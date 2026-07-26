@@ -100,15 +100,47 @@
   text-overflow: ellipsis;
 }
 
-/* This week's read/write counts — secondary to the lead, hidden while zero. */
+/* This week's read/write counts plus a ten-week trend — hidden while zero. */
 .brain-page-header__usage {
-  margin: 1px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 0 0;
   font-size: 11px;
   color: var(--mn-fg-muted);
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.brain-usage__metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.brain-usage__metric b {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg);
+}
+
+.brain-usage__spark {
+  display: block;
+  flex-shrink: 0;
+  height: 14px;
+  overflow: visible;
+}
+
+.brain-usage__spark rect {
+  fill: color-mix(in srgb, var(--mn-fg) 26%, transparent);
+}
+
+/* Newest week carries the accent so the trend has a "you are here". */
+.brain-usage__spark rect.is-current {
+  fill: var(--mn-accent);
 }
 
 .brain-page-header__actions {

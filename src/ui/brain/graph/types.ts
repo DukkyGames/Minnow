@@ -39,6 +39,9 @@ export interface GraphEdge {
 /** Theme colors resolved from CSS custom properties. */
 export interface ForceGraphTheme {
   stageBg: string;
+  /** Callout card / label bubble fill. */
+  surface: string;
+  border: string;
   nodePage: string;
   nodePageMuted: string;
   nodeTag: string;
@@ -48,12 +51,23 @@ export interface ForceGraphTheme {
   nodeActive: string;
   nodeOrphan: string;
   nodeOrphanMuted: string;
+  /** Node core fill — reads as the hollow center of a hub ring. */
+  nodeCore: string;
   edge: string;
   edgeHighlight: string;
+  /** Dashed `similarTo` relations. */
+  edgeSimilar: string;
+  /** Faint page→tag membership relations. */
+  edgeTag: string;
   label: string;
   labelMuted: string;
   glow: string;
+  /** Ambient background lattice dots. */
+  grid: string;
 }
+
+/** Node classes the legend can mute. */
+export type GraphEmphasisKey = 'page' | 'tag' | 'symbol' | 'orphan';
 
 /** User interaction callbacks from the canvas renderer. */
 export interface ForceGraphCallbacks {

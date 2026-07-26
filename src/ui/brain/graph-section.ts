@@ -7,11 +7,12 @@ import type { BrainPageMeta } from '../../brain/types';
 import { scheduleAnimationFrame } from '../../lib/schedule-animation-frame';
 import { flattenBrainTree, filterBrainTreeForDisplay, isBrainArchivePagePath } from './tree-utils';
 import { buildPageGraph, filterGraphByQuery } from './graph/graph-data';
-import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
-import type { GraphNode } from './graph/types';
+import { createForceGraph, type ForceGraphApi, type ForceGraphStats } from './graph/force-graph';
+import type { GraphEmphasisKey } from './graph/types';
 import { closeBrainInspector, renderBrainInspector } from './inspector';
 
 const SHOW_ARCHIVES_KEY = 'minnow.brain.showArchives';
+const READOUT_COLLAPSED_KEY = 'minnow.brain.readoutCollapsed';
 
 function readShowArchivesPref(): boolean {
   try {
@@ -36,6 +37,8 @@ let layoutMode: 'graph' | 'tree' = 'graph';
 let highlightOrphans = false;
 let orphanPaths = new Set<string>();
 let searchQuery = '';
+// Node classes faded out from the legend chips (view-only; never changes the data).
+const mutedKinds = new Set<GraphEmphasisKey>();
 let bindingsDone = false;
 let firstRunHint = true;
 let overlayOffsetObserver: ResizeObserver | null = null;
@@ -57,7 +60,36 @@ function syncGraphOverlayOffsets(): void {
   const gap = Number.parseFloat(styles.getPropertyValue('--brain-graph-overlay-gap')) || 10;
   const below = pad + toolbar.getBoundingClientRect().height + gap;
   root.style.setProperty('--brain-graph-below-toolbar', `${Math.ceil(below)}px`);
+  syncGraphViewportInsets();
   syncGraphTreePanelSizing();
+}
+
+/**
+ * Tell the renderer how much of the canvas the floating panels cover, so "Fit"
+ * and node centering land in clear space instead of behind the inspector.
+ */
+function syncGraphViewportInsets(): void {
+  const canvas = document.getElementById('brainGraphCanvas');
+  if (!canvas || !graphApi) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  if (!canvasRect.width || !canvasRect.height) return;
+
+  const overlap = (selector: string, edge: 'top' | 'right' | 'left'): number => {
+    const el = document.querySelector(selector);
+    if (!el || el.classList.contains('hidden') || el.classList.contains('is-collapsed')) return 0;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return 0;
+    if (edge === 'top') return Math.max(0, rect.bottom - canvasRect.top);
+    if (edge === 'left') return Math.max(0, rect.right - canvasRect.left);
+    return Math.max(0, canvasRect.right - rect.left);
+  };
+
+  graphApi.setViewportInsets({
+    top: overlap('.brain-graph-toolbar', 'top'),
+    left: Math.max(overlap('#brainGraphTreePanel', 'left'), overlap('#brainGraphLegend', 'left')),
+    right: overlap('#brainInspector.is-open', 'right'),
+    bottom: 0,
+  });
 }
 
 /** Size the tree panel to its content while preserving space for the bottom legend. */
@@ -241,6 +273,33 @@ function bindGraphToolbar(): void {
     syncGraphTreePanelSizing();
   });
 
+  const readoutToggle = document.getElementById('brainGraphReadoutToggle');
+  const readoutPanel = document.getElementById('brainGraphLegend');
+  const applyReadoutCollapsed = (collapsed: boolean): void => {
+    readoutPanel?.classList.toggle('is-collapsed', collapsed);
+    readoutToggle?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    readoutToggle?.setAttribute(
+      'aria-label',
+      collapsed ? 'Expand structure panel' : 'Collapse structure panel',
+    );
+    syncGraphViewportInsets();
+    syncGraphTreePanelSizing();
+  };
+  readoutToggle?.addEventListener('click', () => {
+    const collapsed = !readoutPanel?.classList.contains('is-collapsed');
+    try {
+      localStorage.setItem(READOUT_COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+    applyReadoutCollapsed(collapsed);
+  });
+  try {
+    applyReadoutCollapsed(localStorage.getItem(READOUT_COLLAPSED_KEY) === '1');
+  } catch {
+    /* ignore */
+  }
+
   bindOverlayOffsetObserver();
   syncGraphOverlayOffsets();
 }
@@ -283,17 +342,24 @@ async function refreshGraphCanvas(): Promise<void> {
     // Resize is handled internally by the engine's ResizeObserver — no window listener needed.
   }
 
-  let data = buildPageGraph(catalogPages, {
+  const full = buildPageGraph(catalogPages, {
     includeTags,
     orphanPaths: highlightOrphans ? orphanPaths : undefined,
   });
-  if (searchQuery.trim()) data = filterGraphByQuery(data, searchQuery);
+  const data = searchQuery.trim() ? filterGraphByQuery(full, searchQuery) : full;
 
   graphApi.setData(data.nodes, data.edges);
+  graphApi.setMutedKinds(mutedKinds);
+
+  // The toolbar readout only speaks up when a search is actually narrowing things.
   if (statsEl) {
-    statsEl.textContent = `${data.nodes.length} nodes · ${data.edges.length} edges`;
+    const narrowed = data.nodes.length !== full.nodes.length;
+    statsEl.textContent = narrowed
+      ? `${data.nodes.length} of ${full.nodes.length} match`
+      : '';
+    statsEl.classList.toggle('hidden', !narrowed);
   }
-  syncGraphLegend(data.nodes);
+  syncGraphReadout(graphApi.getStats());
   syncGraphTreePanelSizing();
   denseEl?.classList.toggle('hidden', !data.truncated);
   syncGraphOverlayOffsets();
@@ -306,40 +372,114 @@ async function refreshGraphCanvas(): Promise<void> {
   // Auto-fit is driven by the engine's pendingFit / simulation 'end' handler — no RAF needed.
 }
 
-/** Render legend chips with per-kind counts from the current graph data. */
-function syncGraphLegend(nodes: GraphNode[]): void {
-  const legendEl = document.getElementById('brainGraphLegend');
-  if (!legendEl) return;
+/** Build one label/value cell for the readout metric grid. */
+function buildMetricCell(label: string, value: string, tone?: 'warn'): HTMLElement {
+  const cell = document.createElement('div');
+  cell.className = 'brain-graph-metric';
+  if (tone) cell.dataset.tone = tone;
+  const name = document.createElement('span');
+  name.className = 'brain-graph-metric__label';
+  name.textContent = label;
+  const num = document.createElement('span');
+  num.className = 'brain-graph-metric__value';
+  num.textContent = value;
+  cell.append(name, num);
+  return cell;
+}
 
-  let pageCount = 0;
-  let tagCount = 0;
-  let orphanCount = 0;
-  for (const node of nodes) {
-    if (node.kind === 'page') pageCount += 1;
-    if (node.kind === 'tag') tagCount += 1;
-    if (node.orphan) orphanCount += 1;
+/**
+ * Structure readout: counts, weave density, the most connected pages, and
+ * legend chips that fade a node class out of the canvas.
+ *
+ * Degree data only exists once the renderer has ingested the graph, so this
+ * reads from the engine rather than recomputing over the node list.
+ */
+function syncGraphReadout(stats: ForceGraphStats): void {
+  const body = document.getElementById('brainGraphReadoutBody');
+  if (!body) return;
+  body.replaceChildren();
+
+  const metrics = document.createElement('div');
+  metrics.className = 'brain-graph-readout__metrics';
+  metrics.append(
+    buildMetricCell('Pages', String(stats.kinds.page)),
+    buildMetricCell('Links', String(stats.edgeCount)),
+  );
+  if (includeTags) metrics.append(buildMetricCell('Tags', String(stats.kinds.tag)));
+  metrics.append(buildMetricCell('Density', stats.density.toFixed(1)));
+  if (stats.orphanCount > 0) {
+    metrics.append(buildMetricCell('Orphans', String(stats.orphanCount), 'warn'));
+  }
+  body.append(metrics);
+
+  if (stats.hubs.length) {
+    const hubs = document.createElement('div');
+    hubs.className = 'brain-graph-hubs';
+    const heading = document.createElement('p');
+    heading.className = 'brain-graph-hubs__title';
+    heading.textContent = 'Most connected';
+    hubs.append(heading);
+
+    const max = stats.hubs[0].degree || 1;
+    for (const hub of stats.hubs.slice(0, 3)) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'brain-graph-hub';
+      row.title = hub.path ?? hub.label;
+      if (hub.path) {
+        row.addEventListener('click', () => navigateBrainGraphPage(hub.path!));
+      } else {
+        row.disabled = true;
+      }
+      const name = document.createElement('span');
+      name.className = 'brain-graph-hub__name';
+      name.textContent = hub.label;
+      const bar = document.createElement('span');
+      bar.className = 'brain-graph-hub__bar';
+      bar.style.setProperty('--fill', `${Math.round((hub.degree / max) * 100)}%`);
+      const count = document.createElement('span');
+      count.className = 'brain-graph-hub__count';
+      count.textContent = String(hub.degree);
+      row.append(name, bar, count);
+      hubs.append(row);
+    }
+    body.append(hubs);
   }
 
-  legendEl.replaceChildren();
-  const items: Array<{ label: string; count: number; swatch: string }> = [
-    { label: 'Page', count: pageCount, swatch: 'page' },
-    { label: 'Tag', count: tagCount, swatch: 'tag' },
-    { label: 'Orphan', count: orphanCount, swatch: 'orphan' },
-    { label: 'Active', count: selectedPath ? 1 : 0, swatch: 'active' },
+  const legend = document.createElement('div');
+  legend.className = 'brain-graph-legend';
+  const chips: Array<{ key: GraphEmphasisKey; label: string; count: number }> = [
+    { key: 'page', label: 'Pages', count: stats.kinds.page },
+    { key: 'tag', label: 'Tags', count: stats.kinds.tag },
+    { key: 'orphan', label: 'Orphans', count: stats.orphanCount },
   ];
-
-  for (const item of items) {
-    if (item.swatch === 'orphan' && item.count === 0 && !highlightOrphans) continue;
-    const row = document.createElement('span');
-    row.className = 'brain-graph-legend__item';
+  for (const chip of chips) {
+    if (chip.count === 0 && chip.key !== 'page') continue;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'brain-graph-legend__item';
+    btn.dataset.kind = chip.key;
+    const muted = mutedKinds.has(chip.key);
+    btn.setAttribute('aria-pressed', muted ? 'false' : 'true');
+    btn.title = muted ? `Show ${chip.label.toLowerCase()}` : `Fade ${chip.label.toLowerCase()}`;
     const swatch = document.createElement('span');
-    swatch.className = `brain-graph-legend__swatch brain-graph-legend__swatch--${item.swatch}`;
+    swatch.className = `brain-graph-legend__swatch brain-graph-legend__swatch--${chip.key}`;
     swatch.setAttribute('aria-hidden', 'true');
     const text = document.createElement('span');
-    text.textContent = `${item.label} (${item.count})`;
-    row.append(swatch, text);
-    legendEl.append(row);
+    text.textContent = chip.label;
+    const count = document.createElement('span');
+    count.className = 'brain-graph-legend__count';
+    count.textContent = String(chip.count);
+    btn.append(swatch, text, count);
+    btn.addEventListener('click', () => {
+      if (mutedKinds.has(chip.key)) mutedKinds.delete(chip.key);
+      else mutedKinds.add(chip.key);
+      graphApi?.setMutedKinds(mutedKinds);
+      if (graphApi) syncGraphReadout(graphApi.getStats());
+    });
+    legend.append(btn);
   }
+  body.append(legend);
   syncGraphTreePanelSizing();
 }
 
@@ -358,6 +498,8 @@ async function openInspector(relPath: string): Promise<void> {
       await renderGraphSection();
     },
   );
+  // The inspector just claimed canvas width — re-measure so fits avoid it.
+  syncGraphViewportInsets();
 }
 
 function renderGraphTree(mount: HTMLElement, tree: Record<string, unknown>): void {

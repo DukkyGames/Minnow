@@ -1171,20 +1171,21 @@
             <div class="brain-graph-toolbar__group brain-graph-toolbar__search">
               <label class="brain-graph-search">
                 <span class="visually-hidden">Search nodes</span>
+                <svg class="brain-graph-search__icon icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
                 <input type="search" id="brainGraphSearch" placeholder="Search pages…" autocomplete="off">
               </label>
-              <span id="brainGraphStats" class="brain-graph-stats">—</span>
+              <span id="brainGraphStats" class="brain-graph-stats hidden" aria-live="polite"></span>
             </div>
-            <div class="brain-graph-toolbar__group brain-graph-toolbar__zoom" role="group" aria-label="Zoom">
+            <div class="brain-graph-toolbar__group brain-graph-toolbar__toggles brain-graph-seg" role="group" aria-label="View options">
+              <button type="button" class="brain-action-btn" id="brainGraphLayoutToggle" aria-pressed="false" title="Switch between the force graph and a plain page tree">Tree</button>
+              <button type="button" class="brain-action-btn" id="brainGraphTagToggle" aria-pressed="false" title="Draw tag vertices and page→tag relations">Tags</button>
+              <button type="button" class="brain-action-btn" id="brainGraphOrphanToggle" aria-pressed="false" title="Highlight pages nothing links to">Orphans</button>
+              <button type="button" class="brain-action-btn" id="brainGraphArchiveToggle" aria-pressed="false" title="Show per-chat archive pages in graph and tree">Archives</button>
+            </div>
+            <div class="brain-graph-toolbar__group brain-graph-toolbar__zoom brain-graph-seg" role="group" aria-label="Zoom">
               <button type="button" class="brain-action-btn brain-action-btn--icon" id="brainGraphZoomOut" aria-label="Zoom out">−</button>
               <button type="button" class="brain-action-btn" id="brainGraphFit">Fit</button>
               <button type="button" class="brain-action-btn brain-action-btn--icon" id="brainGraphZoomIn" aria-label="Zoom in">+</button>
-            </div>
-            <div class="brain-graph-toolbar__group brain-graph-toolbar__toggles" role="group" aria-label="View options">
-              <button type="button" class="brain-action-btn" id="brainGraphLayoutToggle" aria-pressed="false">Tree</button>
-              <button type="button" class="brain-action-btn" id="brainGraphTagToggle" aria-pressed="false">Tags</button>
-              <button type="button" class="brain-action-btn" id="brainGraphOrphanToggle" aria-pressed="false">Orphans</button>
-              <button type="button" class="brain-action-btn" id="brainGraphArchiveToggle" aria-pressed="false" title="Show per-chat archive pages in graph and tree">Archives</button>
             </div>
             <div class="brain-graph-toolbar__group brain-graph-toolbar__primary">
               <button type="button" class="brain-action-btn is-primary" id="brainGraphNewPage">New page</button>
@@ -1201,9 +1202,17 @@
             <div id="brainGraphTree" class="brain-graph-tree-mount" aria-label="Page tree"></div>
           </aside>
           <div id="brainGraphTreeOnly" class="brain-graph-tree-only brain-overlay-card hidden" aria-label="Tree layout"></div>
-          <div id="brainGraphLegend" class="brain-graph-legend brain-overlay-card" aria-label="Node types"></div>
+          <aside id="brainGraphLegend" class="brain-graph-readout brain-overlay-card" aria-label="Graph readout">
+            <div class="brain-graph-readout__head">
+              <h3 class="brain-section-subtitle">Structure</h3>
+              <button type="button" class="brain-action-btn brain-graph-readout__toggle icon-btn" id="brainGraphReadoutToggle" aria-expanded="true" aria-label="Collapse structure panel">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="brain-graph-readout__body" id="brainGraphReadoutBody"></div>
+          </aside>
           <div id="brainGraphFirstRun" class="brain-graph-hint brain-overlay-card hidden">
-            <p>Click a node to inspect. Double-click to focus neighbors. Drag to pin positions.</p>
+            <p>Hover a node to trace its relations. Click to inspect, double-click to focus the neighborhood, drag to pin. Bigger nodes have more connections.</p>
             <button type="button" class="brain-action-btn" id="brainGraphDismissHint">Got it</button>
           </div>
         </div>

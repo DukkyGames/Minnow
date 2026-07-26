@@ -117,12 +117,59 @@ function updatePageHeader(section: BrainSectionId): void {
   void refreshUsageLine();
 }
 
+/** Weeks of history drawn in the header sparkline. */
+const USAGE_SPARK_WEEKS = 10;
+
+/** One mono counter with its caption for the header activity readout. */
+function buildUsageCounter(value: number, label: string): HTMLElement {
+  const wrap = document.createElement('span');
+  wrap.className = 'brain-usage__metric';
+  const num = document.createElement('b');
+  num.textContent = String(value);
+  wrap.append(num, document.createTextNode(` ${label}`));
+  return wrap;
+}
+
 /**
- * Show this week's Brain activity in the header.
+ * Bar sparkline of total weekly Brain activity, newest bar last.
+ *
+ * Built as inline SVG rather than a canvas: it is a handful of rects, and it
+ * inherits theme colours through `currentColor` without a redraw on theme swap.
+ */
+function buildUsageSpark(weeks: Array<{ week: string; total: number }>): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const width = weeks.length * 5 - 2;
+  const height = 14;
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', 'brain-usage__spark');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('aria-hidden', 'true');
+
+  const max = Math.max(1, ...weeks.map((w) => w.total));
+  weeks.forEach((entry, index) => {
+    const bar = document.createElementNS(ns, 'rect');
+    // Floor at 1px so a quiet-but-nonzero week still registers.
+    const barHeight = entry.total === 0 ? 1 : Math.max(2, (entry.total / max) * height);
+    bar.setAttribute('x', String(index * 5));
+    bar.setAttribute('y', String(height - barHeight));
+    bar.setAttribute('width', '3');
+    bar.setAttribute('height', String(barHeight));
+    bar.setAttribute('rx', '1');
+    if (index === weeks.length - 1) bar.setAttribute('class', 'is-current');
+    svg.append(bar);
+  });
+  return svg;
+}
+
+/**
+ * Show Brain activity in the header: this week's writes and reads plus a
+ * ten-week trend.
  *
  * The whole overhaul rests on the wiki actually being read and written, so the
- * number is worth surfacing where it can't be ignored. Hidden when nothing has
- * happened yet — a row of zeroes is noise.
+ * numbers are worth surfacing where they can't be ignored. Hidden when nothing
+ * has happened yet — a row of zeroes is noise.
  */
 async function refreshUsageLine(): Promise<void> {
   const el = document.getElementById('brainPageHeaderUsage');
@@ -145,8 +192,25 @@ async function refreshUsageLine(): Promise<void> {
     return;
   }
 
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  el.textContent = `This week: ${plural(writes, 'write')} · ${plural(reads, 'read')}`;
+  const history = Object.entries(usage.weeks ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-USAGE_SPARK_WEEKS)
+    .map(([week, counters]) => ({
+      week,
+      total: Object.values(counters).reduce((sum, n) => sum + (n || 0), 0),
+    }));
+
+  el.replaceChildren(buildUsageCounter(writes, 'writes'), buildUsageCounter(reads, 'reads'));
+  if (history.length > 1) {
+    const spark = buildUsageSpark(history);
+    spark.setAttribute('role', 'img');
+    spark.setAttribute(
+      'aria-label',
+      `Weekly Brain activity over the last ${history.length} weeks`,
+    );
+    spark.removeAttribute('aria-hidden');
+    el.append(spark);
+  }
   el.classList.remove('hidden');
 }
 
