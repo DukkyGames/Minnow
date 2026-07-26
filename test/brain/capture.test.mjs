@@ -9,6 +9,7 @@ import path from 'node:path';
 import { createServer, request as httpRequestNode } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
 import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import {
   captureChatToBrain,
@@ -120,6 +121,8 @@ describe('brain capture', () => {
     await new Promise((resolve) => server.close(resolve));
     await closeCodeDbForTests();
     await shutdownAllLsp();
+    // initBrainApi opens sessions.db via readAllChatIds — close before rm (Windows EBUSY).
+    closeSessionsDb();
     await fs.rm(homeDir, { recursive: true, force: true });
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();

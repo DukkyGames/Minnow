@@ -12,7 +12,7 @@ Default: `~/.minnow` (`%USERPROFILE%\.minnow` on Windows). The path is printed a
 |------|---------|
 | `config.json` | Active provider, workspace, feature flags, and per-feature settings (voice, synthesis, oauth, webhooks). |
 | `.key` | AES-256-GCM key for encrypted secrets (`0o600` on Unix). **Back this up.** |
-| `sessions/state.json` | All chats and history (a single blob, not per-chat files). |
+| `sessions/sessions.db` | All chats and history (SQLite). Boot: summaries + lazy history; writes: PATCH dirty sets (full PUT fallback). Search: FTS5 `GET /api/config/sessions/search`. Legacy `state.json` imports once → `state.json.migrated`; rotating `state.json.backup` mirror. Rollback: `MINNOW_SESSIONS_STORE=json`. |
 | `chats/` | Assistant/desktop chat workspaces + per-workspace active-chat memory. |
 | `tools.json` | Per-tool permissions (`full` / `ask` / `off`) and path policy. |
 | `providers/<id>/` | Provider profiles, encrypted `secrets.json`, and `capabilities.json` probes. |

@@ -2,8 +2,16 @@
  * Express-style middleware for /api/config/* (Vite configureServer).
  */
 
+import fs from 'node:fs';
 import { ensureMinnowLayout, getMinnowHome } from './home.js';
-import { readResource, writeResource, readConfigJson, writeConfigJson, configFileExists } from './store.js';
+import {
+  readResource,
+  writeResource,
+  patchResource,
+  readConfigJson,
+  writeConfigJson,
+  configFileExists,
+} from './store.js';
 import {
   validateSessionState,
   normalizeToolConfig,
@@ -12,6 +20,15 @@ import {
 } from './validators.js';
 import { resolveConfigPath, ALLOWED_CONFIG_FILES } from './paths.js';
 import { handleRunsConfigRequest } from '../runs/middleware.js';
+import {
+  exportSessionStateToJson,
+  readChatHistory,
+  readSessionSummariesState,
+  searchSessionChats,
+  useJsonSessionsStore,
+} from './sessions-repo.js';
+import { getSessionsDb, readSessionMeta } from './sessions-db.js';
+import { sessionsDbPath } from './sessions-paths.js';
 
 const MAX_MIGRATE_BYTES = 10 * 1024 * 1024;
 
@@ -65,20 +82,38 @@ async function handleMigrate(body) {
     {
       key: 'sessions',
       raw: ls.sessions,
-      file: 'sessions/state.json',
+      file: useJsonSessionsStore() ? 'sessions/state.json' : 'sessions/sessions.db',
       parse: (str) => validateSessionState(JSON.parse(str)),
+      // Sessions write through writeResource so SQLite cutover stays consistent.
+      write: async (parsed) => {
+        await writeResource('sessions', parsed);
+      },
+      exists: async () => {
+        if (useJsonSessionsStore()) {
+          return configFileExists('sessions/state.json');
+        }
+        return fs.existsSync(sessionsDbPath());
+      },
     },
     {
       key: 'tools',
       raw: ls.tools,
       file: 'tools.json',
       parse: (str) => normalizeToolConfig(JSON.parse(str)),
+      write: async (parsed) => {
+        await writeConfigJson('tools.json', parsed);
+      },
+      exists: async () => configFileExists('tools.json'),
     },
     {
       key: 'systemPrompt',
       raw: ls.systemPrompt,
       file: 'system-prompt.json',
       parse: (str) => validateSystemPromptSettings(JSON.parse(str)),
+      write: async (parsed) => {
+        await writeConfigJson('system-prompt.json', parsed);
+      },
+      exists: async () => configFileExists('system-prompt.json'),
     },
   ];
 
@@ -89,11 +124,11 @@ async function handleMigrate(body) {
 
     try {
       const parsed = item.parse(item.raw);
-      if (force === false && (await configFileExists(item.file)) && meta.migratedFromLocalStorage) {
+      if (force === false && (await item.exists()) && meta.migratedFromLocalStorage) {
         warnings.push(`${item.file} already exists; skipped`);
         continue;
       }
-      await writeConfigJson(item.file, parsed);
+      await item.write(parsed);
       written.push(item.file);
       if (item.key === 'sessions') keysMigrated.push(STORAGE_KEYS.sessions);
       if (item.key === 'tools') keysMigrated.push(STORAGE_KEYS.tools);
@@ -160,12 +195,176 @@ export async function handleConfigRequest(req, res, pathname) {
     if (pathname === '/api/config/status' && req.method === 'GET') {
       await ensureMinnowLayout();
       const meta = (await readConfigJson('config.json')) ?? {};
-      sendJson(res, 200, {
+      /** @type {Record<string, unknown>} */
+      const status = {
         ok: true,
         storage: 'home',
         migrated: meta.migratedFromLocalStorage === true,
         schemaVersion: meta.schemaVersion ?? 1,
-      });
+        sessionsStore: useJsonSessionsStore() ? 'json' : 'sqlite',
+      };
+      if (!useJsonSessionsStore()) {
+        try {
+          const db = getSessionsDb();
+          const failedAt = readSessionMeta(db, 'jsonImportFailedAt');
+          if (failedAt) status.jsonImportFailedAt = failedAt;
+        } catch {
+          /* status should still succeed if DB is unavailable */
+        }
+      }
+      sendJson(res, 200, status);
+      return true;
+    }
+
+    if (pathname === '/api/config/sessions/export-json' && req.method === 'POST') {
+      await ensureMinnowLayout();
+      const data = useJsonSessionsStore()
+        ? ((await readConfigJson('sessions/state.json')) ?? (await readResource('sessions')))
+        : exportSessionStateToJson();
+      sendJson(res, 200, { ok: true, data });
+      return true;
+    }
+
+    // Phase C.1: chat list without message bodies (lazy history boot when flag on).
+    if (pathname === '/api/config/sessions/summaries' && req.method === 'GET') {
+      await ensureMinnowLayout();
+      if (useJsonSessionsStore()) {
+        // JSON rollback store has no summary projection — return whole blob chats
+        // stripped of history so the client shape stays consistent.
+        const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
+        const url = new URL(req.url ?? '', 'http://localhost');
+        const workspace = url.searchParams.get('workspace') ?? '';
+        const chats = Array.isArray(full?.chats) ? full.chats : [];
+        const summaries = chats
+          .filter((chat) => {
+            if (!workspace) return true;
+            const wp = typeof chat.workspacePath === 'string' ? chat.workspacePath : '';
+            return wp === workspace;
+          })
+          .map((chat) => {
+            const history = Array.isArray(chat.history) ? chat.history : [];
+            const last = history.length ? history[history.length - 1] : null;
+            let lastMessagePreview = '';
+            if (last && typeof last === 'object' && typeof last.content === 'string') {
+              lastMessagePreview = last.content.slice(0, 240);
+            }
+            const { history: _drop, ...rest } = chat;
+            return {
+              ...rest,
+              messageCount: history.length,
+              lastMessagePreview,
+            };
+          });
+        sendJson(res, 200, { ...full, chats: summaries });
+        return true;
+      }
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const workspace = url.searchParams.get('workspace') ?? undefined;
+      sendJson(res, 200, readSessionSummariesState({ workspace }));
+      return true;
+    }
+
+    // Phase C.1: full (or optionally paged) message history for one chat.
+    const historyMatch = pathname.match(/^\/api\/config\/sessions\/history\/([^/]+)$/);
+    if (historyMatch && req.method === 'GET') {
+      await ensureMinnowLayout();
+      const chatId = decodeURIComponent(historyMatch[1] ?? '').trim();
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const offsetRaw = url.searchParams.get('offset');
+      const limitRaw = url.searchParams.get('limit');
+      const opts = {};
+      if (offsetRaw != null && offsetRaw !== '') opts.offset = Number(offsetRaw);
+      if (limitRaw != null && limitRaw !== '') opts.limit = Number(limitRaw);
+
+      if (useJsonSessionsStore()) {
+        const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
+        const chat = Array.isArray(full?.chats)
+          ? full.chats.find((c) => c && c.id === chatId)
+          : null;
+        let history = Array.isArray(chat?.history) ? chat.history : [];
+        const offset = typeof opts.offset === 'number' && opts.offset > 0 ? Math.floor(opts.offset) : 0;
+        const limit = typeof opts.limit === 'number' && opts.limit > 0 ? Math.floor(opts.limit) : null;
+        if (offset || limit != null) {
+          history = limit != null ? history.slice(offset, offset + limit) : history.slice(offset);
+        }
+        sendJson(res, 200, { chatId, history });
+        return true;
+      }
+
+      sendJson(res, 200, { chatId, history: readChatHistory(chatId, opts) });
+      return true;
+    }
+
+    // Phase C.2: FTS5 search over message bodies + title substring match.
+    if (pathname === '/api/config/sessions/search' && req.method === 'GET') {
+      await ensureMinnowLayout();
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const q = url.searchParams.get('q') ?? '';
+      const workspace = url.searchParams.get('workspace') ?? undefined;
+      const limitRaw = url.searchParams.get('limit');
+      const limit = limitRaw != null && limitRaw !== '' ? Number(limitRaw) : 30;
+
+      if (useJsonSessionsStore()) {
+        // JSON rollback: scan in-process (client also keeps the pure scorer for localStorage).
+        const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
+        const chats = Array.isArray(full?.chats) ? full.chats : [];
+        const tokens = String(q)
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean);
+        const wsKey = workspace ? String(workspace) : '';
+        /** @type {Array<Record<string, unknown>>} */
+        const results = [];
+        for (const chat of chats) {
+          if (!chat || typeof chat !== 'object') continue;
+          if (wsKey && String(chat.workspacePath ?? '') !== wsKey) continue;
+          const name = String(chat.name ?? '');
+          const nameLower = name.toLowerCase();
+          let best = null;
+          if (tokens.length && tokens.every((t) => nameLower.includes(t))) {
+            best = {
+              chatId: chat.id,
+              name,
+              workspacePath: chat.workspacePath ?? '',
+              lastMessageAt: chat.lastMessageAt ?? 0,
+              score: 280,
+              matchedIn: 'title',
+              snippet: '',
+            };
+          }
+          const history = Array.isArray(chat.history) ? chat.history : [];
+          for (const msg of history) {
+            if (!msg || (msg.role !== 'user' && msg.role !== 'assistant')) continue;
+            const body = typeof msg.content === 'string' ? msg.content : '';
+            if (!body || !tokens.length) continue;
+            const lower = body.toLowerCase();
+            if (!tokens.every((t) => lower.includes(t))) continue;
+            const score = 140;
+            if (best && best.score >= score) continue;
+            const idx = lower.indexOf(tokens[0]);
+            const start = Math.max(0, idx - 32);
+            best = {
+              chatId: chat.id,
+              name,
+              workspacePath: chat.workspacePath ?? '',
+              lastMessageAt: chat.lastMessageAt ?? 0,
+              score,
+              matchedIn: 'message',
+              role: msg.role,
+              snippet: `${start > 0 ? '…' : ''}${body.slice(start, start + 110).trim()}${start + 110 < body.length ? '…' : ''}`,
+            };
+          }
+          if (best) results.push(best);
+        }
+        results.sort((a, b) => {
+          if (a.score !== b.score) return b.score - a.score;
+          return (b.lastMessageAt || 0) - (a.lastMessageAt || 0);
+        });
+        sendJson(res, 200, { results: results.slice(0, Math.min(100, Math.max(1, limit || 30))) });
+        return true;
+      }
+
+      sendJson(res, 200, searchSessionChats({ q, workspace, limit }));
       return true;
     }
 
@@ -197,6 +396,19 @@ export async function handleConfigRequest(req, res, pathname) {
         const body = await readJsonBody(req);
         const saved = await writeResource(resource, body);
         sendJson(res, 200, { ok: true, data: saved });
+        return true;
+      }
+
+      // Partial sessions write (Phase B.0). Other config resources stay PUT-only.
+      // POST is a sendBeacon alias for PATCH (beacons cannot use the PATCH method).
+      if (req.method === 'PATCH' || req.method === 'POST') {
+        if (resource !== 'sessions') {
+          sendJson(res, 405, { error: 'Method not allowed' });
+          return true;
+        }
+        const body = await readJsonBody(req);
+        const result = await patchResource(resource, body);
+        sendJson(res, 200, result);
         return true;
       }
     }

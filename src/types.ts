@@ -777,6 +777,39 @@ export interface QueuedComposerMessage {
   createdAt: number;
 }
 
+/**
+ * Sidebar / boot row for a chat without message bodies (Phase C.1/C.2).
+ * Hot columns + denormalized `messageCount` / `lastMessagePreview`, plus optional
+ * cold `meta_json` fields and non-message children (runs, loops, …) for boot.
+ * Do not make {@link Chat.history} optional — inflate with `history: []` + `historyLoaded: false`.
+ */
+export type ChatSummary = Omit<Chat, 'history' | 'historyLoaded' | 'lastStats' | 'modelInfo'> & {
+  /** Denormalized COUNT of messages rows for this chat. */
+  messageCount: number;
+  /** Denormalized preview of the last message body (truncated). */
+  lastMessagePreview: string;
+  /** Sidebar order column (`chats.sort_index`). */
+  sortIndex?: number;
+  /** SHA-256 digest of message row hashes (skip sync when unchanged). */
+  historyDigest?: string;
+  lastStats?: LastStats | null;
+  modelInfo?: ModelInfo;
+};
+
+/** Session blob from GET /api/config/sessions/summaries (chats omit `history`). */
+export interface SessionSummariesState {
+  version: SessionSchemaVersion;
+  activeId: string | null;
+  sidebarCollapsed: boolean;
+  sidebarWidth?: number;
+  chats: ChatSummary[];
+  groups?: ChatGroup[];
+  activeBoardGroupId?: string;
+  lastActiveChatIdByWorkspace?: Record<string, string>;
+  lastActiveChatIdByApp?: Record<string, string>;
+  codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
+}
+
 export interface Chat {
   id: string;
   name: string;
@@ -872,7 +905,22 @@ export interface Chat {
   turnError?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */
   lastAssistantAt?: number;
+  /**
+   * Transcript messages. Always present (never optional) — unloaded chats use `[]`
+   * with `historyLoaded: false` until `ensureChatHistoryLoaded` runs.
+   */
   history: Message[];
+  /**
+   * When `false`, `history` is a placeholder and must be loaded via
+   * `ensureChatHistoryLoaded` before read/mutate. Omitted/`true` means loaded
+   * (whole-blob boot path, or after lazy fetch / local create).
+   */
+  historyLoaded?: boolean;
+  /**
+   * Denormalized server message count from summaries (C.2). Used for sidebar/rail
+   * listing while `historyLoaded === false`; not a wire persistence field.
+   */
+  messageCount?: number;
   lastStats: LastStats | null;
   modelInfo: ModelInfo;
   /** Epoch ms of last committed user/assistant/tool history entry (sidebar sort). */

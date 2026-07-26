@@ -1,8 +1,15 @@
 /**
  * Resolve per-task dev/API ports for board worktree chats and build spawn env.
+ *
+ * Hot path (no injectedState): indexed SQLite lookup via resolveBoardTaskPorts.
+ * Injected state keeps the in-memory validate+scan path for unit tests.
  */
 
 import path from 'node:path';
+import {
+  resolveBoardTaskPorts,
+  useJsonSessionsStore,
+} from '../config/sessions-repo.js';
 import { readConfigJson } from '../config/store.js';
 import { validateSessionState } from '../config/validators.js';
 import { resolveChatCwd } from './chat-cwd.js';
@@ -60,28 +67,12 @@ function resolvePortsByWorktreeCwd(state, cwd) {
 }
 
 /**
- * Board-task port env for a command when cwd resolves to an isolated worktree.
+ * In-memory port resolution from a SessionState blob (tests + JSON rollback).
  * @param {{ chatId?: string, cwd?: string }} params
- * @param {SessionState | null | undefined} [injectedState]
+ * @param {SessionState} state
  * @returns {Promise<Record<string, string> | undefined>}
  */
-export async function resolveBoardTaskSpawnEnvForCommand(
-  { chatId, cwd },
-  injectedState,
-) {
-  let state = injectedState;
-  if (!state) {
-    const raw = (await readConfigJson('sessions/state.json')) ?? {
-      version: 5,
-      chats: [],
-    };
-    try {
-      state = validateSessionState(raw);
-    } catch {
-      return undefined;
-    }
-  }
-
+async function resolveFromSessionBlob({ chatId, cwd }, state) {
   const trimmedChatId = typeof chatId === 'string' ? chatId.trim() : '';
   let resolvedCwd = typeof cwd === 'string' && cwd.trim() ? path.resolve(cwd.trim()) : '';
 
@@ -120,4 +111,38 @@ export async function resolveBoardTaskSpawnEnvForCommand(
   const byCwd = resolvePortsByWorktreeCwd(state, resolvedCwd);
   if (!byCwd) return undefined;
   return buildBoardTaskSpawnEnv(byCwd.devPort, byCwd.apiPort);
+}
+
+/**
+ * Board-task port env for a command when cwd resolves to an isolated worktree.
+ * @param {{ chatId?: string, cwd?: string }} params
+ * @param {SessionState | null | undefined} [injectedState]
+ * @returns {Promise<Record<string, string> | undefined>}
+ */
+export async function resolveBoardTaskSpawnEnvForCommand(
+  { chatId, cwd },
+  injectedState,
+) {
+  // Injected blob — keep in-memory path so existing unit tests stay green.
+  let state = injectedState;
+  if (!state) {
+    // Hot path: point lookup + by-cwd variant over board_tasks indexes.
+    if (!useJsonSessionsStore()) {
+      const ports = resolveBoardTaskPorts({ chatId, cwd });
+      if (!ports) return undefined;
+      return buildBoardTaskSpawnEnv(ports.devPort, ports.apiPort);
+    }
+    // JSON rollback: whole-blob read from state.json.
+    const raw = (await readConfigJson('sessions/state.json')) ?? {
+      version: 5,
+      chats: [],
+    };
+    try {
+      state = validateSessionState(raw);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return resolveFromSessionBlob({ chatId, cwd }, state);
 }

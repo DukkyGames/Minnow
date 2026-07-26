@@ -21,6 +21,8 @@ export interface BoardAggregateMetrics {
 }
 
 function collectUsageFromChatHistory(chat: Chat): Usage[] {
+  // Lazy history: do not scan placeholder [] — prefer tokenLedger / lastStats instead.
+  if (chat.historyLoaded === false) return [];
   const segments: Usage[] = [];
   for (const msg of chat.history) {
     if (msg.role === 'assistant' && msg.usage) segments.push(msg.usage);
@@ -66,6 +68,7 @@ export function latestTurnStatsPair(chat: Chat): { stats: Stats; usage: Usage } 
       },
     };
   }
+  if (chat.historyLoaded === false) return null;
   for (let i = chat.history.length - 1; i >= 0; i--) {
     const row = chat.history[i];
     if (row.role !== 'assistant') continue;

@@ -13,7 +13,9 @@ import { isDomAvailable } from '../../lib/dom-available.ts';
 import { getPlannerChatForGroup } from '../../state/chat-groups';
 import { isBoardAutoMode, isBoardRunning } from '../../state/orchestrate-board-store';
 import {
+  ensureChatHistoryLoaded,
   findChatById,
+  requireHistory,
   scheduleSaveSessions,
   sessionState,
   touchChat,
@@ -161,7 +163,9 @@ async function defaultDeliver(
 ): Promise<void> {
   const chat = findChatById(chatId);
   if (!chat) return;
-  chat.history.push({ role: 'assistant', content: message });
+  // C.2 category-3: planner may be non-active — hydrate before mutating transcript.
+  await ensureChatHistoryLoaded(chatId);
+  requireHistory(chat).push({ role: 'assistant', content: message });
   touchChat(chat);
   scheduleSaveSessions();
 

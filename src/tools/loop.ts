@@ -89,11 +89,13 @@ import {
 } from '../chat/main-turn-activity';
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
+  ensureChatHistoryLoaded,
   getActiveChat,
   scheduleSaveSessions,
   sessionState,
   touchChat,
   recordChatMessage,
+  requireHistory,
 } from '../state/sessions';
 import { schedulePostTurnSynthesis } from '../synthesis/client';
 import {
@@ -1133,6 +1135,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   } = options;
 
   const hideUserEcho = suppressUserEcho || Boolean(superPlanStage);
+
+  // Category-3: hydrate full history before any absolute-index / mutate work (archive, push).
+  await ensureChatHistoryLoaded(chat.id);
+  requireHistory(chat);
 
   if (!beginChatTurnSetup(chat.id)) {
     return;

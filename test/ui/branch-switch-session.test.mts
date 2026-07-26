@@ -74,7 +74,7 @@ function makeBranchedChat(id: string): Chat {
 }
 
 describe('branch switch session target', { concurrency: false }, () => {
-  test('switchActiveChat after activateBranch keeps the branched chat active', () => {
+  test('switchActiveChat after activateBranch keeps the branched chat active', async () => {
     setupDom();
     const branched = makeBranchedChat('chat-branched');
     const other: Chat = {
@@ -103,7 +103,7 @@ describe('branch switch session target', { concurrency: false }, () => {
     assert.equal(ok, true);
     assert.equal((branched.history[1] as { content: string }).content, 'reply A');
 
-    const switched = switchActiveChat(branched.id);
+    const switched = await switchActiveChat(branched.id);
     assert.ok(switched);
     assert.equal(getActiveChat().id, branched.id);
   });

@@ -28,8 +28,18 @@ export interface FinishBoardStats {
 function collectUsageFromChat(chat: Chat | undefined): Usage[] {
   if (!chat) return [];
   const segments: Usage[] = [];
-  for (const msg of chat.history) {
-    if (msg.role === 'assistant' && msg.usage) segments.push(msg.usage);
+  // Prefer ledger / lastStats so finish stats work before lazy history hydrate.
+  const totals = chat.tokenLedger?.totals;
+  if (totals && totals.totalTokens > 0) {
+    segments.push({
+      prompt_tokens: totals.promptTokens,
+      completion_tokens: totals.completionTokens,
+      total_tokens: totals.totalTokens,
+    });
+  } else if (chat.historyLoaded !== false) {
+    for (const msg of chat.history) {
+      if (msg.role === 'assistant' && msg.usage) segments.push(msg.usage);
+    }
   }
   const ls = chat.lastStats;
   if (

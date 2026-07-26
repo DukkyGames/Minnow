@@ -246,7 +246,8 @@ async function switchBranch(
   // Keep session activeId aligned with the chat whose branch we switched so the
   // next composer send does not land in a different (or newly created) chat.
   const prevActiveId = sessionState?.activeId;
-  if (switchActiveChat(chat.id)) {
+  const switched = await switchActiveChat(chat.id);
+  if (switched) {
     void switchComposerDraft(prevActiveId, chat);
   }
   renderChatInForegroundShell(chat);

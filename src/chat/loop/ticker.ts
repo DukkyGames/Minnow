@@ -10,8 +10,10 @@ import {
 } from '../streaming-state';
 import { isChatTurnSetupPending } from '../chat-turn-guard';
 import {
+  ensureChatHistoryLoaded,
   getActiveLoops,
   removeActiveLoop,
+  requireHistory,
   sessionState,
   updateActiveLoop,
 } from '../../state/sessions';
@@ -230,6 +232,16 @@ export async function runLoopTick(options: {
 
       if (!send) {
         report('err', 'Loop ticker has no send handler');
+        continue;
+      }
+
+      // C.2 category-3: loops fire on non-active chats — hydrate before send mutates history.
+      try {
+        await ensureChatHistoryLoaded(chat.id);
+        requireHistory(chat);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        report('err', `Loop #${loop.id} history load failed: ${message}`);
         continue;
       }
 

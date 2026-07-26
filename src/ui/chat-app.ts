@@ -15,9 +15,11 @@ import {
   ensureActiveAssistantChat,
 } from '../state/chat-app-sessions';
 import {
+  ensureChatHistoryLoaded,
   getActiveChat,
   getAssistantChats,
   isEphemeralEmptyChat,
+  markSessionScalarsDirty,
   newChatId,
   pruneEphemeralEmptyChats,
   rememberActiveChatForApp,
@@ -119,12 +121,16 @@ function renderChatAppMessages(): void {
 }
 
 /** Activate an assistant chat for the Chat app without touching Code sidebar DOM. */
-function activateAssistantChat(chatId: string): void {
+async function activateAssistantChat(chatId: string): Promise<void> {
   if (!sessionState) return;
   const prevId = sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   sessionState.activeId = chatId;
+  markSessionScalarsDirty();
+  // Lazy history: wait before paint so restart+switch does not show empty state.
+  await ensureChatHistoryLoaded(chatId);
+  if (!sessionState || sessionState.activeId !== chatId) return;
   acknowledgeChatViewed(chatId);
   rememberActiveChatForApp(CHAT_APP_ID, chatId);
   switchComposerDraft(prevId, chat);
@@ -135,7 +141,7 @@ function activateAssistantChat(chatId: string): void {
 
 /** Public: switch session rail thread (also used by background-stream hint). */
 export function activateChatAppThread(chatId: string): void {
-  activateAssistantChat(chatId);
+  void activateAssistantChat(chatId);
 }
 
 /** Create a new assistant chat and make it active. */

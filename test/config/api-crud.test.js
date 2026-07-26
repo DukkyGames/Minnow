@@ -3,6 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import {
+  closeSessionsDb,
+  getSessionsDb,
+  readSessionMeta,
+} from '../../server/config/sessions-db.js';
+import {
   createConfigTestServer,
   httpRequest,
   readFixture,
@@ -14,8 +19,11 @@ describe('config API CRUD', () => {
   let homeDir;
   let server;
   let baseUrl;
+  let savedStore;
 
   before(async () => {
+    savedStore = process.env.MINNOW_SESSIONS_STORE;
+    delete process.env.MINNOW_SESSIONS_STORE;
     homeDir = setTestHome(process.env);
     server = createConfigTestServer();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -25,6 +33,9 @@ describe('config API CRUD', () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    closeSessionsDb();
+    if (savedStore === undefined) delete process.env.MINNOW_SESSIONS_STORE;
+    else process.env.MINNOW_SESSIONS_STORE = savedStore;
     await rmTestHome(homeDir);
   });
 
@@ -198,10 +209,29 @@ describe('config API CRUD', () => {
     assert.equal(res.json.error, 'Invalid config path');
   });
 
-  test('written sessions file exists on disk', async () => {
-    const file = path.join(homeDir, 'sessions', 'state.json');
-    const raw = await fs.readFile(file, 'utf8');
-    const parsed = JSON.parse(raw);
-    assert.equal(parsed.activeId, '11111111-1111-1111-1111-111111111111');
+  test('written sessions.db exists; state.json retired', async () => {
+    const dbPath = path.join(homeDir, 'sessions', 'sessions.db');
+    await fs.access(dbPath);
+
+    const db = getSessionsDb();
+    assert.equal(readSessionMeta(db, 'activeId'), '11111111-1111-1111-1111-111111111111');
+
+    const stateJson = path.join(homeDir, 'sessions', 'state.json');
+    const migrated = `${stateJson}.migrated`;
+    let stateExists = true;
+    try {
+      await fs.access(stateJson);
+    } catch {
+      stateExists = false;
+    }
+    let migratedExists = true;
+    try {
+      await fs.access(migrated);
+    } catch {
+      migratedExists = false;
+    }
+    // After SQLite cutover, live state.json must not exist (may be .migrated from import).
+    assert.equal(stateExists, false);
+    assert.ok(!stateExists || migratedExists);
   });
 });

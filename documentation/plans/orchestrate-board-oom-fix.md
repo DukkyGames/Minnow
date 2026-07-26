@@ -18,8 +18,7 @@ Renderer OOM during heavy AFK orchestrate runs (3 concurrent tasks + merge fixer
 
 ### Phase 2 — Memory discipline
 
-- **Task history trim** — `src/chat/orchestrate/task-history-trim.ts`; invoked from `moveTaskStatus` for terminal tasks and `testing` transition.
-- **Idle trim on stream-end (MIN-407)** — `trimIdleBoardTaskChats` runs after every board task chat stream-end (build / test / fixer / final) so concurrent AFK runs do not retain full tool transcripts for every completed chat in RAM; skips active and still-streaming chats.
+- **Task history trim** — removed in sessions SQLite C.2; lazy history (`sessionsLazyHistoryEnabled`) keeps unused board chats unloaded instead of mutating transcripts.
 - **Board log caps** — `BOARD_LOG_MAX` 100, preview cap 200 (`src/state/orchestrate-board-store.ts`, `src/state/sessions.ts`).
 - **OOM concurrency cap** — `resolveEffectiveMaxConcurrent` limits to 2 while OOM pause is active; header hint in board UI.
 
@@ -39,7 +38,7 @@ Renderer OOM during heavy AFK orchestrate runs (3 concurrent tasks + merge fixer
 |---|---|
 | Kanban heartbeat in-place | `test/ui/orchestrate-board-live-update.test.mjs` |
 | OOM resume gate | `test/chat/orchestrate/board-boot-resume-oom.test.mts` |
-| Task history trim | `test/orchestrate/task-history-trim.test.mts` |
+| Task history trim | _(removed — see sessions-sqlite-migration C.2)_ |
 | Board-log GET ping | `test/server/orchestrate-board-log-api.test.mjs` |
 | Preview exec wrap | `test/electron/preview-automation.test.mjs` |
 | OOM pause marker | `test/electron/crash-log.test.mjs` |
@@ -47,7 +46,7 @@ Renderer OOM during heavy AFK orchestrate runs (3 concurrent tasks + merge fixer
 ## Primary files
 
 - `electron/main.ts`, `electron/crash-log.ts`
-- `src/chat/orchestrate/board-boot-resume.ts`, `oom-recovery.ts`, `task-history-trim.ts`
+- `src/chat/orchestrate/board-boot-resume.ts`, `oom-recovery.ts`
 - `src/state/orchestrate-board-actions.ts`, `orchestrate-board-store.ts`, `board-log-disk.ts`
 - `src/ui/orchestrate-board.ts`, `src/boot/diagnostics.ts`
 - `electron/preview-guest-actions.ts`, `src/tools/browser-preview-tools.ts`

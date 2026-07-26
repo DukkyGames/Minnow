@@ -243,11 +243,12 @@ export function renderDesktopChatRail(desktopWorkspacePath?: string | null): voi
   const list = getRailList();
   if (!list || !sessionState) return;
 
+  const path = desktopWorkspacePath ?? null;
+  // Don't clear an existing rail when path is still resolving (boot race).
+  if (!path) return;
+
   mountExpertScopeInRail(false);
   list.replaceChildren();
-
-  const path = desktopWorkspacePath ?? null;
-  if (!path) return;
 
   const chats = getDesktopRailChats(path, sessionState);
   const activeId = sessionState.activeId;

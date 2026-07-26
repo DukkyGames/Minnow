@@ -1,5 +1,6 @@
 /**
  * Read/write JSON config files under ~/.minnow with atomic writes.
+ * Sessions resource uses SQLite (sessions-repo) unless MINNOW_SESSIONS_STORE=json.
  */
 
 import fs from 'node:fs/promises';
@@ -8,16 +9,19 @@ import { resolveConfigPath, resourceToRelativeKey } from './paths.js';
 import { ensureMinnowLayout } from './home.js';
 import {
   mergeConfigMeta,
+  migrateChatRowV5ToV6,
+  normalizeChatRow,
+  normalizeGroupRow,
+  normalizeSessionScalars,
   normalizeToolConfig,
   normalizeSearchConfig,
   normalizeServersConfig,
   normalizeResearchConfig,
   seedSearchConfigFromTools,
-  defaultSearchConfig,
-  defaultServersConfig,
   defaultResearchConfig,
   normalizeSkillConfig,
   normalizeSubAgentsConfig,
+  SESSION_SCHEMA_VERSION,
   validateSessionState,
   validateSystemPromptSettings,
   validateUserRulesSettings,
@@ -31,6 +35,13 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_RULES,
 } from './home.js';
+import {
+  patchSessionState,
+  readWholeSessionState,
+  useJsonSessionsStore,
+  writeWholeSessionState,
+} from './sessions-repo.js';
+import { sessionsJsonPath } from './sessions-paths.js';
 
 /** Best-effort chmod for secret-bearing files on Unix. */
 async function chmodSecretFile(filePath) {
@@ -46,6 +57,15 @@ async function chmodSecretFile(filePath) {
  * @returns {Promise<boolean>}
  */
 export async function configFileExists(relativeKey) {
+  // Sessions JSON key is no longer on the allowlist — resolve via sessions-paths.
+  if (relativeKey === 'sessions/state.json') {
+    try {
+      await fs.access(sessionsJsonPath());
+      return true;
+    } catch {
+      return false;
+    }
+  }
   const full = resolveConfigPath(relativeKey);
   try {
     await fs.access(full);
@@ -57,12 +77,17 @@ export async function configFileExists(relativeKey) {
 
 /**
  * JSON blobs with many concurrent writers must be read/written under one queue per file.
- * config.json: dev-server + workspace settings; sessions/state.json: SPA autosave + terminal history.
+ * config.json: dev-server + workspace settings.
+ * sessions/state.json mutex removed in A.2 (SQLite locking); kept only for JSON rollback.
  */
-const SERIALIZED_CONFIG_KEYS = new Set(['config.json', 'sessions/state.json']);
+const SERIALIZED_CONFIG_KEYS = new Set(['config.json']);
 
 /** @type {Map<string, Promise<void>>} */
 const configJsonQueues = new Map();
+
+/** Separate mutex for MINNOW_SESSIONS_STORE=json rollback path. */
+/** @type {Promise<void>} */
+let sessionsJsonQueue = Promise.resolve();
 
 /**
  * @param {string} relativeKey
@@ -96,6 +121,20 @@ function withConfigJsonLock(relativeKey, fn) {
 }
 
 /**
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+function withSessionsJsonLock(fn) {
+  const run = sessionsJsonQueue.then(fn, fn);
+  sessionsJsonQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
  * Windows (and occasionally Unix AV/indexers) can briefly lock the destination during rename.
  * @param {string} src
  * @param {string} dest
@@ -120,11 +159,24 @@ async function renameConfigAtomic(src, dest) {
 }
 
 /**
+ * Kept reachable for JSON-mode sessions rollback and generic config reads.
  * @param {string} relativeKey
  * @returns {Promise<unknown>}
  */
 async function readConfigJsonUnlocked(relativeKey) {
   await ensureMinnowLayout();
+  // Sessions bypass the allowlist (removed in A.2).
+  if (relativeKey === 'sessions/state.json') {
+    try {
+      const raw = await fs.readFile(sessionsJsonPath(), 'utf8');
+      return JSON.parse(raw);
+    } catch (err) {
+      if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') {
+        return null;
+      }
+      throw err;
+    }
+  }
   const full = resolveConfigPath(relativeKey);
   try {
     const raw = await fs.readFile(full, 'utf8');
@@ -142,6 +194,9 @@ async function readConfigJsonUnlocked(relativeKey) {
  * @returns {Promise<unknown>}
  */
 export async function readConfigJson(relativeKey) {
+  if (relativeKey === 'sessions/state.json' && useJsonSessionsStore()) {
+    return withSessionsJsonLock(() => readConfigJsonUnlocked(relativeKey));
+  }
   if (!SERIALIZED_CONFIG_KEYS.has(relativeKey)) {
     return readConfigJsonUnlocked(relativeKey);
   }
@@ -155,7 +210,10 @@ export async function readConfigJson(relativeKey) {
  */
 async function writeConfigJsonUnlocked(relativeKey, data) {
   await ensureMinnowLayout();
-  const full = resolveConfigPath(relativeKey);
+  const full =
+    relativeKey === 'sessions/state.json'
+      ? sessionsJsonPath()
+      : resolveConfigPath(relativeKey);
   await fs.mkdir(path.dirname(full), { recursive: true });
   const tmp = `${full}.tmp-${process.pid}-${Date.now()}`;
   const body = `${JSON.stringify(data, null, 2)}\n`;
@@ -171,6 +229,9 @@ async function writeConfigJsonUnlocked(relativeKey, data) {
  * @param {unknown} data
  */
 export async function writeConfigJson(relativeKey, data) {
+  if (relativeKey === 'sessions/state.json' && useJsonSessionsStore()) {
+    return withSessionsJsonLock(() => writeConfigJsonUnlocked(relativeKey, data));
+  }
   if (!SERIALIZED_CONFIG_KEYS.has(relativeKey)) {
     return writeConfigJsonUnlocked(relativeKey, data);
   }
@@ -178,13 +239,21 @@ export async function writeConfigJson(relativeKey, data) {
 }
 
 /**
- * Read-modify-write under the per-file queue (required for sessions/state.json terminal history, etc.).
+ * Read-modify-write under the per-file queue (required for config.json, JSON sessions rollback).
  * @template T
  * @param {string} relativeKey
  * @param {(current: unknown) => T | Promise<T>} mutator
  * @returns {Promise<T>}
  */
 export async function updateConfigJson(relativeKey, mutator) {
+  if (relativeKey === 'sessions/state.json' && useJsonSessionsStore()) {
+    return withSessionsJsonLock(async () => {
+      const current = await readConfigJsonUnlocked(relativeKey);
+      const next = await mutator(current);
+      await writeConfigJsonUnlocked(relativeKey, next);
+      return next;
+    });
+  }
   if (!SERIALIZED_CONFIG_KEYS.has(relativeKey)) {
     const current = await readConfigJsonUnlocked(relativeKey);
     const next = await mutator(current);
@@ -208,8 +277,12 @@ export async function readResource(resource) {
   if (!key) throw new Error('Unknown resource');
 
   if (resource === 'sessions') {
-    const data = await readConfigJson(key);
-    return data ?? defaultSessionStateJson();
+    if (useJsonSessionsStore()) {
+      const data = await readConfigJson(key);
+      return data ?? defaultSessionStateJson();
+    }
+    await ensureMinnowLayout();
+    return readWholeSessionState();
   }
   if (resource === 'tools') {
     const data = await readConfigJson(key);
@@ -313,7 +386,16 @@ export async function writeResource(resource, body) {
 
   if (resource === 'sessions') {
     const validated = validateSessionState(body);
-    await writeConfigJson(key, validated);
+    if (useJsonSessionsStore()) {
+      await writeConfigJson(key, validated);
+      return validated;
+    }
+    await ensureMinnowLayout();
+    const rawChats =
+      body && typeof body === 'object' && Array.isArray(/** @type {Record<string, unknown>} */ (body).chats)
+        ? /** @type {Record<string, unknown>} */ (body).chats
+        : undefined;
+    writeWholeSessionState(validated, { rawChats });
     return validated;
   }
   if (resource === 'tools') {
@@ -378,4 +460,161 @@ export async function writeResource(resource, body) {
 
   await writeConfigJson(key, body);
   return body;
+}
+
+/**
+ * Apply a partial sessions delta (PATCH /api/config/sessions).
+ * SQLite path uses {@link patchSessionState}; JSON fallback does in-memory splice.
+ *
+ * @param {string} resource
+ * @param {unknown} body
+ * @returns {Promise<{ ok: true, applied: Record<string, unknown> }>}
+ */
+export async function patchResource(resource, body) {
+  if (resource !== 'sessions') {
+    const err = new Error('PATCH is only supported for sessions');
+    /** @type {Error & { statusCode?: number }} */ (err).statusCode = 405;
+    throw err;
+  }
+
+  if (useJsonSessionsStore()) {
+    return patchJsonSessionState(body);
+  }
+
+  await ensureMinnowLayout();
+  return patchSessionState(body);
+}
+
+/**
+ * JSON-store fallback for PATCH — read whole blob, apply delta, rewrite.
+ * Same semantics as {@link patchSessionState} (absent keys unchanged; explicit deletes).
+ * @param {unknown} delta
+ */
+async function patchJsonSessionState(delta) {
+  if (!delta || typeof delta !== 'object') {
+    const err = new Error('Invalid session patch');
+    /** @type {Error & { statusCode?: number }} */ (err).statusCode = 400;
+    throw err;
+  }
+
+  const body = /** @type {Record<string, unknown>} */ (delta);
+  const baseVersion = body.baseVersion;
+  if (
+    baseVersion !== undefined &&
+    baseVersion !== 1 &&
+    baseVersion !== 2 &&
+    baseVersion !== 3 &&
+    baseVersion !== 4 &&
+    baseVersion !== 5 &&
+    baseVersion !== 6
+  ) {
+    const err = new Error('Invalid session baseVersion');
+    /** @type {Error & { statusCode?: number }} */ (err).statusCode = 400;
+    throw err;
+  }
+
+  const applied = {
+    chats: 0,
+    deletedChats: 0,
+    groups: 0,
+    deletedGroups: 0,
+    scalars: false,
+  };
+
+  const current = validateSessionState(
+    (await readConfigJson('sessions/state.json')) ?? defaultSessionStateJson(),
+  );
+
+  const deleteChatIds = new Set(
+    Array.isArray(body.deleteChatIds)
+      ? body.deleteChatIds.filter((id) => typeof id === 'string' && id.trim())
+      : [],
+  );
+  const deleteGroupIds = new Set(
+    Array.isArray(body.deleteGroupIds)
+      ? body.deleteGroupIds.filter((id) => typeof id === 'string' && id.trim())
+      : [],
+  );
+
+  let chats = current.chats.filter((c) => {
+    if (deleteChatIds.has(c.id)) {
+      applied.deletedChats += 1;
+      return false;
+    }
+    return true;
+  });
+
+  let groups = (current.groups ?? []).filter((g) => {
+    if (deleteGroupIds.has(g.id)) {
+      applied.deletedGroups += 1;
+      return false;
+    }
+    return true;
+  });
+
+  if (Array.isArray(body.chats)) {
+    for (const raw of body.chats) {
+      if (!raw || typeof raw !== 'object') continue;
+      const chat = normalizeChatRow(raw);
+      migrateChatRowV5ToV6(chat);
+      // Preserve server-owned terminalHistory when the client omits/replaces it.
+      const existing = chats.find((c) => c.id === chat.id);
+      if (existing?.terminalHistory?.length && !chat.terminalHistory?.length) {
+        chat.terminalHistory = existing.terminalHistory;
+      } else if (existing?.terminalHistory?.length) {
+        // Client may send terminalHistory; ignore it (server-owned).
+        chat.terminalHistory = existing.terminalHistory;
+      } else {
+        delete chat.terminalHistory;
+      }
+      const idx = chats.findIndex((c) => c.id === chat.id);
+      if (idx >= 0) chats[idx] = chat;
+      else chats.push(chat);
+      applied.chats += 1;
+    }
+  }
+
+  if (Array.isArray(body.groups)) {
+    for (const raw of body.groups) {
+      const group = normalizeGroupRow(raw);
+      if (!group?.id) continue;
+      const idx = groups.findIndex((g) => g.id === group.id);
+      if (idx >= 0) groups[idx] = group;
+      else groups.push(group);
+      applied.groups += 1;
+    }
+  }
+
+  /** @type {Record<string, unknown>} */
+  let next = {
+    ...current,
+    version: SESSION_SCHEMA_VERSION,
+    chats,
+    groups,
+  };
+
+  if (body.scalars && typeof body.scalars === 'object') {
+    const scalars = normalizeSessionScalars(body.scalars, { mode: 'partial' });
+    for (const [key, value] of Object.entries(scalars)) {
+      if (value === null && (key === 'sidebarWidth' || key === 'activeBoardGroupId' || key === 'codeChangeTotalsByWorkspace')) {
+        delete next[key];
+      } else {
+        next[key] = value;
+      }
+    }
+    applied.scalars = Object.keys(scalars).length > 0;
+  }
+
+  if (!next.chats.length) {
+    const err = new Error('Session must have at least one chat');
+    /** @type {Error & { statusCode?: number }} */ (err).statusCode = 400;
+    throw err;
+  }
+  if (!next.chats.some((c) => c.id === next.activeId)) {
+    next.activeId = next.chats[0].id;
+  }
+
+  const validated = validateSessionState(next);
+  await writeConfigJson('sessions/state.json', validated);
+  return { ok: true, applied };
 }

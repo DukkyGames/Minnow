@@ -1,10 +1,12 @@
 /**
  * Persist a headless run transcript into ~/.minnow sessions (scheduler run history).
+ * Uses PATCH so concurrent UI chat creates are not clobbered by a GET-splice-PUT.
  */
 
 import { normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import type { Chat, Message, SessionState } from '../types';
+import { SESSION_SCHEMA_VERSION } from '../types';
+import type { Chat, Message } from '../types';
 import { headlessApiUrl } from './server-context';
 
 export interface PersistHeadlessChatInput {
@@ -18,22 +20,18 @@ export interface PersistHeadlessChatInput {
   history: Message[];
 }
 
-async function fetchSessions(): Promise<SessionState> {
-  const res = await fetch(headlessApiUrl('/api/config/sessions'), { cache: 'no-store' });
-  if (!res.ok) {
-    throw new Error(`GET /api/config/sessions failed: HTTP ${res.status}`);
-  }
-  return (await res.json()) as SessionState;
-}
-
-async function putSessions(state: SessionState): Promise<void> {
+/** Upsert one chat via PATCH /api/config/sessions (no whole-blob read/write). */
+async function patchSessionsChat(chat: Chat): Promise<void> {
   const res = await fetch(headlessApiUrl('/api/config/sessions'), {
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(state),
+    body: JSON.stringify({
+      baseVersion: SESSION_SCHEMA_VERSION,
+      chats: [chat],
+    }),
   });
   if (!res.ok) {
-    throw new Error(`PUT /api/config/sessions failed: HTTP ${res.status}`);
+    throw new Error(`PATCH /api/config/sessions failed: HTTP ${res.status}`);
   }
 }
 
@@ -44,7 +42,6 @@ export async function persistHeadlessChat(input: PersistHeadlessChatInput): Prom
     throw new Error('chatId is required to persist a headless chat');
   }
 
-  const state = await fetchSessions();
   const now = Date.now();
   const workspacePath = normalizeWorkspacePath(input.workspacePath);
 
@@ -64,12 +61,5 @@ export async function persistHeadlessChat(input: PersistHeadlessChatInput): Prom
     lastMessageAt: now,
   };
 
-  const existingIndex = state.chats.findIndex((row) => row.id === chatId);
-  if (existingIndex >= 0) {
-    state.chats[existingIndex] = { ...state.chats[existingIndex], ...chat };
-  } else {
-    state.chats.unshift(chat);
-  }
-
-  await putSessions(state);
+  await patchSessionsChat(chat);
 }
