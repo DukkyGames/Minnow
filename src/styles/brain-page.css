@@ -121,6 +121,7 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  gap: 8px;
   padding: 2px 8px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
@@ -133,6 +134,35 @@
   color: var(--mn-fg-muted);
   line-height: 1.35;
   white-space: nowrap;
+}
+
+.brain-usage__metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.brain-usage__metric b {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+/* Ten-week activity trend, newest bar last. */
+.brain-usage__spark {
+  display: block;
+  flex-shrink: 0;
+  height: 11px;
+  overflow: visible;
+}
+
+.brain-usage__spark rect {
+  fill: color-mix(in srgb, var(--mn-fg) 26%, transparent);
+}
+
+/* Newest week carries the accent so the trend has a "you are here". */
+.brain-usage__spark rect.is-current {
+  fill: var(--mn-accent);
 }
 
 /* Graph canvas overlay: title + usage only so the canvas stays unobstructed. */
