@@ -2764,6 +2764,7 @@ export async function sendMessageWithTools(
     return;
   }
   const rawText = input.value.trim();
+  const chat = getActiveChat();
   const { consumePendingMessageEdit, completePendingMessageEdit } = await import(
     '../ui/message-actions'
   );
@@ -2779,7 +2780,6 @@ export async function sendMessageWithTools(
   }
   const pending = getPendingAttachments();
   const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
-  const chat = getActiveChat();
 
   // /loop before /goal so both stateful commands settle without skill resolution
   const loopDispatch = handleLoopCommand(chat, rawText, setStatus);

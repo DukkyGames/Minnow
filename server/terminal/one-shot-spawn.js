@@ -57,6 +57,12 @@ export function resolveOneShotSpawn({
   const unixOneShot = oneShot && platform !== 'win32';
 
   if (winOneShot) {
+    // Background dev-server spawns pass shell:true so Node routes through COMSPEC
+    // with intact quoting. Manual cmd.exe /c decomposition strips nested quotes
+    // (e.g. node -e "setInterval(...)") and the child exits immediately.
+    if (shell === true) {
+      return { command, args: [], shell: true };
+    }
     return {
       command: 'cmd.exe',
       args: ['/d', '/s', '/c', command],

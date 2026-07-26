@@ -57,6 +57,19 @@ describe('resolveOneShotSpawn', () => {
     assert.equal(win.shell, false);
   });
 
+  it('uses Node shell mode for Windows one-shot when shell is true', () => {
+    const cmd = 'node -e "setInterval(()=>{}, 60000)"';
+    const win = resolveOneShotSpawn({
+      command: cmd,
+      args: [],
+      shell: true,
+      platform: 'win32',
+    });
+    assert.equal(win.command, cmd);
+    assert.deepEqual(win.args, []);
+    assert.equal(win.shell, true);
+  });
+
   it('passes argv invocations through unchanged', () => {
     const direct = resolveOneShotSpawn({
       command: 'node',
