@@ -395,8 +395,8 @@ export function openBoardTimelineDrawer(groupId: string): void {
     if (!openTimeline || openTimeline.groupId !== groupId) return;
     refreshRelativeTimes(openTimeline);
   }, 1000);
-  if (typeof state.tickerId === 'object' && state.tickerId && 'unref' in state.tickerId) {
-    state.tickerId.unref();
+  if (state.tickerId != null && typeof state.tickerId === 'object' && 'unref' in state.tickerId) {
+    (state.tickerId as { unref: () => void }).unref();
   }
 
   backdrop.addEventListener('click', (ev) => {

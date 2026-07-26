@@ -10,6 +10,7 @@
 
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
+import { resolveTestConcurrency } from './test-config.mjs';
 import {
   groupByRunner,
   listTestsForSuite,
@@ -51,14 +52,46 @@ Runs all discoverable test/**/*.test.{js,mjs,mts,ts} files, grouped by runner pr
 Orphan detection: npm run test:check-coverage`);
 }
 
-/** Stay under Windows CreateProcess command-line limits when batching files. */
-const MAX_FILES_PER_BATCH = process.platform === 'win32' ? 20 : 80;
+/** Headroom under Windows CreateProcess's 32767-char command-line limit. */
+const ARGV_CHAR_BUDGET = 24_000;
+/** Secondary guard so a single batch does not grow without bound. */
+const MAX_FILES_PER_BATCH = 300;
 
-function chunkFiles(files) {
+/** Estimate joined argv length (one space between args). */
+function estimateArgvLength(args) {
+  if (args.length === 0) return 0;
+  return args.reduce((sum, arg) => sum + arg.length, 0) + args.length - 1;
+}
+
+/** Split files into batches that fit the argv budget and file-count cap. */
+function chunkFiles(files, runnerId) {
+  const profile = RUNNERS[runnerId];
+  const fixedPrefix = [
+    ...profile.prefixArgs,
+    `--test-concurrency=${resolveTestConcurrency()}`,
+  ];
+
   const chunks = [];
-  for (let i = 0; i < files.length; i += MAX_FILES_PER_BATCH) {
-    chunks.push(files.slice(i, i + MAX_FILES_PER_BATCH));
+  let currentChunk = [];
+
+  for (const file of files) {
+    const nextChunk = [...currentChunk, file];
+    const nextLen = estimateArgvLength([...fixedPrefix, ...nextChunk]);
+    const overBudget = nextLen > ARGV_CHAR_BUDGET;
+    const overCount = nextChunk.length > MAX_FILES_PER_BATCH;
+
+    if (currentChunk.length > 0 && (overBudget || overCount)) {
+      chunks.push(currentChunk);
+      currentChunk = [file];
+    } else {
+      currentChunk = nextChunk;
+    }
   }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
   return chunks;
 }
 
@@ -70,7 +103,7 @@ function runBatch(runnerId, files) {
   }
 
   let exitCode = 0;
-  const chunks = chunkFiles(files);
+  const chunks = chunkFiles(files, runnerId);
 
   for (const [index, chunk] of chunks.entries()) {
     const label =
@@ -79,10 +112,13 @@ function runBatch(runnerId, files) {
         : `${runnerId} batch ${index + 1}/${chunks.length} (${chunk.length} files)`;
     console.log(`\n▶ ${label}`);
 
-    const args = [...profile.prefixArgs, ...chunk];
+    const args = [
+      ...profile.prefixArgs,
+      `--test-concurrency=${resolveTestConcurrency()}`,
+      ...chunk,
+    ];
     const result = spawnSync(profile.command, args, {
       stdio: 'inherit',
-      shell: process.platform === 'win32',
       cwd: process.cwd(),
     });
 
@@ -128,7 +164,7 @@ function main() {
   }
 
   const groups = groupByRunner(files);
-  const runnerOrder = ['node', 'tsx-mocks', 'tsx-loader-mocks', 'tsx', 'node-tsx'];
+  const runnerOrder = ['node', 'tsx-mocks', 'tsx-mocks-loader', 'node-tsx'];
 
   let exitCode = 0;
   for (const runnerId of runnerOrder) {

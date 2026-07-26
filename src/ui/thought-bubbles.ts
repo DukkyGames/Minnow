@@ -391,7 +391,7 @@ export function renderThoughtsToggle(
   }
 
   btn.addEventListener('click', () => {
-    const nowExpanded = flow.hidden;
+    const nowExpanded = Boolean(flow.hidden);
     flow.hidden = !nowExpanded;
     btn.setAttribute('aria-expanded', nowExpanded ? 'true' : 'false');
     caret.classList.toggle('thoughts-caret--expanded', nowExpanded);

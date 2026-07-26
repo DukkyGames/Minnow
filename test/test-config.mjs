@@ -3,7 +3,22 @@
  * Used by test/run-all.mjs and test/check-test-coverage.mjs.
  */
 
-/** @typedef {'node' | 'tsx-mocks' | 'tsx-mocks-loader' | 'tsx-loader-mocks' | 'tsx' | 'node-tsx'} RunnerId */
+import { availableParallelism } from 'node:os';
+
+/** @typedef {'node' | 'tsx-mocks' | 'tsx-mocks-loader' | 'node-tsx'} RunnerId */
+
+/** Full parallelism (~31 workers on a 32-core box) exhausted system RAM; cap it. */
+export const MAX_TEST_CONCURRENCY = 16;
+
+/** Resolve node:test worker count (env override or capped availableParallelism). */
+export function resolveTestConcurrency() {
+  const raw = process.env.MINNOW_TEST_CONCURRENCY;
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  return Math.max(1, Math.min(MAX_TEST_CONCURRENCY, availableParallelism()));
+}
 
 /** How each runner invokes node:test. */
 export const RUNNERS = {
@@ -22,9 +37,9 @@ export const RUNNERS = {
       '--test-timeout=120000',
     ],
   },
-  // Same as tsx-mocks but also registers test-loader.mjs's CSS/@xterm stubs
-  // (--import composes, unlike tsx-loader-mocks's cli.mjs wrapper below,
-  // which silently disables --experimental-test-module-mocks entirely).
+  // Registers test-loader.mjs's CSS/@xterm stubs (--import composes with tsx
+  // and --experimental-test-module-mocks). Avoid node_modules/tsx/dist/cli.mjs —
+  // that wrapper respawns node and silently drops --experimental-test-module-mocks.
   'tsx-mocks-loader': {
     command: 'node',
     prefixArgs: [
@@ -38,22 +53,6 @@ export const RUNNERS = {
       '--test-timeout=120000',
     ],
   },
-  'tsx-loader-mocks': {
-    command: 'node',
-    prefixArgs: [
-      '--experimental-test-module-mocks',
-      './node_modules/tsx/dist/cli.mjs',
-      '--import',
-      './test/test-loader.mjs',
-      '--test',
-      '--test-force-exit',
-      '--test-timeout=120000',
-    ],
-  },
-  tsx: {
-    command: 'tsx',
-    prefixArgs: ['--test', '--test-force-exit', '--test-timeout=120000'],
-  },
   'node-tsx': {
     command: 'node',
     prefixArgs: ['--import', 'tsx', '--test', '--test-force-exit', '--test-timeout=120000'],
@@ -64,9 +63,9 @@ export const RUNNERS = {
 export const DEFAULT_RUNNER_BY_EXT = {
   '.test.js': 'node',
   // .mjs suites often import ../../src/*.ts; plain node cannot resolve TS dependency chains.
-  '.test.mjs': 'tsx-loader-mocks',
-  '.test.ts': 'tsx-loader-mocks',
-  '.test.mts': 'tsx-loader-mocks',
+  '.test.mjs': 'tsx-mocks-loader',
+  '.test.ts': 'tsx-mocks-loader',
+  '.test.mts': 'tsx-mocks-loader',
 };
 
 /**
@@ -74,9 +73,9 @@ export const DEFAULT_RUNNER_BY_EXT = {
  * Patterns use forward slashes and support `*` / `**` globs via fs.globSync.
  */
 export const PATH_RUNNER_RULES = [
-  { pattern: 'test/headless/preflight.test.mts', runner: 'tsx' },
+  { pattern: 'test/headless/preflight.test.mts', runner: 'node-tsx' },
   // persist-chat imports server config helpers + headless TS (no CSS).
-  { pattern: 'test/headless/persist-chat.test.mts', runner: 'tsx' },
+  { pattern: 'test/headless/persist-chat.test.mts', runner: 'node-tsx' },
   { pattern: 'test/sub-agents/scheduler-drain-reject.test.mts', runner: 'tsx-mocks' },
   { pattern: 'test/research/*.test.mts', runner: 'tsx-mocks-loader' },
   // Parity imports src/state/sessions.ts (CSS/@xterm via UI); other config tests stay on tsx-mocks.
