@@ -166,6 +166,7 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     process.exit(0);
+    return;
   }
 
   const code = await runCommand(parsed.options);
