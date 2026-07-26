@@ -6,6 +6,9 @@ export const COMPARE_ICON_SRC = '/icons/compare.png';
 /** Public path for the Brain app raster glyph (brain-circuit). */
 export const BRAIN_ICON_SRC = '/icons/brain-circuit.png';
 
+/** Public path for the Issues app glyph (issue tracker). */
+export const ISSUES_ICON_SRC = '/icons/issue_tracker.svg';
+
 export type OsIconName =
   | 'code'
   | 'chat'
@@ -16,6 +19,7 @@ export type OsIconName =
   | 'scheduler'
   | 'calendar'
   | 'email'
+  | 'issues'
   | 'chip'
   | 'brain'
   | 'gear'
@@ -28,13 +32,12 @@ export type OsIconName =
   | 'restore'
   | 'bell'
   | 'bellOff'
-  | 'fish'
   | 'folder'
   | 'globe'
   | 'fileText';
 
-/** Launcher icons rendered from a PNG mask instead of inline SVG paths. */
-export type RasterIconName = 'compare' | 'brain';
+/** Launcher icons rendered from a PNG/SVG mask instead of inline SVG paths. */
+export type RasterIconName = 'compare' | 'brain' | 'issues';
 
 /** Inline SVG icon ids (excludes raster-backed launcher icons). */
 export type SvgIconName = Exclude<OsIconName, RasterIconName>;
@@ -67,7 +70,6 @@ const PATHS: Record<SvgIconName, string> = {
   bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
   bellOff:
     '<path d="M13.7 21a2 2 0 0 1-3.4 0"/><path d="M18 8a6 6 0 0 0-9.3-5.7"/><path d="M6.3 6.3A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 1 .7 2.7"/><path d="m2 2 20 20"/>',
-  fish: '<path d="M16.5 12c-2 3-5.5 4.5-9 4.5 1-1.5 1-3 1-4.5s0-3-1-4.5c3.5 0 7 1.5 9 4.5Z"/><path d="M16.5 12 21 8.5v7L16.5 12Z"/><circle cx="9.5" cy="11" r=".6" fill="currentColor" stroke="none"/>',
   folder:
     '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/>',
   globe:
@@ -80,6 +82,7 @@ const PATHS: Record<SvgIconName, string> = {
 const RASTER_ICON_SRC: Record<RasterIconName, string> = {
   compare: COMPARE_ICON_SRC,
   brain: BRAIN_ICON_SRC,
+  issues: ISSUES_ICON_SRC,
 };
 
 export interface OsIconOptions {

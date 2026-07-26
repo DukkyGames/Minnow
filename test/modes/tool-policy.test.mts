@@ -185,7 +185,6 @@ describe('per-mode matrix groups', () => {
 });
 
 describe('cross-mode policy invariants', () => {
-  const BUG_TOOLS = TOOL_GROUP_IDS['bug-board'];
   const BRAIN_TOOLS = [
     ...TOOL_GROUP_IDS['brain-core'],
     ...TOOL_GROUP_IDS['brain-admin'],
@@ -194,11 +193,12 @@ describe('cross-mode policy invariants', () => {
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
   const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;
 
-  test('bug-board tools allowed only in general, debug, and desktop', () => {
+  test('issue tools allowed in general, build, plan, debug, and desktop', () => {
+    const ISSUE_MODES = new Set<ModeId>(['general', 'build', 'plan', 'debug', 'desktop']);
     for (const modeId of MODE_IDS) {
-      for (const toolId of BUG_TOOLS) {
+      for (const toolId of TOOL_GROUP_IDS.issues) {
         const allowed = isToolAllowedForMode(modeId, toolId);
-        const expected = modeId === 'general' || modeId === 'debug' || modeId === 'desktop';
+        const expected = ISSUE_MODES.has(modeId);
         assert.equal(
           allowed,
           expected,
@@ -260,7 +260,7 @@ describe('cross-mode policy invariants', () => {
 });
 
 describe('tool payload token reduction', () => {
-  test('build mode tool JSON payload stays below ~8,850 tokens', () => {
+  test('build mode tool JSON payload stays below ~9,820 tokens', () => {
     const allDefs = BUILT_IN_TOOLS.map((t) => t.definition);
     const allTokens = estimateToolPayloadTokens(
       allDefs.map((definition) => ({ definition })),
@@ -272,8 +272,8 @@ describe('tool payload token reduction', () => {
 
     assert.ok(allTokens > 9_000, `baseline should exceed 9k, got ${allTokens}`);
     assert.ok(
-      buildTokens >= 7_000 && buildTokens <= 8_850,
-      `build payload expected ~7k-8.85k tok, got ${buildTokens} (all=${allTokens})`,
+      buildTokens >= 7_000 && buildTokens <= 9_820,
+      `build payload expected ~7k-9.82k tok, got ${buildTokens} (all=${allTokens})`,
     );
     assert.ok(buildTokens < allTokens - 2_000, 'build should save at least 2k tokens');
   });

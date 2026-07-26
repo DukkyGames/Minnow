@@ -40,7 +40,7 @@ const SECTION_SEARCH_ALIASES: Partial<
 > = {
   general: ['network', 'lan', 'wifi', 'remote', 'terminal', 'updates'],
   notifications: ['notifications', 'bell', 'sound', 'alert', 'background chat', 'menubar'],
-  diagnostics: ['health', 'errors', 'logs', 'crash', 'report', 'subsystem'],
+  diagnostics: ['health', 'errors', 'logs', 'crash', 'report', 'subsystem', 'issues', 'auto-file'],
   'agent-center': ['prompts', 'prompt', 'profile', 'system prompt', 'modes', 'work agents', 'sub-agents'],
   rules: ['user rules', 'cursor rules', 'rule'],
   'model-routing': ['models', 'routing', 'bindings'],

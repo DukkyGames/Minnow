@@ -32,13 +32,30 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 ### MinnowOS apps
 
-Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
+Chat (desktop), **Code**, **Models**, **Compare**, **Bench**, **Research**, **Experts**, **Brain**, **Calendar**, **Email**, **Issues**, **Scheduler**, **Settings** — routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
 
-**Availability:** each app is `core` (always on: Chat, Code, Research, Models, Brain, Scheduler, Settings) or `optional`, plus a developer `releaseState` (`released` | `hidden`). User preferences store disabled optional ids in `localStorage` key `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)). Missing key = all released optional apps enabled. Dock, menubar shortcuts, hash routes, notifications, and `launch_minnow_app` all consult the same selectors. First-run **Choose your apps** (after Appearance) and **Settings → Apps** share [`src/os/app-picker-ui.ts`](../src/os/app-picker-ui.ts): core apps collapse to a read-only “Always included” line; optional apps use quiet toggle cards (dimmed when off, no accent wash when on) with Enable all / Disable all. When no optional apps are released yet, both surfaces show a **Coming soon** empty state instead of an empty card grid. Onboarding **Email** and **Calendar** setup steps are applicable only when the matching app is enabled (`isAppEnabled`) and the tool server is up — disabling those apps in Choose your apps (or Settings) skips their wizard steps.
+**Issues** (`#/app/issues`, core) is the Linear-style tracker (list + board + detail). UI: split header (brand + quick capture) and filter bar; clickable list column headers to sort (ID / Type / Title / Status / Priority / Labels / Updated — session-only, smart first-click direction; helpers in [`issues-list-sort.ts`](../src/ui/issues-list-sort.ts)); type/status/priority chips; multiselect via row highlight (Ctrl/Cmd+click, Shift+range) with bulk delete; right-click context menu on list rows and board cards (Open, copy ID, select, expand with agent, send to chat / send to background with mode submenus, change status, delete — [`issues-context-menu.ts`](../src/ui/issues-context-menu.ts)); inline label editing on list rows and in the detail sticky header (add via Enter/comma, remove via chip ×, autocomplete from workspace labels — [`issues-labels-field.ts`](../src/ui/issues-labels-field.ts)); detail panel with sticky workflow header (activity chips like **Investigating…** / **Planning…** open the linked sub-agent drawer or board chat), Delete action, click-to-edit description (markdown preview → textarea; blur or Ctrl/Cmd+Enter saves, Escape cancels), and scrollable body. Board view keeps all status lanes on one horizontal row (scroll when narrow). Legacy `#/bugs` hashes redirect via [`resolveLegacyHash`](../src/os/router.ts) — the old All-bugs overlay UI/store/pipeline was removed in MIN-261 Phase 5.
+
+**Code sidebar vs desktop:** the Code chat sidebar Issues button (`btnAllBugs`) embeds `#issuesView` into `#chatArea` inside the Code window (toggle / Back / Escape; same main-column overlay family as Code overview / Code map — see [`issues-page.ts`](../src/ui/issues-page.ts)). While embedded, issue detail opens in-place and does not rewrite the hash to `#/app/issues/ISS-n` (that would foreground the fullscreen Issues app). Dock, menubar app switcher, and `#/app/issues` still launch the fullscreen Issues app.
+
+| Concern | Location |
+|---------|----------|
+| Persist | `~/.minnow/issues/state.json` ([`src/state/issues-store.ts`](../src/state/issues-store.ts)); Vite-only key `minnow-issues-v1` |
+| Taxonomy | `~/.minnow/issues/taxonomy.json` ([`src/issues/taxonomy.ts`](../src/issues/taxonomy.ts), [`issues-taxonomy-store.ts`](../src/state/issues-taxonomy-store.ts)); Vite-only key `minnow-issues-taxonomy-v1`. **Settings → Apps → Issues** edits types, statuses (with workflow roles + board/closed flags), and priorities. Deletes blocked when issues still reference an id. |
+| Migration | First load with no issues file reads leftover `bugs/state.json` / `minnow-bugs-v1` (leaves bugs file on disk). `migrateLegacyBugBoardsFromChats` folds any remaining `chat.bugBoard` cards, then strips them. |
+| UI | [`src/ui/issues-page.ts`](../src/ui/issues-page.ts), detail [`issues-detail.ts`](../src/ui/issues-detail.ts), styles [`issues.css`](../src/styles/issues.css); deep link `#/app/issues/ISS-n` |
+| Tools | `issue_add` / `issue_update` / `issue_link` / `issue_get_state` / `issue_delete` ([`issue-tools.ts`](../src/tools/issue-tools.ts)). Allowed in **General**, **Build**, **Plan**, **Debug**, and **Desktop** ([`tool-groups.ts`](../src/chat/modes/tool-groups.ts) `issues` group). Retired `bug_*` tool names still execute via [`bug-board-tools.ts`](../src/tools/bug-board-tools.ts) for older transcripts but are no longer exposed to models. |
+| Workflows | **Send to chat** / **Send to background** mode dropdowns (General, Build, Plan, Debug foreground; Debug + Plan background sub-agents) in the detail workflow toolbar; **Send to board** in the Plan section when `planPath` is set ([`src/chat/issues/pipeline.ts`](../src/chat/issues/pipeline.ts), [`workflow-seeds.ts`](../src/chat/issues/workflow-seeds.ts), [`issues-workflow-menu.ts`](../src/ui/issues-workflow-menu.ts)); triage **Expand with agent** (detail panel + board cards) → shipped `issue-writer`; detail **Open plan** foregrounds Code then opens the plan in the file viewer (`openIssuePlanInEditor`) |
+| Git | Branch `issue/iss-n-<slug>`, commit grep `[ISS-n]`, PR via `gh`, GitHub URL chips ([`git-helpers.ts`](../src/chat/issues/git-helpers.ts), [`git-actions.ts`](../src/chat/issues/git-actions.ts)) |
+| Plans | `documentation/plans/issues/<id>.md`; board completion → status `review` ([`board-review.ts`](../src/chat/issues/board-review.ts)) |
+
+Renderer crash diagnostics can file Issues cards (type `bug`) when **Settings → Advanced → Health & diagnostics → File renderer errors to Issues** is enabled (`localStorage` `minnow.diagnostics.fileErrorsToIssues`; default **off**). Errors still log locally and appear in the diagnostics viewer regardless.
+
+**Availability:** each app is `core` (always on: Chat, Code, Research, Models, Brain, Scheduler, Issues, Settings) or `optional`, plus a developer `releaseState` (`released` | `hidden`). User preferences store disabled optional ids in `localStorage` key `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)). Missing key = all released optional apps enabled. Dock, menubar shortcuts, hash routes, notifications, and `launch_minnow_app` all consult the same selectors. First-run **Choose your apps** (after Appearance) and **Settings → Apps** share [`src/os/app-picker-ui.ts`](../src/os/app-picker-ui.ts): core apps collapse to a read-only “Always included” line; optional apps use quiet toggle cards (dimmed when off, no accent wash when on) with Enable all / Disable all. When no optional apps are released yet, both surfaces show a **Coming soon** empty state instead of an empty card grid. Onboarding **Email** and **Calendar** setup steps are applicable only when the matching app is enabled (`isAppEnabled`) and the tool server is up — disabling those apps in Choose your apps (or Settings) skips their wizard steps.
 
 ### Scale
 
-- **~88 built-in tools** — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
+- **~86 built-in tools** — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
 - **~33 built-in slash skills** — [`src/skills/`](../src/skills/), manifest via `npm run prebuild`
 - **Six modes** + work agents, sub-agents, orchestrator boards, Brain wiki
 
@@ -103,6 +120,9 @@ Full directory map: [`guides/configuration.md`](guides/configuration.md). Notabl
 | `brain/` | Wiki pages, vectors, code index DBs, proposals |
 | `skills/`, `skills.json` | User skills and enable flags |
 | `scheduler.json`, `calendar/`, `email/` | Scheduler, calendar DB, email accounts + `mail-<accountId>.db` |
+| `issues/state.json` | Issues app store (MIN-261); migrates from leftover `bugs/state.json` once |
+| `issues/taxonomy.json` | Issues types / statuses / priorities catalog (Settings → Issues); workflows resolve status **roles** at runtime |
+| `bugs/state.json` | Legacy bug tracker blob — read-only migration source; left on disk after import |
 | `compare/`, `benchmarks/`, `evals/` | Compare history, bench runs, eval harness |
 
 **Vite-only (`npm run dev`):** falls back to `localStorage` for sessions (`minnow-sessions-v1`) and tools (`minnow.tools`); server features disabled.
@@ -141,7 +161,7 @@ Middleware registration: [`server/runtime/middlewares.js`](../server/runtime/mid
 2. `detectLocalServer()` (before Code file panel init).
 3. `initOsRouter()` when MinnowOS enabled.
 
-`initApp()`: tool config → prompts → work agents → sessions → tool handlers → models → render chat.
+`initApp()`: tool config → prompts → work agents → sessions → Issues store (migrate leftover bugs if needed) → tool handlers → models → render chat.
 
 Loader dismiss: [`src/boot/app-ready.ts`](../src/boot/app-ready.ts) on `DOMContentLoaded`, not `window.load`.
 
@@ -318,7 +338,7 @@ Stage layers in `#osStage` ([`src/os/shell.ts`](../src/os/shell.ts)):
 | Side panels | Scheduler list rail |
 | Fullscreen apps | Code, Email, Settings-from-Code |
 
-Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)).
+Presentation modes: `fullscreen` | `window` | `desktop` | `sidePanel` ([`src/os/presentation-mode.ts`](../src/os/presentation-mode.ts)). Settings opened from Code sets `returnToApp: 'code'` (fullscreen); the Settings back control calls [`closeSettings()`](../src/ui/settings-page.ts) so it restores Code instead of falling through to the desktop. `initSettingsPage` is idempotent so duplicate binds cannot stack back handlers.
 
 **Desktop chat** is the primary chat surface (`#desktopChatCol`); legacy `#chatView` retained for deep links. **Code** reparents `#appBody` into `#osAppsLayer`. Chat transcript mount + inset overlay routing (sub-agent drawer, goal eval) live in [`src/ui/chat-mount.ts`](../src/ui/chat-mount.ts): Code → `#mainColumn`, desktop → `.mn-os-desktop-chat`, Chat app → `.chat-app-main`.
 
@@ -329,6 +349,8 @@ The Code chat sidebar header keeps its navigation controls ordered as **collapse
 Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()`.
 
 **Notifications:** menubar bell inbox ([`src/os/notifications-menu.ts`](../src/os/notifications-menu.ts), [`src/notifications/`](../src/notifications/)). Sounds use **packs** under `public/sounds/packs/<packId>/` ([`src/notifications/sound-packs.ts`](../src/notifications/sound-packs.ts)): each pack maps three cues — `turn_complete`, `question`, `tool_turn` — to audio files; notification kinds resolve to a cue at playback time. Default pack **Minnow** ships `turn-complete.wav`, `question.wav`, `tool-turn.mp3`. Prefs: `minnow.notifications.soundPackId` (`default` | `none`), `minnow.notifications.soundOnActiveChat` (play cues while watching the active chat in Code without bell rows). Settings → General → Notifications.
+
+**App switcher:** in-app menubar grid icon ([`src/os/app-switcher-menu.ts`](../src/os/app-switcher-menu.ts)) opens a compact popover with **Desktop** plus the same apps as the dock (`listDockApps`). Hidden on the Desktop view (dock covers that case). Escape / outside click dismisses; opening closes other chrome popovers.
 
 **Desktop prefs** (`minnow.os.*`): wallpaper / layout via [`src/os/desktop-prefs.ts`](../src/os/desktop-prefs.ts); **disabled apps** via `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)).
 

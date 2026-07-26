@@ -54,7 +54,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   SettingsSectionId[]
 > = {
   general: ['general', 'notifications', 'audio', 'about'],
-  apps: ['apps'],
+  apps: ['apps', 'issues'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
   agents: ['agent-center', 'rules', 'agent-packs', 'autopilot', 'watchdog'],
@@ -217,6 +217,18 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('apps.optional.compare', 'Compare app', 'apps', 'apps'),
   field('apps.optional.email', 'Email app', 'apps', 'apps'),
   field('apps.optional.calendar', 'Calendar app', 'apps', 'apps'),
+  field('apps.issues.types', 'Issue types', 'apps', 'issues', {
+    keywords: ['issue types', 'bug', 'task', 'idea', 'taxonomy'],
+    description: 'Customize issue type labels and ids.',
+  }),
+  field('apps.issues.statuses', 'Issue statuses', 'apps', 'issues', {
+    keywords: ['issue statuses', 'workflow', 'board columns', 'triage', 'review'],
+    description: 'Workflow statuses, board columns, and semantic roles.',
+  }),
+  field('apps.issues.priorities', 'Issue priorities', 'apps', 'issues', {
+    keywords: ['priorities', 'urgent', 'severity'],
+    description: 'Priority levels for issues.',
+  }),
 
   // —— Appearance ——
   field('appearance.theme', 'Theme presets', 'appearance', 'appearance', {
@@ -412,6 +424,17 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('advanced.diagnostics.actions', 'Diagnostic actions', 'advanced', 'diagnostics', {
     keywords: ['copy report', 'refresh', 'clear logs'],
   }),
+  field(
+    'advanced.diagnostics.fileErrorsToIssues',
+    'File renderer errors to Issues',
+    'advanced',
+    'diagnostics',
+    {
+      keywords: ['issues', 'bug', 'crash', 'auto-file', 'tracker', 'renderer'],
+      description:
+        'When enabled, uncaught renderer errors create bug cards in the Issues app (off by default).',
+    },
+  ),
 
   // —— About (General) ——
   field('about.info', 'Build info', 'general', 'about', {

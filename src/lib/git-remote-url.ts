@@ -42,6 +42,11 @@ export function parseGitRemoteUrl(remoteUrl: string): ParsedGitRemote | null {
   return null;
 }
 
+/** Shared host check for GitHub.com / GHES-style remotes. */
+function isGithubStyleHost(host: string): boolean {
+  return host === 'github.com' || host.endsWith('.github.com') || host.includes('.');
+}
+
 /** Build a web URL for viewing a commit, or null when the remote is not parseable. */
 export function commitUrl(remoteUrl: string, sha: string): string | null {
   const parsed = parseGitRemoteUrl(remoteUrl);
@@ -50,13 +55,24 @@ export function commitUrl(remoteUrl: string, sha: string): string | null {
   const { host, owner, repo } = parsed;
   const hash = sha.trim();
 
-  if (host === 'github.com' || host.endsWith('.github.com')) {
-    return `https://${host}/${owner}/${repo}/commit/${hash}`;
-  }
+  if (!isGithubStyleHost(host)) return null;
+  return `https://${host}/${owner}/${repo}/commit/${hash}`;
+}
 
-  if (host.includes('.')) {
-    return `https://${host}/${owner}/${repo}/commit/${hash}`;
-  }
+/** Build a web URL for a pull request number, or null when the remote is not parseable. */
+export function pullRequestUrl(remoteUrl: string, prNumber: string | number): string | null {
+  const parsed = parseGitRemoteUrl(remoteUrl);
+  const n = String(prNumber).trim();
+  if (!parsed || !/^\d+$/.test(n)) return null;
+  if (!isGithubStyleHost(parsed.host)) return null;
+  return `https://${parsed.host}/${parsed.owner}/${parsed.repo}/pull/${n}`;
+}
 
-  return null;
+/** Build a web URL for a GitHub issue number, or null when the remote is not parseable. */
+export function githubIssueWebUrl(remoteUrl: string, issueNumber: string | number): string | null {
+  const parsed = parseGitRemoteUrl(remoteUrl);
+  const n = String(issueNumber).trim();
+  if (!parsed || !/^\d+$/.test(n)) return null;
+  if (!isGithubStyleHost(parsed.host)) return null;
+  return `https://${parsed.host}/${parsed.owner}/${parsed.repo}/issues/${n}`;
 }

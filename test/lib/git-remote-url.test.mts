@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { commitUrl, parseGitRemoteUrl } from '../../src/lib/git-remote-url.ts';
+import {
+  commitUrl,
+  githubIssueWebUrl,
+  parseGitRemoteUrl,
+  pullRequestUrl,
+} from '../../src/lib/git-remote-url.ts';
 
 describe('parseGitRemoteUrl', () => {
   it('parses SSH github URLs', () => {
@@ -35,5 +40,13 @@ describe('commitUrl', () => {
 
   it('returns null when remote cannot be parsed', () => {
     assert.equal(commitUrl('not-a-remote', 'abc123'), null);
+  });
+});
+
+describe('pullRequestUrl / githubIssueWebUrl', () => {
+  it('builds PR and issue URLs from origin', () => {
+    const remote = 'https://github.com/acme/widget.git';
+    assert.equal(pullRequestUrl(remote, 12), 'https://github.com/acme/widget/pull/12');
+    assert.equal(githubIssueWebUrl(remote, '9'), 'https://github.com/acme/widget/issues/9');
   });
 });

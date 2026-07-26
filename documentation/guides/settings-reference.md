@@ -365,7 +365,7 @@ Preview panel automation for `browser_*` tools (Electron desktop shell only).
 | **Files** | List directory, Read file, Read file lines, Save file, Append file, Insert at line, Replace in file, Search in file, Grep, Make directory, Move/rename, Copy file, Delete path, Find files, File metadata |
 | **Git** | Status, Diff, Log, Add, Commit, Checkout |
 | **Code** | Run command, Read command log, List/stop running commands, Start/stop background command, Run JavaScript, Run Python, Repo map, Find symbol, Who calls, Read symbol, Explain symbol |
-| **Agents** | Spawn/cancel/list/get sub-agent status, Board init/update/set autonomy/get state/report, Delegate tasks, Bug add/update/get state |
+| **Agents** | Spawn/cancel/list/get sub-agent status, Board init/update/set autonomy/get state/report, Delegate tasks, Issue add/update/link/get state |
 | **Browser** | List tabs, Navigate, Request origin access, Snapshot, Click, Fill, Eval, Screenshot |
 | **Brain** | Search, Read page, List pages, Write page, Append log, Ingest source |
 | **LSP** | Get diagnostics, List LSP servers |

@@ -33,6 +33,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   scheduler: 'schedulerView',
   calendar: 'calendarView',
   email: 'emailView',
+  issues: 'issuesView',
   experts: 'expertsView',
 };
 
@@ -64,8 +65,6 @@ function mountAppLayers(): void {
     codeWrap.className = 'mn-os-app-layer mn-os-code-layer';
     codeWrap.dataset.osApp = 'code';
     if (topbar) codeWrap.appendChild(topbar);
-    const globalBugs = document.getElementById('globalBugsView');
-    if (globalBugs) codeWrap.appendChild(globalBugs);
     codeWrap.appendChild(appBody);
     const welcome = document.getElementById('welcomeView');
     if (welcome) codeWrap.appendChild(welcome);
@@ -110,6 +109,7 @@ function closeAllAppPages(): void {
     'schedulerView',
     'calendarView',
     'emailView',
+    'issuesView',
     'researchView',
     'expertsView',
     'chatView',
@@ -119,6 +119,21 @@ function closeAllAppPages(): void {
       const desktopMount = document.getElementById('desktopExpertsMount');
       // Lab panel on the desktop overlay — preserve is-open while reparented there.
       if (view && desktopMount?.contains(view)) {
+        continue;
+      }
+    }
+    if (id === 'issuesView') {
+      const view = document.getElementById('issuesView');
+      const chatArea = document.getElementById('chatArea');
+      // Code sidebar embed — restore to apps layer before clearing is-open.
+      if (view && chatArea?.contains(view)) {
+        // Keep this DOM-only so app-host does not import the Issues UI module.
+        const appsLayer = document.getElementById('osAppsLayer');
+        appsLayer?.appendChild(view);
+        view.classList.remove('issues-page--embedded', 'is-open');
+        document.getElementById('btnIssuesEmbedBack')?.remove();
+        chatArea.classList.remove('chat-area--issues');
+        document.getElementById('mainColumn')?.classList.remove('main-column--issues');
         continue;
       }
     }
@@ -205,6 +220,12 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     case 'email': {
       const { openEmail } = await import('../ui/email-page');
       await openEmail();
+      break;
+    }
+    case 'issues': {
+      const { openIssues } = await import('../ui/issues-page');
+      const issueId = getCurrentRoute().issueId;
+      await openIssues(issueId ? { issueId } : undefined);
       break;
     }
     case 'experts': {

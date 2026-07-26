@@ -2,15 +2,17 @@
  * HTTP client for ~/.minnow config API (npm start only).
  */
 
-import type { BugsState } from '../state/bug-board-store.ts';
 import type {
+  BugsState,
   Chat,
   ChatGroup,
+  IssuesState,
   Message,
   SessionState,
   SessionSummariesState,
   SystemPromptSettings,
 } from '../types';
+import type { IssuesTaxonomy } from '../issues/taxonomy';
 import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/tool-settings-types';
 import type { SearchConfig } from './search-config';
@@ -101,6 +103,10 @@ export async function getSessions(): Promise<SessionState> {
   return parseJsonResponse<SessionState>(res);
 }
 
+/**
+ * GET /api/config/bugs — read-only migration source for Issues (MIN-261).
+ * Leftover bugs/state.json is left on disk after migration.
+ */
 /** GET /api/config/sessions/summaries?workspace=… — chats omit `history` (Phase C.1). */
 export async function getSessionSummaries(workspace?: string): Promise<SessionSummariesState> {
   const params = new URLSearchParams();
@@ -168,12 +174,42 @@ export async function getBugs(): Promise<BugsState> {
   return parseJsonResponse<BugsState>(res);
 }
 
-/** PUT /api/config/bugs */
-export async function putBugs(state: BugsState): Promise<void> {
-  const res = await fetch('/api/config/bugs', {
+/**
+ * GET /api/config/issues
+ * Returns null when the issues file has never been written (triggers migration).
+ */
+export async function getIssues(): Promise<IssuesState | null> {
+  const res = await fetch('/api/config/issues', { cache: 'no-store' });
+  if (res.status === 404) return null;
+  return parseJsonResponse<IssuesState>(res);
+}
+
+/** PUT /api/config/issues */
+export async function putIssues(state: IssuesState): Promise<void> {
+  const res = await fetch('/api/config/issues', {
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify(state),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
+/**
+ * GET /api/config/issues-taxonomy
+ * Returns null when the taxonomy file has never been written (client seeds defaults).
+ */
+export async function getIssuesTaxonomy(): Promise<IssuesTaxonomy | null> {
+  const res = await fetch('/api/config/issues-taxonomy', { cache: 'no-store' });
+  if (res.status === 404) return null;
+  return parseJsonResponse<IssuesTaxonomy>(res);
+}
+
+/** PUT /api/config/issues-taxonomy */
+export async function putIssuesTaxonomy(taxonomy: IssuesTaxonomy): Promise<void> {
+  const res = await fetch('/api/config/issues-taxonomy', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(taxonomy),
   });
   await parseJsonResponse<{ ok: boolean }>(res);
 }

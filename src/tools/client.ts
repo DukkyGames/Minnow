@@ -7,6 +7,7 @@ import { executeBrowserTool } from './browser-executor';
 import { executeBoardTool } from './board-tools';
 import { executeTodoWrite } from './todo-tools';
 import { executeBugBoardTool } from './bug-board-tools';
+import { executeIssueTool } from './issue-tools';
 import { executeSubAgentTool } from './sub-agent-executor';
 import {
   ensureToolConfigReady,
@@ -325,6 +326,19 @@ async function executeToolInner(
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
     const text = executeTodoWrite(args, { chatId: context?.chatId });
+    return { content: text };
+  }
+
+  if (
+    name === 'issue_add' ||
+    name === 'issue_update' ||
+    name === 'issue_link' ||
+    name === 'issue_get_state' ||
+    name === 'issue_delete'
+  ) {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = await executeIssueTool(name, args);
     return { content: text };
   }
 

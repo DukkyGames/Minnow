@@ -43,7 +43,7 @@ const SEQUENTIAL_TOOL_GROUP_IDS = [
   'code-exec',
   'browser',
   'board',
-  'bug-board',
+  'issues',
   'mode-mgmt',
 ] as const;
 

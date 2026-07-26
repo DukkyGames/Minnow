@@ -26,6 +26,9 @@ import {
   validateSystemPromptSettings,
   validateUserRulesSettings,
   validateBugsState,
+  validateIssuesState,
+  validateIssuesTaxonomy,
+  defaultIssuesTaxonomy,
 } from './validators.js';
 import {
   DEFAULT_META,
@@ -372,6 +375,14 @@ export async function readResource(resource) {
     const data = await readConfigJson(key);
     return data ?? { version: 1, bugs: [] };
   }
+  if (resource === 'issues') {
+    // null when file missing — client migrates from bugs on first load.
+    return readConfigJson(key);
+  }
+  if (resource === 'issues-taxonomy') {
+    const data = await readConfigJson(key);
+    return data ?? defaultIssuesTaxonomy();
+  }
 
   return readConfigJson(key);
 }
@@ -454,6 +465,26 @@ export async function writeResource(resource, body) {
   }
   if (resource === 'bugs') {
     const validated = validateBugsState(body);
+    await writeConfigJson(key, validated);
+    return validated;
+  }
+  if (resource === 'issues') {
+    const validated = validateIssuesState(body);
+    await writeConfigJson(key, validated);
+    return validated;
+  }
+  if (resource === 'issues-taxonomy') {
+    const issuesKey = resourceToRelativeKey('issues');
+    const issuesRaw = issuesKey ? await readConfigJson(issuesKey) : null;
+    const issuesState = validateIssuesState(issuesRaw);
+    const previousRaw = await readConfigJson(key);
+    const previous = previousRaw
+      ? validateIssuesTaxonomy(previousRaw, { issues: issuesState.issues })
+      : defaultIssuesTaxonomy();
+    const validated = validateIssuesTaxonomy(body, {
+      previous,
+      issues: issuesState.issues,
+    });
     await writeConfigJson(key, validated);
     return validated;
   }

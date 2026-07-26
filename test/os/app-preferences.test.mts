@@ -46,12 +46,13 @@ function setupDom(): void {
 }
 
 describe('app registry availability invariants', () => {
-  test('core apps include chat, code, research, models, brain, scheduler, settings', () => {
+  test('core apps include chat, code, research, models, brain, scheduler, issues, settings', () => {
     const coreIds = listCoreReleasedApps().map((app) => app.id).sort();
     assert.deepEqual(coreIds, [
       'brain',
       'chat',
       'code',
+      'issues',
       'models',
       'research',
       'scheduler',
@@ -68,8 +69,8 @@ describe('app registry availability invariants', () => {
   });
 
   test('every app has availability + releaseState; five apps are hidden', () => {
-    assert.equal(APPS.length, 12);
-    assert.equal(listReleasedApps().length, 7);
+    assert.equal(APPS.length, 13);
+    assert.equal(listReleasedApps().length, 8);
     for (const app of APPS) {
       assert.ok(app.availability === 'core' || app.availability === 'optional');
       assert.ok(app.releaseState === 'released' || app.releaseState === 'hidden');

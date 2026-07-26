@@ -118,6 +118,7 @@ import { renderDeepResearchSettingsSection } from './settings-research-section';
 import { renderSamplerSettingsSection } from './settings-sampler';
 import { renderThinkingSettingsSection } from './settings-thinking';
 import { renderWebhooksSettingsSection } from './settings-webhooks';
+import { renderIssuesSettingsSection } from './settings-issues';
 import {
   getTerminalMetaCached,
   loadTerminalMeta,
@@ -2109,6 +2110,12 @@ async function renderAppsSection(): Promise<void> {
   renderAppsSettingsSection(mount);
 }
 
+async function renderIssuesSettingsPanel(): Promise<void> {
+  const mount = clearMount('settingsIssuesBody');
+  if (!mount) return;
+  renderIssuesSettingsSection(mount);
+}
+
 /** Load or refresh one settings section from live APIs. */
 export async function refreshSettingsSection(
   section: SettingsSectionId,
@@ -2122,6 +2129,9 @@ export async function refreshSettingsSection(
       break;
     case 'apps':
       await renderAppsSection();
+      break;
+    case 'issues':
+      await renderIssuesSettingsPanel();
       break;
     case 'appearance':
       await renderAppearanceSection();

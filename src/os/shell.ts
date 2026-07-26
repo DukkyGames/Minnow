@@ -11,7 +11,7 @@ import { initAppHost } from './app-host';
 import { renderDesktop } from './desktop';
 import { initDockLauncher } from './dock-launcher';
 import { renderMenubar } from './menubar';
-import { createOsIcon } from './icons';
+import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { isOsShellEnabled } from './page-bridge';
 
 const BOOT_MS = 1300;
@@ -94,7 +94,7 @@ function showBootSplash(root: HTMLElement): void {
 
   const logo = document.createElement('div');
   logo.className = 'mn-os-boot-logo';
-  logo.appendChild(createOsIcon('fish', { size: 40 }));
+  logo.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
   const name = document.createElement('div');
   name.className = 'mn-os-boot-name';

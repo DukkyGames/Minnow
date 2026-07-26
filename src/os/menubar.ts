@@ -8,10 +8,11 @@ import {
 import { getUnreadNotificationCount } from './notifications-menu';
 import { onNewNotification } from '../notifications/push';
 import { subscribeNotifications } from '../notifications/store';
-import { launchApp, navigateToDesktop } from './router';
+import { launchApp } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
 import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
+import { closeAppSwitcherMenu, initAppSwitcherMenu } from './app-switcher-menu';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
@@ -97,13 +98,13 @@ export function renderMenubar(root: HTMLElement): () => void {
     if (title) statusText.setAttribute('title', title);
   }
 
-  const desktopBtn = document.createElement('button');
-  desktopBtn.type = 'button';
-  desktopBtn.className = 'mn-os-mb-desktop';
-  desktopBtn.hidden = true;
-  desktopBtn.appendChild(createOsIcon('grid', { size: 15 }));
-  desktopBtn.appendChild(document.createTextNode(' Desktop'));
-  desktopBtn.addEventListener('click', () => navigateToDesktop());
+  // Icon-only Apps launcher — opens a dock-sized grid with Desktop + apps.
+  const appsBtn = document.createElement('button');
+  appsBtn.type = 'button';
+  appsBtn.className = 'mn-os-mb-icon mn-os-mb-apps';
+  appsBtn.hidden = true;
+  appsBtn.appendChild(createOsIcon('grid', { size: 16 }));
+  const cleanupAppSwitcher = initAppSwitcherMenu(appsBtn);
 
   const sep = document.createElement('span');
   sep.className = 'mn-os-mb-sep mn-os-mb-app-sep';
@@ -138,7 +139,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     void import('../ui/layout').then((m) => m.toggleSidebarLayout());
   });
 
-  left.append(brand, desktopBtn, sep, appName, statusSep, statusPill, chatToggle);
+  left.append(brand, appsBtn, sep, appName, statusSep, statusPill, chatToggle);
 
   const right = document.createElement('div');
   right.className = 'mn-os-mb-right';
@@ -202,7 +203,9 @@ export function renderMenubar(root: HTMLElement): () => void {
 
     root.dataset.view = view;
     brand.hidden = !onDesktop;
-    desktopBtn.hidden = onDesktop;
+    appsBtn.hidden = onDesktop;
+    // Dock covers Desktop; dismiss the switcher if we navigated home.
+    if (onDesktop) closeAppSwitcherMenu();
     sep.hidden = onDesktop;
     appName.hidden = onDesktop;
 
@@ -272,6 +275,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     unsubPrefs();
     unsubNotif();
     stopClock();
+    cleanupAppSwitcher();
     cleanupModelChip();
     cleanupNotifications();
     cleanupUpdatePill();

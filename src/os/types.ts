@@ -1,5 +1,18 @@
 /** MinnowOS app identifiers — one per launcher tile. */
-export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'brain' | 'scheduler' | 'calendar' | 'email' | 'settings';
+export type AppId =
+  | 'code'
+  | 'chat'
+  | 'research'
+  | 'experts'
+  | 'bench'
+  | 'compare'
+  | 'models'
+  | 'brain'
+  | 'scheduler'
+  | 'calendar'
+  | 'email'
+  | 'issues'
+  | 'settings';
 
 /** How an app is presented in the MinnowOS shell. */
 export type PresentationMode = 'fullscreen' | 'window' | 'desktop' | 'sidePanel';
@@ -56,6 +69,16 @@ export interface LaunchOptions {
   modeId?: ModeId;
   /** Code app: absolute workspace path from the recent-workspace list. */
   workspacePath?: string;
+  /**
+   * Code app: queue as composer `codeRef` attachments before auto-send
+   * (Issues Plan / Debug launches).
+   */
+  codeRefs?: Array<{
+    path: string;
+    startLine?: number;
+    endLine?: number;
+    text?: string;
+  }>;
   /** Research: start a run immediately when a seed is present. */
   autoRun?: boolean;
   /** Code app: switch to this chat after launch (notification deep-link). */
@@ -83,4 +106,6 @@ export interface OsRoute {
   modelsSection?: string;
   brainSection?: string;
   codeSection?: CodeSectionId;
+  /** Issues deep link (`#/app/issues/ISS-n`) — detail panel in Phase 2. */
+  issueId?: string;
 }

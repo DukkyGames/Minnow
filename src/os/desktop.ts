@@ -100,6 +100,9 @@ export function renderDesktop(root: HTMLElement): () => void {
   rail.className = 'mn-os-chat-rail is-collapsed';
   rail.setAttribute('aria-label', 'Chat sessions');
 
+  const railTabs = document.createElement('div');
+  railTabs.className = 'mn-os-chat-rail-tabs';
+
   const railTab = document.createElement('button');
   railTab.type = 'button';
   railTab.id = 'btnDesktopChatRailToggle';
@@ -107,6 +110,16 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTab.setAttribute('aria-label', 'Show chat sessions');
   railTab.setAttribute('aria-expanded', 'false');
   railTab.appendChild(createOsIcon('chat', { size: 28 }));
+
+  const railNewTab = document.createElement('button');
+  railNewTab.type = 'button';
+  railNewTab.id = 'btnDesktopChatRailNew';
+  railNewTab.className = 'mn-os-chat-rail-tab mn-os-chat-rail-tab--new';
+  railNewTab.setAttribute('aria-label', 'New chat');
+  railNewTab.title = 'New chat';
+  railNewTab.textContent = '+';
+
+  railTabs.append(railTab, railNewTab);
 
   const railPanel = document.createElement('div');
   railPanel.className = 'mn-os-chat-rail-panel';
@@ -152,7 +165,7 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   railMain.append(railHeader, railNewChat, railList);
   railPanel.appendChild(railMain);
-  rail.append(railTab, railPanel);
+  rail.append(railTabs, railPanel);
 
   const railBackdrop = document.createElement('button');
   railBackdrop.type = 'button';

@@ -73,7 +73,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     id: 'debug',
     label: 'Debug',
     description:
-      'Investigate bugs and root causes; file and triage via All bugs and bug_* tools.',
+      'Investigate bugs and root causes; file and triage via Issues and issue_* tools.',
     promptId: 'debug',
     toolPolicy: allowGroupsToolPolicy('debug', MODE_ALLOWED_GROUPS.debug),
   },
