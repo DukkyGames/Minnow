@@ -17,7 +17,7 @@ Agents can create PDF, Excel, and Word files with first-class tools instead of s
 
 All three are in the `files-write` tool group. Plan mode blocks them (same as other binary writes).
 
-## Optional dependencies
+## Dependencies
 
 | Package | Used for |
 |---------|----------|
@@ -26,15 +26,16 @@ All three are in the `files-write` tool group. Plan mode blocks them (same as ot
 | `docx` | `create_word_document` |
 | `mammoth` | `.docx` HTML preview |
 | `officeparser` | legacy `.doc` preview fallback |
+| `pdf-parse` | `read_document` PDF extraction |
 
-Install with `npm install` (optionalDependencies) or add packages manually.
+All six are listed in `package.json` `dependencies` and install with `npm install`.
 
 ## File viewer preview
 
 | Extension | View mode | Route |
 |-----------|-----------|-------|
 | `.pdf` | embed (blob URL; avoids Chromium iframe PDF block) | `GET /api/preview/file/…` → client blob |
-| `.xlsx`, `.xls`, `.csv`, … | iframe (HTML tables) | `GET /api/preview/document-html/…` |
+| `.xlsx`, `.xls`, `.ods`, … | iframe (HTML tables) | `GET /api/preview/document-html/…` |
 | `.docx`, `.doc`, … | iframe (HTML) | `GET /api/preview/document-html/…` |
 
 ## Todos

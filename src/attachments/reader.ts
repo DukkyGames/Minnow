@@ -160,19 +160,12 @@ function readFileAsText(file: File): Promise<string> {
 
 /** Encodes file bytes as base64 for read_document. */
 async function readFileAsBase64(file: File): Promise<string> {
-  const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () =>
-      reject(reader.error ?? new Error('Failed to read file'));
-    reader.readAsArrayBuffer(file);
-  });
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  const dataUrl = await readFileAsDataUrl(file);
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) {
+    throw new Error('Failed to encode file as base64');
   }
-  return btoa(binary);
+  return dataUrl.slice(comma + 1);
 }
 
 /** POST read_document to the local tools server (npm start). */

@@ -31,7 +31,7 @@ export function isOfficeExtension(filename) {
   return OFFICE_EXTENSIONS.has(fileExtension(filename));
 }
 
-const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xls', 'xlsm', 'ods', 'csv']);
+const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xls', 'xlsm', 'ods']);
 const WORD_EXTENSIONS = new Set(['docx', 'doc', 'odt', 'rtf']);
 
 /** @param {string} pathOrName */

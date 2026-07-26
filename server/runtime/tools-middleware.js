@@ -1294,11 +1294,22 @@ export async function executeServerTool(name, args, options = {}) {
   });
 }
 
+const MAX_TOOLS_BODY_BYTES = 32 * 1024 * 1024;
+
 /** Read JSON body from POST /api/tools. */
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = MAX_TOOLS_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new Error('Body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => {
       try {
         const raw = Buffer.concat(chunks).toString('utf8');
@@ -1309,6 +1320,13 @@ function readJsonBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+/** Map readJsonBody failures to HTTP status codes. */
+function statusForToolsBodyError(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message === 'Body too large') return 413;
+  return 400;
 }
 
 /**
@@ -1351,7 +1369,7 @@ export function createToolsMiddleware() {
         res.end(JSON.stringify({ codeChange: codeChange ?? null }));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        res.statusCode = 400;
+        res.statusCode = statusForToolsBodyError(err);
         res.end(JSON.stringify({ error: message }));
       }
       return;
@@ -1415,7 +1433,7 @@ export function createToolsMiddleware() {
         res.end(JSON.stringify(payload));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        res.statusCode = 400;
+        res.statusCode = statusForToolsBodyError(err);
         res.end(JSON.stringify({ error: message }));
       }
       return;
