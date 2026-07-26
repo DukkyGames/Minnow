@@ -220,13 +220,10 @@ describe('renderAppUpdatesSettings', () => {
     assert.ok(callout?.textContent?.includes('macOS auto-update requires code signing'));
     const check = mount.querySelector<HTMLElement>('#settingsUpdatesCheckBtn');
     assert.ok(!check || check.hidden || check.closest('.settings-updates__controls')?.hidden);
-    const channelInputs = mount.querySelectorAll<HTMLInputElement>(
-      'input[name="settings-update-channel"]',
+    assert.equal(
+      mount.querySelectorAll<HTMLInputElement>('input[name="settings-update-channel"]').length,
+      0,
     );
-    assert.equal(channelInputs.length, 2);
-    for (const input of channelInputs) {
-      assert.equal(input.disabled, true);
-    }
   });
 
   test('unsupported dev install hides channel and check controls', async () => {

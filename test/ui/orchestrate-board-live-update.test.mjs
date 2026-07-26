@@ -740,6 +740,19 @@ describe('orchestrate board live updates', () => {
 
   test('isolation select still works after switching to AFK', async () => {
     setupDom();
+    globalThis.window.minnow = {
+      preview: { show: async () => {}, hide: async () => {} },
+      app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
+      window: {
+        minimize: async () => {},
+        maximize: async () => {},
+        close: async () => {},
+        isMaximized: async () => false,
+        onMaximizedChanged: () => () => {},
+      },
+    };
+    const { installAppDialogs } = await import('../../src/ui/app-dialog.ts');
+    installAppDialogs(globalThis.window);
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
     const group = initBoardForChat(chat, {

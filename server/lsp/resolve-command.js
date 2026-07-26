@@ -113,8 +113,31 @@ function resolveFromAppRoot(specifier) {
  * @param {string[]} extraArgs
  * @returns {ResolvedLspSpawn}
  */
+/**
+ * @param {string} rootDir
+ * @returns {string | undefined}
+ */
+function tryResolveTsserverFromRoot(rootDir) {
+  const legacy = path.join(rootDir, 'node_modules/typescript/lib/tsserver.js');
+  if (fs.existsSync(legacy)) return legacy;
+  return tryResolveFromRoot(rootDir, 'typescript/lib/tsserver.js');
+}
+
 /** Bundled tsserver.js (used when the workspace has no local typescript). */
 export function getBundledTsserverPath() {
+  const workspace = getWorkspaceRoot();
+  const appRoot = getAppRoot();
+  const managed = getManagedLspNpmRoot();
+
+  const fromWorkspace = tryResolveTsserverFromRoot(workspace);
+  if (fromWorkspace) return fromWorkspace;
+
+  const fromApp = tryResolveTsserverFromRoot(appRoot);
+  if (fromApp) return fromApp;
+
+  const fromManaged = tryResolveTsserverFromRoot(managed);
+  if (fromManaged) return fromManaged;
+
   return resolveFromAppRoot('typescript/lib/tsserver.js');
 }
 
@@ -255,7 +278,7 @@ export function resolveLspSpawnArgv(command) {
       return path.join(getAppRoot(), 'test/fixtures/fake-lsp.mjs');
     }
     if (part === '$minnow:tsserver') {
-      return resolveFromAppRoot('typescript/lib/tsserver.js');
+      return getBundledTsserverPath();
     }
     if (index === 0 && typeof part === 'string') {
       return resolveLspExecutable(part);

@@ -202,6 +202,8 @@ export function renderAppUpdatesSettings(mount: HTMLElement): void {
     callout.hidden = !limited;
     if (limited) {
       callout.textContent = unsupportedMessage(status);
+      if (channelBlock.isConnected) channelBlock.remove();
+      if (actionsBlock.isConnected) actionsBlock.remove();
     }
 
     suppressChannelEvents = true;

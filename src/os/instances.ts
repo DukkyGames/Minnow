@@ -80,7 +80,13 @@ function pickNextForeground(
   // returnToApp only applies when closing a fullscreen overlay (e.g. Settings from Code).
   if (returnApp && closedPresentation === 'fullscreen') {
     const target = instances.find((i) => i.appId === returnApp && i.id !== excludeId);
-    if (target) return target.id;
+    if (target) {
+      const mode = resolveInstancePresentation(target);
+      // Honor returnToApp only for floating surfaces — not background fullscreen apps.
+      if (mode === 'window' || mode === 'sidePanel') {
+        return target.id;
+      }
+    }
   }
 
   const remaining = instances.filter((i) => i.id !== excludeId);

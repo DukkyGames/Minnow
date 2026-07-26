@@ -34,6 +34,7 @@ function setupThreeToolLists() {
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
+  globalThis.HTMLLabelElement = window.HTMLLabelElement;
   globalThis.HTMLInputElement = window.HTMLInputElement;
   globalThis.HTMLSelectElement = window.HTMLSelectElement;
   globalThis.HTMLLabelElement = window.HTMLLabelElement;
