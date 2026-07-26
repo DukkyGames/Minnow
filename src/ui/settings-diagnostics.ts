@@ -7,6 +7,10 @@ import '../styles/settings-general.css';
 import '../styles/settings-about.css';
 import { detectConfigServer } from '../config/storage-mode';
 import {
+  loadDiagnosticsPrefs,
+  saveDiagnosticsPref,
+} from '../diagnostics/prefs';
+import {
   appendSettingsGroup,
   linkToSettingsSection,
 } from './settings-layout';
@@ -15,6 +19,7 @@ import {
   createSettingsActionsRow,
 } from './settings-controls';
 import { setStatus } from './status';
+import { createSettingsToggleRow } from './settings-switch';
 import {
   fetchDiagnosticsHealth,
   renderHealthStrip,
@@ -214,6 +219,23 @@ export async function renderDiagnosticsSettingsSection(): Promise<void> {
   );
   const healthHost = el('div', 'diagnostics-health-host');
   healthGroup.appendChild(healthHost);
+
+  const issuesPrefs = loadDiagnosticsPrefs();
+  const issuesGroup = appendSettingsGroup(
+    content,
+    'Issues app',
+    'Optional auto-filing of renderer crashes as bug cards.',
+    'advanced.diagnostics.fileErrorsToIssues',
+    { emphasis: true },
+  );
+  const { row: fileIssuesRow } = createSettingsToggleRow('File renderer errors to Issues', {
+    checked: issuesPrefs.fileErrorsToIssues,
+    description:
+      'When enabled, uncaught renderer errors create bug cards in the Issues app. Off by default.',
+    searchKey: 'advanced.diagnostics.fileErrorsToIssues',
+    onChange: (next) => saveDiagnosticsPref('fileErrorsToIssues', next),
+  });
+  issuesGroup.appendChild(fileIssuesRow);
 
   const diagnostics = appendSettingsGroup(
     content,

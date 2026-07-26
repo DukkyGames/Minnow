@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { installHappyDomGlobals } from './dom-helpers.mts';
+import { installHappyDomGlobals, seedMinimalSession } from './dom-helpers.mts';
 
 function setupCodeSettingsDom(doc: Document): void {
   doc.body.innerHTML = `
@@ -11,7 +11,7 @@ function setupCodeSettingsDom(doc: Document): void {
     </div>
     <div id="appBody"></div>
     <main id="settingsView" class="settings-page mn-os-app-layer" data-os-app="settings">
-      <button type="button" id="btnSettingsPageBack" aria-label="Back">Back</button>
+      <button type="button" id="btnSettingsPageBack" aria-label="Back to Code">Back</button>
     </main>
   `;
 }
@@ -35,8 +35,10 @@ describe('code app settings (MIN-417)', () => {
   let resetWindowManagerForTests: typeof import('../../src/os/window-manager.ts').resetWindowManagerForTests;
   let windowManager: typeof import('../../src/os/window-manager.ts').windowManager;
   let initSettingsPage: typeof import('../../src/ui/settings-page.ts').initSettingsPage;
+  let resetSettingsPageForTests: typeof import('../../src/ui/settings-page.ts').resetSettingsPageForTests;
   let openSettingsFromTopbar: typeof import('../../src/ui/settings-page.ts').openSettingsFromTopbar;
   let closeSettings: typeof import('../../src/ui/settings-page.ts').closeSettings;
+  let resetAppModulesForTests: typeof import('../../src/os/app-modules.ts').resetAppModulesForTests;
 
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
@@ -47,6 +49,7 @@ describe('code app settings (MIN-417)', () => {
         headers: { 'Content-Type': 'application/json' },
       });
     installHappyDomGlobals(win, { fetch: win.fetch });
+    seedMinimalSession('chat-1');
     win.localStorage.clear();
     win.location.hash = '#/app/code/chat';
     setupCodeSettingsDom(win.document);
@@ -78,8 +81,10 @@ describe('code app settings (MIN-417)', () => {
       resetWindowManagerForTests,
       windowManager,
     } = await import('../../src/os/window-manager.ts'));
+    ({ resetAppModulesForTests } = await import('../../src/os/app-modules.ts'));
     ({
       initSettingsPage,
+      resetSettingsPageForTests,
       openSettingsFromTopbar,
       closeSettings,
     } = await import('../../src/ui/settings-page.ts'));
@@ -89,9 +94,12 @@ describe('code app settings (MIN-417)', () => {
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     resetAppHostForTests();
+    resetAppModulesForTests();
+    resetSettingsPageForTests();
     initOsPageBridge();
     initOsRouter();
     initAppHost();
+    // Single bind — openAppPage also ensureAppInitialized; idempotent init must not stack handlers.
     initSettingsPage();
     launchInstance('code');
     syncAppHostForTests();
@@ -104,11 +112,15 @@ describe('code app settings (MIN-417)', () => {
     const { resetOsRouterForTests } = await import('../../src/os/router.ts');
     const { resetOsPageBridgeForTests } = await import('../../src/os/page-bridge.ts');
     const { resetAppHostForTests } = await import('../../src/os/app-host.ts');
+    const { resetAppModulesForTests } = await import('../../src/os/app-modules.ts');
+    const { resetSettingsPageForTests } = await import('../../src/ui/settings-page.ts');
     resetWindowManagerForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     resetAppHostForTests();
+    resetAppModulesForTests();
+    resetSettingsPageForTests();
   });
 
   test('opening settings from Code uses fullscreen presentation', async () => {
@@ -141,6 +153,46 @@ describe('code app settings (MIN-417)', () => {
 
     const snap = getInstanceSnapshot();
     assert.equal(snap.instances.some((i) => i.appId === 'settings'), false);
+    assert.equal(getForegroundAppId(), 'code');
+    assert.equal(getOsView(), 'app');
+    assert.equal(window.location.hash, '#/app/code/chat');
+  });
+
+  test('settings back button returns to the Code app', async () => {
+    openSettingsFromTopbar();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const back = document.getElementById('btnSettingsPageBack');
+    assert.ok(back);
+    back.click();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(getForegroundAppId(), 'code');
+    assert.equal(getOsView(), 'app');
+    assert.equal(window.location.hash, '#/app/code/chat');
+    assert.equal(getInstanceSnapshot().instances.some((i) => i.appId === 'settings'), false);
+  });
+
+  test('stacked back handlers do not fall through to desktop', async () => {
+    // Pre-fix failure mode: a second closeSettings listener runs after Code was restored.
+    document.getElementById('btnSettingsPageBack')?.addEventListener('click', () => {
+      closeSettings();
+    });
+
+    openSettingsFromTopbar();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    document.getElementById('btnSettingsPageBack')?.click();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
     assert.equal(getForegroundAppId(), 'code');
     assert.equal(getOsView(), 'app');
     assert.equal(window.location.hash, '#/app/code/chat');

@@ -68,9 +68,11 @@ function viewForPresentationMode(mode: PresentationMode): OsView {
   return mode === 'window' || mode === 'sidePanel' || mode === 'desktop' ? 'desktop' : 'app';
 }
 
-function pickNextForeground(excludeId: string): string | null {
-  const closing = instances.find((i) => i.id === excludeId);
-  const returnApp = closing?.launchOptions?.returnToApp;
+/**
+ * Pick the next foreground after closing `excludeId`.
+ * `returnApp` must be captured before the instance is removed from the store.
+ */
+function pickNextForeground(excludeId: string, returnApp?: AppId): string | null {
   if (returnApp) {
     const target = instances.find((i) => i.appId === returnApp && i.id !== excludeId);
     if (target) return target.id;
@@ -185,9 +187,11 @@ export function restoreInstance(id: string): boolean {
 export function closeInstance(id: string): boolean {
   const idx = instances.findIndex((i) => i.id === id);
   if (idx < 0) return false;
+  // Read returnToApp before removing — pickNextForeground cannot see the closed row.
+  const returnApp = instances[idx]?.launchOptions?.returnToApp;
   instances = instances.filter((i) => i.id !== id);
   if (foregroundId === id) {
-    foregroundId = pickNextForeground(id);
+    foregroundId = pickNextForeground(id, returnApp);
     if (!foregroundId) {
       view = 'desktop';
     } else {

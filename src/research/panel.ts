@@ -27,7 +27,6 @@ import {
 } from './workspace-scope-ui';
 import { closeBenchmark } from '../ui/benchmark-page';
 import { closeCompare } from '../ui/compare-page';
-import { closeGlobalBugs } from '../ui/global-bugs-page';
 import { renderChatFromHistory } from '../ui/messages';
 import { closeSettings } from '../ui/settings-page';
 import { renderSidebar } from '../ui/sidebar';
@@ -468,7 +467,6 @@ async function cancelActiveRun(): Promise<void> {
 
 function closeOtherOverlays(): void {
   closeSettings({ skipNavigate: true });
-  closeGlobalBugs();
   closeBenchmark({ skipNavigate: true });
   closeCompare({ skipNavigate: true });
   void import('../ui/welcome-page').then((m) => {

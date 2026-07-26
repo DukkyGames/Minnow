@@ -2,8 +2,14 @@
  * Renderer global error handlers — surface crashes visibly and forward to main log.
  */
 
+import { isFileErrorsToIssuesEnabled } from '../diagnostics/prefs.ts';
 import { pushNotification } from '../notifications/push';
-import { addBug, isBugsStoreLoaded, updateBug } from '../state/bug-board-store';
+import {
+  addIssue,
+  bugSeverityToIssuePriority,
+  isIssuesStoreLoaded,
+  updateIssue,
+} from '../state/issues-store';
 import { getWorkspacePath } from '../state/workspace';
 import { setStatus } from '../ui/status';
 
@@ -109,42 +115,51 @@ function report(kind: string, message: string, stack?: string): void {
 
   setStatus('err', truncateStatus(message));
 
-  if (!isBugsStoreLoaded()) return;
+  if (!isIssuesStoreLoaded() || !isFileErrorsToIssuesEnabled()) return;
 
   if (decision.rollSuppressionCard) {
     const count = surfaceState.suppressedCount;
     const title = `+${count} more suppressed errors`;
     const description = `${kind}\n${message}\n${stack ?? ''}`;
     if (surfaceState.suppressionBugId) {
-      updateBug(surfaceState.suppressionBugId, { notes: description });
+      updateIssue(surfaceState.suppressionBugId, { notes: description });
     } else {
-      const bugId = `bug-crash-${Date.now().toString(36)}`;
-      addBug(
+      // Stable legacy-style id so suppression updates can find the same card.
+      const issueId = `bug-crash-${Date.now().toString(36)}`;
+      addIssue(
         {
           title,
           description,
+          type: 'bug',
+          status: 'triage',
+          priority: bugSeverityToIssuePriority('critical'),
           severity: 'critical',
+          legacyBugId: issueId,
           workspacePath: getWorkspacePath(),
         },
-        bugId,
+        issueId,
       );
-      surfaceState.suppressionBugId = bugId;
+      surfaceState.suppressionBugId = issueId;
     }
     return;
   }
 
   if (!decision.surfaceUi) return;
 
-  const bugId = `bug-crash-${Date.now().toString(36)}`;
+  const issueId = `bug-crash-${Date.now().toString(36)}`;
   const title = message.trim() || kind;
-  addBug(
+  addIssue(
     {
       title,
       description: `${kind}\n${stack ?? message}`,
+      type: 'bug',
+      status: 'triage',
+      priority: bugSeverityToIssuePriority('critical'),
       severity: 'critical',
+      legacyBugId: issueId,
       workspacePath: getWorkspacePath(),
     },
-    bugId,
+    issueId,
   );
 
   pushNotification({

@@ -1760,7 +1760,102 @@ label.settings-action-btn {
   overflow-wrap: anywhere;
 }
 
-/* MCP page continues below — providers styles live in settings-providers.css */
+/* Settings → Issues taxonomy tables */
+
+.settings-issues-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+}
+
+.settings-issues-table__head,
+.settings-issues-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) minmax(88px, 0.9fr) minmax(100px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.settings-issues-table__head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 6%, transparent));
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.settings-issues-row {
+  border-bottom: 1px solid var(--mn-border);
+  font-size: 13px;
+}
+
+.settings-issues-row:last-child {
+  border-bottom: none;
+}
+
+.settings-issues-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-issues-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+}
+
+.settings-issues-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-issues-order {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-issues-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-issues-add,
+.settings-issues-reset {
+  margin-top: 10px;
+}
+
+.settings-issues-empty {
+  margin: 0;
+  padding: 12px 10px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-inline-btn--danger {
+  color: var(--mn-danger);
+}
+
+@media (max-width: 720px) {
+  .settings-issues-table__head {
+    display: none;
+  }
+
+  .settings-issues-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
 
 .settings-mcp-remove {
   margin-left: auto;

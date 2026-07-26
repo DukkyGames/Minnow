@@ -103,9 +103,10 @@ describe('welcome-page', { concurrency: false }, () => {
     assert.equal(validateProjectFolderName('valid-name'), null);
   });
 
-  test('isOtherFullPageHash matches settings and bugs routes', () => {
+  test('isOtherFullPageHash matches settings, legacy bugs redirect, and app routes', () => {
     assert.equal(isOtherFullPageHash('#/settings/general'), true);
     assert.equal(isOtherFullPageHash('#/bugs'), true);
+    assert.equal(isOtherFullPageHash('#/app/issues'), true);
     assert.equal(isOtherFullPageHash('#/benchmark'), true);
     assert.equal(isOtherFullPageHash('#/experts'), true);
     assert.equal(isOtherFullPageHash('#/welcome'), false);

@@ -31,7 +31,7 @@ Three overlapping audiences, one growth direction:
 
 ### Platform capabilities
 
-- **Five operating modes** — General, Build, Plan, Orchestrate, Debug (bug tracker) — each with tuned prompts and tool policy.
+- **Five operating modes** — General, Build, Plan, Orchestrate, Debug (Issues workflows) — each with tuned prompts and tool policy.
 - **Agent layer** — ~88 built-in tools, sub-agents, work agents, skills (`/commands`), tool permissions (Full / Ask / Off), MCP and local plugins.
 - **MinnowOS apps** — Calendar, Email, Scheduler, Experts, Bench, Evals, and more from the dock.
 - **Workspace tools** — memory synthesis, voice I/O, browser CDP automation (Electron), webhooks, semantic embeddings.

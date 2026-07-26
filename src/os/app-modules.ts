@@ -7,26 +7,29 @@ import { isAppAvailable } from './app-preferences';
 import type { AppId } from './types';
 
 const initializedApps = new Set<AppId>();
-let globalBugsInitialized = false;
+/** Coalesce concurrent ensureAppInitialized calls for the same app. */
+const inflightInits = new Map<AppId, Promise<void>>();
 
 /** Initialize a single app page module once. */
 export async function ensureAppInitialized(appId: AppId): Promise<void> {
   if (initializedApps.has(appId)) return;
+  const inflight = inflightInits.get(appId);
+  if (inflight) return inflight;
   // Do not lazy-init apps the user (or developer gate) has made unavailable.
   if (!isAppAvailable(appId)) return;
   const loader = APP_MODULE_LOADERS[appId];
   if (!loader) return;
-  const mod = await loader();
-  await mod.init();
-  initializedApps.add(appId);
-}
 
-/** Legacy `#/bugs` overlay — not a dock app but still code-split. */
-export async function ensureGlobalBugsInitialized(): Promise<void> {
-  if (globalBugsInitialized) return;
-  const mod = await import('../ui/global-bugs-page');
-  mod.initGlobalBugsPage();
-  globalBugsInitialized = true;
+  // Mark in-flight before the first await so parallel openers share one init.
+  const pending = (async () => {
+    const mod = await loader();
+    await mod.init();
+    initializedApps.add(appId);
+  })().finally(() => {
+    inflightInits.delete(appId);
+  });
+  inflightInits.set(appId, pending);
+  return pending;
 }
 
 function bootAppIdFromHash(hash: string): AppId | null {
@@ -37,11 +40,11 @@ function bootAppIdFromHash(hash: string): AppId | null {
 
 /** Initialize app modules required for the current hash route at cold boot. */
 export async function ensureBootAppsInitialized(): Promise<void> {
-  // Sidebar #btnAllBugs and #/bugs routing need listeners on every boot.
-  await ensureGlobalBugsInitialized();
+  // Sidebar Issues button + badge need listeners on every boot.
+  await ensureAppInitialized('issues');
 
   const appId = bootAppIdFromHash(window.location.hash);
-  if (appId && isAppAvailable(appId)) {
+  if (appId && isAppAvailable(appId) && appId !== 'issues') {
     await ensureAppInitialized(appId);
   }
 }
@@ -49,5 +52,5 @@ export async function ensureBootAppsInitialized(): Promise<void> {
 /** Reset lazy-init state (tests). */
 export function resetAppModulesForTests(): void {
   initializedApps.clear();
-  globalBugsInitialized = false;
+  inflightInits.clear();
 }

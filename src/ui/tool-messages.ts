@@ -10,6 +10,13 @@ import { formatAskQuestionResultAsListItems } from './format-ask-question-result
 /** Human-readable labels for built-in tools (fallback: snake_case → spaces). */
 const TOOL_LABEL_MAP = new Map(BUILT_IN_TOOLS.map((t) => [t.id, t.label]));
 
+/** Retired tool ids still shown in older transcripts — map to current Issues labels. */
+const LEGACY_TOOL_LABELS: Record<string, string> = {
+  bug_add: 'Issue add',
+  bug_update: 'Issue update',
+  bug_get_state: 'Issue get state',
+};
+
 /** File write/edit tools that render as open diff cards instead of collapsible bubbles. */
 const FILE_MUTATION_TOOLS = new Set([
   'save_file',
@@ -126,7 +133,7 @@ export function syncToolCallKillButtons(activeRunIds: Set<string>): void {
 }
 
 export function humanizeToolName(name: string): string {
-  return TOOL_LABEL_MAP.get(name) ?? name.replace(/_/g, ' ');
+  return LEGACY_TOOL_LABELS[name] ?? TOOL_LABEL_MAP.get(name) ?? name.replace(/_/g, ' ');
 }
 
 /** Last path segment for file-card summary titles. */

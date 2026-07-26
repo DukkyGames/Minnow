@@ -15,7 +15,6 @@ import {
 } from './desktop-state';
 import { getAppById, isAppId } from './app-registry';
 import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
-import { ensureGlobalBugsInitialized } from './app-modules';
 import {
   closeInstance,
   getForegroundAppId,
@@ -65,11 +64,6 @@ const MODELS_SETTINGS_REDIRECTS: Record<string, string> = {
   voice: 'voice',
 };
 
-/** Legacy full-page overlays that keep their hash and must not trigger OS routing. */
-export function isLegacyOverlayHash(hash: string): boolean {
-  return hash === '#/bugs' || hash.startsWith('#/bugs/');
-}
-
 /** Map legacy hashes to MinnowOS routes before parsing. */
 export function resolveLegacyHash(hash: string): {
   hash: string;
@@ -116,6 +110,9 @@ export function resolveLegacyHash(hash: string): {
   }
   if (trimmed === '#/email' || trimmed.startsWith('#/email/')) {
     return { hash: '#/app/email' };
+  }
+  if (trimmed === '#/bugs' || trimmed.startsWith('#/bugs/')) {
+    return { hash: '#/app/issues' };
   }
   if (trimmed === '#/models' || trimmed.startsWith('#/models/')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^models(?:\/([\w-]+))?/);
@@ -172,6 +169,10 @@ export function parseOsHash(hash: string): OsRoute {
             ? 'dev-server'
             : (pendingCodeSection ?? 'chat');
     }
+    // Prepare Issues deep-link parse for Phase 2 detail panel.
+    if (route.appId === 'issues' && appMatch[2]) {
+      route.issueId = appMatch[2];
+    }
     return route;
   }
   return { view: 'desktop' };
@@ -199,6 +200,9 @@ function hashForRoute(route: OsRoute): string {
     if (section === 'overview') return '#/app/code/overview';
     if (section === 'dev-server') return '#/app/code/dev-server';
     return '#/app/code/chat';
+  }
+  if (route.appId === 'issues' && route.issueId) {
+    return `#/app/issues/${route.issueId}`;
   }
   if (route.appId) return `#/app/${route.appId}`;
   return '#/desktop';
@@ -290,11 +294,6 @@ function applyRouteFromHash(): void {
   applyingRoute = true;
   try {
     const raw = window.location.hash;
-    // Global bugs (#/bugs) is a legacy overlay — global-bugs-page owns the route.
-    if (isLegacyOverlayHash(raw)) {
-      void ensureGlobalBugsInitialized();
-      return;
-    }
     const legacy = resolveLegacyHash(raw);
     if (legacy.hash !== raw) {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;

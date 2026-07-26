@@ -42,7 +42,6 @@ import {
 } from './composer-send';
 import { handleComposerPromptHistoryKeydown } from './composer-prompt-history';
 import { handleSkillPickerKeydown, initComposerSlashPicker, isSkillPickerOpen } from './skill-picker';
-import { closeGlobalBugs } from './global-bugs-page';
 import { renderChatFromHistory } from './messages';
 import { closeSettings } from './settings-page';
 import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
@@ -75,7 +74,6 @@ function getChatShell(): HTMLElement | null {
 /** Close other full-page overlays before opening Chat. */
 function closeOtherOverlays(): void {
   closeSettings({ skipNavigate: true });
-  closeGlobalBugs();
   closeBenchmark({ skipNavigate: true });
   closeCompare({ skipNavigate: true });
   void import('../research/panel').then((m) => {

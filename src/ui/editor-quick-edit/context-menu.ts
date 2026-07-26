@@ -13,6 +13,8 @@ export interface FileViewerContextMenuInput {
   onQuickEdit: () => void;
   onSwitchToCode: () => void;
   onSwitchToPreview: () => void;
+  /** Optional: link editor selection to an Issues app card (MIN-261). */
+  onLinkToIssue?: () => void;
 }
 
 /** Assemble viewer context menu items (selection actions + optional markdown toggles). */
@@ -32,6 +34,12 @@ export function buildFileViewerContextMenuItems(
         action: input.onQuickEdit,
       },
     );
+    if (input.onLinkToIssue) {
+      items.push({
+        label: 'Link to issue…',
+        action: input.onLinkToIssue,
+      });
+    }
   }
 
   if (input.isMarkdown) {

@@ -12,24 +12,32 @@ import {
   resetOsPageBridgeForTests,
 } from '../../src/os/page-bridge.ts';
 
-const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
-  '../../src/state/sessions.ts',
-);
 const { upsertSubAgentCardForRun, clearSubAgentCardDomRegistry } = await import(
   '../../src/ui/sub-agent-cards.ts',
 );
 const { openSubAgentDrawer, closeSubAgentDrawer } = await import(
   '../../src/ui/sub-agent-drawer.ts',
 );
+const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
+  '../../src/state/sessions.ts',
+);
+const { renderHub, teardownHub } = await import('../../src/ui/hub.ts');
 
 function setupCodeDom() {
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
-  const area = document.createElement('div');
-  area.id = 'chatArea';
-  document.body.appendChild(area);
+  globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+  document.body.innerHTML = `
+    <div id="mainColumn">
+      <div id="chatArea"></div>
+      <div class="input-bar">
+        <textarea id="msgInput"></textarea>
+        <div id="modeSelector"></div>
+      </div>
+    </div>
+  `;
   return window;
 }
 
@@ -77,6 +85,7 @@ const sampleRun = (chatId: string) => ({
 
 describe('sub-agent cards', { concurrency: false }, () => {
   afterEach(() => {
+    teardownHub();
     setSessionStateForTests(null);
     resetDesktopStateForTests();
     resetInstancesForTests();
@@ -101,6 +110,25 @@ describe('sub-agent cards', { concurrency: false }, () => {
     assert.ok(el.textContent?.includes('explore'));
     assert.ok(el.textContent?.includes('List files'));
     assert.equal(document.getElementById('chatArea')?.querySelector('.sub-agent-card'), el);
+
+    clearSubAgentCardDomRegistry();
+  });
+
+  test('upsertSubAgentCardForRun skips the Vibe hub empty-chat landing', () => {
+    setupCodeDom();
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-hub-sub';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderHub(chat);
+    const el = upsertSubAgentCardForRun(sampleRun(chat.id), chat.id);
+    assert.equal(el, null);
+    assert.equal(document.getElementById('chatArea')?.querySelector('.sub-agent-card'), null);
 
     clearSubAgentCardDomRegistry();
   });

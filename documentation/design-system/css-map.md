@@ -83,7 +83,7 @@
 | `calendar.css`, `calendar-window.css` | Calendar |
 | `scheduler-page.css`, `scheduler-side-panel.css`, `scheduler-editor-window.css` | Scheduler |
 | `experts-hub.css`, `experts-summon.css` | Experts |
-| `global-bugs-page.css`, `bug-board.css` | Debug / bugs |
+| `issues.css` | Issues app (list/board/detail) |
 
 ## Orchestrate
 
