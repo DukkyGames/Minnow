@@ -248,6 +248,36 @@ describe('TTL and scope clear', () => {
   });
 });
 
+describe('getCacheScope workspaceRoot override', () => {
+  test('scopes list_directory separately per workspaceRoot', async () => {
+    bindWorkspacePathForToolCache(() => '/code-workspace');
+    let calls = 0;
+    const inner = async () => {
+      calls += 1;
+      return { content: `listing-${calls}` };
+    };
+    const args = { path: '.' };
+
+    const scopeA = getCacheScope({ workspaceRoot: '/desktop/a' });
+    const scopeB = getCacheScope({ workspaceRoot: '/desktop/b' });
+    assert.notEqual(scopeA, scopeB);
+
+    const rA1 = await executeWithResultCache('list_directory', args, { workspaceRoot: '/desktop/a' }, inner);
+    const rB1 = await executeWithResultCache('list_directory', args, { workspaceRoot: '/desktop/b' }, inner);
+    const rA2 = await executeWithResultCache('list_directory', args, { workspaceRoot: '/desktop/a' }, inner);
+
+    assert.equal(calls, 2);
+    assert.equal(rA1.content, 'listing-1');
+    assert.equal(rB1.content, 'listing-2');
+    assert.equal(rA2.content, 'listing-1');
+  });
+
+  test('falls back to bound workspace when workspaceRoot is omitted', () => {
+    bindWorkspacePathForToolCache(() => '/code-workspace');
+    assert.equal(getCacheScope({}), '/code-workspace:__no_chat__');
+  });
+});
+
 describe('changedPathAffectsDirectoryListing', () => {
   test('parent listing invalidates when child file changes', () => {
     assert.equal(changedPathAffectsDirectoryListing('src', 'src/foo.ts'), true);

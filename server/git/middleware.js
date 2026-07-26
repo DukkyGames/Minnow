@@ -28,6 +28,9 @@ import {
   stashPop,
   stashPush,
   status,
+  snapshotCreate,
+  snapshotDiff,
+  snapshotRestore,
   unstage,
   worktreeAdd,
   worktreeRemove,
@@ -84,6 +87,10 @@ const OPS = {
   stashApply: (a) => stashApply(a),
   stashDrop: (a) => stashDrop(a),
   cherryPick: (a) => cherryPick(a),
+  // MIN-409: dangling working-tree snapshots for agent undo (no HEAD move).
+  snapshotCreate: (a) => snapshotCreate(a),
+  snapshotRestore: (a) => snapshotRestore(a),
+  snapshotDiff: (a) => snapshotDiff(a),
 };
 
 export async function handleGitRequest(req, res, pathname) {

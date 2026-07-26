@@ -1,5 +1,5 @@
 /**
- * Client helper for the ~/.minnow/workspace sandbox (MinnowOS desktop chat).
+ * Client helper for the desktop chat workspace (MinnowOS desktop surface).
  */
 
 import { normalizeWorkspacePath } from './normalize-workspace-path';
@@ -7,20 +7,28 @@ import { normalizeWorkspacePath } from './normalize-workspace-path';
 export interface DesktopWorkspaceInfo {
   ok?: boolean;
   path: string;
+  label?: string;
   fileCount: number;
   error?: string;
 }
 
 let cachedDesktopWorkspacePath: string | null = null;
+let cachedDesktopWorkspaceLabel: string | null = null;
 
 /** Clear cached desktop workspace path (tests or server restart). */
 export function resetDesktopWorkspacePathCache(): void {
   cachedDesktopWorkspacePath = null;
+  cachedDesktopWorkspaceLabel = null;
 }
 
 /** Cached absolute desktop workspace path from the last successful API fetch. */
 export function getCachedDesktopWorkspacePath(): string | null {
   return cachedDesktopWorkspacePath;
+}
+
+/** Cached folder label from the last successful API fetch. */
+export function getCachedDesktopWorkspaceLabel(): string | null {
+  return cachedDesktopWorkspaceLabel;
 }
 
 /** True when a chat or tool workspace path is the desktop sandbox. */
@@ -31,6 +39,16 @@ export function isDesktopWorkspacePath(
   const desktopPath = desktopWorkspacePath ?? cachedDesktopWorkspacePath;
   if (!desktopPath) return false;
   return normalizeWorkspacePath(workspacePath) === normalizeWorkspacePath(desktopPath);
+}
+
+function applyDesktopWorkspaceInfo(data: DesktopWorkspaceInfo): string | null {
+  if (!data?.path || typeof data.path !== 'string') return null;
+  cachedDesktopWorkspacePath = data.path;
+  cachedDesktopWorkspaceLabel =
+    typeof data.label === 'string' && data.label.trim()
+      ? data.label.trim()
+      : data.path.split(/[/\\]/).filter(Boolean).pop() ?? data.path;
+  return cachedDesktopWorkspacePath;
 }
 
 /**
@@ -46,9 +64,7 @@ export async function getDesktopWorkspacePath(): Promise<string | null> {
     const res = await fetch('/api/desktop-workspace', { cache: 'no-store' });
     if (!res.ok) return null;
     const data = (await res.json()) as DesktopWorkspaceInfo;
-    if (!data?.path || typeof data.path !== 'string') return null;
-    cachedDesktopWorkspacePath = data.path;
-    return cachedDesktopWorkspacePath;
+    return applyDesktopWorkspaceInfo(data);
   } catch {
     return null;
   }
@@ -60,13 +76,26 @@ export async function fetchDesktopWorkspaceInfo(): Promise<DesktopWorkspaceInfo 
     const res = await fetch('/api/desktop-workspace', { cache: 'no-store' });
     if (!res.ok) return null;
     const data = (await res.json()) as DesktopWorkspaceInfo;
-    if (data?.path && typeof data.path === 'string') {
-      cachedDesktopWorkspacePath = data.path;
-    }
+    applyDesktopWorkspaceInfo(data);
     return data;
   } catch {
     return null;
   }
+}
+
+/** Set the desktop chat workspace folder (validated on server). */
+export async function setDesktopWorkspacePath(absPath: string): Promise<DesktopWorkspaceInfo> {
+  const res = await fetch('/api/desktop-workspace', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: absPath }),
+  });
+  const json = (await res.json()) as DesktopWorkspaceInfo & { error?: string };
+  if (!res.ok) {
+    throw new Error(json.error ?? `HTTP ${res.status}`);
+  }
+  applyDesktopWorkspaceInfo(json);
+  return json;
 }
 
 export interface DesktopWorkspaceListEntry {

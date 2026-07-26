@@ -12,6 +12,8 @@ import { getCachePolicyForTool, type ToolCachePolicy } from './tool-cache-policy
 /** Minimal executeTool context for cache scoping (avoids circular import with client.ts). */
 export interface ToolCacheContext {
   chatId?: string;
+  /** Override workspace root (desktop drawer, chats sandbox, worktree listing). */
+  workspaceRoot?: string;
 }
 
 /** Workspace root reader (bound at app init to avoid importing workspace state in tests). */
@@ -255,7 +257,9 @@ export function buildCacheKey(name: string, normalizedArgs: Record<string, unkno
 
 /** Scope id: normalized workspace path + chat id (or __no_chat__). */
 export function getCacheScope(context: ToolCacheContext): string {
-  const workspace = normalizeWorkspacePath(readWorkspacePathForCache());
+  const workspace = normalizeWorkspacePath(
+    context.workspaceRoot?.trim() || readWorkspacePathForCache(),
+  );
   const chat = context.chatId?.trim() || '__no_chat__';
   return `${workspace}:${chat}`;
 }

@@ -2081,6 +2081,18 @@ export function mergeConfigMeta(existing, patch) {
     base.workspace = existingWorkspace;
   }
 
+  if (p.desktopWorkspace && typeof p.desktopWorkspace === 'object') {
+    const existingDesktopWorkspace =
+      base.desktopWorkspace && typeof base.desktopWorkspace === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.desktopWorkspace) }
+        : { path: '' };
+    const dw = /** @type {Record<string, unknown>} */ (p.desktopWorkspace);
+    if (typeof dw.path === 'string' && dw.path.trim()) {
+      existingDesktopWorkspace.path = dw.path.trim();
+    }
+    base.desktopWorkspace = existingDesktopWorkspace;
+  }
+
   if (p.filePanel && typeof p.filePanel === 'object') {
     const existingPanel =
       base.filePanel && typeof base.filePanel === 'object'

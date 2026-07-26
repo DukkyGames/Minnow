@@ -75,6 +75,10 @@ import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
+import {
+  invalidateComposerUndoGitCache,
+  syncComposerUndoFromActiveChat,
+} from './composer-undo';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from './git-panel';
 import { seedNewChatComposerRunTarget } from './new-chat-run-target-seed';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
@@ -318,6 +322,8 @@ export function onModelSelectChange(): void {
 /** Refresh main column after workspace folder changes. */
 export function applyWorkspaceScopedSession(newPath: string, previousPath?: string): void {
   clearChatSelection();
+  // Workspace switch may enter/leave a git repo — recheck Undo visibility.
+  invalidateComposerUndoGitCache();
   const { activeChat, activeChanged } = onWorkspaceChanged(newPath, previousPath);
   if (activeChanged) {
     recordChatOpened(activeChat.id);
@@ -329,6 +335,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     void syncOrchestratePlanStripFromActiveChat();
     syncComposerPinnedSkillFromActiveChat();
     syncComposerRunTargetFromActiveChat();
+    syncComposerUndoFromActiveChat();
     syncViewModeToggleFromActiveChat();
     clearPanelCwdUserOverride();
     syncPanelFromActiveChat({ forceFileTree: true });
@@ -1204,6 +1211,7 @@ export function switchChat(id: string): void {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
+  syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });
@@ -1252,6 +1260,7 @@ function syncCreateChatChrome(chatId: string): void {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncComposerRunTargetFromActiveChat();
+  syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   onModelRoutingActiveChatChanged(chatId);
