@@ -58,6 +58,8 @@ UI-only tools (e.g. `ask_question`) fail with a clear error in headless mode unl
 
 `npm test` runs the full suite via [`test/run-all.mjs`](../../test/run-all.mjs) — it discovers every `test/**/*.test.{js,mjs,mts,ts}` file and runs the correct runner/loader per path (see [`test/test-config.mjs`](../../test/test-config.mjs)). New test files are included automatically; `npm run test:check-coverage` fails CI when a file would be orphaned. Worker parallelism defaults to `min(16, availableParallelism())`; override with `MINNOW_TEST_CONCURRENCY`.
 
+**Memory:** every runner preloads [`test/assert-dom-safe.mjs`](../../test/assert-dom-safe.mjs). Without it a *failing* `assert.equal(document.querySelector('.x'), null)` hands a happy-dom node to node:assert, which inspects it at `depth: 1000` and Myers-diffs the result — synchronous, unbounded typed-array allocation that `--max-old-space-size` cannot cap, and enough to freeze a 64 GB workstation from a single test process (measured: one child at 49 GB and still climbing). The guard compares DOM operands itself and reports a short descriptor (`<section.board-root>`) instead. Do not remove the preload, and prefer `assert.ok(!el)` over comparing elements when adding assertions.
+
 **CI (MIN-383):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `npm ci` → `test:check-coverage` → `npx tsc --noEmit` → `npm test` on `windows-latest` and `ubuntu-latest`. Require the **`ci`** status check on `main` before merge ([`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md)).
 
 Scoped suites (each delegates to `node test/run-all.mjs --suite <name>`):

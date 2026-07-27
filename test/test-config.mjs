@@ -20,11 +20,23 @@ export function resolveTestConcurrency() {
   return Math.max(1, Math.min(MAX_TEST_CONCURRENCY, availableParallelism()));
 }
 
+/**
+ * Preload applied by every runner. Stops node:assert from inspecting/diffing a
+ * happy-dom node on a failed assertion — that path allocates unbounded typed
+ * arrays synchronously and takes the whole machine down. See the module header.
+ */
+export const ASSERT_GUARD_IMPORT = ['--import', './test/assert-dom-safe.mjs'];
+
 /** How each runner invokes node:test. */
 export const RUNNERS = {
   node: {
     command: 'node',
-    prefixArgs: ['--test', '--test-force-exit', '--test-timeout=120000'],
+    prefixArgs: [
+      ...ASSERT_GUARD_IMPORT,
+      '--test',
+      '--test-force-exit',
+      '--test-timeout=120000',
+    ],
   },
   'tsx-mocks': {
     command: 'node',
@@ -32,6 +44,7 @@ export const RUNNERS = {
       '--experimental-test-module-mocks',
       '--import',
       'tsx',
+      ...ASSERT_GUARD_IMPORT,
       '--test',
       '--test-force-exit',
       '--test-timeout=120000',
@@ -48,6 +61,7 @@ export const RUNNERS = {
       'tsx',
       '--import',
       './test/test-loader.mjs',
+      ...ASSERT_GUARD_IMPORT,
       '--test',
       '--test-force-exit',
       '--test-timeout=120000',
@@ -55,7 +69,14 @@ export const RUNNERS = {
   },
   'node-tsx': {
     command: 'node',
-    prefixArgs: ['--import', 'tsx', '--test', '--test-force-exit', '--test-timeout=120000'],
+    prefixArgs: [
+      '--import',
+      'tsx',
+      ...ASSERT_GUARD_IMPORT,
+      '--test',
+      '--test-force-exit',
+      '--test-timeout=120000',
+    ],
   },
 };
 
