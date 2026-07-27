@@ -330,6 +330,8 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 **Terminal panel (MIN-500):** Bottom dock tabs are Agent (command output) + interactive PTY sessions only ([`src/ui/terminal-tabs.ts`](../src/ui/terminal-tabs.ts), [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts)). The former Dev Server virtual tab / log stream bridge was removed; workspace server logs move to the Dev Servers Code screen.
 **Pipeline holds (MIN-409):** Non-streaming merge/fixer phases occupy a concurrency slot via ref-counted holds in [`src/state/orchestrate-pipeline-holds.ts`](../src/state/orchestrate-pipeline-holds.ts) (WeakMap keyed by board object identity; TTL-on-read + sweep). `countRunningTaskChats` counts chat slots plus hold-only tasks; `isTaskStalledForRestart` treats held tasks as not stalled. The running-tasks strip shows a non-interactive **Merging** chip for hold-only slots. Sequential → AFK pins `maxConcurrentTasks` to 1 when unset (`setBoardExecutionMode`).
 
+**Fake model server (orchestrate testability):** [`scripts/fake-model-server.mjs`](../scripts/fake-model-server.mjs) — local OpenAI-v1 HTTP stub (`GET /v1/models`, `POST /v1/chat/completions` SSE) driven by ordered scenario JSON (`{ match: { role?, taskId?, nth? }, emit: [...] }`). Default scenario emits a `board_report` pass tool call. `npm run fake-model -- --register` writes provider `fake-board` under `~/.minnow/providers/`. Exports `requests` for assertions.
+
 ### Experts
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.
