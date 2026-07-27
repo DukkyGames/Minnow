@@ -367,6 +367,7 @@ describe('task stream end finalization', () => {
     const prevMinnowTest = process.env.MINNOW_TEST;
     process.env.MINNOW_TEST = '1';
     try {
+      setAutopilotMetaForTests({ maxBuildAttempts: 2 });
       const group = makeGroup('auto');
       const planner = makePlanner();
       const task = group.orchestrateBoard!.tasks[0]!;
@@ -501,6 +502,40 @@ describe('task stream end finalization', () => {
       if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
       else process.env.MINNOW_TEST = prevMinnowTest;
     }
+  });
+
+  test('GAP-3 unverified completion (prose + testSpec, no report) nudges instead of advancing', () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup('auto');
+      const planner = makePlanner();
+      updateTask(
+        group,
+        'W1-A',
+        { testSpec: 'npm test', boardReport: undefined, buildOutcome: undefined },
+        planner,
+      );
+      finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      assert.equal(updated.status, 'in_progress');
+      assert.equal(updated.chatId, TASK_CHAT_ID);
+      assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 1);
+      assert.equal(updated.buildAttempts, undefined);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('inferStreamOutcome marks max-tool-turns transcript as failed', () => {
+    const chat = makeTaskChat(false);
+    chat.history = [
+      { role: 'user', content: 'Execute task' },
+      { role: 'assistant', content: 'Maximum tool turns reached. Cannot complete.' },
+    ];
+    assert.equal(resolveTaskChatStreamOutcome(chat), 'failed');
   });
 
   test('markBoardTaskInProgressFromChat sets in_progress when stream starts', () => {

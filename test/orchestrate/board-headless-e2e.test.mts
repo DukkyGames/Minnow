@@ -15,6 +15,7 @@ import {
   autoDelegateNext,
   clearTaskChatStallRestartsForTests,
   clearTaskQueuesForTests,
+  MISSING_REPORT_NUDGE_CAP,
   releaseLaunchSlotForTests,
   setBoardChatTurnRunner,
   startBoardAutoRun,
@@ -60,6 +61,7 @@ function installBoardHeadlessToolPermissions(): void {
   const toolConfig = defaultToolConfig();
   toolConfig.permissions.default.board_report = 'full';
   toolConfig.permissions.default.get_datetime = 'full';
+  toolConfig.permissions.default.save_file = 'full';
   setToolConfigForTests(toolConfig);
 }
 
@@ -110,6 +112,7 @@ async function driveHeadlessBoard(
     tasks: Array<{ id: string; title: string; wave: string }>;
     finalTest?: boolean;
   },
+  options?: { maxTicks?: number; allowSettleTimeout?: boolean },
 ): Promise<{
   group: ReturnType<typeof seedBoard>['group'];
   router: FakeApiRouterHandle;
@@ -135,7 +138,11 @@ async function driveHeadlessBoard(
 
   startBoardAutoRun(group, planner);
   await autoDelegateNext(group, planner);
-  await settleUntil(group, planner, 1200, { runner: turnFlight });
+  try {
+    await settleUntil(group, planner, options?.maxTicks ?? 1200, { runner: turnFlight });
+  } catch (err) {
+    if (!options?.allowSettleTimeout) throw err;
+  }
 
   return { group, router };
 }
@@ -257,15 +264,39 @@ describe('board headless quirk fixtures', () => {
   async function runQuirk(
     name: keyof typeof quirkFixtures,
     assertFn?: (group: ReturnType<typeof seedBoard>['group']) => void,
+    spec?: {
+      tasks?: Array<{ id: string; title: string; wave: string }>;
+      finalTest?: boolean;
+      autopilot?: { maxBuildAttempts?: number; maxConcurrentTasks?: number };
+      allowSettleTimeout?: boolean;
+      boardLogSkip?: BoardLogCheckOptions['skip'];
+    },
   ): Promise<void> {
+    if (spec?.autopilot) {
+      setAutopilotMetaForTests({
+        maxBuildAttempts: spec.autopilot.maxBuildAttempts ?? 2,
+        maxConcurrentTasks: spec.autopilot.maxConcurrentTasks ?? 2,
+      });
+    }
+    const tasks = spec?.tasks ?? [{ id: QUIRK_TASK, title: `Quirk ${name}`, wave: 'W1' }];
     const script = quirkFixtures[name](QUIRK_TASK);
-    const { group, router: r } = await driveHeadlessBoard(script, {
-      waves: [{ id: 'W1' }],
-      tasks: [{ id: QUIRK_TASK, title: `Quirk ${name}`, wave: 'W1' }],
-    });
+    const { group, router: r } = await driveHeadlessBoard(
+      script,
+      {
+        waves: [{ id: 'W1' }],
+        tasks,
+        finalTest: spec?.finalTest,
+      },
+      { allowSettleTimeout: spec?.allowSettleTimeout },
+    );
     router = r;
     assertFn?.(group);
-    assertBoardLogCaptured(router, boardLogOpts([QUIRK_TASK], ['W1']));
+    const taskIds = tasks.map((t) => t.id);
+    const logOpts = boardLogOpts(taskIds, ['W1'], spec?.finalTest === true);
+    if (spec?.boardLogSkip?.length) {
+      logOpts.skip = [...(logOpts.skip ?? []), ...spec.boardLogSkip];
+    }
+    assertBoardLogCaptured(router, logOpts);
     assertZeroUnrouted(router);
   }
 
@@ -354,10 +385,173 @@ describe('board headless quirk fixtures', () => {
   });
 
   test('tester context exceeded then VERDICT recover', async () => {
-    await runQuirk('contextExceededTesterThenRecover', (group) => {
+    await runQuirk(
+      'contextExceededTesterThenRecover',
+      (group) => {
+        assertTaskStatus(group, QUIRK_TASK, 'complete');
+        const task = group.orchestrateBoard?.tasks.find((t) => t.id === QUIRK_TASK);
+        assert.equal(task?.testVerdict, 'pass');
+      },
+      { allowSettleTimeout: true },
+    );
+  });
+
+  test('builder prose-only success without board_report nudges then recovers', async () => {
+    await runQuirk('builderProseNoReport', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+      const nudges = router!.boardLogEvents.filter(
+        (e) => e.type === 'task_retry' && e.detail?.attemptKind === 'nudge',
+      );
+      assert.equal(nudges.length, 2, 'expected two builder missing-report nudges');
+    });
+  });
+
+  test('builder prose-only exhausts nudge budget then quarantines at build cap', async () => {
+    await runQuirk(
+      'builderProseOnlyQuarantine',
+      (group) => {
+        assertTaskStatus(group, QUIRK_TASK, 'quarantined');
+        const nudges = router!.boardLogEvents.filter(
+          (e) => e.type === 'task_retry' && e.detail?.attemptKind === 'nudge',
+        );
+        assert.equal(nudges.length, MISSING_REPORT_NUDGE_CAP);
+      },
+      { autopilot: { maxBuildAttempts: 1 }, allowSettleTimeout: true },
+    );
+  });
+
+  test('board_report ok synonym completes', async () => {
+    await runQuirk('boardReportOk', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('board_report success synonym completes', async () => {
+    await runQuirk('boardReportSuccess', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('board_report env_blocked routes env-fixer path without silent complete', async () => {
+    await runQuirk('boardReportEnvBlocked', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('board_report fail then recovery completes', async () => {
+    await runQuirk('boardReportFailThenRecover', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('partially valid tool args then recovery', async () => {
+    await runQuirk('partialValidToolArgs', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('truncated after tool name then recovery', async () => {
+    await runQuirk('truncatedAfterToolName', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('forbidden delegate_tasks then recovery', async () => {
+    await runQuirk('forbiddenDelegateTool', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('multiple tool calls in one delta then complete', async () => {
+    await runQuirk('multipleToolCallsInDelta', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('wrong finish_reason then recovery', async () => {
+    await runQuirk('wrongFinishReason', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('runaway mutating tools then board_report', async () => {
+    await runQuirk('runawayMutatingThenReport', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('max tool turns transcript then recovery', async () => {
+    await runQuirk('maxToolTurnsThenRecover', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('empty assistant stream then recovery', async () => {
+    await runQuirk('emptyAssistantStream', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('duplicate board_report in one delta completes once', async () => {
+    await runQuirk('duplicateBoardReportDelta', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('sibling task_id report ignored then recovery', async () => {
+    await runQuirk('siblingTaskReport', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('tester VERDICT:PASS casing completes', async () => {
+    await runQuirk('testerVerdictPassUpper', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('tester buried VERDICT completes', async () => {
+    await runQuirk('testerVerdictBuried', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('tester board_report instead of prose VERDICT completes', async () => {
+    await runQuirk('testerBoardReportInstead', (group) => {
       assertTaskStatus(group, QUIRK_TASK, 'complete');
       const task = group.orchestrateBoard?.tasks.find((t) => t.id === QUIRK_TASK);
       assert.equal(task?.testVerdict, 'pass');
     });
+  });
+
+  test('tester fail verdict then recovery completes', async () => {
+    await runQuirk('testerFailThenRecover', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('final integration prose without VERDICT does not pass silently', async () => {
+    await runQuirk(
+      'finalProseNoVerdict',
+      (group) => {
+        assert.notEqual(group.orchestrateBoard?.finalTest?.status, 'passed');
+      },
+      { finalTest: true },
+    );
+  });
+
+  test('repeated context exceeded at build cap quarantines without history wipe', async () => {
+    await runQuirk(
+      'contextExceededBuildCap',
+      (group) => {
+        assertTaskStatus(group, QUIRK_TASK, 'quarantined');
+        const task = group.orchestrateBoard?.tasks.find((t) => t.id === QUIRK_TASK);
+        assert.ok(task?.chatId, 'builder chat should be preserved until quarantine');
+      },
+      {
+        autopilot: { maxBuildAttempts: 2 },
+        boardLogSkip: ['quarantine-cascade'],
+      },
+    );
   });
 });

@@ -491,4 +491,94 @@ describe('final integration test', () => {
     assert.equal(typeof last?.content, 'string');
     assert.match(last!.content as string, /no failing task ids/i);
   });
+
+  test('final integration prose without VERDICT nudges instead of passing', async () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup({ 'W1-A': 'complete', 'W1-B': 'complete' });
+      const planner = makePlanner();
+      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.autoRunning = true;
+      group.orchestrateBoard!.finalTest = {
+        status: 'in_progress',
+        chatId: TEST_CHAT_ID,
+      };
+      const finalChat: Chat = {
+        id: TEST_CHAT_ID,
+        name: 'Final',
+        workspacePath: '/tmp/ws',
+        modeId: 'build',
+        modelId: 'm1',
+        workAgentId: 'tester',
+        history: [{ role: 'assistant', content: 'Looks good but no VERDICT marker.' }],
+        lastStats: null,
+        modelInfo: {},
+        updatedAt: 1,
+        boardGroupId: GROUP_ID,
+      };
+      setSessionStateForTests({ chats: [planner, finalChat], groups: [group], activeChatId: PLANNER_ID });
+      await finalizeFinalTestOnStreamEnd(group, planner);
+      assert.notEqual(group.orchestrateBoard!.finalTest?.status, 'passed');
+      assert.equal(getMissingReportNudgeCountForTests(TEST_CHAT_ID), 1);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('recovers VERDICT:PASS uppercase from tester transcript', async () => {
+    const group = makeGroup({ 'W1-A': 'testing' });
+    const planner = makePlanner();
+    const testChat: Chat = {
+      id: TEST_CHAT_ID,
+      name: 'Test',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      workAgentId: 'tester',
+      history: [{ role: 'assistant', content: 'All green.\nVERDICT:PASS' }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+    updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+    setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
+    assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
+  });
+
+  test('conflicting VERDICT markers in one message — latest pass wins', async () => {
+    const group = makeGroup({ 'W1-A': 'testing' });
+    const planner = makePlanner();
+    const testChat: Chat = {
+      id: TEST_CHAT_ID,
+      name: 'Test',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      workAgentId: 'tester',
+      history: [
+        {
+          role: 'assistant',
+          content: 'VERDICT: fail\nOn second thought: VERDICT: pass',
+        },
+      ],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+    updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+    setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'complete');
+    assert.equal(updated.testVerdict, 'pass');
+  });
 });

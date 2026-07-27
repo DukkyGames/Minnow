@@ -36,7 +36,7 @@ import {
   seedBoard,
   type BoardFlowScript,
 } from './_board-flow-helpers.mts';
-import { createScriptedTurnRunner } from './_scripted-turn-runner.mts';
+import { createScriptedTurnRunner, injectChatOutcome } from './_scripted-turn-runner.mts';
 
 function assertLiveLaunchContract(
   group: { orchestrateBoard?: { tasks: { id: string }[] } | null },
@@ -227,6 +227,122 @@ describe('board live launch harness', () => {
     assertTaskStatus(group, 'W1-B', 'complete');
     assert.equal(resolveBoardMaxConcurrent(group.orchestrateBoard!), 1);
     assert.equal(runner.peakConcurrency, 1, 'sequential mode must never exceed one slot');
+    assertLiveLaunchContract(group, runner);
+  });
+
+  test('multi-task: builder prose-only on W1-A nudges while W1-B completes', async () => {
+    const script: BoardFlowScript = {
+      tasks: {
+        'W1-A': { build: 'complete', test: 'pass', merge: 'clean' },
+        'W1-B': { build: 'complete', test: 'pass', merge: 'clean' },
+      },
+    };
+
+    const { planner, group } = seedBoard({
+      waves: [{ id: 'W1' }],
+      tasks: [
+        { id: 'W1-A', title: 'Prose-only path', wave: 'W1' },
+        { id: 'W1-B', title: 'Happy sibling', wave: 'W1' },
+      ],
+    });
+
+    restoreFetch = mockWorktreeOps(cleanMergeMocks());
+    const proseOnlyAttempts = new Map<string, number>();
+    runner = createScriptedTurnRunner({
+      script,
+      override: (ctx) => {
+        if (ctx.phase === 'build' && ctx.task?.id === 'W1-A') {
+          const n = proseOnlyAttempts.get('W1-A') ?? 0;
+          proseOnlyAttempts.set('W1-A', n + 1);
+          if (n < 2) {
+            ctx.chat.history.push({
+              role: 'assistant',
+              content: 'Status: READY FOR VERIFICATION',
+            });
+            return;
+          }
+          if (ctx.task) {
+            ctx.task.boardReport = { outcome: 'pass', summary: 'Recovered after nudges' };
+          }
+          ctx.chat.history.push({ role: 'assistant', content: 'Build complete for W1-A.' });
+          return;
+        }
+        if (ctx.phase === 'build') {
+          injectChatOutcome(ctx.chat, ctx.task, 'build', { build: 'complete' });
+          return;
+        }
+        if (ctx.phase === 'test') {
+          injectChatOutcome(ctx.chat, ctx.task, 'test', {
+            test: script.tasks[ctx.task?.id ?? '']?.test ?? 'pass',
+          });
+        }
+      },
+    });
+
+    await driveLiveBoard(group, planner, runner);
+
+    assertTaskStatus(group, 'W1-A', 'complete');
+    assertTaskStatus(group, 'W1-B', 'complete');
+    assert.ok(proseOnlyAttempts.get('W1-A')! >= 3, 'W1-A should need nudged build retries');
+    assertLiveLaunchContract(group, runner);
+  });
+
+  test('multi-task: missing-report nudge on W1-A does not block W1-B drain', async () => {
+    const script: BoardFlowScript = {
+      tasks: {
+        'W1-A': { build: 'complete', test: 'pass', merge: 'clean' },
+        'W1-B': { build: 'complete', test: 'pass', merge: 'clean' },
+      },
+    };
+
+    const { planner, group } = seedBoard({
+      waves: [{ id: 'W1' }],
+      maxConcurrentTasks: 2,
+      tasks: [
+        { id: 'W1-A', title: 'Slow nudge path', wave: 'W1' },
+        { id: 'W1-B', title: 'Parallel happy', wave: 'W1' },
+      ],
+    });
+
+    restoreFetch = mockWorktreeOps(cleanMergeMocks());
+    const buildAttempts = new Map<string, number>();
+    runner = createScriptedTurnRunner({
+      script,
+      override: (ctx) => {
+        if (ctx.phase === 'build' && ctx.task?.id === 'W1-A') {
+          const n = buildAttempts.get('W1-A') ?? 0;
+          buildAttempts.set('W1-A', n + 1);
+          if (n < 2) {
+            ctx.chat.history.push({
+              role: 'assistant',
+              content: 'Done but forgot board_report.',
+            });
+            return;
+          }
+          ctx.task!.boardReport = { outcome: 'pass', summary: 'Recovered after nudges' };
+          ctx.chat.history.push({ role: 'assistant', content: 'Build W1-A recovered.' });
+          return;
+        }
+        if (ctx.phase === 'build') {
+          ctx.task!.boardReport = { outcome: 'pass', summary: `ok ${ctx.task?.id}` };
+          ctx.chat.history.push({ role: 'assistant', content: `Build ${ctx.task?.id}` });
+          return;
+        }
+        if (ctx.phase === 'test') {
+          ctx.task!.testVerdict = 'pass';
+          ctx.chat.history.push({ role: 'assistant', content: 'VERDICT: pass' });
+        }
+      },
+    });
+
+    await driveLiveBoard(group, planner, runner);
+
+    assertTaskStatus(group, 'W1-B', 'complete');
+    const taskA = group.orchestrateBoard?.tasks.find((t) => t.id === 'W1-A');
+    assert.ok(
+      taskA?.status === 'in_progress' || taskA?.status === 'complete' || taskA?.status === 'testing',
+      'W1-A should still be recovering or complete, not block sibling',
+    );
     assertLiveLaunchContract(group, runner);
   });
 });
