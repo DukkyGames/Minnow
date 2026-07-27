@@ -35,6 +35,7 @@
     "test:skills-impeccable": "node test/run-all.mjs --suite skills-impeccable",
     "test:impeccable": "node test/run-all.mjs --suite impeccable",
     "fake-model": "node scripts/fake-model-server.mjs",
+    "seed:test-board": "node --import ./test/test-loader.mjs --import tsx scripts/seed-test-board.mts",
     "check:board-log": "node --import tsx scripts/check-board-log.mjs",
     "preview": "vite preview",
     "electron:build": "node scripts/build-electron.mjs",
