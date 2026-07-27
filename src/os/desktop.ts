@@ -10,6 +10,7 @@ import {
 } from './desktop-workspace-rail';
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
+import { DESKTOP_RAIL_TAB_ICON_SIZE } from './desktop-rail-constants';
 import { createOsIcon } from './icons';
 import { ICON_CHEVRON_LEFT, ICON_SEARCH } from '../constants';
 import type { DesktopPrefs } from './types';
@@ -109,7 +110,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTab.className = 'mn-os-chat-rail-tab';
   railTab.setAttribute('aria-label', 'Show chat sessions');
   railTab.setAttribute('aria-expanded', 'false');
-  railTab.appendChild(createOsIcon('chat', { size: 28 }));
+  railTab.appendChild(createOsIcon('chat', { size: DESKTOP_RAIL_TAB_ICON_SIZE }));
 
   const railNewTab = document.createElement('button');
   railNewTab.type = 'button';

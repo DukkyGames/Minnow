@@ -2035,7 +2035,10 @@ const BOARD_ADVANCE_ICON_NAMES: Record<BoardAdvanceIconKind, IconName> = {
 };
 
 function createBoardAdvanceIcon(kind: BoardAdvanceIconKind): HTMLElement {
-  return createIcon(BOARD_ADVANCE_ICON_NAMES[kind], { className: 'board-task-card__advance-icon' });
+  return createIcon(BOARD_ADVANCE_ICON_NAMES[kind], {
+    className: 'board-task-card__advance-icon',
+    size: 14,
+  });
 }
 
 function buildStatusActionButtons(

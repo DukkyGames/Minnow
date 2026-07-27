@@ -84,10 +84,14 @@ export function toggleSidebarLayout(): void {
     if (side && side.classList.contains('mobile-open')) closeMobileSidebar();
     else openMobileSidebar();
     applySidebarVisuals();
+    // Mobile overlay vs icon rail changes board wave flattening in the list.
+    void import('./sidebar').then((m) => m.renderSidebar());
   } else {
     sessionState!.sidebarCollapsed = !sessionState!.sidebarCollapsed;
     applySidebarVisuals();
     scheduleSaveSessions();
+    // Re-render so orchestrate boards collapse to the group glyph on the icon rail.
+    void import('./sidebar').then((m) => m.renderSidebar());
   }
 }
 
@@ -95,9 +99,11 @@ export function toggleSidebarCollapsed(): void {
   if (isMobileLayout()) {
     closeMobileSidebar();
     applySidebarVisuals();
+    void import('./sidebar').then((m) => m.renderSidebar());
     return;
   }
   sessionState!.sidebarCollapsed = !sessionState!.sidebarCollapsed;
   applySidebarVisuals();
   scheduleSaveSessions();
+  void import('./sidebar').then((m) => m.renderSidebar());
 }

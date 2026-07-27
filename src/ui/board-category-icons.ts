@@ -14,5 +14,5 @@ export function createBoardCategoryIcon(
 ): HTMLElement | null {
   const name = CATEGORY_TO_ICON[category];
   if (!name) return null;
-  return createIcon(name, { className });
+  return createIcon(name, { className, size: 10 });
 }

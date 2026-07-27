@@ -1,5 +1,5 @@
 /**
- * Uicons glyphs for operating modes (General / Build / Plan / …).
+ * Uicons Solid Rounded glyphs for operating modes (General / Build / Plan / …).
  */
 
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
@@ -17,19 +17,14 @@ const MODE_TO_ICON: Record<ModeId, IconName> = {
   onboarding: 'modeGeneral',
 };
 
-/** Thicker Orchestrate glyph for hub intent chips and sidebar chat list. */
-export const ORCHESTRATE_PROMINENT_ICON_NAME: IconName = 'modeOrchestrateBold';
-
 /** Resolve semantic icon name for a persisted or unknown mode id. */
 export function modeIconName(modeId: string | null | undefined): IconName {
   return MODE_TO_ICON[normalizeModeId(modeId)];
 }
 
-/** Sidebar chat rows: solid Orchestrate glyph at compact sizes. */
+/** Sidebar chat rows use the same solid glyphs as the composer mode strip. */
 export function chatListModeIconName(modeId: string | null | undefined): IconName {
-  const normalized = normalizeModeId(modeId);
-  if (normalized === 'orchestrate') return ORCHESTRATE_PROMINENT_ICON_NAME;
-  return MODE_TO_ICON[normalized];
+  return modeIconName(modeId);
 }
 
 /** @deprecated Use modeIconName — kept for callers expecting a URL string. */

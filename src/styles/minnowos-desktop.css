@@ -608,13 +608,18 @@
   background: transparent;
   color: var(--os-text-dim);
   cursor: pointer;
+  --mn-os-rail-tab-icon-size: 21px;
   transition:
     color 0.16s var(--os-ease),
     opacity 0.2s var(--os-ease-out);
 }
 
+.mn-os-chat-rail-tab .icon-svg {
+  --mn-icon-size: var(--mn-os-rail-tab-icon-size);
+}
+
 .mn-os-chat-rail-tab--new {
-  font-size: 28px;
+  font-size: var(--mn-os-rail-tab-icon-size);
   font-weight: 300;
   line-height: 1;
 }

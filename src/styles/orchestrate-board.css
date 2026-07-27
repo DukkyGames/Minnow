@@ -403,11 +403,7 @@ button.board-header__activity {
 }
 
 .board-running-tasks__phase-icon {
-  width: 11px;
-  height: 11px;
-  fill: currentColor;
-  stroke: none;
-  fill-rule: evenodd;
+  --mn-icon-size: 11px;
 }
 
 .board-running-tasks__dot {
@@ -494,13 +490,7 @@ button.board-header__activity {
 }
 
 .board-running-tasks__control-icon {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  --mn-icon-size: 13px;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1408,12 +1398,7 @@ button.board-header__activity {
 }
 
 .board-task-card__cat-icon {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  fill: currentColor;
-  stroke: none;
-  fill-rule: evenodd;
+  --mn-icon-size: 10px;
 }
 
 .bt--build {
@@ -1487,9 +1472,7 @@ button.board-header__activity {
 }
 
 .board-task-card__advance-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
+  --mn-icon-size: 14px;
 }
 
 .board-task-card__advance-label {

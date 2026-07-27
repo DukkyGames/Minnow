@@ -39,8 +39,10 @@ function setupDom() {
     <aside id="fileSidebar" class="file-sidebar collapsed" aria-label="Project files">
       <div class="file-sidebar-header">
         <span id="fileSidebarTitle">Files</span>
-        <button type="button" id="btnFileSidebarCollapse"></button>
-        <button type="button" id="btnGitPanelToggle"></button>
+        <div class="file-sidebar-header-actions">
+          <button type="button" id="btnFileSidebarCollapse"></button>
+          <button type="button" id="btnGitPanelToggle"></button>
+        </div>
       </div>
       <div id="fileSidebarFilesView" class="file-sidebar-files-view"></div>
       <div id="gitPanelRoot" class="git-panel-root" hidden></div>
