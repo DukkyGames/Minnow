@@ -18,6 +18,10 @@ export type ShellIconName =
   | 'minimize'
   | 'maximize'
   | 'restore'
+  | 'windowClose'
+  | 'windowMinimize'
+  | 'windowMaximize'
+  | 'windowRestore'
   | 'grid'
   | 'bell'
   | 'bellOff'
@@ -198,6 +202,10 @@ export const ICON_CLASS: Record<IconName, string> = {
   minimize: 'fi-rr-minus-small',
   maximize: 'fi-rr-square',
   restore: 'fi-rr-duplicate',
+  windowClose: 'fi-rr-cross',
+  windowMinimize: 'fi-rr-window-minimize',
+  windowMaximize: 'fi-rr-window-maximize',
+  windowRestore: 'fi-rr-window-restore',
   grid: 'fi-rr-apps',
   bell: 'fi-rr-bell',
   bellOff: 'fi-rr-bell-slash',

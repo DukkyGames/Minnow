@@ -25,6 +25,9 @@
   --os-accent-glow: var(--mn-accent-border);
 
   --os-menubar-h: 46px;
+  /* Desktop window chrome — smaller than --touch-min (mobile composer targets). */
+  --os-window-btn-size: 32px;
+  --os-window-btn-icon-size: 12px;
 
   /* motion + radii (prototype values, aligned where Minnow matches) */
   --os-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
