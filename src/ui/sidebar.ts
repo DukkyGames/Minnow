@@ -684,7 +684,8 @@ function showGroupContextMenu(
   const renameItem = document.createElement('button');
   renameItem.type = 'button';
   renameItem.textContent = 'Rename';
-  renameItem.addEventListener('click', () => {
+  renameItem.addEventListener('click', (e) => {
+    e.stopPropagation();
     menu.remove();
     beginRenameGroup(groupId, nameSpan);
   });
@@ -692,7 +693,8 @@ function showGroupContextMenu(
   const deleteItem = document.createElement('button');
   deleteItem.type = 'button';
   deleteItem.textContent = 'Delete group';
-  deleteItem.addEventListener('click', () => {
+  deleteItem.addEventListener('click', (e) => {
+    e.stopPropagation();
     menu.remove();
     const group = findGroupById(groupId);
     const isBoardGroup = Boolean(group?.orchestrateBoard);
@@ -722,7 +724,7 @@ function showGroupContextMenu(
     if (result.chatRemoval) {
       onChatRemoved({ ...result.chatRemoval, activeChanged: result.activeChanged });
     } else {
-      renderSidebar();
+      refreshSessionListUIs();
       if (isOrchestrateHubMounted()) {
         refreshOrchestrateHubBoardList();
       }
@@ -903,7 +905,8 @@ function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): vo
   deleteItem.textContent = `Delete ${deletable.length} chat${deletable.length === 1 ? '' : 's'}`;
   deleteItem.className = 'chat-context-menu__item--danger';
   deleteItem.disabled = deletable.length === 0;
-  deleteItem.addEventListener('click', () => {
+  deleteItem.addEventListener('click', (e) => {
+    e.stopPropagation();
     menu.remove();
     const n = deletable.length;
     if (!n) return;
@@ -1015,7 +1018,8 @@ function showChatItemContextMenu(
   deleteItem.type = 'button';
   deleteItem.textContent = 'Delete';
   deleteItem.className = 'chat-context-menu__item--danger';
-  deleteItem.addEventListener('click', () => {
+  deleteItem.addEventListener('click', (e) => {
+    e.stopPropagation();
     menu.remove();
     if (options?.onDelete) {
       options.onDelete(chat);
@@ -1080,6 +1084,13 @@ function beginRenameChat(chatId: string, nameSpan: HTMLSpanElement): void {
   inp.addEventListener('blur', finish, { once: true });
 }
 
+/** Refresh every session list surface (Code sidebar, desktop rail, Chat app rail). */
+function refreshSessionListUIs(): void {
+  renderSidebar();
+  void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
+  void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
+}
+
 /** Refresh sidebar and main chat UI after removeChatById. */
 function onChatRemoved(result: RemoveChatResult): void {
   if (!result.ok) return;
@@ -1093,10 +1104,8 @@ function onChatRemoved(result: RemoveChatResult): void {
     } else {
       renderChatFromHistory(active);
     }
-  } else if (shouldPaintDesktopChatSurface()) {
-    void import('../ui/desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   }
-  renderSidebar();
+  refreshSessionListUIs();
   if (isOrchestrateHubMounted()) {
     refreshOrchestrateHubBoardList();
     // Deleting a planner chat can free its plan; refresh the dropdown too (MIN-215).

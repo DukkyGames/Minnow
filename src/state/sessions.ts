@@ -1038,6 +1038,59 @@ function rememberActiveChatForWorkspaceKey(workspaceKey: string): void {
   markSessionScalarsDirty();
 }
 
+/** Drop a deleted chat id from remembered workspace/app maps (PATCH scalars). */
+function purgeRememberedChatId(state: SessionState, chatId: string): void {
+  let changed = false;
+  if (state.lastActiveChatIdByWorkspace) {
+    for (const [key, id] of Object.entries(state.lastActiveChatIdByWorkspace)) {
+      if (id === chatId) {
+        delete state.lastActiveChatIdByWorkspace[key];
+        changed = true;
+      }
+    }
+  }
+  if (state.lastActiveChatIdByApp) {
+    for (const [appId, id] of Object.entries(state.lastActiveChatIdByApp)) {
+      if (id === chatId) {
+        delete state.lastActiveChatIdByApp[appId];
+        changed = true;
+      }
+    }
+  }
+  if (changed) markSessionScalarsDirty();
+}
+
+/** Point remembered workspace/app ids at the new active chat after a deletion. */
+function syncRememberedActiveChatAfterDelete(
+  state: SessionState,
+  victim: Chat,
+  wasActive: boolean,
+): void {
+  purgeRememberedChatId(state, victim.id);
+  if (!wasActive) return;
+
+  const next = state.chats.find((c) => c.id === state.activeId);
+  if (!next) return;
+
+  const workspaceKey = normalizeWorkspacePath(next.workspacePath ?? '');
+  if (!state.lastActiveChatIdByWorkspace) {
+    state.lastActiveChatIdByWorkspace = {};
+  }
+  // Unassigned chats use workspacePath '' — still persist under that key.
+  state.lastActiveChatIdByWorkspace[workspaceKey] = next.id;
+  markSessionScalarsDirty();
+
+  if (victim.appScope === 'email') {
+    rememberActiveChatForAppInState(state, EMAIL_APP_ID, next.id);
+    return;
+  }
+  if (normalizeModeId(victim.modeId) === 'desktop') {
+    rememberActiveChatForAppInState(state, DESKTOP_APP_ID, next.id);
+    return;
+  }
+  rememberActiveChatForAppInState(state, CHAT_APP_ID, next.id);
+}
+
 /** Persist the active chat when it belongs to the given project workspace (before desktop chat). */
 export function rememberWorkspaceActiveChat(workspacePath: string): void {
   const state = sessionState;
@@ -1803,6 +1856,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
 
   const victimWorkspace = normalizeWorkspacePath(victim.workspacePath ?? '');
   let activeChanged = wasActive;
+  // Defer remembered-id sync until after activeId may change below.
   if (state.chats.length === 0) {
     const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
     state.chats.push(fresh);
@@ -1811,9 +1865,12 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
     touchChat(fresh);
     activeChanged = true;
   } else if (wasActive) {
-    const inWorkspace = getSidebarListedChatsForWorkspace(victimWorkspace, state);
-    if (inWorkspace.length) {
-      state.activeId = inWorkspace[0]!.id;
+    const remaining =
+      victimWorkspace.length > 0
+        ? getSidebarListedChatsForWorkspace(victimWorkspace, state)
+        : getUnassignedChats(state);
+    if (remaining.length) {
+      state.activeId = remaining[0]!.id;
       markSessionScalarsDirty();
     } else {
       const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
@@ -1825,6 +1882,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
     activeChanged = true;
   }
 
+  syncRememberedActiveChatAfterDelete(state, victim, wasActive);
   scheduleSaveSessions();
   return {
     ok: true,
