@@ -263,6 +263,9 @@ export const SCOPED_SUITES = {
   evals: {
     patterns: ['test/evals/**/*.test.mjs', 'test/evals/**/*.test.mts'],
   },
+  board: {
+    patterns: ['test/orchestrate/**/*.test.mts', 'test/orchestrate/**/*.test.mjs'],
+  },
 };
 
 /** Glob used to discover all node:test files under test/. */
