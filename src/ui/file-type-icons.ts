@@ -14,7 +14,6 @@ export { resolveFileIconId, resolveFolderIconId } from './file-type-icon-resolve
 
 /** Base path for synced SVG assets (see scripts/sync-material-file-icons.mjs). */
 const ICON_BASE = './material-icons';
-
 /** True when the active Minnow palette is a light variant. */
 export function isFileIconLightTheme(): boolean {
   if (typeof document === 'undefined') return false;

@@ -345,6 +345,17 @@ function enqueueBoardMerge<T>(groupId: string, fn: () => Promise<T>): Promise<T>
   return run;
 }
 
+export type BoardChatTurnRunner = (
+  input: Parameters<typeof runChatTurn>[0],
+) => Promise<unknown>;
+
+let boardChatTurnRunner: BoardChatTurnRunner = runChatTurn;
+
+/** Host/test hook: substitute the board's chat-turn runner. `null` restores runChatTurn. */
+export function setBoardChatTurnRunner(fn: BoardChatTurnRunner | null): void {
+  boardChatTurnRunner = fn ?? runChatTurn;
+}
+
 /** Chat ids holding a launch slot until runChatTurn registers streaming/setup. */
 const reservedLaunchChatIds = new Set<string>();
 
@@ -1233,13 +1244,24 @@ function maxConcurrent(board: NonNullable<ChatGroup['orchestrateBoard']>): numbe
   return resolveEffectiveMaxConcurrent(board);
 }
 
-/** Skip launching background chat turns under node:test (avoids open handles). */
+/**
+ * Background board chat launches are suppressed under node:test unless a test
+ * explicitly installs a runner via setBoardChatTurnRunner (opting into the real
+ * launch path: chat creation, worktree ensure, supervision timers, slot accounting).
+ */
 function skipBackgroundBoardChatLaunch(): boolean {
-  return (
-    typeof process !== 'undefined' &&
-    typeof process.env !== 'undefined' &&
-    process.env.MINNOW_TEST === '1'
-  );
+  if (boardChatTurnRunner !== runChatTurn) return false;
+  return typeof process !== 'undefined' && process.env?.MINNOW_TEST === '1';
+}
+
+/** Best-effort sidebar repaint after a launch. UI failures must never fail a launch. */
+async function refreshSidebarAfterLaunch(): Promise<void> {
+  try {
+    const { renderSidebar } = await import('../ui/sidebar.ts');
+    renderSidebar();
+  } catch (err) {
+    reportBackgroundError('board-launch-sidebar-refresh', err);
+  }
 }
 
 /** Phase label for a running board task slot (build / test / fix / merge / final integration). */
@@ -1896,8 +1918,7 @@ export async function runTaskChatNudge(
 
   reserveLaunchSlot(taskChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarAfterLaunch();
 
     if (targetChatId === task.chatId?.trim()) {
       const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
@@ -1914,7 +1935,7 @@ export async function runTaskChatNudge(
     refreshHeartbeatThresholds();
     startTaskChatSupervision(taskChat.id);
 
-    void runChatTurn({
+    void boardChatTurnRunner({
       chat: taskChat,
       pushUser: true,
       rawText: nudge,
@@ -2495,7 +2516,7 @@ export async function startMergeConflictFixer(
     // Part 1: Supervise the fixer chat like every other board chat starter.
     refreshHeartbeatThresholds();
     startTaskChatSupervision(fixerChat.id);
-    void runChatTurn({
+    void boardChatTurnRunner({
       chat: fixerChat,
       pushUser: true,
       rawText: seed,
@@ -2873,7 +2894,7 @@ export async function startEnvFixer(
     const seed = buildEnvFixerSeedMessage(task, phase, summary);
     refreshHeartbeatThresholds();
     startTaskChatSupervision(fixerChat.id);
-    void runChatTurn({
+    void boardChatTurnRunner({
       chat: fixerChat,
       pushUser: true,
       rawText: seed,
@@ -3148,8 +3169,7 @@ export async function startTask(
 
   reserveLaunchSlot(taskChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarAfterLaunch();
 
     // Scope this task chat's tools to an isolated worktree when board isolation is on
     // (MIN-275). Best-effort: a null result leaves the chat on the shared workspace.
@@ -3168,7 +3188,7 @@ export async function startTask(
     refreshHeartbeatThresholds();
     startTaskChatSupervision(taskChat.id);
 
-    void runChatTurn({
+    void boardChatTurnRunner({
       chat: taskChat,
       pushUser: true,
       rawText: seed,
@@ -3268,8 +3288,7 @@ export async function startTaskTesting(
 
   reserveLaunchSlot(testChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarAfterLaunch();
 
     // Tester runs against the same isolated worktree as the Builder (MIN-275).
     const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? task;
@@ -3295,7 +3314,7 @@ export async function startTaskTesting(
     refreshHeartbeatThresholds();
     startTaskChatSupervision(testChat.id);
 
-    void runChatTurn({
+    void boardChatTurnRunner({
       chat: testChat,
       pushUser: true,
       rawText: seed,
@@ -3685,15 +3704,14 @@ export async function startFinalIntegrationTest(
 
   reserveLaunchSlot(finalChat.id);
   try {
-    const { renderSidebar } = await import('../ui/sidebar.ts');
-    renderSidebar();
+    await refreshSidebarAfterLaunch();
 
     const seed = buildFinalIntegrationTestSeedMessage(group, plannerChat);
 
     refreshHeartbeatThresholds();
     startTaskChatSupervision(finalChat.id);
 
-    void runChatTurn({
+    void boardChatTurnRunner({
       chat: finalChat,
       pushUser: true,
       rawText: seed,
