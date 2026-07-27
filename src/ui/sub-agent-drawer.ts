@@ -18,8 +18,11 @@ import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome
 import type { SubAgentStructuredOutcome } from '../agents/sub-agent-structured-outcome';
 import type { PersistedSubAgentRun } from '../types';
 import { resolveSubAgentOverlayMount } from './chat-mount';
-import { humanizeToolName } from './tool-messages';
 import { renderTranscriptView } from './transcript-view.ts';
+import {
+  subAgentLiveStatusLine,
+  subAgentTranscriptLiveFromRun,
+} from './sub-agent-live-status';
 import { iconHtml } from './icon';
 
 type AnyRun = SubAgentRun | PersistedSubAgentRun;
@@ -131,17 +134,7 @@ function resolveOutcome(run: AnyRun, live: boolean): SubAgentStructuredOutcome |
 
 /** Live status line when a structured outcome is not ready yet. */
 function liveStatusLine(run: SubAgentRun): string {
-  const snap = buildSubAgentStatusPayload(run);
-  const toolName = run.liveCurrentToolName?.trim();
-  if (toolName) {
-    return `Calling ${humanizeToolName(toolName)}…`;
-  }
-  const preview =
-    typeof snap.lastMessagePreview === 'string' ? snap.lastMessagePreview.trim() : '';
-  if (preview) return preview;
-  if (run.status === 'queued') return 'Queued — waiting for a concurrency slot…';
-  if (run.status === 'running') return 'Generating response…';
-  return '';
+  return subAgentLiveStatusLine(run, true);
 }
 
 /** Structured summary / findings / artifacts above the activity stream. */
@@ -294,7 +287,11 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
 
   const hasStructured = Boolean(resolveOutcome(run, live));
   state.transcriptDetails.open = !hasStructured || !isTerminal(run.status);
-  renderTranscriptView(state.transcriptBody, run.messages as unknown[]);
+  renderTranscriptView(
+    state.transcriptBody,
+    run.messages as unknown[],
+    subAgentTranscriptLiveFromRun(run, live),
+  );
 
   // Footer: cancel affordance only for an in-flight live run.
   state.footer.replaceChildren();

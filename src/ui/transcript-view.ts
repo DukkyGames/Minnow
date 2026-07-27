@@ -11,7 +11,13 @@ import type {
   ToolImageAttachment,
 } from '../types';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
+import { humanizeToolName } from './tool-messages';
 import { renderToolCall, renderToolResult } from './tool-messages';
+import type { SubAgentTranscriptLive } from './sub-agent-live-status';
+import {
+  STREAM_LABEL_GENERATING,
+  STREAM_LABEL_THINKING,
+} from './stream-status';
 
 /** Parse stored tool `arguments` JSON for display. */
 export function parseToolArgsForTranscriptDisplay(raw: string): Record<string, unknown> {
@@ -93,8 +99,103 @@ function appendAssistantTranscriptRow(body: HTMLElement, msg: Record<string, unk
   body.appendChild(row);
 }
 
+/** Build the animated dots + label row used during live sub-agent turns. */
+function createTranscriptStreamStatus(
+  phase: 'thinking' | 'generating',
+): HTMLElement {
+  const statusEl = document.createElement('div');
+  statusEl.className = `stream-status stream-status--${phase} transcript-view__stream-status`;
+  statusEl.setAttribute('role', 'status');
+  statusEl.setAttribute('aria-live', 'polite');
+  statusEl.setAttribute('aria-busy', 'true');
+
+  const dots = document.createElement('span');
+  dots.className = 'stream-status__dots';
+  dots.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 3; i += 1) {
+    const dot = document.createElement('span');
+    dot.className = 'stream-status__dot';
+    dots.appendChild(dot);
+  }
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'stream-status__label';
+  labelEl.textContent =
+    phase === 'thinking' ? STREAM_LABEL_THINKING : STREAM_LABEL_GENERATING;
+
+  statusEl.appendChild(dots);
+  statusEl.appendChild(labelEl);
+  return statusEl;
+}
+
+/** Inline tool-call spinner while a nested tool executes or streams in. */
+function createTranscriptToolIndicator(toolName: string): HTMLElement {
+  const indicatorEl = document.createElement('div');
+  indicatorEl.className = 'tool-start-indicator transcript-view__tool-indicator';
+  indicatorEl.setAttribute('role', 'status');
+  indicatorEl.setAttribute('aria-live', 'polite');
+
+  const spinner = document.createElement('span');
+  spinner.className = 'tool-call-spinner';
+  spinner.setAttribute('aria-hidden', 'true');
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'tool-start-indicator__label';
+  labelEl.textContent = `Calling ${humanizeToolName(toolName)}…`;
+
+  indicatorEl.appendChild(spinner);
+  indicatorEl.appendChild(labelEl);
+  return indicatorEl;
+}
+
+/** Append thinking / generating / tool indicators below committed transcript rows. */
+export function appendTranscriptLiveTail(
+  body: HTMLElement,
+  live: SubAgentTranscriptLive | undefined,
+): void {
+  body.querySelector('.transcript-view__live-tail')?.remove();
+  if (!live?.isLive) return;
+
+  const tail = document.createElement('div');
+  tail.className = 'transcript-view__live-tail';
+
+  const phase = live.phase;
+  const toolName = live.currentToolName?.trim();
+
+  if (phase === 'thinking') {
+    tail.appendChild(createTranscriptStreamStatus('thinking'));
+    const reasoning = live.partialReasoning?.trim();
+    if (reasoning) {
+      const thoughts = document.createElement('details');
+      thoughts.className = 'transcript-view__thinking';
+      const summary = document.createElement('summary');
+      summary.textContent = STREAM_LABEL_THINKING;
+      const pre = document.createElement('pre');
+      pre.className = 'transcript-view__thinking-body';
+      pre.textContent = reasoning;
+      thoughts.appendChild(summary);
+      thoughts.appendChild(pre);
+      tail.appendChild(thoughts);
+    }
+  } else if (phase === 'generating') {
+    tail.appendChild(createTranscriptStreamStatus('generating'));
+  } else if (phase === 'tools' && toolName) {
+    tail.appendChild(createTranscriptToolIndicator(toolName));
+  } else if (live.isLive) {
+    tail.appendChild(createTranscriptStreamStatus('generating'));
+  }
+
+  if (tail.childNodes.length > 0) {
+    body.appendChild(tail);
+  }
+}
+
 /** Render API-shaped messages into a scrollable transcript body. */
-export function renderTranscriptView(body: HTMLElement, messages: unknown[]): void {
+export function renderTranscriptView(
+  body: HTMLElement,
+  messages: unknown[],
+  live?: SubAgentTranscriptLive,
+): void {
   body.replaceChildren();
   const toolResultMap = new Map<
     string,
@@ -183,4 +284,6 @@ export function renderTranscriptView(body: HTMLElement, messages: unknown[]): vo
       continue;
     }
   }
+
+  appendTranscriptLiveTail(body, live);
 }

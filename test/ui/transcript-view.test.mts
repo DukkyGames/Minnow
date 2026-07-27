@@ -8,6 +8,7 @@ import { Window } from 'happy-dom';
 
 import { MULTIMODAL_PROBE_PROMPT } from '../../src/benchmark/fixtures/multimodal-probe.ts';
 import { renderTranscriptView } from '../../src/ui/transcript-view.ts';
+import { subAgentTranscriptLiveFromRun } from '../../src/ui/sub-agent-live-status.ts';
 
 function setupDom(): Window {
   const window = new Window();
@@ -83,5 +84,65 @@ describe('renderTranscriptView', () => {
       body.querySelector('.transcript-view__assistant')?.textContent,
       'A small silvery fish rests on wet wood.',
     );
+  });
+
+  test('appends live thinking and tool indicators for in-flight sub-agent turns', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+
+    renderTranscriptView(
+      body,
+      [
+        { role: 'user', content: 'Explore src/' },
+        { role: 'assistant', content: 'Scanning the tree…' },
+      ],
+      {
+        isLive: true,
+        phase: 'tools',
+        currentToolName: 'list_directory',
+      },
+    );
+
+    assert.ok(body.querySelector('.transcript-view__live-tail'));
+    assert.ok(body.querySelector('.tool-start-indicator'));
+    assert.match(
+      body.querySelector('.tool-start-indicator__label')?.textContent ?? '',
+      /List Directory/i,
+    );
+
+    body.replaceChildren();
+    renderTranscriptView(body, [{ role: 'user', content: 'Go' }], {
+      isLive: true,
+      phase: 'thinking',
+      partialReasoning: 'Need to check package.json first.',
+    });
+
+    assert.ok(body.querySelector('.stream-status--thinking'));
+    assert.ok(body.querySelector('.transcript-view__thinking-body'));
+  });
+
+  test('subAgentTranscriptLiveFromRun maps orchestrator live fields', () => {
+    const live = subAgentTranscriptLiveFromRun(
+      {
+        runId: 'run-1',
+        type: 'explore',
+        task: 't',
+        status: 'running',
+        parentChatId: 'chat-1',
+        parentToolCallId: null,
+        parentTurnId: null,
+        summary: '',
+        error: null,
+        startedAt: null,
+        endedAt: null,
+        toolTurns: 0,
+        cancelled: false,
+        messages: [],
+        livePhase: 'generating',
+      },
+      true,
+    );
+    assert.equal(live?.phase, 'generating');
+    assert.equal(live?.isLive, true);
   });
 });
