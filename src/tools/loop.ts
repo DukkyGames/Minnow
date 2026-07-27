@@ -149,7 +149,10 @@ import {
   resolveComposerSurface,
   type ComposerSurface,
 } from '../ui/composer-surface';
-import { clearComposerDraftOnChat } from '../ui/composer-draft';
+import {
+  clearComposerAfterSend,
+  clearComposerDraftOnChat,
+} from '../ui/composer-draft';
 
 export type { ComposerSurface } from '../ui/composer-surface';
 import { getActiveChatMountElement, setTurnChatMount } from '../ui/chat-mount';
@@ -2848,7 +2851,7 @@ export async function sendMessageWithTools(
     }
     const chat = getActiveChat();
     if (enqueueComposerMessage(chat, rawTextEarly)) {
-      clearComposerInput(input);
+      clearComposerAfterSend(chat, input);
       setStatus('ok', 'Follow-up queued');
       refreshComposerStreamingAffordance();
       syncComposerMessageQueue();
@@ -2866,7 +2869,9 @@ export async function sendMessageWithTools(
   );
   const pendingEdit = consumePendingMessageEdit();
   if (pendingEdit) {
-    clearComposerInput(input);
+    const editChat =
+      sessionState?.chats.find((c) => c.id === pendingEdit.chatId) ?? getActiveChat();
+    clearComposerAfterSend(editChat, input);
     await completePendingMessageEdit(
       pendingEdit.chatId,
       pendingEdit.historyIndex,
@@ -2881,13 +2886,13 @@ export async function sendMessageWithTools(
   // /loop before /goal so both stateful commands settle without skill resolution
   const loopDispatch = handleLoopCommand(chat, rawText, setStatus);
   if (loopDispatch === 'handled') {
-    clearComposerInput(input);
+    clearComposerAfterSend(chat, input);
     return;
   }
 
   const goalDispatch = handleGoalCommand(chat, rawText, setStatus);
   if (goalDispatch === 'handled') {
-    clearComposerInput(input);
+    clearComposerAfterSend(chat, input);
     return;
   }
 
@@ -2896,7 +2901,7 @@ export async function sendMessageWithTools(
   if (goalDispatch === 'set') {
     goalDriven = true;
     effectiveRawText = getActiveGoal(chat)?.conditionText ?? rawText;
-    clearComposerInput(input);
+    clearComposerAfterSend(chat, input);
   }
 
   if (
@@ -2979,13 +2984,13 @@ export async function sendMessageWithTools(
       attachmentCount: validAttachments.length,
     })
   ) {
-    clearComposerInput(input);
+    clearComposerAfterSend(chat, input);
     await startPlanningFromComposer(peekUserText || effectiveRawText);
     return;
   }
 
   if (!goalDispatch) {
-    clearComposerInput(input);
+    clearComposerAfterSend(chat, input);
   }
 
   await sendProgrammaticChatText(chat, effectiveRawText, {
