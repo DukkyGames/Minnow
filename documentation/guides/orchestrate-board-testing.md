@@ -6,7 +6,7 @@ How to run, debug, and extend tests for the Orchestrate Kanban board (dispatcher
 
 | Layer | When to use | Command / entry |
 |-------|----------------|-----------------|
-| **Automated suite** | CI, regressions, every PR | `npm run test:board` (~7s, 356 tests) |
+| **Automated suite** | CI, regressions, every PR | `npm run test:board` (~14s, 397 tests) |
 | **Board log validation** | Post-mortem on a real or test run | `npm run check:board-log -- <groupId>` |
 | **Manual UI + fake model** | Click through the real app without a live LLM | `npm run seed:test-board` + `npm run fake-model -- --register` |
 
@@ -100,7 +100,7 @@ Use your real `groupId` from the board folder if different.
 
 | Command | Description |
 |---------|-------------|
-| `npm run test:board` | All `test/orchestrate/**/*.test.{mts,mjs}` (~356 tests) |
+| `npm run test:board` | All `test/orchestrate/**/*.test.{mts,mjs}` (~397 tests) |
 | `npm run fake-model` | Local OpenAI-v1 stub; `npm run fake-model -- --help` |
 | `npm run seed:test-board` | Inject pre-initialized board into sessions |
 | `npm run check:board-log -- <groupId\|path>` | Validate `~/.minnow/logs/orchestrate/*.jsonl` |
@@ -175,7 +175,9 @@ Headless E2E wraps real `runChatTurn` with a custom runner (must not be the `run
 | [`_scripted-turn-runner.mts`](../../test/orchestrate/_scripted-turn-runner.mts) | Scripted `boardChatTurnRunner`; reproduces stream-end contract |
 | [`_headless-board-dom.mts`](../../test/orchestrate/_headless-board-dom.mts) | happy-dom stubs for full `runChatTurn` |
 | [`_fake-api-router.mts`](../../test/orchestrate/_fake-api-router.mts) | `globalThis.fetch` router for generations, tools, worktree |
-| [`_board-quirk-fixtures.mts`](../../test/orchestrate/_board-quirk-fixtures.mts) | Model-misbehaviour SSE scenarios |
+| [`_board-quirk-fixtures.mts`](../../test/orchestrate/_board-quirk-fixtures.mts) | Model-misbehaviour SSE scenarios (families A–H) |
+
+**LLM-quirk TDD:** See [orchestrate-board-llm-quirk-tdd.md](../plans/orchestrate-board-llm-quirk-tdd.md) for the full scenario matrix and **known red** backlog. New quirk tests assert **intended** behaviour; `npm run test:board` may fail until product fixes land — do not weaken assertions.
 
 **Drive modes:**
 
@@ -218,8 +220,9 @@ npx tsx --import ./test/test-loader.mjs --import ./test/assert-dom-safe.mjs \
 |------|--------|
 | `board-flow-e2e.test.mts` | Multi-wave lifecycle via bootstrap harness |
 | `board-live-launch.test.mts` | Real launch path, slots, supervision, concurrency |
-| `board-headless-e2e.test.mts` | Full `runChatTurn` + quirk fixtures |
+| `board-headless-e2e.test.mts` | Full `runChatTurn` + quirk fixtures (families A–H) |
 | `board-log-invariants.test.mts` | Invariant checker fixtures |
+| `merge-fixer-llm-quirks.test.mts` | Fixer LLM nonsense (family D) |
 
 ### Launch, stream-end, recovery
 
@@ -280,9 +283,12 @@ npx tsx --import ./test/test-loader.mjs --import ./test/assert-dom-safe.mjs \
 
 ### New quirk (model misbehaviour)
 
-1. Add an SSE scenario to [`_board-quirk-fixtures.mts`](../../test/orchestrate/_board-quirk-fixtures.mts).
-2. Add a case to [`board-headless-e2e.test.mts`](../../test/orchestrate/board-headless-e2e.test.mts).
-3. Assert final task statuses **and** `checkBoardLog(events, opts).ok`.
+1. Add an SSE scenario to [`_board-quirk-fixtures.mts`](../../test/orchestrate/_board-quirk-fixtures.mts) and register in `quirkFixtures` — use `generationErrorEndSse` / `generationPostErrorTurn` for context-window overflow; see `CONTEXT_EXCEEDED_MESSAGES`.
+2. Add a case to [`board-headless-e2e.test.mts`](../../test/orchestrate/board-headless-e2e.test.mts) (or the relevant unit suite for dispatcher-only edges).
+3. Assert final task statuses **and** `checkBoardLog(events, opts).ok` where the board converges.
+4. If documenting a known product gap, add the test to **Known red** in [orchestrate-board-llm-quirk-tdd.md](../plans/orchestrate-board-llm-quirk-tdd.md).
+
+New tests assert **intended** recovery behaviour and may stay red until product fixes land.
 
 ### New launch-path behaviour
 

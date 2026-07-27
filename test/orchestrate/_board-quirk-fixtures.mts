@@ -239,6 +239,313 @@ export function runawayRepetitionScript(taskId: string): FakeApiScript {
   };
 }
 
+/** Builder prose success without board_report — contract text from build.full.md. */
+export function builderProseReadySse(): string[] {
+  return proseSse('Implementation complete.\n\nStatus: READY FOR VERIFICATION');
+}
+
+/** board_report with tolerant outcome synonyms beyond green. */
+export function boardReportOkSse(taskId: string): string[] {
+  return boardReportSse(taskId, 'ok', `OK synonym for ${taskId}`);
+}
+
+export function boardReportSuccessSse(taskId: string): string[] {
+  return boardReportSse(taskId, 'success', `Success synonym for ${taskId}`);
+}
+
+export function boardReportEnvBlockedSse(taskId: string): string[] {
+  return boardReportSse(taskId, 'env_blocked', 'Postgres not running on port 5432');
+}
+
+export function boardReportFailSse(taskId: string): string[] {
+  return boardReportSse(taskId, 'fail', 'Build could not verify changes');
+}
+
+/** Partially valid JSON args with trailing junk and unicode escapes. */
+export function partialValidToolArgsSse(taskId: string): string[] {
+  const args =
+    `{"task_id":"${taskId}","outcome":"pass","summary":"ok"} trailing junk \\u0022`;
+  const delta = JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_partial',
+              type: 'function',
+              function: { name: 'board_report', arguments: args },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+  });
+  return [`data: ${delta}\n\n`, `data: ${finish}\n\n`, `event: end\ndata: {"status":"complete"}\n\n`];
+}
+
+/** Truncated stream after tool name but before any arguments JSON. */
+export function truncatedAfterToolNameSse(): string[] {
+  const delta = JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_trunc_name',
+              type: 'function',
+              function: { name: 'board_report', arguments: '' },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  return [`data: ${delta}\n\n`, `event: end\ndata: {"status":"complete"}\n\n`];
+}
+
+/** Builder requests a board-stripped orchestrator tool (role-forbidden). */
+export function forbiddenDelegateToolSse(): string[] {
+  return toolCallsSse(
+    'delegate_tasks',
+    '{"tasks":[{"id":"W1-B","title":"Sibling"}]}',
+    'call_forbidden_delegate',
+  );
+}
+
+/** board_report plus a harmless tool call in the same delta. */
+export function multipleToolCallsInDeltaSse(taskId: string): string[] {
+  const reportArgs = JSON.stringify({
+    task_id: taskId,
+    outcome: 'pass',
+    summary: `Multi-tool delta for ${taskId}`,
+  });
+  const delta = JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_noise',
+              type: 'function',
+              function: { name: 'get_datetime', arguments: '{}' },
+            },
+            {
+              index: 1,
+              id: 'call_report',
+              type: 'function',
+              function: { name: 'board_report', arguments: reportArgs },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+  });
+  return [`data: ${delta}\n\n`, `data: ${finish}\n\n`, `event: end\ndata: {"status":"complete"}\n\n`];
+}
+
+/** Tool-call delta but finish_reason stop — provider quirk. */
+export function wrongFinishReasonSse(taskId: string): string[] {
+  const args = JSON.stringify({ task_id: taskId, outcome: 'pass', summary: 'wrong finish' });
+  const delta = JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_wrong_finish',
+              type: 'function',
+              function: { name: 'board_report', arguments: args },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: 'stop' }],
+  });
+  return [`data: ${delta}\n\n`, `data: ${finish}\n\n`, `event: end\ndata: {"status":"complete"}\n\n`];
+}
+
+/** Repeated save_file calls before a successful board_report. */
+export function runawaySaveFileTurns(count: number): string[][] {
+  const turns: string[][] = [];
+  for (let i = 0; i < count; i++) {
+    turns.push(
+      toolCallsSse(
+        'save_file',
+        JSON.stringify({ path: `scratch-${i}.txt`, content: 'noop' }),
+        `call_save_${i}`,
+      ),
+    );
+  }
+  return turns;
+}
+
+/** Stall transcript from max tool turns — inferStreamOutcome should read failed. */
+export function maxToolTurnsProseSse(): string[] {
+  return proseSse('Maximum tool turns reached. Cannot complete this reply.');
+}
+
+/** Empty assistant content with a normal stop finish. */
+export function emptyAssistantSse(): string[] {
+  const delta = JSON.stringify({
+    choices: [{ delta: { content: '' } }],
+  });
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: 'stop' }],
+  });
+  return [
+    `data: ${delta}\n\n`,
+    `data: ${finish}\n\n`,
+    `event: end\ndata: {"status":"complete"}\n\n`,
+  ];
+}
+
+/** Two board_report tool calls in one assistant delta. */
+export function duplicateBoardReportDeltaSse(taskId: string): string[] {
+  const args = JSON.stringify({
+    task_id: taskId,
+    outcome: 'pass',
+    summary: `Duplicate report for ${taskId}`,
+  });
+  const delta = JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_dup_a',
+              type: 'function',
+              function: { name: 'board_report', arguments: args },
+            },
+            {
+              index: 1,
+              id: 'call_dup_b',
+              type: 'function',
+              function: { name: 'board_report', arguments: args },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+  });
+  return [`data: ${delta}\n\n`, `data: ${finish}\n\n`, `event: end\ndata: {"status":"complete"}\n\n`];
+}
+
+/** board_report for a sibling task id — should not satisfy the active task. */
+export function siblingTaskReportSse(wrongTaskId: string): string[] {
+  return boardReportSse(wrongTaskId, 'pass', `Report meant for ${wrongTaskId}`);
+}
+
+/** Tester VERDICT format variants. */
+export function testerVerdictPassUpperSse(): string[] {
+  return proseSse('VERDICT:PASS — all checks green');
+}
+
+export function testerVerdictBuriedSse(): string[] {
+  return proseSse('Ran npm test.\nEverything passed.\n\nVERDICT: pass\n\nThanks!');
+}
+
+export function testerConflictingVerdictsSse(): string[] {
+  return proseSse('VERDICT: fail\nOn second thought: VERDICT: pass');
+}
+
+export function testerVerdictFailSse(): string[] {
+  return testerVerdictSse('fail');
+}
+
+const DEFAULT_TOOL_RESULTS = {
+  get_datetime: { result: '2026-07-26T12:00:00Z' },
+  save_file: { result: 'saved' },
+} as const;
+
+/** Builder prose-only turns then a valid board_report (missing-report nudge path). */
+export function builderProseNoReportScript(taskId: string): FakeApiScript {
+  const prose = builderProseReadySse();
+  return {
+    slots: {
+      [`${taskId}:build`]: [
+        { sse: prose },
+        { sse: prose },
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  };
+}
+
+/** Builder never reports — intended to quarantine after nudge budget at build cap. */
+export function builderProseOnlyQuarantineScript(taskId: string): FakeApiScript {
+  const prose = builderProseReadySse();
+  const buildTurns = Array.from({ length: 12 }, () => ({ sse: prose }));
+  return {
+    slots: {
+      [`${taskId}:build`]: buildTurns,
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  };
+}
+
+/** Tester fail verdict then recovery pass on retry. */
+export function testerFailThenRecoverScript(taskId: string): FakeApiScript {
+  return {
+    slots: {
+      [`${taskId}:build`]: [
+        ...toolTurns(boardReportPassSse(taskId)),
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:test`]: [
+        { sse: testerVerdictFailSse() },
+        { sse: testerVerdictSse('pass') },
+      ],
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  };
+}
+
+/** Final integration tester omits VERDICT — should nudge, not pass silently. */
+export function finalProseNoVerdictScript(taskId: string): FakeApiScript {
+  return {
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportPassSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+      final: [{ sse: proseSse('Integration looked fine but I forgot VERDICT.') }],
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  };
+}
+
+/** Repeated context exceeded on build — intended quarantine at retry cap. */
+export function contextExceededBuildCapScript(taskId: string): FakeApiScript {
+  return {
+    slots: {
+      [`${taskId}:build`]: [
+        { sse: generationErrorEndSse(CONTEXT_EXCEEDED_MESSAGES.couldNotComplete) },
+        { sse: generationErrorEndSse(CONTEXT_EXCEEDED_MESSAGES.openAi) },
+      ],
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  };
+}
+
 export const quirkFixtures = {
   malformedToolArgs: (taskId: string) => ({
     slots: {
@@ -343,9 +650,173 @@ export const quirkFixtures = {
       [`${taskId}:build`]: toolTurns(boardReportPassSse(taskId)),
       [`${taskId}:test`]: [
         { sse: generationErrorEndSse(CONTEXT_EXCEEDED_MESSAGES.llamaCpp) },
+        { sse: generationErrorEndSse(CONTEXT_EXCEEDED_MESSAGES.llamaCpp) },
         { sse: testerVerdictSse('pass') },
       ],
     },
-    toolResults: { get_datetime: { result: '2026-07-26T12:00:00Z' } },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
   }),
+  builderProseNoReport: builderProseNoReportScript,
+  builderProseOnlyQuarantine: builderProseOnlyQuarantineScript,
+  boardReportOk: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportOkSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  boardReportSuccess: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportSuccessSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  boardReportEnvBlocked: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: [
+        ...toolTurns(boardReportEnvBlockedSse(taskId)),
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:fix`]: toolTurns(boardReportPassSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  boardReportFailThenRecover: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: appendPostToolAck([
+        { sse: boardReportFailSse(taskId) },
+        { sse: boardReportPassSse(taskId) },
+      ]),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  partialValidToolArgs: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: appendPostToolAck([
+        { sse: partialValidToolArgsSse(taskId) },
+        { sse: boardReportPassSse(taskId) },
+      ]),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  truncatedAfterToolName: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: appendPostToolAck([
+        { sse: truncatedAfterToolNameSse() },
+        { sse: boardReportPassSse(taskId) },
+      ]),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  forbiddenDelegateTool: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: appendPostToolAck([
+        { sse: forbiddenDelegateToolSse() },
+        { sse: boardReportPassSse(taskId) },
+      ]),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  multipleToolCallsInDelta: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(multipleToolCallsInDeltaSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  wrongFinishReason: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: appendPostToolAck([
+        { sse: wrongFinishReasonSse(taskId) },
+        { sse: boardReportPassSse(taskId) },
+      ]),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  runawayMutatingThenReport: (taskId: string) => {
+    const mutating = runawaySaveFileTurns(3).map((sse) => ({ sse }));
+    mutating.push({ sse: boardReportPassSse(taskId) });
+    return {
+      slots: {
+        [`${taskId}:build`]: appendPostToolAck(mutating),
+        [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+      },
+      toolResults: { ...DEFAULT_TOOL_RESULTS },
+    };
+  },
+  maxToolTurnsThenRecover: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: [
+        { sse: maxToolTurnsProseSse() },
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  emptyAssistantStream: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: [
+        { sse: emptyAssistantSse() },
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  duplicateBoardReportDelta: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(duplicateBoardReportDeltaSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  siblingTaskReport: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: appendPostToolAck([
+        { sse: siblingTaskReportSse('W1-B') },
+        { sse: boardReportPassSse(taskId) },
+      ]),
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  testerVerdictPassUpper: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportPassSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictPassUpperSse()),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  testerVerdictBuried: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportPassSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerVerdictBuriedSse()),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  testerConflictingVerdicts: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportPassSse(taskId)),
+      [`${taskId}:test`]: slotTurns(testerConflictingVerdictsSse()),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  testerBoardReportInstead: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportPassSse(taskId)),
+      [`${taskId}:test`]: toolTurns(boardReportPassSse(taskId)),
+    },
+    toolResults: { ...DEFAULT_TOOL_RESULTS },
+  }),
+  testerFailThenRecover: testerFailThenRecoverScript,
+  finalProseNoVerdict: finalProseNoVerdictScript,
+  contextExceededBuildCap: contextExceededBuildCapScript,
 } satisfies Record<string, (taskId: string) => FakeApiScript>;

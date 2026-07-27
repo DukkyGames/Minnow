@@ -185,6 +185,24 @@ describe('classifyTaskFailure — text markers', () => {
   test('clean prose → code', () => {
     assert.equal(classifyTaskFailure(chatWithText('TypeError: undefined is not a function')), 'code');
   });
+
+  test('ambiguous mixed stall + infra signals — stall wins', () => {
+    assert.equal(
+      classifyTaskFailure(
+        chatWithText('Maximum tool turns reached while connecting ECONNREFUSED 127.0.0.1:5432'),
+      ),
+      'stall',
+    );
+  });
+
+  test('ambiguous mixed infra + code — infra scanned before code fallback', () => {
+    assert.equal(
+      classifyTaskFailure(
+        chatWithText('ECONNREFUSED during npm run build\nTypeError: undefined is not a function'),
+      ),
+      'infra',
+    );
+  });
 });
 
 // ── classifyTaskFailure — structured signal ────────────────────────────────
