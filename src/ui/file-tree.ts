@@ -44,6 +44,10 @@ import {
   fileRowPaddingLeftPx,
 } from './file-tree-indent';
 import { isFileViewerEditorFocused } from './file-viewer-focus';
+import {
+  createFileTypeIconElement,
+  createFolderTypeIconElement,
+} from './file-type-icons';
 import * as fileTreeOps from './file-tree-ops';
 
 export {
@@ -439,6 +443,8 @@ function appendDirRow(
   row.tabIndex = 0;
 
   row.appendChild(createExpandHit(fullPath, expanded));
+  // Material Icon Theme folder glyph (special folders like src / node_modules when named)
+  row.appendChild(createFolderTypeIconElement(name, 'tree', { expanded }));
 
   const label = document.createElement('span');
   label.className = 'file-tree-label';
@@ -492,6 +498,8 @@ function appendFileRow(
   row.style.paddingLeft = `${fileRowPaddingLeftPx(depth)}px`;
   row.tabIndex = 0;
 
+  row.appendChild(createFileTypeIconElement(name, 'tree'));
+
   const label = document.createElement('span');
   label.className = 'file-tree-label';
   label.textContent = name;
@@ -529,6 +537,8 @@ function appendFlatFileRow(host: HTMLElement, fullPath: string): void {
   row.setAttribute('role', 'option');
   row.style.paddingLeft = `${FILE_TREE_DIR_BASE_PADDING_PX}px`;
   row.tabIndex = 0;
+
+  row.appendChild(createFileTypeIconElement(base, 'tree'));
 
   const label = document.createElement('span');
   label.className = 'file-tree-label file-tree-label--flat';

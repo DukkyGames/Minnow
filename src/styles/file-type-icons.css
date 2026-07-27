@@ -1,0 +1,26 @@
+/**
+ * Material Icon Theme glyphs in the file tree and editor tabs.
+ * Icons ship their own brand colors (TS blue, JS yellow, …) — no tint overrides.
+ */
+
+.file-type-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  vertical-align: middle;
+  user-select: none;
+  pointer-events: none;
+}
+
+.file-type-icon--tab {
+  width: 14px;
+  height: 14px;
+}
+
+/* Keep icon crisp when the row is selected / hovered */
+.file-tree-row.selected .file-type-icon,
+.unified-tab.is-active .file-type-icon {
+  opacity: 1;
+}
