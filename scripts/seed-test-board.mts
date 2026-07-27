@@ -11,205 +11,15 @@
  * Restart Minnow (or re-open the workspace) if the app was already running.
  */
 
-import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { installHeadlessLocalStorage } from '../src/headless/server-context.ts';
 import { normalizeWorkspacePath } from '../src/lib/normalize-workspace-path.ts';
-import { initBoard } from '../src/state/orchestrate-board-store.ts';
-import type { BoardTask, Chat, ChatGroup } from '../src/types.ts';
+import {
+  buildTestBoardSession,
+  type PresetId,
+  type SeedTestBoardOptions,
+} from '../src/dev/test-board-seed.ts';
 import { patchSessionState, readWholeSessionState } from '../server/config/sessions-repo.js';
-
-export const TEST_BOARD_PLANNER_ID = 'a0000000-0000-4000-8000-000000000001';
-export const TEST_BOARD_GROUP_ID = 'grp_a0000000-0000-4000-8000-000000000001';
-
-const QUICK_PLAN = 'documentation/plans/test-board-quick.md';
-const SMOKE_PLAN = 'documentation/plans/orchestrator-board-smoke.md';
-
-type PresetId = 'quick' | 'smoke';
-type ExecutionMode = 'manual' | 'auto' | 'sequential';
-
-type SeedTask = {
-  id: string;
-  title: string;
-  wave: string;
-  category?: BoardTask['category'];
-  build: string;
-  test: string;
-  dependsOn?: string[];
-};
-
-type PresetSpec = {
-  planPath: string;
-  label: string;
-  tasks: SeedTask[];
-  waves: Array<{ id: string }>;
-};
-
-const PRESETS: Record<PresetId, PresetSpec> = {
-  quick: {
-    planPath: QUICK_PLAN,
-    label: 'Test board (quick)',
-    waves: [{ id: 'W1' }],
-    tasks: [
-      {
-        id: 'W1-A',
-        title: 'Greet util',
-        wave: 'W1',
-        category: 'build',
-        build: 'Create sandbox/test-board-quick/greet.ts',
-        test: 'Read greet.ts; greet("World") → Hello, World!',
-      },
-      {
-        id: 'W1-B',
-        title: 'Add util',
-        wave: 'W1',
-        category: 'build',
-        build: 'Create sandbox/test-board-quick/add.ts',
-        test: 'Read add.ts; add(2, 3) → 5',
-      },
-      {
-        id: 'W1-C',
-        title: 'Index barrel',
-        wave: 'W1',
-        category: 'build',
-        build: 'Create sandbox/test-board-quick/index.ts',
-        test: 'Read index.ts; exports greet and add',
-      },
-    ],
-  },
-  smoke: {
-    planPath: SMOKE_PLAN,
-    label: 'Test board (smoke)',
-    waves: [{ id: 'W1' }, { id: 'W2' }, { id: 'W3' }],
-    tasks: [
-      {
-        id: 'W1-A',
-        title: 'Create greet util',
-        wave: 'W1',
-        category: 'build',
-        build: 'Create sandbox/board-smoke/greet.ts',
-        test: 'Read greet.ts',
-      },
-      {
-        id: 'W1-B',
-        title: 'Create add util',
-        wave: 'W1',
-        category: 'build',
-        build: 'Create sandbox/board-smoke/add.ts',
-        test: 'Read add.ts',
-      },
-      {
-        id: 'W1-C',
-        title: 'Survey sandbox',
-        wave: 'W1',
-        category: 'research',
-        build: 'List sandbox/board-smoke (read-only)',
-        test: 'Report files present',
-      },
-      {
-        id: 'W2-A',
-        title: 'Wire index',
-        wave: 'W2',
-        category: 'build',
-        dependsOn: ['W1-A', 'W1-B'],
-        build: 'Create sandbox/board-smoke/index.ts',
-        test: 'Read index.ts imports',
-      },
-      {
-        id: 'W2-B',
-        title: 'Unit test',
-        wave: 'W2',
-        category: 'test',
-        dependsOn: ['W2-A'],
-        build: 'Create sandbox/board-smoke/smoke.test.mts',
-        test: 'Read smoke.test.mts',
-      },
-      {
-        id: 'W3-A',
-        title: 'Header comment',
-        wave: 'W3',
-        category: 'fix',
-        dependsOn: ['W2-A'],
-        build: 'Prepend header to index.ts',
-        test: 'Confirm header line',
-      },
-    ],
-  },
-};
-
-export type SeedTestBoardOptions = {
-  workspacePath: string;
-  preset?: PresetId;
-  mode?: ExecutionMode;
-  providerId?: string;
-  modelId?: string;
-  autoStart?: boolean;
-};
-
-/** Build planner + group with board_init already applied (no LLM). */
-export function buildTestBoardSession(
-  options: SeedTestBoardOptions,
-): { planner: Chat; group: ChatGroup } {
-  const preset = PRESETS[options.preset ?? 'quick'];
-  const workspacePath = path.resolve(options.workspacePath);
-  const providerId = options.providerId?.trim() || 'fake-board';
-  const modelId = options.modelId?.trim() || 'fake-board-model';
-  const mode = options.mode ?? 'manual';
-
-  const planner: Chat = {
-    id: TEST_BOARD_PLANNER_ID,
-    name: preset.label,
-    workspacePath,
-    modeId: 'orchestrate',
-    providerId,
-    modelId,
-    history: [
-      {
-        role: 'assistant',
-        content:
-          'Test board seeded locally (board_init skipped). Open board view and press Start — pair with `npm run fake-model -- --register` for deterministic runs.',
-      },
-    ],
-    lastStats: null,
-    modelInfo: {},
-    updatedAt: Date.now(),
-    orchestratePlanPath: preset.planPath,
-    boardGroupId: TEST_BOARD_GROUP_ID,
-    viewMode: 'board',
-  };
-
-  const group: ChatGroup = {
-    id: TEST_BOARD_GROUP_ID,
-    name: preset.label,
-    workspacePath,
-    collapsed: false,
-    order: 0,
-    plannerChatId: TEST_BOARD_PLANNER_ID,
-    orchestratePlanPath: preset.planPath,
-    viewMode: 'board',
-  };
-
-  initBoard(group, planner, {
-    planPath: preset.planPath,
-    tasks: preset.tasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      wave: t.wave,
-      category: t.category ?? 'build',
-      build: t.build,
-      test: t.test,
-      ...(t.dependsOn?.length ? { dependsOn: [...t.dependsOn] } : {}),
-    })),
-    waves: preset.waves.map((w) => ({ id: w.id })),
-  });
-
-  const board = group.orchestrateBoard!;
-  board.executionMode = mode;
-  board.autoRunning = options.autoStart === true;
-  board.integrationBranch = `minnow/integration/${TEST_BOARD_GROUP_ID}`;
-
-  return { planner, group };
-}
 
 function printHelp(): void {
   console.log(`Usage: npm run seed:test-board -- [options]
@@ -223,12 +33,13 @@ Options:
   --provider <id>      Planner provider (default: fake-board)
   --model <id>         Planner model (default: fake-board-model)
   --auto-start         Set board.autoRunning (use with --mode auto)
+  --stable-id          Reuse canonical test board ids (for CI / log fixtures)
   --help               Show this help
 
 After seeding:
   1. npm run fake-model -- --register   (separate terminal)
   2. npm start / npm run desktop
-  3. Open the workspace folder — chat "${PRESETS.quick.label}" is ready on the board
+  3. Open the workspace folder — chat "Test board (quick)" is ready on the board
 
 Re-run to reset the same test board. Restart Minnow if it was open during seeding.
 `);
@@ -242,12 +53,17 @@ function parseArgs(argv: string[]): SeedTestBoardOptions & { help?: boolean } {
     providerId: 'fake-board',
     modelId: 'fake-board-model',
     autoStart: false,
+    stableIds: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') {
       out.help = true;
+      continue;
+    }
+    if (arg === '--stable-id') {
+      out.stableIds = true;
       continue;
     }
     if (arg === '--workspace') {
@@ -261,7 +77,7 @@ function parseArgs(argv: string[]): SeedTestBoardOptions & { help?: boolean } {
       if (next !== 'quick' && next !== 'smoke') {
         throw new Error('--preset must be quick or smoke');
       }
-      out.preset = next;
+      out.preset = next as PresetId;
       continue;
     }
     if (arg === '--mode') {

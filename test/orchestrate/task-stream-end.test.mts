@@ -363,6 +363,52 @@ describe('task stream end finalization', () => {
     assert.match(updated.quarantine?.summary ?? updated.error ?? '', /board_report/i);
   });
 
+  test('context exceeded failed outcome does not use missing-report nudge path', () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup('auto');
+      const planner = makePlanner();
+      const task = group.orchestrateBoard!.tasks[0]!;
+      const failedChat: Chat = {
+        ...makeTaskChat(false),
+        history: [
+          { role: 'user', content: 'Execute task' },
+          {
+            role: 'assistant',
+            content: 'Partial work before context window overflow.',
+          },
+        ],
+        runs: [
+          {
+            runId: 'run_ctx',
+            branchId: 'b1',
+            forkHistoryIndex: 0,
+            status: 'failed',
+            createdAt: 10,
+            errorMessage: 'context length exceeded',
+            snapshot: null,
+          } as any,
+        ],
+      };
+      setSessionStateForTests({
+        chats: [planner, failedChat],
+        groups: [group],
+        activeChatId: PLANNER_ID,
+      });
+      finalizeBoardTaskOnStreamEnd(group, task, planner);
+
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 0);
+      assert.equal(updated.status, 'in_progress');
+      assert.equal(updated.chatId, TASK_CHAT_ID);
+      assert.equal(updated.buildAttempts, 1);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
   test('clean build end without board_report nudges instead of burning an attempt', () => {
     const prevMinnowTest = process.env.MINNOW_TEST;
     process.env.MINNOW_TEST = '1';

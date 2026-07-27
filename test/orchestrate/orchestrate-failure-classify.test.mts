@@ -157,6 +157,31 @@ describe('classifyTaskFailure — text markers', () => {
     assert.equal(classifyTaskFailure(chatWithText('Could not complete this reply')), 'stall');
   });
 
+  test('context length exceeded is transient code failure, not stall', () => {
+    assert.equal(
+      classifyTaskFailure(
+        chatWithText('Could not complete this reply: context length exceeded'),
+      ),
+      'code',
+    );
+    assert.equal(
+      classifyTaskFailure(
+        chatWithText(
+          'Trying to generate tokens after context limit has been reached (n_ctx = 4096)',
+        ),
+      ),
+      'code',
+    );
+    assert.equal(
+      classifyTaskFailure(
+        chatWithText(
+          "This model's maximum context length is 8192 tokens. However, your messages resulted in 9000 tokens.",
+        ),
+      ),
+      'code',
+    );
+  });
+
   test('clean prose → code', () => {
     assert.equal(classifyTaskFailure(chatWithText('TypeError: undefined is not a function')), 'code');
   });

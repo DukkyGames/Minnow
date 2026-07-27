@@ -98,6 +98,7 @@ import {
 } from './settings-controls';
 import { renderAboutSettingsSection } from './settings-about';
 import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
+import { renderBoardTestingSettingsSection } from './settings-board-testing';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAppsSettingsSection } from './settings-apps';
 import { renderAgentCenterPanel } from './settings-agent-center';
@@ -2156,6 +2157,9 @@ export async function refreshSettingsSection(
       break;
     case 'diagnostics':
       await renderDiagnosticsSettingsSection();
+      break;
+    case 'board-testing':
+      await renderBoardTestingSettingsSection();
       break;
     case 'providers':
       refreshProvidersBanner();
