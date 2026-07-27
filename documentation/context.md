@@ -332,7 +332,11 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 **Fake model server (orchestrate testability):** [`scripts/fake-model-server.mjs`](../scripts/fake-model-server.mjs) — local OpenAI-v1 HTTP stub (`GET /v1/models`, `POST /v1/chat/completions` SSE) driven by ordered scenario JSON (`{ match: { role?, taskId?, nth? }, emit: [...] }`). Default scenario emits a `board_report` pass tool call. `npm run fake-model -- --register` writes provider `fake-board` under `~/.minnow/providers/`. Exports `requests` for assertions.
 
+**Board log invariant CLI (B3):** [`scripts/check-board-log.mjs`](../scripts/check-board-log.mjs) — `npm run check:board-log -- <groupId|path> [--plan plan.json] [--json]` reads `~/.minnow/logs/orchestrate/<groupId>.jsonl` (or a direct path), parses JSONL (tolerates trailing partial lines; skips `*.bak`), and runs [`checkBoardLog`](../src/state/board-log-invariants.ts). Without `--plan`, `wave-order` and `dependency-order` are skipped. Exit 0/1.
+
 **Board lifecycle test harness:** [`test/orchestrate/_board-flow-helpers.mts`](../test/orchestrate/_board-flow-helpers.mts) — `seedBoard`, `driveBoardToConvergence` (bootstrap slots), and `driveLiveBoard` (real `startTask` / supervision / slot accounting with [`_scripted-turn-runner.mts`](../test/orchestrate/_scripted-turn-runner.mts)). Live mode opts in via `setBoardChatTurnRunner` under `MINNOW_TEST=1`. Suites: [`board-flow-e2e.test.mts`](../test/orchestrate/board-flow-e2e.test.mts), [`board-live-launch.test.mts`](../test/orchestrate/board-live-launch.test.mts).
+
+**Board headless E2E (real `runChatTurn`):** [`test/orchestrate/board-headless-e2e.test.mts`](../test/orchestrate/board-headless-e2e.test.mts) drives the full tool loop via real [`runChatTurn`](../src/tools/loop.ts) with happy-dom ([`_headless-board-dom.mts`](../test/orchestrate/_headless-board-dom.mts)) and a `globalThis.fetch` router ([`_fake-api-router.mts`](../test/orchestrate/_fake-api-router.mts)) for generations, tools, worktree, and board-log mirror capture. Scripted SSE per slot key (`${taskId}:build|test|fix`, `final`) lives in [`_board-quirk-fixtures.mts`](../test/orchestrate/_board-quirk-fixtures.mts). `npm run test:board` runs the full orchestrate suite (356 tests).
 
 ### Experts
 
