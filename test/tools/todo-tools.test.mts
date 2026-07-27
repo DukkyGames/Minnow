@@ -163,12 +163,14 @@ describe('executeTodoWrite', () => {
     assert.match(out, /^Error: active chat not found/);
   });
 
-  test('rejects board task chats', () => {
-    seedChat({ boardTaskId: 'W1-A' });
+  test('writes todos on board task chats', () => {
+    const chat = seedChat({ boardTaskId: 'W1-A' });
     const out = executeTodoWrite(
-      { todos: [{ text: 'Nope', status: 'pending' }] },
+      { todos: [{ text: 'Step one', status: 'in_progress' }] },
       { chatId: CHAT_ID },
     );
-    assert.match(out, /not available on orchestrate board task chats/);
+    const parsed = JSON.parse(out) as { progress: string; todos: unknown[] };
+    assert.equal(parsed.progress, '0/1');
+    assert.equal(getChatTodos(chat)?.length, 1);
   });
 });

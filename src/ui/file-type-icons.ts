@@ -1,7 +1,6 @@
 /**
  * File / folder icons for the Code file tree and editor tabs.
- * Uses Material Icon Theme (PKief) — the colorful VS Code-style set
- * (TS blue square, JS yellow square, JSON braces, Vite bolt, etc.).
+ * Uses Material Icon Theme (PKief) — colorful SVGs served from public/material-icons/.
  */
 
 import {
@@ -13,22 +12,8 @@ export type FileTypeIconContext = 'tree' | 'tab';
 
 export { resolveFileIconId, resolveFolderIconId } from './file-type-icon-resolve';
 
-/** Eager URL map so tree rows can set img.src synchronously. */
-const iconUrlModules = import.meta.glob(
-  '../../node_modules/material-icon-theme/icons/*.svg',
-  {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  },
-) as Record<string, string>;
-
-const iconUrlById = new Map<string, string>();
-for (const [modulePath, url] of Object.entries(iconUrlModules)) {
-  const base = modulePath.replace(/\\/g, '/').split('/').pop();
-  if (!base?.endsWith('.svg')) continue;
-  iconUrlById.set(base.slice(0, -4), url);
-}
+/** Base path for synced SVG assets (see scripts/sync-material-file-icons.mjs). */
+const ICON_BASE = './material-icons';
 
 /** True when the active Minnow palette is a light variant. */
 export function isFileIconLightTheme(): boolean {
@@ -37,15 +22,17 @@ export function isFileIconLightTheme(): boolean {
   return theme.endsWith('-light') || theme === 'light';
 }
 
-/** Absolute (Vite) URL for a Material icon id, or undefined if missing. */
-export function getMaterialIconUrl(iconId: string): string | undefined {
-  return iconUrlById.get(iconId);
+/** Public URL for a Material icon id. */
+export function getMaterialIconUrl(iconId: string): string {
+  const safe = iconId.replace(/[^a-z0-9_-]/gi, '');
+  return `${ICON_BASE}/${safe}.svg`;
 }
 
 function createIconImage(
   iconId: string,
   context: FileTypeIconContext,
   title: string,
+  fallbackId = 'file',
 ): HTMLImageElement {
   const img = document.createElement('img');
   img.className = `file-type-icon file-type-icon--${context}`;
@@ -55,10 +42,16 @@ function createIconImage(
   img.title = title;
   img.width = context === 'tab' ? 14 : 16;
   img.height = context === 'tab' ? 14 : 16;
-
-  const url = getMaterialIconUrl(iconId) ?? getMaterialIconUrl('file');
-  if (url) img.src = url;
+  img.src = getMaterialIconUrl(iconId);
   img.dataset.iconId = iconId;
+
+  // Fall back to generic file glyph when a specialized asset is missing.
+  img.addEventListener('error', () => {
+    if (img.dataset.iconId === fallbackId) return;
+    img.dataset.iconId = fallbackId;
+    img.src = getMaterialIconUrl(fallbackId);
+  }, { once: true });
+
   return img;
 }
 
@@ -72,7 +65,7 @@ export function createFolderTypeIconElement(
     expanded: options?.expanded,
     light: isFileIconLightTheme(),
   });
-  return createIconImage(iconId, context, folderName || 'Folder');
+  return createIconImage(iconId, context, folderName || 'Folder', 'folder');
 }
 
 /** File glyph for a path — used in the tree and editor tabs. */

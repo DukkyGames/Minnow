@@ -156,15 +156,18 @@ describe('applyBoardMemberToolFilter', () => {
     assert.ok(!names.includes('board_init'));
     assert.ok(!names.includes('board_update_task'));
     assert.ok(!names.includes('delegate_tasks'));
-    assert.ok(!names.includes('todo_write'), 'todo_write should be stripped on board task chats');
+    assert.ok(names.includes('todo_write'), 'todo_write should be available on board task chats');
   });
 
-  test('todo_write is available for plain build chats but not orchestrate', () => {
+  test('todo_write is available for plain build and board task chats but not orchestrate', () => {
     seedBoardSession();
     const plainBuild = createEmptyChatObject('', '');
     plainBuild.modeId = 'build';
     const buildNames = getEnabledToolDefinitionsForChat(plainBuild).map((d) => d.function.name);
     assert.ok(buildNames.includes('todo_write'));
+
+    const boardNames = getEnabledToolDefinitionsForChat(builderChat).map((d) => d.function.name);
+    assert.ok(boardNames.includes('todo_write'));
 
     const planner = createEmptyChatObject('', '');
     planner.modeId = 'orchestrate';
@@ -285,6 +288,7 @@ describe('board role matrix groups', () => {
       'lsp',
       'browser',
       'brain-core',
+      'todo',
     ]),
     test: new Set([
       'util-basic',
@@ -297,6 +301,7 @@ describe('board role matrix groups', () => {
       'lsp',
       'browser',
       'brain-core',
+      'todo',
     ]),
     fix: new Set([
       'util-basic',
@@ -309,6 +314,7 @@ describe('board role matrix groups', () => {
       'code-intel',
       'lsp',
       'brain-core',
+      'todo',
     ]),
   };
 

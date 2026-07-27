@@ -18,7 +18,6 @@ const BOARD_MEMBER_STRIPPED_TOOLS = new Set([
   'board_update_task',
   'board_set_autonomy',
   'delegate_tasks',
-  'todo_write',
 ]);
 
 /**
