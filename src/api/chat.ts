@@ -22,8 +22,7 @@ import {
 } from '../state/sessions';
 import { resolveEffectiveChatModelBinding } from '../ui/default-model';
 import { applyModelSelectValueToChat } from '../lib/model-select-key';
-import { autoResize } from '../ui/input';
-import { clearComposerDraftOnChat } from '../ui/composer-draft';
+import { clearComposerAfterSend } from '../ui/composer-draft';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type {
   ApiMessage,
@@ -448,14 +447,11 @@ export async function sendMessage(): Promise<void> {
   await ensureChatHistoryLoaded(chat.id);
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
-  clearComposerDraftOnChat(chat);
+  clearComposerAfterSend(chat, input);
   recordChatMessage(chat);
   scheduleSaveSessions();
   renderSidebar();
   appendBubble('user', text);
-
-  input.value = '';
-  autoResize(input);
 
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: text,

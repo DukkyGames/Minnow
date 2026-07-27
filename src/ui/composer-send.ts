@@ -3,10 +3,8 @@ import { enqueueComposerMessage } from '../chat/message-queue';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import { getActiveChat } from '../state/sessions';
-import {
-  clearComposerInput,
-  getActiveComposerSurface,
-} from './composer-surface';
+import { clearComposerAfterSend } from './composer-draft';
+import { getActiveComposerSurface } from './composer-surface';
 import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
@@ -167,7 +165,7 @@ function submitQueueFromComposer(): void {
   if (!text) return;
   const chat = getActiveChat();
   if (!enqueueComposerMessage(chat, text)) return;
-  clearComposerInput(input);
+  clearComposerAfterSend(chat, input);
   setStatus('ok', 'Follow-up queued');
   refreshComposerStreamingAffordance();
   syncComposerMessageQueue();
