@@ -45,12 +45,18 @@ function saveWidth(px: number): void {
   }
 }
 
-/** Apply drawer width via CSS variable on the desktop layer. */
+function getStageLayer(): HTMLElement | null {
+  return document.getElementById('osStage');
+}
+
+/** Apply drawer width via CSS variable on the stage (shared by drawer, chat, composer, dock). */
 export function applyDesktopWorkspaceDrawerWidth(px: number): void {
   const layer = getDesktopLayer();
-  if (!layer) return;
-  const clamped = clampWorkspaceDrawerWidth(px, layer);
-  layer.style.setProperty('--desktop-workspace-drawer-w', `${clamped}px`);
+  const stage = getStageLayer();
+  const clamped = clampWorkspaceDrawerWidth(px, layer ?? stage);
+  if (stage) {
+    stage.style.setProperty('--desktop-workspace-drawer-w', `${clamped}px`);
+  }
 }
 
 /** Restore saved drawer width when the rail mounts. */
@@ -162,6 +168,6 @@ export function resetDesktopWorkspaceRailResizeForTests(): void {
     /* ignore */
   }
   if (typeof document !== 'undefined') {
-    getDesktopLayer()?.style.removeProperty('--desktop-workspace-drawer-w');
+    getStageLayer()?.style.removeProperty('--desktop-workspace-drawer-w');
   }
 }

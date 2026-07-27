@@ -88,14 +88,34 @@ function layerForApp(appId: AppId): HTMLElement | null {
   return document.getElementById(APP_LAYER_IDS[appId]);
 }
 
+const APP_ENTER_CLASS = 'mn-os-app-enter';
+
 function setLayerActive(el: HTMLElement | null, active: boolean): void {
   if (!el) return;
   el.classList.toggle('is-active', active);
 }
 
+function clearAppEnterAnimation(el: HTMLElement | null): void {
+  el?.classList.remove(APP_ENTER_CLASS);
+}
+
+/** Play the app enter animation once (desktop → fullscreen app). */
+function markAppEnterAnimation(el: HTMLElement | null): void {
+  if (!el) return;
+  el.classList.add(APP_ENTER_CLASS);
+  const onEnd = (event: AnimationEvent): void => {
+    if (event.target !== el || event.animationName !== 'mn-os-app-in') return;
+    el.removeEventListener('animationend', onEnd);
+    el.classList.remove(APP_ENTER_CLASS);
+  };
+  el.addEventListener('animationend', onEnd);
+}
+
 function hideAllLayers(): void {
   for (const appId of Object.keys(APP_LAYER_IDS) as AppId[]) {
-    setLayerActive(layerForApp(appId), false);
+    const layer = layerForApp(appId);
+    clearAppEnterAnimation(layer);
+    setLayerActive(layer, false);
   }
 }
 
@@ -298,10 +318,19 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
   }
 }
 
-/** Show the requested app layer and hide others. */
-export function showAppLayer(appId: AppId): void {
-  hideAllLayers();
-  setLayerActive(layerForApp(appId), true);
+/** Show the requested app layer and hide others without a blank intermediate frame. */
+export function showAppLayer(appId: AppId, animateEnter = false): void {
+  const next = layerForApp(appId);
+  setLayerActive(next, true);
+  if (animateEnter) {
+    markAppEnterAnimation(next);
+  }
+  for (const id of Object.keys(APP_LAYER_IDS) as AppId[]) {
+    if (id === appId) continue;
+    const layer = layerForApp(id);
+    clearAppEnterAnimation(layer);
+    setLayerActive(layer, false);
+  }
 }
 
 function launchOptionsFromSnapshot(snapshot: InstanceSnapshot): LaunchOptions | undefined {
@@ -507,7 +536,8 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   if (!usesFullscreenLayer(mode)) return;
 
   if (appId !== lastForegroundApp) {
-    showAppLayer(appId);
+    const animateEnter = lastForegroundApp === null;
+    showAppLayer(appId, animateEnter);
     void openAppPage(appId, options);
     lastForegroundApp = appId;
   } else if (options && (appId === 'chat' || appId === 'code' || appId === 'research')) {

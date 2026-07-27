@@ -9,6 +9,9 @@ import {
   deactivateDesktopResearch,
   isDesktopExpertsActive,
   isDesktopResearchActive,
+  prepareDesktopChatSurface,
+  prepareDesktopExpertsSurface,
+  prepareDesktopResearchSurface,
   queueDesktopChatActivation,
   queueDesktopExpertsActivation,
   queueDesktopResearchActivation,
@@ -220,18 +223,29 @@ function syncForegroundLifecycle(nextApp: AppId | null): void {
 function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'desktop') {
     syncForegroundLifecycle(null);
-    showDesktop();
+    const comingFromFullscreenApp = getOsView() === 'app';
     const pendingResearch = consumePendingDesktopResearchActivation();
+    const pendingExperts = consumePendingDesktopExpertsActivation();
+    const pendingChat = consumePendingDesktopChatActivation();
+    // Apply desktop surface classes before instance emit so app-host never paints idle hero.
+    if (comingFromFullscreenApp) {
+      if (pendingResearch !== null) {
+        prepareDesktopResearchSurface();
+      } else if (pendingExperts !== null) {
+        prepareDesktopExpertsSurface();
+      } else if (pendingChat !== null) {
+        prepareDesktopChatSurface();
+      }
+    }
+    showDesktop();
     if (pendingResearch !== null) {
       void activateDesktopResearch(pendingResearch);
       return;
     }
-    const pendingExperts = consumePendingDesktopExpertsActivation();
     if (pendingExperts !== null) {
       void activateDesktopExperts(pendingExperts);
       return;
     }
-    const pendingChat = consumePendingDesktopChatActivation();
     if (pendingChat !== null) {
       void activateDesktopChat(pendingChat);
     } else {

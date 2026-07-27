@@ -2,8 +2,14 @@
  * Right-edge workspace rail — mirrors left chat rail on the desktop.
  */
 
-#osDesktopLayer {
+#osStage {
   --desktop-workspace-drawer-w: 560px;
+  /* Shared inset when the right workspace drawer is open (stage, composer, dock). */
+  --os-workspace-drawer-inset: 0px;
+}
+
+#osStage:has(#osDesktopLayer.is-chat-active .mn-os-workspace-rail.is-expanded) {
+  --os-workspace-drawer-inset: min(var(--desktop-workspace-drawer-w, 560px), calc(100vw - 80px));
 }
 
 .mn-os-workspace-rail {
@@ -341,12 +347,14 @@
   transition: padding-right 280ms var(--os-ease-out);
 }
 
-#osDesktopLayer.is-chat-active .mn-os-workspace-rail.is-expanded ~ .mn-os-desk-stage,
 #osDesktopLayer.is-chat-active:has(.mn-os-workspace-rail.is-expanded) .mn-os-desk-stage {
-  padding-right: min(var(--desktop-workspace-drawer-w, 560px), calc(100vw - 80px));
+  padding-right: var(--os-workspace-drawer-inset);
 }
 
-#osDesktopLayer.is-chat-active:has(.mn-os-workspace-rail-drawer.is-resizing) .mn-os-desk-stage {
+#osDesktopLayer.is-chat-active:has(.mn-os-workspace-rail-drawer.is-resizing) .mn-os-desk-stage,
+#osDesktopLayer.is-chat-active:has(.mn-os-workspace-rail-drawer.is-resizing) .mn-os-composer-dock,
+#osStage:has(.mn-os-workspace-rail-drawer.is-resizing) .mn-os-dock-reveal,
+#osStage:has(.mn-os-workspace-rail-drawer.is-resizing) .mn-os-dock-panel {
   transition: none;
 }
 

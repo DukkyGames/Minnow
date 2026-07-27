@@ -28,14 +28,15 @@ describe('desktop workspace rail resize', () => {
     assert.equal(clampWorkspaceDrawerWidth(1200, layer), 900);
   });
 
-  test('applyDesktopWorkspaceDrawerWidth sets CSS variable on desktop layer', () => {
-    document.body.innerHTML = '<div id="osDesktopLayer"></div>';
+  test('applyDesktopWorkspaceDrawerWidth sets CSS variable on stage', () => {
+    document.body.innerHTML = '<div id="osStage"><div id="osDesktopLayer"></div></div>';
+    const stage = document.getElementById('osStage')!;
     const layer = document.getElementById('osDesktopLayer')!;
     layer.getBoundingClientRect = () =>
       ({ width: 1400, height: 900, top: 0, left: 0, right: 1400, bottom: 900 }) as DOMRect;
     applyDesktopWorkspaceDrawerWidth(DEFAULT_WORKSPACE_DRAWER_W);
     assert.equal(
-      layer.style.getPropertyValue('--desktop-workspace-drawer-w'),
+      stage.style.getPropertyValue('--desktop-workspace-drawer-w'),
       `${DEFAULT_WORKSPACE_DRAWER_W}px`,
     );
   });
