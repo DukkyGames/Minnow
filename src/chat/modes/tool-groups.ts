@@ -351,6 +351,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'lsp',
     'browser',
     'brain-core',
+    'todo',
   ],
   test: [
     'util-basic',
@@ -363,6 +364,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'lsp',
     'browser',
     'brain-core',
+    'todo',
   ],
   fix: [
     'util-basic',
@@ -375,6 +377,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'code-intel',
     'lsp',
     'brain-core',
+    'todo',
   ],
 };
 

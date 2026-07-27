@@ -135,10 +135,6 @@ export function executeTodoWrite(
     return 'Error: active chat not found';
   }
 
-  if (chat.boardTaskId?.trim()) {
-    return 'Error: todo_write is not available on orchestrate board task chats';
-  }
-
   const { todos } = validated.args;
   if (todos.length === 0) {
     clearChatTodos(chat);
@@ -156,6 +152,5 @@ export function executeTodoWrite(
 
 /** Defense helper for tests — whether todo_write may run on this chat. */
 export function isTodoWriteAllowedForChat(chat: Chat | null | undefined): boolean {
-  if (!chat) return false;
-  return !chat.boardTaskId?.trim();
+  return Boolean(chat);
 }
