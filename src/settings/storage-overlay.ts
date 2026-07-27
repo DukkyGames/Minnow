@@ -80,6 +80,11 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     sensitivity: 'dangerous',
     refreshAreas: ['general'],
   }),
+  'general.desktop': section(['general']),
+  'general.desktop.closeToTray': meta('desktopShell.closeToTray', 'boolean', {
+    refreshAreas: ['general'],
+  }),
+  'general.desktop.launchAtStartup': section(['general']),
   'general.chat.terminal': section(['general']),
   'general.toolCalls.constrained': meta('toolCalls.useConstrainedDecoding', 'boolean', {
     refreshAreas: ['general', 'tools'],

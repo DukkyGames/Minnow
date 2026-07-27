@@ -367,6 +367,43 @@ const minnowBridge = {
     clearOomPause: (): Promise<void> =>
       ipcRenderer.invoke(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE),
   },
+  tray: {
+    publishStatus: (snapshot: {
+      agentCount: number;
+      localModelCount: number;
+      localModelNames: string[];
+    }): void => {
+      ipcRenderer.send(channels.TRAY_PUBLISH_STATUS, snapshot);
+    },
+    notifyReady: (): void => {
+      ipcRenderer.send(channels.TRAY_NOTIFY_READY);
+    },
+    getCloseToTray: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.TRAY_GET_CLOSE_TO_TRAY),
+    setCloseToTray: (enabled: boolean): Promise<boolean> =>
+      ipcRenderer.invoke(channels.TRAY_SET_CLOSE_TO_TRAY, enabled),
+    getLoginItem: (): Promise<{ openAtLogin: boolean; supported: boolean }> =>
+      ipcRenderer.invoke(channels.TRAY_GET_LOGIN_ITEM),
+    setLoginItem: (enabled: boolean): Promise<{ openAtLogin: boolean; supported: boolean }> =>
+      ipcRenderer.invoke(channels.TRAY_SET_LOGIN_ITEM, enabled),
+    onCommand: (
+      callback: (command: {
+        type: 'new_chat' | 'open_settings' | 'unload_local_models';
+      }) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        command: { type: 'new_chat' | 'open_settings' | 'unload_local_models' },
+      ) => callback(command);
+      ipcRenderer.on(channels.TRAY_COMMAND, handler);
+      return () => ipcRenderer.removeListener(channels.TRAY_COMMAND, handler);
+    },
+    onCloseToTrayChanged: (callback: (enabled: boolean) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, enabled: boolean) => callback(enabled);
+      ipcRenderer.on(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
+      return () => ipcRenderer.removeListener(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('minnow', minnowBridge);

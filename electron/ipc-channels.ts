@@ -103,3 +103,20 @@ export const WINDOW_IS_MAXIMIZED = 'minnow:window:is-maximized';
 export const WINDOW_RESTORE_FOCUS = 'minnow:window:restore-focus';
 /** Main → renderer: shell window maximized state changed. */
 export const WINDOW_MAXIMIZED_CHANGED = 'minnow:window:maximized-changed';
+
+/** Renderer → main: tray status snapshot for menu labels. */
+export const TRAY_PUBLISH_STATUS = 'minnow:tray:publish-status';
+/** Renderer → main: renderer finished hydrating; drain queued tray commands. */
+export const TRAY_NOTIFY_READY = 'minnow:tray:notify-ready';
+/** Renderer → main: read close-to-tray preference. */
+export const TRAY_GET_CLOSE_TO_TRAY = 'minnow:tray:get-close-to-tray';
+/** Renderer → main: persist close-to-tray preference. */
+export const TRAY_SET_CLOSE_TO_TRAY = 'minnow:tray:set-close-to-tray';
+/** Renderer → main: read launch-at-login state from the OS. */
+export const TRAY_GET_LOGIN_ITEM = 'minnow:tray:get-login-item';
+/** Renderer → main: toggle launch-at-login via the OS. */
+export const TRAY_SET_LOGIN_ITEM = 'minnow:tray:set-login-item';
+/** Main → renderer: tray menu invoked an action. */
+export const TRAY_COMMAND = 'minnow:tray:command';
+/** Main → renderer: close-to-tray preference changed. */
+export const TRAY_CLOSE_TO_TRAY_CHANGED = 'minnow:tray:close-to-tray-changed';

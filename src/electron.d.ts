@@ -328,12 +328,41 @@ export interface MinnowUpdaterApi {
   onStatusChanged(callback: (status: MinnowUpdaterStatus) => void): () => void;
 }
 
+export interface MinnowTrayStatusSnapshot {
+  agentCount: number;
+  localModelCount: number;
+  localModelNames: string[];
+}
+
+export type MinnowTrayCommand =
+  | { type: 'new_chat' }
+  | { type: 'open_settings' }
+  | { type: 'unload_local_models' };
+
+export interface MinnowLoginItemSnapshot {
+  openAtLogin: boolean;
+  supported: boolean;
+}
+
+/** System tray integration (close-to-tray, status, native commands). */
+export interface MinnowTrayApi {
+  publishStatus(snapshot: MinnowTrayStatusSnapshot): void;
+  notifyReady(): void;
+  getCloseToTray(): Promise<boolean>;
+  setCloseToTray(enabled: boolean): Promise<boolean>;
+  getLoginItem(): Promise<MinnowLoginItemSnapshot>;
+  setLoginItem(enabled: boolean): Promise<MinnowLoginItemSnapshot>;
+  onCommand(callback: (command: MinnowTrayCommand) => void): () => void;
+  onCloseToTrayChanged(callback: (enabled: boolean) => void): () => void;
+}
+
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
   app: MinnowAppApi;
   window?: MinnowWindowApi;
   diagnostics?: MinnowDiagnosticsApi;
   updater?: MinnowUpdaterApi;
+  tray?: MinnowTrayApi;
 }
 
 declare global {

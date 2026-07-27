@@ -135,6 +135,16 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['beta', 'stable', 'prerelease', 'channel'],
     description: 'Choose Stable releases or Beta pre-releases for auto-update.',
   }),
+  field('general.desktop', 'Desktop app', 'general', 'general', {
+    keywords: ['tray', 'close', 'startup', 'background', 'minimize'],
+    description: 'System tray behavior and whether Minnow opens when you sign in.',
+  }),
+  field('general.desktop.closeToTray', 'Keep Minnow running after closing the window', 'general', 'general', {
+    keywords: ['tray', 'background', 'close', 'hide'],
+  }),
+  field('general.desktop.launchAtStartup', 'Launch Minnow at startup', 'general', 'general', {
+    keywords: ['login', 'boot', 'startup', 'open at login'],
+  }),
   field('general.notifications', 'Notifications', 'general', 'notifications', {
     keywords: ['bell', 'alert', 'sound', 'menubar'],
     description: 'Menubar bell when background chats, tasks, or jobs need attention.',
