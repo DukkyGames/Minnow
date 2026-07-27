@@ -32,6 +32,17 @@ export async function rmTestHome(dir) {
   }
 }
 
+/**
+ * Long-running command safe for Windows cmd.exe /c one-shot spawn (no nested double-quotes).
+ * Used by dev-server tests that start background node processes via createBackgroundRun.
+ */
+export function longRunningDevServerCommand() {
+  if (process.platform === 'win32') {
+    return 'node -e setInterval(function(){},60000)';
+  }
+  return 'node -e "setInterval(()=>{}, 60000)"';
+}
+
 export async function readFixture(name) {
   const raw = await fs.readFile(path.join(FIXTURES_DIR, name), 'utf8');
   return raw.trimEnd();

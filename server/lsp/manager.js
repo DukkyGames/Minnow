@@ -12,7 +12,7 @@ import {
   StreamMessageWriter,
 } from 'vscode-jsonrpc/node';
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
-import { getBundledTsserverPath, resolveLspSpawnArgv } from './resolve-command.js';
+import { resolveLspSpawnArgv, tryResolveBundledTsserverPath } from './resolve-command.js';
 import { buildLspProcessEnv } from './paths.js';
 import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import {
@@ -442,10 +442,9 @@ function spawnLspChild(argv) {
 
 /** LSP initialize options for built-in TypeScript (TLS v4+ uses init, not CLI flags). */
 function typescriptInitializationOptions() {
+  const fallbackPath = tryResolveBundledTsserverPath();
   return {
-    tsserver: {
-      fallbackPath: getBundledTsserverPath(),
-    },
+    ...(fallbackPath ? { tsserver: { fallbackPath } } : {}),
     typescript: {
       implicitProjectConfiguration: {
         checkJs: true,

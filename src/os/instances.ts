@@ -73,16 +73,17 @@ function viewForPresentationMode(mode: PresentationMode): OsView {
  * `returnApp` must be captured before the instance is removed from the store.
  */
 function pickNextForeground(excludeId: string, returnApp?: AppId): string | null {
-  if (returnApp) {
-    const target = instances.find((i) => i.appId === returnApp && i.id !== excludeId);
-    if (target) return target.id;
-  }
-
   const remaining = instances.filter((i) => i.id !== excludeId);
   const windowed = remaining.filter((i) => {
     const mode = resolveInstancePresentation(i);
     return mode === 'window' || mode === 'sidePanel';
   });
+
+  // returnToApp only applies to other floating surfaces — never resurrect background fullscreen apps.
+  if (returnApp) {
+    const target = windowed.find((i) => i.appId === returnApp);
+    if (target) return target.id;
+  }
   // Only rotate among floating surfaces — never resurrect a background fullscreen app
   // (e.g. Code) when the user closes the last window they opened on the desktop.
   if (windowed.length === 0) return null;

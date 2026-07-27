@@ -219,11 +219,14 @@ describe('renderAppUpdatesSettings', () => {
     assert.equal(mount.querySelector('.settings-updates__controls')?.hidden, true);
     const callout = mount.querySelector('.settings-updates__callout');
     assert.ok(callout?.textContent?.includes('macOS auto-update requires code signing'));
-    assert.equal(mount.querySelector('#settingsUpdatesCheckBtn'), null);
+    const checkBtn = mount.querySelector<HTMLButtonElement>('#settingsUpdatesCheckBtn');
+    assert.equal(checkBtn?.disabled, true);
     const channelInputs = mount.querySelectorAll<HTMLInputElement>(
       'input[name="settings-update-channel"]',
     );
-    assert.equal(channelInputs.length, 0);
+    assert.equal(channelInputs.length, 2);
+    assert.equal(channelInputs[0]?.disabled, true);
+    assert.equal(channelInputs[1]?.disabled, true);
   });
 
   test('unsupported dev install hides channel and check controls', async () => {
@@ -242,6 +245,7 @@ describe('renderAppUpdatesSettings', () => {
 
     assert.equal(mount.querySelector('.settings-updates__controls')?.hidden, true);
     assert.ok(mount.querySelector('.settings-updates__callout')?.textContent?.includes('dev session'));
-    assert.equal(mount.querySelector('#settingsUpdatesCheckBtn'), null);
+    const checkBtn = mount.querySelector<HTMLButtonElement>('#settingsUpdatesCheckBtn');
+    assert.equal(checkBtn?.disabled, true);
   });
 });

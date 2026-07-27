@@ -113,9 +113,31 @@ function resolveFromAppRoot(specifier) {
  * @param {string[]} extraArgs
  * @returns {ResolvedLspSpawn}
  */
+/** Candidate specifiers for bundled tsserver (TS ≤6 ships tsserver.js; TS 7 does not). */
+const TSSERVER_SPECIFIERS = [
+  'typescript/lib/tsserver.js',
+  'tsserver-fallback/lib/tsserver.js',
+];
+
+/**
+ * Resolve bundled tsserver.js when available (workspace → app → managed).
+ * @returns {string | undefined}
+ */
+export function tryResolveBundledTsserverPath() {
+  for (const spec of TSSERVER_SPECIFIERS) {
+    const resolved = tryResolvePackageSpec(spec);
+    if (resolved) return resolved;
+  }
+  return undefined;
+}
+
 /** Bundled tsserver.js (used when the workspace has no local typescript). */
 export function getBundledTsserverPath() {
-  return resolveFromAppRoot('typescript/lib/tsserver.js');
+  const resolved = tryResolveBundledTsserverPath();
+  if (resolved) return resolved;
+  throw new Error(
+    'Cannot resolve bundled tsserver — install typescript (≤6) or tsserver-fallback in the app bundle.',
+  );
 }
 
 function stripLegacyTsserverCliFlags(extraArgs) {
@@ -255,7 +277,9 @@ export function resolveLspSpawnArgv(command) {
       return path.join(getAppRoot(), 'test/fixtures/fake-lsp.mjs');
     }
     if (part === '$minnow:tsserver') {
-      return resolveFromAppRoot('typescript/lib/tsserver.js');
+      const resolved = tryResolveBundledTsserverPath();
+      if (resolved) return resolved;
+      throw new Error('Cannot resolve $minnow:tsserver — no bundled tsserver.js found.');
     }
     if (index === 0 && typeof part === 'string') {
       return resolveLspExecutable(part);

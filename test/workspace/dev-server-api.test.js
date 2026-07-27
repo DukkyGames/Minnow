@@ -2,11 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { after, before, describe, test } from 'node:test';
+import { after, afterEach, before, describe, test } from 'node:test';
 import { ensureMinnowLayout } from '../../server/config/home.js';
+import {
+  resetDevServerManagerForTests,
+  stopDevServer,
+} from '../../server/dev-server/manager.js';
 import { handleWorkspaceRequest } from '../../server/workspace/middleware.js';
 import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
-import { rmTestHome, setTestHome } from '../config/test-helpers.js';
+import { longRunningDevServerCommand, rmTestHome, setTestHome } from '../config/test-helpers.js';
 
 function createServer() {
   return http.createServer((req, res) => {
@@ -66,8 +70,14 @@ describe('workspace dev-server API', () => {
   });
 
   after(async () => {
+    await stopDevServer(workspaceDir).catch(() => undefined);
     await new Promise((resolve) => server.close(resolve));
     await rmTestHome(homeDir);
+  });
+
+  afterEach(async () => {
+    await stopDevServer(workspaceDir).catch(() => undefined);
+    resetDevServerManagerForTests();
   });
 
   test('startup reports no_guide without startup.md', async () => {
@@ -89,10 +99,7 @@ describe('workspace dev-server API', () => {
 
   test('start and stop with node one-shot command', async () => {
     const startupPath = path.join(workspaceDir, 'startup.md');
-    const isWin = process.platform === 'win32';
-    const command = isWin
-      ? 'node -e "setInterval(()=>{}, 60000)"'
-      : 'node -e "setInterval(()=>{}, 60000)"';
+    const command = longRunningDevServerCommand();
 
     await fs.writeFile(
       startupPath,
@@ -133,7 +140,7 @@ describe('workspace dev-server API', () => {
     const startupPath = path.join(workspaceDir, 'startup.md');
     await fs.writeFile(
       startupPath,
-      '---\ncommand: node -e "setInterval(()=>{}, 60000)"\ncwd: .\n---\n',
+      `---\ncommand: ${longRunningDevServerCommand()}\ncwd: .\n---\n`,
       'utf8',
     );
 
@@ -154,7 +161,7 @@ describe('workspace dev-server API', () => {
     const startupPath = path.join(workspaceDir, 'startup.md');
     const healthPort = 38474;
     const healthUrl = `http://127.0.0.1:${healthPort}/`;
-    const command = 'node -e "setInterval(()=>{}, 60000)"';
+    const command = longRunningDevServerCommand();
 
     await fs.writeFile(
       startupPath,
@@ -183,7 +190,7 @@ describe('workspace dev-server API', () => {
     const startupPath = path.join(workspaceDir, 'startup.md');
     const healthPort = 38473;
     const healthUrl = `http://127.0.0.1:${healthPort}/`;
-    const command = 'node -e "setInterval(()=>{}, 60000)"';
+    const command = longRunningDevServerCommand();
 
     await httpJson(baseUrl, '/api/workspace/dev-server/settings', 'PUT', {
       port: healthPort,
@@ -225,7 +232,7 @@ describe('workspace dev-server API', () => {
   test('GET /api/workspace/dev-servers lists seeded primary', async () => {
     await fs.writeFile(
       path.join(workspaceDir, 'startup.md'),
-      '---\ncommand: node -e "setInterval(()=>{}, 60000)"\ncwd: .\n---\n',
+      `---\ncommand: ${longRunningDevServerCommand()}\ncwd: .\n---\n`,
       'utf8',
     );
     const { status, json } = await httpJson(baseUrl, '/api/workspace/dev-servers');

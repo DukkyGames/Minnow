@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import { isBoardRunning } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -87,8 +88,7 @@ describe('workspace-switch-guard', () => {
 
   beforeEach(() => {
     domWindow = new Window();
-    globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
-    globalThis.document = domWindow.document;
+    installHappyDomGlobals(domWindow);
     resetWorkspaceStateForTests();
     setWorkspaceFromServer({
       path: CURRENT_WS,
@@ -139,16 +139,24 @@ describe('workspace-switch-guard', () => {
 
   test('confirmAndStopBoardsForWorkspaceSwitch cancels without stopping', async () => {
     const { group } = seedRunningBoard();
-    window.confirm = () => false;
-    const allowed = await confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    await Promise.resolve();
+    const cancelBtn = document.querySelector<HTMLButtonElement>('[data-dialog-action="cancel"]');
+    assert.ok(cancelBtn);
+    cancelBtn.click();
+    const allowed = await allowedPromise;
     assert.equal(allowed, false);
     assert.equal(isBoardRunning(group), true);
   });
 
   test('confirmAndStopBoardsForWorkspaceSwitch stops boards when confirmed', async () => {
     const { group } = seedRunningBoard();
-    window.confirm = () => true;
-    const allowed = await confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    await Promise.resolve();
+    const confirmBtn = document.querySelector<HTMLButtonElement>('[data-dialog-action="confirm"]');
+    assert.ok(confirmBtn);
+    confirmBtn.click();
+    const allowed = await allowedPromise;
     assert.equal(allowed, true);
     assert.equal(isBoardRunning(group), false);
     assert.equal(group.orchestrateBoard?.userStopped, true);

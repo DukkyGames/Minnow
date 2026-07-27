@@ -32,6 +32,27 @@ const BUILD_CHAT_ID = '22222222-2222-2222-2222-222222222222';
 const TEST_CHAT_ID = '33333333-3333-3333-3333-333333333333';
 const PLAN_PATH = 'documentation/plans/board-report.md';
 
+/** Minimal Storage stub for notification prefs without enabling chat DOM renders. */
+function stubLocalStorage(): void {
+  const data = new Map<string, string>();
+  globalThis.localStorage = {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      data.set(key, value);
+    },
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
+    clear: () => {
+      data.clear();
+    },
+    get length() {
+      return data.size;
+    },
+    key: (index: number) => [...data.keys()][index] ?? null,
+  } as Storage;
+}
+
 function makePlanner(): Chat {
   return {
     id: PLANNER_ID,
@@ -130,6 +151,7 @@ describe('board_report happy path', () => {
 
 describe('quarantine-last stall', () => {
   beforeEach(() => {
+    stubLocalStorage();
     resetNotificationStoreForTests();
     resetNotificationProducersForTests();
     resetOrchestratePlanCompleteUiForTests();
