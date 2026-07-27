@@ -33,7 +33,7 @@ One desktop shell and eight apps. All of them ship finished and always on; there
 
 | App | What it's for |
 |-----|---------------|
-| **Chat** | The desktop surface. Composer, session rail, notifications. Where most work starts. |
+| **Chat** | The desktop surface. Composer, session rail, notifications. General Chat workspace |
 | **Code** | The build workspace: file tree, CodeMirror + LSP, terminal, git, chat beside your code, inline completion. |
 | **Research** | Multi-step web research with a saved library. |
 | **Models** | Hardware-fit scoring, Hugging Face downloads, local serving, provider routing. |
