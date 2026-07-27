@@ -10,7 +10,7 @@ import {
   createMessageConnection,
   StreamMessageReader,
   StreamMessageWriter,
-} from 'vscode-jsonrpc/node.js';
+} from 'vscode-jsonrpc/node';
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
 import { getBundledTsserverPath, resolveLspSpawnArgv } from './resolve-command.js';
 import { buildLspProcessEnv } from './paths.js';

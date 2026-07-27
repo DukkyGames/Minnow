@@ -169,7 +169,12 @@
   "overrides": {
     "glob": "^13.0.6",
     "rimraf": "^6.0.1",
-    "inflight": "npm:@favware/skip-inflight@^1.0.2"
+    "inflight": "npm:@favware/skip-inflight@^1.0.2",
+    "@hono/node-server": "^2.0.12",
+    "brace-expansion": "^5.0.8",
+    "minimatch": "^10.2.5",
+    "protobufjs": "^7.6.3",
+    "sharp": "^0.35.3"
   },
   "optionalDependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
