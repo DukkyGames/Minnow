@@ -34,6 +34,7 @@
     "test:attachments": "node test/run-all.mjs --suite attachments",
     "test:skills-impeccable": "node test/run-all.mjs --suite skills-impeccable",
     "test:impeccable": "node test/run-all.mjs --suite impeccable",
+    "fake-model": "node scripts/fake-model-server.mjs",
     "preview": "vite preview",
     "electron:build": "node scripts/build-electron.mjs",
     "electron:dev": "concurrently -k -n server,electron \"cross-env BROWSER=none MINNOW_ELECTRON=1 node server.js\" \"node scripts/electron-dev.mjs\"",
