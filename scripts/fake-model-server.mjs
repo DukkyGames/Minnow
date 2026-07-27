@@ -64,13 +64,64 @@ export function boardReportPassChunks(taskId = 'W1-A', toolCallId = 'call_fake_b
   ];
 }
 
-/** Default scenario: always emit a valid board_report pass tool call. */
-export const DEFAULT_SCENARIO = [
-  {
-    match: {},
-    emit: boardReportPassChunks(),
-  },
-];
+/** Prose completion — required after a tool-call round so runChatTurn can finish. */
+export function proseSseChunks(text = 'Done.', finishReason = 'stop') {
+  const delta = JSON.stringify({
+    choices: [{ delta: { content: text } }],
+  });
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: finishReason }],
+  });
+  return [
+    `data: ${delta}\n\n`,
+    `data: ${finish}\n\n`,
+    'event: end\ndata: {"status":"complete"}\n\n',
+  ];
+}
+
+/** Tester chat: VERDICT marker the board finalizer parses. */
+export function testerVerdictChunks(verdict = 'pass') {
+  return proseSseChunks(`VERDICT: ${verdict}`);
+}
+
+/**
+ * Default board scenario: smart per-role / per-nth responses (no static wildcard).
+ * Custom --scenario JSON can still override with explicit match steps.
+ */
+export const DEFAULT_SCENARIO = [];
+
+/**
+ * Built-in responses when no explicit scenario step matches.
+ * @param {{ role?: string; taskId?: string }} ctx
+ * @param {number} nth 0-based per (role, taskId) chat turn sequence
+ * @returns {string[]}
+ */
+export function defaultEmitForContext(ctx, nth) {
+  const taskId = ctx.taskId?.trim() || 'W1-A';
+
+  if (ctx.role === 'tester') {
+    return testerVerdictChunks('pass');
+  }
+  if (ctx.role === 'fixer') {
+    return proseSseChunks(
+      nth === 0 ? 'Resolved conflict with git commit --no-edit.' : 'Done.',
+    );
+  }
+  if (ctx.role === 'final') {
+    if (nth === 0) {
+      return boardReportPassChunks('FULL_BOARD', 'call_fake_final_report');
+    }
+    return proseSseChunks('Done.');
+  }
+  if (ctx.role === 'builder') {
+    if (nth === 0) {
+      return boardReportPassChunks(taskId, `call_build_${taskId.replace(/[^A-Za-z0-9]/g, '_')}`);
+    }
+    return proseSseChunks('Done.');
+  }
+
+  return proseSseChunks('Done.');
+}
 
 /**
  * @param {unknown} raw
@@ -195,8 +246,7 @@ export function pickScenarioEmit(scenario, ctx) {
     return step.emit;
   }
 
-  const fallback = scenario[scenario.length - 1];
-  return fallback?.emit ?? boardReportPassChunks(ctx.taskId);
+  return defaultEmitForContext(ctx, nth);
 }
 
 /**
@@ -328,7 +378,8 @@ Scenario step shape:
   { "match": { "role": "builder", "taskId": "W1-A", "nth": 0 }, "emit": ["data: ...\\n\\n"] }
 
 Match fields are optional wildcards. "nth" is 0-based per (role, taskId) pair.
-Default scenario emits a valid board_report pass tool call.
+Default (no --scenario): builder nth=0 → board_report for that task; nth≥1 → prose ack;
+tester → VERDICT: pass; fixer/final follow the headless quirk-fixture pattern.
 
 Recorded requests are logged to stderr and exposed as export { requests }.
 `);
