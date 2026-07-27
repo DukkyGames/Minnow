@@ -6,7 +6,7 @@ import {
   normalizeOrchestratePlanPath,
 } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
-import { getOrCreateBoardGroup } from '../state/chat-groups';
+import { getOrCreateBoardGroup, getBoardGroupForChat } from '../state/chat-groups';
 import {
   getActiveChat,
   scheduleSaveSessions,
@@ -23,7 +23,9 @@ import { setOrchestrateViewMode } from './view-mode-toggle';
 export function launchBoardFromPlan(planPath: string): void {
   const active = getActiveChat();
   const canReuse =
-    !active.history.length && normalizeModeId(active.modeId) === 'orchestrate';
+    !active.history.length &&
+    normalizeModeId(active.modeId) === 'orchestrate' &&
+    !getBoardGroupForChat(active);
   let chat = active;
   if (!canReuse) {
     const created = createChatWithMode({ modeId: 'orchestrate' });

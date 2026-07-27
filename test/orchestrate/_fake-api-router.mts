@@ -9,7 +9,12 @@ import {
 } from './_board-flow-helpers.mts';
 import type { BoardLogEvent } from '../../src/types.ts';
 
-export type FakeApiTurn = { sse: string[] };
+/** One scripted generation round — SSE stream and/or HTTP error on create. */
+export type FakeApiTurn = {
+  sse?: string[];
+  /** When set, POST /api/generations returns this error instead of opening a stream. */
+  postError?: { status: number; body: string };
+};
 
 export type FakeApiScript = {
   /** Keys: `${taskId}:build|test|fix`, or `final` for integration test chat. */
@@ -203,6 +208,13 @@ export function installFakeApiRouter(
       const slotScript = script.slots[slotKey];
       const turnIdx = slotTurnIndex.get(slotKey) ?? 0;
       const turn = slotScript?.[turnIdx];
+      if (turn?.postError) {
+        slotTurnIndex.set(slotKey, turnIdx + 1);
+        return new Response(turn.postError.body, {
+          status: turn.postError.status,
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      }
       const sse = turn?.sse?.length ? turn.sse : defaultAckSse();
       slotTurnIndex.set(slotKey, turnIdx + 1);
       const generationId = nextGenerationId(slotKey);

@@ -71,7 +71,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
     'editor',
     'webhooks',
   ],
-  advanced: ['diagnostics'],
+  advanced: ['diagnostics', 'board-testing'],
 };
 
 /** Flat category list in sidebar order. */
@@ -445,6 +445,21 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
         'When enabled, uncaught renderer errors create bug cards in the Issues app (off by default).',
     },
   ),
+
+  field('advanced.boardTesting', 'Board testing', 'advanced', 'board-testing', {
+    keywords: ['orchestrate', 'fake model', 'seed board', 'board log', 'kanban', 'test board'],
+    description:
+      'Manual orchestrate board workflow: in-process fake model, seed test board, validate diagnostic logs.',
+  }),
+  field('advanced.boardTesting.fakeModel', 'Fake model', 'advanced', 'board-testing', {
+    keywords: ['fake-board', 'openai stub', 'deterministic model'],
+  }),
+  field('advanced.boardTesting.seed', 'Seed test board', 'advanced', 'board-testing', {
+    keywords: ['quick preset', 'smoke preset', 'board_init', 'planner'],
+  }),
+  field('advanced.boardTesting.log', 'Validate board log', 'advanced', 'board-testing', {
+    keywords: ['jsonl', 'invariants', 'check-board-log', 'orchestrate log'],
+  }),
 
   // —— About (General) ——
   field('about.info', 'Build info', 'general', 'about', {

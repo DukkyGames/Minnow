@@ -224,4 +224,45 @@ describe('finalizeBoardTaskOnStreamEnd in-place auto retry', () => {
     assert.equal(updated.status, 'in_progress');
     assert.equal(updated.buildAttempts, 1);
   });
+
+  test('context exceeded failed run retries in-place on same chat id', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    const taskChat = makePartialBoardTaskChat();
+    taskChat.history = [
+      { role: 'user', content: 'Execute task' },
+      {
+        role: 'assistant',
+        content: 'Implemented Dashboard.tsx with charts before the provider cut off.',
+      },
+    ];
+    const run = failedRunRecord();
+    run.errorMessage =
+      'Could not complete this reply: context length exceeded (n_ctx = 4096)';
+    taskChat.runs = [run];
+    setSessionStateForTests({
+      chats: [planner, taskChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
+
+    const task = group.orchestrateBoard!.tasks[0]!;
+    const chatIdBefore = task.chatId;
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+
+    const updated = group.orchestrateBoard!.tasks[0]!;
+    assert.equal(updated.chatId, chatIdBefore);
+    assert.equal(updated.status, 'in_progress');
+    assert.equal(updated.buildAttempts, 1);
+    assert.match(updated.pendingBuildSeed ?? '', /failed build attempt/i);
+    assert.ok(
+      taskChat.history.some(
+        (m) =>
+          m.role === 'assistant' &&
+          typeof m.content === 'string' &&
+          m.content.includes('Dashboard.tsx'),
+      ),
+      'partial builder work must survive context exceeded failure',
+    );
+  });
 });

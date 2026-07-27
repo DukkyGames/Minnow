@@ -332,4 +332,32 @@ describe('board headless quirk fixtures', () => {
       );
     });
   });
+
+  test('context exceeded on stream then in-place recover to complete', async () => {
+    await runQuirk('contextExceededStreamThenRecover', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+      const task = group.orchestrateBoard?.tasks.find((t) => t.id === QUIRK_TASK);
+      assert.equal(task?.buildAttempts, 1, 'one transient failure should burn one build attempt');
+    });
+  });
+
+  test('LM Studio context limit error then recover', async () => {
+    await runQuirk('contextExceededLmStudioThenRecover', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('upstream HTTP 400 context_length_exceeded then recover', async () => {
+    await runQuirk('contextExceededPostThenRecover', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+    });
+  });
+
+  test('tester context exceeded then VERDICT recover', async () => {
+    await runQuirk('contextExceededTesterThenRecover', (group) => {
+      assertTaskStatus(group, QUIRK_TASK, 'complete');
+      const task = group.orchestrateBoard?.tasks.find((t) => t.id === QUIRK_TASK);
+      assert.equal(task?.testVerdict, 'pass');
+    });
+  });
 });

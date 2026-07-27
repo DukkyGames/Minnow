@@ -2,7 +2,7 @@
  * Shared SSE chunks + FakeApiScript builders for headless board E2E and fake-model scenarios.
  */
 
-import type { FakeApiScript } from './_fake-api-router.mts';
+import type { FakeApiScript, FakeApiTurn } from './_fake-api-router.mts';
 
 /** Default duplicate-tool threshold from self-healing tier1 (sub-agents.json). */
 export const DUPLICATE_TOOL_CALL_THRESHOLD = 5;
@@ -80,10 +80,33 @@ export function postToolAckSse(): string[] {
 }
 
 /** Append a post-tool prose ack after scripted tool-call generations. */
-export function appendPostToolAck(
-  turns: Array<{ sse: string[] }>,
-): Array<{ sse: string[] }> {
+export function appendPostToolAck(turns: FakeApiTurn[]): FakeApiTurn[] {
   return [...turns, { sse: postToolAckSse() }];
+}
+
+/** Representative provider copy when the model context window is exceeded. */
+export const CONTEXT_EXCEEDED_MESSAGES = {
+  lmStudio:
+    'Trying to generate tokens after context limit has been reached (n_ctx = 4096)',
+  openAi:
+    "This model's maximum context length is 8192 tokens. However, your messages resulted in 9000 tokens.",
+  generic: 'context length exceeded',
+  llamaCpp: 'Requested tokens (8192) exceed context window of 4096',
+  couldNotComplete: 'Could not complete this reply: context length exceeded',
+} as const;
+
+/** Terminal generation SSE with status error (Minnow /api/generations stream end). */
+export function generationErrorEndSse(errorMessage: string): string[] {
+  const payload = JSON.stringify({ status: 'error', errorMessage });
+  return [`event: end\ndata: ${payload}\n\n`];
+}
+
+/** HTTP error on POST /api/generations before any stream opens (upstream 400/413). */
+export function generationPostErrorTurn(
+  status: number,
+  body: string,
+): FakeApiTurn {
+  return { postError: { status, body } };
 }
 
 function toolTurns(sse: string[]): FakeApiScript['slots'][string] {
@@ -276,4 +299,53 @@ export const quirkFixtures = {
     toolResults: { get_datetime: { result: '2026-07-26T12:00:00Z' } },
   }),
   runawayRepetition: runawayRepetitionScript,
+  contextExceededStreamThenRecover: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: [
+        { sse: generationErrorEndSse(CONTEXT_EXCEEDED_MESSAGES.generic) },
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { get_datetime: { result: '2026-07-26T12:00:00Z' } },
+  }),
+  contextExceededLmStudioThenRecover: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: [
+        { sse: generationErrorEndSse(CONTEXT_EXCEEDED_MESSAGES.lmStudio) },
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { get_datetime: { result: '2026-07-26T12:00:00Z' } },
+  }),
+  contextExceededPostThenRecover: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: [
+        generationPostErrorTurn(
+          400,
+          JSON.stringify({
+            error: {
+              message: CONTEXT_EXCEEDED_MESSAGES.openAi,
+              type: 'invalid_request_error',
+              code: 'context_length_exceeded',
+            },
+          }),
+        ),
+        ...toolTurns(boardReportPassSse(taskId)),
+      ],
+      [`${taskId}:test`]: slotTurns(testerVerdictSse('pass')),
+    },
+    toolResults: { get_datetime: { result: '2026-07-26T12:00:00Z' } },
+  }),
+  contextExceededTesterThenRecover: (taskId: string) => ({
+    slots: {
+      [`${taskId}:build`]: toolTurns(boardReportPassSse(taskId)),
+      [`${taskId}:test`]: [
+        { sse: generationErrorEndSse(CONTEXT_EXCEEDED_MESSAGES.llamaCpp) },
+        { sse: testerVerdictSse('pass') },
+      ],
+    },
+    toolResults: { get_datetime: { result: '2026-07-26T12:00:00Z' } },
+  }),
 } satisfies Record<string, (taskId: string) => FakeApiScript>;
