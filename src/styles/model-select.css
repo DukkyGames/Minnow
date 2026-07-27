@@ -221,8 +221,7 @@
 }
 
 .model-host-filter-action .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
 }
 
 .model-host-filter-action .model-load-unload-spinner {

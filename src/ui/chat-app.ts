@@ -8,6 +8,7 @@ import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
+import { iconHtml } from './icon';
 import { navigateToDesktop } from '../os/router';
 import {
   CHAT_APP_ID,
@@ -94,7 +95,7 @@ function renderChatAppEmptyState(area: HTMLElement): void {
   empty.className = 'chat-app-empty';
   empty.innerHTML = `
     <div class="chat-app-empty-ico" aria-hidden="true">
-      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      ${iconHtml('appChat')}
     </div>
     <h2>Start a conversation</h2>
     <p>General assistant with tools and file outputs. Ask anything below.</p>

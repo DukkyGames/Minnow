@@ -23,6 +23,7 @@ import { switchComposerDraft } from './composer-draft';
 import { renderChatInForegroundShell, renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
 import { setStatus } from './status';
+import { iconHtml } from './icon';
 
 function branchIndexLabel(index: number, total: number): string {
   return `Branch ${index + 1} of ${total}`;
@@ -38,8 +39,7 @@ function buildTriggerLabel(activeIndex: number, total: number): string {
   return `Branch ${activeIndex + 1} of ${total}`;
 }
 
-const BRANCH_CHEVRON_SVG =
-  '<svg class="branch-picker__trigger-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>';
+const BRANCH_CHEVRON_SVG = iconHtml('chevronDown', { className: 'branch-picker__trigger-chevron' });
 
 function closeBranchMenu(menu: HTMLElement | null): void {
   if (!menu) return;

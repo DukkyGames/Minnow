@@ -11,6 +11,7 @@ import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
+import { createIcon, type IconName } from './icon';
 
 export interface WorkspaceFolderPickerResult {
   cancelled: boolean;
@@ -20,13 +21,11 @@ export interface WorkspaceFolderPickerResult {
 const OVERLAY_ID = 'workspaceFolderPickerOverlay';
 const DIALOG_ID = 'workspaceFolderPicker';
 
-const ICON_FOLDER =
-  'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z';
-const ICON_CHEVRON = 'M9 18l6-6-6-6';
-const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
-const ICON_FOLDER_PLUS =
-  'M12 10v6M9 13h6M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z';
-const ICON_CLOSE = 'M18 6L6 18M6 6l12 12';
+const ICON_FOLDER: IconName = 'folder';
+const ICON_CHEVRON: IconName = 'chevronRight';
+const ICON_UP: IconName = 'arrowUp';
+const ICON_FOLDER_PLUS: IconName = 'addFolder';
+const ICON_CLOSE: IconName = 'close';
 
 let overlayEl: HTMLDivElement | null = null;
 let dialogEl: HTMLDivElement | null = null;
@@ -69,16 +68,9 @@ export function isWorkspaceFolderPickerOpen(): boolean {
 /** Delay single-click selection so double-click can drill down first. */
 const PICKER_CLICK_DELAY_MS = 220;
 
-/** Build a stroke SVG icon matching global `.icon-svg` styling. */
-function createIconSvg(pathD: string, className = 'icon-svg'): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', className);
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', pathD);
-  svg.appendChild(path);
-  return svg;
+/** Build a Uicons icon matching global `.icon-svg` styling. */
+function createIconSvg(name: IconName, className = 'icon-svg'): HTMLElement {
+  return createIcon(name, { className });
 }
 
 function folderDisplayName(absPath: string): string {
@@ -189,9 +181,8 @@ function wireRowActivation(
   });
 }
 
-function createFolderIcon(): SVGSVGElement {
-  const svg = createIconSvg(ICON_FOLDER, 'icon-svg workspace-picker__folder-icon');
-  return svg;
+function createFolderIcon(): HTMLElement {
+  return createIconSvg(ICON_FOLDER, 'icon-svg workspace-picker__folder-icon');
 }
 
 function createChildFolderRow(entry: WorkspaceBrowseEntry): HTMLLIElement {

@@ -269,8 +269,7 @@
 }
 
 .file-viewer-header .icon-btn .icon-svg {
-  width: 15px;
-  height: 15px;
+  --mn-icon-size: 15px;
 }
 
 /* Diagnostics/status stay left; Intent + save/close align to the trailing edge */

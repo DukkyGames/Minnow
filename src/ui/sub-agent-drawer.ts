@@ -20,6 +20,7 @@ import type { PersistedSubAgentRun } from '../types';
 import { resolveSubAgentOverlayMount } from './chat-mount';
 import { humanizeToolName } from './tool-messages';
 import { renderTranscriptView } from './transcript-view.ts';
+import { iconHtml } from './icon';
 
 type AnyRun = SubAgentRun | PersistedSubAgentRun;
 
@@ -595,23 +596,12 @@ export function openSubAgentDrawer(runId: string, chatId: string): void {
   closeBtn.focus();
 }
 
-/** Diagonal expand arrows (stroke inherits currentColor). */
+/** Diagonal expand icon for full-column toggle. */
 function expandIconSvg(): string {
-  return (
-    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" ' +
-    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M9.5 2.5H13.5V6.5"/><path d="M6.5 13.5H2.5V9.5"/>' +
-    '<path d="M13.5 2.5L9 7"/><path d="M2.5 13.5L7 9"/></svg>'
-  );
+  return iconHtml('expand', { size: 16 });
 }
 
-/** Close X (stroke inherits currentColor). */
+/** Close icon for overlay dismiss. */
 function closeIconSvg(): string {
-  return (
-    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" ' +
-    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M3.5 3.5L12.5 12.5"/><path d="M12.5 3.5L3.5 12.5"/></svg>'
-  );
+  return iconHtml('close', { size: 16 });
 }

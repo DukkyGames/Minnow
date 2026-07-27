@@ -120,8 +120,7 @@
 }
 
 .input-inset-btn .icon-svg {
-  width: 18px;
-  height: 18px;
+  --mn-icon-size: 18px;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -420,20 +419,17 @@
 .send-btn.send-btn--stop .icon-svg {
   stroke: currentColor;
   fill: currentColor;
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
 }
 
 .send-btn .icon-svg {
   stroke: var(--mn-fg-on-accent);
-  width: 20px;
-  height: 20px;
+  --mn-icon-size: 20px;
 }
 @media (hover: hover) and (pointer: fine) {
   .send-btn:hover:not(:disabled) .icon-svg {
     stroke: var(--mn-fg);
-    width: 27px;
-    height: 27px;
+    --mn-icon-size: 27px;
   }
 }
 

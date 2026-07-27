@@ -12,6 +12,7 @@ import { isChatTurnInProgress } from '../chat/chat-turn-guard';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { getActiveChat } from '../state/sessions';
 import { getActiveComposerSurface } from './composer-surface';
+import { createIcon, type IconName } from './icon';
 import { autoResize } from './input';
 import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { setStatus } from './status';
@@ -79,7 +80,7 @@ function ensureQueueRoot(): HTMLElement {
 function iconButton(
   className: string,
   label: string,
-  svgInner: string,
+  iconName: IconName,
   onClick: () => void,
 ): HTMLButtonElement {
   const btn = document.createElement('button');
@@ -87,7 +88,7 @@ function iconButton(
   btn.className = className;
   btn.setAttribute('aria-label', label);
   btn.title = label;
-  btn.innerHTML = `<svg class="composer-message-queue__icon" viewBox="0 0 24 24" aria-hidden="true">${svgInner}</svg>`;
+  btn.appendChild(createIcon(iconName, { className: 'composer-message-queue__icon' }));
   btn.addEventListener('click', (ev) => {
     ev.preventDefault();
     ev.stopPropagation();
@@ -95,13 +96,6 @@ function iconButton(
   });
   return btn;
 }
-
-const ICON_EDIT =
-  '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>';
-const ICON_PUSH =
-  '<path d="M12 19V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
-const ICON_TRASH =
-  '<path d="M3 6h18" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 6V4h8v2M19 6l-1 14H6L5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
 
 function loadQueueItemIntoComposer(text: string): void {
   const { inputEl } = getActiveComposerSurface();
@@ -135,7 +129,7 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
   actions.className = 'composer-message-queue__actions';
 
   actions.appendChild(
-    iconButton('composer-message-queue__action', 'Edit queued message', ICON_EDIT, () => {
+    iconButton('composer-message-queue__action', 'Edit queued message', 'edit', () => {
       const chat = getActiveChat();
       if (!removeQueuedMessage(chat, item.id)) return;
       loadQueueItemIntoComposer(item.text);
@@ -145,7 +139,7 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
   );
 
   actions.appendChild(
-    iconButton('composer-message-queue__action', 'Push now', ICON_PUSH, () => {
+    iconButton('composer-message-queue__action', 'Push now', 'arrowUp', () => {
       const chat = getActiveChat();
       if (!pushQueuedMessageNow(chat, item.id)) return;
       setStatus('ok', isChatTurnInProgress(chat.id) ? 'Steering at next step…' : 'Sending queued message…');
@@ -155,7 +149,7 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
   );
 
   actions.appendChild(
-    iconButton('composer-message-queue__action', 'Delete queued message', ICON_TRASH, () => {
+    iconButton('composer-message-queue__action', 'Delete queued message', 'trash', () => {
       const chat = getActiveChat();
       if (!removeQueuedMessage(chat, item.id)) return;
       syncComposerMessageQueue();

@@ -114,8 +114,7 @@
 }
 
 .preview-header .icon-btn .icon-svg {
-  width: 15px;
-  height: 15px;
+  --mn-icon-size: 15px;
 }
 
 /* .icon-btn sets display:flex, which overrides the native [hidden] rule */

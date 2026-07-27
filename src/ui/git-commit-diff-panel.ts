@@ -11,6 +11,7 @@ import {
   type GitPatchFileEntry,
 } from './git-patch-files';
 import { renderSideBySidePatchDiff } from './side-by-side-patch-diff';
+import { iconHtml } from './icon';
 
 export interface GitCommitDiffPanelOptions {
   sha: string;
@@ -174,7 +175,7 @@ function createCloseButton(): HTMLButtonElement {
   closeBtn.setAttribute('aria-label', 'Close commit diff');
   closeBtn.title = 'Close';
   closeBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+    iconHtml('close');
   closeBtn.addEventListener('click', () => closeGitCommitDiffPanel());
   return closeBtn;
 }

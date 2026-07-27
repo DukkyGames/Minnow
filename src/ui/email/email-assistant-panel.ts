@@ -18,6 +18,7 @@ import { PLACEHOLDER_CHAT_NAME } from '../../constants';
 import type { EmailAccount } from '../../email/client';
 import { fetchInboxSummary } from '../../email/client-ext';
 import { createModeMaskIcon } from '../mode-icons';
+import { iconHtml } from '../icon';
 import {
   activateChatById,
   createEmailAssistantChatForApp,
@@ -226,16 +227,14 @@ export function mountEmailAssistantPanel(
   const stopButton = el('button', 'email-assistant-composer-btn') as HTMLButtonElement;
   stopButton.id = 'emailAssistantStopBtn';
   stopButton.type = 'button';
-  stopButton.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>';
+  stopButton.innerHTML = iconHtml('stop');
   stopButton.setAttribute('aria-label', 'Stop generation');
   stopButton.hidden = true;
   stopButton.disabled = true;
   const sendButton = el('button', 'email-assistant-send') as HTMLButtonElement;
   sendButton.id = 'emailAssistantSendBtn';
   sendButton.type = 'button';
-  sendButton.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+  sendButton.innerHTML = iconHtml('arrowUp');
   sendButton.setAttribute('aria-label', 'Send message');
   inputRow.append(attachButton, inputLabel, input, stopButton, sendButton);
   composer.append(toolApprovalHost, questionHost, attachPreview, inputRow);

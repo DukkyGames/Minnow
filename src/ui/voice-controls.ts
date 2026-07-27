@@ -8,6 +8,7 @@ import { TtsStreamClient } from '../voice/tts-stream-client';
 import { setStatus } from './status';
 import { openModels } from './models-page';
 import { extractSpeechText } from './voice-speech-text.ts';
+import { iconHtml } from './icon';
 
 export { extractSpeechText } from './voice-speech-text.ts';
 
@@ -382,8 +383,7 @@ export function attachVoicePlayButton(wrap: HTMLElement, text: string): void {
   btn.className = 'voice-play-btn message-actions__trigger';
   btn.setAttribute('aria-label', 'Read aloud');
   btn.title = 'Read aloud';
-  btn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 6a8 8 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  btn.innerHTML = iconHtml('speaker');
 
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();

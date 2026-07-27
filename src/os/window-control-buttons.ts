@@ -1,9 +1,9 @@
-import { createOsIcon, type SvgIconName } from './icons';
+import { createOsIcon, type OsIconName } from './icons';
 
 /** Window chrome control kinds shared by floating windows and the shell menubar. */
 export type WindowControlKind = 'minimize' | 'maximize' | 'restore' | 'close';
 
-function iconNameForKind(kind: WindowControlKind): SvgIconName {
+function iconNameForKind(kind: WindowControlKind): OsIconName {
   return kind;
 }
 
@@ -18,7 +18,7 @@ export function createWindowControlButton(
   btn.className = `mn-os-window-btn mn-os-window-btn--${kind}`;
   btn.setAttribute('aria-label', label);
   btn.title = label;
-  btn.appendChild(createOsIcon(iconNameForKind(kind), { size: 14, stroke: 1.8 }));
+  btn.appendChild(createOsIcon(iconNameForKind(kind), { size: 14 }));
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();
     onClick();
@@ -35,5 +35,5 @@ export function setWindowControlButtonKind(
   btn.className = `mn-os-window-btn mn-os-window-btn--${kind}`;
   btn.setAttribute('aria-label', label);
   btn.title = label;
-  btn.replaceChildren(createOsIcon(iconNameForKind(kind), { size: 14, stroke: 1.8 }));
+  btn.replaceChildren(createOsIcon(iconNameForKind(kind), { size: 14 }));
 }

@@ -1,0 +1,25 @@
+/* Flaticon Uicons — Regular Rounded + Solid Rounded only (not css/all). */
+@import '@flaticon/flaticon-uicons/css/regular/rounded.css';
+@import '@flaticon/flaticon-uicons/css/solid/rounded.css';
+
+/* Single sizing / colour contract for all UI icons (class name retained for selectors). */
+.icon-svg {
+  --mn-icon-size: 18px;
+  display: block;
+  flex-shrink: 0;
+  font-size: var(--mn-icon-size);
+  width: var(--mn-icon-size);
+  height: var(--mn-icon-size);
+  line-height: 1;
+  color: currentColor;
+}
+
+.icon-svg::before {
+  display: block;
+  line-height: 1;
+}
+
+/* Embedded app page headers (Issues, Scheduler, Calendar). */
+:is(#issuesPageIcon, #schedulerPageIcon, #calendarPageIcon, .issues-header__icon, .scheduler-hdr-ico, .calendar-hdr-ico) .icon-svg {
+  --mn-icon-size: 18px;
+}

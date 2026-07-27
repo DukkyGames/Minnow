@@ -6,6 +6,7 @@ import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
+import { iconHtml } from './icon';
 
 const OVERLAY_ID = 'agentCenterLightboxOverlay';
 const DIALOG_ID = 'agentCenterLightbox';
@@ -88,8 +89,7 @@ function ensureShell(): void {
   closeBtn.type = 'button';
   closeBtn.className = 'icon-btn agent-center-close';
   closeBtn.setAttribute('aria-label', 'Close');
-  closeBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+  closeBtn.innerHTML = iconHtml('close');
   closeBtn.addEventListener('click', () => closeAgentCenterLightbox());
 
   header.append(titleWrap, badgeEl, closeBtn);

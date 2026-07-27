@@ -1,6 +1,6 @@
 /**
  * Code-change strip control: undo the last agent turn (chat rewind + file restore).
- * Lives next to #codeChangeStrip; icon from /icons/undo-alt.svg.
+ * Lives next to #codeChangeStrip; Uicons undo glyph via createIcon.
  * Hidden when the workspace is not a git repository (no snapshots) or the undo
  * target turn did not mutate files (chat-only rewind stays on message ⋮).
  */
@@ -12,6 +12,7 @@ import {
   UNDO_STATUS,
   undoBlockMessage,
 } from '../chat/undo-turn';
+import { createIcon } from './icon';
 import { isWorkspaceGitRepo } from '../state/git-workspace';
 import { findRunById } from '../state/runs-store';
 import { getActiveChat } from '../state/sessions';
@@ -65,9 +66,7 @@ function ensureButton(): HTMLButtonElement | null {
   btn.hidden = true;
   btn.setAttribute('aria-disabled', 'true');
 
-  const icon = document.createElement('span');
-  icon.className = 'code-change-strip__undo-icon';
-  icon.setAttribute('aria-hidden', 'true');
+  const icon = createIcon('undo', { className: 'code-change-strip__undo-icon', size: 14 });
   btn.appendChild(icon);
 
   row.appendChild(btn);

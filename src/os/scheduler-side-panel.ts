@@ -89,7 +89,7 @@ function ensurePanelDom(): HTMLElement {
   const iconSlot = document.createElement('span');
   iconSlot.className = 'mn-os-scheduler-side-panel__ico';
   iconSlot.setAttribute('aria-hidden', 'true');
-  iconSlot.appendChild(createAppIcon('scheduler', { size: 20 }));
+  iconSlot.appendChild(createAppIcon('scheduler'));
 
   const titleWrap = document.createElement('div');
   titleWrap.className = 'mn-os-scheduler-side-panel__title-wrap';

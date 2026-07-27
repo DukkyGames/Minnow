@@ -8,6 +8,7 @@ import {
 import { getUnreadNotificationCount } from './notifications-menu';
 import { onNewNotification } from '../notifications/push';
 import { subscribeNotifications } from '../notifications/store';
+import { iconHtml } from '../ui/icon';
 import { launchApp } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
@@ -122,8 +123,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   chatToggle.className = 'mn-os-mb-icon mn-os-mb-chat-toggle';
   chatToggle.setAttribute('aria-label', 'Chat sessions');
   chatToggle.hidden = true;
-  chatToggle.innerHTML =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+  chatToggle.innerHTML = iconHtml('menu', { size: 16 });
   chatToggle.addEventListener('click', () => {
     const fg = getForegroundAppId();
     if (fg === 'chat') {
@@ -159,7 +159,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   schedulerBtn.className = 'mn-os-mb-icon mn-os-mb-scheduler';
   schedulerBtn.setAttribute('aria-label', 'Scheduler');
   schedulerBtn.title = 'Scheduler';
-  schedulerBtn.appendChild(createAppIcon('scheduler', { size: 16 }));
+  schedulerBtn.appendChild(createAppIcon('scheduler'));
   schedulerBtn.addEventListener('click', () => openSchedulerFromMenubar());
 
   const bell = document.createElement('button');
@@ -213,7 +213,7 @@ export function renderMenubar(root: HTMLElement): () => void {
       const meta = getAppById(fgApp);
       appName.replaceChildren();
       if (meta) {
-        appName.appendChild(createAppIcon(meta.icon as 'code', { size: 14 }));
+        appName.appendChild(createAppIcon(meta.icon as 'code'));
         appName.appendChild(document.createTextNode(` ${meta.name}`));
       }
     }

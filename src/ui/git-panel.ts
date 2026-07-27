@@ -55,6 +55,7 @@ import {
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 
 import { renderGitGraph, type GitGraphOptions } from './git-graph';
+import { iconHtml, createIcon } from './icon';
 
 import {
   showGitGraphCommitContextMenu,
@@ -311,13 +312,7 @@ function createToolbarIconBtn(label: string, title: string): HTMLButtonElement {
 }
 
 /** Circular refresh icon (matches #btnFileTreeRefresh in index.html). */
-const GIT_PANEL_REFRESH_ICON =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M20 4v4h-4"/>' +
-  '<path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>' +
-  '<path d="M4 20v-4h4"/>' +
-  '<path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>' +
-  '</svg>';
+const GIT_PANEL_REFRESH_ICON = iconHtml('refresh');
 
 /** Manual refresh from the toolbar button (status, branches, history graph). */
 async function handleManualRefresh(): Promise<void> {
@@ -730,12 +725,7 @@ function ensurePanelDom(): HTMLElement {
 
   helpBtn.setAttribute('aria-label', 'How worktrees and branches work');
 
-  helpBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-    '<circle cx="12" cy="12" r="10"/>' +
-    '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>' +
-    '<line x1="12" y1="17" x2="12.01" y2="17"/>' +
-    '</svg>';
+  helpBtn.innerHTML = iconHtml('help');
 
   refreshBtn = document.createElement('button');
   refreshBtn.type = 'button';
@@ -987,21 +977,7 @@ function ensurePanelDom(): HTMLElement {
 
   aiGenerateBtn.setAttribute('aria-label', 'Generate commit message with AI');
 
-  const aiGenerateIcon = document.createElement('img');
-
-  aiGenerateIcon.className = 'icon-img git-panel-action-btn__icon';
-
-  aiGenerateIcon.src = '/icons/sparkles.png';
-
-  aiGenerateIcon.width = 12;
-
-  aiGenerateIcon.height = 12;
-
-  aiGenerateIcon.alt = '';
-
-  aiGenerateIcon.setAttribute('aria-hidden', 'true');
-
-  aiGenerateBtn.append(aiGenerateIcon);
+  aiGenerateBtn.append(createIcon('sparkles', { className: 'icon-svg git-panel-action-btn__icon', size: 12 }));
 
   aiGenerateBtn.addEventListener('click', () => void handleGenerateCommitMessage());
 

@@ -6,6 +6,7 @@ import { deriveTaskCategoryBadge } from '../chat/orchestrate/task-category-badge
 import { listTaskRelatedChats } from '../chat/orchestrate/task-chats';
 import { getChatsSortedByUpdatedDesc } from '../state/sessions';
 import type { BoardTask, BoardTaskStatus, Chat, ChatGroup } from '../types';
+import { createIcon } from './icon';
 
 const PANEL_CLASS = 'board-task-plan-panel';
 const MAIN_OPEN_CLASS = 'board-main--task-plan-open';
@@ -145,14 +146,7 @@ function renderPanelContent(
   closeBtn.className = 'icon-btn board-task-plan-panel__close';
   closeBtn.setAttribute('aria-label', 'Close task plan');
   closeBtn.title = 'Close';
-  const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  closeIcon.setAttribute('class', 'icon-svg');
-  closeIcon.setAttribute('viewBox', '0 0 24 24');
-  closeIcon.setAttribute('aria-hidden', 'true');
-  const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  closePath.setAttribute('d', 'M18 6L6 18M6 6l12 12');
-  closeIcon.appendChild(closePath);
-  closeBtn.appendChild(closeIcon);
+  closeBtn.appendChild(createIcon('close'));
   closeBtn.addEventListener('click', () => {
     setBoardTaskPlanSelection(null);
     const main = panel.closest('.board-main');

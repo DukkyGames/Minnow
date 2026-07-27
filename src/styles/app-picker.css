@@ -185,6 +185,10 @@
   color: var(--mn-fg, var(--text));
 }
 
+.mn-app-picker-card__icon .icon-svg {
+  --mn-icon-size: 20px;
+}
+
 .mn-app-picker-card.is-off .mn-app-picker-card__icon {
   color: var(--mn-fg-muted, var(--text-muted));
 }

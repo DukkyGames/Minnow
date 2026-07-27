@@ -29,8 +29,7 @@
 }
 
 .composer-tools-btn--toolbar .icon-svg {
-  width: 18px;
-  height: 18px;
+  --mn-icon-size: 18px;
 }
 
 .composer-controls__trail .composer-tools-popover {
@@ -54,8 +53,7 @@
 }
 
 .composer-tools-btn .icon-svg {
-  width: 20px;
-  height: 20px;
+  --mn-icon-size: 20px;
 }
 
 .composer-tools-btn:active {

@@ -10,6 +10,7 @@ import {
 import type { ToolExecutionResult } from '../types';
 import { isChatAppForeground } from './chat-mount';
 import { setStatus } from './status';
+import { iconHtml } from './icon';
 
 const EMPTY_MESSAGE = 'Files the assistant creates will appear here';
 const REFRESH_DEBOUNCE_MS = 300;
@@ -57,7 +58,7 @@ function renderFileRow(entry: ChatsWorkspaceListEntry, depth: number): HTMLEleme
   downloadBtn.className = 'chat-app-outputs-download';
   downloadBtn.setAttribute('aria-label', `Download ${entry.name}`);
   downloadBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>';
+    iconHtml('download');
 
   downloadBtn.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -84,7 +85,9 @@ function renderDirRow(entry: ChatsWorkspaceListEntry, depth: number): HTMLElemen
   toggle.type = 'button';
   toggle.className = 'chat-app-outputs-dir-toggle';
   toggle.setAttribute('aria-label', `${isOpen ? 'Collapse' : 'Expand'} ${entry.name}`);
-  toggle.innerHTML = `<svg class="icon-svg chat-app-outputs-dir-chevron${isOpen ? ' is-open' : ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`;
+  toggle.innerHTML = iconHtml('chevronRight', {
+    className: `chat-app-outputs-dir-chevron${isOpen ? ' is-open' : ''}`,
+  });
 
   const label = document.createElement('span');
   label.className = 'chat-app-outputs-name';

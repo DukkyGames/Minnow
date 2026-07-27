@@ -19,6 +19,7 @@ import {
   toggleGroupCollapsed,
 } from '../state/chat-groups';
 import { createBoardCategoryIcon } from './board-category-icons';
+import { createIcon } from './icon';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
@@ -133,7 +134,7 @@ import {
   syncChatItemLoopIconsInDom,
 } from './chat-item-loop-icon';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
-import { createModeMaskIcon, chatListModeIconSrc } from './mode-icons';
+import { createModeMaskIcon } from './mode-icons';
 import { hasComposerDraft } from '../state/session-workspace-scope';
 import {
   flushActiveComposerDraftBeforeNewChat,
@@ -492,7 +493,6 @@ export function appendChatRow(
 
   // Mode glyph: collapsed rail icon + compact marker beside name when expanded.
   const icon = createModeMaskIcon(chat.modeId, 'chat-item-icon mode-mask-icon');
-  icon.style.setProperty('--mode-icon-url', `url('${chatListModeIconSrc(chat.modeId)}')`);
   titleRow.appendChild(icon);
 
   const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
@@ -597,9 +597,10 @@ function appendGroupHeader(
   head.title = group.name;
   head.setAttribute('aria-expanded', group.collapsed ? 'false' : 'true');
 
-  const icon = document.createElement('span');
-  icon.className = 'chat-group-header__icon';
-  icon.setAttribute('aria-hidden', 'true');
+  const icon = createIcon(
+    group.orchestrateBoard ? 'modeOrchestrateBold' : 'folder',
+    { className: 'chat-group-header__icon', size: 14 },
+  );
 
   const caret = document.createElement('button');
   caret.type = 'button';

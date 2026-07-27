@@ -1,11 +1,10 @@
 /**
- * Sidebar per-chat /loop indicator: masked loop.svg; spins while at least one loop is unpaused.
+ * Sidebar per-chat /loop indicator; spins while at least one loop is unpaused.
  */
 
 import { getActiveLoops, sessionState } from '../state/sessions';
 import type { Chat } from '../types';
-
-export const CHAT_ITEM_LOOP_ICON_SRC = '/icons/loop.svg';
+import { createIcon } from './icon';
 
 export type ChatItemLoopIconState = 'hidden' | 'running' | 'paused';
 
@@ -30,12 +29,10 @@ function loopIconTitle(chat: Chat): string {
   return parts.join(', ') || 'Loop active';
 }
 
-/** Create the masked loop icon span for a chat title row. */
-export function createChatItemLoopIcon(): HTMLSpanElement {
-  const el = document.createElement('span');
-  el.className = 'chat-item-loop-icon';
+/** Create the loop icon element for a chat title row. */
+export function createChatItemLoopIcon(): HTMLElement {
+  const el = createIcon('loop', { className: 'chat-item-loop-icon' });
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-hidden', 'true');
   return el;
 }
 

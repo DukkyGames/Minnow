@@ -47,7 +47,7 @@ async function refreshPanel(): Promise<void> {
 function mountHeaderIcon(): void {
   const slot = document.getElementById('calendarPageIcon');
   if (!slot || slot.childElementCount > 0) return;
-  slot.appendChild(createAppIcon('calendar', { size: 22 }));
+  slot.appendChild(createAppIcon('calendar'));
 }
 
 export function initCalendarPage(): void {

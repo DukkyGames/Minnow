@@ -37,6 +37,7 @@ import {
   type DesignInstanceMeta,
   type DesignViewportPreset,
 } from '../config/design-meta';
+import { createIcon, type IconName } from '../ui/icon';
 
 const STRIP_CLASS = 'mn-design-strip';
 const CAPTURE_CLASS = 'mn-design-capture';
@@ -203,24 +204,22 @@ const STRIP_TOOL_IDS = ['select', 'draw', 'comment'] as const satisfies readonly
 
 const DRAW_SHAPE_KINDS: readonly ShapeKind[] = ['rect', 'pen', 'arrow', 'label'];
 
-/** Stroke-icon markup (24 viewBox, currentColor) matching the app's toolbar icon style. */
-const STRIP_ICONS: Record<string, string> = {
-  select: '<path d="M4 4l7.07 17 2.51-7.39L21 11.07z"/>',
-  draw: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
-  comment:
-    '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
-  mobile: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
-  tablet: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M11 18h2"/>',
-  desktop: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
-  dark: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
-  exit: '<path d="M18 6L6 18M6 6l12 12"/>',
-  undo: '<path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
-  clear:
-    '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
-  rect: '<rect x="4" y="6" width="16" height="12" rx="2"/>',
-  pen: '<path d="M17 3a2.83 2.83 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
-  arrow: '<path d="M7 17L17 7"/><path d="M8 7h9v9"/>',
-  label: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
+/** Semantic icon names for design strip toolbar buttons. */
+const STRIP_ICON_NAMES: Record<string, IconName> = {
+  select: 'designMode',
+  draw: 'edit',
+  comment: 'appChat',
+  mobile: 'dock',
+  tablet: 'dock',
+  desktop: 'browser',
+  dark: 'globe',
+  exit: 'close',
+  undo: 'undo',
+  clear: 'clear',
+  rect: 'expand',
+  pen: 'edit',
+  arrow: 'arrowUp',
+  label: 'fileText',
 };
 
 function stripButton(icon: string, label: string, className = ''): HTMLButtonElement {
@@ -229,7 +228,8 @@ function stripButton(icon: string, label: string, className = ''): HTMLButtonEle
   btn.className = `${STRIP_CLASS}__btn${className ? ` ${className}` : ''}`;
   btn.title = label;
   btn.setAttribute('aria-label', label);
-  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${STRIP_ICONS[icon] ?? ''}</svg>`;
+  const iconName = STRIP_ICON_NAMES[icon];
+  if (iconName) btn.appendChild(createIcon(iconName));
   return btn;
 }
 

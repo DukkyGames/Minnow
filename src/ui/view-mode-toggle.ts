@@ -23,6 +23,7 @@ import {
   touchChat,
 } from '../state/sessions';
 import type { Chat, ChatGroup } from '../types';
+import { createIcon } from './icon';
 
 const BOARD_TOGGLE_ID = 'btnViewModeToggleBoard';
 const CHAT_TOGGLE_ID = 'btnViewModeToggleChat';
@@ -269,17 +270,7 @@ function createBoardChatViewToggleButton(): HTMLButtonElement {
   btn.title = 'Chat view';
   btn.disabled = true;
 
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'icon-svg view-mode-toggle-btn__icon');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute(
-    'd',
-    'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
-  );
-  svg.appendChild(path);
-  btn.appendChild(svg);
+  btn.appendChild(createIcon('appChat', { className: 'view-mode-toggle-btn__icon' }));
   return btn;
 }
 

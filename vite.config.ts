@@ -6,6 +6,34 @@ import { defineConfig } from 'vite';
  * before the stylesheet finishes loading. Hoist bundle `<link rel="stylesheet">` tags
  * ahead of the entry `<script type="module">` in `<head>` so CSS starts earlier.
  */
+/** Strip .eot / .woff from Uicons @font-face — Chromium only fetches .woff2. */
+function uiconsWoff2OnlyPlugin(): Plugin {
+  function stripNonWoff2Src(css: string): string {
+    return css
+      .replace(/,url\([^)]+\)\s*format\(["']woff["']\)/g, '')
+      .replace(/,url\([^)]+\)\s*format\(["']embedded-opentype["']\)/g, '');
+  }
+
+  return {
+    name: 'minnow-uicons-woff2-only',
+    transform(code, id) {
+      if (!id.endsWith('.css')) return null;
+      if (!code.includes('uicons-regular-rounded') && !code.includes('uicons-solid-rounded')) {
+        return null;
+      }
+      const trimmed = stripNonWoff2Src(code);
+      return trimmed === code ? null : { code: trimmed, map: null };
+    },
+    generateBundle(_options, bundle) {
+      for (const fileName of Object.keys(bundle)) {
+        if (/\.(woff|eot)(\?|$)/i.test(fileName) && /uicons/i.test(fileName)) {
+          delete bundle[fileName];
+        }
+      }
+    },
+  };
+}
+
 function cssBeforeEntryScriptPlugin(): Plugin {
   return {
     name: 'minnow-css-before-entry-script',
@@ -99,7 +127,7 @@ function manualChunkForNodeModule(id: string): string | undefined {
 /** Vite build: relative asset paths for PWA / static hosting. */
 export default defineConfig({
   base: './',
-  plugins: [cssBeforeEntryScriptPlugin()],
+  plugins: [uiconsWoff2OnlyPlugin(), cssBeforeEntryScriptPlugin()],
   optimizeDeps: {
     // Finish the first dep crawl before serving requests (avoids stale dist-* chunk URLs).
     holdUntilCrawlEnd: true,

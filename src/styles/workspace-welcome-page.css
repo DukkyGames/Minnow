@@ -96,8 +96,7 @@
 }
 
 .welcome-page__tile-icon .icon-svg {
-  width: 22px;
-  height: 22px;
+  --mn-icon-size: 22px;
 }
 
 .welcome-page__tile-label {

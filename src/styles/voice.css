@@ -186,8 +186,7 @@
 }
 
 .voice-play-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
 }
 
 .voice-play-btn--loading .icon-svg {

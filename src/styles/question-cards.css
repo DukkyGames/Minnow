@@ -155,8 +155,7 @@
 }
 
 .question-cards-icon-btn .icon-svg {
-  width: 18px;
-  height: 18px;
+  --mn-icon-size: 18px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
@@ -496,8 +495,7 @@
 }
 
 .question-cards-nav-btn .icon-svg {
-  width: 18px;
-  height: 18px;
+  --mn-icon-size: 18px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;

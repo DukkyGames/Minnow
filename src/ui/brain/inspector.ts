@@ -8,6 +8,7 @@ import type { BrainPageMeta } from '../../brain/types';
 import { computeBrainBacklinks } from './tree-utils';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { renderBrainMarkdown } from './wikilink-markdown';
+import { iconHtml } from '../icon';
 
 export type InspectorNavigateFn = (relPath: string) => void;
 export type InspectorEditFn = (relPath: string) => void;
@@ -161,7 +162,7 @@ export async function renderBrainInspector(
   closeBtn.className = 'brain-inspector__close icon-btn';
   closeBtn.setAttribute('aria-label', 'Close inspector');
   closeBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    iconHtml('close');
   closeBtn.addEventListener('click', () => closeBrainInspector(mount));
   inner.append(closeBtn);
 
@@ -360,7 +361,7 @@ export function renderSymbolInspector(
   closeBtn.className = 'brain-inspector__close icon-btn';
   closeBtn.setAttribute('aria-label', 'Close inspector');
   closeBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    iconHtml('close');
   closeBtn.addEventListener('click', () => closeBrainInspector(mount));
   inner.append(closeBtn);
 

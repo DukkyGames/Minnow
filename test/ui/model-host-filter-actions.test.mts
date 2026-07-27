@@ -145,7 +145,7 @@ describe('model host filter actions', () => {
 
       syncModelLoadUnloadIconButtonElement(btn);
       assert.equal(btn.getAttribute('aria-label'), 'Load model');
-      assert.ok(btn.innerHTML.includes('M12 3v12'));
+      assert.ok(btn.querySelector('.icon-svg.fi-rr-download'));
     } finally {
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;

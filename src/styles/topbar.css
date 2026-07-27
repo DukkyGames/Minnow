@@ -56,7 +56,7 @@
 }
 
 .logo-mark .minnow-glyph { width: 18px; height: 18px; }
-.logo-mark .icon-svg { width: 16px; height: 16px; }
+.logo-mark .icon-svg { --mn-icon-size: 16px; }
 
 .app-title {
   font-size: 15px;
@@ -264,8 +264,7 @@
 }
 
 .workspace-btn .icon-svg {
-  width: 18px;
-  height: 18px;
+  --mn-icon-size: 18px;
 }
 
 /* Raster topbar icons (e.g. Benchmark) — dark glyph on light chrome, inverted on dark */

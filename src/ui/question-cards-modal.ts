@@ -16,6 +16,7 @@ import {
   type AskQuestionItem,
   type AskQuestionToolResult,
 } from '../tools/ask-question-types';
+import { iconHtml } from './icon';
 import {
   areAllDraftsValid,
   buildAnswerEntries,
@@ -416,16 +417,14 @@ export function showQuestionCardsModal(
     btnPrev.type = 'button';
     btnPrev.className = 'question-cards-nav-btn';
     btnPrev.setAttribute('aria-label', 'Previous question');
-    btnPrev.innerHTML =
-      '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+    btnPrev.innerHTML = iconHtml('chevronLeft');
     const indicator = document.createElement('span');
     indicator.className = 'question-cards-nav-indicator';
     const btnNext = document.createElement('button');
     btnNext.type = 'button';
     btnNext.className = 'question-cards-nav-btn';
     btnNext.setAttribute('aria-label', 'Next question');
-    btnNext.innerHTML =
-      '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+    btnNext.innerHTML = iconHtml('chevronRight');
     nav.append(btnPrev, indicator, btnNext);
     headerActions.appendChild(nav);
 
@@ -440,8 +439,7 @@ export function showQuestionCardsModal(
     btnClose.type = 'button';
     btnClose.className = 'question-cards-icon-btn';
     btnClose.setAttribute('aria-label', 'Close and cancel questions');
-    btnClose.innerHTML =
-      '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+    btnClose.innerHTML = iconHtml('close');
     headerActions.appendChild(btnClose);
 
     header.append(headerMain, headerActions);

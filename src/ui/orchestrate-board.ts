@@ -115,7 +115,8 @@ import type {
 } from '../types';
 
 type BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
-import { BOARD_CATEGORY_ICON_PATHS, createBoardCategoryIcon } from './board-category-icons';
+import { createBoardCategoryIcon } from './board-category-icons';
+import { createIcon, type IconName } from './icon';
 import { switchChat } from './sidebar';
 import {
   populateOrchestratePlanSelect,
@@ -968,22 +969,10 @@ function syncBoardHeaderActivity(
   if (textEl) textEl.textContent = activity.text;
 }
 
-/** Build an inline SVG icon for board header icon buttons. */
-function createBoardHeaderIconSvg(pathD: string): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'icon-svg board-header__icon');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', pathD);
-  svg.appendChild(path);
-  return svg;
-}
-
 /** Icon-only board header control (Plan, play/pause) matching top-bar icon buttons. */
 function createBoardHeaderIconButton(
   action: string,
-  iconPath: string,
+  iconName: IconName,
   labels: { ariaLabel: string; title: string },
 ): HTMLButtonElement {
   const btn = document.createElement('button');
@@ -992,12 +981,9 @@ function createBoardHeaderIconButton(
   btn.dataset.boardAction = action;
   btn.setAttribute('aria-label', labels.ariaLabel);
   btn.title = labels.title;
-  btn.appendChild(createBoardHeaderIconSvg(iconPath));
+  btn.appendChild(createIcon(iconName, { className: 'board-header__icon' }));
   return btn;
 }
-
-const BOARD_ICON_PLAN =
-  'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8';
 
 /** Autonomy stops (least → most autonomous). */
 const BOARD_EXECUTION_MODES = ['manual', 'sequential', 'auto', 'afk'] as const;
@@ -1356,7 +1342,7 @@ function wireBoardHeaderControls(
 
   const openPlan = createBoardHeaderIconButton(
     'open-plan',
-    BOARD_ICON_PLAN,
+    'fileText',
     {
       ariaLabel: 'Open plan',
       title: planPath ? `Open ${planPath} in file viewer` : 'No plan path set',
@@ -1759,44 +1745,34 @@ function runningSlotShowsContinue(
 
 type RunningTaskIconKind = 'build' | 'test' | 'fix' | 'merge' | 'final';
 
-const RUNNING_TASK_ICON_PATHS: Record<RunningTaskIconKind, readonly string[]> = {
-  build: [BOARD_CATEGORY_ICON_PATHS.build!],
-  test: [BOARD_CATEGORY_ICON_PATHS.test!],
-  fix: [BOARD_CATEGORY_ICON_PATHS.fix!],
-  merge: ['M6 3v12', 'M18 9V3', 'M6 15l6-6 6 6'],
-  final: ['M12 2v20', 'M2 12h20', 'M5 5l14 14', 'M19 5 5 19'],
+const RUNNING_TASK_ICON_NAMES: Record<RunningTaskIconKind, IconName> = {
+  build: 'boardBuild',
+  test: 'boardTest',
+  fix: 'boardFix',
+  merge: 'gitMerge',
+  final: 'check',
 };
 
-const RUNNING_TASK_CONTROL_ICON_PATHS = {
-  stop: ['M6 6h12v12H6z'],
-  restart: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
-  continue: ['M5 12h14', 'M12 5l7 7-7 7'],
-  move: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
-  open: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
-} as const;
+const RUNNING_TASK_CONTROL_ICON_NAMES = {
+  stop: 'stop',
+  restart: 'loop',
+  continue: 'chevronRight',
+  move: 'move',
+  open: 'expand',
+} as const satisfies Record<string, IconName>;
 
 function createRunningTaskIcon(
-  kind: RunningTaskIconKind | keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS,
+  kind: RunningTaskIconKind | keyof typeof RUNNING_TASK_CONTROL_ICON_NAMES,
   className: string,
-): SVGSVGElement {
-  const paths =
-    kind in RUNNING_TASK_ICON_PATHS
-      ? RUNNING_TASK_ICON_PATHS[kind as RunningTaskIconKind]
-      : RUNNING_TASK_CONTROL_ICON_PATHS[kind as keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS];
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', className);
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  for (const d of paths) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    svg.appendChild(path);
-  }
-  return svg;
+): HTMLElement {
+  const name =
+    kind in RUNNING_TASK_ICON_NAMES
+      ? RUNNING_TASK_ICON_NAMES[kind as RunningTaskIconKind]
+      : RUNNING_TASK_CONTROL_ICON_NAMES[kind as keyof typeof RUNNING_TASK_CONTROL_ICON_NAMES];
+  return createIcon(name, { className });
 }
-
 function createRunningTaskControlButton(
-  action: keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS,
+  action: keyof typeof RUNNING_TASK_CONTROL_ICON_NAMES,
   label: string,
   onClick: (e: MouseEvent) => void,
 ): HTMLButtonElement {
@@ -2052,23 +2028,14 @@ function buildTaskAgentBadge(badge: TaskAgentBadge): HTMLElement {
 /** Advance-action icon on kanban task cards (stroke paths, matches `.icon-svg`). */
 type BoardAdvanceIconKind = 'forward' | 'check' | 'recycle';
 
-const BOARD_ADVANCE_ICON_PATHS: Record<BoardAdvanceIconKind, readonly string[]> = {
-  forward: ['M5 12h14', 'M12 5l7 7-7 7'],
-  check: ['M20 6 9 17l-5-5'],
-  recycle: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
+const BOARD_ADVANCE_ICON_NAMES: Record<BoardAdvanceIconKind, IconName> = {
+  forward: 'chevronRight',
+  check: 'check',
+  recycle: 'loop',
 };
 
-function createBoardAdvanceIcon(kind: BoardAdvanceIconKind): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'icon-svg board-task-card__advance-icon');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  for (const d of BOARD_ADVANCE_ICON_PATHS[kind]) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    svg.appendChild(path);
-  }
-  return svg;
+function createBoardAdvanceIcon(kind: BoardAdvanceIconKind): HTMLElement {
+  return createIcon(BOARD_ADVANCE_ICON_NAMES[kind], { className: 'board-task-card__advance-icon' });
 }
 
 function buildStatusActionButtons(

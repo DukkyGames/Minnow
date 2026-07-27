@@ -255,20 +255,9 @@
 }
 
 .chat-new-group-icon {
-  display: block;
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
   flex-shrink: 0;
-  background-color: currentColor;
   opacity: 0.88;
-  mask-image: url('/icons/add-folder.png');
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: url('/icons/add-folder.png');
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
 }
 
 .chat-new-group-label {
@@ -400,29 +389,17 @@
   border-inline-start: 1px solid var(--mn-border);
 }
 
-/* Folder glyph for collapsed rail (masked PNG, theme via currentColor). */
+/* Folder glyph for collapsed rail. */
 .chat-group-header__icon {
   display: none;
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
   flex-shrink: 0;
-  background-color: currentColor;
   opacity: 0.9;
-  mask-image: url('/icons/folder.png');
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: url('/icons/folder.png');
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
 }
 
-/* Orchestrate board folders: thick checklist glyph (expanded + collapsed rail). */
+/* Orchestrate board folders: solid network glyph (expanded + collapsed rail). */
 .chat-group-header--has-board .chat-group-header__icon {
   display: block;
-  mask-image: url('/icons/Orchestrate-thick.svg');
-  -webkit-mask-image: url('/icons/Orchestrate-thick.svg');
 }
 
 .chat-group-header__caret {
@@ -888,27 +865,7 @@
 /* Thinking: keep mode glyph upright; spin only an outer ring. */
 .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon {
   position: relative;
-  background: transparent;
   opacity: 1;
-  mask-image: none;
-  -webkit-mask-image: none;
-}
-
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon::before {
-  content: '';
-  display: block;
-  width: 14px;
-  height: 14px;
-  background-color: currentColor;
-  opacity: 0.9;
-  mask-image: var(--mode-icon-url, url('/icons/mode-build.png'));
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: var(--mode-icon-url, url('/icons/mode-build.png'));
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
 }
 
 .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon::after {
@@ -989,20 +946,11 @@
 
 /* /loop timer indicator (see src/ui/chat-item-loop-icon.ts) */
 .chat-item-loop-icon {
+  --mn-icon-size: 12px;
   display: inline-block;
-  width: 12px;
-  height: 12px;
   flex-shrink: 0;
-  background-color: var(--mn-accent);
+  color: var(--mn-accent);
   opacity: 0.9;
-  mask-image: url('/icons/loop.svg');
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: url('/icons/loop.svg');
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
 }
 
 .chat-item-loop-icon[hidden],

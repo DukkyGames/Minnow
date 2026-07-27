@@ -11,6 +11,7 @@ import { findChatById } from '../state/sessions';
 import { resolveSubAgentOverlayMount } from './chat-mount';
 import { humanizeToolName } from './tool-messages';
 import { renderTranscriptView } from './transcript-view.ts';
+import { iconHtml } from './icon';
 
 type StatusTone = 'working' | 'done' | 'failed';
 
@@ -362,10 +363,5 @@ export function openGoalEvalDrawer(chatId: string): void {
 }
 
 function closeIconSvg(): string {
-  return (
-    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" ' +
-    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M3.5 3.5L12.5 12.5"/><path d="M12.5 3.5L3.5 12.5"/></svg>'
-  );
+  return iconHtml('close', { size: 16 });
 }

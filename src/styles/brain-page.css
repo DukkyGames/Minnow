@@ -509,8 +509,7 @@
 }
 
 .brain-empty-state__icon .icon-svg {
-  width: 22px;
-  height: 22px;
+  --mn-icon-size: 22px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.75;

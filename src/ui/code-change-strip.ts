@@ -12,14 +12,14 @@ import {
   hasCodeChangeTotals,
   type FileChangeSummary,
 } from '../usage/code-change-ledger';
+import { iconHtml } from './icon';
 
 let _currentChat: Chat | null = null;
 let _panelOpen = false;
 let _stripInitialized = false;
 
-/** Chevron SVG for per-file diff expand/collapse. */
-const CHEVRON_SVG =
-  '<svg class="icon-svg code-change-panel__chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+/** Chevron icon for per-file diff expand/collapse. */
+const CHEVRON_SVG = iconHtml('chevronRight', { className: 'code-change-panel__chevron' });
 
 function getStripElements(): {
   wrap: HTMLElement | null;

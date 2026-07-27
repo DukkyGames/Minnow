@@ -17,6 +17,7 @@ import {
 import type { ViewUpdate } from '@codemirror/view';
 import type { Panel } from '@codemirror/view';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
+import { createIcon, type IconName } from './icon';
 
 /** Build a DOM node with optional attributes and children. */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -38,26 +39,14 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Stroke icon for compact toolbar buttons. */
-function iconSvg(pathD: string, className = 'mn-editor-search__icon'): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', className);
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', pathD);
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', 'currentColor');
-  path.setAttribute('stroke-width', '2');
-  path.setAttribute('stroke-linecap', 'round');
-  path.setAttribute('stroke-linejoin', 'round');
-  svg.appendChild(path);
-  return svg;
+/** Uicons glyph for compact toolbar buttons. */
+function searchIcon(name: IconName, className = 'mn-editor-search__icon'): HTMLElement {
+  return createIcon(name, { className });
 }
 
-const ICON_PREV = 'M18 15l-6-6-6 6';
-const ICON_NEXT = 'M6 9l6 6 6-6';
-const ICON_CLOSE = 'M18 6L6 18M6 6l12 12';
+const ICON_PREV: IconName = 'chevronUp';
+const ICON_NEXT: IconName = 'chevronDown';
+const ICON_CLOSE: IconName = 'close';
 
 function phrase(view: EditorView, text: string): string {
   return view.state.phrase(text);
@@ -163,10 +152,10 @@ export class MinnowSearchPanel implements Panel {
     this.wordField.checked = this.query.wholeWord;
     this.wordField.addEventListener('change', this.commit);
 
-    const prevBtn = actionButton('prev', phrase(view, 'previous'), [iconSvg(ICON_PREV)], 'mn-editor-search__btn--icon');
+    const prevBtn = actionButton('prev', phrase(view, 'previous'), [searchIcon(ICON_PREV)], 'mn-editor-search__btn--icon');
     prevBtn.addEventListener('click', () => findPrevious(view));
 
-    const nextBtn = actionButton('next', phrase(view, 'next'), [iconSvg(ICON_NEXT)], 'mn-editor-search__btn--icon');
+    const nextBtn = actionButton('next', phrase(view, 'next'), [searchIcon(ICON_NEXT)], 'mn-editor-search__btn--icon');
     nextBtn.addEventListener('click', () => findNext(view));
 
     const allBtn = actionButton('select', phrase(view, 'all'), [phrase(view, 'all')], 'mn-editor-search__btn--text');
@@ -180,7 +169,7 @@ export class MinnowSearchPanel implements Panel {
         type: 'button',
         'aria-label': phrase(view, 'close'),
       },
-      [iconSvg(ICON_CLOSE)],
+      [searchIcon(ICON_CLOSE)],
     );
     closeBtn.addEventListener('click', () => closeSearchPanel(view));
 

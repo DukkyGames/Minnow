@@ -372,6 +372,10 @@
   transition: 0.18s var(--os-ease);
 }
 
+.mn-os-tile-dock .mn-os-tile-ico .icon-svg {
+  --mn-icon-size: 18px;
+}
+
 .mn-os-tile-dock.is-open:not(.is-active) .mn-os-tile-ico {
   border-color: color-mix(in srgb, var(--os-accent-glow) 48%, var(--os-border-strong));
 }
@@ -451,6 +455,10 @@
   background: var(--os-accent-soft);
   color: var(--os-accent);
   border: 1px solid var(--os-accent-glow);
+}
+
+.mn-os-tile-grid .mn-os-tile-ico .icon-svg {
+  --mn-icon-size: 20px;
 }
 
 .mn-os-tile-grid .mn-os-tile-name {
@@ -1961,6 +1969,10 @@
   .mn-os-tile-dock .mn-os-tile-ico {
     width: 40px;
     height: 40px;
+  }
+
+  .mn-os-tile-dock .mn-os-tile-ico .icon-svg {
+    --mn-icon-size: 16px;
   }
 
   .mn-os-tile-dock .mn-os-tile-name {

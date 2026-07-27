@@ -40,6 +40,7 @@ import { formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/wo
 import { listWorktrees } from '../state/worktree-service';
 import { getWorkspacePath } from '../state/workspace';
 import type { ParsedWorktree } from '../lib/worktree-list-parse';
+import { iconHtml } from './icon';
 
 const ROOT_ID = 'devServerScreenRoot';
 const CHAT_AREA_CLASS = 'chat-area--dev-server';
@@ -47,16 +48,9 @@ const MAIN_COLUMN_CLASS = 'main-column--dev-server';
 const POLL_FAST_MS = 2000;
 const POLL_SLOW_MS = 10000;
 
-const ICON_REFRESH =
-  '<svg class="dev-server-screen__icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M21 12a9 9 0 1 1-2.64-6.36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
-  '<path d="M21 3v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-  '</svg>';
+const ICON_REFRESH = iconHtml('refresh', { className: 'dev-server-screen__icon-svg' });
 
-const ICON_AUTO =
-  '<svg class="dev-server-screen__icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M1 6V1h2v3.1C5.3 1.5 8.5 0 12 0c6.6 0 12 5.4 12 12h-2C22 6.5 17.5 2 12 2 8.8 2 5.9 3.5 4 6h4V8H3a2 2 0 0 1-2-2Zm20 10h-5v2h4c-1.9 2.5-4.8 4-8 4-5.5 0-10-4.5-10-10H0c0 6.6 5.4 12 12 12 3.5 0 6.7-1.5 9-4.1V23h2v-5a2 2 0 0 0-2-2Z" fill="currentColor"/>' +
-  '</svg>';
+const ICON_AUTO = iconHtml('loop', { className: 'dev-server-screen__icon-svg' });
 
 const SETUP_TASK = `Register the workspace dev server using manage_dev_servers (action=create) or by creating startup.md at the workspace root.
 

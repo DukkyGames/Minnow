@@ -3,12 +3,10 @@
  */
 
 import '../styles/git-no-repo.css';
+import { iconHtml } from './icon';
 
 const DEFAULT_HINT =
   'This workspace is not tracked with git. Initialize to see branches, changes, and commit history.';
-
-const GIT_GRAPH_ICON_SVG =
-  '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.5 7.5 10.5 16M16.5 7.5 13.5 16M8 6h8"/></svg>';
 
 /** True when git status failed because the workspace root is not a repository. */
 export function isMissingGitRepositoryError(message?: string): boolean {
@@ -29,7 +27,7 @@ export function renderGitNoRepositoryState(
   const icon = document.createElement('div');
   icon.className = 'git-no-repo__icon';
   icon.setAttribute('aria-hidden', 'true');
-  icon.innerHTML = GIT_GRAPH_ICON_SVG;
+  icon.innerHTML = iconHtml('gitGraph');
 
   const title = document.createElement('p');
   title.className = 'git-no-repo__title';

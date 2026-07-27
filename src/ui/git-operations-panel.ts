@@ -29,6 +29,7 @@ import {
   showGitGraphCommitContextMenu,
   type GitGraphContextMenuCtx,
 } from './git-graph-context-menu';
+import { createIcon } from './icon';
 import { parseUnifiedPatchToDiffLines } from './git-patch-parse';
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
 import {
@@ -164,14 +165,7 @@ export function createGitOperationsPanel(
   aiGenerateBtn.className = 'git-panel-action-btn git-panel-action-btn--ai git-panel-action-btn--icon';
   aiGenerateBtn.title = 'Generate commit message with AI';
   aiGenerateBtn.setAttribute('aria-label', 'Generate commit message with AI');
-  const aiGenerateIcon = document.createElement('img');
-  aiGenerateIcon.className = 'icon-img git-panel-action-btn__icon';
-  aiGenerateIcon.src = '/icons/sparkles.png';
-  aiGenerateIcon.width = 12;
-  aiGenerateIcon.height = 12;
-  aiGenerateIcon.alt = '';
-  aiGenerateIcon.setAttribute('aria-hidden', 'true');
-  aiGenerateBtn.append(aiGenerateIcon);
+  aiGenerateBtn.append(createIcon('sparkles', { className: 'icon-svg git-panel-action-btn__icon', size: 12 }));
   aiGenerateBtn.addEventListener('click', () => void handleGenerateCommitMessage());
 
   const commitBtn = document.createElement('button');

@@ -846,28 +846,23 @@
   background: var(--mn-success);
 }
 
-/* Overview nav — raster icon in sidebar header cluster */
-.code-overview-nav-btn[aria-current='page'] .icon-img {
+/* Overview nav icon in sidebar header cluster */
+.code-overview-nav-btn[aria-current='page'] .icon-svg {
   opacity: 1;
 }
 
 /* Match visual weight of the adjacent collapse chevron (muted SVG stroke) */
-.chat-sidebar-header-actions .code-overview-nav-btn .icon-img {
+.chat-sidebar-header-actions .code-overview-nav-btn .icon-svg {
   opacity: 0.85;
 }
 
-.chat-sidebar-header-actions .code-overview-nav-btn[aria-current='page'] .icon-img {
+.chat-sidebar-header-actions .code-overview-nav-btn[aria-current='page'] .icon-svg {
   opacity: 1;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .chat-sidebar-header-actions .code-overview-nav-btn:hover .icon-img {
+  .chat-sidebar-header-actions .code-overview-nav-btn:hover .icon-svg {
     opacity: 1;
-    filter: brightness(0);
-  }
-
-  html[data-theme$='-dark'] .chat-sidebar-header-actions .code-overview-nav-btn:hover .icon-img {
-    filter: brightness(0) invert(1);
   }
 }
 

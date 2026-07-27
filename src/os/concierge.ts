@@ -18,6 +18,7 @@ import { isActiveChatStreaming } from '../chat/streaming-state';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from '../ui/skill-picker';
 import { handleComposerPromptHistoryKeydown } from '../ui/composer-prompt-history';
 import { handleDesktopResearchSubmit } from './research-desktop';
+import { iconHtml } from '../ui/icon';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 
 /** Build the full desktop composer bar (textarea, attach, voice, context ring, send). */
@@ -60,8 +61,7 @@ function buildDesktopComposer(): HTMLElement {
   attachBtn.className = 'mn-os-desktop-comp-btn';
   attachBtn.setAttribute('aria-label', 'Attach files');
   attachBtn.title = 'Attach files';
-  attachBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+  attachBtn.innerHTML = iconHtml('attach');
 
   const inputStack = document.createElement('div');
   inputStack.className = 'mn-os-desktop-input-stack';

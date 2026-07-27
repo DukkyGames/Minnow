@@ -14,7 +14,7 @@ import type { LastStats } from '../types';
 import type { Chat } from '../types';
 import type { ModeId } from '../chat/modes/types';
 import { setChatMode, syncModeSelectorFromActiveChat } from './mode-selector';
-import { createModeMaskIconLg, ORCHESTRATE_PROMINENT_ICON_SRC } from './mode-icons';
+import { createModeMaskIconLg } from './mode-icons';
 import { intentPrefill, mapIntentModeId, type HubIntentId } from './hub-intents';
 import { switchChat } from './sidebar';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
@@ -436,9 +436,6 @@ function buildHubDom(activeChat: Chat): HTMLElement {
     const iconWrap = document.createElement('span');
     iconWrap.className = 'hub-intent__icon';
     const icon = createModeMaskIconLg(def.modeId);
-    if (def.id === 'orchestrate') {
-      icon.style.setProperty('--mode-icon-url', `url('${ORCHESTRATE_PROMINENT_ICON_SRC}')`);
-    }
     iconWrap.appendChild(icon);
 
     const copy = document.createElement('span');

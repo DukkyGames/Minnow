@@ -376,8 +376,7 @@
 }
 
 .chat-app-empty-ico .icon-svg {
-  width: 36px;
-  height: 36px;
+  --mn-icon-size: 36px;
 }
 
 .chat-app-empty h2 {
@@ -495,8 +494,7 @@
 }
 
 .chat-app-comp-btn .icon-svg {
-  width: 20px;
-  height: 20px;
+  --mn-icon-size: 20px;
 }
 
 /* Context ring sits beside send (popover opens above the input row). */
@@ -555,8 +553,7 @@
   }
 
   .chat-app-send:hover:not(:disabled) .icon-svg {
-    width: 22px;
-    height: 22px;
+    --mn-icon-size: 22px;
   }
 }
 
@@ -566,8 +563,7 @@
 }
 
 .chat-app-send .icon-svg {
-  width: 20px;
-  height: 20px;
+  --mn-icon-size: 20px;
   transition: width var(--duration-fast) var(--ease-out), height var(--duration-fast) var(--ease-out);
 }
 
@@ -755,8 +751,7 @@
 }
 
 .chat-app-outputs-download .icon-svg {
-  width: 15px;
-  height: 15px;
+  --mn-icon-size: 15px;
 }
 
 @media (max-width: 640px) {

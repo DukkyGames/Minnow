@@ -1,6 +1,8 @@
 /**
- * Raster icons for git source-control toolbar actions (pull, push, fetch, …).
+ * Uicons glyphs for git source-control toolbar actions (pull, push, fetch, …).
  */
+
+import { createIcon, type IconName } from './icon';
 
 export type GitSourceControlAction =
   | 'pull'
@@ -11,15 +13,14 @@ export type GitSourceControlAction =
   | 'stash'
   | 'cherry-pick';
 
-/** Public URL for each source-control action icon under /public/icons. */
-export const GIT_SOURCE_CONTROL_ICON_SRC: Record<GitSourceControlAction, string> = {
-  pull: '/icons/git-pull.png',
-  push: '/icons/git-push.png',
-  fetch: '/icons/git-fetch.png',
-  merge: '/icons/git-merge.png',
-  rebase: '/icons/git-rebase.png',
-  stash: '/icons/git-stash.png',
-  'cherry-pick': '/icons/git-cherry-pick.png',
+const ACTION_TO_ICON: Record<GitSourceControlAction, IconName> = {
+  pull: 'gitPull',
+  push: 'gitPush',
+  fetch: 'gitFetch',
+  merge: 'gitMerge',
+  rebase: 'gitRebase',
+  stash: 'gitStash',
+  'cherry-pick': 'gitCherryPick',
 };
 
 /** Map visible button labels to icon action keys. */
@@ -35,28 +36,25 @@ const LABEL_TO_ACTION: Record<string, GitSourceControlAction> = {
   'Cherry-pick': 'cherry-pick',
 };
 
-/** Resolve icon path from a toolbar button label. */
-export function gitSourceControlIconSrc(label: string): string | undefined {
+/** Resolve semantic icon name from a toolbar button label. */
+export function gitSourceControlIconName(label: string): IconName | undefined {
   const action = LABEL_TO_ACTION[label];
-  return action ? GIT_SOURCE_CONTROL_ICON_SRC[action] : undefined;
+  return action ? ACTION_TO_ICON[action] : undefined;
 }
 
-/** Create a raster icon img for a source-control action button. */
+/** @deprecated Use gitSourceControlIconName. */
+export function gitSourceControlIconSrc(label: string): string | undefined {
+  return gitSourceControlIconName(label);
+}
+
+/** Create a Uicons icon for a source-control action button. */
 export function createGitSourceControlIconImg(
   label: string,
-  className = 'icon-img git-source-control-btn__icon',
-): HTMLImageElement | null {
-  const src = gitSourceControlIconSrc(label);
-  if (!src) return null;
-
-  const img = document.createElement('img');
-  img.className = className;
-  img.src = src;
-  img.width = 14;
-  img.height = 14;
-  img.alt = '';
-  img.setAttribute('aria-hidden', 'true');
-  return img;
+  className = 'icon-svg git-source-control-btn__icon',
+): HTMLElement | null {
+  const name = gitSourceControlIconName(label);
+  if (!name) return null;
+  return createIcon(name, { size: 14, className });
 }
 
 /** Append icon + label to a source-control action button. */

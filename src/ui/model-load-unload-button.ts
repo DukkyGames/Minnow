@@ -2,19 +2,15 @@
  * Shared Load/Unload button UI — spinner + label while a model action is in flight.
  */
 
+import { iconHtml } from './icon';
+
 export type ModelLoadUnloadPhase = 'load' | 'unload';
 
-/** Download-into-tray stroke icon for compact Load affordances. */
-const LOAD_ICON_HTML =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 20h16"/>' +
-  '</svg>';
+/** Download-into-tray icon for compact Load affordances. */
+const LOAD_ICON_HTML = iconHtml('download');
 
-/** Eject-from-tray stroke icon for compact Unload affordances. */
-const UNLOAD_ICON_HTML =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M12 21V9"/><path d="M8 13l4-4 4 4"/><path d="M4 4h16"/>' +
-  '</svg>';
+/** Eject-from-tray icon for compact Unload affordances. */
+const UNLOAD_ICON_HTML = iconHtml('upload');
 
 let inFlight = false;
 let phase: ModelLoadUnloadPhase | null = null;

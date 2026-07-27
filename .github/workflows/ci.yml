@@ -35,6 +35,9 @@ jobs:
       - name: Verify test discovery coverage
         run: npm run test:check-coverage
 
+      - name: Verify Uicons registry
+        run: npm run check:icons
+
       - name: Typecheck
         run: npx tsc --noEmit
 
