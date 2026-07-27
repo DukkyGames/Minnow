@@ -159,12 +159,4 @@
     width: var(--touch-min);
     height: var(--touch-min);
   }
-
-  /* Footer packs six controls in --sidebar-w; flex row sizing beats fixed touch target */
-  .chat-sidebar:not(.collapsed) .chat-sidebar-footer .chat-sidebar-footer-btn {
-    width: auto;
-    height: auto;
-    min-height: var(--touch-min);
-    aspect-ratio: 1;
-  }
 }

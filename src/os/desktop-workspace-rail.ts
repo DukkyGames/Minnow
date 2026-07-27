@@ -2,6 +2,7 @@
  * Right-edge workspace rail — Files, Browser, and File preview on the desktop.
  */
 
+import { DESKTOP_RAIL_TAB_ICON_SIZE } from './desktop-rail-constants';
 import { createOsIcon } from './icons';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { getOsView } from './instances';
@@ -28,7 +29,6 @@ import {
 const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
 
 /** Collapsed tab glyphs — 75% of the left chat rail icon (28px). */
-const WORKSPACE_RAIL_TAB_ICON_SIZE = 21;
 
 let mobileMq: MediaQueryList | null = null;
 let mobileMqListener: ((event: MediaQueryListEvent) => void) | null = null;
@@ -223,7 +223,7 @@ export function renderDesktopWorkspaceRail(root: HTMLElement): void {
     tab.dataset.workspaceTab = def.tab;
     tab.setAttribute('aria-expanded', 'false');
     tab.setAttribute('aria-label', `Show ${def.label}`);
-    tab.appendChild(createOsIcon(def.icon, { size: WORKSPACE_RAIL_TAB_ICON_SIZE }));
+    tab.appendChild(createOsIcon(def.icon, { size: DESKTOP_RAIL_TAB_ICON_SIZE }));
     tabStrip.appendChild(tab);
   }
 

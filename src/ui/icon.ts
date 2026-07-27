@@ -60,7 +60,6 @@ export type ModeIconName =
   | 'modeSuperPlan'
   | 'modeDebug'
   | 'modeOrchestrate'
-  | 'modeOrchestrateBold'
   | 'modeReef';
 
 // ── Git ──────────────────────────────────────────────────────────────────────
@@ -225,20 +224,19 @@ export const ICON_CLASS: Record<IconName, string> = {
   appStats: 'fi-rr-stats',
   appConsole: 'fi-rr-terminal',
   appServers: 'fi-rr-database',
-  appAgentActivity: 'fi-rr-waveform-path',
-  appCodeOverview: 'fi-rr-layout-fluid',
+  appAgentActivity: 'fi-rr-user-robot',
+  appCodeOverview: 'fi-sr-dashboard-panel',
   appCodeBrainMap: 'fi-rr-sitemap',
   appDevServer: 'fi-rr-cloud-code',
 
-  // Modes
-  modeGeneral: 'fi-rr-comment-dots',
-  modeBuild: 'fi-rr-hammer',
-  modePlan: 'fi-rr-clipboard-list',
-  modeSuperPlan: 'fi-rr-clipboard-list-check',
-  modeDebug: 'fi-rr-bug',
-  modeOrchestrate: 'fi-rr-network',
-  modeOrchestrateBold: 'fi-sr-network',
-  modeReef: 'fi-rr-water',
+  // Modes (Solid Rounded — filled glyphs read better at 12–14px in the mode strip)
+  modeGeneral: 'fi-sr-comment-dots',
+  modeBuild: 'fi-sr-hammer',
+  modePlan: 'fi-sr-clipboard-list',
+  modeSuperPlan: 'fi-sr-clipboard-list-check',
+  modeDebug: 'fi-sr-bug',
+  modeOrchestrate: 'fi-sr-network',
+  modeReef: 'fi-sr-water',
 
   // Git
   gitPull: 'fi-rr-cloud-download',
@@ -310,7 +308,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   boardView: 'fi-rr-layout-fluid',
   loop: 'fi-rr-rotate-right',
   sparkles: 'fi-rr-sparkles',
-  thinkingBrain: 'fi-rr-brain',
+  thinkingBrain: 'fi-sr-brain',
   inbox: 'fi-rr-inbox',
 
   // Board

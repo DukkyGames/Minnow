@@ -48,9 +48,14 @@
   background: transparent;
   color: var(--os-text-dim);
   cursor: pointer;
+  --mn-os-rail-tab-icon-size: 21px;
   transition:
     color 0.16s var(--os-ease),
     opacity 0.2s var(--os-ease-out);
+}
+
+.mn-os-workspace-rail-tab .icon-svg {
+  --mn-icon-size: var(--mn-os-rail-tab-icon-size);
 }
 
 .mn-os-workspace-rail-tab:hover,

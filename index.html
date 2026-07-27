@@ -2082,7 +2082,7 @@
           aria-label="Code overview"
           title="Code overview"
         >
-          <i class="fi fi-rr-layout-fluid icon-svg" aria-hidden="true"></i>
+          <i class="fi fi-sr-dashboard-panel icon-svg" aria-hidden="true"></i>
         </button>
       </div>
     </div>
@@ -2095,27 +2095,29 @@
     <div class="chat-list" id="chatList" role="list"></div>
     </div>
     <div class="chat-sidebar-footer">
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="Issues" title="Issues">
-        <i class="fi fi-rr-radar icon-svg" aria-hidden="true"></i>
-      </button>
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
-        <i class="fi fi-rr-stats icon-svg" aria-hidden="true"></i>
-      </button>
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAgentActivity" aria-label="Agent activity" aria-expanded="false" aria-controls="agentActivityPanel" title="Agent activity">
-        <i class="fi fi-rr-waveform-path icon-svg" aria-hidden="true"></i>
-      </button>
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
-        <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
-      </button>
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
-        <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
-      </button>
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnDevServers" aria-label="Dev servers" title="Dev servers" aria-pressed="false">
-        <i class="fi fi-rr-database icon-svg" aria-hidden="true"></i>
-      </button>
-      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
-        <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
-      </button>
+      <div class="chat-sidebar-footer-actions">
+        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="Issues" title="Issues">
+          <i class="fi fi-rr-radar icon-svg" aria-hidden="true"></i>
+        </button>
+        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
+          <i class="fi fi-rr-stats icon-svg" aria-hidden="true"></i>
+        </button>
+        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAgentActivity" aria-label="Agent activity" aria-expanded="false" aria-controls="agentActivityPanel" title="Agent activity">
+          <i class="fi fi-rr-user-robot icon-svg" aria-hidden="true"></i>
+        </button>
+        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
+          <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
+        </button>
+        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
+          <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
+        </button>
+        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnDevServers" aria-label="Dev servers" title="Dev servers" aria-pressed="false">
+          <i class="fi fi-rr-database icon-svg" aria-hidden="true"></i>
+        </button>
+        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
+          <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
+        </button>
+      </div>
     </div>
     <div
       class="sidebar-resizer sidebar-resizer--chat"
@@ -2276,7 +2278,7 @@
           <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
         </button>
         <button class="send-btn" id="sendBtn" type="button" aria-label="Send message" data-mode="send">
-          <span id="sendIcon"><i class="fi fi-rr-paper-plane icon-svg" aria-hidden="true"></i></span>
+          <span id="sendIcon"><svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg></span>
           <span id="sendStopIcon" class="hidden"><i class="fi fi-rr-square icon-svg" aria-hidden="true"></i></span>
           <span id="sendSpinner" class="spinner hidden"></span>
         </button>
@@ -2475,19 +2477,21 @@
     ></div>
     <div class="file-sidebar-header">
       <span class="file-sidebar-title" id="fileSidebarTitle">Files</span>
-      <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files">
-        <i class="fi fi-rr-document icon-svg" aria-hidden="true"></i>
-      </button>
-      <button type="button" class="icon-btn file-sidebar-preview-toggle" id="btnPreviewToggle"
-        aria-label="Preview browser" title="Preview browser">
-        <i class="fi fi-rr-globe icon-svg" aria-hidden="true"></i>
-      </button>
-      <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
-        <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
-      </button>
-      <button type="button" class="icon-btn git-panel-toggle" id="btnGitPanelToggle" aria-label="Source control" title="Source control" aria-pressed="false">
-        <i class="fi fi-sr-code-branch icon-svg" aria-hidden="true"></i>
-      </button>
+      <div class="file-sidebar-header-actions">
+        <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files">
+          <i class="fi fi-rr-document icon-svg" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="icon-btn file-sidebar-preview-toggle" id="btnPreviewToggle"
+          aria-label="Preview browser" title="Preview browser">
+          <i class="fi fi-rr-globe icon-svg" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
+          <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="icon-btn git-panel-toggle" id="btnGitPanelToggle" aria-label="Source control" title="Source control" aria-pressed="false">
+          <i class="fi fi-sr-code-branch icon-svg" aria-hidden="true"></i>
+        </button>
+      </div>
     </div>
     <div class="file-sidebar-files-view" id="fileSidebarFilesView">
       <div class="file-tree-search-wrap">

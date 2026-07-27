@@ -145,6 +145,11 @@
   color: var(--mn-fg-muted);
 }
 
+/* Search glyph reads heavy at the default 18px inside the compact header cluster */
+#btnChatSearch .icon-svg {
+  --mn-icon-size: 16px;
+}
+
 .chat-sidebar-header-actions .icon-btn + .icon-btn {
   border-left: 1px solid var(--mn-border);
 }
@@ -531,41 +536,83 @@
   gap: 2px;
 }
 
-/* Metrics + terminal toggles: pinned bottom-left of the session sidebar */
+/* Metrics + terminal toggles: pinned bottom-left cluster (matches file sidebar header) */
 .chat-sidebar-footer {
   flex-shrink: 0;
   position: relative;
   z-index: 2;
   display: flex;
-  flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
   padding: 8px;
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--mn-border);
   background: var(--mn-surface-1);
 }
 
-/* Six footer tools share --sidebar-w (240px); equal flex beats fixed 40px .icon-btn width */
-.chat-sidebar:not(.collapsed) .chat-sidebar-footer .chat-sidebar-footer-btn {
-  flex: 1 1 0;
-  min-width: 0;
-  width: auto;
-  height: 34px;
+.chat-sidebar-footer-actions {
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--mn-surface-1);
+}
+
+.chat-sidebar-footer-actions .chat-sidebar-footer-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+}
+
+.chat-sidebar-footer-actions .chat-sidebar-footer-btn .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+.chat-sidebar-footer-actions .chat-sidebar-footer-btn + .chat-sidebar-footer-btn {
+  border-left: 1px solid var(--mn-border);
+}
+
+.chat-sidebar-footer-actions .chat-sidebar-footer-btn[aria-expanded='true'],
+.chat-sidebar-footer-actions .chat-sidebar-footer-btn[aria-pressed='true'],
+.chat-sidebar-footer-actions .chat-sidebar-footer-btn.icon-btn--active {
+  color: var(--mn-accent);
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-sidebar-footer-actions .chat-sidebar-footer-btn:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+    border-color: transparent;
+  }
+
+  .chat-sidebar-footer-actions .chat-sidebar-footer-btn[aria-expanded='true']:hover,
+  .chat-sidebar-footer-actions .chat-sidebar-footer-btn[aria-pressed='true']:hover,
+  .chat-sidebar-footer-actions .chat-sidebar-footer-btn.icon-btn--active:hover {
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+    color: var(--mn-accent);
+  }
 }
 
 .chat-sidebar.collapsed .chat-sidebar-footer {
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  justify-content: center;
   padding: 8px 4px;
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
 
-.chat-sidebar.collapsed .chat-sidebar-footer-btn {
-  width: 32px;
-  height: 32px;
+.chat-sidebar.collapsed .chat-sidebar-footer-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.chat-sidebar.collapsed .chat-sidebar-footer-actions .chat-sidebar-footer-btn + .chat-sidebar-footer-btn {
+  border-left: none;
+  border-top: 1px solid var(--mn-border);
 }
 
 /* Workspace vs legacy unassigned chat buckets */
@@ -678,12 +725,8 @@
 }
 
 .chat-item-board-cat-icon {
-  width: 10px;
-  height: 10px;
+  --mn-icon-size: 10px;
   flex-shrink: 0;
-  fill: currentColor;
-  stroke: none;
-  fill-rule: evenodd;
   color: var(--mn-fg-muted);
 }
 
@@ -1064,6 +1107,21 @@
 
   .chat-sidebar.collapsed.mobile-open {
     width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+  }
+
+  .chat-sidebar.collapsed.mobile-open .chat-sidebar-footer {
+    justify-content: flex-start;
+    padding: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .chat-sidebar.collapsed.mobile-open .chat-sidebar-footer-actions {
+    flex-direction: row;
+  }
+
+  .chat-sidebar.collapsed.mobile-open .chat-sidebar-footer-actions .chat-sidebar-footer-btn + .chat-sidebar-footer-btn {
+    border-left: 1px solid var(--mn-border);
+    border-top: none;
   }
 
   /* Desktop collapse rail is hidden on phone; sessions open as a full drawer */

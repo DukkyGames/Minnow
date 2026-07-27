@@ -1110,22 +1110,24 @@
   overflow: hidden;
 }
 
-/* Collapsed rail: stack collapse + preview toggles; 32px buttons fit 48px width */
+/* Collapsed rail: stack the action cluster vertically in the 48px rail */
 .file-sidebar.collapsed .file-sidebar-header {
   flex-direction: column;
   align-items: center;
   padding: 8px 4px;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 0;
 }
 
-.file-sidebar.collapsed .file-sidebar-header .icon-btn {
-  width: 32px;
-  height: 32px;
-  padding: calc((var(--touch-min) - 32px) / 2);
-  margin: calc((var(--touch-min) - 32px) / -2);
-  box-sizing: content-box;
-  flex-shrink: 0;
+.file-sidebar.collapsed .file-sidebar-header-actions {
+  flex-direction: column;
+  align-items: stretch;
+  margin-left: 0;
+}
+
+.file-sidebar.collapsed .file-sidebar-header-actions .icon-btn + .icon-btn {
+  border-left: none;
+  border-top: 1px solid var(--mn-border);
 }
 
 .file-sidebar-header {
@@ -1135,6 +1137,49 @@
   padding: 10px 10px 8px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
+}
+
+/* Collapse + preview + refresh + git: one bordered cluster (matches chat sidebar) */
+.file-sidebar-header-actions {
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  margin-left: auto;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--mn-surface-1);
+}
+
+.file-sidebar-header-actions .icon-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+}
+
+.file-sidebar-header-actions .icon-btn .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+.file-sidebar-header-actions .icon-btn + .icon-btn {
+  border-left: 1px solid var(--mn-border);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .file-sidebar-header-actions .icon-btn:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+    border-color: transparent;
+  }
+
+  .file-sidebar-header-actions .file-sidebar-preview-toggle.is-active:hover,
+  .file-sidebar-header-actions .git-panel-toggle.is-active:hover {
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+    color: var(--mn-accent);
+  }
 }
 
 .file-sidebar-files-view {
@@ -1608,6 +1653,16 @@
     justify-content: flex-start;
     padding: 10px 10px 8px;
     gap: 6px;
+  }
+
+  .file-sidebar.collapsed.mobile-open .file-sidebar-header-actions {
+    flex-direction: row;
+    margin-left: auto;
+  }
+
+  .file-sidebar.collapsed.mobile-open .file-sidebar-header-actions .icon-btn + .icon-btn {
+    border-left: 1px solid var(--mn-border);
+    border-top: none;
   }
 
   #btnFileSidebarCollapse {

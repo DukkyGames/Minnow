@@ -156,6 +156,13 @@ function toggleSidebarWaveCollapsed(group: ChatGroup, waveId: number | string): 
   scheduleSaveSessions();
 }
 
+/** True when the Code chat sidebar is the 48px icon rail (not the mobile overlay). */
+function isChatSidebarIconRail(): boolean {
+  if (!sessionState?.sidebarCollapsed) return false;
+  const side = document.getElementById('chatSidebar');
+  return Boolean(side && !side.classList.contains('mobile-open'));
+}
+
 function appendWaveSubgroupHeader(
   container: HTMLElement,
   waveId: number | string,
@@ -491,9 +498,14 @@ export function appendChatRow(
   const titleRow = document.createElement('div');
   titleRow.className = 'chat-item-title-row';
 
+  const boardCategory = inGroup ? boardCategoryForChat(chat, options?.group) : undefined;
+
   // Mode glyph: collapsed rail icon + compact marker beside name when expanded.
-  const icon = createModeMaskIcon(chat.modeId, 'chat-item-icon mode-mask-icon');
-  titleRow.appendChild(icon);
+  // In-group board tasks use a category icon instead (build/fix/test); skip mode to avoid duplicates.
+  if (!inGroup || !boardCategory) {
+    const icon = createModeMaskIcon(chat.modeId, 'chat-item-icon mode-mask-icon');
+    titleRow.appendChild(icon);
+  }
 
   const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
   const dotState = resolveChatItemDotState(chat, dotCtx);
@@ -514,7 +526,6 @@ export function appendChatRow(
     nameSpan.title = 'Unsent draft';
   }
 
-  const boardCategory = inGroup ? boardCategoryForChat(chat, options?.group) : undefined;
   if (boardCategory) {
     const catIcon = createBoardCategoryIcon(boardCategory, 'chat-item-board-cat-icon');
     if (catIcon) titleRow.appendChild(catIcon);
@@ -595,22 +606,27 @@ function appendGroupHeader(
   }
   head.dataset.groupId = group.id;
   head.title = group.name;
-  head.setAttribute('aria-expanded', group.collapsed ? 'false' : 'true');
+  // Icon rail always hides board members, so treat the folder as collapsed for a11y.
+  const membersHidden =
+    group.collapsed ||
+    (isChatSidebarIconRail() &&
+      (Boolean(group.orchestrateBoard) || isBoardSetupIncomplete(group)));
+  head.setAttribute('aria-expanded', membersHidden ? 'false' : 'true');
 
   const icon = createIcon(
-    group.orchestrateBoard ? 'modeOrchestrateBold' : 'folder',
+    group.orchestrateBoard ? 'modeOrchestrate' : 'folder',
     { className: 'chat-group-header__icon', size: 14 },
   );
 
   const caret = document.createElement('button');
   caret.type = 'button';
   caret.className = 'chat-group-header__caret';
-  caret.setAttribute('aria-expanded', group.collapsed ? 'false' : 'true');
+  caret.setAttribute('aria-expanded', membersHidden ? 'false' : 'true');
   caret.setAttribute(
     'aria-label',
-    group.collapsed ? 'Expand group chats' : 'Collapse group chats',
+    membersHidden ? 'Expand group chats' : 'Collapse group chats',
   );
-  caret.textContent = group.collapsed ? '▸' : '▾';
+  caret.textContent = membersHidden ? '▸' : '▾';
   caret.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleGroupCollapsed(group.id);
@@ -809,7 +825,11 @@ export function renderSidebar(): void {
         members,
         members.length,
       );
-      if (!group.collapsed && members.length > 0) {
+      // Icon rail: board folders collapse to the folder glyph only (no waves/tasks).
+      const isBoardFolder =
+        Boolean(group.orchestrateBoard) || isBoardSetupIncomplete(group);
+      const hideBoardMembers = isBoardFolder && isChatSidebarIconRail();
+      if (!group.collapsed && members.length > 0 && !hideBoardMembers) {
         const membersEl = document.createElement('div');
         membersEl.className = 'chat-group-members';
         membersEl.setAttribute('role', 'group');
