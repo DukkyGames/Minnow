@@ -2250,7 +2250,7 @@ export function initGitPanel(): void {
   subscribeAllBoardChanges((groupId) => {
     const boardGroup = getActiveBoardGroupFromSession();
     if (!boardGroup || boardGroup.id !== groupId || boardGroup.viewMode !== 'board') return;
-    syncPanelFromActiveChat({ forceFileTree: true });
+    syncPanelFromActiveChat();
   });
 
   syncPanelFromActiveChat();

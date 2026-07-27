@@ -1,0 +1,92 @@
+/**
+ * Incremental file tree refresh — targeted invalidation and scroll preservation.
+ */
+
+import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import { Window } from 'happy-dom';
+import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
+import { resetDesktopWorkspaceMountsForTests } from '../../src/os/desktop-workspace-mounts.ts';
+import {
+  getFilePanelState,
+  resetFilePanelStateForTests,
+  patchFilePanelState,
+} from '../../src/state/file-panel.ts';
+import { affectedDirsFromTool } from '../../src/ui/file-tree-invalidation.ts';
+import { setFileTreeServerAvailable } from '../../src/ui/file-tree-server.ts';
+import { resetWorkspaceStateForTests } from '../../src/state/workspace.ts';
+import { installHappyDomGlobals, teardownHappyDomAsync } from '../os/dom-helpers.mts';
+
+let testWindow: Window | null = null;
+
+function setupDom(): void {
+  testWindow?.close();
+  testWindow = new Window();
+  installHappyDomGlobals(testWindow);
+  document.body.innerHTML =
+    '<div id="fileSidebarTitle">Files</div><div id="fileTreeHost" style="height:200px;overflow:auto"></div>';
+}
+
+beforeEach(() => {
+  resetInstancesForTests();
+  resetDesktopWorkspaceMountsForTests();
+});
+
+afterEach(async () => {
+  const { stopFileTreeGitStatusPollForTests } = await import('../../src/ui/file-tree.ts');
+  stopFileTreeGitStatusPollForTests();
+  if (testWindow) {
+    await teardownHappyDomAsync(testWindow);
+    testWindow = null;
+  }
+  resetWorkspaceStateForTests();
+  resetFilePanelStateForTests();
+  setFileTreeServerAvailable(false);
+  resetInstancesForTests();
+  resetDesktopWorkspaceMountsForTests();
+});
+
+describe('affectedDirsFromTool', () => {
+  test('maps save_file to parent directory', () => {
+    assert.deepEqual(affectedDirsFromTool('save_file', { path: 'src/ui/file-tree.ts' }), [
+      'src/ui',
+    ]);
+  });
+
+  test('maps move_file to source and destination parents', () => {
+    assert.deepEqual(
+      affectedDirsFromTool('move_file', {
+        source: 'src/old.ts',
+        destination: 'lib/new.ts',
+      }),
+      ['src', 'lib'],
+    );
+  });
+
+  test('maps delete_path to parent and prunes expanded dirs', () => {
+    patchFilePanelState({ expandedDirs: ['src', 'src/ui', 'docs'] });
+    assert.deepEqual(affectedDirsFromTool('delete_path', { path: 'src/ui' }), ['src']);
+    assert.deepEqual(getFilePanelState().expandedDirs, ['src', 'docs']);
+  });
+});
+
+describe('renderFileTree scroll preservation', () => {
+  test('restores scrollTop after render', async () => {
+    setupDom();
+    launchInstance('code');
+    setFileTreeServerAvailable(true);
+    patchFilePanelState({ treeRoot: '.' });
+
+    const { renderFileTree, seedFileTreeListingForTests } = await import(
+      '../../src/ui/file-tree.ts'
+    );
+    seedFileTreeListingForTests('.', { dirs: ['src'], files: ['README.md'] });
+
+    const host = document.getElementById('fileTreeHost')!;
+    host.scrollTop = 120;
+
+    renderFileTree();
+
+    assert.equal(host.scrollTop, 120);
+  });
+});

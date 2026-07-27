@@ -6,9 +6,11 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import {
   FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS,
+  FILE_TREE_INTERACTION_FLUSH_MS,
   resetFileTreeAutoRefreshForTests,
   scheduleFileTreeRefreshAfterTool,
   setFileTreeAutoRefreshRunnerForTests,
+  setFileTreeUserInteractingForTests,
   shouldScheduleFileTreeRefresh,
 } from '../../src/ui/file-tree-auto-refresh.ts';
 import { setFileTreeServerAvailable } from '../../src/ui/file-tree-server.ts';
@@ -62,13 +64,77 @@ describe('scheduleFileTreeRefreshAfterTool', () => {
       refreshCount += 1;
     });
 
-    scheduleFileTreeRefreshAfterTool('save_file', { content: 'ok' });
-    scheduleFileTreeRefreshAfterTool('save_file', { content: 'ok' });
+    scheduleFileTreeRefreshAfterTool('save_file', { content: 'ok' }, undefined, {
+      path: 'src/a.ts',
+    });
+    scheduleFileTreeRefreshAfterTool('save_file', { content: 'ok' }, undefined, {
+      path: 'src/b.ts',
+    });
     assert.equal(refreshCount, 0);
 
     await new Promise<void>((resolve) =>
       setTimeout(resolve, FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS + 40),
     );
     assert.equal(refreshCount, 1);
+  });
+
+  test('passes affected parent dirs to the refresh runner', async () => {
+    setFileTreeServerAvailable(true);
+    const seen: Array<string[] | null> = [];
+    setFileTreeAutoRefreshRunnerForTests(async (dirs) => {
+      seen.push(dirs);
+    });
+
+    scheduleFileTreeRefreshAfterTool(
+      'save_file',
+      { content: 'ok' },
+      undefined,
+      { path: 'src/ui/file-tree.ts' },
+    );
+
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS + 40),
+    );
+    assert.deepEqual(seen, [['src/ui']]);
+  });
+
+  test('defers refresh while user is interacting with the tree', async () => {
+    setFileTreeServerAvailable(true);
+    let refreshCount = 0;
+    setFileTreeAutoRefreshRunnerForTests(async () => {
+      refreshCount += 1;
+    });
+    setFileTreeUserInteractingForTests(true);
+
+    scheduleFileTreeRefreshAfterTool('save_file', { content: 'ok' }, undefined, {
+      path: 'docs/readme.md',
+    });
+
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS + 40),
+    );
+    assert.equal(refreshCount, 0);
+
+    setFileTreeUserInteractingForTests(false);
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, FILE_TREE_INTERACTION_FLUSH_MS + 40),
+    );
+    assert.equal(refreshCount, 1);
+  });
+
+  test('ending tree interaction without a scheduled refresh does not reload the tree', async () => {
+    setFileTreeServerAvailable(true);
+    let refreshCount = 0;
+    setFileTreeAutoRefreshRunnerForTests(async () => {
+      refreshCount += 1;
+    });
+
+    setFileTreeUserInteractingForTests(true);
+    setFileTreeUserInteractingForTests(false);
+
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, FILE_TREE_INTERACTION_FLUSH_MS + 40),
+    );
+    assert.equal(refreshCount, 0);
   });
 });

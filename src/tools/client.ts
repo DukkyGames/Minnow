@@ -193,7 +193,12 @@ export async function executeTool(
   args: Record<string, unknown> = {},
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
-  return runWithFileTreeAutoRefresh(name, () => executeToolInner(name, args, context), context);
+  return runWithFileTreeAutoRefresh(
+    name,
+    () => executeToolInner(name, args, context),
+    context,
+    args,
+  );
 }
 
 async function executeToolInner(

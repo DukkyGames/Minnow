@@ -28,7 +28,10 @@ import {
   invalidateFileTreeIndex,
   sortFilteredPaths,
 } from './file-tree-filter';
-import { joinTreePath } from './file-tree-path';
+import {
+  joinTreePath,
+  normalizeTreePath,
+} from './file-tree-path';
 import {
   buildMenuContext,
   hideFileTreeContextMenu,
@@ -66,10 +69,35 @@ let gitStatusPollCwd: string | undefined;
 let gitStatusPollDebounce: ReturnType<typeof setTimeout> | undefined;
 let gitStatusPollInFlight = false;
 
-/** Update git badge map and re-render visible file rows. */
+/** Update git badge map; patch visible rows in place when possible. */
 export function setFileTreeGitStatus(map: Map<string, string>): void {
+  const prev = gitStatusMap;
   gitStatusMap = map;
-  renderFileTree();
+
+  const changed = new Set<string>();
+  for (const [path, status] of map) {
+    if (prev.get(path) !== status) changed.add(path);
+  }
+  for (const path of prev.keys()) {
+    if (!map.has(path)) changed.add(path);
+  }
+  if (changed.size === 0) return;
+
+  let needsFullRender = false;
+  for (const path of changed) {
+    const row = document.querySelector<HTMLElement>(
+      `[data-tree-path="${CSS.escape(path)}"]`,
+    );
+    if (!row) {
+      needsFullRender = true;
+      break;
+    }
+    patchGitBadgeOnRow(row, path);
+  }
+
+  if (needsFullRender) {
+    renderFileTree();
+  }
 }
 
 /** Git poll timers must not block `node --test` process exit (happy-dom uses Node timers). */
@@ -172,6 +200,12 @@ function appendGitBadge(row: HTMLElement, fullPath: string): void {
   row.appendChild(badge);
 }
 
+/** Replace or remove the git badge on one rendered file row. */
+function patchGitBadgeOnRow(row: HTMLElement, fullPath: string): void {
+  row.querySelector('.file-tree-git-badge')?.remove();
+  appendGitBadge(row, fullPath);
+}
+
 let crudBound = false;
 let focusedTreePath: string | null = null;
 let focusedTreeKind: FileTreeEntryKind | null = null;
@@ -236,6 +270,108 @@ export function invalidateFileTreeCache(): void {
   }
 }
 
+export { affectedDirsFromTool } from './file-tree-invalidation';
+
+/** Drop cached listings for specific directories only (not the whole tree). */
+export function invalidateListingCacheForDirs(dirs: string[]): void {
+  const unique = [...new Set(dirs.map((d) => normalizeTreePath(d)))];
+  for (const dir of unique) {
+    listingCache.delete(dir);
+  }
+  invalidateFileTreeIndex();
+}
+
+/** Depth of a directory relative to the tree root (0 = root listing). */
+function treeDepthForDir(dir: string, treeRoot: string): number {
+  const normalizedDir = normalizeTreePath(dir);
+  const normalizedRoot = normalizeTreePath(treeRoot);
+  if (normalizedDir === normalizedRoot || normalizedDir === '.') return 0;
+  const prefix = normalizedRoot === '.' ? '' : `${normalizedRoot}/`;
+  const relative = normalizedDir.startsWith(prefix)
+    ? normalizedDir.slice(prefix.length)
+    : normalizedDir;
+  return relative.split('/').filter(Boolean).length;
+}
+
+/** Re-render one expanded directory's children container without rebuilding the whole tree. */
+function patchDirChildren(dir: string, treeRoot: string): void {
+  const host = document.getElementById('fileTreeHost');
+  if (!host) return;
+
+  const normalizedDir = normalizeTreePath(dir);
+  const normalizedRoot = normalizeTreePath(treeRoot);
+
+  if (normalizedDir === normalizedRoot || normalizedDir === '.') {
+    renderFileTree();
+    return;
+  }
+
+  const container = host.querySelector<HTMLElement>(
+    `[data-tree-dir="${CSS.escape(normalizedDir)}"]`,
+  );
+  if (!container) return;
+
+  container.innerHTML = '';
+  renderSubtree(container, normalizedDir, treeDepthForDir(normalizedDir, treeRoot));
+}
+
+function captureFileTreeScrollTop(): number {
+  const host = document.getElementById('fileTreeHost');
+  return host?.scrollTop ?? 0;
+}
+
+function restoreFileTreeScrollTop(scrollTop: number): void {
+  const host = document.getElementById('fileTreeHost');
+  if (host) host.scrollTop = scrollTop;
+}
+
+function restoreFocusedTreeRow(): void {
+  if (!focusedTreePath || !focusedTreeKind) return;
+  const row = document.querySelector<HTMLElement>(
+    `[data-tree-path="${CSS.escape(focusedTreePath)}"]`,
+  );
+  if (row) {
+    row.classList.add('file-tree-row--focused');
+  }
+}
+
+/**
+ * Re-fetch and patch only the given directory listings (VS Code-style incremental refresh).
+ * Falls back to a full reload when the filter box is active or dirs are unknown.
+ */
+export async function refreshDirectories(dirs: string[]): Promise<void> {
+  if (!isFileTreeServerAvailable()) {
+    renderFileTree();
+    return;
+  }
+
+  if (getFilterQuery().trim()) {
+    invalidateFileTreeIndex();
+    renderFileTree();
+    return;
+  }
+
+  const uniqueDirs = [...new Set(dirs.map((d) => normalizeTreePath(d)))];
+  if (uniqueDirs.length === 0) {
+    await refreshFileTree();
+    return;
+  }
+
+  const scrollTop = captureFileTreeScrollTop();
+  invalidateListingCacheForDirs(uniqueDirs);
+
+  const treeRoot = getFilePanelState().treeRoot || '.';
+  for (const dir of uniqueDirs) {
+    loadingDirs.add(dir);
+    await fetchListing(dir);
+    loadingDirs.delete(dir);
+    patchDirChildren(dir, treeRoot);
+  }
+
+  restoreFileTreeScrollTop(scrollTop);
+  restoreFocusedTreeRow();
+}
+
 /** Reload the file tree after the effective listing root changes. */
 async function refreshFileTreeForListingRootChange(
   nextRoot: string | undefined,
@@ -272,8 +408,10 @@ export async function syncFileTreeToPanelWorktree(
     const nextRoot = desktopPath ?? undefined;
     const prevRoot = getFileTreeListingWorkspaceRoot();
 
-    if (!fileTreeListingRootsEqual(prevRoot, nextRoot) || options?.force) {
+    if (!fileTreeListingRootsEqual(prevRoot, nextRoot)) {
       await refreshFileTreeForListingRootChange(nextRoot, prevRoot);
+    } else if (options?.force) {
+      await refreshFileTree();
     }
 
     startFileTreeGitStatusPoll(nextRoot ?? getFileTreeListingWorkspaceRoot());
@@ -284,8 +422,10 @@ export async function syncFileTreeToPanelWorktree(
   const nextRoot = resolveFileTreeListingRoot(panelCwd);
   const prevRoot = getFileTreeListingWorkspaceRoot();
 
-  if (!fileTreeListingRootsEqual(prevRoot, nextRoot) || options?.force) {
+  if (!fileTreeListingRootsEqual(prevRoot, nextRoot)) {
     await refreshFileTreeForListingRootChange(nextRoot, prevRoot);
+  } else if (options?.force) {
+    await refreshFileTree();
   }
 
   startFileTreeGitStatusPoll(nextRoot ?? getWorkspacePath());
@@ -439,6 +579,7 @@ function appendDirRow(
   row.className = 'file-tree-row file-tree-row--dir';
   row.setAttribute('role', 'treeitem');
   row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  row.setAttribute('data-tree-path', fullPath);
   row.style.paddingLeft = `${dirRowPaddingLeftPx(depth)}px`;
   row.tabIndex = 0;
 
@@ -478,6 +619,7 @@ function appendDirRow(
     const group = document.createElement('div');
     group.className = 'file-tree-children';
     group.setAttribute('role', 'group');
+    group.setAttribute('data-tree-dir', fullPath);
     host.appendChild(group);
     renderSubtree(group, fullPath, depth + 1);
   }
@@ -495,6 +637,7 @@ function appendFileRow(
   const row = document.createElement('div');
   row.className = 'file-tree-row file-tree-row--file' + (selected ? ' selected' : '');
   row.setAttribute('role', 'treeitem');
+  row.setAttribute('data-tree-path', fullPath);
   row.style.paddingLeft = `${fileRowPaddingLeftPx(depth)}px`;
   row.tabIndex = 0;
 
@@ -637,15 +780,23 @@ export function renderFileTree(): void {
   const host = document.getElementById('fileTreeHost');
   if (!host) return;
 
+  const scrollTop = captureFileTreeScrollTop();
+  const savedFocusPath = focusedTreePath;
+  const savedFocusKind = focusedTreeKind;
+
   if (!isFileTreeServerAvailable()) {
     renderOfflineEmpty(host);
+    restoreFileTreeScrollTop(scrollTop);
     return;
   }
 
   const activeFilter = getFilterQuery().trim();
   if (activeFilter) {
     const root = getFilePanelState().treeRoot || '.';
-    void renderFlatResults(host, root, activeFilter);
+    void renderFlatResults(host, root, activeFilter).then(() => {
+      restoreFileTreeScrollTop(scrollTop);
+      restoreFocusedTreeRow();
+    });
     return;
   }
 
@@ -660,6 +811,7 @@ export function renderFileTree(): void {
     wait.className = 'file-tree-loading';
     wait.textContent = 'Loading project…';
     host.appendChild(wait);
+    restoreFileTreeScrollTop(scrollTop);
     return;
   }
 
@@ -667,9 +819,17 @@ export function renderFileTree(): void {
   host.setAttribute('role', 'tree');
   host.setAttribute('aria-label', 'Project files');
   renderSubtree(host, root, 0);
+
+  restoreFileTreeScrollTop(scrollTop);
+  if (savedFocusPath && savedFocusKind) {
+    focusedTreePath = savedFocusPath;
+    focusedTreeKind = savedFocusKind;
+    restoreFocusedTreeRow();
+  }
 }
 
 export async function refreshFileTree(): Promise<void> {
+  const scrollTop = captureFileTreeScrollTop();
   invalidateFileTreeCache();
   if (!isFileTreeServerAvailable()) {
     renderFileTree();
@@ -697,6 +857,8 @@ export async function refreshFileTree(): Promise<void> {
   }
 
   renderFileTree();
+  restoreFileTreeScrollTop(scrollTop);
+  restoreFocusedTreeRow();
 }
 
 export async function initFileTreeIfNeeded(): Promise<void> {
@@ -796,6 +958,11 @@ export function getFocusedTreePathForTests(): {
   kind: FileTreeEntryKind | null;
 } {
   return { path: focusedTreePath, kind: focusedTreeKind };
+}
+
+/** Test helper: seed an in-memory directory listing without hitting the tool server. */
+export function seedFileTreeListingForTests(dir: string, listing: ParsedListing): void {
+  listingCache.set(normalizeTreePath(dir), listing);
 }
 
 /** Test helper: whether clipboard has items. */
