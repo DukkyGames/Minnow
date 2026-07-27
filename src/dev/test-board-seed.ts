@@ -4,7 +4,7 @@
  */
 
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '../lib/random-id.ts';
 import { initBoard } from '../state/orchestrate-board-store.ts';
 import type { BoardTask, Chat, ChatGroup } from '../types.ts';
 
