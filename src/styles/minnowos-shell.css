@@ -724,10 +724,10 @@ html.is-electron-shell[data-platform='darwin'] .mn-os-mb-window-controls {
 }
 
 html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
   border-radius: 6px;
 }
 
@@ -738,10 +738,10 @@ html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn svg {
 
 @media (max-width: 640px) {
   html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn {
-    width: 28px;
-    height: 28px;
-    min-width: 28px;
-    min-height: 28px;
+    width: var(--touch-min);
+    height: var(--touch-min);
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
   }
 
   html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn svg {

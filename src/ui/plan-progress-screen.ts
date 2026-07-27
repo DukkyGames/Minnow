@@ -262,12 +262,24 @@ export class PlanProgressPanel {
       this.root.classList.add('plan-progress--reduced-motion');
     }
     if (this.onStepClick) {
+      const onReworkStep = (event: Event, node: HTMLElement): void => {
+        if (!this.root?.contains(node)) return;
+        const index = Number(node.dataset.stepIndex);
+        if (Number.isInteger(index)) this.onStepClick?.(index);
+      };
       this.root.addEventListener('click', (event) => {
         const target = event.target as HTMLElement | null;
         const node = target?.closest?.('[data-step-index]') as HTMLElement | null;
-        if (!node || !this.root?.contains(node)) return;
-        const index = Number(node.dataset.stepIndex);
-        if (Number.isInteger(index)) this.onStepClick?.(index);
+        if (!node) return;
+        onReworkStep(event, node);
+      });
+      this.root.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const target = event.target as HTMLElement | null;
+        const node = target?.closest?.('[data-step-index]') as HTMLElement | null;
+        if (!node) return;
+        event.preventDefault();
+        onReworkStep(event, node);
       });
     }
     this.mount.replaceChildren(this.root);
@@ -448,8 +460,11 @@ export class PlanProgressPanel {
         const title = reworkable
           ? `${escapeHtml(s.short)} — click to rework from this phase`
           : escapeHtml(s.short);
+        const reworkLabel = escapeHtml(s.label);
         return `${track}<span class="dr-node ${st}${reworkable ? ' dr-node--clickable' : ''}" ${
-          reworkable ? `data-step-index="${i}" role="button" tabindex="0"` : ''
+          reworkable
+            ? `data-step-index="${i}" role="button" tabindex="0" aria-label="Rework from ${reworkLabel}"`
+            : ''
         } title="${title}">${inner}</span>`;
       })
       .join('');

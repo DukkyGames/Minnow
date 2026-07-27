@@ -200,7 +200,9 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  padding: 0;
+  padding: calc((var(--touch-min) - 20px) / 2);
+  margin: calc((var(--touch-min) - 20px) / -2);
+  box-sizing: content-box;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -219,7 +221,9 @@
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  margin-bottom: 2px;
+  padding: calc((var(--touch-min) - 28px) / 2);
+  margin: calc((var(--touch-min) - 28px) / -2) calc((var(--touch-min) - 28px) / -2) 2px;
+  box-sizing: content-box;
   border: 1px dashed var(--mn-border);
   border-radius: 6px;
   background: transparent;
@@ -255,10 +259,13 @@
   min-width: 0;
 }
 
-/* Compact toolbar — smaller than the global 40px .icon-btn */
+/* Compact toolbar — 28px visual, 44px touch target via padding */
 .file-viewer-header .icon-btn {
   width: 28px;
   height: 28px;
+  padding: calc((var(--touch-min) - 28px) / 2);
+  margin: calc((var(--touch-min) - 28px) / -2);
+  box-sizing: content-box;
 }
 
 .file-viewer-header .icon-btn .icon-svg {
@@ -433,8 +440,11 @@
   }
 
   .file-viewer-tab__close {
-    width: 28px;
-    height: 28px;
+    width: 20px;
+    height: 20px;
+    padding: calc((var(--touch-min) - 20px) / 2);
+    margin: calc((var(--touch-min) - 20px) / -2);
+    box-sizing: content-box;
   }
 }
 
@@ -1113,6 +1123,9 @@
 .file-sidebar.collapsed .file-sidebar-header .icon-btn {
   width: 32px;
   height: 32px;
+  padding: calc((var(--touch-min) - 32px) / 2);
+  margin: calc((var(--touch-min) - 32px) / -2);
+  box-sizing: content-box;
   flex-shrink: 0;
 }
 
