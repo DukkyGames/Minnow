@@ -3,7 +3,7 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
-import { listActiveSubAgentRuns } from '../agents/orchestrator';
+import { listActiveSubAgentRuns, getSubAgentRun } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { initSubAgentCompletionPush } from '../agents/sub-agent-completion-push';
@@ -18,6 +18,10 @@ import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { isOrchestrateHubMounted } from './orchestrate-hub';
 import { scrollBottom } from './input';
 import { initSubAgentDrawerLiveUpdates, openSubAgentDrawer } from './sub-agent-drawer';
+import {
+  subAgentLiveBadgeLabel,
+  subAgentLiveStatusLine,
+} from './sub-agent-live-status';
 
 /** Maps run id to the card element for the current chat render. */
 const cards = new Map<string, HTMLElement>();
@@ -34,12 +38,8 @@ export function clearSubAgentCardDomRegistry(): void {
   cards.clear();
 }
 
-function statusLabel(status: string): string {
-  if (status === 'running' || status === 'queued') return 'Working';
-  if (status === 'completed') return 'Done';
-  if (status === 'failed') return 'Failed';
-  if (status === 'cancelled') return 'Stopped';
-  return status;
+function statusLabel(run: SubAgentRun | PersistedSubAgentRun, live: boolean): string {
+  return subAgentLiveBadgeLabel(run, live);
 }
 
 function taskPreview(task: string): string {
@@ -48,7 +48,11 @@ function taskPreview(task: string): string {
 }
 
 /** Fills the card DOM from a live or persisted run row. */
-function fillCard(el: HTMLElement, run: SubAgentRun | PersistedSubAgentRun): void {
+function fillCard(
+  el: HTMLElement,
+  run: SubAgentRun | PersistedSubAgentRun,
+  live: boolean,
+): void {
   el.classList.toggle(
     'sub-agent-card--active',
     run.status === 'running' || run.status === 'queued',
@@ -65,7 +69,7 @@ function fillCard(el: HTMLElement, run: SubAgentRun | PersistedSubAgentRun): voi
 
   const badge = document.createElement('span');
   badge.className = 'sub-agent-card__badge';
-  badge.textContent = statusLabel(run.status);
+  badge.textContent = statusLabel(run, live);
 
   head.appendChild(type);
   head.appendChild(badge);
@@ -76,24 +80,29 @@ function fillCard(el: HTMLElement, run: SubAgentRun | PersistedSubAgentRun): voi
 
   const subtitle = document.createElement('div');
   subtitle.className = 'sub-agent-card__subtitle';
-  const outcome =
-    run.structuredOutcome ??
-    (run.summary?.trim() ? legacyOutcomeFromSummary(run.summary) : null);
-  if (outcome?.findings?.[0]?.title) {
-    subtitle.textContent = outcome.findings[0].title;
-  } else if (outcome?.summary?.trim()) {
-    const s = outcome.summary.trim();
-    subtitle.textContent = s.length > 100 ? `${s.slice(0, 100)}…` : s;
+  const liveLine = live ? subAgentLiveStatusLine(run, true) : '';
+  if (liveLine) {
+    subtitle.textContent = liveLine;
+  } else {
+    const outcome =
+      run.structuredOutcome ??
+      (run.summary?.trim() ? legacyOutcomeFromSummary(run.summary) : null);
+    if (outcome?.findings?.[0]?.title) {
+      subtitle.textContent = outcome.findings[0].title;
+    } else if (outcome?.summary?.trim()) {
+      const s = outcome.summary.trim();
+      subtitle.textContent = s.length > 100 ? `${s.slice(0, 100)}…` : s;
+    }
   }
 
   const hint = document.createElement('div');
   hint.className = 'sub-agent-card__hint';
   hint.textContent = 'Click to view details';
 
-  const live = run as SubAgentRun;
+  const activeRun = run as SubAgentRun;
   const nested =
-    live.liveNestedToolCalls != null && live.liveNestedToolCalls > 0
-      ? `${live.liveNestedToolCalls} nested tool call(s)`
+    activeRun.liveNestedToolCalls != null && activeRun.liveNestedToolCalls > 0
+      ? `${activeRun.liveNestedToolCalls} nested tool call(s)`
       : run.toolTurns > 0
         ? `${run.toolTurns} tool round(s)`
         : '';
@@ -119,6 +128,12 @@ export function upsertSubAgentCardForRun(
 ): HTMLElement | null {
   const active = getActiveChat();
   if (active.id !== chatId) return null;
+  const orchestratorRun = getSubAgentRun(run.runId);
+  const isLive =
+    run.status === 'running' ||
+    run.status === 'queued' ||
+    orchestratorRun?.status === 'running' ||
+    orchestratorRun?.status === 'queued';
   if (
     normalizeModeId(active.modeId) === 'orchestrate' &&
     active.viewMode === 'board'
@@ -171,11 +186,12 @@ export function upsertSubAgentCardForRun(
     }
   }
 
+  const displayRun = orchestratorRun ?? run;
   el.setAttribute(
     'aria-label',
-    `Sub-agent ${run.type}, ${run.status}. ${taskPreview(run.task)}`,
+    `Sub-agent ${displayRun.type}, ${displayRun.status}. ${taskPreview(displayRun.task)}`,
   );
-  fillCard(el, run);
+  fillCard(el, displayRun, isLive);
   scrollBottom();
   return el;
 }

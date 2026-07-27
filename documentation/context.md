@@ -307,6 +307,8 @@ Per-role prompts and optional provider/model binding. Shipped: `default`, `build
 
 [`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) — nested loops, concurrency cap in `sub-agents.json`. Tools: `spawn_sub_agent`, `get_sub_agent_status`, `cancel_sub_agent`. Background completion pushes a hidden user resume row to the parent (`sub-agent-completion-push.ts` + [`hidden-transcript-user-messages.ts`](../src/chat/hidden-transcript-user-messages.ts)) — the model sees it; the transcript does not.
 
+**Live status UI:** While a run is in flight, the runner publishes `livePhase` (`thinking` → `generating` → `tools`) plus partial reasoning and the current tool name via `onLiveActivity` → [`sub-agent-events.ts`](../src/agents/sub-agent-events.ts). Parent chat **cards** ([`sub-agent-cards.ts`](../src/ui/sub-agent-cards.ts)) and the **drawer** ([`sub-agent-drawer.ts`](../src/ui/sub-agent-drawer.ts)) subscribe and mirror main-chat stream indicators (`stream-status`, tool spinner) in the activity transcript ([`transcript-view.ts`](../src/ui/transcript-view.ts) + [`sub-agent-live-status.ts`](../src/ui/sub-agent-live-status.ts)).
+
 **Generation timeouts:** Settings → **Watchdog** (`config.json` → `chat.generationIdleTimeoutMs`, `chat.generationMaxDurationMs`) — upstream idle and max-duration limits while streaming from the model.
 
 ### Orchestrate boards

@@ -11,6 +11,7 @@ import {
   fetchMemoryEntries,
   fetchMemoryStatus,
 } from '../../memory/client';
+import { appConfirm } from '../app-dialog';
 import { parseMemoryTagsInput } from '../../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../../memory/types';
 
@@ -149,7 +150,7 @@ function bindMemoryListActions(listEl: HTMLElement): void {
 
     const id = target.dataset.memoryRemove;
     void (async () => {
-      if (!confirm('Delete this memory entry?')) return;
+      if (!(await appConfirm('Delete this memory entry?'))) return;
       const ok = await deleteMemoryEntry(id);
       if (ok) {
         setStatus('ok', 'Memory entry deleted');
@@ -291,7 +292,7 @@ function bindMemoriesSection(): void {
   });
 
   document.getElementById('brainMemoryClear')?.addEventListener('click', async () => {
-    if (!confirm('Clear all memory entries?')) return;
+    if (!(await appConfirm('Clear all memory entries?'))) return;
     const ok = await clearMemory(true);
     setStatus(
       ok ? 'ok' : 'err',

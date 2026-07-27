@@ -114,6 +114,32 @@ describe('sub-agent cards', { concurrency: false }, () => {
     clearSubAgentCardDomRegistry();
   });
 
+  test('upsertSubAgentCardForRun shows live phase on the badge and subtitle', () => {
+    setupCodeDom();
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-sub-live';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const el = upsertSubAgentCardForRun(
+      {
+        ...sampleRun(chat.id),
+        livePhase: 'thinking',
+        livePartialReasoning: 'Checking routes…',
+      },
+      chat.id,
+    );
+    assert.ok(el);
+    assert.ok(el.textContent?.includes('Thinking'));
+    assert.ok(el.textContent?.includes('Thinking…'));
+
+    clearSubAgentCardDomRegistry();
+  });
+
   test('upsertSubAgentCardForRun skips the Vibe hub empty-chat landing', () => {
     setupCodeDom();
     const chat = createEmptyChatObject('');

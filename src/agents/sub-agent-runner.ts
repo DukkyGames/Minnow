@@ -101,7 +101,7 @@ import {
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort';
 import { resolveSendCapabilities } from '../providers/model-capabilities';
-import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
+import type { SubAgentRunner, SubAgentRunnerOutput, SubAgentLiveActivity } from './types';
 import type { ProviderPublic } from '../providers/types';
 
 /** Prefer main `content`; some reasoning models only emit JSON on the reasoning channel. */
@@ -257,6 +257,8 @@ async function streamSubAgentTurn(
   streamOptions?: {
     thinkingBudgetTracker?: ThinkingBudgetTracker | null;
     prefillEchoPartial?: string;
+    onReasoningDelta?: (reasoningSoFar: string) => void;
+    onToolCallDelta?: (toolName: string) => void;
   },
 ): Promise<{
   fullText: string;
@@ -294,6 +296,8 @@ async function streamSubAgentTurnOnce(
   streamOptions?: {
     thinkingBudgetTracker?: ThinkingBudgetTracker | null;
     prefillEchoPartial?: string;
+    onReasoningDelta?: (reasoningSoFar: string) => void;
+    onToolCallDelta?: (toolName: string) => void;
   },
 ): Promise<{
   fullText: string;
@@ -354,12 +358,18 @@ async function streamSubAgentTurnOnce(
     }
   }
 
+  function notifyReasoningDelta(): void {
+    if (!reasoningText) return;
+    streamOptions?.onReasoningDelta?.(reasoningText);
+  }
+
   function processRoutedParts(parts: RoutedContentPart[]): void {
     for (const [text, isThinking] of parts) {
       if (isThinking) {
         if (text) {
           feedThinkingBudget(text);
           reasoningText += text;
+          notifyReasoningDelta();
         }
         continue;
       }
@@ -382,6 +392,7 @@ async function streamSubAgentTurnOnce(
         if (harmonyText) {
           feedThinkingBudget(harmonyText);
           reasoningText += harmonyText;
+          notifyReasoningDelta();
         }
         continue;
       }
@@ -395,6 +406,7 @@ async function streamSubAgentTurnOnce(
         if (harmonyText) {
           feedThinkingBudget(harmonyText);
           reasoningText += harmonyText;
+          notifyReasoningDelta();
         }
         continue;
       }
@@ -414,6 +426,7 @@ async function streamSubAgentTurnOnce(
     if (reasoningDelta) {
       feedThinkingBudget(reasoningDelta);
       reasoningText += reasoningDelta;
+      notifyReasoningDelta();
     }
     const contentDelta = extractStreamDelta(chunk);
     if (contentDelta) {
@@ -423,6 +436,11 @@ async function streamSubAgentTurnOnce(
         prefillEchoPartial = '';
       }
       routeContentDelta(routedDelta);
+    }
+    const partialTools = finalizeToolCalls(toolAcc);
+    const streamingToolName = partialTools[0]?.function?.name?.trim();
+    if (streamingToolName) {
+      streamOptions?.onToolCallDelta?.(streamingToolName);
     }
   }
 
@@ -570,7 +588,39 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       input.onMessagesChange(snapshot);
     };
 
+    let liveEmitQueued = false;
+    let pendingLive: SubAgentLiveActivity | null = null;
+
+    const flushLiveActivity = (): void => {
+      liveEmitQueued = false;
+      if (!pendingLive || !input.onLiveActivity) return;
+      const snapshot = pendingLive;
+      pendingLive = null;
+      input.onLiveActivity(snapshot);
+    };
+
+    const emitLiveActivity = (
+      patch: Partial<SubAgentLiveActivity>,
+      force = false,
+    ): void => {
+      if (!input.onLiveActivity) return;
+      pendingLive = {
+        phase: pendingLive?.phase ?? null,
+        partialReasoning: pendingLive?.partialReasoning,
+        currentToolName: pendingLive?.currentToolName,
+        ...patch,
+      };
+      if (force) {
+        flushLiveActivity();
+        return;
+      }
+      if (liveEmitQueued) return;
+      liveEmitQueued = true;
+      queueMicrotask(flushLiveActivity);
+    };
+
     emitProgress(undefined, true);
+    emitLiveActivity({ phase: 'generating', partialReasoning: undefined, currentToolName: null }, true);
 
     await loadToolCallsMeta();
     const provider = await resolveProvider(input.providerId);
@@ -838,6 +888,21 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       }
 
       let streamingAssistant = '';
+      const streamProgress = {
+        onReasoningDelta: (reasoningSoFar: string) => {
+          emitLiveActivity({
+            phase: 'thinking',
+            partialReasoning: reasoningSoFar,
+            currentToolName: null,
+          });
+        },
+        onToolCallDelta: (toolName: string) => {
+          emitLiveActivity({
+            phase: 'tools',
+            currentToolName: toolName,
+          });
+        },
+      };
       const runSubTurn = (
         turnBody: SubAgentCompletionBody,
         streamOpts?: {
@@ -852,10 +917,18 @@ export const defaultSubAgentRunner: SubAgentRunner = {
           input.type,
           (fullSoFar) => {
             streamingAssistant = fullSoFar;
+            emitLiveActivity({
+              phase: 'generating',
+              partialReasoning: undefined,
+              currentToolName: null,
+            });
             emitProgress(streamingAssistant);
           },
           { provider, modelCapabilities: sendCaps },
-          streamOpts,
+          {
+            ...streamOpts,
+            ...streamProgress,
+          },
         );
 
       const runSubTurnWithThinkingBudget = async (): Promise<
@@ -971,6 +1044,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         toolTurns += 1;
         messages.push(
           buildSubAgentToolAssistantMessage(input.modelId, turnResult),
+        );
+        const firstTool = turnResult.toolCalls[0]?.function?.name?.trim();
+        emitLiveActivity(
+          {
+            phase: 'tools',
+            currentToolName: firstTool || null,
+            partialReasoning: undefined,
+          },
+          true,
         );
         emitProgress(undefined, true);
 

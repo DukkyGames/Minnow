@@ -141,6 +141,10 @@ export interface SubAgentRun {
   liveNestedToolCalls?: number;
   /** Last nested tool name invoked (activity panel). */
   liveCurrentToolName?: string | null;
+  /** In-flight stream phase for drawer/cards (cleared when the run settles). */
+  livePhase?: SubAgentLivePhase | null;
+  /** Partial reasoning text while `livePhase` is `thinking` (drawer activity tail). */
+  livePartialReasoning?: string;
   /** Resolved provider for this run (set when execution starts). */
   providerId?: string;
   /** Resolved model for this run (set when execution starts). */
@@ -257,6 +261,16 @@ export interface SubAgentRunnerOutput {
   stats?: Stats;
 }
 
+/** Live stream phase mirrored from main-chat UX (thinking → generating → tools). */
+export type SubAgentLivePhase = 'thinking' | 'generating' | 'tools';
+
+/** Snapshot pushed while a sub-agent turn is in flight (drawer/cards). */
+export interface SubAgentLiveActivity {
+  phase: SubAgentLivePhase | null;
+  partialReasoning?: string;
+  currentToolName?: string | null;
+}
+
 /** Injectable runner for tests (deterministic mock). */
 export interface SubAgentRunner {
   run(input: {
@@ -285,5 +299,7 @@ export interface SubAgentRunner {
     ) => Promise<import('../types').ToolExecutionResult>;
     /** Called whenever the in-flight transcript changes (streaming + tools). */
     onMessagesChange?: (messages: ApiMessage[]) => void;
+    /** Called when stream phase or partial reasoning/tool name changes. */
+    onLiveActivity?: (activity: SubAgentLiveActivity) => void;
   }): Promise<SubAgentRunnerOutput>;
 }

@@ -131,7 +131,13 @@ function buildSubAgentRows(input: BuildAgentActivitySnapshotInput): AgentActivit
     const startedAtMs = run.startedAt ? Date.parse(run.startedAt) : input.nowMs;
     const safeStart = Number.isFinite(startedAtMs) ? startedAtMs : input.nowMs;
     const status: AgentActivityStatus =
-      run.status === 'queued' ? 'queued' : run.status === 'running' ? 'running' : 'running';
+      run.status === 'queued'
+        ? 'queued'
+        : run.liveCurrentToolName || run.livePhase === 'tools'
+          ? 'tools'
+          : run.livePhase === 'thinking' || run.livePhase === 'generating'
+            ? 'generating'
+            : 'running';
     return {
       id: `sub:${run.runId}`,
       kind: 'sub_agent',

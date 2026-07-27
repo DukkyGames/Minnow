@@ -668,6 +668,43 @@
   word-break: break-word;
 }
 
+.transcript-view__live-tail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.transcript-view__stream-status {
+  margin: 4px 0 0;
+}
+
+.transcript-view__tool-indicator {
+  align-self: flex-start;
+}
+
+.transcript-view__thinking {
+  align-self: flex-start;
+  max-width: 92%;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.transcript-view__thinking-body {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
+
 .benchmark-transcript-drawer__body {
   display: flex;
   flex-direction: column;
