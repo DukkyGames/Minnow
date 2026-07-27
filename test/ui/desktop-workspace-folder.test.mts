@@ -80,6 +80,45 @@ describe('desktop-workspace-folder', () => {
     resetDesktopWorkspacePathCache();
   });
 
+  test('alignDesktopWorkspaceToChat ignores Code workspace chats', async () => {
+    const { fetchDesktopWorkspaceInfo } = await import('../../src/lib/desktop-workspace.ts');
+    const originalFetch = globalThis.fetch;
+    let putCount = 0;
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(url);
+      if (path.includes('/api/desktop-workspace') && init?.method === 'PUT') {
+        putCount += 1;
+      }
+      if (path.includes('/api/desktop-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            path: DESKTOP_WS,
+            label: 'workspace',
+            fileCount: 0,
+          }),
+        } as Response;
+      }
+      return originalFetch(url, init);
+    }) as typeof fetch;
+
+    await fetchDesktopWorkspaceInfo();
+    const { alignDesktopWorkspaceToChat } = await import('../../src/ui/desktop-workspace-folder.ts');
+    const codeChat = {
+      ...createEmptyChatObject('model-a'),
+      id: 'code-chat',
+      workspacePath: PROJECT_WS,
+      modeId: 'build',
+    };
+    const moved = await alignDesktopWorkspaceToChat(codeChat);
+    assert.equal(moved, false);
+    assert.equal(putCount, 0);
+
+    globalThis.fetch = originalFetch;
+    resetDesktopWorkspacePathCache();
+  });
+
   test('activateDesktopAssistantChatForApp restores remembered chat for workspace', async () => {
     setSessionStateForTests({
       version: 5,
@@ -113,6 +152,43 @@ describe('desktop-workspace-folder', () => {
       '../../src/state/sessions.ts'
     );
     activateDesktopAssistantChatForApp(PROJECT_WS);
+    assert.equal(getActiveChat().id, 'project-chat');
+  });
+
+  test('onDesktopWorkspaceChanged switches to per-folder remembered desktop chat', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'sandbox-chat',
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {
+        [DESKTOP_WS]: 'sandbox-chat',
+        [PROJECT_WS]: 'project-chat',
+      },
+      lastActiveChatIdByApp: { desktop: 'sandbox-chat' },
+      chats: [
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'sandbox-chat',
+          name: 'Sandbox chat',
+          workspacePath: DESKTOP_WS,
+          modeId: 'desktop',
+          appScope: 'desktop' as const,
+          history: [{ role: 'user', content: 'sandbox' }],
+        },
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'project-chat',
+          name: 'Project chat',
+          workspacePath: PROJECT_WS,
+          modeId: 'desktop',
+          appScope: 'desktop' as const,
+          history: [{ role: 'user', content: 'project work' }],
+        },
+      ],
+    });
+
+    const { onDesktopWorkspaceChanged, getActiveChat } = await import('../../src/state/sessions.ts');
+    await onDesktopWorkspaceChanged(PROJECT_WS, DESKTOP_WS);
     assert.equal(getActiveChat().id, 'project-chat');
   });
 });

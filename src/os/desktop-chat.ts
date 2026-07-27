@@ -14,6 +14,7 @@ import {
 } from './desktop-chat-sessions';
 import { getWorkspacePath } from '../state/workspace';
 import type { DesktopChatActivateOptions } from './desktop-state';
+import { shouldAlignDesktopWorkspaceToChat } from '../state/session-workspace-scope';
 import {
   ensureChatHistoryLoaded,
   ensureSessionsReady,
@@ -24,6 +25,7 @@ import {
   newChatId,
   touchChat,
   rememberActiveChatForApp,
+  rememberChatActiveForWorkspace,
   rememberWorkspaceActiveChat,
   scheduleSaveSessions,
   sessionState,
@@ -210,6 +212,7 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
   }
   sessionState.activeId = chatId;
   markSessionScalarsDirty();
+  rememberChatActiveForWorkspace(chat);
   // Threads span folders: move the desktop workspace (and with it the file
   // explorer) to this thread's folder before painting.
   const { alignDesktopWorkspaceToChat } = await import('../ui/desktop-workspace-folder');
@@ -257,13 +260,22 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
 
   const ready = await ensureDesktopWorkspaceReady();
   if (ready && sessionState) {
-    rememberWorkspaceActiveChat(getWorkspacePath());
-
     const state = sessionState;
+    const activeBefore = getActiveChat();
+    // Park the Code workspace chat before foregrounding desktop; skip when the
+    // active thread already belongs to the desktop surface (or an expert thread).
+    if (
+      activeBefore.appScope == null &&
+      activeBefore.kind !== 'expert' &&
+      !shouldAlignDesktopWorkspaceToChat(activeBefore)
+    ) {
+      rememberWorkspaceActiveChat(getWorkspacePath());
+    }
+
     if (options?.chatId?.trim()) {
       try {
         const chat = state.chats.find((c) => c.id === options.chatId?.trim());
-        if (chat) {
+        if (chat && shouldAlignDesktopWorkspaceToChat(chat)) {
           state.activeId = chat.id;
           markSessionScalarsDirty();
           acknowledgeChatViewed(chat.id);
@@ -286,7 +298,7 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
     // The restored thread may have been created in another folder — move the
     // desktop workspace to match before the first paint.
     const restored = state.chats.find((c) => c.id === state.activeId);
-    if (restored) {
+    if (restored && shouldAlignDesktopWorkspaceToChat(restored)) {
       const { alignDesktopWorkspaceToChat } = await import('../ui/desktop-workspace-folder');
       if (await alignDesktopWorkspaceToChat(restored)) {
         desktopWorkspacePath = await getDesktopWorkspacePath();

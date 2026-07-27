@@ -11,7 +11,9 @@ import {
   resetDesktopWorkspacePathCache,
   setDesktopWorkspacePath,
 } from '../lib/desktop-workspace';
-import { activateDesktopAssistantChatForApp } from '../state/sessions';
+import { shouldAlignDesktopWorkspaceToChat } from '../state/session-workspace-scope';
+import { onDesktopWorkspaceChanged } from '../state/sessions';
+import type { Chat } from '../types';
 import { getLocalServerAvailable } from '../tools/client';
 import { clearCachesForWorkspace } from '../tools/result-cache';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
@@ -51,7 +53,7 @@ export async function applyDesktopWorkspaceSwitch(
   clearCachesForWorkspace(prev);
   const { renderChatFromHistory } = await import('./messages');
   const { getActiveChat } = await import('../state/sessions');
-  const chat = activateDesktopAssistantChatForApp(info.path);
+  const { activeChat: chat } = await onDesktopWorkspaceChanged(info.path, prev);
   renderDesktopChatRail(info.path);
   renderDesktopChatMessages();
   renderChatFromHistory(chat);
@@ -80,9 +82,10 @@ export async function applyDesktopWorkspaceSwitch(
  *
  * @returns true when the workspace moved.
  */
-export async function alignDesktopWorkspaceToChat(chat: {
-  workspacePath?: string;
-}): Promise<boolean> {
+export async function alignDesktopWorkspaceToChat(chat: Chat): Promise<boolean> {
+  if (!shouldAlignDesktopWorkspaceToChat(chat)) {
+    return false;
+  }
   const target = chat.workspacePath?.trim();
   if (!target) return false;
   const current = (await getDesktopWorkspacePath()) ?? '';

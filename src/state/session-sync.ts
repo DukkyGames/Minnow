@@ -20,6 +20,7 @@ import {
 } from '../chat/streaming-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { reportBackgroundError } from '../boot/report-background-error';
+import { isDesktopChatActive } from '../os/desktop-state';
 import {
   applyRemoteSessionState,
   getActiveChat,
@@ -93,6 +94,14 @@ function shouldSkipRemoteReconcile(): boolean {
 async function refreshUiAfterRemoteSession(): Promise<void> {
   if (!sessionState) return;
   try {
+    if (isDesktopChatActive()) {
+      const active = getActiveChat();
+      if (active.appScope !== 'desktop' && active.kind !== 'expert') {
+        const { restoreDesktopSessionOnForeground } = await import('../os/desktop-launch');
+        await restoreDesktopSessionOnForeground();
+        return;
+      }
+    }
     const active = getActiveChat();
     const engineTurnActive = isActiveChatEngineTurnActive();
     renderSidebar();

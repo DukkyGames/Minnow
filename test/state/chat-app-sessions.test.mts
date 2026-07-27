@@ -18,6 +18,7 @@ import {
   getChatsForChatsWorkspace,
   getDesktopChats,
   resolveActiveDesktopChatId,
+  resolveActiveDesktopChatIdForWorkspace,
   getEmailAssistantChats,
   getListedEmailAssistantChats,
   getLastActiveChatIdForApp,
@@ -220,6 +221,70 @@ describe('desktop chat scoping', () => {
     );
     assert.equal(id, 'fresh-desktop');
     assert.equal(state.chats.find((c) => c.id === id)?.appScope, 'desktop');
+  });
+
+  test('resolveActiveDesktopChatIdForWorkspace remembers per-folder id', () => {
+    const state = seedState({
+      chats: [
+        desktopRow(ASSISTANT_A, DESKTOP_WS, 300),
+        desktopRow(ASSISTANT_B, PROJECT_WS, 200),
+      ],
+      lastActiveChatIdByWorkspace: { [PROJECT_WS]: ASSISTANT_B },
+      lastActiveChatIdByApp: { [DESKTOP_APP_ID]: ASSISTANT_A },
+    });
+
+    assert.equal(
+      resolveActiveDesktopChatIdForWorkspace(PROJECT_WS, state, (path) =>
+        createDesktopChat(path, 'unused'),
+      ),
+      ASSISTANT_B,
+    );
+  });
+
+  test('resolveActiveDesktopChatIdForWorkspace picks newest listed chat in folder', () => {
+    const state = seedState({
+      chats: [
+        desktopRow(ASSISTANT_A, DESKTOP_WS, 300),
+        desktopRow(ASSISTANT_B, DESKTOP_WS, 200),
+      ],
+      lastActiveChatIdByApp: { [DESKTOP_APP_ID]: ASSISTANT_B },
+    });
+
+    assert.equal(
+      resolveActiveDesktopChatIdForWorkspace(DESKTOP_WS, state, (path) =>
+        createDesktopChat(path, 'unused'),
+      ),
+      ASSISTANT_A,
+    );
+  });
+
+  test('resolveActiveDesktopChatIdForWorkspace ignores global app memory from another folder', () => {
+    const state = seedState({
+      chats: [
+        desktopRow(ASSISTANT_A, DESKTOP_WS, 300),
+        desktopRow(ASSISTANT_B, PROJECT_WS, 200),
+      ],
+      lastActiveChatIdByApp: { [DESKTOP_APP_ID]: ASSISTANT_B },
+    });
+
+    assert.equal(
+      resolveActiveDesktopChatIdForWorkspace(DESKTOP_WS, state, (path) =>
+        createDesktopChat(path, 'unused'),
+      ),
+      ASSISTANT_A,
+    );
+  });
+
+  test('resolveActiveDesktopChatIdForWorkspace creates a fresh desktop chat when folder is empty', () => {
+    const state = seedState({
+      chats: [desktopRow(ASSISTANT_B, PROJECT_WS, 200)],
+    });
+
+    const id = resolveActiveDesktopChatIdForWorkspace(DESKTOP_WS, state, (path) =>
+      createDesktopChat(path, 'fresh-folder-chat'),
+    );
+    assert.equal(id, 'fresh-folder-chat');
+    assert.equal(state.chats.find((c) => c.id === id)?.workspacePath, DESKTOP_WS);
   });
 });
 

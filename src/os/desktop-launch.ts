@@ -5,6 +5,7 @@
 
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { getWorkspacePath } from '../state/workspace';
+import { shouldAlignDesktopWorkspaceToChat } from '../state/session-workspace-scope';
 import { isDesktopChatActive } from './desktop-state';
 
 /** Re-render desktop rail, transcript, file drawer, and stream shell for the active desktop chat. */
@@ -63,11 +64,20 @@ export async function restoreDesktopSessionOnForeground(): Promise<void> {
   const activeIsDesktop = active.appScope === 'desktop';
 
   if (active.kind === 'expert' || activeIsDesktop) {
+    if (activeIsDesktop && shouldAlignDesktopWorkspaceToChat(active)) {
+      const { alignDesktopWorkspaceToChat } = await import('../ui/desktop-workspace-folder');
+      await alignDesktopWorkspaceToChat(active);
+    }
     await refreshDesktopChatSurface();
     return;
   }
 
   rememberWorkspaceActiveChat(getWorkspacePath());
   activateDesktopAssistantChatForApp(desktopPath);
+  const restored = getActiveChat();
+  if (shouldAlignDesktopWorkspaceToChat(restored)) {
+    const { alignDesktopWorkspaceToChat } = await import('../ui/desktop-workspace-folder');
+    await alignDesktopWorkspaceToChat(restored);
+  }
   await refreshDesktopChatSurface();
 }

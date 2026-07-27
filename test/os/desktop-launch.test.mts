@@ -163,4 +163,43 @@ describe('restoreDesktopSessionOnForeground', () => {
     }
     assert.equal(getActiveChat().id, 'expert-chat', 'restore must not switch away from expert chat');
   });
+
+  test('restoreDesktopSessionOnForeground replaces Code activeId with desktop chat', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'code-chat',
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: { [CODE_WS]: 'code-chat' },
+      lastActiveChatIdByApp: { desktop: 'desktop-chat' },
+      chats: [
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'code-chat',
+          name: 'Code thread',
+          workspacePath: CODE_WS,
+          modeId: 'build',
+          history: [{ role: 'user', content: 'Fix the bug' }],
+        },
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'desktop-chat',
+          name: 'Desktop hello',
+          workspacePath: DESKTOP_WS,
+          modeId: 'desktop',
+          appScope: 'desktop' as const,
+          history: [{ role: 'user', content: 'Hello desktop' }],
+        },
+      ],
+    });
+
+    const { restoreDesktopSessionOnForeground } = await import('../../src/os/desktop-launch.ts');
+    const { getActiveChat } = await import('../../src/state/sessions.ts');
+
+    try {
+      await restoreDesktopSessionOnForeground();
+    } catch (err) {
+      assert.match(String(err), /DOMPurify|sanitize/);
+    }
+    assert.equal(getActiveChat().id, 'desktop-chat');
+  });
 });

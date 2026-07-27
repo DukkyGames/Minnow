@@ -47,6 +47,7 @@ import {
   rememberActiveChatForApp as rememberActiveChatForAppInState,
   resolveActiveAssistantChatId,
   resolveActiveDesktopChatId,
+  resolveActiveDesktopChatIdForWorkspace,
   resolveActiveEmailAssistantChatId,
   resolveActiveChatIdForWorkspace as pickActiveChatIdForWorkspace,
   type RawSessionJson,
@@ -1152,6 +1153,14 @@ export function rememberWorkspaceActiveChat(workspacePath: string): void {
   scheduleSaveSessions();
 }
 
+/** Remember the active chat under its workspace folder (desktop rail / folder picker round-trip). */
+export function rememberChatActiveForWorkspace(chat: Chat): void {
+  const key = normalizeWorkspacePath(chat.workspacePath ?? '');
+  if (!key) return;
+  rememberActiveChatForWorkspaceKey(key);
+  scheduleSaveSessions();
+}
+
 /** Chats for the given workspace (newest first); empty workspace key returns none. */
 export function getChatsForWorkspace(
   workspacePath: string,
@@ -1307,6 +1316,52 @@ export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string)
   rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
+}
+
+/**
+ * Activate the desktop chat for a workspace folder (per-folder remembered id).
+ * Does not hydrate history — prefer {@link onDesktopWorkspaceChanged} before paint.
+ */
+export function activateDesktopChatForWorkspaceFolder(desktopWorkspacePath: string): Chat {
+  const state = requireSessionState();
+  const nextId = resolveActiveDesktopChatIdForWorkspace(desktopWorkspacePath, state, (workspaceKey) => {
+    const fresh = createDesktopChat(workspaceKey, newChatId());
+    touchChat(fresh);
+    return fresh;
+  });
+  state.activeId = nextId;
+  markSessionScalarsDirty();
+  rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(desktopWorkspacePath));
+  rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);
+  scheduleSaveSessions();
+  return getActiveChat();
+}
+
+/**
+ * After the desktop workspace folder changes: persist per-folder active chat and switch
+ * to the best desktop thread for the new path. Awaits history hydrate for the new active chat.
+ */
+export async function onDesktopWorkspaceChanged(
+  newPath: string,
+  previousPath?: string,
+): Promise<WorkspaceChangeResult> {
+  const state = requireSessionState();
+  const prevKey = normalizeWorkspacePath(previousPath ?? '');
+  rememberActiveChatForWorkspaceKey(prevKey);
+
+  const nextId = resolveActiveDesktopChatIdForWorkspace(newPath, state, (workspaceKey) => {
+    const fresh = createDesktopChat(workspaceKey, newChatId());
+    touchChat(fresh);
+    return fresh;
+  });
+  const activeChanged = state.activeId !== nextId;
+  state.activeId = nextId;
+  markSessionScalarsDirty();
+  rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(newPath));
+  rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);
+  scheduleSaveSessions({ chatId: nextId });
+  await ensureChatHistoryLoaded(nextId);
+  return { activeChat: getActiveChat(), activeChanged };
 }
 
 /**

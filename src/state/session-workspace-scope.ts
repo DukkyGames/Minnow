@@ -27,6 +27,16 @@ export function isDesktopChat(chat: Chat): boolean {
   return chat.appScope === 'desktop';
 }
 
+/**
+ * True when activating this chat should repoint the desktop workspace folder.
+ * Code and Chat app threads keep their own workspace binding and must not move
+ * the desktop sandbox when desktop chat is foregrounded.
+ */
+export function shouldAlignDesktopWorkspaceToChat(chat: Chat): boolean {
+  if (chat.kind === 'expert') return true;
+  return isDesktopChat(chat) || chat.modeId === 'desktop';
+}
+
 /** True when the chat has unsent composer text persisted on the session row. */
 export function hasComposerDraft(chat: Chat): boolean {
   return Boolean(chat.composerDraft?.trim());
@@ -242,6 +252,30 @@ export function getSidebarListedDesktopChats(state: SessionState): Chat[] {
   return getDesktopChats(state).filter(chatHasListableContent);
 }
 
+/** Desktop chats bound to a workspace folder (newest first). */
+export function getDesktopChatsForWorkspace(
+  state: SessionState,
+  workspacePath: string,
+): Chat[] {
+  const key = normalizeWorkspacePath(workspacePath);
+  if (!key) return [];
+  return [...state.chats]
+    .filter(
+      (c) =>
+        isDesktopChat(c) &&
+        normalizeWorkspacePath(c.workspacePath ?? '') === key,
+    )
+    .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
+}
+
+/** Desktop rail rows for a workspace folder (excludes ephemeral empty chats). */
+export function getSidebarListedDesktopChatsForWorkspace(
+  state: SessionState,
+  workspacePath: string,
+): Chat[] {
+  return getDesktopChatsForWorkspace(state, workspacePath).filter(chatHasListableContent);
+}
+
 /** Remember the last active chat for a MinnowOS app (e.g. Chat). */
 export function rememberActiveChatForApp(
   state: SessionState,
@@ -423,6 +457,42 @@ export function resolveActiveDesktopChatId(
   if (scoped.length) return scoped[0]!.id;
 
   const fresh = createScopedDesktopChat(normalizeWorkspacePath(desktopWorkspacePath));
+  state.chats.unshift(fresh);
+  const now = Date.now();
+  fresh.updatedAt = now;
+  fresh.lastMessageAt = now;
+  return fresh.id;
+}
+
+/**
+ * Pick the active desktop thread for a workspace folder: per-folder remembered id,
+ * else newest listed desktop chat in that folder, else create one there.
+ *
+ * Unlike {@link resolveActiveDesktopChatId}, this does not follow the global
+ * `lastActiveChatIdByApp.desktop` when that chat belongs to another folder.
+ */
+export function resolveActiveDesktopChatIdForWorkspace(
+  desktopWorkspacePath: string,
+  state: SessionState,
+  createScopedDesktopChat: (desktopWorkspacePath: string) => Chat,
+): string {
+  const key = normalizeWorkspacePath(desktopWorkspacePath);
+  const map = state.lastActiveChatIdByWorkspace ?? {};
+  const remembered = map[key];
+  if (remembered) {
+    const chat = state.chats.find(
+      (c) =>
+        c.id === remembered &&
+        isDesktopChat(c) &&
+        normalizeWorkspacePath(c.workspacePath ?? '') === key,
+    );
+    if (chat) return chat.id;
+  }
+
+  const scoped = getSidebarListedDesktopChatsForWorkspace(state, key);
+  if (scoped.length) return scoped[0]!.id;
+
+  const fresh = createScopedDesktopChat(key);
   state.chats.unshift(fresh);
   const now = Date.now();
   fresh.updatedAt = now;
