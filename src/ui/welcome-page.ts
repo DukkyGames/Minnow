@@ -428,7 +428,7 @@ export function openWelcome(options?: { skipHash?: boolean }): void {
   }
   setWelcomePending(false);
 
-  // Re-probe in case welcome opened before initApp finished detectLocalServer (MinnowOS Code app).
+  // Re-probe in case welcome opened before initApp finished detectLocalServer (Minnow Code app).
   syncServerAvailabilityUi();
   void detectLocalServer().then(() => {
     syncServerAvailabilityUi();

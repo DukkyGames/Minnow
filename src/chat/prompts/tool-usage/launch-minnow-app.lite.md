@@ -1,7 +1,7 @@
 ---
 id: launch-minnow-app
 kind: tool-usage
-label: MinnowOS app routing (lite)
+label: Minnow app routing (lite)
 version: 1
 part: tool-usage
 description: Lite app-switching rules for launch_minnow_app.

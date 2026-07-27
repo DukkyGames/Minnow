@@ -223,7 +223,7 @@ For any AI-suggested mutation (digest action groups, automation mail-ops, chat-a
 ## Part 4 — Automations v2
 
 - **Conditions**: sender / domain / subject-contains / has-attachment / category / urgency, AND-combined. Schema: `{ conditions: [{ field, op, value }], trigger, actions: [...] }` (multiple actions per rule).
-- **Actions**: existing (triage, variants) + `move_to_folder`, `archive`, `mark_read`, `flag`, `forward_to` (through the review queue, 3.7), `os_notify` (real MinnowOS notification via scheduler delivery — fixes D9), `run_scheduler_job`.
+- **Actions**: existing (triage, variants) + `move_to_folder`, `archive`, `mark_read`, `flag`, `forward_to` (through the review queue, 3.7), `os_notify` (real Minnow notification via scheduler delivery — fixes D9), `run_scheduler_job`.
 - **Dry-run preview** in the builder: "would have matched 14 messages this week" (query the store).
 - **Audit log**: every run recorded in `automation_runs` (rule, message, action, outcome) with a Runs tab in the UI.
 - Guardrail: automations never send mail; `forward_to` is confirm-queued unless the user marks the rule trusted.

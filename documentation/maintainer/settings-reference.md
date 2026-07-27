@@ -2,7 +2,7 @@
 
 Complete inventory of Minnow settings: where they appear in the UI, what they control, and where they are persisted.
 
-For storage layout and `config.json` overview, see [configuration.md](configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts) and [settings-page-rebuild-min-130.md](../plans/settings-page-rebuild-min-130.md).
+For storage layout and `config.json` overview, see [configuration.md](../guides/configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts).
 
 **Last updated:** 2026-07-25
 
@@ -86,7 +86,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 
 ## 2. Apps
 
-Choose which MinnowOS apps appear in the dock, menubar shortcuts, notifications, and agent `launch_minnow_app` choices. Changes apply immediately (no restart).
+Choose which Minnow apps appear in the dock, menubar shortcuts, notifications, and agent `launch_minnow_app` choices. Changes apply immediately (no restart).
 
 | Setting | Persistence | Notes |
 |---------|-------------|-------|
@@ -117,7 +117,7 @@ Stored primarily in browser `localStorage` (custom token overrides may sync via 
 | Theme family | `sage`, `amber`, `cyan`, `coral` |
 | Theme mode | `dark`, `light` per family |
 | Follow system | Match OS dark/light |
-| Desktop wallpaper | MinnowOS wallpaper image |
+| Desktop wallpaper | Minnow wallpaper image |
 | Fonts | UI font + mono font stacks |
 | Custom colors | Per-token `--mn-*` overrides |
 
@@ -229,13 +229,13 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 | Rule groups | Named sections (e.g. General, Git, Style) |
 | Rules | Per-rule title, instructions, enabled flag, and group assignment |
 
-Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover ([`src/ui/settings-rules.ts`](../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../src/ui/settings-rules-popover.ts)). Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
+Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover ([`src/ui/settings-rules.ts`](../../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../../src/ui/settings-rules-popover.ts)). Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
 
 ### Modes (9)
 
 Composer strip: `general` · `build` · `plan` · `debug`
 
-Entered elsewhere: `orchestrate` (hub) · `super-plan` (Plan sub-menu) · `desktop` (MinnowOS chat) · `email` (assistant dock, ships with the hidden Email app) · `onboarding` (first run). `reef` was removed in MIN-473.
+Entered elsewhere: `orchestrate` (hub) · `super-plan` (Plan sub-menu) · `desktop` (Minnow chat) · `email` (assistant dock, ships with the hidden Email app) · `onboarding` (first run). `reef` was removed in MIN-473.
 
 | Per-mode | Notes |
 |----------|-------|
@@ -508,7 +508,7 @@ Not all exposed in Settings UI:
 | `MINNOW_ELECTRON` | Internal Electron flag |
 | `MINNOW_TEST` | Test mode |
 
-Full table: [commands.md](commands.md#environment-variables).
+Full table: [commands.md](../guides/commands.md#environment-variables).
 
 ---
 
@@ -582,4 +582,4 @@ Desktop and General modes include the **`settings`** tool group (`search_setting
 
 **Prompt:** [`src/chat/prompts/tool-usage/manage-settings.md`](../../src/chat/prompts/tool-usage/manage-settings.md) (gated when `update_settings` is enabled in General/Desktop).
 
-Plan: [`documentation/plans/settings-agent-tools.md`](../plans/settings-agent-tools.md).
+Implementation: [`src/ui/settings-agent-center.ts`](../../src/ui/settings-agent-center.ts).

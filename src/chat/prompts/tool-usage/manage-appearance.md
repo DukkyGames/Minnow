@@ -7,7 +7,7 @@ part: tool-usage
 
 # Manage appearance
 
-Use **`get_appearance`**, **`update_appearance`**, and **`upload_appearance_asset`** when the user asks to change MinnowOS theme, colors, fonts, or desktop wallpaper.
+Use **`get_appearance`**, **`update_appearance`**, and **`upload_appearance_asset`** when the user asks to change Minnow theme, colors, fonts, or desktop wallpaper.
 
 Appearance is **browser-local** (not server settings). Do **not** use `update_settings` for theme, wallpaper, fonts, or custom colors — those keys are read-only there.
 

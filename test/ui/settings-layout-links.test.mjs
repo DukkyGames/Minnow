@@ -1,5 +1,5 @@
 /**
- * Inline settings cross-links must call openSettings (not hash-only) so MinnowOS
+ * Inline settings cross-links must call openSettings (not hash-only) so Minnow
  * can switch sections while the Settings window is already open.
  */
 import assert from 'node:assert/strict';

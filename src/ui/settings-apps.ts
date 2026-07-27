@@ -1,5 +1,5 @@
 /**
- * Settings → Apps: toggle which optional MinnowOS apps appear in launchers.
+ * Settings → Apps: toggle which optional Minnow apps appear in launchers.
  * When none are released yet, shows Always included + Coming soon.
  */
 

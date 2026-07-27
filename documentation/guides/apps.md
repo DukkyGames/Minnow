@@ -1,8 +1,8 @@
-# MinnowOS apps
+# Minnow apps
 
-Minnow's desktop shell ("MinnowOS") presents focused apps on a desktop with a **dock** launcher and a **menubar** (model chip, notifications bell, clock). The desktop itself is the **chat** surface; other apps open as fullscreen surfaces, floating windows, or side panels. Routes use hashes like `#/desktop` and `#/app/<id>`.
+Minnow's desktop shell ("Minnow") presents focused apps on a desktop with a **dock** launcher and a **menubar** (model chip, notifications bell, clock). The desktop itself is the **chat** surface; other apps open as fullscreen surfaces, floating windows, or side panels. Routes use hashes like `#/desktop` and `#/app/<id>`.
 
-Shell internals live in [`src/os/`](../../src/os/); the exhaustive reference is the "MinnowOS shell" section of [`../context.md`](../context.md).
+Shell internals live in [`src/os/`](../../src/os/); the exhaustive reference is the "Minnow Shell" section of [`../context.md`](../context.md).
 
 ## What ships
 
@@ -102,7 +102,7 @@ The rest are entered from elsewhere and never appear in the strip:
 |------|--------------|
 | **Orchestrate** | The Orchestrate hub / top bar — board + plans under `documentation/plans/`. |
 | **Super Plan** | The caret sub-menu under **Plan**, or the Orchestrate plan screen. |
-| **Desktop** | The MinnowOS desktop chat surface. |
+| **Desktop** | The Minnow desktop chat surface. |
 | **Email** | The Email assistant dock (ships with the hidden Email app). |
 | **Onboarding** | First run only — the guide chat. |
 

@@ -1,6 +1,6 @@
 # Minnow Underwater Wallpaper — Extract
 
-Portable copy of the MinnowOS **Underwater** desktop wallpaper (default wallpaper in Minnow). Pure DOM + CSS — no images, no canvas, no build step.
+Portable copy of the Minnow **Underwater** desktop wallpaper (default wallpaper in Minnow). Pure DOM + CSS — no images, no canvas, no build step.
 
 ## What it is
 

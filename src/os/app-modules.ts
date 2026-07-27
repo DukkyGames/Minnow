@@ -1,5 +1,5 @@
 /**
- * Lazy MinnowOS app module initialization — defer page bundles until opened or routed at boot.
+ * Lazy Minnow app module initialization — defer page bundles until opened or routed at boot.
  */
 
 import { APP_MODULE_LOADERS, isAppId } from './app-registry';

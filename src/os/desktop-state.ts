@@ -1,5 +1,5 @@
 /**
- * MinnowOS desktop state machine — idle hero, desktop chat, and desktop research.
+ * Minnow desktop state machine — idle hero, desktop chat, and desktop research.
  */
 
 import { runComposerDockTransition } from './composer-motion';

@@ -65,7 +65,7 @@ Minnow captures errors **locally only** — nothing is sent off-device.
 
 | Problem | Fix |
 |---------|-----|
-| OAuth `redirect_uri_mismatch` | The redirect URI in the Google/Microsoft console must exactly match Settings → OAuth (port included). See [oauth-google.md](oauth-google.md) / [oauth-microsoft.md](oauth-microsoft.md). |
+| OAuth `redirect_uri_mismatch` | The redirect URI in the Google/Microsoft console must exactly match Settings → OAuth, port included. Only relevant to the release-gated Email/Calendar apps. |
 | OAuth `access_denied` (Google) | Add your account as a **test user** on the consent screen while the app is in Testing mode. |
 | Email / Calendar / Compare / Bench / Experts app missing | Expected — these are release-gated off (`releaseState: 'hidden'`). They have no dock tile, route, or tools. See [apps.md](apps.md#behind-the-release-gate). |
 | Email won't send | *(hidden app)* By design — send always requires explicit confirmation. Also: Outlook tenants often block IMAP/SMTP basic auth; prefer Graph/OAuth. |
@@ -84,9 +84,9 @@ Minnow captures errors **locally only** — nothing is sent off-device.
 With the server running (substitute your port):
 
 ```bash
-npx tsx scripts/sa16-smoke.mjs http://localhost:5173
-node test/terminal-stream.test.mjs http://localhost:5173
-npx tsx scripts/step16-memory-smoke.mjs http://localhost:5173
+npx tsx scripts/sa16-smoke.mjs http://localhost:9473
+node test/terminal-stream.test.mjs http://localhost:9473
+npx tsx scripts/step16-memory-smoke.mjs http://localhost:9473
 ```
 
 Still stuck? The exhaustive reference is [`../context.md`](../context.md), and active issues/fixes are tracked under [`../plans/`](../plans/).

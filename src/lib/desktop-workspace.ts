@@ -1,5 +1,5 @@
 /**
- * Client helper for the desktop chat workspace (MinnowOS desktop surface).
+ * Client helper for the desktop chat workspace (Minnow desktop surface).
  */
 
 import { normalizeWorkspacePath } from './normalize-workspace-path';

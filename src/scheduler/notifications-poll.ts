@@ -1,5 +1,5 @@
 /**
- * Poll scheduler notifications and surface them via MinnowOS menubar badges.
+ * Poll scheduler notifications and surface them via Minnow menubar badges.
  */
 
 import { detectLocalServer } from '../tools/client';

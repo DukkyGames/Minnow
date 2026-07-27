@@ -33,7 +33,7 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
   if (!isElectronShell()) {
     appendSettingsOfflineHint(
       mount,
-      'Desktop app settings are available in the MinnowOS Electron shell.',
+      'Desktop app settings are available in the Minnow Electron shell.',
     );
     return;
   }

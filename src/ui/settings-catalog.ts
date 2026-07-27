@@ -40,7 +40,7 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
 /** Category descriptions (search keywords / future catalog hints; not shown in UI). */
 export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
   general: 'Terminal behavior, filesystem and LAN access, notifications, audio devices, and where settings are saved.',
-  apps: 'Choose which MinnowOS apps appear in the dock and launchers.',
+  apps: 'Choose which Minnow apps appear in the dock and launchers.',
   appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',

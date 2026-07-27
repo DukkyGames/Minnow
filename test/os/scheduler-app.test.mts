@@ -1,5 +1,5 @@
 /**
- * MinnowOS Scheduler app registration, routing, and side-panel shell.
+ * Minnow Scheduler app registration, routing, and side-panel shell.
  */
 
 import assert from 'node:assert/strict';

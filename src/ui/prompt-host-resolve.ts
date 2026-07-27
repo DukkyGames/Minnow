@@ -68,7 +68,7 @@ function pickPromptHost(candidates: (HTMLElement | null)[]): HTMLElement | null 
   return candidates.find((host) => host != null) ?? null;
 }
 
-/** Chat app page is open (legacy #/chat or MinnowOS Chat window). */
+/** Chat app page is open (legacy #/chat or Minnow Chat window). */
 function isLegacyChatAppOpen(): boolean {
   if (getForegroundAppId() === 'chat') return true;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;

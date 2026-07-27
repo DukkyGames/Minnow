@@ -448,7 +448,7 @@ html.onboarding-active .mn-os-shell {
   gap: 16px;
 }
 
-/* Same accent-box logo treatment as the MinnowOS menubar header. */
+/* Same accent-box logo treatment as the Minnow menubar header. */
 .mn-onboarding-welcome__logo {
   flex-shrink: 0;
   width: 48px;

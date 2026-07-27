@@ -1,5 +1,5 @@
 /**
- * User-facing MinnowOS app availability preferences.
+ * User-facing Minnow app availability preferences.
  * Persists disabled optional app ids under minnow.os.disabledApps.
  * Missing storage means all released optional apps are enabled.
  */

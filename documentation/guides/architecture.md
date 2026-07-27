@@ -14,7 +14,7 @@ A high-level map of how Minnow fits together. For the exhaustive, file-by-file r
                 │ loads
 ┌───────────────▼─────────────────────────────────────────────┐
 │ SPA  (src/, index.html — Vite + TypeScript, no framework)    │
-│  • MinnowOS shell (src/os/): desktop, dock, windows, apps    │
+│  • Minnow Shell (src/os/): desktop, dock, windows, apps    │
 │  • Chat + modes + prompts (src/chat/)                        │
 │  • Agent layer: tools, sub-agents, work agents (src/agents,  │
 │    src/tools)                                                 │

@@ -2,7 +2,7 @@
 
 Minnow is local-first: all durable state lives under your **Minnow home** directory. Nothing leaves your machine except requests to the model providers you configure.
 
-For a complete list of every setting (UI sections, config keys, tools, and env vars), see **[settings-reference.md](settings-reference.md)**.
+For a complete list of every setting (UI sections, config keys, tools, and env vars), see **[settings-reference.md](../maintainer/settings-reference.md)**.
 
 ## Minnow home (`~/.minnow`)
 

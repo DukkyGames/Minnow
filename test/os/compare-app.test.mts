@@ -1,5 +1,5 @@
 /**
- * MinnowOS Compare app registration and markup contract.
+ * Minnow Compare app registration and markup contract.
  */
 
 import assert from 'node:assert/strict';

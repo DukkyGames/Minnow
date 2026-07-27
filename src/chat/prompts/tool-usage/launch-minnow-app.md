@@ -1,15 +1,15 @@
 ---
 id: launch-minnow-app
 kind: tool-usage
-label: MinnowOS app routing
+label: Minnow app routing
 version: 1
 part: tool-usage
-description: Offer to switch the user to a better-fit MinnowOS app via launch_minnow_app.
+description: Offer to switch the user to a better-fit Minnow app via launch_minnow_app.
 ---
 
-## MinnowOS app switching
+## Minnow app switching
 
-When another MinnowOS app clearly fits the user's goal better than staying in Chat, **offer** to switch — describe which app and why, and **wait for the user to confirm** before calling **`launch_minnow_app`**. Do not navigate on your own.
+When another Minnow app clearly fits the user's goal better than staying in Chat, **offer** to switch — describe which app and why, and **wait for the user to confirm** before calling **`launch_minnow_app`**. Do not navigate on your own.
 
 | User intent | `app_id` | `seed` (optional) |
 |-------------|----------|-------------------|

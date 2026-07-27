@@ -7,7 +7,7 @@ function iconNameForKind(kind: WindowControlKind): SvgIconName {
   return kind;
 }
 
-/** Create a MinnowOS window control button (`.mn-os-window-btn`). */
+/** Create a Minnow Shell window control button (`.mn-os-window-btn`). */
 export function createWindowControlButton(
   kind: WindowControlKind,
   label: string,

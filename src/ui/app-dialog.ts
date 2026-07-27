@@ -1,5 +1,5 @@
 /**
- * In-app alert / confirm / prompt dialogs for the Minnow shell.
+ * In-app alert / confirm / prompt dialogs for the Minnow Shell.
  * Replaces blocking native window dialogs that break Electron input on Windows.
  */
 

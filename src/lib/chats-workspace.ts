@@ -1,5 +1,5 @@
 /**
- * Client helper for the ~/.minnow/chats sandbox (MinnowOS Chat App).
+ * Client helper for the ~/.minnow/chats sandbox (Minnow Chat App).
  */
 
 import { normalizeWorkspacePath } from './normalize-workspace-path';

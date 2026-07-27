@@ -27,7 +27,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     id: 'desktop',
     label: 'Desktop',
     description:
-      'MinnowOS desktop assistant — full tool access for everyday tasks on the desktop surface.',
+      'Minnow desktop assistant — full tool access for everyday tasks on the desktop surface.',
     promptId: 'desktop',
     toolPolicy: allowGroupsToolPolicy('desktop', MODE_ALLOWED_GROUPS.desktop),
   },

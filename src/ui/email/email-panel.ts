@@ -1,6 +1,6 @@
 import { appAlert, appConfirm, appPrompt } from '../app-dialog';
 /**
- * Email inbox + thread panel for the MinnowOS Email app.
+ * Email inbox + thread panel for the Minnow Email app.
  */
 
 import {

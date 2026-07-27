@@ -854,7 +854,7 @@ export interface TurnRunRecord {
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
 export type ChatKind = 'expert' | 'expert-lab';
 
-/** MinnowOS app-owned chat scopes that stay out of unrelated session rails. */
+/** Minnow app-owned chat scopes that stay out of unrelated session rails. */
 export type ChatAppScope = 'email';
 
 /** Follow-up message queued while the agent turn is in progress (MIN-200). */
@@ -1058,7 +1058,7 @@ export interface SessionState {
   activeBoardGroupId?: string;
   /** Last selected chat per normalized workspace key ('' = unassigned bucket). */
   lastActiveChatIdByWorkspace?: Record<string, string>;
-  /** Last selected chat per MinnowOS app id (e.g. `{ chat: '…' }` for the Chat app). */
+  /** Last selected chat per Minnow app id (e.g. `{ chat: '…' }` for the Chat app). */
   lastActiveChatIdByApp?: Record<string, string>;
   /** Cumulative agent line stats keyed by normalized workspace path. */
   codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;

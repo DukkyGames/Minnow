@@ -11,7 +11,7 @@ import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsShellEnabled } from '../os/page-bridge';
 import { getFilePanelState } from '../state/file-panel';
 
-/** True when Code is the active fullscreen MinnowOS app. */
+/** True when Code is the active fullscreen Minnow app. */
 export function isCodeAppForeground(): boolean {
   return getOsView() === 'app' && getForegroundAppId() === 'code';
 }

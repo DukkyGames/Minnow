@@ -1,5 +1,5 @@
 /**
- * MinnowOS Chat app session helpers (client; uses sessions API + chats workspace path).
+ * Minnow Chat app session helpers (client; uses sessions API + chats workspace path).
  */
 
 import { getChatsWorkspacePath, isChatsWorkspacePath } from '../lib/chats-workspace';

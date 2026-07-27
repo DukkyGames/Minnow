@@ -1,5 +1,5 @@
 /**
- * Choose your apps — pick which optional MinnowOS apps appear in the dock.
+ * Choose your apps — pick which optional Minnow apps appear in the dock.
  * When no optional apps are released yet, shows Always included + Coming soon.
  */
 

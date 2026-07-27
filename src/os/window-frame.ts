@@ -40,7 +40,7 @@ const MIN_HEIGHT = 200;
 
 type ResizeDir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
-/** DOM factory for a draggable, resizable MinnowOS window chrome. */
+/** DOM factory for a draggable, resizable Minnow Shell window chrome. */
 export class WindowFrame {
   readonly root: HTMLElement;
   readonly body: HTMLElement;

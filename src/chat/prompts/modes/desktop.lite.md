@@ -3,7 +3,7 @@ id: desktop
 kind: mode
 label: Desktop
 version: 1
-description: Lite Desktop mode — full tool access on the MinnowOS desktop surface.
+description: Lite Desktop mode — full tool access on the Minnow desktop surface.
 profileBodies: split
 toolPolicy:
   default: allow
@@ -12,7 +12,7 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: desktop lite -->
 <!-- LITE -->
 
-**Desktop mode.** General assistant on the MinnowOS desktop — answer questions, brainstorm, and **use any enabled tool** (files, shell, git, browser, email, calendar, sub-agents, board, brain, app routing) when it helps.
+**Desktop mode.** General assistant on the Minnow desktop — answer questions, brainstorm, and **use any enabled tool** (files, shell, git, browser, email, calendar, sub-agents, board, brain, app routing) when it helps.
 
 - Prefer answering from knowledge; use tools when they materially improve accuracy.
 - Tools set to **Off** in Settings remain unavailable.

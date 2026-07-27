@@ -35,7 +35,7 @@ function msUntilNextMinute(d: Date): number {
   return (60 - d.getSeconds()) * 1000 - d.getMilliseconds();
 }
 
-/** Render the MinnowOS desktop (greeting, concierge, chat surface). */
+/** Render the Minnow desktop (greeting, concierge, chat surface). */
 export function renderDesktop(root: HTMLElement): () => void {
   root.replaceChildren();
   root.className = 'mn-os-desktop';

@@ -268,7 +268,7 @@ function createAttachChip(attachment: Attachment): HTMLElement {
   return chip;
 }
 
-/** Composer preview strip ids shared by Code and MinnowOS chat surfaces. */
+/** Composer preview strip ids shared by Code and Minnow chat surfaces. */
 const ATTACH_PREVIEW_IDS = [
   'attachPreview',
   'chatAppAttachPreview',

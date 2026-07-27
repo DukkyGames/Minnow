@@ -22,7 +22,7 @@
   display: none !important;
 }
 
-/* Fallback when Brain/Code shells are hidden behind another MinnowOS window */
+/* Fallback when Brain/Code shells are hidden behind another Minnow Shell window */
 .question-host--global {
   position: fixed;
   left: 50%;
@@ -54,7 +54,7 @@
   animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
 }
 
-/* Frosted composer shell (MinnowOS desktop dock) */
+/* Frosted composer shell (Minnow desktop dock) */
 .question-cards-panel--os-dock {
   padding: 14px 16px 16px;
   background: color-mix(in srgb, var(--os-surface-2) 85%, transparent);

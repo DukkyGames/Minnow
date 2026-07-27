@@ -1,4 +1,4 @@
-# Updating Minnow
+# Releasing Minnow
 
 How updates flow through Minnow — **releasing** a new version (for maintainers) and
 **receiving** one (for users). Auto-update is built on
@@ -169,4 +169,5 @@ and [`test/os/update-menubar.test.mts`](../../test/os/update-menubar.test.mts).
 | Menubar pill + popover | [`src/os/update-menubar.ts`](../../src/os/update-menubar.ts) |
 | Persisted channel choice | `~/.minnow/updater.json` |
 | Publish config (`--publish never` locally) | [`package.json`](../../package.json) `build.publish` + [`scripts/electron-builder-run.mjs`](../../scripts/electron-builder-run.mjs) |
-| Packaging overview | [`../getting-started.md`](../getting-started.md#packaging-a-desktop-build) |
+| Packaging targets, extra resources, asar unpack | [`package.json`](../../package.json) `build` + [`context.md`](../context.md#electron-and-packaging) |
+| macOS signing & notarization | [`macos-signing.md`](macos-signing.md) |
