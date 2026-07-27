@@ -35,6 +35,7 @@
     "test:skills-impeccable": "node test/run-all.mjs --suite skills-impeccable",
     "test:impeccable": "node test/run-all.mjs --suite impeccable",
     "fake-model": "node scripts/fake-model-server.mjs",
+    "check:board-log": "node --import tsx scripts/check-board-log.mjs",
     "preview": "vite preview",
     "electron:build": "node scripts/build-electron.mjs",
     "electron:dev": "concurrently -k -n server,electron \"cross-env BROWSER=none MINNOW_ELECTRON=1 node server.js\" \"node scripts/electron-dev.mjs\"",
@@ -69,7 +70,8 @@
     "test:design": "node test/run-all.mjs --suite design",
     "test:browser": "node test/run-all.mjs --suite browser",
     "test:benchmark": "node test/run-all.mjs --suite benchmark",
-    "test:evals": "node test/run-all.mjs --suite evals"
+    "test:evals": "node test/run-all.mjs --suite evals",
+    "test:board": "node test/run-all.mjs --suite board"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.21",
