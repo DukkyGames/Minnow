@@ -313,6 +313,8 @@ Per-role prompts and optional provider/model binding. Shipped: `default`, `build
 
 Kanban delivery from plans under `documentation/plans/`. Tools: `board_init`, `board_update_task`, `board_get_state`, `board_report`, `delegate_tasks`. Board member chats get role-scoped tool filters ([`src/chat/modes/orchestrate-tool-filter.ts`](../src/chat/modes/orchestrate-tool-filter.ts)); builder/tester/fixer chats also get `todo_write` for the composer checklist ([`src/tools/todo-tools.ts`](../src/tools/todo-tools.ts), [`src/ui/todo-panel.ts`](../src/ui/todo-panel.ts)).
 
+**Testing guide:** [guides/orchestrate-board-testing.md](guides/orchestrate-board-testing.md) — `npm run test:board`, fake model, `seed:test-board`, `check:board-log`, harness layout.
+
 State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orchestrate-board.ts`](../src/ui/orchestrate-board.ts). Global defaults (`autopilot` block in `config.json`): Settings → **Autopilot** ([`src/ui/settings-autopilot.ts`](../src/ui/settings-autopilot.ts)) — emphasis-panel layout matching Agents/Rules (board execution, retries, heartbeat, planner fallback, self-heal). Per-board overrides on the board header.
 
 **Board metrics strip (MIN-414):** When the main column is in board view, the bottom inference metrics panel rolls up **all planner + member chat** token totals (ledger-first per chat) and averages per-chat tok/s (completion-weighted via [`averageStatsSegments`](../src/chat/orchestrate/stats-math.ts)). Implementation: [`src/chat/orchestrate/board-stats-aggregate.ts`](../src/chat/orchestrate/board-stats-aggregate.ts); refreshed on board live updates and chat switches so focusing a member chat does not reset totals.

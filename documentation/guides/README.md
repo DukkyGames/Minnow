@@ -10,6 +10,7 @@ Task-oriented documentation. Product overview: [`README.md`](../../README.md). F
 | [architecture.md](architecture.md) | High-level system map: SPA, tool server, Electron shell, agent layer, storage. |
 | [configuration.md](configuration.md) | `~/.minnow` layout, `config.json`, providers, encrypted secrets, env vars. |
 | [troubleshooting.md](troubleshooting.md) | Common problems and fixes. |
+| [orchestrate-board-testing.md](orchestrate-board-testing.md) | Orchestrate Kanban tests: `test:board`, fake model, seed board, log invariants. |
 
 New to the project? Start with **setup.md**, then skim **apps.md**.
 
