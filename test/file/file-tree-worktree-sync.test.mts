@@ -193,7 +193,7 @@ describe('syncFileTreeToPanelWorktree', () => {
     assert.equal(buildFileTreeToolContext().workspaceRoot, undefined);
   });
 
-  test('force refresh reloads tree even when listing root unchanged', async () => {
+  test('force refresh preserves expansion when listing root unchanged', async () => {
     setupDom();
     launchInstance('code');
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
@@ -203,11 +203,11 @@ describe('syncFileTreeToPanelWorktree', () => {
     const { syncFileTreeToPanelWorktree } = await import('../../src/ui/file-tree.ts');
     await syncFileTreeToPanelWorktree(MAIN_WS, { force: true });
 
-    assert.deepEqual(getFilePanelState().expandedDirs, []);
-    assert.equal(getFilePanelState().selectedPath, null);
+    assert.deepEqual(getFilePanelState().expandedDirs, ['docs']);
+    assert.equal(getFilePanelState().selectedPath, 'docs/readme.md');
   });
 
-  test('force refresh keeps browser split open when preview is active', async () => {
+  test('force refresh keeps preview tabs but preserves file tree state', async () => {
     setupDom();
     launchInstance('code');
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
@@ -229,6 +229,8 @@ describe('syncFileTreeToPanelWorktree', () => {
       { id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } },
     ]);
     assert.equal(getFilePanelState().activePreviewTab, 'tab-1');
+    assert.deepEqual(getFilePanelState().expandedDirs, ['docs']);
+    assert.equal(getFilePanelState().selectedPath, 'docs/readme.md');
   });
 
   test('desktop workspace switch updates listing root and resets panel state', async () => {

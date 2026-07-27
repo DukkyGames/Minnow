@@ -20,9 +20,11 @@ import {
   initFileTreeCrud,
   initFileTreeIfNeeded,
   invalidateFileTreeCache,
+  refreshDirectories,
   refreshFileTree,
   renderFileTree,
 } from './file-tree';
+import { initFileTreeAutoRefreshInteractionTracking } from './file-tree-auto-refresh';
 import { registerFileTreeRefreshBridge } from './file-tree-refresh-bridge';
 import { setFileTreeServerAvailable } from './file-tree-server';
 import {
@@ -111,6 +113,7 @@ export function onFilePanelServerAvailabilityChanged(): void {
 export async function initFilePanel(): Promise<void> {
   registerFileTreeRefreshBridge({
     refresh: refreshFileTree,
+    refreshDirectories,
     render: renderFileTree,
     invalidateCache: invalidateFileTreeCache,
   });
@@ -152,6 +155,7 @@ export async function initFilePanel(): Promise<void> {
   bindFileViewerContextMenu();
   initFileTreeCrud();
   initFileTreeDnD();
+  initFileTreeAutoRefreshInteractionTracking();
   registerFileTreeFilterRender(renderFileTree);
   registerFileTreeServerCheck(isLocalServerAvailable);
   initFileTreeSearch();

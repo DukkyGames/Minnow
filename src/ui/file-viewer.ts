@@ -30,7 +30,6 @@ import {
 import { isMarkdownFilePath } from './file-markdown-path';
 import { showFilePanelContextMenu } from './file-tree-context-menu';
 import {
-  refreshFileTreeViaBridge,
   renderFileTreeViaBridge,
 } from './file-tree-refresh-bridge';
 import {
@@ -1068,7 +1067,6 @@ export async function saveCurrentFile(): Promise<boolean> {
     if (lspSyncedPath === tab.path) {
       void notifyLspDocument(tab.path, 'change', content);
     }
-    await refreshFileTreeViaBridge();
     const { emitFileSaved } = await import('../state/preview-events');
     emitFileSaved(tab.path);
     return true;
