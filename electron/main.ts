@@ -367,9 +367,15 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers();
   initUpdater({ prepareQuitForUpdate });
 
+  // Window creation and runtime/server bootstrap are independent (window state reads
+  // Electron userData, not the Minnow home dir), so overlap them — the shell is then
+  // ready to load the moment the server URL resolves.
+  const loadUrlPromise = resolveLoadUrl();
+  // Keep the rejection handled even if createMainWindow() rejects first.
+  loadUrlPromise.catch(() => {});
+
   mainWindow = await createMainWindow();
-  const loadUrl = await resolveLoadUrl();
-  await mainWindow.loadURL(loadUrl);
+  await mainWindow.loadURL(await loadUrlPromise);
 }
 
 /** Surface fatal startup errors — packaged runs have no terminal for console.error. */
