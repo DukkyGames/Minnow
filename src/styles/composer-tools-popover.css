@@ -38,6 +38,21 @@
   right: 0;
 }
 
+/* Popover opens above the tools button; escape overflow clipping on composer rows */
+.composer-controls:has(.composer-tools-popover:not(.hidden)) {
+  overflow: visible;
+  position: relative;
+  z-index: 30;
+}
+
+.composer-controls__trail:has(.composer-tools-popover:not(.hidden)) {
+  overflow: visible;
+}
+
+.composer-tools-anchor:has(.composer-tools-popover:not(.hidden)) {
+  z-index: 30;
+}
+
 .composer-tools-btn .icon-svg {
   width: 20px;
   height: 20px;

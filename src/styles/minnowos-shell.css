@@ -801,10 +801,14 @@ html.is-electron-shell .mn-os-mb-window-controls .mn-os-window-btn svg {
 }
 
 .mn-os-app-layer.is-active {
-  animation: mn-os-app-in 0.35s var(--os-ease-out);
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
+}
+
+/* Enter animation only when opening an app from the desktop — not app-to-app switches. */
+.mn-os-app-layer.is-active.mn-os-app-enter {
+  animation: mn-os-app-in 0.35s var(--os-ease-out);
 }
 
 .mn-os-app-layer:not(.is-active) {
@@ -1177,7 +1181,7 @@ html.minnow-os-enabled header.topbar.hidden {
   .mn-os-boot,
   .mn-os-boot-logo,
   .mn-os-boot-bar span,
-  .mn-os-app-layer.is-active,
+  .mn-os-app-layer.is-active.mn-os-app-enter,
   .mn-os-caret {
     animation: none !important;
   }

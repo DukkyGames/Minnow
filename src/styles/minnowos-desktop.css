@@ -251,11 +251,17 @@
 .mn-os-dock-reveal {
   position: absolute;
   bottom: env(safe-area-inset-bottom, 0px);
-  left: 50%;
+  left: calc(50% - var(--os-workspace-drawer-inset, 0px) / 2);
   transform: translateX(-50%);
   border-bottom: none;
   border-radius: 10px 10px 0 0;
   box-shadow: 0 -8px 24px -12px rgba(0, 0, 0, 0.55);
+  transition:
+    color 0.16s var(--os-ease),
+    border-color 0.16s var(--os-ease),
+    background 0.16s var(--os-ease),
+    transform 0.2s var(--os-ease-out),
+    left 280ms var(--os-ease-out);
 }
 
 .mn-os-dock-reveal:hover,
@@ -274,11 +280,12 @@
 .mn-os-dock-panel {
   position: absolute;
   bottom: calc(var(--os-dock-panel-inset, 22px) + env(safe-area-inset-bottom, 0px));
-  left: 50%;
+  left: calc(50% - var(--os-workspace-drawer-inset, 0px) / 2);
   transform: translateX(-50%);
   transition:
     transform 0.28s var(--os-ease-out),
-    opacity 0.24s var(--os-ease-out);
+    opacity 0.24s var(--os-ease-out),
+    left 280ms var(--os-ease-out);
 }
 
 .mn-os-dock-hide {
@@ -724,14 +731,21 @@
 
 .mn-os-composer-dock {
   position: absolute;
-  left: 50%;
+  /* Shift left by half the workspace drawer so we stay centered over the transcript. */
+  left: calc(50% - var(--os-workspace-drawer-inset, 0px) / 2);
   bottom: var(--os-composer-dock-bottom);
   transform: translateX(-50%);
-  width: min(var(--os-chat-column-max), calc(100% - 48px));
+  width: min(
+    var(--os-chat-column-max),
+    calc(100% - 48px - var(--os-workspace-drawer-inset, 0px))
+  );
   z-index: 12;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 280ms var(--os-ease-out);
+  transition:
+    opacity 280ms var(--os-ease-out),
+    left 280ms var(--os-ease-out),
+    width 280ms var(--os-ease-out);
   display: flex;
   flex-direction: column;
   gap: var(--os-composer-dock-flex-gap);
@@ -1959,7 +1973,10 @@
 
   /* Minimized previews: fit narrow screens */
   .mn-os-composer-dock {
-    width: calc(100% - max(20px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px)));
+    width: calc(
+      100% - max(20px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px)) -
+        var(--os-workspace-drawer-inset, 0px)
+    );
     bottom: var(--os-composer-dock-bottom);
   }
 

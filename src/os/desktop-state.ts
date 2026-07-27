@@ -309,6 +309,42 @@ export function takePendingDesktopResearchOptions(): DesktopResearchActivateOpti
 }
 
 /**
+ * Synchronously show desktop chat chrome before `showDesktop()` emits.
+ * Avoids a one-frame idle-desktop flash when leaving a fullscreen app (e.g. Code).
+ */
+export function prepareDesktopChatSurface(): void {
+  if (isDesktopResearchActive()) {
+    deactivateDesktopResearch();
+  }
+  if (isDesktopExpertsActive()) {
+    deactivateDesktopExperts();
+  }
+  setState('chatActive');
+}
+
+/** Synchronously show desktop research chrome before `showDesktop()` emits. */
+export function prepareDesktopResearchSurface(): void {
+  if (state === 'chatActive') {
+    deactivateDesktopChat();
+  }
+  if (isDesktopExpertsActive()) {
+    deactivateDesktopExperts();
+  }
+  setState('researchIdle');
+}
+
+/** Synchronously show desktop experts chrome before `showDesktop()` emits. */
+export function prepareDesktopExpertsSurface(): void {
+  if (state === 'chatActive') {
+    deactivateDesktopChat();
+  }
+  if (isDesktopResearchActive()) {
+    deactivateDesktopResearch();
+  }
+  setState('expertsIdle');
+}
+
+/**
  * Transition to desktop chat: dock composer, show rail + transcript, ensure session.
  * Does not launch the legacy Chat app layer.
  */
@@ -319,12 +355,8 @@ export async function activateDesktopChat(options?: DesktopChatActivateOptions):
   if (isDesktopExpertsActive()) {
     deactivateDesktopExperts();
   }
-  const wasIdle = state === 'idle';
   setState('chatActive');
-
-  if (wasIdle) {
-    await ensureDesktopComposerDocked();
-  }
+  await ensureDesktopComposerDocked();
 
   const { bootstrapDesktopChat } = await import('./desktop-chat');
   await bootstrapDesktopChat(options);

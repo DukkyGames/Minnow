@@ -12,6 +12,10 @@ import {
   getInstanceSnapshot,
   resetInstancesForTests,
 } from '../../src/os/instances.ts';
+import {
+  isDesktopChatActive,
+  resetDesktopStateForTests,
+} from '../../src/os/desktop-state.ts';
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   getCurrentRoute,
@@ -125,11 +129,13 @@ describe('os router navigation', () => {
     win.localStorage.clear();
     win.document.body.innerHTML = `
       <header class="topbar"></header>
+      <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
       <div id="appBody"></div>
     `;
     win.location.hash = '#/desktop';
     resetAppPreferencesForTests();
     resetInstancesForTests();
+    resetDesktopStateForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     initOsRouter();
@@ -138,6 +144,7 @@ describe('os router navigation', () => {
   afterEach(() => {
     resetOsRouterForTests();
     resetInstancesForTests();
+    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     resetAppPreferencesForTests();
   });
@@ -215,6 +222,18 @@ describe('os router navigation', () => {
     assert.equal(snap.view, 'desktop');
     assert.equal(snap.instances.find((i) => i.appId === 'chat'), undefined);
     assert.equal(isDesktopChatActive(), true);
+  });
+
+  test('launchApp(chat) from code prepares desktop chat before showDesktop emit', () => {
+    launchApp('code');
+    assert.equal(getForegroundAppId(), 'code');
+    launchApp('chat');
+    syncOsRouteFromHashForTests();
+    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(getInstanceSnapshot().view, 'desktop');
+    assert.equal(isDesktopChatActive(), true);
+    const layer = document.getElementById('osDesktopLayer');
+    assert.equal(layer?.classList.contains('is-chat-active'), true);
   });
 
   test('launchApp(research) redirects to desktop research', async () => {
