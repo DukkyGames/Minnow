@@ -332,6 +332,8 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 **Fake model server (orchestrate testability):** [`scripts/fake-model-server.mjs`](../scripts/fake-model-server.mjs) — local OpenAI-v1 HTTP stub (`GET /v1/models`, `POST /v1/chat/completions` SSE) driven by ordered scenario JSON (`{ match: { role?, taskId?, nth? }, emit: [...] }`). Default scenario emits a `board_report` pass tool call. `npm run fake-model -- --register` writes provider `fake-board` under `~/.minnow/providers/`. Exports `requests` for assertions.
 
+**Board lifecycle test harness:** [`test/orchestrate/_board-flow-helpers.mts`](../test/orchestrate/_board-flow-helpers.mts) — `seedBoard`, `driveBoardToConvergence` (bootstrap slots), and `driveLiveBoard` (real `startTask` / supervision / slot accounting with [`_scripted-turn-runner.mts`](../test/orchestrate/_scripted-turn-runner.mts)). Live mode opts in via `setBoardChatTurnRunner` under `MINNOW_TEST=1`. Suites: [`board-flow-e2e.test.mts`](../test/orchestrate/board-flow-e2e.test.mts), [`board-live-launch.test.mts`](../test/orchestrate/board-live-launch.test.mts).
+
 ### Experts
 
 Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`, memory under `pages/experts/<id>/facts/`. UI: Experts' Lab on desktop + `#/experts`.

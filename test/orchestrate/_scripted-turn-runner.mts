@@ -5,10 +5,16 @@
 
 import { setStreaming } from '../../src/app-state.ts';
 import { notifyChatStreamEnded } from '../../src/chat/streaming-state.ts';
-import { resetWrapperState } from '../../src/agents/controller/wrapper.ts';
+import {
+  chatTaskRunId,
+  bumpProgress,
+  getRunSupervision,
+  resetWrapperState,
+} from '../../src/agents/controller/wrapper.ts';
 import {
   clearTaskChatStallRestartsForTests,
   clearTaskQueuesForTests,
+  isLaunchReservedForTests,
   listRunningBoardTaskSlots,
   setBoardChatTurnRunner,
   type BoardChatTurnRunner,
@@ -57,6 +63,10 @@ export interface ScriptedTurnRunnerHandle {
   install(): void;
   restore(): void;
   launches: ScriptedTurnLaunch[];
+  /** Chat ids that had an active launch slot when the scripted turn began. */
+  slotsReservedAtLaunch: string[];
+  /** Chat ids with bound supervision when the scripted turn began. */
+  supervisionAtLaunch: string[];
   peakConcurrency: number;
   inFlight: number;
 }
@@ -234,6 +244,8 @@ export function createScriptedTurnRunner(opts: {
 }): ScriptedTurnRunnerHandle {
   const { script, override, turnDelayMs = 0 } = opts;
   const launches: ScriptedTurnLaunch[] = [];
+  const slotsReservedAtLaunch: string[] = [];
+  const supervisionAtLaunch: string[] = [];
   let peakConcurrency = 0;
   let inFlight = 0;
   const buildAttempts = new Map<string, number>();
@@ -264,9 +276,21 @@ export function createScriptedTurnRunner(opts: {
       input,
     });
 
+    if (isLaunchReservedForTests(chat.id)) {
+      slotsReservedAtLaunch.push(chat.id);
+    }
+    if (getRunSupervision(chatTaskRunId(chat.id))) {
+      supervisionAtLaunch.push(chat.id);
+    }
+
     inFlight += 1;
     try {
       markBoardTaskInProgressFromChat(chat);
+      // markBoardTaskInProgressFromChat may replace the task row via updateTask —
+      // re-read before injecting scripted outcomes onto the live store object.
+      const liveTask = chat.boardTaskId?.trim()
+        ? board.tasks.find((t) => t.id === chat.boardTaskId.trim())
+        : task;
 
       if (input.ownsGlobalStreaming ?? true) {
         setStreaming(true, chat.id);
@@ -281,7 +305,7 @@ export function createScriptedTurnRunner(opts: {
         input,
         chat,
         group,
-        task,
+        task: liveTask,
         phase,
         attempt,
       };
@@ -291,6 +315,8 @@ export function createScriptedTurnRunner(opts: {
       } else {
         defaultScriptedBody(ctx, script, buildAttempts);
       }
+
+      bumpProgress(chatTaskRunId(chat.id));
 
       notifyChatStreamEnded(chat.id);
       if (input.ownsGlobalStreaming ?? true) {
@@ -303,6 +329,8 @@ export function createScriptedTurnRunner(opts: {
 
   const handle: ScriptedTurnRunnerHandle = {
     launches,
+    slotsReservedAtLaunch,
+    supervisionAtLaunch,
     get peakConcurrency() {
       return peakConcurrency;
     },

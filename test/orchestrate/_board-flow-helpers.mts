@@ -244,6 +244,10 @@ export function cleanMergeMocks(integrationSha = 'cafebabe'): Record<string, unk
     verify_integration: { ok: true, verified: true },
     refresh_integration_deps: { ok: true },
     ensure_integration: { ok: true, path: '/tmp/fake-integration' },
+    create: { ok: true, path: '/tmp/fake-task-worktree' },
+    commit: { ok: true },
+    check_dirty: { ok: true, dirty: false },
+    check_merged: { ok: true, merged: true },
   };
 }
 
@@ -516,11 +520,27 @@ export async function settleUntil(
   group: ChatGroup,
   planner: Chat,
   maxTicks = 400,
+  options?: { runner?: ScriptedTurnRunnerHandle },
 ): Promise<void> {
   for (let tick = 0; tick < maxTicks; tick++) {
+    await autoDelegateNext(group, planner);
+    if (options?.runner && options.runner.inFlight > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      continue;
+    }
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     await drainTaskQueueForTests(group, planner);
-    if (assertBoardConverged(group)) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await drainTaskQueueForTests(group, planner);
+    if (assertBoardConverged(group)) {
+      const board = group.orchestrateBoard!;
+      if (
+        countRunningTaskChats(board) === 0 &&
+        (!options?.runner || options.runner.inFlight === 0)
+      ) {
+        return;
+      }
+    }
   }
   throw new Error(`settleUntil exceeded ${maxTicks} ticks without convergence`);
 }
@@ -540,7 +560,7 @@ export async function driveLiveBoard(
   runner.install();
   startBoardAutoRun(group, planner);
   await autoDelegateNext(group, planner);
-  await settleUntil(group, planner, options.maxTicks ?? 400);
+  await settleUntil(group, planner, options.maxTicks ?? 400, { runner });
 }
 
 /**
@@ -666,6 +686,9 @@ export function installBoardTestDom(): void {
     replaceChildren() {}
     querySelector() {
       return null;
+    }
+    querySelectorAll() {
+      return [];
     }
     appendChild() {
       return this;
