@@ -3,9 +3,11 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { describe, it } from 'node:test';
+import { resetMinnowHomeCache } from '../server/config/home.js';
 import { listMergedSkills } from '../server/skills/scan.js';
 import {
   applyMinnowPatchesToSkillDir,
@@ -45,6 +47,24 @@ const MATT_POCOCK_IDS = [
 ];
 
 describe('Matt Pocock Skills Library pack', () => {
+  /** @type {string | undefined} */
+  let isolatedHome;
+
+  before(() => {
+    isolatedHome = path.join(os.tmpdir(), `minnow-test-matt-pocock-${process.pid}`);
+    process.env.MINNOW_HOME = isolatedHome;
+    resetMinnowHomeCache();
+    fs.mkdirSync(path.join(isolatedHome, 'skills'), { recursive: true });
+  });
+
+  after(async () => {
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
+    if (isolatedHome) {
+      await fs.promises.rm(isolatedHome, { recursive: true, force: true });
+    }
+  });
+
   it('Matt Pocock skill dirs are not bundled under src/skills', () => {
     for (const id of MATT_POCOCK_IDS) {
       assert.equal(

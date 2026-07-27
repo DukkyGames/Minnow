@@ -8,7 +8,7 @@ import { availableParallelism } from 'node:os';
 /** @typedef {'node' | 'tsx-mocks' | 'tsx-mocks-loader' | 'node-tsx'} RunnerId */
 
 /** Full parallelism (~31 workers on a 32-core box) exhausted system RAM; cap it. */
-export const MAX_TEST_CONCURRENCY = 16;
+export const MAX_TEST_CONCURRENCY = 26;
 
 /** Resolve node:test worker count (env override or capped availableParallelism). */
 export function resolveTestConcurrency() {

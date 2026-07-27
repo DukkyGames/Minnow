@@ -94,6 +94,7 @@ describe('desktop chat session switch', () => {
     assert.equal(host?.hidden, false);
 
     activateDesktopChatSession('chat-b');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(host?.hidden, true);
 
     const closeBtn = host?.querySelector('.question-cards-icon-btn') as HTMLButtonElement;
@@ -122,9 +123,11 @@ describe('desktop chat session switch', () => {
 
     const host = document.getElementById('desktopQuestionHost');
     activateDesktopChatSession('chat-b');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(host?.hidden, true);
 
     activateDesktopChatSession('chat-a');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(host?.hidden, false);
     assert.ok(host?.querySelector('.question-cards-panel'));
 

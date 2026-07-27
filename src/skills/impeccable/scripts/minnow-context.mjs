@@ -60,9 +60,9 @@ function loadDesignJson(contextDir, workspaceRoot) {
     throw new Error(`Invalid .impeccable/design.json: ${message}`);
   }
 
-  if (parsed.schemaVersion !== 2) {
+  if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== 3) {
     throw new Error(
-      `Expected design.json schemaVersion 2, got ${String(parsed.schemaVersion)}`,
+      `Expected design.json schemaVersion 2 or 3, got ${String(parsed.schemaVersion)}`,
     );
   }
 

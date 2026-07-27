@@ -23,9 +23,9 @@ import {
   setWorkspaceRoot,
 } from '../../server/workspace/root.js';
 import { parseStartupMarkdown } from '../../server/dev-server/parse-startup.js';
-import { rmTestHome, setTestHome } from '../config/test-helpers.js';
+import { longRunningDevServerCommand, rmTestHome, setTestHome } from '../config/test-helpers.js';
 
-const LONG_RUNNING_CMD = 'node -e "setInterval(()=>{}, 60000)"';
+const LONG_RUNNING_CMD = longRunningDevServerCommand();
 
 describe('dev-server manager tools', () => {
   let homeDir;
@@ -118,7 +118,10 @@ describe('dev-server manager tools', () => {
     );
 
     const raw = await toolStartBackgroundCommand({
-      command: 'node -e "setInterval(()=>{}, 30000)"',
+      command:
+        process.platform === 'win32'
+          ? 'node -e setInterval(function(){},30000)'
+          : 'node -e "setInterval(()=>{}, 30000)"',
       cwd: '.',
     });
     const result = JSON.parse(raw);

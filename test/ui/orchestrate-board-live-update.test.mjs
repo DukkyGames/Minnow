@@ -759,6 +759,10 @@ describe('orchestrate board live updates', () => {
     globalThis.window.confirm = confirmStub;
     try {
       afkBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const confirmBtn = document.querySelector('[data-dialog-action="confirm"]');
+      assert.ok(confirmBtn, 'AFK switch should open appConfirm dialog');
+      confirmBtn.click();
       await new Promise((resolve) => setTimeout(resolve, 20));
       assert.equal(group.orchestrateBoard?.executionMode, 'afk');
 

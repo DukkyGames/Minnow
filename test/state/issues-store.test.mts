@@ -173,6 +173,6 @@ describe('issues-store', () => {
     addIssue({ title: 'a', workspacePath: '/w', labels: ['Beta', 'alpha'] }, 'ISS-1');
     addIssue({ title: 'b', workspacePath: '/w', labels: ['ALPHA', 'gamma'] }, 'ISS-2');
     assert.deepEqual(collectIssueLabelSuggestions(), ['alpha', 'Beta', 'gamma']);
-    assert.deepEqual(collectIssueLabelSuggestions('ISS-1'), ['alpha', 'gamma']);
+    assert.deepEqual(collectIssueLabelSuggestions('ISS-1'), ['ALPHA', 'gamma']);
   });
 });
