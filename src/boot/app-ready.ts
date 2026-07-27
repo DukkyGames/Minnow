@@ -1,11 +1,18 @@
 /** Max wait before revealing the shell even if a stylesheet never loads. */
 const APP_READY_STYLE_TIMEOUT_MS = 4_000;
 
-/** Expected `.topbar` height once `tokens.css` + `topbar.css` are applied. */
-export const APP_TOPBAR_HEIGHT_PX = 52;
+/**
+ * Sentinel custom property declared on `:root` by `styles/tokens.css`. The inline
+ * critical CSS in `index.html` only *consumes* tokens (with fallbacks) and declares
+ * none, so resolving this proves the bundled stylesheet is applied.
+ */
+export const APP_CSS_READY_PROPERTY = '--mn-app-css-ready';
 
-/** Probe element: `.topbar` uses `display: flex` and `--topbar-h` once app CSS is applied. */
-const APP_SHELL_PROBE_SELECTOR = '.topbar';
+/**
+ * Own deadline for the CSS-applied probe. Bounded so a probe that can never
+ * succeed costs a frame budget rather than the full outer timeout.
+ */
+export const APP_SHELL_STYLED_TIMEOUT_MS = 500;
 
 /** True for app bundle stylesheets (not highlight.js, fonts CDN, etc.). */
 function isBundledStylesheetLink(link: HTMLLinkElement): boolean {
@@ -102,29 +109,25 @@ export function whenViteInjectedStylesReady(): Promise<void> {
   });
 }
 
-/** True once bundled layout CSS has been applied to the shell probe. */
+/** True once bundled app CSS has been applied (see `APP_CSS_READY_PROPERTY`). */
 export function isAppShellStyled(): boolean {
-  const probe = document.querySelector(APP_SHELL_PROBE_SELECTOR);
-  if (!probe) return false;
   if (typeof getComputedStyle !== 'function') return true;
-  const style = getComputedStyle(probe);
-  if (style.display !== 'flex') return false;
-  const heightPx = Number.parseFloat(style.height);
-  return (
-    Number.isFinite(heightPx) &&
-    heightPx >= APP_TOPBAR_HEIGHT_PX - 2 &&
-    heightPx <= APP_TOPBAR_HEIGHT_PX + 2
-  );
+  const root = document.documentElement;
+  if (!root) return false;
+  return getComputedStyle(root).getPropertyValue(APP_CSS_READY_PROPERTY).trim() === '1';
 }
 
-/** Poll until shell CSS is active (no frame cap — outer timeout is the only fallback). */
-export function whenAppShellStyled(): Promise<void> {
+/** Poll until app CSS is active, giving up after `timeoutMs` so boot never stalls on it. */
+export function whenAppShellStyled(
+  timeoutMs: number = APP_SHELL_STYLED_TIMEOUT_MS,
+): Promise<void> {
   if (isAppShellStyled()) {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
     const tick = () => {
-      if (isAppShellStyled()) {
+      if (isAppShellStyled() || Date.now() >= deadline) {
         resolve();
         return;
       }
