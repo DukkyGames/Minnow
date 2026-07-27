@@ -1,8 +1,11 @@
 # Orchestrate board AFK end-to-end reliability plan
 
-**Status:** proposed  
-**Scope:** test architecture, failure injection, AFK acceptance, and reliability feedback loops  
-**Primary surfaces:** Orchestrate runtime, board testing API, Settings → Advanced → Board testing, CI  
+**Status:** proposed
+
+**Scope:** test architecture, failure injection, AFK acceptance, and reliability feedback loops
+
+**Primary surfaces:** Orchestrate runtime, board testing API, Settings → Advanced → Board testing, CI
+
 **Related:** [`orchestrate-board-testing.md`](../guides/orchestrate-board-testing.md), [`orchestrate-board-llm-quirk-tdd.md`](orchestrate-board-llm-quirk-tdd.md), [`orchestrate-board-model-rethink.md`](orchestrate-board-model-rethink.md)
 
 ## Goal
@@ -584,17 +587,23 @@ The test scenario catalog should target semantic events so it survives these int
 
 Recommended defaults are included so work can proceed without blocking.
 
-- **AFK terminal policy:** Is quarantining after bounded recovery acceptable, or must the planner automatically re-plan?  
+- **AFK terminal policy:** Is quarantining after bounded recovery acceptable, or must the planner automatically re-plan?
+
   **Recommended:** bounded quarantine is acceptable for the first gate; add re-plan as a separate scenario and policy.
-- **Real model coverage:** Should release qualification include one local model?  
+- **Real model coverage:** Should release qualification include one local model?
+
   **Recommended:** keep deterministic fake-provider tests as the gate; run local-model compatibility as non-blocking qualification.
-- **Integration strategy:** Continue investing in merge-fixer coverage while integration-by-rerun is evaluated?  
+- **Integration strategy:** Continue investing in merge-fixer coverage while integration-by-rerun is evaluated?
+
   **Recommended:** cover the current engine fully, but keep scenario expectations strategy-neutral.
-- **CI duration:** Which matrices run on PR, nightly, and release?  
+- **CI duration:** Which matrices run on PR, nightly, and release?
+
   **Recommended:** PR gets unit, live launch, and headless; nightly gets persisted git, restart, and soak; release adds Electron.
-- **Platform gate:** Is macOS required in addition to Linux and Windows?  
+- **Platform gate:** Is macOS required in addition to Linux and Windows?
+
   **Recommended:** require Linux and Windows for worktree behavior; add macOS when a reliable runner is available.
-- **Settings runner exposure:** Developer-only or user-visible Advanced setting?  
+- **Settings runner exposure:** Developer-only or user-visible Advanced setting?
+
   **Recommended:** keep it in Advanced and gate destructive reset controls behind explicit test-workspace confirmation.
 
 ## Implementation todo summary
