@@ -100,8 +100,10 @@ html.is-scheduler-side-panel-open .mn-os-side-panels-layer {
 }
 
 .mn-os-window-btn {
-  width: 28px;
-  height: 28px;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
   display: grid;
   place-items: center;
   border: 1px solid transparent;

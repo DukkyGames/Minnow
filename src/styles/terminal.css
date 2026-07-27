@@ -115,7 +115,7 @@
   gap: 4px;
   flex-shrink: 0;
   max-width: 200px;
-  min-height: 32px;
+  min-height: var(--touch-min);
   padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -158,10 +158,16 @@
 }
 
 .terminal-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  margin: calc((var(--touch-min) - 1em) / -2);
   opacity: 0.55;
   font-size: 14px;
   line-height: 1;
-  padding: 0 2px;
+  padding: 0;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -175,8 +181,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: var(--touch-min);
+  height: var(--touch-min);
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   background: var(--mn-bg);
@@ -222,7 +228,7 @@
 }
 
 .terminal-header-btn {
-  min-height: 32px;
+  min-height: var(--touch-min);
   padding: 0 12px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
