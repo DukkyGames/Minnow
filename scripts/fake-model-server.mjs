@@ -374,7 +374,7 @@ export function parseCliArgs(argv) {
  * @param {string} baseUrl
  */
 async function registerFakeProvider(baseUrl) {
-  const { createProvider, updateProvider, listProviderIds } = await import(
+  const { createProvider, updateProvider, listProviders } = await import(
     '../server/providers/store.js'
   );
   const body = {
@@ -383,8 +383,8 @@ async function registerFakeProvider(baseUrl) {
     baseUrl,
     apiKind: 'openai-v1',
   };
-  const ids = await listProviderIds();
-  if (ids.includes(FAKE_PROVIDER_ID)) {
+  const { providers } = await listProviders();
+  if (providers.some((p) => p.id === FAKE_PROVIDER_ID)) {
     await updateProvider(FAKE_PROVIDER_ID, body);
     console.error(`[fake-model] Updated provider "${FAKE_PROVIDER_ID}" → ${baseUrl}`);
     return;
