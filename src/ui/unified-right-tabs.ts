@@ -15,9 +15,8 @@ import {
   onPreviewTabStoreChange,
   reorderPreviewTab,
 } from './preview-tab-store';
+import { createFileTypeIconElement } from './file-type-icons';
 
-const FILE_TAB_ICON =
-  '<svg class="unified-tab__icon icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
 const PREVIEW_TAB_ICON =
   '<svg class="unified-tab__icon icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
 
@@ -125,7 +124,7 @@ function appendFileTab(
 
   const icon = document.createElement('span');
   icon.className = 'unified-tab__icon-wrap';
-  icon.innerHTML = FILE_TAB_ICON;
+  icon.appendChild(createFileTypeIconElement(tab.path, 'tab'));
   tabEl.appendChild(icon);
 
   const label = document.createElement('span');

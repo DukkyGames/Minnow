@@ -128,6 +128,7 @@
     "isomorphic-dompurify": "^3.19.0",
     "mailparser": "^3.9.14",
     "marked": "^18.0.7",
+    "material-icon-theme": "^5.37.0",
     "node-ical": "^0.27.1",
     "nodemailer": "^9.0.3",
     "pyright": "^1.1.411",

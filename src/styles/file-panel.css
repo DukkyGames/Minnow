@@ -1440,16 +1440,6 @@
   transform: rotate(90deg);
 }
 
-.file-tree-row--file .file-tree-label::before {
-  content: '📄 ';
-  font-size: 11px;
-}
-
-.file-tree-row--dir .file-tree-label::before {
-  content: '📁 ';
-  font-size: 11px;
-}
-
 .file-tree-label {
   flex: 1;
   min-width: 0;

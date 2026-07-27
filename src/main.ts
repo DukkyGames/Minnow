@@ -31,6 +31,8 @@ import './styles/mode-icons.css';
 import './styles/composer-controls.css';
 import './styles/composer-message-queue.css';
 import './styles/file-panel.css';
+/* Material Icon Theme (PKief) — colorful file/folder glyphs for Code tree + tabs */
+import './styles/file-type-icons.css';
 import './styles/git-commit-diff.css';
 import './styles/editor-quick-edit.css';
 import './styles/editor-intent-mode.css';
