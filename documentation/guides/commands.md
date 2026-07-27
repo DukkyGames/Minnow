@@ -14,7 +14,7 @@ Every npm script, the headless CLI, smoke/maintenance scripts, and environment v
 | `npm run electron:prod` | Full build + Electron build, then run the packaged main against `dist/`. |
 | `npm run build` | `tsc && vite build` → `dist/`. `prebuild` regenerates `src/skills/builtin-manifest.json`. |
 | `npm run preview` | `vite preview` of the production build (no tool API). |
-| `npm run package` | Build + Electron build + **electron-builder** installer → `release/pkg` (Windows NSIS + `latest.yml` auto-update feed metadata; never uploads — see [Getting started → Packaging](../getting-started.md#packaging-a-desktop-build)). |
+| `npm run package` | Build + Electron build + **electron-builder** installer → `release/pkg` (Windows NSIS + `latest.yml` auto-update feed metadata; never uploads — see [releasing](../maintainer/releasing.md)). |
 | `npm run package:dir` | Same, unpacked directory (`--dir`). |
 | `npm run package:clean` | Clean the `release/` output. |
 | `npx tsc --noEmit` | Typecheck only. |
@@ -41,7 +41,7 @@ Flags (`minnow run --help` for the authoritative list):
 | `--mode <id>` | `general` / `build` / `plan` / `orchestrate` / `debug`. |
 | `--model <id>` / `--provider <id>` | Override model / provider. |
 | `--profile <id>` | Prompt profile / setup bundle. |
-| `--base-url <url>` | Server origin (default detected; e.g. `http://127.0.0.1:5173`). |
+| `--base-url <url>` | Server origin (default detected; e.g. `http://127.0.0.1:9473`). |
 | `--start-server` | Start a tool server for the run. |
 | `--server-timeout <ms>` | Server readiness timeout. |
 | `--json` / `--json-out <file>` | Machine-readable result to stdout / file. |
@@ -105,12 +105,12 @@ Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs 
 
 ## Smoke scripts
 
-Run with the server up (default port 5173 — substitute yours):
+Run with the server up (default port 9473 — substitute yours). API calls need the per-boot session token from `~/.minnow/session-token`:
 
 ```bash
-npx tsx scripts/sa16-smoke.mjs http://localhost:5173       # general/sub-agent smoke
-node test/terminal-stream.test.mjs http://localhost:5173   # terminal stream API
-npx tsx scripts/step16-memory-smoke.mjs http://localhost:5173
+npx tsx scripts/sa16-smoke.mjs http://localhost:9473       # general/sub-agent smoke
+node test/terminal-stream.test.mjs http://localhost:9473   # terminal stream API
+npx tsx scripts/step16-memory-smoke.mjs http://localhost:9473
 ```
 
 Other `scripts/*.mjs` cover stepwise feature smokes, Electron launch, token/CSS generation, and migrations — see the [`scripts/`](../../scripts/) folder.
@@ -119,7 +119,7 @@ Other `scripts/*.mjs` cover stepwise feature smokes, Electron launch, token/CSS 
 
 | Variable | Effect |
 |----------|--------|
-| `PORT` | Server/Vite port (default 5173, falls back to next free). |
+| `PORT` | Server/Vite port (default 9473, falls back to next free). `5173` is ignored and coerced to 9473 — it's reserved for dev servers in your workspace. |
 | `MINNOW_HOME` | Override the `~/.minnow` data directory. |
 | `MINNOW_BROWSER=1` | Open a system browser tab instead of the Electron shell. |
 | `MINNOW_HEADLESS=1` / `BROWSER=none` | Don't auto-open any window. |

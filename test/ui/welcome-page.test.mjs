@@ -112,7 +112,7 @@ describe('welcome-page', { concurrency: false }, () => {
     assert.equal(isOtherFullPageHash('#/welcome'), false);
   });
 
-  test('shouldShowWelcomeOnBoot is false under MinnowOS shell', () => {
+  test('shouldShowWelcomeOnBoot is false under Minnow Shell', () => {
     setupWelcomeDom();
     resetWelcomeStateForTests();
     resetWorkspaceStateForTests();

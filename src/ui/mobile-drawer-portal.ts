@@ -1,5 +1,5 @@
 /**
- * MinnowOS mobile drawer chrome — scrims live in #appBody; open state toggles
+ * Minnow mobile drawer chrome — scrims live in #appBody; open state toggles
  * `mn-os-mobile-*-drawer` on <html> for shell CSS (no sidebar reparenting).
  */
 

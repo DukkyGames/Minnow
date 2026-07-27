@@ -9,7 +9,7 @@ export type AppAvailability = 'core' | 'optional';
  */
 export type AppReleaseState = 'released' | 'hidden';
 
-/** Launcher metadata for each MinnowOS app. */
+/** Launcher metadata for each Minnow app. */
 export interface AppDefinition {
   id: AppId;
   name: string;
@@ -21,7 +21,7 @@ export interface AppDefinition {
   releaseState: AppReleaseState;
 }
 
-/** Canonical app list — ported from MinnowOS prototype `data.jsx`. */
+/** Canonical app list — ported from Minnow prototype `data.jsx`. */
 export const APPS: readonly AppDefinition[] = [
   {
     id: 'code',
@@ -204,7 +204,7 @@ export function listOptionalReleasedApps(): AppDefinition[] {
 
 type AppModuleLoader = () => Promise<{ init: () => void | Promise<void> }>;
 
-/** Dynamic import entry points for each MinnowOS app page bundle. */
+/** Dynamic import entry points for each Minnow app page bundle. */
 export const APP_MODULE_LOADERS: Partial<Record<AppId, AppModuleLoader>> = {
   settings: () => import('../ui/settings-page').then((m) => ({ init: m.initSettingsPage })),
   bench: () => import('../ui/benchmark-page').then((m) => ({ init: m.initBenchmarkPage })),

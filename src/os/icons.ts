@@ -1,4 +1,4 @@
-/** Inline SVG icons for MinnowOS shell (ported from prototype icons.jsx). */
+/** Inline SVG icons for Minnow Shell (ported from prototype icons.jsx). */
 
 /** Public path for the Compare app raster glyph. */
 export const COMPARE_ICON_SRC = '/icons/compare.png';

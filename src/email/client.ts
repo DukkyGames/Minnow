@@ -1,5 +1,5 @@
 /**
- * Email API client for the MinnowOS Email app.
+ * Email API client for the Minnow Email app.
  */
 
 export interface EmailAccount {

@@ -1,19 +1,19 @@
 ﻿# Minnow — project context
 
-Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`getting-started.md`](getting-started.md). Product overview: [`README.md`](../README.md).
+Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`guides/setup.md`](guides/setup.md) and [`guides/commands.md`](guides/commands.md). Product overview: [`README.md`](../README.md).
 
-**Also useful:** [`guides/configuration.md`](guides/configuration.md) (storage layout), [`DESIGN.md`](../DESIGN.md) (visual tokens), [`AGENTS.md`](../AGENTS.md) (agent quick reference), [`documentation/plans/`](plans/) (feature plans and roadmaps).
+**Also useful:** [`guides/configuration.md`](guides/configuration.md) (storage layout), [`DESIGN.md`](../DESIGN.md) (visual tokens), [`AGENTS.md`](../AGENTS.md) (agent quick reference), [`plans/`](plans/) (in-flight feature plans).
 
 ---
 
 ## What it is
 
-Minnow is a **local-first AI workspace**: a **Vite + TypeScript SPA**, a **Node tool server** (`server.js`), and an **Electron desktop shell** (MinnowOS). It targets **LM Studio** and other **OpenAI-compatible** providers.
+Minnow is a **local-first AI workspace**: a **Vite + TypeScript SPA**, a **Node tool server** (`server.js`), and an **Electron desktop shell** (Minnow Shell). It targets **LM Studio** and other **OpenAI-compatible** providers.
 
 | Layer | Role |
 |-------|------|
 | **Electron** (`electron/`) | Desktop window, frameless chrome, `WebContentsView` in-app browser (`browser_*`), packaged in-process server |
-| **SPA** (`src/`, `index.html`) | MinnowOS shell, Code workspace, chat, modes, tools loop |
+| **SPA** (`src/`, `index.html`) | Minnow Shell, Code workspace, chat, modes, tools loop |
 | **Tool server** (`server.js`, `server/`) | Vite dev host, `/api/*`, file/git/shell tools, generations SSE, persistence under `~/.minnow` |
 
 - **`npm start`** — Vite + tool server (default port **9473**) + Electron.
@@ -30,7 +30,7 @@ Registry: [`src/chat/modes/registry.ts`](../src/chat/modes/registry.ts). Tool al
 
 **Super Plan** (`super-plan` mode) runs a sequential pipeline (grill → spec → research → draft/review → present) via [`src/chat/super-plan/controller.ts`](../src/chat/super-plan/controller.ts). The controller owns chat turns for each stage; composer follow-up queue drains are deferred while the pipeline is active so a queued message cannot race the post-interview `spec_confirm` turn. If the loop backs off while a stage is still pending, it schedules a deferred `advanceSuperPlan` retry (stream-end recovery also retries when the hook fires during an in-flight loop). During the **research** stage, [`PlanProgressPanel`](../src/ui/plan-progress-screen.ts) embeds [`ResearchProgressPanel`](../src/research/progress-panel.ts) with `embedded: true` (compact “Deep research” chrome, no nested card, workspace styles in [`plan-progress.css`](../src/styles/plan-progress.css)).
 
-### MinnowOS apps
+### Minnow apps
 
 Released (all `core`): Chat (desktop), **Code**, **Research**, **Models**, **Brain**, **Issues**, **Scheduler**, **Settings**. Hidden (`releaseState: 'hidden'`, MIN-471): **Compare**, **Bench**, **Experts**, **Calendar**, **Email** — code and tests stay in tree, but they are omitted from every product surface. Routes `#/desktop`, `#/app/{id}`, registry in [`src/os/app-registry.ts`](../src/os/app-registry.ts).
 
@@ -72,7 +72,7 @@ Minnow/
 ├── electron/               # Desktop main/preload → electron/dist/
 ├── src/
 │   ├── main.ts             # Boot: theme, OS shell, initApp
-│   ├── os/                 # MinnowOS shell, router, windows, dock
+│   ├── os/                 # Minnow Shell, router, windows, dock
 │   ├── chat/               # Modes, prompts, orchestrate, goal/loop, titles
 │   ├── tools/              # definitions, loop, client, permission gate
 │   ├── agents/             # Sub-agents, work agents, UI Designer
@@ -102,7 +102,7 @@ Minnow/
 
 **Canonical session store (HTTP):** `sessions/sessions.db` (SQLite) — GET/PUT still exchange the whole SessionState blob; the SPA flushes with **PATCH** when dirty sets are available (B.2). Chat/group/scalar normalization is shared in [`src/state/session-schema.mjs`](../src/state/session-schema.mjs) (`normalizeChatRow` / `normalizeGroupRow` / `normalizeSessionScalars`) — imported by server validators and client `ensureChatShape` (thin wrapper; no client twin). There is no `MAX_CHATS` hard-trim on save. Kitchen-sink contract: [`test/fixtures/migration/kitchen-sink-sessions-state.json`](../test/fixtures/migration/kitchen-sink-sessions-state.json).
 
-**Sessions SQLite (Phase A → C.2):** On first open, legacy `sessions/state.json` is imported once and renamed to `state.json.migrated`. Whole-blob R/W lives in [`server/config/sessions-repo.js`](../server/config/sessions-repo.js) (the persistence seam; optimistic `rev`/`If-Match` stays in [`plans/server-session-engine.md`](plans/server-session-engine.md)). `terminalHistory` is server-owned on PUT/PATCH (only `appendTerminalRun` writes it). **PATCH `/api/config/sessions`** accepts `{ baseVersion, chats?, deleteChatIds?, groups?, deleteGroupIds?, scalars? }` — absent keys mean unchanged; deletes are explicit id lists; dirty chats/groups are full objects. Implemented via `patchResource` → `patchSessionState`. **POST** on the same path is a `sendBeacon` alias for PATCH (beacons cannot PATCH). Headless [`src/headless/persist-chat.ts`](../src/headless/persist-chat.ts) uses PATCH (no GET-splice-PUT). **B.2 SPA flush:** `saveSessionsNow` uses PATCH when `sessionsClientPatchEnabled` (default **ON**) and dirty sets are trusted; full PUT on the first save after load or after a dirty-tracking verifier miss. Dirty sets (`touchChat` / `dirtyChatIds` / `deletedChatIds` / `dirtyGroupIds` / `deletedGroupIds` / `sessionScalarsDirty`) clear only after a successful PATCH/PUT. Shutdown: serialize the delta; if &lt; 60 KiB use `navigator.sendBeacon` (POST alias); else keepalive whole-blob PUT (Fetch keepalive bodies are capped at 64 KiB — large keepalive PUTs were likely silent no-ops). MIN-408: no PATCH/PUT before `sessionsHydratedFromServer`. Dev builds compare chats against a shadow copy at flush and `console.warn` unmarked mutations (forces PUT fallback). A rotating `state.json.backup` mirror flushes on a 5-minute dirty debounce and on `closeSessionsDb()`. Rollback: `MINNOW_SESSIONS_STORE=json`. Export: `POST /api/config/sessions/export-json`. Hot server consumers use indexed SQLite point lookups — see [`plans/sessions-sqlite-migration.md`](plans/sessions-sqlite-migration.md).
+**Sessions SQLite (Phase A → C.2):** On first open, legacy `sessions/state.json` is imported once and renamed to `state.json.migrated`. Whole-blob R/W lives in [`server/config/sessions-repo.js`](../server/config/sessions-repo.js) (the persistence seam; optimistic `rev`/`If-Match` is deferred to the SQLite rebuild — see [`plans/sessions-sqlite-migration.md`](plans/sessions-sqlite-migration.md)). `terminalHistory` is server-owned on PUT/PATCH (only `appendTerminalRun` writes it). **PATCH `/api/config/sessions`** accepts `{ baseVersion, chats?, deleteChatIds?, groups?, deleteGroupIds?, scalars? }` — absent keys mean unchanged; deletes are explicit id lists; dirty chats/groups are full objects. Implemented via `patchResource` → `patchSessionState`. **POST** on the same path is a `sendBeacon` alias for PATCH (beacons cannot PATCH). Headless [`src/headless/persist-chat.ts`](../src/headless/persist-chat.ts) uses PATCH (no GET-splice-PUT). **B.2 SPA flush:** `saveSessionsNow` uses PATCH when `sessionsClientPatchEnabled` (default **ON**) and dirty sets are trusted; full PUT on the first save after load or after a dirty-tracking verifier miss. Dirty sets (`touchChat` / `dirtyChatIds` / `deletedChatIds` / `dirtyGroupIds` / `deletedGroupIds` / `sessionScalarsDirty`) clear only after a successful PATCH/PUT. Shutdown: serialize the delta; if &lt; 60 KiB use `navigator.sendBeacon` (POST alias); else keepalive whole-blob PUT (Fetch keepalive bodies are capped at 64 KiB — large keepalive PUTs were likely silent no-ops). MIN-408: no PATCH/PUT before `sessionsHydratedFromServer`. Dev builds compare chats against a shadow copy at flush and `console.warn` unmarked mutations (forces PUT fallback). A rotating `state.json.backup` mirror flushes on a 5-minute dirty debounce and on `closeSessionsDb()`. Rollback: `MINNOW_SESSIONS_STORE=json`. Export: `POST /api/config/sessions/export-json`. Hot server consumers use indexed SQLite point lookups — see [`plans/sessions-sqlite-migration.md`](plans/sessions-sqlite-migration.md).
 
 **Lazy history (C.2, flag ON):** Boot uses `GET /api/config/sessions/summaries?workspace=…` — chats omit `history`, include denormalized `messageCount` / `lastMessagePreview`, plus `meta_json` cold fields and non-message children (`runs`, `subAgentRuns`, `activeLoops`, `terminalHistory`). Client flag `sessionsLazyHistoryEnabled` defaults **ON**; `ensureChatHistoryLoaded` (idempotent, in-flight dedupe) hydrates full `GET /api/config/sessions/history/:chatId` on switch / activate / workspace change / before turn mutate. Inflated chats keep `messageCount` so `isSidebarListedChat` / desktop rail can list unloaded chats (`history: []` alone would hide them). UI switch paths (`switchChat`, desktop/Chat-app activate, `onWorkspaceChanged`) **await** hydrate before painting — otherwise empty-state landings stick after restart. **Wire saves** (`chatForSessionsWire` / `sessionStateForSessionsWire` in [`src/state/sessions.ts`](../src/state/sessions.ts)) omit the `history` key for chats with `historyLoaded === false` so PATCH/PUT cannot wipe stored messages; server `patchSessionState` / `writeWholeSessionState` skip `syncMessages` when `history` is absent on the wire object. **Never page** history into archive or turn-run absolute-index consumers. FTS5 search: `GET /api/config/sessions/search?q=` (`messages_fts`); UI uses server FTS in server mode and the pure scorer in [`src/chat/chat-search.ts`](../src/chat/chat-search.ts) for localStorage / JSON-store fallback. DEV trap: first `history` read while unloaded `console.error`s with stack. `requireHistory(chat)` throws if unloaded. Task history trim removed — unused chats stay unloaded. OS shell chrome (`syncLoopActiveHint` via page-bridge) no-ops until `sessionState` is loaded — do not call `getActiveChat()` before `loadSessionsFromStorage`.
 
@@ -160,7 +160,7 @@ Middleware registration: [`server/runtime/middlewares.js`](../server/runtime/mid
 
 1. `detectConfigServer()` → `loadSessionsFromStorage()` (before OS router).
 2. `detectLocalServer()` (before Code file panel init).
-3. `initOsRouter()` when MinnowOS enabled.
+3. `initOsRouter()` when Minnow enabled.
 
 `initApp()`: tool config → prompts → work agents → sessions → Issues store (migrate leftover bugs if needed) → tool handlers → models → render chat.
 
@@ -332,7 +332,7 @@ Personas under `src/chat/prompts/experts/<id>/`. Chats: `Chat.kind === 'expert'`
 
 ---
 
-## MinnowOS shell
+## Minnow Shell
 
 Stage layers in `#osStage` ([`src/os/shell.ts`](../src/os/shell.ts)):
 
@@ -499,7 +499,7 @@ Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, �
 | [`src/state/sessions.ts`](../src/state/sessions.ts) | Session persistence |
 | [`src/api/generations.ts`](../src/api/generations.ts) | Generations client |
 | [`src/api/sse-parse.ts`](../src/api/sse-parse.ts) | SSE framing |
-| [`src/os/shell.ts`](../src/os/shell.ts) | MinnowOS shell |
+| [`src/os/shell.ts`](../src/os/shell.ts) | Minnow Shell |
 | [`server/runtime/tools-middleware.js`](../server/runtime/tools-middleware.js) | Server tool dispatch |
 | [`server/generations/`](../server/generations/) | Buffered upstream streams |
 | [`server/config/validators.js`](../server/config/validators.js) | Config + session schema |

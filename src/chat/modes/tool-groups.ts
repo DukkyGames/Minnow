@@ -130,7 +130,7 @@ export const PLAN_FILES_WRITE_ALLOW = ['save_file', 'make_directory'] as const;
  * Orchestrate sub-agents: group is ● but spawn/cancel stay denied (footnote 2).
  * Plan code-exec: kept per final matrix (MIN-332) — shell runs allowed for planning probes.
  */
-/** Desktop chat: every built-in tool group (full MinnowOS assistant surface). */
+/** Desktop chat: every built-in tool group (full Minnow assistant surface). */
 export const DESKTOP_ALLOWED_GROUPS: readonly ToolGroupId[] = TOOL_GROUP_ID_LIST;
 
 export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {

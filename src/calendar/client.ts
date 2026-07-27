@@ -1,5 +1,5 @@
 /**
- * Calendar API client for the MinnowOS Calendar app.
+ * Calendar API client for the Minnow Calendar app.
  */
 
 import { withSessionToken } from '../api/session-token.ts';

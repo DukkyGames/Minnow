@@ -81,13 +81,13 @@ export function getChatLastMessageAt(chat: Chat): number {
   return typeof updated === 'number' && Number.isFinite(updated) ? updated : 0;
 }
 
-/** MinnowOS Chat app id stored in `lastActiveChatIdByApp`. */
+/** Minnow Chat app id stored in `lastActiveChatIdByApp`. */
 export const CHAT_APP_ID = 'chat';
 
-/** MinnowOS desktop chat id stored in `lastActiveChatIdByApp` (separate from legacy Chat app). */
+/** Minnow desktop chat id stored in `lastActiveChatIdByApp` (separate from legacy Chat app). */
 export const DESKTOP_APP_ID = 'desktop';
 
-/** MinnowOS Email assistant id stored in `lastActiveChatIdByApp`. */
+/** Minnow Email assistant id stored in `lastActiveChatIdByApp`. */
 export const EMAIL_APP_ID = 'email';
 
 /** Raw session JSON from disk or API (may be schema v1 or v2). */
@@ -167,7 +167,7 @@ export function getSidebarListedChatsForWorkspace(
   return getChatsForWorkspace(workspacePath, state).filter(isSidebarListedChat);
 }
 
-/** True when the chat belongs to the MinnowOS Chat app (chats workspace sandbox). */
+/** True when the chat belongs to the Minnow Chat app (chats workspace sandbox). */
 export function isAssistantChat(chat: Chat, chatsWorkspacePath: string): boolean {
   const key = normalizeWorkspacePath(chatsWorkspacePath);
   if (!key) return false;
@@ -203,7 +203,7 @@ export function getAssistantChats(state: SessionState, chatsWorkspacePath: strin
   return getSidebarListedAssistantChats(state, chatsWorkspacePath);
 }
 
-/** Remember the last active chat for a MinnowOS app (e.g. Chat). */
+/** Remember the last active chat for a Minnow app (e.g. Chat). */
 export function rememberActiveChatForApp(
   state: SessionState,
   appId: string,
@@ -218,7 +218,7 @@ export function rememberActiveChatForApp(
   state.lastActiveChatIdByApp[id] = chat;
 }
 
-/** Read the remembered active chat id for a MinnowOS app. */
+/** Read the remembered active chat id for a Minnow app. */
 export function getLastActiveChatIdForApp(state: SessionState, appId: string): string | undefined {
   const id = appId.trim();
   if (!id) return undefined;

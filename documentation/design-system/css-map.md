@@ -98,7 +98,7 @@
 | `sub-agent-drawer.css` | Sub-agent drawer |
 | `agent-activity-panel.css` | Agent activity |
 
-## MinnowOS
+## Minnow
 
 | File | Scope |
 |------|-------|

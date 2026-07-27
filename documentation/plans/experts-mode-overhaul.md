@@ -2,7 +2,7 @@
 
 Status: In progress (core shipped)  
 Scope: One complete overhaul of Experts mode  
-Surfaces: MinnowOS desktop Experts picker, Experts' Lab, expert chat, prompt composition, tool policy, and Brain memory
+Surfaces: Minnow desktop Experts picker, Experts' Lab, expert chat, prompt composition, tool policy, and Brain memory
 
 ## Agreed product decisions
 
@@ -270,7 +270,7 @@ Primary files:
 - [ ] Add Brain scope tests proving no cross-expert automatic retrieval.
 - [ ] Add proposal tests proving expert proposals always require review and acceptance writes into the correct namespace.
 - [ ] Add UI tests for real model labels, runtime save validation, memory review, delete/clear confirmation, and offline states.
-- [ ] Extend MinnowOS tests for hero selection, immediate chat open, deterministic transition, and return navigation.
+- [ ] Extend Minnow tests for hero selection, immediate chat open, deterministic transition, and return navigation.
 - [ ] Run `npm run test:check-coverage`.
 - [ ] Run `npx tsc --noEmit`.
 - [ ] Run focused Experts, prompt, session, tools, Brain, and OS suites.
@@ -320,7 +320,7 @@ Likely test files:
 - Accepted memories are stored and retrieved only for the matching expert during automatic injection.
 - Users can review, edit, reject, delete, and clear expert memory from the Lab.
 - Existing chats and custom expert definitions survive migration.
-- The feature works in MinnowOS and legacy non-OS routing, with responsive, keyboard, and reduced-motion behavior.
+- The feature works in Minnow and legacy non-OS routing, with responsive, keyboard, and reduced-motion behavior.
 - Type checking, coverage checks, the full test suite, and production build pass.
 
 ## Risks and safeguards

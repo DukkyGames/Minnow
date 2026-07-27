@@ -1,5 +1,5 @@
 /**
- * Browser tool: foreground a MinnowOS app via the OS hash router.
+ * Browser tool: foreground a Minnow app via the OS hash router.
  */
 
 import { fieldByKey } from '../ui/settings-catalog';
@@ -50,7 +50,7 @@ function resolveSettingsDeepLink(args: Record<string, unknown>): Pick<
   return out;
 }
 
-/** Launch a MinnowOS app and return JSON { ok, appId, hash }. */
+/** Launch a Minnow app and return JSON { ok, appId, hash }. */
 export function toolLaunchMinnowApp(
   args: Record<string, unknown>,
   launchApp: (
@@ -65,7 +65,7 @@ export function toolLaunchMinnowApp(
 
   const appId = rawAppId.trim();
   if (!isAppId(appId)) {
-    return `Error: invalid app_id "${appId}" (expected a MinnowOS app id)`;
+    return `Error: invalid app_id "${appId}" (expected a Minnow app id)`;
   }
 
   if (!isAppAvailable(appId)) {

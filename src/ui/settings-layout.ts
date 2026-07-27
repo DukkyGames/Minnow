@@ -120,7 +120,7 @@ export function linkToSettingsSection(
       );
       return;
     }
-    // Call openSettings directly so MinnowOS re-applies the section when the
+    // Call openSettings directly so Minnow re-applies the section when the
     // Settings window is already open (hash → #/app/settings is a no-op then).
     void import('./settings-page').then((m) => {
       m.openSettings(sectionId as import('./settings-page-types').SettingsSectionId);

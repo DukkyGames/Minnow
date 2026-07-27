@@ -228,7 +228,17 @@
     "extraResources": [
       {
         "from": "documentation",
-        "to": "documentation"
+        "to": "documentation",
+        "filter": [
+          "**/*",
+          "!maintainer/**",
+          "!plans/**",
+          "!memory/**",
+          "!archive/**",
+          "!images/**",
+          "!MEMORY.md",
+          "!To-do-list"
+        ]
       }
     ],
     "win": {

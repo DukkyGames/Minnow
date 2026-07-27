@@ -2165,7 +2165,7 @@ label.settings-action-btn {
   }
 }
 
-/* MinnowOS embedded app shell (settings opened from dock, not full browser route). */
+/* Minnow embedded app shell (settings opened from dock, not full browser route). */
 .settings-page--os-embedded {
   height: 100%;
   min-height: 0;

@@ -1,5 +1,5 @@
 /**
- * MinnowOS Chat app full-page UI (#/app/chat) — session rail, messaging, composer.
+ * Minnow Chat app full-page UI (#/app/chat) — session rail, messaging, composer.
  */
 
 import { sendMessage } from '../chat/messaging';

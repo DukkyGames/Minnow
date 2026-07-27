@@ -116,7 +116,7 @@ Gatekeeper will block first open; auto-update stays disabled in Settings.
 [ ] Pre-release flag set correctly (Beta vs Stable)
 ```
 
-See also [`updating.md`](updating.md) for the shared release flow.
+See also [`updating.md`](releasing.md) for the shared release flow.
 
 ---
 

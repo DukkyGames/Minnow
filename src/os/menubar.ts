@@ -59,7 +59,7 @@ function startMenubarClock(el: HTMLElement): () => void {
   };
 }
 
-/** Render the MinnowOS menubar. Returns cleanup function. */
+/** Render the Minnow menubar. Returns cleanup function. */
 export function renderMenubar(root: HTMLElement): () => void {
   root.replaceChildren();
   root.className = 'mn-os-menubar';

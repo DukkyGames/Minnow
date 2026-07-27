@@ -12,7 +12,7 @@ export function isOsShellEnabled(): boolean {
   return true;
 }
 
-/** Whether the hash belongs to the MinnowOS shell (desktop or foreground app). */
+/** Whether the hash belongs to the Minnow Shell (desktop or foreground app). */
 export function isOsAppHash(hash?: string): boolean {
   const h = hash ?? window.location.hash;
   return h === '#/desktop' || h.startsWith('#/app/');

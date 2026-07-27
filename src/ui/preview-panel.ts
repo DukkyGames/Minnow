@@ -382,7 +382,7 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   }
 }
 
-/** Design Mode is a Code-workspace tool — hidden and disabled on the MinnowOS desktop browser drawer. */
+/** Design Mode is a Code-workspace tool — hidden and disabled on the Minnow desktop browser drawer. */
 async function isPreviewDesignModeAvailable(): Promise<boolean> {
   const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
   return !isDesktopWorkspaceHostingActive();

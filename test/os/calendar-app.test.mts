@@ -1,5 +1,5 @@
 /**
- * MinnowOS Calendar app registration, window shell, and markup contract.
+ * Minnow Calendar app registration, window shell, and markup contract.
  */
 
 import assert from 'node:assert/strict';

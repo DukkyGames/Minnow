@@ -1,5 +1,5 @@
 /**
- * In-app notification inbox types (MinnowOS menubar bell).
+ * In-app notification inbox types (Minnow menubar bell).
  */
 
 import type { AppId } from '../os/types';

@@ -66,7 +66,7 @@ const MODELS_SETTINGS_REDIRECTS: Record<string, string> = {
   voice: 'voice',
 };
 
-/** Map legacy hashes to MinnowOS routes before parsing. */
+/** Map legacy hashes to Minnow routes before parsing. */
 export function resolveLegacyHash(hash: string): {
   hash: string;
   settingsSection?: string;

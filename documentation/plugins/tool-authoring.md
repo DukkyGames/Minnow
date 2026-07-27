@@ -97,7 +97,7 @@ Execution uses the same path as built-in server tools: `POST /api/tools` with `{
 With `npm start` running:
 
 ```bash
-curl -X POST http://localhost:5173/api/plugins/scaffold \
+curl -X POST http://localhost:9473/api/plugins/scaffold \
   -H 'Content-Type: application/json' \
   -d '{"id":"demo"}'
 ```

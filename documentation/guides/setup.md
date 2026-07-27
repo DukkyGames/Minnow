@@ -1,6 +1,6 @@
 # Setup guide
 
-A step-by-step walkthrough to get Minnow running locally. For a fast version, see [Quick start](../getting-started.md#quick-start). Product overview: [README](../../README.md).
+A step-by-step walkthrough to get Minnow running locally. For the short version, see the [README quick start](../../README.md#quick-start). Everything else: [documentation index](../README.md).
 
 ## 1. Prerequisites
 
@@ -69,7 +69,7 @@ lms load <model-name> -y
 npm start
 ```
 
-This starts Vite + the Node tool server on **port 5173** (or the next free port — watch the terminal) and launches the **Electron desktop shell**. It also prints `Minnow data: <path>` showing your `~/.minnow` home.
+This starts Vite + the Node tool server on **port 9473** (or the next free port — watch the terminal) and launches the **Electron desktop shell**. It also prints `Minnow data: <path>` showing your `~/.minnow` home.
 
 **Variants:**
 
@@ -79,19 +79,29 @@ BROWSER=none npm start         # don't auto-open anything (CI/headless)
 PORT=3000 npm start            # custom port (PowerShell: $env:PORT=3000; npm start)
 ```
 
+> `PORT=5173` is deliberately ignored and coerced back to 9473 — 5173 is reserved for dev servers running in your *workspace*, so agents can start a Vite app without colliding with Minnow itself.
+
 > Use `npm start` (not `npm run dev`) whenever you want file/git tools, persistence, terminal, attachments, the browser preview, or any of the apps. `npm run dev` is Vite-only.
 
-Verify the server is healthy:
+Verify the server is healthy. Every `/api/*` route requires the per-boot session token written to `~/.minnow/session-token`, so pass it:
 
 ```bash
-curl http://localhost:5173/api/tools/ping   # {"ok":true}
+curl -H "X-Minnow-Token: $(cat ~/.minnow/session-token)" http://localhost:9473/api/tools/ping
+# {"ok":true}
 ```
+
+```powershell
+# PowerShell
+curl.exe -H "X-Minnow-Token: $(Get-Content $env:USERPROFILE\.minnow\session-token)" http://localhost:9473/api/tools/ping
+```
+
+A bare request without the header returns `401 Unauthorized` — that is the gate working, not a broken server.
 
 ## 5. First-run checklist in the UI
 
 1. **Provider** — Settings → Models → Providers: confirm the base URL and that the provider is reachable.
 2. **Model** — pick one from the menubar model chip (use refresh if empty). Vision tasks need a **VLM** model; many tools work better with a tool-calling-capable model.
-3. **Mode** — choose in the composer: General / Build / Plan / Orchestrate / Debug.
+3. **Mode** — choose in the composer: General / Build / Plan / Debug. (Orchestrate opens from the sidebar hub, not the composer picker.)
 4. **Tools** — Settings → Tools: enable the capabilities you want, set per-tool permission (`full` / `ask` / `off`). Server tools need `npm start` and a healthy tools ping.
 5. **Workspace** — open the **Code** app and pick a project folder; file/git tools resolve under this root.
 
@@ -101,7 +111,7 @@ curl http://localhost:5173/api/tools/ping   # {"ok":true}
 - **Voice** — Models → Voice: download local Whisper (STT) / Qwen3-TTS, or use a provider. Local voice provisions a Python worker on demand.
 - **Memory & Brain** — Settings → Memory: enable the store and optional semantic embeddings (local or provider).
 - **MCP** — Settings → MCP: Context7 is built in; add custom servers.
-- **Skills Library** — Settings → Integrations → Skills Library: browse and install curated third-party `SKILL.md` packs (only 15 skills are bundled).
+- **Skills Library** — Settings → Integrations → Skills Library: browse and install curated third-party `SKILL.md` packs. Only 15 skills ship in the box; everything else is opt-in, and you can write your own into `~/.minnow/skills/`.
 - **Webhooks** — Settings → Webhooks: HMAC-signed outbound deliveries (SSRF-guarded).
 
 > The **Email** and **Calendar** apps are release-gated off in this build, so there is no IMAP/CalDAV setup step — see [apps.md](apps.md#behind-the-release-gate).
@@ -112,3 +122,4 @@ curl http://localhost:5173/api/tools/ping   # {"ok":true}
 - Full command reference: [commands.md](commands.md)
 - Architecture: [architecture.md](architecture.md)
 - Where data lives: [configuration.md](configuration.md)
+- Extend it: [tool authoring](../plugins/tool-authoring.md), [agent packs](../agent-packs/README.md)

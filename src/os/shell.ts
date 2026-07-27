@@ -82,7 +82,7 @@ function ensureShellDom(): {
   return { menubar, desktopLayer, dockLayer };
 }
 
-/** Boot the MinnowOS shell UI (desktop, menubar, app host). */
+/** Boot the Minnow Shell UI (desktop, menubar, app host). */
 export function initOsShell(): void {
   if (!isOsShellEnabled()) return;
 

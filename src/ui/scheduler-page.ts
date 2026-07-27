@@ -1,5 +1,5 @@
 /**
- * MinnowOS Scheduler app — recurring local agent jobs and reminders.
+ * Minnow Scheduler app — recurring local agent jobs and reminders.
  */
 
 import '../styles/scheduler-page.css';

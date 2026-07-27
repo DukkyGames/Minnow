@@ -1,5 +1,5 @@
 /**
- * MinnowOS Email app — agent-first inbox dashboard and mail client.
+ * Minnow Email app — agent-first inbox dashboard and mail client.
  */
 
 import '../styles/email.css';
@@ -90,7 +90,7 @@ function onHashChange(): void {
   }
 }
 
-/** Menubar shortcut — opens the Email app in MinnowOS. */
+/** Menubar shortcut — opens the Email app in Minnow. */
 export function openEmailFromMenubar(): void {
   if (isOsShellEnabled()) {
     void import('../os/router').then((m) => m.launchApp('email'));

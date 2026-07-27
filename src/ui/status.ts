@@ -30,7 +30,7 @@ export function parseServerBaseUrl(raw: string): string | null {
 /** Topbar pill states — operational feedback only, not model inventory. */
 export type StatusState = 'idle' | 'ok' | 'err' | 'spin';
 
-/** Legacy topbar and MinnowOS menubar status targets (same pill semantics). */
+/** Legacy topbar and Minnow menubar status targets (same pill semantics). */
 const STATUS_PILL_TARGETS: ReadonlyArray<{ dotId: string; textId: string }> = [
   { dotId: 'sDot', textId: 'sText' },
   { dotId: 'osStatusDot', textId: 'osStatusText' },

@@ -1,5 +1,5 @@
 /**
- * MinnowOS Chat app session scoping (assistant chats vs Code workspace).
+ * Minnow Chat app session scoping (assistant chats vs Code workspace).
  */
 
 import assert from 'node:assert/strict';

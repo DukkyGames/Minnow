@@ -47,7 +47,7 @@ function resolveComposerKey(): AppId | 'desktop' {
   return foregroundAppId ?? 'code';
 }
 
-/** Composer for the foreground MinnowOS app; Code app when shell is on desktop idle. */
+/** Composer for the foreground Minnow app; Code app when shell is on desktop idle. */
 export function getActiveComposerSurface(): ComposerSurface {
   // First-run wizard chat: while the onboarding overlay's composer exists it owns
   // the surface (the overlay is modal above every app surface).

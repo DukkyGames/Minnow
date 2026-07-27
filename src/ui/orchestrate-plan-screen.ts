@@ -299,7 +299,7 @@ export function suspendOrchestratePlanScreenOnLeave(leavingChatId: string): void
   });
 }
 
-/** Suspend overlay when foregrounding another MinnowOS app (keep grill questions in composer). */
+/** Suspend overlay when foregrounding another Minnow app (keep grill questions in composer). */
 export function suspendOrchestratePlanScreenOnAppLeave(leavingChatId: string): void {
   if (!planSession || planSession.chatId !== leavingChatId) return;
   if (!isOrchestratePlanScreenMounted()) return;

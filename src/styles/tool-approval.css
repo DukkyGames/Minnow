@@ -23,7 +23,7 @@
   display: none !important;
 }
 
-/* Fallback when Brain/Code shells are hidden behind another MinnowOS window */
+/* Fallback when Brain/Code shells are hidden behind another Minnow Shell window */
 .tool-approval-host--global {
   position: fixed;
   left: 50%;

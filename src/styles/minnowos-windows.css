@@ -1,5 +1,5 @@
 /* ============================================================
-   MinnowOS — floating window chrome, snap preview, shadows
+   Minnow — floating window chrome, snap preview, shadows
    Z-order: wallpaper < desktop chat + dock (12) < windows (15) < workspace drawer (20) < side panels (25) < menubar (40)
    ============================================================ */
 

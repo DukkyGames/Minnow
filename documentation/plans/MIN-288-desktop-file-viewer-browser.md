@@ -8,7 +8,7 @@
 
 ## Problem statement
 
-MinnowOS desktop chat today is a capable assistant surface (transcript, composer, session rail) but it cannot browse or edit files, preview HTML, or drive the built-in Chromium browser. Those capabilities exist only inside the **Code** app (`#appBody`), which is **hidden** whenever the user is on the desktop (`shouldHideAppBody()` in [`src/os/page-bridge.ts`](../../src/os/page-bridge.ts)).
+Minnow desktop chat today is a capable assistant surface (transcript, composer, session rail) but it cannot browse or edit files, preview HTML, or drive the built-in Chromium browser. Those capabilities exist only inside the **Code** app (`#appBody`), which is **hidden** whenever the user is on the desktop (`shouldHideAppBody()` in [`src/os/page-bridge.ts`](../../src/os/page-bridge.ts)).
 
 Desktop chat tools are also scoped to **`~/.minnow/chats`** (chats sandbox via [`src/lib/chats-workspace.ts`](../../src/lib/chats-workspace.ts) and `resolveToolWorkspaceRoot()` in [`src/tools/client.ts`](../../src/tools/client.ts)). The product intent for MIN-288 is a dedicated **`~/.minnow/workspace`** sandbox that desktop chat owns, with first-class UI to open the file tree, in-app browser, and file preview from the desktop canvas.
 
@@ -229,7 +229,7 @@ Mirror [`server/chats-workspace/`](../../server/chats-workspace/):
 | [`browser-preview-tools.ts`](../../src/tools/browser-preview-tools.ts) | `revealPreviewPanelForAgentNavigation` opens desktop browser tab when `isDesktopChatActive()`. |
 | [`electron/preview-host.ts`](../../electron/preview-host.ts) | No protocol change; bounds come from desktop `#previewBody` rect. |
 
-**Fullscreen overlay list:** Add MinnowOS desktop drawers to obstruction checks if they overlap preview bounds (unlikely if only one right drawer).
+**Fullscreen overlay list:** Add Minnow desktop drawers to obstruction checks if they overlap preview bounds (unlikely if only one right drawer).
 
 **Todos:**
 
@@ -242,7 +242,7 @@ Mirror [`server/chats-workspace/`](../../server/chats-workspace/):
 
 **Todos:**
 
-- [ ] `MIN-288-5a` — Update [`documentation/context.md`](../context.md) MinnowOS shell section.
+- [ ] `MIN-288-5a` — Update [`documentation/context.md`](../context.md) Minnow Shell section.
 - [ ] `MIN-288-5b` — Add guide snippet under `documentation/guides/` for desktop workspace layout.
 - [ ] `MIN-288-5c` — Composer hints: desktop empty state mentions Files/Browser tabs.
 - [ ] `MIN-288-5d` — `npx tsc --noEmit` + scoped tests (`npm run test` subsets: os, ui preview, tools).

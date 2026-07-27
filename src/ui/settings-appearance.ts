@@ -62,7 +62,7 @@ export function renderAppearanceSettingsSection(mount: HTMLElement): void {
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Palette, typography, and the MinnowOS desktop background. Terminals and LAN access live under ',
+    'Palette, typography, and the Minnow desktop background. Terminals and LAN access live under ',
     linkToSettingsSection('General', 'general'),
     '.',
   );
@@ -84,7 +84,7 @@ export function renderAppearanceSettingsSection(mount: HTMLElement): void {
   const wallpaper = appendSettingsGroup(
     content,
     'Desktop wallpaper',
-    'Ambient backgrounds on the MinnowOS desktop. Default is Underwater.',
+    'Ambient backgrounds on the Minnow desktop. Default is Underwater.',
     'appearance.wallpaper',
     { emphasis: true },
   );

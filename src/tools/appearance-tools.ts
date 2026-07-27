@@ -1,5 +1,5 @@
 /**
- * Desktop-only browser tools for MinnowOS appearance (theme, fonts, wallpaper).
+ * Desktop-only browser tools for Minnow appearance (theme, fonts, wallpaper).
  */
 
 import {

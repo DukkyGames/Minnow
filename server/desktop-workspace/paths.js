@@ -1,6 +1,6 @@
 /**
  * Desktop workspace paths under MINNOW_HOME (~/.minnow/workspace).
- * Sandboxed storage for MinnowOS desktop chat files, separate from Code and chats.
+ * Sandboxed storage for Minnow desktop chat files, separate from Code and chats.
  */
 
 import fs from 'node:fs/promises';
@@ -15,7 +15,7 @@ const DESKTOP_DIR_NAME = 'workspace';
 
 const README_BODY = `# Minnow Desktop Workspace
 
-This directory is the sandbox for MinnowOS desktop chat — attachments, notes, HTML previews, and session artifacts.
+This directory is the sandbox for Minnow desktop chat — attachments, notes, HTML previews, and session artifacts.
 
 - Files here stay separate from your active Code project workspace unless tools are explicitly pointed elsewhere.
 - Open the **Files**, **Browser**, and **Preview** tabs on the desktop to browse and edit this folder.

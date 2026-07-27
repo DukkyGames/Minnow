@@ -1,5 +1,5 @@
 /**
- * Benchmark Overview tab: multi-model comparison grid (MinnowOS bench-grid).
+ * Benchmark Overview tab: multi-model comparison grid (Minnow bench-grid).
  */
 
 import { pickCampaignInsight } from '../../benchmark/aggregates.ts';

@@ -1,5 +1,5 @@
 /**
- * MinnowOS Calendar app — local-first events, ICS, and CalDAV sync.
+ * Minnow Calendar app — local-first events, ICS, and CalDAV sync.
  */
 
 import '../styles/calendar.css';
@@ -116,7 +116,7 @@ function onHashChange(): void {
   }
 }
 
-/** Menubar shortcut — opens the Calendar app in MinnowOS. */
+/** Menubar shortcut — opens the Calendar app in Minnow. */
 export function openCalendarFromMenubar(): void {
   if (isOsShellEnabled()) {
     launchApp('calendar');

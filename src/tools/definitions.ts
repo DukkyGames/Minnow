@@ -44,7 +44,7 @@ export interface ToolDefinition {
   previewRequired?: boolean;
   requiresKey?: boolean;
   keyId?: string;
-  /** When set, the tool is exposed only while the bound MinnowOS app is released and enabled. */
+  /** When set, the tool is exposed only while the bound Minnow app is released and enabled. */
   appId?: AppId;
   definition: OpenAIFunctionDefinition;
 }
@@ -286,17 +286,17 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'launch_minnow_app',
     label: 'Launch Minnow app',
     description:
-      'Open or foreground a MinnowOS app (Code, Chat, Research, Experts, Bench, Settings) from the assistant.',
+      'Open or foreground a Minnow app (Code, Chat, Research, Experts, Bench, Settings) from the assistant.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
       'launch_minnow_app',
-      'Launch or foreground a MinnowOS app. Use when the user wants repo work (code), deep research (research), benchmarks (bench), settings, experts lab, or a fresh chat (chat). Pass seed to prefill concierge or research input.',
+      'Launch or foreground a Minnow app. Use when the user wants repo work (code), deep research (research), benchmarks (bench), settings, experts lab, or a fresh chat (chat). Pass seed to prefill concierge or research input.',
       {
         app_id: {
           type: 'string',
           enum: ['code', 'chat', 'research', 'experts', 'bench', 'issues', 'settings'],
-          description: 'MinnowOS app to open',
+          description: 'Minnow app to open',
         },
         seed: {
           type: 'string',
@@ -2036,7 +2036,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'get_appearance',
     label: 'Get appearance',
     description:
-      'Read current MinnowOS appearance: theme family/mode, custom colors, fonts, and desktop wallpaper.',
+      'Read current Minnow appearance: theme family/mode, custom colors, fonts, and desktop wallpaper.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(

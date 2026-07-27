@@ -1110,7 +1110,7 @@ export function getListedEmailAssistantChats(
   return filterListedEmailAssistantChats(state, chatsWorkspacePath);
 }
 
-/** Persist last active chat id for a MinnowOS app. */
+/** Persist last active chat id for a Minnow app. */
 export function rememberActiveChatForApp(appId: string, chatId: string): void {
   const state = requireSessionState();
   rememberActiveChatForAppInState(state, appId, chatId);
@@ -1118,7 +1118,7 @@ export function rememberActiveChatForApp(appId: string, chatId: string): void {
   scheduleSaveSessions();
 }
 
-/** Read remembered active chat id for a MinnowOS app. */
+/** Read remembered active chat id for a Minnow app. */
 export function getLastActiveChatIdForAppFromSession(appId: string): string | undefined {
   return getLastActiveChatIdForApp(requireSessionState(), appId);
 }

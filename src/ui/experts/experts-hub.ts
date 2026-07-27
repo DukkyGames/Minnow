@@ -1,5 +1,5 @@
 /**
- * Experts' Lab — split-pane roster + detail (MinnowOS layout).
+ * Experts' Lab — split-pane roster + detail (Minnow layout).
  */
 
 import '../../styles/experts-hub.css';

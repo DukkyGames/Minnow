@@ -1,4 +1,4 @@
-# MinnowOS shell
+# Minnow Shell
 
 Electron desktop layer wrapping Minnow apps. Tokens alias the chat palette via **`--os-*`** → **`--mn-*`**.
 

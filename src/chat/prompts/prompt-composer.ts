@@ -325,7 +325,7 @@ function resolveManageAppearanceBody(ctx: ComposeContext, profile: PromptProfile
   return loaded?.body?.trim() ?? '';
 }
 
-/** General-mode MinnowOS app routing when launch_minnow_app is enabled. */
+/** General-mode Minnow app routing when launch_minnow_app is enabled. */
 function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
   if ((modeId !== 'general' && modeId !== 'desktop') || !contextHasLaunchMinnowAppTool(ctx)) {

@@ -1,5 +1,5 @@
 /**
- * Resolve which MinnowOS app owns a chat session.
+ * Resolve which Minnow app owns a chat session.
  */
 
 import {

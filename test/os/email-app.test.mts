@@ -1,5 +1,5 @@
 /**
- * MinnowOS Email app registration and markup contract.
+ * Minnow Email app registration and markup contract.
  */
 
 import assert from 'node:assert/strict';

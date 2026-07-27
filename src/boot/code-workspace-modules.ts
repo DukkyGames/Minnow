@@ -1,6 +1,6 @@
 /**
  * Lazy initialization for Code workspace modules (editor, terminal, orchestrate hub).
- * Deferred on MinnowOS desktop cold start so the entry chunk stays smaller.
+ * Deferred on Minnow desktop cold start so the entry chunk stays smaller.
  */
 
 let initialized = false;

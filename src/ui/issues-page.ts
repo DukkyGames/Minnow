@@ -1,5 +1,5 @@
 /**
- * MinnowOS Issues app — list + board, filters, quick capture, detail (MIN-261).
+ * Minnow Issues app — list + board, filters, quick capture, detail (MIN-261).
  * Code sidebar opens an embed in #chatArea; desktop/dock keeps the fullscreen app.
  */
 

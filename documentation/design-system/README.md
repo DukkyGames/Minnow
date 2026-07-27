@@ -13,7 +13,7 @@ Living inventory of Minnow's UI layer as implemented in code. Minnow has **no Re
 | Custom overrides | [`src/appearance/types.ts`](../../src/appearance/types.ts), [`custom-theme.ts`](../../src/appearance/custom-theme.ts) |
 | Shared settings primitives | [`src/ui/settings-controls.ts`](../../src/ui/settings-controls.ts) + [`settings-controls.css`](../../src/styles/settings-controls.css) |
 | Global primitives | [`global.css`](../../src/styles/global.css), [`topbar.css`](../../src/styles/topbar.css), [`input.css`](../../src/styles/input.css), [`messages.css`](../../src/styles/messages.css), [`stats.css`](../../src/styles/stats.css) |
-| MinnowOS shell | [`minnowos-tokens.css`](../../src/styles/minnowos-tokens.css), [`src/os/`](../../src/os/) |
+| Minnow Shell | [`minnowos-tokens.css`](../../src/styles/minnowos-tokens.css), [`src/os/`](../../src/os/) |
 | Human spec | [`DESIGN.md`](../../DESIGN.md), [`PRODUCT.md`](../../PRODUCT.md) |
 | Machine sidecar | [`.impeccable/design.json`](../../.impeccable/design.json) |
 
@@ -25,7 +25,7 @@ Living inventory of Minnow's UI layer as implemented in code. Minnow has **no Re
 | [themes.md](themes.md) | 16 palette themes, storage keys, customization |
 | [primitives.md](primitives.md) | Buttons, chips, inputs, settings controls, toast |
 | [layout-shell.md](layout-shell.md) | Top bar, sidebar, composer, stats strip, breakpoints |
-| [minnowos.md](minnowos.md) | Desktop shell, `--os-*` aliases, wallpaper |
+| [shell.md](shell.md) | Minnow Shell, `--os-*` aliases, wallpaper |
 | [css-map.md](css-map.md) | Stylesheet → feature mapping |
 
 ## Architecture
@@ -37,7 +37,7 @@ global.css + feature CSS (--mn-* consumers)
     ↓
 src/ui/*.ts (DOM builders, no shared widget kit)
     ↓
-index.html shell + MinnowOS (src/os/)
+index.html shell + Minnow (src/os/)
 ```
 
 ## Rules (carry everywhere)

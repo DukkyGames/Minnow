@@ -1,5 +1,5 @@
 /**
- * MinnowOS Brain app registration and markup contract.
+ * Minnow Brain app registration and markup contract.
  */
 
 import assert from 'node:assert/strict';
