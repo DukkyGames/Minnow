@@ -58,8 +58,7 @@
 }
 
 .workspace-picker__close .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
 }
 
 /* ─── Path nav: breadcrumbs + icon actions ─── */
@@ -161,8 +160,7 @@
 }
 
 .workspace-picker__nav-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
 }
 
 .workspace-picker__nav-btn:disabled {

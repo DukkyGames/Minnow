@@ -1,20 +1,5 @@
 @import './minnowos-tokens.css';
 
-/* Raster launcher glyphs (shared with compare page header) */
-.mn-os-icon-raster {
-  display: block;
-  flex-shrink: 0;
-  background-color: currentColor;
-  mask-image: var(--icon-mask);
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: var(--icon-mask);
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-}
-
 /* ============================================================
    Minnow — shell, menubar, stage, transitions
    ============================================================ */
@@ -157,8 +142,7 @@ html.minnow-os-enabled {
 }
 
 .mn-os-mb-workspace-slot .workspace-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
 }
 
 .mn-os-mb-logo {
@@ -222,6 +206,11 @@ html.minnow-os-enabled {
   flex-shrink: 0;
   font-size: 13px;
   color: var(--os-text-dim);
+}
+
+.mn-os-mb-appname .icon-svg,
+.mn-os-mb-scheduler .icon-svg {
+  --mn-icon-size: 14px;
 }
 
 /* Operational status (Ready, loading models, errors) — mirrors legacy .status-pill */
@@ -386,9 +375,13 @@ html.minnow-os-enabled {
   transition: background-color 0.14s var(--os-ease), border-color 0.14s var(--os-ease);
 }
 
+.mn-os-app-switcher__ico .icon-svg {
+  --mn-icon-size: 16px;
+}
+
 .mn-os-app-switcher__ico .minnow-glyph {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
 }
 
 .mn-os-app-switcher__name {
@@ -546,6 +539,10 @@ html.minnow-os-enabled {
   border-radius: 8px;
   background: var(--mn-surface-1);
   color: var(--mn-accent);
+}
+
+.mn-os-notif-item__icon .icon-svg {
+  --mn-icon-size: 14px;
 }
 
 .mn-os-notif-item__body {

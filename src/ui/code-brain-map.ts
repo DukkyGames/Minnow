@@ -7,6 +7,7 @@ import '../styles/code-brain-map.css';
 import { sessionState } from '../state/sessions';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import { iconHtml } from './icon';
 
 const CODE_SECTION_ID = 'brainSection-code';
 const CODE_MAP_MOUNT_ID = 'codeBrainMapMount';
@@ -119,7 +120,7 @@ function buildOverlayDom(): HTMLElement {
   backBtn.id = 'btnCodeBrainMapBack';
   backBtn.setAttribute('aria-label', 'Back to chat');
   backBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
+    iconHtml('back');
 
   const titleWrap = document.createElement('div');
   titleWrap.className = 'code-brain-map-header__text';

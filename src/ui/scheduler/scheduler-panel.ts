@@ -25,6 +25,7 @@ import {
 import { findChatById, loadSessionsFromStorage, sessionState } from '../../state/sessions';
 import { setWorkspacePath } from '../../config/workspace-api';
 import { confirmAndStopBoardsForWorkspaceSwitch, dismissBoardViewOutsideWorkspace } from '../workspace-switch-guard';
+import { createIcon } from '../icon';
 import { getWorkspacePath, setWorkspaceFromServer } from '../../state/workspace';
 import { launchApp } from '../../os/router';
 import { switchChat, applyWorkspaceScopedSession } from '../sidebar';
@@ -105,27 +106,8 @@ function formatJobModelLabel(
 }
 
 /** Inline clock icon for the uptime notice. */
-function createNoticeIcon(): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.classList.add('scheduler-notice__icon');
-  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  circle.setAttribute('cx', '12');
-  circle.setAttribute('cy', '12');
-  circle.setAttribute('r', '9');
-  circle.setAttribute('fill', 'none');
-  circle.setAttribute('stroke', 'currentColor');
-  circle.setAttribute('stroke-width', '1.75');
-  const hand = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  hand.setAttribute('d', 'M12 7v5l3 2');
-  hand.setAttribute('fill', 'none');
-  hand.setAttribute('stroke', 'currentColor');
-  hand.setAttribute('stroke-width', '1.75');
-  hand.setAttribute('stroke-linecap', 'round');
-  hand.setAttribute('stroke-linejoin', 'round');
-  svg.append(circle, hand);
-  return svg;
+function createNoticeIcon(): HTMLElement {
+  return createIcon('statusPending', { className: 'scheduler-notice__icon' });
 }
 
 /** Render scheduler list UI into the supplied mount element. */

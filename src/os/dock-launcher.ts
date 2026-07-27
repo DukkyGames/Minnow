@@ -61,7 +61,7 @@ function buildDockTile(
 
   const ico = document.createElement('span');
   ico.className = 'mn-os-tile-ico';
-  ico.appendChild(createAppIcon(app.icon as 'code', { size: 24 }));
+  ico.appendChild(createAppIcon(app.icon as 'code'));
   btn.appendChild(ico);
 
   const name = document.createElement('span');

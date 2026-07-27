@@ -26,15 +26,10 @@ import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
+import { iconHtml } from './icon';
 
-/** Stroke icon reused for compact refresh controls in model picker filter bars. */
-const MODEL_REFRESH_ICON_HTML =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M20 4v4h-4"/>' +
-  '<path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>' +
-  '<path d="M4 20v-4h4"/>' +
-  '<path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>' +
-  '</svg>';
+/** Refresh icon reused for compact refresh controls in model picker filter bars. */
+const MODEL_REFRESH_ICON_HTML = iconHtml('refresh');
 
 /** Flat list when catalog is small; larger catalogs get collapsible producer headers. */
 const BROWSE_ALL_LIMIT = 12;
@@ -47,11 +42,8 @@ const MODEL_SEARCH_DEBOUNCE_MS = 150;
 /** Filter models by provider host: all, loopback/local, or remote/cloud APIs. */
 export type ModelHostFilter = 'all' | 'local' | 'cloud';
 
-/** Stroke icon for the loaded-only toggle (filled dot matches model load indicator). */
-const MODEL_LOADED_TOGGLE_ICON_HTML =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<circle cx="12" cy="12" r="5" fill="currentColor"/>' +
-  '</svg>';
+/** Icon for the loaded-only toggle (matches model load indicator). */
+const MODEL_LOADED_TOGGLE_ICON_HTML = iconHtml('statusPass');
 
 /** When host is Local: show only models loaded in memory. */
 export type ModelLocalLoadFilter = 'all' | 'loaded';
@@ -910,8 +902,7 @@ function appendProducerHeader(
   chevron.className = 'model-select-producer-chevron';
   if (isCollapsed) chevron.classList.add('model-select-producer-chevron--collapsed');
   chevron.setAttribute('aria-hidden', 'true');
-  chevron.innerHTML =
-    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  chevron.innerHTML = iconHtml('chevronDown', { size: 10 });
 
   if (producer.logoSvg) {
     const logo = document.createElement('span');

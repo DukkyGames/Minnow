@@ -44,6 +44,10 @@
   flex-shrink: 0;
 }
 
+.mn-os-scheduler-side-panel__ico .icon-svg {
+  --mn-icon-size: 16px;
+}
+
 .mn-os-scheduler-side-panel__title-wrap {
   flex: 1;
   min-width: 0;

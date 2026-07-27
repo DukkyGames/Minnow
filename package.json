@@ -12,8 +12,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-skills-manifest.mjs && tsx scripts/generate-skills-library-index.mjs && tsx scripts/generate-settings-registry.mjs && node scripts/sync-material-file-icons.mjs",
-    "build:benchmark-packs": "node scripts/build-benchmark-packs.mjs",
+    "prebuild": "node scripts/generate-skills-manifest.mjs && tsx scripts/generate-skills-library-index.mjs && tsx scripts/generate-settings-registry.mjs && node scripts/sync-material-file-icons.mjs && node scripts/check-icons.mjs",
+    "check:icons": "node scripts/check-icons.mjs",
     "report:bundle-size": "node scripts/report-bundle-size.mjs",
     "report:bundle-size:ci": "node scripts/report-bundle-size.mjs --fail-over-kb 1500",
     "build": "tsc && vite build",

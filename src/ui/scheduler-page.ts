@@ -83,7 +83,7 @@ async function refreshPanel(): Promise<void> {
 function mountHeaderIcon(): void {
   const slot = document.getElementById('schedulerPageIcon');
   if (!slot || slot.childElementCount > 0) return;
-  slot.appendChild(createAppIcon('scheduler', { size: 22 }));
+  slot.appendChild(createAppIcon('scheduler'));
 }
 
 export function initSchedulerPage(): void {

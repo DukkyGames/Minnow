@@ -14,6 +14,7 @@ import { DictationRange } from '../voice/dictation-range';
 import { SttStreamClient } from '../voice/stt-stream-client';
 import { ensureVoiceWorker } from '../voice/api-client';
 import { fetchSttStatus } from './voice-controls';
+import { iconHtml } from './icon';
 
 export type MicState = 'idle' | 'starting' | 'recording' | 'transcribing';
 
@@ -46,11 +47,7 @@ const MIC_BUTTON_MARKUP =
   '<span class="composer-mic-btn__bars" aria-hidden="true">' +
   '<span></span><span></span><span></span>' +
   '</span>' +
-  '<svg class="icon-svg composer-mic-btn__icon" viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/>' +
-  '<path d="M19 11a7 7 0 0 1-14 0" fill="none" stroke="currentColor" stroke-width="2"/>' +
-  '<path d="M12 18v3"/>' +
-  '</svg>' +
+  iconHtml('mic', { className: 'composer-mic-btn__icon' }) +
   '<span class="composer-mic-btn__spinner" aria-hidden="true"></span>';
 
 function resizeComposerInput(input: HTMLTextAreaElement): void {

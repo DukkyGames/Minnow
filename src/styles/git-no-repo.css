@@ -25,8 +25,7 @@
 }
 
 .git-no-repo__icon .icon-svg {
-  width: 20px;
-  height: 20px;
+  --mn-icon-size: 20px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.75;

@@ -46,8 +46,7 @@
 }
 
 .experts-hdr-ico .icon-svg {
-  width: 20px;
-  height: 20px;
+  --mn-icon-size: 20px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
@@ -340,8 +339,7 @@
 }
 
 .experts-btn-primary .icon-svg {
-  width: 15px;
-  height: 15px;
+  --mn-icon-size: 15px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
@@ -594,8 +592,7 @@
 }
 
 .expert-scope-back .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;

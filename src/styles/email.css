@@ -704,8 +704,7 @@
 
 .email-chrome-segment .email-icon,
 .email-chrome-segment .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
   flex-shrink: 0;
   opacity: 0.72;
 }
@@ -818,8 +817,7 @@
 
 .email-chrome-icon-btn .email-icon,
 .email-chrome-icon-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1034,8 +1032,7 @@
 
 .email-dash-row-dismiss .email-icon,
 .email-dash-row-dismiss .icon-svg {
-  width: 12px;
-  height: 12px;
+  --mn-icon-size: 12px;
 }
 
 .email-dash-row.email-urgency-high {
@@ -1319,8 +1316,7 @@
 
 .email-icon-btn .email-icon,
 .email-icon-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
 }
 
 /* Filled icons (e.g. starred) override the global stroke-only `.icon-svg` rule. */
@@ -1337,8 +1333,7 @@
 }
 
 .email-btn-icon .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
   flex-shrink: 0;
 }
 
@@ -1402,8 +1397,7 @@
 }
 
 .email-compose-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
 }
 
 .email-nav-title {
@@ -1538,8 +1532,7 @@
 }
 
 .email-list-search-wrap .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
   color: var(--mn-fg-muted);
   flex-shrink: 0;
 }
@@ -1752,8 +1745,7 @@
 }
 
 .email-list-attach .icon-svg {
-  width: 13px;
-  height: 13px;
+  --mn-icon-size: 13px;
 }
 
 .email-reader-pane {
@@ -3844,8 +3836,7 @@
 }
 
 .email-readout-refresh.email-icon-btn .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
 }
 
 .email-readout-assistant.email-icon-btn {
@@ -4476,12 +4467,8 @@
 
 .email-assistant-toggle-icon,
 .email-assistant-title-icon {
+  --mn-icon-size: 18px;
   display: inline-block;
-  width: 18px;
-  height: 18px;
-  background: currentColor;
-  mask: var(--mode-icon-url) center / contain no-repeat;
-  -webkit-mask: var(--mode-icon-url) center / contain no-repeat;
 }
 
 .email-shell-a.has-assistant .email-assistant-toggle {
@@ -4603,8 +4590,7 @@
 
 .email-assistant-icon-btn .icon-svg,
 .email-assistant-composer-btn .icon-svg {
-  width: 17px;
-  height: 17px;
+  --mn-icon-size: 17px;
 }
 
 .email-assistant-scroll {
@@ -4766,8 +4752,7 @@
 }
 
 .email-assistant-send .icon-svg {
-  width: 18px;
-  height: 18px;
+  --mn-icon-size: 18px;
 }
 
 .email-assistant-composer-btn[hidden] {

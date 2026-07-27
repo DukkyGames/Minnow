@@ -7,6 +7,7 @@ import './styles/font-presets.css';
 import './styles/tokens.css';
 import './styles/theme-transitions.css';
 import './styles/global.css';
+import './styles/icons.css';
 import './styles/motion.css';
 import './styles/topbar.css';
 import './styles/model-select.css';

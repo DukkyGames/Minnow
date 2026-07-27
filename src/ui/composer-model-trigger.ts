@@ -26,11 +26,11 @@ import {
   unregisterChromePopover,
 } from './preview-electron-visibility';
 
-const CHEVRON_SVG =
-  '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+import { iconHtml } from './icon';
 
-const MODEL_FALLBACK_ICON_SVG =
-  '<svg class="mn-os-mb-model-fallback-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
+const CHEVRON_SVG = iconHtml('chevronDown', { size: 10 });
+
+const MODEL_FALLBACK_ICON_SVG = iconHtml('appModels', { className: 'mn-os-mb-model-fallback-icon' });
 
 type ComposerModelVariant = 'desktop' | 'code' | 'menubar';
 

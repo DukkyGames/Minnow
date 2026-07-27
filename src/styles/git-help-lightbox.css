@@ -54,8 +54,7 @@
 }
 
 .git-help-close .icon-svg {
-  width: 16px;
-  height: 16px;
+  --mn-icon-size: 16px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
@@ -321,8 +320,7 @@
 }
 
 .git-panel-help-btn .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2;

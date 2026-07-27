@@ -89,7 +89,7 @@ function rebuildList(): void {
 
     const icon = document.createElement('span');
     icon.className = 'mn-os-notif-item__icon';
-    icon.appendChild(createAppIcon(app.icon as OsIconName, { size: 16 }));
+    icon.appendChild(createAppIcon(app.icon as OsIconName));
     btn.appendChild(icon);
 
     const body = document.createElement('span');

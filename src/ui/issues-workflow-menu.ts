@@ -3,6 +3,8 @@
  * Flat chrome, --mn-* tokens, accessible menu with keyboard support.
  */
 
+import { createIcon } from './icon';
+
 export interface IssuesWorkflowMenuItem {
   id: string;
   label: string;
@@ -63,22 +65,8 @@ function positionMenu(anchor: HTMLElement, menu: HTMLElement): void {
   menu.style.left = `${left}px`;
 }
 
-function chevronSvg(): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '12');
-  svg.setAttribute('height', '12');
-  svg.setAttribute('viewBox', '0 0 12 12');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.classList.add('issues-workflow-menu__chevron');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M3 4.5 6 7.5 9 4.5');
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', 'currentColor');
-  path.setAttribute('stroke-width', '1.5');
-  path.setAttribute('stroke-linecap', 'round');
-  path.setAttribute('stroke-linejoin', 'round');
-  svg.appendChild(path);
-  return svg;
+function chevronSvg(): HTMLElement {
+  return createIcon('chevronDown', { size: 12, className: 'issues-workflow-menu__chevron' });
 }
 
 function openMenuForTrigger(

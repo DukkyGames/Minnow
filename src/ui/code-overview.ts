@@ -3,6 +3,7 @@
  */
 
 import '../styles/code-overview.css';
+import { iconHtml } from './icon';
 
 import { loadRegistry, type PersistedRunRecord } from '../agents/controller/persistence';
 import { fetchBrainCodeStatus, fetchBrainStatus } from '../brain/client';
@@ -233,7 +234,7 @@ function buildShell(): HTMLElement {
         <button type="button" class="code-overview__pulse-expand" id="codeOverviewPulseExpand" aria-expanded="false">
           <span class="code-overview__pulse-expand-label">Live metrics</span>
           <span class="code-overview__pulse-expand-preview" id="codeOverviewPulsePreview">—</span>
-          <svg class="code-overview__pulse-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          ${iconHtml('chevronDown', { className: 'code-overview__pulse-expand-chevron' })}
         </button>
         <div class="code-overview__pulse-grid">
           <div class="code-overview__pulse-cell">
@@ -278,28 +279,28 @@ function buildShell(): HTMLElement {
           <section class="code-overview__section" aria-labelledby="codeOverviewGitTitle">
             <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewGitTitle">Git</h2>
-              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              ${iconHtml('chevronDown', { className: 'code-overview__section-chevron' })}
             </div>
             <div class="code-overview__section-body code-overview__section-body--git" id="codeOverviewGitBody"></div>
           </section>
           <section class="code-overview__section" aria-labelledby="codeOverviewSystemTitle">
             <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewSystemTitle">System</h2>
-              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              ${iconHtml('chevronDown', { className: 'code-overview__section-chevron' })}
             </div>
             <div class="code-overview__section-body" id="codeOverviewSystemBody"></div>
           </section>
           <section class="code-overview__section" aria-labelledby="codeOverviewSchedulerTitle">
             <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewSchedulerTitle">Scheduler</h2>
-              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              ${iconHtml('chevronDown', { className: 'code-overview__section-chevron' })}
             </div>
             <div class="code-overview__section-body" id="codeOverviewSchedulerBody"></div>
           </section>
           <section class="code-overview__section" aria-labelledby="codeOverviewWorkspaceTitle">
             <div class="code-overview__section-head" data-code-overview-rail-toggle>
               <h2 class="code-overview__section-title" id="codeOverviewWorkspaceTitle">Workspace</h2>
-              <svg class="code-overview__section-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              ${iconHtml('chevronDown', { className: 'code-overview__section-chevron' })}
             </div>
             <div class="code-overview__section-body" id="codeOverviewWorkspaceBody"></div>
           </section>
@@ -316,7 +317,7 @@ function buildShell(): HTMLElement {
         >
           <span class="code-overview__telemetry-expand-label">Telemetry</span>
           <span class="code-overview__telemetry-expand-preview" id="codeOverviewTelemetryPreview">—</span>
-          <svg class="code-overview__telemetry-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          ${iconHtml('chevronDown', { className: 'code-overview__telemetry-expand-chevron' })}
         </button>
         <div class="code-overview__telemetry-head">
           <h2 class="code-overview__section-title">Telemetry</h2>

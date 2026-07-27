@@ -21,6 +21,7 @@ import type {
 } from '../chat/issues/workflow-seeds';
 import { getMode } from '../chat/modes/registry';
 import { createAppIcon } from '../os/icons';
+import { iconHtml } from './icon';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
@@ -262,7 +263,7 @@ function ensureEmbeddedBackButton(): void {
   btn.setAttribute('aria-label', 'Back to chat');
   btn.title = 'Back to chat';
   btn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
+    iconHtml('back');
   btn.addEventListener('click', () => {
     closeIssuesEmbeddedInCode();
   });
@@ -448,7 +449,7 @@ function getMount(): HTMLElement | null {
 function mountHeaderIcon(): void {
   const slot = document.getElementById('issuesPageIcon');
   if (!slot || slot.childElementCount > 0) return;
-  slot.appendChild(createAppIcon('issues', { size: 22 }));
+  slot.appendChild(createAppIcon('issues'));
 }
 
 function collectOptions(): CollectIssuesOptions {

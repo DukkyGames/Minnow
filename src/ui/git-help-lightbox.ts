@@ -7,6 +7,7 @@ import {
   unregisterChromePopover,
 } from './preview-electron-visibility';
 import { createGitWorktreeIcon } from './git-worktree-icons';
+import { createIcon } from './icon';
 
 const OVERLAY_ID = 'gitHelpLightboxOverlay';
 const DIALOG_ID = 'gitHelpLightbox';
@@ -23,18 +24,6 @@ let chromePopoverRegistered = false;
 /** Whether the git help lightbox is open. */
 export function isGitHelpLightboxOpen(): boolean {
   return isOpen;
-}
-
-/** Stroke SVG icon matching global `.icon-svg` styling. */
-function createStrokeIcon(pathD: string, className = 'icon-svg'): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', className);
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', pathD);
-  svg.appendChild(path);
-  return svg;
 }
 
 function trapFocus(e: KeyboardEvent): void {
@@ -327,7 +316,7 @@ function ensureShell(): void {
   closeBtn.type = 'button';
   closeBtn.className = 'icon-btn git-help-close';
   closeBtn.setAttribute('aria-label', 'Close');
-  closeBtn.appendChild(createStrokeIcon('M18 6L6 18M6 6l12 12'));
+  closeBtn.appendChild(createIcon('close'));
   closeBtn.addEventListener('click', () => closeGitHelpLightbox());
 
   header.append(title, closeBtn);

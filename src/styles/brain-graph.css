@@ -86,8 +86,7 @@
 }
 
 .brain-rail__btn .icon-svg {
-  width: 18px;
-  height: 18px;
+  --mn-icon-size: 18px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.75;
@@ -668,8 +667,7 @@
 }
 
 .brain-graph-tree-toggle .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
   transition: transform 0.18s var(--brain-ease-out);
 }
 
@@ -811,8 +809,7 @@
 }
 
 .brain-graph-readout__toggle .icon-svg {
-  width: 14px;
-  height: 14px;
+  --mn-icon-size: 14px;
   transition: transform 0.18s var(--brain-ease-out);
 }
 

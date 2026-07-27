@@ -16,6 +16,7 @@ import {
 import type { SubAgentTypeConfig } from '../agents/types';
 import { listModes } from '../chat/modes/registry';
 import { createModeMaskIcon } from './mode-icons';
+import { createIcon } from './icon';
 import { getActiveChat } from '../state/sessions';
 import { isServerStorageMode } from '../config/storage-mode';
 import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
@@ -283,15 +284,8 @@ function openSubAgentLightbox(
   });
 }
 
-function createCardChevron(): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'icon-svg settings-agent-card__chevron');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M9 6l6 6-6 6');
-  svg.appendChild(path);
-  return svg;
+function createCardChevron(): HTMLElement {
+  return createIcon('chevronRight', { className: 'settings-agent-card__chevron' });
 }
 
 function renderCardButton(card: AgentCenterCard, agents: WorkAgentDefinition[]): HTMLButtonElement {

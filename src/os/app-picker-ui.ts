@@ -59,7 +59,7 @@ export function createAppPickerCard(options: AppPickerCardOptions): HTMLButtonEl
 
   const ico = el('span', 'mn-app-picker-card__icon');
   ico.setAttribute('aria-hidden', 'true');
-  ico.appendChild(createAppIcon(app.icon as 'code', { size: 28 }));
+  ico.appendChild(createAppIcon(app.icon as 'code'));
   card.appendChild(ico);
 
   const copy = el('div', 'mn-app-picker-card__copy');

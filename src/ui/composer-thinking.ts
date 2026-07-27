@@ -33,6 +33,7 @@ import {
   touchChat,
 } from '../state/sessions';
 import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-effort';
+import { createIcon } from './icon';
 import { isComposerRecoveryBlocked } from './composer-send';
 
 let rootEl: HTMLElement | null = null;
@@ -149,10 +150,7 @@ export function initThinkingControl(): void {
   toggleBtn.setAttribute('aria-label', 'Thinking mode');
   toggleBtn.addEventListener('click', onToggleClick);
 
-  const icon = document.createElement('span');
-  icon.className = 'thinking-toggle-icon';
-  icon.setAttribute('aria-hidden', 'true');
-
+  const icon = createIcon('thinkingBrain', { className: 'thinking-toggle-icon' });
   toggleBtn.appendChild(icon);
   rootEl.appendChild(toggleBtn);
   void ensureSessionsReady().then(() => syncThinkingControlFromActiveChat());

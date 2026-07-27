@@ -132,7 +132,7 @@ function buildTile(item: AppSwitcherItem): HTMLButtonElement {
     // Brand glyph marks the Desktop home surface (same mark as the menubar logo).
     ico.innerHTML = MINNOW_GLYPH_HEADER_HTML;
   } else {
-    ico.appendChild(createAppIcon(item.icon as 'code', { size: 20 }));
+    ico.appendChild(createAppIcon(item.icon as 'code'));
   }
   btn.appendChild(ico);
 

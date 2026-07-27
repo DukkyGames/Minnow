@@ -16,6 +16,7 @@ import {
 } from '../theme';
 import { applyResolvedTheme } from './theme';
 import { createSettingsToggleRow } from './settings-switch';
+import { iconHtml } from './icon';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -29,7 +30,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 const CHECK_SVG =
-  '<svg class="settings-theme-check" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.2 11.2 3.4 8.4l-1 1 3.8 3.8 7.8-7.8-1-1z"/></svg>';
+  iconHtml('check', { className: 'settings-theme-check' });
 
 /** Build a miniature window mock that previews palette tokens for one family. */
 function appendFamilyPreview(family: ThemeFamily, mode: ThemeMode): HTMLElement {

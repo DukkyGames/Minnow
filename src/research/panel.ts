@@ -7,6 +7,7 @@ import '../styles/research-page.css';
 import { wrapUntrusted } from '../lib/untrusted.mjs';
 import { resolveResearchModelBinding } from './resolve-binding';
 import { pushNotification } from '../notifications/push';
+import { iconHtml } from '../ui/icon';
 import {
   cancelResearch,
   fetchResearchDetail,
@@ -117,8 +118,7 @@ function setRunningState(isRunning: boolean): void {
     if (isRunning) {
       startBtn.innerHTML = '<span class="dr-spinner"></span> Running…';
     } else {
-      startBtn.innerHTML =
-        '<svg class="dr-run-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg> Research';
+      startBtn.innerHTML = `${iconHtml('search', { size: 16, className: 'dr-run-icon' })} Research`;
     }
   }
   if (cancelBtn) {

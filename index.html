@@ -253,12 +253,7 @@
     <div class="model-wrap" data-model-state="unknown">
       <label class="visually-hidden" id="modelSelectLabel" for="modelSelectTrigger">Model</label>
       <button class="icon-btn model-refresh-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" title="Refresh model list">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M20 4v4h-4"/>
-          <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
-          <path d="M4 20v-4h4"/>
-          <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
-        </svg>
+        <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
       </button>
       <div class="model-select-inner" id="modelSelectRoot">
         <span class="model-state-dot model-load-dot" id="modelStateDot" aria-hidden="true"></span>
@@ -280,27 +275,27 @@
 
   <div class="topbar-actions">
     <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <i class="fi fi-rr-menu-burger icon-svg" aria-hidden="true"></i>
     </button>
     <div id="workspaceControlSlot" class="topbar-workspace-slot">
       <div class="workspace-control">
         <span id="workspacePathLabel" class="workspace-path-label" hidden></span>
         <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-describedby="workspacePathLabel" aria-label="Choose workspace folder" title="Choose workspace folder">
-          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <i class="fi fi-rr-folder icon-svg" aria-hidden="true"></i>
         </button>
       </div>
     </div>
     <button class="icon-btn" type="button" id="btnResearch" aria-label="Deep Research" title="Deep Research">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+      <i class="fi fi-rr-search icon-svg" aria-hidden="true"></i>
     </button>
     <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Compare model speed and quality">
-      <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
+      <i class="fi fi-rr-chart-simple icon-svg" aria-hidden="true"></i>
     </button>
     <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Experts" title="Experts">
-      <img class="icon-img" src="/icons/expert-lab.png" width="18" height="18" alt="" aria-hidden="true">
+      <i class="fi fi-rr-flask icon-svg" aria-hidden="true"></i>
     </button>
     <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <i class="fi fi-rr-settings icon-svg" aria-hidden="true"></i>
     </button>
   </div>
 </header>
@@ -309,7 +304,7 @@
 <button type="button" class="drawer-overlay" id="drawerOverlay" aria-label="Close settings" aria-hidden="true"></button>
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" inert>
   <div class="drawer-header" id="drawerTitle">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <i class="fi fi-rr-settings icon-svg" aria-hidden="true"></i>
     Settings
   </div>
   <div class="drawer-body">
@@ -372,7 +367,7 @@
       </div>
     </section>
     <button class="drawer-clear-btn" type="button">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;display:inline-block;vertical-align:-3px;margin-right:6px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true" style="--mn-icon-size:16px;display:inline-block;vertical-align:-3px;margin-right:6px"></i>
       Clear messages in this chat
     </button>
   </div>
@@ -384,7 +379,7 @@
 <main id="settingsView" class="settings-page" aria-label="Settings">
   <header class="settings-page-header">
     <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to Code">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <i class="fi fi-rr-arrow-left icon-svg" aria-hidden="true"></i>
     </button>
     <div id="settingsSearchFinderSlot" class="settings-search-finder-slot">
     <div
@@ -790,14 +785,14 @@
     <div class="welcome-page__tiles" role="group" aria-label="Workspace actions">
       <button type="button" class="welcome-page__tile" id="btnWelcomeOpenProject">
         <span class="welcome-page__tile-icon" aria-hidden="true">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <i class="fi fi-rr-folder-open icon-svg" aria-hidden="true"></i>
         </span>
         <span class="welcome-page__tile-label">Open project</span>
         <span class="welcome-page__tile-desc">Browse to an existing folder</span>
       </button>
       <button type="button" class="welcome-page__tile" id="btnWelcomeCreateProject">
         <span class="welcome-page__tile-icon" aria-hidden="true">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true"></i>
         </span>
         <span class="welcome-page__tile-label">Create new project</span>
         <span class="welcome-page__tile-desc">New folder under Projects</span>
@@ -922,7 +917,7 @@
           </div>
           <div class="dr-actions research-run-actions">
             <button type="button" class="dr-run" id="btnResearchStart">
-              <svg class="dr-run-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              <i class="fi fi-rr-search icon-svg dr-run-icon" aria-hidden="true" style="--mn-icon-size:16px"></i>
               Research
             </button>
             <button type="button" class="dr-cancel" id="btnResearchCancel" hidden>Cancel</button>
@@ -948,10 +943,10 @@
         <span class="chat-app-rail-title">Chats</span>
         <div class="chat-app-rail-head-actions">
           <button type="button" class="chat-app-rail-new" id="btnChatAppNewChat" aria-label="New chat" title="New chat">
-            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true"></i>
           </button>
           <button type="button" class="icon-btn chat-app-rail-toggle" id="btnChatAppRailToggle" aria-label="Expand sessions" aria-expanded="false" title="Expand sessions">
-            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+            <i class="fi fi-rr-angle-small-right icon-svg" aria-hidden="true"></i>
           </button>
         </div>
       </div>
@@ -960,7 +955,7 @@
     <div class="chat-app-main chat-app">
       <header class="chat-app-top">
         <span class="chat-app-ava" aria-hidden="true">
-          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <i class="fi fi-rr-comment icon-svg" aria-hidden="true"></i>
         </span>
         <h1 class="chat-app-title" id="chatAppTitle">Chat</h1>
       </header>
@@ -979,13 +974,13 @@
             <div id="chatAppAttachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
             <div class="chat-app-input">
               <button type="button" class="chat-app-comp-btn" id="btnChatAppAttach" aria-label="Attach files" title="Attach files">
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <i class="fi fi-rr-clip icon-svg" aria-hidden="true"></i>
               </button>
               <div class="composer-tools-anchor chat-app-tools-anchor">
                 <button type="button" class="chat-app-comp-btn composer-tools-btn" id="btnChatAppTools"
                   aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
                   aria-controls="chatAppToolsPopover" title="Tool permissions">
-                  <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M4 14h4M12 6h4M20 10h4"/></svg>
+                  <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true"></i>
                 </button>
                 <div id="chatAppToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
                   <p id="chatAppToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
@@ -999,7 +994,7 @@
               <label for="chatAppInput" class="visually-hidden">Message</label>
               <textarea id="chatAppInput" class="chat-app-field" rows="1" placeholder="Message Minnow…"></textarea>
               <button type="button" class="chat-app-comp-btn chat-app-stop hidden" id="btnChatAppStop" aria-label="Stop generation" hidden disabled>
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                <i class="fi fi-rr-square icon-svg" aria-hidden="true"></i>
               </button>
               <div class="context-usage-anchor chat-app-context-usage">
                 <button
@@ -1025,7 +1020,7 @@
                 ></div>
               </div>
               <button type="button" class="chat-app-send" id="chatAppSendBtn" aria-label="Send message">
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                <i class="fi fi-rr-arrow-up icon-svg" aria-hidden="true"></i>
               </button>
             </div>
             </div>
@@ -1035,10 +1030,7 @@
           <header class="chat-app-outputs-head">
             <span class="chat-app-outputs-label">Outputs</span>
             <button type="button" class="chat-app-outputs-toggle" id="btnChatAppOutputsToggle" aria-expanded="true" aria-controls="chatAppFilesBody" aria-label="Toggle outputs panel">
-              <svg class="icon-svg chat-app-outputs-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-          </header>
-          <div id="chatAppFilesBody" class="chat-app-outputs-body">
+              <i class="fi fi-rr-angle-small-down icon-svg chat-app-outputs-chevron" aria-hidden="true"></i>
             <p class="chat-app-outputs-empty">Files the assistant creates will appear here.</p>
           </div>
         </aside>
@@ -1050,7 +1042,7 @@
 <main id="modelsView" class="models-page" aria-label="Models">
   <header class="models-page-header">
     <button type="button" class="icon-btn" id="btnModelsPageBack" aria-label="Back">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <i class="fi fi-rr-arrow-left icon-svg" aria-hidden="true"></i>
     </button>
     <h1 class="models-page-header__title">Models</h1>
   </header>
@@ -1109,7 +1101,7 @@
   <div class="brain-page-chrome">
   <header class="brain-page-header brain-overlay-surface">
     <button type="button" class="icon-btn brain-page-header__back" id="btnBrainPageBack" aria-label="Back">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <i class="fi fi-rr-arrow-left icon-svg" aria-hidden="true"></i>
     </button>
     <div class="brain-page-header__main">
       <div class="brain-page-header__title-row">
@@ -1128,43 +1120,43 @@
   <div class="brain-page-body">
     <nav class="brain-rail brain-overlay-surface" aria-label="Brain sections">
       <button type="button" class="brain-rail__btn" data-brain-nav="graph" aria-current="page" title="Graph">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.5 7.5 10.5 16M16.5 7.5 13.5 16M8 6h8"/></svg>
+        <i class="fi fi-rr-chart-network icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Graph</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="edit" title="Edit">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <i class="fi fi-rr-edit icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Edit</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="log" title="Log">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <i class="fi fi-rr-list icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Log</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="schema" title="Schema">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h7v7h-7z"/></svg>
+        <i class="fi fi-rr-table-layout icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Schema</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="proposals" title="Proposals">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg>
+        <i class="fi fi-rr-layers icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Proposals</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="memories" title="Memories">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        <i class="fi fi-rr-brain icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Memories</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="ingest" title="Ingest">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <i class="fi fi-rr-inbox-in icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Ingest</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="lint" title="Lint">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <i class="fi fi-rr-triangle-warning icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Lint</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="code" title="Code">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7l-5 5 5 5"/><path d="M16 7l5 5-5 5"/></svg>
+        <i class="fi fi-rr-code-simple icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Code</span>
       </button>
       <button type="button" class="brain-rail__btn" data-brain-nav="settings" title="Settings">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg>
+        <i class="fi fi-rr-settings icon-svg" aria-hidden="true"></i>
         <span class="brain-rail__label">Settings</span>
       </button>
     </nav>
@@ -1178,7 +1170,7 @@
             <div class="brain-graph-toolbar__group brain-graph-toolbar__search">
               <label class="brain-graph-search">
                 <span class="visually-hidden">Search nodes</span>
-                <svg class="brain-graph-search__icon icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <i class="fi fi-rr-search icon-svg brain-graph-search__icon" aria-hidden="true"></i>
                 <input type="search" id="brainGraphSearch" placeholder="Search pages…" autocomplete="off">
               </label>
               <span id="brainGraphStats" class="brain-graph-stats hidden" aria-live="polite"></span>
@@ -1204,7 +1196,7 @@
               <div class="brain-graph-tree-head">
                 <h3 class="brain-section-subtitle">Pages</h3>
                 <button type="button" class="brain-action-btn brain-graph-tree-toggle icon-btn" id="brainGraphTreeToggle" aria-expanded="true" aria-label="Collapse page tree">
-                  <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  <i class="fi fi-rr-angle-small-down icon-svg" aria-hidden="true"></i>
                 </button>
               </div>
               <div id="brainGraphTree" class="brain-graph-tree-mount" aria-label="Page tree"></div>
@@ -1213,7 +1205,7 @@
               <div class="brain-graph-readout__head">
                 <h3 class="brain-section-subtitle">Structure</h3>
                 <button type="button" class="brain-action-btn brain-graph-readout__toggle icon-btn" id="brainGraphReadoutToggle" aria-expanded="true" aria-label="Collapse structure panel">
-                  <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  <i class="fi fi-rr-angle-small-down icon-svg" aria-hidden="true"></i>
                 </button>
               </div>
               <div class="brain-graph-readout__body" id="brainGraphReadoutBody"></div>
@@ -1953,7 +1945,7 @@
 <main id="expertsView" class="experts-page" data-step="browse" aria-label="Experts' Lab">
   <header class="experts-hdr">
     <span class="experts-hdr-ico" aria-hidden="true">
-      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M9 3h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10 3v6l-5 8.5A2 2 0 0 0 6.7 21h10.6a2 2 0 0 0 1.7-3.5L14 9V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 14h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <i class="fi fi-rr-flask icon-svg" aria-hidden="true"></i>
     </span>
     <div class="experts-hdr-txt">
       <h2>Experts' Lab</h2>
@@ -1961,7 +1953,7 @@
     </div>
     <div class="experts-hdr-spacer"></div>
     <button type="button" class="experts-hdr-btn" id="btnExpertsNew">
-      <svg class="icon-svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
       New expert
     </button>
   </header>
@@ -2049,7 +2041,7 @@
     <div id="expertScopeChrome" class="expert-scope-chrome hidden" hidden>
       <div class="expert-scope-header">
         <button type="button" class="expert-scope-back" id="btnExpertScopeBack" aria-label="Back to Experts">
-          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          <i class="fi fi-rr-angle-small-left icon-svg" aria-hidden="true"></i>
           <span class="expert-scope-back-label">Experts</span>
         </button>
         <div id="expertScopeIdentity" class="expert-scope-identity">
@@ -2071,7 +2063,7 @@
           id="btnSidebarCollapse"
           aria-label="Collapse sidebar"
         >
-          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          <i class="fi fi-rr-angle-small-left icon-svg" aria-hidden="true"></i>
         </button>
         <button
           class="icon-btn"
@@ -2081,7 +2073,7 @@
           title="Search chats"
           aria-expanded="false"
         >
-          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <i class="fi fi-rr-search icon-svg" aria-hidden="true"></i>
         </button>
         <button
           type="button"
@@ -2090,39 +2082,39 @@
           aria-label="Code overview"
           title="Code overview"
         >
-          <img class="icon-img" src="/icons/code-overview.png" width="18" height="18" alt="" aria-hidden="true">
+          <i class="fi fi-rr-layout-fluid icon-svg" aria-hidden="true"></i>
         </button>
       </div>
     </div>
     <button type="button" class="chat-new-wide">+ New chat</button>
     <button type="button" class="chat-new-compact" aria-label="New chat">+</button>
     <button type="button" class="chat-new-group-wide" id="btnNewChatGroup" aria-label="New group">
-      <span class="chat-new-group-icon" aria-hidden="true"></span>
+      <i class="fi fi-rr-folder-download icon-svg chat-new-group-icon" aria-hidden="true"></i>
       <span class="chat-new-group-label">New group</span>
     </button>
     <div class="chat-list" id="chatList" role="list"></div>
     </div>
     <div class="chat-sidebar-footer">
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="Issues" title="Issues">
-        <img class="icon-img" src="/icons/issue_tracker.svg" width="18" height="18" alt="" aria-hidden="true">
+        <i class="fi fi-rr-radar icon-svg" aria-hidden="true"></i>
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
-        <img class="icon-img" src="/icons/stats.png" width="18" height="18" alt="" aria-hidden="true">
+        <i class="fi fi-rr-stats icon-svg" aria-hidden="true"></i>
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAgentActivity" aria-label="Agent activity" aria-expanded="false" aria-controls="agentActivityPanel" title="Agent activity">
-        <img class="icon-img" src="/icons/agent-activity.png" width="18" height="18" alt="" aria-hidden="true">
+        <i class="fi fi-rr-waveform-path icon-svg" aria-hidden="true"></i>
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
-        <img class="icon-img" src="/icons/console.png" width="18" height="18" alt="" aria-hidden="true">
+        <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
-        <img class="icon-img" src="/icons/code-brain-map.png" width="18" height="18" alt="" aria-hidden="true">
+        <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnDevServers" aria-label="Dev servers" title="Dev servers" aria-pressed="false">
-        <img class="icon-img" src="/icons/Servers.svg" width="18" height="18" alt="" aria-hidden="true">
+        <i class="fi fi-rr-database icon-svg" aria-hidden="true"></i>
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
-        <img class="icon-img" src="/icons/Orchestrate.svg" width="18" height="18" alt="" aria-hidden="true">
+        <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
       </button>
     </div>
     <div
@@ -2179,7 +2171,7 @@
           <span class="code-change-strip__label">Code changes</span>
           <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
         </button>
-        <!-- Undo last agent turn — lives with code-change chrome (MIN-409); icon: /icons/undo-alt.svg.
+        <!-- Undo last agent turn — lives with code-change chrome (MIN-409); Uicons undo glyph.
              Hidden unless git + the undo target turn mutated files. -->
         <button
           type="button"
@@ -2254,7 +2246,7 @@
               <button type="button" class="composer-tools-btn composer-tools-btn--toolbar" id="btnComposerTools"
                 aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
                 aria-controls="composerToolsPopover">
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M4 14h4M12 6h4M20 10h4"/></svg>
+                <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true"></i>
               </button>
               <div id="composerToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
                 <p id="composerToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
@@ -2273,7 +2265,7 @@
             <textarea id="msgInput" placeholder="Type a message…" rows="1"></textarea>
             <div class="input-inset-actions" id="composerInsetActions" aria-label="Message attachments and voice">
               <button type="button" class="input-inset-btn attach-btn" id="attachBtn" aria-label="Attach files">
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <i class="fi fi-rr-clip icon-svg" aria-hidden="true"></i>
               </button>
             </div>
           </div>
@@ -2281,11 +2273,11 @@
       </div>
       <div class="input-bar-send-stack">
         <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
-          <svg class="icon-svg view-mode-toggle-btn__icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="8" rx="1"/><rect x="14" y="13" width="7" height="8" rx="1"/></svg>
+          <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
         </button>
         <button class="send-btn" id="sendBtn" type="button" aria-label="Send message" data-mode="send">
-          <span id="sendIcon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
-          <span id="sendStopIcon" class="hidden"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></span>
+          <span id="sendIcon"><i class="fi fi-rr-paper-plane icon-svg" aria-hidden="true"></i></span>
+          <span id="sendStopIcon" class="hidden"><i class="fi fi-rr-square icon-svg" aria-hidden="true"></i></span>
           <span id="sendSpinner" class="spinner hidden"></span>
         </button>
       </div>
@@ -2296,27 +2288,27 @@
       <button type="button" class="stats-expand-btn" id="statsExpandBtn" aria-label="Show inference metrics" aria-expanded="false" aria-controls="statsPanel">
         <span class="stats-expand-label">Metrics</span>
         <span class="stats-expand-preview" id="statsExpandPreview">— t/s · — tokens</span>
-        <svg class="stats-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        <i class="fi fi-rr-angle-small-down icon-svg stats-expand-chevron" aria-hidden="true"></i>
       </button>
       <div class="stats-panel" id="statsPanel">
       <div class="stat-cell cyan">
-        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>Tokens / Second</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><i class="fi fi-rr-bolt icon-svg" aria-hidden="true"></i></span>Tokens / Second</div>
         <div class="stat-val blank" id="stripTPS">—</div>
       </div>
       <div class="stat-cell green">
-        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></span>Time to First Token</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><i class="fi fi-rr-play icon-svg" aria-hidden="true"></i></span>Time to First Token</div>
         <div class="stat-val blank" id="stripTTFT">—</div>
       </div>
       <div class="stat-cell yellow">
-        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>Generation Time</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><i class="fi fi-rr-clock icon-svg" aria-hidden="true"></i></span>Generation Time</div>
         <div class="stat-val blank" id="stripGen">—</div>
       </div>
       <div class="stat-cell red">
-        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>Total Tokens</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><i class="fi fi-rr-layers icon-svg" aria-hidden="true"></i></span>Total Tokens</div>
         <div class="stat-val blank" id="stripTotal">—</div>
       </div>
       <div class="stat-cell purple">
-        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>Est. cost</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><i class="fi fi-rr-scale icon-svg" aria-hidden="true"></i></span>Est. cost</div>
         <div class="stat-val blank" id="stripCost">—</div>
       </div>
       <div class="token-cell">
@@ -2355,7 +2347,7 @@
           id="btnAgentActivityClose"
           aria-label="Close agent activity"
         >
-          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
         </button>
       </header>
       <div class="agent-activity-panel__body">
@@ -2411,10 +2403,10 @@
         Intent
       </button>
       <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSave" aria-label="Save file" title="Save (Ctrl+S)" disabled>
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        <i class="fi fi-rr-disk icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerClose" aria-label="Close tab" title="Close tab">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
       </button>
     </header>
     <div class="file-viewer-body" id="fileViewerHost"></div>
@@ -2423,13 +2415,13 @@
   <section class="preview-pane hidden" id="previewPane" aria-label="Preview browser">
     <header class="preview-header">
       <button type="button" class="icon-btn" id="btnPreviewBack" title="Back" aria-label="Preview back" disabled>
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <i class="fi fi-rr-angle-small-left icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn" id="btnPreviewForward" title="Forward" aria-label="Preview forward" disabled>
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+        <i class="fi fi-rr-angle-small-right icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn" id="btnPreviewReload" title="Reload" aria-label="Reload preview">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v4h-4"/><path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/><path d="M4 20v-4h4"/><path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/></svg>
+        <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
       </button>
       <span class="preview-loading hidden" id="previewLoading" aria-live="polite" aria-label="Preview loading"></span>
       <input id="previewUrlInput" class="preview-url" type="text"
@@ -2440,19 +2432,19 @@
         <input type="checkbox" id="previewAutoReload" checked /> Auto-reload
       </label>
       <button type="button" class="icon-btn" id="btnPreviewDesignToggle" aria-label="Design Mode" title="Design Mode" aria-pressed="false">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        <i class="fi fi-rr-magic-wand icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn" id="btnPreviewAnnotationsToggle" aria-label="Annotations panel" title="Annotations panel" aria-pressed="false" hidden>
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <i class="fi fi-rr-comment icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn" id="btnPreviewDevTools" aria-label="Toggle DevTools" title="DevTools (F12)" aria-pressed="false" hidden>
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn" id="btnPreviewDevToolsDock" aria-label="Dock DevTools to side" title="Dock DevTools to side" data-dock="bottom" hidden>
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="14" x2="21" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="14" y1="4" x2="14" y2="20" stroke="currentColor" stroke-width="1.5" opacity="0.45"/></svg>
+        <i class="fi fi-rr-layout-fluid icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn" id="btnPreviewClose" aria-label="Close preview" title="Close preview">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
       </button>
     </header>
     <div class="preview-body" id="previewBody" aria-label="Preview content area">
@@ -2484,26 +2476,17 @@
     <div class="file-sidebar-header">
       <span class="file-sidebar-title" id="fileSidebarTitle">Files</span>
       <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        <i class="fi fi-rr-document icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn file-sidebar-preview-toggle" id="btnPreviewToggle"
         aria-label="Preview browser" title="Preview browser">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <i class="fi fi-rr-globe icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M20 4v4h-4"/>
-          <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
-          <path d="M4 20v-4h4"/>
-          <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
-        </svg>
+        <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn git-panel-toggle" id="btnGitPanelToggle" aria-label="Source control" title="Source control" aria-pressed="false">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="6" cy="6" r="2.5"/>
-          <circle cx="18" cy="18" r="2.5"/>
-          <path d="M6 8.5v3a4 4 0 0 0 4 4h4"/>
-        </svg>
+        <i class="fi fi-sr-code-branch icon-svg" aria-hidden="true"></i>
       </button>
     </div>
     <div class="file-sidebar-files-view" id="fileSidebarFilesView">
@@ -2513,7 +2496,7 @@
           aria-label="Filter files by name" role="searchbox" />
         <button type="button" class="icon-btn file-tree-search-clear hidden"
           id="btnFileTreeSearchClear" aria-label="Clear filter" title="Clear filter">
-          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
         </button>
       </div>
       <div id="fileTreeMoveConfirm" class="file-tree-move-confirm hidden" role="region"

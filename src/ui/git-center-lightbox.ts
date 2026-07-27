@@ -7,6 +7,7 @@ import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
+import { iconHtml } from './icon';
 import {
   buildTopologyTree,
   defaultExpandedIds,
@@ -410,8 +411,7 @@ function ensureShell(): void {
   closeBtn.type = 'button';
   closeBtn.className = 'icon-btn git-center-close';
   closeBtn.setAttribute('aria-label', 'Close');
-  closeBtn.innerHTML =
-    '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+  closeBtn.innerHTML = iconHtml('close');
   closeBtn.addEventListener('click', () => closeGitCenterLightbox());
   headerActions.append(fetchAllBtn, closeBtn);
   header.append(titleWrap, headerActions);

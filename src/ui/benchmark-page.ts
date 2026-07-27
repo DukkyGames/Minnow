@@ -89,6 +89,7 @@ import {
 } from './benchmark-transcript-drawer.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
+import { iconHtml } from './icon';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
@@ -180,19 +181,15 @@ function statusText(result: TestResult): string {
 }
 
 function iconSvg(kind: 'pass' | 'fail' | 'skip' | 'running' | 'pending'): string {
-  if (kind === 'pass') {
-    return `<svg class="benchmark-test-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  }
-  if (kind === 'fail') {
-    return `<svg class="benchmark-test-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
-  }
-  if (kind === 'skip') {
-    return `<svg class="benchmark-test-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
-  }
-  if (kind === 'running') {
-    return `<svg class="benchmark-test-icon benchmark-test-icon--spin" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="14 42" stroke-linecap="round"/></svg>`;
-  }
-  return `<span class="benchmark-test-icon benchmark-test-icon--dot" aria-hidden="true"></span>`;
+  const names = {
+    pass: 'statusPass',
+    fail: 'statusFail',
+    skip: 'statusSkip',
+    running: 'statusRunning',
+    pending: 'statusPending',
+  } as const;
+  const spinClass = kind === 'running' ? ' benchmark-test-icon--spin' : '';
+  return iconHtml(names[kind], { className: `benchmark-test-icon${spinClass}` });
 }
 
 function cardState(result: TestResult): string {

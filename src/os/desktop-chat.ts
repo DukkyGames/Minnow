@@ -36,6 +36,7 @@ import {
   shouldAllowComposerPrimaryAction,
   syncComposerFromStreamingState,
 } from '../ui/composer-send';
+import { iconHtml } from '../ui/icon';
 import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-draft';
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
@@ -70,7 +71,7 @@ function renderDesktopEmptyState(area: HTMLElement): void {
   empty.className = 'mn-os-chat-empty';
   empty.innerHTML = `
     <div class="mn-os-chat-empty-ico" aria-hidden="true">
-      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      ${iconHtml('appChat')}
     </div>
     <h2>Start a conversation</h2>
     <p>Ask anything — use the Files, Browser, and Preview tabs on the right for workspace files.</p>

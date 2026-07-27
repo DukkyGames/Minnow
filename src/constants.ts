@@ -1,23 +1,20 @@
 import type { SystemPromptPreset } from './types';
 import { SESSION_SCHEMA_VERSION } from './types';
 import { MINNOW_GLYPH_EMPTY_HTML } from './ui/minnow-glyph';
+import { iconHtml } from './ui/icon';
 
 /** Persisted `SessionState.version` — must match `SESSION_SCHEMA_VERSION` in types. */
 export const SESSION_STATE_VERSION = SESSION_SCHEMA_VERSION;
 
-/** SVG chevrons for sidebar collapse control. */
-export const ICON_CHEVRON_LEFT =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
-export const ICON_CHEVRON_RIGHT =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+/** Uicons chevrons for sidebar collapse control. */
+export const ICON_CHEVRON_LEFT = iconHtml('chevronLeft');
+export const ICON_CHEVRON_RIGHT = iconHtml('chevronRight');
 
-/** SVG magnifier for chat search buttons (sidebar + desktop rail). */
-export const ICON_SEARCH =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
+/** Uicons magnifier for chat search buttons (sidebar + desktop rail). */
+export const ICON_SEARCH = iconHtml('search');
 
-/** Document-with-lines icon for the file sidebar toggle. */
-export const ICON_FILE_TREE =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>';
+/** Document icon for the file sidebar toggle. */
+export const ICON_FILE_TREE = iconHtml('fileText');
 
 /** Named layout icons (sidebar chevrons). Stats-strip SVGs stay in HTML markup. */
 export const icons = {

@@ -83,20 +83,8 @@
   color: var(--mn-fg-subtle);
 }
 
-/* Masked undo-alt.svg so the glyph inherits button color. */
 .code-change-strip__undo-icon {
-  display: block;
-  width: 14px;
-  height: 14px;
-  background-color: currentColor;
-  mask-image: url('/icons/undo-alt.svg');
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: url('/icons/undo-alt.svg');
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
+  --mn-icon-size: 14px;
 }
 
 @media (prefers-reduced-motion: reduce) {

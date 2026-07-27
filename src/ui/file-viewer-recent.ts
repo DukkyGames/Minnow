@@ -44,7 +44,7 @@ export function renderViewerRecentFilesEmptyState(host: HTMLElement): void {
 
   const iconWrap = document.createElement('div');
   iconWrap.className = 'file-viewer-recent__icon';
-  iconWrap.appendChild(createOsIcon('fileText', { size: 28, stroke: 1.5 }));
+  iconWrap.appendChild(createOsIcon('fileText', { size: 28 }));
 
   const title = document.createElement('h2');
   title.className = 'file-viewer-recent__title';
@@ -86,7 +86,7 @@ export function renderViewerRecentFilesEmptyState(host: HTMLElement): void {
 
     const glyph = document.createElement('span');
     glyph.className = 'file-viewer-recent__glyph';
-    glyph.appendChild(createOsIcon('fileText', { size: 16, stroke: 1.6 }));
+    glyph.appendChild(createOsIcon('fileText', { size: 16 }));
 
     const text = document.createElement('span');
     text.className = 'file-viewer-recent__text';
@@ -110,7 +110,7 @@ export function renderViewerRecentFilesEmptyState(host: HTMLElement): void {
     removeBtn.className = 'file-viewer-recent__remove';
     removeBtn.setAttribute('aria-label', `Remove ${name} from recent files`);
     removeBtn.title = 'Remove from recent';
-    removeBtn.appendChild(createOsIcon('close', { size: 14, stroke: 1.8 }));
+    removeBtn.appendChild(createOsIcon('close', { size: 14 }));
     removeBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       removeRecentViewerFile(entry.path, workspaceRoot);
