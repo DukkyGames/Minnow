@@ -37,6 +37,10 @@ import {
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
 import type { BoardTask, Chat, ChatGroup, OrchestrateBoardState } from '../../src/types.ts';
+import type { ScriptedTurnRunnerHandle } from './_scripted-turn-runner.mts';
+import { injectChatOutcome } from './_scripted-turn-runner.mts';
+
+export { injectChatOutcome } from './_scripted-turn-runner.mts';
 
 export const FLOW_PLANNER_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 export const FLOW_GROUP_ID = 'grp_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -298,91 +302,6 @@ function resolveBuildOutcome(
   return spec;
 }
 
-/** Populate a launched chat so stream-end finalizers read the scripted result. */
-export function injectChatOutcome(
-  chat: Chat,
-  task: BoardTask | undefined,
-  phase: RunningBoardTaskSlot['phase'],
-  outcome: {
-    build?: 'complete' | 'fail' | 'stopped';
-    test?: 'pass' | 'fail';
-    finalTest?: 'pass' | 'fail';
-  },
-): void {
-  if (phase === 'build') {
-    const build = outcome.build ?? 'complete';
-    if (build === 'stopped') {
-      chat.history.push({
-        role: 'assistant',
-        content: 'Stopped mid-build.',
-        stopped: true,
-      });
-      chat.runs = [
-        {
-          runId: 'run_stop',
-          branchId: 'b1',
-          forkHistoryIndex: 0,
-          status: 'stopped',
-          stopReason: 'system',
-          createdAt: 10,
-          snapshot: null as never,
-        },
-      ];
-      return;
-    }
-    if (build === 'fail') {
-      chat.history.push({ role: 'user', content: 'Execute task' });
-      return;
-    }
-    if (task) {
-      task.boardReport = { outcome: 'pass', summary: `Build verified for ${task.id}` };
-    }
-    chat.history.push({
-      role: 'assistant',
-      content: `Build complete for ${task?.id ?? 'task'}.`,
-    });
-    return;
-  }
-
-  if (phase === 'test') {
-    const verdict = outcome.test ?? 'pass';
-    if (task) {
-      task.testVerdict = verdict;
-      task.testSummary = verdict === 'pass' ? 'tests passed' : 'tests failed';
-    }
-    chat.history.push({
-      role: 'assistant',
-      content: verdict === 'pass' ? 'VERDICT: pass' : 'VERDICT: fail',
-    });
-    return;
-  }
-
-  if (phase === 'fix') {
-    if (task) {
-      task.boardReport = { outcome: 'pass', summary: 'Merge committed' };
-    }
-    chat.history.push({
-      role: 'assistant',
-      content: 'Resolved conflict with git commit --no-edit.',
-    });
-    return;
-  }
-
-  if (phase === 'final') {
-    const verdict = outcome.finalTest ?? 'pass';
-    const board = sessionState?.groups?.find((g) => g.id === FLOW_GROUP_ID);
-    if (board?.orchestrateBoard?.finalTest) {
-      board.orchestrateBoard.finalTest.recordedVerdict = verdict;
-      board.orchestrateBoard.finalTest.summary =
-        verdict === 'pass' ? 'full board pass' : 'full board fail';
-    }
-    chat.history.push({
-      role: 'assistant',
-      content: `VERDICT: ${verdict}`,
-    });
-  }
-}
-
 function worktreeMocksForSlot(
   script: BoardFlowScript,
   slot: RunningBoardTaskSlot,
@@ -584,10 +503,45 @@ export type DriveIterationSnapshot = {
 };
 
 export type DriveBoardOptions = {
+  mode?: 'bootstrap' | 'live';
   maxIterations?: number;
+  maxTicks?: number;
+  runner?: ScriptedTurnRunnerHandle;
   onIteration?: (snapshot: DriveIterationSnapshot) => void;
   setWorktreeMocks?: (mocks: Record<string, unknown>) => void;
 };
+
+/** Alternate setTimeout(0) + drain until every task is terminal or maxTicks exceeded. */
+export async function settleUntil(
+  group: ChatGroup,
+  planner: Chat,
+  maxTicks = 400,
+): Promise<void> {
+  for (let tick = 0; tick < maxTicks; tick++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await drainTaskQueueForTests(group, planner);
+    if (assertBoardConverged(group)) return;
+  }
+  throw new Error(`settleUntil exceeded ${maxTicks} ticks without convergence`);
+}
+
+/**
+ * Drive a board through real launch + scripted turns (MINNOW_TEST runner hook).
+ * Installs the runner for the duration of the drive (caller restores via runner.restore()).
+ */
+export async function driveLiveBoard(
+  group: ChatGroup,
+  planner: Chat,
+  runner: ScriptedTurnRunnerHandle,
+  options: DriveBoardOptions = {},
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  assert.ok(board, 'board required');
+  runner.install();
+  startBoardAutoRun(group, planner);
+  await autoDelegateNext(group, planner);
+  await settleUntil(group, planner, options.maxTicks ?? 400);
+}
 
 /**
  * Drive a board through build → test → merge → final test using scripted outcomes.
@@ -599,6 +553,13 @@ export async function driveBoardToConvergence(
   script: BoardFlowScript,
   options: DriveBoardOptions = {},
 ): Promise<void> {
+  if (options.mode === 'live') {
+    if (!options.runner) {
+      throw new Error('driveBoardToConvergence live mode requires options.runner');
+    }
+    return driveLiveBoard(group, planner, options.runner, options);
+  }
+
   const board = group.orchestrateBoard;
   assert.ok(board, 'board required');
   const maxIterations = options.maxIterations ?? 50;
@@ -678,7 +639,7 @@ export function installFlowTestEnv(): {
   const prevMinnowTest = process.env.MINNOW_TEST;
   process.env.MINNOW_TEST = '1';
   setBoardNowForTests(() => 1_700_000_000_000);
-  stubMinimalBrowserGlobals();
+  installBoardTestDom();
   return {
     prevMinnowTest,
     restore: () => {
@@ -694,7 +655,7 @@ export function installFlowTestEnv(): {
 }
 
 /** DOM / window stubs for code paths that touch UI during node:test. */
-function stubMinimalBrowserGlobals(): void {
+export function installBoardTestDom(): void {
   class FakeElement {
     innerHTML = '';
     id = '';
@@ -712,13 +673,19 @@ function stubMinimalBrowserGlobals(): void {
   }
   const chatArea = new FakeElement();
   chatArea.id = 'chatArea';
+  const chatList = new FakeElement();
+  chatList.id = 'chatList';
   (globalThis as { HTMLElement?: typeof HTMLElement }).HTMLElement =
     FakeElement as unknown as typeof HTMLElement;
   const doc = {
     createElement: () => new FakeElement(),
     body: { appendChild() {} },
     addEventListener() {},
-    getElementById: (id: string) => (id === 'chatArea' ? chatArea : null),
+    getElementById: (id: string) => {
+      if (id === 'chatArea') return chatArea;
+      if (id === 'chatList') return chatList;
+      return null;
+    },
     querySelector: () => chatArea,
     querySelectorAll: () => [],
   };
