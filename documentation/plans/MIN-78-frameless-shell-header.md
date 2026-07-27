@@ -20,7 +20,7 @@ Replace double chrome (native OS title bar + `#osMenubar`) in the Electron deskt
 
 ## Platform behavior
 
-- **Windows / Linux:** `.mn-os-mb-window-controls` after the menubar clock; shell close quits the app (`aria-label`: "Close Minnow").
+- **Windows / Linux:** `.mn-os-mb-window-controls` after the menubar clock; shell close **hides to the system tray by default** (see **Desktop app** in Settings → General; disable close-to-tray to restore quit-on-close). Tray **Quit Minnow** still runs the full shutdown path.
 - **macOS:** No custom controls; `padding-left: 72px` on `.mn-os-mb-left` for traffic lights.
 - **Browser tab:** No `is-electron-shell` class; menubar unchanged.
 - **Maximized:** Restore icon on Win/Linux; main process emits state on `maximize` / `unmaximize` / fullscreen transitions.

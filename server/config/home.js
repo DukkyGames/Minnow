@@ -156,6 +156,9 @@ const DEFAULT_META = {
   toolSecurity: {
     filesystemAccess: 'workspace',
   },
+  desktopShell: {
+    closeToTray: true,
+  },
   selfHealing: {
     enabled: false,
     tier1: {

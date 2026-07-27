@@ -158,6 +158,26 @@ async function applyDesktopSeed(seed?: string): Promise<void> {
   await handleDesktopSend(seed.trim());
 }
 
+/** Start a fresh Desktop General chat from the tray or other native entry points. */
+export async function startNewDesktopGeneralChat(): Promise<void> {
+  const { navigateToDesktop } = await import('./router');
+  navigateToDesktop();
+  bindStreamEndOnce();
+  await ensureSessionsReady();
+  const ready = await ensureDesktopWorkspaceReady();
+  if (!ready || !sessionState || !desktopWorkspacePath) return;
+  createFreshAssistantChat(desktopWorkspacePath, sessionState);
+  if (sessionState.activeId) {
+    await ensureChatHistoryLoaded(sessionState.activeId);
+  }
+  renderDesktopChatRail(desktopWorkspacePath);
+  renderDesktopChatMessages();
+  syncDesktopComposerSendState();
+  refreshContextUsageRing();
+  const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
+  input?.focus();
+}
+
 /** Start a fresh assistant thread in the desktop workspace sandbox. */
 function createFreshAssistantChat(
   workspacePath: string,

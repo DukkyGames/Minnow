@@ -48,6 +48,7 @@ Managed through Settings; edit directly only if you know the shape ([`server/con
 - **`voice`** — `audio`, `stt`, and `tts` blocks (local vs provider vs browser).
 - **`oauth.google` / `oauth.microsoft`** — BYO OAuth client id/secret (tokens stored separately under `oauth/`).
 - **`webhooks.allowLocalHttp`** — dev-only, permits `http://127.0.0.1` webhook targets.
+- **`desktopShell.closeToTray`** — when **true** (default), closing the Electron window hides Minnow to the system tray instead of quitting. Launch-at-startup is **not** stored here; Electron reads/writes the OS login item directly.
 
 ## Providers
 

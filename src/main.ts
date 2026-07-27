@@ -212,6 +212,7 @@ import { initNotificationAudioUnlock } from './notifications/sound';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
 import { initOsShell } from './os/shell';
+import { initElectronTrayBridge } from './electron-tray-bridge';
 import { installAppDialogs } from './ui/app-dialog';
 
 /** Register PWA service worker (shell cache); failures are ignored. */
@@ -428,6 +429,7 @@ async function startApp(): Promise<void> {
   if (isOsShellEnabled()) {
     initOsRouter();
   }
+  initElectronTrayBridge();
   void initApp();
 }
 

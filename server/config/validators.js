@@ -1712,6 +1712,18 @@ export function mergeConfigMeta(existing, patch) {
     base.server = existingServer;
   }
 
+  if (p.desktopShell && typeof p.desktopShell === 'object') {
+    const existingShell =
+      base.desktopShell && typeof base.desktopShell === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.desktopShell) }
+        : { closeToTray: true };
+    const ds = /** @type {Record<string, unknown>} */ (p.desktopShell);
+    if (typeof ds.closeToTray === 'boolean') {
+      existingShell.closeToTray = ds.closeToTray;
+    }
+    base.desktopShell = existingShell;
+  }
+
   if (p.browser && typeof p.browser === 'object') {
     const existingBrowser =
       base.browser && typeof base.browser === 'object'

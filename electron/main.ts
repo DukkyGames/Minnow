@@ -25,6 +25,18 @@ import { startInProcessServer, type InProcessServerHandle } from './server-host.
 import { loadWindowState, trackWindowState } from './window-state.js';
 import { resolveMinnowPort } from './minnow-port.js';
 import { disposeUpdater, initUpdater } from './updater.js';
+import {
+  readCloseToTrayPreference,
+  writeCloseToTrayPreference,
+} from './desktop-shell-config.js';
+import { readLoginItemSnapshot, writeLoginItemOpenAtLogin } from './login-item.js';
+import { createTrayManager, type TrayManager } from './tray.js';
+import { shouldQuitOnWindowAllClosed } from './tray-close.js';
+import {
+  EMPTY_TRAY_STATUS,
+  type TrayRendererCommand,
+  type TrayStatusSnapshot,
+} from './tray-status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +67,11 @@ const devUrl = (
 let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
 let quitInProgress = false;
+let closeToTrayEnabled = true;
+let trayManager: TrayManager | null = null;
+let bootstrapPromise: Promise<void> | null = null;
+const queuedTrayCommands: TrayRendererCommand[] = [];
+let rendererTrayReady = false;
 
 /** Sliding window of renderer crash timestamps for anti-reload-loop. */
 const rendererCrashTimestamps: number[] = [];
@@ -158,6 +175,46 @@ function registerIpcHandlers(): void {
     // Chromium can restore stale dialog focus after the IPC turn on Windows.
     setTimeout(() => restoreShellWindowFocus(win), 0);
   });
+
+  ipcMain.on(channels.TRAY_PUBLISH_STATUS, (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return;
+    const p = payload as Record<string, unknown>;
+    const names = Array.isArray(p.localModelNames)
+      ? p.localModelNames.filter((n): n is string => typeof n === 'string')
+      : [];
+    const status: TrayStatusSnapshot = {
+      agentCount: typeof p.agentCount === 'number' ? p.agentCount : 0,
+      localModelCount: typeof p.localModelCount === 'number' ? p.localModelCount : 0,
+      localModelNames: names,
+    };
+    trayManager?.updateStatus(status);
+  });
+
+  ipcMain.on(channels.TRAY_NOTIFY_READY, (event) => {
+    rendererTrayReady = true;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+    flushQueuedTrayCommands(win);
+  });
+
+  ipcMain.handle(channels.TRAY_GET_CLOSE_TO_TRAY, () => closeToTrayEnabled);
+
+  ipcMain.handle(channels.TRAY_SET_CLOSE_TO_TRAY, async (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return closeToTrayEnabled;
+    closeToTrayEnabled = await writeCloseToTrayPreference(enabled);
+    trayManager?.rebuildMenu();
+    mainWindow?.webContents.send(channels.TRAY_CLOSE_TO_TRAY_CHANGED, closeToTrayEnabled);
+    return closeToTrayEnabled;
+  });
+
+  ipcMain.handle(channels.TRAY_GET_LOGIN_ITEM, () => readLoginItemSnapshot());
+
+  ipcMain.handle(channels.TRAY_SET_LOGIN_ITEM, (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return readLoginItemSnapshot();
+    const next = writeLoginItemOpenAtLogin(enabled);
+    trayManager?.rebuildMenu();
+    return next;
+  });
 }
 
 /** Push shell maximize state to the renderer for menubar control icons. */
@@ -214,8 +271,58 @@ function restoreShellWindowFocus(win: BrowserWindow): void {
 }
 
 function focusMainWindow(): void {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   restoreShellWindowFocus(mainWindow);
+}
+
+function sendTrayCommand(command: TrayRendererCommand): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!rendererTrayReady) {
+    queuedTrayCommands.push(command);
+    return;
+  }
+  mainWindow.webContents.send(channels.TRAY_COMMAND, command);
+}
+
+function flushQueuedTrayCommands(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  while (queuedTrayCommands.length > 0) {
+    const command = queuedTrayCommands.shift();
+    if (command) win.webContents.send(channels.TRAY_COMMAND, command);
+  }
+}
+
+function requestExplicitQuit(): void {
+  if (quitInProgress) return;
+  quitInProgress = true;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
+  }
+  app.quit();
+}
+
+function ensureTrayManager(): TrayManager {
+  if (!trayManager) {
+    trayManager = createTrayManager({
+      iconPath: appIconPath,
+      focusMainWindow,
+      requestQuit: requestExplicitQuit,
+      sendTrayCommand: (command) => {
+        focusMainWindow();
+        sendTrayCommand(command);
+      },
+      getCloseToTray: () => closeToTrayEnabled,
+      setCloseToTray: async (enabled) => {
+        closeToTrayEnabled = await writeCloseToTrayPreference(enabled);
+        mainWindow?.webContents.send(channels.TRAY_CLOSE_TO_TRAY_CHANGED, closeToTrayEnabled);
+        return closeToTrayEnabled;
+      },
+      getLoginItem: readLoginItemSnapshot,
+      setLoginItem: writeLoginItemOpenAtLogin,
+      isQuitInProgress: () => quitInProgress,
+    });
+  }
+  return trayManager;
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {
@@ -272,7 +379,13 @@ async function createMainWindow(): Promise<BrowserWindow> {
 
   win.on('closed', () => {
     clearTimeout(showFallbackTimer);
+    if (mainWindow === win) {
+      mainWindow = null;
+      rendererTrayReady = false;
+    }
   });
+
+  ensureTrayManager().wireWindowClose(win);
 
   // If Vite is still warming up or load fails, avoid an invisible window on first launch.
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
@@ -358,6 +471,17 @@ async function resolveLoadUrl(): Promise<string> {
 }
 
 async function bootstrap(): Promise<void> {
+  if (bootstrapPromise) return bootstrapPromise;
+  bootstrapPromise = bootstrapInner();
+  try {
+    await bootstrapPromise;
+  } catch (err) {
+    bootstrapPromise = null;
+    throw err;
+  }
+}
+
+async function bootstrapInner(): Promise<void> {
   app.setName('Minnow');
   // Windows taskbar grouping / jump lists; pairs with branded electron.exe in dev (see brand-electron-win.mjs).
   if (process.platform === 'win32') {
@@ -367,6 +491,16 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers();
   initUpdater({ prepareQuitForUpdate });
 
+  closeToTrayEnabled = await readCloseToTrayPreference();
+  const tray = ensureTrayManager();
+  tray.ensureTray();
+  tray.updateStatus({ ...EMPTY_TRAY_STATUS });
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    focusMainWindow();
+    return;
+  }
+
   // Window creation and runtime/server bootstrap are independent (window state reads
   // Electron userData, not the Minnow home dir), so overlap them — the shell is then
   // ready to load the moment the server URL resolves.
@@ -375,6 +509,7 @@ async function bootstrap(): Promise<void> {
   loadUrlPromise.catch(() => {});
 
   mainWindow = await createMainWindow();
+  rendererTrayReady = false;
   await mainWindow.loadURL(await loadUrlPromise);
 }
 
@@ -452,9 +587,13 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    if (process.platform === 'darwin') return;
+    if (quitInProgress) {
       app.quit();
+      return;
     }
+    if (!shouldQuitOnWindowAllClosed(closeToTrayEnabled)) return;
+    app.quit();
   });
 
   app.on('activate', () => {
@@ -470,6 +609,7 @@ if (!gotSingleInstanceLock) {
     event.preventDefault();
     quitInProgress = true;
     disposeUpdater();
+    trayManager?.destroyTray();
     shutdownRuntime()
       .catch((err) => {
         console.error('[electron] shutdown error:', err);
