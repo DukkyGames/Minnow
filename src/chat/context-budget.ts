@@ -155,16 +155,20 @@ function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnSlice[] 
   let i = systemEnd;
   while (i < messages.length) {
     if (messages[i].role !== 'user') {
-      turns.push({ start: i, end: i + 1 });
-      i += 1;
+      const end = unitEndAt(messages, i);
+      turns.push({ start: i, end });
+      i = end;
       continue;
     }
-    const start = i;
+    // Keep each user line separate so a single seed does not swallow an entire
+    // tool loop (orchestrate board tasks, sub-agents, headless runs).
+    turns.push({ start: i, end: i + 1 });
     i += 1;
     while (i < messages.length && messages[i].role !== 'user') {
-      i += 1;
+      const end = unitEndAt(messages, i);
+      turns.push({ start: i, end });
+      i = end;
     }
-    turns.push({ start, end: i });
   }
   return turns;
 }
