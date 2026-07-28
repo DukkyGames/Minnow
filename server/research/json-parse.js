@@ -1,6 +1,6 @@
 /**
  * JSON repair helpers for Deep Research LLM output.
- * Port of Odysseus `DeepResearcher._strip_code_block`, `_parse_json_array`, `_parse_json_object`.
+ * JSON parsing helpers for fenced code blocks and LLM output arrays/objects.
  */
 
 /**

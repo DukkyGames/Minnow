@@ -1,5 +1,5 @@
 /**
- * SSRF guard tests for outgoing webhooks (ported from Odysseus).
+ * SSRF guard tests for outgoing webhooks.
  */
 
 import assert from 'node:assert/strict';

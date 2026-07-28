@@ -1,5 +1,5 @@
 /**
- * Fallback chain settings from config.json meta (Odysseus port #04).
+ * Fallback chain settings from config.json meta.
  */
 
 import { detectConfigServer, isConfigServerMode } from './storage-mode';

@@ -1,5 +1,5 @@
 /**
- * Validators for Models download/serve inputs — mirrors Odysseus cookbook_helpers guards.
+ * Validators for Models download/serve inputs.
  */
 
 const REPO_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;

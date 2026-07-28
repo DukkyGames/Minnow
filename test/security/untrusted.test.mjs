@@ -1,5 +1,5 @@
 /**
- * Unit tests for untrusted-content wrapping (Odysseus port #13).
+ * Unit tests for untrusted-content wrapping.
  */
 
 import assert from 'node:assert/strict';

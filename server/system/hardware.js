@@ -1,5 +1,5 @@
 /**
- * Hardware detection for the Models app — ports Odysseus services/hwfit/hardware.py.
+ * Hardware detection for the Models app.
  * Local probes only (no remote SSH in Minnow v1).
  */
 
@@ -11,7 +11,7 @@ import { parseNvidiaSmiGpu } from './vram.js';
 /** 24 h — matches hardware.py CACHE_TTL; user can bypass with fresh=true. */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Verbatim PowerShell probe from Odysseus _detect_windows() ps_cmd. */
+/** PowerShell probe for Windows hardware detection. */
 const WINDOWS_PS_CMD = `
         $r = @{}
         $os = Get-CimInstance Win32_OperatingSystem

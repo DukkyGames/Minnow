@@ -1,5 +1,5 @@
 /**
- * LLM skill draft extraction for skill proposals (Odysseus port #08).
+ * LLM skill draft extraction for skill proposals.
  */
 
 import { llmCall } from '../research/llm.js';

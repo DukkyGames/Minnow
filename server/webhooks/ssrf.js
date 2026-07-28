@@ -1,6 +1,5 @@
 /**
  * SSRF protection and error sanitization for outgoing webhooks.
- * Ported from Odysseus webhook_manager.py.
  */
 
 import dns from 'node:dns/promises';
@@ -208,7 +207,7 @@ export async function validateWebhookUrl(url, options = {}) {
   return trimmed;
 }
 
-// Broad candidate matcher for IPv6 redaction (ReDoS-safe, ported from Odysseus).
+// Broad candidate matcher for IPv6 redaction (ReDoS-safe).
 const IP_CANDIDATE =
   /\[[^\[\]\s]*\](?::\d+)?|(?<![\w.:%])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,}(?:(?:\.[0-9]{1,3}){3})?(?:%[0-9A-Za-z._-]+)?/g;
 

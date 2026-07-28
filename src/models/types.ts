@@ -1,4 +1,4 @@
-/** Catalog model entry — mirrors Odysseus hwfit catalog JSON shape. */
+/** Catalog model entry — hwfit catalog JSON shape. */
 export interface CatalogModel {
   name: string;
   provider: string;

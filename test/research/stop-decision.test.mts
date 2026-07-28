@@ -77,7 +77,7 @@ describe('parseStopDecision', () => {
 });
 
 describe('isLowQuality', () => {
-  test('exports the Odysseus marker list verbatim', () => {
+  test('exports the low-quality marker list verbatim', () => {
     assert.deepEqual(LOW_QUALITY_MARKERS, [
       'insufficient to',
       'content is insufficient',

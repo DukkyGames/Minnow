@@ -1,5 +1,5 @@
 /**
- * Serve profile preset tests — port of Odysseus test_serve_profiles shape.
+ * Serve profile preset tests.
  */
 
 import assert from 'node:assert/strict';
