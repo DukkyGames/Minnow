@@ -3,7 +3,7 @@
  */
 
 import { stopGeneration } from '../chat/stop-generation.ts';
-import { decodeModelSelectKey } from '../lib/model-select-key.ts';
+import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import {
@@ -1029,33 +1029,14 @@ function isTaskChatStreaming(chatId: string): boolean {
   );
 }
 
-/** Provider/model for a board task chat — planner binding, then top-bar model select. */
-function resolvePlannerModelBinding(plannerChat: Chat): {
-  providerId: string;
-  modelId: string;
-} {
-  let providerId = plannerChat.providerId?.trim() ?? '';
-  let modelId = plannerChat.modelId?.trim() ?? '';
-  if (!modelId) {
-    const domRaw =
-      (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ??
-      '';
-    if (domRaw) {
-      const parsed = decodeModelSelectKey(domRaw);
-      if (parsed) {
-        providerId = providerId || parsed.providerId;
-        modelId = parsed.modelId;
-      } else {
-        modelId = domRaw;
-      }
-    }
-  }
-  if (!modelId) {
-    const meta = getAutopilotMetaSync();
-    providerId = providerId || meta.plannerProviderId?.trim() || '';
-    modelId = meta.plannerModelId?.trim() || '';
-  }
-  return { providerId, modelId };
+/** Provider/model for board chats — board override, then planner / top bar / settings default. */
+function resolvePlannerModelBinding(
+  plannerChat: Chat,
+  board?: OrchestrateBoardState | null,
+): { providerId: string; modelId: string } {
+  const resolvedBoard =
+    board ?? getBoardGroupForChat(plannerChat)?.orchestrateBoard ?? null;
+  return resolveBoardModelBinding(plannerChat, resolvedBoard);
 }
 
 /** Keep task/test/final chats aligned with the planner model before launching a turn. */
@@ -4110,6 +4091,58 @@ export function setBoardMaxConcurrent(
   if (isBoardAutoMode(group)) {
     void drainTaskQueue(group, plannerChat);
   }
+}
+
+/** Set the model used for this board (planner + linked task chats). */
+export function setBoardModel(
+  group: ChatGroup,
+  providerId: string,
+  modelId: string,
+  plannerChat: Chat,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const pid = providerId.trim();
+  const mid = modelId.trim();
+  if (!pid || !mid) return;
+  if (
+    board.modelProviderId === pid &&
+    board.modelId === mid &&
+    plannerChat.providerId?.trim() === pid &&
+    plannerChat.modelId?.trim() === mid
+  ) {
+    return;
+  }
+
+  board.modelProviderId = pid;
+  board.modelId = mid;
+  plannerChat.providerId = pid;
+  plannerChat.modelId = mid;
+
+  for (const task of board.tasks) {
+    for (const chatId of [task.chatId, task.testChatId, task.fixerChatId]) {
+      const id = chatId?.trim();
+      if (!id) continue;
+      const chat = findChatById(id);
+      if (!chat) continue;
+      chat.providerId = pid;
+      chat.modelId = mid;
+    }
+  }
+
+  const finalChatId = board.finalTest?.chatId?.trim();
+  if (finalChatId) {
+    const finalChat = findChatById(finalChatId);
+    if (finalChat) {
+      finalChat.providerId = pid;
+      finalChat.modelId = mid;
+    }
+  }
+
+  board.lastUpdatedAt = Date.now();
+  touchChat(plannerChat);
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
 }
 
 /** True when a linked task chat still has an in-flight turn after reload. */

@@ -100,8 +100,6 @@ function boardLogOpts(
     waveOrder: waves,
     expectFinalTest: expectFinal,
     requireTerminal: true,
-    // Fast clean merge completes in-process (testing → complete) without a merging log row.
-    skip: ['status-transitions'],
   };
 }
 

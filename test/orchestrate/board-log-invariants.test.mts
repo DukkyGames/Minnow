@@ -121,6 +121,24 @@ describe('checkBoardLog', () => {
     });
   });
 
+  test('status-transitions allows fast merge path testing → complete', () => {
+    resetSeq();
+    const events = [
+      status('W1-A', 'planned', 'in_progress'),
+      started('W1-A'),
+      ev('build_verdict', 'W1-A', { verdict: 'pass' }),
+      status('W1-A', 'in_progress', 'testing'),
+      ev('test_verdict', 'W1-A', { verdict: 'pass' }),
+      ev('merge_result', 'W1-A', { outcome: 'skipped' }),
+      status('W1-A', 'testing', 'complete'),
+    ];
+    const result = checkBoardLog(events, {
+      tasks: [{ id: 'W1-A', wave: 'W1' }],
+      skip: ['wave-order', 'dependency-order', 'quarantine-cascade', 'final-test-order'],
+    });
+    assert.equal(result.ok, true, JSON.stringify(result.violations));
+  });
+
   test('verdict-after-start flags verdict before task_started', () => {
     resetSeq();
     const events = [

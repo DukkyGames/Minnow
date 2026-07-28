@@ -554,6 +554,12 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.maxConcurrentTasks === 'number' && r.maxConcurrentTasks > 0) {
     out.maxConcurrentTasks = r.maxConcurrentTasks;
   }
+  if (typeof r.modelProviderId === 'string' && r.modelProviderId.trim()) {
+    out.modelProviderId = r.modelProviderId.trim().slice(0, 64);
+  }
+  if (typeof r.modelId === 'string' && r.modelId.trim()) {
+    out.modelId = r.modelId.trim().slice(0, 200);
+  }
   if (typeof r.completionShownAt === 'number') {
     out.completionShownAt = r.completionShownAt;
   }

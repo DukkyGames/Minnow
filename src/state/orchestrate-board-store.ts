@@ -10,6 +10,7 @@
  */
 
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
+import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
 import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
@@ -831,6 +832,11 @@ export function initBoard(
     maxConcurrentTasks: getAutopilotMetaSync().maxConcurrentTasks ?? 3,
     executionMode: getAutopilotMetaSync().defaultExecutionMode ?? 'manual',
   };
+  const modelBinding = resolveBoardModelBinding(plannerChat);
+  if (modelBinding.modelId) {
+    board.modelProviderId = modelBinding.providerId || undefined;
+    board.modelId = modelBinding.modelId;
+  }
   const cycles = detectDependencyCycles(board);
   if (cycles.length > 0) {
     const cycleTaskIds = detectCycleTaskIds(board);
