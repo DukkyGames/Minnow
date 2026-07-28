@@ -1,5 +1,5 @@
 /**
- * Unit tests for server/security/secret-box.js (Odysseus port #12).
+ * Unit tests for server/security/secret-box.js.
  */
 
 import assert from 'node:assert/strict';

@@ -28,7 +28,7 @@ export function parseNvidiaSmiVram(stdout) {
 }
 
 /**
- * Parse nvidia-smi memory.total,name CSV — ports Odysseus _detect_nvidia row parser.
+ * Parse nvidia-smi memory.total,name CSV row parser.
  * @param {string} stdout
  * @returns {{ available: false, unified?: Array<{ index: number, name: string }> } | { available: true, gpus: Array<{ index: number, name: string, vramGb: number }> }}
  */

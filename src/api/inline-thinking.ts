@@ -1,7 +1,6 @@
 /**
  * Inline thinking extraction and stream routing for models that embed reasoning in `content`.
- * Ports Odysseus `strip-thinking`, `chat_helpers._normalize_thinking` / `_extract_thinking_meta`,
- * and `llm_core._HarmonyStreamRouter`.
+ * Handles think-block stripping, thinking normalization/extraction, and stream routing.
  */
 
 const THINK_TAG = '(?:(?:redacted_)?think(?:ing)?|thought)';

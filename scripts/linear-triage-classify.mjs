@@ -91,7 +91,6 @@ function classifyType(t, title) {
     'dashboard',
     'system',
     'epic',
-    'odysseus',
     'world-class',
     'session engine',
     'multi-model',
@@ -267,7 +266,6 @@ function classifyPriority(issue, type, areas) {
   else if (type === 'Bug') base = 2;
   else if (title.startsWith('phase ') || title.startsWith('min-b')) base = 3;
   else if (areas.includes('polish') && type === 'Improvement') base = 4;
-  else if (title.includes('odysseus port')) base = 3;
 
   return base;
 }

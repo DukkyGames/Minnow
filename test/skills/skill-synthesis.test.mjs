@@ -23,7 +23,7 @@ describe('skill synthesis', () => {
     assert.equal(obj.title, 'Run tests');
   });
 
-  test('parses JSON after stray brace prose (Odysseus stray brace case)', () => {
+  test('parses JSON after stray brace prose', () => {
     const raw =
       'The session uses {placeholder} formatting. {"title":"Deploy app","problem":"Ship build","solution":"Use npm run build","steps":["npm run build","open dist"],"tags":["deploy"],"confidence":0.75}';
     const obj = parseSkillExtractionJson(raw);

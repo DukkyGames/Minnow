@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 
-/** Two-hour TTL aligned with Odysseus search cache. */
+/** Two-hour TTL for search cache. */
 export const RESEARCH_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
 
 /**

@@ -1,6 +1,6 @@
 /**
  * Non-streaming server-side chat completion helper for the Deep Research engine.
- * Port of Odysseus `llm_call_async` (OpenAI-compatible path) with one retry on transient failure.
+ * OpenAI-compatible LLM call with one retry on transient failure.
  */
 
 import { formatUpstreamHttpErrorMessage } from '../generations/upstream-error-detail.js';
@@ -13,7 +13,7 @@ export const llmCallDeps = {
   fetchFn: fetch,
 };
 
-/** HTTP statuses that trigger a single retry (Odysseus transient set). */
+/** HTTP statuses that trigger a single retry. */
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
 /** Delay before retrying a transient upstream failure. */
 const RETRY_DELAY_MS = 500;

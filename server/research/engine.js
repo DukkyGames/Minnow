@@ -1,5 +1,5 @@
 /**
- * IterResearch-style deep research engine (port of Odysseus `DeepResearcher`).
+ * IterResearch-style deep research engine.
  */
 
 import { searchCodebase as defaultSearchCodebase, extractFromFile as defaultExtractFromFile } from './codebase-search.js';
@@ -217,7 +217,7 @@ export class DeepResearcher {
   }
 
   /**
-   * @param {Record<string, unknown>} kwargs Odysseus-style snake_case keys from the port
+   * @param {Record<string, unknown>} kwargs snake_case keys
    */
   _emit(kwargs) {
     /** @type {Record<string, unknown>} */

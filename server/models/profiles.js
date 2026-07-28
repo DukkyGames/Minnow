@@ -1,5 +1,5 @@
 /**
- * llama.cpp serve profile presets — simplified port of Odysseus hwfit/profiles.py.
+ * llama.cpp serve profile presets — Quality / Balanced / Speed from hardware + model metadata.
  * Deterministic Quality / Balanced / Speed presets from hardware + model metadata.
  */
 

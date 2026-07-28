@@ -1,6 +1,6 @@
 /**
  * Local model cache scan — HF hub, Minnow artifacts, Ollama, custom dirs.
- * Ports Odysseus cookbook_helpers._cached_model_scan_script to Node.
+ * Local model cache scan for HF hub, Minnow artifacts, Ollama, and custom dirs.
  */
 
 import fsp from 'node:fs/promises';

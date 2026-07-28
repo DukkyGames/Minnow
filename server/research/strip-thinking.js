@@ -1,6 +1,6 @@
 /**
  * Strip reasoning/thinking blocks from research LLM output and filter low-quality summaries.
- * Port of Odysseus `src/research_utils.py` + `src/text_helpers.strip_think` (prose=false, prompt_echo=true).
+ * Think-block stripping for research output (prose=false, prompt_echo=true).
  */
 
 /** @typedef {'think' | 'thinking' | 'thought'} ThinkTagName */
@@ -86,7 +86,7 @@ export function normalizeThinkingMarkup(text) {
 }
 
 /**
- * Core think-block stripper (Odysseus `strip_think`, research path: prose=false, prompt_echo=true).
+ * Core think-block stripper (research path: prose=false, prompt_echo=true).
  * @param {string} text
  * @param {{ prose?: boolean, promptEcho?: boolean }} [options]
  * @returns {string}
@@ -198,7 +198,7 @@ export function isLowQuality(summary) {
   }
 }
 
-/** Strip leading markdown/quotes before checking YES/NO (Odysseus `_should_stop`). */
+/** Strip leading markdown/quotes before checking YES/NO. */
 const STOP_ANSWER_PREFIX_RE = /^[\s*_`"'#>-]+/;
 
 /**

@@ -1,6 +1,6 @@
 /**
  * Known context windows for major API models (fallback when /models omits context metadata).
- * Ported from Odysseus model_context.py — longest matching key wins substring lookup.
+ * Known model context windows — longest matching key wins substring lookup.
  */
 
 export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
