@@ -13,6 +13,7 @@ import {
   subscribeTitleJobActivity,
 } from './chat/titles/activity-events';
 import type { MinnowTrayCommand, MinnowTrayStatusSnapshot } from './electron.d';
+import { appConfirm } from './ui/app-dialog';
 import {
   collectLocalModelTraySnapshot,
   unloadAllLocalModels,
@@ -81,7 +82,7 @@ async function publishTrayStatus(): Promise<void> {
 async function handleUnloadLocalModels(): Promise<void> {
   const agents = countRunningAgents();
   if (agents > 0) {
-    const proceed = window.confirm(
+    const proceed = await appConfirm(
       `${agents} agent${agents === 1 ? '' : 's'} may be using a loaded model. Unload all local models anyway?`,
     );
     if (!proceed) return;

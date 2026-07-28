@@ -42,6 +42,7 @@ import {
 } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
+import { appConfirm } from './app-dialog';
 
 const CONTEXT_POLICY_OPTIONS: { value: ContextEnforcementPolicy; label: string }[] = [
   { value: 'slide', label: 'Slide (drop oldest turns)' },
@@ -349,10 +350,10 @@ export function mountPromptFileEditor(
   const resetBtn = el('button', 'settings-action-btn', 'Reset to built-in');
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => {
-    const dirty = ta.value !== lastSavedContent;
-    if (dirty && !confirm('Discard unsaved edits and remove your override?')) return;
-    if (!dirty && !confirm('Remove your override and restore the shipped prompt?')) return;
     void (async () => {
+      const dirty = ta.value !== lastSavedContent;
+      if (dirty && !(await appConfirm('Discard unsaved edits and remove your override?'))) return;
+      if (!dirty && !(await appConfirm('Remove your override and restore the shipped prompt?'))) return;
       const restored = await resetPromptFileOverride(
         family,
         entityId,
@@ -473,10 +474,10 @@ export function mountWorkAgentPromptEditor(
   const resetBtn = el('button', 'settings-action-btn', 'Reset prompt to built-in');
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => {
-    const dirty = ta.value !== lastSavedPromptContent;
-    if (dirty && !confirm('Discard unsaved edits and remove your override?')) return;
-    if (!dirty && !confirm('Remove prompt override for this profile?')) return;
     void (async () => {
+      const dirty = ta.value !== lastSavedPromptContent;
+      if (dirty && !(await appConfirm('Discard unsaved edits and remove your override?'))) return;
+      if (!dirty && !(await appConfirm('Remove prompt override for this profile?'))) return;
       const restored = await resetWorkAgentPromptOverride(
         options.agentId,
         currentProfile,
@@ -758,10 +759,10 @@ export function mountWorkAgentEditor(
   const resetBtn = el('button', 'settings-action-btn', 'Reset prompt to built-in');
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => {
-    const dirty = ta.value !== lastSavedPromptContent;
-    if (dirty && !confirm('Discard unsaved edits and remove your override?')) return;
-    if (!dirty && !confirm('Remove prompt override for this profile?')) return;
     void (async () => {
+      const dirty = ta.value !== lastSavedPromptContent;
+      if (dirty && !(await appConfirm('Discard unsaved edits and remove your override?'))) return;
+      if (!dirty && !(await appConfirm('Remove prompt override for this profile?'))) return;
       const restored = await resetWorkAgentPromptOverride(
         options.agentId,
         currentProfile,

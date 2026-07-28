@@ -4,6 +4,7 @@
 
 import { buildLineDiff, promptsMatchForDiff } from '../chat/prompts/text-diff';
 import { isLocalServerAvailable } from '../tools/config';
+import { appConfirm } from './app-dialog';
 import {
   renderSideBySidePromptDiff,
   renderUnifiedPromptDiff,
@@ -184,7 +185,10 @@ export function mountPromptDiffControls(
         const dirty =
           options.getCurrent().trim() !== baselineText.trim() &&
           options.getCurrent().trim() !== '';
-        if (dirty && !confirm('Discard unsaved edits for this part and reset to shipped default?')) {
+        if (
+          dirty &&
+          !(await appConfirm('Discard unsaved edits for this part and reset to shipped default?'))
+        ) {
           return;
         }
         await options.onResetPart!();

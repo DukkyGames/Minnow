@@ -21,6 +21,7 @@ import {
   loadSessionsFromStorage,
   markGroupDeleted,
   markGroupDirty,
+  removeChatById,
   resetSessionPersistenceForTests,
   saveSessionsNow,
   sessionState,
@@ -34,6 +35,7 @@ import {
 import type { ChatGroup, SessionState } from '../../src/types.ts';
 
 const SAVED_CHAT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const OTHER_CHAT_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const GROUP_ID = 'grp_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 function restoreFetch(): void {
@@ -170,6 +172,136 @@ describe('session persistence (MIN-408 + B.2)', () => {
     assert.equal(sessionState?.chats[0]?.history[0]?.content, 'hello');
     assert.equal(isSessionsHydratedFromServerForTests(), true);
     assert.equal(getSessionDirtyTrackingForTests().sessionPatchDirtySetsReady, false);
+  });
+
+  test('lazy summaries keep messageCount on unloaded chats after ensureChatShape', async () => {
+    // Regression: normalizeChatRow dropped messageCount → empty rails + prune wiped SQLite.
+    setStorageModeForTests('server');
+    setSessionStateForTests(defaultSessionState());
+    resetSessionPersistenceForTests();
+
+    const activeId = SAVED_CHAT_ID;
+    const otherId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    const serverPayload = {
+      version: 6,
+      activeId,
+      sidebarCollapsed: false,
+      chats: [
+        {
+          id: activeId,
+          name: 'Active',
+          workspacePath: '/ws',
+          modelId: 'm',
+          history: [{ role: 'user', content: 'hi' }],
+          updatedAt: 2,
+        },
+        {
+          id: otherId,
+          name: 'Other prior chat',
+          workspacePath: '/ws',
+          modelId: 'm',
+          history: [
+            { role: 'user', content: 'one' },
+            { role: 'assistant', content: 'two' },
+          ],
+          updatedAt: 1,
+        },
+      ],
+    };
+
+    globalThis.fetch = mockSessionsGet(serverPayload);
+    await loadSessionsFromStorage({ force: true });
+
+    const other = sessionState?.chats.find((c) => c.id === otherId);
+    assert.ok(other);
+    assert.equal(other.historyLoaded, false);
+    assert.equal(other.messageCount, 2);
+    assert.equal(other.history.length, 0);
+  });
+
+  test('delete during in-flight PUT is not resurrected (follow-up flush)', async () => {
+    // Overlapping PUT + delete used to clear deletedChatIds when the PUT settled,
+    // leaving the removed chat on disk after reload.
+    setStorageModeForTests('server');
+    resetSessionPersistenceForTests();
+
+    const twoChats: SessionState = {
+      version: 6,
+      activeId: SAVED_CHAT_ID,
+      sidebarCollapsed: false,
+      chats: [
+        {
+          id: SAVED_CHAT_ID,
+          name: 'Keep',
+          workspacePath: '',
+          modelId: 'm',
+          history: [{ role: 'user', content: 'keep' }],
+          updatedAt: 2,
+          lastMessageAt: 2,
+          lastStats: null,
+          modelInfo: {},
+        },
+        {
+          id: OTHER_CHAT_ID,
+          name: 'Delete me',
+          workspacePath: '',
+          modelId: 'm',
+          history: [{ role: 'user', content: 'gone' }],
+          updatedAt: 1,
+          lastMessageAt: 1,
+          lastStats: null,
+          modelInfo: {},
+        },
+      ],
+    };
+    setSessionStateForTests(twoChats);
+    // Simulate post-load: next save must full-PUT.
+    setSessionPatchDirtySetsReadyForTests(false);
+
+    let releasePut!: () => void;
+    const putGate = new Promise<void>((resolve) => {
+      releasePut = resolve;
+    });
+    const putBodies: Array<{ chats?: Array<{ id: string }> }> = [];
+    const patchBodies: Array<{ deleteChatIds?: string[] }> = [];
+
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/api/config/sessions') && method === 'PUT') {
+        putBodies.push(JSON.parse(String(init?.body ?? '{}')));
+        await putGate;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.includes('/api/config/sessions') && method === 'PATCH') {
+        patchBodies.push(JSON.parse(String(init?.body ?? '{}')));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    touchChat(twoChats.chats[0]!);
+    saveSessionsNow();
+    // Delete while the baseline PUT is still in flight.
+    removeChatById(OTHER_CHAT_ID, 'm');
+    assert.equal(
+      sessionState?.chats.some((c) => c.id === OTHER_CHAT_ID),
+      false,
+    );
+    assert.deepEqual(getSessionDirtyTrackingForTests().deletedChatIds, [OTHER_CHAT_ID]);
+
+    releasePut();
+    await waitForSessionSaveForTests();
+
+    assert.equal(putBodies.length, 1);
+    assert.ok(putBodies[0]?.chats?.some((c) => c.id === OTHER_CHAT_ID));
+    // Follow-up PATCH must delete the chat the stale PUT may have rewritten.
+    assert.ok(
+      patchBodies.some((body) => body.deleteChatIds?.includes(OTHER_CHAT_ID)),
+      'expected follow-up PATCH with deleteChatIds',
+    );
+    assert.deepEqual(getSessionDirtyTrackingForTests().deletedChatIds, []);
+    assert.equal(sessionState?.chats.some((c) => c.id === OTHER_CHAT_ID), false);
   });
 
   test('first save after load uses full PUT then subsequent saves PATCH', async () => {

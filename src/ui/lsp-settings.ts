@@ -36,6 +36,7 @@ import { isLocalServerAvailable } from '../tools/config';
 
 import { appendSettingsCrosslinks, appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 import { createSettingsSwitch } from './settings-switch';
+import { appConfirm } from './app-dialog';
 import { appendSettingsOfflineHint } from './settings-controls';
 import { setStatus } from './status';
 import '../styles/settings-general.css';
@@ -432,113 +433,122 @@ function bindBundleInstallToggle(
 
   input.addEventListener('change', () => {
 
-    const wantInstalled = input.checked;
+    void (async () => {
+
+      const wantInstalled = input.checked;
 
 
 
-    if (!wantInstalled && bundle.installed && !bundle.prebundled) {
+      if (!wantInstalled && bundle.installed && !bundle.prebundled) {
 
-      if (!confirm(`Remove ${bundle.label} from ~/.minnow/lsp-servers?`)) {
+        if (
+          !(await appConfirm(`Remove ${bundle.label} from ~/.minnow/lsp-servers?`, {
+            confirmLabel: 'Remove',
+            danger: true,
+          }))
+        ) {
 
-        input.checked = true;
+          input.checked = true;
+
+          return;
+
+        }
+
+        input.disabled = true;
+
+        void uninstallLspBundle(bundle.id).then((ok) => {
+
+          setStatus(ok ? 'ok' : 'err', ok ? `Removed ${bundle.label}` : 'Uninstall failed');
+
+          stopPoll();
+
+          hideProgress();
+
+          if (!ok) input.checked = true;
+
+          input.disabled = bundle.prebundled === true;
+
+          onChanged();
+
+        });
 
         return;
 
       }
 
-      input.disabled = true;
 
-      void uninstallLspBundle(bundle.id).then((ok) => {
 
-        setStatus(ok ? 'ok' : 'err', ok ? `Removed ${bundle.label}` : 'Uninstall failed');
+      if (wantInstalled && !bundle.installed) {
 
-        stopPoll();
+        input.disabled = true;
 
-        hideProgress();
-
-        if (!ok) input.checked = true;
-
-        input.disabled = bundle.prebundled === true;
-
-        onChanged();
-
-      });
-
-      return;
-
-    }
+        showProgress(0, 'Starting…');
 
 
 
-    if (wantInstalled && !bundle.installed) {
+        const pollProgress = (alreadyInstalled: boolean) => {
 
-      input.disabled = true;
+          void fetchLspBundleProgress(bundle.id).then((payload) => {
 
-      showProgress(0, 'Starting…');
+            handleInstallJob(payload?.job, alreadyInstalled);
+
+          });
+
+        };
 
 
 
-      const pollProgress = (alreadyInstalled: boolean) => {
+        void installLspBundle(bundle.id).then(async (result) => {
 
-        void fetchLspBundleProgress(bundle.id).then((payload) => {
+          if (!result.ok) {
 
-          handleInstallJob(payload?.job, alreadyInstalled);
+            setStatus('err', result.error ?? 'Install failed');
+
+            hideProgress();
+
+            setInstallChecked(false);
+
+            onChanged();
+
+            return;
+
+          }
+
+
+
+          const alreadyInstalled = result.alreadyInstalled === true;
+
+          if (
+
+            handleInstallJob(
+
+              await fetchLspBundleProgress(bundle.id).then((p) => p?.job),
+
+              alreadyInstalled,
+
+            )
+
+          ) {
+
+            return;
+
+          }
+
+
+
+          pollTimer = setInterval(() => pollProgress(alreadyInstalled), 500);
 
         });
 
-      };
+        return;
+
+      }
 
 
 
-      void installLspBundle(bundle.id).then(async (result) => {
+      input.checked = bundle.installed;
 
-        if (!result.ok) {
-
-          setStatus('err', result.error ?? 'Install failed');
-
-          hideProgress();
-
-          setInstallChecked(false);
-
-          onChanged();
-
-          return;
-
-        }
-
-
-
-        const alreadyInstalled = result.alreadyInstalled === true;
-
-        if (
-
-          handleInstallJob(
-
-            await fetchLspBundleProgress(bundle.id).then((p) => p?.job),
-
-            alreadyInstalled,
-
-          )
-
-        ) {
-
-          return;
-
-        }
-
-
-
-        pollTimer = setInterval(() => pollProgress(alreadyInstalled), 500);
-
-      });
-
-      return;
-
-    }
-
-
-
-    input.checked = bundle.installed;
+    })();
 
   });
 
@@ -1398,7 +1408,14 @@ export async function renderLspSection(): Promise<void> {
 
   const removeCustomServer = async (id: string) => {
 
-    if (!confirm(`Remove language server "${id}"?`)) return;
+    if (
+      !(await appConfirm(`Remove language server "${id}"?`, {
+        confirmLabel: 'Remove',
+        danger: true,
+      }))
+    ) {
+      return;
+    }
 
     const ok = await saveLspConfig({ removeLspIds: [id] });
 

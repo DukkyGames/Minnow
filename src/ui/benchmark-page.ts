@@ -89,6 +89,7 @@ import {
 } from './benchmark-transcript-drawer.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
+import { appConfirm } from './app-dialog';
 import { iconHtml } from './icon';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
@@ -1594,9 +1595,10 @@ async function onClearHistoryClick(): Promise<void> {
     return;
   }
   if (
-    !confirm(
+    !(await appConfirm(
       'Delete all saved benchmark runs? This removes server and browser copies and cannot be undone.',
-    )
+      { confirmLabel: 'Delete all', danger: true },
+    ))
   ) {
     return;
   }

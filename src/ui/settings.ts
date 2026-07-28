@@ -4,6 +4,7 @@ import { defaultSystemPromptSettings } from '../config/defaults';
 import { isServerStorageMode } from '../config/storage-mode';
 import { isProvidersApiAvailable } from '../providers/store';
 import { setStatus } from './status';
+import { appConfirm } from './app-dialog';
 import type { SystemPromptSettings } from '../types';
 export { fillToolsSection, registerToolHandlers } from './tools-list';
 import {
@@ -130,17 +131,21 @@ export function onSystemPromptPresetChange(): void {
     saveSystemPromptSettings();
     return;
   }
-  if (
-    dirty &&
-    !confirm('Replace your current system prompt with this preset? Unsaved edits will be lost.')
-  ) {
-    setSuppressSystemPromptSelectChange(true);
-    sel.value = activeSystemPromptPresetId;
-    setSuppressSystemPromptSelectChange(false);
-    return;
-  }
-  applySystemPromptPreset(targetId);
-  saveSystemPromptSettings();
+  void (async () => {
+    if (
+      dirty &&
+      !(await appConfirm(
+        'Replace your current system prompt with this preset? Unsaved edits will be lost.',
+      ))
+    ) {
+      setSuppressSystemPromptSelectChange(true);
+      sel.value = activeSystemPromptPresetId;
+      setSuppressSystemPromptSelectChange(false);
+      return;
+    }
+    applySystemPromptPreset(targetId);
+    saveSystemPromptSettings();
+  })();
 }
 
 /** Build tool toggle rows from BUILT_IN_TOOLS (single source of truth). */

@@ -73,6 +73,22 @@ describe('chat sidebar listing', () => {
     assert.equal(isSidebarListedChat(unloadedEmpty), false);
   });
 
+  test('lazy-unloaded chats with missing messageCount stay listed (fail-safe)', () => {
+    // If ensureChatShape drops messageCount, prefer a visible rail over prune wipe.
+    const unloadedUnknown = createEmptyChatObject('', WS);
+    unloadedUnknown.history = [];
+    unloadedUnknown.historyLoaded = false;
+    delete unloadedUnknown.messageCount;
+    assert.equal(isEphemeralEmptyChat(unloadedUnknown), false);
+    assert.equal(isSidebarListedChat(unloadedUnknown), true);
+
+    const keep = createEmptyChatObject('', WS);
+    keep.history.push({ role: 'user', content: 'anchor' });
+    const state = stateWithChats(keep, unloadedUnknown);
+    pruneEphemeralEmptyChats(state, keep.id);
+    assert.ok(state.chats.some((c) => c.id === unloadedUnknown.id));
+  });
+
   test('pruneEphemeralEmptyChats keeps the active row and listed chats', () => {
     const keep = createEmptyChatObject('', WS);
     const orphan = createEmptyChatObject('', WS);

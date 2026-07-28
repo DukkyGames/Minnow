@@ -36,6 +36,7 @@ import {
 } from '../../state/sessions';
 import { getWorkspacePath } from '../../state/workspace';
 import { closeBenchmark } from '../benchmark-page';
+import { appConfirm } from '../app-dialog';
 import { closeSettings } from '../settings-page';
 import {
   isExpertScopeActive,
@@ -255,10 +256,19 @@ function renderExpertDetail(): void {
       void openEditExpertStep(selectedExpertId!);
     },
     onDelete: () => {
-      const expert = getExpert(selectedExpertId!);
-      const label = expert?.meta.label ?? selectedExpertId;
-      if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
-      void deleteExpertConfirmed(selectedExpertId!);
+      void (async () => {
+        const expert = getExpert(selectedExpertId!);
+        const label = expert?.meta.label ?? selectedExpertId;
+        if (
+          !(await appConfirm(`Delete "${label}"? This cannot be undone.`, {
+            confirmLabel: 'Delete',
+            danger: true,
+          }))
+        ) {
+          return;
+        }
+        await deleteExpertConfirmed(selectedExpertId!);
+      })();
     },
     onOpenChat: (chat) => {
       void openExpertChatInShell(chat);
@@ -567,11 +577,13 @@ async function submitEditExpert(event?: Event): Promise<void> {
 }
 
 function cancelEditExpert(): void {
-  if (editDirty && !confirm('Discard unsaved changes?')) return;
-  editExpertId = null;
-  editDirty = false;
-  setFormError('expertsEditError', null);
-  setStep('browse');
+  void (async () => {
+    if (editDirty && !(await appConfirm('Discard unsaved changes?'))) return;
+    editExpertId = null;
+    editDirty = false;
+    setFormError('expertsEditError', null);
+    setStep('browse');
+  })();
 }
 
 function showExpertsActionError(message: string | null): void {
