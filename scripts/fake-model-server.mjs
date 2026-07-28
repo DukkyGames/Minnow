@@ -114,6 +114,8 @@ export function defaultEmitForContext(ctx, nth) {
     return proseSseChunks('Done.');
   }
   if (ctx.role === 'builder') {
+    // First build turn and missing-report nudges both need board_report so the
+    // board can advance; later prose-only acks are for multi-turn builder work.
     if (nth === 0) {
       return boardReportPassChunks(taskId, `call_build_${taskId.replace(/[^A-Za-z0-9]/g, '_')}`);
     }
@@ -121,6 +123,14 @@ export function defaultEmitForContext(ctx, nth) {
   }
 
   return proseSseChunks('Done.');
+}
+
+/**
+ * True when the completion body is a missing-report nudge (board re-prompt).
+ * @param {unknown} body
+ */
+export function isMissingBoardReportNudge(body) {
+  return /ended without calling board_report/i.test(messagesText(body));
 }
 
 /**
@@ -203,7 +213,12 @@ export function extractRequestContext(body) {
     ctx.role = 'fixer';
   } else if (/final full-board integration/i.test(text)) {
     ctx.role = 'final';
-  } else if (/Execute this orchestrate task|Fix this orchestrate task/i.test(text)) {
+  } else if (
+    /Execute this orchestrate task|Fix this orchestrate task|Continue the orchestrate task/i.test(
+      text,
+    ) ||
+    /ended without calling board_report/i.test(text)
+  ) {
     ctx.role = 'builder';
   }
 
@@ -211,8 +226,13 @@ export function extractRequestContext(body) {
   if (taskLine) {
     ctx.taskId = taskLine[1];
   } else {
-    const taskIdArg = text.match(/task_id:\s*"([^"]+)"/);
-    if (taskIdArg) ctx.taskId = taskIdArg[1];
+    const continueLine = text.match(/Continue the orchestrate task\s+([A-Z0-9_-]+)\s+—/);
+    if (continueLine) {
+      ctx.taskId = continueLine[1];
+    } else {
+      const taskIdArg = text.match(/task_id:\s*"([^"]+)"/);
+      if (taskIdArg) ctx.taskId = taskIdArg[1];
+    }
   }
 
   return ctx;
@@ -230,9 +250,10 @@ function partialMatchKey(partial) {
  * Pick scenario emit chunks for this completion request.
  * @param {ScenarioStep[]} scenario
  * @param {{ role?: string; taskId?: string }} ctx
+ * @param {unknown} [body]
  * @returns {string[]}
  */
-export function pickScenarioEmit(scenario, ctx) {
+export function pickScenarioEmit(scenario, ctx, body) {
   const partial = { role: ctx.role, taskId: ctx.taskId };
   const key = partialMatchKey(partial);
   const nth = matchOccurrenceCounts.get(key) ?? 0;
@@ -244,6 +265,14 @@ export function pickScenarioEmit(scenario, ctx) {
     if (match.taskId !== undefined && match.taskId !== ctx.taskId) continue;
     if (match.nth !== undefined && match.nth !== nth) continue;
     return step.emit;
+  }
+
+  if (ctx.role === 'builder' && isMissingBoardReportNudge(body)) {
+    const taskId = ctx.taskId?.trim() || 'W1-A';
+    return boardReportPassChunks(
+      taskId,
+      `call_build_nudge_${taskId.replace(/[^A-Za-z0-9]/g, '_')}`,
+    );
   }
 
   return defaultEmitForContext(ctx, nth);
@@ -310,7 +339,7 @@ export function createFakeModelServer(opts = {}) {
           `[fake-model] POST ${pathname} (#${requests.length}) role=${context.role ?? '-'} taskId=${context.taskId ?? '-'}`,
         );
 
-        const chunks = pickScenarioEmit(scenario, context);
+        const chunks = pickScenarioEmit(scenario, context, body);
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',

@@ -11,9 +11,10 @@ import {
 import { StreamingContentAccumulator } from '../../api/message-content.ts';
 import { modelCache } from '../../app-state.ts';
 import { thinkingToCompletionBody } from '../../agents/thinking-to-body.ts';
-import { getAutopilotMetaSync } from '../../config/autopilot-meta.ts';
-import { isDomAvailable } from '../../lib/dom-available.ts';
-import { decodeModelSelectKey, encodeModelSelectKey } from '../../lib/model-select-key.ts';
+import { encodeModelSelectKey } from '../../lib/model-select-key.ts';
+import { resolveBoardModelBinding } from './board-model-binding.ts';
+
+export { resolveBoardModelBinding as resolvePlannerModelBinding } from './board-model-binding.ts';
 import { catalogCapabilitiesFromRow } from '../../providers/model-capabilities.ts';
 import { resolveProvider } from '../../providers/store.ts';
 import { emitBoardChange } from '../../state/orchestrate-board-events.ts';
@@ -39,35 +40,6 @@ const MAX_RECOMMENDATION_TOKENS = 512;
 
 /** In-flight enrichment per board group — avoids duplicate generation calls. */
 const enrichInFlight = new Map<string, Promise<void>>();
-
-/** Provider/model for finish recommendations — same binding as board task chats. */
-export function resolvePlannerModelBinding(plannerChat: Chat): {
-  providerId: string;
-  modelId: string;
-} {
-  let providerId = plannerChat.providerId?.trim() ?? '';
-  let modelId = plannerChat.modelId?.trim() ?? '';
-  if (!modelId && isDomAvailable()) {
-    const domRaw =
-      (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ??
-      '';
-    if (domRaw) {
-      const parsed = decodeModelSelectKey(domRaw);
-      if (parsed) {
-        providerId = providerId || parsed.providerId;
-        modelId = parsed.modelId;
-      } else {
-        modelId = domRaw;
-      }
-    }
-  }
-  if (!modelId) {
-    const meta = getAutopilotMetaSync();
-    providerId = providerId || meta.plannerProviderId?.trim() || '';
-    modelId = meta.plannerModelId?.trim() || '';
-  }
-  return { providerId, modelId };
-}
 
 function truncatePlanText(text: string, maxChars = MAX_PLAN_CHARS): string {
   const trimmed = text.trim();
@@ -164,7 +136,7 @@ async function fetchRecommendationsFromLlm(
   board: OrchestrateBoardState,
   planContent: string,
 ): Promise<string | null> {
-  const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+  const { providerId, modelId } = resolveBoardModelBinding(plannerChat, board);
   if (!providerId || !modelId) return null;
 
   const provider = await resolveProvider(providerId);
@@ -262,7 +234,7 @@ export async function enrichFinishReportWithRecommendations(
   const work = (async (): Promise<void> => {
     const planPath =
       plannerChat.orchestratePlanPath?.trim() || board.planPath?.trim() || '';
-    const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+    const { providerId, modelId } = resolveBoardModelBinding(plannerChat, board);
     const noModel = !providerId || !modelId;
 
     let recommendations: string | null = null;

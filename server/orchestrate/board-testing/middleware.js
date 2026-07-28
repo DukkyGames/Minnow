@@ -7,7 +7,12 @@ import { FAKE_PROVIDER_ID } from '../../../scripts/fake-model-server.mjs';
 import { listProviders } from '../../providers/store.js';
 import { patchSessionState, readWholeSessionState } from '../../config/sessions-repo.js';
 import { getWorkspaceRoot } from '../../workspace/root.js';
-import { getFakeModelStatus, startFakeModel, stopFakeModel } from './fake-model-host.js';
+import {
+  getFakeModelStatus,
+  resetFakeModelScenario,
+  startFakeModel,
+  stopFakeModel,
+} from './fake-model-host.js';
 import { validateBoardLog } from './board-log-validate.js';
 import { importTsModule } from './ts-import.js';
 import { TEST_BOARD_GROUP_ID, TEST_BOARD_PLANNER_ID } from './constants.js';
@@ -182,6 +187,9 @@ export async function handleBoardTestingRequest(req, res, pathname) {
           lastActiveChatIdByWorkspace: lastByWorkspace,
         },
       });
+
+      // Each seeded board expects builder nth=0 → board_report; reset when reusing the host.
+      resetFakeModelScenario();
 
       sendJson(res, 200, {
         ok: true,

@@ -55,6 +55,11 @@ export function getFakeModelStatus() {
 /** Default listen port for the in-process fake model host. */
 const DEFAULT_PORT = 18765;
 
+/** Clear per-(role, taskId) turn counters so a new board run gets fresh nth=0 responses. */
+export function resetFakeModelScenario() {
+  active?.fake.reset();
+}
+
 /**
  * @param {{ port?: number }} [options]
  */
@@ -64,6 +69,7 @@ export async function startFakeModel(options = {}) {
   }
 
   const fake = createFakeModelServer();
+  fake.reset();
   const port = options.port ?? DEFAULT_PORT;
   const resolvedPort = await fake.listen(port);
   const baseUrl = `http://127.0.0.1:${resolvedPort}`;
@@ -76,6 +82,7 @@ export async function stopFakeModel() {
   if (!active) {
     return getFakeModelStatus();
   }
+  active.fake.reset();
   await active.fake.close();
   active = null;
   return getFakeModelStatus();

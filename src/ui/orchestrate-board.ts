@@ -158,6 +158,10 @@ import {
   type BoardOnboardingBusyPhase,
 } from './orchestrate-board-onboarding-ui';
 import { formatBoardOnboardingPlanDisplay } from './orchestrate-board-plan-display';
+import {
+  syncBoardHeaderModelSelect,
+  wireBoardHeaderModelSelect,
+} from './orchestrate-board-model-select';
 
 export { formatBoardOnboardingPlanDisplay };
 export type { BoardOnboardingBusyPhase };
@@ -1210,6 +1214,10 @@ function wireBoardHeaderControls(
   clearBoardAfkHintTimers();
   lastSyncedExecMode = null;
   boardAfkHintShownForSession = false;
+
+  void wireBoardHeaderModelSelect(controls, group, board, plannerChat, () => {
+    refreshActiveBoardIfMounted();
+  });
 
   // Execution mode segments (Manual → Sequential → Auto → AFK)
   const currentMode = getBoardExecutionMode(board);
@@ -2861,6 +2869,8 @@ function refreshBoardDom(
   if (isolationSelect) {
     isolationSelect.value = board.isolationMode ?? 'auto';
   }
+
+  syncBoardHeaderModelSelect(root, board, plannerChat);
 
   // Sync Start/Stop button: add if needed, remove when mode switches to manual
   const controls = root.querySelector('.board-header__controls') as HTMLElement | null;

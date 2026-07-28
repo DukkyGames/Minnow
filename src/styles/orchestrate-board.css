@@ -726,6 +726,31 @@ button.board-header__activity {
   border-radius: var(--radius-sm);
 }
 
+.board-header__model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+.board-header__model-provider,
+.board-header__model-select {
+  height: 32px;
+  max-width: 9rem;
+  padding: 0 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.board-header__model-select {
+  max-width: 11rem;
+}
+
 .board-header__run-btn {
   height: 32px;
   padding: 0 14px;

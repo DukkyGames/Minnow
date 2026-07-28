@@ -83,7 +83,7 @@ Open the seeded workspace. The chat **Test board (quick)** should appear with th
 
 ### 4. Verify the fake model is used
 
-- Planner chat must use **Fake board model** (`fake-board`). Settings alone does not retarget an existing board — switch the model on the **planner chat** via the composer picker.
+- Planner chat must use **Fake board model** (`fake-board`). Settings alone does not retarget an existing board — pick **Fake board** in the board header model select, or switch the planner chat via the composer model picker.
 - The fake-model terminal should log `POST /v1/chat/completions` with `role=builder|tester|…`.
 
 ### 5. Validate the run log (optional)
@@ -190,7 +190,7 @@ Headless E2E wraps real `runChatTurn` with a custom runner (must not be the `run
 
 | Invariant | What it checks |
 |-----------|----------------|
-| `status-transitions` | Legal status edges |
+| `status-transitions` | Legal status edges (`planned → in_progress → testing → merging → complete`, plus fast `testing → complete` when merge is skipped/merged in-process) |
 | `verdict-after-start` | No verdict before first `task_started` |
 | `attempt-caps` | Retries/nudges within caps |
 | `merge-integrity` | One merge per completed task |
@@ -309,6 +309,7 @@ New tests assert **intended** recovery behaviour and may stay red until product 
 | Symptom | Likely cause | Fix |
 |---------|----------------|-----|
 | Fake model loops on `board_report` | Missing post-tool prose turn | Restart fake-model (fixed in default scenario) |
+| Tasks stuck in `in_progress` after a prior run | Fake model `nth` counter not reset (builder nth≥1 → prose only) | Restart fake model (Settings → Board testing) or re-seed (resets counters); missing-report nudges now re-emit `board_report` |
 | Board ignores fake model | Planner chat still bound to old provider | Switch model on **planner chat** composer picker |
 | `issuesState is not initialized` in test output | Plan-complete hook; Issues not loaded | Benign in tests; ignore or init Issues store |
 | Seed script hangs | `scheduleSaveSessions` after `initBoard` | Wait or Ctrl+C after "Seeded test board" prints |

@@ -118,6 +118,8 @@ function isLegalStatusEdge(from: BoardTaskStatus | undefined, to: BoardTaskStatu
   if (to === 'failed' || to === 'blocked') return true;
   if (to === 'planned' && REOPEN_FROM.has(from)) return true;
   if (to === 'quarantined') return true;
+  // Clean/skipped merges complete in-process without a visible merging phase.
+  if (from === 'testing' && to === 'complete') return true;
   return FORWARD_CHAIN[from] === to;
 }
 

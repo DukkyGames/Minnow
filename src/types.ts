@@ -506,6 +506,10 @@ export interface OrchestrateBoardState {
   activeParentTurnId?: string;
   /** Max concurrent task chats (default 3). */
   maxConcurrentTasks?: number;
+  /** Provider for board orchestration (planner + task chats). */
+  modelProviderId?: string;
+  /** Model for board orchestration (planner + task chats). */
+  modelId?: string;
   /** Manual board vs auto-pilot delegation (default manual). */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   /** True when the user has pressed Start in auto/sequential mode. */
