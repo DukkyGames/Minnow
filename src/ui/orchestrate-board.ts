@@ -1218,7 +1218,6 @@ function wireBoardHeaderControls(
   void wireBoardHeaderModelSelect(controls, group, board, plannerChat, () => {
     refreshActiveBoardIfMounted();
   });
-
   // Execution mode segments (Manual → Sequential → Auto → AFK)
   const currentMode = getBoardExecutionMode(board);
   const modeWrapper = document.createElement('div');
@@ -2870,7 +2869,7 @@ function refreshBoardDom(
     isolationSelect.value = board.isolationMode ?? 'auto';
   }
 
-  syncBoardHeaderModelSelect(root, board, plannerChat);
+  syncBoardHeaderModelSelect(root, group, board, plannerChat);
 
   // Sync Start/Stop button: add if needed, remove when mode switches to manual
   const controls = root.querySelector('.board-header__controls') as HTMLElement | null;
