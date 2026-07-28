@@ -179,7 +179,15 @@ export function mergeUserWorkAgentOverride(
   agentId: string,
   patch: WorkAgentUserOverride,
 ): void {
-  userOverrides[agentId] = { ...(userOverrides[agentId] ?? {}), ...patch };
+  const prev = userOverrides[agentId] ?? {};
+  const next: WorkAgentUserOverride = { ...prev, ...patch };
+  if (patch.contextEnforcementPolicy === null) {
+    delete next.contextEnforcementPolicy;
+  }
+  if (patch.archive === null) {
+    delete next.archive;
+  }
+  userOverrides[agentId] = next;
 }
 
 /** Load built-in agents from Vite glob or test fixture map. */
@@ -223,6 +231,12 @@ export function listWorkAgents(includeDisabled = false): WorkAgentDefinition[] {
   const agents = orderedAgents(builtinAgents);
   if (includeDisabled) return agents;
   return agents.filter((a) => !a.disabled);
+}
+
+/** Shipped built-in row before user overrides (null if unknown). */
+export function getBuiltinWorkAgent(id: string): WorkAgentDefinition | null {
+  const agent = builtinAgents.get(id);
+  return agent ? { ...agent } : null;
 }
 
 /** Get one agent by id (null if missing). */

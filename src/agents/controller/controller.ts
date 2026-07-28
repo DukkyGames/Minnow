@@ -27,6 +27,7 @@ import {
   agentContextBudgetFromSubAgentType,
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
 } from '../../chat/context-budget';
+import { resolveSubAgentTypeContextPolicy } from '../../chat/resolve-context-policy';
 import { cloneSubAgentMessages, defaultSubAgentRunner, getSubAgentRunner } from '../sub-agent-runner';
 import { resolveSubAgentModelBinding } from '../resolve-sub-agent-binding';
 import { resolveSubAgentToolModeId } from '../resolve-sub-agent-tool-mode';
@@ -545,9 +546,14 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       { role: 'user', content: run.task },
     ]);
 
+    const resolvedContextPolicy = resolveSubAgentTypeContextPolicy(
+      run.type,
+      config,
+      typeConfig,
+    );
+
     run.contextBudgetMaxInputTokens = typeConfig.maxInputTokens ?? null;
-    run.contextBudgetPolicy =
-      typeConfig.contextEnforcementPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY;
+    run.contextBudgetPolicy = resolvedContextPolicy;
 
     const output = await getSubAgentRunner().run({
       runId: run.runId,
@@ -558,7 +564,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       providerId,
       modelId,
       parentChatId: run.parentChatId,
-      contextBudget: agentContextBudgetFromSubAgentType(typeConfig),
+      contextBudget: agentContextBudgetFromSubAgentType(typeConfig, resolvedContextPolicy),
       summarySchema: typeConfig.summarySchema,
       signal: abort.signal,
       toolExecuteContext: {

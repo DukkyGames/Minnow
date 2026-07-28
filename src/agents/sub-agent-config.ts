@@ -3,7 +3,7 @@
  */
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
-import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
+import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY, type ContextEnforcementPolicy } from '../chat/context-budget';
 import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-structured-outcome';
 import DEFAULTS from './defaults/sub-agents.json';
 import { clampSamplerPreset, mergeSamplerLayers } from './sampler-types';
@@ -17,6 +17,7 @@ export const LEGACY_SUB_AGENT_DEFAULT_PROVIDER = 'lm-studio-local';
 
 let runtimeUserOverrides: Partial<SubAgentsFile> | null = null;
 let cachedMerged: SubAgentsFile | null = null;
+let cachedUserOverrides: Partial<SubAgentsFile> | null | undefined;
 
 /** Coerce check-in nudge interval: 0 = disabled, else [10s, 30m]. */
 export function clampSubAgentCheckInNudgeMs(value: unknown, fallback = 120_000): number {
@@ -224,6 +225,7 @@ export async function saveSubAgentConfigToServer(
     if (!res.ok) return false;
     runtimeUserOverrides = overrides;
     cachedMerged = null;
+    cachedUserOverrides = undefined;
     return true;
   }
 
@@ -237,12 +239,32 @@ export async function saveSubAgentConfigToServer(
 export function setRuntimeSubAgentOverrides(overrides: Partial<SubAgentsFile> | null): void {
   runtimeUserOverrides = overrides;
   cachedMerged = null;
+  cachedUserOverrides = undefined;
 }
 
 /** Reset config cache (tests). */
 export function resetSubAgentConfigCache(): void {
   cachedMerged = null;
   runtimeUserOverrides = null;
+  cachedUserOverrides = undefined;
+}
+
+/** Raw user overrides from the last load (for inherit vs explicit policy). */
+export function getSubAgentUserOverridesSync(): Partial<SubAgentsFile> | null {
+  return cachedUserOverrides ?? runtimeUserOverrides;
+}
+
+/** Global context policy from the merged sub-agents config (sync). */
+export function getGlobalContextEnforcementPolicySync(): ContextEnforcementPolicy {
+  if (cachedMerged?.defaultContextEnforcementPolicy) {
+    return cachedMerged.defaultContextEnforcementPolicy;
+  }
+  const defaults = DEFAULTS as SubAgentsFile;
+  return (
+    runtimeUserOverrides?.defaultContextEnforcementPolicy ??
+    defaults.defaultContextEnforcementPolicy ??
+    DEFAULT_CONTEXT_ENFORCEMENT_POLICY
+  );
 }
 
 /**
@@ -259,6 +281,7 @@ export async function loadSubAgentConfig(): Promise<SubAgentsFile> {
     user = fromServer ?? readLocalSubAgents();
   }
 
+  cachedUserOverrides = user ?? null;
   cachedMerged = mergeSubAgentConfig(defaults, user ?? undefined);
   return cachedMerged;
 }

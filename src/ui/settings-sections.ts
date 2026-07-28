@@ -6,10 +6,16 @@ import { appAlert, appConfirm, appPrompt } from './app-dialog';
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import {
   clampDuplicateToolCallThreshold,
+  getSubAgentUserOverridesSync,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
 } from '../agents/sub-agent-config';
 import type { SubAgentTypeConfig } from '../agents/types';
+import type { ContextEnforcementPolicy } from '../chat/context-budget';
+import {
+  subAgentContextPolicySelectValue,
+  workAgentContextPolicySelectValue,
+} from '../chat/resolve-context-policy';
 import { PART_ORDER } from '../chat/prompts/prompt-composer';
 import { schedulePromptTokenEstimateRefresh } from './settings-prompt-estimate';
 import { mountSetupProfilesPanel } from './settings-profiles';
@@ -108,6 +114,8 @@ import {
   createSettingsToggleRow,
 } from './settings-switch';
 import {
+  createGlobalContextPolicySelect,
+  applyArchiveEmbeddingsGate,
   mountSubAgentTypeEditor,
   mountWorkAgentConfigEditor,
   renderEntityEditorList,
@@ -1066,7 +1074,7 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialModelId: agent.modelId,
         initialDisabled: agent.disabled === true,
         initialMaxInputTokens: agent.maxInputTokens ?? null,
-        initialContextPolicy: agent.contextEnforcementPolicy ?? 'summarize',
+        initialContextPolicy: workAgentContextPolicySelectValue(id),
         initialArchive: agent.archive,
         onModelSaved: () => {
           void renderWorkAgentsSection();
@@ -1093,6 +1101,7 @@ async function renderSubAgentsSection(): Promise<void> {
         | 'defaultTimeoutMs'
         | 'checkInNudgeMs'
         | 'duplicateToolCallThreshold'
+        | 'defaultContextEnforcementPolicy'
       >
     >,
   ): Promise<void> => {
@@ -1155,12 +1164,18 @@ async function renderSubAgentsSection(): Promise<void> {
     'Identical tool calls before watchdog flags repetition (0 disables)',
   );
 
+  const globalPolicySel = createGlobalContextPolicySelect(
+    config.defaultContextEnforcementPolicy ?? 'summarize',
+  );
+  void applyArchiveEmbeddingsGate(globalPolicySel);
+
   const summary = createSettingsKvList([
     { term: 'Enabled', value: enabledSwitch },
     { term: 'Max concurrent', value: maxInput },
     { term: 'Default timeout', value: timeoutWrap },
     { term: 'Check-in nudge', value: nudgeWrap },
     { term: 'Duplicate tool limit', value: duplicateToolInput },
+    { term: 'Global context policy', value: globalPolicySel },
   ]);
 
   const globalBody = appendSettingsGroup(
@@ -1183,11 +1198,15 @@ async function renderSubAgentsSection(): Promise<void> {
 
   const saveTypePatch = async (
     typeId: string,
-    patch: Partial<SubAgentTypeConfig>,
+    patch: Partial<SubAgentTypeConfig & { contextEnforcementPolicy: ContextEnforcementPolicy | null }>,
   ): Promise<boolean> => {
-    const fresh = await loadSubAgentConfig();
-    const types = { ...fresh.types };
-    types[typeId] = { ...types[typeId], ...patch };
+    const userOverrides = getSubAgentUserOverridesSync() ?? {};
+    const typeUser = { ...(userOverrides.types?.[typeId] ?? {}) };
+    const nextType = { ...typeUser, ...patch } as SubAgentTypeConfig;
+    if (patch.contextEnforcementPolicy === null) {
+      delete (nextType as { contextEnforcementPolicy?: ContextEnforcementPolicy }).contextEnforcementPolicy;
+    }
+    const types = { ...(userOverrides.types ?? {}), [typeId]: nextType };
     return saveSubAgentConfigToServer({ types });
   };
 
@@ -1210,7 +1229,7 @@ async function renderSubAgentsSection(): Promise<void> {
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
           maxInputTokens: type.maxInputTokens ?? null,
-          contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'summarize',
+          contextEnforcementPolicy: subAgentContextPolicySelectValue(id),
           summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
         },
         (patch) => saveTypePatch(id, patch),
@@ -1247,6 +1266,12 @@ async function renderSubAgentsSection(): Promise<void> {
     );
     duplicateToolInput.value = String(value);
     void persistGlobal({ duplicateToolCallThreshold: value });
+  });
+
+  globalPolicySel.addEventListener('change', () => {
+    void persistGlobal({
+      defaultContextEnforcementPolicy: globalPolicySel.value as ContextEnforcementPolicy,
+    });
   });
 
 }

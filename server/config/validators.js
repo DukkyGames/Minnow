@@ -3081,7 +3081,8 @@ export function normalizeSubAgentsConfig(body) {
     defaultPolicy !== undefined &&
     defaultPolicy !== 'summarize' &&
     defaultPolicy !== 'slide' &&
-    defaultPolicy !== 'truncate'
+    defaultPolicy !== 'truncate' &&
+    defaultPolicy !== 'archive'
   ) {
     delete base.defaultContextEnforcementPolicy;
   }

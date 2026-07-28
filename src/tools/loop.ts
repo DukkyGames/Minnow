@@ -245,6 +245,7 @@ import {
   applyContextBudget,
   resolveContextBudget,
 } from '../chat/context-budget';
+import { resolveWorkAgentContextPolicy } from '../chat/resolve-context-policy';
 import {
   applyArchivePolicy,
   applyMemoizedCollapse,
@@ -1624,7 +1625,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let proseQuestionRetries = 0;
     let ephemeralPostToolInstruction: string | undefined;
     const workAgentBudget = activeWorkAgent
-      ? agentContextBudgetFromWorkAgent(activeWorkAgent)
+      ? agentContextBudgetFromWorkAgent(
+          activeWorkAgent,
+          resolveWorkAgentContextPolicy(activeWorkAgent.id),
+        )
       : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
 
     // Boot resume subscribes once; later tool-loop rounds must POST new generations (MIN-187).
