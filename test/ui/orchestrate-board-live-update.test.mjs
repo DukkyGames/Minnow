@@ -66,9 +66,10 @@ function kanbanColumnSelector(columnId) {
 
 /** Flush dynamic imports and sidebar/board repaints used by card clicks and view toggles. */
 async function flushUiWork() {
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let i = 0; i < 5; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 30));
 }
 
 function setupDom() {
