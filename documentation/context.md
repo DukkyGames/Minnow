@@ -225,7 +225,7 @@ Naming: `src/tools/loop.ts` is the tool-call/send loop — unrelated to `/loop`.
 
 ## Built-in tools
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; quick access from the Code/Chat composer **Tools** popover ([`src/ui/composer-tools-popover.ts`](../src/ui/composer-tools-popover.ts), [`src/styles/composer-tools-popover.css`](../src/styles/composer-tools-popover.css)) with segmented Off/Ask/Full rows, consolidated availability notices, web-search provider + session-cache toggles, and a link to full tool settings; persistence `tools.json` / `minnow.tools`. Optional `appId` on a catalog entry gates exposure through [`getEnabledToolCatalogEntries()`](../src/tools/client.ts) and [`fillToolsSection()`](../src/ui/tools-list.ts): email and calendar tools appear only when `isAppEnabled` for that app (developer `releaseState` plus user `disabledApps`).
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; quick access from the Code/Chat composer **Tools** popover ([`src/ui/composer-tools-popover.ts`](../src/ui/composer-tools-popover.ts), [`src/styles/composer-tools-popover.css`](../src/styles/composer-tools-popover.css)) with segmented Off/Ask/Full rows, consolidated availability notices, web-search provider (SearXNG, DuckDuckGo, Brave, Tavily — persisted to `search.json` with `tools.json` fallback) + session-cache toggles, and a link to full tool settings; persistence `tools.json` / `minnow.tools`. Optional `appId` on a catalog entry gates exposure through [`getEnabledToolCatalogEntries()`](../src/tools/client.ts) and [`fillToolsSection()`](../src/ui/tools-list.ts): email and calendar tools appear only when `isAppEnabled` for that app (developer `releaseState` plus user `disabledApps`).
 
 | Category | Examples | Runs on |
 |----------|----------|---------|
@@ -440,7 +440,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 ## Providers and models
 
-Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. Chat uses composite model keys (`providerId` + model id) in [`src/lib/model-select-key.ts`](../src/lib/model-select-key.ts).
+Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. Chat uses composite model keys (`providerId` + model id) in [`src/lib/model-select-key.ts`](../src/lib/model-select-key.ts). The top-bar picker and composer model menus share the same catalog via [`src/ui/model-select-picker.ts`](../src/ui/model-select-picker.ts); composer menus resolve **Load/Unload** against the **active chat model** (not the global menubar default) via [`src/ui/model-host-filter-context.ts`](../src/ui/model-host-filter-context.ts).
 
 **One-click presets:** shared catalog in [`src/providers/presets.ts`](../src/providers/presets.ts) — OpenCode Go/Zen, Anthropic, DeepSeek, GitHub Copilot, plus OpenRouter/OpenAI/Groq/Mistral. **Onboarding → Cloud API** shows preset chips with a green check when that provider already has a saved API key (`onboarding-cloud-<preset>` ids in the registry). **Settings → Providers** uses the `settings-general` emphasis-panel layout (like Routing and Usage): grouped picker (local servers, featured APIs, more cloud APIs, then custom), flat provider rows inside the configured panel, and related links to Routing and Usage. Styles: [`src/styles/settings-providers.css`](../src/styles/settings-providers.css).
 

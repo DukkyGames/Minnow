@@ -5,6 +5,12 @@
 
 import { getTools, putTools } from '../config/api-client';
 import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults';
+import {
+  loadSearchConfig,
+  saveSearchConfig,
+  toLegacyWebSearchProvider,
+  type SearchProvider,
+} from '../config/search-config';
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
@@ -490,16 +496,8 @@ export function loadToolConfigIntoDrawer(
     tavilyInput.value = config.keys.tavilyApiKey;
   }
 
-  for (const id of [
-    'webSearchProvider',
-    'composerToolsWebSearchProvider',
-    'chatAppToolsWebSearchProvider',
-  ] as const) {
-    const providerSelect = document.getElementById(id) as HTMLSelectElement | null;
-    if (providerSelect) {
-      providerSelect.value = config.webSearchProvider;
-    }
-  }
+  setWebSearchProviderSelects(config.webSearchProvider);
+  void syncWebSearchProviderFromSearchConfig();
 
   const cacheEnabled = config.toolCache?.enabled !== false;
   for (const id of ['settingsToolCacheEnabled', 'composerToolsCacheEnabled', 'chatAppToolsCacheEnabled'] as const) {
@@ -850,11 +848,57 @@ export function refreshServerToolDisabledState(): void {
   syncToolSelectAllControls(document);
 }
 
+/** Web search provider `<select>` ids (drawer + composer popovers). */
+const WEB_SEARCH_PROVIDER_SELECT_IDS = [
+  'webSearchProvider',
+  'composerToolsWebSearchProvider',
+  'chatAppToolsWebSearchProvider',
+] as const;
+
+/** Composer/drawer provider values that map to search.json. */
+const WEB_SEARCH_PROVIDER_VALUES = new Set<SearchProvider>([
+  'searxng',
+  'duckduckgo',
+  'brave',
+  'tavily',
+]);
+
+function isWebSearchProviderSelect(element: EventTarget | null): element is HTMLSelectElement {
+  if (!(element instanceof HTMLSelectElement)) return false;
+  return (WEB_SEARCH_PROVIDER_SELECT_IDS as readonly string[]).includes(element.id);
+}
+
+/** Keep every web-search provider dropdown in sync. */
+export function setWebSearchProviderSelects(provider: string): void {
+  for (const id of WEB_SEARCH_PROVIDER_SELECT_IDS) {
+    const providerSelect = document.getElementById(id) as HTMLSelectElement | null;
+    if (!providerSelect) continue;
+    const hasOption = Array.from(providerSelect.options).some((option) => option.value === provider);
+    if (hasOption) {
+      providerSelect.value = provider;
+    }
+  }
+}
+
+/** Load search.json provider into drawer/composer selects (search.json wins over tools.json). */
+export async function syncWebSearchProviderFromSearchConfig(): Promise<void> {
+  try {
+    const search = await loadSearchConfig();
+    if (search.provider === 'disabled') return;
+    setWebSearchProviderSelects(search.provider);
+  } catch {
+    // Vite-only or server down — tools.json value from loadToolConfigIntoDrawer is enough.
+  }
+}
+
 /** Persist web search provider and API keys from drawer or composer popover fields. */
-export function saveWebSearchSettingsFromDrawer(): void {
+export function saveWebSearchSettingsFromDrawer(event?: Event): void {
   const braveInput = document.getElementById('braveApiKey') as HTMLInputElement | null;
   const tavilyInput = document.getElementById('tavilyApiKey') as HTMLInputElement | null;
+  const eventTarget = event?.target ?? null;
+  const changedProviderSelect = isWebSearchProviderSelect(eventTarget) ? eventTarget : null;
   const providerSelect =
+    changedProviderSelect ??
     (document.getElementById('webSearchProvider') as HTMLSelectElement | null) ??
     (document.getElementById('composerToolsWebSearchProvider') as HTMLSelectElement | null) ??
     (document.getElementById('chatAppToolsWebSearchProvider') as HTMLSelectElement | null);
@@ -867,13 +911,36 @@ export function saveWebSearchSettingsFromDrawer(): void {
   if (tavilyInput) {
     config.keys.tavilyApiKey = tavilyInput.value.trim();
   }
-  if (providerSelect) {
-    const value = providerSelect.value;
-    if (value === 'brave' || value === 'tavily' || value === 'duckduckgo') {
-      config.webSearchProvider = value;
+
+  const providerValue = providerSelect?.value;
+  const searchProvider =
+    providerValue && WEB_SEARCH_PROVIDER_VALUES.has(providerValue as SearchProvider)
+      ? (providerValue as SearchProvider)
+      : null;
+
+  if (searchProvider) {
+    setWebSearchProviderSelects(searchProvider);
+    const legacyProvider = toLegacyWebSearchProvider(searchProvider);
+    if (legacyProvider) {
+      config.webSearchProvider = legacyProvider;
     }
   }
+
   saveToolConfig(config);
+
+  if (searchProvider) {
+    void (async () => {
+      try {
+        const search = await loadSearchConfig();
+        await saveSearchConfig({ ...search, provider: searchProvider });
+      } catch {
+        // search.json is server-backed; tools.json still updated for legacy providers.
+      }
+      loadToolConfigIntoDrawer(document);
+    })();
+    return;
+  }
+
   loadToolConfigIntoDrawer(document);
 }
 

@@ -227,6 +227,7 @@ describe('settings page HTML', () => {
     assert.match(html, /id="composerToolsServerBanner"/);
     assert.match(html, /id="composerToolsStatus"/);
     assert.match(html, /id="composerToolsWebSearchProvider"/);
+    assert.match(html, /id="composerToolsWebSearchProvider"[^>]*>[\s\S]*value="searxng"/);
     assert.match(html, /id="composerToolsCacheEnabled"/);
     assert.match(html, /id="composerToolsOpenSettings"/);
     assert.match(html, /class="tools-list tools-list--composer"/);

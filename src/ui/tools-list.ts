@@ -318,7 +318,7 @@ export function fillToolsSection(
       bodyNodes.push(row);
     }
 
-    if (variant === 'settings') {
+    if (variant === 'settings' || variant === 'composer') {
       container.appendChild(
         wrapCollapsibleToolGroup(category, tools.length, head, bodyNodes),
       );
@@ -367,8 +367,8 @@ export function registerToolHandlers(): void {
   for (const id of webSearchFields) {
     const el = document.getElementById(id);
     if (!el) continue;
-    el.addEventListener('input', saveWebSearchSettingsFromDrawer);
-    el.addEventListener('change', saveWebSearchSettingsFromDrawer);
+    el.addEventListener('input', (event) => saveWebSearchSettingsFromDrawer(event));
+    el.addEventListener('change', (event) => saveWebSearchSettingsFromDrawer(event));
   }
 
   for (const id of ['settingsToolCacheEnabled', 'composerToolsCacheEnabled', 'chatAppToolsCacheEnabled']) {
