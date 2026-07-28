@@ -12,12 +12,10 @@ import {
   registerChromePopover,
   unregisterChromePopover,
 } from '../ui/preview-electron-visibility';
+import { APP_SWITCHER_DESKTOP_ID, type AppSwitcherItemId } from './surface-id';
 import type { AppId } from './types';
 
-/** Synthetic id for the Desktop home entry (not an AppId). */
-export const APP_SWITCHER_DESKTOP_ID = 'desktop' as const;
-
-export type AppSwitcherItemId = typeof APP_SWITCHER_DESKTOP_ID | AppId;
+export { APP_SWITCHER_DESKTOP_ID, type AppSwitcherItemId } from './surface-id';
 
 /** One tile in the switcher grid (Desktop first, then dock apps). */
 export interface AppSwitcherItem {

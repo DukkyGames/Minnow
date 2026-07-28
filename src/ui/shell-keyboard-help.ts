@@ -16,6 +16,11 @@ const SHELL_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Shell', keys: '?', label: 'Open this keyboard shortcuts list' },
   { section: 'Shell', keys: 'Escape', label: 'Close overlays, popovers, and side panels' },
   { section: 'Shell', keys: 'Alt + `', label: 'Cycle focus among open floating windows' },
+  {
+    section: 'Shell',
+    keys: 'Ctrl + Tab / Ctrl + Shift + Tab',
+    label: 'Cycle between Desktop and recent Minnow apps (Cmd+Tab on macOS stays with the OS)',
+  },
   { section: 'Shell', keys: 'Tab / Shift+Tab', label: 'Move focus through dock, menubar, and app chrome' },
 ];
 

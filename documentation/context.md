@@ -501,7 +501,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 
 Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, `test:a11y`, …).
 
-**Accessibility:** [guides/accessibility-audit.md](guides/accessibility-audit.md) — per-app keyboard checklist, NVDA smoke notes, contrast tokens. Regression: `npm run test:a11y` (`test/a11y/`, `test/theme-contrast.test.mts`). Global shortcuts overlay: **`?`** ([`src/ui/shell-keyboard-help.ts`](../src/ui/shell-keyboard-help.ts)). Streaming SR throttling: [`src/ui/a11y/stream-announcer.ts`](../src/ui/a11y/stream-announcer.ts). Window focus cycle: Alt+` ([`src/os/window-focus-cycle.ts`](../src/os/window-focus-cycle.ts)).
+**Accessibility:** [guides/accessibility-audit.md](guides/accessibility-audit.md) — per-app keyboard checklist, NVDA smoke notes, contrast tokens. Regression: `npm run test:a11y` (`test/a11y/`, `test/theme-contrast.test.mts`). Global shortcuts overlay: **`?`** ([`src/ui/shell-keyboard-help.ts`](../src/ui/shell-keyboard-help.ts)). Streaming SR throttling: [`src/ui/a11y/stream-announcer.ts`](../src/ui/a11y/stream-announcer.ts). App surface cycle: Ctrl+Tab / Ctrl+Shift+Tab ([`src/os/app-focus-cycle.ts`](../src/os/app-focus-cycle.ts)). Window focus cycle: Alt+` ([`src/os/window-focus-cycle.ts`](../src/os/window-focus-cycle.ts)).
 
 ---
 

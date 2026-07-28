@@ -15,6 +15,7 @@ Most single-key shortcuts (mail triage, tool approval digits) are **suppressed w
 | **Escape** | Close open overlays and popovers (tools permissions, context usage breakdown, code-change panel, modals, drawers, and other dismissible layers). Wired from [`src/main.ts`](../../src/main.ts) and per-surface handlers. |
 | **Mod+A** | Select all **within the focused panel** (chat transcript, editor, preview, orchestrate chat pane, onboarding chat) instead of the whole app shell ([`scoped-select-all.ts`](../../src/ui/scoped-select-all.ts)). Native controls and CodeMirror/xterm keep their built-in select-all. |
 | **Tab** / **Shift+Tab** | Move focus through dock, menubar, sidebars, and app chrome (standard browser tab order). |
+| **Ctrl+Tab** / **Ctrl+Shift+Tab** | Cycle between **Desktop** and recently used Minnow apps (dock apps), macOS **Cmd+Tab**–style within Minnow. Uses **Ctrl** only — not **Cmd** on macOS (system app switcher) and not **Mod+Tab** in the Code editor (file tabs). When the Code editor or unified tab strip has focus on Windows/Linux, **Ctrl+Tab** still cycles file tabs there first. |
 
 ---
 
@@ -201,6 +202,8 @@ Common patterns across sub-agent drawer, question cards, git lightboxes, researc
 | Area | Primary module |
 |------|----------------|
 | Global Escape | [`src/main.ts`](../../src/main.ts) |
+| App surface cycle | [`src/os/app-focus-cycle.ts`](../../src/os/app-focus-cycle.ts) |
+| Floating window cycle | [`src/os/window-focus-cycle.ts`](../../src/os/window-focus-cycle.ts) |
 | Composer | [`src/ui/input.ts`](../../src/ui/input.ts), [`src/ui/skill-picker.ts`](../../src/ui/skill-picker.ts) |
 | Editor | [`src/ui/file-editor-keymap.ts`](../../src/ui/file-editor-keymap.ts), [`src/ui/editor-core-extensions.ts`](../../src/ui/editor-core-extensions.ts) |
 | File tree | [`src/ui/file-tree.ts`](../../src/ui/file-tree.ts) |
