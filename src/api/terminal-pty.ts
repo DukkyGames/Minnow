@@ -49,7 +49,28 @@ export async function fetchShellProfiles(): Promise<{
   };
 }
 
-/** Create a new PTY session on the server. */
+export interface PtySessionMeta {
+  sessionId: string;
+  shellProfileId: string;
+  shell: string;
+  cwd: string;
+  cols: number;
+  rows: number;
+  chatId: string | null;
+  exited: boolean;
+  exitCode: number | null;
+}
+
+/** List live PTY sessions on the server (for reconnect after reload). */
+export async function fetchTerminalSessions(
+  chatId?: string,
+): Promise<{ sessions: PtySessionMeta[] }> {
+  const qs = chatId ? `?chatId=${encodeURIComponent(chatId)}` : '';
+  const res = await fetch(`/api/terminal/sessions${qs}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`sessions ${res.status}`);
+  const body = (await res.json()) as { sessions?: PtySessionMeta[] };
+  return { sessions: body.sessions ?? [] };
+}
 export async function createTerminalSession(options: {
   shellProfileId?: string;
   cols?: number;

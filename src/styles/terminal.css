@@ -5,6 +5,8 @@
   --terminal-line-height: 1.55;
   --terminal-padding-y: 10px;
   --terminal-padding-x: 12px;
+  /* Minimum PTY viewport (#terminalXtermHost); panel resize clamps above this + chrome. */
+  --terminal-xterm-min-height: 311px;
 }
 
 .terminal-panel {
@@ -500,13 +502,30 @@
 
 .terminal-xterm-host {
   flex: 1;
-  min-height: 0;
+  min-height: var(--terminal-xterm-min-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: var(--terminal-padding-y) var(--terminal-padding-x);
   background: var(--mn-bg);
 }
 
-.terminal-xterm-host .xterm {
-  height: 100%;
+/* FitAddon sizes against this inner box (host padding excluded). */
+.terminal-xterm-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--mn-bg);
+}
+
+/* FitAddon sizes rows to the viewport; do not stretch past the cell grid. */
+.terminal-xterm-viewport .xterm {
+  width: 100%;
+}
+
+/* xterm.css defaults the scroll viewport to #000; match the Minnow canvas. */
+.terminal-xterm-viewport .xterm .xterm-viewport {
+  background-color: var(--mn-bg);
 }
 
 .terminal-output .stderr-line {

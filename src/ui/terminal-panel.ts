@@ -26,6 +26,7 @@ import { registerShellRun, unregisterShellRun } from './shell-run-registry';
 import { refreshShellKillUi } from './shell-run-ui';
 import {
   detachAllTerminalTabs,
+  flushTerminalTabsForUnload,
   initTerminalTabs,
   isTerminalTabsInitialized,
   onTerminalPanelResize,
@@ -54,8 +55,7 @@ import {
   resolveFileExplorerTerminalCwd,
   terminalCwdsEqual,
 } from './terminal-worktree-cwd';
-
-const MIN_HEIGHT_PX = 120;
+import { resolveTerminalPanelMinHeightPx } from './terminal-layout';
 const MAX_HEIGHT_RATIO = 0.5;
 const MAIN_COLUMN_TERMINAL_MAX_CLASS = 'main-column--terminal-maximized';
 
@@ -98,12 +98,28 @@ export interface TerminalStreamHooks {
 
 let externalHooks: TerminalStreamHooks = {};
 
+function minPanelHeight(): number {
+  return resolveTerminalPanelMinHeightPx(panelEl, xtermHostEl);
+}
+
 function maxPanelHeight(): number {
-  return Math.floor(window.innerHeight * MAX_HEIGHT_RATIO);
+  const ratioCap = Math.floor(window.innerHeight * MAX_HEIGHT_RATIO);
+  if (!panelEl) return ratioCap;
+
+  const mainColumn = document.getElementById('mainColumn');
+  if (!mainColumn) return ratioCap;
+
+  // Panel bottom is anchored to the main column; cap height so the header cannot
+  // scroll above the column top when the dock is tall or the window is short.
+  const panelBottom = panelEl.getBoundingClientRect().bottom;
+  const columnTop = mainColumn.getBoundingClientRect().top;
+  const structuralCap = Math.floor(panelBottom - columnTop - 8);
+
+  return Math.max(minPanelHeight(), Math.min(ratioCap, structuralCap));
 }
 
 function clampHeight(px: number): number {
-  return Math.min(maxPanelHeight(), Math.max(MIN_HEIGHT_PX, px));
+  return Math.min(maxPanelHeight(), Math.max(minPanelHeight(), px));
 }
 
 function isTerminalMaximized(): boolean {
@@ -953,6 +969,7 @@ export async function initTerminalPanel(): Promise<void> {
   }
 
   window.addEventListener('pagehide', () => {
+    flushTerminalTabsForUnload();
     void detachAllTerminalTabs();
   });
 

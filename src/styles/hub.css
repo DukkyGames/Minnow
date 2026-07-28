@@ -197,18 +197,6 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   overflow: hidden;
 }
 
-.input-bar--hub .composer-tools-btn--toolbar {
-  background: transparent;
-  border-color: transparent;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .input-bar--hub .composer-tools-btn--toolbar:hover {
-    background: var(--mn-surface-2);
-    border-color: var(--mn-border);
-  }
-}
-
 .input-bar--hub .composer-controls .mode-segmented {
   flex: 1 1 auto;
   width: auto;
@@ -284,8 +272,9 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   height: 52px;
 }
 
-.input-bar--hub .input-bar-send-stack .view-mode-toggle-btn--to-board {
-  width: 52px;
+.input-bar--hub .composer-controls__trail .view-mode-toggle-btn--to-board {
+  width: 32px;
+  height: 32px;
 }
 
 .input-bar--hub #msgInput {
@@ -859,8 +848,13 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
     --input-inset-btn-size: 40px;
   }
 
-  .input-bar--hub .input-bar-send-stack .send-btn,
-  .input-bar--hub .input-bar-send-stack .view-mode-toggle-btn--to-board {
+  .input-bar--hub .input-bar-send-stack .send-btn {
+    width: var(--touch-min, 44px);
+    height: var(--touch-min, 44px);
+  }
+
+  .input-bar--hub .composer-controls__trail .view-mode-toggle-btn--to-board,
+  .input-bar--hub .composer-controls__trail .composer-tools-btn--toolbar {
     width: var(--touch-min, 44px);
     height: var(--touch-min, 44px);
   }

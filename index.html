@@ -2252,6 +2252,9 @@
             </label>
           </div>
           <div class="composer-controls__trail">
+            <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
+              <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
+            </button>
             <div class="composer-tools-anchor">
               <button type="button" class="composer-tools-btn composer-tools-btn--toolbar" id="btnComposerTools"
                 aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
@@ -2282,9 +2285,6 @@
         </div>
       </div>
       <div class="input-bar-send-stack">
-        <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
-          <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
-        </button>
         <button class="send-btn" id="sendBtn" type="button" aria-label="Send message" data-mode="send">
           <span id="sendIcon"><svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg></span>
           <span id="sendStopIcon" class="hidden"><i class="fi fi-rr-square icon-svg" aria-hidden="true"></i></span>

@@ -1357,6 +1357,9 @@ export function mergeConfigMeta(existing, patch) {
           ...(tab.chatId === null || typeof tab.chatId === 'string'
             ? { chatId: tab.chatId }
             : {}),
+          ...(tab.sessionId === null || typeof tab.sessionId === 'string'
+            ? { sessionId: tab.sessionId }
+            : {}),
           order: typeof tab.order === 'number' ? tab.order : tabs.length,
         });
         if (tabs.length >= 12) break;

@@ -614,7 +614,7 @@ export function initComposerModelTriggers(): void {
     const codeAnchor = document.createElement('div');
     codeAnchor.id = 'codeComposerModelAnchor';
     codeAnchor.className = 'composer-model-trigger-anchor';
-    codeTrail.insertBefore(codeAnchor, toolsAnchor);
+    codeTrail.insertBefore(codeAnchor, codeTrail.firstChild);
     mountComposerModelTrigger(codeAnchor, 'code');
   }
 }

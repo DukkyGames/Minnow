@@ -2,6 +2,8 @@
  * Terminal panel preferences in ~/.minnow/config.json (`terminal` block).
  */
 
+import { TERMINAL_PANEL_MIN_HEIGHT_PX } from '../ui/terminal-layout';
+
 export interface TerminalTabMeta {
   id: string;
   shellProfileId: string;
@@ -9,6 +11,8 @@ export interface TerminalTabMeta {
   /** Absolute cwd when the PTY tab was opened (MIN-349 tab scope labels). */
   boundCwd?: string;
   chatId?: string | null;
+  /** Live PTY session id for reconnect after SPA reload (server must still be running). */
+  sessionId?: string | null;
   order: number;
 }
 
@@ -29,7 +33,7 @@ export interface TerminalMeta {
 
 const DEFAULT_TERMINAL_META: TerminalMeta = {
   open: false,
-  heightPx: 240,
+  heightPx: TERMINAL_PANEL_MIN_HEIGHT_PX,
   autoOpenOnAgentRun: false,
   autoFollowAgentTab: false,
   tabs: [],
@@ -56,6 +60,10 @@ function normalizeTab(raw: unknown, index: number): TerminalTabMeta | null {
       row.chatId === null || typeof row.chatId === 'string'
         ? (row.chatId as string | null)
         : null,
+    sessionId:
+      row.sessionId === null || typeof row.sessionId === 'string'
+        ? (row.sessionId as string | null)
+        : undefined,
     order: typeof row.order === 'number' ? row.order : index,
   };
 }
@@ -73,7 +81,7 @@ function normalizeTerminalMeta(raw: unknown): TerminalMeta {
     open: row.open === true,
     heightPx:
       typeof row.heightPx === 'number' && Number.isFinite(row.heightPx)
-        ? Math.min(800, Math.max(120, Math.round(row.heightPx)))
+        ? Math.min(800, Math.max(TERMINAL_PANEL_MIN_HEIGHT_PX, Math.round(row.heightPx)))
         : DEFAULT_TERMINAL_META.heightPx,
     autoOpenOnAgentRun: row.autoOpenOnAgentRun === true,
     autoFollowAgentTab: row.autoFollowAgentTab === true,
@@ -118,10 +126,11 @@ export async function loadTerminalMeta(): Promise<TerminalMeta> {
   }
 }
 
-/** Persist terminal prefs via PUT /api/config/meta. */
-export async function saveTerminalMeta(patch: Partial<TerminalMeta>): Promise<void> {
-  const current = await loadTerminalMeta();
-  const next: TerminalMeta = {
+function mergeTerminalMetaPatch(
+  current: TerminalMeta,
+  patch: Partial<TerminalMeta>,
+): TerminalMeta {
+  return {
     open: patch.open ?? current.open,
     heightPx: patch.heightPx ?? current.heightPx,
     autoOpenOnAgentRun: patch.autoOpenOnAgentRun ?? current.autoOpenOnAgentRun,
@@ -134,12 +143,38 @@ export async function saveTerminalMeta(patch: Partial<TerminalMeta>): Promise<vo
     workspaceShellProfiles:
       patch.workspaceShellProfiles ?? current.workspaceShellProfiles,
   };
+}
+
+/** Persist terminal prefs via PUT /api/config/meta. */
+export async function saveTerminalMeta(patch: Partial<TerminalMeta>): Promise<void> {
+  const current = await loadTerminalMeta();
+  const next = mergeTerminalMetaPatch(current, patch);
   cached = next;
   await fetch('/api/config/meta', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ terminal: next }),
   });
+}
+
+/**
+ * Best-effort terminal persist for pagehide/unload (keepalive fetch).
+ * Uses the in-memory cache; call after merging live tab state into the patch.
+ */
+export function saveTerminalMetaKeepalive(patch: Partial<TerminalMeta>): void {
+  const current = getTerminalMetaCached();
+  const next = mergeTerminalMetaPatch(current, patch);
+  cached = next;
+  try {
+    void fetch('/api/config/meta', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terminal: next }),
+      keepalive: true,
+    });
+  } catch {
+    /* unload */
+  }
 }
 
 export function getTerminalMetaCached(): TerminalMeta {

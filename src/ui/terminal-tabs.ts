@@ -14,10 +14,12 @@ import {
   getTerminalMetaCached,
   loadTerminalMeta,
   saveTerminalMeta,
+  saveTerminalMetaKeepalive,
   type TerminalTabMeta,
 } from '../config/terminal-meta';
 import {
   attachTerminalTab,
+  clearTabHistory,
   detachTerminalTab,
   disconnectActiveTerminalWs,
   fitTerminalXterm,
@@ -93,9 +95,10 @@ function metaToSession(meta: TerminalTabMeta): TerminalTabSession {
   return {
     tabId: meta.id,
     shellProfileId: meta.shellProfileId,
-    sessionId: null,
+    sessionId: meta.sessionId ?? null,
     title: meta.title ?? meta.shellProfileId,
     boundCwd: meta.boundCwd,
+    chatId: meta.chatId,
   };
 }
 
@@ -106,6 +109,7 @@ function sessionsToMeta(): TerminalTabMeta[] {
     title: t.title,
     boundCwd: t.boundCwd,
     chatId: t.chatId ?? null,
+    sessionId: t.sessionId ?? null,
     order: i,
   }));
 }
@@ -306,6 +310,7 @@ export async function closeTab(tabId: string): Promise<void> {
   const tab = liveTabs.get(tabId);
   if (!tab) return;
   await detachTerminalTab(tab, true);
+  clearTabHistory(tabId);
   liveTabs.delete(tabId);
 
   const meta = getTerminalMetaCached();
@@ -333,10 +338,23 @@ export function isTerminalTabsInitialized(): boolean {
   return tabsInitialized;
 }
 
-/** Close all live tabs and kill server PTY sessions (e.g. on page unload). */
+/**
+ * Persist open PTY tab metadata before unload so reload restores the tab bar.
+ * Uses keepalive fetch; safe to call from pagehide.
+ */
+export function flushTerminalTabsForUnload(): void {
+  if (!tabsInitialized || liveTabs.size === 0) return;
+  const activeId = getTerminalMetaCached().activeTabId ?? null;
+  saveTerminalMetaKeepalive({
+    tabs: sessionsToMeta(),
+    activeTabId: activeId,
+  });
+}
+
+/** Disconnect all tabs on unload; server PTYs stay alive for reconnect after reload. */
 export async function detachAllTerminalTabs(): Promise<void> {
   for (const tab of liveTabs.values()) {
-    await detachTerminalTab(tab, true);
+    await detachTerminalTab(tab, false);
   }
   liveTabs.clear();
   tabsInitialized = false;
@@ -354,7 +372,10 @@ export async function initTerminalTabs(
 
   setTerminalSessionEndedHandler((tabId) => {
     const tab = liveTabs.get(tabId);
-    if (tab) tab.sessionId = null;
+    if (!tab) return;
+    tab.sessionId = null;
+    const activeId = getTerminalMetaCached().activeTabId ?? null;
+    void persistTabs(activeId);
   });
 
   shellSelect.addEventListener('change', () => {
