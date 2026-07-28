@@ -93,17 +93,22 @@ export function estimateApiMessagesTokens(messages: ApiMessage[]): number {
   return total;
 }
 
-export function agentContextBudgetFromWorkAgent(agent: {
-  maxInputTokens?: number | null;
-  contextEnforcementPolicy?: ContextEnforcementPolicy | null;
-  minRecentTurns?: number;
-  summaryReserveTokens?: number;
-  archive?: ArchiveConfig;
-}): AgentContextBudgetConfig {
+export function agentContextBudgetFromWorkAgent(
+  agent: {
+    maxInputTokens?: number | null;
+    contextEnforcementPolicy?: ContextEnforcementPolicy | null;
+    minRecentTurns?: number;
+    summaryReserveTokens?: number;
+    archive?: ArchiveConfig;
+  },
+  resolvedPolicy?: ContextEnforcementPolicy,
+): AgentContextBudgetConfig {
   return {
     maxInputTokens: normalizePositiveInt(agent.maxInputTokens ?? null),
     enforcementPolicy:
-      agent.contextEnforcementPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+      resolvedPolicy ??
+      agent.contextEnforcementPolicy ??
+      DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
     minRecentTurns: agent.minRecentTurns,
     summaryReserveTokens: agent.summaryReserveTokens,
     archive: agent.archive,
@@ -112,8 +117,9 @@ export function agentContextBudgetFromWorkAgent(agent: {
 
 export function agentContextBudgetFromSubAgentType(
   type: Parameters<typeof agentContextBudgetFromWorkAgent>[0],
+  resolvedPolicy?: ContextEnforcementPolicy,
 ): AgentContextBudgetConfig {
-  return agentContextBudgetFromWorkAgent(type);
+  return agentContextBudgetFromWorkAgent(type, resolvedPolicy);
 }
 
 export function resolveContextBudget(params: {

@@ -10,10 +10,16 @@ import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import type { WorkAgentDefinition } from '../agents/work-agent-types';
 import {
   clampDuplicateToolCallThreshold,
+  getSubAgentUserOverridesSync,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
 } from '../agents/sub-agent-config';
 import type { SubAgentTypeConfig } from '../agents/types';
+import type { ContextEnforcementPolicy } from '../chat/context-budget';
+import {
+  subAgentContextPolicySelectValue,
+  workAgentContextPolicySelectValue,
+} from '../chat/resolve-context-policy';
 import { listModes } from '../chat/modes/registry';
 import { createModeMaskIcon } from './mode-icons';
 import { createIcon } from './icon';
@@ -22,6 +28,8 @@ import { isServerStorageMode } from '../config/storage-mode';
 import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 import { appendSettingsOfflineHint, createSettingsKvList, createSettingsSelectRow } from './settings-controls';
 import {
+  createGlobalContextPolicySelect,
+  applyArchiveEmbeddingsGate,
   mountPromptFileEditor,
   mountSubAgentTypeEditor,
   mountWorkAgentConfigEditor,
@@ -50,6 +58,21 @@ export interface AgentCenterCard {
   meta?: string;
   searchKey: string;
   disabled?: boolean;
+}
+
+
+async function saveSubAgentTypePatch(
+  typeId: string,
+  patch: Partial<SubAgentTypeConfig & { contextEnforcementPolicy: import('../chat/context-budget').ContextEnforcementPolicy | null }>,
+): Promise<boolean> {
+  const userOverrides = getSubAgentUserOverridesSync() ?? {};
+  const typeUser = { ...(userOverrides.types?.[typeId] ?? {}) };
+  const nextType = { ...typeUser, ...patch } as SubAgentTypeConfig;
+  if (patch.contextEnforcementPolicy === null) {
+    delete (nextType as { contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy }).contextEnforcementPolicy;
+  }
+  const types = { ...(userOverrides.types ?? {}), [typeId]: nextType };
+  return saveSubAgentConfigToServer({ types });
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -225,7 +248,7 @@ function openWorkAgentLightbox(agent: WorkAgentDefinition): void {
           initialModelId: agent.modelId,
           initialDisabled: agent.disabled === true,
           initialMaxInputTokens: agent.maxInputTokens ?? null,
-          initialContextPolicy: agent.contextEnforcementPolicy ?? 'summarize',
+          initialContextPolicy: workAgentContextPolicySelectValue(agent.id),
           initialArchive: agent.archive,
         });
       });
@@ -263,14 +286,11 @@ function openSubAgentLightbox(
             enabled: type.enabled !== false,
             maxConcurrent: type.maxConcurrent,
             maxInputTokens: type.maxInputTokens ?? null,
-            contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'summarize',
+            contextEnforcementPolicy: subAgentContextPolicySelectValue(typeId),
             summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
           },
           async (patch) => {
-            const fresh = await loadSubAgentConfig();
-            const types = { ...fresh.types };
-            types[typeId] = { ...types[typeId], ...patch };
-            const ok = await saveSubAgentConfigToServer({ types });
+            const ok = await saveSubAgentTypePatch(typeId, patch);
             if (ok) onRefresh();
             return ok;
           },
@@ -379,6 +399,39 @@ const AGENT_CENTER_CARD_SECTIONS: {
     searchKey: 'agents.subAgents',
   },
 ];
+
+/** Mount global context policy default for all agents. */
+async function mountGlobalContextPolicy(mount: HTMLElement): Promise<void> {
+  const config = await loadSubAgentConfig();
+  const groupBody = appendSettingsGroup(
+    mount,
+    'Context policy',
+    'Default enforcement for work agents and sub-agent types unless they set their own policy.',
+    'agents.contextPolicy',
+    { emphasis: true },
+  );
+
+  const policySel = createGlobalContextPolicySelect(
+    config.defaultContextEnforcementPolicy ?? 'summarize',
+  );
+  void applyArchiveEmbeddingsGate(policySel);
+
+  groupBody.appendChild(
+    createSettingsSelectRow('Global default', { select: policySel }).row,
+  );
+
+  policySel.addEventListener('change', () => {
+    void (async () => {
+      const ok = await saveSubAgentConfigToServer({
+        defaultContextEnforcementPolicy: policySel.value as ContextEnforcementPolicy,
+      });
+      setStatus(
+        ok ? 'ok' : 'err',
+        ok ? 'Global context policy updated' : 'Save failed — use npm start',
+      );
+    })();
+  });
+}
 
 /** Mount global sub-agent limits as an emphasis panel (matches General settings groups). */
 async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
@@ -556,6 +609,7 @@ export async function renderAgentCenterPanel(
   const agents = remote?.agents ?? [];
   const allCards = await loadAgentCenterCards(agents);
 
+  await mountGlobalContextPolicy(content);
   await mountGlobalSubAgentLimits(content);
 
   const sectionGrids = new Map<AgentCenterSectionId, HTMLUListElement>();

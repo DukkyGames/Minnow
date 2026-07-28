@@ -3,6 +3,7 @@
  */
 
 import { mergeUserWorkAgentOverride } from './work-agent-registry';
+import type { ContextEnforcementPolicy } from '../chat/context-budget';
 
 export type WorkAgentPromptProfile = 'full' | 'lite';
 
@@ -88,7 +89,7 @@ export async function patchWorkAgentOverride(
     modelId?: string | null;
     disabled?: boolean;
     maxInputTokens?: number | null;
-    contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy;
+    contextEnforcementPolicy?: ContextEnforcementPolicy | null;
     minRecentTurns?: number;
     summaryReserveTokens?: number;
     archive?: import('../chat/archive/types').ArchiveConfig | null;
