@@ -91,6 +91,7 @@ const EXPECTED_INIT_BOARD_JSON = `{
   "timerAccumulatedMs": 0,
   "maxConcurrentTasks": 3,
   "executionMode": "manual",
+  "modelId": "test-model",
   "log": [
     {
       "type": "board_init",
