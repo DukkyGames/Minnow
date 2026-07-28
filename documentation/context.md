@@ -1,6 +1,6 @@
 ﻿# Minnow — project context
 
-Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`guides/setup.md`](guides/setup.md) and [`guides/commands.md`](guides/commands.md). Product overview: [`README.md`](../README.md).
+Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`guides/setup.md`](guides/setup.md) and [`guides/commands.md`](guides/commands.md). UI key bindings: [`guides/keyboard-shortcuts.md`](guides/keyboard-shortcuts.md). Product overview: [`README.md`](../README.md).
 
 **Also useful:** [`guides/configuration.md`](guides/configuration.md) (storage layout), [`DESIGN.md`](../DESIGN.md) (visual tokens), [`AGENTS.md`](../AGENTS.md) (agent quick reference), [`plans/`](plans/) (in-flight feature plans).
 

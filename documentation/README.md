@@ -9,6 +9,7 @@ Everything written down about Minnow, in one index. New here? Read [Setup](guide
 | [Setup](guides/setup.md) | Prerequisites, install, providers, first run, optional extras. |
 | [Apps](guides/apps.md) | The eight apps, the composer modes, and what's behind the release gate. |
 | [Commands](guides/commands.md) | Every npm script, the headless CLI, test suites, environment variables. |
+| [Keyboard shortcuts](guides/keyboard-shortcuts.md) | Composer, editor, file tree, terminal, mail, and global key bindings. |
 | [Orchestrate board testing](guides/orchestrate-board-testing.md) | `test:board`, fake model, seed board, log invariants. |
 | [Configuration](guides/configuration.md) | The `~/.minnow` folder, `config.json`, providers, encrypted secrets. |
 | [Troubleshooting](guides/troubleshooting.md) | When it won't start, won't connect, or a tool won't run. |

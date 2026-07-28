@@ -2,6 +2,8 @@
 
 Every npm script, the headless CLI, smoke/maintenance scripts, and environment variables. Source of truth: [`package.json`](../../package.json).
 
+For UI key bindings (composer, editor, file tree, terminal, mail), see [Keyboard shortcuts](keyboard-shortcuts.md).
+
 ## Running & building
 
 | Command | Description |
