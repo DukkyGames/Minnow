@@ -168,6 +168,52 @@ describe('applyContextBudget slide', () => {
 });
 
 describe('applyContextBudget summarize', () => {
+  test('summarizes board-task tool loops after a single user seed', () => {
+    // Orchestrate board chats: one user seed, then many assistant/tool rounds.
+    // Older logic treated that as one turn so summarize could never inject.
+    const messages: ApiMessage[] = [system('sys')];
+    messages.push(user('Execute orchestrate task W1-A'));
+    for (let round = 0; round < 8; round += 1) {
+      messages.push(
+        assistantWithTools(null, [
+          {
+            id: `call_${round}`,
+            type: 'function',
+            function: { name: 'read_file', arguments: '{}' },
+          },
+        ]),
+      );
+      messages.push(toolResult(`call_${round}`, (`body ${round} `).repeat(20)));
+    }
+    const resolved = resolveContextBudget({
+      agentConfig: {
+        maxInputTokens: 200,
+        enforcementPolicy: 'summarize',
+        minRecentTurns: 2,
+        summaryReserveTokens: 32,
+      },
+      modelLimit: null,
+    });
+    const out = applyContextBudget(messages, resolved, {
+      maxInputTokens: 200,
+      enforcementPolicy: 'summarize',
+      minRecentTurns: 2,
+      summaryReserveTokens: 32,
+    });
+    assert.equal(out.applied, true);
+    assert.equal(out.summaryInjected, true);
+    assert.ok(out.droppedMessageCount > 0);
+    assert.ok(out.tokensAfter <= (resolved.effectiveLimit ?? 0));
+    const hasSummary = out.messages.some(
+      (m) =>
+        m.role === 'user' &&
+        typeof m.content === 'string' &&
+        m.content.includes('Prior context (compressed)'),
+    );
+    assert.ok(hasSummary);
+    assertValidToolSequence(out.messages);
+  });
+
   test('injects summary and stays under limit', () => {
     const messages: ApiMessage[] = [
       system('sys'),
