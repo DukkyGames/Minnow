@@ -40,7 +40,8 @@ const FIXED_HEALTH_PORT = 7788;
 async function seedSearxngInstalled() {
   const venvDir = getServerVenvDir('searxng');
   await fsp.rm(venvDir, { recursive: true, force: true });
-  const systemPython = process.env.SEARXNG_TEST_PYTHON ?? 'python';
+  const systemPython =
+    process.env.SEARXNG_TEST_PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3');
   await createVenv(systemPython, venvDir);
   const searxInit = path.join(getServerDir('searxng'), 'src', 'searx', '__init__.py');
   await fsp.mkdir(path.dirname(searxInit), { recursive: true });

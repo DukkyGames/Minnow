@@ -55,7 +55,10 @@ async function validateImageUrl(rawUrl) {
     throw new Error('url must use http or https');
   }
 
-  const hostname = (parsed.hostname || '').trim().toLowerCase();
+  let hostname = (parsed.hostname || '').trim().toLowerCase();
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    hostname = hostname.slice(1, -1);
+  }
   if (!hostname) {
     throw new Error('url must have a hostname');
   }

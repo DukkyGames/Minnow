@@ -86,13 +86,14 @@ describe('terminal-console-links', () => {
     anchor.dispatchEvent(event);
 
     assert.equal(event.defaultPrevented, true);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 150));
   });
 
   test('openConsoleLinkInPreview ignores empty URLs', async () => {
     let called = false;
     window.minnow = {
       preview: {
+        hide: () => undefined,
         show: async () => {
           called = true;
         },

@@ -64,6 +64,14 @@ function kanbanColumnSelector(columnId) {
   return `.kanban-column[data-kanban-column="${columnId}"]`;
 }
 
+/** Flush dynamic imports and sidebar/board repaints used by card clicks and view toggles. */
+async function flushUiWork() {
+  for (let i = 0; i < 5; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 30));
+}
+
 function setupDom() {
   win = new Window();
   installHappyDomGlobals(win);
@@ -651,7 +659,7 @@ describe('orchestrate board live updates', () => {
     );
     assert.ok(completeBadge, 'complete task shows Complete agent badge');
     completeBadge.closest('.board-task-card--clickable')?.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushUiWork();
     assert.equal(getActiveChat().id, chat.id);
 
     group.viewMode = 'board';
@@ -668,7 +676,7 @@ describe('orchestrate board live updates', () => {
     const inProgressCard = inProgressBadge.closest('.board-task-card--clickable');
     assert.ok(inProgressCard);
     inProgressCard.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushUiWork();
     assert.equal(getActiveChat().id, FIXED_TASK_CHAT_ID);
     assert.equal(document.querySelector('.sub-agent-overlay__sheet'), null);
     assert.equal(document.querySelectorAll('.board-agents').length, 0);
@@ -842,7 +850,7 @@ describe('orchestrate board live updates', () => {
     assert.ok(document.querySelector('.board-root'));
 
     setOrchestrateViewMode('chat');
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushUiWork();
 
     assert.equal(group.viewMode, 'chat');
     assert.equal(document.querySelector('.board-root'), null);
