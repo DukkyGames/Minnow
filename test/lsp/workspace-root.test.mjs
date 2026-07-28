@@ -1,5 +1,6 @@
 /**
  * LSP file URIs and spawn cwd follow the active workspace root, not the Minnow install dir.
+ * Agent diagnostics honor per-request worktree overrides via pathAccessStore.
  */
 
 import assert from 'node:assert/strict';
@@ -11,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
 import { getLspDiagnostics, shutdownAllLsp } from '../../server/lsp/manager.js';
+import { pathAccessStore } from '../../server/runtime/path-access.js';
 import { setAppRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -73,6 +75,19 @@ describe('LSP workspace root', () => {
       return;
     }
     const result = await getLspDiagnostics('sample.fake');
+    assert.match(result, /';' expected/);
+    assert.match(result, /fake/);
+  });
+
+  test('diagnostics resolve files under a worktree override', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
+      return;
+    }
+    shutdownAllLsp();
+    const result = await pathAccessStore.run(
+      { workspaceRootOverride: tempWorkspace },
+      () => getLspDiagnostics('sample.fake'),
+    );
     assert.match(result, /';' expected/);
     assert.match(result, /fake/);
   });

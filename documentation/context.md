@@ -434,7 +434,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 ## LSP, MCP, plugins
 
-**LSP:** Bundled TS/JS + on-demand language bundles; config `~/.minnow/lsp.json`, defaults `src/lsp/defaults.json`. APIs: `/api/lsp/*`. TypeScript 7 no longer ships `tsserver.js`; `tsserver-fallback` (npm alias to TS 5.8) supplies the bundled fallback path for `typescript-language-server`.
+**LSP:** Bundled TS/JS + on-demand language bundles; config `~/.minnow/lsp.json`, defaults `src/lsp/defaults.json`. APIs: `/api/lsp/*`. TypeScript 7 no longer ships `tsserver.js`; `tsserver-fallback` (npm alias to TS 5.8) supplies the bundled fallback path for `typescript-language-server`. Agent-scoped `get_lsp_diagnostics` resolves paths and spawns language servers against the active tool `workspaceRoot` (board/chat worktree override via `getEffectiveWorkspaceRoot()`), with per-root agent connections so `initialize` `rootUri` matches the isolated checkout.
 
 **MCP:** Config under `~/.minnow/mcp/`; Context7 built-in for library docs. Tools surface as `mcp__<server>__<tool>`.
 
