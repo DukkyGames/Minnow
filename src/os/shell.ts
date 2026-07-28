@@ -102,6 +102,7 @@ export function initOsShell(): void {
   };
 
   initAppHost();
+  void import('./window-focus-cycle').then((m) => m.initOsShellKeyboard());
   void import('./scheduler-side-panel').then((m) => m.initSchedulerSidePanel());
   // Re-apply route now that app layers are mounted (router may have queued an app open).
   void import('./router').then((m) => m.syncOsRouteFromHash());

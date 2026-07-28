@@ -85,6 +85,11 @@ import {
   type StreamPhase,
 } from './stream-status';
 import {
+  beginStreamAnnouncer,
+  cancelStreamAnnouncer,
+  completeStreamAnnouncer,
+} from './a11y/stream-announcer';
+import {
   attachMessageActions,
   type MessageTurnKind,
 } from './message-actions';
@@ -663,6 +668,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
 
   wrap.appendChild(label);
   const streamStatus = attachStreamStatus(wrap);
+  beginStreamAnnouncer(wrap);
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
   mount.appendChild(wrap);
@@ -700,6 +706,7 @@ export function removeOrphanStreamingRow(
   streamStatus?: StreamingStatusHandle,
 ): void {
   streamStatus?.dispose();
+  cancelStreamAnnouncer();
   if (wrap.isConnected) {
     wrap.remove();
   }

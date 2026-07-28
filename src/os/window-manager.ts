@@ -1,4 +1,5 @@
 import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
+import { rememberFocusBeforeWindowActivate, restoreFocusAfterWindowsClosed } from './window-focus-memory';
 import { getAppById } from './app-registry';
 import {
   CALENDAR_EVENT_EDITOR_INSTANCE_ID,
@@ -196,6 +197,7 @@ class WindowManager {
     const record = this.windows.get(windowId);
     const frame = this.frames.get(windowId);
     if (!record) return;
+    const wasFocused = this.focusedId === windowId;
     if (frame) {
       record.bounds = frame.getBounds();
       record.snapMode = frame.getSnapMode();
@@ -208,7 +210,11 @@ class WindowManager {
     if (this.focusedId === windowId) {
       const remaining = [...this.windows.values()].sort((a, b) => b.zIndex - a.zIndex);
       this.focusedId = remaining[0]?.id ?? null;
-      if (this.focusedId) this.focus(this.focusedId);
+      if (this.focusedId) {
+        this.focus(this.focusedId);
+      } else if (wasFocused) {
+        restoreFocusAfterWindowsClosed();
+      }
     }
     this.emit();
   }
@@ -217,6 +223,9 @@ class WindowManager {
     const record = this.windows.get(windowId);
     const frame = this.frames.get(windowId);
     if (!record || !frame) return;
+    if (this.focusedId !== windowId) {
+      rememberFocusBeforeWindowActivate();
+    }
     if (this.focusedId === windowId) return;
 
     this.zCounter += 1;

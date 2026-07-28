@@ -185,6 +185,7 @@ import {
   renderChatFromHistory,
   setAssistantErrorBubbleWithRecovery,
 } from '../ui/messages';
+import { completeStreamAnnouncer } from '../ui/a11y/stream-announcer';
 import { refreshBranchPickerAtFork } from '../ui/branch-picker';
 import { setContextInFlightOverlay } from '../chat/context-in-flight';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
@@ -2195,6 +2196,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             streaming: false,
             modeId: chat.modeId,
           });
+          completeStreamAnnouncer(persistedContent);
         }
 
         const proseRetryAssistantMsg: AssistantMessage = {
@@ -2395,6 +2397,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.wrap.classList.remove('msg--awaiting-prose');
         bubble.classList.remove('msg-bubble--awaiting');
         setAssistantBubbleContent(bubble, text, { streaming: false, modeId: chat.modeId });
+        completeStreamAnnouncer(text);
         markMessageStopped(streamCtx.wrap);
       } else if (wrapConnected && streamCtx.wrap.classList.contains('msg--awaiting-prose')) {
         removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);

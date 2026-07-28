@@ -11,6 +11,7 @@ import './styles/icons.css';
 import './styles/motion.css';
 import './styles/topbar.css';
 import './styles/model-select.css';
+import './styles/shell-keyboard-help.css';
 import './styles/sidebar.css';
 import './styles/chat-search.css';
 import './styles/messages.css';
@@ -412,6 +413,8 @@ export async function initApp(): Promise<void> {
 /** Start init once the document is ready (module scripts often run after `load`). */
 async function startApp(): Promise<void> {
   initShellHandlers();
+  const { initShellKeyboardHelp } = await import('./ui/shell-keyboard-help');
+  initShellKeyboardHelp();
   installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
     const hash = window.location.hash;

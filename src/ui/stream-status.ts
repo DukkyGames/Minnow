@@ -52,6 +52,8 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
   const elapsedEl = document.createElement('span');
   elapsedEl.className = 'stream-status__elapsed';
   elapsedEl.hidden = true;
+  // Elapsed ticks live inside aria-live status; hide from SR to avoid "Thinking 1s 2s…" spam.
+  elapsedEl.setAttribute('aria-hidden', 'true');
 
   statusEl.appendChild(dots);
   statusEl.appendChild(labelEl);

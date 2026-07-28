@@ -1,0 +1,90 @@
+.shell-keyboard-help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  background: var(--mn-overlay);
+}
+
+.shell-keyboard-help-sheet {
+  position: fixed;
+  z-index: 12001;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(80vh, 640px);
+  overflow: auto;
+  padding: 20px 22px 18px;
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--mn-shadow);
+}
+
+.shell-keyboard-help__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.shell-keyboard-help__intro {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+.shell-keyboard-help__section {
+  margin: 12px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.shell-keyboard-help__section:first-child {
+  margin-top: 0;
+}
+
+.shell-keyboard-help__list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.shell-keyboard-help__list dt {
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg);
+}
+
+.shell-keyboard-help__list dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+}
+
+.shell-keyboard-help__close {
+  margin-top: 16px;
+  min-height: var(--mn-touch-min, 44px);
+  padding: 0 14px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shell-keyboard-help__close:hover {
+  background: var(--mn-surface-elevated);
+}
+
+.shell-keyboard-help__close:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
+}
