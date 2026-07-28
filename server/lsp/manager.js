@@ -20,7 +20,7 @@ import {
   serverSupportsWorkspaceSymbols,
 } from '../../src/lsp/merge-config.mjs';
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
-import { getWorkspaceRoot } from '../workspace/root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 import { normalizeFileUri } from './file-uri.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,12 +68,28 @@ function contentRevision(text) {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-function workspaceRootUri() {
-  return pathToFileURL(getWorkspaceRoot()).href;
+/** Active workspace root (Code workspace or per-request worktree override). */
+function lspWorkspaceRoot() {
+  return getEffectiveWorkspaceRoot();
 }
 
-function toFileUri(relativePath) {
-  const abs = path.resolve(getWorkspaceRoot(), relativePath);
+/**
+ * Process map key — agent-scoped servers are isolated per workspace root so
+ * initialize rootUri matches the worktree when tools run in isolation.
+ */
+function connectionProcessKey(scope, serverId) {
+  if (scope === LSP_SCOPE_AGENT) {
+    return `${serverId}::${path.resolve(lspWorkspaceRoot())}`;
+  }
+  return serverId;
+}
+
+function workspaceRootUri(workspaceRoot = lspWorkspaceRoot()) {
+  return pathToFileURL(workspaceRoot).href;
+}
+
+function toFileUri(relativePath, workspaceRoot = lspWorkspaceRoot()) {
+  const abs = path.resolve(workspaceRoot, relativePath);
   return normalizeFileUri(pathToFileURL(abs).href);
 }
 
@@ -172,7 +188,7 @@ function fileUriToRelativePath(uri) {
   if (!uri || typeof uri !== 'string') return '';
   try {
     const abs = fileURLToPath(normalizeFileUri(uri));
-    const root = path.resolve(getWorkspaceRoot());
+    const root = path.resolve(lspWorkspaceRoot());
     const rel = path.relative(root, abs);
     if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
       return rel.replace(/\\/g, '/');
@@ -412,18 +428,21 @@ function formatLspSpawnError(serverId, bin, err) {
 }
 
 /** Wait for spawn success; reject on ENOENT and other spawn failures (avoids unhandled 'error'). */
-function spawnLspChild(argv) {
+function spawnLspChild(argv, workspaceRoot = lspWorkspaceRoot()) {
   const [bin, ...args] = argv;
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
-      cwd: getWorkspaceRoot(),
+      cwd: workspaceRoot,
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
-      env: buildLspProcessEnv({
-        ...process.env,
-        MINNOW_APP_ROOT: APP_ROOT,
-      }),
+      env: buildLspProcessEnv(
+        {
+          ...process.env,
+          MINNOW_APP_ROOT: APP_ROOT,
+        },
+        workspaceRoot,
+      ),
     });
     /** @type {string[]} */
     const stderrLines = [];
@@ -488,8 +507,8 @@ function formatWorkspaceSymbolErrors(errors) {
   return joined;
 }
 
-function discardLspState(scope, serverId, state) {
-  getScopeStore(scope).processes.delete(serverId);
+function discardLspState(scope, processKey, state) {
+  getScopeStore(scope).processes.delete(processKey);
   try {
     state.connection?.dispose?.();
   } catch {
@@ -502,10 +521,10 @@ function discardLspState(scope, serverId, state) {
   }
 }
 
-function bindLspProcessLifecycle(scope, serverId, state) {
+function bindLspProcessLifecycle(scope, serverId, processKey, state) {
   state.child.on('error', (err) => {
     console.error(`[lsp] ${serverId}:`, err instanceof Error ? err.message : err);
-    discardLspState(scope, serverId, state);
+    discardLspState(scope, processKey, state);
   });
   state.child.on('exit', (code, signal) => {
     if (code !== 0 && code != null) {
@@ -527,7 +546,7 @@ function bindLspProcessLifecycle(scope, serverId, state) {
         extra: { serverId, signal, scope },
       });
     }
-    discardLspState(scope, serverId, state);
+    discardLspState(scope, processKey, state);
   });
 }
 
@@ -611,6 +630,7 @@ function cancelAllDiagnosticWaiters() {
 }
 
 async function connectLspServer(scope, serverId, config) {
+  const workspaceRoot = lspWorkspaceRoot();
   const command = config.command;
   if (!Array.isArray(command) || command.length === 0) {
     throw new Error(
@@ -626,7 +646,7 @@ async function connectLspServer(scope, serverId, config) {
   }
   let child;
   try {
-    child = await spawnLspChild(argv);
+    child = await spawnLspChild(argv, workspaceRoot);
   } catch (err) {
     throw new Error(formatLspSpawnError(serverId, displayBin, err));
   }
@@ -653,13 +673,14 @@ async function connectLspServer(scope, serverId, config) {
     }
   });
 
-  bindLspProcessLifecycle(scope, serverId, state);
+  const processKey = connectionProcessKey(scope, serverId);
+  bindLspProcessLifecycle(scope, serverId, processKey, state);
 
   try {
     connection.listen();
     const initResult = await connection.sendRequest('initialize', {
       processId: process.pid,
-      rootUri: workspaceRootUri(),
+      rootUri: workspaceRootUri(workspaceRoot),
       ...(serverId === 'typescript'
         ? { initializationOptions: typescriptInitializationOptions() }
         : {}),
@@ -707,29 +728,30 @@ async function connectLspServer(scope, serverId, config) {
     state.ready = true;
     return state;
   } catch (err) {
-    discardLspState(scope, serverId, state);
+    discardLspState(scope, processKey, state);
     throw err;
   }
 }
 
 async function getConnection(scope, serverId, config) {
+  const processKey = connectionProcessKey(scope, serverId);
   const store = getScopeStore(scope);
-  if (store.processes.has(serverId)) {
-    return store.processes.get(serverId);
+  if (store.processes.has(processKey)) {
+    return store.processes.get(processKey);
   }
-  if (store.pendingConnections.has(serverId)) {
-    return store.pendingConnections.get(serverId);
+  if (store.pendingConnections.has(processKey)) {
+    return store.pendingConnections.get(processKey);
   }
 
   const connectPromise = connectLspServer(scope, serverId, config).then((state) => {
-    store.processes.set(serverId, state);
+    store.processes.set(processKey, state);
     return state;
   });
-  store.pendingConnections.set(serverId, connectPromise);
+  store.pendingConnections.set(processKey, connectPromise);
   try {
     return await connectPromise;
   } finally {
-    store.pendingConnections.delete(serverId);
+    store.pendingConnections.delete(processKey);
   }
 }
 
@@ -840,7 +862,7 @@ async function ensureDocumentSyncedForScope(scope, relativePath, options = {}) {
   let body = options.diskText ?? options.editorText;
   if (body === undefined) {
     const fs = await import('node:fs/promises');
-    const abs = path.resolve(getWorkspaceRoot(), relativePath);
+    const abs = path.resolve(lspWorkspaceRoot(), relativePath);
     body = await fs.readFile(abs, 'utf8').catch(() => '');
   }
   await notifyLspDocumentForScope(scope, relativePath, 'open', body);
@@ -997,7 +1019,8 @@ export async function getLspDiagnostics(relativePath) {
   }
 
   const fs = await import('node:fs/promises');
-  const abs = path.resolve(getWorkspaceRoot(), relativePath);
+  const workspaceRoot = lspWorkspaceRoot();
+  const abs = path.resolve(workspaceRoot, relativePath);
   let diskText;
   try {
     diskText = await fs.readFile(abs, 'utf8');
@@ -1007,7 +1030,7 @@ export async function getLspDiagnostics(relativePath) {
   }
 
   const revision = contentRevision(diskText);
-  const fileUri = toFileUri(relativePath);
+  const fileUri = toFileUri(relativePath, workspaceRoot);
   const agentStore = getScopeStore(LSP_SCOPE_AGENT);
   const cached = agentStore.diagnosticSnapshots.get(fileUri);
   if (cached && cached.revision === revision) {
@@ -1441,9 +1464,11 @@ export async function listLspServers() {
   return Object.entries(merged.lsp ?? {}).map(([id, cfg]) => {
     const disabled = cfg.disabled === true;
     const hasCommand = Array.isArray(cfg.command) && cfg.command.length > 0;
-    const running =
-      getScopeStore(LSP_SCOPE_EDITOR).processes.has(id) ||
-      getScopeStore(LSP_SCOPE_AGENT).processes.has(id);
+    const editorRunning = getScopeStore(LSP_SCOPE_EDITOR).processes.has(id);
+    const agentRunning = [...getScopeStore(LSP_SCOPE_AGENT).processes.keys()].some(
+      (key) => key === id || key.startsWith(`${id}::`),
+    );
+    const running = editorRunning || agentRunning;
     const requirements =
       cfg.requirements && typeof cfg.requirements === 'object'
         ? cfg.requirements
@@ -1490,14 +1515,26 @@ export function resetLspDiagnosticWaitForTest() {
 }
 
 /** Stop specific language servers (e.g. after scaffolded tsconfig so tsserver reloads). */
+function matchesServerProcessKey(processKey, serverId) {
+  return processKey === serverId || processKey.startsWith(`${serverId}::`);
+}
+
 export function shutdownLspServers(serverIds) {
   const ids = new Set(serverIds.map((id) => String(id)));
   for (const scope of [LSP_SCOPE_EDITOR, LSP_SCOPE_AGENT]) {
     const store = getScopeStore(scope);
     for (const id of ids) {
-      store.pendingConnections.delete(id);
-      const state = store.processes.get(id);
-      if (state) discardLspState(scope, id, state);
+      for (const key of [...store.pendingConnections.keys()]) {
+        if (matchesServerProcessKey(key, id)) {
+          store.pendingConnections.delete(key);
+        }
+      }
+      for (const key of [...store.processes.keys()]) {
+        if (matchesServerProcessKey(key, id)) {
+          const state = store.processes.get(key);
+          if (state) discardLspState(scope, key, state);
+        }
+      }
     }
   }
 }
