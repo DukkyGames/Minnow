@@ -149,6 +149,14 @@ const deletedGroupIds = new Set<string>();
 /** Session scalars (activeId, sidebar, maps, …) changed since last successful flush. */
 let sessionScalarsDirty = false;
 /**
+ * Bumped on every dirty-set mutation. A flush only clears dirty sets when the epoch
+ * is unchanged — otherwise an overlapping older PUT/PATCH could drop a delete that
+ * landed mid-flight and resurrect the chat on disk.
+ */
+let sessionDirtyEpoch = 0;
+/** When true, run another {@link saveSessionsNow} after the in-flight flush settles. */
+let sessionSaveQueued = false;
+/**
  * Shadow JSON of chats after last load/flush — used by the B.1/B.2 DEV verifier to
  * catch mutations that bypassed {@link touchChat}.
  */
@@ -206,6 +214,11 @@ function clearSessionDirtySets(): void {
   sessionScalarsDirty = false;
 }
 
+/** Record that dirty sets changed so in-flight flushes must not clear newer work. */
+function bumpSessionDirtyEpoch(): void {
+  sessionDirtyEpoch += 1;
+}
+
 /** True when any dirty marker would produce a non-empty PATCH. */
 function hasSessionDirtyWork(): boolean {
   return (
@@ -220,6 +233,7 @@ function hasSessionDirtyWork(): boolean {
 /** Mark session-level scalars dirty for the next PATCH. */
 export function markSessionScalarsDirty(): void {
   sessionScalarsDirty = true;
+  bumpSessionDirtyEpoch();
 }
 
 /** Mark a sidebar/board group dirty for the next PATCH upsert. */
@@ -229,6 +243,7 @@ export function markGroupDirty(groupId: string): void {
   // A resurrected/upserted group is not a delete.
   deletedGroupIds.delete(id);
   dirtyGroupIds.add(id);
+  bumpSessionDirtyEpoch();
 }
 
 /** Mark a group deleted for PATCH `deleteGroupIds` (not a dirty upsert). */
@@ -237,6 +252,7 @@ export function markGroupDeleted(groupId: string): void {
   if (!id) return;
   dirtyGroupIds.delete(id);
   deletedGroupIds.add(id);
+  bumpSessionDirtyEpoch();
 }
 
 /**
@@ -476,6 +492,8 @@ export function resetSessionPersistenceForTests(): void {
   historyTrapForcedForTests = false;
   sessionPatchDirtySetsReady = false;
   inFlightSessionSave = null;
+  sessionSaveQueued = false;
+  sessionDirtyEpoch = 0;
   historyLoadInflight.clear();
   // Clear debounce timer so Node test runners can exit.
   if (saveTimer) {
@@ -486,7 +504,14 @@ export function resetSessionPersistenceForTests(): void {
 
 /** Await the in-flight server PATCH/PUT started by {@link saveSessionsNow} (tests). */
 export async function waitForSessionSaveForTests(): Promise<void> {
-  if (inFlightSessionSave) await inFlightSessionSave;
+  // Drain follow-up flushes queued when dirty work landed mid-flight.
+  for (let i = 0; i < 25; i++) {
+    if (!inFlightSessionSave) {
+      if (!sessionSaveQueued) return;
+      saveSessionsNow();
+    }
+    await inFlightSessionSave;
+  }
 }
 
 /** Expose hydration guard for persistence unit tests. */
@@ -663,15 +688,20 @@ function sessionStateFromSummaries(remote: SessionSummariesState): SessionState 
     codeChangeTotalsByWorkspace: remote.codeChangeTotalsByWorkspace,
   } as RawSessionJson;
   const state = parseSessionStateFromJson(raw);
-  // parse/ensureChatShape may drop historyLoaded — re-apply unload markers + traps.
+  // parse/ensureChatShape may drop historyLoaded / messageCount — re-apply from summaries.
+  const summaryById = new Map(remote.chats.map((s) => [s.id, s]));
   for (const chat of state.chats) {
-    const fromSummary = remote.chats.some((s) => s.id === chat.id);
-    if (!fromSummary) {
+    const summary = summaryById.get(chat.id);
+    if (!summary) {
       chat.historyLoaded = true;
       continue;
     }
     chat.historyLoaded = false;
     if (!Array.isArray(chat.history)) chat.history = [];
+    // Keep denormalized count for sidebar listing / prune while history is unloaded.
+    const count = summary.messageCount;
+    chat.messageCount =
+      typeof count === 'number' && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
     installUnloadedHistoryTrap(chat);
   }
   return state;
@@ -1420,6 +1450,7 @@ export function touchChat(chat: Chat): void {
   chat.updatedAt = Date.now();
   // Entire-chat dirty marker for the next PATCH upsert.
   dirtyChatIds.add(chat.id);
+  bumpSessionDirtyEpoch();
 }
 
 /** Store a new /goal completion condition on the chat. */
@@ -1617,7 +1648,8 @@ export type SaveSessionsOptions = {
  * - MIN-408: no network write until hydrated from ~/.minnow
  * - PATCH when `sessionsClientPatchEnabled` (default ON) and dirty sets are trusted
  * - full PUT on first save after load, or after a dirty-tracking verifier miss
- * - dirty sets clear only after a successful PATCH/PUT (or accepted shutdown beacon)
+ * - dirty sets clear only after a successful PATCH/PUT whose dirty epoch still matches
+ * - overlapping flushes are serialized; mid-flight deletes queue a follow-up save
  */
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   if (!sessionState) return 'ok';
@@ -1639,6 +1671,7 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
     if (usePatch && !hasSessionDirtyWork()) {
       // Nothing changed since the last successful flush.
+      sessionSaveQueued = false;
       captureDirtyTrackingShadow(sessionState);
       void import('../ui/hub').then((m) => m.refreshHubLiveData());
       return 'ok';
@@ -1659,37 +1692,56 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
       return 'ok';
     }
 
+    // One network write at a time — queue instead of overlapping PUT/PATCH (resurrects deletes).
+    if (inFlightSessionSave) {
+      sessionSaveQueued = true;
+      return 'ok';
+    }
+
     const reportSaveError = (): void => {
       if (typeof document !== 'undefined') {
         setStatus('err', 'Could not save sessions to ~/.minnow');
       }
     };
 
+    const epochAtStart = sessionDirtyEpoch;
+    const finishSave = (ok: boolean): void => {
+      inFlightSessionSave = null;
+      if (ok) {
+        // Only drop dirty markers when nothing newer landed during the request.
+        if (sessionDirtyEpoch === epochAtStart) {
+          clearSessionDirtySets();
+        }
+        if (!usePatch) sessionPatchDirtySetsReady = true;
+        captureDirtyTrackingShadow(sessionState);
+      }
+      const shouldFollowUp = sessionSaveQueued || hasSessionDirtyWork();
+      sessionSaveQueued = false;
+      if (shouldFollowUp) {
+        saveSessionsNow();
+      }
+    };
+
     if (usePatch) {
       const delta = buildSessionsPatchDelta(sessionState);
       inFlightSessionSave = patchSessions(delta)
-        .then(() => {
-          clearSessionDirtySets();
-          captureDirtyTrackingShadow(sessionState);
-        })
-        .catch(reportSaveError)
-        .finally(() => {
-          inFlightSessionSave = null;
+        .then(() => finishSave(true))
+        .catch(() => {
+          reportSaveError();
+          finishSave(false);
         });
       void import('../ui/hub').then((m) => m.refreshHubLiveData());
       return 'ok';
     }
 
     // Full-PUT fallback (first save after load, verifier miss, or flag off).
-    inFlightSessionSave = putSessions(sessionStateForSessionsWire(sessionState))
-      .then(() => {
-        clearSessionDirtySets();
-        sessionPatchDirtySetsReady = true;
-        captureDirtyTrackingShadow(sessionState);
-      })
-      .catch(reportSaveError)
-      .finally(() => {
-        inFlightSessionSave = null;
+    // Capture wire body now; a follow-up flush re-reads sessionState if deletes race this PUT.
+    const wireState = sessionStateForSessionsWire(sessionState);
+    inFlightSessionSave = putSessions(wireState)
+      .then(() => finishSave(true))
+      .catch(() => {
+        reportSaveError();
+        finishSave(false);
       });
     void import('../ui/hub').then((m) => m.refreshHubLiveData());
     return 'ok';
@@ -1712,7 +1764,10 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
 export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string }): void {
   // Opportunistic dirty hints for callers that know what changed.
-  if (hint?.chatId?.trim()) dirtyChatIds.add(hint.chatId.trim());
+  if (hint?.chatId?.trim()) {
+    dirtyChatIds.add(hint.chatId.trim());
+    bumpSessionDirtyEpoch();
+  }
   if (hint?.groupId?.trim()) markGroupDirty(hint.groupId.trim());
   if (saveTimer) clearTimeout(saveTimer);
   setSaveTimer(
@@ -1850,6 +1905,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
 
   state.chats.splice(idx, 1);
   deletedChatIds.add(chatId);
+  bumpSessionDirtyEpoch();
   if (boardGroup) {
     markGroupDirty(boardGroup.id);
   }
@@ -1883,7 +1939,12 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   }
 
   syncRememberedActiveChatAfterDelete(state, victim, wasActive);
-  scheduleSaveSessions();
+  // Flush immediately so a delete is not lost behind a debounced / overlapping PUT.
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    setSaveTimer(null);
+  }
+  saveSessionsNow();
   return {
     ok: true,
     removed: victim,

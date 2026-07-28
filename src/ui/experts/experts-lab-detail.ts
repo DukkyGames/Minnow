@@ -1567,11 +1567,7 @@ function renderChatsPanel(ctx: ExpertsDetailContext, expertId: string): HTMLElem
         onActivate: (c) => ctx.onOpenChat(c),
 
         onDelete: (c) => {
-
-          deleteChat(c.id);
-
-          ctx.onRefresh();
-
+          void deleteChat(c.id).then(() => ctx.onRefresh());
         },
 
       });

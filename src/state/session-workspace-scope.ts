@@ -26,8 +26,12 @@ export function hasComposerDraft(chat: Chat): boolean {
 export function chatHasListableContent(chat: Chat): boolean {
   if (hasComposerDraft(chat)) return true;
   if (Array.isArray(chat.history) && chat.history.length > 0) return true;
-  // C.2 summaries: unloaded rows still report server message count.
-  if (chat.historyLoaded === false && (chat.messageCount ?? 0) > 0) return true;
+  if (chat.historyLoaded === false) {
+    // Explicit 0 from summaries → hide empty rows. Missing count → keep visible so a
+    // normalize/passthrough miss cannot empty the rail or feed pruneEphemeralEmptyChats.
+    if (chat.messageCount === undefined) return true;
+    return chat.messageCount > 0;
+  }
   return false;
 }
 
