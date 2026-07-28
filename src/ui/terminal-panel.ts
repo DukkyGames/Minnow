@@ -50,13 +50,14 @@ import {
 import {
   formatTerminalCwdHeader,
   formatTerminalShellHint,
-  getTerminalCwdLabelSuffix,
+  isTerminalWorktreeCwd,
   resolveFileExplorerTerminalCwd,
   terminalCwdsEqual,
 } from './terminal-worktree-cwd';
 
 const MIN_HEIGHT_PX = 120;
 const MAX_HEIGHT_RATIO = 0.5;
+const MAIN_COLUMN_TERMINAL_MAX_CLASS = 'main-column--terminal-maximized';
 
 let panelEl: HTMLElement | null = null;
 let agentPaneEl: HTMLElement | null = null;
@@ -69,6 +70,9 @@ let terminalCwdLabelEl: HTMLElement | null = null;
 let activeRunId: string | null = null;
 /** Active SSE subscriptions for agent background shell runs (MIN-402). */
 const agentBackgroundStreams = new Map<string, AbortController>();
+/** Last docked height before the user expanded the terminal over chat. */
+let heightBeforeMaximize: number | null = null;
+let terminalMaximized = false;
 let stickToBottom = true;
 let displayBytes = 0;
 const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
@@ -102,6 +106,63 @@ function clampHeight(px: number): number {
   return Math.min(maxPanelHeight(), Math.max(MIN_HEIGHT_PX, px));
 }
 
+function isTerminalMaximized(): boolean {
+  return terminalMaximized;
+}
+
+function syncTerminalMaximizeButton(): void {
+  const btn = document.getElementById('btnTerminalMaximize');
+  if (!btn) return;
+  const maximized = isTerminalMaximized();
+  btn.setAttribute('aria-pressed', maximized ? 'true' : 'false');
+  btn.setAttribute(
+    'aria-label',
+    maximized ? 'Restore terminal size' : 'Expand terminal',
+  );
+  btn.setAttribute(
+    'title',
+    maximized ? 'Restore terminal size' : 'Expand terminal to fill chat',
+  );
+}
+
+function clearTerminalMaximizedState(): void {
+  document.getElementById('mainColumn')?.classList.remove(MAIN_COLUMN_TERMINAL_MAX_CLASS);
+  panelEl?.classList.remove('is-maximized');
+  terminalMaximized = false;
+  syncTerminalMaximizeButton();
+}
+
+function setTerminalMaximized(maximized: boolean): void {
+  const mainColumn = document.getElementById('mainColumn');
+  if (!panelEl || !mainColumn) return;
+  if (terminalMaximized === maximized) return;
+
+  if (maximized) {
+    if (!isTerminalPanelOpen()) {
+      openTerminalPanel();
+    }
+    heightBeforeMaximize = panelEl.getBoundingClientRect().height;
+    mainColumn.classList.add(MAIN_COLUMN_TERMINAL_MAX_CLASS);
+    panelEl.classList.add('is-maximized');
+    panelEl.style.removeProperty('height');
+    terminalMaximized = true;
+  } else {
+    mainColumn.classList.remove(MAIN_COLUMN_TERMINAL_MAX_CLASS);
+    panelEl.classList.remove('is-maximized');
+    terminalMaximized = false;
+    const restoreHeight = heightBeforeMaximize ?? getTerminalMetaCached().heightPx;
+    heightBeforeMaximize = null;
+    applyPanelHeight(restoreHeight);
+  }
+
+  syncTerminalMaximizeButton();
+  requestAnimationFrame(() => onTerminalPanelResize());
+}
+
+function toggleTerminalMaximized(): void {
+  setTerminalMaximized(!isTerminalMaximized());
+}
+
 function getElements(): void {
   panelEl = document.getElementById('terminalPanel');
   agentPaneEl = document.getElementById('terminalAgentPane');
@@ -117,11 +178,10 @@ function getElements(): void {
 
 function updateTerminalCwdChrome(cwd: string): void {
   if (!terminalCwdLabelEl) return;
-  const label = formatTerminalCwdHeader(cwd);
-  const suffix = getTerminalCwdLabelSuffix(cwd);
-  terminalCwdLabelEl.textContent = label;
-  terminalCwdLabelEl.title = cwd;
-  terminalCwdLabelEl.classList.toggle('terminal-cwd-label--worktree', suffix.length > 0);
+  const isWorktree = isTerminalWorktreeCwd(cwd);
+  terminalCwdLabelEl.textContent = isWorktree ? formatTerminalCwdHeader(cwd) : '';
+  terminalCwdLabelEl.title = isWorktree ? cwd : '';
+  terminalCwdLabelEl.classList.toggle('hidden', !isWorktree);
 }
 
 function updateTerminalShellHintText(cwd: string): void {
@@ -171,8 +231,7 @@ function applyActiveTabView(kind: TerminalTabKind): void {
   ptyPaneEl?.classList.toggle('hidden', !isPty);
 
   document.getElementById('terminalShellHint')?.classList.toggle('hidden', isAgent);
-  document.getElementById('terminalShellSelect')?.classList.toggle('hidden', isAgent);
-  document.getElementById('terminalCwdLabel')?.classList.toggle('hidden', isAgent);
+  document.getElementById('terminalHeaderShell')?.classList.toggle('hidden', isAgent);
   const clearBtn = document.getElementById('btnTerminalClear');
   clearBtn?.classList.toggle('hidden', !isAgent);
   if (clearBtn) {
@@ -313,6 +372,11 @@ function setPanelOpen(open: boolean): void {
   const btn = document.getElementById('btnTerminal');
   btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
   if (currentlyOpen === open) return;
+
+  if (!open && terminalMaximized) {
+    clearTerminalMaximizedState();
+    heightBeforeMaximize = null;
+  }
 
   panelEl.classList.toggle('hidden', !open);
   panelEl.classList.toggle('is-collapsed', !open);
@@ -523,7 +587,9 @@ export function toggleTerminalPanel(): void {
 function applyPanelHeight(px: number): void {
   if (!panelEl) return;
   const height = clampHeight(px);
-  panelEl.style.height = `${height}px`;
+  if (!terminalMaximized) {
+    panelEl.style.height = `${height}px`;
+  }
   void saveTerminalMeta({ heightPx: height });
   onTerminalPanelResize();
 }
@@ -850,6 +916,12 @@ function wireTerminalPanelButtons(): void {
   document.getElementById('btnTerminalCollapse')?.addEventListener('click', () => {
     closeTerminalPanel();
   });
+
+  document.getElementById('btnTerminalMaximize')?.addEventListener('click', () => {
+    toggleTerminalMaximized();
+  });
+
+  syncTerminalMaximizeButton();
 }
 
 export async function initTerminalPanel(): Promise<void> {

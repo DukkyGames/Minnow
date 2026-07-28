@@ -46,25 +46,60 @@
 
 .terminal-header {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  align-items: stretch;
+  gap: 0;
+  min-height: 40px;
+  padding: 0;
   border-bottom: 1px solid var(--mn-border);
   background: var(--mn-surface-1);
   user-select: none;
 }
 
+/* Shell profile picker — left zone */
+.terminal-header-shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 10px 6px 12px;
+  border-right: 1px solid var(--mn-border);
+}
+
+.terminal-header-shell.hidden {
+  display: none;
+}
+
+.terminal-shell-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terminal-shell-label {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--mn-fg-subtle);
+}
+
 .terminal-shell-select {
   flex-shrink: 0;
-  max-width: 148px;
-  min-height: 36px;
-  padding: 6px 28px 6px 10px;
+  /* Fit long WSL profile names (e.g. JetPack distro labels) without crowding tabs */
+  width: min(320px, 42ch);
+  max-width: min(320px, 42ch);
+  min-width: 180px;
+  min-height: 28px;
+  padding: 2px 24px 2px 8px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   background: var(--mn-bg);
   color: var(--mn-fg);
-  font-family: var(--font-ui);
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   cursor: pointer;
   transition: border-color 0.2s var(--ease-out);
 }
@@ -75,38 +110,53 @@
   outline-offset: 2px;
 }
 
-.terminal-cwd-label {
-  flex-shrink: 0;
-  max-width: 200px;
+.terminal-cwd-chip {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-ui);
-  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in oklch, var(--mn-accent) 35%, var(--mn-border));
+  border-radius: var(--radius-sm);
+  background: var(--mn-accent-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
   font-weight: 500;
-  color: var(--mn-fg-muted);
+  color: var(--mn-accent-ink);
 }
 
-.terminal-cwd-label--worktree {
-  color: var(--mn-accent);
+.terminal-cwd-chip.hidden {
+  display: none;
+}
+
+/* Tab strip — center zone */
+.terminal-header-tabs {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-width: 0;
+  padding: 4px 8px 0;
 }
 
 .terminal-tab-bar {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   min-width: 0;
-  gap: 6px;
   overflow: hidden;
 }
 
 .terminal-tab-list {
   display: flex;
   flex: 1;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
+  align-items: flex-end;
   overflow-x: auto;
   scrollbar-width: thin;
+  mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 16px), transparent 100%);
 }
 
 .terminal-tab {
@@ -115,20 +165,27 @@
   gap: 4px;
   flex-shrink: 0;
   max-width: 200px;
-  min-height: var(--touch-min);
-  padding: 4px 8px;
+  min-height: 28px;
+  padding: 4px 6px 4px 8px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   background: transparent;
   color: var(--mn-fg-muted);
-  font-family: var(--font-ui);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition:
     background 0.2s var(--ease-out),
     border-color 0.2s var(--ease-out),
     color 0.2s var(--ease-out);
+}
+
+.terminal-tab--agent {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -140,9 +197,11 @@
 }
 
 .terminal-tab[aria-selected='true'] {
-  border-color: var(--mn-accent);
+  border-color: var(--mn-border);
+  border-bottom-color: var(--mn-bg);
   color: var(--mn-fg);
-  background: var(--mn-accent-soft);
+  background: var(--mn-bg);
+  box-shadow: inset 0 -2px 0 var(--mn-accent);
 }
 
 .terminal-tab:focus-visible {
@@ -161,18 +220,30 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: var(--touch-min);
-  min-height: var(--touch-min);
-  margin: calc((var(--touch-min) - 1em) / -2);
-  opacity: 0.55;
-  font-size: 14px;
+  width: 20px;
+  height: 20px;
+  margin: 0 -2px 0 0;
+  border-radius: var(--radius-sm);
+  opacity: 0.5;
   line-height: 1;
   padding: 0;
+  transition:
+    opacity 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
+}
+
+.terminal-tab-close .icon-svg {
+  --mn-icon-size: 12px;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .terminal-tab:hover .terminal-tab-close {
-    opacity: 0.9;
+    opacity: 0.85;
+  }
+
+  .terminal-tab-close:hover {
+    opacity: 1;
+    background: color-mix(in oklch, var(--mn-fg) 8%, transparent);
   }
 }
 
@@ -181,13 +252,14 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: var(--touch-min);
-  height: var(--touch-min);
-  border: 1px solid var(--mn-border);
+  width: 28px;
+  height: 28px;
+  margin: 0 0 1px 2px;
+  border: 1px dashed var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--mn-bg);
+  background: transparent;
   color: var(--mn-fg-muted);
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -199,8 +271,9 @@
 @media (hover: hover) and (pointer: fine) {
   .terminal-tab-add:hover {
     border-color: var(--mn-border-strong);
+    border-style: solid;
     color: var(--mn-fg);
-    background: var(--mn-surface-0);
+    background: var(--mn-surface-elevated);
   }
 }
 
@@ -225,17 +298,19 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  padding: 6px 10px 6px 8px;
+  border-left: 1px solid var(--mn-border);
 }
 
 .terminal-header-btn {
-  min-height: var(--touch-min);
-  padding: 0 12px;
+  min-height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   background: var(--mn-bg);
   color: var(--mn-fg);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -245,16 +320,83 @@
     background 0.2s var(--ease-out);
 }
 
+.terminal-header-btn--danger {
+  border-color: color-mix(in oklch, var(--mn-danger) 40%, var(--mn-border));
+  color: var(--mn-danger);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .terminal-header-btn:hover {
     border-color: var(--mn-border-strong);
     background: var(--mn-surface-0);
+  }
+
+  .terminal-header-btn--danger:hover {
+    border-color: var(--mn-danger);
+    background: color-mix(in oklch, var(--mn-danger) 12%, var(--mn-bg));
   }
 }
 
 .terminal-header-btn:focus-visible {
   outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
+}
+
+.terminal-header-collapse {
+  width: 32px;
+  height: 32px;
+}
+
+.terminal-header-expand {
+  width: 32px;
+  height: 32px;
+}
+
+.terminal-header-expand .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+.terminal-header-expand .terminal-header-restore-icon {
+  display: none;
+}
+
+.main-column.main-column--terminal-maximized .terminal-header-expand .terminal-header-expand-icon {
+  display: none;
+}
+
+.main-column.main-column--terminal-maximized .terminal-header-expand .terminal-header-restore-icon {
+  display: block;
+}
+
+.terminal-header-collapse .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+.terminal-panel.is-maximized {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.main-column.main-column--terminal-maximized .chat-viewport,
+.main-column.main-column--terminal-maximized .input-bar,
+.main-column.main-column--terminal-maximized .tool-approval-host,
+.main-column.main-column--terminal-maximized .question-host,
+.main-column.main-column--terminal-maximized .code-change-strip-wrap,
+.main-column.main-column--terminal-maximized .stats-strip,
+.main-column.main-column--terminal-maximized .agent-activity-panel {
+  display: none;
+}
+
+.main-column.main-column--terminal-maximized .terminal-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+}
+
+.main-column.main-column--terminal-maximized .terminal-resize-handle {
+  display: none;
 }
 
 /* Warning strip — full width inside panel (inherits amber from tools-server-banner) */
@@ -385,11 +527,25 @@
 }
 
 @media (max-width: 768px) {
-  .terminal-panel {
+  .terminal-panel:not(.is-maximized) {
     max-height: 40vh;
   }
 
-  .terminal-header-actions .terminal-header-btn:first-child {
+  .terminal-header-shell {
+    padding-inline: 8px;
+  }
+
+  .terminal-shell-select {
+    width: min(240px, 52vw);
+    max-width: min(240px, 52vw);
+    min-width: 140px;
+  }
+
+  .terminal-cwd-chip {
+    display: none;
+  }
+
+  .terminal-header-actions .terminal-header-btn:not(.terminal-header-btn--danger) {
     display: none;
   }
 }

@@ -42,6 +42,9 @@ export interface TerminalTabSession {
   boundCwd?: string;
 }
 
+/** Padded outer shell from index.html (#terminalXtermHost). */
+let outerHostEl: HTMLElement | null = null;
+/** Inner viewport FitAddon sizes against (excludes host padding). */
 let hostEl: HTMLElement | null = null;
 let term: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
@@ -260,23 +263,37 @@ function ensureTerminal(): Terminal | null {
     activeWs.send(JSON.stringify({ type: 'input', data }));
   });
 
+  const resizeTarget = outerHostEl ?? hostEl;
   resizeObserver = new ResizeObserver(() => {
     const sid = activeWs ? new URL(activeWs.url).searchParams.get('sessionId') : null;
     fitAndResize(sid);
   });
-  resizeObserver.observe(hostEl);
+  if (resizeTarget) {
+    resizeObserver.observe(resizeTarget);
+  }
 
   return term;
 }
 
+function ensureXtermViewport(host: HTMLElement): HTMLElement {
+  let viewport = host.querySelector<HTMLElement>('.terminal-xterm-viewport');
+  if (!viewport) {
+    viewport = document.createElement('div');
+    viewport.className = 'terminal-xterm-viewport';
+    host.appendChild(viewport);
+  }
+  return viewport;
+}
+
 /** Mount xterm into the host element. */
 export function initTerminalXterm(host: HTMLElement): void {
-  hostEl = host;
+  outerHostEl = host;
+  hostEl = ensureXtermViewport(host);
 }
 
 /** Whether the xterm host element has been registered. */
 export function isTerminalXtermReady(): boolean {
-  return hostEl !== null;
+  return outerHostEl !== null && hostEl !== null;
 }
 
 /** Fill cwd scope on restored tabs before spawning a PTY session. */

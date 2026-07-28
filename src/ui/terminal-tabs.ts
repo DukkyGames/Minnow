@@ -205,7 +205,8 @@ function renderTabBar(activeId: string | null): void {
     const close = document.createElement('span');
     close.className = 'terminal-tab-close';
     close.setAttribute('aria-label', `Close ${displayTitle}`);
-    close.textContent = '×';
+    close.innerHTML =
+      '<i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>';
     close.addEventListener('click', (e) => {
       e.stopPropagation();
       void closeTab(tab.tabId);
@@ -222,9 +223,10 @@ function renderTabBar(activeId: string | null): void {
   addBtn.addEventListener('click', () => {
     void addTab();
   });
+  // Keep the add control inline with tabs, not pinned to the strip edge.
+  list.appendChild(addBtn);
 
   tabBarEl.appendChild(list);
-  tabBarEl.appendChild(addBtn);
   syncAgentTabActivityBadge();
 }
 

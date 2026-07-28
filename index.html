@@ -2368,14 +2368,26 @@
     <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
       <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
       <header class="terminal-header">
-        <label class="visually-hidden" for="terminalShellSelect">Shell profile</label>
-        <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
-        <span class="terminal-cwd-label" id="terminalCwdLabel" aria-label="Shell working directory"></span>
-        <div class="terminal-tab-bar" id="terminalTabBar"></div>
+        <div class="terminal-header-shell" id="terminalHeaderShell">
+          <div class="terminal-shell-field">
+            <label class="terminal-shell-label" for="terminalShellSelect">Shell</label>
+            <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
+          </div>
+          <span class="terminal-cwd-chip hidden" id="terminalCwdLabel" aria-label="File explorer worktree"></span>
+        </div>
+        <div class="terminal-header-tabs">
+          <div class="terminal-tab-bar" id="terminalTabBar"></div>
+        </div>
         <div class="terminal-header-actions">
-          <button type="button" class="terminal-header-btn hidden" id="btnTerminalAgentStop">Stop command</button>
-          <button type="button" class="terminal-header-btn hidden" id="btnTerminalClear">Clear agent output</button>
-          <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
+          <button type="button" class="terminal-header-btn terminal-header-btn--danger hidden" id="btnTerminalAgentStop">Stop</button>
+          <button type="button" class="terminal-header-btn hidden" id="btnTerminalClear">Clear output</button>
+          <button type="button" class="icon-btn terminal-header-expand" id="btnTerminalMaximize" aria-label="Expand terminal" aria-pressed="false" title="Expand terminal to fill chat">
+            <i class="fi fi-rr-expand icon-svg terminal-header-expand-icon" aria-hidden="true"></i>
+            <i class="fi fi-rr-compress-alt icon-svg terminal-header-restore-icon" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="icon-btn terminal-header-collapse" id="btnTerminalCollapse" aria-label="Hide terminal" title="Hide terminal">
+            <i class="fi fi-rr-angle-small-down icon-svg" aria-hidden="true"></i>
+          </button>
         </div>
       </header>
       <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Interactive terminal requires <code>npm start</code> (not <code>npm run dev</code>). Agent runs still need the local server.</p>
