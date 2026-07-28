@@ -22,6 +22,7 @@ import { getActiveChat } from '../state/sessions';
 import { autoResize } from './input';
 import { renderChatFromHistory, renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
+import { appConfirm } from './app-dialog';
 import { setStatus } from './status';
 
 export type MessageTurnKind = 'user' | 'assistant' | 'assistant-tools';
@@ -269,25 +270,30 @@ export function attachMessageActions(
 
     items.push(
       buildMenuButton('Delete message', () => {
-        if (shouldConfirmDelete(target.historyIndex)) {
-          const ok = confirm('Delete this message and all messages after it?');
-          if (!ok) return;
-        }
-        const result = truncateChatHistory(
-          target.chatId,
-          target.historyIndex,
-          'exclusive',
-        );
-        if (!result.ok) {
-          if (result.error === 'streaming') guardStreaming();
-          else setStatus('err', 'Could not delete');
-          return;
-        }
-        const chat = getActiveChat();
-        renderChatFromHistory(chat);
-        renderStatsForChat(chat);
-        renderSidebar();
-        setStatus('ok', 'Message deleted');
+        void (async () => {
+          if (shouldConfirmDelete(target.historyIndex)) {
+            const ok = await appConfirm('Delete this message and all messages after it?', {
+              confirmLabel: 'Delete',
+              danger: true,
+            });
+            if (!ok) return;
+          }
+          const result = truncateChatHistory(
+            target.chatId,
+            target.historyIndex,
+            'exclusive',
+          );
+          if (!result.ok) {
+            if (result.error === 'streaming') guardStreaming();
+            else setStatus('err', 'Could not delete');
+            return;
+          }
+          const chat = getActiveChat();
+          renderChatFromHistory(chat);
+          renderStatsForChat(chat);
+          renderSidebar();
+          setStatus('ok', 'Message deleted');
+        })();
       }),
     );
 

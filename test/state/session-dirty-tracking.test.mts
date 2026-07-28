@@ -129,6 +129,46 @@ describe('session dirty tracking (B.1/B.2)', () => {
     assert.deepEqual(dirty.deletedChatIds, [CHAT_B]);
   });
 
+  test('removeChatById purges stale remembered workspace and app ids', () => {
+    const state = baseState();
+    state.lastActiveChatIdByWorkspace = { '': CHAT_B };
+    state.lastActiveChatIdByApp = { chat: CHAT_B };
+    setSessionStateForTests(state);
+    removeChatById(CHAT_B, 'm');
+    assert.equal(state.lastActiveChatIdByWorkspace[''], undefined);
+    assert.equal(state.lastActiveChatIdByApp.chat, undefined);
+    assert.equal(getSessionDirtyTrackingForTests().sessionScalarsDirty, true);
+  });
+
+  test('removeChatById retargets remembered ids when the active chat is deleted', () => {
+    const state = baseState();
+    state.chats[0]!.history = [{ role: 'user', content: 'hello' }];
+    state.chats[1]!.history = [{ role: 'user', content: 'bye' }];
+    state.activeId = CHAT_B;
+    state.lastActiveChatIdByWorkspace = { '': CHAT_B };
+    state.lastActiveChatIdByApp = { chat: CHAT_B };
+    setSessionStateForTests(state);
+    const result = removeChatById(CHAT_B, 'm');
+    assert.equal(result.ok, true);
+    assert.equal(result.activeChanged, true);
+    assert.equal(state.activeId, CHAT_A);
+    assert.equal(state.lastActiveChatIdByWorkspace[''], CHAT_A);
+    assert.equal(state.lastActiveChatIdByApp.chat, CHAT_A);
+  });
+
+  test('removeChatById switches to another unassigned chat when active is deleted', () => {
+    const state = baseState();
+    state.chats[0]!.history = [{ role: 'user', content: 'hello' }];
+    state.chats[1]!.history = [{ role: 'user', content: 'bye' }];
+    state.activeId = CHAT_B;
+    setSessionStateForTests(state);
+    const result = removeChatById(CHAT_B, 'm');
+    assert.equal(result.ok, true);
+    assert.equal(result.activeChanged, true);
+    assert.equal(state.activeId, CHAT_A);
+    assert.equal(state.chats.some((c) => c.id === CHAT_B), false);
+  });
+
   test('verifier warns when a chat mutates without touchChat', () => {
     const state = baseState();
     setSessionStateForTests(state);

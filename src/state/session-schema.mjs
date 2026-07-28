@@ -57,6 +57,9 @@ const CHAT_PASSTHROUGH_KEYS = new Set([
   'pendingMessageQueue',
   'pendingModeId',
   'turnError',
+  // C.2 lazy summaries: denormalized count must survive ensureChatShape so rails
+  // stay listable before history hydrate (missing count → empty sidebar + prune wipe).
+  'messageCount',
 ]);
 const MAX_GOAL_CONDITION_CHARS = 4000;
 const MAX_LOOP_PROMPT_CHARS = 4000;

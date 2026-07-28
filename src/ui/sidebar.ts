@@ -18,6 +18,7 @@ import {
   resolveBoardRestoreGroupOnSwitch,
   toggleGroupCollapsed,
 } from '../state/chat-groups';
+import { appConfirm } from './app-dialog';
 import { createBoardCategoryIcon } from './board-category-icons';
 import { createIcon } from './icon';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
@@ -684,7 +685,8 @@ function showGroupContextMenu(
   const renameItem = document.createElement('button');
   renameItem.type = 'button';
   renameItem.textContent = 'Rename';
-  renameItem.addEventListener('click', () => {
+  renameItem.addEventListener('click', (e) => {
+    e.stopPropagation();
     menu.remove();
     beginRenameGroup(groupId, nameSpan);
   });
@@ -692,41 +694,51 @@ function showGroupContextMenu(
   const deleteItem = document.createElement('button');
   deleteItem.type = 'button';
   deleteItem.textContent = 'Delete group';
-  deleteItem.addEventListener('click', () => {
+  deleteItem.addEventListener('click', (e) => {
+    e.stopPropagation();
     menu.remove();
-    const group = findGroupById(groupId);
-    const isBoardGroup = Boolean(group?.orchestrateBoard);
-    if (isBoardGroup) {
-      const chatCount = group ? listBoardGroupChatIds(group, sessionState?.chats ?? []).length : 0;
-      const chatLabel = chatCount === 1 ? '1 chat' : `${chatCount} chats`;
-      if (
-        !confirm(
-          `Delete this board and ${chatLabel} inside it? This cannot be undone.`,
-        )
+    void (async () => {
+      const group = findGroupById(groupId);
+      const isBoardGroup = Boolean(group?.orchestrateBoard);
+      if (isBoardGroup) {
+        const chatCount = group ? listBoardGroupChatIds(group, sessionState?.chats ?? []).length : 0;
+        const chatLabel = chatCount === 1 ? '1 chat' : `${chatCount} chats`;
+        // Electron patches window.confirm to always return false — use in-app dialog.
+        if (
+          !(await appConfirm(
+            `Delete this board and ${chatLabel} inside it? This cannot be undone.`,
+            { confirmLabel: 'Delete', danger: true },
+          ))
+        ) {
+          return;
+        }
+        if (sessionState?.activeBoardGroupId === groupId) {
+          exitBoardViewForNavigation();
+        }
+        for (const chatId of listBoardGroupChatIds(group, sessionState?.chats ?? [])) {
+          if (isChatStreaming(chatId)) {
+            stopGeneration(chatId, 'system');
+          }
+        }
+      } else if (
+        !(await appConfirm('Delete this group? Chats will stay in the list, ungrouped.', {
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
       ) {
         return;
       }
-      if (sessionState?.activeBoardGroupId === groupId) {
-        exitBoardViewForNavigation();
-      }
-      for (const chatId of listBoardGroupChatIds(group, sessionState?.chats ?? [])) {
-        if (isChatStreaming(chatId)) {
-          stopGeneration(chatId, 'system');
+      const { modelId } = readDefaultModelBinding();
+      const result = deleteGroup(groupId, { fallbackModelId: modelId });
+      if (result.chatRemoval) {
+        onChatRemoved({ ...result.chatRemoval, activeChanged: result.activeChanged });
+      } else {
+        refreshSessionListUIs();
+        if (isOrchestrateHubMounted()) {
+          refreshOrchestrateHubBoardList();
         }
       }
-    } else if (!confirm('Delete this group? Chats will stay in the list, ungrouped.')) {
-      return;
-    }
-    const { modelId } = readDefaultModelBinding();
-    const result = deleteGroup(groupId, { fallbackModelId: modelId });
-    if (result.chatRemoval) {
-      onChatRemoved({ ...result.chatRemoval, activeChanged: result.activeChanged });
-    } else {
-      renderSidebar();
-      if (isOrchestrateHubMounted()) {
-        refreshOrchestrateHubBoardList();
-      }
-    }
+    })();
   });
 
   menu.appendChild(renameItem);
@@ -903,25 +915,36 @@ function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): vo
   deleteItem.textContent = `Delete ${deletable.length} chat${deletable.length === 1 ? '' : 's'}`;
   deleteItem.className = 'chat-context-menu__item--danger';
   deleteItem.disabled = deletable.length === 0;
-  deleteItem.addEventListener('click', () => {
+  deleteItem.addEventListener('click', (e) => {
+    e.stopPropagation();
     menu.remove();
-    const n = deletable.length;
-    if (!n) return;
-    if (!confirm(`Delete ${n} chat${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
-    const prevActiveId = sessionState?.activeId;
-    clearChatSelection();
-    const { modelId } = readDefaultModelBinding();
-    let lastResult: ReturnType<typeof removeChatById> | null = null;
-    for (const chat of deletable) {
-      const r = removeChatById(chat.id, modelId);
-      if (r.ok) lastResult = r;
-    }
-    const activeChanged = prevActiveId !== sessionState?.activeId;
-    if (lastResult) {
-      onChatRemoved({ ...lastResult, activeChanged });
-    } else {
-      renderSidebar();
-    }
+    void (async () => {
+      const n = deletable.length;
+      if (!n) return;
+      // Electron patches window.confirm to always return false — use in-app dialog.
+      if (
+        !(await appConfirm(`Delete ${n} chat${n === 1 ? '' : 's'}? This cannot be undone.`, {
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
+      ) {
+        return;
+      }
+      const prevActiveId = sessionState?.activeId;
+      clearChatSelection();
+      const { modelId } = readDefaultModelBinding();
+      let lastResult: ReturnType<typeof removeChatById> | null = null;
+      for (const chat of deletable) {
+        const r = removeChatById(chat.id, modelId);
+        if (r.ok) lastResult = r;
+      }
+      const activeChanged = prevActiveId !== sessionState?.activeId;
+      if (lastResult) {
+        onChatRemoved({ ...lastResult, activeChanged });
+      } else {
+        renderSidebar();
+      }
+    })();
   });
 
   menu.appendChild(brainItem);
@@ -971,11 +994,27 @@ function showChatItemContextMenu(
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
 
+  const closeMenu = (): void => {
+    menu.remove();
+    document.removeEventListener('pointerdown', onPointerDownOutside, true);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onPointerDownOutside = (e: PointerEvent): void => {
+    // Ignore presses inside the menu so Delete/Rename are not dismissed before click.
+    if (menu.contains(e.target as Node)) return;
+    closeMenu();
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') closeMenu();
+  };
+
   const renameItem = document.createElement('button');
   renameItem.type = 'button';
   renameItem.textContent = 'Rename';
-  renameItem.addEventListener('click', () => {
-    menu.remove();
+  renameItem.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu();
     beginRenameChat(chat.id, nameSpan);
   });
 
@@ -985,8 +1024,10 @@ function showChatItemContextMenu(
   brainItem.textContent = 'Add to Brain';
   brainItem.title = brainState.title;
   brainItem.disabled = brainState.disabled;
-  brainItem.addEventListener('click', () => {
-    menu.remove();
+  brainItem.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu();
     if (brainState.disabled) return;
     void import('./chat-brain-capture').then((m) => m.runChatBrainCapture(chat));
   });
@@ -997,8 +1038,10 @@ function showChatItemContextMenu(
     orchestrateItem = document.createElement('button');
     orchestrateItem.type = 'button';
     orchestrateItem.textContent = 'Open in orchestrator';
-    orchestrateItem.addEventListener('click', () => {
-      menu.remove();
+    orchestrateItem.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
       const group = getBoardGroupForChat(chat) ?? findBoardGroupForPlanner(chat.id);
       if (group && (group.orchestrateBoard || isBoardSetupIncomplete(group))) {
         void import('../state/chat-groups').then((m) => m.openBoardGroup(group.id));
@@ -1015,13 +1058,15 @@ function showChatItemContextMenu(
   deleteItem.type = 'button';
   deleteItem.textContent = 'Delete';
   deleteItem.className = 'chat-context-menu__item--danger';
-  deleteItem.addEventListener('click', () => {
-    menu.remove();
+  deleteItem.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu();
     if (options?.onDelete) {
       options.onDelete(chat);
       return;
     }
-    deleteChat(chat.id);
+    void deleteChat(chat.id);
   });
 
   menu.appendChild(renameItem);
@@ -1030,16 +1075,8 @@ function showChatItemContextMenu(
   menu.appendChild(deleteItem);
   document.body.appendChild(menu);
 
-  const close = (): void => {
-    menu.remove();
-    document.removeEventListener('click', close);
-    document.removeEventListener('keydown', onKey);
-  };
-  const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') close();
-  };
   window.setTimeout(() => {
-    document.addEventListener('click', close);
+    document.addEventListener('pointerdown', onPointerDownOutside, true);
     document.addEventListener('keydown', onKey);
   }, 0);
 }
@@ -1080,6 +1117,13 @@ function beginRenameChat(chatId: string, nameSpan: HTMLSpanElement): void {
   inp.addEventListener('blur', finish, { once: true });
 }
 
+/** Refresh every session list surface (Code sidebar, desktop rail, Chat app rail). */
+function refreshSessionListUIs(): void {
+  renderSidebar();
+  void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
+  void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
+}
+
 /** Refresh sidebar and main chat UI after removeChatById. */
 function onChatRemoved(result: RemoveChatResult): void {
   if (!result.ok) return;
@@ -1093,10 +1137,8 @@ function onChatRemoved(result: RemoveChatResult): void {
     } else {
       renderChatFromHistory(active);
     }
-  } else if (shouldPaintDesktopChatSurface()) {
-    void import('../ui/desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   }
-  renderSidebar();
+  refreshSessionListUIs();
   if (isOrchestrateHubMounted()) {
     refreshOrchestrateHubBoardList();
     // Deleting a planner chat can free its plan; refresh the dropdown too (MIN-215).
@@ -1125,7 +1167,7 @@ function paintActiveChatInForegroundShell(chat: Chat): void {
   renderChatFromHistory(chat);
 }
 
-export function deleteChat(chatId: string, evt?: Event): void {
+export async function deleteChat(chatId: string, evt?: Event): Promise<void> {
   if (evt) evt.stopPropagation();
   if (isChatStreaming(chatId)) {
     setStatus('spin', 'Finish the current reply first');
@@ -1138,7 +1180,15 @@ export function deleteChat(chatId: string, evt?: Event): void {
     victim.history.length === 0 && hasComposerDraft(victim)
       ? formatDraftChatSidebarName(victim)
       : victim.name;
-  if (!confirm(`Delete "${victimLabel}"? Messages in this chat cannot be recovered.`)) return;
+  // Electron patches window.confirm to always return false — must use appConfirm.
+  if (
+    !(await appConfirm(`Delete "${victimLabel}"? Messages in this chat cannot be recovered.`, {
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  ) {
+    return;
+  }
 
   const { modelId } = readDefaultModelBinding();
   const result = removeChatById(chatId, modelId);

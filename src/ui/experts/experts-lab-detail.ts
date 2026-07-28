@@ -67,6 +67,7 @@ import { isLocalServerAvailable } from '../../tools/config';
 import { wrapUntrusted } from '../../lib/untrusted.mjs';
 
 import { appendChatRow, deleteChat } from '../sidebar';
+import { appConfirm } from '../app-dialog';
 
 import type { ExpertAccent, ExpertMeta } from '../../chat/experts/types';
 
@@ -1290,11 +1291,18 @@ function renderSavedMemoryCard(
 
   deleteBtn.addEventListener('click', () => {
 
-    const label = entry.title || 'this memory';
-
-    if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
-
     void (async () => {
+
+      const label = entry.title || 'this memory';
+
+      if (
+        !(await appConfirm(`Delete "${label}"? This cannot be undone.`, {
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
+      ) {
+        return;
+      }
 
       const ok = await deleteExpertMemoryPage(entry.path);
 
@@ -1460,21 +1468,18 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
 
     clearBtn.addEventListener('click', () => {
 
-      if (
-
-        !confirm(
-
-          `Clear all ${saved.length} saved memories for this expert? This cannot be undone.`,
-
-        )
-
-      ) {
-
-        return;
-
-      }
-
       void (async () => {
+
+        if (
+          !(await appConfirm(
+            `Clear all ${saved.length} saved memories for this expert? This cannot be undone.`,
+            { confirmLabel: 'Clear all', danger: true },
+          ))
+        ) {
+
+          return;
+
+        }
 
         const removed = await clearExpertMemories(expertId);
 
@@ -1567,11 +1572,7 @@ function renderChatsPanel(ctx: ExpertsDetailContext, expertId: string): HTMLElem
         onActivate: (c) => ctx.onOpenChat(c),
 
         onDelete: (c) => {
-
-          deleteChat(c.id);
-
-          ctx.onRefresh();
-
+          void deleteChat(c.id).then(() => ctx.onRefresh());
         },
 
       });

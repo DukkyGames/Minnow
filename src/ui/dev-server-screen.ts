@@ -4,6 +4,7 @@
 
 import '../styles/dev-server-screen.css';
 import { spawnSubAgent } from '../agents/orchestrator';
+import { appAlert, appConfirm } from './app-dialog';
 import {
   createDevServerApi,
   deleteDevServerApi,
@@ -567,7 +568,14 @@ async function onRestart(id: string): Promise<void> {
 }
 
 async function onDelete(id: string): Promise<void> {
-  if (!window.confirm('Delete this server definition?')) return;
+  if (
+    !(await appConfirm('Delete this server definition?', {
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  ) {
+    return;
+  }
   await deleteDevServerApi(id);
   if (selectedId === id) selectedId = null;
   hideEditForm();
@@ -581,16 +589,16 @@ async function onOpen(url: string | null): Promise<void> {
 }
 
 async function onKill(pid: number, port: number): Promise<void> {
-  if (!window.confirm(`Kill process ${pid} on port ${port}?`)) return;
+  if (!(await appConfirm(`Kill process ${pid} on port ${port}?`, { danger: true }))) return;
   const result = await postKillPortOwner(pid, port);
-  if (!result.ok) window.alert(result.error ?? 'Kill failed');
+  if (!result.ok) await appAlert(result.error ?? 'Kill failed');
   await refreshAll();
 }
 
 async function onDetect(): Promise<void> {
   const chat = getActiveChat();
   if (!chat) {
-    window.alert('Open a chat first so Detect can spawn a setup agent.');
+    await appAlert('Open a chat first so Detect can spawn a setup agent.');
     return;
   }
   await spawnSubAgent({
@@ -627,7 +635,7 @@ async function onSaveEdit(): Promise<void> {
       ? { worktreeRoot }
       : { worktreeRoot: '' };
   if (!name) {
-    window.alert('Name is required');
+    await appAlert('Name is required');
     return;
   }
   try {
@@ -644,7 +652,7 @@ async function onSaveEdit(): Promise<void> {
       });
     } else {
       if (!command) {
-        window.alert('Command is required');
+        await appAlert('Command is required');
         return;
       }
       await createDevServerApi({
@@ -661,7 +669,7 @@ async function onSaveEdit(): Promise<void> {
     hideEditForm();
     await refreshAll();
   } catch (err) {
-    window.alert(err instanceof Error ? err.message : String(err));
+    await appAlert(err instanceof Error ? err.message : String(err));
   }
 }
 

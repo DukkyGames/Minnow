@@ -42,6 +42,7 @@ import {
 } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
+import { appConfirm } from './app-dialog';
 import { readDefaultModelBinding, resolveEffectiveChatModelBinding } from './default-model';
 import {
   appendSettingsCrosslinks,
@@ -1469,7 +1470,12 @@ function bindProvidersListActions(listEl: HTMLElement): void {
     if (!removeId) return;
 
     void (async () => {
-      if (!confirm(`Remove provider "${removeId}"? This deletes ~/.minnow/providers/${removeId}/.`)) {
+      if (
+        !(await appConfirm(
+          `Remove provider "${removeId}"? This deletes ~/.minnow/providers/${removeId}/.`,
+          { confirmLabel: 'Remove', danger: true },
+        ))
+      ) {
         return;
       }
       const result = await deleteProvider(removeId);

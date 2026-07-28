@@ -7,6 +7,7 @@ import type { BrainLintReport, BrainPruneLinksReport } from '../../brain/types';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { navigateBrainGraphPage, setGraphOrphanPaths } from './graph-section';
 import { openBrain } from '../brain-page';
+import { appConfirm } from '../app-dialog';
 
 function renderIssueList(
   mount: HTMLElement,
@@ -167,10 +168,12 @@ function renderWeakLinksGroup(mount: HTMLElement, report: BrainPruneLinksReport 
     applyBtn.className = 'brain-action-btn';
     applyBtn.textContent = 'Remove weak links';
     applyBtn.addEventListener('click', () => {
-      const ok = confirm(
-        `Remove ${droppedCount} similar-page links from ${report.removals.length} pages? This rewrites page frontmatter.`,
-      );
-      if (ok) void runPrune(true);
+      void (async () => {
+        const ok = await appConfirm(
+          `Remove ${droppedCount} similar-page links from ${report.removals.length} pages? This rewrites page frontmatter.`,
+        );
+        if (ok) void runPrune(true);
+      })();
     });
     section.append(applyBtn);
   }
@@ -221,10 +224,13 @@ function renderLintReport(
     cleanBtn.className = 'brain-action-btn';
     cleanBtn.textContent = 'Clean up';
     cleanBtn.addEventListener('click', () => {
-      const ok = confirm(
-        "Mark orphans stale and delete pages already marked stale. This deletes files and can't be undone.",
-      );
-      if (ok) void runCleanup();
+      void (async () => {
+        const ok = await appConfirm(
+          "Mark orphans stale and delete pages already marked stale. This deletes files and can't be undone.",
+          { confirmLabel: 'Clean up', danger: true },
+        );
+        if (ok) void runCleanup();
+      })();
     });
     mount.append(cleanBtn);
   }

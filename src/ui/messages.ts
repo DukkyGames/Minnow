@@ -59,6 +59,7 @@ import {
 } from './chat-mount';
 import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
+import { appConfirm } from './app-dialog';
 import { setStatus } from './status';
 import { refreshMetricsStripForChat } from '../chat/orchestrate/board-stats-aggregate';
 import { refreshContextUsageRing } from './context-usage-ring';
@@ -772,33 +773,42 @@ export function clearChat(): void {
     setStatus('spin', 'Finish the current reply first');
     return;
   }
-  if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
-  const chat = getActiveChat();
-  clearActiveGoal(chat);
-  clearActiveLoops(chat);
-  clearChatTodos(chat);
-  chat.history = [];
-  resetTokenLedger(chat);
-  resetCodeChangeTotals(chat);
-  updateCodeChangeStrip(chat);
-  if (sessionState) {
-    recomputeWorkspaceCodeChangeTotals(sessionState, chat.workspacePath);
-    updateWorkspaceCodeChangeDisplay();
-  }
-  chat.lastStats = null;
-  chat.modelInfo = {};
-  chat.lastMessageAt = 0;
-  touchChat(chat);
-  renderChatFromHistory(chat);
-  renderStatsForChat(chat);
-  renderSidebar();
-  scheduleSaveSessions();
-  syncTodoPanel();
-  void import('./loop-active-hint').then(({ syncLoopActiveHint }) => {
-    syncLoopActiveHint();
-  });
-  void import('./goal-active-hint').then(({ syncGoalActiveHint }) => {
-    syncGoalActiveHint();
-  });
-  closeDrawer();
+  void (async () => {
+    if (
+      !(await appConfirm('Clear all messages in this chat? The chat stays in your sidebar.', {
+        confirmLabel: 'Clear',
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    const chat = getActiveChat();
+    clearActiveGoal(chat);
+    clearActiveLoops(chat);
+    clearChatTodos(chat);
+    chat.history = [];
+    resetTokenLedger(chat);
+    resetCodeChangeTotals(chat);
+    updateCodeChangeStrip(chat);
+    if (sessionState) {
+      recomputeWorkspaceCodeChangeTotals(sessionState, chat.workspacePath);
+      updateWorkspaceCodeChangeDisplay();
+    }
+    chat.lastStats = null;
+    chat.modelInfo = {};
+    chat.lastMessageAt = 0;
+    touchChat(chat);
+    renderChatFromHistory(chat);
+    renderStatsForChat(chat);
+    renderSidebar();
+    scheduleSaveSessions();
+    syncTodoPanel();
+    void import('./loop-active-hint').then(({ syncLoopActiveHint }) => {
+      syncLoopActiveHint();
+    });
+    void import('./goal-active-hint').then(({ syncGoalActiveHint }) => {
+      syncGoalActiveHint();
+    });
+    closeDrawer();
+  })();
 }

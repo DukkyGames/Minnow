@@ -1239,7 +1239,7 @@ export function bindFileViewerContextMenu(): void {
           sel.to,
         );
         void import('./issue-link-from-editor').then((m) => {
-          m.linkSelectionToIssue({
+          void m.linkSelectionToIssue({
             path: tab.path,
             startLine: fromLine,
             endLine: toLine,
