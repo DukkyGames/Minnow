@@ -123,11 +123,18 @@ describe('applyCodeLaunchOptions', () => {
     resetInstancesForTests();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const appState = await import('../../src/app-state.ts');
+    for (const controller of appState.abortByChatId.values()) {
+      controller.abort();
+    }
+    appState.abortByChatId.clear();
+    appState.setStreaming(false);
     happyDomWindow?.close();
     happyDomWindow = undefined;
     setSessionStateForTests(null);
     resetWorkspaceStateForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   test('switches workspace without sending for navigation-only launch', async () => {
