@@ -4,10 +4,6 @@ import { appAlert, appConfirm, appPrompt } from './app-dialog';
  */
 
 import {
-  deriveOrchestratorLastActivity,
-  type OrchestratorActivity,
-} from '../chat/orchestrate/last-activity';
-import {
   renderFinishDashboard,
   syncFinishDashboard,
 } from './orchestrate-finish-dashboard';
@@ -910,69 +906,6 @@ function syncBoardHeaderStatusBadge(
   if (label) label.textContent = status.label;
 }
 
-const ACTIVITY_KIND_LABEL: Record<OrchestratorActivity['kind'], string> = {
-  tool: 'Tool',
-  message: 'Message',
-  thinking: 'Thinking',
-  waiting: 'Working',
-};
-
-function wireBoardActivityOpenChat(chip: HTMLElement): void {
-  if (chip.dataset.boardActivityWired === 'true') return;
-  chip.dataset.boardActivityWired = 'true';
-  chip.addEventListener('click', () => setOrchestrateViewMode('chat'));
-}
-
-function buildBoardActivityBadge(activity: OrchestratorActivity): HTMLElement {
-  const el = document.createElement('button');
-  el.type = 'button';
-  el.className = `board-header__activity board-header__activity--${activity.kind}`;
-  el.setAttribute('aria-label', `Open chat view: ${activity.title}`);
-  el.title = `${activity.title}\nClick to open chat view`;
-  const kind = document.createElement('span');
-  kind.className = 'board-header__activity-kind';
-  kind.setAttribute('aria-hidden', 'true');
-  kind.textContent = ACTIVITY_KIND_LABEL[activity.kind];
-  const text = document.createElement('span');
-  text.className = 'board-header__activity-text';
-  text.textContent = activity.text;
-  el.appendChild(kind);
-  el.appendChild(text);
-  wireBoardActivityOpenChat(el);
-  return el;
-}
-
-function syncBoardHeaderActivity(
-  header: Element,
-  activity: OrchestratorActivity | null,
-): void {
-  const leading = header.querySelector('.board-header__leading');
-  if (!leading) return;
-  let chip = leading.querySelector('.board-header__activity');
-  if (!activity) {
-    chip?.remove();
-    return;
-  }
-  if (!(chip instanceof HTMLElement)) {
-    const statusBadge = leading.querySelector('.board-header__badge');
-    const next = buildBoardActivityBadge(activity);
-    if (statusBadge) {
-      statusBadge.insertAdjacentElement('afterend', next);
-    } else {
-      leading.appendChild(next);
-    }
-    return;
-  }
-  wireBoardActivityOpenChat(chip);
-  chip.className = `board-header__activity board-header__activity--${activity.kind}`;
-  chip.setAttribute('aria-label', `Open chat view: ${activity.title}`);
-  chip.title = `${activity.title}\nClick to open chat view`;
-  const kindEl = chip.querySelector('.board-header__activity-kind');
-  const textEl = chip.querySelector('.board-header__activity-text');
-  if (kindEl) kindEl.textContent = ACTIVITY_KIND_LABEL[activity.kind];
-  if (textEl) textEl.textContent = activity.text;
-}
-
 /** Icon-only board header control (Plan, play/pause) matching top-bar icon buttons. */
 function createBoardHeaderIconButton(
   action: string,
@@ -1464,19 +1397,17 @@ interface BoardHeaderMetrics {
 }
 
 function buildBoardHeader(
-  chat: Chat,
   board: BoardState,
   planPath: string,
   metrics: BoardHeaderMetrics,
-  isStreaming: boolean,
   headerStatus: BoardHeaderStatus,
-  activity: OrchestratorActivity | null,
   group: ChatGroup,
   plannerChat: Chat,
 ): HTMLElement {
   const header = document.createElement('header');
   header.className = 'board-header';
 
+  // Single instrument strip: identity + inline telemetry + run controls.
   const toolbar = document.createElement('div');
   toolbar.className = 'board-header__toolbar';
 
@@ -1488,9 +1419,7 @@ function buildBoardHeader(
   title.textContent = shortPlanName(planPath);
   leading.appendChild(title);
   leading.appendChild(buildBoardStatusBadge(headerStatus));
-  if (activity) {
-    leading.appendChild(buildBoardActivityBadge(activity));
-  }
+  leading.appendChild(buildBoardHeaderTelemetry(metrics, board));
 
   const controls = document.createElement('div');
   controls.className = 'board-header__controls';
@@ -1499,25 +1428,12 @@ function buildBoardHeader(
   toolbar.appendChild(leading);
   toolbar.appendChild(controls);
 
-  const pendingAfkBanner = buildPendingAfkBanner(group, board, plannerChat);
-  if (pendingAfkBanner) toolbar.appendChild(pendingAfkBanner);
-
+  // Secondary band: only alerts / live slots (keeps the primary strip tight).
   const meta = document.createElement('div');
   meta.className = 'board-header__meta';
-  meta.appendChild(buildBoardHeaderBench(metrics, board));
 
-  const bar = document.createElement('div');
-  bar.className = 'board-header__progress';
-  bar.setAttribute('role', 'progressbar');
-  bar.setAttribute('aria-valuenow', String(metrics.progress));
-  bar.setAttribute('aria-valuemin', '0');
-  bar.setAttribute('aria-valuemax', '100');
-  const fill = document.createElement('div');
-  fill.className = 'board-header__progress-fill';
-  fill.style.setProperty('--progress-scale', String(metrics.progress / 100));
-  bar.appendChild(fill);
-
-  meta.appendChild(bar);
+  const pendingAfkBanner = buildPendingAfkBanner(group, board, plannerChat);
+  if (pendingAfkBanner) meta.appendChild(pendingAfkBanner);
 
   const runningStrip = buildBoardRunningTasksStrip(board, group, plannerChat);
   if (runningStrip) meta.appendChild(runningStrip);
@@ -1526,7 +1442,9 @@ function buildBoardHeader(
   if (finalBanner) meta.appendChild(finalBanner);
 
   header.appendChild(toolbar);
-  header.appendChild(meta);
+  if (meta.childElementCount > 0) {
+    header.appendChild(meta);
+  }
   return header;
 }
 
@@ -1554,6 +1472,7 @@ function buildFinalTestBanner(
   }
 
   if (finalTest?.status === 'failed') {
+    wrap.classList.add('board-header__final-test--failed');
     const summary = finalTest.summary?.trim();
     const reopened = finalTest.failingTaskIds?.length
       ? ` Reopened: ${finalTest.failingTaskIds.join(', ')}.`
@@ -1590,61 +1509,90 @@ function buildFinalTestBanner(
   return wrap;
 }
 
-/** One instrumentation cell in the board header bench (mono value + label). */
-function createBoardBenchCell(
+/** One inline metric token: mono value + lowercase label (tight instrument strip). */
+function createBoardMetricToken(
   value: string,
   label: string,
-  benchKey: string,
+  metricKey: string,
 ): HTMLElement {
-  const cell = document.createElement('div');
-  cell.className = 'board-bench__cell';
-  cell.dataset.boardBench = benchKey;
+  const token = document.createElement('span');
+  token.className = 'board-header__metric';
+  token.dataset.boardMetric = metricKey;
   const valueEl = document.createElement('span');
-  valueEl.className = 'board-bench__value';
+  valueEl.className = 'board-header__metric-value';
   valueEl.textContent = value;
   const labelEl = document.createElement('span');
-  labelEl.className = 'board-bench__label';
+  labelEl.className = 'board-header__metric-label';
   labelEl.textContent = label;
-  cell.appendChild(valueEl);
-  cell.appendChild(labelEl);
-  return cell;
+  token.appendChild(valueEl);
+  token.appendChild(labelEl);
+  return token;
 }
 
-/** Compact metrics row under the board toolbar (stats-strip family). */
-function buildBoardHeaderBench(
+/** Dot separator between inline metric tokens. */
+function createBoardMetricSep(): HTMLElement {
+  const sep = document.createElement('span');
+  sep.className = 'board-header__metric-sep';
+  sep.setAttribute('aria-hidden', 'true');
+  sep.textContent = '·';
+  return sep;
+}
+
+/** Inline telemetry cluster: metrics line + thin progress under it. */
+function buildBoardHeaderTelemetry(
   metrics: BoardHeaderMetrics,
   board: BoardState,
 ): HTMLElement {
-  const bench = document.createElement('div');
-  bench.className = 'board-header__bench';
-  bench.setAttribute('role', 'group');
-  bench.setAttribute('aria-label', 'Board metrics');
+  const telemetry = document.createElement('div');
+  telemetry.className = 'board-header__telemetry';
+
+  const metricsRow = document.createElement('div');
+  metricsRow.className = 'board-header__metrics';
+  metricsRow.setAttribute('role', 'group');
+  metricsRow.setAttribute('aria-label', 'Board metrics');
+
   const cap = resolveEffectiveMaxConcurrent(board);
   const running = countRunningTaskChats(board);
-  bench.appendChild(
-    createBoardBenchCell(
-      `${metrics.done}/${metrics.totalTasks}`,
-      'Tasks',
-      'tasks',
-    ),
-  );
-  bench.appendChild(
-    createBoardBenchCell(
-      `${metrics.wavesComplete}/${metrics.totalWaves}`,
-      'Waves',
-      'waves',
-    ),
-  );
-  bench.appendChild(
-    createBoardBenchCell(`${running}/${cap}`, 'Running', 'running'),
-  );
-  bench.appendChild(
-    createBoardBenchCell(metrics.elapsed, 'Elapsed', 'elapsed'),
-  );
-  return bench;
+  const tokens: Array<{ value: string; label: string; key: string }> = [
+    {
+      value: `${metrics.done}/${metrics.totalTasks}`,
+      label: 'tasks',
+      key: 'tasks',
+    },
+    {
+      value: `${metrics.wavesComplete}/${metrics.totalWaves}`,
+      label: 'waves',
+      key: 'waves',
+    },
+    { value: `${running}/${cap}`, label: 'run', key: 'running' },
+    { value: metrics.elapsed, label: 'elapsed', key: 'elapsed' },
+  ];
+  tokens.forEach((token, index) => {
+    if (index > 0) metricsRow.appendChild(createBoardMetricSep());
+    metricsRow.appendChild(
+      createBoardMetricToken(token.value, token.label, token.key),
+    );
+  });
+  telemetry.appendChild(metricsRow);
+
+  const bar = document.createElement('div');
+  bar.className = 'board-header__progress';
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-valuenow', String(metrics.progress));
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', '100');
+  bar.setAttribute('aria-label', 'Board progress');
+  const fill = document.createElement('div');
+  fill.className = 'board-header__progress-fill';
+  fill.style.setProperty('--progress-scale', String(metrics.progress / 100));
+  bar.appendChild(fill);
+  telemetry.appendChild(bar);
+
+  return telemetry;
 }
 
-function syncBoardHeaderBench(
+/** Patch mono metric values in place during live board ticks. */
+function syncBoardHeaderTelemetry(
   header: Element,
   metrics: BoardHeaderMetrics,
   board: BoardState,
@@ -1658,8 +1606,10 @@ function syncBoardHeaderBench(
     elapsed: metrics.elapsed,
   };
   for (const [key, text] of Object.entries(values)) {
-    const cell = header.querySelector(`[data-board-bench="${key}"] .board-bench__value`);
-    if (cell) cell.textContent = text;
+    const valueEl = header.querySelector(
+      `[data-board-metric="${key}"] .board-header__metric-value`,
+    );
+    if (valueEl) valueEl.textContent = text;
   }
 }
 
@@ -1982,9 +1932,10 @@ function syncBoardRunningTasksStrip(
   if (!existing) {
     const strip = buildBoardRunningTasksStrip(board, group, plannerChat);
     if (!strip) return;
-    const bar = meta.querySelector('.board-header__progress');
-    if (bar) {
-      bar.insertAdjacentElement('afterend', strip);
+    // Keep live slots above the final-test banner when present.
+    const finalTest = meta.querySelector('.board-header__final-test');
+    if (finalTest) {
+      finalTest.insertAdjacentElement('beforebegin', strip);
     } else {
       meta.appendChild(strip);
     }
@@ -2809,21 +2760,14 @@ function refreshBoardDom(
     activeRuns.length,
     userStopped,
   );
-  const activity = deriveOrchestratorLastActivity(plannerChat, isStreaming);
-
   const header = root.querySelector('.board-header');
   if (header) {
     syncBoardHeaderStatusBadge(header, headerStatus);
-    syncBoardHeaderActivity(header, activity);
+    syncBoardHeaderTelemetry(header, metrics, board);
   }
 
   const title = root.querySelector('.board-header__title');
   if (title) title.textContent = shortPlanName(planPath);
-
-  const headerEl = root.querySelector('.board-header');
-  if (headerEl) {
-    syncBoardHeaderBench(headerEl, metrics, board);
-  }
 
   const fill = root.querySelector(
     '.board-header__progress-fill',
@@ -2833,9 +2777,18 @@ function refreshBoardDom(
   const bar = root.querySelector('.board-header__progress');
   if (bar) bar.setAttribute('aria-valuenow', String(metrics.progress));
 
-  const headerMeta = root.querySelector('.board-header__meta');
+  // Ensure meta exists when live slots appear after an initially empty secondary band.
+  let headerMeta = root.querySelector('.board-header__meta');
+  if (!headerMeta && header) {
+    headerMeta = document.createElement('div');
+    headerMeta.className = 'board-header__meta';
+    header.appendChild(headerMeta);
+  }
   if (headerMeta) {
     syncBoardRunningTasksStrip(headerMeta, board, group, plannerChat);
+    if (headerMeta.childElementCount === 0) {
+      headerMeta.remove();
+    }
   }
 
   const openPlanBtn = root.querySelector(
@@ -3351,16 +3304,12 @@ export function renderBoardView(group: ChatGroup): void {
     activeRuns.length,
     isBoardUserStopped(board, plannerChat),
   );
-  const activity = deriveOrchestratorLastActivity(plannerChat, isStreaming);
   const metrics = boardHeaderMetrics(group, plannerChat, board, activeRuns.length);
   const header = buildBoardHeader(
-    plannerChat,
     board,
     planPath,
     metrics,
-    isStreaming,
     headerStatus,
-    activity,
     group,
     plannerChat,
   );

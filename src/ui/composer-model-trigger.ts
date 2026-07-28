@@ -224,8 +224,12 @@ function syncTrigger(trigger: ComposerModelTrigger): void {
   if (isMenubarStyleVariant(trigger.variant)) {
     trigger.labelEl.textContent = model;
     if (trigger.providerEl) {
+      // Skip provider when it duplicates the model name (e.g. fake-board branding).
+      const showProvider =
+        Boolean(provider) &&
+        provider.trim().toLowerCase() !== model.trim().toLowerCase();
       trigger.providerEl.textContent = provider;
-      trigger.providerEl.hidden = !provider;
+      trigger.providerEl.hidden = !showProvider;
     }
   } else {
     const label =
@@ -354,7 +358,15 @@ function positionMenubarExpandLabel(trigger: ComposerModelTrigger): void {
   const expand = trigger.expandEl;
   if (!expand) return;
   const rect = trigger.trigger.getBoundingClientRect();
-  // Anchor to the left of the icon — label grows leftward, icon stays fixed.
+  // Board header is dense (telemetry sits to the left). Drop the label under the
+  // icon so it never paints over the instrument strip.
+  if (trigger.variant === 'board') {
+    expand.style.left = `${rect.left + rect.width / 2}px`;
+    expand.style.top = `${rect.bottom + 6}px`;
+    expand.style.right = 'auto';
+    return;
+  }
+  // Menubar: anchor to the left of the icon — label grows leftward, icon stays fixed.
   expand.style.left = `${rect.left - 6}px`;
   expand.style.top = `${rect.top + rect.height / 2}px`;
   expand.style.right = 'auto';
@@ -621,6 +633,9 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
 
   const expandEl = document.createElement('div');
   expandEl.className = 'mn-os-mb-model-expand';
+  if (variant === 'board') {
+    expandEl.classList.add('mn-os-mb-model-expand--board');
+  }
   expandEl.setAttribute('aria-hidden', 'true');
 
   const expandInner = document.createElement('div');
