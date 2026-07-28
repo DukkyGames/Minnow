@@ -363,6 +363,7 @@ export function registerToolHandlers(): void {
     'webSearchProvider',
     'composerToolsWebSearchProvider',
     'chatAppToolsWebSearchProvider',
+    'desktopToolsWebSearchProvider',
   ];
   for (const id of webSearchFields) {
     const el = document.getElementById(id);
@@ -371,7 +372,12 @@ export function registerToolHandlers(): void {
     el.addEventListener('change', (event) => saveWebSearchSettingsFromDrawer(event));
   }
 
-  for (const id of ['settingsToolCacheEnabled', 'composerToolsCacheEnabled', 'chatAppToolsCacheEnabled']) {
+  for (const id of [
+    'settingsToolCacheEnabled',
+    'composerToolsCacheEnabled',
+    'chatAppToolsCacheEnabled',
+    'desktopToolsCacheEnabled',
+  ]) {
     const el = document.getElementById(id);
     if (!el) continue;
     el.addEventListener('change', saveToolCacheFromUi);

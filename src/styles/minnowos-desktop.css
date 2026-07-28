@@ -930,6 +930,24 @@
   flex: none;
 }
 
+.mn-os-desktop-tools-anchor {
+  position: relative;
+  flex: none;
+}
+
+.mn-os-desktop-tools-anchor .composer-tools-popover {
+  bottom: calc(100% + 8px);
+  right: 0;
+}
+
+.mn-os-desktop-input-row:has(.composer-tools-popover:not(.hidden)) {
+  overflow: visible;
+}
+
+.mn-os-desktop-input-row:has(.composer-tools-popover:not(.hidden)) .mn-os-desktop-tools-anchor {
+  z-index: 10;
+}
+
 .mn-os-desktop-send {
   width: 40px;
   height: 40px;

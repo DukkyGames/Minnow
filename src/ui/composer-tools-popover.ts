@@ -124,6 +124,12 @@ const CHAT_APP_POPOVER_IDS: ToolsPopoverIds = {
   settingsLinkId: 'chatAppToolsOpenSettings',
 };
 
+const DESKTOP_POPOVER_IDS: ToolsPopoverIds = {
+  buttonId: 'btnDesktopTools',
+  popoverId: 'desktopToolsPopover',
+  settingsLinkId: 'desktopToolsOpenSettings',
+};
+
 /** Whether the Code composer tools popover is visible. */
 export function isComposerToolsPopoverOpen(): boolean {
   return isPopoverOpen(COMPOSER_POPOVER_IDS.popoverId);
@@ -152,4 +158,14 @@ export function initComposerToolsPopover(): void {
 /** Wire Chat app composer tools button popover. */
 export function initChatAppToolsPopover(): void {
   initToolsPopover(CHAT_APP_POPOVER_IDS);
+}
+
+/** Close the desktop composer tools popover. */
+export function closeDesktopToolsPopover(): void {
+  closeToolsPopover(DESKTOP_POPOVER_IDS);
+}
+
+/** Wire desktop composer tools button popover. */
+export function initDesktopToolsPopover(): void {
+  initToolsPopover(DESKTOP_POPOVER_IDS);
 }

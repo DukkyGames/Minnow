@@ -13,7 +13,7 @@ Most single-key shortcuts (mail triage, tool approval digits) are **suppressed w
 | Keys | Action |
 |------|--------|
 | **Escape** | Close open overlays and popovers (tools permissions, context usage breakdown, code-change panel, modals, drawers, and other dismissible layers). Wired from [`src/main.ts`](../../src/main.ts) and per-surface handlers. |
-| **Mod+A** | Select all **within the focused panel** (chat transcript, editor, preview, orchestrate chat pane, onboarding chat) instead of the whole app shell ([`scoped-select-all.ts`](../../src/ui/scoped-select-all.ts)). Native controls and CodeMirror/xterm keep their built-in select-all. |
+| **Mod+A** | Select all **within the focused panel** (chat, editor, preview, Settings, Research, Models, Brain, Issues, and other full-page apps) instead of the whole app shell ([`scoped-select-all.ts`](../../src/ui/scoped-select-all.ts)). Native controls and CodeMirror/xterm keep their built-in select-all. |
 | **Tab** / **Shift+Tab** | Move focus through dock, menubar, sidebars, and app chrome (standard browser tab order). |
 | **Ctrl+Tab** / **Ctrl+Shift+Tab** | Cycle between **Desktop** and recently used Minnow apps (dock apps), macOS **Cmd+Tab**–style within Minnow. Uses **Ctrl** only — not **Cmd** on macOS (system app switcher) and not **Mod+Tab** in the Code editor (file tabs). When the Code editor or unified tab strip has focus on Windows/Linux, **Ctrl+Tab** still cycles file tabs there first. |
 
