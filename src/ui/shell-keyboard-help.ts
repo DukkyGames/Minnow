@@ -3,6 +3,8 @@
  * Per-app shortcuts (mail triage, file tree, board) are listed in context sections.
  */
 
+import { isDeveloperReleased } from '../os/app-registry';
+import type { AppId } from '../os/types';
 import { isTypingTarget } from './a11y/typing-target';
 
 export interface ShortcutDoc {
@@ -10,6 +12,8 @@ export interface ShortcutDoc {
   label: string;
   /** Group heading for the cheat sheet. */
   section?: string;
+  /** Omit from help when the app is not developer-released. */
+  appId?: AppId;
 }
 
 const SHELL_SHORTCUTS: ShortcutDoc[] = [
@@ -28,6 +32,11 @@ const CHAT_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Chat', keys: 'Enter', label: 'Send message (composer focused)' },
   { section: 'Chat', keys: 'Shift + Enter', label: 'New line in composer' },
   { section: 'Chat', keys: '/', label: 'Open skill picker in composer' },
+  {
+    section: 'Chat',
+    keys: 'Ctrl/Cmd + M',
+    label: 'Open per-chat model picker (focuses search)',
+  },
   { section: 'Chat', keys: 'Arrow keys', label: 'Navigate model list when picker is open' },
   { section: 'Chat', keys: '1 / 2 / 3', label: 'Tool approval: allow once, always allow, cancel' },
 ];
@@ -46,14 +55,19 @@ const BOARD_SHORTCUTS: ShortcutDoc[] = [
 ];
 
 const MAIL_SHORTCUTS: ShortcutDoc[] = [
-  { section: 'Email', keys: 'j / k', label: 'Next / previous conversation' },
-  { section: 'Email', keys: 'e', label: 'Archive' },
-  { section: 'Email', keys: '#', label: 'Trash' },
-  { section: 'Email', keys: 'c', label: 'Compose' },
-  { section: 'Email', keys: '?', label: 'Email-only shortcut list (when mail app is focused)' },
+  { section: 'Email', appId: 'email', keys: 'j / k', label: 'Next / previous conversation' },
+  { section: 'Email', appId: 'email', keys: 'e', label: 'Archive' },
+  { section: 'Email', appId: 'email', keys: '#', label: 'Trash' },
+  { section: 'Email', appId: 'email', keys: 'c', label: 'Compose' },
+  {
+    section: 'Email',
+    appId: 'email',
+    keys: '?',
+    label: 'Email-only shortcut list (when mail app is focused)',
+  },
 ];
 
-export const GLOBAL_KEYBOARD_SHORTCUTS: ShortcutDoc[] = [
+const ALL_KEYBOARD_SHORTCUTS: ShortcutDoc[] = [
   ...SHELL_SHORTCUTS,
   ...CHAT_SHORTCUTS,
   ...CODE_SHORTCUTS,
@@ -61,9 +75,32 @@ export const GLOBAL_KEYBOARD_SHORTCUTS: ShortcutDoc[] = [
   ...MAIL_SHORTCUTS,
 ];
 
+/** Full shortcut catalog (includes release-gated apps). */
+export const GLOBAL_KEYBOARD_SHORTCUTS: ShortcutDoc[] = ALL_KEYBOARD_SHORTCUTS;
+
+/** Shortcuts shown in the `?` overlay — omits unreleased apps. */
+export function getVisibleKeyboardShortcuts(): ShortcutDoc[] {
+  return ALL_KEYBOARD_SHORTCUTS.filter((row) => !row.appId || isDeveloperReleased(row.appId));
+}
+
+function keyboardHelpIntro(): string {
+  const base = 'Shortcuts are suppressed while you type in a text field.';
+  if (isDeveloperReleased('email')) {
+    return `${base} Email has additional bindings when the mail app is focused.`;
+  }
+  return base;
+}
+
 let sheetOpen = false;
 let previousFocus: HTMLElement | null = null;
 let escapeHandler: ((event: KeyboardEvent) => void) | null = null;
+
+/** Prefer the foreground app layer; fall back to the OS stage or document body. */
+export function resolveKeyboardHelpMount(): HTMLElement {
+  const activeLayer = document.querySelector<HTMLElement>('.mn-os-app-layer.is-active');
+  if (activeLayer) return activeLayer;
+  return document.getElementById('osStage') ?? document.body;
+}
 
 function trapFocus(event: KeyboardEvent): void {
   const panel = document.getElementById('shellKeyboardHelpPanel');
@@ -98,26 +135,75 @@ function closeKeyboardHelp(): void {
   previousFocus = null;
 }
 
-/** Render grouped shortcut rows into a definition list. */
-function renderShortcutList(shortcuts: ShortcutDoc[]): HTMLDListElement {
-  const list = document.createElement('dl');
-  list.className = 'shell-keyboard-help__list';
-  let lastSection = '';
-  for (const row of shortcuts) {
-    if (row.section && row.section !== lastSection) {
-      lastSection = row.section;
-      const heading = document.createElement('div');
-      heading.className = 'shell-keyboard-help__section';
-      heading.textContent = row.section;
-      list.appendChild(heading);
+/** Split a shortcut string into chip groups (e.g. `Ctrl + K`, `Shift + Tab`). */
+function renderKeyChips(keys: string): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'shell-keyboard-help__keys';
+
+  const alternatives = keys.split(' / ');
+  for (let altIndex = 0; altIndex < alternatives.length; altIndex += 1) {
+    if (altIndex > 0) {
+      const or = document.createElement('span');
+      or.className = 'shell-keyboard-help__keys-or';
+      or.textContent = '/';
+      or.setAttribute('aria-hidden', 'true');
+      wrap.appendChild(or);
     }
-    const keys = document.createElement('dt');
-    keys.textContent = row.keys;
-    const label = document.createElement('dd');
-    label.textContent = row.label;
-    list.append(keys, label);
+
+    const parts = alternatives[altIndex].split(/\s*\+\s*/);
+    for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
+      if (partIndex > 0) {
+        const plus = document.createElement('span');
+        plus.className = 'shell-keyboard-help__keys-plus';
+        plus.textContent = '+';
+        plus.setAttribute('aria-hidden', 'true');
+        wrap.appendChild(plus);
+      }
+      const chip = document.createElement('kbd');
+      chip.className = 'shell-keyboard-help__kbd';
+      chip.textContent = parts[partIndex].trim();
+      wrap.appendChild(chip);
+    }
   }
-  return list;
+
+  return wrap;
+}
+
+/** Render grouped shortcut sections (each section owns its own definition list). */
+function renderShortcutSections(shortcuts: ShortcutDoc[]): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  const groups = new Map<string, ShortcutDoc[]>();
+
+  for (const row of shortcuts) {
+    const section = row.section ?? 'Other';
+    const bucket = groups.get(section);
+    if (bucket) bucket.push(row);
+    else groups.set(section, [row]);
+  }
+
+  for (const [section, rows] of groups) {
+    const group = document.createElement('section');
+    group.className = 'shell-keyboard-help__group';
+
+    const heading = document.createElement('h3');
+    heading.className = 'shell-keyboard-help__section';
+    heading.textContent = section;
+    group.appendChild(heading);
+
+    const list = document.createElement('dl');
+    list.className = 'shell-keyboard-help__list';
+    for (const row of rows) {
+      const keys = document.createElement('dt');
+      keys.appendChild(renderKeyChips(row.keys));
+      const label = document.createElement('dd');
+      label.textContent = row.label;
+      list.append(keys, label);
+    }
+    group.appendChild(list);
+    fragment.appendChild(group);
+  }
+
+  return fragment;
 }
 
 /** Open the global shortcuts overlay. */
@@ -131,38 +217,56 @@ export function showShellKeyboardHelp(): void {
   previousFocus =
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
+  const mount = resolveKeyboardHelpMount();
+  const scoped = mount !== document.body;
+
   const backdrop = document.createElement('div');
   backdrop.id = 'shellKeyboardHelpBackdrop';
   backdrop.className = 'shell-keyboard-help-backdrop';
+  if (scoped) backdrop.classList.add('is-scoped');
   backdrop.addEventListener('click', closeKeyboardHelp);
 
   const panel = document.createElement('div');
   panel.id = 'shellKeyboardHelpPanel';
   panel.className = 'shell-keyboard-help-sheet';
+  if (scoped) panel.classList.add('is-scoped');
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-label', 'Keyboard shortcuts');
   panel.tabIndex = -1;
 
+  const header = document.createElement('header');
+  header.className = 'shell-keyboard-help__header';
+
   const title = document.createElement('h2');
   title.className = 'shell-keyboard-help__title';
   title.textContent = 'Keyboard shortcuts';
-  panel.appendChild(title);
+  header.appendChild(title);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'shell-keyboard-help__close-icon';
+  closeBtn.setAttribute('aria-label', 'Close keyboard shortcuts');
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', closeKeyboardHelp);
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
 
   const intro = document.createElement('p');
   intro.className = 'shell-keyboard-help__intro';
-  intro.textContent =
-    'Shortcuts are suppressed while you type in a text field. Email has additional bindings when the mail app is focused.';
+  intro.textContent = keyboardHelpIntro();
   panel.appendChild(intro);
 
-  panel.appendChild(renderShortcutList(GLOBAL_KEYBOARD_SHORTCUTS));
+  const body = document.createElement('div');
+  body.className = 'shell-keyboard-help__body';
+  body.appendChild(renderShortcutSections(getVisibleKeyboardShortcuts()));
+  panel.appendChild(body);
 
-  const dismiss = document.createElement('button');
-  dismiss.type = 'button';
-  dismiss.className = 'shell-keyboard-help__close';
-  dismiss.textContent = 'Close';
-  dismiss.addEventListener('click', closeKeyboardHelp);
-  panel.appendChild(dismiss);
+  const footer = document.createElement('footer');
+  footer.className = 'shell-keyboard-help__footer';
+  footer.innerHTML =
+    'Press <kbd class="shell-keyboard-help__kbd shell-keyboard-help__kbd--inline">?</kbd> or <kbd class="shell-keyboard-help__kbd shell-keyboard-help__kbd--inline">Esc</kbd> to close';
+  panel.appendChild(footer);
 
   escapeHandler = (event: KeyboardEvent) => {
     if (event.key === 'Escape' || event.key === '?') {
@@ -173,8 +277,8 @@ export function showShellKeyboardHelp(): void {
   document.addEventListener('keydown', escapeHandler, true);
   document.addEventListener('keydown', trapFocus, true);
 
-  document.body.append(backdrop, panel);
-  dismiss.focus();
+  mount.append(backdrop, panel);
+  closeBtn.focus();
 }
 
 let helpBound = false;
@@ -189,7 +293,7 @@ export function initShellKeyboardHelp(): void {
     if (event.key !== '?') return;
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (isTypingTarget(event.target)) return;
-  // Shift+? is the typical physical key; unshifted ? also works on some layouts.
+    // Shift+? is the typical physical key; unshifted ? also works on some layouts.
     event.preventDefault();
     showShellKeyboardHelp();
   });

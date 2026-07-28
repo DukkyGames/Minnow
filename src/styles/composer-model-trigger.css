@@ -32,6 +32,19 @@
   flex-shrink: 0;
 }
 
+.chat-app-input .composer-model-trigger-anchor,
+.chat-app-input .composer-model-trigger-wrap {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(14rem, 34vw);
+  overflow: hidden;
+}
+
+.chat-app-input .composer-model-trigger {
+  max-width: 100%;
+  min-width: 0;
+}
+
 .composer-model-trigger-wrap--desktop {
   justify-content: flex-end;
   flex-shrink: 0;

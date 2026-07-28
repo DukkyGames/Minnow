@@ -5,38 +5,110 @@
   background: var(--mn-overlay);
 }
 
+.shell-keyboard-help-backdrop.is-scoped {
+  position: absolute;
+  z-index: 80;
+}
+
 .shell-keyboard-help-sheet {
   position: fixed;
   z-index: 12001;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(520px, calc(100vw - 32px));
-  max-height: min(80vh, 640px);
-  overflow: auto;
-  padding: 20px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  width: min(480px, calc(100% - 32px));
+  max-height: min(72vh, 560px);
+  overflow: hidden;
+  padding: 0;
   background: var(--mn-surface-1);
   border: 1px solid var(--mn-border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--mn-shadow);
+  box-shadow: 0 10px 40px oklch(0.08 0.02 250 / 0.45);
+  transform: translate(-50%, -50%);
+  animation: shell-keyboard-help-in 0.2s var(--ease-out, ease-out);
+}
+
+.shell-keyboard-help-sheet.is-scoped {
+  position: absolute;
+  z-index: 81;
+  width: min(480px, calc(100% - 40px));
+  max-height: min(78%, 560px);
+}
+
+.shell-keyboard-help__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 0;
+  flex-shrink: 0;
 }
 
 .shell-keyboard-help__title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.shell-keyboard-help__close-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .shell-keyboard-help__close-icon:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+    border-color: var(--mn-border);
+  }
+}
+
+.shell-keyboard-help__close-icon:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
 }
 
 .shell-keyboard-help__intro {
-  margin: 0 0 14px;
+  margin: 0;
+  padding: 8px 18px 12px;
   font-size: 13px;
   line-height: 1.45;
   color: var(--mn-fg-muted);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.shell-keyboard-help__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 18px 8px;
+  overscroll-behavior: contain;
+}
+
+.shell-keyboard-help__group + .shell-keyboard-help__group {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
 }
 
 .shell-keyboard-help__section {
-  margin: 12px 0 6px;
+  margin: 0 0 8px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -44,47 +116,110 @@
   color: var(--mn-fg-muted);
 }
 
-.shell-keyboard-help__section:first-child {
-  margin-top: 0;
-}
-
 .shell-keyboard-help__list {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 16px;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 8px 14px;
   margin: 0;
+  align-items: start;
 }
 
 .shell-keyboard-help__list dt {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
-  font-size: 12px;
-  color: var(--mn-fg);
+  margin: 0;
+  justify-self: start;
 }
 
 .shell-keyboard-help__list dd {
   margin: 0;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--mn-fg-muted);
+  color: var(--mn-fg);
 }
 
-.shell-keyboard-help__close {
-  margin-top: 16px;
-  min-height: var(--mn-touch-min, 44px);
-  padding: 0 14px;
+.shell-keyboard-help__keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.shell-keyboard-help__keys-or,
+.shell-keyboard-help__keys-plus {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+  user-select: none;
+}
+
+.shell-keyboard-help__kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 1px 6px;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
   border: 1px solid var(--mn-border-strong);
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--mn-fg);
-  font-size: 13px;
-  cursor: pointer;
 }
 
-.shell-keyboard-help__close:hover {
-  background: var(--mn-surface-elevated);
+.shell-keyboard-help__kbd--inline {
+  min-height: 20px;
+  padding: 0 5px;
+  font-size: 10px;
+  vertical-align: middle;
 }
 
-.shell-keyboard-help__close:focus-visible {
-  outline: 2px solid var(--mn-focus-ring);
-  outline-offset: 2px;
+.shell-keyboard-help__footer {
+  flex-shrink: 0;
+  padding: 10px 18px 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+  text-align: center;
+  border-top: 1px solid var(--mn-border);
+}
+
+@keyframes shell-keyboard-help-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 6px));
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-keyboard-help-sheet {
+    animation: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .shell-keyboard-help__list {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .shell-keyboard-help__list dd {
+    margin-bottom: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--mn-border) 65%, transparent);
+    color: var(--mn-fg-muted);
+  }
+
+  .shell-keyboard-help__list dd:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
 }

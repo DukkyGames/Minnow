@@ -28,6 +28,7 @@ Applies to Code workspace composers (`#msgInput`) and equivalent chat surfaces u
 | **Enter** | Send message (or **Stop** while streaming when the send button is in stop mode). |
 | **Shift+Enter** | Insert a newline without sending. |
 | **/** | Open the slash **skill picker** when typed at the start of the composer ([`skill-picker.ts`](../../src/ui/skill-picker.ts)). |
+| **Mod+M** | Open the **per-chat model picker** for the active composer and focus its search field ([`composer-model-trigger.ts`](../../src/ui/composer-model-trigger.ts)). Works while the composer is focused. |
 | **↑** / **↓** | Browse **per-chat prompt history** when the caret is at the start (↑) or end (↓) of the composer ([`composer-prompt-history.ts`](../../src/ui/composer-prompt-history.ts)). |
 | **↑** / **↓** / **Enter** / **Tab** / **Escape** | Navigate and confirm the slash picker while it is open. |
 | **1** / **2** / **3** | Tool approval strip: allow once, always allow, cancel ([`tool-approval-modal.ts`](../../src/ui/tool-approval-modal.ts)). Plain digit keys only (no modifiers). |
@@ -41,6 +42,16 @@ Opened from the sidebar **Search** button (`btnChatSearch` / `btnDesktopChatSear
 | **↑** / **↓** | Move highlight in results. |
 | **Enter** | Open the highlighted chat. |
 | **Escape** | Close the popover. |
+
+### Model picker (composer)
+
+Per-chat model selection on desktop, Code, and Chat app composers ([`composer-model-trigger.ts`](../../src/ui/composer-model-trigger.ts)).
+
+| Keys | Action |
+|------|--------|
+| **Mod+M** | Open the model picker and focus search. |
+| **Escape** | Close the model list menu. |
+| **Arrow keys** | Navigate the model list while the picker is open. |
 
 ### Model picker (top bar)
 
