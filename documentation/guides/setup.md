@@ -107,6 +107,7 @@ A bare request without the header returns `401 Unauthorized` — that is the gat
 
 ## 6. Optional setup
 
+- **WSL terminal (Windows)** — when WSL is installed, open **Settings → General → Chat & terminal** and choose a **Default shell** such as `WSL Ubuntu`. Agent `execute_command` calls and new integrated terminal tabs run inside that distro with workspace paths mapped to `/mnt/c/...`. Use **Shell for this workspace** to override the global default per Code workspace folder. Requires `npm start` (the tool server spawns `wsl.exe`).
 - **Models app** — hardware-aware recommendations, Hugging Face downloads, and local serving (`Models → Recommend / Installed`).
 - **Voice** — Models → Voice: download local Whisper (STT) / Qwen3-TTS, or use a provider. Local voice provisions a Python worker on demand.
 - **Memory & Brain** — Settings → Memory: enable the store and optional semantic embeddings (local or provider).

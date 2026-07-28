@@ -93,6 +93,7 @@ describe('tools list sync contract', () => {
     assert.match(src, /tools-list--composer/);
     assert.match(src, /tools-list--settings/);
     assert.match(src, /tool-group--collapsible/);
+    assert.match(src, /tool-permission-segment/);
   });
 });
 
@@ -155,5 +156,16 @@ describe('tools list sync runtime', { concurrency: false }, () => {
     assert.ok(drawer?.querySelector('.tool-desc'));
     assert.equal(composer?.querySelectorAll('.tool-desc').length, 0);
     assert.ok(composer?.classList.contains('tools-list--composer'));
+  });
+
+  test('composer list uses collapsed category details by default', () => {
+    setupThreeToolLists();
+
+    const composer = document.getElementById('composerToolsList');
+    const groups = composer?.querySelectorAll('.tool-group--collapsible');
+    assert.ok(groups && groups.length > 0, 'composer should render collapsible groups');
+    for (const group of groups) {
+      assert.equal(group.hasAttribute('open'), false);
+    }
   });
 });

@@ -57,6 +57,37 @@ describe('resolveOneShotSpawn', () => {
     assert.equal(win.shell, false);
   });
 
+  it('routes Windows one-shot strings through WSL when profile is wsl', () => {
+    const wsl = resolveOneShotSpawn({
+      command: 'echo MINNOW_WSL',
+      args: [],
+      platform: 'win32',
+      shellProfile: {
+        id: 'wsl:Ubuntu',
+        label: 'WSL Ubuntu',
+        shell: 'wsl.exe',
+        args: [],
+        platform: 'win32',
+        runtime: 'wsl',
+        distro: 'Ubuntu',
+      },
+      cwd: 'C:\\repo',
+    });
+    assert.equal(wsl.command, 'wsl.exe');
+    assert.deepEqual(wsl.args, [
+      '-d',
+      'Ubuntu',
+      '--cd',
+      '/mnt/c/repo',
+      '--',
+      'bash',
+      '-l',
+      '-c',
+      'echo MINNOW_WSL',
+    ]);
+    assert.equal(wsl.shell, false);
+  });
+
   it('passes argv invocations through unchanged', () => {
     const direct = resolveOneShotSpawn({
       command: 'node',

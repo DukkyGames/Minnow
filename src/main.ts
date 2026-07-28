@@ -149,7 +149,7 @@ import {
   loadSystemPromptSettings,
   registerToolHandlers,
 } from './ui/settings';
-import { loadToolConfigIntoDrawer } from './tools/config';
+import { loadToolConfigIntoDrawer, syncWebSearchProviderFromSearchConfig } from './tools/config';
 import {
   initModelSelectPicker,
   syncModelSelectPicker,
@@ -342,6 +342,7 @@ export async function initApp(): Promise<void> {
   initChatScroll();
   initMinnowBrowserLinkRouting();
   loadToolConfigIntoDrawer();
+  void syncWebSearchProviderFromSearchConfig();
   applySidebarVisuals();
   renderSidebar();
   const { wireSidebarNewGroupButton } = await import('./ui/sidebar');

@@ -185,6 +185,7 @@ async function persistTerminalHistory(chatId, record) {
  * @param {string} [params.toolCallId]
  * @param {number} [params.timeoutMs] custom timeout in ms (clamped 1000–600000; default COMMAND_TIMEOUT_MS)
  * @param {Record<string, string>} [params.env] merged over process.env for the child
+ * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
  * @returns {Promise<{ runId: string, startedAt: number }>}
  */
 export async function createRun({
@@ -197,6 +198,7 @@ export async function createRun({
   toolCallId,
   timeoutMs,
   env: envOverrides,
+  shellProfile = null,
 }) {
   const runId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -245,10 +247,16 @@ export async function createRun({
 
   const runChild = async () => {
     try {
-      const spawnTarget = resolveOneShotSpawn({ command, args, shell });
+      const spawnTarget = resolveOneShotSpawn({
+        command,
+        args,
+        shell,
+        shellProfile,
+        cwd,
+      });
 
       const result = await runProcess(spawnTarget.command, spawnTarget.args, {
-        cwd,
+        cwd: spawnTarget.cwd ?? cwd,
         timeout: clampedTimeout,
         shell: spawnTarget.shell,
         killTree: killProcessTree,
@@ -305,6 +313,7 @@ export async function createRun({
  * @param {boolean} [params.shell]
  * @param {string} [params.logSubdir] logs subdirectory under ~/.minnow/logs/
  * @param {Record<string, string>} [params.env] merged over process.env for the child
+ * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
  * @returns {Promise<{ runId: string, startedAt: number, logPath: string, pid: number | null }>}
  */
 export async function createBackgroundRun({
@@ -317,6 +326,7 @@ export async function createBackgroundRun({
   toolCallId,
   logSubdir = 'terminal',
   env: envOverrides,
+  shellProfile = null,
 }) {
   const runId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -358,10 +368,17 @@ export async function createBackgroundRun({
   activeRuns.set(runId, state);
   emit(state, { type: 'meta', runId, command, cwd });
 
-  const spawnTarget = resolveOneShotSpawn({ command, args, shell });
+  const spawnTarget = resolveOneShotSpawn({
+    command,
+    args,
+    shell,
+    shellProfile,
+    cwd,
+  });
   const execCommand = spawnTarget.command;
   const execArgs = spawnTarget.args;
   const useShell = spawnTarget.shell;
+  const spawnCwd = spawnTarget.cwd ?? cwd;
 
   const childEnv =
     envOverrides && typeof envOverrides === 'object'
@@ -369,7 +386,7 @@ export async function createBackgroundRun({
       : process.env;
 
   const child = spawn(execCommand, execArgs, {
-    cwd,
+    cwd: spawnCwd,
     env: childEnv,
     shell: useShell,
     // detached on Windows spawns a separate console window; windowsHide cannot hide it.
@@ -845,6 +862,7 @@ export async function readRunLogTail(runId, maxBytes = 64 * 1024) {
  * @param {string} [params.toolCallId]
  * @param {number} [params.timeoutMs]
  * @param {Record<string, string>} [params.env] merged over process.env for the child
+ * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
  */
 export async function executeCommandBlocking({
   command,
@@ -855,6 +873,7 @@ export async function executeCommandBlocking({
   toolCallId,
   timeoutMs,
   env,
+  shellProfile = null,
 }) {
   const { runId } = await createRun({
     command,
@@ -866,6 +885,7 @@ export async function executeCommandBlocking({
     toolCallId,
     timeoutMs,
     env,
+    shellProfile,
   });
   return waitForRun(runId);
 }

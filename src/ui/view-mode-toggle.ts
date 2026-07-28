@@ -1,6 +1,6 @@
 /**
  * Orchestrate mode: separate Chat / Board view toggles.
- * Board → composer column above send; Chat → board header controls.
+ * Board → composer controls trail; Chat → board header controls.
  * Board state lives on sidebar folders ({@link ChatGroup}).
  */
 

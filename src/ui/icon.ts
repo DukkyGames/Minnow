@@ -129,6 +129,7 @@ export type ChromeIconName =
   | 'undo'
   | 'clear'
   | 'expand'
+  | 'compress'
   | 'edit'
   | 'addFolder'
   | 'openProject'
@@ -303,6 +304,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   undo: 'fi-rr-undo-alt',
   clear: 'fi-rr-trash',
   expand: 'fi-rr-expand',
+  compress: 'fi-rr-compress-alt',
   edit: 'fi-rr-edit',
   addFolder: 'fi-rr-folder-download',
   openProject: 'fi-rr-folder-open',

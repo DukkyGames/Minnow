@@ -5,6 +5,12 @@
 
 import { getTools, putTools } from '../config/api-client';
 import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults';
+import {
+  loadSearchConfig,
+  saveSearchConfig,
+  toLegacyWebSearchProvider,
+  type SearchProvider,
+} from '../config/search-config';
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
@@ -419,6 +425,52 @@ export function isToolEnabled(id: string): boolean {
   return getToolPermissionForId(loadToolConfig(), id) !== 'off';
 }
 
+/** Sync one tool row's permission select and segmented control to `mode`. */
+function syncToolRowPermissionUi(row: HTMLElement, mode: ToolPermissionMode): void {
+  const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
+  if (select) {
+    select.value = mode;
+  }
+
+  const segments = row.querySelectorAll<HTMLButtonElement>('.tool-permission-segment');
+  for (const segment of segments) {
+    const active = segment.dataset.value === mode;
+    segment.setAttribute('aria-checked', active ? 'true' : 'false');
+  }
+}
+
+/** Toggle composer popover status panels when any notice is visible. */
+function syncComposerToolsPopoverStatusVisibility(): void {
+  for (const prefix of ['composerTools', 'chatAppTools'] as const) {
+    const status = document.getElementById(`${prefix}Status`);
+    const server = document.getElementById(`${prefix}ServerBanner`);
+    const preview = document.getElementById(`${prefix}PreviewBanner`);
+    if (!status) continue;
+    const hasNotice =
+      (server && !server.classList.contains('hidden')) ||
+      (preview && !preview.classList.contains('hidden'));
+    status.classList.toggle('hidden', !hasNotice);
+  }
+}
+
+/** Apply disabled state to segmented permission controls on one row. */
+function syncToolRowSegmentAvailability(
+  row: HTMLElement,
+  unavailable: boolean,
+  title: string,
+): void {
+  const segments = row.querySelectorAll<HTMLButtonElement>('.tool-permission-segment');
+  for (const segment of segments) {
+    const isOff = segment.dataset.value === 'off';
+    segment.disabled = unavailable && !isOff;
+    if (unavailable && !isOff) {
+      segment.setAttribute('title', title);
+    } else {
+      segment.removeAttribute('title');
+    }
+  }
+}
+
 /** Sync permission selects and Brave key field from config; dim server tools when offline. */
 export function loadToolConfigIntoDrawer(
   root: ParentNode = document,
@@ -431,11 +483,7 @@ export function loadToolConfigIntoDrawer(
   for (const row of rows) {
     const id = row.getAttribute('data-tool-id');
     if (!id) continue;
-
-    const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
-    if (select) {
-      select.value = getToolPermissionForId(config, id);
-    }
+    syncToolRowPermissionUi(row, getToolPermissionForId(config, id));
   }
 
   const braveInput = document.getElementById('braveApiKey') as HTMLInputElement | null;
@@ -448,11 +496,15 @@ export function loadToolConfigIntoDrawer(
     tavilyInput.value = config.keys.tavilyApiKey;
   }
 
-  const providerSelect = document.getElementById(
-    'webSearchProvider',
-  ) as HTMLSelectElement | null;
-  if (providerSelect) {
-    providerSelect.value = config.webSearchProvider;
+  setWebSearchProviderSelects(config.webSearchProvider);
+  void syncWebSearchProviderFromSearchConfig();
+
+  const cacheEnabled = config.toolCache?.enabled !== false;
+  for (const id of ['settingsToolCacheEnabled', 'composerToolsCacheEnabled', 'chatAppToolsCacheEnabled'] as const) {
+    const checkbox = document.getElementById(id) as HTMLInputElement | null;
+    if (checkbox) {
+      checkbox.checked = cacheEnabled;
+    }
   }
 
   refreshServerToolDisabledState();
@@ -743,6 +795,13 @@ export function refreshServerToolDisabledState(): void {
         select.removeAttribute('title');
       }
     }
+    if (serverUnavailable) {
+      syncToolRowSegmentAvailability(
+        row,
+        true,
+        'Requires npm start — local tool server is not running',
+      );
+    }
   }
 
   const previewRows = document.querySelectorAll<HTMLElement>(
@@ -752,29 +811,97 @@ export function refreshServerToolDisabledState(): void {
   for (const row of previewRows) {
     row.classList.toggle('is-preview-unavailable', previewUnavailable);
     const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
-    if (!select) continue;
+    if (select) {
+      if (previewUnavailable) {
+        select.disabled = true;
+        select.setAttribute(
+          'title',
+          'Requires the Minnow desktop app window — open via npm start, not a separate browser tab',
+        );
+      } else if (!row.hasAttribute('data-server-required') || !serverUnavailable) {
+        select.disabled = false;
+        select.removeAttribute('title');
+      }
+    }
     if (previewUnavailable) {
-      select.disabled = true;
-      select.setAttribute(
-        'title',
+      syncToolRowSegmentAvailability(
+        row,
+        true,
         'Requires the Minnow desktop app window — open via npm start, not a separate browser tab',
       );
     } else if (!row.hasAttribute('data-server-required') || !serverUnavailable) {
-      select.disabled = false;
-      select.removeAttribute('title');
+      syncToolRowSegmentAvailability(row, false, '');
     }
   }
 
+  for (const row of serverRows) {
+    if (!serverUnavailable) {
+      const previewOnly =
+        row.hasAttribute('data-preview-required') && previewUnavailable;
+      if (!previewOnly) {
+        syncToolRowSegmentAvailability(row, false, '');
+      }
+    }
+  }
+
+  syncComposerToolsPopoverStatusVisibility();
   syncToolSelectAllControls(document);
 }
 
-/** Persist web search provider and API keys from the settings drawer. */
-export function saveWebSearchSettingsFromDrawer(): void {
+/** Web search provider `<select>` ids (drawer + composer popovers). */
+const WEB_SEARCH_PROVIDER_SELECT_IDS = [
+  'webSearchProvider',
+  'composerToolsWebSearchProvider',
+  'chatAppToolsWebSearchProvider',
+] as const;
+
+/** Composer/drawer provider values that map to search.json. */
+const WEB_SEARCH_PROVIDER_VALUES = new Set<SearchProvider>([
+  'searxng',
+  'duckduckgo',
+  'brave',
+  'tavily',
+]);
+
+function isWebSearchProviderSelect(element: EventTarget | null): element is HTMLSelectElement {
+  if (!(element instanceof HTMLSelectElement)) return false;
+  return (WEB_SEARCH_PROVIDER_SELECT_IDS as readonly string[]).includes(element.id);
+}
+
+/** Keep every web-search provider dropdown in sync. */
+export function setWebSearchProviderSelects(provider: string): void {
+  for (const id of WEB_SEARCH_PROVIDER_SELECT_IDS) {
+    const providerSelect = document.getElementById(id) as HTMLSelectElement | null;
+    if (!providerSelect) continue;
+    const hasOption = Array.from(providerSelect.options).some((option) => option.value === provider);
+    if (hasOption) {
+      providerSelect.value = provider;
+    }
+  }
+}
+
+/** Load search.json provider into drawer/composer selects (search.json wins over tools.json). */
+export async function syncWebSearchProviderFromSearchConfig(): Promise<void> {
+  try {
+    const search = await loadSearchConfig();
+    if (search.provider === 'disabled') return;
+    setWebSearchProviderSelects(search.provider);
+  } catch {
+    // Vite-only or server down — tools.json value from loadToolConfigIntoDrawer is enough.
+  }
+}
+
+/** Persist web search provider and API keys from drawer or composer popover fields. */
+export function saveWebSearchSettingsFromDrawer(event?: Event): void {
   const braveInput = document.getElementById('braveApiKey') as HTMLInputElement | null;
   const tavilyInput = document.getElementById('tavilyApiKey') as HTMLInputElement | null;
-  const providerSelect = document.getElementById(
-    'webSearchProvider',
-  ) as HTMLSelectElement | null;
+  const eventTarget = event?.target ?? null;
+  const changedProviderSelect = isWebSearchProviderSelect(eventTarget) ? eventTarget : null;
+  const providerSelect =
+    changedProviderSelect ??
+    (document.getElementById('webSearchProvider') as HTMLSelectElement | null) ??
+    (document.getElementById('composerToolsWebSearchProvider') as HTMLSelectElement | null) ??
+    (document.getElementById('chatAppToolsWebSearchProvider') as HTMLSelectElement | null);
   if (!braveInput && !tavilyInput && !providerSelect) return;
 
   const config = loadToolConfig();
@@ -784,13 +911,51 @@ export function saveWebSearchSettingsFromDrawer(): void {
   if (tavilyInput) {
     config.keys.tavilyApiKey = tavilyInput.value.trim();
   }
-  if (providerSelect) {
-    const value = providerSelect.value;
-    if (value === 'brave' || value === 'tavily' || value === 'duckduckgo') {
-      config.webSearchProvider = value;
+
+  const providerValue = providerSelect?.value;
+  const searchProvider =
+    providerValue && WEB_SEARCH_PROVIDER_VALUES.has(providerValue as SearchProvider)
+      ? (providerValue as SearchProvider)
+      : null;
+
+  if (searchProvider) {
+    setWebSearchProviderSelects(searchProvider);
+    const legacyProvider = toLegacyWebSearchProvider(searchProvider);
+    if (legacyProvider) {
+      config.webSearchProvider = legacyProvider;
     }
   }
+
   saveToolConfig(config);
+
+  if (searchProvider) {
+    void (async () => {
+      try {
+        const search = await loadSearchConfig();
+        await saveSearchConfig({ ...search, provider: searchProvider });
+      } catch {
+        // search.json is server-backed; tools.json still updated for legacy providers.
+      }
+      loadToolConfigIntoDrawer(document);
+    })();
+    return;
+  }
+
+  loadToolConfigIntoDrawer(document);
+}
+
+/** Persist session tool-cache toggle from settings or composer popover. */
+export function saveToolCacheFromUi(): void {
+  const checkbox =
+    (document.getElementById('settingsToolCacheEnabled') as HTMLInputElement | null) ??
+    (document.getElementById('composerToolsCacheEnabled') as HTMLInputElement | null) ??
+    (document.getElementById('chatAppToolsCacheEnabled') as HTMLInputElement | null);
+  if (!checkbox) return;
+
+  const config = loadToolConfig();
+  config.toolCache = { enabled: checkbox.checked };
+  saveToolConfig(config);
+  loadToolConfigIntoDrawer(document);
 }
 
 /** @deprecated Use {@link saveWebSearchSettingsFromDrawer}. */
