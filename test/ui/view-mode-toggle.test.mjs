@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 
 
 
@@ -60,12 +61,7 @@ function setupDom() {
 
   const window = new Window();
 
-  globalThis.window = window;
-  globalThis.document = window.document;
-
-  globalThis.HTMLElement = window.HTMLElement;
-
-  globalThis.Node = window.Node;
+  installHappyDomGlobals(window);
 
 
 

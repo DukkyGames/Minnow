@@ -115,34 +115,27 @@ const STALL_MARKERS: string[] = [
   'Could not complete this reply',
 ];
 
-/**
- * Provider/context-window limit copy — transient, retriable in-place. Takes
- * precedence over the generic "Could not complete this reply" stall marker.
- */
+/** Provider copy for a full context window — transient, retriable as code (not stall). */
 const CONTEXT_LENGTH_MARKERS: string[] = [
   'context length exceeded',
   'context limit has been reached',
   'maximum context length',
   'context_length_exceeded',
   'exceed context window',
-  'n_ctx =',
   'requested tokens',
 ];
-
-export function isContextLengthExceededText(text: string): boolean {
-  return matchesAny(text, CONTEXT_LENGTH_MARKERS);
-}
 
 function matchesAny(text: string, markers: string[]): boolean {
   const lower = text.toLowerCase();
   return markers.some((m) => lower.includes(m.toLowerCase()));
 }
 
-export function extractBoardChatTranscriptText(chat: Chat): string {
-  return extractChatText(chat);
+/** True when the transcript shows a context-window overflow (retriable, not a stall). */
+export function isTransientContextLengthError(text: string): boolean {
+  return matchesAny(text, CONTEXT_LENGTH_MARKERS);
 }
 
-function extractChatText(chat: Chat): string {
+export function extractChatText(chat: Chat): string {
   const parts: string[] = [];
   for (const msg of chat.history) {
     const content =
@@ -153,18 +146,16 @@ function extractChatText(chat: Chat): string {
           : JSON.stringify(msg.content);
     if (content) parts.push(content);
   }
+  return parts.join('\n');
+}
+
+/** Transcript plus failed-run error messages (board chats often only record errors on runs). */
+export function extractChatFailureText(chat: Chat): string {
+  const parts = [extractChatText(chat)];
   for (const run of chat.runs ?? []) {
     if (run.errorMessage?.trim()) parts.push(run.errorMessage);
   }
   return parts.join('\n');
-}
-
-function isStallAssistantContent(content: string): boolean {
-  if (isContextLengthExceededText(content)) return false;
-  return (
-    content.includes('Maximum tool turns reached') ||
-    content.includes('Could not complete this reply')
-  );
 }
 
 /**
@@ -192,8 +183,11 @@ export function inferStreamOutcome(chat: Chat): TaskChatStreamOutcome {
           : msg.content == null
             ? ''
             : JSON.stringify(msg.content);
-      if (isContextLengthExceededText(content)) return 'failed';
-      if (isStallAssistantContent(content)) {
+      if (
+        content.includes('Maximum tool turns reached') ||
+        (content.includes('Could not complete this reply') &&
+          !isTransientContextLengthError(content))
+      ) {
         return 'failed';
       }
       return 'completed';
@@ -225,8 +219,8 @@ export function classifyTaskFailure(
   // 'failed' falls through to text scan below.
 
   // 2. Transcript text scan (covers both prose and embedded tool output).
-  const text = extractChatText(chat);
-  if (isContextLengthExceededText(text)) return 'code';
+  const text = extractChatFailureText(chat);
+  if (isTransientContextLengthError(text)) return 'code';
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
   if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';
 

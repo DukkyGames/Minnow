@@ -213,6 +213,7 @@ export function bindToolsListChange(list: HTMLElement): void {
   if (list.dataset.toolsChangeBound === 'true') return;
   list.dataset.toolsChangeBound = 'true';
   list.addEventListener('change', (event) => handleToolsListChange(event, list));
+  // Composer popover uses segmented buttons instead of <select>; clicks do not emit change.
   list.addEventListener('click', (event) => handleToolsListChange(event, list));
 }
 

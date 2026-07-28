@@ -275,7 +275,7 @@ describe('git API', () => {
   test('worktreeRemove rejects removing the principal worktree', async () => {
     const removed = await worktreeRemove({ cwd: repoDir, path: repoDir });
     assert.equal(removed.ok, false);
-    assert.match(removed.error ?? '', /Cannot remove the main worktree/i);
+    assert.match(removed.error ?? '', /Cannot remove the main worktree|is a main working tree/i);
   });
 
   test('POST /api/git status honors cwd', async () => {

@@ -44,7 +44,7 @@ describe('benchmark page HTML', () => {
     assert.doesNotMatch(tag, /\bon[a-z]+="/i);
   });
 
-  test('benchmark topbar uses Uicons chart icon', () => {
+  test('benchmark topbar uses Flaticon chart icon', () => {
     assert.match(html, /id="btnBenchmark"[\s\S]*?fi-rr-chart-simple/);
   });
 

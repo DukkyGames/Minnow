@@ -23,6 +23,7 @@ const {
   setLocalServerAvailable,
   setToolPermission,
   TOOL_CONFIG_STORAGE_KEY,
+  flushToolListUiRefresh,
 } = await import('../../src/tools/config.ts');
 const { fillToolsSection } = await import('../../src/ui/tools-list.ts');
 
@@ -37,6 +38,7 @@ function setupThreeToolLists() {
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.HTMLInputElement = window.HTMLInputElement;
   globalThis.HTMLSelectElement = window.HTMLSelectElement;
+  globalThis.HTMLButtonElement = window.HTMLButtonElement;
   globalThis.HTMLLabelElement = window.HTMLLabelElement;
   globalThis.HTMLButtonElement = window.HTMLButtonElement;
   globalThis.Event = window.Event;
@@ -55,19 +57,20 @@ function setupThreeToolLists() {
   fillToolsSection('chatAppToolsList', { variant: 'composer' });
 }
 
-/** Permission value for one tool row (select or composer segment group). */
+/** Current permission mode for one tool row (select or composer segments). */
 function permissionValue(listId, toolId) {
   const list = document.getElementById(listId);
   const row = list?.querySelector(`[data-tool-id="${toolId}"]`);
-  const select = row?.querySelector('select.tool-permission-select');
+  if (!row) return null;
+
+  const select = row.querySelector('select.tool-permission-select');
   if (select) return select.value;
-  const activeSegment = row?.querySelector(
-    '.tool-permission-segment[aria-checked="true"]',
-  );
+
+  const activeSegment = row.querySelector('.tool-permission-segment[aria-checked="true"]');
   return activeSegment?.dataset.value ?? null;
 }
 
-/** Permission select for one tool row inside a list container. */
+/** Permission select for drawer/settings lists that still use <select>. */
 function permissionSelect(listId, toolId) {
   const list = document.getElementById(listId);
   const row = list?.querySelector(`[data-tool-id="${toolId}"]`);
@@ -117,19 +120,20 @@ describe('tools list sync runtime', { concurrency: false }, () => {
     localStorage.clear();
   });
 
-  test('setToolPermission updates drawer, settings, composer, and chat app selects', () => {
+  test('setToolPermission updates drawer, settings, composer, and chat app selects', async () => {
     setupThreeToolLists();
     setLocalServerAvailable(true);
     seedCalculateOff();
 
     setToolPermission(SYNC_TOOL_ID, 'full', document);
+    await flushToolListUiRefresh();
 
     for (const listId of LIST_IDS) {
       assert.equal(permissionValue(listId, SYNC_TOOL_ID), 'full', listId);
     }
   });
 
-  test('change on drawer select syncs settings and composer', () => {
+  test('change on drawer select syncs settings and composer', async () => {
     setupThreeToolLists();
     setLocalServerAvailable(true);
     seedCalculateOff();
@@ -138,18 +142,39 @@ describe('tools list sync runtime', { concurrency: false }, () => {
     assert.ok(drawerSelect);
     drawerSelect.value = 'ask';
     drawerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushToolListUiRefresh();
 
     assert.equal(permissionValue('settingsToolsList', SYNC_TOOL_ID), 'ask');
     assert.equal(permissionValue('composerToolsList', SYNC_TOOL_ID), 'ask');
+    assert.equal(permissionValue('chatAppToolsList', SYNC_TOOL_ID), 'ask');
   });
 
-  test('refreshAllToolListUis syncs bulk checkboxes on every list', () => {
+  test('click on composer segment syncs drawer and settings', async () => {
+    setupThreeToolLists();
+    setLocalServerAvailable(true);
+    seedCalculateOff();
+
+    const composerRow = document.querySelector(
+      `#composerToolsList [data-tool-id="${SYNC_TOOL_ID}"]`,
+    );
+    const askSegment = composerRow?.querySelector('.tool-permission-segment[data-value="ask"]');
+    assert.ok(askSegment);
+    askSegment.dispatchEvent(new Event('click', { bubbles: true }));
+    await flushToolListUiRefresh();
+
+    assert.equal(permissionValue('toolsList', SYNC_TOOL_ID), 'ask');
+    assert.equal(permissionValue('settingsToolsList', SYNC_TOOL_ID), 'ask');
+    assert.equal(permissionValue('chatAppToolsList', SYNC_TOOL_ID), 'ask');
+  });
+
+  test('refreshAllToolListUis syncs bulk checkboxes on every list', async () => {
     setupThreeToolLists();
     setLocalServerAvailable(true);
     seedCalculateOff();
 
     setToolPermission(SYNC_TOOL_ID, 'full', document);
     refreshAllToolListUis(document);
+    await flushToolListUiRefresh();
 
     for (const listId of LIST_IDS) {
       const list = document.getElementById(listId);

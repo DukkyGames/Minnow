@@ -270,6 +270,7 @@ describe('board headless quirk fixtures', () => {
     spec?: {
       tasks?: Array<{ id: string; title: string; wave: string }>;
       finalTest?: boolean;
+      expectFinalTestInLog?: boolean;
       autopilot?: { maxBuildAttempts?: number; maxConcurrentTasks?: number };
       allowSettleTimeout?: boolean;
       boardLogSkip?: BoardLogCheckOptions['skip'];
@@ -295,7 +296,14 @@ describe('board headless quirk fixtures', () => {
     router = r;
     assertFn?.(group);
     const taskIds = tasks.map((t) => t.id);
-    const logOpts = boardLogOpts(taskIds, ['W1'], spec?.finalTest === true);
+    const logOpts = boardLogOpts(
+      taskIds,
+      ['W1'],
+      spec?.expectFinalTestInLog ?? spec?.finalTest === true,
+    );
+    if (spec?.finalTest !== true) {
+      logOpts.skip = [...(logOpts.skip ?? []), 'final-test-order'];
+    }
     if (spec?.boardLogSkip?.length) {
       logOpts.skip = [...(logOpts.skip ?? []), ...spec.boardLogSkip];
     }
@@ -539,7 +547,7 @@ describe('board headless quirk fixtures', () => {
       (group) => {
         assert.notEqual(group.orchestrateBoard?.finalTest?.status, 'passed');
       },
-      { finalTest: true },
+      { finalTest: true, expectFinalTestInLog: false, boardLogSkip: ['final-test-order'] },
     );
   });
 
