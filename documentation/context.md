@@ -1,4 +1,4 @@
-﻿# Minnow — project context
+# Minnow — project context
 
 Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`guides/setup.md`](guides/setup.md) and [`guides/commands.md`](guides/commands.md). UI key bindings: [`guides/keyboard-shortcuts.md`](guides/keyboard-shortcuts.md). Product overview: [`README.md`](../README.md).
 
@@ -316,6 +316,8 @@ Per-role prompts and optional provider/model binding. Shipped: `default`, `build
 Kanban delivery from plans under `documentation/plans/`. Tools: `board_init`, `board_update_task`, `board_get_state`, `board_report`, `delegate_tasks`. Board member chats get role-scoped tool filters ([`src/chat/modes/orchestrate-tool-filter.ts`](../src/chat/modes/orchestrate-tool-filter.ts)); builder/tester/fixer chats also get `todo_write` for the composer checklist ([`src/tools/todo-tools.ts`](../src/tools/todo-tools.ts), [`src/ui/todo-panel.ts`](../src/ui/todo-panel.ts)).
 
 **Testing guide:** [guides/orchestrate-board-testing.md](guides/orchestrate-board-testing.md) — `npm run test:board`, fake model, `seed:test-board`, `check:board-log`, harness layout. **Manual workflow GUI:** Settings → **Advanced → Board testing** ([`src/ui/settings-board-testing.ts`](../src/ui/settings-board-testing.ts)) — in-process fake model (`POST /api/orchestrate/board-testing/fake-model/*`), seed test board, validate board log JSONL. API: [`server/orchestrate/board-testing/`](../server/orchestrate/board-testing/). Shared seed presets: [`src/dev/test-board-seed.ts`](../src/dev/test-board-seed.ts).
+
+**AFK E2E reliability plan:** [`plans/orchestrate-board-afk-e2e-reliability.md`](plans/orchestrate-board-afk-e2e-reliability.md) — proposed unified scenario catalog, failure-boundary matrix, persisted server/real-git and crash-reload harnesses, Settings scenario runner, soak gates, and hands-off AFK acceptance criteria.
 
 State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orchestrate-board.ts`](../src/ui/orchestrate-board.ts). Global defaults (`autopilot` block in `config.json`): Settings → **Autopilot** ([`src/ui/settings-autopilot.ts`](../src/ui/settings-autopilot.ts)) — emphasis-panel layout matching Agents/Rules (board execution, retries, heartbeat, planner fallback, self-heal). Per-board overrides on the board header.
 
