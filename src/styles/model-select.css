@@ -407,6 +407,11 @@
   color: var(--mn-fg);
 }
 
+.model-select-option--active {
+  background: var(--mn-surface-elevated);
+  outline: 1px solid var(--mn-border-strong);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .model-select-option:hover,
   .model-select-option--selected:hover {

@@ -6,6 +6,7 @@ import {
   assistantRenderDebounceTimer,
   setAssistantRenderDebounceTimer,
 } from '../app-state';
+import { announceStreamingProse } from '../ui/a11y/stream-announcer';
 import { scrollBottom } from '../ui/input';
 
 let minnowMarkedConfigured = false;
@@ -111,6 +112,7 @@ export function scheduleAssistantBubbleRender(
     setTimeout(() => {
       setAssistantRenderDebounceTimer(null);
       setAssistantBubbleContent(bubble, markdown, { streaming: true, streamCursor });
+      announceStreamingProse(markdown);
       scrollBottom();
     }, ASSISTANT_RENDER_DEBOUNCE_MS)
   );

@@ -75,6 +75,33 @@ const EMBEDDED_QUESTIONS_HOST_IDS = new Set([
   ONBOARDING_GUIDE_QUESTIONS_HOST_ID,
 ]);
 
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getActiveHTMLElement(): HTMLElement | null {
+  const active = document.activeElement;
+  if (!active || typeof (active as HTMLElement).focus !== 'function') return null;
+  return active as HTMLElement;
+}
+
+/** Focusable controls inside the open question panel (visible, enabled). */
+function listPanelFocusables(panel: HTMLElement): HTMLElement[] {
+  return [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (el) =>
+      !el.hidden &&
+      el.getAttribute('aria-hidden') !== 'true' &&
+      !el.hasAttribute('disabled'),
+  );
+}
+
+function focusFirstPanelControl(panel: HTMLElement): void {
+  const nodes = listPanelFocusables(panel);
+  const firstOption = panel.querySelector<HTMLElement>(
+    '.question-cards-options input:not([disabled])',
+  );
+  (firstOption ?? nodes[0])?.focus();
+}
+
 function isEmbeddedQuestionsHost(host: HTMLElement): boolean {
   return EMBEDDED_QUESTIONS_HOST_IDS.has(host.id);
 }
@@ -110,7 +137,11 @@ function activateComposerQuestionChrome(state: ActiveQuestionModalState): void {
   state.host.hidden = false;
 }
 
-function restoreComposerAfterQuestion(state: ActiveQuestionModalState): void {
+function restoreComposerAfterQuestion(
+  state: ActiveQuestionModalState,
+  focusOverride?: HTMLElement | null,
+  options?: { suppressFocus?: boolean },
+): void {
   state.composerShell?.classList.remove('main-column--question-pending');
   state.host.hidden = true;
   releaseUserPromptLock();
@@ -127,12 +158,19 @@ function restoreComposerAfterQuestion(state: ActiveQuestionModalState): void {
         state.sendBtn.disabled = state.prevSendDisabled;
       }
     }
-    state.msgInput?.focus();
+    if (!options?.suppressFocus) {
+      const focusTarget =
+        focusOverride?.isConnected ? focusOverride : state.msgInput;
+      focusTarget?.focus();
+    }
   }
 }
 
-function deactivateComposerQuestionChrome(state: ActiveQuestionModalState): void {
-  restoreComposerAfterQuestion(state);
+function deactivateComposerQuestionChrome(
+  state: ActiveQuestionModalState,
+  focusOverride?: HTMLElement | null,
+): void {
+  restoreComposerAfterQuestion(state, focusOverride);
   setSidebarInputPendingChatId(null);
 }
 
@@ -157,7 +195,7 @@ function parkActiveQuestionModal(): void {
   state.parked = true;
   state.host.hidden = true;
   if (!state.embedded) {
-    restoreComposerAfterQuestion(state);
+    restoreComposerAfterQuestion(state, null, { suppressFocus: true });
   }
   setSidebarInputPendingChatId(state.chatId);
 }
@@ -391,8 +429,12 @@ export function showQuestionCardsModal(
 
     const panel = document.createElement('div');
     panel.className = panelClasses.join(' ');
-    panel.setAttribute('role', 'region');
-    panel.setAttribute('aria-label', 'Assistant questions');
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', args.title?.trim() || 'Assistant questions');
+    panel.tabIndex = -1;
+
+    const previousFocus = getActiveHTMLElement();
 
     const header = document.createElement('div');
     header.className = 'question-cards-panel__header';
@@ -470,17 +512,34 @@ export function showQuestionCardsModal(
     host.appendChild(panel);
 
     let settled = false;
+    let trapFocusHandler: ((ev: KeyboardEvent) => void) | null = null;
+    let focusInHandler: ((ev: FocusEvent) => void) | null = null;
+
+    const detachFocusTrap = (): void => {
+      if (trapFocusHandler) {
+        panel.removeEventListener('keydown', trapFocusHandler);
+        trapFocusHandler = null;
+      }
+      if (focusInHandler) {
+        document.removeEventListener('focusin', focusInHandler, true);
+        focusInHandler = null;
+      }
+    };
+
     const finish = (result: AskQuestionToolResult): void => {
       if (settled) return;
       settled = true;
       requestQuestionCardsCancel = null;
+      detachFocusTrap();
       document.removeEventListener('keydown', onDocKeyDown, true);
       if (abortListener) {
         getChatAbort(chatIdForAbort)?.signal.removeEventListener('abort', abortListener);
       }
       const modal = activeQuestionModal;
       if (modal && !modal.embedded) {
-        deactivateComposerQuestionChrome(modal);
+        deactivateComposerQuestionChrome(modal, previousFocus);
+      } else if (previousFocus?.isConnected) {
+        previousFocus.focus();
       }
       (modal?.host ?? host).replaceChildren();
       activeQuestionModal = null;
@@ -546,7 +605,9 @@ export function showQuestionCardsModal(
 
       const promptEl = document.createElement('h2');
       promptEl.className = 'question-cards-prompt';
+      promptEl.id = `question-cards-prompt-${q.id}`;
       promptEl.textContent = q.prompt;
+      panel.setAttribute('aria-labelledby', promptEl.id);
       cardBody.appendChild(promptEl);
 
       const list = document.createElement('div');
@@ -724,6 +785,29 @@ export function showQuestionCardsModal(
       }
     };
 
+    trapFocusHandler = (ev: KeyboardEvent): void => {
+      if (ev.key !== 'Tab' || host.hidden) return;
+      const nodes = listPanelFocusables(panel);
+      if (nodes.length === 0) return;
+      const active = document.activeElement as HTMLElement;
+      const index = nodes.indexOf(active);
+      const from = index >= 0 ? index : 0;
+      ev.preventDefault();
+      const next = ev.shiftKey
+        ? nodes[(from - 1 + nodes.length) % nodes.length]
+        : nodes[(from + 1) % nodes.length];
+      next.focus();
+    };
+    panel.addEventListener('keydown', trapFocusHandler);
+
+    focusInHandler = (ev: FocusEvent): void => {
+      if (host.hidden || settled) return;
+      const target = ev.target;
+      if (target instanceof HTMLElement && panel.contains(target)) return;
+      focusFirstPanelControl(panel);
+    };
+    document.addEventListener('focusin', focusInHandler, true);
+
     document.addEventListener('keydown', onDocKeyDown, true);
     showCard();
 
@@ -731,7 +815,11 @@ export function showQuestionCardsModal(
 
     requestAnimationFrame(() => {
       host.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      btnPrev.focus();
+      if (questions.length === 1) {
+        focusFirstPanelControl(panel);
+      } else {
+        btnPrev.focus();
+      }
     });
   });
 }

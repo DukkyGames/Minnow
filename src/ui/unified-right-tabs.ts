@@ -18,7 +18,7 @@ import {
 import { createFileTypeIconElement } from './file-type-icons';
 import { iconHtml } from './icon';
 
-const PREVIEW_TAB_ICON = iconHtml('globe', { className: 'unified-tab__icon' });
+const PREVIEW_TAB_ICON = iconHtml('globe', { size: 14 });
 
 let bound = false;
 

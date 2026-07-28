@@ -72,7 +72,8 @@
     "test:browser": "node test/run-all.mjs --suite browser",
     "test:benchmark": "node test/run-all.mjs --suite benchmark",
     "test:evals": "node test/run-all.mjs --suite evals",
-    "test:board": "node test/run-all.mjs --suite board"
+    "test:board": "node test/run-all.mjs --suite board",
+    "test:a11y": "node test/run-all.mjs --suite a11y"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.21",
