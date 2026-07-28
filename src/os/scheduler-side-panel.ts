@@ -35,12 +35,14 @@ function setPanelStatus(state: 'ok' | 'err', message: string): void {
 }
 
 async function refreshPanelList(): Promise<void> {
-  if (!mountEl) return;
+  const mount = mountEl;
+  if (!mount) return;
   const [{ renderSchedulerPanel }, { openJobEditorWindow }] = await Promise.all([
     import('../ui/scheduler/scheduler-panel'),
     import('../ui/scheduler/job-editor-window'),
   ]);
-  await renderSchedulerPanel(mountEl, {
+  if (!mountEl || mountEl !== mount || !mount.isConnected) return;
+  await renderSchedulerPanel(mount, {
     onStatus: setPanelStatus,
     onAddTask: () => {
       openJobEditorWindow({

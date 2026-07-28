@@ -2550,6 +2550,35 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
     }
     clearMainTurnActivity(chat.id);
+    if (turnRunId) {
+      const run = findRunById(chat, turnRunId);
+      const start = run?.outputHistoryStart;
+      const end = run?.outputHistoryEnd;
+      const persistOutput =
+        turnRunStatus !== 'failed' || Boolean(chat.boardTaskId?.trim());
+      const outputMessages =
+        persistOutput &&
+        start !== undefined &&
+        end !== undefined &&
+        end >= start
+          ? chat.history.slice(start, end + 1).map((m) => ({ ...m }))
+          : undefined;
+      finalizeRun(chat, turnRunId, {
+        status: turnRunStatus,
+        outputHistoryStart: persistOutput ? start : undefined,
+        outputHistoryEnd: persistOutput ? end : undefined,
+        outputMessages,
+        stopReason: turnRunStatus === 'stopped' ? (turnStopReason ?? 'user') : undefined,
+        endReason: turnEndReason,
+        errorMessage: turnErrorMessage,
+      });
+      // MIN-409: post-turn snapshot after history suffix is known (best-effort).
+      await capturePostTurnSnapshot(chat, turnRunId);
+      scheduleSaveSessions();
+      if (isStreamDomVisible(chat.id) && run) {
+        refreshBranchPickerAtFork(chat, run.forkHistoryIndex);
+      }
+    }
     if (ownsGlobalStreaming) {
       notifyChatStreamEnded(chat.id);
       setStreaming(false, chat.id);
@@ -2589,6 +2618,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       if (completedNormally && isPartyModePinned(chat.pinnedSkill) && isStreamDomVisible(chat.id)) {
         burstPartyConfetti();
       }
+      if (turnRunId) {
+        void import('../notifications/chat-turn.js').then((mod) => {
+          mod.notifyChatTurnEnded(chat.id, turnRunId);
+        });
+      }
     }
     if (getChatAbort(chat.id)?.signal === chatSignal) {
       setChatAbort(chat.id, null);
@@ -2602,42 +2636,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     ) {
       removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
     }
-    if (turnRunId) {
-      const run = findRunById(chat, turnRunId);
-      const start = run?.outputHistoryStart;
-      const end = run?.outputHistoryEnd;
-      const persistOutput =
-        turnRunStatus !== 'failed' || Boolean(chat.boardTaskId?.trim());
-      const outputMessages =
-        persistOutput &&
-        start !== undefined &&
-        end !== undefined &&
-        end >= start
-          ? chat.history.slice(start, end + 1).map((m) => ({ ...m }))
-          : undefined;
-      finalizeRun(chat, turnRunId, {
-        status: turnRunStatus,
-        outputHistoryStart: persistOutput ? start : undefined,
-        outputHistoryEnd: persistOutput ? end : undefined,
-        outputMessages,
-        stopReason: turnRunStatus === 'stopped' ? (turnStopReason ?? 'user') : undefined,
-        endReason: turnEndReason,
-        errorMessage: turnErrorMessage,
-      });
-      // MIN-409: post-turn snapshot after history suffix is known (best-effort).
-      await capturePostTurnSnapshot(chat, turnRunId);
-      scheduleSaveSessions();
-      if (isStreamDomVisible(chat.id) && run) {
-        refreshBranchPickerAtFork(chat, run.forkHistoryIndex);
-      }
-      if (ownsGlobalStreaming) {
-        void import('../notifications/chat-turn.js').then((mod) => {
-          mod.notifyChatTurnEnded(chat.id, turnRunId);
-        });
-      }
-    }
   }
-  } finally {
+} finally {
     if (turnMountPinned) {
       setTurnChatMount(null);
     }

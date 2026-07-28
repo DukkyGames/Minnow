@@ -80,10 +80,12 @@ describe('quarantine completion hooks', () => {
     setOrchestratePlanCompleteWrapUpHook(async () => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     resetOrchestratorAutoReportsForTests();
     resetOrchestratePlanCompleteUiForTests();
+    setOrchestratePlanCompleteWrapUpHook(async () => {});
     resetSubAgentOrchestrator();
+    await new Promise((resolve) => setImmediate(resolve));
     setSessionStateForTests(null);
   });
 
@@ -99,8 +101,10 @@ describe('quarantine completion hooks', () => {
       planner,
     );
 
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    const { maybeEmitOrchestratePlanComplete } = await import(
+      '../../src/chat/orchestrate/plan-complete-ui.ts'
+    );
+    await maybeEmitOrchestratePlanComplete(group.id);
 
     assert.ok(board.completionShownAt != null, 'completionShownAt should be set');
     const completionMessages = planner.history.filter(
@@ -145,10 +149,12 @@ describe('requeue after completion round-trip', () => {
     setOrchestratePlanCompleteWrapUpHook(async () => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     resetOrchestratorAutoReportsForTests();
     resetOrchestratePlanCompleteUiForTests();
+    setOrchestratePlanCompleteWrapUpHook(async () => {});
     resetSubAgentOrchestrator();
+    await new Promise((resolve) => setImmediate(resolve));
     setSessionStateForTests(null);
   });
 
