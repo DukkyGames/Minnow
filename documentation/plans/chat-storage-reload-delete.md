@@ -17,6 +17,7 @@
 - [x] Harden chat context-menu outside dismiss (pointerdown, ignore menu target)
 - [x] Tests: sidebar listing + lazy load persistence + delete-during-PUT race
 - [x] Update `documentation/context.md`
+- [x] Repo-wide SPA sweep: sync `window.confirm` / `alert` / `prompt` → `appConfirm` / `appAlert` / `appPrompt`
 - [ ] Manual verify: reload keeps sidebar; delete removes + stays gone after reload
 - [ ] Merge with MIN-509 UI refresh fixes
 

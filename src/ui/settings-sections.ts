@@ -576,7 +576,10 @@ function renderCustomPartEditors(mount: HTMLElement, config: PromptConfig): void
           onResetPart: async () => {
             const hasUnsaved =
               (ta.value.trim() ? ta.value : null) !== lastSavedOverride;
-            if (hasUnsaved && !confirm('Discard unsaved edits and reset this part to shipped default?')) {
+            if (
+              hasUnsaved &&
+              !(await appConfirm('Discard unsaved edits and reset this part to shipped default?'))
+            ) {
               return;
             }
             if (!activeCustomConfig) return;
@@ -662,7 +665,7 @@ async function bindPromptingToolbar(): Promise<void> {
 
   document.getElementById('settingsCustomConfigNew')?.addEventListener('click', () => {
     void (async () => {
-      const label = prompt('Configuration label:', 'My setup');
+      const label = await appPrompt('Configuration label:', 'My setup');
       if (!label?.trim()) return;
       const id = label
         .trim()
@@ -708,7 +711,7 @@ async function bindPromptingToolbar(): Promise<void> {
     void (async () => {
       const meta = await loadPromptMetaSettings();
       if (!meta.activePromptConfigId) return;
-      const newLabel = prompt('Duplicate as:', 'Copy');
+      const newLabel = await appPrompt('Duplicate as:', 'Copy');
       if (!newLabel?.trim()) return;
       const newId = `${meta.activePromptConfigId}-copy`
         .slice(0, 48)
@@ -734,7 +737,14 @@ async function bindPromptingToolbar(): Promise<void> {
     void (async () => {
       const meta = await loadPromptMetaSettings();
       if (!meta.activePromptConfigId) return;
-      if (!confirm(`Delete "${meta.activePromptConfigId}"?`)) return;
+      if (
+        !(await appConfirm(`Delete "${meta.activePromptConfigId}"?`, {
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
+      ) {
+        return;
+      }
       const result = await deletePromptConfig(meta.activePromptConfigId);
       if (result instanceof Error) {
         setStatus('err', result.message);
@@ -1969,7 +1979,14 @@ async function renderMcpSection(): Promise<void> {
       if (!serverId) return;
 
       void (async () => {
-        if (!confirm(`Remove MCP server "${serverId}"?`)) return;
+        if (
+          !(await appConfirm(`Remove MCP server "${serverId}"?`, {
+            confirmLabel: 'Remove',
+            danger: true,
+          }))
+        ) {
+          return;
+        }
         const ok = await deleteMcpServer(serverId);
         if (ok) {
           setStatus('ok', `Removed ${serverId}`);

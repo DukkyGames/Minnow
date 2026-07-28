@@ -21,6 +21,7 @@ import { importStandardDataset } from '../../benchmark/campaign-persistence.ts';
 import type { StandardBenchmarkPack } from '../../benchmark/standard/types.ts';
 import { isLocalServerAvailable } from '../../tools/config.ts';
 import { catalogFamilyLabel, TEST_FAMILY_LABELS } from './copy.ts';
+import { appAlert } from '../app-dialog';
 
 const ALL_INTEGRATION_SUITES: SuiteId[] = [
   'capability',
@@ -172,7 +173,7 @@ async function renderCustomEditor(
         await renderTestsPanel(mount.closest('#benchmarkTabTests') as HTMLElement);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        alert(message);
+        await appAlert(message);
       }
     })();
   });
@@ -195,7 +196,7 @@ function wireImportDataset(mount: HTMLElement): void {
       const text = await file.text();
       const pack = JSON.parse(text) as StandardBenchmarkPack;
       await importStandardDataset(pack);
-      alert(`Imported full dataset: ${pack.id}`);
+      await appAlert(`Imported full dataset: ${pack.id}`);
       await renderTestsPanel(mount);
     })();
   });

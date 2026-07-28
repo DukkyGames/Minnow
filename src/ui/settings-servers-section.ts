@@ -36,6 +36,7 @@ import {
 import { appendSettingsOfflineHint } from './settings-controls';
 import { createSettingsSwitch } from './settings-switch';
 import { setStatus } from './status';
+import { appConfirm } from './app-dialog';
 import { isLocalServerAvailable } from '../tools/config';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -509,10 +510,15 @@ function createServerRow(
   actions.querySelector<HTMLButtonElement>(`[data-server-uninstall="${server.id}"]`)?.addEventListener(
     'click',
     () => {
-      if (!confirm(`Uninstall ${server.label}? This removes files under ~/.minnow/servers/.`)) {
-        return;
-      }
       void (async () => {
+        if (
+          !(await appConfirm(
+            `Uninstall ${server.label}? This removes files under ~/.minnow/servers/.`,
+            { confirmLabel: 'Uninstall', danger: true },
+          ))
+        ) {
+          return;
+        }
         const ok = await uninstallManagedServer(server.id);
         if (ok) {
           setStatus('ok', `${server.label} uninstalled`);

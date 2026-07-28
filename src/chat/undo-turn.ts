@@ -281,8 +281,8 @@ export function formatSnapshotRestoreConfirm(info: UndoConfirmInfo): string {
 }
 
 /**
- * Prefer Minnow’s in-app confirm (Electron-safe). Fall back to native confirm,
- * then a conservative headless default for tests without a DOM dialog.
+ * Prefer Minnow’s in-app confirm (Electron-safe). Fall back to native confirm
+ * outside Electron, then a conservative headless default for tests without a DOM dialog.
  */
 async function defaultConfirm(info: UndoConfirmInfo): Promise<boolean> {
   const labels = snapshotRestoreConfirmLabels(info);
@@ -292,10 +292,11 @@ async function defaultConfirm(info: UndoConfirmInfo): Promise<boolean> {
     const { appConfirm } = await import('../ui/app-dialog');
     return await appConfirm(message, labels);
   } catch {
-    // Module or DOM unavailable (unit tests) — try native next.
+    // Module or DOM unavailable (unit tests) — try native next when not in Electron.
   }
 
-  if (typeof globalThis.confirm === 'function') {
+  const isElectron = globalThis.minnow?.app?.isElectron === true;
+  if (!isElectron && typeof globalThis.confirm === 'function') {
     return globalThis.confirm(`${labels.title}\n\n${message}`);
   }
 

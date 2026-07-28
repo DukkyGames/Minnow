@@ -21,6 +21,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { refreshSettingsSection } from './settings-sections';
 import { schedulePromptTokenEstimateRefresh } from './settings-prompt-estimate';
 import { createSettingsToggleRow } from './settings-switch';
+import { appConfirm, appPrompt } from './app-dialog';
 
 type StatusFn = (kind: 'ok' | 'err', message: string) => void;
 
@@ -202,9 +203,9 @@ export function mountSetupProfilesPanel(
       }
       const summary = summarizeActivateImpact(loaded);
       if (
-        !confirm(
+        !(await appConfirm(
           `Apply setup profile "${loaded.label}"?\n\nThis updates:\n${summary}\n\nContinue?`,
-        )
+        ))
       ) {
         return;
       }
@@ -222,7 +223,7 @@ export function mountSetupProfilesPanel(
 
   captureBtn.addEventListener('click', () => {
     void (async () => {
-      const label = prompt('Setup profile name:', 'My setup');
+      const label = await appPrompt('Setup profile name:', 'My setup');
       if (!label?.trim()) return;
       const id = label
         .trim()
@@ -283,7 +284,7 @@ export function mountSetupProfilesPanel(
     void (async () => {
       const id = select.value;
       if (!id) return;
-      const newLabel = prompt('Duplicate as:', 'Copy');
+      const newLabel = await appPrompt('Duplicate as:', 'Copy');
       if (!newLabel?.trim()) return;
       const newId = `${id}-copy`.slice(0, 48).replace(/[^a-z0-9-]/g, '-');
       const result = await duplicateSetupProfile(id, newId, newLabel.trim());
@@ -301,7 +302,14 @@ export function mountSetupProfilesPanel(
     void (async () => {
       const id = select.value;
       if (!id) return;
-      if (!confirm(`Delete setup profile "${id}"?`)) return;
+      if (
+        !(await appConfirm(`Delete setup profile "${id}"?`, {
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
+      ) {
+        return;
+      }
       const result = await deleteSetupProfile(id);
       if (result instanceof Error) {
         setStatus('err', result.message);
