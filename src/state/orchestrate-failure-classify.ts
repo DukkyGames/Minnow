@@ -115,9 +115,31 @@ const STALL_MARKERS: string[] = [
   'Could not complete this reply',
 ];
 
+/**
+ * Provider/context-window limit copy — transient, retriable in-place. Takes
+ * precedence over the generic "Could not complete this reply" stall marker.
+ */
+const CONTEXT_LENGTH_MARKERS: string[] = [
+  'context length exceeded',
+  'context limit has been reached',
+  'maximum context length',
+  'context_length_exceeded',
+  'exceed context window',
+  'n_ctx =',
+  'requested tokens',
+];
+
+export function isContextLengthExceededText(text: string): boolean {
+  return matchesAny(text, CONTEXT_LENGTH_MARKERS);
+}
+
 function matchesAny(text: string, markers: string[]): boolean {
   const lower = text.toLowerCase();
   return markers.some((m) => lower.includes(m.toLowerCase()));
+}
+
+export function extractBoardChatTranscriptText(chat: Chat): string {
+  return extractChatText(chat);
 }
 
 function extractChatText(chat: Chat): string {
@@ -131,7 +153,18 @@ function extractChatText(chat: Chat): string {
           : JSON.stringify(msg.content);
     if (content) parts.push(content);
   }
+  for (const run of chat.runs ?? []) {
+    if (run.errorMessage?.trim()) parts.push(run.errorMessage);
+  }
   return parts.join('\n');
+}
+
+function isStallAssistantContent(content: string): boolean {
+  if (isContextLengthExceededText(content)) return false;
+  return (
+    content.includes('Maximum tool turns reached') ||
+    content.includes('Could not complete this reply')
+  );
 }
 
 /**
@@ -159,10 +192,8 @@ export function inferStreamOutcome(chat: Chat): TaskChatStreamOutcome {
           : msg.content == null
             ? ''
             : JSON.stringify(msg.content);
-      if (
-        content.includes('Maximum tool turns reached') ||
-        content.includes('Could not complete this reply')
-      ) {
+      if (isContextLengthExceededText(content)) return 'failed';
+      if (isStallAssistantContent(content)) {
         return 'failed';
       }
       return 'completed';
@@ -195,6 +226,7 @@ export function classifyTaskFailure(
 
   // 2. Transcript text scan (covers both prose and embedded tool output).
   const text = extractChatText(chat);
+  if (isContextLengthExceededText(text)) return 'code';
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
   if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';
 

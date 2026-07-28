@@ -29,7 +29,7 @@ import {
   resolveSelfHealMaxRounds,
   resolveMaxEnvFixAttempts,
 } from '../config/autopilot-meta.ts';
-import { classifyTaskFailure, resolveTaskChatStreamFailure } from './orchestrate-failure-classify.ts';
+import { classifyTaskFailure, extractBoardChatTranscriptText, isContextLengthExceededText, resolveTaskChatStreamFailure } from './orchestrate-failure-classify.ts';
 import { runSelfHeal, type SelfHealDeps } from './orchestrate-self-heal.ts';
 import { isLocalServerAvailable } from '../tools/config.ts';
 import {
@@ -527,9 +527,11 @@ export function resolveTaskChatStreamOutcome(chat: Chat): TaskChatStreamOutcome 
           : msg.content == null
             ? ''
             : JSON.stringify(msg.content);
+      if (isContextLengthExceededText(content)) return 'failed';
       if (
         content.includes('Maximum tool turns reached') ||
-        content.includes('Could not complete this reply')
+        (content.includes('Could not complete this reply') &&
+          !isContextLengthExceededText(content))
       ) {
         return 'failed';
       }
@@ -708,6 +710,25 @@ function tryNudgeForMissingBoardReport(
   plannerChat: Chat,
   chat: Chat,
 ): boolean {
+  return tryNudgeChatForMissingReport(group, task.id, plannerChat, chat, () => {
+    void runTaskChatNudge(group, task.id, plannerChat, undefined, {
+      chatId: chat.id,
+      missingReport: true,
+    }).catch((err) => reportBackgroundError('missing-board-report-nudge', err));
+  });
+}
+
+/**
+ * Re-prompt a board chat that ended cleanly without `board_report` / VERDICT.
+ * Shared by per-task Builder/Tester/Fixer paths and the final integration test.
+ */
+function tryNudgeChatForMissingReport(
+  group: ChatGroup,
+  logTaskId: string,
+  plannerChat: Chat,
+  chat: Chat,
+  relaunch: () => void,
+): boolean {
   // A paused/stopped board must not launch turns; the resume sweep re-drives it.
   if (!isBoardRunning(group)) return false;
 
@@ -722,12 +743,42 @@ function tryNudgeForMissingBoardReport(
 
   const attempt = sent + 1;
   missingReportNudges.set(chatId, attempt);
-  logBoardReportNudge(group, task.id, attempt, MISSING_REPORT_NUDGE_CAP);
-  void runTaskChatNudge(group, task.id, plannerChat, undefined, {
-    chatId,
-    missingReport: true,
-  }).catch((err) => reportBackgroundError('missing-board-report-nudge', err));
+  logBoardReportNudge(group, logTaskId, attempt, MISSING_REPORT_NUDGE_CAP);
+  relaunch();
   return true;
+}
+
+function nudgeFinalIntegrationChat(
+  group: ChatGroup,
+  plannerChat: Chat,
+  chat: Chat,
+): void {
+  if (skipBackgroundBoardChatLaunch()) return;
+  ensureStreamEndSubscription();
+  const { modelId } = resolvePlannerModelBinding(plannerChat);
+  if (!modelId) return;
+
+  reserveLaunchSlot(chat.id);
+  const nudge = [
+    'Continue the final integration test where you left off.',
+    'Your last turn ended without calling board_report or a VERDICT line, so the board cannot advance.',
+    'If verification is complete, call board_report for FULL_BOARD and end with `VERDICT: pass` or `VERDICT: fail`.',
+  ].join(' ');
+  refreshHeartbeatThresholds();
+  startTaskChatSupervision(chat.id);
+  void boardChatTurnRunner({
+    chat,
+    pushUser: true,
+    rawText: nudge,
+    userText: nudge,
+    displayText: nudge,
+    historyContent: nudge,
+    skillId: null,
+    validAttachments: [],
+    titleSeed: 'Final integration test',
+    ownsGlobalStreaming: true,
+  }).catch((err) => reportBackgroundError('missing-final-report-nudge', err))
+    .finally(() => releaseLaunchSlotAndDrive(group, plannerChat, chat.id));
 }
 
 /**
@@ -907,7 +958,12 @@ export function finalizeBoardTaskOnStreamEnd(
   if (isBoardRunning(group)) {
     const { category } = resolveTaskChatStreamFailure(chat);
     const signal = report?.outcome ?? freshTask.buildOutcome;
-    const healCategory = signal === 'env_blocked' ? 'infra' : category;
+    const healCategory =
+      signal === 'env_blocked'
+        ? 'infra'
+        : !report && outcome === 'completed'
+          ? 'unknown'
+          : category;
     void runSelfHeal(
       group,
       freshTask,
@@ -1064,10 +1120,19 @@ function getOrCreateBoardChat(input: {
   if (existingId) {
     const existing = findChatById(existingId);
     if (existing) {
+      const boardTask = input.taskId
+        ? input.group.orchestrateBoard?.tasks.find((t) => t.id === input.taskId)
+        : undefined;
+      const preserveMissingReportNudgeBudget =
+        boardTask?.status === 'in_progress' &&
+        input.taskChatField === 'chatId' &&
+        boardTask.chatId?.trim() === existing.id;
       // A fresh phase launch (build / test / fixer) is a new attempt, so it gets
       // a full missing-report nudge budget. Nudge continuations go through
       // runTaskChatNudge instead and deliberately keep the running count.
-      missingReportNudges.delete(existing.id);
+      if (!preserveMissingReportNudgeBudget) {
+        missingReportNudges.delete(existing.id);
+      }
       if (input.taskId) existing.boardTaskId = input.taskId;
       if (input.role === 'tester') existing.workAgentId = 'tester';
       if (input.role === 'fixer') existing.workAgentId = null;
@@ -3385,11 +3450,41 @@ export function applyTaskBuildFailureState(
   return 'retry';
 }
 
+function parseVerdictMarkersFromContent(content: string): {
+  verdict: 'pass' | 'fail';
+  summary: string;
+} | null {
+  const lines = content.split(/\r?\n/);
+  let last: { verdict: 'pass' | 'fail'; summary: string } | null = null;
+  for (const line of lines) {
+    const pattern = /verdict\s*[:=]\s*([a-z]+)/gi;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(line)) !== null) {
+      const verdict = match[1] ? normalizeVerdict(match[1]) : null;
+      if (!verdict) continue;
+      last = { verdict, summary: line.trim() || `Tester message verdict: ${verdict}` };
+    }
+  }
+  return last;
+}
+
+function shouldNudgeForMissingFinalVerdict(chat: Chat): boolean {
+  const lastAssistant = [...chat.history].reverse().find((m) => m.role === 'assistant');
+  const text =
+    lastAssistant && typeof lastAssistant.content === 'string'
+      ? lastAssistant.content.trim()
+      : '';
+  if (!text) return false;
+  if (text === 'Done.' || text === 'Done') return false;
+  return !/verdict\s*[:=]/i.test(text);
+}
+
 /**
  * Fallback verdict parsed from the Tester chat transcript when the structured
  * `board_report_test_result` call never landed (primary signal). Scans backward
  * for the most recent assistant message that contains an explicit
- * `VERDICT: pass|fail` marker — prose alone is not trusted. Returns null when
+ * `VERDICT: pass|fail` marker — prose alone is not trusted. When multiple
+ * markers appear in one message, the latest line wins. Returns null when
  * no marker is present.
  */
 function parseTesterVerdictMarker(chatId: string | undefined): {
@@ -3405,14 +3500,8 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
     if (!msg || msg.role !== 'assistant') continue;
     const content = typeof msg.content === 'string' ? msg.content : '';
     if (!content.trim()) continue;
-    const match = content.match(/^[ \t>*_-]*verdict\s*[:=]\s*([a-z]+)/im);
-    const verdict = match ? normalizeVerdict(match[1]) : null;
-    if (!verdict) continue;
-    const line = content
-      .split(/\r?\n/)
-      .find((l) => /verdict\s*[:=]/i.test(l))
-      ?.trim();
-    return { verdict, summary: line || `Tester message verdict: ${verdict}` };
+    const parsed = parseVerdictMarkersFromContent(content);
+    if (parsed) return parsed;
   }
   return null;
 }
@@ -3444,12 +3533,27 @@ export async function finalizeTaskTestingOnStreamEnd(
     }
   }
 
+  if (
+    endedTestChat &&
+    resolveTaskChatStreamOutcome(endedTestChat) === 'failed' &&
+    isContextLengthExceededText(extractBoardChatTranscriptText(endedTestChat)) &&
+    isBoardRunning(group)
+  ) {
+    void startTaskTesting(group, fresh.id, plannerChat, {
+      enqueueAtFront: true,
+      allowPreReservedTestChat: true,
+    }).catch((err) => reportBackgroundError('retry-tester-context-exceeded', err));
+    return;
+  }
+
   let report = resolveBoardReport(fresh);
+  let reportFromTranscript = false;
 
   if (!report) {
     const parsed = parseTesterVerdictMarker(fresh.testChatId);
     if (parsed) {
       report = { outcome: parsed.verdict, summary: parsed.summary };
+      reportFromTranscript = true;
       updateTask(
         group,
         fresh.id,
@@ -3538,6 +3642,25 @@ export async function finalizeTaskTestingOnStreamEnd(
       releasePipelineHold(hold);
     }
     return;
+  }
+
+  // Transcript-only VERDICT fail: retry the Tester in-place before escalating to the Builder.
+  if (outcome === 'fail' && reportFromTranscript && isBoardRunning(group)) {
+    const attempts = (fresh.testAttempts ?? 0) + 1;
+    if (attempts < resolveMaxTaskTestAttempts()) {
+      updateTask(
+        group,
+        fresh.id,
+        { testAttempts: attempts, testSummary: summary },
+        plannerChat,
+      );
+      logTaskRetry(group, fresh.id, 'test', attempts);
+      void startTaskTesting(group, fresh.id, plannerChat, {
+        enqueueAtFront: true,
+        allowPreReservedTestChat: true,
+      }).catch((err) => reportBackgroundError('retry-tester-verdict-fail', err));
+      return;
+    }
   }
 
   // Test failed or env_blocked: route through self-heal with the Tester chat for classification.
@@ -3785,7 +3908,33 @@ export function finalizeFinalTestOnStreamEnd(
   const board = group.orchestrateBoard;
   if (!board?.finalTest) return;
 
-  const report = resolveFinalBoardReport(board);
+  const finalChatId = board.finalTest.chatId?.trim();
+  const endedFinalChat = finalChatId ? findChatById(finalChatId) : undefined;
+
+  let report = resolveFinalBoardReport(board);
+  if (!report && endedFinalChat) {
+    const parsed = parseTesterVerdictMarker(finalChatId);
+    if (parsed) {
+      report = { outcome: parsed.verdict, summary: parsed.summary };
+      board.finalTest = {
+        ...board.finalTest,
+        recordedVerdict: parsed.verdict,
+        summary: parsed.summary,
+      };
+    }
+  }
+
+  if (
+    !report &&
+    endedFinalChat &&
+    shouldNudgeForMissingFinalVerdict(endedFinalChat) &&
+    tryNudgeChatForMissingReport(group, 'FULL_BOARD', plannerChat, endedFinalChat, () => {
+      nudgeFinalIntegrationChat(group, plannerChat, endedFinalChat);
+    })
+  ) {
+    return;
+  }
+
   const outcome = report?.outcome;
   const summary = report?.summary?.trim() || 'Final integration test did not report a verdict';
   const failingIds = board.finalTest.failingTaskIds ?? [];

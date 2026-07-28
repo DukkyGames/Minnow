@@ -15,6 +15,7 @@ import {
   autoDelegateNext,
   clearTaskChatStallRestartsForTests,
   clearTaskQueuesForTests,
+  clearMissingReportNudgesForTests,
   MISSING_REPORT_NUDGE_CAP,
   releaseLaunchSlotForTests,
   setBoardChatTurnRunner,
@@ -169,6 +170,7 @@ describe('board headless E2E (real runChatTurn)', () => {
     setLocalServerAvailableForTests(true);
     setSessionStateForTests(null);
     clearTaskQueuesForTests();
+    clearMissingReportNudgesForTests();
     clearTaskChatStallRestartsForTests();
     resetAutopilotMetaCache();
     setAutopilotMetaForTests({ maxBuildAttempts: 2, maxConcurrentTasks: 3 });
@@ -188,6 +190,7 @@ describe('board headless E2E (real runChatTurn)', () => {
     envRestore = undefined;
     setLocalServerAvailableForTests(false);
     clearTaskQueuesForTests();
+    clearMissingReportNudgesForTests();
     clearTaskChatStallRestartsForTests();
     releaseLaunchSlotForTests(FLOW_FINAL_CHAT_ID);
     setSessionStateForTests(null);
@@ -233,6 +236,7 @@ describe('board headless quirk fixtures', () => {
     setLocalServerAvailableForTests(true);
     setSessionStateForTests(null);
     clearTaskQueuesForTests();
+    clearMissingReportNudgesForTests();
     clearTaskChatStallRestartsForTests();
     resetAutopilotMetaCache();
     setAutopilotMetaForTests({ maxBuildAttempts: 2, maxConcurrentTasks: 2 });
@@ -252,6 +256,7 @@ describe('board headless quirk fixtures', () => {
     envRestore = undefined;
     setLocalServerAvailableForTests(false);
     clearTaskQueuesForTests();
+    clearMissingReportNudgesForTests();
     clearTaskChatStallRestartsForTests();
     releaseLaunchSlotForTests(FLOW_FINAL_CHAT_ID);
     setSessionStateForTests(null);
