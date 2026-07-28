@@ -1,4 +1,4 @@
-# Minnow — project context
+﻿# Minnow — project context
 
 Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`guides/setup.md`](guides/setup.md) and [`guides/commands.md`](guides/commands.md). UI key bindings: [`guides/keyboard-shortcuts.md`](guides/keyboard-shortcuts.md). Product overview: [`README.md`](../README.md).
 
@@ -225,7 +225,7 @@ Naming: `src/tools/loop.ts` is the tool-call/send loop — unrelated to `/loop`.
 
 ## Built-in tools
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; quick access from the Code/Chat composer **Tools** popover ([`src/ui/composer-tools-popover.ts`](../src/ui/composer-tools-popover.ts), [`src/styles/composer-tools-popover.css`](../src/styles/composer-tools-popover.css)) with segmented Off/Ask/Full rows, consolidated availability notices, web-search provider (SearXNG, DuckDuckGo, Brave, Tavily — persisted to `search.json` with `tools.json` fallback) + session-cache toggles, and a link to full tool settings; persistence `tools.json` / `minnow.tools`. Optional `appId` on a catalog entry gates exposure through [`getEnabledToolCatalogEntries()`](../src/tools/client.ts) and [`fillToolsSection()`](../src/ui/tools-list.ts): email and calendar tools appear only when `isAppEnabled` for that app (developer `releaseState` plus user `disabledApps`).
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings → Tools; quick access from the Code/Chat/**desktop** composer **Tools** popover ([`src/ui/composer-tools-popover.ts`](../src/ui/composer-tools-popover.ts), [`src/styles/composer-tools-popover.css`](../src/styles/composer-tools-popover.css)) with segmented Off/Ask/Full rows, consolidated availability notices, web-search provider (SearXNG, DuckDuckGo, Brave, Tavily — persisted to `search.json` with `tools.json` fallback) + session-cache toggles, and a link to full tool settings; persistence `tools.json` / `minnow.tools`. Optional `appId` on a catalog entry gates exposure through [`getEnabledToolCatalogEntries()`](../src/tools/client.ts) and [`fillToolsSection()`](../src/ui/tools-list.ts): email and calendar tools appear only when `isAppEnabled` for that app (developer `releaseState` plus user `disabledApps`).
 
 | Category | Examples | Runs on |
 |----------|----------|---------|

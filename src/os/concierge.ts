@@ -21,6 +21,62 @@ import { handleDesktopResearchSubmit } from './research-desktop';
 import { iconHtml } from '../ui/icon';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 
+/** Tools permissions popover for the desktop composer (mirrors Chat/Code composer popovers). */
+function buildDesktopToolsAnchor(): HTMLElement {
+  const anchor = document.createElement('div');
+  anchor.className = 'composer-tools-anchor mn-os-desktop-tools-anchor';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.id = 'btnDesktopTools';
+  button.className = 'mn-os-desktop-comp-btn composer-tools-btn';
+  button.setAttribute('aria-label', 'Tools');
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-haspopup', 'dialog');
+  button.setAttribute('aria-controls', 'desktopToolsPopover');
+  button.title = 'Tool permissions';
+  button.innerHTML = iconHtml('settings');
+
+  const popover = document.createElement('div');
+  popover.id = 'desktopToolsPopover';
+  popover.className = 'composer-tools-popover hidden';
+  popover.setAttribute('role', 'dialog');
+  popover.setAttribute('aria-label', 'Tool permissions');
+  popover.innerHTML = `
+    <header class="composer-tools-popover__header">
+      <h2 class="composer-tools-popover__title">Tools</h2>
+    </header>
+    <div id="desktopToolsStatus" class="composer-tools-popover__status hidden" role="status" aria-live="polite">
+      <p id="desktopToolsServerBanner" class="composer-tools-popover__notice hidden">Server tools need <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <p id="desktopToolsPreviewBanner" class="composer-tools-popover__notice hidden">Browser tools need the Minnow desktop app window.</p>
+    </div>
+    <div id="desktopToolsList" class="tools-list tools-list--composer"></div>
+    <footer class="composer-tools-popover__footer">
+      <div class="composer-tools-popover__setting">
+        <label for="desktopToolsWebSearchProvider" class="composer-tools-popover__setting-label">Web search</label>
+        <select id="desktopToolsWebSearchProvider" class="composer-tools-popover__select" aria-label="Web search provider">
+          <option value="searxng">SearXNG</option>
+          <option value="duckduckgo">DuckDuckGo</option>
+          <option value="brave">Brave API</option>
+          <option value="tavily">Tavily API</option>
+        </select>
+      </div>
+      <label class="composer-tools-popover__toggle">
+        <input type="checkbox" id="desktopToolsCacheEnabled" aria-describedby="desktopToolsCacheHint">
+        <span class="composer-tools-popover__setting-label">Cache read-only results</span>
+      </label>
+      <p id="desktopToolsCacheHint" class="composer-tools-popover__hint">Per session until the workspace changes.</p>
+      <button type="button" class="composer-tools-popover__settings-link" id="desktopToolsOpenSettings">
+        <span>All tool settings</span>
+        <i class="fi fi-rr-angle-right icon-svg" aria-hidden="true"></i>
+      </button>
+    </footer>
+  `;
+
+  anchor.append(button, popover);
+  return anchor;
+}
+
 /** Build the full desktop composer bar (textarea, attach, voice, context ring, send). */
 function buildDesktopComposer(): HTMLElement {
   const root = document.createElement('div');
@@ -79,6 +135,8 @@ function buildDesktopComposer(): HTMLElement {
 
   inputStack.append(attachPreview, inputWrap);
 
+  const toolsAnchor = buildDesktopToolsAnchor();
+
   const contextAnchor = document.createElement('div');
   contextAnchor.className = 'context-usage-anchor mn-os-desktop-context';
   contextAnchor.innerHTML = `
@@ -112,7 +170,7 @@ function buildDesktopComposer(): HTMLElement {
   sendBtn.setAttribute('aria-label', 'Send message');
   sendBtn.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
-  row.append(attachBtn, inputStack, contextAnchor, sendBtn);
+  row.append(attachBtn, inputStack, toolsAnchor, contextAnchor, sendBtn);
   root.append(toolApprovalHost, questionHost, modelTriggerRow, row);
   return root;
 }

@@ -194,6 +194,7 @@ import {
   closeAllToolsPopovers,
   initChatAppToolsPopover,
   initComposerToolsPopover,
+  initDesktopToolsPopover,
 } from './ui/composer-tools-popover';
 import { initComposerVoice } from './ui/composer-voice';
 import { initComposerUndo } from './ui/composer-undo';
@@ -277,9 +278,11 @@ export async function initApp(): Promise<void> {
   fillToolsSection();
   fillToolsSection('composerToolsList', { variant: 'composer' });
   fillToolsSection('chatAppToolsList', { variant: 'composer' });
+  fillToolsSection('desktopToolsList', { variant: 'composer' });
   registerToolHandlers();
   initComposerToolsPopover();
   initChatAppToolsPopover();
+  initDesktopToolsPopover();
   initComposerVoice();
   initComposerUndo();
   void initVoiceStatus();

@@ -4,9 +4,14 @@
 
 import '../styles/settings-general.css';
 import '../styles/settings-about.css';
+import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import { detectConfigServer } from '../config/storage-mode';
 import { fetchWorkspace } from '../config/workspace-api';
 import { TEST_BOARD_GROUP_ID } from '../dev/test-board-seed';
+import {
+  ensureResearchWorkspaceOption,
+  populateResearchWorkspaceSelect,
+} from '../research/workspace-scope-ui';
 import {
   checkBoardLog,
   fetchBoardTestingStatus,
@@ -17,6 +22,7 @@ import {
   type CheckBoardLogResponse,
 } from '../api/board-testing';
 import { loadSessionsFromStorage } from '../state/sessions';
+import type { ChatGroup } from '../types';
 import {
   appendSettingsGroup,
   linkToSettingsSection,
@@ -29,7 +35,11 @@ import {
   createSettingsTextareaRow,
 } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
+import { listWorkspaceOrchestrateBoardGroups } from './orchestrate-hub';
+import { shortPlanLabel } from './orchestrate-plan-picker';
 import { setStatus } from './status';
+
+const BOARD_GROUP_CUSTOM_VALUE = '__custom__';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -97,6 +107,67 @@ function renderStatusChips(host: HTMLElement, status: BoardTestingStatus | null)
   host.appendChild(list);
 }
 
+/** Human-readable label for a board group row in settings selects. */
+function boardGroupOptionLabel(group: ChatGroup): string {
+  const plan = group.orchestratePlanPath?.trim();
+  if (plan) return shortPlanLabel(plan);
+  if (group.name?.trim()) return group.name.trim();
+  return PLACEHOLDER_CHAT_NAME;
+}
+
+/** Fill the board picker from orchestrate groups in the chosen workspace. */
+function populateBoardGroupSelect(
+  select: HTMLSelectElement,
+  workspacePath: string,
+  preferredGroupId?: string,
+): void {
+  const boards = listWorkspaceOrchestrateBoardGroups(workspacePath);
+  const previous = preferredGroupId ?? select.value;
+  select.replaceChildren();
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = boards.length ? 'Select a board…' : 'No boards in this workspace';
+  placeholder.disabled = true;
+  select.appendChild(placeholder);
+
+  for (const group of boards) {
+    const option = document.createElement('option');
+    option.value = group.id;
+    const taskCount = group.orchestrateBoard?.tasks.length;
+    const suffix =
+      typeof taskCount === 'number' && taskCount > 0
+        ? ` (${taskCount} task${taskCount === 1 ? '' : 's'})`
+        : '';
+    option.textContent = `${boardGroupOptionLabel(group)}${suffix}`;
+    select.appendChild(option);
+  }
+
+  const custom = document.createElement('option');
+  custom.value = BOARD_GROUP_CUSTOM_VALUE;
+  custom.textContent = 'Custom group id or log path…';
+  select.appendChild(custom);
+
+  const known = boards.some((group) => group.id === previous);
+  if (known) {
+    select.value = previous;
+    return;
+  }
+  if (previous === BOARD_GROUP_CUSTOM_VALUE) {
+    select.value = BOARD_GROUP_CUSTOM_VALUE;
+    return;
+  }
+  if (boards.length === 1) {
+    select.value = boards[0].id;
+    return;
+  }
+  if (previous && !known) {
+    select.value = BOARD_GROUP_CUSTOM_VALUE;
+    return;
+  }
+  select.value = '';
+}
+
 function renderValidationResult(host: HTMLElement, result: CheckBoardLogResponse): void {
   host.replaceChildren();
   host.className = 'diagnostics-subsection';
@@ -160,6 +231,12 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   const content = el('div', 'settings-general__content');
   shell.appendChild(content);
 
+  try {
+    await loadSessionsFromStorage();
+  } catch {
+    // Board pickers fall back to empty lists when sessions are unavailable.
+  }
+
   const statusHost = el('div', 'board-testing-status-host');
   content.appendChild(statusHost);
 
@@ -173,6 +250,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
     try {
       currentStatus = await fetchBoardTestingStatus();
       renderStatusChips(statusHost, currentStatus);
+      refreshBoardGroupSelect(workspacePath);
     } catch {
       renderStatusChips(statusHost, null);
     }
@@ -294,22 +372,58 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   });
   seedGroup.appendChild(autoStartRow);
 
-  const { row: workspaceRow, input: workspaceInput } = createSettingsInputRow('Workspace path', {
-    value: workspacePath,
+  const { row: workspaceRow, select: workspaceSelect } = createSettingsSelectRow('Workspace', {
     searchKey: 'advanced.boardTesting.seed.workspace',
     description: 'Folder for the seeded planner and board group.',
     onChange: (value) => {
       workspacePath = value;
+      refreshBoardGroupSelect(workspacePath);
+      syncGroupIdCustomRow();
     },
   });
-  workspaceInput.id = 'boardTestingWorkspace';
+  workspaceSelect.id = 'boardTestingWorkspace';
+  populateResearchWorkspaceSelect(workspaceSelect, workspaceInfo);
+  if (workspacePath.trim()) {
+    ensureResearchWorkspaceOption(workspaceSelect, workspacePath);
+    workspaceSelect.value = workspacePath;
+  }
   seedGroup.appendChild(workspaceRow);
 
   const seedResultHost = el('pre', 'diagnostics-log-tail');
   seedResultHost.setAttribute('aria-live', 'polite');
   seedGroup.appendChild(seedResultHost);
 
-  let groupIdInput: HTMLInputElement | null = null;
+  let groupIdSelect: HTMLSelectElement | null = null;
+  let groupIdCustomInput: HTMLInputElement | null = null;
+  let groupIdCustomRow: HTMLDivElement | null = null;
+
+  function syncGroupIdCustomRow(): void {
+    if (!groupIdCustomRow || !groupIdSelect) return;
+    groupIdCustomRow.hidden = groupIdSelect.value !== BOARD_GROUP_CUSTOM_VALUE;
+  }
+
+  function resolveGroupIdForValidation(): string {
+    if (!groupIdSelect) return '';
+    if (groupIdSelect.value === BOARD_GROUP_CUSTOM_VALUE) {
+      return groupIdCustomInput?.value.trim() ?? '';
+    }
+    return groupIdSelect.value.trim();
+  }
+
+  function refreshBoardGroupSelect(nextWorkspacePath?: string, preferredGroupId?: string): void {
+    if (!groupIdSelect) return;
+    const path = (nextWorkspacePath ?? workspacePath).trim();
+    populateBoardGroupSelect(groupIdSelect, path, preferredGroupId ?? groupIdSelect.value);
+    syncGroupIdCustomRow();
+  }
+
+  function selectSeededBoard(groupId: string | undefined): void {
+    if (!groupId?.trim() || !groupIdSelect) return;
+    refreshBoardGroupSelect(workspacePath, groupId);
+    if (groupIdSelect.value === BOARD_GROUP_CUSTOM_VALUE && groupIdCustomInput) {
+      groupIdCustomInput.value = groupId;
+    }
+  }
 
   const seedActions = createSettingsActionsRow(
     [
@@ -331,7 +445,12 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
                 autoStart,
               });
               await loadSessionsFromStorage({ force: true });
-              if (groupIdInput) groupIdInput.value = result.groupId ?? '';
+              if (result.workspacePath?.trim()) {
+                workspacePath = result.workspacePath.trim();
+                ensureResearchWorkspaceOption(workspaceSelect, workspacePath);
+                workspaceSelect.value = workspacePath;
+              }
+              selectSeededBoard(result.groupId);
               seedResultHost.textContent = [
                 `group:    ${result.groupId}`,
                 `planner:  ${result.plannerId}`,
@@ -362,15 +481,33 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
     { emphasis: true },
   );
 
-  const { row: groupIdRow, input: groupIdField } = createSettingsInputRow('Group id', {
-    value: TEST_BOARD_GROUP_ID,
+  const { row: groupIdRow, select: groupIdField } = createSettingsSelectRow('Board', {
     searchKey: 'advanced.boardTesting.log.groupId',
-    description: 'Board group id or direct path to a .jsonl file.',
-    onChange: () => {},
+    description: 'Pick a board from the workspace above, or enter a custom group id / log path.',
+    onChange: () => {
+      syncGroupIdCustomRow();
+    },
   });
   groupIdField.id = 'boardTestingGroupId';
-  groupIdInput = groupIdField;
+  groupIdSelect = groupIdField;
   logGroup.appendChild(groupIdRow);
+
+  const { row: groupIdCustomRowEl, input: groupIdCustomField } = createSettingsInputRow(
+    'Custom group id or log path',
+    {
+      value: TEST_BOARD_GROUP_ID,
+      searchKey: 'advanced.boardTesting.log.groupIdCustom',
+      description: 'Used when Board is set to custom.',
+      onChange: () => {},
+    },
+  );
+  groupIdCustomField.id = 'boardTestingGroupIdCustom';
+  groupIdCustomInput = groupIdCustomField;
+  groupIdCustomRow = groupIdCustomRowEl;
+  groupIdCustomRow.hidden = true;
+  logGroup.appendChild(groupIdCustomRow);
+
+  refreshBoardGroupSelect(workspacePath, TEST_BOARD_GROUP_ID);
 
   const { row: planRow, textarea: planTextarea } = createSettingsTextareaRow('Plan JSON (optional)', {
     value: '',
@@ -398,9 +535,9 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
               setStatus('err', 'Tool server offline');
               return;
             }
-            const groupId = groupIdInput.value.trim();
+            const groupId = resolveGroupIdForValidation();
             if (!groupId) {
-              setStatus('err', 'Group id is required');
+              setStatus('err', 'Board group id is required');
               return;
             }
 

@@ -6,14 +6,24 @@
 /** Scrollable panels where select-all should stay local. */
 export const SELECTION_SCOPE_SELECTOR = [
   '#chatArea',
-  '.board-init-split__chat',
-  '[data-testid="orchestrate-chat-pane"]',
-  '.mn-os-chat-transcript',
   '#chatAppArea',
   '#onboardingChatCol',
   '#fileViewerHost',
   '.file-viewer-body',
   '#previewBody',
+  '.board-init-split__chat',
+  '.board-main',
+  '[data-testid="orchestrate-chat-pane"]',
+  '.mn-os-chat-transcript',
+  '#settingsView',
+  '#researchView',
+  '#modelsView',
+  '#brainView',
+  '#benchmarkView',
+  '#issuesView',
+  '#schedulerView',
+  '#welcomeView',
+  '.code-overview-root',
 ].join(', ');
 
 /** True for the platform select-all chord (Ctrl+A / Cmd+A). */

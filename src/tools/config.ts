@@ -500,7 +500,12 @@ export function loadToolConfigIntoDrawer(
   void syncWebSearchProviderFromSearchConfig();
 
   const cacheEnabled = config.toolCache?.enabled !== false;
-  for (const id of ['settingsToolCacheEnabled', 'composerToolsCacheEnabled', 'chatAppToolsCacheEnabled'] as const) {
+  for (const id of [
+    'settingsToolCacheEnabled',
+    'composerToolsCacheEnabled',
+    'chatAppToolsCacheEnabled',
+    'desktopToolsCacheEnabled',
+  ] as const) {
     const checkbox = document.getElementById(id) as HTMLInputElement | null;
     if (checkbox) {
       checkbox.checked = cacheEnabled;
@@ -621,7 +626,13 @@ export function refreshAllToolListUis(_root: ParentNode = document): void {
 
   loadToolConfigIntoDrawer(document);
 
-  for (const listId of ['toolsList', 'settingsToolsList', 'composerToolsList', 'chatAppToolsList'] as const) {
+  for (const listId of [
+    'toolsList',
+    'settingsToolsList',
+    'composerToolsList',
+    'chatAppToolsList',
+    'desktopToolsList',
+  ] as const) {
     const list = document.getElementById(listId);
     if (list) {
       syncToolSelectAllControls(list);
@@ -767,6 +778,16 @@ export function refreshServerToolDisabledState(): void {
     chatAppPreviewBanner.classList.toggle('hidden', !previewUnavailable);
   }
 
+  const desktopBanner = document.getElementById('desktopToolsServerBanner');
+  if (desktopBanner) {
+    desktopBanner.classList.toggle('hidden', !serverUnavailable);
+  }
+
+  const desktopPreviewBanner = document.getElementById('desktopToolsPreviewBanner');
+  if (desktopPreviewBanner) {
+    desktopPreviewBanner.classList.toggle('hidden', !previewUnavailable);
+  }
+
   const previewBanner = document.getElementById('toolsPreviewBanner');
   if (previewBanner) {
     previewBanner.classList.toggle('hidden', !previewUnavailable);
@@ -853,6 +874,7 @@ const WEB_SEARCH_PROVIDER_SELECT_IDS = [
   'webSearchProvider',
   'composerToolsWebSearchProvider',
   'chatAppToolsWebSearchProvider',
+  'desktopToolsWebSearchProvider',
 ] as const;
 
 /** Composer/drawer provider values that map to search.json. */
@@ -901,7 +923,8 @@ export function saveWebSearchSettingsFromDrawer(event?: Event): void {
     changedProviderSelect ??
     (document.getElementById('webSearchProvider') as HTMLSelectElement | null) ??
     (document.getElementById('composerToolsWebSearchProvider') as HTMLSelectElement | null) ??
-    (document.getElementById('chatAppToolsWebSearchProvider') as HTMLSelectElement | null);
+    (document.getElementById('chatAppToolsWebSearchProvider') as HTMLSelectElement | null) ??
+    (document.getElementById('desktopToolsWebSearchProvider') as HTMLSelectElement | null);
   if (!braveInput && !tavilyInput && !providerSelect) return;
 
   const config = loadToolConfig();
