@@ -14,7 +14,6 @@ import {
 import { appConfirm } from '../app-dialog';
 import { parseMemoryTagsInput } from '../../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../../memory/types';
-import { appConfirm } from '../app-dialog';
 
 type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 

@@ -6,6 +6,9 @@ import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/
 const FINANCE_WS = '/home/user/finance-app';
 const CURRENT_WS = '/home/user/minnow';
 
+/** @type {import('happy-dom').Window | undefined} */
+let happyDomWindow: import('happy-dom').Window | undefined;
+
 function stubCodeAppDom(doc: Document): void {
   const statsIds = [
     'stripTPS',
@@ -49,6 +52,7 @@ describe('applyCodeLaunchOptions', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
+    happyDomWindow = win;
     const g = globalThis as typeof globalThis & {
       window: Window;
       document: Document;
@@ -87,7 +91,7 @@ describe('applyCodeLaunchOptions', () => {
           }),
         } as Response;
       }
-      return { ok: false, status: 503, json: async () => ({ error: 'offline' }) } as Response;
+      return { ok: false, status: 503, json: async () => ({ error: 'offline' }), text: async () => 'offline' } as Response;
     }) as typeof fetch;
 
     resetWorkspaceStateForTests();
@@ -120,6 +124,8 @@ describe('applyCodeLaunchOptions', () => {
   });
 
   afterEach(() => {
+    happyDomWindow?.close();
+    happyDomWindow = undefined;
     setSessionStateForTests(null);
     resetWorkspaceStateForTests();
   });

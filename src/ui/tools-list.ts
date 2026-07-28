@@ -213,6 +213,7 @@ export function bindToolsListChange(list: HTMLElement): void {
   if (list.dataset.toolsChangeBound === 'true') return;
   list.dataset.toolsChangeBound = 'true';
   list.addEventListener('change', (event) => handleToolsListChange(event, list));
+  list.addEventListener('click', (event) => handleToolsListChange(event, list));
 }
 
 /** Populate a tool list container with grouped permission rows. */

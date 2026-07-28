@@ -60,6 +60,7 @@ function setupDom() {
 
   const window = new Window();
 
+  globalThis.window = window;
   globalThis.document = window.document;
 
   globalThis.HTMLElement = window.HTMLElement;

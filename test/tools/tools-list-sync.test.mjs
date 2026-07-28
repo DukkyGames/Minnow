@@ -32,11 +32,13 @@ const SYNC_TOOL_ID = 'calculate';
 /** Mount drawer, settings, and composer tool lists in happy-dom. */
 function setupThreeToolLists() {
   const window = new Window();
+  globalThis.window = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.HTMLInputElement = window.HTMLInputElement;
   globalThis.HTMLSelectElement = window.HTMLSelectElement;
   globalThis.HTMLLabelElement = window.HTMLLabelElement;
+  globalThis.HTMLButtonElement = window.HTMLButtonElement;
   globalThis.Event = window.Event;
   globalThis.localStorage = window.localStorage;
 
@@ -53,6 +55,18 @@ function setupThreeToolLists() {
   fillToolsSection('chatAppToolsList', { variant: 'composer' });
 }
 
+/** Permission value for one tool row (select or composer segment group). */
+function permissionValue(listId, toolId) {
+  const list = document.getElementById(listId);
+  const row = list?.querySelector(`[data-tool-id="${toolId}"]`);
+  const select = row?.querySelector('select.tool-permission-select');
+  if (select) return select.value;
+  const activeSegment = row?.querySelector(
+    '.tool-permission-segment[aria-checked="true"]',
+  );
+  return activeSegment?.dataset.value ?? null;
+}
+
 /** Permission select for one tool row inside a list container. */
 function permissionSelect(listId, toolId) {
   const list = document.getElementById(listId);
@@ -63,7 +77,7 @@ function permissionSelect(listId, toolId) {
 /** Seed localStorage + in-memory cache with calculate disabled. */
 function seedCalculateOff() {
   const config = defaultToolConfig();
-  config.permissions[SYNC_TOOL_ID] = 'off';
+  config.permissions.default[SYNC_TOOL_ID] = 'off';
   config.enabled[SYNC_TOOL_ID] = false;
   invalidateToolConfigCache();
   localStorage.setItem(TOOL_CONFIG_STORAGE_KEY, JSON.stringify(config));
@@ -111,7 +125,7 @@ describe('tools list sync runtime', { concurrency: false }, () => {
     setToolPermission(SYNC_TOOL_ID, 'full', document);
 
     for (const listId of LIST_IDS) {
-      assert.equal(permissionSelect(listId, SYNC_TOOL_ID)?.value, 'full', listId);
+      assert.equal(permissionValue(listId, SYNC_TOOL_ID), 'full', listId);
     }
   });
 
@@ -125,8 +139,8 @@ describe('tools list sync runtime', { concurrency: false }, () => {
     drawerSelect.value = 'ask';
     drawerSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
-    assert.equal(permissionSelect('settingsToolsList', SYNC_TOOL_ID)?.value, 'ask');
-    assert.equal(permissionSelect('composerToolsList', SYNC_TOOL_ID)?.value, 'ask');
+    assert.equal(permissionValue('settingsToolsList', SYNC_TOOL_ID), 'ask');
+    assert.equal(permissionValue('composerToolsList', SYNC_TOOL_ID), 'ask');
   });
 
   test('refreshAllToolListUis syncs bulk checkboxes on every list', () => {

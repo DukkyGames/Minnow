@@ -94,10 +94,13 @@ describe('scheduler markup contract', () => {
 
 describe('scheduler side panel shell', () => {
   let fetchMock: typeof fetch;
+  /** @type {import('happy-dom').Window | undefined} */
+  let happyDomWindow: import('happy-dom').Window | undefined;
 
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
+    happyDomWindow = win;
     const g = globalThis as typeof globalThis & {
       window: Window;
       document: Document;
@@ -137,6 +140,8 @@ describe('scheduler side panel shell', () => {
 
   afterEach(() => {
     globalThis.fetch = fetchMock;
+    happyDomWindow?.close();
+    happyDomWindow = undefined;
     resetInstancesForTests();
     resetOsRouterForTests();
     resetAppHostForTests();

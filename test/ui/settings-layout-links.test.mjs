@@ -3,34 +3,29 @@
  * can switch sections while the Settings window is already open.
  */
 import assert from 'node:assert/strict';
-import { afterEach, beforeEach, describe, mock, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
 let openSettingsCalls = [];
 let openModelsCalls = [];
 
-mock.module('../../src/ui/settings-page.ts', {
-  namedExports: {
-    openSettings(section) {
-      openSettingsCalls.push(section);
-    },
-  },
-});
-
-mock.module('../../src/ui/models-page.ts', {
-  namedExports: {
-    openModels(section) {
-      openModelsCalls.push(section);
-    },
-  },
-});
-
-const { linkToSettingsSection } = await import('../../src/ui/settings-layout.ts');
+const {
+  linkToSettingsSection,
+  setSettingsLayoutNavHandlersForTests,
+} = await import('../../src/ui/settings-layout.ts');
 
 describe('linkToSettingsSection', () => {
   beforeEach(() => {
     openSettingsCalls = [];
     openModelsCalls = [];
+    setSettingsLayoutNavHandlersForTests({
+      openSettings(section) {
+        openSettingsCalls.push(section);
+      },
+      openModels(section) {
+        openModelsCalls.push(section);
+      },
+    });
     const window = new Window();
     globalThis.window = window;
     globalThis.document = window.document;
@@ -39,6 +34,7 @@ describe('linkToSettingsSection', () => {
   });
 
   afterEach(() => {
+    setSettingsLayoutNavHandlersForTests(null);
     delete globalThis.window;
     delete globalThis.document;
     delete globalThis.HTMLElement;
