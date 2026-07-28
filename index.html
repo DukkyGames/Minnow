@@ -991,11 +991,32 @@
                   <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true"></i>
                 </button>
                 <div id="chatAppToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
-                  <p id="chatAppToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
-                  <p id="chatAppToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
+                  <header class="composer-tools-popover__header">
+                    <h2 class="composer-tools-popover__title">Tools</h2>
+                  </header>
+                  <div id="chatAppToolsStatus" class="composer-tools-popover__status hidden" role="status" aria-live="polite">
+                    <p id="chatAppToolsServerBanner" class="composer-tools-popover__notice hidden">Server tools need <code>npm start</code> (not <code>npm run dev</code>).</p>
+                    <p id="chatAppToolsPreviewBanner" class="composer-tools-popover__notice hidden">Browser tools need the Minnow desktop app window.</p>
+                  </div>
                   <div id="chatAppToolsList" class="tools-list tools-list--composer"></div>
                   <footer class="composer-tools-popover__footer">
-                    <button type="button" class="composer-tools-popover__link" id="chatAppToolsOpenSettings">Settings → Tools</button>
+                    <div class="composer-tools-popover__setting">
+                      <label for="chatAppToolsWebSearchProvider" class="composer-tools-popover__setting-label">Web search</label>
+                      <select id="chatAppToolsWebSearchProvider" class="composer-tools-popover__select" aria-label="Web search provider">
+                        <option value="duckduckgo">DuckDuckGo</option>
+                        <option value="brave">Brave API</option>
+                        <option value="tavily">Tavily API</option>
+                      </select>
+                    </div>
+                    <label class="composer-tools-popover__toggle">
+                      <input type="checkbox" id="chatAppToolsCacheEnabled" aria-describedby="chatAppToolsCacheHint">
+                      <span class="composer-tools-popover__setting-label">Cache read-only results</span>
+                    </label>
+                    <p id="chatAppToolsCacheHint" class="composer-tools-popover__hint">Per session until the workspace changes.</p>
+                    <button type="button" class="composer-tools-popover__settings-link" id="chatAppToolsOpenSettings">
+                      <span>All tool settings</span>
+                      <i class="fi fi-rr-angle-right icon-svg" aria-hidden="true"></i>
+                    </button>
                   </footer>
                 </div>
               </div>
@@ -2262,11 +2283,32 @@
                 <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true"></i>
               </button>
               <div id="composerToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
-                <p id="composerToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
-                <p id="composerToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
+                <header class="composer-tools-popover__header">
+                  <h2 class="composer-tools-popover__title">Tools</h2>
+                </header>
+                <div id="composerToolsStatus" class="composer-tools-popover__status hidden" role="status" aria-live="polite">
+                  <p id="composerToolsServerBanner" class="composer-tools-popover__notice hidden">Server tools need <code>npm start</code> (not <code>npm run dev</code>).</p>
+                  <p id="composerToolsPreviewBanner" class="composer-tools-popover__notice hidden">Browser tools need the Minnow desktop app window.</p>
+                </div>
                 <div id="composerToolsList" class="tools-list tools-list--composer"></div>
                 <footer class="composer-tools-popover__footer">
-                  <button type="button" class="composer-tools-popover__link" id="composerToolsOpenSettings">Settings → Tools</button>
+                  <div class="composer-tools-popover__setting">
+                    <label for="composerToolsWebSearchProvider" class="composer-tools-popover__setting-label">Web search</label>
+                    <select id="composerToolsWebSearchProvider" class="composer-tools-popover__select" aria-label="Web search provider">
+                      <option value="duckduckgo">DuckDuckGo</option>
+                      <option value="brave">Brave API</option>
+                      <option value="tavily">Tavily API</option>
+                    </select>
+                  </div>
+                  <label class="composer-tools-popover__toggle">
+                    <input type="checkbox" id="composerToolsCacheEnabled" aria-describedby="composerToolsCacheHint">
+                    <span class="composer-tools-popover__setting-label">Cache read-only results</span>
+                  </label>
+                  <p id="composerToolsCacheHint" class="composer-tools-popover__hint">Per session until the workspace changes.</p>
+                  <button type="button" class="composer-tools-popover__settings-link" id="composerToolsOpenSettings">
+                    <span>All tool settings</span>
+                    <i class="fi fi-rr-angle-right icon-svg" aria-hidden="true"></i>
+                  </button>
                 </footer>
               </div>
             </div>

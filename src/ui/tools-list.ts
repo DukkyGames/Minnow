@@ -4,6 +4,7 @@
 
 import {
   isToolPermissionMode,
+  saveToolCacheFromUi,
   saveWebSearchSettingsFromDrawer,
   setToolPermission,
   setToolsEnabled,
@@ -131,9 +132,50 @@ function createToolSelectAllControl(
   return label;
 }
 
+/** Compact Off / Ask / Full control for the composer tools popover. */
+function createToolPermissionSegments(
+  toolLabel: string,
+): HTMLDivElement {
+  const group = document.createElement('div');
+  group.className = 'tool-permission-segments';
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', `${toolLabel} permission`);
+
+  for (const optDef of [
+    { value: 'off', label: 'Off' },
+    { value: 'ask', label: 'Ask' },
+    { value: 'full', label: 'Full' },
+  ] as const) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tool-permission-segment';
+    button.dataset.value = optDef.value;
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', 'false');
+    button.textContent = optDef.label;
+    group.appendChild(button);
+  }
+
+  return group;
+}
+
 /** Handle permission select and bulk checkbox changes on a tools list. */
 function handleToolsListChange(event: Event, list: HTMLElement): void {
   const target = event.target;
+  if (
+    target instanceof HTMLButtonElement &&
+    target.classList.contains('tool-permission-segment')
+  ) {
+    const row = target.closest<HTMLElement>('[data-tool-id]');
+    const id = row?.getAttribute('data-tool-id');
+    if (!id) return;
+    const mode = target.dataset.value;
+    if (!isToolPermissionMode(mode)) return;
+    setToolPermission(id, mode, list);
+    void import('./context-usage-ring').then((m) => m.scheduleContextUsageRefresh());
+    return;
+  }
+
   if (
     target instanceof HTMLSelectElement &&
     target.classList.contains('tool-permission-select')
@@ -188,7 +230,12 @@ export function fillToolsSection(
 
   const toolbar = document.createElement('div');
   toolbar.className = 'tool-list-toolbar';
-  toolbar.appendChild(createToolSelectAllControl('global', 'Enable all tools'));
+  toolbar.appendChild(
+    createToolSelectAllControl(
+      'global',
+      variant === 'composer' ? 'Enable all' : 'Enable all tools',
+    ),
+  );
   container.appendChild(toolbar);
 
   for (const category of TOOL_CATEGORY_ORDER) {
@@ -204,11 +251,14 @@ export function fillToolsSection(
     header.className = 'tool-group-header';
     header.textContent = TOOL_CATEGORY_LABELS[category];
 
-    head.append(header, createToolSelectAllControl(category, 'All'));
+    head.append(header);
+    if (variant !== 'composer') {
+      head.append(createToolSelectAllControl(category, 'All'));
+    }
 
     const bodyNodes: HTMLElement[] = [];
 
-    if (category === 'browser') {
+    if (category === 'browser' && variant !== 'composer') {
       const hint = document.createElement('p');
       hint.className = 'tool-group-hint';
       hint.textContent =
@@ -240,19 +290,20 @@ export function fillToolsSection(
       select.setAttribute('aria-label', `${tool.label} permission`);
       if (variant !== 'composer') {
         select.setAttribute('aria-describedby', `tool-desc-${tool.id}`);
+        for (const optDef of [
+          { value: 'off', label: 'Disabled' },
+          { value: 'ask', label: 'Requires permission' },
+          { value: 'full', label: 'Full permission' },
+        ] as const) {
+          const opt = document.createElement('option');
+          opt.value = optDef.value;
+          opt.textContent = optDef.label;
+          select.appendChild(opt);
+        }
+        controlWrap.append(nameSpan, select);
+      } else {
+        controlWrap.append(nameSpan, createToolPermissionSegments(tool.label));
       }
-      for (const optDef of [
-        { value: 'off', label: 'Disabled' },
-        { value: 'ask', label: 'Requires permission' },
-        { value: 'full', label: 'Full permission' },
-      ] as const) {
-        const opt = document.createElement('option');
-        opt.value = optDef.value;
-        opt.textContent = optDef.label;
-        select.appendChild(opt);
-      }
-
-      controlWrap.append(nameSpan, select);
 
       row.appendChild(controlWrap);
 
@@ -306,11 +357,23 @@ export function registerToolHandlers(): void {
     bindToolsListChange(composerList);
   }
 
-  const webSearchFields = ['braveApiKey', 'tavilyApiKey', 'webSearchProvider'];
+  const webSearchFields = [
+    'braveApiKey',
+    'tavilyApiKey',
+    'webSearchProvider',
+    'composerToolsWebSearchProvider',
+    'chatAppToolsWebSearchProvider',
+  ];
   for (const id of webSearchFields) {
     const el = document.getElementById(id);
     if (!el) continue;
     el.addEventListener('input', saveWebSearchSettingsFromDrawer);
     el.addEventListener('change', saveWebSearchSettingsFromDrawer);
+  }
+
+  for (const id of ['settingsToolCacheEnabled', 'composerToolsCacheEnabled', 'chatAppToolsCacheEnabled']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.addEventListener('change', saveToolCacheFromUi);
   }
 }

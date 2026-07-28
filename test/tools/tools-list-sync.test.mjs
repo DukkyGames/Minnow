@@ -93,6 +93,7 @@ describe('tools list sync contract', () => {
     assert.match(src, /tools-list--composer/);
     assert.match(src, /tools-list--settings/);
     assert.match(src, /tool-group--collapsible/);
+    assert.match(src, /tool-permission-segment/);
   });
 });
 

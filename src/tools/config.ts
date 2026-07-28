@@ -419,6 +419,52 @@ export function isToolEnabled(id: string): boolean {
   return getToolPermissionForId(loadToolConfig(), id) !== 'off';
 }
 
+/** Sync one tool row's permission select and segmented control to `mode`. */
+function syncToolRowPermissionUi(row: HTMLElement, mode: ToolPermissionMode): void {
+  const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
+  if (select) {
+    select.value = mode;
+  }
+
+  const segments = row.querySelectorAll<HTMLButtonElement>('.tool-permission-segment');
+  for (const segment of segments) {
+    const active = segment.dataset.value === mode;
+    segment.setAttribute('aria-checked', active ? 'true' : 'false');
+  }
+}
+
+/** Toggle composer popover status panels when any notice is visible. */
+function syncComposerToolsPopoverStatusVisibility(): void {
+  for (const prefix of ['composerTools', 'chatAppTools'] as const) {
+    const status = document.getElementById(`${prefix}Status`);
+    const server = document.getElementById(`${prefix}ServerBanner`);
+    const preview = document.getElementById(`${prefix}PreviewBanner`);
+    if (!status) continue;
+    const hasNotice =
+      (server && !server.classList.contains('hidden')) ||
+      (preview && !preview.classList.contains('hidden'));
+    status.classList.toggle('hidden', !hasNotice);
+  }
+}
+
+/** Apply disabled state to segmented permission controls on one row. */
+function syncToolRowSegmentAvailability(
+  row: HTMLElement,
+  unavailable: boolean,
+  title: string,
+): void {
+  const segments = row.querySelectorAll<HTMLButtonElement>('.tool-permission-segment');
+  for (const segment of segments) {
+    const isOff = segment.dataset.value === 'off';
+    segment.disabled = unavailable && !isOff;
+    if (unavailable && !isOff) {
+      segment.setAttribute('title', title);
+    } else {
+      segment.removeAttribute('title');
+    }
+  }
+}
+
 /** Sync permission selects and Brave key field from config; dim server tools when offline. */
 export function loadToolConfigIntoDrawer(
   root: ParentNode = document,
@@ -431,11 +477,7 @@ export function loadToolConfigIntoDrawer(
   for (const row of rows) {
     const id = row.getAttribute('data-tool-id');
     if (!id) continue;
-
-    const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
-    if (select) {
-      select.value = getToolPermissionForId(config, id);
-    }
+    syncToolRowPermissionUi(row, getToolPermissionForId(config, id));
   }
 
   const braveInput = document.getElementById('braveApiKey') as HTMLInputElement | null;
@@ -448,11 +490,23 @@ export function loadToolConfigIntoDrawer(
     tavilyInput.value = config.keys.tavilyApiKey;
   }
 
-  const providerSelect = document.getElementById(
+  for (const id of [
     'webSearchProvider',
-  ) as HTMLSelectElement | null;
-  if (providerSelect) {
-    providerSelect.value = config.webSearchProvider;
+    'composerToolsWebSearchProvider',
+    'chatAppToolsWebSearchProvider',
+  ] as const) {
+    const providerSelect = document.getElementById(id) as HTMLSelectElement | null;
+    if (providerSelect) {
+      providerSelect.value = config.webSearchProvider;
+    }
+  }
+
+  const cacheEnabled = config.toolCache?.enabled !== false;
+  for (const id of ['settingsToolCacheEnabled', 'composerToolsCacheEnabled', 'chatAppToolsCacheEnabled'] as const) {
+    const checkbox = document.getElementById(id) as HTMLInputElement | null;
+    if (checkbox) {
+      checkbox.checked = cacheEnabled;
+    }
   }
 
   refreshServerToolDisabledState();
@@ -743,6 +797,13 @@ export function refreshServerToolDisabledState(): void {
         select.removeAttribute('title');
       }
     }
+    if (serverUnavailable) {
+      syncToolRowSegmentAvailability(
+        row,
+        true,
+        'Requires npm start — local tool server is not running',
+      );
+    }
   }
 
   const previewRows = document.querySelectorAll<HTMLElement>(
@@ -752,29 +813,51 @@ export function refreshServerToolDisabledState(): void {
   for (const row of previewRows) {
     row.classList.toggle('is-preview-unavailable', previewUnavailable);
     const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
-    if (!select) continue;
+    if (select) {
+      if (previewUnavailable) {
+        select.disabled = true;
+        select.setAttribute(
+          'title',
+          'Requires the Minnow desktop app window — open via npm start, not a separate browser tab',
+        );
+      } else if (!row.hasAttribute('data-server-required') || !serverUnavailable) {
+        select.disabled = false;
+        select.removeAttribute('title');
+      }
+    }
     if (previewUnavailable) {
-      select.disabled = true;
-      select.setAttribute(
-        'title',
+      syncToolRowSegmentAvailability(
+        row,
+        true,
         'Requires the Minnow desktop app window — open via npm start, not a separate browser tab',
       );
     } else if (!row.hasAttribute('data-server-required') || !serverUnavailable) {
-      select.disabled = false;
-      select.removeAttribute('title');
+      syncToolRowSegmentAvailability(row, false, '');
     }
   }
 
+  for (const row of serverRows) {
+    if (!serverUnavailable) {
+      const previewOnly =
+        row.hasAttribute('data-preview-required') && previewUnavailable;
+      if (!previewOnly) {
+        syncToolRowSegmentAvailability(row, false, '');
+      }
+    }
+  }
+
+  syncComposerToolsPopoverStatusVisibility();
   syncToolSelectAllControls(document);
 }
 
-/** Persist web search provider and API keys from the settings drawer. */
+/** Persist web search provider and API keys from drawer or composer popover fields. */
 export function saveWebSearchSettingsFromDrawer(): void {
   const braveInput = document.getElementById('braveApiKey') as HTMLInputElement | null;
   const tavilyInput = document.getElementById('tavilyApiKey') as HTMLInputElement | null;
-  const providerSelect = document.getElementById(
-    'webSearchProvider',
-  ) as HTMLSelectElement | null;
+  const providerSelect =
+    (document.getElementById('webSearchProvider') as HTMLSelectElement | null) ??
+    (document.getElementById('composerToolsWebSearchProvider') as HTMLSelectElement | null) ??
+    (document.getElementById('chatAppToolsWebSearchProvider') as HTMLSelectElement | null);
   if (!braveInput && !tavilyInput && !providerSelect) return;
 
   const config = loadToolConfig();
@@ -791,6 +874,21 @@ export function saveWebSearchSettingsFromDrawer(): void {
     }
   }
   saveToolConfig(config);
+  loadToolConfigIntoDrawer(document);
+}
+
+/** Persist session tool-cache toggle from settings or composer popover. */
+export function saveToolCacheFromUi(): void {
+  const checkbox =
+    (document.getElementById('settingsToolCacheEnabled') as HTMLInputElement | null) ??
+    (document.getElementById('composerToolsCacheEnabled') as HTMLInputElement | null) ??
+    (document.getElementById('chatAppToolsCacheEnabled') as HTMLInputElement | null);
+  if (!checkbox) return;
+
+  const config = loadToolConfig();
+  config.toolCache = { enabled: checkbox.checked };
+  saveToolConfig(config);
+  loadToolConfigIntoDrawer(document);
 }
 
 /** @deprecated Use {@link saveWebSearchSettingsFromDrawer}. */
