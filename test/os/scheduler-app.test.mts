@@ -32,6 +32,7 @@ import {
   resetWindowManagerForTests,
   windowManager,
 } from '../../src/os/window-manager.ts';
+import { teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 function setupSchedulerDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
@@ -94,10 +95,13 @@ describe('scheduler markup contract', () => {
 
 describe('scheduler side panel shell', () => {
   let fetchMock: typeof fetch;
+  /** @type {import('happy-dom').Window | undefined} */
+  let happyDomWindow: import('happy-dom').Window | undefined;
 
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
+    happyDomWindow = win;
     const g = globalThis as typeof globalThis & {
       window: Window;
       document: Document;
@@ -135,14 +139,18 @@ describe('scheduler side panel shell', () => {
     };
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     globalThis.fetch = fetchMock;
+    resetSchedulerSidePanelForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetAppHostForTests();
     resetWindowManagerForTests();
     resetOsPageBridgeForTests();
-    resetSchedulerSidePanelForTests();
+    if (happyDomWindow) {
+      await teardownHappyDomAsync(happyDomWindow);
+      happyDomWindow = undefined;
+    }
   });
 
   test('launchApp(scheduler) opens side panel on desktop without leaving desktop view', async () => {

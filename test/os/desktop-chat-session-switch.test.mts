@@ -62,6 +62,7 @@ describe('desktop chat session switch', () => {
       '../../src/ui/question-cards-modal.ts'
     );
     resetQuestionCardsModalForTests();
+    await new Promise((resolve) => setImmediate(resolve));
     resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     setSessionStateForTests(null);

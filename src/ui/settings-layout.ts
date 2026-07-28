@@ -2,6 +2,9 @@
  * Shared settings page layout helpers (grouped panels, cross-links).
  */
 
+import type { ModelsSectionId } from './models-page';
+import type { SettingsSectionId } from './settings-page-types';
+
 export type SettingsFieldOptions = {
   key: string;
   label: string;
@@ -102,6 +105,36 @@ const MODELS_APP_SECTION_BY_SETTINGS: Partial<Record<string, string>> = {
   usage: 'usage',
 };
 
+type SettingsLayoutNavHandlers = {
+  openSettings: (section: SettingsSectionId) => void;
+  openModels: (section: ModelsSectionId) => void;
+};
+
+let navHandlersForTests: SettingsLayoutNavHandlers | null = null;
+
+/** Override cross-link navigation in unit tests (restored by passing null). */
+export function setSettingsLayoutNavHandlersForTests(
+  handlers: SettingsLayoutNavHandlers | null,
+): void {
+  navHandlersForTests = handlers;
+}
+
+function openSettingsSection(sectionId: SettingsSectionId): void {
+  if (navHandlersForTests) {
+    navHandlersForTests.openSettings(sectionId);
+    return;
+  }
+  void import('./settings-page').then((m) => m.openSettings(sectionId));
+}
+
+function openModelsSection(sectionId: ModelsSectionId): void {
+  if (navHandlersForTests) {
+    navHandlersForTests.openModels(sectionId);
+    return;
+  }
+  void import('./models-page').then((m) => m.openModels(sectionId));
+}
+
 /** Jump to another settings (or Models) section. Uses open APIs, not hash-only. */
 export function linkToSettingsSection(
   label: string,
@@ -115,16 +148,12 @@ export function linkToSettingsSection(
     // Models-owned areas always open the Models app (legacy #/settings redirects).
     const modelsSection = MODELS_APP_SECTION_BY_SETTINGS[sectionId];
     if (modelsSection) {
-      void import('./models-page').then((m) =>
-        m.openModels(modelsSection as import('./models-page').ModelsSectionId),
-      );
+      openModelsSection(modelsSection as ModelsSectionId);
       return;
     }
     // Call openSettings directly so Minnow re-applies the section when the
     // Settings window is already open (hash → #/app/settings is a no-op then).
-    void import('./settings-page').then((m) => {
-      m.openSettings(sectionId as import('./settings-page-types').SettingsSectionId);
-    });
+    openSettingsSection(sectionId as SettingsSectionId);
   });
   return btn;
 }
