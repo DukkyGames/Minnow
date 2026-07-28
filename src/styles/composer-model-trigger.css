@@ -282,6 +282,28 @@
   transform: translate(-100%, -50%);
 }
 
+/* Board header: label drops under the chip so it clears inline telemetry. */
+.mn-os-mb-model-expand--board {
+  transform: translate(-50%, -4px);
+  max-width: min(16rem, 48vw);
+  z-index: 60;
+}
+
+.mn-os-mb-model-expand--board.is-expanded,
+.mn-os-mb-model-expand--board.is-open {
+  transform: translate(-50%, 0);
+}
+
+.mn-os-mb-model-expand--board .mn-os-mb-model-expand-inner {
+  max-width: min(16rem, 48vw);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border, var(--os-border));
+  background: var(--mn-bg, var(--os-bg));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--mn-fg, var(--os-text)) 10%, transparent);
+  color: var(--mn-fg-muted, var(--os-text-dim));
+}
+
 .mn-os-mb-model-expand-inner {
   display: inline-flex;
   align-items: baseline;

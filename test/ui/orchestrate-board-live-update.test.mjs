@@ -802,7 +802,7 @@ describe('orchestrate board live updates', () => {
     );
   });
 
-  test('header activity chip is a button when assistant history exists', () => {
+  test('header uses inline telemetry strip without activity dump', () => {
     setupDom();
     const chat = makeOrchestrateChat();
     chat.history = [
@@ -817,10 +817,14 @@ describe('orchestrate board live updates', () => {
     setSessionStateForTests(sessionStateForBoard(chat, group));
 
     renderBoardView(group);
-    const chip = document.querySelector('.board-header__activity');
-    assert.ok(chip);
-    assert.equal(chip.tagName, 'BUTTON');
-    assert.equal(chip.dataset.boardActivityWired, 'true');
+    assert.equal(document.querySelector('.board-header__activity'), null);
+    assert.ok(document.querySelector('.board-header__telemetry'));
+    assert.ok(document.querySelector('[data-board-metric="tasks"]'));
+    assert.match(
+      document.querySelector('[data-board-metric="tasks"] .board-header__metric-value')
+        ?.textContent ?? '',
+      /0\/1/,
+    );
   });
 
   test('setOrchestrateViewMode chat dismisses board (activity chip / header toggle path)', async () => {
@@ -1226,7 +1230,7 @@ describe('orchestrate board live updates', () => {
     assert.equal(area.classList.contains('chat-area--code-overview'), false);
   });
 
-  test('header activity chip shows last assistant message', () => {
+  test('header telemetry keeps progress under the metrics cluster', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
@@ -1245,13 +1249,12 @@ describe('orchestrate board live updates', () => {
     setSessionStateForTests(sessionStateForBoard(chat, group));
 
     renderBoardView(group);
-    const activityText = document.querySelector('.board-header__activity-text');
-    assert.ok(activityText);
-    assert.match(activityText.textContent ?? '', /Initialized the board/);
-    assert.equal(
-      document.querySelector('.board-header__activity-kind')?.textContent,
-      'Message',
-    );
+    const telemetry = document.querySelector('.board-header__telemetry');
+    const progress = document.querySelector('.board-header__progress');
+    assert.ok(telemetry);
+    assert.ok(progress);
+    assert.equal(progress?.parentElement, telemetry);
+    assert.ok(telemetry?.querySelector('.board-header__metrics'));
   });
 
   test('task card shows activity line and related chat row', async () => {
@@ -1348,8 +1351,9 @@ describe('orchestrate board live updates', () => {
 
     const strip = document.querySelector('.board-running-tasks');
     assert.ok(strip, 'running strip visible while task chat streams');
-    const progress = document.querySelector('.board-header__progress');
-    assert.ok(progress?.nextElementSibling?.classList.contains('board-running-tasks'));
+    const meta = document.querySelector('.board-header__meta');
+    assert.ok(meta?.contains(strip));
+    assert.ok(document.querySelector('.board-header__telemetry .board-header__progress'));
     const chip = document.querySelector('.board-running-tasks__chip');
     assert.ok(chip?.textContent?.includes('W1-A'));
     assert.ok(chip?.textContent?.includes('420 tok'));
