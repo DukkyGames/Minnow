@@ -263,6 +263,13 @@ export const SCOPED_SUITES = {
   evals: {
     patterns: ['test/evals/**/*.test.mjs', 'test/evals/**/*.test.mts'],
   },
+  a11y: {
+    patterns: [
+      'test/a11y/**/*.test.mts',
+      'test/theme-contrast.test.mts',
+      'test/ui/question-cards-modal-focus.test.mts',
+    ],
+  },
   board: {
     patterns: ['test/orchestrate/**/*.test.mts', 'test/orchestrate/**/*.test.mjs'],
   },

@@ -108,6 +108,27 @@ describe('theme-contrast', () => {
       assert.ok(contrastRatio(fg, bg) >= 4.5, `fg on bg contrast too low for ${themeId}`);
       assert.ok(contrastRatio(fg, surface1) >= 4.5, `fg on surface-1 contrast too low for ${themeId}`);
     });
+
+    test(`${themeId}: muted text and accent ink meet WCAG AA on surfaces`, () => {
+      const vars = readThemeBlock(css, themeId);
+      const bg = vars['--mn-bg'];
+      const surface1 = vars['--mn-surface-1'];
+      const fgMuted = resolveToken(vars, '--mn-fg-muted');
+      const accentInk = resolveToken(vars, '--mn-accent-ink');
+      assert.ok(bg && surface1, `missing surfaces for ${themeId}`);
+      if (fgMuted) {
+        assert.ok(
+          contrastRatio(fgMuted, bg) >= 4.5,
+          `fg-muted on bg ${contrastRatio(fgMuted, bg).toFixed(2)} < 4.5 for ${themeId}`,
+        );
+      }
+      if (accentInk) {
+        assert.ok(
+          contrastRatio(accentInk, surface1) >= 4.5,
+          `accent-ink on surface-1 ${contrastRatio(accentInk, surface1).toFixed(2)} < 4.5 for ${themeId}`,
+        );
+      }
+    });
   }
 
   for (const id of LIGHT_THEME_IDS) {

@@ -62,6 +62,71 @@ let hostFilter: ModelHostFilter = loadModelHostFilter();
 let localLoadFilter: ModelLocalLoadFilter = loadModelLocalLoadFilter();
 let modelSearchQuery = '';
 let modelSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let modelMenuActiveIndex = -1;
+
+/** List selectable option rows in an open model menu (skips producer headers). */
+function listModelMenuOptions(menu: HTMLUListElement): HTMLLIElement[] {
+  return [...menu.querySelectorAll<HTMLLIElement>('.model-select-option[role="option"]')];
+}
+
+function syncModelMenuActiveOption(menu: HTMLUListElement, index: number): void {
+  const options = listModelMenuOptions(menu);
+  if (options.length === 0) {
+    modelMenuActiveIndex = -1;
+    menu.removeAttribute('aria-activedescendant');
+    return;
+  }
+  const clamped = Math.max(0, Math.min(index, options.length - 1));
+  modelMenuActiveIndex = clamped;
+  for (let i = 0; i < options.length; i += 1) {
+    const selected = i === clamped;
+    options[i].classList.toggle('model-select-option--active', selected);
+    if (!options[i].id) {
+      options[i].id = `model-opt-${i}-${options[i].dataset.value ?? 'x'}`;
+    }
+  }
+  menu.setAttribute('aria-activedescendant', options[clamped].id);
+  options[clamped].scrollIntoView({ block: 'nearest' });
+}
+
+function handleTopBarModelMenuKeydown(event: KeyboardEvent): void {
+  if (!open) return;
+  const { menu, sel } = getElements();
+  if (!menu || !sel) return;
+
+  const options = listModelMenuOptions(menu);
+  if (options.length === 0) return;
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    const start = modelMenuActiveIndex < 0 ? 0 : modelMenuActiveIndex + 1;
+    syncModelMenuActiveOption(menu, start);
+    return;
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    const start = modelMenuActiveIndex < 0 ? options.length - 1 : modelMenuActiveIndex - 1;
+    syncModelMenuActiveOption(menu, start);
+    return;
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    if (modelMenuActiveIndex < 0) return;
+    event.preventDefault();
+    const opt = options[modelMenuActiveIndex];
+    const value = opt.dataset.value?.trim();
+    if (value) pickModel(value);
+    return;
+  }
+  if (event.key === 'Home') {
+    event.preventDefault();
+    syncModelMenuActiveOption(menu, 0);
+    return;
+  }
+  if (event.key === 'End') {
+    event.preventDefault();
+    syncModelMenuActiveOption(menu, options.length - 1);
+  }
+}
 
 /** Optional close hooks for composer / OS model menus that share the #modelSelect catalog. */
 const externalModelMenuClosers = new Set<() => void>();
@@ -521,6 +586,8 @@ export function closeModelSelectMenu(): void {
   clearModelSearchQuery();
   const { root, trigger, menu } = getElements();
   open = false;
+  modelMenuActiveIndex = -1;
+  menu?.removeAttribute('aria-activedescendant');
   root?.classList.remove('is-open');
   getTopBarModelPopover()?.classList.add('hidden');
   menu?.classList.add('hidden');
@@ -549,6 +616,10 @@ function openModelSelectMenu(): void {
     updateModelLoadUnloadButtons();
   });
   focusModelHostFilterSearch();
+  const selectedIndex = listModelMenuOptions(menu).findIndex(
+    (li) => li.classList.contains('model-select-option--selected'),
+  );
+  syncModelMenuActiveOption(menu, selectedIndex >= 0 ? selectedIndex : 0);
 }
 
 function toggleModelSelectMenu(): void {
@@ -1081,6 +1152,11 @@ export function initModelSelectPicker(): void {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && open) closeModelSelectMenu();
+    if (!open) return;
+    if (e.key === 'Escape') {
+      closeModelSelectMenu();
+      return;
+    }
+    handleTopBarModelMenuKeydown(e);
   });
 }

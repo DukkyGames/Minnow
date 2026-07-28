@@ -2344,7 +2344,11 @@ function buildTaskCard(
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         activateCard();
+        return;
       }
+      void import('./orchestrate-board-keyboard').then((mod) => {
+        mod.handleBoardCardKeydown(e, card);
+      });
     });
   }
 

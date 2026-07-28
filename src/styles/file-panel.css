@@ -135,14 +135,16 @@
 .unified-tab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   max-width: 180px;
-  padding: 4px 6px 4px 8px;
+  min-height: 28px;
+  padding: 4px 4px 4px 8px;
   border: 1px solid var(--mn-border);
   border-radius: 6px 6px 0 0;
   background: var(--mn-bg);
   font-family: var(--font-mono);
   font-size: 12px;
+  line-height: 1.2;
   color: var(--mn-fg-muted);
   cursor: pointer;
   flex-shrink: 0;
@@ -164,7 +166,11 @@
 
 .unified-tab__icon-wrap {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 14px;
+  height: 14px;
   color: var(--mn-fg-muted);
 }
 
@@ -172,7 +178,13 @@
   color: var(--mn-accent);
 }
 
-.unified-tab__icon {
+/* Uicons glyphs in preview tabs */
+.unified-tab__icon-wrap .icon-svg {
+  --mn-icon-size: 14px;
+}
+
+/* Inline SVG tab icons (legacy) */
+.unified-tab__icon:is(svg) {
   width: 14px;
   height: 14px;
   stroke: currentColor;
@@ -182,7 +194,7 @@
   stroke-linejoin: round;
 }
 
-.unified-tab__icon path[fill] {
+.unified-tab__icon:is(svg) path[fill] {
   fill: currentColor;
   stroke: none;
 }
@@ -198,11 +210,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: calc((var(--touch-min) - 20px) / 2);
-  margin: calc((var(--touch-min) - 20px) / -2);
-  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -218,23 +229,60 @@
 }
 
 .unified-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  padding: calc((var(--touch-min) - 28px) / 2);
-  margin: calc((var(--touch-min) - 28px) / -2) calc((var(--touch-min) - 28px) / -2) 2px;
-  box-sizing: content-box;
+  margin-bottom: 2px;
+  padding: 0;
   border: 1px dashed var(--mn-border);
   border-radius: 6px;
   background: transparent;
   color: var(--mn-fg-muted);
   font-size: 16px;
+  line-height: 1;
   cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .unified-tab__close {
+    width: 20px;
+    height: 20px;
+    padding: calc((var(--touch-min) - 20px) / 2);
+    margin: calc((var(--touch-min) - 20px) / -2);
+    box-sizing: content-box;
+  }
+
+  .unified-tab-add {
+    padding: calc((var(--touch-min) - 28px) / 2);
+    margin: calc((var(--touch-min) - 28px) / -2) calc((var(--touch-min) - 28px) / -2) 2px;
+    box-sizing: content-box;
+  }
 }
 
 .unified-tab-add:hover {
   border-color: var(--mn-accent);
   color: var(--mn-fg);
+}
+
+/* Unified strip owns layout — legacy file/preview tab classes are state hooks only. */
+.unified-tabs .file-viewer-tab,
+.unified-tabs .preview-tab {
+  max-width: 180px;
+  padding: 4px 4px 4px 8px;
+  gap: 6px;
+  border-radius: 6px 6px 0 0;
+}
+
+.unified-tabs .file-viewer-tab__close,
+.unified-tabs .preview-tab__close {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .file-viewer-pane {
@@ -433,12 +481,12 @@
 }
 
 @media (pointer: coarse) {
-  .file-viewer-tab {
+  .file-viewer-tabs .file-viewer-tab {
     padding: 8px 8px 8px 12px;
     max-width: 180px;
   }
 
-  .file-viewer-tab__close {
+  .file-viewer-tabs .file-viewer-tab__close {
     width: 20px;
     height: 20px;
     padding: calc((var(--touch-min) - 20px) / 2);
