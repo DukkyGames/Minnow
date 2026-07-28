@@ -1398,7 +1398,8 @@ export function createChatWithMode(
     !options.initialUserMessage?.trim() &&
     isEphemeralEmptyChat(active) &&
     sameWorkspace &&
-    !isMainColumnOverlaySuppressingChatDom();
+    !isMainColumnOverlaySuppressingChatDom() &&
+    !isBoardAnchorChat(active);
 
   if (canReuseEphemeral) {
     const activeMode = normalizeModeId(active.modeId);

@@ -1,5 +1,5 @@
 /**
- * STT upload size and MIME allowlist (ported from Odysseus upload_limits.py).
+ * STT upload size and MIME allowlist.
  */
 
 /** Default max audio upload size: 25 MB. */

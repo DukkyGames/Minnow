@@ -2,6 +2,8 @@
 
 Every npm script, the headless CLI, smoke/maintenance scripts, and environment variables. Source of truth: [`package.json`](../../package.json).
 
+For UI key bindings (composer, editor, file tree, terminal, mail), see [Keyboard shortcuts](keyboard-shortcuts.md).
+
 ## Running & building
 
 | Command | Description |
@@ -87,6 +89,7 @@ Scoped suites (each delegates to `node test/run-all.mjs --suite <name>`):
 | `npm run test:terminal-pty` | Terminal PTY session (live server) |
 | `npm run test:ui-designer` | UI Designer agent |
 | `npm run test:settings` | Settings registry |
+| `npm run test:board` | Orchestrate board suite — see [orchestrate-board-testing.md](orchestrate-board-testing.md) |
 | `npm run test:check-coverage` | Orphan test detection (also in CI) |
 
 Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs `.css` + xterm); some use `--experimental-test-module-mocks`.
@@ -102,6 +105,15 @@ Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs 
 | `npm run build:benchmark-packs` | Rebuild benchmark task packs into `public/benchmark-packs/`. |
 | `npm run report:bundle-size` | Print production chunk sizes from `dist/assets` (run after `npm run build`). |
 | `npm run report:bundle-size:ci` | Same as above; exits non-zero when entry chunk exceeds 1500 KB or data packs ship as JS. |
+
+## Orchestrate board dev tools
+
+| Command | Description |
+|---------|-------------|
+| `npm run test:board` | Orchestrate Kanban test suite only. See [orchestrate-board-testing.md](orchestrate-board-testing.md). |
+| `npm run fake-model` | Local OpenAI-v1 stub for manual board runs. `npm run fake-model -- --register` adds provider `fake-board`. |
+| `npm run seed:test-board` | Pre-initialized test board in `~/.minnow/sessions` (skips onboarding + `board_init`). |
+| `npm run check:board-log -- <groupId>` | Validate orchestrate JSONL log invariants. |
 
 ## Smoke scripts
 

@@ -110,6 +110,28 @@ export function logTaskStatus(
   });
 }
 
+export function logQuarantine(
+  group: ChatGroup,
+  taskId: string,
+  from: BoardTaskStatus | undefined,
+  cause: 'root' | 'dependency',
+  issue: NonNullable<BoardTask['quarantine']>,
+): void {
+  appendBoardLog(group, {
+    type: 'task_quarantined',
+    level: 'error',
+    taskId,
+    message: `${taskId}: quarantined (${cause})`,
+    detail: {
+      from,
+      to: 'quarantined',
+      cause,
+      category: issue.category,
+      summary: issue.summary,
+    },
+  });
+}
+
 export function logBoardInit(
   group: ChatGroup,
   taskCount: number,
@@ -285,7 +307,7 @@ export function logBoardReportNudge(
     level: 'warn',
     taskId,
     message: `${taskId}: ended without board_report — nudge ${attempt}/${max}`,
-    detail: { attempt },
+    detail: { attempt, attemptKind: 'nudge' },
   });
 }
 
@@ -589,6 +611,8 @@ export function quarantineTaskAndDependents(
       ? issue
       : { category: 'stall', summary: `blocked by quarantined ${taskId}`, resolutionSteps: [], at: issue.at };
 
+    const prev = board.tasks.find((t) => t.id === current);
+    logQuarantine(group, current, prev?.status, isRoot ? 'root' : 'dependency', payload!);
     updateTask(group, current, { status: 'quarantined', quarantine: payload }, plannerChat);
 
     for (const dependentId of reverseAdj.get(current) ?? []) {

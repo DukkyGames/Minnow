@@ -1,5 +1,5 @@
 /**
- * Memory injection integration — untrusted wrapping (Odysseus port #13).
+ * Memory injection integration — untrusted wrapping.
  */
 
 import assert from 'node:assert/strict';

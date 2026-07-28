@@ -18,7 +18,7 @@ export function createWindowControlButton(
   btn.className = `mn-os-window-btn mn-os-window-btn--${kind}`;
   btn.setAttribute('aria-label', label);
   btn.title = label;
-  btn.appendChild(createOsIcon(iconNameForKind(kind), { size: 14 }));
+  btn.appendChild(createOsIcon(iconNameForKind(kind)));
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();
     onClick();
@@ -35,5 +35,5 @@ export function setWindowControlButtonKind(
   btn.className = `mn-os-window-btn mn-os-window-btn--${kind}`;
   btn.setAttribute('aria-label', label);
   btn.title = label;
-  btn.replaceChildren(createOsIcon(iconNameForKind(kind), { size: 14 }));
+  btn.replaceChildren(createOsIcon(iconNameForKind(kind)));
 }

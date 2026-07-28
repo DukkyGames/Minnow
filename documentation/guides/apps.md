@@ -35,7 +35,7 @@ The **browser preview** pane (desktop shell only) renders workspace HTML and loc
 
 Everything about models in one place (`#/app/models/<section>`):
 
-- **Recommend** — hardware-aware suggestions (probe via `/api/system/hardware`, fit scoring ported from Odysseus).
+- **Recommend** — hardware-aware suggestions (probe via `/api/system/hardware`, fit scoring).
 - **Installed** — downloaded artifacts under `~/.minnow/models/`.
 - **Settings / Providers / Routing / Sampler / Thinking / Usage** — provider config, model routing, sampler presets, reasoning controls, token usage.
 - **Voice** — local Whisper (STT) / Qwen3-TTS (TTS) downloads + provider settings.

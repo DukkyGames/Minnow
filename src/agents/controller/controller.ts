@@ -38,6 +38,7 @@ import type {
   CancelSubAgentResult,
   SpawnSubAgentInput,
   SpawnSubAgentResult,
+  SubAgentLiveActivity,
   SubAgentRun,
   SubAgentStatus,
   SubAgentTerminalReason,
@@ -302,6 +303,8 @@ function settleRun(
   run.endedAt = nowIso();
   run.liveNestedToolCalls = undefined;
   run.liveCurrentToolName = undefined;
+  run.livePhase = undefined;
+  run.livePartialReasoning = undefined;
   stopHeartbeat(run.runId);
   clearTimeoutFor(internals);
   releaseConcurrencySlot(internals);
@@ -421,6 +424,21 @@ function syncBoardTaskOnSettle(
 /** Push a transcript snapshot to the run row and notify UI subscribers. */
 function publishRunMessages(run: SubAgentRun, messages: ApiMessage[]): void {
   run.messages = cloneSubAgentMessages(messages);
+  bumpProgress(run.runId);
+  emitSubAgentRunUpdated(run);
+}
+
+/** Push live stream phase / reasoning / tool name to the run row for drawer + cards. */
+function publishRunLiveActivity(run: SubAgentRun, activity: SubAgentLiveActivity): void {
+  run.livePhase = activity.phase ?? undefined;
+  if (activity.partialReasoning !== undefined) {
+    run.livePartialReasoning = activity.partialReasoning;
+  } else if (activity.phase !== 'thinking') {
+    run.livePartialReasoning = undefined;
+  }
+  if (activity.currentToolName !== undefined) {
+    run.liveCurrentToolName = activity.currentToolName;
+  }
   bumpProgress(run.runId);
   emitSubAgentRunUpdated(run);
 }
@@ -549,6 +567,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       },
       executeTool: filteredExecute,
       onMessagesChange: (messages) => publishRunMessages(run, messages),
+      onLiveActivity: (activity) => publishRunLiveActivity(run, activity),
     });
 
     if (run.status === 'cancelled') return;
@@ -940,6 +959,7 @@ export function recordToolCallForRun(
     args: JSON.stringify(args),
   });
   internals.run.liveCurrentToolName = name;
+  internals.run.livePhase = 'tools';
   observeSubAgentToolCall(
     runId,
     internals.run.type,
@@ -1056,6 +1076,8 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
   if (run.error) payload.error = run.error;
   if (run.liveNestedToolCalls != null) payload.liveNestedToolCalls = run.liveNestedToolCalls;
   if (run.liveCurrentToolName) payload.liveCurrentToolName = run.liveCurrentToolName;
+  if (run.livePhase) payload.livePhase = run.livePhase;
+  if (run.livePartialReasoning) payload.livePartialReasoning = run.livePartialReasoning;
   if (run.modelId) payload.modelId = run.modelId;
   if (run.providerId) payload.providerId = run.providerId;
   if (run.budgetEvents?.length) {

@@ -581,6 +581,7 @@ export type BoardLogEventType =
   | 'worktree_allocated'
   | 'task_retry'
   | 'task_error'
+  | 'task_quarantined'
   | 'tool_call'
   | 'terminal_run'
   | 'dev_server'
@@ -602,7 +603,9 @@ export interface BoardLogDetail {
   to?: BoardTaskStatus;
   verdict?: 'pass' | 'fail';
   attempt?: number;
-  attemptKind?: 'build' | 'test' | 'fixer';
+  attemptKind?: 'build' | 'test' | 'fixer' | 'nudge';
+  cause?: 'root' | 'dependency';
+  category?: NonNullable<BoardTask['quarantine']>['category'];
   mode?: 'manual' | 'auto' | 'sequential' | 'afk';
   outcome?: 'merged' | 'conflict' | 'error' | 'skipped';
   branch?: string;

@@ -1,5 +1,5 @@
 /**
- * Per-page goal-based extraction for Deep Research (Odysseus `_fetch_and_extract`).
+ * Per-page goal-based extraction for Deep Research.
  */
 
 import {
@@ -25,7 +25,7 @@ export const extractorDeps = {
 };
 
 /**
- * Truncate plain text at a paragraph boundary (Odysseus `max_content_chars` logic).
+ * Truncate plain text at a paragraph boundary (`max_content_chars` logic).
  * @param {string} content
  * @param {number} maxChars
  * @returns {string}

@@ -28,7 +28,7 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 - **`npm run test:check-coverage`** fails if any discoverable test file is not covered (CI gate).
 - **CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every PR + push to `main` — `npm ci`, `test:check-coverage`, `npx tsc --noEmit`, `npm test` (Windows + Ubuntu). Enable branch protection per [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md).
 - **`npx tsc --noEmit`** for type checking (no separate ESLint config).
-- Scoped suites: `npm run test:memory|brain|engine|lsp|mcp|browser|skills|attachments|research|benchmark|evals|calendar|email|webhooks|notifications|voice|servers|plugins|terminal-pty|ui-designer|scheduler`. See `package.json` for exact globs.
+- Scoped suites: `npm run test:memory|brain|engine|lsp|mcp|browser|skills|attachments|research|benchmark|evals|calendar|email|webhooks|notifications|voice|servers|plugins|terminal-pty|ui-designer|scheduler|board`. See `package.json` for exact globs. Board testing: [documentation/guides/orchestrate-board-testing.md](documentation/guides/orchestrate-board-testing.md).
 - Many TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (the loader stubs `.css` and xterm). Some use `--experimental-test-module-mocks`.
 
 ## Building & packaging

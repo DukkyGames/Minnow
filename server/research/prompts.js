@@ -1,5 +1,5 @@
 /**
- * Deep Research prompts — verbatim from Odysseus `deep_research.py` and `goal_based_extractor.py`.
+ * Deep Research prompts.
  */
 
 /**

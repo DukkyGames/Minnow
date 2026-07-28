@@ -227,6 +227,9 @@ function ensureTerminal(): Terminal | null {
   term.loadAddon(new WebLinksAddon(handleTerminalWebLink));
   applyXtermTheme();
   term.open(hostEl);
+  hostEl.setAttribute('role', 'document');
+  hostEl.setAttribute('aria-label', 'Terminal');
+  hostEl.setAttribute('aria-keyshortcuts', 'Control+C Meta+C');
 
   // Copy selected text on Ctrl/Cmd+C; otherwise Ctrl+C still sends SIGINT to the PTY.
   term.attachCustomKeyEventHandler((event) => {

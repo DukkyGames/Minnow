@@ -6,10 +6,13 @@
 import { decodeModelSelectKey, resolveModelSelectValueForChat } from '../lib/model-select-key';
 import { getModelRowForSelectOrCanonicalId, updateModelLoadUnloadButtons } from '../api/models';
 import { modelCache } from '../app-state';
+import { isDesktopChatActive } from '../os/desktop-state';
+import { getForegroundAppId, getOsView } from '../os/instances';
 import { modelProducerLogoSvg } from '../providers/model-producer';
 import { isModelLoadUnloadBusy } from './model-load-unload-button';
 import { resolveModelState } from './model-state-dot';
 import { getActiveChat } from '../state/sessions';
+import { isChatAppForeground } from './chat-mount';
 import { onActiveChatModelChange } from './chat-model-ui';
 import {
   clearModelSearchQuery,
@@ -32,7 +35,9 @@ const CHEVRON_SVG = iconHtml('chevronDown', { size: 10 });
 
 const MODEL_FALLBACK_ICON_SVG = iconHtml('appModels', { className: 'mn-os-mb-model-fallback-icon' });
 
-type ComposerModelVariant = 'desktop' | 'code' | 'menubar';
+type ComposerModelVariant = 'desktop' | 'code' | 'chat' | 'menubar';
+
+type ComposerModelSurfaceVariant = Exclude<ComposerModelVariant, 'menubar'>;
 
 /** How long the menubar hover label stays visible before collapsing. */
 const MENUBAR_EXPAND_HOLD_MS = 3200;
@@ -56,7 +61,41 @@ const triggers: ComposerModelTrigger[] = [];
 let openTrigger: ComposerModelTrigger | null = null;
 let chromePopoverRegistered = false;
 let globalsBound = false;
+let shortcutBound = false;
 let unregisterExternalCloser: (() => void) | null = null;
+
+/** True when an element is connected and laid out in the viewport. */
+function isElementVisible(el: HTMLElement): boolean {
+  if (!el.isConnected) return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+/** Map the foreground composer surface to its per-chat model trigger variant. */
+function resolveChatModelTriggerVariant(): ComposerModelSurfaceVariant | null {
+  const foregroundAppId = getForegroundAppId();
+  if (foregroundAppId === 'code') return 'code';
+  if (isDesktopChatActive()) return 'desktop';
+  if (isChatAppForeground()) return 'chat';
+
+  const desktopInput = document.getElementById('desktopInput');
+  if (desktopInput && isElementVisible(desktopInput)) return 'desktop';
+
+  const codeAnchor = document.getElementById('codeComposerModelAnchor');
+  if (codeAnchor && isElementVisible(codeAnchor)) return 'code';
+
+  const chatAnchor = document.getElementById('chatAppComposerModelAnchor');
+  if (chatAnchor && isElementVisible(chatAnchor)) return 'chat';
+
+  if (getOsView() === 'desktop' && desktopInput) return 'desktop';
+  return null;
+}
+
+function findChatModelTrigger(
+  variant: ComposerModelSurfaceVariant,
+): ComposerModelTrigger | undefined {
+  return triggers.find((trigger) => trigger.variant === variant);
+}
 
 function getModelSelect(): HTMLSelectElement | null {
   return document.getElementById('modelSelect') as HTMLSelectElement | null;
@@ -357,6 +396,39 @@ function attachGlobalListeners(): void {
   window.addEventListener('resize', onWindowResize);
 }
 
+/** Open the per-chat model picker for the active composer surface. */
+export function openActiveChatModelSelect(): boolean {
+  ensureGlobals();
+  const variant = resolveChatModelTriggerVariant();
+  if (!variant) return false;
+
+  const trigger = findChatModelTrigger(variant);
+  if (!trigger || trigger.trigger.disabled) return false;
+
+  if (openTrigger === trigger) {
+    focusModelHostFilterSearch();
+    return true;
+  }
+
+  openMenu(trigger);
+  return true;
+}
+
+/** Bind Mod+M to open the per-chat model picker (works from composer fields). */
+export function initChatModelSelectShortcut(): void {
+  if (shortcutBound) return;
+  shortcutBound = true;
+
+  document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented) return;
+    if (event.key.toLowerCase() !== 'm') return;
+    if (event.altKey || event.shiftKey) return;
+    if (!event.ctrlKey && !event.metaKey) return;
+    if (!openActiveChatModelSelect()) return;
+    event.preventDefault();
+  });
+}
+
 /** Close any open composer model menu popover. */
 export function closeComposerModelMenu(): void {
   if (!openTrigger) return;
@@ -583,7 +655,7 @@ function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
 /** Mount a compact model trigger into an anchor element. */
 export function mountComposerModelTrigger(
   anchor: HTMLElement,
-  variant: Exclude<ComposerModelVariant, 'menubar'>,
+  variant: ComposerModelSurfaceVariant,
 ): void {
   ensureGlobals();
   if (anchor.querySelector('.composer-model-trigger-wrap')) return;
@@ -599,9 +671,24 @@ export function mountMenubarModelChipTrigger(anchor: HTMLElement): void {
   anchor.appendChild(entry.root);
 }
 
-/** Wire desktop + Code composer model triggers (idempotent). */
+function mountChatAppComposerModelTrigger(): void {
+  const chatInputRow = document.querySelector('.chat-app-input');
+  const chatToolsAnchor = chatInputRow?.querySelector('.chat-app-tools-anchor');
+  if (!chatInputRow || !chatToolsAnchor || chatInputRow.querySelector('#chatAppComposerModelAnchor')) {
+    return;
+  }
+
+  const chatAnchor = document.createElement('div');
+  chatAnchor.id = 'chatAppComposerModelAnchor';
+  chatAnchor.className = 'composer-model-trigger-anchor';
+  chatInputRow.insertBefore(chatAnchor, chatToolsAnchor);
+  mountComposerModelTrigger(chatAnchor, 'chat');
+}
+
+/** Wire desktop + Code + Chat composer model triggers (idempotent). */
 export function initComposerModelTriggers(): void {
   ensureGlobals();
+  initChatModelSelectShortcut();
 
   const desktopAnchor = document.getElementById('desktopComposerModelAnchor');
   if (desktopAnchor) {
@@ -617,4 +704,6 @@ export function initComposerModelTriggers(): void {
     codeTrail.insertBefore(codeAnchor, toolsAnchor);
     mountComposerModelTrigger(codeAnchor, 'code');
   }
+
+  mountChatAppComposerModelTrigger();
 }

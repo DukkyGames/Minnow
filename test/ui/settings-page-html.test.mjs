@@ -37,6 +37,7 @@ const SETTINGS_SECTION_IDS = [
   'editor',
   'webhooks',
   'diagnostics',
+  'board-testing',
 ];
 
 /** Sections populated by refreshSettingsSection via clearMount(). */
@@ -63,6 +64,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsProvidersBody',
   'settingsEditorBody',
   'settingsDiagnosticsBody',
+  'settingsBoardTestingBody',
 ];
 
 describe('settings page HTML', () => {
@@ -123,7 +125,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 28);
+    assert.equal(SETTINGS_SECTION_IDS.length, 29);
   });
 
   test('agents center mount exists in index.html', () => {
@@ -162,12 +164,28 @@ describe('settings page HTML', () => {
     assert.match(html, /Health &amp; diagnostics/);
   });
 
+  test('board testing section exists under advanced in index.html', () => {
+    assert.match(html, /id="settingsSection-board-testing"/);
+    assert.match(html, /id="settingsBoardTestingBody"/);
+    assert.match(html, /data-area="board-testing"/);
+    assert.match(html, /data-settings-nav-area="board-testing"/);
+    assert.match(html, /Board testing/);
+  });
+
   test('diagnostics section matches other general-style settings mounts', () => {
     const diagnosticsBlock = html.slice(
       html.indexOf('id="settingsSection-diagnostics"'),
     );
     assert.match(diagnosticsBlock, /id="settingsDiagnosticsBody"/);
     assert.doesNotMatch(diagnosticsBlock, /class="settings-lead"/);
+  });
+
+  test('board testing section matches other general-style settings mounts', () => {
+    const boardTestingBlock = html.slice(
+      html.indexOf('id="settingsSection-board-testing"'),
+    );
+    assert.match(boardTestingBlock, /id="settingsBoardTestingBody"/);
+    assert.doesNotMatch(boardTestingBlock, /class="settings-lead"/);
   });
 
   test('orchestration and evals settings pages are removed', () => {

@@ -4,7 +4,7 @@ import type { CatalogModel } from './types';
 
 let modelsCache: CatalogModel[] | null = null;
 
-/** Mirrors Odysseus _normalize_model_entry. */
+/** Normalizes a catalog model entry. */
 export function normalizeModelEntry(model: CatalogModel): CatalogModel {
   const inferred = inferQuantizationFromName(model.name);
   const quant = model.quantization;

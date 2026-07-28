@@ -9,6 +9,7 @@ import {
   scheduleAssistantBubbleRender,
   setAssistantBubbleContent,
 } from '../markdown/renderer';
+import { completeStreamAnnouncer } from '../ui/a11y/stream-announcer';
 import { resolveModelInfo } from './models';
 import {
   isFirstUserMessagePending,
@@ -675,9 +676,11 @@ export async function sendMessage(): Promise<void> {
         streaming: false,
         modeId: chat.modeId,
       });
+      completeStreamAnnouncer(fullText || 'The model returned no text.');
     } else {
       revealProse();
       setAssistantBubbleContent(bubble, fullText, { streaming: false, modeId: chat.modeId });
+      completeStreamAnnouncer(fullText);
     }
 
     if (fullText) {
@@ -750,6 +753,7 @@ export async function sendMessage(): Promise<void> {
         wrap.classList.remove('msg--awaiting-prose');
         bubble.classList.remove('msg-bubble--awaiting');
         setAssistantBubbleContent(bubble, text, { streaming: false, modeId: chat.modeId });
+        completeStreamAnnouncer(text);
         markMessageStopped(wrap);
       } else if (wrap.isConnected && wrap.classList.contains('msg--awaiting-prose')) {
         wrap.remove();

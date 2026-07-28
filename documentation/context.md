@@ -1,6 +1,6 @@
-﻿# Minnow — project context
+# Minnow — project context
 
-Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`guides/setup.md`](guides/setup.md) and [`guides/commands.md`](guides/commands.md). Product overview: [`README.md`](../README.md).
+Authoritative technical reference for the codebase. For orientation, start with [`guides/architecture.md`](guides/architecture.md). For setup and commands, see [`guides/setup.md`](guides/setup.md) and [`guides/commands.md`](guides/commands.md). UI key bindings: [`guides/keyboard-shortcuts.md`](guides/keyboard-shortcuts.md). Product overview: [`README.md`](../README.md).
 
 **Also useful:** [`guides/configuration.md`](guides/configuration.md) (storage layout), [`DESIGN.md`](../DESIGN.md) (visual tokens), [`AGENTS.md`](../AGENTS.md) (agent quick reference), [`plans/`](plans/) (in-flight feature plans).
 
@@ -307,11 +307,17 @@ Per-role prompts and optional provider/model binding. Shipped: `default`, `build
 
 [`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) — nested loops, concurrency cap in `sub-agents.json`. Tools: `spawn_sub_agent`, `get_sub_agent_status`, `cancel_sub_agent`. Background completion pushes a hidden user resume row to the parent (`sub-agent-completion-push.ts` + [`hidden-transcript-user-messages.ts`](../src/chat/hidden-transcript-user-messages.ts)) — the model sees it; the transcript does not.
 
+**Live status UI:** While a run is in flight, the runner publishes `livePhase` (`thinking` → `generating` → `tools`) plus partial reasoning and the current tool name via `onLiveActivity` → [`sub-agent-events.ts`](../src/agents/sub-agent-events.ts). Parent chat **cards** ([`sub-agent-cards.ts`](../src/ui/sub-agent-cards.ts)) and the **drawer** ([`sub-agent-drawer.ts`](../src/ui/sub-agent-drawer.ts)) subscribe and mirror main-chat stream indicators (`stream-status`, tool spinner) in the activity transcript ([`transcript-view.ts`](../src/ui/transcript-view.ts) + [`sub-agent-live-status.ts`](../src/ui/sub-agent-live-status.ts)).
+
 **Generation timeouts:** Settings → **Watchdog** (`config.json` → `chat.generationIdleTimeoutMs`, `chat.generationMaxDurationMs`) — upstream idle and max-duration limits while streaming from the model.
 
 ### Orchestrate boards
 
 Kanban delivery from plans under `documentation/plans/`. Tools: `board_init`, `board_update_task`, `board_get_state`, `board_report`, `delegate_tasks`. Board member chats get role-scoped tool filters ([`src/chat/modes/orchestrate-tool-filter.ts`](../src/chat/modes/orchestrate-tool-filter.ts)); builder/tester/fixer chats also get `todo_write` for the composer checklist ([`src/tools/todo-tools.ts`](../src/tools/todo-tools.ts), [`src/ui/todo-panel.ts`](../src/ui/todo-panel.ts)).
+
+**Testing guide:** [guides/orchestrate-board-testing.md](guides/orchestrate-board-testing.md) — `npm run test:board`, fake model, `seed:test-board`, `check:board-log`, harness layout. **Manual workflow GUI:** Settings → **Advanced → Board testing** ([`src/ui/settings-board-testing.ts`](../src/ui/settings-board-testing.ts)) — in-process fake model (`POST /api/orchestrate/board-testing/fake-model/*`), seed test board, validate board log JSONL. API: [`server/orchestrate/board-testing/`](../server/orchestrate/board-testing/). Shared seed presets: [`src/dev/test-board-seed.ts`](../src/dev/test-board-seed.ts).
+
+**AFK E2E reliability plan:** [`plans/orchestrate-board-afk-e2e-reliability.md`](plans/orchestrate-board-afk-e2e-reliability.md) — proposed unified scenario catalog, failure-boundary matrix, persisted server/real-git and crash-reload harnesses, Settings scenario runner, soak gates, and hands-off AFK acceptance criteria.
 
 State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orchestrate-board.ts`](../src/ui/orchestrate-board.ts). Global defaults (`autopilot` block in `config.json`): Settings → **Autopilot** ([`src/ui/settings-autopilot.ts`](../src/ui/settings-autopilot.ts)) — emphasis-panel layout matching Agents/Rules (board execution, retries, heartbeat, planner fallback, self-heal). Per-board overrides on the board header.
 
@@ -329,6 +335,16 @@ State: `Chat.orchestratePlanPath`, `ChatGroup.orchestrateBoard`, [`src/ui/orches
 
 **Terminal panel (MIN-500):** Bottom dock tabs are Agent (command output) + interactive PTY sessions only ([`src/ui/terminal-tabs.ts`](../src/ui/terminal-tabs.ts), [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts)). The former Dev Server virtual tab / log stream bridge was removed; workspace server logs move to the Dev Servers Code screen.
 **Pipeline holds (MIN-409):** Non-streaming merge/fixer phases occupy a concurrency slot via ref-counted holds in [`src/state/orchestrate-pipeline-holds.ts`](../src/state/orchestrate-pipeline-holds.ts) (WeakMap keyed by board object identity; TTL-on-read + sweep). `countRunningTaskChats` counts chat slots plus hold-only tasks; `isTaskStalledForRestart` treats held tasks as not stalled. The running-tasks strip shows a non-interactive **Merging** chip for hold-only slots. Sequential → AFK pins `maxConcurrentTasks` to 1 when unset (`setBoardExecutionMode`).
+
+**Fake model server (orchestrate testability):** [`scripts/fake-model-server.mjs`](../scripts/fake-model-server.mjs) — local OpenAI-v1 HTTP stub (`GET /v1/models`, `POST /v1/chat/completions` SSE) driven by ordered scenario JSON (`{ match: { role?, taskId?, nth? }, emit: [...] }`). Default scenario emits a `board_report` pass tool call. `npm run fake-model -- --register` writes provider `fake-board` under `~/.minnow/providers/`. Exports `requests` for assertions.
+
+**Test board seed (manual dev):** `npm run seed:test-board` — writes a pre-`board_init` orchestrate folder + planner chat into `~/.minnow` sessions (`scripts/seed-test-board.mts`). Each run creates a **new** board folder by default; pass `--stable-id` to reuse the canonical test ids for CI/log fixtures. Presets: `quick` (3 parallel W1 tasks) or `smoke` (full board-smoke plan). Defaults to `fake-board` / `fake-board-model`. Restart Minnow if it was open during seeding.
+
+**Board log invariant CLI (B3):** [`scripts/check-board-log.mjs`](../scripts/check-board-log.mjs) — `npm run check:board-log -- <groupId|path> [--plan plan.json] [--json]` reads `~/.minnow/logs/orchestrate/<groupId>.jsonl` (or a direct path), parses JSONL (tolerates trailing partial lines; skips `*.bak`), and runs [`checkBoardLog`](../src/state/board-log-invariants.ts). Without `--plan`, `wave-order` and `dependency-order` are skipped. Exit 0/1.
+
+**Board lifecycle test harness:** [`test/orchestrate/_board-flow-helpers.mts`](../test/orchestrate/_board-flow-helpers.mts) — `seedBoard`, `driveBoardToConvergence` (bootstrap slots), and `driveLiveBoard` (real `startTask` / supervision / slot accounting with [`_scripted-turn-runner.mts`](../test/orchestrate/_scripted-turn-runner.mts)). Live mode opts in via `setBoardChatTurnRunner` under `MINNOW_TEST=1`. Suites: [`board-flow-e2e.test.mts`](../test/orchestrate/board-flow-e2e.test.mts), [`board-live-launch.test.mts`](../test/orchestrate/board-live-launch.test.mts).
+
+**Board headless E2E (real `runChatTurn`):** [`test/orchestrate/board-headless-e2e.test.mts`](../test/orchestrate/board-headless-e2e.test.mts) drives the full tool loop via real [`runChatTurn`](../src/tools/loop.ts) with happy-dom ([`_headless-board-dom.mts`](../test/orchestrate/_headless-board-dom.mts)) and a `globalThis.fetch` router ([`_fake-api-router.mts`](../test/orchestrate/_fake-api-router.mts)) for generations, tools, worktree, and board-log mirror capture. Scripted SSE per slot key (`${taskId}:build|test|fix`, `final`) lives in [`_board-quirk-fixtures.mts`](../test/orchestrate/_board-quirk-fixtures.mts) (families A–H: prose-only builds, VERDICT variants, stream corruption, context exceeded, final-test quirks). LLM-quirk TDD matrix + **known red** backlog: [`plans/orchestrate-board-llm-quirk-tdd.md`](plans/orchestrate-board-llm-quirk-tdd.md). Merge-fixer nonsense: [`merge-fixer-llm-quirks.test.mts`](../test/orchestrate/merge-fixer-llm-quirks.test.mts). `npm run test:board` runs the full orchestrate suite (397 tests; five quirk cases intentionally red until product fixes).
 
 ### Experts
 
@@ -485,7 +501,9 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 - **`npx tsc --noEmit`** — typecheck (no ESLint config).
 - **CI:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Windows + Ubuntu.
 
-Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, …).
+Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, `test:a11y`, …).
+
+**Accessibility:** [guides/accessibility-audit.md](guides/accessibility-audit.md) — per-app keyboard checklist, NVDA smoke notes, contrast tokens. Regression: `npm run test:a11y` (`test/a11y/`, `test/theme-contrast.test.mts`). Global shortcuts overlay: **`?`** ([`src/ui/shell-keyboard-help.ts`](../src/ui/shell-keyboard-help.ts)) — mounts inside the foreground app layer (or `#osStage` on desktop) with scoped absolute positioning; grouped sections, key chips, scrollable body. Rows tagged with `appId` are omitted when the app is not developer-released (`releaseState: 'hidden'`). Per-chat model picker: **Mod+M** ([`src/ui/composer-model-trigger.ts`](../src/ui/composer-model-trigger.ts)). Streaming SR throttling: [`src/ui/a11y/stream-announcer.ts`](../src/ui/a11y/stream-announcer.ts). App surface cycle: Ctrl+Tab / Ctrl+Shift+Tab ([`src/os/app-focus-cycle.ts`](../src/os/app-focus-cycle.ts)). Window focus cycle: Alt+` ([`src/os/window-focus-cycle.ts`](../src/os/window-focus-cycle.ts)).
 
 ---
 

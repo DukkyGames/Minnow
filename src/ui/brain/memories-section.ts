@@ -11,6 +11,7 @@ import {
   fetchMemoryEntries,
   fetchMemoryStatus,
 } from '../../memory/client';
+import { appConfirm } from '../app-dialog';
 import { parseMemoryTagsInput } from '../../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../../memory/types';
 import { appConfirm } from '../app-dialog';
