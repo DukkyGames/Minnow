@@ -536,24 +536,27 @@
   gap: 2px;
 }
 
-/* Metrics + terminal toggles: pinned bottom-left cluster (matches file sidebar header) */
+/* Metrics + terminal toggles: full-width segmented bar pinned to sidebar bottom */
 .chat-sidebar-footer {
   flex-shrink: 0;
   position: relative;
   z-index: 2;
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 8px;
-  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  align-items: stretch;
+  justify-content: stretch;
+  box-sizing: border-box;
+  min-height: 50px;
+  padding: 6px 8px;
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--mn-border);
   background: var(--mn-surface-1);
 }
 
 .chat-sidebar-footer-actions {
-  display: inline-flex;
+  display: flex;
   align-items: stretch;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -561,8 +564,10 @@
 }
 
 .chat-sidebar-footer-actions .chat-sidebar-footer-btn {
-  width: 32px;
-  height: 32px;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: auto;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -601,13 +606,21 @@
 
 .chat-sidebar.collapsed .chat-sidebar-footer {
   justify-content: center;
+  align-items: center;
   padding: 8px 4px;
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
 
 .chat-sidebar.collapsed .chat-sidebar-footer-actions {
+  flex: none;
   flex-direction: column;
   align-items: stretch;
+}
+
+.chat-sidebar.collapsed .chat-sidebar-footer-actions .chat-sidebar-footer-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
 }
 
 .chat-sidebar.collapsed .chat-sidebar-footer-actions .chat-sidebar-footer-btn + .chat-sidebar-footer-btn {
@@ -1110,13 +1123,21 @@
   }
 
   .chat-sidebar.collapsed.mobile-open .chat-sidebar-footer {
-    justify-content: flex-start;
-    padding: 8px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    justify-content: stretch;
+    align-items: stretch;
+    padding: 6px 8px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
   }
 
   .chat-sidebar.collapsed.mobile-open .chat-sidebar-footer-actions {
+    flex: 1;
     flex-direction: row;
+  }
+
+  .chat-sidebar.collapsed.mobile-open .chat-sidebar-footer-actions .chat-sidebar-footer-btn {
+    flex: 1;
+    width: auto;
+    height: auto;
   }
 
   .chat-sidebar.collapsed.mobile-open .chat-sidebar-footer-actions .chat-sidebar-footer-btn + .chat-sidebar-footer-btn {

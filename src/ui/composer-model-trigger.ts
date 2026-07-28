@@ -220,6 +220,7 @@ function syncTrigger(trigger: ComposerModelTrigger): void {
 export function syncComposerModelTriggers(): void {
   for (const trigger of triggers) syncTrigger(trigger);
   if (openTrigger) rebuildOpenMenu();
+  updateModelLoadUnloadButtons();
 }
 
 function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string): void {
@@ -505,7 +506,19 @@ function ensureGlobals(): void {
   }
 }
 
-function createModelMenuPanel(): { panel: HTMLDivElement; menu: HTMLUListElement } {
+function resolveComposerLoadUnloadValue(): string {
+  const sel = getModelSelect();
+  if (!sel) return '';
+  return resolveModelSelectValueForChat(getActiveChat(), [...sel.options].map((o) => o.value));
+}
+
+function resolveMenubarLoadUnloadValue(): string {
+  return getModelSelect()?.value.trim() ?? '';
+}
+
+function createModelMenuPanel(
+  resolveLoadUnloadValue: () => string,
+): { panel: HTMLDivElement; menu: HTMLUListElement } {
   const panel = document.createElement('div');
   panel.className = 'composer-model-menu hidden';
   panel.setAttribute('role', 'presentation');
@@ -519,6 +532,7 @@ function createModelMenuPanel(): { panel: HTMLDivElement; menu: HTMLUListElement
         rebuildOpenMenu();
         syncComposerModelTriggers();
       },
+      resolveLoadUnloadValue,
     },
     'composer-model-menu__filter',
   );
@@ -580,7 +594,7 @@ function buildMenubarTrigger(): ComposerModelTrigger {
   root.appendChild(triggerBtn);
   document.body.appendChild(expandEl);
 
-  const { panel, menu } = createModelMenuPanel();
+  const { panel, menu } = createModelMenuPanel(resolveMenubarLoadUnloadValue);
 
   const entry: ComposerModelTrigger = {
     variant: 'menubar',
@@ -634,7 +648,7 @@ function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
   triggerBtn.append(logoEl, labelEl, chevronEl);
   root.appendChild(triggerBtn);
 
-  const { panel, menu } = createModelMenuPanel();
+  const { panel, menu } = createModelMenuPanel(resolveComposerLoadUnloadValue);
 
   const entry: ComposerModelTrigger = {
     variant,
@@ -701,7 +715,7 @@ export function initComposerModelTriggers(): void {
     const codeAnchor = document.createElement('div');
     codeAnchor.id = 'codeComposerModelAnchor';
     codeAnchor.className = 'composer-model-trigger-anchor';
-    codeTrail.insertBefore(codeAnchor, toolsAnchor);
+    codeTrail.insertBefore(codeAnchor, codeTrail.firstChild);
     mountComposerModelTrigger(codeAnchor, 'code');
   }
 

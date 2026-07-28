@@ -1,13 +1,30 @@
 /**
- * OS-gated shell profile catalog for interactive PTY tabs.
+ * OS-gated shell profile catalog for interactive PTY tabs and execute_command.
  */
 
 import { execSync } from 'child_process';
 import fs from 'fs';
+import {
+  buildWslInteractiveArgs,
+  listWslDistros,
+  resolveWslDistroFromProfileId,
+  WSL_PROFILE_PREFIX,
+} from './wsl.js';
 
-/** @typedef {{ id: string; label: string; shell: string; args: string[]; platform: string }} ShellProfile */
+/**
+ * @typedef {object} ShellProfile
+ * @property {string} id
+ * @property {string} label
+ * @property {string} shell
+ * @property {string[]} args
+ * @property {string} platform
+ * @property {'native' | 'wsl'} [runtime]
+ * @property {string} [distro] WSL distribution name when runtime is wsl
+ */
 
 let wslDetected = null;
+/** @type {{ distros: string[]; defaultDistro: string | null } | null} */
+let wslCatalog = null;
 
 /**
  * Whether WSL is available (Windows only, cached).
@@ -23,6 +40,30 @@ export function detectWsl(platform = process.platform) {
     wslDetected = false;
   }
   return wslDetected;
+}
+
+/**
+ * Cached WSL distro list (Windows only).
+ * @param {{ wsl?: boolean }} [options]
+ */
+function getWslCatalog(options = {}) {
+  if (wslCatalog !== null) return wslCatalog;
+  if (options.wsl === false) {
+    wslCatalog = { distros: [], defaultDistro: null };
+    return wslCatalog;
+  }
+  if (options.wsl !== true && !detectWsl()) {
+    wslCatalog = { distros: [], defaultDistro: null };
+    return wslCatalog;
+  }
+  wslCatalog = listWslDistros();
+  return wslCatalog;
+}
+
+/** Reset cached WSL detection (tests). */
+export function resetWslShellProfileCache() {
+  wslDetected = null;
+  wslCatalog = null;
 }
 
 /**
@@ -46,9 +87,27 @@ function resolveOnPath(candidates) {
 }
 
 /**
+ * @param {string} distro
+ * @param {boolean} isDefault
+ * @returns {ShellProfile}
+ */
+function wslDistroProfile(distro, isDefault) {
+  const suffix = isDefault ? ' (default)' : '';
+  return {
+    id: `${WSL_PROFILE_PREFIX}${distro}`,
+    label: `WSL ${distro}${suffix}`,
+    shell: 'wsl.exe',
+    args: buildWslInteractiveArgs({ distro }),
+    platform: 'win32',
+    runtime: 'wsl',
+    distro,
+  };
+}
+
+/**
  * Build profiles for a platform (pure, testable).
  * @param {string} platform - Node `process.platform`
- * @param {{ wsl?: boolean }} [options]
+ * @param {{ wsl?: boolean; wslDistros?: string[]; wslDefaultDistro?: string | null }} [options]
  * @returns {ShellProfile[]}
  */
 export function resolveProfiles(platform, options = {}) {
@@ -62,6 +121,7 @@ export function resolveProfiles(platform, options = {}) {
       shell: pwsh,
       args: ['-NoLogo'],
       platform: 'win32',
+      runtime: 'native',
     });
     profiles.push({
       id: 'cmd',
@@ -69,16 +129,36 @@ export function resolveProfiles(platform, options = {}) {
       shell: 'cmd.exe',
       args: [],
       platform: 'win32',
+      runtime: 'native',
     });
-    if (options.wsl !== false && (options.wsl === true || detectWsl(platform))) {
+
+    const catalog =
+      options.wslDistros != null
+        ? {
+            distros: options.wslDistros,
+            defaultDistro: options.wslDefaultDistro ?? options.wslDistros[0] ?? null,
+          }
+        : getWslCatalog(options);
+
+    if (catalog.distros.length > 0) {
+      for (const distro of catalog.distros) {
+        profiles.push(
+          wslDistroProfile(distro, distro === catalog.defaultDistro),
+        );
+      }
+
+      const defaultDistro = catalog.defaultDistro ?? catalog.distros[0];
       profiles.push({
         id: 'bash',
-        label: 'WSL Bash',
+        label: defaultDistro ? `WSL Bash (${defaultDistro})` : 'WSL Bash',
         shell: 'wsl.exe',
-        args: ['-e', 'bash', '-l'],
+        args: buildWslInteractiveArgs({ distro: defaultDistro }),
         platform: 'win32',
+        runtime: 'wsl',
+        distro: defaultDistro ?? undefined,
       });
     }
+
     return profiles;
   }
 
@@ -89,6 +169,7 @@ export function resolveProfiles(platform, options = {}) {
       shell: '/bin/zsh',
       args: ['-l'],
       platform: 'darwin',
+      runtime: 'native',
     });
     profiles.push({
       id: 'bash',
@@ -96,6 +177,7 @@ export function resolveProfiles(platform, options = {}) {
       shell: '/bin/bash',
       args: ['-l'],
       platform: 'darwin',
+      runtime: 'native',
     });
     return profiles;
   }
@@ -106,6 +188,7 @@ export function resolveProfiles(platform, options = {}) {
     shell: '/bin/bash',
     args: ['-l'],
     platform: 'linux',
+    runtime: 'native',
   });
   return profiles;
 }
@@ -120,11 +203,58 @@ export function getAvailableShellProfiles() {
  * @returns {ShellProfile | null}
  */
 export function getShellProfileById(id) {
-  return getAvailableShellProfiles().find((p) => p.id === id) ?? null;
+  const direct = getAvailableShellProfiles().find((p) => p.id === id);
+  if (direct) return direct;
+
+  if (id.startsWith(WSL_PROFILE_PREFIX)) {
+    const distro = id.slice(WSL_PROFILE_PREFIX.length);
+    if (distro) {
+      return wslDistroProfile(distro, false);
+    }
+  }
+
+  return null;
 }
 
 /**
- * Default shell profile id for the current OS.
+ * Resolve distro + runtime flags for a profile record.
+ * @param {ShellProfile | null | undefined} profile
+ * @returns {{ runtime: 'native' | 'wsl'; distro: string | null }}
+ */
+export function describeShellProfileRuntime(profile) {
+  if (!profile) return { runtime: 'native', distro: null };
+  if (profile.runtime === 'wsl') {
+    const catalog = getWslCatalog();
+    return {
+      runtime: 'wsl',
+      distro:
+        profile.distro ??
+        resolveWslDistroFromProfileId(profile.id, catalog.defaultDistro),
+    };
+  }
+  return { runtime: 'native', distro: null };
+}
+
+/**
+ * Build PTY spawn options for a shell profile and cwd.
+ * @param {ShellProfile} profile
+ * @param {string} cwd Windows or POSIX cwd
+ * @returns {{ shell: string; args: string[]; cwd: string }}
+ */
+export function resolvePtySpawnForProfile(profile, cwd) {
+  const { runtime, distro } = describeShellProfileRuntime(profile);
+  if (runtime === 'wsl') {
+    return {
+      shell: 'wsl.exe',
+      args: buildWslInteractiveArgs({ distro, cwd }),
+      cwd: process.env.USERPROFILE ?? process.env.SystemRoot ?? cwd,
+    };
+  }
+  return { shell: profile.shell, args: profile.args, cwd };
+}
+
+/**
+ * Default shell profile id for the current OS (PowerShell on Windows, bash elsewhere).
  */
 export function getDefaultShellProfileId() {
   const available = getAvailableShellProfiles();

@@ -27,6 +27,10 @@ import {
   unregisterChromePopover,
 } from './preview-electron-visibility';
 import { iconHtml } from './icon';
+import {
+  resolveModelHostFilterLoadUnloadValue,
+  setModelHostFilterLoadUnloadResolver,
+} from './model-host-filter-context';
 
 /** Refresh icon reused for compact refresh controls in model picker filter bars. */
 const MODEL_REFRESH_ICON_HTML = iconHtml('refresh');
@@ -387,6 +391,8 @@ export interface ModelHostFilterBarOptions {
   onFilterChange: () => void;
   onAfterRefresh?: () => void;
   onAfterLoadUnload?: () => void;
+  /** When set, load/unload targets this value instead of the global #modelSelect default. */
+  resolveLoadUnloadValue?: () => string;
 }
 
 function normalizeHostFilterBarOptions(
@@ -411,15 +417,18 @@ async function refreshModelsFromHostFilterBar(
 }
 
 async function toggleLoadUnloadFromHostFilterBar(
+  bar: HTMLDivElement,
   onAfterLoadUnload?: () => void,
 ): Promise<void> {
   if (isModelLoadUnloadBusy()) return;
-  const { toggleSelectedModelLoad } = await import('../api/models');
-  await toggleSelectedModelLoad();
+  const { toggleModelLoadForSelectValue } = await import('../api/models');
+  const selectValue = resolveModelHostFilterLoadUnloadValue(bar);
+  await toggleModelLoadForSelectValue(selectValue);
   onAfterLoadUnload?.();
 }
 
 function mountModelHostFilterActions(
+  bar: HTMLDivElement,
   toolbarEnd: HTMLDivElement,
   options: ModelHostFilterBarOptions,
 ): void {
@@ -447,7 +456,7 @@ function mountModelHostFilterActions(
   loadUnloadBtn.addEventListener('mousedown', (e) => e.preventDefault());
   loadUnloadBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    await toggleLoadUnloadFromHostFilterBar(options.onAfterLoadUnload);
+    await toggleLoadUnloadFromHostFilterBar(bar, options.onAfterLoadUnload);
   });
 
   actions.append(refreshBtn, loadUnloadBtn);
@@ -538,6 +547,10 @@ export function mountModelHostFilterBar(
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Model filters');
 
+  if (options.resolveLoadUnloadValue) {
+    setModelHostFilterLoadUnloadResolver(bar, options.resolveLoadUnloadValue);
+  }
+
   mountModelHostFilterSearch(bar, options.onFilterChange);
 
   const controls = document.createElement('div');
@@ -569,7 +582,7 @@ export function mountModelHostFilterBar(
   controls.appendChild(segments);
   controls.appendChild(toolbarEnd);
   mountModelHostFilterLoadedToggle(toolbarEnd, options.onFilterChange);
-  mountModelHostFilterActions(toolbarEnd, options);
+  mountModelHostFilterActions(bar, toolbarEnd, options);
   bar.appendChild(controls);
   parent.appendChild(bar);
   syncAllModelHostFilterBars();

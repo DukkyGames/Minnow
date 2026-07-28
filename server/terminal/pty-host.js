@@ -9,7 +9,12 @@ import pty from '@lydell/node-pty';
 import { getMinnowHome } from '../config/home.js';
 import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import { formatServerMessage } from './pty-protocol.js';
-import { getShellProfileById, getDefaultShellProfileId } from './shell-profiles.js';
+import {
+  getShellProfileById,
+  getDefaultShellProfileId,
+  resolvePtySpawnForProfile,
+} from './shell-profiles.js';
+import { resolveShellProfileId, readTerminalShellConfig } from './shell-config.js';
 
 const MAX_SESSIONS = 8;
 const MAX_SCROLLBACK_BYTES = 512 * 1024;
@@ -120,7 +125,7 @@ export function getPtyAvailability() {
  * @param {number} [options.rows]
  * @param {string | null} [options.chatId]
  */
-export function createPtySession(options) {
+export async function createPtySession(options) {
   pruneExitedPtySessions();
   if (countActivePtySessions() >= MAX_SESSIONS) {
     throw new Error('Maximum PTY sessions reached (8)');
@@ -131,7 +136,11 @@ export function createPtySession(options) {
     throw new Error(avail.error ?? 'PTY unavailable');
   }
 
-  const profileId = options.shellProfileId ?? getDefaultShellProfileId();
+  const terminalConfig = await readTerminalShellConfig();
+  const profileId =
+    options.shellProfileId ??
+    resolveShellProfileId(terminalConfig, options.cwd) ??
+    getDefaultShellProfileId();
   const profile = getShellProfileById(profileId);
   if (!profile) {
     throw new Error(`Unknown shell profile: ${profileId}`);
@@ -140,17 +149,18 @@ export function createPtySession(options) {
   const cols = options.cols ?? 80;
   const rows = options.rows ?? 24;
   const cwd = options.cwd;
+  const spawnTarget = resolvePtySpawnForProfile(profile, cwd);
 
   const env = {
     ...process.env,
     MINNOW_WORKSPACE_ROOT: cwd,
   };
 
-  const ptyProcess = pty.spawn(profile.shell, profile.args, {
+  const ptyProcess = pty.spawn(spawnTarget.shell, spawnTarget.args, {
     name: 'xterm-256color',
     cols,
     rows,
-    cwd,
+    cwd: spawnTarget.cwd,
     env,
     encoding: 'utf8',
   });

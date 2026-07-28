@@ -2,7 +2,7 @@
  * Composer toolbar tools button — quick off/ask/full permissions popover.
  */
 
-import { loadToolConfigIntoDrawer } from '../tools/config';
+import { loadToolConfigIntoDrawer, syncWebSearchProviderFromSearchConfig } from '../tools/config';
 
 interface ToolsPopoverIds {
   buttonId: string;
@@ -56,6 +56,7 @@ function openToolsPopover(ids: ToolsPopoverIds): void {
 
   closeOtherToolsPopovers(ids.popoverId);
   loadToolConfigIntoDrawer(document);
+  void syncWebSearchProviderFromSearchConfig();
 
   popover.classList.remove('hidden');
   popoverState.set(ids.popoverId, true);

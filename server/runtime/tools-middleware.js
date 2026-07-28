@@ -32,6 +32,8 @@ import {
 import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 import { assessUnixPipeOnWindows } from '../tools/windows-pipe-guard.js';
+import { resolveExecuteShellProfile } from '../terminal/shell-config.js';
+import { describeShellProfileRuntime } from '../terminal/shell-profiles.js';
 import {
   coerceContentToFileEol,
   detectDominantEol,
@@ -880,13 +882,20 @@ async function toolExecuteCommand(args) {
     return toolStopCommand(args);
   }
 
+  const shellProfile = await resolveExecuteShellProfile(getEffectiveWorkspaceRoot());
+  const usesWsl =
+    process.platform === 'win32' &&
+    describeShellProfileRuntime(shellProfile).runtime === 'wsl';
+
   if (typeof args?.command === 'string') {
     const hostKill = assessHostKillCommand(args.command);
     if (hostKill) return hostKill;
     const portBind = assessHostPortBindCommand(args.command);
     if (portBind) return portBind;
-    const unixPipe = assessUnixPipeOnWindows(args.command);
-    if (unixPipe) return unixPipe;
+    if (!usesWsl) {
+      const unixPipe = assessUnixPipeOnWindows(args.command);
+      if (unixPipe) return unixPipe;
+    }
   }
 
   if (args?.background === true) {
@@ -914,11 +923,12 @@ async function toolExecuteCommand(args) {
       const started = await createBackgroundRun({
         command,
         cwd,
-        shell: process.platform === 'win32',
+        shell: process.platform === 'win32' && !usesWsl,
         source: 'agent',
         chatId,
         toolCallId,
         logSubdir: 'terminal',
+        shellProfile,
         ...(spawnEnv ? { env: spawnEnv } : {}),
       });
       const blockUntilMs = clampBlockUntilMs(args?.block_until_ms);
@@ -989,10 +999,11 @@ async function toolExecuteCommand(args) {
     const output = await executeCommandBlocking({
       command,
       cwd,
-      shell: process.platform === 'win32',
+      shell: process.platform === 'win32' && !usesWsl,
       chatId,
       toolCallId,
       timeoutMs: typeof args?.timeout_ms === 'number' ? args.timeout_ms : undefined,
+      shellProfile,
       ...(spawnEnv ? { env: spawnEnv } : {}),
     });
     if (String(output).trimStart().startsWith('Error')) {

@@ -44,6 +44,7 @@ import {
   mergeCapabilitiesIntoModelCache,
 } from '../providers/model-capabilities';
 import { syncComposerReasoningEffortFromActiveChat } from '../ui/composer-reasoning-effort';
+import { resolveModelHostFilterLoadUnloadValue } from '../ui/model-host-filter-context';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import {
   applyDefaultModelToChat,
@@ -104,6 +105,24 @@ export function showCachedModelInfo(): void {
   updateStrip({}, {}, resolveModelInfo(modelIdOrKey));
 }
 
+function optionForModelSelectValue(
+  sel: HTMLSelectElement,
+  selectValue: string,
+): HTMLOptionElement | undefined {
+  const key = selectValue.trim();
+  if (!key) return undefined;
+  return [...sel.options].find((o) => o.value === key);
+}
+
+function supportsLoadUnloadForSelectValue(
+  sel: HTMLSelectElement,
+  selectValue: string,
+): boolean {
+  if (!isServerStorageMode()) return false;
+  const opt = optionForModelSelectValue(sel, selectValue);
+  return opt?.getAttribute('data-supports-load-unload') === '1';
+}
+
 /** Sync one Load/Unload button from selection + in-flight state. */
 export function syncModelLoadUnloadButtonElement(btn: HTMLButtonElement): void {
   if (isModelLoadUnloadBusy()) {
@@ -116,9 +135,8 @@ export function syncModelLoadUnloadButtonElement(btn: HTMLButtonElement): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   if (!sel) return;
 
-  const opt = sel.options[sel.selectedIndex];
-  const supportsUnload =
-    serverMode && opt?.getAttribute('data-supports-load-unload') === '1';
+  const raw = resolveModelHostFilterLoadUnloadValue(btn.closest('.model-select-host-filter'));
+  const supportsUnload = supportsLoadUnloadForSelectValue(sel, raw);
 
   if (!supportsUnload) {
     setModelLoadUnloadButtonUnsupported(btn, serverMode);
@@ -126,7 +144,6 @@ export function syncModelLoadUnloadButtonElement(btn: HTMLButtonElement): void {
   }
 
   btn.hidden = false;
-  const raw = sel.value.trim();
   const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
   const loaded = row ? isModelLoaded(row.state) : false;
   setModelLoadUnloadButtonIdle(btn, loaded, Boolean(raw));
@@ -143,16 +160,14 @@ export function syncModelLoadUnloadIconButtonElement(btn: HTMLButtonElement): vo
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   if (!sel) return;
 
-  const opt = sel.options[sel.selectedIndex];
-  const supportsUnload =
-    serverMode && opt?.getAttribute('data-supports-load-unload') === '1';
+  const raw = resolveModelHostFilterLoadUnloadValue(btn.closest('.model-select-host-filter'));
+  const supportsUnload = supportsLoadUnloadForSelectValue(sel, raw);
 
   if (!supportsUnload) {
     setModelLoadUnloadIconButtonUnsupported(btn, serverMode);
     return;
   }
 
-  const raw = sel.value.trim();
   const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
   const loaded = row ? isModelLoaded(row.state) : false;
   setModelLoadUnloadIconButtonIdle(btn, loaded, Boolean(raw));
@@ -235,11 +250,10 @@ export async function unloadModel(modelId: string, providerId: string): Promise<
   await fetchModels();
 }
 
-/** Load the model currently selected in the topbar picker. */
-export async function loadSelectedModel(): Promise<void> {
+/** Load a model for a specific #modelSelect option value (composite key or canonical id). */
+export async function loadModelForSelectValue(selectValue: string): Promise<void> {
   if (isModelLoadUnloadBusy()) return;
-  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
-  const raw = sel.value.trim();
+  const raw = selectValue.trim();
   if (!raw) return;
   const decoded = decodeModelSelectKey(raw);
   const modelId = decoded?.modelId ?? raw;
@@ -266,25 +280,16 @@ export async function loadSelectedModel(): Promise<void> {
   }
 }
 
-/** Load or unload the model currently selected in the topbar picker. */
-export async function toggleSelectedModelLoad(): Promise<void> {
+/** Load the model currently selected in the topbar picker. */
+export async function loadSelectedModel(): Promise<void> {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement;
-  const raw = sel.value.trim();
-  if (!raw) return;
-  const row = getModelRowForSelectOrCanonicalId(raw);
-  const loaded = row ? isModelLoaded(row.state) : false;
-  if (loaded) {
-    await unloadSelectedModel();
-  } else {
-    await loadSelectedModel();
-  }
+  await loadModelForSelectValue(sel.value);
 }
 
-/** Unload the model currently selected in the topbar picker. */
-export async function unloadSelectedModel(): Promise<void> {
+/** Unload a model for a specific #modelSelect option value (composite key or canonical id). */
+export async function unloadModelForSelectValue(selectValue: string): Promise<void> {
   if (isModelLoadUnloadBusy()) return;
-  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
-  const raw = sel.value.trim();
+  const raw = selectValue.trim();
   if (!raw) return;
   const decoded = decodeModelSelectKey(raw);
   const modelId = decoded?.modelId ?? raw;
@@ -309,6 +314,31 @@ export async function unloadSelectedModel(): Promise<void> {
     updateModelStateDot(raw);
     syncModelSelectPicker();
   }
+}
+
+/** Unload the model currently selected in the topbar picker. */
+export async function unloadSelectedModel(): Promise<void> {
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
+  await unloadModelForSelectValue(sel.value);
+}
+
+/** Load or unload the model for a specific #modelSelect option value. */
+export async function toggleModelLoadForSelectValue(selectValue: string): Promise<void> {
+  const raw = selectValue.trim();
+  if (!raw) return;
+  const row = getModelRowForSelectOrCanonicalId(raw);
+  const loaded = row ? isModelLoaded(row.state) : false;
+  if (loaded) {
+    await unloadModelForSelectValue(raw);
+  } else {
+    await loadModelForSelectValue(raw);
+  }
+}
+
+/** Load or unload the model currently selected in the topbar picker. */
+export async function toggleSelectedModelLoad(): Promise<void> {
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
+  await toggleModelLoadForSelectValue(sel.value);
 }
 
 /** Build optgroup HTML for all providers that returned at least one model. */

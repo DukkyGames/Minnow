@@ -4,6 +4,7 @@
 
 
 import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
+import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
   clampThinkingBudgetTokens,
@@ -1322,6 +1323,53 @@ export function mergeConfigMeta(existing, patch) {
     }
     if (typeof t.autoFollowAgentTab === 'boolean') {
       existingTerminal.autoFollowAgentTab = t.autoFollowAgentTab;
+    }
+    if (typeof t.defaultShellProfileId === 'string') {
+      const trimmed = t.defaultShellProfileId.trim();
+      if (trimmed) existingTerminal.defaultShellProfileId = trimmed;
+      else delete existingTerminal.defaultShellProfileId;
+    }
+    if (t.workspaceShellProfiles && typeof t.workspaceShellProfiles === 'object') {
+      const map = {};
+      for (const [key, value] of Object.entries(
+        /** @type {Record<string, unknown>} */ (t.workspaceShellProfiles),
+      )) {
+        if (typeof key !== 'string' || !key.trim()) continue;
+        if (typeof value !== 'string' || !value.trim()) continue;
+        map[normalizeWorkspacePathKey(key)] = value.trim();
+      }
+      existingTerminal.workspaceShellProfiles = map;
+    }
+    if (Array.isArray(t.tabs)) {
+      const tabs = [];
+      for (const row of t.tabs) {
+        if (!row || typeof row !== 'object') continue;
+        const tab = /** @type {Record<string, unknown>} */ (row);
+        const id = typeof tab.id === 'string' ? tab.id.trim() : '';
+        const shellProfileId =
+          typeof tab.shellProfileId === 'string' ? tab.shellProfileId.trim() : '';
+        if (!id || !shellProfileId) continue;
+        tabs.push({
+          id,
+          shellProfileId,
+          ...(typeof tab.title === 'string' ? { title: tab.title } : {}),
+          ...(typeof tab.boundCwd === 'string' ? { boundCwd: tab.boundCwd } : {}),
+          ...(tab.chatId === null || typeof tab.chatId === 'string'
+            ? { chatId: tab.chatId }
+            : {}),
+          ...(tab.sessionId === null || typeof tab.sessionId === 'string'
+            ? { sessionId: tab.sessionId }
+            : {}),
+          order: typeof tab.order === 'number' ? tab.order : tabs.length,
+        });
+        if (tabs.length >= 12) break;
+      }
+      existingTerminal.tabs = tabs;
+    }
+    if (typeof t.activeTabId === 'string') {
+      existingTerminal.activeTabId = t.activeTabId;
+    } else if (t.activeTabId === null) {
+      existingTerminal.activeTabId = null;
     }
     base.terminal = existingTerminal;
   }

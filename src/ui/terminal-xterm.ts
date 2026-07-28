@@ -10,6 +10,7 @@ import {
   buildTerminalWsUrl,
   createTerminalSession,
   deleteTerminalSession,
+  fetchTerminalSessions,
   parsePtyServerMessage,
   resizeTerminalSession,
   type ShellProfile,
@@ -23,7 +24,10 @@ import {
 import {
   buildHistoryClearInput,
   buildHistoryReplaceInput,
+  isTerminalEscapeInput,
+  parseHistoryArrow,
   resolveHistoryNavigation,
+  usesShellNativeHistory,
 } from './terminal-history-nav';
 import { handleTerminalWebLink } from './terminal-console-links';
 import { buildTerminalXtermTheme } from './terminal-xterm-theme';
@@ -42,11 +46,15 @@ export interface TerminalTabSession {
   boundCwd?: string;
 }
 
+/** Padded outer shell from index.html (#terminalXtermHost). */
+let outerHostEl: HTMLElement | null = null;
+/** Inner viewport FitAddon sizes against (excludes host padding). */
 let hostEl: HTMLElement | null = null;
 let term: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let activeWs: WebSocket | null = null;
 let activeTabId: string | null = null;
+let activeShellProfileId: string | null = null;
 let lineBuffer = '';
 let historyIndex = -1;
 let tabHistory: string[] = [];
@@ -57,9 +65,24 @@ function historyKey(tabId: string): string {
   return `${HISTORY_STORAGE_PREFIX}${tabId}`;
 }
 
-function loadTabHistory(tabId: string): string[] {
+/** Migrate one-time from sessionStorage (pre-reload persistence fix). */
+function migrateTabHistoryFromSession(tabId: string): void {
+  const key = historyKey(tabId);
   try {
-    const raw = sessionStorage.getItem(historyKey(tabId));
+    if (localStorage.getItem(key)) return;
+    const legacy = sessionStorage.getItem(key);
+    if (!legacy) return;
+    localStorage.setItem(key, legacy);
+    sessionStorage.removeItem(key);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function loadTabHistory(tabId: string): string[] {
+  migrateTabHistoryFromSession(tabId);
+  try {
+    const raw = localStorage.getItem(historyKey(tabId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -71,12 +94,23 @@ function loadTabHistory(tabId: string): string[] {
 
 function saveTabHistory(tabId: string, lines: string[]): void {
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       historyKey(tabId),
       JSON.stringify(lines.slice(-MAX_TAB_HISTORY)),
     );
   } catch {
     /* quota */
+  }
+}
+
+/** Drop stored command history when a PTY tab is closed. */
+export function clearTabHistory(tabId: string): void {
+  const key = historyKey(tabId);
+  try {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  } catch {
+    /* private mode */
   }
 }
 
@@ -161,12 +195,28 @@ function sendPtyInput(data: string): void {
   activeWs.send(JSON.stringify({ type: 'input', data }));
 }
 
+function trackLineBufferInput(data: string): void {
+  if (isTerminalEscapeInput(data)) return;
+
+  for (const ch of data) {
+    if (ch === '\r' || ch === '\n') {
+      pushSubmittedLine(lineBuffer);
+      lineBuffer = '';
+    } else if (ch === '\u007f' || ch === '\b') {
+      lineBuffer = lineBuffer.slice(0, -1);
+    } else if (ch >= ' ') {
+      lineBuffer += ch;
+    }
+  }
+}
+
 function handleHistoryKeys(data: string): boolean {
-  if (!term || data !== '\u001b[A' && data !== '\u001b[B') return false;
+  const arrow = parseHistoryArrow(data);
+  if (!arrow || !term) return false;
+  if (usesShellNativeHistory(activeShellProfileId)) return false;
   if (tabHistory.length === 0) return false;
   if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return false;
 
-  const arrow = data === '\u001b[A' ? 'up' : 'down';
   const nav = resolveHistoryNavigation(
     { historyIndex, tabHistory },
     arrow,
@@ -249,43 +299,57 @@ function ensureTerminal(): Terminal | null {
 
     if (handleHistoryKeys(data)) return;
 
-    for (const ch of data) {
-      if (ch === '\r' || ch === '\n') {
-        pushSubmittedLine(lineBuffer);
-        lineBuffer = '';
-      } else if (ch === '\u007f') {
-        lineBuffer = lineBuffer.slice(0, -1);
-      } else if (ch >= ' ') {
-        lineBuffer += ch;
-      }
-    }
-
+    trackLineBufferInput(data);
     activeWs.send(JSON.stringify({ type: 'input', data }));
   });
 
+  const resizeTarget = hostEl;
   resizeObserver = new ResizeObserver(() => {
     const sid = activeWs ? new URL(activeWs.url).searchParams.get('sessionId') : null;
     fitAndResize(sid);
   });
-  resizeObserver.observe(hostEl);
+  if (resizeTarget) {
+    resizeObserver.observe(resizeTarget);
+  }
 
   return term;
 }
 
+function ensureXtermViewport(host: HTMLElement): HTMLElement {
+  let viewport = host.querySelector<HTMLElement>('.terminal-xterm-viewport');
+  if (!viewport) {
+    viewport = document.createElement('div');
+    viewport.className = 'terminal-xterm-viewport';
+    host.appendChild(viewport);
+  }
+  return viewport;
+}
+
 /** Mount xterm into the host element. */
 export function initTerminalXterm(host: HTMLElement): void {
-  hostEl = host;
+  outerHostEl = host;
+  hostEl = ensureXtermViewport(host);
 }
 
 /** Whether the xterm host element has been registered. */
 export function isTerminalXtermReady(): boolean {
-  return hostEl !== null;
+  return outerHostEl !== null && hostEl !== null;
 }
 
 /** Fill cwd scope on restored tabs before spawning a PTY session. */
 function ensureTabScope(tab: TerminalTabSession): void {
   if (!tab.boundCwd) {
     tab.boundCwd = resolveFileExplorerTerminalCwd();
+  }
+}
+
+/** True when the server still has a live PTY for this session id. */
+async function isTerminalSessionAlive(sessionId: string): Promise<boolean> {
+  try {
+    const { sessions } = await fetchTerminalSessions();
+    return sessions.some((s) => s.sessionId === sessionId && !s.exited);
+  } catch {
+    return false;
   }
 }
 
@@ -302,6 +366,7 @@ export async function attachTerminalTab(
   }
   attachedTabId = tab.tabId;
   activeTabId = tab.tabId;
+  activeShellProfileId = tab.shellProfileId;
   tabHistory = loadTabHistory(tab.tabId);
   historyIndex = tabHistory.length;
   lineBuffer = '';
@@ -313,8 +378,12 @@ export async function attachTerminalTab(
   t.focus();
 
   if (tab.sessionId) {
-    connectWs(tab.sessionId, tab.tabId);
-    return;
+    const alive = await isTerminalSessionAlive(tab.sessionId);
+    if (alive) {
+      connectWs(tab.sessionId, tab.tabId);
+      return;
+    }
+    tab.sessionId = null;
   }
 
   ensureTabScope(tab);

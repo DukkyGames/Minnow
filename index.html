@@ -350,6 +350,7 @@
       <div class="tool-key-row field">
         <label for="webSearchProvider">Web search provider</label>
         <select id="webSearchProvider" aria-label="Web search provider">
+          <option value="searxng">SearXNG (local instance)</option>
           <option value="duckduckgo">DuckDuckGo (local server)</option>
           <option value="brave">Brave Search API</option>
           <option value="tavily">Tavily API</option>
@@ -991,11 +992,33 @@
                   <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true"></i>
                 </button>
                 <div id="chatAppToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
-                  <p id="chatAppToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
-                  <p id="chatAppToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
+                  <header class="composer-tools-popover__header">
+                    <h2 class="composer-tools-popover__title">Tools</h2>
+                  </header>
+                  <div id="chatAppToolsStatus" class="composer-tools-popover__status hidden" role="status" aria-live="polite">
+                    <p id="chatAppToolsServerBanner" class="composer-tools-popover__notice hidden">Server tools need <code>npm start</code> (not <code>npm run dev</code>).</p>
+                    <p id="chatAppToolsPreviewBanner" class="composer-tools-popover__notice hidden">Browser tools need the Minnow desktop app window.</p>
+                  </div>
                   <div id="chatAppToolsList" class="tools-list tools-list--composer"></div>
                   <footer class="composer-tools-popover__footer">
-                    <button type="button" class="composer-tools-popover__link" id="chatAppToolsOpenSettings">Settings → Tools</button>
+                    <div class="composer-tools-popover__setting">
+                      <label for="chatAppToolsWebSearchProvider" class="composer-tools-popover__setting-label">Web search</label>
+                      <select id="chatAppToolsWebSearchProvider" class="composer-tools-popover__select" aria-label="Web search provider">
+                        <option value="searxng">SearXNG</option>
+                        <option value="duckduckgo">DuckDuckGo</option>
+                        <option value="brave">Brave API</option>
+                        <option value="tavily">Tavily API</option>
+                      </select>
+                    </div>
+                    <label class="composer-tools-popover__toggle">
+                      <input type="checkbox" id="chatAppToolsCacheEnabled" aria-describedby="chatAppToolsCacheHint">
+                      <span class="composer-tools-popover__setting-label">Cache read-only results</span>
+                    </label>
+                    <p id="chatAppToolsCacheHint" class="composer-tools-popover__hint">Per session until the workspace changes.</p>
+                    <button type="button" class="composer-tools-popover__settings-link" id="chatAppToolsOpenSettings">
+                      <span>All tool settings</span>
+                      <i class="fi fi-rr-angle-right icon-svg" aria-hidden="true"></i>
+                    </button>
                   </footer>
                 </div>
               </div>
@@ -2252,6 +2275,9 @@
             </label>
           </div>
           <div class="composer-controls__trail">
+            <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
+              <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
+            </button>
             <div class="composer-tools-anchor">
               <button type="button" class="composer-tools-btn composer-tools-btn--toolbar" id="btnComposerTools"
                 aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
@@ -2259,11 +2285,33 @@
                 <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true"></i>
               </button>
               <div id="composerToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
-                <p id="composerToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
-                <p id="composerToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
+                <header class="composer-tools-popover__header">
+                  <h2 class="composer-tools-popover__title">Tools</h2>
+                </header>
+                <div id="composerToolsStatus" class="composer-tools-popover__status hidden" role="status" aria-live="polite">
+                  <p id="composerToolsServerBanner" class="composer-tools-popover__notice hidden">Server tools need <code>npm start</code> (not <code>npm run dev</code>).</p>
+                  <p id="composerToolsPreviewBanner" class="composer-tools-popover__notice hidden">Browser tools need the Minnow desktop app window.</p>
+                </div>
                 <div id="composerToolsList" class="tools-list tools-list--composer"></div>
                 <footer class="composer-tools-popover__footer">
-                  <button type="button" class="composer-tools-popover__link" id="composerToolsOpenSettings">Settings → Tools</button>
+                  <div class="composer-tools-popover__setting">
+                    <label for="composerToolsWebSearchProvider" class="composer-tools-popover__setting-label">Web search</label>
+                    <select id="composerToolsWebSearchProvider" class="composer-tools-popover__select" aria-label="Web search provider">
+                      <option value="searxng">SearXNG</option>
+                      <option value="duckduckgo">DuckDuckGo</option>
+                      <option value="brave">Brave API</option>
+                      <option value="tavily">Tavily API</option>
+                    </select>
+                  </div>
+                  <label class="composer-tools-popover__toggle">
+                    <input type="checkbox" id="composerToolsCacheEnabled" aria-describedby="composerToolsCacheHint">
+                    <span class="composer-tools-popover__setting-label">Cache read-only results</span>
+                  </label>
+                  <p id="composerToolsCacheHint" class="composer-tools-popover__hint">Per session until the workspace changes.</p>
+                  <button type="button" class="composer-tools-popover__settings-link" id="composerToolsOpenSettings">
+                    <span>All tool settings</span>
+                    <i class="fi fi-rr-angle-right icon-svg" aria-hidden="true"></i>
+                  </button>
                 </footer>
               </div>
             </div>
@@ -2282,9 +2330,6 @@
         </div>
       </div>
       <div class="input-bar-send-stack">
-        <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
-          <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
-        </button>
         <button class="send-btn" id="sendBtn" type="button" aria-label="Send message" data-mode="send">
           <span id="sendIcon"><svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg></span>
           <span id="sendStopIcon" class="hidden"><i class="fi fi-rr-square icon-svg" aria-hidden="true"></i></span>
@@ -2368,14 +2413,26 @@
     <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
       <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
       <header class="terminal-header">
-        <label class="visually-hidden" for="terminalShellSelect">Shell profile</label>
-        <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
-        <span class="terminal-cwd-label" id="terminalCwdLabel" aria-label="Shell working directory"></span>
-        <div class="terminal-tab-bar" id="terminalTabBar"></div>
+        <div class="terminal-header-shell" id="terminalHeaderShell">
+          <div class="terminal-shell-field">
+            <label class="terminal-shell-label" for="terminalShellSelect">Shell</label>
+            <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
+          </div>
+          <span class="terminal-cwd-chip hidden" id="terminalCwdLabel" aria-label="File explorer worktree"></span>
+        </div>
+        <div class="terminal-header-tabs">
+          <div class="terminal-tab-bar" id="terminalTabBar"></div>
+        </div>
         <div class="terminal-header-actions">
-          <button type="button" class="terminal-header-btn hidden" id="btnTerminalAgentStop">Stop command</button>
-          <button type="button" class="terminal-header-btn hidden" id="btnTerminalClear">Clear agent output</button>
-          <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
+          <button type="button" class="terminal-header-btn terminal-header-btn--danger hidden" id="btnTerminalAgentStop">Stop</button>
+          <button type="button" class="terminal-header-btn hidden" id="btnTerminalClear">Clear output</button>
+          <button type="button" class="icon-btn terminal-header-expand" id="btnTerminalMaximize" aria-label="Expand terminal" aria-pressed="false" title="Expand terminal to fill chat">
+            <i class="fi fi-rr-expand icon-svg terminal-header-expand-icon" aria-hidden="true"></i>
+            <i class="fi fi-rr-compress-alt icon-svg terminal-header-restore-icon" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="icon-btn terminal-header-collapse" id="btnTerminalCollapse" aria-label="Hide terminal" title="Hide terminal">
+            <i class="fi fi-rr-angle-small-down icon-svg" aria-hidden="true"></i>
+          </button>
         </div>
       </header>
       <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Interactive terminal requires <code>npm start</code> (not <code>npm run dev</code>). Agent runs still need the local server.</p>

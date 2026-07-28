@@ -2,18 +2,47 @@
  * Pure helpers for PTY tab command-history navigation (ArrowUp/ArrowDown).
  */
 
+/**
+ * Clear the shell's current input line (readline / PSReadLine): beginning-of-line
+ * then kill-to-end. Does not depend on a client-side buffer length (Windows DEL
+ * backspaces were unreliable and desynced from PSReadLine).
+ */
+export const HISTORY_LINE_CLEAR = '\x01\x0b';
+
 /** Build PTY input that replaces the current editable line with `nextLine`. */
 export function buildHistoryReplaceInput(
-  currentBuffer: string,
+  _currentBuffer: string,
   nextLine: string,
 ): string {
-  const clear = '\x7f'.repeat(currentBuffer.length);
-  return clear + nextLine;
+  return HISTORY_LINE_CLEAR + nextLine;
 }
 
 /** Build PTY input that clears the current editable line. */
-export function buildHistoryClearInput(currentBuffer: string): string {
-  return '\x7f'.repeat(currentBuffer.length);
+export function buildHistoryClearInput(_currentBuffer: string): string {
+  return HISTORY_LINE_CLEAR;
+}
+
+/** CSI / SS3 arrow-up and arrow-down (incl. Windows modifyOtherKeys prefixes). */
+export function parseHistoryArrow(data: string): HistoryArrow | null {
+  if (data === '\x1bOA') return 'up';
+  if (data === '\x1bOB') return 'down';
+  const match = /^\x1b\[([0-9;]*)?([AB])$/.exec(data);
+  if (!match) return null;
+  return match[2] === 'A' ? 'up' : 'down';
+}
+
+/** True when `data` is a terminal escape sequence (must not update lineBuffer). */
+export function isTerminalEscapeInput(data: string): boolean {
+  return data.length > 0 && data.charCodeAt(0) === 0x1b;
+}
+
+/**
+ * Shells with their own line editor history (PSReadLine, cmd DOSKEY). ArrowUp/Down
+ * must reach the PTY — client-side recall would fight the shell and garble input.
+ */
+export function usesShellNativeHistory(shellProfileId: string | null | undefined): boolean {
+  if (!shellProfileId) return false;
+  return shellProfileId === 'powershell' || shellProfileId === 'cmd';
 }
 
 export type HistoryArrow = 'up' | 'down';

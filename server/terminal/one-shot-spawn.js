@@ -1,7 +1,10 @@
 /**
  * Resolve spawn targets for one-shot shell command strings (agent execute_command).
- * Windows uses cmd.exe; Unix uses a login shell so PATH/profile matches interactive PTY tabs.
+ * Windows uses cmd.exe by default; WSL profiles route through wsl.exe + bash -l.
  */
+
+import { buildWslOneShotSpawn } from './wsl.js';
+import { describeShellProfileRuntime } from './shell-profiles.js';
 
 /**
  * Pick a login shell for Unix one-shot invocations (macOS zsh, Linux bash).
@@ -44,17 +47,31 @@ export function resolveUnixLoginShell(platform) {
  * @param {string[]} [params.args]
  * @param {boolean} [params.shell]
  * @param {string} [params.platform]
- * @returns {{ command: string, args: string[], shell: boolean }}
+ * @param {import('./shell-profiles.js').ShellProfile | null} [params.shellProfile]
+ * @param {string} [params.cwd]
+ * @returns {{ command: string, args: string[], shell: boolean, cwd?: string }}
  */
 export function resolveOneShotSpawn({
   command,
   args = [],
   shell = false,
   platform = process.platform,
+  shellProfile = null,
+  cwd = null,
 }) {
   const oneShot = args.length === 0 && typeof command === 'string';
   const winOneShot = oneShot && platform === 'win32';
   const unixOneShot = oneShot && platform !== 'win32';
+  const { runtime, distro } = describeShellProfileRuntime(shellProfile);
+
+  if (runtime === 'wsl' && platform === 'win32') {
+    return buildWslOneShotSpawn({
+      command,
+      args,
+      distro,
+      cwd: cwd ?? undefined,
+    });
+  }
 
   if (winOneShot) {
     return {
