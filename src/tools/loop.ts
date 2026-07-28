@@ -2466,6 +2466,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         ? GENERATION_LOST_ON_RESTART_MESSAGE
         : `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`;
     turnErrorMessage = lost;
+    // Board stream-end subscribers run before the final `finalizeRun` pass.
+    // Publish the failure signal now so recovery can classify provider errors.
+    if (failedRun) {
+      failedRun.status = 'failed';
+      failedRun.errorMessage = lost;
+    }
     if (superPlanStage && rolledBack) {
       appendSuperPlanStageFailureNotice(chat, superPlanStage, lost);
       recordChatMessage(chat);

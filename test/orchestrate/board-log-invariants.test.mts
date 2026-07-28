@@ -139,6 +139,24 @@ describe('checkBoardLog', () => {
     assert.equal(result.ok, true, JSON.stringify(result.violations));
   });
 
+  test('status-transitions allows failed Tester round to reopen Builder', () => {
+    resetSeq();
+    const events = [
+      status('W1-A', 'planned', 'in_progress'),
+      started('W1-A'),
+      ev('build_verdict', 'W1-A', { verdict: 'pass' }),
+      status('W1-A', 'in_progress', 'testing'),
+      ev('test_verdict', 'W1-A', { verdict: 'fail', attempt: 1 }),
+      ev('task_retry', 'W1-A', { attemptKind: 'test', attempt: 1 }),
+      status('W1-A', 'testing', 'in_progress'),
+    ];
+    const result = checkBoardLog(events, {
+      tasks: [{ id: 'W1-A', wave: 'W1' }],
+      skip: ['merge-integrity', 'wave-order', 'dependency-order', 'quarantine-cascade', 'final-test-order'],
+    });
+    assert.equal(result.ok, true, JSON.stringify(result.violations));
+  });
+
   test('verdict-after-start flags verdict before task_started', () => {
     resetSeq();
     const events = [

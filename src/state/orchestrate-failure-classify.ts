@@ -115,6 +115,14 @@ const STALL_MARKERS: string[] = [
   'Could not complete this reply',
 ];
 
+const CONTEXT_WINDOW_MARKERS: string[] = [
+  'context length exceeded',
+  'context_length_exceeded',
+  'context limit has been reached',
+  'maximum context length',
+  'exceed context window',
+];
+
 function matchesAny(text: string, markers: string[]): boolean {
   const lower = text.toLowerCase();
   return markers.some((m) => lower.includes(m.toLowerCase()));
@@ -131,7 +139,15 @@ function extractChatText(chat: Chat): string {
           : JSON.stringify(msg.content);
     if (content) parts.push(content);
   }
+  for (const run of chat.runs ?? []) {
+    if (run.errorMessage?.trim()) parts.push(run.errorMessage.trim());
+  }
   return parts.join('\n');
+}
+
+/** Provider context-window failures are transient execution failures, not agent stalls. */
+export function isContextWindowFailure(chat: Chat): boolean {
+  return matchesAny(extractChatText(chat), CONTEXT_WINDOW_MARKERS);
 }
 
 /**
@@ -195,6 +211,7 @@ export function classifyTaskFailure(
 
   // 2. Transcript text scan (covers both prose and embedded tool output).
   const text = extractChatText(chat);
+  if (matchesAny(text, CONTEXT_WINDOW_MARKERS)) return 'code';
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
   if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';
 
