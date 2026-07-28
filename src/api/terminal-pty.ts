@@ -10,6 +10,8 @@ export interface ShellProfile {
   shell: string;
   args: string[];
   platform: string;
+  runtime?: 'native' | 'wsl';
+  distro?: string;
 }
 
 export interface PtySessionCreated {
@@ -31,16 +33,19 @@ export type PtyServerMessage =
 export async function fetchShellProfiles(): Promise<{
   profiles: ShellProfile[];
   ptyAvailable: boolean;
+  defaultShellProfileId?: string;
 }> {
   const res = await fetch('/api/terminal/shell-profiles', { cache: 'no-store' });
   if (!res.ok) throw new Error(`shell-profiles ${res.status}`);
   const body = (await res.json()) as {
     profiles: ShellProfile[];
     ptyAvailable?: boolean;
+    defaultShellProfileId?: string;
   };
   return {
     profiles: body.profiles ?? [],
     ptyAvailable: body.ptyAvailable !== false,
+    defaultShellProfileId: body.defaultShellProfileId,
   };
 }
 

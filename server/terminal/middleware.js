@@ -7,7 +7,7 @@ import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail, stopActiveRunsForChat } from '../terminal-runner.js';
 import { resolveChatCwd } from '../workspace/chat-cwd.js';
 import { resolvePtySessionCwd } from './session-cwd.js';
-import { getAvailableShellProfiles } from './shell-profiles.js';
+import { listShellProfilesForApi } from './shell-config.js';
 import {
   createPtySession,
   destroyPtySession,
@@ -208,8 +208,10 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
 
   if (pathname === '/api/terminal/shell-profiles' && req.method === 'GET') {
     const pty = getPtyAvailability();
+    const { profiles, defaultShellProfileId } = await listShellProfilesForApi();
     sendJson(res, 200, {
-      profiles: getAvailableShellProfiles(),
+      profiles,
+      defaultShellProfileId,
       ptyAvailable: pty.available,
       ...(pty.error ? { ptyError: pty.error } : {}),
     });
@@ -234,7 +236,7 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
       const cols = typeof body?.cols === 'number' ? body.cols : 80;
       const rows = typeof body?.rows === 'number' ? body.rows : 24;
 
-      const created = createPtySession({
+      const created = await createPtySession({
         shellProfileId,
         cwd,
         cols,

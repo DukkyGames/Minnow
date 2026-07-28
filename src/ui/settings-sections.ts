@@ -126,6 +126,17 @@ import {
   loadTerminalMeta,
   saveTerminalMeta,
 } from '../config/terminal-meta';
+import { fetchShellProfiles } from '../api/terminal-pty';
+
+/** Normalize workspace path keys for shell profile overrides (matches server). */
+function workspaceShellProfileKey(absPath: string): string {
+  const trimmed = absPath.trim();
+  if (!trimmed) return '';
+  const forward = trimmed.replace(/\\/g, '/');
+  return /^[a-zA-Z]:\//.test(forward) || /^[a-zA-Z]:\\/.test(trimmed)
+    ? forward.toLowerCase()
+    : forward;
+}
 import {
   clampGenerationIdleTimeoutMs,
   clampGenerationMaxDurationMs,
@@ -179,6 +190,89 @@ function clearMount(id: string): HTMLElement | null {
 async function appendTerminalControls(mount: HTMLElement): Promise<void> {
   await loadTerminalMeta();
   const meta = getTerminalMetaCached();
+
+  let shellProfiles: Awaited<ReturnType<typeof fetchShellProfiles>>['profiles'] = [];
+  let configuredDefault = meta.defaultShellProfileId;
+  try {
+    const fetched = await fetchShellProfiles();
+    shellProfiles = fetched.profiles;
+    configuredDefault =
+      meta.defaultShellProfileId ?? fetched.defaultShellProfileId ?? shellProfiles[0]?.id;
+  } catch {
+    /* shell profile picker hidden when server is offline */
+  }
+
+  const wslProfiles = shellProfiles.filter((p) => p.runtime === 'wsl');
+  if (wslProfiles.length > 0) {
+    const { row: shellRow, select: shellSelect } = createSettingsSelectRow(
+      'Default shell',
+      {
+        options: shellProfiles.map((p) => ({ value: p.id, label: p.label })),
+        value: configuredDefault ?? shellProfiles[0]?.id ?? 'powershell',
+        searchKey: 'general.chat.terminal.defaultShell',
+        description:
+          'Used for new terminal tabs and agent execute_command. Pick a WSL distro to run Linux tooling from Windows.',
+      },
+    );
+    mount.appendChild(shellRow);
+
+    shellSelect.addEventListener('change', () => {
+      void (async () => {
+        try {
+          await saveTerminalMeta({ defaultShellProfileId: shellSelect.value });
+          setStatus('ok', 'Default shell updated');
+        } catch {
+          setStatus('err', 'Could not save default shell');
+        }
+      })();
+    });
+
+    try {
+      const workspaceRes = await fetch('/api/workspace', { cache: 'no-store' });
+      if (workspaceRes.ok) {
+        const workspaceBody = (await workspaceRes.json()) as { path?: string };
+        const workspacePath =
+          typeof workspaceBody.path === 'string' ? workspaceBody.path : '';
+        if (workspacePath) {
+          const workspaceKey = workspaceShellProfileKey(workspacePath);
+          const workspaceOverride = meta.workspaceShellProfiles?.[workspaceKey];
+          const { row: workspaceShellRow, select: workspaceShellSelect } =
+            createSettingsSelectRow('Shell for this workspace', {
+              options: [
+                { value: '', label: 'Use global default' },
+                ...shellProfiles.map((p) => ({ value: p.id, label: p.label })),
+              ],
+              value: workspaceOverride ?? '',
+              searchKey: 'general.chat.terminal.workspaceShell',
+              description:
+                'Override the default shell for the open Code workspace only. Handy when one repo expects WSL and another uses PowerShell.',
+            });
+          mount.appendChild(workspaceShellRow);
+
+          workspaceShellSelect.addEventListener('change', () => {
+            void (async () => {
+              const current = await loadTerminalMeta();
+              const nextMap = { ...(current.workspaceShellProfiles ?? {}) };
+              const selected = workspaceShellSelect.value;
+              if (!selected) {
+                delete nextMap[workspaceKey];
+              } else {
+                nextMap[workspaceKey] = selected;
+              }
+              try {
+                await saveTerminalMeta({ workspaceShellProfiles: nextMap });
+                setStatus('ok', 'Workspace shell override updated');
+              } catch {
+                setStatus('err', 'Could not save workspace shell override');
+              }
+            })();
+          });
+        }
+      }
+    } catch {
+      /* workspace override row omitted when workspace API is unavailable */
+    }
+  }
 
   const { row: autoOpenRow, input: autoOpenCb } = createSettingsToggleRow(
     'Open terminal when agent runs a command',

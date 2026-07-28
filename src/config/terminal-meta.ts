@@ -21,7 +21,10 @@ export interface TerminalMeta {
   autoFollowAgentTab: boolean;
   tabs?: TerminalTabMeta[];
   activeTabId?: string | null;
+  /** Default shell for new PTY tabs and execute_command (Windows: includes WSL distros). */
   defaultShellProfileId?: string;
+  /** Per-workspace shell profile overrides (normalized absolute path → profile id). */
+  workspaceShellProfiles?: Record<string, string>;
 }
 
 const DEFAULT_TERMINAL_META: TerminalMeta = {
@@ -32,6 +35,7 @@ const DEFAULT_TERMINAL_META: TerminalMeta = {
   tabs: [],
   activeTabId: null,
   defaultShellProfileId: undefined,
+  workspaceShellProfiles: undefined,
 };
 
 let cached: TerminalMeta | null = null;
@@ -82,6 +86,17 @@ function normalizeTerminalMeta(raw: unknown): TerminalMeta {
       typeof row.defaultShellProfileId === 'string'
         ? row.defaultShellProfileId
         : undefined,
+    workspaceShellProfiles:
+      row.workspaceShellProfiles &&
+      typeof row.workspaceShellProfiles === 'object' &&
+      !Array.isArray(row.workspaceShellProfiles)
+        ? Object.fromEntries(
+            Object.entries(row.workspaceShellProfiles as Record<string, unknown>).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[0] === 'string' && typeof entry[1] === 'string',
+            ),
+          )
+        : undefined,
   };
 }
 
@@ -116,6 +131,8 @@ export async function saveTerminalMeta(patch: Partial<TerminalMeta>): Promise<vo
       patch.activeTabId !== undefined ? patch.activeTabId : current.activeTabId,
     defaultShellProfileId:
       patch.defaultShellProfileId ?? current.defaultShellProfileId,
+    workspaceShellProfiles:
+      patch.workspaceShellProfiles ?? current.workspaceShellProfiles,
   };
   cached = next;
   await fetch('/api/config/meta', {

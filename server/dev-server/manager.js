@@ -717,13 +717,23 @@ export async function toolStartBackgroundCommand(args) {
       spawnEnv = undefined;
     }
 
+    const shellProfile = await (
+      await import('../terminal/shell-config.js')
+    ).resolveExecuteShellProfile(getWorkspaceRoot());
+    const usesWsl =
+      process.platform === 'win32' &&
+      (await import('../terminal/shell-profiles.js')).describeShellProfileRuntime(
+        shellProfile,
+      ).runtime === 'wsl';
+
     const started = await createBackgroundRun({
       command,
       cwd,
-      shell: process.platform === 'win32',
+      shell: process.platform === 'win32' && !usesWsl,
       source: 'agent',
       chatId,
       logSubdir: 'dev-server',
+      shellProfile,
       ...(spawnEnv ? { env: spawnEnv } : {}),
     });
 
