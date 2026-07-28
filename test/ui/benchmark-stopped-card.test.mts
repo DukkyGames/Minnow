@@ -52,7 +52,7 @@ describe('benchmark stopped card', () => {
     assert.ok(card?.classList.contains('is-fail'));
     assert.ok(!card?.classList.contains('is-running'));
     assert.equal(card?.querySelector('.benchmark-test-card-meta')?.textContent, 'Stopped');
-    assert.match(card?.querySelector('.benchmark-test-card-status')?.innerHTML ?? '', /M6 6l12 12/);
+    assert.match(card?.querySelector('.benchmark-test-card-status')?.innerHTML ?? '', /fi-rr-cross-circle/);
     assert.equal(card?.getAttribute('role'), 'button');
     assert.equal(card?.getAttribute('tabindex'), '0');
   });

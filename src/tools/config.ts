@@ -621,7 +621,9 @@ export function applyDefaultBuiltInPermissions(config: ToolConfig): ToolConfig {
 }
 
 /** Refresh permission selects and bulk checkboxes on every mounted tool list. */
-export function refreshAllToolListUis(_root: ParentNode = document): void {
+let refreshAllToolListUisScheduled = false;
+
+function refreshAllToolListUisNow(): void {
   if (typeof document === 'undefined') return;
 
   loadToolConfigIntoDrawer(document);
@@ -638,6 +640,22 @@ export function refreshAllToolListUis(_root: ParentNode = document): void {
       syncToolSelectAllControls(list);
     }
   }
+}
+
+/** Queue a single UI refresh so change/click handlers can finish before DOM sync. */
+export function refreshAllToolListUis(_root: ParentNode = document): void {
+  if (typeof document === 'undefined') return;
+  if (refreshAllToolListUisScheduled) return;
+  refreshAllToolListUisScheduled = true;
+  queueMicrotask(() => {
+    refreshAllToolListUisScheduled = false;
+    refreshAllToolListUisNow();
+  });
+}
+
+/** Test helper: await the deferred {@link refreshAllToolListUis} pass. */
+export async function flushToolListUiRefresh(): Promise<void> {
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
 }
 
 /** Set every built-in tool to `mode`, persist, and refresh all tool list UIs. */

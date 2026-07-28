@@ -9,8 +9,8 @@ const {
   setFilePanelState,
 } = await import('../../src/state/file-panel.ts');
 
-const CHEVRON_RIGHT_PATH = 'M9 18l6-6-6-6';
-const FILE_TREE_PATH = 'M14 2H6a2';
+const CHEVRON_RIGHT_CLASS = 'fi-rr-angle-small-right';
+const FILE_TREE_CLASS = 'fi-rr-document';
 
 function stubMatchMedia(win, matches) {
   const stub = (query) => ({
@@ -70,7 +70,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     applyFileSidebarVisuals();
 
     const btn = document.getElementById('btnFileSidebarCollapse');
-    assert.ok(btn.innerHTML.includes(CHEVRON_RIGHT_PATH));
+    assert.ok(btn.innerHTML.includes(CHEVRON_RIGHT_CLASS));
     assert.equal(btn.getAttribute('aria-label'), 'Collapse file tree');
   });
 
@@ -81,7 +81,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     applyFileSidebarVisuals();
 
     const btn = document.getElementById('btnFileSidebarCollapse');
-    assert.ok(btn.innerHTML.includes(FILE_TREE_PATH));
+    assert.ok(btn.innerHTML.includes(FILE_TREE_CLASS));
     assert.equal(btn.getAttribute('aria-label'), 'Expand file tree');
   });
 
@@ -93,7 +93,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     applyFileSidebarVisuals();
 
     const btn = document.getElementById('btnFileSidebarCollapse');
-    assert.ok(btn.innerHTML.includes(CHEVRON_RIGHT_PATH));
+    assert.ok(btn.innerHTML.includes(CHEVRON_RIGHT_CLASS));
     assert.equal(btn.getAttribute('aria-label'), 'Close file tree');
   });
 
@@ -103,7 +103,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     applyFileSidebarVisuals();
 
     const btn = document.getElementById('btnFileSidebarCollapse');
-    assert.ok(btn.innerHTML.includes(FILE_TREE_PATH));
+    assert.ok(btn.innerHTML.includes(FILE_TREE_CLASS));
     assert.equal(btn.getAttribute('aria-label'), 'Open file tree');
   });
 });
