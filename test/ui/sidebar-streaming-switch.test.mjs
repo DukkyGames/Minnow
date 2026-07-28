@@ -55,6 +55,7 @@ function setupDom() {
 describe('switchChat while another chat streams', { concurrency: false }, () => {
   afterEach(async () => {
     appState.setStreaming(false);
+    await new Promise((resolve) => setImmediate(resolve));
     setSessionStateForTests(null);
     resetDesktopStateForTests();
     if (win) {

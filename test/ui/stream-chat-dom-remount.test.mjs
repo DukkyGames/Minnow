@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject } = await import(
@@ -70,12 +71,14 @@ function setupDom() {
 }
 
 describe('stream-chat-dom remount', { concurrency: false }, () => {
-  afterEach(() => {
-    activeWindow?.close();
-    activeWindow = null;
+  afterEach(async () => {
     appState.setStreaming(false);
     registerStreamDomRemount('chat-streaming', null);
     setSessionStateForTests(null);
+    if (activeWindow) {
+      await teardownHappyDomAsync(activeWindow);
+      activeWindow = null;
+    }
   });
 
   test('remountStreamDomForChat restores Generating response… after history re-render', async () => {
@@ -103,6 +106,8 @@ describe('stream-chat-dom remount', { concurrency: false }, () => {
 
     renderChatFromHistory(streaming);
     // renderChatFromHistory lazy-imports remountStreamDomForChat to avoid a circular module graph.
+    await import('../../src/tools/stream-chat-dom.ts');
+    await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(remounted, 'remount listener should run during history re-render');
 

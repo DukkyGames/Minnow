@@ -69,7 +69,8 @@ export function parseDefaultWslDistro(output) {
  * @returns {{ distros: string[]; defaultDistro: string | null }}
  */
 export function listWslDistros(fixtures = {}) {
-  if (process.platform !== 'win32') {
+  const hasFixtures = fixtures.listOutput != null || fixtures.defaultOutput != null;
+  if (process.platform !== 'win32' && !hasFixtures) {
     return { distros: [], defaultDistro: null };
   }
 

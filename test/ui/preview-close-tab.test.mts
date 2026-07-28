@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import {
   getFilePanelState,
   patchFilePanelState,
@@ -10,6 +11,7 @@ import {
   openPreviewTab,
   resetPreviewTabStoreForTests,
 } from '../../src/ui/preview-tab-store.ts';
+import { teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 function setupPreviewDom(): void {
   document.body.innerHTML = `
@@ -31,9 +33,14 @@ function setupPreviewDom(): void {
 }
 
 describe('closePreviewTabUi', () => {
+  /** @type {import('happy-dom').Window | undefined} */
+  let happyDomWindow: import('happy-dom').Window | undefined;
+
   beforeEach(async () => {
+    setStorageModeForTests('localStorage');
     const { Window } = await import('happy-dom');
     const win = new Window();
+    happyDomWindow = win;
     const g = globalThis as typeof globalThis & {
       window: Window;
       document: Document;
@@ -47,6 +54,8 @@ describe('closePreviewTabUi', () => {
       cb(0);
       return 1;
     }) as typeof requestAnimationFrame;
+    g.fetch = (async () =>
+      ({ ok: true, json: async () => ({}) }) as Response) as typeof fetch;
     win.matchMedia = ((query: string) => ({
       matches: false,
       media: query,
@@ -64,9 +73,14 @@ describe('closePreviewTabUi', () => {
     patchFilePanelState({ rightPaneMode: 'preview', viewerOpen: true });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     resetFilePanelStateForTests();
     resetPreviewTabStoreForTests();
+    setStorageModeForTests('localStorage');
+    if (happyDomWindow) {
+      await teardownHappyDomAsync(happyDomWindow);
+      happyDomWindow = undefined;
+    }
   });
 
   test('closing the last preview tab removes it and collapses the right split', async () => {

@@ -33,12 +33,14 @@ const SYNC_TOOL_ID = 'calculate';
 /** Mount drawer, settings, and composer tool lists in happy-dom. */
 function setupThreeToolLists() {
   const window = new Window();
+  globalThis.window = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.HTMLInputElement = window.HTMLInputElement;
   globalThis.HTMLSelectElement = window.HTMLSelectElement;
   globalThis.HTMLButtonElement = window.HTMLButtonElement;
   globalThis.HTMLLabelElement = window.HTMLLabelElement;
+  globalThis.HTMLButtonElement = window.HTMLButtonElement;
   globalThis.Event = window.Event;
   globalThis.localStorage = window.localStorage;
 
