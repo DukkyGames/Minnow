@@ -82,6 +82,79 @@ describe('orchestrate board-testing API', () => {
     assert.equal(stop.json?.fakeModel?.running, false);
   });
 
+  test('configures a running fake-model scenario and exposes only sanitized request tails', async () => {
+    const configured = await httpRequest(
+      baseUrl,
+      'POST',
+      '/api/orchestrate/board-testing/fake-model/scenario',
+      {
+        steps: [
+          {
+            match: { role: 'builder', nth: 0 },
+            emit: [
+              'data: {"choices":[{"delta":{"content":"configured"}}]}\n\n',
+              'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+            ],
+          },
+        ],
+      },
+    );
+    assert.equal(configured.status, 200);
+    assert.equal(configured.json?.scenario?.stepCount, 1);
+
+    const invalid = await httpRequest(
+      baseUrl,
+      'POST',
+      '/api/orchestrate/board-testing/fake-model/scenario',
+      { steps: [{ match: { nth: -1 }, emit: ['data: ok\n\n'] }] },
+    );
+    assert.equal(invalid.status, 400);
+
+    const start = await httpRequest(
+      baseUrl,
+      'POST',
+      '/api/orchestrate/board-testing/fake-model/start',
+      { port: 0 },
+    );
+    const fakeBaseUrl = start.json?.fakeModel?.baseUrl;
+    const completion = await fetch(`${fakeBaseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer transport-secret',
+      },
+      body: JSON.stringify({
+        model: 'fake-board-model',
+        apiKey: 'body-secret',
+        messages: [
+          {
+            role: 'user',
+            content: 'Execute this orchestrate task\nTask: W1-A — demo\napiKey=message-secret',
+          },
+        ],
+      }),
+    });
+    assert.equal(completion.status, 200);
+    assert.match(await completion.text(), /configured/);
+
+    const tail = await httpRequest(
+      baseUrl,
+      'GET',
+      '/api/orchestrate/board-testing/fake-model/requests?limit=1',
+    );
+    assert.equal(tail.status, 200);
+    assert.equal(tail.json?.requests?.length, 1);
+    const serialized = JSON.stringify(tail.json);
+    assert.doesNotMatch(serialized, /transport-secret|body-secret|message-secret/);
+    assert.match(serialized, /\[REDACTED\]/);
+    assert.equal(tail.json?.requests?.[0]?.context?.taskId, 'W1-A');
+
+    await httpRequest(baseUrl, 'POST', '/api/orchestrate/board-testing/fake-model/stop');
+    await httpRequest(baseUrl, 'POST', '/api/orchestrate/board-testing/fake-model/scenario', {
+      steps: [],
+    });
+  });
+
   test('seed upserts test board sessions', async () => {
     const seed = await httpRequest(baseUrl, 'POST', '/api/orchestrate/board-testing/seed', {
       workspacePath: homeDir,
@@ -140,5 +213,49 @@ describe('orchestrate board-testing API', () => {
     assert.equal(typeof res.json?.ok, 'boolean');
     assert.equal(res.json?.eventsCount, 1);
     assert.ok(Array.isArray(res.json?.skippedInvariants));
+  });
+
+  test('tails bounded board logs and rejects paths and escaping symlinks', async () => {
+    const logDir = path.join(homeDir, 'logs', 'orchestrate');
+    await fs.mkdir(logDir, { recursive: true });
+    const events = [
+      { id: 1, type: 'one' },
+      { id: 2, type: 'two', token: 'must-not-leak' },
+      { id: 3, type: 'three' },
+    ];
+    await fs.writeFile(
+      path.join(logDir, 'safe-group.jsonl'),
+      `${events.map((event) => JSON.stringify(event)).join('\n')}\n`,
+      'utf8',
+    );
+    const tail = await httpRequest(
+      baseUrl,
+      'GET',
+      '/api/orchestrate/board-testing/board-log/tail?groupId=safe-group&limit=2',
+    );
+    assert.equal(tail.status, 200);
+    assert.deepEqual(
+      tail.json?.events?.map((event) => event.id),
+      [2, 3],
+    );
+    assert.equal(tail.json?.events?.[0]?.token, '[REDACTED]');
+
+    const traversal = await httpRequest(
+      baseUrl,
+      'GET',
+      '/api/orchestrate/board-testing/board-log/tail?groupId=..%2Foutside',
+    );
+    assert.equal(traversal.status, 400);
+
+    const outside = path.join(homeDir, 'outside.jsonl');
+    await fs.writeFile(outside, '{"secret":"outside"}\n', 'utf8');
+    await fs.symlink(outside, path.join(logDir, 'linked.jsonl'));
+    const symlink = await httpRequest(
+      baseUrl,
+      'GET',
+      '/api/orchestrate/board-testing/board-log/tail?groupId=linked',
+    );
+    assert.equal(symlink.status, 400);
+    assert.match(symlink.json?.error, /symlink escapes/);
   });
 });

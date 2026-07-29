@@ -96,4 +96,23 @@ describe('pipeline holds', () => {
     assert.equal(countHeldTaskIds(board), 0);
     releasePipelineHoldsForTask(board, 'W1-A');
   });
+
+  test('logger context receives acquire and TTL expiry with post-event counts', async () => {
+    const group = makeBoardGroup();
+    const board = group.orchestrateBoard!;
+    const seen: Array<{ action: string; holdId: string; active: number }> = [];
+    setPipelineHoldMaxMsForTests(1);
+    const hold = acquirePipelineHold(board, 'W1-A', 'merge', {
+      onEvent(action, current, active) {
+        seen.push({ action, holdId: current.id, active });
+      },
+    });
+    assert.ok(hold);
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    assert.equal(hasPipelineHold(board, 'W1-A'), false);
+    assert.deepEqual(seen, [
+      { action: 'acquire', holdId: hold.id, active: 1 },
+      { action: 'expiry', holdId: hold.id, active: 0 },
+    ]);
+  });
 });

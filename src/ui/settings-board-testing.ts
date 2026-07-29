@@ -35,11 +35,13 @@ import {
   createSettingsTextareaRow,
 } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
+import { renderBoardScenarioRunner } from './board-scenario-runner';
 import { listWorkspaceOrchestrateBoardGroups } from './orchestrate-hub';
 import { shortPlanLabel } from './orchestrate-plan-picker';
 import { setStatus } from './status';
 
 const BOARD_GROUP_CUSTOM_VALUE = '__custom__';
+let disposeBoardScenarioRunner: (() => void) | null = null;
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -203,6 +205,8 @@ function renderValidationResult(host: HTMLElement, result: CheckBoardLogResponse
 
 /** Populate Settings → Advanced → Board testing. */
 export async function renderBoardTestingSettingsSection(): Promise<void> {
+  disposeBoardScenarioRunner?.();
+  disposeBoardScenarioRunner = null;
   const mount = clearMount('settingsBoardTestingBody');
   if (!mount) return;
 
@@ -220,7 +224,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   lead.append(guideLink, '. Planner chat must use the fake board model under ', linkToSettingsSection('Providers', 'providers'), '.');
   shell.appendChild(lead);
 
-  const serverUp = await detectConfigServer();
+  const serverUp = (await detectConfigServer()) === 'server';
   if (!serverUp) {
     appendSettingsOfflineHint(
       shell,
@@ -325,7 +329,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   );
 
   let preset: 'quick' | 'smoke' = 'quick';
-  let mode: 'manual' | 'auto' | 'sequential' = 'manual';
+  let mode: 'manual' | 'afk' | 'auto' | 'sequential' = 'manual';
   let autoStart = false;
   let workspacePath = '';
 
@@ -349,13 +353,14 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   const { row: modeRow, select: modeSelect } = createSettingsSelectRow('Execution mode', {
     options: [
       { value: 'manual', label: 'Manual' },
+      { value: 'afk', label: 'AFK' },
       { value: 'auto', label: 'Auto' },
       { value: 'sequential', label: 'Sequential' },
     ],
     value: mode,
     searchKey: 'advanced.boardTesting.seed.mode',
     onChange: (value) => {
-      if (value === 'auto' || value === 'sequential') mode = value;
+      if (value === 'afk' || value === 'auto' || value === 'sequential') mode = value;
       else mode = 'manual';
     },
   });
@@ -364,7 +369,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
 
   const { row: autoStartRow } = createSettingsToggleRow('Auto-start board', {
     checked: autoStart,
-    description: 'Set board.autoRunning (use with auto execution mode).',
+    description: 'Set board.autoRunning (use with AFK or auto execution mode).',
     searchKey: 'advanced.boardTesting.seed.autoStart',
     onChange: (next) => {
       autoStart = next;
@@ -568,6 +573,11 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
     { searchKey: 'advanced.boardTesting.log.actions' },
   );
   logGroup.appendChild(logActions);
+
+  disposeBoardScenarioRunner = renderBoardScenarioRunner(content, {
+    serverUp,
+    announce: setStatus,
+  });
 
   await refreshStatus();
 }

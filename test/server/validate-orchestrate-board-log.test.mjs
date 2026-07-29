@@ -124,6 +124,51 @@ describe('validateSessionState board log', () => {
     ]);
   });
 
+  it('round-trips quarantine, nudge, and Phase-2 durable evidence', () => {
+    const rows = [
+      ['task_quarantined', { from: 'testing', to: 'quarantined', cause: 'root', category: 'code' }],
+      ['nudge', { attempt: 2, attemptKind: 'nudge', reason: 'missing report' }],
+      ['phase_start', { phaseId: 'phase-1', phase: 'build', lifecycleRun: 3, ownerId: 'chat-1' }],
+      ['phase_end', { phaseId: 'phase-1', phase: 'build', lifecycleRun: 3, durationMs: 42 }],
+      ['slot_acquire', { slotId: 'slot-1', phase: 'build', ownerId: 'chat-1' }],
+      ['slot_release', { slotId: 'slot-1', reason: 'phase complete' }],
+      ['hold_acquire', { holdId: 'hold-1', holdKind: 'merge', ownerId: 'run-1' }],
+      ['hold_release', { holdId: 'hold-1', holdKind: 'merge' }],
+      ['hold_expiry', { holdId: 'hold-2', holdKind: 'fixer', reason: 'ttl' }],
+      ['concurrency_observation', {
+        activeSlots: 1,
+        activeHolds: 1,
+        activeTotal: 2,
+        concurrencyCap: 3,
+      }],
+      ['lifecycle_owner_set', {
+        lifecycleRun: 3,
+        ownerId: 'chat-1',
+        ownerKind: 'chat',
+      }],
+      ['lifecycle_owner_clear', {
+        lifecycleRun: 3,
+        ownerId: 'chat-1',
+        ownerKind: 'chat',
+      }],
+      ['board_terminal', { terminalOutcome: 'blocked', reason: 'bounded quarantine' }],
+      ['planner_report', { reportId: 'report-1', summary: 'done' }],
+      ['completion_notification', { notificationId: 'notification-1' }],
+      ['interaction_required', { interactionKind: 'approval', reason: 'permission ask' }],
+    ].map(([type, detail], index) => ({
+      id: `1710000002000-${index}`,
+      ts: 1710000002000 + index,
+      type,
+      level: 'info',
+      ...(type === 'board_terminal' ? {} : { taskId: 'W1-A' }),
+      message: String(type),
+      detail,
+    }));
+
+    const out = validateSessionState(basePayload(rows));
+    assert.deepEqual(out.groups[0].orchestrateBoard.log, rows);
+  });
+
   it('truncates oversized log on load and long detail strings', () => {
     const long = 'x'.repeat(3000);
     const log = Array.from({ length: 510 }, (_, i) => ({

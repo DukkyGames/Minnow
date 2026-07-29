@@ -146,16 +146,15 @@ export function extractChatText(chat: Chat): string {
           : JSON.stringify(msg.content);
     if (content) parts.push(content);
   }
+  for (const run of chat.runs ?? []) {
+    if (run.errorMessage?.trim()) parts.push(run.errorMessage.trim());
+  }
   return parts.join('\n');
 }
 
 /** Transcript plus failed-run error messages (board chats often only record errors on runs). */
 export function extractChatFailureText(chat: Chat): string {
-  const parts = [extractChatText(chat)];
-  for (const run of chat.runs ?? []) {
-    if (run.errorMessage?.trim()) parts.push(run.errorMessage);
-  }
-  return parts.join('\n');
+  return extractChatText(chat);
 }
 
 /**
