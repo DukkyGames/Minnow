@@ -7,7 +7,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache, ensureMinnowLayout } from '../../server/config/home.js';
+import { closeSessionsDb } from '../../server/config/sessions-db.js';
 import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { getCatalogPath } from '../../server/brain/paths.js';
 import {
@@ -26,10 +27,21 @@ before(async () => {
   homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-brain-catalog-'));
   process.env.MINNOW_HOME = homeDir;
   resetMinnowHomeCache();
+  await ensureMinnowLayout();
+  // Catalog rebuild does not cover vector sync — disable embeddings so createPage
+  // does not schedule fire-and-forget embedder I/O during CI teardown.
+  const configPath = path.join(homeDir, 'config.json');
+  const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  config.memory = config.memory ?? {};
+  config.memory.embeddings = { ...(config.memory.embeddings ?? {}), enabled: false };
+  config.brain = config.brain ?? {};
+  config.brain.embeddings = { ...(config.brain.embeddings ?? {}), enabled: false };
+  await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 });
 
 after(async () => {
   closeCodeDbForTests();
+  closeSessionsDb();
   delete process.env.MINNOW_HOME;
   resetMinnowHomeCache();
   await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
@@ -42,6 +54,7 @@ describe('brain catalog rebuild', () => {
       id: PAGE_ID,
       title: 'Direct write',
       body: 'Body from CRUD.',
+      skipVectorSync: true,
     });
 
     await fs.unlink(getCatalogPath());
