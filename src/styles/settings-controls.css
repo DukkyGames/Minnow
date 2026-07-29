@@ -440,6 +440,31 @@
   font-size: 11px;
 }
 
+.settings-network-qr__code-label {
+  margin-top: 4px;
+  color: var(--mn-fg-muted);
+  font-size: 12px;
+}
+
+.settings-network-qr__code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-network-qr__code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: 700 18px/1 var(--font-ui);
+  letter-spacing: 0.2em;
+}
+
 .settings-network-device-list {
   display: flex;
   flex-direction: column;

@@ -16,6 +16,7 @@ import {
 import {
   createPairingChallenge,
   exchangePairingChallenge,
+  normalizePairingCode,
   PAIRING_TTL_MS,
   PairingError,
   resetPairingState,
@@ -138,9 +139,17 @@ describe('pairing challenges', () => {
   beforeEach(setTestHome);
   afterEach(rmTestHome);
 
-  test('is single-use and expires after five minutes', () => {
+  test('normalizes six-digit codes from spaced input', () => {
+    assert.equal(normalizePairingCode('123 456'), '123456');
+    assert.equal(normalizePairingCode('12345'), '');
+    assert.equal(normalizePairingCode('1234567'), '');
+  });
+
+  test('issues six-digit single-use codes that expire after five minutes', () => {
     let now = 1_000;
-    const first = createPairingChallenge('Phone', { now: () => now });
+    const first = createPairingChallenge('Phone', { now: () => now, randomInt: () => 42_019 });
+    assert.match(first.code, /^\d{6}$/);
+    assert.equal(first.code, '042019');
     const issued = exchangePairingChallenge(
       { code: first.code, deviceName: 'Phone', source: '192.168.1.20' },
       {
@@ -180,7 +189,7 @@ describe('pairing challenges', () => {
       assert.throws(
         () =>
           exchangePairingChallenge(
-            { code: `wrong-${i}`, deviceName: 'Phone', source: '192.168.1.50' },
+            { code: String(i).padStart(6, '0'), deviceName: 'Phone', source: '192.168.1.50' },
             { now },
           ),
         (err) => err instanceof PairingError && err.code === 'invalid_pairing_code',
@@ -330,7 +339,7 @@ describe('companion request authorization', () => {
     const pairingPayload = JSON.parse(createdPairing.res.body);
     assert.equal(pairingPayload.deviceName, 'My Phone');
     assert.deepEqual(pairingPayload.urls, [
-      `http://192.168.1.10:9473/#pair=${encodeURIComponent(pairingPayload.code)}`,
+      `http://192.168.1.10:9473/#pair=${pairingPayload.code}`,
     ]);
 
     const { device } = createDevice('Tablet');

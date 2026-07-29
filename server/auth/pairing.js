@@ -6,9 +6,12 @@ import crypto from 'node:crypto';
 import { createDevice, sanitizeDeviceName } from './device-store.js';
 
 export const PAIRING_TTL_MS = 5 * 60 * 1000;
+export const PAIRING_CODE_DIGITS = 6;
+const PAIRING_CODE_RE = /^\d{6}$/;
 const ATTEMPT_WINDOW_MS = 60 * 1000;
 const MAX_ATTEMPTS_PER_SOURCE = 10;
 const MAX_ACTIVE_CHALLENGES = 100;
+const MAX_CODE_ALLOCATION_ATTEMPTS = 32;
 
 /** @type {Map<string, { deviceName: string, createdAt: number, expiresAt: number }>} */
 const challenges = new Map();
@@ -46,9 +49,29 @@ function recordAttempt(source, now) {
   attempts.set(key, recent);
 }
 
+/** Strip non-digits and require exactly six numeric characters. */
+export function normalizePairingCode(value) {
+  if (typeof value !== 'string') return '';
+  const digits = value.replace(/\D/g, '');
+  return PAIRING_CODE_RE.test(digits) ? digits : '';
+}
+
+/**
+ * @param {{ randomInt?: (min: number, max: number) => number }} deps
+ */
+function allocatePairingCode(deps = {}) {
+  const randomInt = deps.randomInt ?? ((min, max) => crypto.randomInt(min, max));
+  const upper = 10 ** PAIRING_CODE_DIGITS;
+  for (let attempt = 0; attempt < MAX_CODE_ALLOCATION_ATTEMPTS; attempt += 1) {
+    const code = String(randomInt(0, upper)).padStart(PAIRING_CODE_DIGITS, '0');
+    if (!challenges.has(code)) return code;
+  }
+  throw new PairingError('Could not allocate pairing code', 503, 'pairing_capacity');
+}
+
 /**
  * @param {unknown} deviceName
- * @param {{ now?: () => number, randomBytes?: (size: number) => Buffer }} [deps]
+ * @param {{ now?: () => number, randomInt?: (min: number, max: number) => number }} [deps]
  */
 export function createPairingChallenge(deviceName, deps = {}) {
   const name = sanitizeDeviceName(deviceName);
@@ -58,7 +81,7 @@ export function createPairingChallenge(deviceName, deps = {}) {
   if (challenges.size >= MAX_ACTIVE_CHALLENGES) {
     throw new PairingError('Too many active pairings', 429, 'pairing_capacity');
   }
-  const code = (deps.randomBytes ?? crypto.randomBytes)(24).toString('base64url');
+  const code = allocatePairingCode(deps);
   const expiresAt = now + PAIRING_TTL_MS;
   challenges.set(code, { deviceName: name, createdAt: now, expiresAt });
   return { code, deviceName: name, expiresAt };
@@ -74,7 +97,7 @@ export function exchangePairingChallenge(input, deps = {}) {
   const now = (deps.now ?? Date.now)();
   recordAttempt(input.source ?? 'unknown', now);
 
-  const code = typeof input.code === 'string' ? input.code : '';
+  const code = normalizePairingCode(input.code);
   if (!code) {
     throw new PairingError('Pairing code is required', 400, 'invalid_pairing_request');
   }

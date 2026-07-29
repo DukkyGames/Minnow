@@ -3,7 +3,9 @@
  */
 
 import '../styles/companion.css';
-import { initializeDevicePairing } from '../api/device-auth.ts';
+import { markAppReady } from '../boot/app-ready.ts';
+import { exchangePairingCode, initializeDevicePairing } from '../api/device-auth.ts';
+import { isInstalledPwa } from '../api/pwa-context.ts';
 import { clearDeviceToken, getDeviceToken, hasHostSessionToken } from '../api/session-token.ts';
 import { listComposerModes } from '../chat/modes/registry.ts';
 import { isModeId } from '../chat/modes/types.ts';
@@ -12,6 +14,7 @@ import { setChatMode } from '../ui/mode-selector.ts';
 
 const COMPANION_MEDIA = '(max-width: 640px)';
 const RECONNECT_INTERVAL_MS = 5_000;
+const PAIRING_CODE_DIGITS = 6;
 
 let reconnectTimer: number | undefined;
 let modePickerObserver: MutationObserver | null = null;
@@ -70,8 +73,64 @@ function watchForCompanionComposer(): void {
   modePickerObserver.observe(document.body, { childList: true, subtree: true });
 }
 
+function renderPairingCodeForm(showError: boolean): HTMLFormElement {
+  const form = document.createElement('form');
+  form.className = 'companion-access__form';
+  form.noValidate = true;
+
+  const label = document.createElement('label');
+  label.className = 'companion-access__label';
+  label.htmlFor = 'companionPairingCode';
+  label.textContent = 'Pairing code';
+
+  const input = document.createElement('input');
+  input.id = 'companionPairingCode';
+  input.className = 'companion-access__input';
+  input.name = 'pairingCode';
+  input.type = 'text';
+  input.inputMode = 'numeric';
+  input.autocomplete = 'one-time-code';
+  input.spellcheck = false;
+  input.maxLength = PAIRING_CODE_DIGITS;
+  input.pattern = '[0-9]{6}';
+  input.placeholder = '6-digit code';
+  input.required = true;
+
+  const error = document.createElement('p');
+  error.className = 'companion-access__error';
+  error.hidden = !showError;
+  error.textContent = 'That pairing code is invalid, expired, or already used.';
+
+  const submit = document.createElement('button');
+  submit.className = 'companion-access__submit';
+  submit.type = 'submit';
+  submit.textContent = 'Connect';
+
+  form.append(label, input, error, submit);
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    error.hidden = true;
+    submit.disabled = true;
+    void exchangePairingCode(input.value)
+      .then(() => {
+        window.location.replace(`${window.location.pathname}${window.location.search}#/desktop`);
+        window.location.reload();
+      })
+      .catch(() => {
+        error.hidden = false;
+        submit.disabled = false;
+        input.focus();
+        input.select();
+      });
+  });
+
+  return form;
+}
+
 function renderAccessScreen(kind: 'required' | 'failed' | 'revoked'): void {
   document.documentElement.classList.add('minnow-companion-access');
+  markAppReady();
+
   const existing = document.getElementById('companionAccess');
   existing?.remove();
 
@@ -84,20 +143,26 @@ function renderAccessScreen(kind: 'required' | 'failed' | 'revoked'): void {
   title.id = 'companionAccessTitle';
   title.textContent = kind === 'revoked' ? 'Device access revoked' : 'Pair this device';
 
+  const installed = isInstalledPwa();
   const copy = document.createElement('p');
   copy.textContent =
     kind === 'failed'
       ? 'This pairing link is invalid, expired, or already used. Create a new link in Minnow Settings.'
       : kind === 'revoked'
         ? 'This device no longer has access. Create a new pairing from the host to reconnect.'
-        : 'On the host, open Settings → General → Network access and scan a fresh pairing QR code.';
+        : installed
+          ? 'Enter the pairing code from the host (Settings → Network access). QR scans open the browser, which uses separate storage from the installed app.'
+          : 'Scan the QR from the host, or enter the pairing code shown under the QR in Settings → Network access.';
 
   const hint = document.createElement('p');
   hint.className = 'companion-access__hint';
-  hint.textContent = 'Minnow companion works only while the host is running on the same network.';
+  hint.textContent = installed
+    ? 'Each installed app needs its own pairing. Create a new code on the host if you already paired in the browser.'
+    : 'Minnow companion works only while the host is running on the same network.';
 
-  screen.append(title, copy, hint);
+  screen.append(title, copy, hint, renderPairingCodeForm(kind === 'failed'));
   document.body.appendChild(screen);
+  screen.querySelector<HTMLInputElement>('#companionPairingCode')?.focus();
 }
 
 function ensureReconnectBanner(): HTMLElement {
@@ -180,4 +245,3 @@ export async function initializeCompanionAccess(): Promise<boolean> {
   window.matchMedia(COMPANION_MEDIA).addEventListener('change', applyCompanionViewport);
   return true;
 }
-

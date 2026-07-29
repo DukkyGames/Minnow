@@ -7,7 +7,7 @@ Minnow can serve an authenticated phone or tablet companion on the same private 
 1. On the host, open **Settings → General → Network access**.
 2. Select **Local network** and restart Minnow.
 3. Return to Network access, enter a device name, and select **Create pairing QR**.
-4. Scan the QR within five minutes. The link works once.
+4. Scan the QR within five minutes, or enter the **6-digit code** shown under the QR. Each link and code works once.
 5. Keep the host running while using the companion.
 
 The phone stores its own device credential. The host stores only a SHA-256 hash in `~/.minnow/auth/devices.json`.

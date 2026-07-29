@@ -69,7 +69,17 @@ export function renderCompanionDevices(mount: HTMLElement, lanActive: boolean): 
   const qrTitle = element('strong', '', 'Scan with your device');
   const qrExpiry = element('span', 'settings-network-qr__expiry');
   const qrLink = element('code', 'settings-network-qr__link');
-  qrCopy.append(qrTitle, qrExpiry, qrLink);
+  const qrCodeLabel = element(
+    'span',
+    'settings-network-qr__code-label',
+    'Or enter this 6-digit code in the installed app:',
+  );
+  const qrCodeRow = element('div', 'settings-network-qr__code-row');
+  const qrCode = element('code', 'settings-network-qr__code');
+  const copyCodeButton = element('button', 'settings-inline-btn', 'Copy code');
+  copyCodeButton.type = 'button';
+  qrCodeRow.append(qrCode, copyCodeButton);
+  qrCopy.append(qrTitle, qrExpiry, qrLink, qrCodeLabel, qrCodeRow);
   qrRegion.append(canvas, qrCopy);
 
   const listTitle = element('h4', 'settings-network-devices__list-title', 'Paired devices');
@@ -195,6 +205,15 @@ export function renderCompanionDevices(mount: HTMLElement, lanActive: boolean): 
         minute: '2-digit',
       })}`;
       qrLink.textContent = url;
+      qrCode.textContent = pairing.code;
+      copyCodeButton.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(pairing.code);
+          setStatus('ok', 'Pairing code copied');
+        } catch {
+          setStatus('err', 'Could not copy pairing code');
+        }
+      };
       qrRegion.hidden = false;
       startPairingPoll(pairing.expiresAt);
       setStatus('ok', 'Pairing QR ready');

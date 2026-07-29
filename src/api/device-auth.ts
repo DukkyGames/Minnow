@@ -28,18 +28,47 @@ interface PairingExchangeResponse {
 }
 
 const PAIRING_FRAGMENT_KEY = 'pair';
+const PAIRING_CODE_DIGITS = 6;
+
+/** Keep only digits and require a six-digit LAN pairing code. */
+function normalizePairingCode(code: string): string {
+  const digits = code.replace(/\D/g, '');
+  return /^\d{6}$/.test(digits) ? digits : '';
+}
 
 function pairingCodeFromLocation(): string {
   if (typeof window === 'undefined') return '';
   const raw = window.location.hash.startsWith('#')
     ? window.location.hash.slice(1)
     : window.location.hash;
-  return new URLSearchParams(raw).get(PAIRING_FRAGMENT_KEY)?.trim() ?? '';
+  const fromFragment = new URLSearchParams(raw).get(PAIRING_FRAGMENT_KEY)?.trim() ?? '';
+  return normalizePairingCode(fromFragment);
 }
 
 function removePairingFragment(): void {
   const url = `${window.location.pathname}${window.location.search}#/desktop`;
   window.history.replaceState(null, '', url);
+}
+
+/** Exchange a one-time pairing secret for a named device credential. */
+export async function exchangePairingCode(code: string): Promise<PairingExchangeResponse> {
+  const normalized = normalizePairingCode(code);
+  if (!normalized) throw new Error('Enter the 6-digit pairing code from the host');
+
+  // This exact bootstrap request is the only API operation that accepts no token.
+  const response = await fetch('/api/auth/pair', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: normalized }),
+  });
+  const payload = (await response.json()) as Partial<PairingExchangeResponse> & {
+    error?: string;
+  };
+  if (!response.ok || typeof payload.token !== 'string' || !payload.device) {
+    throw new Error(payload.error ?? 'Pairing failed');
+  }
+  saveDeviceToken(payload.token);
+  return payload as PairingExchangeResponse;
 }
 
 /** Exchange a URL-fragment pairing secret before authenticated app bootstrap. */
@@ -52,19 +81,7 @@ export async function initializeDevicePairing(): Promise<
   if (!code) return getDeviceToken() ? 'device' : 'pairing-required';
 
   try {
-    // This exact bootstrap request is the only API operation that accepts no token.
-    const response = await fetch('/api/auth/pair', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    });
-    const payload = (await response.json()) as Partial<PairingExchangeResponse> & {
-      error?: string;
-    };
-    if (!response.ok || typeof payload.token !== 'string') {
-      throw new Error(payload.error ?? 'Pairing failed');
-    }
-    saveDeviceToken(payload.token);
+    await exchangePairingCode(code);
     removePairingFragment();
     return 'device';
   } catch {
