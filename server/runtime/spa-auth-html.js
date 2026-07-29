@@ -11,10 +11,7 @@ import { getSessionToken, injectSessionTokenScript } from './session-token.js';
 export function isHtmlNavigationRequest(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
   const accept = req.headers.accept ?? '';
-  if (accept.includes('text/html')) return true;
-  const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
-  const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
-  return !lastSegment.includes('.');
+  return accept.includes('text/html');
 }
 
 /** Inject the host credential only when the request Host is loopback. */

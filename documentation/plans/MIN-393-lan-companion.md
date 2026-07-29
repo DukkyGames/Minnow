@@ -22,7 +22,7 @@ Make Minnow reachable from a phone or tablet on the same private network without
 2. The server creates a random, single-use, five-minute pairing secret and returns companion URLs with `#pair=<secret>`.
 3. A LAN browser loads the public SPA shell without an injected host token.
 4. Before normal app bootstrap, the browser exchanges the fragment through `POST /api/auth/pair`.
-5. The server returns a random device token. The browser stores it in `localStorage`, removes the fragment, and reloads.
+5. The server returns a random device token. The browser stores it in `localStorage`, removes the fragment, and continues to the authenticated shell.
 6. The global API interceptor and URL-token helper use the host token when injected, otherwise the stored device token.
 7. The central auth middleware accepts either the per-boot host token or an active device-token hash.
 
@@ -53,16 +53,16 @@ The authenticated request records device identity on the incoming request. Destr
 
 ## Todos
 
-- [ ] Prevent host token disclosure in LAN-served HTML.
-- [ ] Add device-token storage, one-time pairing challenges, throttling, and auth routes.
-- [ ] Extend central HTTP and WebSocket authentication to active device tokens.
-- [ ] Add client token storage and pre-bootstrap pairing exchange.
-- [ ] Add QR pairing and device revoke controls to Settings → Network.
-- [ ] Add the narrow companion shell and hide desktop-only destinations.
-- [ ] Add host reconnect feedback and service-worker secure-context guidance.
-- [ ] Cover token lifecycle, pairing, authorization boundaries, and revocation with automated tests.
-- [ ] Validate at a 375px viewport and run typecheck/build.
-- [ ] Update `documentation/context.md` and LAN setup guidance.
+- [x] Prevent host token disclosure in LAN-served HTML.
+- [x] Add device-token storage, one-time pairing challenges, throttling, and auth routes.
+- [x] Extend central HTTP and WebSocket authentication to active device tokens.
+- [x] Add client token storage and pre-bootstrap pairing exchange.
+- [x] Add QR pairing and device revoke controls to Settings → Network.
+- [x] Add the narrow companion shell and hide desktop-only destinations.
+- [x] Add host reconnect feedback and service-worker secure-context guidance.
+- [x] Cover token lifecycle, pairing, authorization boundaries, and revocation with automated tests.
+- [x] Validate at a 375px viewport and run typecheck/build.
+- [x] Update `documentation/context.md` and LAN setup guidance.
 
 ## Acceptance mapping
 

@@ -59,10 +59,15 @@ const COMPANION_MUTATING_TOOLS = new Set([
   'email_action',
 ]);
 
+/** Whether a built-in mutation must always prompt from a companion device. */
+export function companionToolRequiresApproval(toolId: string): boolean {
+  return COMPANION_MUTATING_TOOLS.has(toolId);
+}
+
 function companionRequiresApproval(toolId: string): boolean {
   return (
     document.documentElement.classList.contains('minnow-companion') &&
-    COMPANION_MUTATING_TOOLS.has(toolId)
+    companionToolRequiresApproval(toolId)
   );
 }
 
