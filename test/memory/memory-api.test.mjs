@@ -154,9 +154,13 @@ describe('memory API', () => {
 
     const res = await httpRequest(baseUrl, 'POST', '/api/memory/retrieve', {
       query: 'npm',
+      // Hybrid retrieval can rank unrelated entries when embeddings are healthy;
+      // limit to the top hit so keyword relevance is what we assert.
+      limit: 1,
     });
     assert.match(res.json.block, /npm workflow/);
     assert.doesNotMatch(res.json.block, /Python only/);
+    assert.equal(res.json.ids[0], FIXTURE_ID);
   });
 
   test('reject oversize body', async () => {
