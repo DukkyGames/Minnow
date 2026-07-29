@@ -132,6 +132,16 @@ export { resolveModelInfo, showCachedModelInfo } from '../api/models';
 /** Suppress per-bubble scroll while bulk-rendering history (renderChatFromHistory). */
 let suppressBubbleScroll = false;
 
+/** Remove landing placeholders before the first live bubble mounts. */
+function clearTranscriptEmptyState(mount: HTMLElement): void {
+  document.getElementById('emptyState')?.remove();
+  for (const el of mount.querySelectorAll(
+    '.mn-os-chat-empty, .chat-app-empty',
+  )) {
+    el.remove();
+  }
+}
+
 export function renderStatsForChat(chat: Chat): void {
   refreshMetricsStripForChat(chat);
   refreshContextUsageRing();
@@ -477,9 +487,8 @@ export function appendBubble(
   if (shouldStubOrchestrateStreamDom(chat)) {
     return bubbleDomStub();
   }
-  if (document.getElementById('emptyState')) {
-    document.getElementById('emptyState')!.remove();
-  }
+  const mount = getActiveChatMountElement();
+  clearTranscriptEmptyState(mount);
   if (isHubMounted()) {
     teardownHub();
   }
@@ -512,7 +521,7 @@ export function appendBubble(
 
   wrap.appendChild(label);
   wrap.appendChild(bubble);
-  getActiveChatMountElement().appendChild(wrap);
+  mount.appendChild(wrap);
   if (!suppressBubbleScroll) {
     if (role === 'user') {
       scrollChatToBottom();
@@ -643,14 +652,12 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   if (shouldStubOrchestrateStreamDom(targetChat)) {
     return streamingAssistantRowStub();
   }
-  if (document.getElementById('emptyState')) {
-    document.getElementById('emptyState')!.remove();
-  }
+  const mount = getActiveChatMountElement();
+  clearTranscriptEmptyState(mount);
   if (isHubMounted()) {
     teardownHub();
   }
 
-  const mount = getActiveChatMountElement();
   removeStaleLiveStreamingRows(mount);
 
   const wrap = document.createElement('div');

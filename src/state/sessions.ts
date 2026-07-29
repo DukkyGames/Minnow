@@ -656,7 +656,16 @@ function materializeChatHistory(chat: Chat, messages: Message[]): void {
     // Drop the dev trap getter so subsequent access is a plain data property.
     delete (chat as { history?: Message[] }).history;
   }
-  chat.history = Array.isArray(messages) ? messages : [];
+  const incoming = Array.isArray(messages) ? messages : [];
+  const current = Array.isArray(chat.history) ? chat.history : [];
+  // A send can land while ensureChatHistoryLoaded is still in flight (e.g. session
+  // rail switched activeId before hydrate finished). Never discard a longer local tail.
+  if (current.length > incoming.length) {
+    chat.historyLoaded = true;
+    chat.messageCount = current.length;
+    return;
+  }
+  chat.history = incoming;
   chat.historyLoaded = true;
   chat.messageCount = chat.history.length;
 }

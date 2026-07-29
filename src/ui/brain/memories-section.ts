@@ -14,6 +14,10 @@ import {
 import { appConfirm } from '../app-dialog';
 import { parseMemoryTagsInput } from '../../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../../memory/types';
+import {
+  memorySavedPayloadFromEntry,
+  showMemorySavedToast,
+} from '../memory-saved-toast';
 
 type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -227,6 +231,15 @@ function bindMemoryAddForm(): void {
       if (panel) panel.open = false;
       setStatus('ok', `Saved memory “${entry.title}”`);
       await refreshMemoryEntriesList();
+      showMemorySavedToast(memorySavedPayloadFromEntry(entry, body), {
+        onReject: async () => {
+          const rejected = await deleteMemoryEntry(entry.id);
+          if (rejected) {
+            await refreshMemoryEntriesList();
+          }
+          return rejected;
+        },
+      });
     })();
   });
 }
