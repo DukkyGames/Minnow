@@ -7,7 +7,7 @@ import '../styles/brain-graph.css';
 
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
-import { navigateToDesktop } from '../os/router';
+import { launchApp, navigateToDesktop } from '../os/router';
 import { closeBrainInspector } from './brain/inspector';
 import { initBrainInspectorResize } from './brain/inspector-resize';
 import { renderBrainSection } from './brain/sections';
@@ -336,6 +336,9 @@ export function openBrain(section?: BrainSectionId, options?: { editPath?: strin
 
 /** Jump to Edit with a pre-filled wiki path. */
 export function openBrainEditForPath(relPath: string): void {
+  if (isOsEmbedded()) {
+    launchApp('brain', { brainSection: 'edit', brainEditPath: relPath });
+  }
   openBrain('edit', { editPath: relPath });
 }
 
@@ -404,6 +407,12 @@ export function initBrainPage(): void {
   if (window.location.hash.includes('/brain')) {
     openBrain(parseHashSection());
   }
+}
+
+/** Reset module-local section state before mounting a fresh test document. */
+export function resetBrainPageForTests(): void {
+  activeSection = 'graph';
+  staticBindingsDone = false;
 }
 
 export { SECTION_LABELS, SECTION_TITLES, SECTION_LEADS, SECTIONS };
