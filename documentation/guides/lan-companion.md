@@ -43,4 +43,5 @@ Voice capture can have the same secure-context limitation.
 - Restart after changing Network access.
 - Create a new QR if the previous link was opened once or is older than five minutes.
 - If the reconnect banner remains visible, verify the host process is running and the LAN address has not changed.
+- If pairing hangs on load, the QR may have picked a VPN or virtual-adapter address. Copy the Wi-Fi URL from the list above the QR instead, or regenerate the QR after the host prioritizes RFC1918 addresses.
 

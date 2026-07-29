@@ -29,6 +29,8 @@ function formatPairedDate(value: string): string {
   return `Paired ${date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
+const PAIRING_POLL_MS = 2_000;
+
 /** Render pairing controls below the LAN URL list. */
 export function renderCompanionDevices(mount: HTMLElement, lanActive: boolean): void {
   const section = element('section', 'settings-network-devices');
@@ -76,13 +78,61 @@ export function renderCompanionDevices(mount: HTMLElement, lanActive: boolean): 
   section.append(title, description, form, inactiveHint, qrRegion, listTitle, listState, list);
   mount.appendChild(section);
 
+  let pairingPollTimer: number | undefined;
+  let pairingExpiryTimer: number | undefined;
+  let knownDeviceIds = new Set<string>();
+
+  function stopPairingPoll(): void {
+    if (pairingPollTimer !== undefined) {
+      window.clearInterval(pairingPollTimer);
+      pairingPollTimer = undefined;
+    }
+    if (pairingExpiryTimer !== undefined) {
+      window.clearTimeout(pairingExpiryTimer);
+      pairingExpiryTimer = undefined;
+    }
+  }
+
+  function renderDeviceList(devices: CompanionDevice[]): void {
+    list.replaceChildren();
+    listState.hidden = devices.length > 0;
+    listState.textContent = devices.length ? '' : 'No devices paired yet.';
+    for (const device of devices) list.appendChild(renderDevice(device));
+  }
+
+  function startPairingPoll(expiresAt: string): void {
+    stopPairingPoll();
+    const deadline = new Date(expiresAt).getTime();
+
+    const poll = async (): Promise<void> => {
+      try {
+        const devices = await fetchCompanionDevices();
+        const paired = devices.find((device) => !knownDeviceIds.has(device.id));
+        renderDeviceList(devices);
+        if (paired) {
+          knownDeviceIds.add(paired.id);
+          stopPairingPoll();
+          setStatus('ok', `${paired.name} paired`);
+        }
+      } catch {
+        listState.hidden = false;
+        listState.textContent = 'Could not load paired devices.';
+      }
+    };
+
+    pairingPollTimer = window.setInterval(() => void poll(), PAIRING_POLL_MS);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) {
+      pairingExpiryTimer = window.setTimeout(stopPairingPoll, remainingMs);
+    }
+    void poll();
+  }
+
   async function refreshDevices(): Promise<void> {
     try {
       const devices = await fetchCompanionDevices();
-      list.replaceChildren();
-      listState.hidden = devices.length > 0;
-      listState.textContent = devices.length ? '' : 'No devices paired yet.';
-      for (const device of devices) list.appendChild(renderDevice(device));
+      knownDeviceIds = new Set(devices.map((device) => device.id));
+      renderDeviceList(devices);
     } catch {
       listState.hidden = false;
       listState.textContent = 'Could not load paired devices.';
@@ -126,7 +176,12 @@ export function renderCompanionDevices(mount: HTMLElement, lanActive: boolean): 
       return;
     }
     pairButton.disabled = true;
+    stopPairingPoll();
     try {
+      const existing = await fetchCompanionDevices();
+      knownDeviceIds = new Set(existing.map((device) => device.id));
+      renderDeviceList(existing);
+
       const pairing = await createPairing(name);
       const url = pairing.urls[0];
       if (!url) throw new Error('No LAN URL is available');
@@ -141,6 +196,7 @@ export function renderCompanionDevices(mount: HTMLElement, lanActive: boolean): 
       })}`;
       qrLink.textContent = url;
       qrRegion.hidden = false;
+      startPairingPoll(pairing.expiresAt);
       setStatus('ok', 'Pairing QR ready');
     } catch {
       qrRegion.hidden = true;
