@@ -14,7 +14,12 @@ import {
   resetOrchestratePlanCompleteUiForTests,
   setOrchestratePlanCompleteWrapUpHook,
 } from '../../src/chat/orchestrate/plan-complete-ui.ts';
-import { initBoard, quarantineTaskAndDependents, updateTask } from '../../src/state/orchestrate-board-store.ts';
+import {
+  initBoard,
+  quarantineTaskAndDependents,
+  updateTask,
+  waitForBoardCompletionHooksForTests,
+} from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import type { Chat, ChatGroup } from '../../src/types.ts';
 
@@ -81,6 +86,7 @@ describe('quarantine completion hooks', () => {
   });
 
   afterEach(async () => {
+    await waitForBoardCompletionHooksForTests();
     resetOrchestratorAutoReportsForTests();
     resetOrchestratePlanCompleteUiForTests();
     setOrchestratePlanCompleteWrapUpHook(async () => {});
@@ -101,10 +107,7 @@ describe('quarantine completion hooks', () => {
       planner,
     );
 
-    const { maybeEmitOrchestratePlanComplete } = await import(
-      '../../src/chat/orchestrate/plan-complete-ui.ts'
-    );
-    await maybeEmitOrchestratePlanComplete(group.id);
+    await waitForBoardCompletionHooksForTests();
 
     assert.ok(board.completionShownAt != null, 'completionShownAt should be set');
     const completionMessages = planner.history.filter(
@@ -130,8 +133,7 @@ describe('quarantine completion hooks', () => {
       planner,
     );
 
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    await waitForBoardCompletionHooksForTests();
 
     assert.equal(
       board.finalTest?.status,
@@ -150,6 +152,7 @@ describe('requeue after completion round-trip', () => {
   });
 
   afterEach(async () => {
+    await waitForBoardCompletionHooksForTests();
     resetOrchestratorAutoReportsForTests();
     resetOrchestratePlanCompleteUiForTests();
     setOrchestratePlanCompleteWrapUpHook(async () => {});

@@ -1,6 +1,6 @@
 # Orchestrate board AFK end-to-end reliability plan
 
-**Status:** proposed
+**Status:** implemented (MIN-513)
 
 **Scope:** test architecture, failure injection, AFK acceptance, and reliability feedback loops
 
@@ -608,13 +608,13 @@ Recommended defaults are included so work can proceed without blocking.
 
 ## Implementation todo summary
 
-- [ ] Stabilize and green the current suite.
-- [ ] Add first-class AFK E2E coverage.
-- [ ] Create one semantic scenario catalog.
-- [ ] Expand durable events and invariants.
-- [ ] Add persisted server and real-git harnesses.
-- [ ] Add deterministic crash/reload checkpoints.
-- [ ] Build the Settings scenario runner.
-- [ ] Add soak, platform, and release gates.
+- [x] Stabilize and green the current suite.
+- [x] Add first-class AFK E2E coverage.
+- [x] Create one semantic scenario catalog.
+- [x] Expand durable events and invariants.
+- [x] Add persisted server and real-git harnesses.
+- [x] Add deterministic crash/reload checkpoints.
+- [x] Build the Settings scenario runner.
+- [x] Add soak, platform, and release gates.
 - [ ] Refactor product state/contracts in parallel with the reliability findings.
-- [ ] Keep [`documentation/context.md`](../context.md) and the testing guide current as each phase lands.
+- [x] Keep [`documentation/context.md`](../context.md) and the testing guide current as each phase lands.

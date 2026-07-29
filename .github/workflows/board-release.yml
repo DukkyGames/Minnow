@@ -1,0 +1,43 @@
+name: board release smoke
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+concurrency:
+  group: board-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  electron-afk-smoke:
+    name: package + Electron AFK smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MINNOW_HOME: ${{ runner.temp }}/minnow-board-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and package unpacked Electron app
+        run: npm run package:dir
+
+      - name: Electron AFK smoke
+        run: npm run board:electron-smoke -- --package-path release/pkg/linux-unpacked
+
+      - name: Upload Electron smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: board-electron-smoke
+          path: ${{ runner.temp }}/minnow-board-release/logs/orchestrate-scenarios
+          if-no-files-found: warn
+          retention-days: 14

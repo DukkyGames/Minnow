@@ -584,13 +584,36 @@ export type BoardLogEventType =
   | 'merge_result'
   | 'worktree_allocated'
   | 'task_retry'
+  | 'nudge'
   | 'task_error'
   | 'task_quarantined'
   | 'tool_call'
   | 'terminal_run'
   | 'dev_server'
+  | 'phase_start'
+  | 'phase_end'
+  | 'slot_acquire'
+  | 'slot_release'
+  | 'hold_acquire'
+  | 'hold_release'
+  | 'hold_expiry'
+  | 'concurrency_observation'
+  | 'lifecycle_owner_set'
+  | 'lifecycle_owner_clear'
+  | 'board_terminal'
+  | 'planner_report'
+  | 'completion_notification'
+  | 'interaction_required'
   | 'final_test_started'
   | 'final_test_verdict';
+
+export type BoardExecutionPhase =
+  | 'build'
+  | 'test'
+  | 'fixer'
+  | 'merge'
+  | 'final_test'
+  | 'planner';
 
 export interface BoardLogEvent {
   id: string;
@@ -625,6 +648,26 @@ export interface BoardLogDetail {
   error?: string;
   summary?: string;
   failingTaskIds?: string[];
+  /** Durable correlation id for one phase invocation. */
+  phaseId?: string;
+  phase?: BoardExecutionPhase;
+  /** Monotonic task lifecycle generation; prevents stale owners finalizing a requeue. */
+  lifecycleRun?: number;
+  slotId?: string;
+  holdId?: string;
+  holdKind?: 'merge' | 'fixer' | 'handoff' | 'phase_rerun' | 'other';
+  ownerId?: string;
+  ownerKind?: 'chat' | 'run' | 'hold' | 'planner' | 'system';
+  activeSlots?: number;
+  activeHolds?: number;
+  activeTotal?: number;
+  concurrencyCap?: number;
+  durationMs?: number;
+  reason?: string;
+  terminalOutcome?: 'passed' | 'blocked' | 'stopped' | 'failed';
+  reportId?: string;
+  notificationId?: string;
+  interactionKind?: 'question' | 'approval' | 'confirmation' | 'mode_switch' | 'other';
 }
 
 /** Collapsible sidebar folder for chats in a workspace. */

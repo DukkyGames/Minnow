@@ -18,6 +18,7 @@ import type {
   BoardLogDetail,
   BoardLogEvent,
   BoardLogLevel,
+  BoardExecutionPhase,
   BoardTask,
   BoardTaskStatus,
   BoardWave,
@@ -48,6 +49,20 @@ export const BOARD_LOG_MAX = 100;
 const BOARD_LOG_PREVIEW_MAX = 200;
 
 let boardLogSeq = 0;
+
+const pendingBoardCompletionHooks = new Set<Promise<void>>();
+
+function trackBoardCompletionHook(promise: Promise<void>): void {
+  pendingBoardCompletionHooks.add(promise);
+  void promise.finally(() => pendingBoardCompletionHooks.delete(promise));
+}
+
+/** Wait until all fire-and-forget board completion hooks have settled. */
+export async function waitForBoardCompletionHooksForTests(): Promise<void> {
+  while (pendingBoardCompletionHooks.size > 0) {
+    await Promise.all([...pendingBoardCompletionHooks]);
+  }
+}
 
 /** Optional disk sink, set at boot (server/Electron); undefined in unit tests. */
 let boardLogDiskSink: ((groupId: string, e: BoardLogEvent) => void) | undefined;
@@ -304,11 +319,203 @@ export function logBoardReportNudge(
   max: number,
 ): void {
   appendBoardLog(group, {
+    // Keep the currently wired runtime shape until nudge producers are migrated
+    // together; the schema/checker also accept first-class `nudge` events.
     type: 'task_retry',
     level: 'warn',
     taskId,
     message: `${taskId}: ended without board_report — nudge ${attempt}/${max}`,
     detail: { attempt, attemptKind: 'nudge' },
+  });
+}
+
+/** First-class durable nudge event for producers migrated to the Phase-2 schema. */
+export function logBoardNudge(
+  group: ChatGroup,
+  taskId: string,
+  attempt: number,
+  reason: string,
+): void {
+  appendBoardLog(group, {
+    type: 'nudge',
+    level: 'warn',
+    taskId,
+    message: `${taskId}: nudge #${attempt} — ${truncateBoardLogPreview(reason, 120)}`,
+    detail: {
+      attempt,
+      attemptKind: 'nudge',
+      reason: truncateBoardLogPreview(reason),
+    },
+  });
+}
+
+type PhaseLogInput = {
+  phaseId: string;
+  phase: BoardExecutionPhase;
+  taskId?: string;
+  lifecycleRun?: number;
+  ownerId?: string;
+  reason?: string;
+};
+
+/** Emit a durable phase boundary. Runtime call sites are intentionally wired separately. */
+export function logBoardPhase(
+  group: ChatGroup,
+  boundary: 'start' | 'end',
+  input: PhaseLogInput & { durationMs?: number },
+): void {
+  appendBoardLog(group, {
+    type: boundary === 'start' ? 'phase_start' : 'phase_end',
+    level: 'info',
+    taskId: input.taskId,
+    message: `${input.taskId ? `${input.taskId}: ` : ''}${input.phase} phase ${boundary}ed`,
+    detail: input,
+  });
+}
+
+/** Emit slot ownership changes used to reconstruct effective concurrency. */
+export function logBoardSlot(
+  group: ChatGroup,
+  action: 'acquire' | 'release',
+  input: {
+    slotId: string;
+    taskId?: string;
+    phase?: BoardExecutionPhase;
+    lifecycleRun?: number;
+    ownerId?: string;
+    reason?: string;
+  },
+): void {
+  appendBoardLog(group, {
+    type: action === 'acquire' ? 'slot_acquire' : 'slot_release',
+    level: 'info',
+    taskId: input.taskId,
+    message: `${input.taskId ? `${input.taskId}: ` : ''}slot ${input.slotId} ${action}d`,
+    detail: input,
+  });
+}
+
+/** Emit pipeline-hold ownership changes, including TTL expiry. */
+export function logBoardHold(
+  group: ChatGroup,
+  action: 'acquire' | 'release' | 'expiry',
+  input: {
+    holdId: string;
+    taskId?: string;
+    holdKind?: NonNullable<BoardLogDetail['holdKind']>;
+    lifecycleRun?: number;
+    ownerId?: string;
+    reason?: string;
+  },
+): void {
+  appendBoardLog(group, {
+    type:
+      action === 'acquire'
+        ? 'hold_acquire'
+        : action === 'release'
+          ? 'hold_release'
+          : 'hold_expiry',
+    level: action === 'expiry' ? 'warn' : 'info',
+    taskId: input.taskId,
+    message: `${input.taskId ? `${input.taskId}: ` : ''}hold ${input.holdId} ${action}d`,
+    detail: input,
+  });
+}
+
+/** Record the scheduler's audited concurrency snapshot. */
+export function logBoardConcurrency(
+  group: ChatGroup,
+  input: {
+    activeSlots: number;
+    activeHolds: number;
+    activeTotal: number;
+    concurrencyCap: number;
+    reason?: string;
+  },
+): void {
+  appendBoardLog(group, {
+    type: 'concurrency_observation',
+    level: input.activeTotal > input.concurrencyCap ? 'error' : 'info',
+    message: `Concurrency ${input.activeTotal}/${input.concurrencyCap}`,
+    detail: input,
+  });
+}
+
+/** Record the sole owner allowed to finalize one task lifecycle. */
+export function logBoardLifecycleOwner(
+  group: ChatGroup,
+  action: 'set' | 'clear',
+  input: {
+    taskId: string;
+    lifecycleRun: number;
+    ownerId: string;
+    ownerKind: NonNullable<BoardLogDetail['ownerKind']>;
+    reason?: string;
+  },
+): void {
+  appendBoardLog(group, {
+    type: action === 'set' ? 'lifecycle_owner_set' : 'lifecycle_owner_clear',
+    level: 'info',
+    taskId: input.taskId,
+    message: `${input.taskId}: lifecycle ${input.lifecycleRun} owner ${action} (${input.ownerId})`,
+    detail: input,
+  });
+}
+
+/** Emit one board-level terminal decision. */
+export function logBoardTerminal(
+  group: ChatGroup,
+  outcome: NonNullable<BoardLogDetail['terminalOutcome']>,
+  reason?: string,
+): void {
+  if (group.orchestrateBoard?.log?.some((event) => event.type === 'board_terminal')) return;
+  appendBoardLog(group, {
+    type: 'board_terminal',
+    level: outcome === 'passed' ? 'info' : outcome === 'stopped' ? 'warn' : 'error',
+    message: `Board terminal: ${outcome}`,
+    detail: { terminalOutcome: outcome, reason },
+  });
+}
+
+/** Emit an idempotency-correlated planner report. */
+export function logPlannerReport(group: ChatGroup, reportId: string, summary?: string): void {
+  if (group.orchestrateBoard?.log?.some((event) => event.type === 'planner_report')) return;
+  appendBoardLog(group, {
+    type: 'planner_report',
+    level: 'info',
+    message: 'Planner report emitted',
+    detail: { reportId, summary },
+  });
+}
+
+/** Emit an idempotency-correlated completion notification. */
+export function logCompletionNotification(
+  group: ChatGroup,
+  notificationId: string,
+  reason?: string,
+): void {
+  if (group.orchestrateBoard?.log?.some((event) => event.type === 'completion_notification')) return;
+  appendBoardLog(group, {
+    type: 'completion_notification',
+    level: 'info',
+    message: 'Completion notification emitted',
+    detail: { notificationId, reason },
+  });
+}
+
+/** Record any path that would require user input (a strict AFK violation). */
+export function logInteractionRequired(
+  group: ChatGroup,
+  kind: NonNullable<BoardLogDetail['interactionKind']>,
+  reason: string,
+  taskId?: string,
+): void {
+  appendBoardLog(group, {
+    type: 'interaction_required',
+    level: 'warn',
+    taskId,
+    message: `${taskId ? `${taskId}: ` : ''}interaction required (${kind})`,
+    detail: { interactionKind: kind, reason },
   });
 }
 
@@ -622,9 +829,12 @@ export function quarantineTaskAndDependents(
   }
 
   if (plannerChat && visited.size > 0) {
-    void import('./orchestrate-board-actions.ts')
-      .then((mod) => mod.onTasksQuarantined(group, [...visited], plannerChat))
+    const completionHook = import('./orchestrate-board-actions.ts')
+      .then((mod) => {
+        mod.onTasksQuarantined(group, [...visited], plannerChat);
+      })
       .catch((err) => reportBackgroundError('quarantine-completion-hook', err));
+    trackBoardCompletionHook(completionHook);
   }
 }
 
@@ -1019,9 +1229,10 @@ export function updateTask(
     (patch.status === 'complete' || patch.status === 'quarantined') &&
     isOrchestratePlanComplete(board)
   ) {
-    void import('./orchestrate-board-actions.ts')
+    const completionHook = import('./orchestrate-board-actions.ts')
       .then((mod) => mod.syncBoardRunCompletion(group, plannerChat))
       .catch((err) => reportBackgroundError('update-task-completion-hook', err));
+    trackBoardCompletionHook(completionHook);
   }
 
   return task;

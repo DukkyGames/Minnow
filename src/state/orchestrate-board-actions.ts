@@ -29,7 +29,13 @@ import {
   resolveSelfHealMaxRounds,
   resolveMaxEnvFixAttempts,
 } from '../config/autopilot-meta.ts';
-import { classifyTaskFailure, extractChatFailureText, isTransientContextLengthError, resolveTaskChatStreamFailure, type FailureCategory } from './orchestrate-failure-classify.ts';
+import {
+  classifyTaskFailure,
+  extractChatFailureText,
+  isTransientContextLengthError,
+  resolveTaskChatStreamFailure,
+  type FailureCategory,
+} from './orchestrate-failure-classify.ts';
 import { runSelfHeal, resolutionStepsForCategory, type SelfHealDeps } from './orchestrate-self-heal.ts';
 import { isLocalServerAvailable } from '../tools/config.ts';
 import {
@@ -48,7 +54,18 @@ import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
-import type { BoardReport, BoardTask, BoardTaskStatus, Chat, ChatGroup, ChatStopReason, OrchestrateBoardState, SessionState, UnresolvedIssue } from '../types.ts';
+import type {
+  BoardExecutionPhase,
+  BoardReport,
+  BoardTask,
+  BoardTaskStatus,
+  Chat,
+  ChatGroup,
+  ChatStopReason,
+  OrchestrateBoardState,
+  SessionState,
+  UnresolvedIssue,
+} from '../types.ts';
 import {
   assignChatToGroup,
   getBoardGroupForChat,
@@ -56,7 +73,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
 import {
   acquirePipelineHold,
   heldTaskIdsForOccupancy,
@@ -67,6 +84,7 @@ import {
   releasePipelineHoldsForTask,
   setPipelineHoldMaxMsForTests,
   sweepExpiredPipelineHolds,
+  type PipelineHoldReason,
 } from './orchestrate-pipeline-holds.ts';
 import {
   isIsolationActive,
@@ -358,13 +376,179 @@ export function setBoardChatTurnRunner(fn: BoardChatTurnRunner | null): void {
 
 /** Chat ids holding a launch slot until runChatTurn registers streaming/setup. */
 const reservedLaunchChatIds = new Set<string>();
+const pendingChatContinuations = new Map<string, () => Promise<void>>();
 
-function reserveLaunchSlot(chatId: string): void {
+type LaunchAudit = {
+  group: ChatGroup;
+  slotId: string;
+  phaseId: string;
+  phase: BoardExecutionPhase;
+  taskId?: string;
+  lifecycleRun?: number;
+  ownerId: string;
+  startedAt: number;
+};
+
+const launchAudits = new Map<string, LaunchAudit>();
+const auditedHoldsByBoard = new WeakMap<OrchestrateBoardState, Map<string, string>>();
+let durableRuntimeSeq = 0;
+
+function logConcurrencySnapshot(
+  group: ChatGroup,
+  reason: string,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const slots = [...launchAudits.values()].filter((audit) => audit.group === group);
+  const holds = auditedHoldsByBoard.get(board) ?? new Map<string, string>();
+  // A handoff can briefly own both a pipeline hold and its replacement chat.
+  // That is one effective task occupant, so wait for the release edge before
+  // writing a reconstructible raw-count observation.
+  if (
+    [...holds.values()].some((taskId) =>
+      slots.some((slot) => slot.taskId && slot.taskId === taskId),
+    )
+  ) {
+    return;
+  }
+  const activeSlots = slots.length;
+  const activeHolds = holds.size;
+  logBoardConcurrency(group, {
+    activeSlots,
+    activeHolds,
+    activeTotal: activeSlots + activeHolds,
+    concurrencyCap: maxConcurrent(board),
+    reason,
+  });
+}
+
+function reserveLaunchSlot(
+  chatId: string,
+  group?: ChatGroup,
+  phase?: BoardExecutionPhase,
+  taskId?: string,
+): void {
+  if (reservedLaunchChatIds.has(chatId)) return;
   reservedLaunchChatIds.add(chatId);
+  if (!group?.orchestrateBoard || !phase) return;
+  const task = taskId
+    ? group.orchestrateBoard.tasks.find((candidate) => candidate.id === taskId)
+    : undefined;
+  const lifecycleRun = task ? task.lifecycleRun ?? 0 : undefined;
+  const seq = ++durableRuntimeSeq;
+  const audit: LaunchAudit = {
+    group,
+    slotId: `slot:${chatId}:${seq}`,
+    phaseId: `phase:${phase}:${chatId}:${seq}`,
+    phase,
+    taskId,
+    lifecycleRun,
+    ownerId: chatId,
+    startedAt: Date.now(),
+  };
+  launchAudits.set(chatId, audit);
+  logBoardPhase(group, 'start', {
+    phaseId: audit.phaseId,
+    phase: audit.phase,
+    taskId: audit.taskId,
+    lifecycleRun: audit.lifecycleRun,
+    ownerId: audit.ownerId,
+  });
+  logBoardSlot(group, 'acquire', {
+    slotId: audit.slotId,
+    phase: audit.phase,
+    taskId: audit.taskId,
+    lifecycleRun: audit.lifecycleRun,
+    ownerId: audit.ownerId,
+  });
+  if (taskId && lifecycleRun !== undefined) {
+    logBoardLifecycleOwner(group, 'set', {
+      taskId,
+      lifecycleRun,
+      ownerId: chatId,
+      ownerKind: 'chat',
+      reason: `${phase} phase`,
+    });
+  }
+  logConcurrencySnapshot(group, `slot ${audit.slotId} acquired`);
 }
 
 function releaseLaunchSlot(chatId: string): void {
+  if (!reservedLaunchChatIds.has(chatId)) return;
   reservedLaunchChatIds.delete(chatId);
+  const audit = launchAudits.get(chatId);
+  if (!audit) return;
+  launchAudits.delete(chatId);
+  logBoardSlot(audit.group, 'release', {
+    slotId: audit.slotId,
+    phase: audit.phase,
+    taskId: audit.taskId,
+    lifecycleRun: audit.lifecycleRun,
+    ownerId: audit.ownerId,
+  });
+  logBoardPhase(audit.group, 'end', {
+    phaseId: audit.phaseId,
+    phase: audit.phase,
+    taskId: audit.taskId,
+    lifecycleRun: audit.lifecycleRun,
+    ownerId: audit.ownerId,
+    durationMs: Math.max(0, Date.now() - audit.startedAt),
+  });
+  if (audit.taskId && audit.lifecycleRun !== undefined) {
+    logBoardLifecycleOwner(audit.group, 'clear', {
+      taskId: audit.taskId,
+      lifecycleRun: audit.lifecycleRun,
+      ownerId: audit.ownerId,
+      ownerKind: 'chat',
+      reason: `${audit.phase} phase ended`,
+    });
+  }
+  logConcurrencySnapshot(audit.group, `slot ${audit.slotId} released`);
+}
+
+function holdKind(reason: PipelineHoldReason): 'merge' | 'fixer' | 'handoff' {
+  if (reason === 'merge') return 'merge';
+  if (reason === 'merge-fixer-start') return 'handoff';
+  return 'fixer';
+}
+
+function acquireBoardPipelineHold(
+  group: ChatGroup,
+  taskId: string,
+  reason: PipelineHoldReason,
+) {
+  const task = group.orchestrateBoard?.tasks.find((candidate) => candidate.id === taskId);
+  return acquirePipelineHold(group.orchestrateBoard, taskId, reason, {
+    onEvent(action, hold, activeHoldCount) {
+      let auditedHolds = auditedHoldsByBoard.get(hold.board);
+      if (!auditedHolds) {
+        auditedHolds = new Map();
+        auditedHoldsByBoard.set(hold.board, auditedHolds);
+      }
+      if (action === 'acquire') {
+        auditedHolds.set(hold.id, hold.taskId);
+      } else {
+        auditedHolds.delete(hold.id);
+      }
+      logBoardHold(group, action, {
+        holdId: hold.id,
+        taskId: hold.taskId,
+        holdKind: holdKind(hold.reason),
+        lifecycleRun: task?.lifecycleRun ?? 0,
+        ownerId: hold.id,
+        reason: hold.reason,
+      });
+      if (auditedHolds.size !== activeHoldCount) {
+        reportBackgroundError(
+          'pipeline-hold-audit-count',
+          new Error(
+            `Pipeline hold audit count ${auditedHolds.size} != registry ${activeHoldCount}`,
+          ),
+        );
+      }
+      logConcurrencySnapshot(group, `hold ${hold.id} ${action}`);
+    },
+  });
 }
 
 /** Release a task-chat launch slot, then re-drain the board now that capacity is free. */
@@ -378,9 +562,29 @@ function releaseLaunchSlotAndDrive(
   if (chat) {
     teardownBoardTaskChatResources(chat, sessionState?.groups);
   }
+  const continuation = pendingChatContinuations.get(chatId);
+  if (continuation) {
+    pendingChatContinuations.delete(chatId);
+    void continuation()
+      .catch((err) => reportBackgroundError('board-chat-continuation', err))
+      .finally(() => {
+        void drainTaskQueue(group, plannerChat).catch((err) =>
+          reportBackgroundError('drain-after-continuation', err),
+        );
+      });
+    return;
+  }
   void drainTaskQueue(group, plannerChat).catch((err) =>
     reportBackgroundError('drain-after-slot-release', err),
   );
+}
+
+function runAfterChatRelease(chatId: string, continuation: () => Promise<void>): void {
+  if (isTaskChatActive(chatId)) {
+    pendingChatContinuations.set(chatId, continuation);
+    return;
+  }
+  void continuation().catch((err) => reportBackgroundError('board-chat-continuation', err));
 }
 
 function isLaunchReserved(chatId: string): boolean {
@@ -418,6 +622,8 @@ export const MISSING_REPORT_NUDGE_CAP = 2;
  * new phase run is launched (see `getOrCreateBoardChat`).
  */
 const missingReportNudges = new Map<string, number>();
+const contextRetryAssistantTurns = new WeakMap<Chat, number>();
+const taskTestFinalizeInFlight = new Set<string>();
 
 /** Test-only: capture stall-path nudge/self-heal calls from heartbeat supervision. */
 let taskChatNudgeCallsForTests: string[] | null = null;
@@ -763,67 +969,15 @@ function recordBoardQuarantineIssue(
 function tryNudgeForMissingFinalReport(
   group: ChatGroup,
   plannerChat: Chat,
-  finalChat: Chat,
+  chat: Chat,
 ): boolean {
-  if (!isBoardRunning(group)) return false;
-  if (resolveTaskChatStreamOutcome(finalChat) !== 'completed') return false;
-
-  const chatId = finalChat.id;
-  const sent = missingReportNudges.get(chatId) ?? 0;
+  if (!isBoardRunning(group) || resolveTaskChatStreamOutcome(chat) !== 'completed') return false;
+  const sent = missingReportNudges.get(chat.id) ?? 0;
   if (sent >= MISSING_REPORT_NUDGE_CAP) return false;
-
   const attempt = sent + 1;
-  missingReportNudges.set(chatId, attempt);
-  void runFinalIntegrationTestNudge(group, plannerChat, finalChat).catch((err) =>
-    reportBackgroundError('missing-final-report-nudge', err),
-  );
+  missingReportNudges.set(chat.id, attempt);
+  runAfterChatRelease(chat.id, () => runFinalTestReportNudge(group, plannerChat, chat));
   return true;
-}
-
-/** Continue a final integration test chat after a missing-verdict nudge. */
-async function runFinalIntegrationTestNudge(
-  group: ChatGroup,
-  plannerChat: Chat,
-  finalChat: Chat,
-): Promise<void> {
-  const board = group.orchestrateBoard;
-  if (!board?.finalTest || board.finalTest.status !== 'in_progress') return;
-  if (isTaskChatActive(finalChat.id)) return;
-  if (skipBackgroundBoardChatLaunch()) return;
-
-  ensureStreamEndSubscription();
-  const { modelId } = resolvePlannerModelBinding(plannerChat);
-  if (!modelId) return;
-
-  reserveLaunchSlot(finalChat.id);
-  try {
-    await refreshSidebarAfterLaunch();
-    const nudge = [
-      'Continue the final integration test where you left off.',
-      'Your last turn ended without a VERDICT marker or board_report.',
-      'If verification is complete, report pass or fail now; otherwise finish checking first.',
-    ].join('\n');
-    refreshHeartbeatThresholds();
-    startTaskChatSupervision(finalChat.id);
-
-    void boardChatTurnRunner({
-      chat: finalChat,
-      pushUser: true,
-      rawText: nudge,
-      userText: nudge,
-      displayText: nudge,
-      historyContent: nudge,
-      skillId: null,
-      validAttachments: [],
-      titleSeed: 'Final integration test',
-      ownsGlobalStreaming: true,
-    }).catch(() => {
-      /* surfaced in chat history */
-    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id));
-  } catch (err) {
-    releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id);
-    throw err;
-  }
 }
 
 /**
@@ -835,7 +989,10 @@ export function finalizeBoardTaskOnStreamEnd(
   task: BoardTask,
   plannerChat: Chat,
 ): void {
-  if (task.status !== 'in_progress') return;
+  const currentTask =
+    group.orchestrateBoard?.tasks.find((candidate) => candidate.id === task.id) ?? task;
+  if (currentTask.status !== 'in_progress') return;
+  task = currentTask;
 
   const chatId = task.chatId?.trim();
   if (!chatId) return;
@@ -1232,6 +1389,10 @@ function ensureStreamEndSubscription(): void {
   if (!streamEndSubscribed) {
     streamEndSubscribed = true;
     subscribeChatStreamEnd((endedChatId) => {
+      // Close durable ownership before any stream-end finalizer can make the
+      // board terminal. The runner's `.finally` release remains an idempotent
+      // fallback for setup failures that never emit stream-end.
+      releaseLaunchSlot(endedChatId);
       if (stallStoppedChatIds.delete(endedChatId)) {
         // Stall-kill stream-end: keep the restart counter so the next stall
         // escalates (nudge → self-heal → cap) instead of nudging forever.
@@ -1920,7 +2081,7 @@ async function restartStallNudgeFallback(
   priorError?: string,
   stalledChatId?: string,
 ): Promise<void> {
-  const hold = acquirePipelineHold(group.orchestrateBoard, task.id, 'merge');
+  const hold = acquireBoardPipelineHold(group, task.id, 'merge');
   try {
     const stalled = stalledChatId?.trim();
     if (!stalled || stalled === task.chatId?.trim()) {
@@ -2020,7 +2181,13 @@ export async function runTaskChatNudge(
 
   task = board.tasks.find((t) => t.id === taskId) ?? task;
 
-  reserveLaunchSlot(taskChat.id);
+  const nudgePhase: BoardExecutionPhase =
+    targetChatId === task.fixerChatId?.trim()
+      ? 'fixer'
+      : targetChatId === task.testChatId?.trim()
+        ? 'test'
+        : 'build';
+  reserveLaunchSlot(taskChat.id, group, nudgePhase, task.id);
   try {
     await refreshSidebarAfterLaunch();
 
@@ -2417,8 +2584,29 @@ function enqueueMergeCompletedTaskWorktree(
   plannerChat: Chat,
 ): Promise<MergeTaskWorktreeResult> {
   return enqueueBoardMerge(group.id, async () => {
-    await waitForNoActiveFixer(group, plannerChat);
-    return mergeCompletedTaskWorktree(group, task, plannerChat);
+    const startedAt = Date.now();
+    const phaseId = `phase:merge:${task.id}:${++durableRuntimeSeq}`;
+    const lifecycleRun = task.lifecycleRun ?? 0;
+    logBoardPhase(group, 'start', {
+      phaseId,
+      phase: 'merge',
+      taskId: task.id,
+      lifecycleRun,
+      ownerId: 'merge-queue',
+    });
+    try {
+      await waitForNoActiveFixer(group, plannerChat);
+      return await mergeCompletedTaskWorktree(group, task, plannerChat);
+    } finally {
+      logBoardPhase(group, 'end', {
+        phaseId,
+        phase: 'merge',
+        taskId: task.id,
+        lifecycleRun,
+        ownerId: 'merge-queue',
+        durationMs: Math.max(0, Date.now() - startedAt),
+      });
+    }
   });
 }
 
@@ -2493,7 +2681,7 @@ export async function startMergeConflictFixer(
   const board = group.orchestrateBoard;
   if (!board?.integrationBranch) return;
 
-  const hold = acquirePipelineHold(board, task.id, 'merge-fixer-start');
+  const hold = acquireBoardPipelineHold(group, task.id, 'merge-fixer-start');
   try {
   const boardId = group.id;
 
@@ -2614,7 +2802,7 @@ export async function startMergeConflictFixer(
   if (skipBackgroundBoardChatLaunch()) return;
 
   ensureStreamEndSubscription();
-  reserveLaunchSlot(fixerChat.id);
+  reserveLaunchSlot(fixerChat.id, group, 'fixer', task.id);
   try {
     const seed = buildMergeFixerSeedMessage(task, effectiveConflictedFiles, seedOptions);
     // Part 1: Supervise the fixer chat like every other board chat starter.
@@ -2676,7 +2864,7 @@ async function finalizeMergeFixerOnStreamEnd(
   if (task.status !== 'merging') return;
   if (fixerFinalizeInFlight.has(task.id)) return;
   fixerFinalizeInFlight.add(task.id);
-  const hold = acquirePipelineHold(group.orchestrateBoard, task.id, 'merge-fixer-finalize');
+  const hold = acquireBoardPipelineHold(group, task.id, 'merge-fixer-finalize');
   try {
     const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
 
@@ -2993,7 +3181,7 @@ export async function startEnvFixer(
   if (skipBackgroundBoardChatLaunch()) return;
 
   ensureStreamEndSubscription();
-  reserveLaunchSlot(fixerChat.id);
+  reserveLaunchSlot(fixerChat.id, group, 'fixer', task.id);
   try {
     const seed = buildEnvFixerSeedMessage(task, phase, summary);
     refreshHeartbeatThresholds();
@@ -3033,7 +3221,7 @@ async function finalizeEnvFixerOnStreamEnd(
   if (task.fixerKind !== 'env') return;
   if (fixerFinalizeInFlight.has(task.id)) return;
   fixerFinalizeInFlight.add(task.id);
-  const hold = acquirePipelineHold(group.orchestrateBoard, task.id, 'env-fixer-finalize');
+  const hold = acquireBoardPipelineHold(group, task.id, 'env-fixer-finalize');
   try {
     const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
 
@@ -3108,7 +3296,7 @@ async function finalizeEnvFixerOnStreamEnd(
             taskId: fresh.id,
             taskChatField: 'testChatId',
           });
-          reserveLaunchSlot(testChat.id);
+          reserveLaunchSlot(testChat.id, group, 'test', fresh.id);
           await startTaskTesting(group, fresh.id, plannerChat, {
             enqueueAtFront: true,
             allowPreReservedTestChat: true,
@@ -3271,7 +3459,7 @@ export async function startTask(
     taskChatField: 'chatId',
   });
 
-  reserveLaunchSlot(taskChat.id);
+  reserveLaunchSlot(taskChat.id, group, 'build', task.id);
   try {
     await refreshSidebarAfterLaunch();
 
@@ -3390,7 +3578,7 @@ export async function startTaskTesting(
     plannerChat,
   );
 
-  reserveLaunchSlot(testChat.id);
+  reserveLaunchSlot(testChat.id, group, 'test', task.id);
   try {
     await refreshSidebarAfterLaunch();
 
@@ -3564,8 +3752,23 @@ export async function finalizeTaskTestingOnStreamEnd(
   task: BoardTask,
   plannerChat: Chat,
 ): Promise<void> {
-  if (task.status !== 'testing') return;
+  const finalizeKey = `${group.id}:${task.id}`;
+  if (taskTestFinalizeInFlight.has(finalizeKey)) return;
+  taskTestFinalizeInFlight.add(finalizeKey);
+  try {
+    await finalizeTaskTestingOnStreamEndImpl(group, task, plannerChat);
+  } finally {
+    taskTestFinalizeInFlight.delete(finalizeKey);
+  }
+}
+
+async function finalizeTaskTestingOnStreamEndImpl(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
   const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+  if (fresh.status !== 'testing') return;
 
   // MIN-304: a tester aborted by a user Stop / board pause has no verdict and
   // must not be routed through self-heal as a test failure. Clear the linkage
@@ -3581,6 +3784,37 @@ export async function finalizeTaskTestingOnStreamEnd(
     if (neutralStop) {
       updateTask(group, fresh.id, { testChatId: undefined }, plannerChat);
       teardownBoardTaskChatResources(endedTestChat, sessionState?.groups);
+      return;
+    }
+  }
+
+  if (
+    endedTestChat &&
+    resolveTaskChatStreamOutcome(endedTestChat) === 'failed' &&
+    isTransientContextLengthError(extractChatFailureText(endedTestChat))
+  ) {
+    const assistantTurns = countChatAssistantTurns(endedTestChat);
+    if (contextRetryAssistantTurns.get(endedTestChat) === assistantTurns) return;
+    contextRetryAssistantTurns.set(endedTestChat, assistantTurns);
+    const attempts = (fresh.testAttempts ?? 0) + 1;
+    if (attempts < resolveMaxTaskTestAttempts()) {
+      const summary = 'Tester exceeded the model context window';
+      logTaskRetry(group, fresh.id, 'test', attempts);
+      updateTask(
+        group,
+        fresh.id,
+        {
+          ...BOARD_REPORT_RESET_PATCH,
+          testAttempts: attempts,
+          testSummary: summary,
+        },
+        plannerChat,
+      );
+      runAfterChatRelease(endedTestChat.id, () =>
+        runTaskChatNudge(group, fresh.id, plannerChat, summary, {
+          chatId: endedTestChat.id,
+        }),
+      );
       return;
     }
   }
@@ -3638,7 +3872,7 @@ export async function finalizeTaskTestingOnStreamEnd(
 
   if (outcome === 'pass') {
     updateTask(group, fresh.id, { error: undefined }, plannerChat);
-    const hold = acquirePipelineHold(group.orchestrateBoard, fresh.id, 'merge');
+    const hold = acquireBoardPipelineHold(group, fresh.id, 'merge');
     try {
       const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
       if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
@@ -3842,7 +4076,7 @@ export async function startFinalIntegrationTest(
   scheduleSaveSessions();
   emitBoardChange(group.id);
 
-  reserveLaunchSlot(finalChat.id);
+  reserveLaunchSlot(finalChat.id, group, 'final_test');
   try {
     await refreshSidebarAfterLaunch();
 
@@ -3933,6 +4167,47 @@ export function applyFinalTestFailureReopens(
     if (!task) continue;
     updateTask(group, taskId, { testAttempts: 1, testSummary: summary }, plannerChat);
     moveTaskStatus(group, taskId, 'in_progress', plannerChat);
+  }
+}
+
+async function runFinalTestReportNudge(
+  group: ChatGroup,
+  plannerChat: Chat,
+  chat: Chat,
+): Promise<void> {
+  if (isTaskChatActive(chat.id)) {
+    runAfterChatRelease(chat.id, () => runFinalTestReportNudge(group, plannerChat, chat));
+    return;
+  }
+  if (skipBackgroundBoardChatLaunch()) return;
+
+  reserveLaunchSlot(chat.id, group, 'final_test');
+  try {
+    await refreshSidebarAfterLaunch();
+    const nudge = [
+      'Continue the final integration test where you left off.',
+      'Your last turn ended without an explicit VERDICT, so the board cannot advance.',
+      'Finish any remaining verification, then end with exactly `VERDICT: pass` or `VERDICT: fail`.',
+    ].join(' ');
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(chat.id);
+    void boardChatTurnRunner({
+      chat,
+      pushUser: true,
+      rawText: nudge,
+      userText: nudge,
+      displayText: nudge,
+      historyContent: nudge,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: 'Final integration test',
+      ownsGlobalStreaming: true,
+    }).catch((err) => {
+      reportBackgroundError('final-test-report-nudge', err);
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, chat.id));
+  } catch (err) {
+    releaseLaunchSlotAndDrive(group, plannerChat, chat.id);
+    throw err;
   }
 }
 

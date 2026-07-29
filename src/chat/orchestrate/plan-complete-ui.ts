@@ -14,6 +14,11 @@ import { isChatStreaming, subscribeChatStreamEnd } from '../../chat/streaming-st
 import { isDomAvailable } from '../../lib/dom-available.ts';
 import { emitBoardChange } from '../../state/orchestrate-board-events.ts';
 import {
+  logBoardTerminal,
+  logCompletionNotification,
+  logPlannerReport,
+} from '../../state/orchestrate-board-store.ts';
+import {
   findGroupById,
   getPlannerChatForGroup,
 } from '../../state/chat-groups.ts';
@@ -147,6 +152,24 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
   } else if (!board.finishReport.includes('## Completed tasks')) {
     board.finishReport = buildDeterministicFinishReport(planner, board);
   }
+  const allQuarantined =
+    board.tasks.length > 0 &&
+    board.tasks.every((t) => t.status === 'quarantined');
+  logBoardTerminal(
+    group,
+    allQuarantined ? 'blocked' : 'passed',
+    allQuarantined ? 'all tasks quarantined' : 'final integration passed',
+  );
+  logPlannerReport(
+    group,
+    `${group.id}:completion-report`,
+    allQuarantined ? 'Plan blocked' : 'Plan complete',
+  );
+  logCompletionNotification(
+    group,
+    `${group.id}:completion-notification`,
+    allQuarantined ? 'blocked' : 'passed',
+  );
   void enrichFinishReportWithRecommendations(groupId, planner, board);
   emitBoardChange(groupId);
 
@@ -163,9 +186,6 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
       renderChatFromHistory(active);
     }
   }
-  const allQuarantined =
-    board.tasks.length > 0 &&
-    board.tasks.every((t) => t.status === 'quarantined');
   showPlanCompleteToast(
     allQuarantined ? 'Orchestrate plan blocked' : 'Orchestrate plan complete',
   );
