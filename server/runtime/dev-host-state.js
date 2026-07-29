@@ -30,6 +30,18 @@ export function writeDevHostState(info) {
   fs.writeFileSync(statePath(), `${JSON.stringify(payload)}\n`, 'utf8');
 }
 
+/** Whether the process that wrote dev-host.json is still running. */
+export function isDevHostProcessAlive(state) {
+  const pid = Number(state?.pid);
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** @returns {{ pid: number, port: number, localUrl: string, ts: number } | null} */
 export function readDevHostState() {
   try {

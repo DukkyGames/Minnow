@@ -158,4 +158,22 @@ describe('incomplete-tool-batch', () => {
     assert.ok(findIncompleteToolBatchAtTail(chat));
     assert.equal(chatAwaitingUserInputTool(chat), false);
   });
+
+  test('chatAwaitingUserInputTool is false when history is not loaded', () => {
+    const chat = makeChat([
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'call_q',
+            type: 'function',
+            function: { name: 'ask_question', arguments: '{}' },
+          },
+        ],
+      },
+    ]);
+    chat.historyLoaded = false;
+    assert.equal(chatAwaitingUserInputTool(chat), false);
+  });
 });
