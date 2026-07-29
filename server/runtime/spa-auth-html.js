@@ -27,7 +27,9 @@ export function isHtmlNavigationRequest(req) {
   const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
   if (isNonSpaAssetPath(pathname)) return false;
   const accept = req.headers.accept ?? '';
-  return accept.includes('text/html');
+  if (accept.includes('text/html')) return true;
+  const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
+  return !lastSegment.includes('.');
 }
 
 /** Inject the host credential only when the request Host is loopback. */

@@ -209,7 +209,7 @@ function copyChatFieldsWithoutLazyHistory(chat: Chat, includeHistory: boolean): 
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(chat)) {
     if (omit.has(key)) continue;
-    out[key] = (chat as Record<string, unknown>)[key];
+    out[key] = (chat as unknown as Record<string, unknown>)[key];
   }
   return out;
 }
@@ -313,7 +313,7 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
  * Omits `history` so the server preserves existing message rows instead of syncing [].
  */
 export function chatForSessionsWire(chat: Chat): Chat {
-  return copyChatFieldsWithoutLazyHistory(chat, chat.historyLoaded !== false) as Chat;
+  return copyChatFieldsWithoutLazyHistory(chat, chat.historyLoaded !== false) as unknown as Chat;
 }
 
 /** Clone session state for wire I/O, stripping unloaded chat histories. */
