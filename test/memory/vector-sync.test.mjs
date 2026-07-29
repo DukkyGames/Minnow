@@ -15,11 +15,13 @@ import {
   deleteEntry,
   loadMemoryConfig,
 } from '../../server/memory/store.js';
-import { getVectorCount, upsertEntryVector } from '../../server/memory/vector-store.js';
+import { getVectorCount, upsertEntryVector, clearVectorStore } from '../../server/memory/vector-store.js';
 import { syncEntryVector } from '../../server/memory/vector-sync.js';
+import { createPage } from '../../server/brain/store.js';
 
 const FIXTURE_ID = '33333333-3333-3333-3333-333333333333';
 const FIXTURE_ID_B = '44444444-4444-4444-4444-444444444444';
+const FIXTURE_ID_DELETE = '55555555-5555-5555-5555-555555555555';
 
 let homeDir;
 
@@ -106,20 +108,23 @@ describe('memory vector sync', () => {
   });
 
   test('deleteEntry removes vector sidecar row', async () => {
-    await createEntry({
-      id: FIXTURE_ID,
+    await clearVectorStore();
+    await createPage({
+      relPath: 'facts/vector-delete-fixture.md',
+      id: FIXTURE_ID_DELETE,
       title: 'Vector delete fixture',
       body: 'Body for vector delete test.',
       tags: ['test'],
+      skipVectorSync: true,
     });
-    await upsertEntryVector(FIXTURE_ID, [1, 0, 0], {
+    await upsertEntryVector(FIXTURE_ID_DELETE, [1, 0, 0], {
       model: 'fixture-model',
       backend: 'local',
       dim: 3,
     });
     assert.equal(await getVectorCount(), 1);
 
-    const ok = await deleteEntry(FIXTURE_ID);
+    const ok = await deleteEntry(FIXTURE_ID_DELETE);
     assert.equal(ok, true);
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(await getVectorCount(), 0);
