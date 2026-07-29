@@ -93,17 +93,22 @@ export function estimateApiMessagesTokens(messages: ApiMessage[]): number {
   return total;
 }
 
-export function agentContextBudgetFromWorkAgent(agent: {
-  maxInputTokens?: number | null;
-  contextEnforcementPolicy?: ContextEnforcementPolicy | null;
-  minRecentTurns?: number;
-  summaryReserveTokens?: number;
-  archive?: ArchiveConfig;
-}): AgentContextBudgetConfig {
+export function agentContextBudgetFromWorkAgent(
+  agent: {
+    maxInputTokens?: number | null;
+    contextEnforcementPolicy?: ContextEnforcementPolicy | null;
+    minRecentTurns?: number;
+    summaryReserveTokens?: number;
+    archive?: ArchiveConfig;
+  },
+  resolvedPolicy?: ContextEnforcementPolicy,
+): AgentContextBudgetConfig {
   return {
     maxInputTokens: normalizePositiveInt(agent.maxInputTokens ?? null),
     enforcementPolicy:
-      agent.contextEnforcementPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+      resolvedPolicy ??
+      agent.contextEnforcementPolicy ??
+      DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
     minRecentTurns: agent.minRecentTurns,
     summaryReserveTokens: agent.summaryReserveTokens,
     archive: agent.archive,
@@ -112,8 +117,9 @@ export function agentContextBudgetFromWorkAgent(agent: {
 
 export function agentContextBudgetFromSubAgentType(
   type: Parameters<typeof agentContextBudgetFromWorkAgent>[0],
+  resolvedPolicy?: ContextEnforcementPolicy,
 ): AgentContextBudgetConfig {
-  return agentContextBudgetFromWorkAgent(type);
+  return agentContextBudgetFromWorkAgent(type, resolvedPolicy);
 }
 
 export function resolveContextBudget(params: {
@@ -155,16 +161,20 @@ function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnSlice[] 
   let i = systemEnd;
   while (i < messages.length) {
     if (messages[i].role !== 'user') {
-      turns.push({ start: i, end: i + 1 });
-      i += 1;
+      const end = unitEndAt(messages, i);
+      turns.push({ start: i, end });
+      i = end;
       continue;
     }
-    const start = i;
+    // Keep each user line separate so a single seed does not swallow an entire
+    // tool loop (orchestrate board tasks, sub-agents, headless runs).
+    turns.push({ start: i, end: i + 1 });
     i += 1;
     while (i < messages.length && messages[i].role !== 'user') {
-      i += 1;
+      const end = unitEndAt(messages, i);
+      turns.push({ start: i, end });
+      i = end;
     }
-    turns.push({ start, end: i });
   }
   return turns;
 }

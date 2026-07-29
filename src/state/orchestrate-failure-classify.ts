@@ -115,12 +115,14 @@ const STALL_MARKERS: string[] = [
   'Could not complete this reply',
 ];
 
-const CONTEXT_WINDOW_MARKERS: string[] = [
+/** Provider copy for a full context window — transient, retriable as code (not stall). */
+const CONTEXT_LENGTH_MARKERS: string[] = [
   'context length exceeded',
-  'context_length_exceeded',
   'context limit has been reached',
   'maximum context length',
+  'context_length_exceeded',
   'exceed context window',
+  'requested tokens',
 ];
 
 function matchesAny(text: string, markers: string[]): boolean {
@@ -128,7 +130,12 @@ function matchesAny(text: string, markers: string[]): boolean {
   return markers.some((m) => lower.includes(m.toLowerCase()));
 }
 
-function extractChatText(chat: Chat): string {
+/** True when the transcript shows a context-window overflow (retriable, not a stall). */
+export function isTransientContextLengthError(text: string): boolean {
+  return matchesAny(text, CONTEXT_LENGTH_MARKERS);
+}
+
+export function extractChatText(chat: Chat): string {
   const parts: string[] = [];
   for (const msg of chat.history) {
     const content =
@@ -145,9 +152,9 @@ function extractChatText(chat: Chat): string {
   return parts.join('\n');
 }
 
-/** Provider context-window failures are transient execution failures, not agent stalls. */
-export function isContextWindowFailure(chat: Chat): boolean {
-  return matchesAny(extractChatText(chat), CONTEXT_WINDOW_MARKERS);
+/** Transcript plus failed-run error messages (board chats often only record errors on runs). */
+export function extractChatFailureText(chat: Chat): string {
+  return extractChatText(chat);
 }
 
 /**
@@ -177,7 +184,8 @@ export function inferStreamOutcome(chat: Chat): TaskChatStreamOutcome {
             : JSON.stringify(msg.content);
       if (
         content.includes('Maximum tool turns reached') ||
-        content.includes('Could not complete this reply')
+        (content.includes('Could not complete this reply') &&
+          !isTransientContextLengthError(content))
       ) {
         return 'failed';
       }
@@ -210,8 +218,8 @@ export function classifyTaskFailure(
   // 'failed' falls through to text scan below.
 
   // 2. Transcript text scan (covers both prose and embedded tool output).
-  const text = extractChatText(chat);
-  if (matchesAny(text, CONTEXT_WINDOW_MARKERS)) return 'code';
+  const text = extractChatFailureText(chat);
+  if (isTransientContextLengthError(text)) return 'code';
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
   if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';
 

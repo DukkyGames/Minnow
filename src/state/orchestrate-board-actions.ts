@@ -31,10 +31,12 @@ import {
 } from '../config/autopilot-meta.ts';
 import {
   classifyTaskFailure,
-  isContextWindowFailure,
+  extractChatFailureText,
+  isTransientContextLengthError,
   resolveTaskChatStreamFailure,
+  type FailureCategory,
 } from './orchestrate-failure-classify.ts';
-import { runSelfHeal, type SelfHealDeps } from './orchestrate-self-heal.ts';
+import { runSelfHeal, resolutionStepsForCategory, type SelfHealDeps } from './orchestrate-self-heal.ts';
 import { isLocalServerAvailable } from '../tools/config.ts';
 import {
   bindRunSupervision,
@@ -52,7 +54,18 @@ import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
-import type { BoardExecutionPhase, BoardReport, BoardTask, BoardTaskStatus, Chat, ChatGroup, ChatStopReason, OrchestrateBoardState, SessionState } from '../types.ts';
+import type {
+  BoardExecutionPhase,
+  BoardReport,
+  BoardTask,
+  BoardTaskStatus,
+  Chat,
+  ChatGroup,
+  ChatStopReason,
+  OrchestrateBoardState,
+  SessionState,
+  UnresolvedIssue,
+} from '../types.ts';
 import {
   assignChatToGroup,
   getBoardGroupForChat,
@@ -722,7 +735,8 @@ export function resolveTaskChatStreamOutcome(chat: Chat): TaskChatStreamOutcome 
             : JSON.stringify(msg.content);
       if (
         content.includes('Maximum tool turns reached') ||
-        content.includes('Could not complete this reply')
+        (content.includes('Could not complete this reply') &&
+          !isTransientContextLengthError(content))
       ) {
         return 'failed';
       }
@@ -923,6 +937,101 @@ function tryNudgeForMissingBoardReport(
   return true;
 }
 
+function recordBoardQuarantineIssue(
+  group: ChatGroup,
+  task: BoardTask,
+  category: FailureCategory,
+  summary: string,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const resolvedCategory: UnresolvedIssue['category'] =
+    category === 'unknown' ? 'code' : category;
+  const resolutionSteps = resolutionStepsForCategory(resolvedCategory);
+  const record: UnresolvedIssue = {
+    taskId: task.id,
+    title: task.title,
+    category: resolvedCategory,
+    summary,
+    resolutionSteps,
+    createdAt: Date.now(),
+    attempts: task.selfHealRound ?? task.buildAttempts,
+  };
+  const prev = board.unresolvedIssues ?? [];
+  board.unresolvedIssues = [...prev.filter((u) => u.taskId !== task.id), record];
+  scheduleSaveSessions();
+}
+
+/**
+ * Re-prompt the final integration Tester when it finished cleanly but never
+ * reported a verdict. Shares the per-chat nudge budget with task chats.
+ */
+function tryNudgeForMissingFinalReport(
+  group: ChatGroup,
+  plannerChat: Chat,
+  finalChat: Chat,
+): boolean {
+  if (!isBoardRunning(group)) return false;
+  if (resolveTaskChatStreamOutcome(finalChat) !== 'completed') return false;
+
+  const chatId = finalChat.id;
+  const sent = missingReportNudges.get(chatId) ?? 0;
+  if (sent >= MISSING_REPORT_NUDGE_CAP) return false;
+
+  const attempt = sent + 1;
+  missingReportNudges.set(chatId, attempt);
+  void runFinalIntegrationTestNudge(group, plannerChat, finalChat).catch((err) =>
+    reportBackgroundError('missing-final-report-nudge', err),
+  );
+  return true;
+}
+
+/** Continue a final integration test chat after a missing-verdict nudge. */
+async function runFinalIntegrationTestNudge(
+  group: ChatGroup,
+  plannerChat: Chat,
+  finalChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board?.finalTest || board.finalTest.status !== 'in_progress') return;
+  if (isTaskChatActive(finalChat.id)) return;
+  if (skipBackgroundBoardChatLaunch()) return;
+
+  ensureStreamEndSubscription();
+  const { modelId } = resolvePlannerModelBinding(plannerChat);
+  if (!modelId) return;
+
+  reserveLaunchSlot(finalChat.id);
+  try {
+    await refreshSidebarAfterLaunch();
+    const nudge = [
+      'Continue the final integration test where you left off.',
+      'Your last turn ended without a VERDICT marker or board_report.',
+      'If verification is complete, report pass or fail now; otherwise finish checking first.',
+    ].join('\n');
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(finalChat.id);
+
+    void boardChatTurnRunner({
+      chat: finalChat,
+      pushUser: true,
+      rawText: nudge,
+      userText: nudge,
+      displayText: nudge,
+      historyContent: nudge,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: 'Final integration test',
+      ownsGlobalStreaming: true,
+    }).catch(() => {
+      /* surfaced in chat history */
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id));
+  } catch (err) {
+    releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id);
+    throw err;
+  }
+}
+
 /**
  * Advance board task status when its linked **Builder** chat finishes streaming.
  * Successful builds move to testing; auto-pilot launches the Tester.
@@ -1101,9 +1210,37 @@ export function finalizeBoardTaskOnStreamEnd(
   logBuildVerdict(group, task.id, 'fail', { summary: errorSummary });
   updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
   if (isBoardRunning(group)) {
-    const { category } = resolveTaskChatStreamFailure(chat);
+    const nextBuildAttempts = (freshTask.buildAttempts ?? 0) + 1;
+    // Missing-report exhaustion at the build cap must quarantine synchronously.
+    // Later scripted turns can still fire before an async self-heal run settles.
+    if (!report && nextBuildAttempts >= resolveMaxTaskBuildAttempts()) {
+      updateTask(
+        group,
+        freshTask.id,
+        { buildAttempts: nextBuildAttempts, error: errorSummary },
+        plannerChat,
+      );
+      quarantineTaskAndDependents(
+        group,
+        freshTask.id,
+        {
+          category: 'code',
+          summary: errorSummary,
+          resolutionSteps: resolutionStepsForCategory('code'),
+          at: Date.now(),
+        },
+        plannerChat,
+      );
+      recordBoardQuarantineIssue(group, freshTask, 'code', errorSummary);
+      void autoDelegateNext(group, plannerChat).catch((err) =>
+        reportBackgroundError('auto-delegate-after-quarantine', err),
+      );
+      return;
+    }
+    const { outcome, category } = resolveTaskChatStreamFailure(chat);
     const signal = report?.outcome ?? freshTask.buildOutcome;
-    const healCategory = signal === 'env_blocked' ? 'infra' : category;
+    const healCategory =
+      signal === 'env_blocked' ? 'infra' : !report && outcome === 'completed' ? 'code' : category;
     void runSelfHeal(
       group,
       freshTask,
@@ -1260,8 +1397,9 @@ function getOrCreateBoardChat(input: {
   if (existingId) {
     const existing = findChatById(existingId);
     if (existing) {
-      // Reused chats retain their missing-report count across retries so a
-      // prose-only agent cannot reset the bounded nudge budget indefinitely.
+      // Reusing the same phase chat (nudge continuation or self-heal retry) must
+      // preserve the missing-report nudge budget — resetting here caused infinite
+      // nudges and blocked quarantine at the build cap.
       if (input.taskId) existing.boardTaskId = input.taskId;
       if (input.role === 'tester') existing.workAgentId = 'tester';
       if (input.role === 'fixer') existing.workAgentId = null;
@@ -3610,6 +3748,30 @@ export function applyTaskBuildFailureState(
   return 'retry';
 }
 
+function parseLastVerdictFromContent(content: string): {
+  verdict: 'pass' | 'fail';
+  summary: string;
+} | null {
+  const pattern = /\bverdict\s*[:=]\s*([a-z]+)/gi;
+  let last: { verdict: 'pass' | 'fail'; line: string } | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(content)) !== null) {
+    const verdict = normalizeVerdict(match[1]);
+    if (!verdict) continue;
+    const line =
+      content
+        .split(/\r?\n/)
+        .find((l) => l.toLowerCase().includes(match![0].trim().toLowerCase()))
+        ?.trim() ?? match[0].trim();
+    last = { verdict, line };
+  }
+  if (!last) return null;
+  return {
+    verdict: last.verdict,
+    summary: last.line || `Tester message verdict: ${last.verdict}`,
+  };
+}
+
 /**
  * Fallback verdict parsed from the Tester chat transcript when the structured
  * `board_report_test_result` call never landed (primary signal). Scans backward
@@ -3630,12 +3792,8 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
     if (!msg || msg.role !== 'assistant') continue;
     const content = typeof msg.content === 'string' ? msg.content : '';
     if (!content.trim()) continue;
-    const matches = [...content.matchAll(/\bverdict\s*[:=]\s*([a-z]+)/gi)];
-    const match = matches.at(-1);
-    const verdict = match ? normalizeVerdict(match[1]) : null;
-    if (!verdict) continue;
-    const line = match ? content.slice(match.index).split(/\r?\n/, 1)[0]?.trim() : undefined;
-    return { verdict, summary: line || `Tester message verdict: ${verdict}` };
+    const parsed = parseLastVerdictFromContent(content);
+    if (parsed) return parsed;
   }
   return null;
 }
@@ -3685,7 +3843,7 @@ async function finalizeTaskTestingOnStreamEndImpl(
   if (
     endedTestChat &&
     resolveTaskChatStreamOutcome(endedTestChat) === 'failed' &&
-    isContextWindowFailure(endedTestChat)
+    isTransientContextLengthError(extractChatFailureText(endedTestChat))
   ) {
     const assistantTurns = countChatAssistantTurns(endedTestChat);
     if (contextRetryAssistantTurns.get(endedTestChat) === assistantTurns) return;
@@ -3725,6 +3883,24 @@ async function finalizeTaskTestingOnStreamEndImpl(
         { testVerdict: parsed.verdict, testSummary: parsed.summary },
         plannerChat,
       );
+    }
+  }
+
+  // Context-window overflow on the Tester is transient — retry testing without
+  // burning a test attempt or reseeding the Builder. Defer one microtask so
+  // finalizeRun can populate run.errorMessage before we scan the transcript.
+  if (!report && endedTestChat && resolveTaskChatStreamOutcome(endedTestChat) === 'failed') {
+    await Promise.resolve();
+    const retestChat = testChatId ? findChatById(testChatId) : endedTestChat;
+    if (
+      retestChat &&
+      isTransientContextLengthError(extractChatFailureText(retestChat)) &&
+      isBoardRunning(group)
+    ) {
+      void startTaskTesting(group, fresh.id, plannerChat).catch((err) =>
+        reportBackgroundError('retry-tester-context-length', err),
+      );
+      return;
     }
   }
 
@@ -4107,11 +4283,12 @@ export function finalizeFinalTestOnStreamEnd(
   plannerChat: Chat,
 ): void {
   const board = group.orchestrateBoard;
-  if (!board?.finalTest) return;
+  if (!board?.finalTest || board.finalTest.status !== 'in_progress') return;
 
   let report = resolveFinalBoardReport(board);
   const finalChatId = board.finalTest.chatId?.trim();
   const finalChat = finalChatId ? findChatById(finalChatId) : undefined;
+
   if (!report) {
     const parsed = parseTesterVerdictMarker(finalChatId);
     if (parsed) {
@@ -4120,12 +4297,15 @@ export function finalizeFinalTestOnStreamEnd(
         recordedVerdict: parsed.verdict,
         summary: parsed.summary,
       };
+      scheduleSaveSessions();
       report = { outcome: parsed.verdict, summary: parsed.summary };
     }
   }
+
   if (!report && finalChat && tryNudgeForMissingFinalReport(group, plannerChat, finalChat)) {
     return;
   }
+
   const outcome = report?.outcome;
   const summary = report?.summary?.trim() || 'Final integration test did not report a verdict';
   const failingIds = board.finalTest.failingTaskIds ?? [];

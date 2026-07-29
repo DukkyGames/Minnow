@@ -89,7 +89,9 @@ describe('quarantine completion hooks', () => {
     await waitForBoardCompletionHooksForTests();
     resetOrchestratorAutoReportsForTests();
     resetOrchestratePlanCompleteUiForTests();
+    setOrchestratePlanCompleteWrapUpHook(async () => {});
     resetSubAgentOrchestrator();
+    await new Promise((resolve) => setImmediate(resolve));
     setSessionStateForTests(null);
   });
 
@@ -153,7 +155,9 @@ describe('requeue after completion round-trip', () => {
     await waitForBoardCompletionHooksForTests();
     resetOrchestratorAutoReportsForTests();
     resetOrchestratePlanCompleteUiForTests();
+    setOrchestratePlanCompleteWrapUpHook(async () => {});
     resetSubAgentOrchestrator();
+    await new Promise((resolve) => setImmediate(resolve));
     setSessionStateForTests(null);
   });
 

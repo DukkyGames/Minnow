@@ -8,6 +8,7 @@ import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
 import { maybeAutoApplyWorkspaceProfile } from '../profiles/handlers.js';
+import { realpathForBoundaryCheck } from './safe-path.js';
 
 /** Directory where `npm start` was launched (Minnow install); overridable for packaged Electron. */
 let APP_ROOT = path.resolve(process.cwd());
@@ -46,7 +47,11 @@ export function workspaceLabel(absPath) {
 export function normalizeWorkspacePathKey(absPath) {
   const resolved = path.resolve(String(absPath).trim());
   if (process.platform === 'win32') {
-    return resolved.toLowerCase();
+    try {
+      return realpathForBoundaryCheck(resolved).toLowerCase();
+    } catch {
+      return resolved.toLowerCase();
+    }
   }
   return resolved;
 }

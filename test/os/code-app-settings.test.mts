@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { installHappyDomGlobals, seedMinimalSession } from './dom-helpers.mts';
+import { installHappyDomGlobals, seedMinimalSession, teardownHappyDomAsync } from './dom-helpers.mts';
 
 function setupCodeSettingsDom(doc: Document): void {
   doc.body.innerHTML = `
@@ -17,6 +17,8 @@ function setupCodeSettingsDom(doc: Document): void {
 }
 
 describe('code app settings (MIN-417)', () => {
+  /** @type {import('happy-dom').Window | undefined} */
+  let happyDomWindow: import('happy-dom').Window | undefined;
   let launchApp: typeof import('../../src/os/router.ts').launchApp;
   let syncOsRouteFromHashForTests: typeof import('../../src/os/router.ts').syncOsRouteFromHashForTests;
   let initOsRouter: typeof import('../../src/os/router.ts').initOsRouter;
@@ -43,6 +45,7 @@ describe('code app settings (MIN-417)', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
+    happyDomWindow = win;
     win.fetch = async () =>
       new Response(JSON.stringify({ activePromptProfile: 'default' }), {
         status: 200,
@@ -121,6 +124,10 @@ describe('code app settings (MIN-417)', () => {
     resetAppHostForTests();
     resetAppModulesForTests();
     resetSettingsPageForTests();
+    if (happyDomWindow) {
+      await teardownHappyDomAsync(happyDomWindow);
+      happyDomWindow = undefined;
+    }
   });
 
   test('opening settings from Code uses fullscreen presentation', async () => {

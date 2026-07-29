@@ -106,6 +106,7 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/chat/super-plan/stages.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/super-plan/controller-lifecycle.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/orchestrate-finish-dashboard.test.mjs', runner: 'tsx-mocks-loader' },
+  { pattern: 'test/ui/orchestrate-plan-screen.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/settings-layout-links.test.mjs', runner: 'tsx-mocks-loader' },
   // Mocks server/email/{accounts,imap-session}.js to drive sync against a fake server.
   { pattern: 'test/email/incremental-sync.test.mjs', runner: 'tsx-mocks' },

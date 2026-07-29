@@ -115,6 +115,7 @@ export async function renderSchedulerPanel(
   mount: HTMLElement,
   options: SchedulerPanelOptions = {},
 ): Promise<void> {
+  if (!mount?.isConnected) return;
   const notify = (state: 'ok' | 'err', message: string) => {
     options.onStatus?.(state, message);
   };

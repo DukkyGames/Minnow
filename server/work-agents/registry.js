@@ -298,7 +298,14 @@ export async function patchWorkAgentOverride(agentId, patch) {
   assertValidWorkAgentId(agentId);
   const overrides = await loadUserOverrides();
   const prev = overrides[agentId] ?? {};
-  overrides[agentId] = { ...prev, ...patch };
+  const next = { ...prev, ...patch };
+  if (patch.contextEnforcementPolicy === null) {
+    delete next.contextEnforcementPolicy;
+  }
+  if (patch.archive === null) {
+    delete next.archive;
+  }
+  overrides[agentId] = next;
   await saveUserOverrides(overrides);
   return overrides[agentId];
 }

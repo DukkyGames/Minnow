@@ -42,6 +42,8 @@ let lastForegroundApp: AppId | null = null;
 /** Last Settings section applied via openAppPage (window deep-links). */
 let lastAppliedSettingsSection: string | undefined;
 const mountedWindowInstances = new Set<string>();
+/** Bumps on each syncFromSnapshot so stale openAppPage work cannot relaunch apps. */
+let syncGeneration = 0;
 
 function getAppsLayer(): HTMLElement | null {
   return document.getElementById('osAppsLayer');
@@ -161,8 +163,14 @@ function closeAllAppPages(): void {
   }
 }
 
-async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void> {
+async function openAppPage(
+  appId: AppId,
+  options?: LaunchOptions,
+  generation?: number,
+): Promise<void> {
+  if (generation != null && generation !== syncGeneration) return;
   await ensureAppInitialized(appId);
+  if (generation != null && generation !== syncGeneration) return;
   const route = getCurrentRoute();
   const settingsSection =
     options?.settingsSection ?? route.settingsSection ?? 'general';
@@ -375,6 +383,7 @@ async function ensureWindowSurface(
   instanceId: string,
   appId: AppId,
   options?: LaunchOptions,
+  generation?: number,
 ): Promise<void> {
   if (!WINDOW_MOUNTED_APPS.has(appId)) return;
 
@@ -400,7 +409,8 @@ async function ensureWindowSurface(
   if (!wasMounted) {
     const layer = layerForApp(appId);
     if (!layer?.classList.contains('is-open')) {
-      await openAppPage(appId, options);
+      await openAppPage(appId, options, generation);
+      if (generation != null && generation !== syncGeneration) return;
       if (appId === 'settings') {
         lastAppliedSettingsSection =
           options?.settingsSection ?? getCurrentRoute().settingsSection ?? 'general';
@@ -416,7 +426,7 @@ async function ensureWindowSurface(
     options.settingsSection !== lastAppliedSettingsSection
   ) {
     lastAppliedSettingsSection = options.settingsSection;
-    await openAppPage(appId, options);
+    await openAppPage(appId, options, generation);
   }
 }
 
@@ -435,7 +445,7 @@ function teardownWindowSurface(instanceId: string, appId: AppId): void {
   if (win) windowManager.close(win.id);
 }
 
-function syncWindowSurfaces(snapshot: InstanceSnapshot): void {
+function syncWindowSurfaces(snapshot: InstanceSnapshot, generation: number): void {
   const openIds = new Set(snapshot.instances.map((i) => i.id));
 
   for (const inst of snapshot.instances) {
@@ -443,7 +453,7 @@ function syncWindowSurfaces(snapshot: InstanceSnapshot): void {
     if (!WINDOW_MOUNTED_APPS.has(inst.appId)) continue;
     const options =
       inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
-    void ensureWindowSurface(inst.id, inst.appId, options);
+    void ensureWindowSurface(inst.id, inst.appId, options, generation);
     if (inst.id === snapshot.foregroundId) {
       const win = windowManager.findWindowByInstance(inst.id);
       if (win) windowManager.focus(win.id);
@@ -465,7 +475,8 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   const stage = getStage();
   if (!stage) return;
 
-  syncWindowSurfaces(snapshot);
+  const generation = ++syncGeneration;
+  syncWindowSurfaces(snapshot, generation);
 
   syncSchedulerSidePanel();
 
@@ -538,10 +549,10 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   if (appId !== lastForegroundApp) {
     const animateEnter = lastForegroundApp === null;
     showAppLayer(appId, animateEnter);
-    void openAppPage(appId, options);
+    void openAppPage(appId, options, generation);
     lastForegroundApp = appId;
   } else if (options && (appId === 'chat' || appId === 'code' || appId === 'research')) {
-    void openAppPage(appId, options);
+    void openAppPage(appId, options, generation);
   }
 }
 
@@ -561,6 +572,7 @@ export function resetAppHostForTests(): void {
   initialized = false;
   lastForegroundApp = null;
   lastAppliedSettingsSection = undefined;
+  syncGeneration = 0;
   mountedWindowInstances.clear();
   const appsLayer = getAppsLayer();
   if (appsLayer) delete appsLayer.dataset.mounted;

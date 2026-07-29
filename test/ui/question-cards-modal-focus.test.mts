@@ -92,6 +92,7 @@ describe('question-cards-modal focus trap', () => {
     const { forceCloseAskQuestionModal } = await import('../../src/ui/question-cards-modal.ts');
     forceCloseAskQuestionModal();
     await promise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   test('Tab cycles inside panel and close restores prior focus', async () => {

@@ -23,6 +23,10 @@ import {
 import { mountPromptDiffControls } from './prompt-diff-panel';
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import {
+  INHERIT_CONTEXT_POLICY,
+  type ContextPolicySelectValue,
+} from '../chat/resolve-context-policy';
+import {
   DEFAULT_ARCHIVE_CONFIG,
   normalizeArchiveConfig,
   type ArchiveConfig,
@@ -64,9 +68,18 @@ function buildSummarySchemaSelect(initial: string): HTMLSelectElement {
   return sel;
 }
 
-function buildContextPolicySelect(initial: ContextEnforcementPolicy): HTMLSelectElement {
+function buildContextPolicySelect(
+  initial: ContextPolicySelectValue,
+  options?: { allowInherit?: boolean; inheritHint?: string },
+): HTMLSelectElement {
   const sel = document.createElement('select');
   sel.className = 'settings-select';
+  if (options?.allowInherit) {
+    const inherit = document.createElement('option');
+    inherit.value = INHERIT_CONTEXT_POLICY;
+    inherit.textContent = options.inheritHint ?? 'Inherit global default';
+    sel.appendChild(inherit);
+  }
   for (const opt of CONTEXT_POLICY_OPTIONS) {
     const node = document.createElement('option');
     node.value = opt.value;
@@ -81,8 +94,22 @@ function buildContextPolicySelect(initial: ContextEnforcementPolicy): HTMLSelect
   return sel;
 }
 
+function contextPolicyFromSelect(
+  sel: HTMLSelectElement,
+): ContextEnforcementPolicy | null {
+  if (sel.value === INHERIT_CONTEXT_POLICY) return null;
+  return sel.value as ContextEnforcementPolicy;
+}
+
+/** Global Agents default select (no inherit row). */
+export function createGlobalContextPolicySelect(
+  initial: ContextEnforcementPolicy,
+): HTMLSelectElement {
+  return buildContextPolicySelect(initial);
+}
+
 /** Disable archive policy when Brain embeddings are off or unhealthy. */
-async function applyArchiveEmbeddingsGate(sel: HTMLSelectElement): Promise<void> {
+export async function applyArchiveEmbeddingsGate(sel: HTMLSelectElement): Promise<void> {
   const archiveOpt = [...sel.options].find((o) => o.value === 'archive');
   if (!archiveOpt) return;
   const status = await fetchBrainEmbeddingsStatus();
@@ -384,7 +411,7 @@ interface WorkAgentEditorOptions {
   initialModelId: string | null;
   initialDisabled: boolean;
   initialMaxInputTokens: number | null;
-  initialContextPolicy: ContextEnforcementPolicy;
+  initialContextPolicy: ContextPolicySelectValue;
   initialArchive?: ArchiveConfig;
   onModelSaved?: () => void;
 }
@@ -515,7 +542,9 @@ export function mountWorkAgentConfigEditor(
   maxInputTokensInput.value =
     options.initialMaxInputTokens != null ? String(options.initialMaxInputTokens) : '';
 
-  const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy);
+  const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy, {
+    allowInherit: true,
+  });
   void applyArchiveEmbeddingsGate(contextPolicySel);
 
   const archiveInitial = {
@@ -523,9 +552,11 @@ export function mountWorkAgentConfigEditor(
     ...(options.initialArchive ?? {}),
   };
   const archiveBlock = mountArchiveTuningBlock(container, archiveInitial);
-  (archiveBlock.root as HTMLDetailsElement).open =
+  const initialPolicyIsArchive =
+    options.initialContextPolicy !== INHERIT_CONTEXT_POLICY &&
     options.initialContextPolicy === 'archive';
-  archiveBlock.root.hidden = options.initialContextPolicy !== 'archive';
+  (archiveBlock.root as HTMLDetailsElement).open = initialPolicyIsArchive;
+  archiveBlock.root.hidden = !initialPolicyIsArchive;
 
   const refreshArchiveBanner = mountArchiveDisabledBanner(container, () => {
     refreshArchiveBanner();
@@ -563,7 +594,7 @@ export function mountWorkAgentConfigEditor(
             const rawCap = maxInputTokensInput.value.trim();
             const maxInputTokens =
               rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
-            const policy = contextPolicySel.value as ContextEnforcementPolicy;
+            const policy = contextPolicyFromSelect(contextPolicySel);
             const patch: Parameters<typeof patchWorkAgentOverride>[1] = {
               disabled: disabledCb.checked,
               maxInputTokens,
@@ -571,6 +602,8 @@ export function mountWorkAgentConfigEditor(
             };
             if (policy === 'archive') {
               patch.archive = archiveBlock.readConfig();
+            } else if (policy === null) {
+              patch.archive = null;
             }
             const agent = await patchWorkAgentOverride(options.agentId, patch);
             if (!agent) {
@@ -796,7 +829,7 @@ export function mountSubAgentTypeEditor(
     enabled: boolean;
     maxConcurrent: number;
     maxInputTokens: number | null;
-    contextEnforcementPolicy: ContextEnforcementPolicy;
+    contextEnforcementPolicy: ContextPolicySelectValue;
     summarySchema: string;
   },
   onSaveConfig: (
@@ -804,7 +837,7 @@ export function mountSubAgentTypeEditor(
       enabled: boolean;
       maxConcurrent: number;
       maxInputTokens: number | null;
-      contextEnforcementPolicy: ContextEnforcementPolicy;
+      contextEnforcementPolicy: ContextEnforcementPolicy | null;
       summarySchema: string;
     }>,
   ) => Promise<boolean>,
@@ -827,7 +860,9 @@ export function mountSubAgentTypeEditor(
   maxInputTokensInput.value =
     initial.maxInputTokens != null ? String(initial.maxInputTokens) : '';
 
-  const contextPolicySel = buildContextPolicySelect(initial.contextEnforcementPolicy);
+  const contextPolicySel = buildContextPolicySelect(initial.contextEnforcementPolicy, {
+    allowInherit: true,
+  });
   const summarySchemaSel = buildSummarySchemaSelect(initial.summarySchema);
 
   const { row: enabledRow, input: enabledCb } = createSettingsToggleRow(`${label} enabled`, {
@@ -859,7 +894,7 @@ export function mountSubAgentTypeEditor(
                 maxInputTokensInput.value.trim() === ''
                   ? null
                   : Math.max(1, Math.floor(Number(maxInputTokensInput.value) || 0)),
-              contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
+              contextEnforcementPolicy: contextPolicyFromSelect(contextPolicySel),
               summarySchema: summarySchemaSel.value,
             });
             setStatus(ok ? 'ok' : 'err', ok ? `${label} settings saved` : 'Save failed');
