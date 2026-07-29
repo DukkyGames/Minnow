@@ -8,6 +8,7 @@
 
 import type { BrainPage } from '../brain/types';
 import type { MemoryEntryMeta } from '../memory/types';
+import { openBrain, openBrainEditForPath } from './brain-page';
 import { createIcon } from './icon';
 import { showToast } from './toast';
 
@@ -150,8 +151,7 @@ export function memorySavedPayloadFromTool(
   return null;
 }
 
-async function openSavedMemory(payload: MemorySavedPayload): Promise<void> {
-  const { openBrain, openBrainEditForPath } = await import('./brain-page');
+function openSavedMemory(payload: MemorySavedPayload): void {
   if (payload.target.kind === 'page') {
     openBrainEditForPath(payload.target.relPath);
     return;
@@ -330,7 +330,7 @@ function buildToastElement(item: QueuedMemorySavedToast): HTMLElement {
       void item.options.onOpen(item.payload);
       return;
     }
-    void openSavedMemory(item.payload);
+    openSavedMemory(item.payload);
   });
 
   card.addEventListener('pointerenter', () => {
@@ -398,9 +398,14 @@ export function showMemorySavedToast(
   payload: MemorySavedPayload,
   options: MemorySavedToastOptions = {},
 ): () => void {
+  const payloadSnapshot: MemorySavedPayload = {
+    title: payload.title,
+    description: payload.description,
+    target: { ...payload.target },
+  };
   const item: QueuedMemorySavedToast = {
     token: Symbol('memory-saved-toast'),
-    payload,
+    payload: payloadSnapshot,
     options,
   };
   queuedToasts.push(item);

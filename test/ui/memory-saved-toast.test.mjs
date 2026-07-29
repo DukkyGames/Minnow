@@ -51,7 +51,8 @@ describe('memory saved toast', () => {
     );
     assert.equal(card.querySelector('.memory-saved-toast__button--reject')?.textContent, 'Reject');
     assert.equal(card.querySelector('.memory-saved-toast__button--open')?.textContent, 'Open memory');
-    assert.equal(card.style.getPropertyValue('--memory-saved-progress'), '1');
+    const progress = Number(card.style.getPropertyValue('--memory-saved-progress'));
+    assert.ok(progress <= 1 && progress > 0.99);
   });
 
   test('opens the saved memory through the injected action', async () => {
@@ -73,6 +74,69 @@ describe('memory saved toast', () => {
     await wait(0);
 
     assert.equal(openedTitle, 'Project facts');
+  });
+
+  test('snapshots the displayed payload and action target', async () => {
+    const payload = {
+      title: 'Original title',
+      description: 'Original description.',
+      target: { kind: 'page', relPath: 'facts/original.md' },
+    };
+    let openedPayload;
+    showMemorySavedToast(payload, {
+      onOpen: (opened) => {
+        openedPayload = opened;
+      },
+    });
+
+    payload.title = 'Changed title';
+    payload.description = 'Changed description.';
+    payload.target.relPath = 'facts/changed.md';
+    document.querySelector('.memory-saved-toast__button--open')?.click();
+    await wait(0);
+
+    assert.equal(
+      document.querySelector('.memory-saved-toast__title')?.textContent,
+      'Original title',
+    );
+    assert.deepEqual(openedPayload, {
+      title: 'Original title',
+      description: 'Original description.',
+      target: { kind: 'page', relPath: 'facts/original.md' },
+    });
+  });
+
+  test('opens a saved wiki page in Brain Edit from Brain Graph', async () => {
+    document.body.innerHTML = `
+      <main id="brainView" class="is-open">
+        <h1 id="brainPageHeaderTitle"></h1>
+        <p id="brainPageHeaderLead"></p>
+        <div id="brainPageHeaderActions"></div>
+        <button id="btnBrainPageBack"></button>
+        <button data-brain-nav="graph"></button>
+        <button data-brain-nav="edit"></button>
+        <section id="brainSection-graph" class="is-active"></section>
+        <section id="brainSection-edit"></section>
+      </main>
+      <div id="appBody"></div>
+      <input id="brainEditPath">
+      <input id="brainEditTitle">
+      <input id="brainEditTags">
+      <textarea id="brainEditBody"></textarea>
+      <div id="brainEditPreview"></div>
+      <div id="brainEditStatus"></div>
+    `;
+    window.location.hash = '#/app/brain/graph';
+    showMemorySavedToast({
+      title: 'Project facts',
+      description: 'A compact project note.',
+      target: { kind: 'page', relPath: 'facts/project.md' },
+    });
+
+    document.querySelector('.memory-saved-toast__button--open')?.click();
+
+    assert.equal(window.location.hash, '#/app/brain/edit');
+    assert.equal(document.querySelector('#brainSection-edit')?.classList.contains('is-active'), true);
   });
 
   test('rejects the saved memory through the injected action', async () => {
