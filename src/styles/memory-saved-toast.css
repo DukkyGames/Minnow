@@ -14,6 +14,8 @@
   border-radius: var(--radius-lg);
   background: var(--mn-surface-2);
   color: var(--mn-fg);
+  box-shadow: var(--shadow-lift);
+  font-family: var(--font-ui);
   opacity: 0;
   transform: translateY(0.5rem);
   transition:
@@ -26,44 +28,51 @@
   transform: translateY(0);
 }
 
-.memory-saved-toast__content {
+.memory-saved-toast__body {
   display: flex;
   min-width: 0;
-  gap: 0.75rem;
-  padding: 1rem 1rem 0.75rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem 0.9rem;
+}
+
+.memory-saved-toast__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
 }
 
 .memory-saved-toast__icon {
   display: inline-flex;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.375rem;
+  height: 1.375rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--mn-success-border);
   border-radius: 50%;
-  background: var(--mn-accent);
-  color: var(--mn-bg);
-}
-
-.memory-saved-toast__copy {
-  min-width: 0;
+  background: var(--mn-success-soft);
+  color: var(--mn-success-ink);
 }
 
 .memory-saved-toast__label {
-  display: block;
-  margin-bottom: 0.2rem;
   color: var(--mn-fg-muted);
-  font-size: 0.72rem;
+  font-size: 0.6875rem;
   font-weight: 600;
+  letter-spacing: 0.06em;
   line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .memory-saved-toast__title {
   display: -webkit-box;
   overflow: hidden;
+  margin: 0;
   color: var(--mn-fg);
-  font-size: 0.94rem;
-  font-weight: 650;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.3;
   text-wrap: pretty;
   -webkit-box-orient: vertical;
@@ -73,11 +82,11 @@
 .memory-saved-toast__description,
 .memory-saved-toast__error {
   display: -webkit-box;
-  margin: 0.3rem 0 0;
+  margin: 0;
   overflow: hidden;
   color: var(--mn-fg-muted);
-  font-size: 0.8rem;
-  line-height: 1.4;
+  font-size: 0.8125rem;
+  line-height: 1.45;
   text-wrap: pretty;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -91,34 +100,45 @@
   color: var(--mn-danger);
 }
 
+.memory-saved-toast__footer {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--mn-border);
+}
+
 .memory-saved-toast__actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-  padding: 0 1rem 0.85rem;
+  padding: 0.65rem 1.1rem 0.75rem;
 }
 
 .memory-saved-toast__button {
-  min-height: 2.5rem;
-  padding: 0.48rem 0.8rem;
+  min-height: var(--touch-min, 2.75rem);
+  padding: 0.5rem 0.85rem;
   border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border-radius: var(--radius-md);
+  background: var(--mn-bg);
   color: var(--mn-fg);
   font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.8125rem;
+  font-weight: 500;
   cursor: pointer;
   transition:
-    background-color var(--duration-fast) ease,
-    border-color var(--duration-fast) ease,
-    color var(--duration-fast) ease;
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.memory-saved-toast__button--reject {
+  background: transparent;
 }
 
 .memory-saved-toast__button--open {
   border-color: var(--mn-accent);
   background: var(--mn-accent);
-  color: var(--mn-bg);
+  color: var(--mn-fg-on-accent, var(--mn-bg));
+  font-weight: 600;
 }
 
 .memory-saved-toast__button:focus-visible {
@@ -132,8 +152,8 @@
 }
 
 .memory-saved-toast__progress {
-  height: 0.2rem;
-  background: var(--mn-border);
+  height: 0.1875rem;
+  background: color-mix(in srgb, var(--mn-border) 72%, transparent);
 }
 
 .memory-saved-toast__progress-fill {
@@ -148,12 +168,15 @@
 
 @media (hover: hover) and (pointer: fine) {
   .memory-saved-toast__button--reject:hover:not(:disabled) {
-    border-color: var(--mn-danger);
+    border-color: var(--mn-danger-border);
+    background: var(--mn-danger-soft);
     color: var(--mn-danger);
   }
 
   .memory-saved-toast__button--open:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--mn-accent) 85%, var(--mn-fg));
+    background: var(--mn-bg);
+    border-color: var(--mn-accent);
+    color: var(--mn-fg);
   }
 }
 
