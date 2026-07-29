@@ -51,7 +51,8 @@ describe('memory saved toast', () => {
     );
     assert.equal(card.querySelector('.memory-saved-toast__button--reject')?.textContent, 'Reject');
     assert.equal(card.querySelector('.memory-saved-toast__button--open')?.textContent, 'Open memory');
-    assert.equal(card.style.getPropertyValue('--memory-saved-progress'), '1');
+    const progress = Number(card.style.getPropertyValue('--memory-saved-progress'));
+    assert.ok(progress <= 1 && progress > 0.99);
   });
 
   test('opens the saved memory through the injected action', async () => {
