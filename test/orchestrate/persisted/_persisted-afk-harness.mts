@@ -212,7 +212,8 @@ export class PersistedAfkHarness {
   }
 
   private async waitUntilReady(): Promise<void> {
-    const deadline = Date.now() + 30_000;
+    // Full-suite runs spawn many workers; allow extra headroom for cold server.js boot.
+    const deadline = Date.now() + 60_000;
     const tokenPath = path.join(this.home, 'session-token');
     while (Date.now() < deadline) {
       if (this.child?.exitCode !== null) {
