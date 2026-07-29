@@ -219,10 +219,11 @@ import { initOsRouter } from './os/router';
 import { initOsShell } from './os/shell';
 import { initElectronTrayBridge } from './electron-tray-bridge';
 import { installAppDialogs } from './ui/app-dialog';
+import { initializeCompanionAccess } from './companion/bootstrap';
 
-/** Register PWA service worker (shell cache); failures are ignored. */
+/** Register shell caching only in browser-secure contexts (HTTPS or loopback). */
 function registerServiceWorker(): void {
-  if ('serviceWorker' in navigator) {
+  if (window.isSecureContext && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }
@@ -416,6 +417,7 @@ export async function initApp(): Promise<void> {
 
 /** Start init once the document is ready (module scripts often run after `load`). */
 async function startApp(): Promise<void> {
+  if (!(await initializeCompanionAccess())) return;
   initShellHandlers();
   const { initShellKeyboardHelp } = await import('./ui/shell-keyboard-help');
   initShellKeyboardHelp();

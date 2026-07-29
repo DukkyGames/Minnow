@@ -113,6 +113,7 @@ Full directory map: [`guides/configuration.md`](guides/configuration.md). Notabl
 | Path | Purpose |
 |------|---------|
 | `config.json` | Workspace, features, voice, synthesis, tool security, fallbacks |
+| `auth/devices.json` | Named LAN companion devices; stores SHA-256 token hashes only (pairing challenges are memory-only) |
 | `tools.json` | Per-tool permissions (`full` / `ask` / `off`) |
 | `providers/<id>/` | `profile.json`, encrypted `secrets.json`, `capabilities.json` |
 | `prompts/`, `prompt-configs/`, `profiles/` | User prompt overrides and setup bundles |
@@ -142,11 +143,11 @@ Browser / Electron (same origin, default :9473)
   └─ Vite SPA
 ```
 
-**Auth:** Per-boot session token in `~/.minnow/session-token`; injected as `window.__MINNOW_SESSION_TOKEN__` and sent as `X-Minnow-Token` ([`server/runtime/auth-middleware.js`](../server/runtime/auth-middleware.js)). No blanket CORS.
+**Auth:** The local host uses a per-boot token in `~/.minnow/session-token`; request-aware SPA serving injects it only for loopback navigations, never into HTML served to a LAN address ([`server/runtime/spa-auth-html.js`](../server/runtime/spa-auth-html.js)). Named LAN companions pair through a five-minute, single-use QR link and receive a revocable `minnow_device_*` token; only its SHA-256 hash is stored in `~/.minnow/auth/devices.json` ([`server/auth/`](../server/auth/)). The central gate accepts host or active device credentials from `X-Minnow-Token` / `?token=`, while device management remains host-only ([`server/runtime/auth-middleware.js`](../server/runtime/auth-middleware.js)). `POST /api/auth/pair` is the sole unauthenticated API operation and remains Host-validated, LAN-mode-only, private-client-only, throttled, and same-origin. No blanket CORS.
 
 **Path policy:** Default workspace-only via `resolveSafePath()` ([`server/runtime/path-access.js`](../server/runtime/path-access.js)). Full disk when `toolSecurity.filesystemAccess` is `full` (Settings → General → Filesystem access) or `TOOLS_ALLOW_ALL_PATHS=1`.
 
-**LAN:** Opt-in (`MINNOW_NETWORK=lan` or Settings → General → Network access); restart required.
+**LAN companion (MIN-393):** Opt in with `MINNOW_NETWORK=lan` or Settings → General → Network access, restart, then create a named pairing QR in the same Settings group. A paired browser uses the full shell on wider viewports and a narrow companion Chat shell (mode picker, notifications, Scheduler, per-call approval for mutating tools) at ≤640px. Revocation takes effect on the next request; companion clients also probe every five seconds and show a reconnect banner while the host is unavailable. Browser/terminal desktop chrome is omitted. Calendar and Email remain omitted while release-hidden. Plain `http://<lan-ip>` is not a secure context, so service-worker shell caching and reliable installability require a future HTTPS transport; current LAN v1 is same-network, online-only. See [`guides/lan-companion.md`](guides/lan-companion.md).
 
 **Browser-only tools** (`get_datetime`, `calculate`, `ask_question`, sub-agent/board tools, mode handoff, `browser_*`) run client-side; `POST /api/tools` returns `Not implemented` for those names.
 

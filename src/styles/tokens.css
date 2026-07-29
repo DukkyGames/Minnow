@@ -43,6 +43,7 @@ body {
   --viewer-min-w: 280px;
   --split-ratio: 0.55;
   --touch-min: 44px;
+  --mn-qr-canvas: #ffffff;
   /* Code / workspace chat column widths */
   --chat-msg-max: 900px;
   --chat-msg-md-ch: 88ch;

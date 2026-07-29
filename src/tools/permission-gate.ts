@@ -22,6 +22,50 @@ import { applyDestructiveConfirmationAfterUserApproval } from './destructive-too
 
 export type { ToolApprovalContext };
 
+const COMPANION_MUTATING_TOOLS = new Set([
+  'write_clipboard',
+  'save_file',
+  'append_file',
+  'insert_at_line',
+  'replace_text_in_file',
+  'make_directory',
+  'move_file',
+  'copy_file',
+  'delete_path',
+  'create_pdf',
+  'create_spreadsheet',
+  'create_word_document',
+  'git_add',
+  'git_commit',
+  'git_checkout',
+  'git_branch',
+  'execute_command',
+  'stop_command',
+  'start_background_command',
+  'stop_background_command',
+  'manage_dev_servers',
+  'run_javascript',
+  'run_python',
+  'brain_write_page',
+  'brain_append_log',
+  'brain_ingest_source',
+  'manage_brain',
+  'update_settings',
+  'update_appearance',
+  'upload_appearance_asset',
+  'save_memory',
+  'manage_calendar',
+  'draft_reply',
+  'email_action',
+]);
+
+function companionRequiresApproval(toolId: string): boolean {
+  return (
+    document.documentElement.classList.contains('minnow-companion') &&
+    COMPANION_MUTATING_TOOLS.has(toolId)
+  );
+}
+
 /** Matches server `resolveSafePath` rejection copy (`server/runtime/path-access.js`). */
 export function outsideWorkspaceBlockMessage(userPath: string): string {
   return `Error: Path "${userPath}" resolves outside the workspace directory. Enable full disk access in Settings → General → Filesystem access (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.`;
@@ -82,13 +126,16 @@ export async function maybeBlockToolForUserApproval(
       : [];
 
   const needsPathAck = pathsOutsideWorkspace.length > 0;
-  const needsPermissionAck = perm === 'ask';
+  // A device must approve each mutating call in the browser that initiated it,
+  // even when the host's shared tool setting is Full.
+  const needsCompanionAck = companionRequiresApproval(permissionToolId);
+  const needsPermissionAck = perm === 'ask' || needsCompanionAck;
   if (!needsPathAck && !needsPermissionAck) {
     return null;
   }
 
   // Auto-approve while a /goal loop is active on this chat (hands-free until goal clears).
-  if (needsPermissionAck && context.chatId) {
+  if (needsPermissionAck && !needsCompanionAck && context.chatId) {
     const chat = findChatById(context.chatId);
     if (chat && isGoalLoopActive(chat)) {
       applyDestructiveConfirmationAfterUserApproval(permissionToolId, args);
@@ -122,7 +169,7 @@ export async function maybeBlockToolForUserApproval(
     return { content: 'Error: User denied tool execution' };
   }
 
-  if (decision === 'always-allow') {
+  if (decision === 'always-allow' && !needsCompanionAck) {
     config.permissions.default[permissionToolId] = 'full';
     await saveToolConfigAsync(config);
   }
