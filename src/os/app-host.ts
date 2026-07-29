@@ -54,6 +54,9 @@ function brainNavigationKey(options?: LaunchOptions): string {
   return `${section}\n${editPath}`;
 }
 
+/** Expose the Brain route cache key for focused app-host regression tests. */
+export const brainNavigationKeyForTests = brainNavigationKey;
+
 function getAppsLayer(): HTMLElement | null {
   return document.getElementById('osAppsLayer');
 }

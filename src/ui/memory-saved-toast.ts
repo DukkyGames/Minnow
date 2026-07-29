@@ -8,7 +8,6 @@
 
 import type { BrainPage } from '../brain/types';
 import type { MemoryEntryMeta } from '../memory/types';
-import { openBrain, openBrainEditForPath } from './brain-page';
 import { createIcon } from './icon';
 import { showToast } from './toast';
 
@@ -151,7 +150,8 @@ export function memorySavedPayloadFromTool(
   return null;
 }
 
-function openSavedMemory(payload: MemorySavedPayload): void {
+async function openSavedMemory(payload: MemorySavedPayload): Promise<void> {
+  const { openBrain, openBrainEditForPath } = await import('./brain-page');
   if (payload.target.kind === 'page') {
     openBrainEditForPath(payload.target.relPath);
     return;

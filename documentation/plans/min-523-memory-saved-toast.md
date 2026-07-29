@@ -31,8 +31,8 @@ Show a global, actionable confirmation whenever Minnow saves an individual Brain
 - [x] Wire chat/research capture and automatic synthesis writes.
 - [x] Add theme-aware responsive styles and import them from the application entry.
 - [x] Add deterministic DOM tests for rendering, queueing, expiry, tool parsing, reject, and open behavior.
-- [ ] Run type checking, targeted tests, build, and a browser walkthrough.
-- [ ] Update `documentation/context.md`.
+- [x] Run type checking, targeted tests, build, and a browser walkthrough.
+- [x] Update `documentation/context.md`.
 
 ## Acceptance checks
 
