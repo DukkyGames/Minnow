@@ -3,6 +3,7 @@
  */
 
 import { wrapUntrusted } from '../security/untrusted.js';
+import { selectQueryRelevantExcerpt } from '../../src/lib/fetch-web-content.mjs';
 import { getEmbedder, embedTexts, DEFAULT_EMBEDDINGS_CONFIG } from './embeddings.js';
 import { cosineSimilarity } from './vector-store.js';
 
@@ -64,8 +65,9 @@ function scoreEntry(meta, body, tokens, tags) {
  * Format entries into a plain-text block for {{memory}} interpolation.
  * @param {Array<{ meta: object, body: string }>} items
  * @param {number} maxChars
+ * @param {string} [query]
  */
-export function formatMemoryBlock(items, maxChars) {
+export function formatMemoryBlock(items, maxChars, query = '') {
   if (!items.length) return '';
 
   const lines = ['## Retrieved memory'];
@@ -73,12 +75,7 @@ export function formatMemoryBlock(items, maxChars) {
     const tags = (meta.tags ?? []).join(', ') || 'none';
     const pagePath =
       typeof meta.path === 'string' && meta.path.trim() ? meta.path.trim() : '';
-    const firstLine = String(body ?? '')
-      .split('\n')
-      .map((l) => l.trim())
-      .find(Boolean) ?? '';
-    const preview =
-      firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
+    const preview = selectQueryRelevantExcerpt(body, query);
     const pathPart = pagePath ? ` path: ${pagePath}` : '';
     lines.push(`- [${meta.title}]${pathPart} (tags: ${tags})`);
     lines.push(`  ${preview}`);
@@ -97,9 +94,10 @@ export function formatMemoryBlock(items, maxChars) {
  * @param {{ query?: string, limit?: number, tags?: string[], maxChars?: number }} opts
  */
 export function retrieveMemoryBlock(allEntries, opts = {}) {
-  const limit = opts.limit ?? 8;
-  const maxChars = opts.maxChars ?? 4000;
-  const tokens = tokenize(opts.query);
+  const limit = opts.limit ?? 12;
+  const maxChars = opts.maxChars ?? 8000;
+  const queryText = String(opts.query ?? '');
+  const tokens = tokenize(queryText);
 
   let ranked = allEntries.map(({ meta, body }) => ({
     meta,
@@ -129,7 +127,7 @@ export function retrieveMemoryBlock(allEntries, opts = {}) {
   });
 
   const top = ranked.slice(0, limit).map(({ meta, body }) => ({ meta, body }));
-  const block = formatMemoryBlock(top, maxChars);
+  const block = formatMemoryBlock(top, maxChars, queryText);
   return {
     block: block ? wrapUntrusted(block, { source: 'memory' }) : '',
     ids: top.map((t) => t.meta.id),
@@ -168,8 +166,8 @@ export async function retrieveMemoryBlockHybrid(allEntries, opts = {}, memoryCon
     return retrieveMemoryBlock(allEntries, opts);
   }
 
-  const limit = opts.limit ?? 8;
-  const maxChars = opts.maxChars ?? 4000;
+  const limit = opts.limit ?? 12;
+  const maxChars = opts.maxChars ?? 8000;
   const blendWeight = Math.min(1, Math.max(0, Number(emb.blendWeight ?? 0.5)));
   const tokens = tokenize(opts.query);
   const queryText = String(opts.query ?? '').trim();
@@ -234,7 +232,7 @@ export async function retrieveMemoryBlockHybrid(allEntries, opts = {}, memoryCon
   });
 
   const top = ranked.slice(0, limit).map(({ meta, body }) => ({ meta, body }));
-  const block = formatMemoryBlock(top, maxChars);
+  const block = formatMemoryBlock(top, maxChars, queryText);
   return {
     block: block ? wrapUntrusted(block, { source: 'memory' }) : '',
     ids: top.map((t) => t.meta.id),

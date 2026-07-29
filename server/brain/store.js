@@ -69,7 +69,7 @@ export async function loadBrainConfig() {
     ...raw,
     enabled: raw.enabled ?? memory.enabled ?? true,
     maxInjectCharsFull:
-      raw.maxInjectCharsFull ?? memory.maxInjectCharsFull ?? 4000,
+      raw.maxInjectCharsFull ?? memory.maxInjectCharsFull ?? 8000,
     maxInjectCharsLite:
       raw.maxInjectCharsLite ?? memory.maxInjectCharsLite ?? 800,
     embeddings,

@@ -14,8 +14,9 @@
 
 import {
   fetchUrlText,
-  rankSentencesByQuery,
+  rankWebContentByQuery,
   truncateUtf8,
+  WEB_RAG_EXCERPT_LIMIT,
   WEB_TEXT_MAX_BYTES,
 } from '../lib/fetch-web-content.mjs';
 import {
@@ -297,7 +298,7 @@ async function toolRagWebContent(args: Record<string, unknown>): Promise<string>
   }
 
   const capped = truncateUtf8(fetchResult, WEB_TEXT_MAX_BYTES);
-  const snippets = rankSentencesByQuery(capped, query, 8);
+  const snippets = rankWebContentByQuery(capped, query, WEB_RAG_EXCERPT_LIMIT);
 
   if (snippets.length === 0) {
     return `No relevant sentences found on ${url} for query: ${query}`;

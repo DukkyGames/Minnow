@@ -12,7 +12,7 @@ archive:
   stalenessTurns: 15
   pressureThreshold: 0.7
   minRecentTurns: 6
-  retrievalTopK: 8
+  retrievalTopK: 12
 defaultForModes:
   - research
 allowedTools:

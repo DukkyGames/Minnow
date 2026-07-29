@@ -55,7 +55,7 @@ export async function toolBrainSearch(args) {
       query,
       limit,
       tags,
-      maxChars: brain.maxInjectCharsFull ?? 4000,
+      maxChars: brain.maxInjectCharsFull ?? 8000,
       workspaceKey: activeWorkspaceKey(),
     },
     brain,
