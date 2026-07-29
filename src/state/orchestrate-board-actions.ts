@@ -969,67 +969,15 @@ function recordBoardQuarantineIssue(
 function tryNudgeForMissingFinalReport(
   group: ChatGroup,
   plannerChat: Chat,
-  finalChat: Chat,
+  chat: Chat,
 ): boolean {
-  if (!isBoardRunning(group)) return false;
-  if (resolveTaskChatStreamOutcome(finalChat) !== 'completed') return false;
-
-  const chatId = finalChat.id;
-  const sent = missingReportNudges.get(chatId) ?? 0;
+  if (!isBoardRunning(group) || resolveTaskChatStreamOutcome(chat) !== 'completed') return false;
+  const sent = missingReportNudges.get(chat.id) ?? 0;
   if (sent >= MISSING_REPORT_NUDGE_CAP) return false;
-
   const attempt = sent + 1;
-  missingReportNudges.set(chatId, attempt);
-  void runFinalIntegrationTestNudge(group, plannerChat, finalChat).catch((err) =>
-    reportBackgroundError('missing-final-report-nudge', err),
-  );
+  missingReportNudges.set(chat.id, attempt);
+  runAfterChatRelease(chat.id, () => runFinalTestReportNudge(group, plannerChat, chat));
   return true;
-}
-
-/** Continue a final integration test chat after a missing-verdict nudge. */
-async function runFinalIntegrationTestNudge(
-  group: ChatGroup,
-  plannerChat: Chat,
-  finalChat: Chat,
-): Promise<void> {
-  const board = group.orchestrateBoard;
-  if (!board?.finalTest || board.finalTest.status !== 'in_progress') return;
-  if (isTaskChatActive(finalChat.id)) return;
-  if (skipBackgroundBoardChatLaunch()) return;
-
-  ensureStreamEndSubscription();
-  const { modelId } = resolvePlannerModelBinding(plannerChat);
-  if (!modelId) return;
-
-  reserveLaunchSlot(finalChat.id);
-  try {
-    await refreshSidebarAfterLaunch();
-    const nudge = [
-      'Continue the final integration test where you left off.',
-      'Your last turn ended without a VERDICT marker or board_report.',
-      'If verification is complete, report pass or fail now; otherwise finish checking first.',
-    ].join('\n');
-    refreshHeartbeatThresholds();
-    startTaskChatSupervision(finalChat.id);
-
-    void boardChatTurnRunner({
-      chat: finalChat,
-      pushUser: true,
-      rawText: nudge,
-      userText: nudge,
-      displayText: nudge,
-      historyContent: nudge,
-      skillId: null,
-      validAttachments: [],
-      titleSeed: 'Final integration test',
-      ownsGlobalStreaming: true,
-    }).catch(() => {
-      /* surfaced in chat history */
-    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id));
-  } catch (err) {
-    releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id);
-    throw err;
-  }
 }
 
 /**
@@ -4261,20 +4209,6 @@ async function runFinalTestReportNudge(
     releaseLaunchSlotAndDrive(group, plannerChat, chat.id);
     throw err;
   }
-}
-
-function tryNudgeForMissingFinalReport(
-  group: ChatGroup,
-  plannerChat: Chat,
-  chat: Chat,
-): boolean {
-  if (!isBoardRunning(group) || resolveTaskChatStreamOutcome(chat) !== 'completed') return false;
-  const sent = missingReportNudges.get(chat.id) ?? 0;
-  if (sent >= MISSING_REPORT_NUDGE_CAP) return false;
-  const attempt = sent + 1;
-  missingReportNudges.set(chat.id, attempt);
-  runAfterChatRelease(chat.id, () => runFinalTestReportNudge(group, plannerChat, chat));
-  return true;
 }
 
 /** Route full-board Tester verdict after final integration chat ends. */
