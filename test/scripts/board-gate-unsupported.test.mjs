@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { after, before, describe, test } from 'node:test';
 import { promisify } from 'node:util';
 import { BOARD_GATE_EXIT } from '../../scripts/run-board-cli.mjs';
@@ -41,7 +42,7 @@ describe('board gate adapter errors', () => {
   test('persisted gates ship a default executable adapter', async () => {
     const stat = await fs.stat(DEFAULT_PERSISTED_GATE_ADAPTER);
     assert.equal(stat.isFile(), true);
-    const adapter = await import(DEFAULT_PERSISTED_GATE_ADAPTER);
+    const adapter = await import(pathToFileURL(DEFAULT_PERSISTED_GATE_ADAPTER).href);
     assert.equal(typeof adapter.createBoardGateDriver, 'function');
   });
 
