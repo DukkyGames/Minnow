@@ -293,6 +293,8 @@ UI: **Brain** app `#/app/brain/<section>`. Settings for embeddings/synthesis liv
 
 Tools: `brain_search`, `brain_read_page`, `brain_write_page`, `save_memory`, `repo_map`, `find_symbol`, …
 
+**Memory saved review card (MIN-523):** Individual wiki/memory saves from Brain forms, `save_memory` / `brain_write_page` chat tools, chat/research capture, and automatic synthesis queue a global 10-second review card ([`src/ui/memory-saved-toast.ts`](../src/ui/memory-saved-toast.ts), [`memory-saved-toast.css`](../src/styles/memory-saved-toast.css)). The card shows the title and a plain-text excerpt, pauses while hovered or focused, and exposes **Reject** (delete the saved page/entry) plus **Open memory** (Brain Edit for wiki pages, Brain Memories for legacy entries). Concurrent saves are shown sequentially rather than replacing one another; failed tool calls do not enqueue cards.
+
 ---
 
 ## Agents

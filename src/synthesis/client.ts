@@ -3,6 +3,7 @@
  */
 
 import { isLocalServerAvailable } from '../tools/config';
+import type { BrainPage } from '../brain/types';
 
 const API_BASE = '';
 
@@ -262,7 +263,7 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
 
       const data = (await res.json()) as {
         memoryProposals?: unknown[];
-        memoryPages?: unknown[];
+        memoryPages?: BrainPage[];
         memorySkipped?: string[];
         skillProposal?: unknown | null;
       };
@@ -292,6 +293,15 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
           appId: savedPages > 0 ? 'brain' : 'settings',
           dedupeKey: `synthesis:${input.chatId}:${savedPages}:${proposals}`,
         });
+      }
+      if (data.memoryPages?.length) {
+        const {
+          memorySavedPayloadFromBrainPage,
+          showMemorySavedToast,
+        } = await import('../ui/memory-saved-toast');
+        for (const page of data.memoryPages) {
+          showMemorySavedToast(memorySavedPayloadFromBrainPage(page));
+        }
       }
     } catch {
       /* synthesis is best-effort */

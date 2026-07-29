@@ -56,6 +56,7 @@ import './styles/composer-model-trigger.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
 import './styles/toast.css';
+import './styles/memory-saved-toast.css';
 import './styles/hub.css';
 import './styles/code-overview.css';
 import './styles/orchestrate-hub.css';

@@ -47,6 +47,7 @@ import {
 } from '../ui/orchestrate-board-init-split.ts';
 import { isOrchestrateBoardViewActive } from '../ui/view-mode-toggle.ts';
 import { renderSidebar } from '../ui/sidebar.ts';
+import { notifyMemorySavedFromTool } from '../ui/memory-saved-toast.ts';
 
 /** Parse exit code from execute_command formatted output. */
 function parseTerminalExitCode(content: string): number | undefined {
@@ -201,6 +202,7 @@ function applyToolOutcome(
     ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
   });
   maybeLogBoardToolExecution(chat, toolName, args, toolContent);
+  notifyMemorySavedFromTool(toolName, args, toolContent);
   options.trackHistoryPush();
   options.syncContextUsage();
 
