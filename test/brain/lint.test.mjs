@@ -22,6 +22,12 @@ before(async () => {
   process.env.MINNOW_HOME = homeDir;
   resetMinnowHomeCache();
   await ensureMinnowLayout();
+  // lint apply paths call updatePage, which schedules vector sync — disable embeddings
+  // so teardown does not race fire-and-forget embedder I/O on Windows CI.
+  const configPath = path.join(homeDir, 'config.json');
+  const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  config.memory.embeddings.enabled = false;
+  await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   await ensureBrainStore();
 });
 
