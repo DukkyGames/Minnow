@@ -142,7 +142,7 @@ describe('memory saved toast', () => {
     await wait(200);
 
     assert.equal(
-      document.querySelector('.memory-saved-toast__title')?.textContent,
+      document.querySelector('.memory-saved-toast--visible .memory-saved-toast__title')?.textContent,
       'Second memory',
     );
   });

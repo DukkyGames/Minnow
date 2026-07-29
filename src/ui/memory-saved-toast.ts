@@ -380,6 +380,8 @@ function renderNextToast(): void {
   document.body.append(element);
   requestAnimationFrame(() => element.classList.add('memory-saved-toast--visible'));
   toast.intervalId = window.setInterval(() => updateProgress(toast), PROGRESS_INTERVAL_MS);
+  // Start the countdown after DOM work so the bar begins at full width.
+  toast.resumedAt = Date.now();
   updateProgress(toast);
 }
 
