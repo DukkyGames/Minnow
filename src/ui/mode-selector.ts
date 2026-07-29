@@ -168,6 +168,11 @@ function getModeSelectorEl(): HTMLElement | null {
   return modeSelectorRoot;
 }
 
+/** Board-managed chats must retain the role and tool policy assigned by the orchestrator. */
+function isBoardManagedChat(chat: ReturnType<typeof getActiveChat>): boolean {
+  return Boolean(chat.boardGroupId?.trim() || chat.boardTaskId?.trim());
+}
+
 function isPlanFamilyMode(modeId: ModeId | string | null | undefined): boolean {
   const normalized = normalizeModeId(modeId ?? undefined);
   return normalized === 'plan' || normalized === 'super-plan';
@@ -257,7 +262,13 @@ export function syncModeSelectorFromActiveChat(): void {
   if (!root || !sessionState) return;
 
   const chat = getActiveChat();
-  const activeId = normalizeModeId(getActiveChat().modeId);
+  root.hidden = isBoardManagedChat(chat);
+  if (root.hidden) {
+    closePlanSubmenu();
+    return;
+  }
+
+  const activeId = normalizeModeId(chat.modeId);
   const buttons = root.querySelectorAll<HTMLButtonElement>('[data-mode-id]');
   let index = 0;
   let selectedIndex = 0;
@@ -330,6 +341,13 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   if (chat.modeId === normalized) {
     const mode = listModes().find((m) => m.id === normalized);
     return { ok: true, modeId: normalized, label: mode?.label };
+  }
+
+  if (isBoardManagedChat(chat)) {
+    return {
+      ok: false,
+      error: 'Board chats keep the role assigned by the orchestrator',
+    };
   }
 
   chat.modeId = normalized;
