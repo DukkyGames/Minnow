@@ -5,10 +5,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   formatFetchNetworkError,
+  rankParagraphsByQuery,
   rankSentencesByQuery,
+  rankWebContentByQuery,
   stripHtmlToPlainText,
   truncateUtf8,
   validateHttpUrl,
+  WEB_RAG_EXCERPT_LIMIT,
   WEB_TEXT_MAX_BYTES,
   fetchUrlText,
 } from '../../src/lib/fetch-web-content.mjs';
@@ -58,8 +61,28 @@ describe('truncateUtf8', () => {
   it('truncates and appends byte cap notice', () => {
     const text = 'x'.repeat(WEB_TEXT_MAX_BYTES + 50);
     const out = truncateUtf8(text, WEB_TEXT_MAX_BYTES);
-    assert.match(out, /\[truncated to 8192 bytes\]/);
+    assert.match(out, /\[truncated to 24576 bytes\]/);
     assert.ok(out.length < text.length);
+  });
+});
+
+describe('rankParagraphsByQuery', () => {
+  it('returns paragraphs matching query terms', () => {
+    const text =
+      'Unrelated intro paragraph with filler content here.\n\nMinnow research mode uses deeper web RAG excerpts for agents.';
+    const hits = rankParagraphsByQuery(text, 'minnow research', 3);
+    assert.ok(hits.length >= 1);
+    assert.match(hits[0], /Minnow research/i);
+  });
+});
+
+describe('rankWebContentByQuery', () => {
+  it('merges sentence and paragraph hits up to the excerpt limit', () => {
+    const text =
+      'Minnow is a local chat client. It supports many tools.\n\nResearch mode uses web fetch with paragraph ranking for denser excerpts.';
+    const hits = rankWebContentByQuery(text, 'minnow research', WEB_RAG_EXCERPT_LIMIT);
+    assert.ok(hits.length >= 1);
+    assert.ok(hits.length <= WEB_RAG_EXCERPT_LIMIT);
   });
 });
 
@@ -125,7 +148,7 @@ describe('toolFetchWebContent', () => {
   it('returns truncated plain text on success', async () => {
     const original = globalThis.fetch;
     globalThis.fetch = async () =>
-      new Response(`<html><body>${'word '.repeat(3000)}</body></html>`, {
+      new Response(`<html><body>${'word '.repeat(6000)}</body></html>`, {
         status: 200,
         headers: { 'content-type': 'text/html' },
       });
@@ -134,7 +157,7 @@ describe('toolFetchWebContent', () => {
       const result = await toolFetchWebContent({ url: 'https://example.com/' });
       assert.ok(!result.startsWith('Error:'));
       assert.match(result, /<<<UNTRUSTED_SOURCE_DATA source="web:https:\/\/example\.com\/">>>/);
-      assert.ok(result.includes('[truncated to 8192 bytes]'));
+      assert.ok(result.includes('[truncated to 24576 bytes]'));
     } finally {
       globalThis.fetch = original;
     }

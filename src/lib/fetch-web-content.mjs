@@ -4,7 +4,10 @@
  */
 
 /** Max plain-text bytes returned from fetched web pages. */
-export const WEB_TEXT_MAX_BYTES = 8192;
+export const WEB_TEXT_MAX_BYTES = 24576;
+
+/** Default number of ranked excerpts returned by rag_web_content. */
+export const WEB_RAG_EXCERPT_LIMIT = 16;
 
 /** User-Agent for server-side page fetch (align with web_search_ddg). */
 export const DEFAULT_FETCH_USER_AGENT =
@@ -78,6 +81,36 @@ export function truncateUtf8(text, maxBytes) {
 }
 
 /**
+ * Tokenize a query into lowercase terms (length >= 2).
+ * @param {string} query
+ * @returns {string[]}
+ */
+function queryTerms(query) {
+  return String(query ?? '')
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.replace(/[^\w]/g, ''))
+    .filter((t) => t.length > 1);
+}
+
+/**
+ * Score one text unit by query term overlap.
+ * @param {string} unit
+ * @param {string[]} terms
+ * @returns {number}
+ */
+function scoreUnitByTerms(unit, terms) {
+  const lower = unit.toLowerCase();
+  let score = 0;
+  for (const term of terms) {
+    if (lower.includes(term)) {
+      score += 1;
+    }
+  }
+  return score;
+}
+
+/**
  * Scores sentences by query term overlap and returns the top matches.
  * @param {string} text
  * @param {string} query
@@ -85,11 +118,7 @@ export function truncateUtf8(text, maxBytes) {
  * @returns {string[]}
  */
 export function rankSentencesByQuery(text, query, limit) {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .map((t) => t.replace(/[^\w]/g, ''))
-    .filter((t) => t.length > 1);
+  const terms = queryTerms(query);
 
   if (terms.length === 0) {
     return [];
@@ -101,20 +130,132 @@ export function rankSentencesByQuery(text, query, limit) {
     .filter((s) => s.length > 20);
 
   const scored = sentences
-    .map((sentence) => {
-      const lower = sentence.toLowerCase();
-      let score = 0;
-      for (const term of terms) {
-        if (lower.includes(term)) {
-          score += 1;
-        }
-      }
-      return { sentence, score };
-    })
+    .map((sentence) => ({
+      sentence,
+      score: scoreUnitByTerms(sentence, terms),
+    }))
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, limit).map((row) => row.sentence);
+}
+
+/**
+ * Scores paragraphs (blank-line separated) by query term overlap.
+ * @param {string} text
+ * @param {string} query
+ * @param {number} limit
+ * @returns {string[]}
+ */
+export function rankParagraphsByQuery(text, query, limit) {
+  const terms = queryTerms(query);
+  if (terms.length === 0) {
+    return [];
+  }
+
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s+/g, ' ').trim())
+    .filter((p) => p.length > 40);
+
+  const scored = paragraphs
+    .map((paragraph) => ({
+      unit: paragraph,
+      score: scoreUnitByTerms(paragraph, terms),
+    }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, limit).map((row) => row.unit);
+}
+
+/**
+ * Rank sentences and paragraphs together for denser web RAG excerpts.
+ * @param {string} text
+ * @param {string} query
+ * @param {number} [limit]
+ * @returns {string[]}
+ */
+export function rankWebContentByQuery(text, query, limit = WEB_RAG_EXCERPT_LIMIT) {
+  const terms = queryTerms(query);
+  if (terms.length === 0) {
+    return [];
+  }
+
+  const candidates = [];
+  const seen = new Set();
+
+  for (const sentence of rankSentencesByQuery(text, query, limit)) {
+    const key = sentence.slice(0, 80);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ unit: sentence, score: scoreUnitByTerms(sentence, terms) });
+  }
+
+  for (const paragraph of rankParagraphsByQuery(text, query, limit)) {
+    const key = paragraph.slice(0, 80);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ unit: paragraph, score: scoreUnitByTerms(paragraph, terms) });
+  }
+
+  return candidates
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((row) => row.unit);
+}
+
+/** Default excerpt length for query-relevant memory/wiki injection. */
+export const MEMORY_EXCERPT_MAX_CHARS = 500;
+
+/**
+ * Pick the best query-matching excerpt from a wiki page body.
+ * @param {string} body
+ * @param {string} [query]
+ * @param {number} [maxLen]
+ * @returns {string}
+ */
+export function selectQueryRelevantExcerpt(body, query = '', maxLen = MEMORY_EXCERPT_MAX_CHARS) {
+  const text = String(body ?? '').trim();
+  if (!text) return '';
+
+  const terms = queryTerms(query);
+  let best = '';
+
+  if (terms.length > 0) {
+    const sections = text
+      .split(/(?=^##\s)/m)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const units =
+      sections.length > 1
+        ? sections
+        : text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
+
+    let bestScore = 0;
+    for (const unit of units) {
+      const score = scoreUnitByTerms(unit, terms);
+      if (score > bestScore) {
+        bestScore = score;
+        best = unit;
+      }
+    }
+  }
+
+  if (!best) {
+    best =
+      text
+        .split('\n')
+        .map((l) => l.trim())
+        .find(Boolean) ?? '';
+  }
+
+  const oneLine = best.replace(/\s+/g, ' ').trim();
+  if (oneLine.length <= maxLen) {
+    return oneLine;
+  }
+  return `${oneLine.slice(0, maxLen - 1)}…`;
 }
 
 /**

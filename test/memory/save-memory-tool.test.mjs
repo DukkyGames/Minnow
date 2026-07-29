@@ -21,13 +21,19 @@ describe('save_memory tool', () => {
     process.env.MINNOW_HOME = homeDir;
     resetMinnowHomeCache();
     await initMemoryApi();
+    // save_memory schedules vector sync — disable embeddings so teardown does not
+    // race fire-and-forget embedder I/O on Windows CI.
+    const configPath = path.join(homeDir, 'config.json');
+    const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+    config.memory.embeddings.enabled = false;
+    await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   });
 
   after(async () => {
     closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
-    await fs.rm(homeDir, { recursive: true, force: true });
+    await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   });
 
   it('creates an agent-sourced entry with fixed title and body', async () => {

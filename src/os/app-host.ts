@@ -41,9 +41,21 @@ let initialized = false;
 let lastForegroundApp: AppId | null = null;
 /** Last Settings section applied via openAppPage (window deep-links). */
 let lastAppliedSettingsSection: string | undefined;
+/** Last Brain section/path applied to its mounted window. */
+let lastAppliedBrainNavigation: string | undefined;
 const mountedWindowInstances = new Set<string>();
 /** Bumps on each syncFromSnapshot so stale openAppPage work cannot relaunch apps. */
 let syncGeneration = 0;
+
+function brainNavigationKey(options?: LaunchOptions): string {
+  const route = getCurrentRoute();
+  const section = options?.brainSection ?? route.brainSection ?? 'graph';
+  const editPath = section === 'edit' ? (options?.brainEditPath ?? '') : '';
+  return `${section}\n${editPath}`;
+}
+
+/** Expose the Brain route cache key for focused app-host regression tests. */
+export const brainNavigationKeyForTests = brainNavigationKey;
 
 function getAppsLayer(): HTMLElement | null {
   return document.getElementById('osAppsLayer');
@@ -88,6 +100,26 @@ function mountAppLayers(): void {
 
 function layerForApp(appId: AppId): HTMLElement | null {
   return document.getElementById(APP_LAYER_IDS[appId]);
+}
+
+/** Page apps that mark readiness with `is-open` on their root layer. */
+const PAGE_OPEN_LAYER_APPS = new Set<AppId>([
+  'settings',
+  'models',
+  'brain',
+  'bench',
+  'compare',
+  'calendar',
+  'email',
+  'issues',
+  'research',
+  'experts',
+  'scheduler',
+]);
+
+function isAppPageLayerOpen(appId: AppId): boolean {
+  if (!PAGE_OPEN_LAYER_APPS.has(appId)) return true;
+  return layerForApp(appId)?.classList.contains('is-open') ?? false;
 }
 
 const APP_ENTER_CLASS = 'mn-os-app-enter';
@@ -228,9 +260,15 @@ async function openAppPage(
     }
     case 'brain': {
       const { openBrain } = await import('../ui/brain-page');
-      openBrain(
-        (route.brainSection ?? options?.brainSection ?? 'graph') as import('../ui/brain-page').BrainSectionId,
-      );
+      const section = (
+        options?.brainSection ??
+        route.brainSection ??
+        'graph'
+      ) as import('../ui/brain-page').BrainSectionId;
+      openBrain(section, {
+        editPath: section === 'edit' ? options?.brainEditPath : undefined,
+      });
+      lastAppliedBrainNavigation = brainNavigationKey(options);
       break;
     }
     case 'scheduler': {
@@ -387,7 +425,6 @@ async function ensureWindowSurface(
 ): Promise<void> {
   if (!WINDOW_MOUNTED_APPS.has(appId)) return;
 
-  const wasMounted = mountedWindowInstances.has(instanceId);
   windowManager.ensureLayer();
   const openOptions: Parameters<typeof windowManager.open>[1] = {
     instanceId,
@@ -406,26 +443,22 @@ async function ensureWindowSurface(
   }
   mountedWindowInstances.add(instanceId);
 
-  if (!wasMounted) {
-    const layer = layerForApp(appId);
-    if (!layer?.classList.contains('is-open')) {
-      await openAppPage(appId, options, generation);
-      if (generation != null && generation !== syncGeneration) return;
-      if (appId === 'settings') {
-        lastAppliedSettingsSection =
-          options?.settingsSection ?? getCurrentRoute().settingsSection ?? 'general';
-      }
-    }
-    return;
-  }
-
-  // Settings hash stays `#/app/settings` — re-open when the section deep-link changes.
-  if (
+  const needsContentOpen = !isAppPageLayerOpen(appId);
+  const settingsSectionChanged =
     appId === 'settings' &&
-    options?.settingsSection &&
-    options.settingsSection !== lastAppliedSettingsSection
-  ) {
-    lastAppliedSettingsSection = options.settingsSection;
+    Boolean(options?.settingsSection) &&
+    options!.settingsSection !== lastAppliedSettingsSection;
+
+  if (needsContentOpen || settingsSectionChanged) {
+    if (settingsSectionChanged) {
+      lastAppliedSettingsSection = options!.settingsSection!;
+    } else if (appId === 'settings') {
+      lastAppliedSettingsSection =
+        options?.settingsSection ?? getCurrentRoute().settingsSection ?? 'general';
+    }
+    await openAppPage(appId, options, generation);
+  }
+  if (appId === 'brain' && brainNavigationKey(options) !== lastAppliedBrainNavigation) {
     await openAppPage(appId, options, generation);
   }
 }
@@ -438,6 +471,9 @@ function teardownWindowSurface(instanceId: string, appId: AppId): void {
   runWindowTeardown(appId);
   if (appId === 'settings') {
     lastAppliedSettingsSection = undefined;
+  }
+  if (appId === 'brain') {
+    lastAppliedBrainNavigation = undefined;
   }
 
   stashWindowContent(appId);
@@ -553,6 +589,9 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
     lastForegroundApp = appId;
   } else if (options && (appId === 'chat' || appId === 'code' || appId === 'research')) {
     void openAppPage(appId, options, generation);
+  } else if (!isAppPageLayerOpen(appId)) {
+    // Stale openAppPage was cancelled after showAppLayer / window mount bookkeeping.
+    void openAppPage(appId, options, generation);
   }
 }
 
@@ -572,6 +611,7 @@ export function resetAppHostForTests(): void {
   initialized = false;
   lastForegroundApp = null;
   lastAppliedSettingsSection = undefined;
+  lastAppliedBrainNavigation = undefined;
   syncGeneration = 0;
   mountedWindowInstances.clear();
   const appsLayer = getAppsLayer();

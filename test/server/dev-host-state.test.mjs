@@ -5,6 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import {
   clearDevHostState,
+  isDevHostProcessAlive,
   readDevHostState,
   writeDevHostState,
 } from '../../server/runtime/dev-host-state.js';
@@ -38,5 +39,14 @@ describe('dev host state', () => {
     writeDevHostState({ localUrl: 'http://localhost:9473', port: 9473 });
     clearDevHostState();
     assert.equal(readDevHostState(), null);
+  });
+
+  test('isDevHostProcessAlive reflects the writer pid', () => {
+    writeDevHostState({ localUrl: 'http://localhost:9473', port: 9473 });
+    const state = readDevHostState();
+    assert.ok(state);
+    assert.equal(isDevHostProcessAlive(state), true);
+    assert.equal(isDevHostProcessAlive({ pid: 0 }), false);
+    assert.equal(isDevHostProcessAlive({ pid: 999_999_999 }), false);
   });
 });

@@ -6,7 +6,7 @@ import { WebSocketServer } from 'ws';
 import { parseClientMessage } from './stt-protocol.js';
 import { SttStreamSession } from './stream-session.js';
 import { getNetworkAccess, isClientAllowed, isHostAllowed } from '../network/access.js';
-import { getSessionToken, timingSafeEqualToken } from '../runtime/session-token.js';
+import { authenticateMinnowToken } from '../runtime/authenticate-token.js';
 
 /**
  * Attach STT WebSocket server to the HTTP server.
@@ -28,7 +28,7 @@ export function attachSttWebSocketServer(httpServer) {
     }
 
     const token = url.searchParams.get('token') ?? '';
-    if (!timingSafeEqualToken(token, getSessionToken())) {
+    if (!authenticateMinnowToken(token)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;

@@ -5,20 +5,9 @@
 
 import http from 'node:http';
 import path from 'node:path';
-import fsp from 'node:fs/promises';
 import connect from 'connect';
 import sirv from 'sirv';
 import { importServerModule } from './server-import.js';
-
-/** True for GET/HEAD requests that should receive the SPA's index.html (mirrors sirv's `single: true` fallback heuristic). */
-function isHtmlNavigationRequest(req: http.IncomingMessage): boolean {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-  const accept = req.headers.accept ?? '';
-  if (accept.includes('text/html')) return true;
-  const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
-  const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
-  return !lastSegment.includes('.');
-}
 
 export interface InProcessServerHandle {
   url: string;
@@ -36,7 +25,7 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
     { attachSttWebSocketServer },
     { attachTtsWebSocketServer },
     { getAppRoot },
-    { getSessionToken, injectSessionTokenScript },
+    { createSpaAuthHtmlMiddleware },
   ] = await Promise.all([
     importServerModule<{
       applyMinnowMiddlewares: (
@@ -62,9 +51,8 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
     }>('tts/tts-ws.js'),
     importServerModule<{ getAppRoot: () => string }>('workspace/root.js'),
     importServerModule<{
-      getSessionToken: () => string;
-      injectSessionTokenScript: (html: string, token: string) => string;
-    }>('runtime/session-token.js'),
+      createSpaAuthHtmlMiddleware: (options: { indexPath: string }) => connect.HandleFunction;
+    }>('runtime/spa-auth-html.js'),
   ]);
 
   const connectApp = connect();
@@ -74,22 +62,13 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
 
   const distDir = path.join(getAppRoot(), 'dist');
 
-  // Inject the session token into the SPA shell so same-origin renderer code can
-  // read it; a cross-origin page never sees this HTML per same-origin policy.
-  connectApp.use(async (req, res, next) => {
-    if (!isHtmlNavigationRequest(req)) {
-      next();
-      return;
-    }
-    try {
-      const html = await fsp.readFile(path.join(distDir, 'index.html'), 'utf8');
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.end(injectSessionTokenScript(html, getSessionToken()));
-    } catch {
-      next();
-    }
-  });
+  // The packaged host is loopback-only, but shares the same request-aware
+  // navigation middleware so a future LAN bind cannot leak the host token.
+  connectApp.use(
+    createSpaAuthHtmlMiddleware({
+      indexPath: path.join(distDir, 'index.html'),
+    }),
+  );
 
   connectApp.use(
     sirv(distDir, {

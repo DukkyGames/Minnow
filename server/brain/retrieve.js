@@ -107,7 +107,7 @@ export async function buildRetrieveHits(entries, ids, scoreById = null) {
     hits.push({
       path: relPath,
       title: row.meta.title ?? 'Untitled',
-      excerpt: String(row.body ?? '').slice(0, 600),
+      excerpt: String(row.body ?? '').slice(0, 800),
       sourceQuote: extractSourceQuote(row.body),
       frontmatter: row.meta,
       backlinks: backlinks[linkKey] ?? backlinks[relPath] ?? [],
@@ -184,7 +184,7 @@ export async function retrieveBrainBlockHybrid(opts = {}, brainConfig) {
         hits = await llmRerankArchiveHits(
           hits,
           String(opts.query ?? ''),
-          opts.limit ?? 8,
+          opts.limit ?? 12,
         );
       }
     }

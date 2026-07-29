@@ -5,6 +5,10 @@
 import { fetchBrainPage, saveBrainPage } from '../../brain/client';
 import { getGraphSelectedPath, setGraphSelectedPath } from './graph-section';
 import { renderBrainMarkdown } from './wikilink-markdown';
+import {
+  memorySavedPayloadFromBrainPage,
+  showMemorySavedToast,
+} from '../memory-saved-toast';
 
 let bindingsDone = false;
 let previewBound = false;
@@ -144,6 +148,7 @@ async function saveEditForm(): Promise<void> {
 
   setGraphSelectedPath(relPath);
   setEditStatus('ok', `Saved ${relPath}`);
+  showMemorySavedToast(memorySavedPayloadFromBrainPage(saved));
 }
 
 /** Mount edit section and optionally pre-fill a path from Wiki. */

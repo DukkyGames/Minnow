@@ -69,12 +69,15 @@ function renderDesktopEmptyState(area: HTMLElement): void {
   area.replaceChildren();
   const empty = document.createElement('div');
   empty.className = 'mn-os-chat-empty';
+  const description = document.documentElement.classList.contains('minnow-companion')
+    ? 'Ask anything below. Mutating tools always wait for your approval on this device.'
+    : 'Ask anything — use the Files, Browser, and Preview tabs on the right for workspace files.';
   empty.innerHTML = `
     <div class="mn-os-chat-empty-ico" aria-hidden="true">
       ${iconHtml('appChat')}
     </div>
     <h2>Start a conversation</h2>
-    <p>Ask anything — use the Files, Browser, and Preview tabs on the right for workspace files.</p>
+    <p>${description}</p>
   `;
   area.appendChild(empty);
 }
@@ -138,6 +141,12 @@ export async function handleDesktopSend(prefill?: string): Promise<void> {
 
   if (!(await ensureReadyForSend())) return;
 
+  const active = getActiveChat();
+  if (active.historyLoaded === false) {
+    await ensureChatHistoryLoaded(active.id);
+    if (!sessionState || sessionState.activeId !== active.id) return;
+  }
+
   if (isActiveChatStreaming()) {
     handleComposerPrimaryAction();
     syncDesktopComposerSendState();
@@ -146,7 +155,6 @@ export async function handleDesktopSend(prefill?: string): Promise<void> {
 
   const sendBtn = document.getElementById('desktopSendBtn') as HTMLButtonElement | null;
   await sendMessage({ inputEl: input, sendBtnEl: sendBtn });
-  renderDesktopChatMessages();
   renderDesktopChatRail(desktopWorkspacePath);
   syncDesktopComposerSendState();
   refreshContextUsageRing();

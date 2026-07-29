@@ -49,10 +49,6 @@ function getComposerControlsRow(root: HTMLElement): HTMLElement | null {
   return root.closest('#composerControls') as HTMLElement | null;
 }
 
-function isHubComposerModeSelector(root: HTMLElement): boolean {
-  return Boolean(root.closest('.input-bar--hub'));
-}
-
 /** Space left in #composerControls for the mode strip (not its current icon-only width). */
 function availableModeSelectorWidth(root: HTMLElement): number {
   const row = getComposerControlsRow(root) ?? root.parentElement;
@@ -64,35 +60,61 @@ function availableModeSelectorWidth(root: HTMLElement): number {
 
   for (const child of row.children) {
     if (child === root) continue;
-    siblingsWidth += (child as HTMLElement).getBoundingClientRect().width;
+    const el = child as HTMLElement;
+    if (el.classList.contains('hidden') || el.hidden) continue;
+    siblingsWidth += el.getBoundingClientRect().width;
   }
 
   const totalGap = childCount > 1 ? gap * (childCount - 1) : 0;
   return Math.max(0, row.clientWidth - siblingsWidth - totalGap);
 }
 
+/** Natural labelled strip width without flex shrink or max-width squeezing the measure. */
+function measureLabelledModeSelectorWidth(root: HTMLElement): number {
+  root.classList.add('mode-segmented--measuring');
+  void root.offsetWidth;
+  const width = root.scrollWidth;
+  root.classList.remove('mode-segmented--measuring');
+  return width;
+}
+
+/** True when labelled segments need more space than the composer row can give them. */
+function shouldModeSelectorBeCompact(root: HTMLElement): boolean {
+  const availableWidth = availableModeSelectorWidth(root);
+  root.classList.remove('mode-segmented--compact');
+  const labelledWidth = measureLabelledModeSelectorWidth(root);
+  return labelledWidth > availableWidth + 1;
+}
+
 /** Hide segment labels when labelled content cannot fit the space left in the composer row. */
 function syncModeSelectorCompact(root: HTMLElement): void {
   if (root.querySelector('.is-submenu-open')) return;
 
-  // Hub keeps labelled segments on the composer row (scroll horizontally when tight).
-  if (isHubComposerModeSelector(root)) {
-    root.classList.remove('mode-segmented--compact');
-    syncPlanSegmentCompactAffordance(root);
-    return;
-  }
-
-  root.classList.remove('mode-segmented--compact');
-  // Measure natural labelled width, not the shrunken icon-only box.
-  void root.offsetWidth;
-  const labelledWidth = root.scrollWidth;
-  const availableWidth = availableModeSelectorWidth(root);
-
-  if (labelledWidth > availableWidth + 1) {
+  if (shouldModeSelectorBeCompact(root)) {
     root.classList.add('mode-segmented--compact');
+  } else {
+    root.classList.remove('mode-segmented--compact');
   }
 
   syncPlanSegmentCompactAffordance(root);
+}
+
+/** Re-run compact layout after composer siblings (branch/worktree chips) change width. */
+export function refreshModeSelectorLayout(): void {
+  const root = getModeSelectorEl();
+  if (!root) return;
+  syncModeSelectorCompact(root);
+}
+
+/** Observe a composer sibling inserted after boot (e.g. run-target wrap). */
+export function observeModeSelectorComposerSibling(el: HTMLElement): void {
+  const root = getModeSelectorEl();
+  if (!root) return;
+
+  if (modeSelectorCompactObserver) {
+    modeSelectorCompactObserver.observe(el);
+  }
+  syncModeSelectorCompact(root);
 }
 
 function isModeSelectorCompact(root: HTMLElement | null = getModeSelectorEl()): boolean {
@@ -144,6 +166,11 @@ function getModeSelectorEl(): HTMLElement | null {
     modeSelectorRoot = document.getElementById('modeSelector');
   }
   return modeSelectorRoot;
+}
+
+/** Board-managed chats must retain the role and tool policy assigned by the orchestrator. */
+function isBoardManagedChat(chat: ReturnType<typeof getActiveChat>): boolean {
+  return Boolean(chat.boardGroupId?.trim() || chat.boardTaskId?.trim());
 }
 
 function isPlanFamilyMode(modeId: ModeId | string | null | undefined): boolean {
@@ -235,7 +262,13 @@ export function syncModeSelectorFromActiveChat(): void {
   if (!root || !sessionState) return;
 
   const chat = getActiveChat();
-  const activeId = normalizeModeId(getActiveChat().modeId);
+  root.hidden = isBoardManagedChat(chat);
+  if (root.hidden) {
+    closePlanSubmenu();
+    return;
+  }
+
+  const activeId = normalizeModeId(chat.modeId);
   const buttons = root.querySelectorAll<HTMLButtonElement>('[data-mode-id]');
   let index = 0;
   let selectedIndex = 0;
@@ -308,6 +341,13 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   if (chat.modeId === normalized) {
     const mode = listModes().find((m) => m.id === normalized);
     return { ok: true, modeId: normalized, label: mode?.label };
+  }
+
+  if (isBoardManagedChat(chat)) {
+    return {
+      ok: false,
+      error: 'Board chats keep the role assigned by the orchestrator',
+    };
   }
 
   chat.modeId = normalized;
@@ -461,4 +501,24 @@ export function initModeSelector(): void {
   root.dataset.initialized = 'true';
   attachModeSelectorCompactObserver(root);
   syncModeSelectorFromActiveChat();
+}
+
+/** Tear down observers and DOM for unit tests. */
+export function disposeModeSelectorForTests(): void {
+  closePlanSubmenu();
+  if (modeSelectorCompactObserver) {
+    modeSelectorCompactObserver.disconnect();
+    modeSelectorCompactObserver = null;
+  }
+  if (statusHideTimer) {
+    clearTimeout(statusHideTimer);
+    statusHideTimer = null;
+  }
+  modeSelectorRoot = null;
+  const root = document.getElementById('modeSelector');
+  if (root) {
+    root.innerHTML = '';
+    root.classList.remove('mode-segmented--compact');
+    delete root.dataset.initialized;
+  }
 }

@@ -202,8 +202,27 @@ function isDirtyTrackingVerifierEnabled(): boolean {
   return isViteDevBuild();
 }
 
+/** Copy chat fields for wire/shadow serialization without tripping lazy-history traps. */
+function copyChatFieldsWithoutLazyHistory(chat: Chat, includeHistory: boolean): Record<string, unknown> {
+  const omit = new Set(['historyLoaded', 'messageCount']);
+  if (!includeHistory) omit.add('history');
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(chat)) {
+    if (omit.has(key)) continue;
+    out[key] = (chat as unknown as Record<string, unknown>)[key];
+  }
+  return out;
+}
+
+/** Serialize chats for dirty-tracking without reading lazy-unloaded history bodies. */
+function chatForDirtyTrackingShadow(chat: Chat): Record<string, unknown> {
+  return copyChatFieldsWithoutLazyHistory(chat, chat.historyLoaded !== false);
+}
+
 function captureDirtyTrackingShadow(state: SessionState | null): void {
-  dirtyTrackingShadowChatsJson = state ? JSON.stringify(state.chats) : null;
+  dirtyTrackingShadowChatsJson = state
+    ? JSON.stringify(state.chats.map(chatForDirtyTrackingShadow))
+    : null;
 }
 
 function clearSessionDirtySets(): void {
@@ -278,7 +297,7 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
   for (const chat of state.chats) {
     const prev = shadowById.get(chat.id);
     if (prev === undefined) continue; // new chats are marked via touchChat on create
-    const next = JSON.stringify(chat);
+    const next = JSON.stringify(chatForDirtyTrackingShadow(chat));
     if (prev !== next && !dirtyChatIds.has(chat.id)) {
       missed = true;
       console.warn(
@@ -294,22 +313,7 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
  * Omits `history` so the server preserves existing message rows instead of syncing [].
  */
 export function chatForSessionsWire(chat: Chat): Chat {
-  if (chat.historyLoaded === false) {
-    const {
-      history: _history,
-      historyLoaded: _loaded,
-      messageCount: _messageCount,
-      ...rest
-    } = chat;
-    void _history;
-    void _loaded;
-    void _messageCount;
-    return rest as Chat;
-  }
-  const { historyLoaded: _loaded, messageCount: _messageCount, ...rest } = chat;
-  void _loaded;
-  void _messageCount;
-  return rest as Chat;
+  return copyChatFieldsWithoutLazyHistory(chat, chat.historyLoaded !== false) as unknown as Chat;
 }
 
 /** Clone session state for wire I/O, stripping unloaded chat histories. */
@@ -568,6 +572,14 @@ export function isChatHistoryLoaded(chat: Chat): boolean {
   return chat.historyLoaded !== false;
 }
 
+/** Message count without tripping the lazy-history dev trap (sidebar/listing safe). */
+export function getChatMessageCount(chat: Chat): number {
+  if (chat.historyLoaded === false) {
+    return typeof chat.messageCount === 'number' ? chat.messageCount : 0;
+  }
+  return chat.history.length;
+}
+
 /**
  * Throw when history is not loaded — use at highest-risk mutators (category-3).
  * Prefer {@link ensureChatHistoryLoaded} before calling this on the flag-on path.
@@ -656,7 +668,16 @@ function materializeChatHistory(chat: Chat, messages: Message[]): void {
     // Drop the dev trap getter so subsequent access is a plain data property.
     delete (chat as { history?: Message[] }).history;
   }
-  chat.history = Array.isArray(messages) ? messages : [];
+  const incoming = Array.isArray(messages) ? messages : [];
+  const current = Array.isArray(chat.history) ? chat.history : [];
+  // A send can land while ensureChatHistoryLoaded is still in flight (e.g. session
+  // rail switched activeId before hydrate finished). Never discard a longer local tail.
+  if (current.length > incoming.length) {
+    chat.historyLoaded = true;
+    chat.messageCount = current.length;
+    return;
+  }
+  chat.history = incoming;
   chat.historyLoaded = true;
   chat.messageCount = chat.history.length;
 }

@@ -201,7 +201,7 @@ export async function retrieveMemoryBlock(options: {
     body: JSON.stringify({
       query: options.query ?? '',
       profile: options.profile ?? 'full',
-      limit: options.limit ?? 8,
+      limit: options.limit ?? 12,
       workspaceKey,
       ...(options.expertId?.trim()
         ? { scope: { expertId: options.expertId.trim() } }

@@ -9,7 +9,7 @@ description: Mandatory verification ladder before planning or implementing again
 
 ## Verify before you plan or build
 
-Do not draft plans or write implementation code from training data alone when the task depends on libraries, APIs, or project-specific conventions. Retrieve and cross-check facts first.
+Do not draft plans or write implementation code from training data alone when the task depends on libraries, APIs, or project-specific conventions. Retrieve and cross-check facts first. For general Q&A and debugging, use the same ladder under **Investigate before you answer**.
 
 ### When this applies
 

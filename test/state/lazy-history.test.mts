@@ -10,6 +10,7 @@ import { defaultSessionState } from '../../src/config/defaults.ts';
 import {
   attachUnloadedHistoryTrapForTests,
   buildSessionsPatchDelta,
+  captureDirtyTrackingShadowForTests,
   chatForSessionsWire,
   ensureChatHistoryLoaded,
   isSessionsLazyHistoryEnabled,
@@ -181,6 +182,26 @@ describe('lazy history (C.2)', () => {
     assert.equal(wireLoaded.history.length, 1);
   });
 
+  test('captureDirtyTrackingShadow skips lazy-unloaded history bodies', () => {
+    const errors: string[] = [];
+    const origError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+      origError.apply(console, args as Parameters<typeof console.error>);
+    };
+    try {
+      setSessionsLazyHistoryEnabledForTests(true);
+      setHistoryTrapForcedForTests(true);
+      const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
+      attachUnloadedHistoryTrapForTests(chat);
+      setSessionStateForTests(makeState([chat]));
+      captureDirtyTrackingShadowForTests();
+      assert.equal(errors.length, 0);
+    } finally {
+      console.error = origError;
+    }
+  });
+
   test('buildSessionsPatchDelta omits history for unloaded dirty chats', () => {
     const unloaded = makeChat(CHAT_A, { historyLoaded: false, name: 'A' });
     const loaded = makeChat(CHAT_B, {
@@ -197,6 +218,33 @@ describe('lazy history (C.2)', () => {
     const wireB = delta.chats?.find((c) => c.id === CHAT_B);
     assert.equal('history' in (wireA ?? {}), false);
     assert.equal(wireB?.history.length, 1);
+  });
+
+  test('materializeChatHistory keeps local tail when a send lands during hydrate', async () => {
+    setStorageModeForTests('server');
+    setSessionsLazyHistoryEnabledForTests(true);
+
+    const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
+    setSessionStateForTests(makeState([chat]));
+
+    let resolveFetch!: (value: Response) => void;
+    const fetchGate = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    globalThis.fetch = async () => fetchGate;
+
+    const hydrate = ensureChatHistoryLoaded(CHAT_A);
+    chat.history.push({ role: 'user', content: 'sent while loading' });
+
+    resolveFetch(
+      new Response(JSON.stringify({ chatId: CHAT_A, history: [] }), { status: 200 }),
+    );
+    await hydrate;
+
+    assert.equal(chat.historyLoaded, true);
+    assert.equal(chat.history.length, 1);
+    assert.equal(chat.history[0]?.content, 'sent while loading');
   });
 
   test('resetSessionPersistenceForTests restores flag default ON', () => {

@@ -1,0 +1,198 @@
+/**
+ * Narrow authenticated companion shell. Desktop-only chrome never appears.
+ */
+
+.companion-access {
+  position: fixed;
+  inset: 0;
+  z-index: 100040;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: max(28px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(28px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+}
+
+.companion-access h1 {
+  max-width: 24ch;
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.companion-access p {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--mn-fg-muted);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.companion-access__hint {
+  padding-top: 8px;
+  font-size: 12px;
+}
+
+.companion-access__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 28rem;
+  margin-top: 8px;
+}
+
+.companion-access__label {
+  font: 600 13px/1.3 var(--font-ui);
+  color: var(--mn-fg);
+}
+
+.companion-access__input {
+  width: 100%;
+  max-width: 12rem;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-bg-elevated);
+  color: var(--mn-fg);
+  font: 600 20px/1.3 var(--font-ui);
+  letter-spacing: 0.18em;
+  text-align: center;
+}
+
+.companion-access__input:focus {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.companion-access__error {
+  margin: 0;
+  color: var(--mn-danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.companion-access__error[hidden] {
+  display: none;
+}
+
+.companion-access__submit {
+  align-self: flex-start;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--mn-accent);
+  color: var(--mn-accent-fg);
+  font: 600 14px/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.companion-access__submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+html.minnow-companion-access body > :not(#companionAccess):not(#companionReconnect) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.companion-reconnect {
+  position: fixed;
+  z-index: 100020;
+  top: max(8px, env(safe-area-inset-top));
+  left: 50%;
+  max-width: calc(100vw - 24px);
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--mn-warning-soft);
+  color: var(--mn-warning);
+  font: 600 12px/1.3 var(--font-ui);
+  box-shadow: var(--shadow-popover-soft);
+}
+
+.companion-reconnect[hidden] {
+  display: none;
+}
+
+.companion-mode-select {
+  display: none;
+}
+
+html.minnow-companion #osDockLayer,
+html.minnow-companion .mn-os-mb-apps,
+html.minnow-companion .mn-os-mb-model-slot,
+html.minnow-companion .mn-os-mb-workspace-slot,
+html.minnow-companion .mn-os-mb-right > .mn-os-mb-icon:not(.mn-os-mb-scheduler),
+html.minnow-companion .mn-os-workspace-rail,
+html.minnow-companion .chat-app-outputs,
+html.minnow-companion .chat-app-tools-anchor,
+html.minnow-companion .mn-os-desktop-tools-anchor,
+html.minnow-companion .mn-os-desktop-context,
+html.minnow-companion #btnChatAppAttach {
+  display: none !important;
+}
+
+html.minnow-companion .mn-os-mb-scheduler {
+  display: grid !important;
+}
+
+html.minnow-companion .chat-app-workspace,
+html.minnow-companion .chat-app-conversation {
+  min-width: 0;
+}
+
+html.minnow-companion .chat-app-top {
+  gap: 10px;
+  padding-inline: max(12px, env(safe-area-inset-left))
+    max(12px, env(safe-area-inset-right));
+}
+
+html.minnow-companion .chat-app-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.minnow-companion .companion-mode-select {
+  display: block;
+  flex: none;
+  min-height: 36px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font: 500 13px var(--font-ui);
+}
+
+html.minnow-companion #desktopComposerRoot .composer-model-trigger-row {
+  justify-content: flex-end;
+  min-height: 36px;
+}
+
+html.minnow-companion #desktopComposerRoot .companion-mode-select {
+  max-width: 9rem;
+}
+
+html.minnow-companion .companion-mode-select:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+html.minnow-companion .chat-app-composer {
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion-reconnect {
+    transition: none;
+  }
+}
+

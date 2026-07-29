@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-28T15:03:20.808Z",
+  "createdAt": "2026-07-29T03:01:10.920Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -100,12 +100,12 @@
   "memory": {
     "enabled": true,
     "maxEntries": 500,
-    "maxInjectCharsFull": 4000,
+    "maxInjectCharsFull": 8000,
     "maxInjectCharsLite": 800,
     "retrieveLimit": 20,
     "defaultTags": [],
     "embeddings": {
-      "enabled": false,
+      "enabled": true,
       "backend": "local",
       "modelId": "Xenova/all-MiniLM-L6-v2",
       "providerId": "",
@@ -237,9 +237,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-d4sjZt",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-KZVGlT",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-d4sjZt"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-KZVGlT"
     ]
   }
 }

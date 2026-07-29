@@ -16,7 +16,8 @@ import { deleteGenerationsForProviderShutdown } from './server/generations/store
 import { getAppRoot } from './server/workspace/root.js';
 import { getMinnowHome } from './server/config/home.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
-import { getSessionToken, injectSessionTokenScript } from './server/runtime/session-token.js';
+import { getSessionToken } from './server/runtime/session-token.js';
+import { createSpaAuthHtmlMiddleware } from './server/runtime/spa-auth-html.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
 import {
   startSchedulerTickLoop,
@@ -114,6 +115,10 @@ function launchElectronShell(port, localUrl, appRoot) {
 }
 
 async function main() {
+  // Drop stale dev-host metadata from a prior crash so Electron does not attach
+  // to an orphaned server on the preferred port while this boot binds elsewhere.
+  clearDevHostState();
+
   const appRoot = getAppRoot();
   const configMeta = (await readConfigJson('config.json')) ?? {};
   const networkAccess = resolveNetworkAccess(configMeta);
@@ -139,9 +144,12 @@ async function main() {
             resolveSafePath,
             runWithPathAccess,
           });
-        },
-        transformIndexHtml(html) {
-          return injectSessionTokenScript(html, getSessionToken());
+          server.middlewares.use(
+            createSpaAuthHtmlMiddleware({
+              indexPath: path.join(appRoot, 'index.html'),
+              transformHtml: (url, html) => server.transformIndexHtml(url, html),
+            }),
+          );
         },
       },
     ],

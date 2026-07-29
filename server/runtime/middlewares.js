@@ -48,6 +48,7 @@ import { createBoardTestingMiddleware } from '../orchestrate/board-testing/middl
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
 import { createAuthMiddleware } from './auth-middleware.js';
+import { createAuthRoutesMiddleware } from '../auth/routes.js';
 import { createDiagnosticsMiddleware } from '../diagnostics/middleware.js';
 import { installDiagnosticsProcessHandlers } from '../diagnostics/process-handlers.js';
 
@@ -58,6 +59,7 @@ import { installDiagnosticsProcessHandlers } from '../diagnostics/process-handle
 export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPathAccess }) {
   installDiagnosticsProcessHandlers();
   connectApp.use(createAuthMiddleware());
+  connectApp.use(createAuthRoutesMiddleware());
   connectApp.use(createDiagnosticsMiddleware());
   connectApp.use(createConfigMiddleware());
   connectApp.use(createSettingsMiddleware());
