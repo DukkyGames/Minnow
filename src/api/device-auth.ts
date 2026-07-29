@@ -38,7 +38,7 @@ function pairingCodeFromLocation(): string {
 }
 
 function removePairingFragment(): void {
-  const url = `${window.location.pathname}${window.location.search}#/companion`;
+  const url = `${window.location.pathname}${window.location.search}#/desktop`;
   window.history.replaceState(null, '', url);
 }
 
