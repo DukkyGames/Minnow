@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { installHappyDomGlobals } from '../os/dom-helpers.mts';
@@ -97,5 +98,17 @@ describe('mode selector for orchestrator board chats', () => {
     syncModeSelectorFromActiveChat();
 
     assert.equal(modeSelector.hidden, false);
+  });
+
+  test('keeps the hidden selector out of layout despite its inline-flex styling', () => {
+    const modeSelectorCss = readFileSync(
+      new URL('../../src/styles/mode-selector.css', import.meta.url),
+      'utf8',
+    );
+
+    assert.match(
+      modeSelectorCss,
+      /#modeSelector\[hidden\]\s*\{\s*display:\s*none;\s*\}/,
+    );
   });
 });
