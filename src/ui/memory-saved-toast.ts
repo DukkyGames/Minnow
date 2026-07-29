@@ -226,16 +226,16 @@ function buildToastElement(item: QueuedMemorySavedToast): HTMLElement {
   card.setAttribute('aria-live', 'polite');
   card.setAttribute('aria-atomic', 'true');
 
-  const content = document.createElement('div');
-  content.className = 'memory-saved-toast__content';
+  const body = document.createElement('div');
+  body.className = 'memory-saved-toast__body';
+
+  const status = document.createElement('div');
+  status.className = 'memory-saved-toast__status';
 
   const icon = document.createElement('span');
   icon.className = 'memory-saved-toast__icon';
   icon.setAttribute('aria-hidden', 'true');
-  icon.append(createIcon('check', { size: 16 }));
-
-  const copy = document.createElement('div');
-  copy.className = 'memory-saved-toast__copy';
+  icon.append(createIcon('check', { size: 14 }));
 
   const eyebrow = document.createElement('span');
   eyebrow.className = 'memory-saved-toast__label';
@@ -253,8 +253,11 @@ function buildToastElement(item: QueuedMemorySavedToast): HTMLElement {
   error.className = 'memory-saved-toast__error';
   error.setAttribute('aria-live', 'assertive');
 
-  copy.append(eyebrow, title, description, error);
-  content.append(icon, copy);
+  status.append(icon, eyebrow);
+  body.append(status, title, description, error);
+
+  const footer = document.createElement('div');
+  footer.className = 'memory-saved-toast__footer';
 
   const actions = document.createElement('div');
   actions.className = 'memory-saved-toast__actions';
@@ -279,7 +282,8 @@ function buildToastElement(item: QueuedMemorySavedToast): HTMLElement {
   progressFill.className = 'memory-saved-toast__progress-fill';
   progress.append(progressFill);
 
-  card.append(content, actions, progress);
+  footer.append(actions, progress);
+  card.append(body, footer);
 
   rejectButton.addEventListener('click', () => {
     const current = activeToast;
