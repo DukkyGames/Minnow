@@ -215,4 +215,23 @@ describe('code app settings (MIN-417)', () => {
     assert.equal(getOsView(), 'app');
     assert.equal(windowManager.getWindows().length, 0);
   });
+
+  test('reopens settings when stale openAppPage left the layer without content', async () => {
+    openSettingsFromTopbar();
+    syncOsRouteFromHashForTests();
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const root = document.getElementById('settingsView');
+    assert.ok(root?.classList.contains('is-open'));
+
+    // Simulate syncGeneration aborting openAppPage after showAppLayer bookkeeping.
+    root.classList.remove('is-open');
+
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(getForegroundAppId(), 'settings');
+    assert.ok(root?.classList.contains('is-open'));
+  });
 });
