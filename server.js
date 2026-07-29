@@ -16,7 +16,8 @@ import { deleteGenerationsForProviderShutdown } from './server/generations/store
 import { getAppRoot } from './server/workspace/root.js';
 import { getMinnowHome } from './server/config/home.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
-import { getSessionToken, injectSessionTokenScript } from './server/runtime/session-token.js';
+import { getSessionToken } from './server/runtime/session-token.js';
+import { createSpaAuthHtmlMiddleware } from './server/runtime/spa-auth-html.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
 import {
   startSchedulerTickLoop,
@@ -139,9 +140,12 @@ async function main() {
             resolveSafePath,
             runWithPathAccess,
           });
-        },
-        transformIndexHtml(html) {
-          return injectSessionTokenScript(html, getSessionToken());
+          server.middlewares.use(
+            createSpaAuthHtmlMiddleware({
+              indexPath: path.join(appRoot, 'index.html'),
+              transformHtml: (url, html) => server.transformIndexHtml(url, html),
+            }),
+          );
         },
       },
     ],

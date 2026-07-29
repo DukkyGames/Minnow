@@ -9,8 +9,12 @@
  * thanks to the browser's same-origin policy on the missing header).
  */
 
-import { getSessionToken, timingSafeEqualToken } from './session-token.js';
-import { getNetworkAccess, isHostAllowed } from '../network/access.js';
+import { authenticateMinnowToken } from './authenticate-token.js';
+import {
+  getNetworkAccess,
+  isClientAllowed,
+  isHostAllowed,
+} from '../network/access.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -52,12 +56,26 @@ export function createAuthMiddleware() {
       return;
     }
 
+    // This exact bootstrap operation is the only unauthenticated API path.
+    // It remains available only while the server is LAN-bound and only to a
+    // loopback/private-network peer. Host validation above still applies.
+    if (url.pathname === '/api/auth/pair' && req.method === 'POST') {
+      if (getNetworkAccess() !== 'lan' || !isClientAllowed(req, getNetworkAccess())) {
+        sendJson(res, 403, { error: 'LAN pairing only' });
+        return;
+      }
+      next();
+      return;
+    }
+
     const token = extractToken(req, url);
-    if (!timingSafeEqualToken(token, getSessionToken())) {
+    const auth = authenticateMinnowToken(token);
+    if (!auth) {
       sendJson(res, 401, { error: 'Unauthorized' });
       return;
     }
 
+    req.minnowAuth = auth;
     next();
   };
 }
