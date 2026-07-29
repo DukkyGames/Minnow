@@ -31,6 +31,22 @@ async function loadFactVerificationPromptMap() {
     path.join(toolDir, 'fact-verification.lite.md'),
     'utf8',
   );
+  map['./tool-usage/investigate-before-answer.full.md'] = await fs.readFile(
+    path.join(toolDir, 'investigate-before-answer.md'),
+    'utf8',
+  );
+  map['./tool-usage/investigate-before-answer.lite.md'] = await fs.readFile(
+    path.join(toolDir, 'investigate-before-answer.lite.md'),
+    'utf8',
+  );
+  map['./tool-usage/sub-agent-delegation.full.md'] = await fs.readFile(
+    path.join(toolDir, 'sub-agent-delegation.md'),
+    'utf8',
+  );
+  map['./tool-usage/sub-agent-delegation.lite.md'] = await fs.readFile(
+    path.join(toolDir, 'sub-agent-delegation.lite.md'),
+    'utf8',
+  );
   map['./tool-usage/context7-docs.full.md'] = await fs.readFile(
     path.join(toolDir, 'context7-docs.md'),
     'utf8',
@@ -69,6 +85,30 @@ async function loadFactVerificationPromptMap() {
 describe('fact-verification prompts', () => {
   beforeEach(() => {
     resetPromptRegistry();
+  });
+
+  test('investigate-before-answer fragment teaches investigation ladder', async () => {
+    registerPromptFilesFromRaw(await loadFactVerificationPromptMap());
+    const loaded = loadPromptById('tool-usage', 'investigate-before-answer', 'full');
+    assert.ok(loaded?.body);
+    assert.match(loaded.body, /Investigation ladder/i);
+    assert.match(loaded.body, /two distinct tool-backed sources/i);
+    assert.match(loaded.body, /rag_web_content/);
+  });
+
+  test('composeSystemPrompt includes investigate-before-answer for debug mode', async () => {
+    registerPromptFilesFromRaw(await loadFactVerificationPromptMap());
+    const out = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/proj',
+      modeId: 'debug',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['read_file', 'grep'],
+    });
+    assert.match(out, /## Investigate before you answer/);
   });
 
   test('fragment teaches verification ladder and web tools', async () => {

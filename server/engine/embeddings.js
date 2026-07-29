@@ -12,7 +12,7 @@ export const DEFAULT_EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';
 
 /** Default embeddings subsection in memory config. */
 export const DEFAULT_EMBEDDINGS_CONFIG = {
-  enabled: false,
+  enabled: true,
   backend: 'local',
   modelId: DEFAULT_EMBEDDING_MODEL,
   providerId: '',

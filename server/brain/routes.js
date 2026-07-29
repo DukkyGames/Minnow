@@ -205,11 +205,11 @@ export async function handleBrainRequest(req, res, pathname) {
       const maxChars =
         profile === 'lite'
           ? brain.maxInjectCharsLite ?? 800
-          : brain.maxInjectCharsFull ?? 4000;
+          : brain.maxInjectCharsFull ?? 8000;
       const { block, ids, hits } = await retrieveBrainBlockHybrid(
         {
           query: body.query,
-          limit: body.limit ?? 8,
+          limit: body.limit ?? 12,
           tags: body.tags,
           maxChars,
           workspaceKey: body.workspaceKey,

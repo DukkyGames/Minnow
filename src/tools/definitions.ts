@@ -151,7 +151,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'fetch_web_content',
-      'Fetch a web page URL and return its main text content (HTML stripped, length capped). Prefer npm start for reliable fetch without browser CORS limits.',
+      'Fetch a web page URL and return its main text content (HTML stripped, up to ~24KB). Prefer npm start for reliable fetch without browser CORS limits.',
       {
         url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },
       },
@@ -161,12 +161,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'rag_web_content',
     label: 'Web RAG',
-    description: 'Fetches a page and returns sentences most relevant to a query.',
+    description: 'Fetches a page and returns sentences and paragraphs most relevant to a query.',
     category: 'web',
     serverRequired: false,
     definition: toolSchema(
       'rag_web_content',
-      'Fetch a web page and return text snippets most relevant to the query.',
+      'Fetch a web page and return up to 16 query-relevant excerpts (sentences and paragraphs) from a deeper page extract (~24KB).',
       {
         url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },
         query: { type: 'string', description: 'What to extract from the page' },

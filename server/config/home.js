@@ -201,12 +201,12 @@ const DEFAULT_META = {
   memory: {
     enabled: true,
     maxEntries: 500,
-    maxInjectCharsFull: 4000,
+    maxInjectCharsFull: 8000,
     maxInjectCharsLite: 800,
     retrieveLimit: 20,
     defaultTags: [],
     embeddings: {
-      enabled: false,
+      enabled: true,
       backend: 'local',
       modelId: 'Xenova/all-MiniLM-L6-v2',
       providerId: '',

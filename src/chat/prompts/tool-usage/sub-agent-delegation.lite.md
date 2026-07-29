@@ -9,4 +9,4 @@ description: Lite sub-agent spawn rules.
 
 ## Sub-agent delegation
 
-Delegate parallel work via `spawn_sub_agent` (`wait: false`; no status polling). Types: `researcher` / `explore` (research), `generalPurpose` (impl chunk), `shell` (scripts). Write self-contained task briefs; synthesize summaries.
+Prefer `researcher`/`explore` in one turn for multi-faceted or uncertain questions (not one shallow parent search). `spawn_sub_agent` (`wait: false`; no polling). Types: `researcher` (cited web+repo), `explore` (code map), `generalPurpose`, `shell`. Self-contained briefs; synthesize summaries.

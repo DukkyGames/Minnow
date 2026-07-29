@@ -34,6 +34,20 @@ describe('memory retrieve', () => {
     assert.equal(block, expected);
   });
 
+  test('formatMemoryBlock uses query-relevant excerpt when query provided', () => {
+    const block = formatMemoryBlock(
+      [
+        {
+          meta: META_A,
+          body: 'Intro line.\n\nUse npm start for integration tests before release.',
+        },
+      ],
+      4000,
+      'integration tests',
+    );
+    assert.match(block, /integration tests/);
+    assert.doesNotMatch(block, /^Intro line\.$/m);
+  });
   test('formatMemoryBlock includes path when meta.path is set', () => {
     const block = formatMemoryBlock(
       [

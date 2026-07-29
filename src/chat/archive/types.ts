@@ -24,7 +24,7 @@ export const DEFAULT_ARCHIVE_CONFIG: ArchiveConfig = {
   stalenessTurns: 20,
   pressureThreshold: 0.75,
   minRecentTurns: 4,
-  retrievalTopK: 5,
+  retrievalTopK: 8,
   llmRerank: false,
 };
 
