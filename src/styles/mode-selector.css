@@ -62,6 +62,11 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Keep board-managed chats hidden even though the strip declares its own display mode. */
+#modeSelector[hidden] {
+  display: none;
+}
+
 /* Must beat `#modeSelector.mode-segmented { overflow-x: auto }` (ID specificity),
    or the Plan/Super Plan menu is clipped inside the strip. */
 #modeSelector.mode-segmented:has(.is-submenu-open),
