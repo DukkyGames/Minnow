@@ -56,6 +56,7 @@ Semantic chip letters: **c** = accent, **g** = success, **y** = warning, **r** =
 | Class | File | Use |
 |-------|------|-----|
 | `.mn-toast` + `--success` / `--error` | [`toast.css`](../../src/styles/toast.css) | Ephemeral notifications ([`toast.ts`](../../src/ui/toast.ts)) |
+| `.memory-saved-toast` | [`memory-saved-toast.css`](../../src/styles/memory-saved-toast.css) | Queued memory confirmation with reject/open actions and expiry progress ([`memory-saved-toast.ts`](../../src/ui/memory-saved-toast.ts)) |
 | `.visually-hidden` | [`global.css`](../../src/styles/global.css) | Screen-reader-only |
 | `.icon-svg` | [`global.css`](../../src/styles/global.css) | 18px stroke icons |
 

@@ -41,9 +41,21 @@ let initialized = false;
 let lastForegroundApp: AppId | null = null;
 /** Last Settings section applied via openAppPage (window deep-links). */
 let lastAppliedSettingsSection: string | undefined;
+/** Last Brain section/path applied to its mounted window. */
+let lastAppliedBrainNavigation: string | undefined;
 const mountedWindowInstances = new Set<string>();
 /** Bumps on each syncFromSnapshot so stale openAppPage work cannot relaunch apps. */
 let syncGeneration = 0;
+
+function brainNavigationKey(options?: LaunchOptions): string {
+  const route = getCurrentRoute();
+  const section = options?.brainSection ?? route.brainSection ?? 'graph';
+  const editPath = section === 'edit' ? (options?.brainEditPath ?? '') : '';
+  return `${section}\n${editPath}`;
+}
+
+/** Expose the Brain route cache key for focused app-host regression tests. */
+export const brainNavigationKeyForTests = brainNavigationKey;
 
 function getAppsLayer(): HTMLElement | null {
   return document.getElementById('osAppsLayer');
@@ -248,9 +260,15 @@ async function openAppPage(
     }
     case 'brain': {
       const { openBrain } = await import('../ui/brain-page');
-      openBrain(
-        (route.brainSection ?? options?.brainSection ?? 'graph') as import('../ui/brain-page').BrainSectionId,
-      );
+      const section = (
+        options?.brainSection ??
+        route.brainSection ??
+        'graph'
+      ) as import('../ui/brain-page').BrainSectionId;
+      openBrain(section, {
+        editPath: section === 'edit' ? options?.brainEditPath : undefined,
+      });
+      lastAppliedBrainNavigation = brainNavigationKey(options);
       break;
     }
     case 'scheduler': {
@@ -440,6 +458,9 @@ async function ensureWindowSurface(
     }
     await openAppPage(appId, options, generation);
   }
+  if (appId === 'brain' && brainNavigationKey(options) !== lastAppliedBrainNavigation) {
+    await openAppPage(appId, options, generation);
+  }
 }
 
 function teardownWindowSurface(instanceId: string, appId: AppId): void {
@@ -450,6 +471,9 @@ function teardownWindowSurface(instanceId: string, appId: AppId): void {
   runWindowTeardown(appId);
   if (appId === 'settings') {
     lastAppliedSettingsSection = undefined;
+  }
+  if (appId === 'brain') {
+    lastAppliedBrainNavigation = undefined;
   }
 
   stashWindowContent(appId);
@@ -587,6 +611,7 @@ export function resetAppHostForTests(): void {
   initialized = false;
   lastForegroundApp = null;
   lastAppliedSettingsSection = undefined;
+  lastAppliedBrainNavigation = undefined;
   syncGeneration = 0;
   mountedWindowInstances.clear();
   const appsLayer = getAppsLayer();

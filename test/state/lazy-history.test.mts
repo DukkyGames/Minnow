@@ -199,6 +199,33 @@ describe('lazy history (C.2)', () => {
     assert.equal(wireB?.history.length, 1);
   });
 
+  test('materializeChatHistory keeps local tail when a send lands during hydrate', async () => {
+    setStorageModeForTests('server');
+    setSessionsLazyHistoryEnabledForTests(true);
+
+    const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
+    setSessionStateForTests(makeState([chat]));
+
+    let resolveFetch!: (value: Response) => void;
+    const fetchGate = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    globalThis.fetch = async () => fetchGate;
+
+    const hydrate = ensureChatHistoryLoaded(CHAT_A);
+    chat.history.push({ role: 'user', content: 'sent while loading' });
+
+    resolveFetch(
+      new Response(JSON.stringify({ chatId: CHAT_A, history: [] }), { status: 200 }),
+    );
+    await hydrate;
+
+    assert.equal(chat.historyLoaded, true);
+    assert.equal(chat.history.length, 1);
+    assert.equal(chat.history[0]?.content, 'sent while loading');
+  });
+
   test('resetSessionPersistenceForTests restores flag default ON', () => {
     setSessionsLazyHistoryEnabledForTests(false);
     assert.equal(isSessionsLazyHistoryEnabled(), false);

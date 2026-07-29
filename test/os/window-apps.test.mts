@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
+  brainNavigationKeyForTests,
   initAppHost,
   resetAppHostForTests,
   syncAppHostForTests,
@@ -80,6 +81,17 @@ describe('window-mounted apps', () => {
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     resetAppHostForTests();
+  });
+
+  test('Brain navigation cache distinguishes edit paths from Graph', () => {
+    assert.equal(brainNavigationKeyForTests({ brainSection: 'graph' }), 'graph\n');
+    assert.equal(
+      brainNavigationKeyForTests({
+        brainSection: 'edit',
+        brainEditPath: 'facts/open-action-demo.md',
+      }),
+      'edit\nfacts/open-action-demo.md',
+    );
   });
 
   for (const appId of WINDOW_APPS) {
