@@ -29,4 +29,4 @@ fixer. The chat then loses the role and board-tool behavior assigned by the orch
 - [x] Hide the mode selector for board-managed chats.
 - [x] Reject mode changes for board-managed chats.
 - [x] Update the project context.
-- [ ] Run automated and manual verification.
+- [x] Run automated and manual verification.
