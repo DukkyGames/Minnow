@@ -80,7 +80,7 @@ describe('MIN-B10 cascade propagation', () => {
     closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
-    await fs.rm(homeDir, { recursive: true, force: true });
+    await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
     await fs.writeFile(path.join(PROJECT_ROOT, SAMPLE_PATH), SAMPLE_TEXT, 'utf8');
   });
 

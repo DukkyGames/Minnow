@@ -44,6 +44,15 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
 /** Modes that receive the fact-verification tool-usage fragment. */
 const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'desktop', 'plan', 'build']);
 
+/** Modes that receive the investigate-before-answer tool-usage fragment. */
+const INVESTIGATE_BEFORE_ANSWER_MODE_IDS = new Set<ModeId>([
+  'general',
+  'desktop',
+  'plan',
+  'build',
+  'debug',
+]);
+
 /** Modes that receive the shared sub-agent delegation tool-usage fragment. */
 const SUB_AGENT_DELEGATION_MODE_IDS = new Set<ModeId>([
   'build',
@@ -224,6 +233,17 @@ function resolveFactVerificationBody(ctx: ComposeContext, profile: PromptProfile
   return loaded?.body?.trim() ?? '';
 }
 
+/** Investigate-before-answer ladder for general/plan/build/debug Q&A. */
+function resolveInvestigateBeforeAnswerBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (!modeId || !isModeId(modeId) || !INVESTIGATE_BEFORE_ANSWER_MODE_IDS.has(modeId)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'investigate-before-answer', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** Context7 MCP workflow when Context7 tools are enabled for this chat. */
 function resolveContext7DocsBody(ctx: ComposeContext, profile: PromptProfile): string {
   if (!contextHasContext7Tools(ctx)) {
@@ -396,6 +416,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const factInterpolated = interpolatePromptBody(factVerificationRaw, vars);
         if (factInterpolated.trim()) {
           sections.push(factInterpolated.trim());
+        }
+      }
+      const investigateRaw = resolveInvestigateBeforeAnswerBody(ctx, profileKey);
+      if (investigateRaw.trim()) {
+        const investigateInterpolated = interpolatePromptBody(investigateRaw, vars);
+        if (investigateInterpolated.trim()) {
+          sections.push(investigateInterpolated.trim());
         }
       }
       const context7DocsRaw = resolveContext7DocsBody(ctx, profileKey);

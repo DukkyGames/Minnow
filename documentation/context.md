@@ -280,9 +280,9 @@ API: `GET /api/skills`, `GET/PUT /api/skills/:id`, `GET/PUT /api/config/skills`.
 
 ## Memory and Brain
 
-**Memory** is a thin adapter over the **Brain wiki** ([`server/memory/store.js`](../server/memory/store.js) → `pages/facts/`). Retrieval injects into composer `memory` part; untrusted fencing via [`src/lib/untrusted.mjs`](../src/lib/untrusted.mjs).
+**Memory** is a thin adapter over the **Brain wiki** ([`server/memory/store.js`](../server/memory/store.js) → `pages/facts/`). Retrieval injects into composer `memory` part; untrusted fencing via [`src/lib/untrusted.mjs`](../src/lib/untrusted.mjs). Defaults (2026): **semantic embeddings on** (`embeddings.enabled: true`), **8k** full-profile inject cap (`maxInjectCharsFull`), retrieve **limit 12**, and **query-relevant excerpts** (~500 chars per hit) instead of first-line previews — see [`server/engine/retrieve.js`](../server/engine/retrieve.js) + [`src/lib/fetch-web-content.mjs`](../src/lib/fetch-web-content.mjs) (`selectQueryRelevantExcerpt`).
 
-**Brain** (`~/.minnow/brain/`): nested markdown pages, `catalog.json` cache, hybrid keyword + vector retrieve, code index per workspace (`code/<workspace-key>.db`), synthesis proposals.
+**Brain** (`~/.minnow/brain/`): nested markdown pages, `catalog.json` cache, hybrid keyword + vector retrieve, code index per workspace (`code/<workspace-key>.db`), synthesis proposals. **Web RAG** (`rag_web_content`) fetches up to **~24KB** per page and returns up to **16** query-ranked sentences/paragraphs.
 
 | API prefix | Purpose |
 |------------|---------|
@@ -305,7 +305,7 @@ Per-role prompts and optional provider/model binding. Shipped: `default`, `build
 
 ### Sub-agents
 
-[`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) — nested loops, concurrency cap in `sub-agents.json`. Tools: `spawn_sub_agent`, `get_sub_agent_status`, `cancel_sub_agent`. Background completion pushes a hidden user resume row to the parent (`sub-agent-completion-push.ts` + [`hidden-transcript-user-messages.ts`](../src/chat/hidden-transcript-user-messages.ts)) — the model sees it; the transcript does not.
+[`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) — nested loops, concurrency cap in `sub-agents.json`. Tools: `spawn_sub_agent`, `get_sub_agent_status`, `cancel_sub_agent`. **Research depth (General/Plan/Build/Debug):** tool-usage fragment [`investigate-before-answer`](../src/chat/prompts/tool-usage/investigate-before-answer.md) requires a codebase → Brain → Context7 → web ladder and ≥2 tool-backed sources before confident factual answers; pairs with strengthened **sub-agent delegation** (prefer `researcher`/`explore` batching). Shipped **`researcher`** workers add Brain + code-map + `recall_chat_context`; **`explore`** workers add `rag_web_content` + Brain + `repo_map`/`find_symbol`. Chat **archive** prelude default `retrievalTopK` is **8** (Research work-agent **12**). Background completion pushes a hidden user resume row to the parent (`sub-agent-completion-push.ts` + [`hidden-transcript-user-messages.ts`](../src/chat/hidden-transcript-user-messages.ts)) — the model sees it; the transcript does not.
 
 **Live status UI:** While a run is in flight, the runner publishes `livePhase` (`thinking` → `generating` → `tools`) plus partial reasoning and the current tool name via `onLiveActivity` → [`sub-agent-events.ts`](../src/agents/sub-agent-events.ts). Parent chat **cards** ([`sub-agent-cards.ts`](../src/ui/sub-agent-cards.ts)) and the **drawer** ([`sub-agent-drawer.ts`](../src/ui/sub-agent-drawer.ts)) subscribe and mirror main-chat stream indicators (`stream-status`, tool spinner) in the activity transcript ([`transcript-view.ts`](../src/ui/transcript-view.ts) + [`sub-agent-live-status.ts`](../src/ui/sub-agent-live-status.ts)).
 

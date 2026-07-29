@@ -28,7 +28,7 @@ const FACTS_PREFIX = 'facts/';
 export const DEFAULT_MEMORY_CONFIG = {
   enabled: true,
   maxEntries: MAX_ENTRIES,
-  maxInjectCharsFull: 4000,
+  maxInjectCharsFull: 8000,
   maxInjectCharsLite: 800,
   retrieveLimit: 20,
   defaultTags: [],

@@ -162,11 +162,11 @@ export async function handleMemoryRequest(req, res, pathname) {
       const maxChars =
         profile === 'lite'
           ? memory.maxInjectCharsLite ?? 800
-          : memory.maxInjectCharsFull ?? 4000;
+          : memory.maxInjectCharsFull ?? 8000;
       const all = await loadAllEntriesWithBodies();
       const { block, ids } = await retrieveMemoryBlockHybrid(all, {
         query: body.query,
-        limit: body.limit ?? 8,
+        limit: body.limit ?? 12,
         tags: body.tags,
         maxChars,
       }, memory);
