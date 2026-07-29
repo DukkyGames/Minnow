@@ -115,6 +115,10 @@ function launchElectronShell(port, localUrl, appRoot) {
 }
 
 async function main() {
+  // Drop stale dev-host metadata from a prior crash so Electron does not attach
+  // to an orphaned server on the preferred port while this boot binds elsewhere.
+  clearDevHostState();
+
   const appRoot = getAppRoot();
   const configMeta = (await readConfigJson('config.json')) ?? {};
   const networkAccess = resolveNetworkAccess(configMeta);

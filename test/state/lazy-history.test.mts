@@ -10,6 +10,7 @@ import { defaultSessionState } from '../../src/config/defaults.ts';
 import {
   attachUnloadedHistoryTrapForTests,
   buildSessionsPatchDelta,
+  captureDirtyTrackingShadowForTests,
   chatForSessionsWire,
   ensureChatHistoryLoaded,
   isSessionsLazyHistoryEnabled,
@@ -179,6 +180,26 @@ describe('lazy history (C.2)', () => {
     });
     const wireLoaded = chatForSessionsWire(loaded);
     assert.equal(wireLoaded.history.length, 1);
+  });
+
+  test('captureDirtyTrackingShadow skips lazy-unloaded history bodies', () => {
+    const errors: string[] = [];
+    const origError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+      origError.apply(console, args as Parameters<typeof console.error>);
+    };
+    try {
+      setSessionsLazyHistoryEnabledForTests(true);
+      setHistoryTrapForcedForTests(true);
+      const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
+      attachUnloadedHistoryTrapForTests(chat);
+      setSessionStateForTests(makeState([chat]));
+      captureDirtyTrackingShadowForTests();
+      assert.equal(errors.length, 0);
+    } finally {
+      console.error = origError;
+    }
   });
 
   test('buildSessionsPatchDelta omits history for unloaded dirty chats', () => {

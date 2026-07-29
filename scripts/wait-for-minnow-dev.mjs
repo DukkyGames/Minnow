@@ -4,7 +4,10 @@
  * Prefers ~/.minnow/run/dev-host.json written by server.js, then probes /api/config/ping.
  */
 
-import { readDevHostState } from '../server/runtime/dev-host-state.js';
+import {
+  isDevHostProcessAlive,
+  readDevHostState,
+} from '../server/runtime/dev-host-state.js';
 import { readSessionTokenFile } from '../server/runtime/session-token.js';
 import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
@@ -75,7 +78,11 @@ export async function waitForMinnowDev(options = {}) {
   while (Date.now() < deadline) {
     const token = resolvePingToken(options);
     const state = readDevHostState();
-    if (state?.localUrl && (await pingMinnowApi(state.localUrl, token))) {
+    if (
+      state?.localUrl &&
+      isDevHostProcessAlive(state) &&
+      (await pingMinnowApi(state.localUrl, token))
+    ) {
       return { origin: state.localUrl, port: state.port };
     }
 

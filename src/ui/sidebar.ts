@@ -33,6 +33,7 @@ import {
   ensureChatHistoryLoaded,
   formatDraftChatSidebarName,
   getActiveChat,
+  getChatMessageCount,
   getSidebarListedChatsForWorkspace,
   getUnassignedChats,
   isEphemeralEmptyChat,
@@ -434,7 +435,7 @@ export function appendChatRow(
   const inGroup = options?.inGroup === true;
   const modelLabel = chat.modelId || 'No model selected';
   const statsPreview = formatSidebarStatsPreview(chat.lastStats);
-  const isDraftOnly = chat.history.length === 0 && hasComposerDraft(chat);
+  const isDraftOnly = getChatMessageCount(chat) === 0 && hasComposerDraft(chat);
   const displayName = isDraftOnly ? formatDraftChatSidebarName(chat) : chat.name;
   const rowLabel = inGroup
     ? displayName
@@ -888,7 +889,7 @@ function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): vo
   label.textContent = `${chats.length} chats selected`;
   menu.appendChild(label);
 
-  const eligible = chats.filter((c) => !isChatStreaming(c.id) && c.history.length > 0);
+  const eligible = chats.filter((c) => !isChatStreaming(c.id) && getChatMessageCount(c) > 0);
   const brainItem = document.createElement('button');
   brainItem.type = 'button';
   brainItem.textContent = `Add ${eligible.length} to Brain`;
@@ -968,7 +969,7 @@ function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): vo
 
 function chatBrainCaptureState(chat: Chat): { disabled: boolean; title: string } {
   const streaming = isChatStreaming(chat.id);
-  const empty = chat.history.length === 0;
+  const empty = getChatMessageCount(chat) === 0;
   if (streaming) {
     return { disabled: true, title: 'Wait for reply to finish' };
   }
@@ -1177,7 +1178,7 @@ export async function deleteChat(chatId: string, evt?: Event): Promise<void> {
   if (idx < 0) return;
   const victim = sessionState!.chats[idx];
   const victimLabel =
-    victim.history.length === 0 && hasComposerDraft(victim)
+    getChatMessageCount(victim) === 0 && hasComposerDraft(victim)
       ? formatDraftChatSidebarName(victim)
       : victim.name;
   // Electron patches window.confirm to always return false — must use appConfirm.

@@ -7,12 +7,27 @@ import fs from 'node:fs/promises';
 import { isHostAllowed } from '../network/access.js';
 import { getSessionToken, injectSessionTokenScript } from './session-token.js';
 
+/** Vite dev-only paths have no file extension but must not receive the SPA shell. */
+function isViteDevInternalPath(pathname) {
+  return (
+    pathname.startsWith('/@vite/') ||
+    pathname.startsWith('/@fs/') ||
+    pathname.startsWith('/@id/')
+  );
+}
+
+/** Paths that must never be replaced with the SPA shell. */
+function isNonSpaAssetPath(pathname) {
+  return pathname.startsWith('/api/') || isViteDevInternalPath(pathname);
+}
+
 /** Whether a GET/HEAD request should receive the SPA navigation shell. */
 export function isHtmlNavigationRequest(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+  if (isNonSpaAssetPath(pathname)) return false;
   const accept = req.headers.accept ?? '';
   if (accept.includes('text/html')) return true;
-  const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
   const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
   return !lastSegment.includes('.');
 }
