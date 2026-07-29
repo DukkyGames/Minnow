@@ -139,4 +139,22 @@ test('Open memory navigates an already-mounted Brain Graph window to populated E
     (document.getElementById('brainEditPath') as HTMLInputElement | null)?.value,
     'facts/open-action-demo.md',
   );
+  assert.equal(document.getElementById('brainPageHeaderTitle')?.textContent, 'Edit');
+  assert.equal(
+    document.querySelector('#brainSection-graph')?.classList.contains('is-active'),
+    false,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 4_000));
+
+  assert.equal(window.location.hash, '#/app/brain/edit');
+  assert.equal(document.getElementById('brainPageHeaderTitle')?.textContent, 'Edit');
+  assert.equal(
+    document.querySelector('#brainSection-edit')?.classList.contains('is-active'),
+    true,
+  );
+  assert.equal(
+    document.querySelector('#brainSection-graph')?.classList.contains('is-active'),
+    false,
+  );
 });
