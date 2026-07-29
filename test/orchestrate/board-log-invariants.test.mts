@@ -304,3 +304,233 @@ describe('checkBoardLog', () => {
     );
   });
 });
+
+describe('Phase-2 durable invariant families', () => {
+  const ALL_INVARIANTS: BoardLogInvariantId[] = [
+    'status-transitions',
+    'verdict-after-start',
+    'attempt-caps',
+    'merge-integrity',
+    'final-test-order',
+    'wave-order',
+    'dependency-order',
+    'quarantine-cascade',
+    'phase-pairing',
+    'slot-balance',
+    'hold-balance',
+    'concurrency-cap',
+    'lifecycle-owner',
+    'terminal-effects',
+    'afk-hands-off',
+  ];
+
+  const only = (
+    id: BoardLogInvariantId,
+    extra: Partial<BoardLogCheckOptions> = {},
+  ): BoardLogCheckOptions => ({
+    tasks: [{ id: 'W1-A', wave: 'W1' }],
+    strictEvidence: true,
+    skip: ALL_INVARIANTS.filter((item) => item !== id),
+    ...extra,
+  });
+
+  const cases: Array<{
+    id: BoardLogInvariantId;
+    passing: () => BoardLogEvent[];
+    failing: () => BoardLogEvent[];
+    incomplete: () => BoardLogEvent[];
+    options?: Partial<BoardLogCheckOptions>;
+  }> = [
+    {
+      id: 'phase-pairing',
+      passing: () => [
+        ev('phase_start', 'W1-A', { phaseId: 'p1', phase: 'build', lifecycleRun: 1 }),
+        ev('phase_end', 'W1-A', { phaseId: 'p1', phase: 'build', lifecycleRun: 1 }),
+      ],
+      failing: () => [ev('phase_end', 'W1-A', { phaseId: 'p1', phase: 'build', lifecycleRun: 1 })],
+      incomplete: () => [ev('phase_start', 'W1-A', { phaseId: 'p1', phase: 'build', lifecycleRun: 1 })],
+    },
+    {
+      id: 'slot-balance',
+      passing: () => [
+        ev('slot_acquire', 'W1-A', { slotId: 's1', phase: 'build' }),
+        ev('slot_release', 'W1-A', { slotId: 's1', phase: 'build' }),
+      ],
+      failing: () => [ev('slot_release', 'W1-A', { slotId: 's1' })],
+      incomplete: () => [ev('slot_acquire', 'W1-A', { slotId: 's1' })],
+    },
+    {
+      id: 'hold-balance',
+      passing: () => [
+        ev('hold_acquire', 'W1-A', { holdId: 'h1', holdKind: 'merge' }),
+        ev('hold_expiry', 'W1-A', { holdId: 'h1', holdKind: 'merge' }),
+      ],
+      failing: () => [ev('hold_release', 'W1-A', { holdId: 'h1' })],
+      incomplete: () => [ev('hold_acquire', 'W1-A', { holdId: 'h1' })],
+    },
+    {
+      id: 'concurrency-cap',
+      passing: () => [
+        ev('concurrency_observation', undefined, {
+          activeSlots: 0,
+          activeHolds: 0,
+          activeTotal: 0,
+          concurrencyCap: 2,
+        }),
+      ],
+      failing: () => [
+        ev('concurrency_observation', undefined, {
+          activeSlots: 2,
+          activeHolds: 1,
+          activeTotal: 3,
+          concurrencyCap: 2,
+        }),
+      ],
+      incomplete: () => [started('W1-A')],
+    },
+    {
+      id: 'lifecycle-owner',
+      passing: () => [
+        ev('lifecycle_owner_set', 'W1-A', {
+          lifecycleRun: 1,
+          ownerId: 'chat-1',
+          ownerKind: 'chat',
+        }),
+        ev('lifecycle_owner_clear', 'W1-A', {
+          lifecycleRun: 1,
+          ownerId: 'chat-1',
+          ownerKind: 'chat',
+        }),
+      ],
+      failing: () => [
+        ev('lifecycle_owner_clear', 'W1-A', {
+          lifecycleRun: 1,
+          ownerId: 'chat-1',
+          ownerKind: 'chat',
+        }),
+      ],
+      incomplete: () => [
+        ev('lifecycle_owner_set', 'W1-A', {
+          lifecycleRun: 1,
+          ownerId: 'chat-1',
+          ownerKind: 'chat',
+        }),
+      ],
+    },
+    {
+      id: 'terminal-effects',
+      passing: () => [ev('board_terminal', undefined, { terminalOutcome: 'passed' })],
+      failing: () => [
+        ev('board_terminal', undefined, { terminalOutcome: 'passed' }),
+        ev('board_terminal', undefined, { terminalOutcome: 'passed' }),
+      ],
+      incomplete: () => [],
+      options: { requireTerminal: true },
+    },
+    {
+      id: 'afk-hands-off',
+      passing: () => [
+        ev('mode_change', undefined, { mode: 'afk' }),
+        ev('board_terminal', undefined, { terminalOutcome: 'passed' }),
+      ],
+      failing: () => [
+        ev('mode_change', undefined, { mode: 'afk' }),
+        ev('interaction_required', 'W1-A', {
+          interactionKind: 'question',
+          reason: 'Need a decision',
+        }),
+        ev('board_terminal', undefined, { terminalOutcome: 'blocked' }),
+      ],
+      incomplete: () => [ev('mode_change', undefined, { mode: 'afk' })],
+      options: { executionMode: 'afk' },
+    },
+  ];
+
+  for (const row of cases) {
+    test(`${row.id}: passing evidence`, () => {
+      resetSeq();
+      const result = checkBoardLog(row.passing(), only(row.id, row.options));
+      assert.equal(
+        result.violations.some((item) => item.id === row.id),
+        false,
+        JSON.stringify(result),
+      );
+      assert.equal(result.incompleteEvidence.some((item) => item.id === row.id), false);
+    });
+
+    test(`${row.id}: failing evidence`, () => {
+      resetSeq();
+      const result = checkBoardLog(row.failing(), only(row.id, row.options));
+      assert.equal(result.ok, false);
+      assert.ok(result.violations.some((item) => item.id === row.id), JSON.stringify(result));
+    });
+
+    test(`${row.id}: incomplete evidence`, () => {
+      resetSeq();
+      const result = checkBoardLog(row.incomplete(), only(row.id, row.options));
+      assert.equal(result.ok, false);
+      assert.equal(result.status, 'incomplete');
+      assert.ok(
+        result.incompleteEvidence.some((item) => item.id === row.id),
+        JSON.stringify(result),
+      );
+    });
+  }
+
+  test('legacy logs remain compatible but cannot pass strict evidence mode', () => {
+    const compatible = checkBoardLog(passingFixture(), PASSING_OPTS);
+    assert.equal(compatible.ok, true);
+    assert.equal(compatible.status, 'incomplete');
+    assert.ok(compatible.incompleteEvidence.length > 0);
+
+    const strict = checkBoardLog(passingFixture(), { ...PASSING_OPTS, strictEvidence: true });
+    assert.equal(strict.ok, false);
+    assert.equal(strict.status, 'incomplete');
+  });
+
+  test('nudge events participate in the persisted attempt cap', () => {
+    resetSeq();
+    const result = checkBoardLog(
+      [ev('nudge', 'W1-A', { attemptKind: 'nudge', attempt: 3 })],
+      only('attempt-caps', { caps: { nudge: 2 } }),
+    );
+    assert.ok(result.violations.some((item) => item.id === 'attempt-caps'));
+  });
+
+  test('terminal effects reject duplicate planner reports and notifications', () => {
+    resetSeq();
+    const result = checkBoardLog(
+      [
+        ev('planner_report', undefined, { reportId: 'report-1' }),
+        ev('planner_report', undefined, { reportId: 'report-1' }),
+        ev('completion_notification', undefined, { notificationId: 'note-1' }),
+        ev('completion_notification', undefined, { notificationId: 'note-1' }),
+      ],
+      only('terminal-effects'),
+    );
+    assert.equal(result.ok, false);
+    assert.equal(
+      result.violations.filter((item) => item.id === 'terminal-effects').length,
+      2,
+    );
+  });
+
+  test('returns reconstructed state and acceptance metrics', () => {
+    resetSeq();
+    const events = [
+      ev('slot_acquire', 'W1-A', { slotId: 's1' }),
+      ev('hold_acquire', 'W1-A', { holdId: 'h1', holdKind: 'merge' }),
+      ev('concurrency_observation', undefined, {
+        activeSlots: 1,
+        activeHolds: 1,
+        activeTotal: 2,
+        concurrencyCap: 3,
+      }),
+    ];
+    const result = checkBoardLog(events, { tasks: [{ id: 'W1-A' }] });
+    assert.deepEqual(result.reconstructed.activeSlotIds, ['s1']);
+    assert.deepEqual(result.reconstructed.activeHoldIds, ['h1']);
+    assert.equal(result.metrics.peakActiveTotal, 2);
+    assert.equal(result.metrics.configuredConcurrencyCap, 3);
+  });
+});

@@ -4,6 +4,8 @@
 
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { findChatById, isGoalLoopActive } from '../state/sessions';
+import { getBoardGroupForChat } from '../state/chat-groups.ts';
+import { logInteractionRequired } from '../state/orchestrate-board-store.ts';
 import { getToolSecurityMetaCached, loadToolSecurityMeta } from '../config/tool-security-meta';
 import {
   loadToolConfig,
@@ -21,6 +23,26 @@ import { resolveEffectivePermission } from './permission-resolve';
 import { applyDestructiveConfirmationAfterUserApproval } from './destructive-tool-confirm';
 
 export type { ToolApprovalContext };
+
+/**
+ * Deny an attempted user-interaction seam during AFK execution. This check is
+ * deliberately at execution time (in addition to catalog filtering), so a
+ * stale or hallucinated tool call can never open UI.
+ */
+export function blockAfkInteractionAttempt(
+  context: ToolApprovalContext,
+  kind: 'question' | 'approval' | 'confirmation' | 'mode_switch' | 'other',
+  reason: string,
+): ToolExecutionResult | null {
+  const chatId = context.chatId?.trim();
+  const chat = chatId ? findChatById(chatId) : undefined;
+  const group = chat ? getBoardGroupForChat(chat) : undefined;
+  if (group?.orchestrateBoard?.executionMode !== 'afk') return null;
+  logInteractionRequired(group, kind, reason, chat?.boardTaskId?.trim());
+  return {
+    content: `Error: AFK execution denied user interaction (${reason}).`,
+  };
+}
 
 /** Matches server `resolveSafePath` rejection copy (`server/runtime/path-access.js`). */
 export function outsideWorkspaceBlockMessage(userPath: string): string {
@@ -52,10 +74,6 @@ export async function maybeBlockToolForUserApproval(
     return null;
   }
 
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
   const config = loadToolConfig();
   const resolved = resolveEffectivePermission(config, permissionToolId, args, {
     subAgentType: context.subAgentType,
@@ -84,6 +102,18 @@ export async function maybeBlockToolForUserApproval(
   const needsPathAck = pathsOutsideWorkspace.length > 0;
   const needsPermissionAck = perm === 'ask';
   if (!needsPathAck && !needsPermissionAck) {
+    return null;
+  }
+  const afkBlocked = blockAfkInteractionAttempt(
+    context,
+    needsPathAck ? 'confirmation' : 'approval',
+    needsPathAck
+      ? `${execName} requested a path outside the allowed workspace`
+      : `${execName} requires user approval`,
+  );
+  if (afkBlocked) return afkBlocked;
+
+  if (typeof document === 'undefined') {
     return null;
   }
 

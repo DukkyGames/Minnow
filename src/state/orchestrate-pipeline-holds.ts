@@ -22,12 +22,26 @@ export interface PipelineHold {
   acquiredAt: number;
 }
 
+export type PipelineHoldLogAction = 'acquire' | 'release' | 'expiry';
+
+export interface PipelineHoldLogContext {
+  onEvent?: (
+    action: PipelineHoldLogAction,
+    hold: PipelineHold,
+    activeHoldCount: number,
+  ) => void;
+}
+
 const PIPELINE_HOLD_MAX_MS = 10 * 60_000;
 
 /** Test override for hold TTL (null restores production cap). */
 let pipelineHoldMaxMsOverride: number | null = null;
 
-type HoldEntry = { acquiredAt: number; reason: PipelineHoldReason };
+type HoldEntry = {
+  acquiredAt: number;
+  reason: PipelineHoldReason;
+  logContext?: PipelineHoldLogContext;
+};
 
 /** Per-board ref-counted holds: taskId → holdId → entry. */
 const holdsByBoard = new WeakMap<
@@ -50,6 +64,34 @@ function getBoardHolds(board: OrchestrateBoardState): Map<string, Map<string, Ho
   return map;
 }
 
+function countHoldEntries(board: OrchestrateBoardState): number {
+  let count = 0;
+  for (const taskHolds of holdsByBoard.get(board)?.values() ?? []) {
+    count += taskHolds.size;
+  }
+  return count;
+}
+
+function notifyHoldEvent(
+  action: PipelineHoldLogAction,
+  board: OrchestrateBoardState,
+  taskId: string,
+  holdId: string,
+  entry: HoldEntry,
+): void {
+  entry.logContext?.onEvent?.(
+    action,
+    {
+      board,
+      taskId,
+      id: holdId,
+      reason: entry.reason,
+      acquiredAt: entry.acquiredAt,
+    },
+    countHoldEntries(board),
+  );
+}
+
 /** Drop holds older than TTL; returns task ids that had at least one hold released. */
 function pruneExpiredHolds(
   board: OrchestrateBoardState,
@@ -63,6 +105,7 @@ function pruneExpiredHolds(
     for (const [holdId, entry] of holdMap) {
       if (nowMs - entry.acquiredAt > maxMs) {
         holdMap.delete(holdId);
+        notifyHoldEvent('expiry', board, taskId, holdId, entry);
         if (!released.includes(taskId)) released.push(taskId);
       }
     }
@@ -85,6 +128,7 @@ export function acquirePipelineHold(
   board: OrchestrateBoardState | undefined | null,
   taskId: string | undefined,
   reason: PipelineHoldReason,
+  logContext?: PipelineHoldLogContext,
 ): PipelineHold | null {
   const id = taskId?.trim();
   if (!board || !id) return null;
@@ -98,8 +142,11 @@ export function acquirePipelineHold(
   }
   const holdId = `ph-${++holdIdSeq}`;
   const acquiredAt = nowMs;
-  taskHolds.set(holdId, { acquiredAt, reason });
-  return { board, taskId: id, id: holdId, reason, acquiredAt };
+  const entry: HoldEntry = { acquiredAt, reason, logContext };
+  taskHolds.set(holdId, entry);
+  const hold = { board, taskId: id, id: holdId, reason, acquiredAt };
+  notifyHoldEvent('acquire', board, id, holdId, entry);
+  return hold;
 }
 
 /** Release one hold (idempotent). Does not drain the task queue. */
@@ -109,7 +156,10 @@ export function releasePipelineHold(hold: PipelineHold | null | undefined): void
   if (!boardHolds) return;
   const taskHolds = boardHolds.get(hold.taskId);
   if (!taskHolds) return;
+  const entry = taskHolds.get(hold.id);
+  if (!entry) return;
   taskHolds.delete(hold.id);
+  notifyHoldEvent('release', hold.board, hold.taskId, hold.id, entry);
   if (taskHolds.size === 0) boardHolds.delete(hold.taskId);
   if (boardHolds.size === 0) holdsByBoard.delete(hold.board);
 }
@@ -126,6 +176,10 @@ export function releasePipelineHoldsForTask(
   const taskHolds = boardHolds.get(id);
   if (!taskHolds) return 0;
   const count = taskHolds.size;
+  for (const [holdId, entry] of taskHolds) {
+    taskHolds.delete(holdId);
+    notifyHoldEvent('release', board, id, holdId, entry);
+  }
   boardHolds.delete(id);
   if (boardHolds.size === 0) holdsByBoard.delete(board);
   return count;
@@ -139,8 +193,12 @@ export function releaseAllPipelineHolds(
   const boardHolds = holdsByBoard.get(board);
   if (!boardHolds) return 0;
   let count = 0;
-  for (const taskHolds of boardHolds.values()) {
+  for (const [taskId, taskHolds] of boardHolds) {
     count += taskHolds.size;
+    for (const [holdId, entry] of taskHolds) {
+      taskHolds.delete(holdId);
+      notifyHoldEvent('release', board, taskId, holdId, entry);
+    }
   }
   holdsByBoard.delete(board);
   return count;

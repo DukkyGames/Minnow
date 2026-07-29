@@ -56,7 +56,10 @@ import {
   executeSetChatMode,
 } from './mode-handoff-tools';
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
-import { maybeBlockToolForUserApproval } from './permission-gate';
+import {
+  blockAfkInteractionAttempt,
+  maybeBlockToolForUserApproval,
+} from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { isDesktopChatActive } from '../os/desktop-state';
@@ -207,6 +210,23 @@ async function executeToolInner(
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
   await ensureToolConfigReady();
+
+  if (
+    name === 'ask_question' ||
+    name === 'propose_mode_switch' ||
+    name === 'request_browser_origin_access'
+  ) {
+    const blocked = blockAfkInteractionAttempt(
+      context,
+      name === 'ask_question'
+        ? 'question'
+        : name === 'propose_mode_switch'
+          ? 'mode_switch'
+          : 'confirmation',
+      `${name} was attempted during AFK execution`,
+    );
+    if (blocked) return blocked;
+  }
 
   if (name === 'set_chat_mode') {
     if (!isToolEnabled('set_chat_mode')) {

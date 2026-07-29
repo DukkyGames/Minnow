@@ -94,12 +94,15 @@ function boardLogOpts(
   taskIds: string[],
   waves: string[],
   expectFinal = false,
+  strictEvidence = false,
 ): BoardLogCheckOptions {
   return {
     tasks: taskIds.map((id) => ({ id, wave: id.startsWith('W2') ? 'W2' : 'W1' })),
     waveOrder: waves,
     expectFinalTest: expectFinal,
     requireTerminal: true,
+    strictEvidence,
+    executionMode: strictEvidence ? 'afk' : 'auto',
   };
 }
 
@@ -110,15 +113,22 @@ async function driveHeadlessBoard(
     tasks: Array<{ id: string; title: string; wave: string }>;
     finalTest?: boolean;
   },
-  options?: { maxTicks?: number; allowSettleTimeout?: boolean },
+  options?: {
+    maxTicks?: number;
+    allowSettleTimeout?: boolean;
+    executionMode?: 'auto' | 'afk';
+  },
 ): Promise<{
   group: ReturnType<typeof seedBoard>['group'];
   router: FakeApiRouterHandle;
 }> {
-  const { planner, group } = seedBoard({
-    waves: spec.waves,
-    tasks: spec.tasks,
-  });
+  const { planner, group } = seedBoard(
+    {
+      waves: spec.waves,
+      tasks: spec.tasks,
+    },
+    options?.executionMode ?? 'auto',
+  );
 
   const router = installFakeApiRouter(script);
   wireBoardLogMirror();
@@ -148,7 +158,7 @@ async function driveHeadlessBoard(
 function assertBoardLogCaptured(
   router: FakeApiRouterHandle,
   opts: BoardLogCheckOptions,
-): void {
+): ReturnType<typeof checkBoardLog> {
   const events =
     router.boardLogEvents.length > 0
       ? router.boardLogEvents
@@ -156,7 +166,8 @@ function assertBoardLogCaptured(
           throw new Error('expected board-log mirror events to be captured');
         })();
   const result = checkBoardLog(events, opts);
-  assert.equal(result.ok, true, JSON.stringify(result.violations));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  return result;
 }
 
 describe('board headless E2E (real runChatTurn)', () => {
@@ -197,15 +208,19 @@ describe('board headless E2E (real runChatTurn)', () => {
 
   test('happy path: multi-wave board converges with board-log invariants', async () => {
     const script = multiWaveHappyScript();
-    const { group, router: r } = await driveHeadlessBoard(script, {
-      waves: [{ id: 'W1' }, { id: 'W2' }],
-      tasks: [
-        { id: 'W1-A', title: 'Wave one A', wave: 'W1' },
-        { id: 'W1-B', title: 'Wave one B', wave: 'W1' },
-        { id: 'W2-A', title: 'Wave two A', wave: 'W2' },
-      ],
-      finalTest: true,
-    });
+    const { group, router: r } = await driveHeadlessBoard(
+      script,
+      {
+        waves: [{ id: 'W1' }, { id: 'W2' }],
+        tasks: [
+          { id: 'W1-A', title: 'Wave one A', wave: 'W1' },
+          { id: 'W1-B', title: 'Wave one B', wave: 'W1' },
+          { id: 'W2-A', title: 'Wave two A', wave: 'W2' },
+        ],
+        finalTest: true,
+      },
+      { executionMode: 'afk' },
+    );
     router = r;
 
     assertTaskStatus(group, 'W1-A', 'complete');
@@ -215,10 +230,30 @@ describe('board headless E2E (real runChatTurn)', () => {
     assert.equal(group.orchestrateBoard?.finalTest?.status, 'passed');
     assert.ok(isOrchestratePlanComplete(group.orchestrateBoard!));
 
-    assertBoardLogCaptured(
+    const evidence = assertBoardLogCaptured(
       router,
-      boardLogOpts(['W1-A', 'W1-B', 'W2-A'], ['W1', 'W2'], true),
+      boardLogOpts(['W1-A', 'W1-B', 'W2-A'], ['W1', 'W2'], true, true),
     );
+    assert.equal(evidence.status, 'pass', JSON.stringify(evidence.incompleteEvidence));
+    assert.equal(evidence.metrics.phaseStarts, 10);
+    assert.equal(evidence.metrics.phaseStarts, evidence.metrics.phaseEnds);
+    assert.equal(evidence.metrics.slotAcquires, 7);
+    assert.equal(evidence.metrics.slotAcquires, evidence.metrics.slotReleases);
+    assert.equal(evidence.metrics.holdAcquires, 3);
+    assert.equal(
+      evidence.metrics.holdAcquires,
+      evidence.metrics.holdReleases + evidence.metrics.holdExpiries,
+    );
+    assert.equal(evidence.metrics.concurrencyObservations, 20);
+    assert.equal(evidence.metrics.peakActiveTotal, 2);
+    assert.equal(evidence.metrics.boardTerminalEvents, 1);
+    assert.equal(evidence.metrics.plannerReports, 1);
+    assert.equal(evidence.metrics.completionNotifications, 1);
+    assert.equal(evidence.metrics.interactionsRequired, 0);
+    assert.deepEqual(evidence.reconstructed.activePhaseIds, []);
+    assert.deepEqual(evidence.reconstructed.activeSlotIds, []);
+    assert.deepEqual(evidence.reconstructed.activeHoldIds, []);
+    assert.deepEqual(evidence.reconstructed.lifecycleOwners, {});
     assertZeroUnrouted(router);
   });
 });

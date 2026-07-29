@@ -129,7 +129,7 @@ export function makeGroup(overrides: Partial<ChatGroup> = {}): ChatGroup {
 /** Build planner + group, init board store, register session, start auto-run. */
 export function seedBoard(
   spec: BoardSeedSpec,
-  executionMode: 'auto' | 'sequential' = 'auto',
+  executionMode: 'auto' | 'sequential' | 'afk' = 'auto',
 ): { planner: Chat; group: ChatGroup } {
   const planner = makePlanner();
   const group = makeGroup();

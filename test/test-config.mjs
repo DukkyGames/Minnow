@@ -273,6 +273,9 @@ export const SCOPED_SUITES = {
   board: {
     patterns: ['test/orchestrate/**/*.test.mts', 'test/orchestrate/**/*.test.mjs'],
   },
+  'board-gates': {
+    patterns: ['test/scripts/*.test.mjs'],
+  },
 };
 
 /** Glob used to discover all node:test files under test/. */

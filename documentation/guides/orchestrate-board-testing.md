@@ -2,13 +2,18 @@
 
 How to run, debug, and extend tests for the Orchestrate Kanban board (dispatcher, task chats, merge/quarantine, board log). Product context: [Orchestrate boards in `context.md`](../context.md#orchestrate-boards).
 
-## Three layers
+## Six layers
 
 | Layer | When to use | Command / entry |
 |-------|----------------|-----------------|
-| **Automated suite** | CI, regressions, every PR | `npm run test:board` (~14s, 397 tests) |
+| **Automated suite** | CI, regressions, every PR | `npm run test:board` (~22s, 442 tests) |
+| **Scenario contract** | PR gate — catalog + adapters | `npm run board:scenario-contract` |
+| **Persisted AFK gate** | Nightly — real server + git | `npm run board:persisted` |
+| **Restart matrix** | Nightly — crash/reload checkpoints | `npm run board:restart` |
+| **Soak** | Nightly — repeated happy path | `npm run board:soak` |
 | **Board log validation** | Post-mortem on a real or test run | `npm run check:board-log -- <groupId>` |
-| **Manual UI + fake model** | Click through the real app without a live LLM | `npm run seed:test-board` + `npm run fake-model -- --register` |
+| **Manual UI + fake model** | Click through the real app without a live LLM | Settings → Advanced → Board testing |
+| **Electron AFK smoke** | Release gate | `npm run board:electron-smoke` |
 
 ```text
                     npm run test:board
@@ -18,6 +23,12 @@ How to run, debug, and extend tests for the Orchestrate Kanban board (dispatcher
   Unit / component   Live launch path   Headless full-stack
   (store, merge,     (real startTask,    (real runChatTurn +
    quarantine…)      scripted turns)     fetch router + quirks)
+                           │
+                           ▼
+              Persisted server AFK (real MINNOW_HOME + git)
+                           │
+                           ▼
+              Restart / soak gates (CLI + nightly CI)
 ```
 
 The automated suite is the main safety net. It exercises the **real launch path** (`startTask`, slot accounting, stream-end ordering) that older tests skipped via `MINNOW_TEST` guards and harness reimplementation.
@@ -65,7 +76,7 @@ This skips onboarding and `board_init` — the planner chat and Kanban already e
 | `--preset quick` | quick | 3 parallel W1 tasks ([`test-board-quick.md`](../plans/test-board-quick.md)) |
 | `--preset smoke` | | 6-task smoke plan ([`orchestrator-board-smoke.md`](../plans/orchestrator-board-smoke.md)) |
 | `--workspace <path>` | cwd | Workspace folder to bind |
-| `--mode manual\|auto\|sequential` | manual | Execution mode |
+| `--mode manual\|auto\|sequential\|afk` | manual | Execution mode |
 | `--provider` / `--model` | `fake-board` / `fake-board-model` | Planner model binding |
 | `--auto-start` | off | Set `board.autoRunning` |
 
@@ -100,7 +111,12 @@ Use your real `groupId` from the board folder if different.
 
 | Command | Description |
 |---------|-------------|
-| `npm run test:board` | All `test/orchestrate/**/*.test.{mts,mjs}` (~397 tests) |
+| `npm run test:board` | All `test/orchestrate/**/*.test.{mts,mjs}` (442 tests) |
+| `npm run board:scenario-contract` | Validate built-in scenario catalog + adapters (PR gate) |
+| `npm run board:persisted` | Persisted-server AFK gate (`--scenario`, `--iterations`, `--timeout-ms`) |
+| `npm run board:restart` | Restart checkpoint matrix (`--checkpoint`) |
+| `npm run board:soak` | Repeated happy-path soak (default 100 iterations) |
+| `npm run board:electron-smoke` | Packaged Electron AFK smoke (release gate) |
 | `npm run fake-model` | Local OpenAI-v1 stub; `npm run fake-model -- --help` |
 | `npm run seed:test-board` | Inject pre-initialized board into sessions |
 | `npm run check:board-log -- <groupId\|path>` | Validate `~/.minnow/logs/orchestrate/*.jsonl` |
@@ -144,6 +160,51 @@ Optional `--scenario path.json` — ordered steps; first match wins:
 ```
 
 Default (no `--scenario`): builder `nth=0` → `board_report` for that task; `nth≥1` → prose ack; tester → `VERDICT: pass`; final → `FULL_BOARD` report.
+
+---
+
+## Unified scenario catalog (MIN-513)
+
+Built-in scenarios live in [`src/dev/orchestrate-scenarios/catalog.ts`](../../src/dev/orchestrate-scenarios/catalog.ts). Each scenario is a production-neutral `BoardScenario` (preset, execution mode, expected outcome, optional faults, restart checkpoints) validated by [`schema.ts`](../../src/dev/orchestrate-scenarios/schema.ts).
+
+Adapters in [`adapters.ts`](../../src/dev/orchestrate-scenarios/adapters.ts):
+
+- `toFakeModelScenario` — ordered fake-model steps for HTTP stub
+- `toScenarioValidationPlan` — graph + invariant options for `checkBoardLog`
+
+List scenarios:
+
+```bash
+npm run board:scenario-contract
+# or via API when the tool server is running:
+curl http://localhost:9473/api/orchestrate/board-testing/scenarios
+```
+
+### Settings scenario runner
+
+Settings → **Advanced → Board testing** includes a scenario runner panel:
+
+1. Pick a built-in scenario from the catalog.
+2. Configure iterations, timeout, and seed.
+3. **Prepare** → **Start** — the server runs iterations via `ScenarioRunManager` ([`scenario-runner.js`](../../server/orchestrate/board-testing/scenario-runner.js)).
+4. Live status shows phase, progress, fake-model request count, and board-log tail.
+5. **Stop** or wait for completion; export artifact bundle from results.
+
+API routes under `/api/orchestrate/board-testing/runs/*` and `/scenarios`.
+
+### Persisted AFK harness
+
+[`test/orchestrate/persisted/`](../../test/orchestrate/persisted/) runs the real tool server with isolated `MINNOW_HOME`, registers the in-process fake model over HTTP, seeds an AFK board, and drives convergence through real `runChatTurn`. Gate CLI entry points:
+
+```bash
+npm run board:persisted -- --scenario happy.quick
+npm run board:restart -- --checkpoint after-board-seed
+npm run board:soak -- --iterations 10
+```
+
+Nightly CI: [`.github/workflows/board-nightly.yml`](../../.github/workflows/board-nightly.yml). Release Electron smoke: [`.github/workflows/board-release.yml`](../../.github/workflows/board-release.yml).
+
+Full reliability plan: [orchestrate-board-afk-e2e-reliability.md](../plans/orchestrate-board-afk-e2e-reliability.md).
 
 ---
 
@@ -198,8 +259,20 @@ Headless E2E wraps real `runChatTurn` with a custom runner (must not be the `run
 | `wave-order` | Wave barriers (needs `--plan`) |
 | `dependency-order` | `dependsOn` respected (needs `--plan`) |
 | `quarantine-cascade` | Root quarantine + dependent cascade |
+| `phase-pairing` | Every `phase_start` has a matching `phase_end` (`strictEvidence`) |
+| `slot-balance` | Slot acquire/release pairs (`strictEvidence`) |
+| `hold-balance` | Pipeline hold acquire/release pairs (`strictEvidence`) |
+| `concurrency-cap` | Observed concurrency never exceeds cap (`strictEvidence`) |
+| `lifecycle-owner` | Task owner set/cleared consistently (`strictEvidence`) |
+| `retry-monotonic` | Retry counters only increase (`strictEvidence`) |
+| `no-task-during-final` | No task mutation during final integration (`strictEvidence`) |
+| `merge-order` | Merge events follow completion order (`strictEvidence`) |
+| `terminal-recovery` | Terminal states are recoverable or explicit (`strictEvidence`) |
+| `board-terminal-once` | Board reaches terminal state once (`strictEvidence`) |
+| `completion-once` | Completion notification emitted once (`strictEvidence`) |
+| `afk-no-interaction` | AFK runs never emit `interaction_required` (`strictEvidence`) |
 
-Concurrency is **not** inferred from logs — assert slots in live-launch tests instead.
+Concurrency is also observable via `concurrency_observed` log events when `strictEvidence` is enabled — slot tests in live-launch suites remain the primary scheduler assertions.
 
 Unit tests: [`board-log-invariants.test.mts`](../../test/orchestrate/board-log-invariants.test.mts).
 
@@ -223,6 +296,10 @@ npx tsx --import ./test/test-loader.mjs --import ./test/assert-dom-safe.mjs \
 | `board-headless-e2e.test.mts` | Full `runChatTurn` + quirk fixtures (families A–H) |
 | `board-log-invariants.test.mts` | Invariant checker fixtures |
 | `merge-fixer-llm-quirks.test.mts` | Fixer LLM nonsense (family D) |
+| `persisted/persisted-afk.test.mts` | Persisted-server AFK happy path |
+| `scenario-catalog.test.mts` | Built-in scenario catalog |
+| `scenario-adapters.test.mts` | Fake-model + validation adapters |
+| `scenario-artifacts.test.mts` | Artifact bundle sanitization |
 
 ### Launch, stream-end, recovery
 
@@ -322,5 +399,6 @@ New tests assert **intended** recovery behaviour and may stay red until product 
 
 - [Command reference](commands.md) — all npm scripts
 - [Orchestrate boards (`context.md`)](../context.md#orchestrate-boards) — architecture reference
+- [AFK E2E reliability plan](../plans/orchestrate-board-afk-e2e-reliability.md) — MIN-513 scenario catalog, gates, acceptance criteria
 - [Orchestrator board smoke plan](../plans/orchestrator-board-smoke.md) — manual smoke checklist
 - [Test board quick plan](../plans/test-board-quick.md) — minimal 3-task plan

@@ -18,6 +18,7 @@ import type { ToolApprovalContext } from './approval-queue';
 import type { AskQuestionArgs, AskQuestionToolResult } from './ask-question-types';
 import { isLocalServerAvailable } from './config';
 import type { ToolExecutionResult } from '../types';
+import { blockAfkInteractionAttempt } from './permission-gate';
 
 export const ALLOWLIST_QUESTION_ID = 'browser_allow_origin';
 
@@ -146,6 +147,12 @@ export async function maybeBlockBrowserNavigation(
   if (check.allowed) {
     return null;
   }
+  const afkBlocked = blockAfkInteractionAttempt(
+    context,
+    'confirmation',
+    `browser_navigate requires origin approval for ${check.origin}`,
+  );
+  if (afkBlocked) return afkBlocked;
 
   acquireUserPromptLock();
   let raw: string;

@@ -7,9 +7,9 @@
  * `logQuarantine` (fixed in B1). Reconstructed timelines are therefore sound
  * once quarantine rows are present.
  *
- * Concurrency is an explicit non-goal: `maxConcurrentTasks` is never logged,
- * there is no chat-end event, and `task_started` only fires for builders.
- * Assert slot limits in live-launch tests instead of inferring them from logs.
+ * Phase-2 durable events make phase, ownership, and concurrency state
+ * reconstructible. Older logs remain valid inputs, but their missing evidence
+ * is reported explicitly instead of being interpreted as a successful audit.
  */
 
 import type { BoardLogEvent, BoardTaskStatus } from '../types.ts';
@@ -56,7 +56,14 @@ export type BoardLogInvariantId =
   | 'final-test-order'
   | 'wave-order'
   | 'dependency-order'
-  | 'quarantine-cascade';
+  | 'quarantine-cascade'
+  | 'phase-pairing'
+  | 'slot-balance'
+  | 'hold-balance'
+  | 'concurrency-cap'
+  | 'lifecycle-owner'
+  | 'terminal-effects'
+  | 'afk-hands-off';
 
 export interface BoardLogCheckOptions {
   tasks: Array<{ id: string; wave?: string; dependsOn?: string[] }>;
@@ -64,6 +71,10 @@ export interface BoardLogCheckOptions {
   caps?: { build?: number; test?: number; fixer?: number; nudge?: number };
   expectFinalTest?: boolean;
   requireTerminal?: boolean;
+  /** Make missing durable Phase-2 evidence affect `ok`; default is legacy-compatible. */
+  strictEvidence?: boolean;
+  /** Explicit mode when the log starts after the mode_change event. */
+  executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   skip?: BoardLogInvariantId[];
 }
 
@@ -72,6 +83,65 @@ export interface BoardLogViolation {
   message: string;
   eventId?: string;
   taskId?: string;
+}
+
+export interface BoardLogIncompleteEvidence {
+  id: BoardLogInvariantId;
+  reason: string;
+  taskId?: string;
+  eventId?: string;
+}
+
+export interface BoardLogSkippedCheck {
+  id: BoardLogInvariantId;
+  reason: string;
+}
+
+export interface BoardLogReconstructedState {
+  taskStatuses: Record<string, BoardTaskStatus>;
+  activePhaseIds: string[];
+  activeSlotIds: string[];
+  activeHoldIds: string[];
+  lifecycleOwners: Record<string, string>;
+  boardTerminal?: 'passed' | 'blocked' | 'stopped' | 'failed';
+  plannerReportIds: string[];
+  completionNotificationIds: string[];
+  interactionRequired: boolean;
+}
+
+export interface BoardLogMetrics {
+  eventCount: number;
+  durationMs: number;
+  phaseStarts: number;
+  phaseEnds: number;
+  slotAcquires: number;
+  slotReleases: number;
+  holdAcquires: number;
+  holdReleases: number;
+  holdExpiries: number;
+  concurrencyObservations: number;
+  peakActiveSlots: number;
+  peakActiveHolds: number;
+  peakActiveTotal: number;
+  configuredConcurrencyCap?: number;
+  boardTerminalEvents: number;
+  plannerReports: number;
+  completionNotifications: number;
+  interactionsRequired: number;
+}
+
+export interface BoardLogCheckResult {
+  /** Backward-compatible pass bit; incomplete evidence only affects it in strictEvidence mode. */
+  ok: boolean;
+  status: 'pass' | 'fail' | 'incomplete';
+  complete: boolean;
+  violations: BoardLogViolation[];
+  incompleteEvidence: BoardLogIncompleteEvidence[];
+  skippedChecks: BoardLogSkippedCheck[];
+  reconstructed: BoardLogReconstructedState;
+  metrics: BoardLogMetrics;
+  /** Legacy numeric counters retained for existing CLI/API callers. */
+  stats: Record<string, number>;
 }
 
 type AttemptKind = 'build' | 'test' | 'fixer' | 'nudge';
@@ -239,7 +309,7 @@ function applyEvent(ctx: CheckContext, event: BoardLogEvent): void {
     return;
   }
 
-  if (type === 'task_retry' && event.taskId) {
+  if ((type === 'task_retry' || type === 'nudge') && event.taskId) {
     const kind = event.detail?.attemptKind;
     const attempt = event.detail?.attempt;
     if (!kind || typeof attempt !== 'number') return;
@@ -605,6 +675,295 @@ function checkExpectFinalTest(ctx: CheckContext, violations: BoardLogViolation[]
   }
 }
 
+type DurableAudit = {
+  incomplete: BoardLogIncompleteEvidence[];
+  skipped: BoardLogSkippedCheck[];
+  reconstructed: BoardLogReconstructedState;
+  metrics: BoardLogMetrics;
+};
+
+function lifecycleKey(event: BoardLogEvent): string | undefined {
+  if (!event.taskId || typeof event.detail?.lifecycleRun !== 'number') return undefined;
+  return `${event.taskId}:${event.detail.lifecycleRun}`;
+}
+
+function auditDurableEvents(
+  ctx: CheckContext,
+  opts: BoardLogCheckOptions,
+  violations: BoardLogViolation[],
+): DurableAudit {
+  const incomplete: BoardLogIncompleteEvidence[] = [];
+  const skipped: BoardLogSkippedCheck[] = [];
+  const activePhases = new Map<string, BoardLogEvent>();
+  const activeSlots = new Map<string, BoardLogEvent>();
+  const activeHolds = new Map<string, BoardLogEvent>();
+  const owners = new Map<string, { ownerId: string; event: BoardLogEvent }>();
+  const taskStatuses = Object.fromEntries(
+    [...ctx.tasksById.keys()].map((taskId) => [taskId, 'planned' as BoardTaskStatus]),
+  );
+  const plannerReportIds: string[] = [];
+  const completionNotificationIds: string[] = [];
+  let terminalOutcome: BoardLogReconstructedState['boardTerminal'];
+  let afk = opts.executionMode === 'afk';
+  let interactionRequired = false;
+  const firstTs = ctx.sorted[0]?.ts;
+  const lastTs = ctx.sorted[ctx.sorted.length - 1]?.ts;
+  const metrics: BoardLogMetrics = {
+    eventCount: ctx.sorted.length,
+    durationMs: firstTs == null || lastTs == null ? 0 : Math.max(0, lastTs - firstTs),
+    phaseStarts: 0,
+    phaseEnds: 0,
+    slotAcquires: 0,
+    slotReleases: 0,
+    holdAcquires: 0,
+    holdReleases: 0,
+    holdExpiries: 0,
+    concurrencyObservations: 0,
+    peakActiveSlots: 0,
+    peakActiveHolds: 0,
+    peakActiveTotal: 0,
+    boardTerminalEvents: 0,
+    plannerReports: 0,
+    completionNotifications: 0,
+    interactionsRequired: 0,
+  };
+
+  const violation = (
+    id: BoardLogInvariantId,
+    message: string,
+    event?: BoardLogEvent,
+  ): void => {
+    violations.push({ id, message, eventId: event?.id, taskId: event?.taskId });
+  };
+
+  for (const event of ctx.sorted) {
+    if (event.type === 'mode_change' && event.detail?.mode === 'afk') afk = true;
+    if (event.type === 'task_status' && event.taskId && event.detail?.to) {
+      taskStatuses[event.taskId] = event.detail.to;
+    } else if (event.type === 'task_quarantined' && event.taskId) {
+      taskStatuses[event.taskId] = 'quarantined';
+    }
+
+    if (event.type === 'phase_start') {
+      metrics.phaseStarts += 1;
+      const id = event.detail?.phaseId;
+      if (!id || !event.detail?.phase) {
+        violation('phase-pairing', 'phase_start requires phaseId and phase', event);
+      } else if (activePhases.has(id)) {
+        violation('phase-pairing', `duplicate active phase ${id}`, event);
+      } else {
+        activePhases.set(id, event);
+      }
+    } else if (event.type === 'phase_end') {
+      metrics.phaseEnds += 1;
+      const id = event.detail?.phaseId;
+      const start = id ? activePhases.get(id) : undefined;
+      if (!id || !event.detail?.phase) {
+        violation('phase-pairing', 'phase_end requires phaseId and phase', event);
+      } else if (!start) {
+        violation('phase-pairing', `phase_end without matching start for ${id}`, event);
+      } else {
+        if (
+          start.detail?.phase !== event.detail.phase ||
+          start.taskId !== event.taskId ||
+          start.detail?.lifecycleRun !== event.detail.lifecycleRun
+        ) {
+          violation('phase-pairing', `phase_end correlation mismatch for ${id}`, event);
+        }
+        activePhases.delete(id);
+      }
+    } else if (event.type === 'slot_acquire') {
+      metrics.slotAcquires += 1;
+      const id = event.detail?.slotId;
+      if (!id) violation('slot-balance', 'slot_acquire requires slotId', event);
+      else if (activeSlots.has(id)) violation('slot-balance', `slot ${id} acquired twice`, event);
+      else activeSlots.set(id, event);
+    } else if (event.type === 'slot_release') {
+      metrics.slotReleases += 1;
+      const id = event.detail?.slotId;
+      if (!id) violation('slot-balance', 'slot_release requires slotId', event);
+      else if (!activeSlots.delete(id)) {
+        violation('slot-balance', `slot ${id} released without acquire`, event);
+      }
+    } else if (event.type === 'hold_acquire') {
+      metrics.holdAcquires += 1;
+      const id = event.detail?.holdId;
+      if (!id) violation('hold-balance', 'hold_acquire requires holdId', event);
+      else if (activeHolds.has(id)) violation('hold-balance', `hold ${id} acquired twice`, event);
+      else activeHolds.set(id, event);
+    } else if (event.type === 'hold_release' || event.type === 'hold_expiry') {
+      if (event.type === 'hold_release') metrics.holdReleases += 1;
+      else metrics.holdExpiries += 1;
+      const id = event.detail?.holdId;
+      if (!id) violation('hold-balance', `${event.type} requires holdId`, event);
+      else if (!activeHolds.delete(id)) {
+        violation('hold-balance', `hold ${id} closed without acquire`, event);
+      }
+    } else if (event.type === 'concurrency_observation') {
+      metrics.concurrencyObservations += 1;
+      const { activeSlots: slots, activeHolds: holds, activeTotal, concurrencyCap } =
+        event.detail ?? {};
+      if (
+        typeof slots !== 'number' ||
+        typeof holds !== 'number' ||
+        typeof activeTotal !== 'number' ||
+        typeof concurrencyCap !== 'number'
+      ) {
+        violation('concurrency-cap', 'concurrency observation requires all counts and cap', event);
+      } else {
+        metrics.peakActiveSlots = Math.max(metrics.peakActiveSlots, slots);
+        metrics.peakActiveHolds = Math.max(metrics.peakActiveHolds, holds);
+        metrics.peakActiveTotal = Math.max(metrics.peakActiveTotal, activeTotal);
+        metrics.configuredConcurrencyCap =
+          metrics.configuredConcurrencyCap == null
+            ? concurrencyCap
+            : Math.min(metrics.configuredConcurrencyCap, concurrencyCap);
+        if (slots !== activeSlots.size || holds !== activeHolds.size) {
+          violation(
+            'concurrency-cap',
+            `observation ${slots} slots/${holds} holds disagrees with reconstructed ${activeSlots.size}/${activeHolds.size}`,
+            event,
+          );
+        }
+        if (activeTotal !== slots + holds) {
+          violation('concurrency-cap', `activeTotal ${activeTotal} must equal slots + holds`, event);
+        }
+        if (activeTotal > concurrencyCap) {
+          violation('concurrency-cap', `observed concurrency ${activeTotal} exceeds cap ${concurrencyCap}`, event);
+        }
+      }
+    } else if (event.type === 'lifecycle_owner_set') {
+      const key = lifecycleKey(event);
+      const ownerId = event.detail?.ownerId;
+      if (!key || !ownerId || !event.detail?.ownerKind) {
+        violation('lifecycle-owner', 'lifecycle_owner_set requires task, lifecycle, owner, and kind', event);
+      } else if (owners.has(key)) {
+        violation('lifecycle-owner', `lifecycle ${key} already has an active owner`, event);
+      } else {
+        owners.set(key, { ownerId, event });
+      }
+    } else if (event.type === 'lifecycle_owner_clear') {
+      const key = lifecycleKey(event);
+      const ownerId = event.detail?.ownerId;
+      const active = key ? owners.get(key) : undefined;
+      if (!key || !ownerId) {
+        violation('lifecycle-owner', 'lifecycle_owner_clear requires task, lifecycle, and owner', event);
+      } else if (!active) {
+        violation('lifecycle-owner', `lifecycle ${key} owner cleared without set`, event);
+      } else {
+        if (active.ownerId !== ownerId) {
+          violation('lifecycle-owner', `lifecycle ${key} cleared by non-owner ${ownerId}`, event);
+        }
+        owners.delete(key);
+      }
+    } else if (event.type === 'board_terminal') {
+      metrics.boardTerminalEvents += 1;
+      if (!event.detail?.terminalOutcome) {
+        violation('terminal-effects', 'board_terminal requires terminalOutcome', event);
+      } else {
+        terminalOutcome = event.detail.terminalOutcome;
+      }
+      if (metrics.boardTerminalEvents > 1) {
+        violation('terminal-effects', 'board_terminal emitted more than once', event);
+      }
+      if (activePhases.size || activeSlots.size || activeHolds.size || owners.size) {
+        violation('terminal-effects', 'board became terminal with active phase, slot, hold, or owner', event);
+      }
+    } else if (event.type === 'planner_report') {
+      metrics.plannerReports += 1;
+      if (event.detail?.reportId) plannerReportIds.push(event.detail.reportId);
+      else violation('terminal-effects', 'planner_report requires reportId', event);
+      if (metrics.plannerReports > 1) {
+        violation('terminal-effects', 'planner_report emitted more than once', event);
+      }
+    } else if (event.type === 'completion_notification') {
+      metrics.completionNotifications += 1;
+      if (event.detail?.notificationId) {
+        completionNotificationIds.push(event.detail.notificationId);
+      } else {
+        violation('terminal-effects', 'completion_notification requires notificationId', event);
+      }
+      if (metrics.completionNotifications > 1) {
+        violation('terminal-effects', 'completion_notification emitted more than once', event);
+      }
+    } else if (event.type === 'interaction_required') {
+      interactionRequired = true;
+      metrics.interactionsRequired += 1;
+      if (afk) violation('afk-hands-off', 'AFK run requested user interaction', event);
+    }
+  }
+
+  const hasActivity = ctx.sorted.some((event) =>
+    ['task_started', 'build_verdict', 'test_verdict', 'merge_result'].includes(event.type),
+  );
+  const evidence = (id: BoardLogInvariantId, count: number, reason: string): void => {
+    if (opts.skip?.includes(id)) {
+      skipped.push({ id, reason: 'explicitly skipped by caller' });
+    } else if (count === 0) {
+      if (hasActivity || opts.requireTerminal) incomplete.push({ id, reason });
+      else skipped.push({ id, reason: 'not applicable: log contains no task activity' });
+    }
+  };
+  evidence('phase-pairing', metrics.phaseStarts + metrics.phaseEnds, 'no phase boundary events');
+  evidence('slot-balance', metrics.slotAcquires + metrics.slotReleases, 'no slot accounting events');
+  if (opts.skip?.includes('hold-balance')) {
+    skipped.push({ id: 'hold-balance', reason: 'explicitly skipped by caller' });
+  } else if (metrics.holdAcquires + metrics.holdReleases + metrics.holdExpiries === 0) {
+    skipped.push({ id: 'hold-balance', reason: 'no hold lifecycle was recorded' });
+  }
+  evidence('concurrency-cap', metrics.concurrencyObservations, 'no concurrency observations');
+  const ownerEvents = ctx.sorted.filter(
+    (event) => event.type === 'lifecycle_owner_set' || event.type === 'lifecycle_owner_clear',
+  ).length;
+  evidence('lifecycle-owner', ownerEvents, 'no lifecycle owner events');
+  if (!opts.skip?.includes('terminal-effects')) {
+    if (opts.requireTerminal && metrics.boardTerminalEvents === 0) {
+      incomplete.push({ id: 'terminal-effects', reason: 'terminal audit requested but board_terminal is missing' });
+    } else if (!opts.requireTerminal && metrics.boardTerminalEvents === 0) {
+      skipped.push({ id: 'terminal-effects', reason: 'board_terminal not required for this partial log' });
+    }
+  }
+  if (opts.skip?.includes('afk-hands-off')) {
+    skipped.push({ id: 'afk-hands-off', reason: 'explicitly skipped by caller' });
+  } else if (!afk) {
+    skipped.push({ id: 'afk-hands-off', reason: 'execution mode is not AFK' });
+  } else if (metrics.boardTerminalEvents === 0) {
+    incomplete.push({ id: 'afk-hands-off', reason: 'AFK negative-interaction audit has no terminal boundary' });
+  }
+
+  if (metrics.boardTerminalEvents === 0) {
+    for (const event of activePhases.values()) {
+      incomplete.push({ id: 'phase-pairing', reason: `phase ${event.detail?.phaseId} still active`, eventId: event.id, taskId: event.taskId });
+    }
+    for (const event of activeSlots.values()) {
+      incomplete.push({ id: 'slot-balance', reason: `slot ${event.detail?.slotId} still active`, eventId: event.id, taskId: event.taskId });
+    }
+    for (const event of activeHolds.values()) {
+      incomplete.push({ id: 'hold-balance', reason: `hold ${event.detail?.holdId} still active`, eventId: event.id, taskId: event.taskId });
+    }
+    for (const [key, owner] of owners) {
+      incomplete.push({ id: 'lifecycle-owner', reason: `lifecycle ${key} still owned by ${owner.ownerId}`, eventId: owner.event.id, taskId: owner.event.taskId });
+    }
+  }
+
+  return {
+    incomplete,
+    skipped,
+    reconstructed: {
+      taskStatuses,
+      activePhaseIds: [...activePhases.keys()],
+      activeSlotIds: [...activeSlots.keys()],
+      activeHoldIds: [...activeHolds.keys()],
+      lifecycleOwners: Object.fromEntries([...owners].map(([key, owner]) => [key, owner.ownerId])),
+      ...(terminalOutcome ? { boardTerminal: terminalOutcome } : {}),
+      plannerReportIds,
+      completionNotificationIds,
+      interactionRequired,
+    },
+    metrics,
+  };
+}
+
 /**
  * Validate a board diagnostic log against structural invariants.
  * Events are processed in `ts` order, then by the numeric suffix of `id`.
@@ -612,7 +971,7 @@ function checkExpectFinalTest(ctx: CheckContext, violations: BoardLogViolation[]
 export function checkBoardLog(
   events: readonly BoardLogEvent[],
   opts: BoardLogCheckOptions,
-): { ok: boolean; violations: BoardLogViolation[]; stats: Record<string, number> } {
+): BoardLogCheckResult {
   const ctx = initContext(events, opts);
   const violations: BoardLogViolation[] = [];
   const skip = opts.skip;
@@ -633,6 +992,25 @@ export function checkBoardLog(
   if (opts.requireTerminal) checkRequireTerminal(ctx, violations);
   if (opts.expectFinalTest) checkExpectFinalTest(ctx, violations);
 
+  const durable = auditDurableEvents(ctx, opts, violations);
+  if (skip?.length) {
+    for (let i = violations.length - 1; i >= 0; i -= 1) {
+      if (skip.includes(violations[i]!.id)) violations.splice(i, 1);
+    }
+  }
   ctx.stats.violations = violations.length;
-  return { ok: violations.length === 0, violations, stats: ctx.stats };
+  ctx.stats.incomplete = durable.incomplete.length;
+  const complete = durable.incomplete.length === 0;
+  const ok = violations.length === 0 && (!opts.strictEvidence || complete);
+  return {
+    ok,
+    status: violations.length ? 'fail' : complete ? 'pass' : 'incomplete',
+    complete,
+    violations,
+    incompleteEvidence: durable.incomplete,
+    skippedChecks: durable.skipped,
+    reconstructed: durable.reconstructed,
+    metrics: durable.metrics,
+    stats: ctx.stats,
+  };
 }

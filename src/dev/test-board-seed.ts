@@ -21,7 +21,7 @@ const SMOKE_PLAN = 'documentation/plans/orchestrator-board-smoke.md';
 export type PresetId = 'quick' | 'smoke';
 export type ExecutionMode = 'manual' | 'auto' | 'sequential';
 
-type SeedTask = {
+export type TestBoardSeedTask = {
   id: string;
   title: string;
   wave: string;
@@ -31,14 +31,14 @@ type SeedTask = {
   dependsOn?: string[];
 };
 
-type PresetSpec = {
+export type TestBoardPresetSpec = {
   planPath: string;
   label: string;
-  tasks: SeedTask[];
+  tasks: TestBoardSeedTask[];
   waves: Array<{ id: string }>;
 };
 
-const PRESETS: Record<PresetId, PresetSpec> = {
+const PRESETS: Record<PresetId, TestBoardPresetSpec> = {
   quick: {
     planPath: QUICK_PLAN,
     label: 'Test board (quick)',
@@ -129,6 +129,20 @@ const PRESETS: Record<PresetId, PresetSpec> = {
     ],
   },
 };
+
+/** Return a detached preset graph for deterministic scenario validation. */
+export function getTestBoardPreset(preset: PresetId): TestBoardPresetSpec {
+  const spec = PRESETS[preset];
+  return {
+    planPath: spec.planPath,
+    label: spec.label,
+    tasks: spec.tasks.map((task) => ({
+      ...task,
+      ...(task.dependsOn ? { dependsOn: [...task.dependsOn] } : {}),
+    })),
+    waves: spec.waves.map((wave) => ({ ...wave })),
+  };
+}
 
 export type SeedTestBoardOptions = {
   workspacePath: string;
