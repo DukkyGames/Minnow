@@ -1,4 +1,4 @@
-const CACHE = 'minnow-v7';
+const CACHE = 'minnow-v8';
 
 /** Shell files precached on install for offline fallback only (not served stale when online). */
 const SHELL = ['./index.html', './manifest.json'];

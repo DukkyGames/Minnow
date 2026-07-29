@@ -1,7 +1,7 @@
 {
   "name": "Minnow",
   "short_name": "Minnow",
-  "description": "Local LM Studio chat client with inference stats",
+  "description": "Local-first AI workspace with an authenticated LAN companion",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#fefefe",

@@ -4,7 +4,7 @@
  * need to be touched individually.
  */
 
-import { getSessionToken } from './session-token.ts';
+import { getDeviceToken, getSessionToken, hasHostSessionToken } from './session-token.ts';
 
 const TOKEN_HEADER = 'X-Minnow-Token';
 
@@ -37,9 +37,20 @@ export function installFetchAuth(): void {
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     headers.set(TOKEN_HEADER, token);
 
-    if (input instanceof Request) {
-      return nativeFetch(new Request(input, { ...init, headers }));
-    }
-    return nativeFetch(input, { ...init, headers });
+    const request =
+      input instanceof Request
+        ? nativeFetch(new Request(input, { ...init, headers }))
+        : nativeFetch(input, { ...init, headers });
+    return request.then((response) => {
+      if (
+        response.status === 401 &&
+        !hasHostSessionToken() &&
+        Boolean(getDeviceToken()) &&
+        typeof window !== 'undefined'
+      ) {
+        window.dispatchEvent(new Event('minnow-auth-revoked'));
+      }
+      return response;
+    });
   }) as typeof fetch;
 }

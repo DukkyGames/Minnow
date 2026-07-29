@@ -12,6 +12,7 @@ import {
 } from '../config/network-access';
 import { setStatus } from './status';
 import { appendSettingsOfflineHint } from './settings-controls';
+import { renderCompanionDevices } from './settings-network-devices';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -126,7 +127,7 @@ export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<v
   );
 
   const warning = warningBanner(
-    'Local network mode exposes chat, files, git, terminal, and ~/.minnow data to anyone on your Wi‑Fi. There is no login — use only on networks you trust. Windows Firewall may block inbound connections until you allow Node.',
+    'Local network mode makes Minnow reachable on your Wi‑Fi. API access still requires a paired device token, but use only on networks you trust. Windows Firewall may block inbound connections until you allow Node.',
   );
   warning.hidden = selectedMode !== 'lan';
   section.appendChild(warning);
@@ -141,6 +142,10 @@ export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<v
   );
   voiceHint.hidden = selectedMode !== 'lan' || status.lanUrls.length === 0;
   section.appendChild(voiceHint);
+
+  const devicesMount = el('div', 'settings-network-devices-mount');
+  section.appendChild(devicesMount);
+  renderCompanionDevices(devicesMount, status.networkAccess === 'lan');
 
   mount.appendChild(section);
 

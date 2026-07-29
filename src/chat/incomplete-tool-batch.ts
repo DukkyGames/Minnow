@@ -90,6 +90,10 @@ export function findIncompleteToolBatchAtTail(chat: Chat): IncompleteToolBatch |
 
 /** True when the next pending tool in the tail batch needs user input (question cards). */
 export function chatAwaitingUserInputTool(chat: Chat): boolean {
+  // Lazy-history summaries omit message bodies; incomplete-tool detection needs full history.
+  if (chat.historyLoaded === false) {
+    return false;
+  }
   const batch = findIncompleteToolBatchAtTail(chat);
   if (!batch?.pendingToolCalls.length) {
     return false;

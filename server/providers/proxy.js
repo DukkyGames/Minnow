@@ -2,6 +2,8 @@
  * Proxy upstream models (and load/unload) with server-side auth injection.
  */
 
+import { FAKE_PROVIDER_ID } from '../../scripts/fake-model-server.mjs';
+import { getFakeModelStatus } from '../orchestrate/board-testing/fake-model-host.js';
 import { getProviderRuntime } from './store.js';
 import { normalizeModelsResponse, enrichLmStudioModelsWithV1Reasoning } from './paths.js';
 import {
@@ -21,6 +23,10 @@ const MODEL_UNLOAD_TIMEOUT_MS = 60_000;
  */
 export async function proxyModels(id) {
   validateProviderId(id);
+  // Dev board-testing provider: registered in ~/.minnow but inert until the fake host starts.
+  if (id === FAKE_PROVIDER_ID && !getFakeModelStatus().running) {
+    return { data: [] };
+  }
   const { profile, headers, paths } = await getProviderRuntime(id);
   const modelsPath = normalizeOpenCodeZenRelativePath(profile.baseUrl, paths.modelsPath);
   const url = `${profile.baseUrl}${modelsPath}`;

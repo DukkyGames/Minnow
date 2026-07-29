@@ -8,6 +8,7 @@ import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 import { renderModelsSection } from './models-sections';
+import { restoreReparentedSettingsSections } from './models/settings-reparent';
 
 export type ModelsSectionId =
   | 'recommend'
@@ -164,6 +165,7 @@ export function closeModels(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) return;
 
   root.classList.remove('is-open');
+  restoreReparentedSettingsSections();
 
   if (!isOsEmbedded()) {
     shell.classList.remove('hidden');

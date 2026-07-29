@@ -14,6 +14,7 @@ import {
   resetSessionTokenCache,
   timingSafeEqualToken,
 } from '../../server/runtime/session-token.js';
+import { addRequestAuthToHtml } from '../../server/runtime/spa-auth-html.js';
 
 let homeDir;
 
@@ -115,5 +116,22 @@ describe('injectSessionTokenScript', () => {
     const html = '<body>no head here</body>';
     const out = injectSessionTokenScript(html, 'deadbeef');
     assert.match(out, /^<script>window\.__MINNOW_SESSION_TOKEN__="deadbeef";<\/script><body>/);
+  });
+});
+
+describe('addRequestAuthToHtml', () => {
+  beforeEach(() => setTestHome());
+  afterEach(() => rmTestHome());
+
+  test('injects the host token for loopback navigations', () => {
+    const html = '<html><head></head><body></body></html>';
+    assert.match(addRequestAuthToHtml(html, '127.0.0.1:9473'), /__MINNOW_SESSION_TOKEN__/);
+  });
+
+  test('never exposes the host token to a LAN navigation', () => {
+    const html = '<html><head></head><body></body></html>';
+    const output = addRequestAuthToHtml(html, '192.168.1.10:9473');
+    assert.equal(output, html);
+    assert.equal(output.includes(getSessionToken()), false);
   });
 });

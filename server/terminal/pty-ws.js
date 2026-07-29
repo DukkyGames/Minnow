@@ -12,7 +12,7 @@ import {
   destroyPtySession,
 } from './pty-host.js';
 import { getNetworkAccess, isClientAllowed, isHostAllowed } from '../network/access.js';
-import { getSessionToken, timingSafeEqualToken } from '../runtime/session-token.js';
+import { authenticateMinnowToken } from '../runtime/authenticate-token.js';
 
 /**
  * Attach PTY WebSocket server to the Vite HTTP server.
@@ -34,7 +34,7 @@ export function attachPtyWebSocketServer(httpServer) {
     }
 
     const token = url.searchParams.get('token') ?? '';
-    if (!timingSafeEqualToken(token, getSessionToken())) {
+    if (!authenticateMinnowToken(token)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
