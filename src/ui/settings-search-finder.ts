@@ -116,7 +116,11 @@ function syncHighlightedOption(): void {
 async function selectEntry(entry: SettingsSearchEntry): Promise<void> {
   const input = getInput();
   closeResults();
-  if (input) input.value = '';
+  if (input) {
+    // Programmatic value clears do not fire `input`; reset in-page filter state too.
+    input.value = '';
+    finderOptions.onQueryChange?.('');
+  }
   await navigateToSettingsSearchEntry(entry);
 }
 

@@ -13,7 +13,36 @@ import {
 import { readConfigJson } from '../config/store.js';
 
 /**
+ * Rank LAN addresses for companion pairing. Phones on the same Wi-Fi need a
+ * reachable RFC1918 address — not Tailscale CGNAT (100.64/10) or common
+ * virtual-adapter subnets that other devices cannot route to.
+ * @param {string} addr
+ * @returns {number}
+ */
+export function rankLanAddress(addr) {
+  const octets = addr.split('.').map((n) => Number(n));
+  if (octets.length !== 4 || octets.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
+    return 90;
+  }
+  const [a, b] = octets;
+
+  // Tailscale and other CGNAT overlays (RFC 6598).
+  if (a === 100 && b >= 64 && b <= 127) return 80;
+
+  if (a === 192 && b === 168) {
+    // VirtualBox / Hyper-V host-only adapters are rarely reachable from phones.
+    if (octets[2] === 56 || octets[2] === 137) return 70;
+    return 0;
+  }
+  if (a === 10) return 10;
+  if (a === 172 && b >= 16 && b <= 31) return 20;
+
+  return 50;
+}
+
+/**
  * List non-internal IPv4 LAN addresses (excludes loopback and link-local).
+ * Best companion targets are first so pairing QR codes pick a phone-reachable IP.
  * @returns {string[]}
  */
 export function listLanAddresses() {
@@ -32,7 +61,10 @@ export function listLanAddresses() {
     }
   }
 
-  return out.sort();
+  return out.sort((left, right) => {
+    const rankDiff = rankLanAddress(left) - rankLanAddress(right);
+    return rankDiff !== 0 ? rankDiff : left.localeCompare(right);
+  });
 }
 
 /**

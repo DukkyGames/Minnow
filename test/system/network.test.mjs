@@ -5,7 +5,11 @@
 import { describe, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
-import { listLanAddresses, buildNetworkUrls } from '../../server/system/network.js';
+import {
+  buildNetworkUrls,
+  listLanAddresses,
+  rankLanAddress,
+} from '../../server/system/network.js';
 
 describe('listLanAddresses', () => {
   test('filters internal, loopback, and link-local IPv4', () => {
@@ -25,7 +29,23 @@ describe('listLanAddresses', () => {
 
     try {
       const addrs = listLanAddresses();
-      assert.deepEqual(addrs, ['10.0.0.5', '192.168.1.42']);
+      assert.deepEqual(addrs, ['192.168.1.42', '10.0.0.5']);
+    } finally {
+      mockInterfaces.mock.restore();
+    }
+  });
+
+  test('prefers Wi-Fi RFC1918 over Tailscale CGNAT and virtual adapters', () => {
+    const mockInterfaces = mock.method(os, 'networkInterfaces', () => ({
+      tailscale0: [{ address: '100.113.176.113', family: 'IPv4', internal: false }],
+      vboxnet0: [{ address: '192.168.56.1', family: 'IPv4', internal: false }],
+      wlan0: [{ address: '192.168.4.191', family: 'IPv4', internal: false }],
+    }));
+
+    try {
+      const addrs = listLanAddresses();
+      assert.deepEqual(addrs, ['192.168.4.191', '192.168.56.1', '100.113.176.113']);
+      assert.equal(rankLanAddress('192.168.4.191') < rankLanAddress('100.113.176.113'), true);
     } finally {
       mockInterfaces.mock.restore();
     }

@@ -6,7 +6,7 @@ import { WebSocketServer } from 'ws';
 import { parseClientMessage, formatServerMessage } from './tts-protocol.js';
 import { TtsStreamSession } from './stream-session.js';
 import { getNetworkAccess, isClientAllowed, isHostAllowed } from '../network/access.js';
-import { getSessionToken, timingSafeEqualToken } from '../runtime/session-token.js';
+import { authenticateMinnowToken } from '../runtime/authenticate-token.js';
 
 /**
  * Attach TTS WebSocket server to the HTTP server.
@@ -28,7 +28,7 @@ export function attachTtsWebSocketServer(httpServer) {
     }
 
     const token = url.searchParams.get('token') ?? '';
-    if (!timingSafeEqualToken(token, getSessionToken())) {
+    if (!authenticateMinnowToken(token)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;

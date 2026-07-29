@@ -26,7 +26,12 @@ import {
   type SettingsSectionId,
 } from './settings-page-types';
 import { initSettingsSearchFinder } from './settings-search-finder';
-import { applySettingsPageFilter, clearSettingsPageFilter } from './settings-filter';
+import {
+  applySettingsPageFilter,
+  clearSettingsPageFilter,
+  refreshSettingsPageFilterForCategory,
+} from './settings-filter';
+import { restoreReparentedSettingsSections } from './models/settings-reparent';
 import {
   activateIntegrationsHub,
   flashSettingsSearchTarget,
@@ -174,6 +179,7 @@ export function setActiveArea(
   }
 
   syncAreaVisibility(area);
+  refreshSettingsPageFilterForCategory();
 
   const hubId =
     category === 'integrations' ? hubForArea(area) : undefined;
@@ -238,6 +244,7 @@ function setActiveIntegrationsHub(hubId: SettingsIntegrationsHubId): void {
   }
 
   activateIntegrationsHub(hubId);
+  refreshSettingsPageFilterForCategory();
   updateSettingsNavActive(undefined, hubId);
   writeSettingsHash(firstArea);
 
@@ -361,6 +368,15 @@ export function openSettings(
   });
 
   const wasAlreadyOpen = root.classList.contains('is-open');
+
+  restoreReparentedSettingsSections();
+  if (!wasAlreadyOpen) {
+    const searchInput = document.getElementById(
+      'settingsSearchInput',
+    ) as HTMLInputElement | null;
+    if (searchInput) searchInput.value = '';
+    clearSettingsPageFilter();
+  }
 
   root.classList.add('is-open');
   if (!isOsEmbedded()) {
