@@ -314,6 +314,11 @@ async function ensureReadyForSend(): Promise<boolean> {
     if (isEphemeralEmptyChat(chat)) {
       await ensureActiveAssistantChat();
     }
+    const active = getActiveChat();
+    if (active.historyLoaded === false) {
+      await ensureChatHistoryLoaded(active.id);
+      if (!sessionState || sessionState.activeId !== active.id) return false;
+    }
     if (!chatsWorkspacePath) {
       chatsWorkspacePath = await getChatsWorkspacePath();
     }
@@ -332,7 +337,6 @@ async function handleChatAppSend(): Promise<void> {
     return;
   }
   await sendMessage();
-  renderChatAppMessages();
   syncComposerSendState();
 }
 

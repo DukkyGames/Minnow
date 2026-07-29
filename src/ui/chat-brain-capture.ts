@@ -9,6 +9,7 @@ import { detectLocalServer } from '../tools/client';
 import type { Chat } from '../types';
 import { openBrainEditForPath } from './brain-page';
 import { setStatus } from './status';
+import { showMemorySavedToast } from './memory-saved-toast';
 
 type StatusFn = (state: string, msg: string) => void;
 
@@ -49,6 +50,11 @@ export async function runChatBrainCapture(
     });
 
     setStatusFn('ok', 'Added to Brain');
+    showMemorySavedToast({
+      title: result.title,
+      description: 'Captured from this chat and saved to Brain.',
+      target: { kind: 'page', relPath: result.relPath },
+    });
     return { relPath: result.relPath, title: result.title };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Capture failed';
@@ -90,6 +96,11 @@ export async function runResearchBrainCapture(
     });
 
     setStatusFn('ok', 'Added to Brain');
+    showMemorySavedToast({
+      title: result.title,
+      description: 'Captured from this research session and saved to Brain.',
+      target: { kind: 'page', relPath: result.relPath },
+    });
     return { relPath: result.relPath, title: result.title };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Capture failed';

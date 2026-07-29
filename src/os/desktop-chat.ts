@@ -141,6 +141,12 @@ export async function handleDesktopSend(prefill?: string): Promise<void> {
 
   if (!(await ensureReadyForSend())) return;
 
+  const active = getActiveChat();
+  if (active.historyLoaded === false) {
+    await ensureChatHistoryLoaded(active.id);
+    if (!sessionState || sessionState.activeId !== active.id) return;
+  }
+
   if (isActiveChatStreaming()) {
     handleComposerPrimaryAction();
     syncDesktopComposerSendState();
@@ -149,7 +155,6 @@ export async function handleDesktopSend(prefill?: string): Promise<void> {
 
   const sendBtn = document.getElementById('desktopSendBtn') as HTMLButtonElement | null;
   await sendMessage({ inputEl: input, sendBtnEl: sendBtn });
-  renderDesktopChatMessages();
   renderDesktopChatRail(desktopWorkspacePath);
   syncDesktopComposerSendState();
   refreshContextUsageRing();

@@ -65,6 +65,8 @@ export interface LaunchOptions {
   modelsSection?: string;
   /** Brain app section slug when opening from `#/app/brain/…` deep links. */
   brainSection?: string;
+  /** Brain Edit: wiki path to load after foregrounding the window. */
+  brainEditPath?: string;
   /** Code app: composer mode to activate. */
   modeId?: ModeId;
   /** Code app: absolute workspace path from the recent-workspace list. */
