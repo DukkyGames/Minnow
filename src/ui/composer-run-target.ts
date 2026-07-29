@@ -29,6 +29,10 @@ import {
   closeGitPanelNamePopover,
   openGitPanelNamePopover,
 } from './git-panel-name-popover.ts';
+import {
+  observeModeSelectorComposerSibling,
+  refreshModeSelectorLayout,
+} from './mode-selector.ts';
 import { setStatus } from './status.ts';
 import { showToast } from './toast.ts';
 
@@ -255,6 +259,7 @@ function ensureControls(): HTMLDivElement {
     } else {
       host.appendChild(wrapEl);
     }
+    observeModeSelectorComposerSibling(wrapEl);
   }
 
   return wrapEl;
@@ -491,6 +496,7 @@ function updateButtonLabels(chat: Chat): void {
     'title',
     chat.gitBranch?.trim() ? `Branch: ${chat.gitBranch}` : 'Select git branch',
   );
+  refreshModeSelectorLayout();
 }
 
 /** Disable controls while streaming or busy. */

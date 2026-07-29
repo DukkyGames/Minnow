@@ -75,6 +75,13 @@
   display: none;
 }
 
+/* Off-layout measure pass — true labelled width without flex shrink. */
+.mode-segmented--measuring {
+  width: max-content !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+}
+
 .mode-segment {
   appearance: none;
   border: 1px solid transparent;
@@ -241,6 +248,8 @@
 .mode-segmented--compact .mode-segment-wrap--plan .mode-segment--plan {
   padding-right: 5px;
   min-width: 26px;
+  border-top-right-radius: calc(var(--radius-md) - 2px);
+  border-bottom-right-radius: calc(var(--radius-md) - 2px);
 }
 
 .mode-segmented--compact .mode-segment__caret {

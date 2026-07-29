@@ -204,6 +204,11 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   max-width: 100%;
 }
 
+.input-bar--hub .composer-controls .mode-segmented.mode-segmented--compact {
+  flex: 0 0 auto;
+  width: fit-content;
+}
+
 .input-bar--hub .composer-controls .thinking-control-wrap {
   flex: none;
 }

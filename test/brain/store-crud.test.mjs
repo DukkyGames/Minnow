@@ -41,6 +41,12 @@ before(async () => {
   process.env.MINNOW_HOME = homeDir;
   resetMinnowHomeCache();
   await ensureMinnowLayout();
+  // CRUD tests do not cover vector sync — disable embeddings so scheduled sync is a no-op
+  // and teardown does not race fire-and-forget embedder I/O on Windows CI.
+  const configPath = path.join(homeDir, 'config.json');
+  const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  config.memory.embeddings.enabled = false;
+  await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 });
 
 after(async () => {
