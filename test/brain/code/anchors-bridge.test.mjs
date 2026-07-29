@@ -86,6 +86,8 @@ describe('MIN-B9 bridge anchors', () => {
 
   after(async () => {
     shutdownAllLsp();
+    // Let fake-lsp child handles close on Windows before temp dir removal (UV_HANDLE_CLOSING).
+    await new Promise((resolve) => setTimeout(resolve, 200));
     closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
