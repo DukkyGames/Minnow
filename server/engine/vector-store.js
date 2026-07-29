@@ -166,6 +166,9 @@ export function createVectorStore(getPaths, opts = {}) {
   async function clearVectorStore() {
     const store = await loadVectorStore();
     store.vectors = {};
+    store.model = '';
+    store.backend = '';
+    store.dim = 0;
     await saveVectorStore(store);
   }
 

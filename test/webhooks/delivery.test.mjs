@@ -5,13 +5,13 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { resetSecretBoxCacheForTests, setSecretKeyBytesForTests } from '../../server/security/secret-box.js';
 import {
   fireAndForget,
-  listRecentDeliveries,
   resetWebhookDeliveryStateForTests,
 } from '../../server/webhooks/emit.js';
 import { createSubscription } from '../../server/webhooks/store.js';
@@ -32,10 +32,32 @@ function setTestHome() {
   resetSecretBoxCacheForTests();
   resetWebhookDeliveryStateForTests();
   setSecretKeyBytesForTests(FIXED_KEY);
-  const dir = path.join('/tmp', `minnow-webhooks-${process.pid}-${Date.now()}`);
+  const dir = path.join(os.tmpdir(), `minnow-webhooks-${process.pid}-${Date.now()}`);
   process.env.MINNOW_HOME = dir;
   homeDir = dir;
   return dir;
+}
+
+async function readDeliveriesFromDisk(home) {
+  const filePath = path.join(home, 'webhooks-deliveries.json');
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.deliveries) ? parsed.deliveries : [];
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
+async function waitForRecordedDelivery(home, deadlineMs = 8_000) {
+  const deadline = Date.now() + deadlineMs;
+  while (Date.now() < deadline) {
+    const deliveries = await readDeliveriesFromDisk(home);
+    if (deliveries.length > 0) return deliveries;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return [];
 }
 
 async function rmTestHome() {
@@ -127,8 +149,8 @@ describe('webhook delivery', () => {
     }
     assert.equal(received, 1, 'expected local test server to receive POST');
 
-    const deliveries = await listRecentDeliveries();
-    assert.ok(deliveries.length >= 1);
+    const deliveries = await waitForRecordedDelivery(homeDir);
+    assert.ok(deliveries.length >= 1, 'expected delivery log on disk for this test home');
     assert.equal(deliveries[0].event, 'chat.completed');
     assert.equal(deliveries[0].statusCode, 204);
   });

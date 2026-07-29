@@ -62,7 +62,7 @@ after(async () => {
   await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
 });
 
-describe('memory vector sync', () => {
+describe('memory vector sync', { concurrency: 1 }, () => {
   test('syncEntryVector marks reindex when embedder fails', async () => {
     const config = await loadMemoryConfig();
     await syncEntryVector(
