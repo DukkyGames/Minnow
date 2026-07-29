@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer, request as httpRequestNode } from 'node:http';
 import { after, before, describe, test } from 'node:test';
-import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache, ensureMinnowLayout } from '../../server/config/home.js';
 import { closeSessionsDb } from '../../server/config/sessions-db.js';
 import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import {
@@ -62,7 +62,17 @@ async function startBrainServer(homeDir) {
   resetMinnowHomeCache();
   await fs.rm(homeDir, { recursive: true, force: true });
   await fs.mkdir(homeDir, { recursive: true });
+  await ensureMinnowLayout();
   await initBrainApi();
+  // Capture tests do not cover vector sync — disable embeddings so scheduled sync is a no-op
+  // and teardown does not race fire-and-forget embedder I/O on CI.
+  const configPath = path.join(homeDir, 'config.json');
+  const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  config.memory = config.memory ?? {};
+  config.memory.embeddings = { ...(config.memory.embeddings ?? {}), enabled: false };
+  config.brain = config.brain ?? {};
+  config.brain.embeddings = { ...(config.brain.embeddings ?? {}), enabled: false };
+  await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 
   const server = createServer(async (req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
@@ -123,7 +133,7 @@ describe('brain capture', () => {
     await shutdownAllLsp();
     // initBrainApi opens sessions.db via readAllChatIds — close before rm (Windows EBUSY).
     closeSessionsDb();
-    await fs.rm(homeDir, { recursive: true, force: true });
+    await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
   });
