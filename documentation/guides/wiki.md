@@ -14,7 +14,7 @@ The wiki is read-only because its pages describe the installed Minnow version. C
 
 ## Ask chat about Minnow
 
-Desktop chat and the other agent modes can use three read-only tools:
+Desktop chat, General mode, and the onboarding guide can use three read-only tools:
 
 | Tool | Purpose |
 |---|---|

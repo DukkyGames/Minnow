@@ -30,15 +30,16 @@ describe('product wiki tool policy', () => {
     assert.equal(ids.has('minnow_docs_list'), true);
   });
 
-  test('makes official documentation available in every conversation mode', () => {
+  test('makes official documentation available in help-oriented modes', () => {
     const docsGroup = TOOL_GROUP_IDS['minnow-docs'];
     assert.deepEqual(docsGroup, [
       'minnow_docs_search',
       'minnow_docs_read',
       'minnow_docs_list',
     ]);
-    for (const [mode, groups] of Object.entries(MODE_ALLOWED_GROUPS)) {
-      assert.ok(groups.includes('minnow-docs'), `${mode} should include official Minnow docs`);
-    }
+    assert.ok(MODE_ALLOWED_GROUPS.desktop.includes('minnow-docs'));
+    assert.ok(MODE_ALLOWED_GROUPS.general.includes('minnow-docs'));
+    assert.ok(MODE_ALLOWED_GROUPS.onboarding.includes('minnow-docs'));
+    assert.equal(MODE_ALLOWED_GROUPS.build.includes('minnow-docs'), false);
   });
 });

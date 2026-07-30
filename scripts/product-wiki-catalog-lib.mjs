@@ -58,16 +58,17 @@ function sectionForPath(relativePath) {
 
 /** Extract stable searchable metadata from one Markdown document. */
 export function createProductWikiEntry(relativePath, markdown) {
-  const headingRows = [...markdown.matchAll(/^(#{1,3})\s+(.+?)\s*$/gmu)];
+  const normalizedMarkdown = markdown.replace(/^\uFEFF/u, '');
+  const headingRows = [...normalizedMarkdown.matchAll(/^(#{1,3})[^\S\r\n]+(.+?)[^\S\r\n]*$/gmu)];
   const title = headingRows.find((row) => row[1].length === 1)?.[2]?.trim()
     ?? path.posix.basename(relativePath, '.md').replaceAll('-', ' ');
   const headings = headingRows
     .filter((row) => row[1].length > 1)
     .map((row) => row[2].replace(/\s+#+$/u, '').trim())
     .filter(Boolean);
-  const bodyWithoutTitle = markdown.replace(/^#\s+.+$/mu, '');
+  const bodyWithoutTitle = normalizedMarkdown.replace(/^#[^\S\r\n]+.+$/mu, '');
   const summary = plainText(bodyWithoutTitle).slice(0, 280);
-  const hash = createHash('sha256').update(markdown).digest('hex');
+  const hash = createHash('sha256').update(normalizedMarkdown).digest('hex');
   return {
     path: `documentation/${relativePath}`,
     title,
