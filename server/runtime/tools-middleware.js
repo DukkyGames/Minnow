@@ -66,6 +66,11 @@ import {
   toolUpdateSettings,
 } from '../settings/tools.js';
 import {
+  toolMinnowDocsList,
+  toolMinnowDocsRead,
+  toolMinnowDocsSearch,
+} from '../tools/minnow-docs-tools.js';
+import {
   toolExplainSymbol,
   toolFindSymbol,
   toolReadSymbol,
@@ -1195,6 +1200,9 @@ const SERVER_TOOL_HANDLERS = {
   brain_search: toolBrainSearch,
   brain_read_page: toolBrainReadPage,
   brain_list: toolBrainList,
+  minnow_docs_search: toolMinnowDocsSearch,
+  minnow_docs_read: toolMinnowDocsRead,
+  minnow_docs_list: toolMinnowDocsList,
   brain_write_page: toolBrainWritePage,
   brain_append_log: toolBrainAppendLog,
   brain_ingest_source: toolBrainIngestSource,

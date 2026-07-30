@@ -23,6 +23,7 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 
 | Need | Tool |
 |------|------|
+| Official Minnow behavior, setup, apps, modes, settings, architecture, roadmap | `minnow_docs_search` → `minnow_docs_read` (cite the source path) |
 | **Why**, **decision**, **domain model**, **gotchas**, conventions | `brain_write_page` / `brain_read_page` / `brain_search` |
 | Fuzzy prose lookup across the wiki | `brain_search` (use the returned `path:` or `Matched page paths` with `brain_read_page`) |
 | Exact string or regex in repo files | `grep` |
@@ -35,6 +36,8 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 | Wiki maintenance note | `brain_append_log` |
 
 **Code tasks:** start with `repo_map` (low-res overview), then `find_symbol` / `read_symbol` to zoom; use `who_calls` for call graph edges. For design intent behind a symbol, use `explain_symbol` then `read_symbol`. Exact strings in files → `grep`.
+
+Official Minnow documentation and Brain are separate: `minnow_docs_*` reads shipped, versioned product help; `brain_*` reads and writes the user's workspace knowledge.
 
 ### How to use retrieved notes
 
