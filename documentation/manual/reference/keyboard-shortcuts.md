@@ -1,110 +1,117 @@
 # Keyboard shortcuts
 
-**Mod** means **Ctrl** on Windows and Linux and **Cmd** on macOS.
+**Mod** means **Ctrl** on Windows and Linux, **Cmd** on macOS.
 
-Most single-key shortcuts (tool approval digits, mail triage when that app ships) are suppressed while focus is in a text field. Modified chords (**Mod+…**) usually still work when the handler allows it.
+Press **?** anywhere outside a text field for the built-in shortcut sheet.
 
-## Global
+Single-key shortcuts — **?**, the tool-approval digits — are suppressed while you are typing in a field. Chords with a modifier generally still work.
 
-| Keys | Action |
-|------|--------|
-| **Escape** | Close open overlays, popovers, modals, and dismissible layers |
-| **Mod+A** | Select all within the focused panel (chat, editor, Settings, etc.), not the whole shell |
-| **Tab** / **Shift+Tab** | Move focus through dock, menubar, sidebars, and chrome |
-| **Ctrl+Tab** / **Ctrl+Shift+Tab** | Cycle between Desktop and recently used dock apps (uses **Ctrl** even on macOS). In Code, file tabs may take **Ctrl+Tab** first when the editor has focus |
-
-## Chat and composer
+## Shell
 
 | Keys | Action |
 |------|--------|
-| **Enter** | Send (or **Stop** while streaming in stop mode) |
-| **Shift+Enter** | New line without sending |
-| **/** | Open slash skill picker at start of composer |
-| **Mod+M** | Open per-chat model picker and focus search |
-| **↑** / **↓** | Browse prompt history when caret is at start (↑) or end (↓) of composer |
-| **↑** / **↓** / **Enter** / **Tab** / **Escape** | Navigate slash picker while open |
-| **1** / **2** / **3** | Tool approval: once, always, cancel |
+| **?** | Open the keyboard shortcuts sheet |
+| **Escape** | Close the top overlay, popover, modal or side panel |
+| **Ctrl+Tab** / **Ctrl+Shift+Tab** | Cycle between the desktop and recent apps (Ctrl even on macOS, since Cmd+Tab belongs to the OS) |
+| **Alt+`** | Cycle focus among open floating windows |
+| **Tab** / **Shift+Tab** | Move focus through the dock, menubar and app chrome |
 
-### Chat search popover
+In Code, **Ctrl+Tab** cycles editor tabs when the editor has focus.
 
-Opened from sidebar **Search**, not a global chord.
+## Chat
 
 | Keys | Action |
 |------|--------|
-| **↑** / **↓** | Move highlight |
-| **Enter** | Open highlighted chat |
-| **Escape** | Close |
+| **Enter** | Send — or stop, while the send button is in stop mode |
+| **Shift+Enter** | New line |
+| **/** | Open the skill picker (at the start of an empty composer) |
+| **Mod+M** | Per-chat model picker, with search focused |
+| **↑** / **↓** | Previous / next prompt from history, when the caret is at the start or end |
+| **1** / **2** / **3** | Tool approval: allow once, always allow, cancel |
+
+While the skill picker is open: **↑ ↓** to move, **Enter** or **Tab** to choose, **Escape** to close.
+
+In the chat search popover: **↑ ↓** to move, **Enter** to open, **Escape** to close.
 
 ## Code editor
 
 | Keys | Action |
 |------|--------|
-| **Mod+K** | Quick Edit on selection |
+| **Mod+K** | Quick Edit on the selection |
 | **Mod+I** | Toggle Intent mode |
-| **Mod+W** | Close active file tab |
-| **Mod+Tab** / **Mod+Shift+Tab** | Cycle file tabs |
-| **Tab** | Accept AI ghost, LSP completion, or indent |
-| **Shift+Tab** | Outdent when LSP does not own Tab |
-| **Mod+→** | Accept next word of ghost text |
-| **Escape** | Dismiss ghost or blur editor |
-| **Ctrl+Space** | LSP completion (macOS also **Alt+`**, **Alt+I**) |
-| **F12** | Go to definition |
-| **Mod+click** | Go to definition at click |
-| **Mod+F** | Find / replace |
-| **Mod+G** / **Mod+Shift+G** | Next / previous match |
-| **Mod+Z** / **Mod+Shift+Z** | Undo / redo |
-| **F2** | Rename tree row or open file |
+| **Mod+S** | Save |
+| **Mod+W** | Close the editor tab |
+| **Mod+Tab** / **Mod+Shift+Tab** | Cycle editor tabs |
+| **Tab** | Accept AI ghost text or an open completion; otherwise indent |
+| **Shift+Tab** | Outdent |
+| **Mod+→** | Accept the next word of ghost text |
+| **Ctrl+Space** | Trigger a completion |
+| **F12** or **Mod+click** | Go to definition |
+| **Mod+F** | Find and replace |
+| **Escape** | Dismiss ghost text, or blur the editor |
 
 ## File tree
 
-When the tree is focused and you are not typing in the editor:
+With the tree focused and the editor not:
 
 | Keys | Action |
 |------|--------|
-| **Enter** / **Space** | Expand/collapse folder or open file |
+| **Enter** / **Space** | Open a file, or expand a folder |
 | **F2** | Rename |
-| **Mod+C** / **Mod+X** / **Mod+V** | Copy / cut / paste paths in workspace |
-| **Delete** | Delete file or folder |
-
-## Preview pane
-
-| Keys | Action |
-|------|--------|
-| **F12** | Toggle DevTools |
-| **Mod+Shift+I** | Same while preview visible |
+| **Mod+C** / **Mod+X** / **Mod+V** | Copy, cut, paste within the workspace |
+| **Delete** | Delete |
+| **Shift+F10** | Context menu |
 
 ## Terminal
 
 | Keys | Action |
 |------|--------|
-| **Ctrl+`** | Toggle terminal panel (not **Mod+`** on macOS for this binding) |
-| **Mod+C** | Copy selection, or send SIGINT to shell when nothing selected |
+| **Ctrl+`** | Toggle the terminal panel (Ctrl on every platform for this one) |
+| **↑** / **↓** | Command history for that tab |
+| **Mod+C** | Copy the selection, or send SIGINT when nothing is selected |
 
-## Settings
+## Browser preview
 
 | Keys | Action |
 |------|--------|
-| **Mod+K** | Focus Settings search when Settings is open |
-| **↑** / **↓** / **Enter** / **Escape** | Navigate search results; Escape closes overlays |
+| **F12** | Toggle DevTools |
+| **Mod+Shift+I** | Toggle DevTools |
+
+## Orchestrate board
+
+| Keys | Action |
+|------|--------|
+| **Tab** | Move between task cards and header controls |
+| **Arrow keys** | Move around the kanban grid |
+| **Enter** / **Space** | Open a task chat or the plan panel |
+| **Arrow keys** | Change execution mode when the mode control is focused |
 
 ## Issues
 
 | Input | Action |
 |-------|--------|
-| **Mod+click** | Toggle multi-select |
-| **Shift+click** | Range select |
+| **Mod+click** | Toggle row selection |
+| **Shift+click** | Select a range |
 | **Shift+F10** | Context menu |
-| **Mod+Enter** | Save description edit |
-| **Escape** | Cancel description edit |
+| **Mod+Enter** | Save a description edit |
+| **Escape** | Cancel a description edit |
 
-## Wiki
-
-While the Minnow wiki overlay is open:
+## Settings
 
 | Keys | Action |
 |------|--------|
-| **Ctrl+K** / **Cmd+K** | Focus wiki search |
+| **Mod+K** | Focus settings search |
+| **↑** / **↓** / **Enter** | Move through results and open one |
+| **Escape** | Close overlays, or blur search |
 
-## Modals
+## This manual
 
-**Escape** closes the top overlay; **Tab** cycles focus inside trapped dialogs.
+| Keys | Action |
+|------|--------|
+| **Ctrl+K** / **Cmd+K** | Focus wiki search while the manual is open |
+| **Escape** | Close the manual |
+
+## Related
+
+- [Working in chat](../chat/chatting.md)
+- [Code app](../apps/code.md)

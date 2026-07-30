@@ -89,6 +89,8 @@ function titleCaseSlug(segment) {
 
 const MANUAL_SECTION_NAMES = {
   'get-started': 'Get started',
+  concepts: 'Core concepts',
+  extend: 'Extend Minnow',
   apps: 'Apps',
   chat: 'Chat',
   code: 'Code',

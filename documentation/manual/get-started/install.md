@@ -1,70 +1,70 @@
 # Install and first launch
 
-This page covers installing Minnow from a packaged release, opening it the first time, and connecting a local model through the Settings UI.
+Minnow ships as a normal desktop application. This page covers getting it onto your machine, what happens the first time it opens, and how updates work afterwards.
 
-## Download the installer
+Once it is running, go straight to [Connect a model](connect-a-model.md) — the interface works without one, but nothing can answer you until a provider responds.
 
-1. Go to [Minnow Releases](https://github.com/DukkyGames/Minnow/releases) on GitHub.
-2. Download the installer for your platform: **Windows** ships an NSIS `.exe`, **macOS** ships `.dmg` and `.zip`. There is no Linux package.
-3. Run the installer and follow the prompts. Minnow installs like any desktop app.
+## Download
 
-### Windows SmartScreen
+Get the installer from [Minnow Releases](https://github.com/DukkyGames/Minnow/releases).
 
-Packaged builds may be **unsigned** on first install. Windows might show a SmartScreen warning. Choose **More info**, then **Run anyway**. After the first install, in-app updates typically do not repeat that step.
+| Platform | What you download |
+|----------|-------------------|
+| Windows | NSIS installer (`.exe`) |
+| macOS | `.dmg`, or `.zip` if you prefer to unzip into Applications yourself |
+| Linux | No packaged build. Run from source — see the [GitHub Wiki](https://github.com/DukkyGames/Minnow/wiki). |
 
-## First launch
+### If Windows blocks the installer
 
-1. Open **Minnow** from the Start menu or desktop shortcut.
-2. The desktop shell opens with **Chat** on the main surface: composer at the bottom, chat rail on the left, dock and menubar at the top.
-3. On first run you may see **onboarding**: a guided chat that helps you pick basics. You can complete it or skip when offered.
+Builds may be unsigned, and Windows SmartScreen will say so. Choose **More info**, then **Run anyway**. You should only need to do that once — later in-app updates install without repeating it.
 
-Minnow stores your profile under your **Minnow home** folder (see [Where your data lives](../reference/configuration.md)). The app prints the path on startup when run from a terminal; on a normal double-click install, expect `%USERPROFILE%\.minnow` on Windows.
+## What happens on first launch
 
-### Updates
+Minnow opens on the **desktop**: a wallpaper, a dock along the top, a menubar, and a chat composer in the middle. That desktop *is* the chat surface — you are not looking at a launcher that will get out of the way.
 
-Packaged Minnow checks for updates in the background. When a build is ready, a menubar pill may show **Restart** with the new version. You can also open **Settings → General → App updates** for status, release notes, Stable vs Beta channel, and **Check for updates**.
+Two things happen behind the scenes:
 
-Closing the window may hide Minnow to the **system tray** instead of quitting (default). Use the tray menu to exit fully when you want updates to apply on quit.
+- Minnow creates its home folder, `%USERPROFILE%\.minnow` on Windows or `~/.minnow` elsewhere, and scaffolds the folders it uses. Empty directories in there are normal. See [Where your data lives](../reference/configuration.md).
+- A local tool server starts on port **9473**. It is what lets chat read files, run git, open a terminal, and save your sessions. It listens on loopback only unless you deliberately turn on LAN access.
 
-## Connect a model provider
+You will usually also get the **first-run setup wizard**: a short guided flow for picking a theme, choosing a provider, selecting a model, setting tool permissions, and turning memory on. It ends by handing you to a real assistant chat rather than a scripted demo, so you can ask it questions immediately. You can skip it and run it again later from **Settings → General → Run setup again**.
 
-You need at least one **OpenAI-compatible** chat endpoint. The UI works without one, but the model picker stays empty until a provider responds.
+## Closing, quitting, and the tray
 
-### Option A: LM Studio (common on Windows)
+Closing the window does **not** quit Minnow. By default it hides to the system tray so chats, agents, scheduled jobs and the tool server keep running. That is deliberate: a long agent run should survive you closing the window.
 
-1. Install and open [LM Studio](https://lmstudio.ai/).
-2. Download a chat model and **load** it in LM Studio.
-3. Open the **Developer** or **Local Server** tab and **Start Server** (default `http://localhost:1234`).
-4. In Minnow, open the **Models** app from the dock.
-5. Go to **Providers**.
-6. Confirm or add a provider pointing at `http://localhost:1234` (or your LM Studio URL), then refresh it.
-7. Use the **model chip** in the menubar or **Ctrl+M** / **Cmd+M** in the composer to pick a model.
+The tray menu has Open, New chat, current agent/model status, unload local models, Settings, and launch-at-startup. **Quit Minnow** from the tray does a full shutdown.
 
-A log line like `[providers] fetch failed` on startup is normal if LM Studio is not running yet. Start the server and refresh providers.
+Change this under **Settings → General → Desktop app**:
 
-### Option B: Ollama
+- **Keep Minnow running after closing the window** — on by default; turn it off if you want the close button to quit.
+- **Launch Minnow at startup** — off by default; this registers a real OS login item.
 
-1. Install [Ollama](https://ollama.com/) and pull a model (`ollama pull …`).
-2. Ollama serves an OpenAI-compatible API at `http://localhost:11434/v1`.
-3. In Minnow: **Models → Providers**, add or edit a provider with that base URL.
-4. Refresh and select a model from the picker.
+## Updates
 
-### Option C: Download and serve inside Minnow
+Packaged builds check GitHub Releases in the background. When a build is downloaded and ready, a **Restart** pill appears in the menubar with the new version.
 
-Open the **Models** app from the dock. Use **Recommendations** for hardware-aware suggestions, **Library** to fetch weights from Hugging Face, and serve them locally with the bundled `llama-server`. Minnow registers that runtime as a provider for you. Details: [Models app](../apps/models.md).
+**Settings → General → App updates** has the rest: current version, release notes, a manual **Check for updates**, and the channel.
 
-### Cloud APIs
+| Channel | What you get |
+|---------|--------------|
+| **Stable** | Normal releases. The default. |
+| **Beta** | Pre-releases as well. Newer features, rougher edges. |
 
-Any OpenAI-compatible HTTPS endpoint works. Add the base URL and API key under **Models → Providers**. Keys are encrypted on disk.
+Two things worth knowing: a completed download stays ready even if a later check fails, so a flaky network does not lose your update; and because closing to tray keeps Minnow alive, an update that wants a restart applies when you actually quit and reopen, not when you close the window.
 
 ## Quick health check
 
-If chat or tools fail:
+If something is clearly not working, in order:
 
-1. Confirm your provider server is running and a model is loaded.
-2. Open **Settings → Advanced → Health & diagnostics** for a local status strip and error log.
-3. See [Troubleshooting](../reference/troubleshooting.md) for common fixes.
+1. Is your model provider actually running, with a model loaded?
+2. **Models → Providers** — is the base URL right? Press refresh.
+3. **Settings → Advanced → Health & diagnostics** — subsystem probes, grouped errors, and a local log tail. **Copy report** produces a redacted markdown summary you can paste into a bug report.
 
-## Next step
+Everything on that page stays on your machine. Minnow sends no telemetry.
 
-[Your first chat](first-chat.md)
+More symptoms and fixes: [Troubleshooting](../reference/troubleshooting.md).
+
+## Next
+
+[Connect a model](connect-a-model.md)

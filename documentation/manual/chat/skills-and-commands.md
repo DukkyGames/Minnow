@@ -1,0 +1,102 @@
+# Skills and slash commands
+
+Type **/** at the start of an empty composer and a picker opens. It holds two different kinds of thing:
+
+- **Skills** — packaged instructions that shape how the model does one job.
+- **Commands** — `/goal` and `/loop`, which change how the *chat* behaves rather than what the model is told.
+
+Navigate with **↑ ↓**, choose with **Enter** or **Tab**, dismiss with **Escape**. Add your own text after the skill name before sending.
+
+## Skills
+
+A skill is a `SKILL.md` file: a short front matter block and a body of instructions. Invoking one prepends those instructions to your request. That is the whole mechanism — which is why writing your own is easy.
+
+Fifteen ship built in and all are enabled by default.
+
+| Skill | What it does |
+|-------|--------------|
+| `/ask-user` | Gathers structured answers from you before starting large or ambiguous work |
+| `/browser-automation` | Drives Minnow's built-in browser for login flows, SPAs and screenshots |
+| `/caveman` | Ultra-compressed replies — cuts token use sharply while keeping technical accuracy |
+| `/code-review` | Security, correctness and style pass over a diff |
+| `/debug-error` | Systematic trace of a tool failure or stack trace |
+| `/docs-update` | Brings README and project docs back in line with the code |
+| `/explain-code` | Teaches the code instead of changing it |
+| `/git-setup` | Initializes git in the workspace and connects a GitHub remote |
+| `/git-commit` | Writes a conventional commit message from the staged diff |
+| `/impeccable` | Design, critique and refine UI against the project's design system |
+| `/partymode` | Bird Man, your local party animal |
+| `/refactor-safe` | Small, tested refactors with a minimal diff |
+| `/security-review` | OWASP-style pass over changes or files |
+| `/ui-designer` | UI audit with screenshots, then plan or implement |
+| `/write-tests` | Deterministic tests that match the project's existing style |
+
+Turn individual ones off in **Settings → Integrations → Skills**. Only enabled skills appear in the picker.
+
+Some skills are model-invocable and some are not. A skill marked otherwise can only be run by you typing it, so the model cannot decide on its own to enter caveman mode.
+
+## Installing more
+
+**Settings → Integrations → Skills → Skills Library** browses curated third-party packs: **Matt Pocock**, **Addy Osmani Agent Skills**, **Superpowers**, **last30days** and **Browserbase**. Install a whole pack or pick individual skills. You can also install directly from a GitHub URL.
+
+Each pack is pinned to a specific commit rather than tracking a branch, so an install is reproducible and cannot change under you. Downloads are restricted to GitHub hosts. Installs land in `skills/` in your Minnow home, record where they came from, and are enabled immediately.
+
+Browsing works offline — Minnow ships an index of each pack's contents. Installing needs a network.
+
+## Writing your own
+
+Create a folder in `skills/` under your Minnow home with a `SKILL.md` inside:
+
+```markdown
+---
+name: release-notes
+description: >-
+  Draft release notes from the git log since the last tag. Use for /release-notes.
+disable-model-invocation: true
+---
+
+# Release notes
+
+1. Run `git log <last-tag>..HEAD --oneline`.
+2. Group commits into Added / Changed / Fixed.
+3. Write one user-facing line per entry. No commit hashes, no internal ticket ids.
+4. Call out anything that breaks compatibility under its own heading.
+```
+
+Then enable it in the Skills catalog. A user skill wins over a built-in of the same name, so you can override a shipped skill by shadowing it.
+
+## `/goal`
+
+`/goal <condition>` tells the chat to keep working until something is actually true — not until the model feels finished.
+
+After each turn a separate evaluator agent checks the condition against the code and test results, then either confirms it or sends the chat back to work. It is the difference between "I have fixed the tests" and tests that pass.
+
+- `/goal all tests in test/orchestrate pass`
+- `/goal clear` stops the loop (`stop`, `off` and `reset` also work)
+
+The goal persists on the chat across reloads. Bind a capable model to the evaluator role in **Models → Routing → Goal evaluator** — a weak evaluator will happily rubber-stamp a broken build.
+
+## `/loop`
+
+`/loop` re-runs a prompt on a schedule while Minnow is open and the chat is idle.
+
+| Form | Behaviour |
+|------|-----------|
+| `/loop 5m <prompt>` | Fixed interval. Units `s` `m` `h` `d`; anything under a minute rounds up to one. |
+| `/loop <prompt>` | Self-paced — Minnow picks a delay from 1 to 60 minutes based on how much the output is changing. |
+| `/loop` | Maintenance mode: runs the checklist in `.minnow/loop.md` in your workspace, or a built-in one. |
+
+The chat panel shows a countdown with pause, resume, skip, interval edit and stop. Loops expire after seven days.
+
+A global ticker wakes at each loop's stored due time, so a reload or a laptop sleep does not lose the schedule.
+
+`/goal` and `/loop` are mutually exclusive on one chat, and `/clear` clears both.
+
+**`/loop` is not the Scheduler.** A loop lives in one chat, keeps its context, and needs that chat idle. A [Scheduler](../apps/scheduler.md) job is a headless run in a chosen workspace with a chosen model, independent of any conversation. Iterating on something belongs in a loop; a nightly report belongs in the Scheduler.
+
+## Related
+
+- [Working in chat](chatting.md)
+- [Modes](../concepts/modes.md)
+- [Scheduler app](../apps/scheduler.md)
+- [Settings app](../apps/settings.md)

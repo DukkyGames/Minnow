@@ -70,9 +70,9 @@ describe('product wiki catalog generation', () => {
     assert.deepEqual(paths.slice(0, 5), [
       'documentation/manual/README.md',
       'documentation/manual/get-started/install.md',
+      'documentation/manual/get-started/connect-a-model.md',
       'documentation/manual/get-started/first-chat.md',
-      'documentation/manual/chat/modes-and-skills.md',
-      'documentation/manual/apps/overview.md',
+      'documentation/manual/concepts/how-minnow-works.md',
     ]);
     const appsBlock = paths.filter((pagePath) => pagePath.includes('/manual/apps/'));
     assert.deepEqual(appsBlock[0], 'documentation/manual/apps/overview.md');
@@ -165,7 +165,7 @@ describe('product wiki reads and search', () => {
 describe('product wiki chat tools', () => {
   test('search, read, and list return citation paths', async () => {
     const searchResult = JSON.parse(await toolMinnowDocsSearch({ query: 'composer modes' }));
-    assert.ok(searchResult.hits.some((hit) => hit.path === 'documentation/manual/chat/modes-and-skills.md'));
+    assert.ok(searchResult.hits.some((hit) => hit.path === 'documentation/manual/concepts/modes.md'));
 
     const readResult = await toolMinnowDocsRead({ path: 'documentation/manual/README.md' });
     assert.match(readResult, /Source: documentation\/manual\/README\.md/u);

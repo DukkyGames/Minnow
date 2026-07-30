@@ -1,49 +1,82 @@
-# Scheduler app
+# Scheduler
 
-**Scheduler** runs **recurring agent jobs** on an interval or cron schedule while Minnow is open. Each job executes a prompt in a chosen workspace and model through a headless Minnow runner.
+Scheduler runs a prompt on a schedule, without a conversation. Each job is a headless agent run in a workspace you choose with a model you choose — a nightly test summary, a Monday dependency check, a periodic sync of notes into Brain.
 
-## Open Scheduler
+Open it from the dock or the menubar. It opens as a **side panel** and deliberately does not take focus, so you can add a job without leaving what you are doing.
 
-Click **Scheduler** in the dock. The UI opens as a **side panel** so you can keep working in Chat or Code.
+## The one rule
 
-## Create a job
+**Jobs only run while Minnow is running.** Hidden in the system tray counts as running — that is the normal case, since closing the window hides to tray by default. Fully quitting stops the scheduler.
 
-Typical fields:
+Minnow does not install an OS-level scheduled task, and it does not backfill runs it missed while closed. If a job must survive reboots, enable **Launch Minnow at startup** under **Settings → General → Desktop app**.
 
-| Field | Meaning |
-|-------|---------|
-| **Prompt** | What the agent should do each run |
-| **Schedule** | Interval (minimum 60 seconds) or cron expression |
-| **Workspace** | Project folder for file-aware tools |
-| **Model** | Which model the headless run uses |
+## Creating a job
 
-Save the job. It appears in the panel list with status and next run hints.
+| Field | Notes |
+|-------|-------|
+| **Label** | How it appears in the list and in notifications |
+| **Prompt** | What the agent should do each run. Treat it as a full brief, not a title. |
+| **Schedule** | Interval or cron |
+| **Mode** | The operating mode the run uses |
+| **Work agent** | Optional role — researcher, reviewer, and so on |
+| **Provider / model** | Which model runs it |
+| **Workspace** | The project folder. Defaults to a scheduler workspace in your Minnow home. |
+| **Channels** | Where results are announced |
+| **Enabled** | Pause without deleting |
 
-## While Minnow runs
+### Schedules
 
-Jobs **only execute when Minnow is running**. Closing the app or hiding to tray still counts as running; fully quitting stops the scheduler.
+**Interval** takes forms like `60s`, `5m`, `2h`. The minimum is **60 seconds** — anything shorter is rejected.
 
-Check **run history** in the Scheduler UI for successes, failures, and logs. Jobs live in `scheduler.json` and run output in `scheduler-runs/` under your Minnow home.
+**Cron** takes a standard five-field expression evaluated in your local timezone. Invalid expressions are rejected when you save, not silently at 3 a.m.
 
-## Good use cases
+| Expression | Meaning |
+|------------|---------|
+| `0 9 * * 1-5` | 09:00 on weekdays |
+| `30 2 * * *` | 02:30 daily |
+| `0 */4 * * *` | Every four hours |
 
-- Nightly lint or test summary on a repo
-- Periodic doc sync into Brain
-- Reminder-style checks that need tool access
+The next run is computed from now; missed runs are not queued up and replayed.
 
-Avoid schedules that require you to approve every tool call unless you are available to click approve.
+## Writing a prompt that works unattended
+
+Nobody is there to answer a question or approve a tool. That changes how you write:
+
+- **Be explicit about the output.** "Run the test suite and write a three-line summary naming any failing files" beats "check the tests".
+- **Check your permissions first.** A tool set to **Ask** in an unattended run just stalls. See [Tools and permissions](../concepts/tools-and-permissions.md).
+- **Say where results go.** "Append findings to a Brain page called *Nightly build*" gives you something to read tomorrow. Otherwise the output lives only in run history.
+- **Set the workspace deliberately.** Wrong workspace means the right prompt operating on the wrong files.
+
+## Run history
+
+Each job keeps its runs: start and finish times, status (running, completed, failed, timeout, cancelled), exit code, output, and errors. Runs persisted as chats can be reopened and read as conversations.
+
+Notifications reach the menubar bell; **Settings → General → Notifications** controls whether background-job notifications appear and whether they make a sound.
+
+Jobs live in `scheduler.json` and runs under `scheduler-runs/` in your Minnow home.
+
+## Scheduler or `/loop`?
+
+| | Scheduler | `/loop` |
+|---|-----------|---------|
+| Runs in | A headless job | One chat, keeping its context |
+| Needs | Minnow open | Minnow open **and** that chat idle |
+| Good for | Reports, checks, syncs | Iterating on something until it is right |
+| Keeps history | Yes, per run | It is the conversation |
+
+See [Skills and slash commands](../chat/skills-and-commands.md).
 
 ## Troubleshooting
 
-| Problem | Check |
-|---------|--------|
-| Job never ran | Was Minnow open? Interval at least 60s? |
-| Run failed | Run history message; model and workspace still valid? |
-| Wrong files touched | Workspace path on the job |
-
-See [Troubleshooting](../reference/troubleshooting.md).
+| Symptom | Check |
+|---------|-------|
+| Never ran | Was Minnow open? Is the job enabled? Interval at least 60 s? |
+| Runs but does nothing | A tool is probably on **Ask** with nobody to approve it |
+| Failed | Run history message. Does the model still exist? Does the workspace path still exist? |
+| Touched the wrong files | The workspace on the job |
 
 ## Related
 
-- [Settings app](settings.md)
+- [Tools and permissions](../concepts/tools-and-permissions.md)
 - [Models app](models.md)
+- [Troubleshooting](../reference/troubleshooting.md)

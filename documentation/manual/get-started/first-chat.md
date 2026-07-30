@@ -1,63 +1,96 @@
 # Your first chat
 
-The **Chat** surface is the Minnow desktop: the place you land after launch. Everything else opens from the dock as a full app, window, or side panel while chat stays available on the desktop layout.
+The desktop is the chat. There is no "open the chat app" step — you land in it, and everything else opens around it.
 
-## Desktop layout
+This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what you just saw.
 
-| Area | What it does |
-|------|----------------|
-| **Dock** | Launch Code, Research, Models, Brain, Issues, Scheduler, Settings, and return to Chat. |
-| **Menubar** | Model chip, notifications, clock, help (**?**), and settings shortcuts. |
-| **Chat rail** (left) | Switch sessions, search chats, start new conversations. |
-| **Composer** (bottom) | Type messages, pick mode, attach files, send or stop generation. |
+## The desktop
 
-The desktop also runs a **smart concierge** on send: one structured routing step tries to open the right app and seed context (with keyword fallback if the model is offline).
+| Area | What it is |
+|------|------------|
+| **Dock** (top) | Launch Code, Research, Models, Brain, Issues, Scheduler, Settings, or return to Chat |
+| **Menubar** (top right) | Model chip, Scheduler, notification bell, update pill, Settings, help (**?**), clock |
+| **Chat rail** (left edge) | Your conversations. Hover or click the tab to open it; search and start new chats from here. |
+| **Composer** (centre) | Where you type. Mode strip, attachments, tools, microphone, model, send. |
+| **Workspace panel** (right edge) | Files, Browser, and File preview for the desktop's working folder |
 
-## Composer basics
+The desktop has its own working folder, separate from whatever project you open in Code. It defaults to a `workspace` folder inside your Minnow home; change it from the **Files** panel on the right, either by picking a recent folder or browsing to a new one. File tools in desktop chat resolve inside that folder.
 
-1. Click in the composer and type a short message, for example: "What can Minnow do on my machine?"
-2. Press **Enter** to send. **Shift+Enter** adds a new line without sending.
-3. While the assistant streams, **Enter** again acts as **Stop** when the send button is in stop mode.
-4. Open the **per-chat model picker** with **Ctrl+M** (**Cmd+M** on macOS) to change model for this chat.
+## Send something
 
-### Tool approval
+Type into the composer and press **Enter**. **Shift+Enter** makes a new line instead.
 
-When the model wants to run a tool and permission is **ask**, a strip appears with choices. Press **1** (allow once), **2** (always allow), or **3** (cancel). Digit shortcuts work when you are not typing in another field.
+Try a question that forces Minnow to actually look at something rather than recite:
 
-## Modes in the composer strip
+> What can you do on this machine? Check what tools you have.
 
-Four modes appear in the composer. Each changes the system behavior and which tools are allowed.
+While the reply streams you will see a live token/second readout and a growing response. Press **Enter** again — or the stop button — to cut it short. Nothing is lost; the partial reply stays in the transcript.
 
-| Mode | Use when |
-|------|-----------|
-| **General** | Everyday questions, brainstorming, and mixed tasks with normal tool approval. |
-| **Build** | Default development work: files, git, terminal, and broad tool access. |
-| **Plan** | Planning and analysis without destructive changes (no shell writes, file deletes, git mutations, and similar). |
-| **Debug** | Investigating bugs and filing work in **Issues**. |
+## Approving a tool
 
-Modes not in the strip (Orchestrate boards, Super Plan, onboarding) open from other parts of the UI. See [Modes, skills, and context](../chat/modes-and-skills.md).
+Most interesting requests make the model call a tool. When a tool's permission is **Ask**, a strip appears with three choices, and there are keyboard shortcuts for them:
 
-Pick a mode before you send if the task needs a strict policy (for example **Plan** for "design only, do not edit files").
+| Key | Action |
+|-----|--------|
+| **1** | Allow once |
+| **2** | Always allow this tool |
+| **3** | Cancel |
 
-## Context ring
+Digits work whenever the strip is open and you are not typing in a field.
 
-Beside **Send**, the **context ring** shows how much of the model context window your conversation is using. If no limit appears, the loaded model did not report a `context_length`. Very long chats or big attachments push usage up; trim history or switch to a larger-context model if replies degrade.
+"Always allow" writes a real permission change to disk. It applies to every future chat, not just this one. If you want it back, **Settings → Integrations → Tools** — or the tools button in the composer, which opens the same Off/Ask/Full controls in a popover.
 
-## Attachments and workspace
+Read [Tools and permissions](../concepts/tools-and-permissions.md) before you turn a lot of things to Full. The short version: file and git tools are confined to the folder you have open, and that boundary is the main thing standing between an over-eager agent and the rest of your disk.
 
-- Drag files into the composer, or use the attachment control beside it.
-- For code tasks, open **Code**, choose a **workspace folder**, then chat in Build mode so file and git tools resolve under that project.
+## The mode strip
+
+Four modes sit under the composer. They change the system prompt *and* which tools exist at all.
+
+| Mode | Use it for |
+|------|------------|
+| **General** | Everyday questions and mixed tasks. The only composer mode that can read this manual. |
+| **Build** | Writing code. Files, git, terminal, code intelligence. |
+| **Plan** | Designing and analysing. Reads anything; cannot edit your files except plan documents. |
+| **Debug** | Investigating failures, with access to diagnostics and the Issues tracker. |
+
+Pick the mode *before* you send. "Design this, do not touch my code" is a Plan-mode instruction that Plan mode actually enforces — the mutating tools are not merely discouraged, they are absent.
+
+[Modes](../concepts/modes.md) explains what each one allows in detail.
+
+## The context ring
+
+The ring beside **Send** shows how much of the model's context window this conversation is using: system prompt, tools, history, attachments and all. Click it for a breakdown.
+
+If no limit appears, the model did not report a context length — the ring cannot guess. If replies suddenly get vague or start forgetting things you said, that ring is the first place to look. See [Context, memory, and rules](../concepts/context-and-memory.md).
+
+## Attachments
+
+Drag files onto the composer, or use the attachment button. Up to 10 MB per file.
+
+- **Images** are sent as image parts, which only works if the model has vision. A text-only model will ignore them.
+- **PDF, Word, Excel and similar** are parsed to text by the local tool server before the model sees them.
+- For code, you usually do not want an attachment at all — open the folder in Code and let the model read files with tools. It can then read the parts it needs instead of you guessing.
 
 ## Slash skills
 
-Type **/** at the start of the composer to open the **skill picker**. Skills are packaged prompts (for example code review or git commit helpers). Choose one, then continue your message. Fifteen skills ship built in and are on by default; install more from **Settings → Tools & integrations → Skills Library**.
+Type **/** at the start of an empty composer to open the picker. Skills are packaged instructions the model follows — code review, commit-message writing, a security pass, a UI critique. Fifteen ship built in and are on by default.
 
-## Open another app
+The same picker holds `/goal` and `/loop`, which are not skills but chat controls: one keeps working until a condition is met, the other re-runs a prompt on a schedule.
 
-Click **Code** in the dock to edit files beside chat, or **Research** for multi-step web research. The concierge may suggest an app after you send from the desktop composer.
+See [Skills and slash commands](../chat/skills-and-commands.md).
+
+## Opening another app
+
+Click **Code** in the dock to work in a project folder with the editor, terminal and git beside chat. Click **Research** to hand a question to a research agent that runs multiple rounds and writes you a report.
+
+The assistant can also open apps itself when it decides that is what you want — that is the `launch_minnow_app` tool, and it can carry your message across as a seed.
+
+## Where your conversations go
+
+Chats are stored in a SQLite database in your Minnow home and are grouped by workspace folder, so the rail shows the threads that belong to where you are working. Minnow keeps the 50 most recent, newest first.
 
 ## Next steps
 
-- [Modes, skills, and context](../chat/modes-and-skills.md)
+- [How Minnow works](../concepts/how-minnow-works.md) — the mental model for everything else
+- [Working in chat](../chat/chatting.md) — queueing, steering, undo, branches, dictation
 - [Apps overview](../apps/overview.md)
-- [Keyboard shortcuts](../reference/keyboard-shortcuts.md)

@@ -1,88 +1,104 @@
 # Troubleshooting
 
-Common problems and fixes for the packaged desktop app. Settings paths refer to the in-app **Settings** app unless noted.
+Symptoms and fixes, roughly in the order people hit them. Paths refer to the in-app **Settings** app.
 
-## Startup and connection
+## Start here
 
-| Problem | What to try |
-|---------|-------------|
-| `[providers] fetch failed` on startup | Normal if LM Studio or Ollama is not running. Start your provider server and refresh under **Models → Providers**. |
-| App opens but chat tools fail | Use the installed Minnow app (not a bare browser tab to localhost unless you know the dev setup). Restart from the Start menu after updates. |
-| Model picker empty | Provider server running? Correct base URL in **Models → Providers**? Click refresh. Model loaded in LM Studio or Ollama? |
-| Empty or garbled assistant text | Provider must speak OpenAI-style chat completions (`/v1/chat/completions`). Some alternate SSE formats yield empty text; try another model or provider profile. |
+Before anything else, open **Settings → Advanced → Health & diagnostics**. It probes each subsystem, groups recent errors, and tails the local log. **Copy report** produces a redacted markdown summary — attach it to a bug report rather than describing the symptom from memory.
 
-## Updates (packaged install)
+Nothing on that page is transmitted. Minnow sends no telemetry.
 
-| Problem | What to try |
-|---------|-------------|
-| No update pill | You may be up to date. Open **Settings → General → App updates** and click **Check for updates**. |
-| Download stuck | Wait for the next automatic cycle or retry manual check. Completed downloads stay ready if a later check fails. |
-| SmartScreen on first install | Expected for unsigned Windows builds: **More info → Run anyway** once. |
+## Nothing answers me
 
-## Diagnostics (local only)
-
-Minnow does **not** send telemetry. Errors stay on your machine.
-
-| Resource | Location |
-|----------|----------|
-| In-app viewer | **Settings → Advanced → Health & diagnostics** |
-| Log files | Minnow home `logs/diagnostics.jsonl` and `logs/crash.jsonl` |
-| Copy report | Button in Health & diagnostics (redacted paths and secrets) |
-
-| Problem | What to try |
-|---------|-------------|
-| Empty health strip | Fully quit and reopen Minnow. |
-| Agent cannot read diagnostics | Enable **read_diagnostics** under **Settings → Tools & integrations → Tools**; use **Debug** mode; approve when asked. |
-
-## Models and chat
-
-| Problem | What to try |
-|---------|-------------|
-| Context ring shows no limit | Model did not report context length metadata. |
-| Tools never run | Use a tool-calling-capable model; enable tools in **Settings → Tools & integrations → Tools**; permission not **off**. |
-| Images ignored | Use a vision (VLM) model for image attachments. |
+| Symptom | Fix |
+|---------|-----|
+| Model picker is empty | Is the provider running with a model loaded? Is the base URL right, including `/v1` where required? Press refresh in **Models → Providers**. |
+| `[providers] fetch failed` at startup | Normal when LM Studio or Ollama is not up yet. Start it and refresh. |
+| Replies are empty or garbled | The endpoint may not speak standard `/v1/chat/completions` SSE. Try another model or provider profile. |
+| Replies stop mid-sentence, forever | A stalled upstream stream. **Settings → Agents → Watchdog** sets the idle timeout that catches this. |
+| Chat works but tools never run | Use a tool-calling-capable model; check the tool is enabled and not **Off** in **Settings → Integrations → Tools**; check your mode allows it. |
+| Images are ignored | You need a vision model. Text-only models silently drop image parts. |
 
 ## Tools and files
 
-| Problem | What to try |
-|---------|-------------|
-| Cannot read files outside project | By design: file and git tools stay under the Code workspace root (`filesystemAccess: workspace`). |
-| PDF or Office attachment fails | The parsers (`pdf-parse`, `mammoth`, `officeparser`, `xlsx`) are npm **optional dependencies**. Packaged builds include them. In a dev clone, re-run `npm install` without `--no-optional`. |
-| Web search does nothing | Check **Settings → Tools & integrations → Search**. The default provider is **SearXNG**, which needs a local instance running (Minnow can manage one). Otherwise switch to DuckDuckGo (no key) or Brave / Tavily (API key required). |
-| CORS errors on fetch tools | Full app routes fetch through the local tool server. |
+| Symptom | Fix |
+|---------|-----|
+| Cannot read a file outside the project | By design — file and git tools stay under the workspace root. Change it in **Settings → General → Filesystem access** if you genuinely need full disk. |
+| A tool says it needs the server | That tool runs server-side. In the packaged app the server is always up; check Health & diagnostics. |
+| Web search does nothing | **Settings → Integrations → Search**. The default SearXNG runs locally — check it under **Servers**. Or switch to DuckDuckGo, which needs no key. |
+| `browser_*` tools missing | Browser automation needs the Electron desktop app. |
+| Browser navigation blocked | Only localhost is allowed by default. Add the origin under **Settings → Integrations → Browser**, or approve when asked. |
+| Approval strip never appears, tool just runs | That tool is on **Full**. Probably from pressing **2** once. |
+| PDF or Office attachment fails | The parsers are optional dependencies. Packaged builds include them; in a source clone, re-run `npm install` without `--no-optional`. |
 
-## Browser automation
+## The model forgets things
 
-| Problem | What to try |
-|---------|-------------|
-| `browser_*` tools missing | Requires the **Electron** Minnow shell, not an external browser without automation. |
-| Navigate blocked | Add the site pattern under **Settings → Tools & integrations → Browser**, or approve when prompted. Only `localhost` and `127.0.0.1` are allowed by default. |
+Look at the context ring first. When it is near full, the model is losing the earliest parts of your conversation.
 
-## Apps
+| Fix | Cost |
+|-----|------|
+| New chat for the new subtask | Lowest — usually the right answer |
+| Remove large attachments | Low |
+| Save durable facts to Brain, then start fresh | Low, and they come back through retrieval |
+| Larger-context model | Depends on your hardware |
 
-| Problem | What to try |
-|---------|-------------|
-| Compare, Benchmarking, Experts, Calendar, Email missing | Expected in this release. They are not in the shipped dock. |
-| Scheduler job did not run | Minnow must stay open. Check interval (60s minimum), run history, workspace, and model on the job. |
-| Local voice fails | Install Python 3 for local STT/TTS workers, or switch to provider voice in **Models → Voice**. |
+If the ring shows no cap, the model did not report a context length. See [Context, memory, and rules](../concepts/context-and-memory.md).
 
-## Secrets and data
+## Agents and boards
 
-| Problem | What to try |
-|---------|-------------|
-| All API keys gone | `.key` was deleted or rotated. Re-enter secrets in Settings. Restore from backup if you saved `.key`. |
-| Fresh start | Set `MINNOW_HOME` to a new folder (advanced) or uninstall and remove `.minnow` if you intend to wipe data. |
+| Symptom | Fix |
+|---------|-----|
+| A board task sits doing nothing | A tool is probably on **Ask** with nobody to approve it. Check permissions before AFK runs. |
+| Task quarantined | It exhausted its retries. Open the task chat to read what happened, fix the cause, then **Requeue**. |
+| Board never starts | Is the workspace a git repository? Boards need one. Minnow offers to set it up during board creation. |
+| Parallel tasks conflicting | Turn worktree isolation on. Auto and AFK use per-task worktrees by default. |
+| Sub-agent seems stuck | The agent activity panel shows live phase and current tool. Timeouts are per type in **Settings → Agents → Sub-agents**. |
+| Undo control is missing | It only appears in a git repository, and only when that turn changed files. The message **⋮ → Undo turn** still does a chat-only rewind. |
 
-## Developers cloning the repo
+## Scheduler
 
-If you run from git instead of the installer:
+| Symptom | Fix |
+|---------|-----|
+| Job never ran | Minnow must be running — tray counts, quit does not. Is the job enabled? Is the interval at least 60 s? |
+| Job ran but did nothing | Tools on **Ask** stall with nobody to approve them |
+| Job failed | Read the run history message. Does the model still exist? Does the workspace path still exist? |
+| Wrong files touched | The workspace set on the job |
 
-| Problem | What to try |
-|---------|-------------|
-| Port in use | Set `PORT` env var and open the printed URL. |
-| `npm run dev` only | File, git, terminal, and persistence need `npm start`. |
-| Vite stale chunk error | Delete `node_modules/.vite`, restart `npm start`, reload the window. |
+## Voice
 
-## Still stuck?
+| Symptom | Fix |
+|---------|-----|
+| Local speech fails | Local voice needs Python 3 for its worker. Install it, or point voice at a provider in **Models → Voice**. |
+| Dictation hears my speakers | **Settings → General → Audio** — turn on echo cancellation |
+| No microphone on the LAN companion | Plain HTTP is not a secure context; browsers block capture there |
 
-Use **Copy report** from Health & diagnostics when filing a [GitHub issue](https://github.com/DukkyGames/Minnow/issues). Browse the in-app wiki **?** for deeper technical reference aimed at maintainers.
+## Updates and install
+
+| Symptom | Fix |
+|---------|-----|
+| No update pill | You may be current. **Settings → General → App updates → Check for updates**. |
+| Download seems stuck | Wait for the next automatic cycle or check manually. A completed download stays ready even if a later check fails. |
+| Update does not apply | Closing the window hides to tray. Quit properly from the tray menu. |
+| SmartScreen warning | Expected for unsigned Windows builds: **More info → Run anyway**, once. |
+
+## Data and secrets
+
+| Symptom | Fix |
+|---------|-----|
+| All my API keys vanished | `.key` was deleted or rotated. Restore it from backup, or re-enter the keys. |
+| Want a clean profile | Point `MINNOW_HOME` at an empty folder and launch. Your real profile is untouched. |
+| Want to remove everything | Delete your Minnow home. Uninstalling deliberately leaves it in place. |
+
+## Apps that are not there
+
+Compare, Benchmarking, Experts, Calendar and Email are behind a release gate in this build. They are absent from the dock, Settings, shortcuts and routes on purpose. See [Apps overview](../apps/overview.md#not-in-this-release).
+
+## Still stuck
+
+Take **Copy report** from Health & diagnostics and open a [GitHub issue](https://github.com/DukkyGames/Minnow/issues). It includes version, platform and recent errors with paths and secrets redacted, which is most of what anyone will ask you for.
+
+## Related
+
+- [Where your data lives](configuration.md)
+- [Tools and permissions](../concepts/tools-and-permissions.md)
+- [Connect a model](../get-started/connect-a-model.md)
