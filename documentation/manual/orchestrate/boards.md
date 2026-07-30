@@ -1,0 +1,132 @@
+# Orchestrate boards
+
+A board turns a plan document into a kanban of tasks that agents work through — building, testing, fixing and merging — while you watch or while you are away.
+
+This is the most powerful thing in Minnow and the one that most rewards understanding before you press Start.
+
+## The shape of it
+
+1. You write a plan (or have [Super Plan](super-plan.md) write it) into `documentation/plans/`.
+2. An **orchestrator** reads it and creates a board of tasks, grouped into **waves** by dependency.
+3. Each task gets its own chat and its own agent: a **builder** implements it, a **tester** verifies it, a **fixer** repairs failures.
+4. Completed work merges into an integration branch.
+5. A **final integration test** runs across the whole board.
+6. A finish dashboard offers to commit, push, and open a pull request.
+
+You choose how much of that happens without you.
+
+## Starting a board
+
+Open the **Orchestrate** button in the Code sidebar rail. The hub shows your recent boards and lets you pick a plan.
+
+Choose a plan file and Minnow creates an Orchestrate planner chat, checks the workspace is a git repository (offering to set one up if not), and asks the orchestrator to build the board. While that is happening the folder shows **Setting up**; if you navigate away there is a banner to return.
+
+Plans must live under `documentation/plans/`. Plan mode can write there even though it cannot touch the rest of your repository — that is deliberate, and it is how a planning session hands off to a delivery board.
+
+## The board
+
+The header is one instrument strip: plan title, status badge, and telemetry — tasks, waves, run, elapsed — over a thin progress bar, then the run controls.
+
+Cards move through these states:
+
+| Status | Meaning |
+|--------|---------|
+| **Planned** | Not started |
+| **In progress** | A builder is working |
+| **Testing** | A tester is verifying |
+| **Merging** | Result is being integrated |
+| **Complete** | Done and merged |
+| **Failed** | Attempt failed; retry logic applies |
+| **Blocked** | Waiting on a dependency |
+| **Quarantined** | Parked after exhausting retries — needs you |
+
+Waves collapse and expand. Click a card to open that task's chat and read exactly what its agent did.
+
+Keyboard: **Tab** moves between cards and header controls, **arrow keys** move around the grid, **Enter** or **Space** opens a task.
+
+## Execution modes
+
+The most important control on the board. Four stops, least to most autonomous:
+
+| Mode | Behaviour |
+|------|-----------|
+| **Manual** | You start each task yourself |
+| **Sequential** | The orchestrator runs one task at a time |
+| **Auto** | The orchestrator runs tasks concurrently |
+| **AFK** | Fully hands-off until you press Stop or the board finishes |
+
+AFK asks for confirmation, because it means what it says: it will not prompt you again. Anything set to **Ask** in your tool permissions will stall a task with nobody there to approve it, so check that before you walk away.
+
+Sequential pins concurrency to one task. Auto and AFK use your concurrency setting — three by default.
+
+**Stop** freezes the board and its timer immediately. A board paused by a shutdown or a memory-recovery event is treated as a system pause, not as failure, and resumes rather than quarantining work.
+
+## Worktree isolation
+
+Parallel agents editing one checkout is a recipe for a mess. Isolation gives each task its own **git worktree**.
+
+| Setting | Behaviour |
+|---------|-----------|
+| **Auto** | Derived from execution mode: off for Manual and Sequential, per-task for Auto and AFK |
+| **Off** | Everyone shares the workspace |
+| **Per-task** | Every task gets its own worktree |
+| **Per-wave** | One worktree per wave |
+
+With isolation on, Minnow mints an **integration branch** and merges task branches into it as they complete. While board view is active, the file explorer, terminal and source-control panel follow the **integration** worktree, not any one task's — so you are looking at the assembled result. Open a task chat and you see its own checkout.
+
+Leave this on Auto unless you have a reason. Running Auto mode without isolation means several agents writing to the same files at once.
+
+## Model and concurrency
+
+The board header has its own model chip. It sets the model for the planner and every task chat on that board, so you can run a board on a different model from your normal chat — and change it mid-run.
+
+Concurrency sets how many task chats run at once. More is not always faster: every concurrent task is a full agent loop competing for the same provider, and a local runtime serving one model will serialize them anyway.
+
+## When things fail
+
+Boards are built around the assumption that agents fail, so the interesting behaviour is in the recovery:
+
+- **Test failures** reopen the task for a fixer instead of failing the board.
+- **Context-length errors** are treated as transient — a tester that overflows retries without burning a test attempt.
+- **An agent that forgets to report** gets nudged; if it keeps failing to report, the task is quarantined at the build cap rather than spinning.
+- **Quarantine parks a task and its dependents** so the board does not pretend to make progress. Use **Requeue** to try again.
+- **Self-heal** can attempt rounds of automatic repair before quarantining, configurable under **Settings → Agents → Autopilot**.
+
+Every board writes a diagnostic log of status changes, verdicts, merges, retries and slot accounting, so a board that went wrong can be read after the fact.
+
+## Finishing
+
+When every task is complete, a **final integration test** runs across the whole board. It is the check that the parts work together, which per-task tests cannot tell you.
+
+Then the **finish dashboard** replaces the kanban with: elapsed time, tokens spent, files and lines changed, a written summary of what was done and what to do next, and unresolved issues with suggested steps.
+
+Its primary action commits the integration work into your branch, and — depending on what your repository supports — pushes it and opens a pull request. There is a caret for **Commit only** or **Commit + push**. A separate **Clear worktrees** action removes the git worktrees the board created.
+
+Toggle back to the kanban at any time from the header.
+
+## Global defaults
+
+**Settings → Agents → Autopilot** sets the defaults every new board starts with: execution mode, isolation, maximum concurrency, planner model, retries, heartbeat, self-heal rounds, infrastructure provisioning, auto-restart of stalled tasks, and a guard against agents changing directory outside their worktree.
+
+**Settings → Agents → Watchdog** sets the streaming limits — idle timeout and maximum duration — that stop a hung model from stalling a board indefinitely.
+
+## Board chats are locked
+
+Planner and member chats hide the mode selector, and mode changes on them are rejected. The orchestrator assigns each chat its mode, its work-agent role and its tool set; a task agent cannot quietly promote itself. Undo is also unavailable on board-linked chats.
+
+## Getting good results
+
+**The plan is the product.** A board executes what the plan says. Vague tasks produce vague work, and no amount of autonomy fixes it. Use [Super Plan](super-plan.md) when the idea is not yet sharp.
+
+**Start Manual.** Run one task, read what the agent did, and see whether the plan means what you thought. Then move up to Sequential or Auto.
+
+**Commit before you start.** The board works on branches, but a clean starting point makes everything easier to unwind.
+
+**Watch the first wave, then leave.** Most plan problems show up in the first two tasks.
+
+## Related
+
+- [Super Plan](super-plan.md)
+- [Agents, sub-agents, and packs](agents.md)
+- [Code app](../apps/code.md)
+- [Tools and permissions](../concepts/tools-and-permissions.md)

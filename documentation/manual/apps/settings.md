@@ -1,63 +1,85 @@
-# Settings app
+# Settings
 
-**Settings** is the full configuration surface: appearance, tools, modes, skills, providers, integrations, and diagnostics. Open it from the dock or the menubar gear.
+Everything configurable, in seven categories. Open it from the dock or the menubar gear.
 
-## Find a setting quickly
+## Find things by searching
 
-1. Open **Settings**.
-2. Press **Ctrl+K** / **Cmd+K** to focus **search**.
-3. Type a keyword (for example "webhook", "MCP", "voice").
-4. Arrow keys and **Enter** open the matching section. **Escape** closes overlays or blurs search.
+Press **Ctrl+K** / **Cmd+K** with Settings open. Type a keyword — "webhook", "tray", "MCP", "temperature", "memory" — and the results deep-link straight to the control, highlighting it when you land.
 
-Some results deep-link out of Settings: memory queries open **Brain**, and provider or sampler queries open the **Models** app.
+Search crosses app boundaries: a memory query opens **Brain**, a provider or sampler query opens the **Models** app. That is intentional, because those settings genuinely live there.
 
-## Section map
+## The map
 
-The sidebar has five groups:
+### General
 
-| Group | Sections |
-|-------|----------|
-| **App** | General (includes **App updates**), Notifications, Appearance, Audio, About |
-| **Apps** | Apps, Issues |
-| **Agents** | Agents, Rules, Agent packs, Autopilot, Watchdog |
-| **Tools & integrations** | Search, Deep Research, Servers, Tools, Skills, Skills Library, Browser, MCP servers, Language servers, Editor, Webhooks |
-| **Advanced** | Health & diagnostics, Board testing |
+| Section | Contains |
+|---------|----------|
+| **General** | App updates and channel, desktop app and tray, launch at startup, network access, filesystem access, terminal behaviour and default shell, constrained tool calls, re-run setup |
+| **Notifications** | Master toggle, per-category (chat, tasks, background jobs), sounds, sounds while watching the active chat |
+| **Audio** | Input and output devices, echo cancellation, noise suppression, auto gain |
+| **About** | Version and build info |
 
-**Providers, Routing, Sampler, Thinking, and Usage & cost are not in this sidebar.** They live in the **Models** app. Settings search still finds them and deep-links across.
+Two settings here matter more than the rest:
 
-## Tools and permissions
+- **Filesystem access** — workspace-only (default) or full disk. This is the containment boundary for every file and git tool. See [Tools and permissions](../concepts/tools-and-permissions.md).
+- **Network access** — loopback-only (default) or LAN. Changing it needs a restart. See [Use Minnow from another device](../extend/companion.md).
 
-**Settings → Tools & integrations → Tools** lists built-in and plugin tools by category.
+### Apps
 
-| Permission | Behavior |
-|------------|----------|
-| **full** | Run without prompting |
-| **ask** | Show approval strip (digits 1/2/3 in chat) |
-| **off** | Model cannot use the tool |
+**Apps** lists what is installed. Every shipped app is core, so there is nothing to disable and you will see a "Coming soon" placeholder where optional apps will appear.
 
-Server-side tools need the packaged app or `npm start` dev stack; a few browser-only tools never run on the server API.
+**Issues** is the taxonomy editor for the tracker: types, statuses with workflow roles and board flags, and priorities.
 
-## Skills
+### Appearance
 
-Both live under **Tools & integrations → Skills**:
+Theme family and mode — 16 themes in total, eight families each with a dark and a light variant — plus desktop wallpaper, fonts, and custom accent colours.
 
-- **Skills**: enable the 15 bundled skills and your own `SKILL.md` folders.
-- **Skills Library**: install curated third-party packs.
+### Models
 
-## Providers
+**Providers**, **Routing**, **Sampler**, **Thinking**, **Usage & cost**. These are the same panels the [Models app](models.md) shows.
 
-Provider URLs and encrypted API keys live in the **Models** app under **Providers** — not in Settings. Searching "provider" in Settings takes you there.
+### Agents
 
-## Health and diagnostics
+| Section | Contains |
+|---------|----------|
+| **Agents** | Prompt profiles (Full / Lite / custom) with a live token estimate, composer modes, Super Plan pipeline settings, plan granularity, work agents, sub-agent types, context policy, setup profile export and import |
+| **Rules** | Standing instructions injected into every prompt, organised into groups |
+| **Agent packs** | Download a template or the built-in pack, upload a zip, manage installed packs |
+| **Autopilot** | Defaults for orchestrate boards: execution mode, isolation, concurrency, planner model, retries, heartbeat, self-heal, infra provisioning |
+| **Watchdog** | Generation limits while streaming — idle timeout and maximum duration |
 
-**Advanced → Health & diagnostics** shows local health, recent errors, log tail, and **Copy report** (redacted markdown for bug reports). Nothing is sent off-device automatically.
+**Watchdog** is the setting to reach for when a model hangs mid-stream and the run sits there forever. The idle timeout resets whenever new tokens arrive, so it catches a genuinely stalled stream without cutting off a slow one.
 
-## Network access
+### Integrations
 
-Default is **loopback only**. Opt in under **General** if you want LAN companion access. Restart after changing network mode.
+| Section | Contains |
+|---------|----------|
+| **Search** | Web search provider, fallback chain, Brave and Tavily keys |
+| **Deep Research** | Research model, search override, round and time limits, extraction settings, report size |
+| **Servers** | Managed local servers — SearXNG and `llama-cpp` — enable, auto-start, port |
+| **Tools** | The full tool catalog with Off/Ask/Full per tool, grouped by category, plus bulk actions and the result cache |
+| **Skills** | Enable or disable skills, author your own, and the **Skills Library** for third-party packs |
+| **Browser** | Automation allowlist, navigation permission, tab restore, DevTools dock |
+| **MCP servers** | Model Context Protocol servers |
+| **Language servers** | LSP configuration and diagnostics |
+| **Editor** | Ghost text, inline completion, context sources, caching |
+| **External** | Outgoing webhooks with HMAC signing |
+
+### Advanced
+
+**Health & diagnostics** — subsystem probes, grouped errors, a local log tail, **Copy report** for a redacted summary, and the toggle for filing renderer errors as issues. Nothing is sent off-device.
+
+**Board testing** — a manual workflow for orchestrate boards: an in-process fake model, seeded test boards, and board-log validation. For development and debugging, not daily use.
+
+## Where settings are stored
+
+In your Minnow home as separate files — `config.json`, `tools.json`, `search.json`, `rules.json`, `skills.json`, and others. Secrets are encrypted; the rest is plain JSON you could read in an editor, though Settings normalizes on load and hand-editing is a recovery tool, not a workflow.
+
+See [Where your data lives](../reference/configuration.md).
 
 ## Related
 
-- [Install and first launch](../get-started/install.md)
-- [Where your data lives](../reference/configuration.md)
-- [Troubleshooting](../reference/troubleshooting.md)
+- [Tools and permissions](../concepts/tools-and-permissions.md)
+- [Context, memory, and rules](../concepts/context-and-memory.md)
+- [Integrations](../extend/integrations.md)
+- [Agents, sub-agents, and packs](../orchestrate/agents.md)

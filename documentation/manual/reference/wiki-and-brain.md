@@ -1,61 +1,74 @@
 # Wiki and Brain
 
-Minnow gives you two different documentation surfaces. They are easy to confuse because both can answer questions, but only one is yours to edit.
+Minnow has two knowledge surfaces and they get confused constantly, because both answer questions and both look like wikis. The difference is simple: **one is about Minnow and you cannot edit it; the other is about your work and it is entirely yours.**
 
-## Minnow wiki (official help)
+## The short version
 
-| | |
-|---|---|
-| **Open** | Menubar **?** button |
-| **Content** | User manual for your installed version (install, apps, modes, troubleshooting) |
-| **Editable** | No at runtime (pages ship with the build) |
-| **Search** | Sidebar sections plus top search; **Ctrl+K** / **Cmd+K** inside the wiki |
-| **Deep links** | Address bar hash reloads the same page |
+| | Minnow wiki | Brain |
+|---|-------------|-------|
+| **Open with** | The menubar **?** | The Brain app in the dock |
+| **Contains** | This manual, for your installed version | Your facts, decisions, notes, code index |
+| **Editable** | No | Yes |
+| **Written by** | The Minnow build | You and the assistant |
+| **Ask it** | "How does the Scheduler work?" | "What did we decide about auth?" |
 
-Use the wiki to learn how Minnow works: install, apps, modes, shortcuts, troubleshooting, roadmap.
+## The Minnow wiki
 
-Developer setup, architecture, and contributor docs are on the [GitHub Wiki](https://github.com/DukkyGames/Minnow/wiki), not in the in-app reader.
+The manual you are reading. It ships inside the build, so it always matches the version you have installed — no version-skew between the app and its documentation.
 
-## Brain (your knowledge)
+- Grouped navigation on the left, in reading order.
+- Full-text search across every page. **Ctrl+K** / **Cmd+K** focuses it.
+- Deep links reload to the same page.
+- An "On this page" contents list on wide screens.
+- A footer link to edit any page on GitHub, if you want to fix something.
 
-| | |
-|---|---|
-| **Open** | **Brain** app in the dock |
-| **Content** | Your facts, decisions, specs, meeting notes, code index |
-| **Editable** | Yes |
-| **Storage** | Minnow home `brain/` folder |
-| **Agent tools** | Search, read, write pages, memory, ingest, code symbols |
+It is an overlay, not an app. Opening it does not disturb whatever you were doing; closing it puts you back.
 
-Use Brain for project context the assistant should remember across chats.
+Developer material — architecture, setup from source, contributing — is deliberately not in here. It lives on the [GitHub Wiki](https://github.com/DukkyGames/Minnow/wiki).
 
-## Ask chat about Minnow itself
+## Brain
 
-In **General** mode (and onboarding), the model can call read-only **minnow_docs_*** tools:
+Your wiki: markdown pages in your Minnow home, with a graph view, an editor, ingest, lint and a code-symbol index. The assistant searches and writes it with tools. `save_memory` writes here.
 
-| Tool | Purpose |
-|------|---------|
-| Search | Find official pages and excerpts |
-| Read | Open a page from search results |
-| List | Browse the documentation catalog |
+This is where "we deploy on Fridays" and "the staging database resets nightly" belong. Retrieval pulls the relevant pages back into the prompt when they matter, which is how the assistant appears to remember across conversations.
 
-For "How do I set up Ollama?" the assistant should search official docs before guessing. Answers may cite documentation paths.
+See [the Brain app](../apps/brain.md) and [Context, memory, and rules](../concepts/context-and-memory.md).
 
-For "What did we decide about the API?" use **Brain**, not the wiki.
+## Asking chat about Minnow
 
-## GitHub Wiki (public mirror)
+In **General** mode and during first-run onboarding, the assistant has three read-only tools for this manual:
 
-The public GitHub Wiki mirrors generated product documentation from the repository. It is not a live view of your Brain.
+| Tool | Does |
+|------|------|
+| `minnow_docs_search` | Finds pages and returns excerpts |
+| `minnow_docs_read` | Opens a page |
+| `minnow_docs_list` | Browses the catalog |
 
-## Quick comparison
+They default to **Full** permission and work regardless of your workspace or Brain settings. Ask "how do I point Minnow at Ollama?" and you get an answer citing a page rather than a guess.
 
-| Question type | Use |
-|---------------|-----|
-| How does Minnow Scheduler work? | Wiki or chat + minnow_docs |
-| What is our release date for v2? | Brain or Issues |
-| Keyboard shortcut for terminal? | Wiki manual or [Keyboard shortcuts](keyboard-shortcuts.md) |
-| Import meeting notes into memory | Brain ingest |
+**Build, Plan and Debug do not have these tools.** Developer modes keep a tighter payload budget and read your repository directly. Ask product questions in General.
+
+The prompts are deliberate about the split: Minnow product questions go to the manual, your project knowledge goes to Brain, and repository architecture comes from reading the repository.
+
+## The GitHub Wiki
+
+A public mirror of the full documentation set — this manual plus contributor and maintainer material — published from the repository. Useful when you want to read documentation without opening Minnow, or link someone to a page.
+
+It mirrors the repository, not your Brain. Nothing of yours is published.
+
+## Which one do I want?
+
+| Question | Surface |
+|----------|---------|
+| How does an orchestrate board work? | Minnow wiki, or ask in General mode |
+| What is the shortcut for the terminal? | Minnow wiki → [Keyboard shortcuts](keyboard-shortcuts.md) |
+| Why did we choose Postgres? | Brain |
+| What is our release date? | Brain, or Issues |
+| Turn these meeting notes into something I can search | Brain → Ingest |
+| How do I set up a language server? | Minnow wiki → [Integrations](../extend/integrations.md) |
 
 ## Related
 
 - [Brain app](../apps/brain.md)
-- [Minnow manual home](../README.md)
+- [Context, memory, and rules](../concepts/context-and-memory.md)
+- [Minnow manual](../README.md)
