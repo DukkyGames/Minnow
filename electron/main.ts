@@ -31,6 +31,10 @@ import {
 } from './desktop-shell-config.js';
 import { readLoginItemSnapshot, writeLoginItemOpenAtLogin } from './login-item.js';
 import { createTrayManager, type TrayManager } from './tray.js';
+import {
+  resolveTrayIconFallbackPath,
+  resolveTrayIconPath,
+} from './tray-icon.js';
 import { shouldQuitOnWindowAllClosed } from './tray-close.js';
 import {
   EMPTY_TRAY_STATUS,
@@ -57,6 +61,19 @@ function appIconPath(): string {
     'png',
     'minnow-1024.png',
   );
+}
+
+function appRoot(): string {
+  return app.isPackaged ? app.getAppPath() : getProjectRoot();
+}
+
+/** System tray icon — platform-specific assets under build/tray/. */
+function trayIconPath(): string {
+  return resolveTrayIconPath(process.platform, appRoot());
+}
+
+function trayIconFallbackPath(): string {
+  return resolveTrayIconFallbackPath(appRoot());
 }
 
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
@@ -304,7 +321,8 @@ function requestExplicitQuit(): void {
 function ensureTrayManager(): TrayManager {
   if (!trayManager) {
     trayManager = createTrayManager({
-      iconPath: appIconPath,
+      trayIconPath,
+      trayIconFallbackPath,
       focusMainWindow,
       requestQuit: requestExplicitQuit,
       sendTrayCommand: (command) => {
