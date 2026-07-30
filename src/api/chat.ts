@@ -467,6 +467,7 @@ export async function sendMessage(): Promise<void> {
     messages.push({ role: 'system', content: outbound.userRules });
   }
   for (const m of chat.history) {
+    if (m.role === 'context') continue;
     if (m.role === 'tool') {
       messages.push({
         role: 'tool',

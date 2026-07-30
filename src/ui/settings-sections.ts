@@ -1073,7 +1073,6 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialProviderId: agent.providerId,
         initialModelId: agent.modelId,
         initialDisabled: agent.disabled === true,
-        initialMaxInputTokens: agent.maxInputTokens ?? null,
         initialContextPolicy: workAgentContextPolicySelectValue(id),
         initialArchive: agent.archive,
         onModelSaved: () => {
@@ -1228,7 +1227,6 @@ async function renderSubAgentsSection(): Promise<void> {
         {
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
-          maxInputTokens: type.maxInputTokens ?? null,
           contextEnforcementPolicy: subAgentContextPolicySelectValue(id),
           summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
         },

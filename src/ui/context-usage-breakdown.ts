@@ -83,7 +83,7 @@ function renderSummary(budget: ContextBudget): string {
           <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.used)}</span>
         </div>
       </div>
-      <p class="context-usage-breakdown__limit-unknown">Context limit unknown for this model.</p>
+      <p class="context-usage-breakdown__limit-unknown">Context limit unknown — compression disabled.</p>
     </div>`;
   }
 

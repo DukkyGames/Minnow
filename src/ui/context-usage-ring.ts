@@ -43,7 +43,7 @@ function formatTooltip(budget: ContextBudget): string {
   if (budget.limit != null) {
     lines.push(`Context: ${budget.limit.toLocaleString()} tokens`);
   } else {
-    lines.push('Context limit unknown');
+    lines.push('Context limit unknown — compression disabled');
   }
   lines.push(`Used (approx.): ~${budget.used.toLocaleString()}`);
   if (budget.remaining != null) {

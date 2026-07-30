@@ -15,6 +15,12 @@ export interface SlashCommandListItem {
 /** Registry of non-skill slash commands. Add new commands here. */
 const SLASH_COMMANDS: SlashCommandListItem[] = [
   {
+    id: 'compress',
+    label: 'Compress',
+    description: 'LLM-summarize older turns and shrink history (alias: /summarize)',
+    insertion: '/compress',
+  },
+  {
     id: 'goal',
     label: 'Goal',
     description: 'Set a completion condition; an agentic verifier runs tests and checks code before confirming',
