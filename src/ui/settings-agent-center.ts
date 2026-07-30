@@ -27,6 +27,7 @@ import { getActiveChat } from '../state/sessions';
 import { isServerStorageMode } from '../config/storage-mode';
 import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 import { appendSettingsOfflineHint, createSettingsKvList, createSettingsSelectRow } from './settings-controls';
+import { msToSeconds, secondsToMs } from './settings-duration';
 import {
   createGlobalContextPolicySelect,
   applyArchiveEmbeddingsGate,
@@ -477,26 +478,26 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   const timeoutInput = document.createElement('input');
   timeoutInput.type = 'number';
   timeoutInput.className = 'settings-select settings-kv-input';
-  timeoutInput.min = '1000';
-  timeoutInput.step = '1000';
-  timeoutInput.value = String(config.defaultTimeoutMs);
-  timeoutInput.setAttribute('aria-label', 'Default sub-agent timeout in milliseconds');
+  timeoutInput.min = '1';
+  timeoutInput.step = '1';
+  timeoutInput.value = String(msToSeconds(config.defaultTimeoutMs));
+  timeoutInput.setAttribute('aria-label', 'Default sub-agent timeout in seconds');
   timeoutWrap.appendChild(timeoutInput);
-  timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
+  timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'sec'));
 
   const nudgeWrap = el('span', 'settings-kv-input-wrap');
   const nudgeInput = document.createElement('input');
   nudgeInput.type = 'number';
   nudgeInput.className = 'settings-select settings-kv-input';
   nudgeInput.min = '0';
-  nudgeInput.step = '1000';
-  nudgeInput.value = String(config.checkInNudgeMs ?? 120_000);
+  nudgeInput.step = '1';
+  nudgeInput.value = String(msToSeconds(config.checkInNudgeMs ?? 120_000));
   nudgeInput.setAttribute(
     'aria-label',
-    'Sub-agent check-in nudge interval in milliseconds (0 disables)',
+    'Sub-agent check-in nudge interval in seconds (0 disables)',
   );
   nudgeWrap.appendChild(nudgeInput);
-  nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
+  nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'sec'));
 
   const duplicateToolInput = document.createElement('input');
   duplicateToolInput.type = 'number';
@@ -535,15 +536,16 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
     void persistGlobal({ globalMaxConcurrent: value });
   });
   timeoutInput.addEventListener('change', () => {
-    const value = Math.max(1000, Math.floor(Number(timeoutInput.value) || 1000));
-    timeoutInput.value = String(value);
-    void persistGlobal({ defaultTimeoutMs: value });
+    const seconds = Math.max(1, Math.floor(Number(timeoutInput.value) || 1));
+    timeoutInput.value = String(seconds);
+    void persistGlobal({ defaultTimeoutMs: secondsToMs(seconds) });
   });
   nudgeInput.addEventListener('change', () => {
-    const raw = Math.floor(Number(nudgeInput.value) || 0);
-    const value = raw <= 0 ? 0 : Math.min(1_800_000, Math.max(10_000, raw));
-    nudgeInput.value = String(value);
-    void persistGlobal({ checkInNudgeMs: value });
+    const rawSec = Math.floor(Number(nudgeInput.value) || 0);
+    const seconds =
+      rawSec <= 0 ? 0 : Math.min(1_800, Math.max(10, rawSec));
+    nudgeInput.value = String(seconds);
+    void persistGlobal({ checkInNudgeMs: secondsToMs(seconds) });
   });
   duplicateToolInput.addEventListener('change', () => {
     const value = clampDuplicateToolCallThreshold(
