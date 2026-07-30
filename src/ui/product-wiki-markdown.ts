@@ -30,6 +30,26 @@ export function renderProductWikiMarkdown(
   container.className = 'product-wiki-markdown';
   container.innerHTML = DOMPurify.sanitize(rendered, { USE_PROFILES: { html: true } });
 
+  const usedHeadingIds = new Set<string>();
+  container.querySelectorAll('h2, h3, h4').forEach((heading) => {
+    const text = heading.textContent?.trim() ?? '';
+    if (!text) return;
+    const base = text
+      .toLowerCase()
+      .replace(/[^\w\s-]/gu, '')
+      .replace(/\s+/gu, '-')
+      .replace(/-+/gu, '-')
+      .replace(/^-|-$/gu, '');
+    let id = base || 'section';
+    let suffix = 2;
+    while (usedHeadingIds.has(id)) {
+      id = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedHeadingIds.add(id);
+    heading.id = id;
+  });
+
   container.querySelectorAll('pre code').forEach((block) => {
     try {
       hljs.highlightElement(block as HTMLElement);
