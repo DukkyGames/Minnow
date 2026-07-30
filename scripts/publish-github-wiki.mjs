@@ -2,9 +2,13 @@ import { readdir, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  collectGitHubWikiPublishPaths,
+  createProductWikiEntry,
+  isGitHubWikiPublishPath,
+} from './product-wiki-catalog-lib.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const catalogPath = path.join(repositoryRoot, 'server', 'product-wiki', 'catalog.json');
 const repositoryBlobBase = 'https://github.com/DukkyGames/Minnow/blob/main/';
 
 /** Parse the optional staging output directory. */
@@ -16,17 +20,11 @@ function readOutputArgument() {
   return path.resolve(requested);
 }
 
-/** Keep public user and developer docs while excluding operational runbooks. */
+/** Publish the full developer documentation corpus (not limited to the in-app catalog). */
 function shouldPublish(sourcePath) {
-  if (sourcePath === 'documentation/README.md') return true;
-  if (sourcePath === 'documentation/ROADMAP.md') return true;
-  if (sourcePath === 'documentation/context.md') return true;
-  return [
-    'documentation/guides/',
-    'documentation/plugins/',
-    'documentation/agent-packs/',
-    'documentation/design-system/',
-  ].some((prefix) => sourcePath.startsWith(prefix));
+  if (!sourcePath.startsWith('documentation/')) return false;
+  const relative = sourcePath.slice('documentation/'.length);
+  return isGitHubWikiPublishPath(relative);
 }
 
 /** Convert a canonical source path to a stable flat GitHub Wiki filename. */
@@ -34,6 +32,7 @@ function wikiFilename(sourcePath) {
   if (sourcePath === 'documentation/README.md') return '_Home.md';
   if (sourcePath === 'documentation/ROADMAP.md') return 'Roadmap.md';
   if (sourcePath === 'documentation/context.md') return 'Developer-Reference.md';
+  if (sourcePath === 'documentation/manual/README.md') return 'User-Manual.md';
   const relative = sourcePath.replace(/^documentation\//u, '').replace(/\.md$/u, '');
   const words = relative
     .split('/')
@@ -101,8 +100,15 @@ function buildSidebar(entries, filenameBySource) {
 /** Stage the generated GitHub Wiki mirror. */
 async function main() {
   const outputDirectory = readOutputArgument();
-  const catalog = JSON.parse(await readFile(catalogPath, 'utf8'));
-  const entries = catalog.entries.filter((entry) => shouldPublish(entry.path));
+  const documentationRoot = path.join(repositoryRoot, 'documentation');
+  const relativePaths = await collectGitHubWikiPublishPaths(documentationRoot);
+  const entries = [];
+  for (const relativePath of relativePaths) {
+    const sourcePath = `documentation/${relativePath}`;
+    if (!shouldPublish(sourcePath)) continue;
+    const markdown = await readFile(path.join(documentationRoot, relativePath), 'utf8');
+    entries.push(createProductWikiEntry(relativePath, markdown));
+  }
   const filenameBySource = new Map(entries.map((entry) => [entry.path, wikiFilename(entry.path)]));
   await clearOutputDirectory(outputDirectory);
 

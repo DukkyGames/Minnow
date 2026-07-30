@@ -2,554 +2,286 @@
   "version": 1,
   "entries": [
     {
-      "path": "documentation/agent-packs/README.md",
-      "title": "Agent packs",
-      "summary": "Drop in work agent bundles for Minnow. Copy a folder to: Manifest See src/agents/schema/agent pack.schema.json for the JSON Schema. Pack id must match the folder name ( ^[a z][a z0 9 ]{0,63}$ ). Agent ids are namespaced as packId.agentKey (e.g. security.auditor ). Prompt paths ar",
+      "path": "documentation/manual/README.md",
+      "title": "Minnow manual",
+      "summary": "Minnow is a free, local first AI workspace on your own computer. You chat with models you already run (LM Studio, Ollama, or any OpenAI compatible endpoint), edit code beside the assistant, research the web, remember facts in Brain, and tune everything from Settings. Your chats, ",
       "headings": [
-        "Manifest",
-        "Enable / disable",
-        "APIs (requires `npm start`)",
-        "Precedence",
-        "Template"
-      ],
-      "section": "Extensions",
-      "hash": "1387260857baea9ac49e7088c4a3aa2a7ef495d819b71aa34aed5a6963adf747"
-    },
-    {
-      "path": "documentation/context.md",
-      "title": "Minnow — project context",
-      "summary": "Authoritative technical reference for the codebase. For orientation, start with guides/architecture.md . For setup and commands, see guides/setup.md and guides/commands.md . UI key bindings: guides/keyboard shortcuts.md . Product overview: README.md . Also useful: guides/configur",
-      "headings": [
-        "What it is",
-        "Operating modes",
-        "Minnow apps",
-        "Scale",
-        "Repository layout",
-        "Persistence (`~/.minnow`)",
-        "Tool server (`server.js`)",
-        "Client bootstrap",
-        "Chat, sessions, and streaming",
-        "Message types (`chat.history`)",
-        "Multi-chat",
-        "Backend-owned generations",
-        "Tool loop",
-        "`/goal` and `/loop` (stateful slash commands)",
-        "Built-in tools",
-        "Prompts and skills",
-        "Prompt system",
-        "Skills",
-        "Official Minnow wiki, Memory, and Brain",
-        "Agents",
-        "Work agents",
-        "Sub-agents",
-        "Orchestrate boards",
-        "Experts",
-        "Minnow Shell",
-        "Theme and appearance",
-        "Major apps (server + UI)",
-        "Email sync engine",
-        "LSP, MCP, plugins",
-        "Providers and models",
-        "Security",
-        "File attachments",
-        "Electron and packaging",
-        "Testing and CI",
-        "Key files",
-        "Conventions for contributors"
-      ],
-      "section": "Developer reference",
-      "hash": "7fb20608c00d41d945aabed580d55691fc070f8a0b571acbc5c8d266b4df4082"
-    },
-    {
-      "path": "documentation/design-system/css-map.md",
-      "title": "CSS file map",
-      "summary": "96 stylesheets under src/styles/ . Grouped by surface for audits and scoped Impeccable passes. Core / global File Paired logic tokens.css Theme engine global.css App wide reset, icons, focus fonts.css , font presets.css Typography loading motion.css Shared animations theme transi",
-      "headings": [
-        "Core / global",
-        "Chat shell",
-        "Settings",
-        "Code workspace",
+        "Get help inside Minnow",
+        "Table of contents",
+        "Get started",
+        "Chat",
         "Apps",
-        "Orchestrate",
-        "Minnow",
-        "Misc",
-        "Legacy fallbacks"
+        "Reference"
       ],
-      "section": "Design system",
-      "hash": "e4c4f509b1aa1859eda7a10f4742efefecbcb887f2f2e43e2d8f5a3f58e25560"
+      "section": "Overview",
+      "hash": "93933b19a4173af629736f0cdeb50e5fb35d4ec1a39a3271ad48545d6a3ef787"
     },
     {
-      "path": "documentation/design-system/layout-shell.md",
-      "title": "Layout shell",
-      "summary": "Primary chrome shared across Chat and Code workspace views. Regions Top bar CSS: topbar.css Logic: model select, status, settings entry Height: topbar h (52px) Border bottom only; no shadow at rest Session sidebar CSS: sidebar.css Logic: sidebar.ts , layout.ts Width: sidebar w (3",
+      "path": "documentation/manual/get-started/install.md",
+      "title": "Install and first launch",
+      "summary": "This page covers installing Minnow from a packaged release, opening it the first time, and connecting a local model through the Settings UI. Download the installer 1. Go to Minnow Releases on GitHub. 2. Download the installer for your platform: Windows ships an NSIS .exe , macOS ",
       "headings": [
-        "Regions",
-        "Top bar",
-        "Session sidebar",
-        "Composer",
-        "Stats strip",
-        "Settings drawer / page",
-        "Code workspace additions",
-        "Breakpoints reference",
-        "Motion"
+        "Download the installer",
+        "Windows SmartScreen",
+        "First launch",
+        "Updates",
+        "Connect a model provider",
+        "Option A: LM Studio (common on Windows)",
+        "Option B: Ollama",
+        "Option C: Download and serve inside Minnow",
+        "Cloud APIs",
+        "Quick health check",
+        "Next step"
       ],
-      "section": "Design system",
-      "hash": "e3489dd8fbfcfb601da68d5f099907524614e6c1a68994766b45fb1eab4eec78"
+      "section": "Get started",
+      "hash": "99aa97b277ca94cb8c09987ecb64d9d0b3281b9310101273a649f60d40a7fab7"
     },
     {
-      "path": "documentation/design-system/primitives.md",
-      "title": "UI primitives",
-      "summary": "Reusable patterns implemented as CSS classes + DOM factories (not a shared component package). Prefer these over one off styles. Buttons Class Size File Behavior .icon btn 40×40 topbar.css Transparent + 1px border; fine pointer hover inverts to accent fill .send btn 44×44 input.c",
+      "path": "documentation/manual/get-started/first-chat.md",
+      "title": "Your first chat",
+      "summary": "The Chat surface is the Minnow desktop: the place you land after launch. Everything else opens from the dock as a full app, window, or side panel while chat stays available on the desktop layout. Desktop layout Area What it does Dock Launch Code, Research, Models, Brain, Issues, ",
       "headings": [
-        "Buttons",
-        "Chips and badges",
-        "Inputs and forms",
-        "Message surfaces",
-        "Navigation rows",
-        "Feedback",
-        "Settings DOM factories",
-        "Mode icons",
-        "Extraction candidates (not yet shared)"
+        "Desktop layout",
+        "Composer basics",
+        "Tool approval",
+        "Modes in the composer strip",
+        "Context ring",
+        "Attachments and workspace",
+        "Slash skills",
+        "Open another app",
+        "Next steps"
       ],
-      "section": "Design system",
-      "hash": "0ee7f80996ba86fed75ffe1258e21c96bd69fbca8be277ec8b3184e4364271e0"
+      "section": "Get started",
+      "hash": "6809a87370a7b7127b62528bd9a0741cfdea5339ad8574395758abaf2f9b9bd8"
     },
     {
-      "path": "documentation/design-system/README.md",
-      "title": "Minnow design system (current state)",
-      "summary": "Living inventory of Minnow's UI layer as implemented in code. Minnow has no React component library ; the design system is CSS tokens + DOM modules ( src/ui/ , src/os/ ) paired with 96 stylesheets under src/styles/ . North star: Calm local instrument — conversation first, metrics",
+      "path": "documentation/manual/chat/modes-and-skills.md",
+      "title": "Modes, skills, and context",
+      "summary": "Minnow separates how the assistant behaves (modes), how you invoke packaged workflows (slash skills), and how much room is left in the model window (context ring). Composer modes (four in the strip) Mode Behavior General Balanced assistant for Q&A and mixed tasks. Enabled tools r",
       "headings": [
-        "Authoritative sources",
-        "Documentation map",
-        "Architecture",
-        "Rules (carry everywhere)",
-        "Gaps tracked (code vs older docs)"
+        "Composer modes (four in the strip)",
+        "Modes you enter elsewhere",
+        "Slash skills",
+        "Invoke a skill",
+        "Built-in skills (15)",
+        "Install more",
+        "Custom skills",
+        "Other slash commands",
+        "Context ring",
+        "When to use what",
+        "Related pages"
       ],
-      "section": "Design system",
-      "hash": "919a8f7a78710aec90b5278370bdbc93fc6fc1286bd57ef3c870d5b3c07062bd"
+      "section": "Chat",
+      "hash": "f41236105f396d852b2629870607f42daf00ae8d247ebb3e7420ff7a1cb3fc17"
     },
     {
-      "path": "documentation/design-system/shell.md",
-      "title": "Minnow Shell",
-      "summary": "Electron desktop layer wrapping Minnow apps. Tokens alias the chat palette via os → mn . Token layer src/styles/minnowos tokens.css OS token Maps to os bg mn bg os surface 0 … os surface 3 mn surface (+ mixed surface 3) os text , os text dim , os text faint mn fg , muted, subtle ",
+      "path": "documentation/manual/apps/overview.md",
+      "title": "Apps overview",
+      "summary": "Minnow is one desktop shell with eight core apps. Each app is always installed and always on. There is no optional app store in the shipped product: onboarding and Settings → Apps show what is included plus a Coming soon placeholder for future optional apps. Open apps from the do",
       "headings": [
-        "Token layer",
-        "Shell modules",
-        "Stylesheets",
-        "Wallpaper modes",
-        "CSS namespace"
-      ],
-      "section": "Design system",
-      "hash": "c9c206fae0b68a9d316fc935a305f96f913e59ee0dbbfd9ddeb33febfa9b22e1"
-    },
-    {
-      "path": "documentation/design-system/themes.md",
-      "title": "Themes",
-      "summary": "Sixteen composed themes on <html data theme=\"{family} {mode}\" . Families × modes Family Dark Light Accent character swamp (default) swamp dark swamp light Muted green on cool neutrals desert desert dark desert light Warm amber on taupe ocean ocean dark ocean light Soft cyan on bl",
-      "headings": [
-        "Families × modes",
-        "Storage keys",
-        "Runtime pipeline",
-        "Custom appearance",
-        "Downstream consumers",
-        "Adding or editing a theme"
-      ],
-      "section": "Design system",
-      "hash": "af629e6fd318df66e8e06ff45be18f504b86fecea91d75b85dd369c60c38b33f"
-    },
-    {
-      "path": "documentation/design-system/tokens.md",
-      "title": "Design tokens",
-      "summary": "All palette values live in src/styles/tokens.css . Every other stylesheet consumes mn variables (never raw hex outside tokens.css ). Core palette ( mn ) 26 keys defined in CORE THEME TOKEN KEYS . Customizable via Settings → Appearance or agent update appearance . Token Role mn bg",
-      "headings": [
-        "Core palette (`--mn-*`)",
-        "Derived per theme (not in custom editor)",
-        "Feature-specific (per theme block)",
-        "Layout and motion (`:root`)",
-        "Typography presets",
-        "Named rules"
-      ],
-      "section": "Design system",
-      "hash": "2cc325bf2f323b2a2e999843a34676ded1fb55832bdd3755be0ba36a3f0e3b5e"
-    },
-    {
-      "path": "documentation/guides/accessibility-audit.md",
-      "title": "Accessibility and keyboard-first audit",
-      "summary": "Systematic keyboard operability, focus management, screen reader behavior, and contrast coverage for Minnow apps. Regression guard: npm run test:a11y (includes test/theme contrast.test.mts ). Global help surface Press ? (when not typing in a text field) to open the shell keyboard",
-      "headings": [
-        "Global help surface",
-        "Per-app keyboard checklist",
-        "Focus management",
-        "Screen reader smoke (NVDA on Windows)",
-        "Contrast (WCAG AA)",
-        "Automated regression",
-        "Known long tail (file as issues)"
-      ],
-      "section": "Guides",
-      "hash": "446b68369124f9754552ea134fdcd9e3beda6d2a811a8cbb3df612965fb6bbc8"
-    },
-    {
-      "path": "documentation/guides/apps.md",
-      "title": "Minnow apps",
-      "summary": "Minnow's desktop shell (\"Minnow\") presents focused apps on a desktop with a dock launcher and a menubar (model chip, notifications bell, clock). The desktop itself is the chat surface; other apps open as fullscreen surfaces, floating windows, or side panels. Routes use hashes lik",
-      "headings": [
-        "What ships",
-        "Desktop chat",
+        "The eight apps",
+        "Chat (desktop)",
         "Code",
-        "Models",
         "Research",
+        "Models",
         "Brain",
         "Issues",
         "Scheduler",
         "Settings",
-        "Behind the release gate",
-        "Operating modes"
+        "Beyond the dock (not separate apps)",
+        "Not in this release",
+        "Related"
       ],
-      "section": "Guides",
-      "hash": "05f30f1ec85ade214ef98a015105aff1c1de6fa447b64b93fbb9b0396bc683b6"
+      "section": "Apps",
+      "hash": "2d2695c8058cf685a6d4100f41b45424ddd05dad2e8613f7c10a70e299fa021b"
     },
     {
-      "path": "documentation/guides/architecture.md",
-      "title": "Architecture overview",
-      "summary": "A high level map of how Minnow fits together. For the exhaustive, file by file reference, read ../context.md — this guide is the orientation layer above it. Three processes npm start ( server.js ) runs all three: Vite + tool server, then launches Electron. npm run dev runs only t",
+      "path": "documentation/manual/apps/code.md",
+      "title": "Code app",
+      "summary": "Use Code when you want to edit a project folder with the assistant beside you: files, terminal, git, previews, and chat in one fullscreen workspace. Open Code Click Code in the dock. The app opens fullscreen and keeps chat available in the Code layout. Set your workspace 1. Choos",
       "headings": [
-        "Three processes",
-        "The SPA (`src/`)",
-        "The tool server (`server/`)",
-        "Generations (streaming)",
-        "Tools",
-        "Agent layer",
-        "Security model",
-        "Persistence",
-        "Where to dig deeper"
+        "Open Code",
+        "Set your workspace",
+        "Typical workflow",
+        "Editor shortcuts (high level)",
+        "Browser preview",
+        "Drag to composer",
+        "When to use Code vs desktop Chat",
+        "Related"
       ],
-      "section": "Guides",
-      "hash": "a4aed9432e3ad9d83f17670928848926efed44a498d8a117b61ba40fbfa8fe3c"
+      "section": "Apps",
+      "hash": "c8df784b3e8683e9a95fcfc1a3d0a91680ab6f6e3f1e3765185fb25d7f1a7631"
     },
     {
-      "path": "documentation/guides/commands.md",
-      "title": "Command reference",
-      "summary": "Every npm script, the headless CLI, smoke/maintenance scripts, and environment variables. Source of truth: package.json . For UI key bindings (composer, editor, file tree, terminal, mail), see Keyboard shortcuts. Running & building Command Description npm start Recommended. node ",
+      "path": "documentation/manual/apps/research.md",
+      "title": "Research app",
+      "summary": "Use Research when you need a structured, multi step investigation on the web rather than a single quick answer in chat. Open Research Click Research in the dock. The desktop layout keeps chat context while Research runs its workflow. Run a research job 1. Enter a topic or questio",
       "headings": [
-        "Running & building",
-        "Headless CLI (`minnow run`)",
-        "Tests",
-        "Skill maintenance",
-        "Orchestrate board dev tools",
-        "Smoke scripts",
-        "Environment variables"
+        "Open Research",
+        "Run a research job",
+        "Library",
+        "Tips",
+        "Related"
       ],
-      "section": "Guides",
-      "hash": "a5ce08f2a859591308a031aa22a5d977da151fe98fd35feec5cd19de9294f105"
+      "section": "Apps",
+      "hash": "45d3fed5260fb3c816f193a1b1477cb5b565e94ed6acd5bbf300192326a287c0"
     },
     {
-      "path": "documentation/guides/configuration.md",
-      "title": "Configuration & storage",
-      "summary": "Minnow is local first: all durable state lives under your Minnow home directory. Nothing leaves your machine except requests to the model providers you configure. For a complete list of every setting (UI sections, config keys, tools, and env vars), see settings reference.md . Min",
+      "path": "documentation/manual/apps/brain.md",
+      "title": "Brain app",
+      "summary": "Brain is your personal knowledge wiki. The assistant can search and update it while you browse, edit, and curate pages. It is not the read only Minnow wiki opened from ? . Open Brain Click Brain in the dock. The app opens as a window you can resize and stack with Models or Settin",
       "headings": [
-        "Minnow home (`~/.minnow`)",
-        "`config.json` highlights",
+        "Open Brain",
+        "What lives in Brain",
+        "How agents use Brain",
+        "Your data location",
+        "Official docs vs Brain",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "406cc423932dc8ec5a15ac3e1b835ff32943ce83d623cef760416de49851e617"
+    },
+    {
+      "path": "documentation/manual/apps/models.md",
+      "title": "Models app",
+      "summary": "The Models app is the control center for what runs on your machine and how Minnow talks to it: recommendations, downloads, local servers, providers, routing, voice, and usage. Open Models Click Models in the dock. It opens as a window with nine sidebar sections: Section Use Recom",
+      "headings": [
+        "Open Models",
+        "Common tasks",
+        "Add LM Studio or Ollama",
+        "Download and run a model locally",
+        "Voice",
+        "Menubar model chip",
+        "Troubleshooting empty picker",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "d863bdbdf9995619444803efa4633eba441ea073c11c5bbf45fe030c7cf0de2a"
+    },
+    {
+      "path": "documentation/manual/apps/issues.md",
+      "title": "Issues app",
+      "summary": "Use Issues for lightweight issue tracking inside Minnow: list and board views, quick capture, and agent driven triage in Debug mode. Open Issues Click Issues in the dock. The app opens fullscreen like Code. Views View Best for List Scanning titles, status, and priority in a table",
+      "headings": [
+        "Open Issues",
+        "Views",
+        "Capture and edit",
+        "Taxonomy",
+        "Debug mode and agents",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "5267fcb07d74111732ad74f2b00fec66a90ad46b8a2d9a3902f2ec675642e759"
+    },
+    {
+      "path": "documentation/manual/apps/scheduler.md",
+      "title": "Scheduler app",
+      "summary": "Scheduler runs recurring agent jobs on an interval or cron schedule while Minnow is open. Each job executes a prompt in a chosen workspace and model through a headless Minnow runner. Open Scheduler Click Scheduler in the dock. The UI opens as a side panel so you can keep working ",
+      "headings": [
+        "Open Scheduler",
+        "Create a job",
+        "While Minnow runs",
+        "Good use cases",
+        "Troubleshooting",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "602f3b2edc66c03a05ae7112724ac4ff98bafe64777960e5a96bcbdf59224ccb"
+    },
+    {
+      "path": "documentation/manual/apps/settings.md",
+      "title": "Settings app",
+      "summary": "Settings is the full configuration surface: appearance, tools, modes, skills, providers, integrations, and diagnostics. Open it from the dock or the menubar gear. Find a setting quickly 1. Open Settings . 2. Press Ctrl+K / Cmd+K to focus search . 3. Type a keyword (for example \"w",
+      "headings": [
+        "Find a setting quickly",
+        "Section map",
+        "Tools and permissions",
+        "Skills",
         "Providers",
-        "Vite-only fallbacks (`npm run dev`)",
-        "Environment variables"
+        "Health and diagnostics",
+        "Network access",
+        "Related"
       ],
-      "section": "Guides",
-      "hash": "be7330ca41dcc70fc6269a35ac263f18089f7d61efef300ca5251a03e43206ef"
+      "section": "Apps",
+      "hash": "fd71178457b17ff5cefe242eaff73737ae85e1c29fae369a8d5bebeca8c97d6d"
     },
     {
-      "path": "documentation/guides/keyboard-shortcuts.md",
+      "path": "documentation/manual/reference/keyboard-shortcuts.md",
       "title": "Keyboard shortcuts",
-      "summary": "Bindings for the Minnow SPA and Electron shell. Mod means Ctrl on Windows/Linux and Cmd on macOS. For npm scripts, the headless CLI, and environment variables, see Commands. Most single key shortcuts (mail triage, tool approval digits) are suppressed while focus is in a text fiel",
+      "summary": "Mod means Ctrl on Windows and Linux and Cmd on macOS. Most single key shortcuts (tool approval digits, mail triage when that app ships) are suppressed while focus is in a text field. Modified chords ( Mod+… ) usually still work when the handler allows it. Global Keys Action Escap",
       "headings": [
         "Global",
-        "Chat & composer",
+        "Chat and composer",
         "Chat search popover",
-        "Model picker (composer)",
-        "Model picker (top bar)",
-        "Chat sidebar",
-        "Code editor (file viewer)",
+        "Code editor",
         "File tree",
-        "Editor tabs & preview",
-        "In-app preview pane",
+        "Preview pane",
         "Terminal",
         "Settings",
-        "Orchestrate board",
         "Issues",
-        "Email (hidden app)",
-        "Modals, drawers, and overlays",
-        "Source map"
+        "Wiki",
+        "Modals"
       ],
-      "section": "Guides",
-      "hash": "abc45ca7586673c26c808e61420ec6509029f383da07b3c78e70cada09075d6d"
+      "section": "Reference",
+      "hash": "695f8b0d79040810ef2b24a06d69cb1f338c6b929485fc45968292ff1d3a0283"
     },
     {
-      "path": "documentation/guides/lan-companion.md",
-      "title": "LAN companion",
-      "summary": "Minnow can serve an authenticated phone or tablet companion on the same private network. It is not an internet facing deployment mode. Pair a device 1. On the host, open Settings → General → Network access . 2. Select Local network and restart Minnow. 3. Return to Network access,",
+      "path": "documentation/manual/reference/configuration.md",
+      "title": "Where your data lives",
+      "summary": "Minnow is local first . Chats, settings, Brain, downloaded models, and encrypted secrets stay on your computer under Minnow home . Nothing leaves the machine except traffic you send to model or search providers you configure. Minnow home Platform Default path Windows %USERPROFILE",
       "headings": [
-        "Pair a device",
-        "Revoke access",
-        "Companion layout",
-        "Security boundary",
-        "HTTP and PWA limitations",
-        "Troubleshooting"
+        "Minnow home",
+        "Back up these items",
+        "What each area stores",
+        "Encrypted secrets",
+        "Clean profile",
+        "Settings vs files on disk",
+        "Related"
       ],
-      "section": "Guides",
-      "hash": "a2b7c9316cf81773cc3af17e8c97f24a947dae4d977a15a1fe5a7603f15ec686"
+      "section": "Reference",
+      "hash": "e4a3cca226317b306b4970699475c3b2cdf422a2ebc2052300bd767ea075ee72"
     },
     {
-      "path": "documentation/guides/orchestrate-board-testing.md",
-      "title": "Orchestrate board testing",
-      "summary": "How to run, debug, and extend tests for the Orchestrate Kanban board (dispatcher, task chats, merge/quarantine, board log). Product context: Orchestrate boards in context.md . Six layers Layer When to use Command / entry Automated suite CI, regressions, every PR npm run test:boar",
-      "headings": [
-        "Six layers",
-        "Quick start (developers)",
-        "Manual UI workflow (fake model)",
-        "1. Start the fake provider",
-        "2. Seed a ready-made board",
-        "3. Open Minnow",
-        "4. Verify the fake model is used",
-        "5. Validate the run log (optional)",
-        "Commands reference",
-        "`check-board-log`",
-        "`fake-model` scenario format",
-        "Unified scenario catalog (MIN-513)",
-        "Settings scenario runner",
-        "Persisted AFK harness",
-        "Test architecture",
-        "Launch path and `MINNOW_TEST`",
-        "Harness modules (`test/orchestrate/_*.mts`)",
-        "Board log invariants",
-        "Test file index",
-        "End-to-end harnesses",
-        "Launch, stream-end, recovery",
-        "Self-heal, quarantine, testing phase",
-        "Store, tools, delegation",
-        "UI / stats / misc",
-        "Adding tests",
-        "New quirk (model misbehaviour)",
-        "New launch-path behaviour",
-        "New board-log invariant",
-        "Troubleshooting",
-        "Related docs"
-      ],
-      "section": "Guides",
-      "hash": "6ca6910870a35b743af9b39a896892c208d0fb1e545399bf886701e193d518f2"
-    },
-    {
-      "path": "documentation/guides/README.md",
-      "title": "Minnow guides",
-      "summary": "Task oriented documentation. Product overview: README.md . Full documentation index: documentation/ . The exhaustive technical reference is context.md . Guide What it covers setup.md Install, prerequisites, LM Studio + providers, first run, optional models & voice. commands.md Ev",
-      "headings": [],
-      "section": "Guides",
-      "hash": "9553e66c51e7e081a3496783728d97cf77cf649d1348347cfa67899b265ad692"
-    },
-    {
-      "path": "documentation/guides/setup.md",
-      "title": "Setup guide",
-      "summary": "A step by step walkthrough to get Minnow running locally. For the short version, see the README quick start. Everything else: documentation index. 1. Prerequisites Requirement Notes Node.js 18+ (20+ recommended) ES modules, Vite 6, native node:test . Check with node v . npm Ships",
-      "headings": [
-        "1. Prerequisites",
-        "2. Clone & install",
-        "Optional document parsers",
-        "3. Start a model provider",
-        "LM Studio headless (optional, for servers/CI)",
-        "4. Run Minnow",
-        "5. First-run checklist in the UI",
-        "6. Optional setup",
-        "7. Next steps"
-      ],
-      "section": "Guides",
-      "hash": "625f070ba30f96ef8428847cce6df70dd226a09933a1c60675f5d6984e0c8c88"
-    },
-    {
-      "path": "documentation/guides/troubleshooting.md",
+      "path": "documentation/manual/reference/troubleshooting.md",
       "title": "Troubleshooting",
-      "summary": "Common problems and fixes. If a fix mentions a setting, it's under the in app Settings unless noted. Startup & server Problem Fix [providers] fetch failed on startup Normal without LM Studio running — provider discovery couldn't reach localhost:1234 . Start a provider or ignore. ",
+      "summary": "Common problems and fixes for the packaged desktop app. Settings paths refer to the in app Settings app unless noted. Startup and connection Problem What to try [providers] fetch failed on startup Normal if LM Studio or Ollama is not running. Start your provider server and refres",
       "headings": [
-        "Startup & server",
-        "Local diagnostics (no telemetry)",
-        "Models & chat",
-        "Tools & files",
+        "Startup and connection",
+        "Updates (packaged install)",
+        "Diagnostics (local only)",
+        "Models and chat",
+        "Tools and files",
         "Browser automation",
         "Apps",
-        "Secrets & data",
-        "Smoke tests"
+        "Secrets and data",
+        "Developers cloning the repo",
+        "Still stuck?"
       ],
-      "section": "Guides",
-      "hash": "47b0657b579a5d7c637447c20eb894c3dff7b6a5455cc30f9c5e3142a7e47fb1"
+      "section": "Reference",
+      "hash": "b18f087f32555531e092505b2409493dcd3d07c6fa7adfbd1b84ea522170a28a"
     },
     {
-      "path": "documentation/guides/wiki.md",
-      "title": "Minnow wiki",
-      "summary": "Minnow ships official product and developer documentation inside the app. Open it from the ? button in the menubar or navigate to /wiki . Find help Browse pages by section in the left navigation. Search titles, headings, paths, summaries, and page text from the top search field. ",
+      "path": "documentation/manual/reference/wiki-and-brain.md",
+      "title": "Wiki and Brain",
+      "summary": "Minnow gives you two different documentation surfaces. They are easy to confuse because both can answer questions, but only one is yours to edit. Minnow wiki (official help) Open Menubar ? button Content User manual for your installed version (install, apps, modes, troubleshootin",
       "headings": [
-        "Find help",
-        "Ask chat about Minnow",
-        "Official wiki and Brain are different",
-        "Contribute documentation"
+        "Minnow wiki (official help)",
+        "Brain (your knowledge)",
+        "Ask chat about Minnow itself",
+        "GitHub Wiki (public mirror)",
+        "Quick comparison",
+        "Related"
       ],
-      "section": "Guides",
-      "hash": "4111c6f4cfc00753238d06f128bdb81602ff89032f7bf72b390c7a6b760c67eb"
+      "section": "Reference",
+      "hash": "a47f5828472aff10a23793a88e3dabaf55429b25fd160b3f709f83d7eec0eed8"
     },
     {
-      "path": "documentation/maintainer/macos-signing.md",
-      "title": "macOS release signing & notarization",
-      "summary": "Signed + notarized macOS builds are required for: Gatekeeper — users can open the .dmg without right click → Open workarounds Auto update — packaged macOS installs only enable electron updater when the running app carries a Developer ID Application signature (see electron/updater",
-      "headings": [
-        "Quick status check",
-        "One-time setup",
-        "1. Developer ID Application certificate",
-        "2. Notarization credentials",
-        "3. Verify",
-        "Building a signed release",
-        "Unsigned local build (debug only)",
-        "GitHub release checklist (macOS)",
-        "Entitlements",
-        "Troubleshooting"
-      ],
-      "section": "Maintainers",
-      "hash": "6f933f634229e82d4e863235b9a26cde29222cb21f72a6f5632e9f3ef282b6d3"
-    },
-    {
-      "path": "documentation/maintainer/prompt-ownership-matrix.md",
-      "title": "Prompt ownership matrix (MIN-379)",
-      "summary": "Defines which layer owns which instruction so composed system prompts do not repeat the same rule 2–4 times. Layers Layer Owns Does not own base Identity, session context, communication style, safety/trust (destructive commands, secrets, untrusted data), resource awareness Tool m",
-      "headings": [
-        "Layers",
-        "Suppression rules (composer)",
-        "Dedupe checklist",
-        "Lite profile",
-        "Compose-time hygiene"
-      ],
-      "section": "Maintainers",
-      "hash": "88d436cb2e6339f78e0fa2c7057a9034564c919a375410590f69a698758ebeb0"
-    },
-    {
-      "path": "documentation/maintainer/releasing.md",
-      "title": "Releasing Minnow",
-      "summary": "How updates flow through Minnow — releasing a new version (for maintainers) and receiving one (for users). Auto update is built on electron updater against GitHub Releases ( DukkyGames/Minnow ). Implementation: electron/updater.ts + electron/updater core.ts ; UI in src/ui/setting",
-      "headings": [
-        "Part 1 — Releasing a new version (maintainers)",
-        "1. Bump the version",
-        "2. Package",
-        "3. Create the GitHub release",
-        "4. Pick the channel",
-        "Release checklist",
-        "Signing caveat (Windows)",
-        "Part 2 — Receiving updates (users)",
-        "The automatic flow",
-        "Where you see it",
-        "Switching channels",
-        "What happens on failure",
-        "Testing the full loop",
-        "Reference"
-      ],
-      "section": "Maintainers",
-      "hash": "7c78aba4e4e3fdb63d2baf2a069929b4c47214848d519848ab3d7e35fb30e978"
-    },
-    {
-      "path": "documentation/maintainer/settings-reference.md",
-      "title": "Settings reference",
-      "summary": "Complete inventory of Minnow settings: where they appear in the UI, what they control, and where they are persisted. For storage layout and config.json overview, see configuration.md. For the Settings page IA and search catalog, see src/ui/settings catalog.ts . Last updated: 2026",
-      "headings": [
-        "Summary counts",
-        "Settings app structure",
-        "1. General",
-        "General → General",
-        "General → Notifications",
-        "General → Audio",
-        "2. Apps",
-        "3. Appearance",
-        "4. Models",
-        "Providers (`~/.minnow/providers/<id>/`)",
-        "Routing",
-        "Sampler (`config.sampler`)",
-        "Thinking (`config.thinking`)",
-        "Usage & cost",
-        "Models app → Voice (`config.voice`)",
-        "5. Agents",
-        "Prompts",
-        "Rules (`rules.json`)",
-        "Modes (9)",
-        "Experts (6 built-in)",
-        "Work agents (7 built-in)",
-        "Agent packs",
-        "Sub-agents",
-        "Autopilot (`config.autopilot`)",
-        "Watchdog (`config.json` → `chat`)",
-        "6. Integrations",
-        "Search (`search.json`)",
-        "Deep Research (`research.json`)",
-        "Servers",
-        "Tools (`tools.json` + `config.json`)",
-        "Browser (`config.json` → `browser`)",
-        "Skills (`skills.json`)",
-        "Skills Library (`skills-library`)",
-        "MCP servers (`~/.minnow/mcp/`)",
-        "Language servers (`lsp.json`)",
-        "Editor",
-        "Webhooks (`webhooks.json`)",
-        "OAuth (`config.oauth` + `oauth/`)",
-        "7. Advanced",
-        "Health & diagnostics",
-        "Orchestration (`config.supervisor`)",
-        "Evals (`~/.minnow/evals/`)",
-        "Settings outside the Settings app",
-        "Session & layout persistence (`config.json`)",
-        "Environment variables",
-        "Vite-only `localStorage` fallbacks (`npm run dev`)",
-        "Persistence file map",
-        "Source of truth in code",
-        "Agent settings tools"
-      ],
-      "section": "Maintainers",
-      "hash": "b17333ea709760176df8b6f07ccc7a9f732e748bde4012bee73af0b09ff275a2"
-    },
-    {
-      "path": "documentation/maintainer/wiki-publishing.md",
-      "title": "GitHub Wiki publishing",
-      "summary": "The GitHub Wiki is a generated public mirror of Minnow's versioned documentation. documentation/ is authoritative; do not maintain a second copy by hand. One time setup 1. Enable Wikis in the GitHub repository settings. 2. Create the first GitHub Wiki page in the web interface if",
-      "headings": [
-        "One-time setup",
-        "Local preview",
-        "Publication rules",
-        "Recovery"
-      ],
-      "section": "Maintainers",
-      "hash": "033ca4054f3d8e8bd6895af470653e236f09ffdb69ae54be6a712168dcf9d315"
-    },
-    {
-      "path": "documentation/plugins/tool-authoring.md",
-      "title": "Native tool plugin authoring",
-      "summary": "Minnow can load local tool plugins from /.minnow/tools/<pluginId / without running a separate MCP server. Each pack contains a JSON manifest and a single JavaScript handler executed on the Node tool server ( npm start ). Layout The folder name must match tool.json → id . Plugin i",
-      "headings": [
-        "Layout",
-        "Exposed tool name",
-        "tool.json",
-        "handler.mjs",
-        "Enablement and permissions",
-        "APIs",
-        "Scaffold",
-        "Sandbox and trust",
-        "Comparison with MCP",
-        "Tests"
-      ],
-      "section": "Extensions",
-      "hash": "c9e0201b78fc6c119d10e82f2233d3bfb0d3457b164d7c86f8a9a9fca23bbe23"
-    },
-    {
-      "path": "documentation/README.md",
-      "title": "Minnow documentation",
-      "summary": "Everything written down about Minnow, in one index. New here? Read Setup, then Apps. Using Minnow Guide What's in it Setup Prerequisites, install, providers, first run, optional extras. Apps The eight apps, the composer modes, and what's behind the release gate. Minnow wiki Brows",
-      "headings": [
-        "Using Minnow",
-        "Building on Minnow",
-        "Maintaining Minnow",
-        "Working folders"
-      ],
-      "section": "Overview",
-      "hash": "43e131daf240bf51390e6d78d320b01874521da86b207a19bcb32162582583eb"
+      "path": "documentation/manual/reference/roadmap.md",
+      "title": "Roadmap",
+      "summary": "The Minnow roadmap is a separate page in this wiki: open the ? menu and choose Roadmap , or search \"roadmap\". It covers what has shipped, the direction the product is steering in, and which apps stay behind the release gate — without delivery dates. Two things you may be looking ",
+      "headings": [],
+      "section": "Reference",
+      "hash": "7fbe4f92fdd9ca60516185695713cac58e16ed5e03f48ab711cdb977649fe893"
     },
     {
       "path": "documentation/ROADMAP.md",
@@ -562,7 +294,7 @@
         "How priorities are chosen"
       ],
       "section": "Roadmap",
-      "hash": "e3ec5bbd4cd7739ada0cd3dac493ccb4b9ccff496a31cedd0d316bbb9e5b3339"
+      "hash": "94ed98bb6e0b5a50be4276389a2aefb397c4f8835ce8998e097215747ede1d41"
     },
     {
       "path": "documentation/THIRD_PARTY_NOTICES.md",
@@ -572,7 +304,7 @@
         "Material Icon Theme",
         "Uicons (Flaticon)"
       ],
-      "section": "Overview",
+      "section": "Legal",
       "hash": "0ea20d06dae95b7a5bd813656406d7684bb77c463895df0b9368d6f4353a61f0"
     }
   ]

@@ -191,8 +191,8 @@ export function renderMenubar(root: HTMLElement): () => void {
   const wikiBtn = document.createElement('button');
   wikiBtn.type = 'button';
   wikiBtn.className = 'mn-os-mb-icon';
-  wikiBtn.setAttribute('aria-label', 'Minnow wiki');
-  wikiBtn.title = 'Minnow wiki';
+  wikiBtn.setAttribute('aria-label', 'Minnow wiki — User manual');
+  wikiBtn.title = 'Minnow wiki — User manual';
   wikiBtn.innerHTML = iconHtml('help', { size: 16 });
   wikiBtn.addEventListener('click', () => openProductWiki());
 

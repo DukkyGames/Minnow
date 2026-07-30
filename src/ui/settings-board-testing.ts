@@ -218,7 +218,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
     'Manual orchestrate board workflow: fake model, seed a test board, validate diagnostic logs. For the full automated suite, see ',
   );
   const guideLink = el('a', 'settings-inline-link');
-  guideLink.href = 'documentation/guides/orchestrate-board-testing.md';
+  guideLink.href = 'documentation/contributor/orchestrate-board-testing.md';
   guideLink.textContent = 'orchestrate-board-testing.md';
   guideLink.title = 'Open testing guide';
   lead.append(guideLink, '. Planner chat must use the fake board model under ', linkToSettingsSection('Providers', 'providers'), '.');

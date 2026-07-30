@@ -2,7 +2,7 @@
 
 Complete inventory of Minnow settings: where they appear in the UI, what they control, and where they are persisted.
 
-For storage layout and `config.json` overview, see [configuration.md](../guides/configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts).
+For storage layout and `config.json` overview, see [Where your data lives](../manual/reference/configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts).
 
 **Last updated:** 2026-07-25
 
@@ -145,7 +145,7 @@ Also: `config.activeProviderId`.
 
 #### One-click provider presets
 
-Catalog: [`src/providers/presets.ts`](../../src/providers/presets.ts). Presets appear as chips in **onboarding → Cloud API** (a green check on a chip means that preset already has a saved API key) and as a preset grid in **Settings → Models → Providers → Add provider** (choose a preset or **Add custom provider** for the full form).
+Catalog: [`src/providers/presets.ts`](../../src/providers/presets.ts). Presets appear as chips in **onboarding → Cloud API** (a green check on a chip means that preset already has a saved API key) and as a preset grid in **Models → Providers → Add provider** (choose a preset or **Add custom provider** for the full form).
 
 | Preset | Base URL | API kind | Auth | Notes |
 |--------|----------|----------|------|-------|
@@ -508,7 +508,7 @@ Not all exposed in Settings UI:
 | `MINNOW_ELECTRON` | Internal Electron flag |
 | `MINNOW_TEST` | Test mode |
 
-Full table: [commands.md](../guides/commands.md#environment-variables).
+Full table: [commands.md](../contributor/commands.md#environment-variables).
 
 ---
 

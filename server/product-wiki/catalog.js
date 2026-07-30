@@ -1,12 +1,21 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isProductWikiPath } from '../../scripts/product-wiki-catalog-lib.mjs';
 import { getAppRoot } from '../workspace/root.js';
 
 const CATALOG_PATH = fileURLToPath(new URL('./catalog.json', import.meta.url));
 const MAX_PAGE_CHARS = 120_000;
 const contentCache = new Map();
 let catalogPromise;
+
+/** Keep only user-manual pages even if catalog.json was generated with an older allowlist. */
+function filterInAppCatalogEntries(entries) {
+  return entries.filter((entry) => {
+    const relative = String(entry?.path ?? '').replace(/^documentation\//u, '');
+    return isProductWikiPath(relative);
+  });
+}
 
 /** Load and validate the generated product-wiki catalog once per process. */
 export async function loadProductWikiCatalog() {
@@ -15,7 +24,7 @@ export async function loadProductWikiCatalog() {
     if (parsed?.version !== 1 || !Array.isArray(parsed.entries)) {
       throw new Error('Product wiki catalog has an unsupported format.');
     }
-    return parsed;
+    return { ...parsed, entries: filterInAppCatalogEntries(parsed.entries) };
   });
   return catalogPromise;
 }
@@ -23,10 +32,15 @@ export async function loadProductWikiCatalog() {
 /** Locate packaged extraResources or the development documentation directory. */
 async function resolveDocumentationRoot() {
   const appRoot = getAppRoot();
+  const resourcesDocumentation =
+    typeof process.resourcesPath === 'string' && process.resourcesPath
+      ? path.join(process.resourcesPath, 'documentation')
+      : null;
   const candidates = [
+    resourcesDocumentation,
     path.join(appRoot, 'documentation'),
     path.join(path.dirname(appRoot), 'documentation'),
-  ];
+  ].filter(Boolean);
   for (const candidate of candidates) {
     try {
       if ((await fs.stat(candidate)).isDirectory()) return candidate;

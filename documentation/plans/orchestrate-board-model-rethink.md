@@ -3,7 +3,7 @@
 **Status:** exploration / design discussion (no code yet)
 **Question being answered:** We keep fighting edge cases on the board. Usually that means the *mental model* is wrong, not that we're missing a patch. Given that **full autonomy — including automatic merge/integration resolution — is a hard requirement** (goal: fully autonomous large-task completion), are we modeling this the right way, or is there a categorically simpler model that preserves autonomy?
 
-This is a companion to [`orchestrate-board-architecture.md`](orchestrate-board-architecture.md), which describes the system *as built*. This doc argues about whether the *concept* is right.
+This is a companion to the board architecture description in [`../context.md`](../context.md) and [`../contributor/orchestrate-board-testing.md`](../contributor/orchestrate-board-testing.md), which cover the system *as built*. This doc argues about whether the *concept* is right.
 
 ---
 

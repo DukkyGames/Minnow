@@ -8,9 +8,10 @@ import {
   type ProductWikiSearchHit,
 } from '../product-wiki/client';
 import { iconHtml } from './icon';
+import { compareProductWikiEntries } from '../product-wiki/nav-order.mjs';
 import { renderProductWikiMarkdown } from './product-wiki-markdown';
 
-const DEFAULT_PAGE_PATH = 'documentation/README.md';
+const DEFAULT_PAGE_PATH = 'documentation/manual/README.md';
 const REPOSITORY_EDIT_BASE =
   'https://github.com/DukkyGames/Minnow/edit/main/';
 let initialized = false;
@@ -135,7 +136,7 @@ function ensureProductWikiRoot(): HTMLElement {
   const root = document.createElement('section');
   root.id = 'productWikiOverlay';
   root.className = 'product-wiki hidden';
-  root.setAttribute('aria-label', 'Minnow wiki');
+  root.setAttribute('aria-label', 'Minnow wiki — User manual');
   root.innerHTML = `
     <header class="product-wiki__header">
       <div class="product-wiki__identity">
@@ -143,13 +144,13 @@ function ensureProductWikiRoot(): HTMLElement {
         <span class="product-wiki__mark" aria-hidden="true">?</span>
         <div class="product-wiki__identity-text">
           <strong>Minnow wiki</strong>
-          <span>Official product help</span>
+          <span>User manual</span>
         </div>
       </div>
       <label class="product-wiki__search">
         ${iconHtml('search', { size: 16 })}
-        <span class="visually-hidden">Search the Minnow wiki</span>
-        <input id="productWikiSearch" type="search" autocomplete="off" placeholder="Search setup, apps, tools, architecture…" />
+        <span class="visually-hidden">Search the Minnow user manual</span>
+        <input id="productWikiSearch" type="search" autocomplete="off" placeholder="Search setup, apps, settings, troubleshooting…" />
         <kbd>Ctrl K</kbd>
       </label>
       <div class="product-wiki__header-actions">
@@ -194,7 +195,8 @@ function renderCatalogNavigation(entries: ProductWikiEntry[]): void {
   if (!host) return;
   host.replaceChildren();
   const sections = new Map<string, ProductWikiEntry[]>();
-  for (const entry of entries) {
+  const orderedEntries = [...entries].sort(compareProductWikiEntries);
+  for (const entry of orderedEntries) {
     const rows = sections.get(entry.section) ?? [];
     rows.push(entry);
     sections.set(entry.section, rows);
