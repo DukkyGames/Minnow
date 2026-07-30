@@ -2,43 +2,57 @@
 
 Draft for r/LocalLLaMA (or similar). Adjust title/flair to the subreddit's rules before posting.
 
-**Suggested title:** Minnow — a free, open source AI workspace built on the belief that open weights should stay open (Chat, Code, Orchestration, and more, all local)
+**Suggested title:** Minnow — an open beta of a free, local AI workspace. I need your help testing it.
 
 ---
 
-I want to talk about why we built Minnow, and it starts with something a little bigger than the app itself.
+I've been working on Minnow for the last few months, mostly alone. It isn't finished. There are bugs. But some things have happened recently that convinced me it's time to get it into people's hands anyway, unfinished edges and all. This is an open beta, and I want as much feedback as I can get.
 
-Open weight models are one of the best things that has happened to this field. Someone trains a model, hands it to the world with no strings attached, and suddenly a kid with a 3090, a researcher with no budget, and a company that doesn't want their data leaving the building can all build the same kinds of things the labs with the big checkbooks build. That's not a small thing. That's the whole promise of this technology staying in reach of the people actually using it, instead of becoming something you rent forever from three companies.
+Here's why now.
 
-And it's under pressure. Not from any one dramatic villain, but from a slow, steady push — "safety" framing that conveniently always lands on "so send us your data instead," licensing that gets a little less open with every release, API-only launches for models that used to ship weights, lobbying to raise the floor on what counts as "safe to release" until only the incumbents can clear it. None of this is conspiracy-brained. It's just what happens when open weights start actually threatening someone's subscription business. Openness doesn't get taken away with an announcement. It gets taken away one quiet decision at a time, and you don't notice until the option is gone.
+DeepSeek, GLM, and Kimi have shown that open models can go toe to toe with the frontier labs. That's not a small thing — it means the gap that used to make "just use the API" the only serious option is closing. Put those models behind a real harness — planning, orchestration, tools, memory — and you start threatening the thing OpenAI's and Anthropic's businesses actually depend on. And when something threatens a business, that business fights back. Not always loudly. Sometimes it's licensing that gets a little less open with each release, or "safety" arguments that always seem to land on "so send us your data instead," or lobbying to raise the bar on what counts as releasable until only the incumbents can clear it. I think they're going to actively try to take this away from us, and I don't think it'll look like a headline when it happens. It'll look like a dozen quiet decisions, and one day the option just isn't there anymore.
 
-We think the answer to that isn't a manifesto, it's tools. Make the local, open path so genuinely good to use that closing it off stops being a viable business strategy. That's what Minnow is for.
+AI is going to change the world. That part isn't in question anymore. What's still in question is who it changes the world for — everyone, or a small number of companies and the people who own them. Right now the direction we're heading points toward the second one. I don't think that's inevitable, but I don't think it fixes itself either. It gets fixed by people building and using the open alternative until closing it off stops making business sense.
 
-**Minnow is a free and open source AI workspace that runs on the models you already have** — LM Studio, Ollama, llama.cpp, or anything speaking the OpenAI-compatible API. Your keys, chats, files, and models stay on your disk. Nothing phones home, because there's no home for it to phone.
+That's what Minnow is my attempt at.
 
-It's AGPL-3.0-or-later. Not "open core." Not a free tier bolted onto a cloud product. Everything, forever, for anyone. If that ever stopped being true, someone could fork it and keep going — that's the actual guarantee open licenses give you, and it's the whole point.
+**Minnow is a free and open source AI workspace that runs on the models you already have** — LM Studio, Ollama, llama.cpp, or anything OpenAI-compatible, local or cloud. Your keys, chats, and files stay on your disk. It's AGPL-3.0-or-later — not open core, not a free tier bolted onto a cloud product. If I ever disappeared or changed my mind, someone could fork it and keep going. That guarantee is the whole point.
 
-**What's actually in it:**
+**What's in it:**
+- **Chat** — the daily driver, composer and sessions.
+- **Code** — file tree, CodeMirror with LSP, terminal, git, chat next to your code, inline completion.
+- **Research** — multi-step web research with a saved library.
+- **Models** — hardware-fit scoring, Hugging Face downloads, local serving, provider routing.
+- **Brain** — a markdown wiki your agents read and write, with semantic recall and a code index.
+- **Issues** — issue tracking the agent files and works through itself.
+- **Scheduler** — recurring agent jobs.
 
-- **Chat** — the daily driver. Composer, sessions, notifications, nothing you have to fight.
-- **Code** — a real build workspace: file tree, CodeMirror with LSP, terminal, git, chat sitting right next to your code, inline completion.
-- **Research** — multi-step web research with a library that keeps what it finds.
-- **Models** — hardware-fit scoring so you know what your machine can actually run, Hugging Face downloads, local serving, provider routing.
-- **Brain** — a markdown wiki your agents read and write to, with semantic recall and a code index, so context survives past one chat window.
-- **Issues** — issue tracking the agent can file and work through on its own.
-- **Scheduler** — recurring agent jobs, so things run without you babysitting them.
+Underneath: 111 built-in tools, sub-agents, work agents, 15 bundled skills, MCP support, and permissions you control on every one.
 
-Underneath all of that: 111 built-in tools, sub-agents, work agents, 15 bundled skills, MCP support, and permissions on every one of them that you control.
+**The piece I'm proudest of is Orchestrator boards.** Give it a plan and it turns that plan into a kanban board — Builder and Tester agents working through waves of tasks, each one in its own isolated git worktree so nothing steps on anything else, merging back at the end. Run it by hand, task by task, or let it go and check in later. Pair it with Super Plan, which takes an idea through interview, spec, research, and a reviewed plan before any code gets written, and it starts behaving like a small team instead of a chat box that occasionally writes files. None of it is gated. There's no "orchestration is the paid tier" — that's not a thing I ever want Minnow to have.
 
-**The part I'm most excited about is Orchestrator boards.** You hand it a plan, and it turns that plan into a kanban board — Builder and Tester agents working waves of tasks, each one in its own isolated git worktree so nothing steps on anything else, merging back together at the end. You can drive it by hand, task by task, or let it run and check in when it's done. Pair that with Super Plan, which walks an idea from a rough interview through spec, research, and a reviewed plan before a single line of code gets written, and you've got something that actually behaves like a small team instead of a chat window that occasionally writes files.
+**Honestly: local models are still rough for this.** A lot of smaller ones can't reliably drive a harness this involved yet — tool calls fall apart, planning breaks down, context gets lost. I expect that to keep improving fast, but I'd rather tell you the truth about where things stand today than oversell it.
 
-None of this is locked behind a tier. There's no "orchestration is a Pro feature." It ships because that's what a complete workspace means.
+Local models I've gotten decent results with:
+- Qwen 3.6 27B
+- Ornith 35B
+- Qwen Coder Next 70B
+- ChatGPT-OSS 120B
+- Gemma 4 31B
 
-**Everything is meant to be taken apart.** Skills are just `SKILL.md` files you drop in a folder. Tools are local plugins, no MCP server required, or point it at any MCP server you already run. Every system prompt in the app is a markdown file you can edit. Themes are tokens in one file. And because it's AGPL, the whole thing is a fork away from being yours if you ever want it to be.
+Below that size, it's been a genuinely hard time getting reliable results — take that as a rough floor, not a hard rule.
 
-We're not pretending this is charity. It's built and funded by the people who use it, the way Blender is — no accounts, no subscriptions, no usage gates, and a sponsor link for anyone who wants to help keep it that way. That's the model we're betting on: open, useful enough that people choose to fund it, and impossible to quietly close off later because the license won't let it happen.
+On the cloud side, cost has kept me from testing everything as thoroughly as I'd like, but here's what's worked:
+- DeepSeek V4 Flash and Pro (my recommendation if you want one answer)
+- GLM family
+- Kimi family
+- ChatGPT API
+- Claude API
+- MiniMax
 
-If you've got a model loaded in LM Studio or Ollama right now, this is a `git clone` and an `npm install` away:
+If you want the best results per dollar: use a bigger, stronger model for planning, and hand the actual building work to something cheaper. The planning step is where model quality matters most; the build step tolerates a weaker model far better once the plan is solid.
+
+**I need your help.** Minnow works, but it's one person's project and it has its fair share of bugs. If you try it and something breaks, a bug report is genuinely the most useful thing you can give me right now — feedback and reports are the best way to help even if you never touch the code. If you want to help build it, come find me on Discord.
 
 ```
 git clone https://github.com/DukkyGames/Minnow.git
@@ -47,7 +61,6 @@ npm install
 npm start
 ```
 
-Repo: https://github.com/DukkyGames/Minnow
-Discord: https://discord.gg/U4FPzv9K4X
+Repo: https://github.com/DukkyGames/Minnow · Discord: https://discord.gg/U4FPzv9K4X
 
-Open weights got us here. We'd like to help keep it that way. Would genuinely love to hear what you build with it, and what you think is missing.
+Open weights got us here. I'd like to help make sure they're what gets us the rest of the way, too. Tell me what breaks.
