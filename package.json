@@ -227,6 +227,7 @@
       "src/state/session-schema.mjs",
       "src/evals/packs/**",
       "build/icon.ico",
+      "build/tray/**",
       "public/logos/minnow-logo/minnow/png/minnow-1024.png",
       "scripts/generate-skills-manifest.mjs",
       "scripts/generate-skills-library-index.mjs",
