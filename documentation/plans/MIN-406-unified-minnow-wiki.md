@@ -43,15 +43,15 @@ Ship one versioned product-help corpus that users can browse in Minnow, publish 
 
 ## Todo
 
-- [ ] Add deterministic product-wiki catalog generation.
-- [ ] Add safe server catalog/search/read APIs.
-- [ ] Add dedicated read-only chat tools and mode/prompt routing.
-- [ ] Add the responsive `#/wiki` overlay and menubar entry point.
-- [ ] Add product roadmap and publishing runbook.
-- [ ] Add GitHub Wiki staging script and sync workflow.
-- [ ] Add focused catalog, path, API, tool, and UI tests.
-- [ ] Run typecheck, focused tests, production build, and a GUI walkthrough.
-- [ ] Update `documentation/context.md` with the shipped architecture.
+- [x] Add deterministic product-wiki catalog generation.
+- [x] Add safe server catalog/search/read APIs.
+- [x] Add dedicated read-only chat tools and mode/prompt routing.
+- [x] Add the responsive `#/wiki` overlay and menubar entry point.
+- [x] Add product roadmap and publishing runbook.
+- [x] Add GitHub Wiki staging script and sync workflow.
+- [x] Add focused catalog, path, API, tool, and UI tests.
+- [x] Run typecheck, focused tests, production build, and a GUI walkthrough.
+- [x] Update `documentation/context.md` with the shipped architecture.
 
 ## Acceptance checks
 

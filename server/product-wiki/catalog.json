@@ -17,8 +17,8 @@
     },
     {
       "path": "documentation/context.md",
-      "title": "context",
-      "summary": "Minnow — project context Authoritative technical reference for the codebase. For orientation, start with guides/architecture.md . For setup and commands, see guides/setup.md and guides/commands.md . UI key bindings: guides/keyboard shortcuts.md . Product overview: README.md . Als",
+      "title": "Minnow — project context",
+      "summary": "Authoritative technical reference for the codebase. For orientation, start with guides/architecture.md . For setup and commands, see guides/setup.md and guides/commands.md . UI key bindings: guides/keyboard shortcuts.md . Product overview: README.md . Also useful: guides/configur",
       "headings": [
         "What it is",
         "Operating modes",
@@ -58,7 +58,7 @@
         "Conventions for contributors"
       ],
       "section": "Developer reference",
-      "hash": "8f098e63d86ad5aa95833b8535eebf857071c92e8f413b5e24b00d5782beee15"
+      "hash": "7ee8e894475bd49dc122af266530fb6717973b9534c7a85088fa72feed3025ca"
     },
     {
       "path": "documentation/design-system/css-map.md",
@@ -390,7 +390,7 @@
         "Contribute documentation"
       ],
       "section": "Guides",
-      "hash": "c7198f2ef2b9efee579c65eab5265d34285003d01fb7bdf80b4aea508f74d33a"
+      "hash": "4111c6f4cfc00753238d06f128bdb81602ff89032f7bf72b390c7a6b760c67eb"
     },
     {
       "path": "documentation/maintainer/macos-signing.md",

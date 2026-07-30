@@ -34,7 +34,7 @@ describe('product wiki catalog generation', () => {
   test('extracts deterministic page metadata', () => {
     const entry = createProductWikiEntry(
       'guides/example.md',
-      '# Example guide\n\nA short summary for readers.\n\n## Configure it\n\nDetails.',
+      '\uFEFF# Example guide\n\nA short summary for readers.\n\n## Configure it\n\nDetails.',
     );
     assert.equal(entry.path, 'documentation/guides/example.md');
     assert.equal(entry.title, 'Example guide');
