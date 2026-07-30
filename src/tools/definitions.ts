@@ -1807,12 +1807,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'minnow_docs_search',
     label: 'Minnow docs search',
-    description: 'Search the official shipped Minnow documentation. Requires npm start.',
+    description: 'Search the official shipped Minnow user manual. Requires npm start.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
       'minnow_docs_search',
-      'Search official Minnow product and developer documentation. Use this instead of Brain for questions about Minnow setup, apps, modes, tools, architecture, settings, or roadmap. Results include source paths for citations.',
+      'Search official Minnow user manual pages (`documentation/manual/`). Use for Minnow setup, apps, modes, tools, settings, and troubleshooting — not repo architecture (`context.md`). Results include source paths for citations.',
       {
         query: {
           type: 'string',
@@ -1824,7 +1824,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
         section: {
           type: 'string',
-          description: 'Optional exact catalog section such as Guides or Developer reference',
+          description: 'Optional exact catalog section such as Get started or Apps',
         },
       },
       ['query'],
@@ -1833,16 +1833,16 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'minnow_docs_read',
     label: 'Minnow docs read',
-    description: 'Read an official Minnow documentation page. Requires npm start.',
+    description: 'Read a user manual page from the shipped Minnow wiki. Requires npm start.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
       'minnow_docs_read',
-      'Read one official Minnow documentation page from a path returned by minnow_docs_search or minnow_docs_list. Cite the returned Source path when answering.',
+      'Read one user manual page from a path returned by minnow_docs_search or minnow_docs_list. Cite the returned Source path when answering.',
       {
         path: {
           type: 'string',
-          description: 'Allowlisted path such as documentation/guides/setup.md',
+          description: 'Allowlisted path such as documentation/manual/get-started/install.md',
         },
       },
       ['path'],
@@ -1851,16 +1851,16 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'minnow_docs_list',
     label: 'Minnow docs list',
-    description: 'List the official Minnow documentation catalog. Requires npm start.',
+    description: 'List the shipped Minnow user manual catalog. Requires npm start.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
       'minnow_docs_list',
-      'List official Minnow documentation metadata, optionally restricted to a path prefix.',
+      'List user manual metadata (`documentation/manual/`), optionally restricted to a path prefix.',
       {
         prefix: {
           type: 'string',
-          description: 'Optional path prefix such as documentation/guides/',
+          description: 'Optional path prefix such as documentation/manual/get-started/',
         },
       },
     ),

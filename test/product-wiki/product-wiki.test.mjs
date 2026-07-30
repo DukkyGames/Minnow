@@ -7,6 +7,7 @@ import {
   loadProductWikiCatalog,
   readProductWikiPage,
   resolveProductWikiPagePath,
+  resetProductWikiCatalogForTests,
   searchProductWiki,
 } from '../../server/product-wiki/catalog.js';
 import {
@@ -17,46 +18,123 @@ import {
 import {
   buildProductWikiCatalog,
   createProductWikiEntry,
+  isGitHubWikiPublishPath,
   isProductWikiPath,
 } from '../../scripts/product-wiki-catalog-lib.mjs';
+import { compareProductWikiEntries } from '../../src/product-wiki/nav-order.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 describe('product wiki catalog generation', () => {
-  test('includes public and maintainer docs while excluding working folders', () => {
-    assert.equal(isProductWikiPath('guides/setup.md'), true);
-    assert.equal(isProductWikiPath('maintainer/releasing.md'), true);
+  test('includes user manual paths while excluding developer and working folders', () => {
+    assert.equal(isProductWikiPath('manual/get-started/install.md'), true);
+    assert.equal(isProductWikiPath('manual/README.md'), true);
+    assert.equal(isProductWikiPath('ROADMAP.md'), true);
+    assert.equal(isProductWikiPath('THIRD_PARTY_NOTICES.md'), true);
+    assert.equal(isProductWikiPath('README.md'), false);
+    assert.equal(isProductWikiPath('context.md'), false);
+    assert.equal(isProductWikiPath('guides/setup.md'), false);
+    assert.equal(isProductWikiPath('contributor/setup-from-source.md'), false);
+    assert.equal(isProductWikiPath('maintainer/releasing.md'), false);
     assert.equal(isProductWikiPath('plans/example.md'), false);
     assert.equal(isProductWikiPath('memory/note.md'), false);
     assert.equal(isProductWikiPath('../README.md'), false);
   });
 
+  test('includes full corpus paths for GitHub Wiki publishing', () => {
+    assert.equal(isGitHubWikiPublishPath('README.md'), true);
+    assert.equal(isGitHubWikiPublishPath('context.md'), true);
+    assert.equal(isGitHubWikiPublishPath('guides/setup.md'), true);
+    assert.equal(isGitHubWikiPublishPath('maintainer/wiki-publishing.md'), true);
+    assert.equal(isGitHubWikiPublishPath('manual/get-started/install.md'), true);
+    assert.equal(isGitHubWikiPublishPath('contributor/setup-from-source.md'), true);
+    assert.equal(isGitHubWikiPublishPath('plans/example.md'), false);
+  });
+
   test('extracts deterministic page metadata', () => {
     const entry = createProductWikiEntry(
-      'guides/example.md',
+      'manual/get-started/example.md',
       '\uFEFF# Example guide\n\nA short summary for readers.\n\n## Configure it\n\nDetails.',
     );
-    assert.equal(entry.path, 'documentation/guides/example.md');
+    assert.equal(entry.path, 'documentation/manual/get-started/example.md');
     assert.equal(entry.title, 'Example guide');
     assert.equal(entry.summary, 'A short summary for readers. Configure it Details.');
     assert.deepEqual(entry.headings, ['Configure it']);
-    assert.equal(entry.section, 'Guides');
+    assert.equal(entry.section, 'Get started');
     assert.match(entry.hash, /^[a-f0-9]{64}$/u);
+  });
+
+  test('orders catalog entries for reader navigation', async () => {
+    const generated = await buildProductWikiCatalog(path.join(repositoryRoot, 'documentation'));
+    const paths = generated.entries.map((entry) => entry.path);
+    assert.deepEqual(paths.slice(0, 5), [
+      'documentation/manual/README.md',
+      'documentation/manual/get-started/install.md',
+      'documentation/manual/get-started/first-chat.md',
+      'documentation/manual/chat/modes-and-skills.md',
+      'documentation/manual/apps/overview.md',
+    ]);
+    const appsBlock = paths.filter((pagePath) => pagePath.includes('/manual/apps/'));
+    assert.deepEqual(appsBlock[0], 'documentation/manual/apps/overview.md');
+    const sorted = [...generated.entries].sort(compareProductWikiEntries);
+    assert.deepEqual(sorted.map((entry) => entry.path), paths);
   });
 
   test('committed catalog covers every generated page', async () => {
     const generated = await buildProductWikiCatalog(path.join(repositoryRoot, 'documentation'));
     const committed = await loadProductWikiCatalog();
     assert.deepEqual(committed, generated);
-    assert.ok(committed.entries.some((entry) => entry.path === 'documentation/guides/wiki.md'));
+    assert.ok(committed.entries.some((entry) => entry.path === 'documentation/manual/reference/wiki-and-brain.md'));
+    assert.ok(!committed.entries.some((entry) => entry.path === 'documentation/guides/wiki.md'));
+    assert.ok(!committed.entries.some((entry) => entry.path === 'documentation/maintainer/releasing.md'));
+    assert.ok(!committed.entries.some((entry) => entry.path.startsWith('documentation/contributor/')));
+    assert.ok(!committed.entries.some((entry) => entry.path === 'documentation/context.md'));
     assert.ok(committed.entries.some((entry) => entry.path === 'documentation/ROADMAP.md'));
+    assert.ok(
+      committed.entries.every(
+        (entry) =>
+          entry.path.startsWith('documentation/manual/')
+          || entry.path === 'documentation/ROADMAP.md'
+          || entry.path === 'documentation/THIRD_PARTY_NOTICES.md',
+      ),
+    );
+  });
+
+  test('runtime catalog drops legacy developer pages from stale catalog.json', async () => {
+    resetProductWikiCatalogForTests();
+    const original = await fs.readFile(
+      path.join(repositoryRoot, 'server/product-wiki/catalog.json'),
+      'utf8',
+    );
+    const parsed = JSON.parse(original);
+    parsed.entries = [
+      {
+        path: 'documentation/context.md',
+        title: 'Developer context',
+        summary: 'Should not appear in app',
+        headings: [],
+        section: 'Developer reference',
+        hash: 'deadbeef',
+      },
+      ...parsed.entries,
+    ];
+    const tempPath = path.join(repositoryRoot, 'server/product-wiki/catalog.json');
+    await fs.writeFile(tempPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    try {
+      const loaded = await loadProductWikiCatalog();
+      assert.ok(!loaded.entries.some((entry) => entry.path === 'documentation/context.md'));
+      assert.ok(loaded.entries.length > 0);
+    } finally {
+      await fs.writeFile(tempPath, original, 'utf8');
+      resetProductWikiCatalogForTests();
+    }
   });
 });
 
 describe('product wiki reads and search', () => {
   test('reads an allowlisted official page', async () => {
-    const page = await readProductWikiPage('documentation/guides/setup.md');
-    assert.equal(page.path, 'documentation/guides/setup.md');
+    const page = await readProductWikiPage('documentation/manual/get-started/install.md');
+    assert.equal(page.path, 'documentation/manual/get-started/install.md');
     assert.match(page.content, /^# /u);
   });
 
@@ -69,28 +147,32 @@ describe('product wiki reads and search', () => {
       resolveProductWikiPagePath('documentation/plans/MIN-406-unified-minnow-wiki.md'),
       /not found/iu,
     );
+    await assert.rejects(
+      resolveProductWikiPagePath('documentation/guides/setup.md'),
+      /not found/iu,
+    );
   });
 
   test('ranks exact title and heading matches with excerpts', async () => {
     const hits = await searchProductWiki('Minnow wiki', { limit: 4 });
     assert.ok(hits.length > 0);
-    assert.equal(hits[0].path, 'documentation/guides/wiki.md');
+    assert.ok(hits[0].path.startsWith('documentation/manual/'));
+    assert.ok(!hits.some((hit) => hit.path === 'documentation/guides/wiki.md'));
     assert.ok(hits[0].excerpt.length > 0);
   });
 });
 
 describe('product wiki chat tools', () => {
   test('search, read, and list return citation paths', async () => {
-    const searchResult = JSON.parse(await toolMinnowDocsSearch({ query: 'keyboard shortcuts' }));
-    assert.ok(searchResult.hits.some((hit) => hit.path === 'documentation/guides/keyboard-shortcuts.md'));
+    const searchResult = JSON.parse(await toolMinnowDocsSearch({ query: 'composer modes' }));
+    assert.ok(searchResult.hits.some((hit) => hit.path === 'documentation/manual/chat/modes-and-skills.md'));
 
-    const readResult = await toolMinnowDocsRead({ path: 'documentation/ROADMAP.md' });
-    assert.match(readResult, /Source: documentation\/ROADMAP\.md/u);
-    assert.match(readResult, /# Minnow roadmap/u);
+    const readResult = await toolMinnowDocsRead({ path: 'documentation/manual/README.md' });
+    assert.match(readResult, /Source: documentation\/manual\/README\.md/u);
+    assert.match(readResult, /# Minnow manual/u);
 
-    const listResult = JSON.parse(await toolMinnowDocsList({ prefix: 'documentation/guides/' }));
-    assert.ok(listResult.entries.length > 0);
-    assert.ok(listResult.entries.every((entry) => entry.path.startsWith('documentation/guides/')));
+    const listResult = JSON.parse(await toolMinnowDocsList({ prefix: 'documentation/manual/' }));
+    assert.ok(listResult.entries.every((entry) => entry.path.startsWith('documentation/manual/')));
   });
 
   test('returns explicit errors for missing arguments', async () => {
@@ -110,6 +192,7 @@ describe('GitHub Wiki staging contract', () => {
       'utf8',
     );
     assert.match(script, /_Sidebar\.md/u);
+    assert.match(script, /collectGitHubWikiPublishPaths/u);
     assert.match(workflow, /WIKI_SYNC_TOKEN/u);
   });
 });

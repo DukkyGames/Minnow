@@ -9,16 +9,16 @@ import {
 
 describe('product wiki route', () => {
   test('parses the home route and encoded article deep links', () => {
-    assert.equal(productWikiPathFromHash('#/wiki'), 'documentation/README.md');
+    assert.equal(productWikiPathFromHash('#/wiki'), 'documentation/manual/README.md');
     assert.equal(
-      productWikiPathFromHash('#/wiki/documentation%2Fguides%2Fsetup.md'),
-      'documentation/guides/setup.md',
+      productWikiPathFromHash('#/wiki/documentation%2Fmanual%2Fget-started%2Finstall.md'),
+      'documentation/manual/get-started/install.md',
     );
     assert.equal(productWikiPathFromHash('#/desktop'), null);
   });
 
   test('falls back to home for malformed encoded paths', () => {
-    assert.equal(productWikiPathFromHash('#/wiki/%E0%A4%A'), 'documentation/README.md');
+    assert.equal(productWikiPathFromHash('#/wiki/%E0%A4%A'), 'documentation/manual/README.md');
   });
 });
 

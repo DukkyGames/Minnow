@@ -19,21 +19,21 @@ Make General / Plan / Build / Debug chat agents (parents and `researcher` / `exp
 
 ### Prompt policy
 
-- Added [`src/chat/prompts/tool-usage/investigate-before-answer.md`](../src/chat/prompts/tool-usage/investigate-before-answer.md) (+ lite) — investigation ladder, ≥2 sources, follow-up hop, delegation guidance.
-- Wired in [`src/chat/prompts/prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts) for `general`, `desktop`, `plan`, `build`, `debug`.
+- Added [`src/chat/prompts/tool-usage/investigate-before-answer.md`](../../src/chat/prompts/tool-usage/investigate-before-answer.md) (+ lite) — investigation ladder, ≥2 sources, follow-up hop, delegation guidance.
+- Wired in [`src/chat/prompts/prompt-composer.ts`](../../src/chat/prompts/prompt-composer.ts) for `general`, `desktop`, `plan`, `build`, `debug`.
 - General mode no longer prefers training-data answers for non-trivial questions.
-- Strengthened [`sub-agent-delegation`](../src/chat/prompts/tool-usage/sub-agent-delegation.md), [`researcher`](../src/agents/prompts/sub-agents/researcher.full.md), and [`explore`](../src/agents/prompts/sub-agents/explore.full.md) worker prompts.
+- Strengthened [`sub-agent-delegation`](../../src/chat/prompts/tool-usage/sub-agent-delegation.md), [`researcher`](../../src/agents/prompts/sub-agents/researcher.full.md), and [`explore`](../../src/agents/prompts/sub-agents/explore.full.md) worker prompts.
 
 ### Worker allowlists
 
-[`src/agents/defaults/sub-agents.json`](../src/agents/defaults/sub-agents.json):
+[`src/agents/defaults/sub-agents.json`](../../src/agents/defaults/sub-agents.json):
 
 - **researcher:** `brain_search`, `brain_read_page`, `repo_map`, `find_symbol`, `get_file_metadata`, `recall_chat_context`
 - **explore:** `rag_web_content`, `brain_search`, `brain_read_page`, `repo_map`, `find_symbol`
 
 ### Brain RAG
 
-- `embeddings.enabled: true` by default ([`server/engine/embeddings.js`](../server/engine/embeddings.js), config defaults).
+- `embeddings.enabled: true` by default ([`server/engine/embeddings.js`](../../server/engine/embeddings.js), config defaults).
 - `maxInjectCharsFull`: 4000 → **8000**; retrieve `limit`: 8 → **12**.
 - `formatMemoryBlock` uses `selectQueryRelevantExcerpt` (~500 chars, paragraph/`##` scoring).
 
@@ -41,13 +41,13 @@ Make General / Plan / Build / Debug chat agents (parents and `researcher` / `exp
 
 - `WEB_TEXT_MAX_BYTES`: 8192 → **24576**
 - `rankWebContentByQuery` — up to **16** sentence + paragraph excerpts
-- Updated tool descriptions in [`src/tools/definitions.ts`](../src/tools/definitions.ts)
+- Updated tool descriptions in [`src/tools/definitions.ts`](../../src/tools/definitions.ts)
 
 ### Archive RAG
 
-- Default `retrievalTopK`: 5 → **8** ([`src/chat/archive/types.ts`](../src/chat/archive/types.ts))
+- Default `retrievalTopK`: 5 → **8** ([`src/chat/archive/types.ts`](../../src/chat/archive/types.ts))
 - Research work-agent archive `retrievalTopK`: 8 → **12**
-- Archive hit excerpts: 600 → **800** chars ([`server/brain/retrieve.js`](../server/brain/retrieve.js))
+- Archive hit excerpts: 600 → **800** chars ([`server/brain/retrieve.js`](../../server/brain/retrieve.js))
 
 ## Out of scope (follow-ups)
 
