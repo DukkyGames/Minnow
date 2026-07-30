@@ -19,6 +19,7 @@ import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
 import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
+import { openProductWiki } from '../ui/product-wiki';
 
 function formatClock(d: Date): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -187,11 +188,28 @@ export function renderMenubar(root: HTMLElement): () => void {
   settingsBtn.appendChild(createOsIcon('gear', { size: 16 }));
   settingsBtn.addEventListener('click', () => launchApp('settings'));
 
+  const wikiBtn = document.createElement('button');
+  wikiBtn.type = 'button';
+  wikiBtn.className = 'mn-os-mb-icon';
+  wikiBtn.setAttribute('aria-label', 'Minnow wiki');
+  wikiBtn.title = 'Minnow wiki';
+  wikiBtn.innerHTML = iconHtml('help', { size: 16 });
+  wikiBtn.addEventListener('click', () => openProductWiki());
+
   const timeEl = document.createElement('span');
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, modelChipAnchor, schedulerBtn, bell, updateSlot, settingsBtn, timeEl);
+  right.append(
+    workspaceSlot,
+    modelChipAnchor,
+    schedulerBtn,
+    bell,
+    updateSlot,
+    wikiBtn,
+    settingsBtn,
+    timeEl,
+  );
   root.append(left, right);
 
   const cleanupShellChrome = initShellMenubarChrome(root, right);

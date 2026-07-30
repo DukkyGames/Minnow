@@ -102,6 +102,7 @@ export function initOsShell(): void {
   };
 
   initAppHost();
+  void import('../ui/product-wiki').then((module) => module.initProductWiki());
   void import('./window-focus-cycle').then((m) => m.initOsShellKeyboard());
   void import('./app-focus-cycle').then((m) => {
     m.initAppFocusCycleKeyboard();

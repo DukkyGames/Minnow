@@ -3,7 +3,7 @@
  */
 
 
-import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
+import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET, MINNOW_DOCS_TOOL_IDS } from './tool-ids.js';
 import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
@@ -556,7 +556,12 @@ export function normalizeArchiveConfig(raw) {
 }
 
 function defaultPermissionForTool(id, enabled) {
-  if (id === 'search_settings' || id === 'get_settings' || id === 'get_appearance') {
+  if (
+    id === 'search_settings'
+    || id === 'get_settings'
+    || id === 'get_appearance'
+    || MINNOW_DOCS_TOOL_IDS.includes(id)
+  ) {
     return enabled ? 'full' : 'off';
   }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
@@ -576,6 +581,7 @@ export function normalizeToolConfig(raw) {
     'brain_search',
     'brain_read_page',
     'brain_list',
+    ...MINNOW_DOCS_TOOL_IDS,
     'brain_write_page',
     'brain_append_log',
     'brain_ingest_source',

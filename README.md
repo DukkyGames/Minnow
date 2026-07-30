@@ -42,7 +42,7 @@ One desktop shell and eight apps. All of them ship finished and always on; there
 | **Scheduler** | Recurring agent jobs. |
 | **Settings** | Appearance, tools, modes, skills, providers, integrations. |
 
-Underneath: **111 built-in tools** (files, git, LSP, web, browser automation, agents), sub-agents, work agents, **15 bundled skills**, MCP, and per-tool permissions you control.
+Underneath: **114 built-in tools** (files, git, LSP, web, browser automation, agents, and official-doc retrieval), sub-agents, work agents, **15 bundled skills**, MCP, and per-tool permissions you control.
 
 Two things worth the tour on their own:
 

@@ -1805,6 +1805,67 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'minnow_docs_search',
+    label: 'Minnow docs search',
+    description: 'Search the official shipped Minnow documentation. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_search',
+      'Search official Minnow product and developer documentation. Use this instead of Brain for questions about Minnow setup, apps, modes, tools, architecture, settings, or roadmap. Results include source paths for citations.',
+      {
+        query: {
+          type: 'string',
+          description: 'Natural-language documentation query',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum results to return (default 8, max 20)',
+        },
+        section: {
+          type: 'string',
+          description: 'Optional exact catalog section such as Guides or Developer reference',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'minnow_docs_read',
+    label: 'Minnow docs read',
+    description: 'Read an official Minnow documentation page. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_read',
+      'Read one official Minnow documentation page from a path returned by minnow_docs_search or minnow_docs_list. Cite the returned Source path when answering.',
+      {
+        path: {
+          type: 'string',
+          description: 'Allowlisted path such as documentation/guides/setup.md',
+        },
+      },
+      ['path'],
+    ),
+  },
+  {
+    id: 'minnow_docs_list',
+    label: 'Minnow docs list',
+    description: 'List the official Minnow documentation catalog. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_list',
+      'List official Minnow documentation metadata, optionally restricted to a path prefix.',
+      {
+        prefix: {
+          type: 'string',
+          description: 'Optional path prefix such as documentation/guides/',
+        },
+      },
+    ),
+  },
+  {
     id: 'brain_write_page',
     label: 'Brain write page',
     description: 'Create or update a Brain wiki page. Requires npm start.',

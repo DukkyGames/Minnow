@@ -8,6 +8,8 @@ Everything written down about Minnow, in one index. New here? Read [Setup](guide
 |-------|--------------|
 | [Setup](guides/setup.md) | Prerequisites, install, providers, first run, optional extras. |
 | [Apps](guides/apps.md) | The eight apps, the composer modes, and what's behind the release gate. |
+| [Minnow wiki](guides/wiki.md) | Browse and search official help, ask chat, and understand Wiki vs Brain. |
+| [Roadmap](ROADMAP.md) | Shipped capabilities, active direction, and release-gated areas. |
 | [Commands](guides/commands.md) | Every npm script, the headless CLI, test suites, environment variables. |
 | [Keyboard shortcuts](guides/keyboard-shortcuts.md) | Composer, editor, file tree, terminal, mail, and global key bindings. |
 | [Orchestrate board testing](guides/orchestrate-board-testing.md) | `test:board`, fake model, seed board, log invariants. |
@@ -29,7 +31,7 @@ Everything written down about Minnow, in one index. New here? Read [Setup](guide
 
 ## Maintaining Minnow
 
-Release and internal-inventory docs live in [`maintainer/`](maintainer/) — [releasing](maintainer/releasing.md), [macOS signing](maintainer/macos-signing.md), the full [settings reference](maintainer/settings-reference.md), and the [prompt ownership matrix](maintainer/prompt-ownership-matrix.md).
+Release and internal-inventory docs live in [`maintainer/`](maintainer/) — [releasing](maintainer/releasing.md), [macOS signing](maintainer/macos-signing.md), [GitHub Wiki publishing](maintainer/wiki-publishing.md), the full [settings reference](maintainer/settings-reference.md), and the [prompt ownership matrix](maintainer/prompt-ownership-matrix.md).
 
 ## Working folders
 

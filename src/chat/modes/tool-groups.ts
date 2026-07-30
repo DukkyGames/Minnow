@@ -97,6 +97,7 @@ export const TOOL_GROUP_IDS = {
     'brain_ingest_source',
     'manage_brain',
   ],
+  'minnow-docs': ['minnow_docs_search', 'minnow_docs_read', 'minnow_docs_list'],
   recall: ['recall_chat_context', 'recall_turn_full'],
   settings: ['search_settings', 'get_settings', 'update_settings'],
   appearance: ['get_appearance', 'update_appearance', 'upload_appearance_asset'],
@@ -143,6 +144,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'ask',
     'brain-core',
     'brain-admin',
+    'minnow-docs',
     'email',
     'calendar',
   ],
@@ -163,6 +165,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'browser',
     'brain-core',
     'brain-admin',
+    'minnow-docs',
     'recall',
     'settings',
     'impeccable',
@@ -184,6 +187,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'browser',
     'brain-core',
     'brain-admin',
+    'minnow-docs',
     'recall',
     'impeccable',
     'todo',
@@ -203,6 +207,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'browser',
     'brain-core',
     'brain-admin',
+    'minnow-docs',
     'recall',
     'impeccable',
   ],
@@ -219,6 +224,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'browser',
     'brain-core',
     'brain-admin',
+    'minnow-docs',
     'recall',
     'impeccable',
   ],
@@ -233,6 +239,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'ask',
     'brain-core',
     'brain-admin',
+    'minnow-docs',
     'recall',
   ],
   debug: [
@@ -252,13 +259,22 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'browser',
     'brain-core',
     'brain-admin',
+    'minnow-docs',
     'recall',
     'impeccable',
     'todo',
     'diagnostics',
   ],
   /** First-run wizard tour guide — safe demo set: no shell, no writes, no email/calendar. */
-  onboarding: ['util-basic', 'web', 'files-read', 'brain-core', 'brain-admin', 'ask'],
+  onboarding: [
+    'util-basic',
+    'web',
+    'files-read',
+    'brain-core',
+    'brain-admin',
+    'minnow-docs',
+    'ask',
+  ],
 };
 
 /** Per-mode explicit deny overrides applied after group expansion. */
@@ -351,6 +367,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'lsp',
     'browser',
     'brain-core',
+    'minnow-docs',
     'todo',
   ],
   test: [
@@ -364,6 +381,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'lsp',
     'browser',
     'brain-core',
+    'minnow-docs',
     'todo',
   ],
   fix: [
@@ -377,6 +395,7 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
     'code-intel',
     'lsp',
     'brain-core',
+    'minnow-docs',
     'todo',
   ],
 };

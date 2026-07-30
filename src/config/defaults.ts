@@ -34,6 +34,9 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'brain_search',
   'brain_read_page',
   'brain_list',
+  'minnow_docs_search',
+  'minnow_docs_read',
+  'minnow_docs_list',
   'brain_write_page',
   'brain_append_log',
   'brain_ingest_source',
@@ -74,11 +77,22 @@ const BRAIN_FULL_PERMISSION_TOOL_ID_SET = new Set<string>(BRAIN_FULL_PERMISSION_
 /** Settings read tools default to permission `full`. */
 const SETTINGS_READ_TOOL_IDS = new Set(['search_settings', 'get_settings']);
 
+/** Official Minnow documentation is read-only and safe by default. */
+const MINNOW_DOCS_TOOL_IDS = new Set([
+  'minnow_docs_search',
+  'minnow_docs_read',
+  'minnow_docs_list',
+]);
+
 /** Appearance read tool defaults to permission `full`. */
 const APPEARANCE_READ_TOOL_IDS = new Set(['get_appearance']);
 
 function defaultPermissionForTool(id: string, enabled: boolean): ToolPermissionMode {
-  if (SETTINGS_READ_TOOL_IDS.has(id) || APPEARANCE_READ_TOOL_IDS.has(id)) {
+  if (
+    SETTINGS_READ_TOOL_IDS.has(id)
+    || APPEARANCE_READ_TOOL_IDS.has(id)
+    || MINNOW_DOCS_TOOL_IDS.has(id)
+  ) {
     return enabled ? 'full' : 'off';
   }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {

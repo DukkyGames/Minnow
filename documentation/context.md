@@ -56,7 +56,7 @@ Renderer crash diagnostics can file Issues cards (type `bug`) when **Settings �
 
 ### Scale
 
-- **111 built-in tools** (103 exposed in a default build; 8 are gated to the hidden Calendar/Email apps) — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
+- **114 built-in tools** (106 exposed in a default build; 8 are gated to the hidden Calendar/Email apps) — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
 - **15 bundled slash skills** — [`src/skills/`](../src/skills/), manifest via `npm run prebuild`; everything else installs from **Skills Library**
 - **8 released apps**, all core — no optional-app picker in this build
 - **Nine modes** + work agents, sub-agents, orchestrator boards, Brain wiki
@@ -140,7 +140,7 @@ Browser / Electron (same origin, default :9473)
   ├─ GET/PUT /api/config/*     → ~/.minnow JSON
   ├─ POST /api/tools             → { name, args, modeId? } → { result }
   ├─ POST /api/generations       → backend-owned SSE streams
-  ├─ /api/providers/*, /api/terminal/*, /api/brain/*, /api/memory/*, …
+  ├─ /api/providers/*, /api/terminal/*, /api/brain/*, /api/product-wiki/*, …
   └─ Vite SPA
 ```
 
@@ -239,6 +239,7 @@ Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings �
 | **Code intel** | `repo_map`, `find_symbol`, `who_calls`, `brain_*` | Server |
 | **LSP** | `get_lsp_diagnostics`, `list_lsp_servers` | Server |
 | **Memory** | `save_memory` | Server (Brain adapter) |
+| **Minnow docs** | `minnow_docs_search`, `minnow_docs_read`, `minnow_docs_list` | Server (installed read-only docs) |
 | **Agents** | `spawn_sub_agent`, `board_*`, mode handoff | Browser executors |
 | **Browser preview** | `browser_navigate`, `browser_snapshot`, … | Electron + server allowlist |
 | **Chat UI** | `ask_question`, `propose_mode_switch` | Browser |
@@ -280,7 +281,15 @@ API: `GET /api/skills`, `GET/PUT /api/skills/:id`, `GET/PUT /api/config/skills`.
 
 ---
 
-## Memory and Brain
+## Official Minnow wiki, Memory, and Brain
+
+**Official Minnow wiki (MIN-406):** `documentation/` is the canonical user + developer help corpus. [`scripts/generate-product-wiki-catalog.mjs`](../scripts/generate-product-wiki-catalog.mjs) creates the deterministic [`server/product-wiki/catalog.json`](../server/product-wiki/catalog.json) search/navigation manifest during `prebuild`. Runtime catalog, full-text ranking, capped reads, allowlist enforcement, traversal rejection, and packaged `extraResources` resolution live in [`server/product-wiki/`](../server/product-wiki/). Read-only API: `GET /api/product-wiki/catalog`, `/page?path=`, and `/search?q=`.
+
+The in-app reader is a responsive overlay at `#/wiki/<encoded-documentation-path>` ([`src/ui/product-wiki.ts`](../src/ui/product-wiki.ts), [`product-wiki.css`](../src/styles/product-wiki.css)). Open it from the menubar **?** button. It provides grouped navigation, debounced full-text search, reloadable article deep links, sanitized Markdown, internal-link routing, and external source links. It intentionally is not a ninth dock app.
+
+Chat retrieves the same versioned corpus through `minnow_docs_search`, `minnow_docs_read`, and `minnow_docs_list` ([`server/tools/minnow-docs-tools.js`](../server/tools/minnow-docs-tools.js)). These tools are read-only, default to **Full**, run independently of the active workspace and Brain settings, and are available across conversation modes. Prompts route Minnow product questions here and reserve `brain_*` for user/project knowledge.
+
+**GitHub Wiki:** [`scripts/publish-github-wiki.mjs`](../scripts/publish-github-wiki.mjs) stages a flattened, link-rewritten public mirror; [`.github/workflows/wiki-sync.yml`](../.github/workflows/wiki-sync.yml) publishes it from `main`. The public roadmap is [`ROADMAP.md`](ROADMAP.md); maintainer setup and rollback are in [`maintainer/wiki-publishing.md`](maintainer/wiki-publishing.md). Plans, specs, archives, agent memory, and maintainer runbooks are not published.
 
 **Memory** is a thin adapter over the **Brain wiki** ([`server/memory/store.js`](../server/memory/store.js) → `pages/facts/`). Retrieval injects into composer `memory` part; untrusted fencing via [`src/lib/untrusted.mjs`](../src/lib/untrusted.mjs). Defaults (2026): **semantic embeddings on** (`embeddings.enabled: true`), **8k** full-profile inject cap (`maxInjectCharsFull`), retrieve **limit 12**, and **query-relevant excerpts** (~500 chars per hit) instead of first-line previews — see [`server/engine/retrieve.js`](../server/engine/retrieve.js) + [`src/lib/fetch-web-content.mjs`](../src/lib/fetch-web-content.mjs) (`selectQueryRelevantExcerpt`).
 
@@ -390,6 +399,8 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` �
 **Notifications:** menubar bell inbox ([`src/os/notifications-menu.ts`](../src/os/notifications-menu.ts), [`src/notifications/`](../src/notifications/)). Sounds use **packs** under `public/sounds/packs/<packId>/` ([`src/notifications/sound-packs.ts`](../src/notifications/sound-packs.ts)): each pack maps three cues — `turn_complete`, `question`, `tool_turn` — to audio files; notification kinds resolve to a cue at playback time. Default pack **Minnow** ships `turn-complete.wav`, `question.wav`, `tool-turn.mp3`. Prefs: `minnow.notifications.soundPackId` (`default` | `none`), `minnow.notifications.soundOnActiveChat` (play cues while watching the active chat in Code without bell rows). Settings → General → Notifications.
 
 **App switcher:** in-app menubar grid icon ([`src/os/app-switcher-menu.ts`](../src/os/app-switcher-menu.ts)) opens a compact popover with **Desktop** plus the same apps as the dock (`listDockApps`). Hidden on the Desktop view (dock covers that case). Escape / outside click dismisses; opening closes other chrome popovers.
+
+**Product help overlay:** the menubar **?** opens `#/wiki` without changing the underlying app lifecycle. Router handling leaves the current desktop/app surface mounted while [`product-wiki.ts`](../src/ui/product-wiki.ts) owns overlay visibility and restores the prior hash on close.
 
 **Desktop prefs** (`minnow.os.*`): wallpaper / layout via [`src/os/desktop-prefs.ts`](../src/os/desktop-prefs.ts); **disabled apps** via `minnow.os.disabledApps` ([`src/os/app-preferences.ts`](../src/os/app-preferences.ts)).
 
