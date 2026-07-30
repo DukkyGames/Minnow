@@ -58,7 +58,7 @@ function sectionForPath(relativePath) {
 
 /** Extract stable searchable metadata from one Markdown document. */
 export function createProductWikiEntry(relativePath, markdown) {
-  const normalizedMarkdown = markdown.replace(/^\uFEFF/u, '');
+  const normalizedMarkdown = markdown.replace(/^\uFEFF/u, '').replace(/\r\n/g, '\n');
   const headingRows = [...normalizedMarkdown.matchAll(/^(#{1,3})[^\S\r\n]+(.+?)[^\S\r\n]*$/gmu)];
   const title = headingRows.find((row) => row[1].length === 1)?.[2]?.trim()
     ?? path.posix.basename(relativePath, '.md').replaceAll('-', ' ');
