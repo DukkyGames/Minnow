@@ -2108,8 +2108,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
                     'minnow',
                     'aurora',
                     'starfield',
-                    'grain',
-                    'mesh',
                     'custom',
                   ],
                 },

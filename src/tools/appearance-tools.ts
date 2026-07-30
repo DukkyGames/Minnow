@@ -57,8 +57,6 @@ const WALLPAPER_MODES = new Set<WallpaperMode>([
   'minnow',
   'aurora',
   'starfield',
-  'grain',
-  'mesh',
   'custom',
 ]);
 

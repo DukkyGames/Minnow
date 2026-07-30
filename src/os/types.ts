@@ -31,8 +31,6 @@ export interface DesktopPrefs {
     | 'minnow'
     | 'aurora'
     | 'starfield'
-    | 'grain'
-    | 'mesh'
     | 'custom';
   /** IndexedDB asset id when wallpaper is `custom`. */
   wallpaperImageId?: string;

@@ -46,8 +46,9 @@ Core `--os-*` tokens are on `:root` as well as `.mn-os` so wallpaper thumbnails 
 
 Prefs in `minnow.os.*` ([`desktop-prefs.ts`](../../src/os/desktop-prefs.ts)):
 
-- underwater (default), minnow fish (boids + glyph), aurora, starfield, grain, mesh, gradient, flat
+- underwater (default), minnow fish (boids + glyph), aurora, starfield, gradient, flat
 - custom image (IndexedDB via [`asset-store.ts`](../../src/appearance/asset-store.ts))
+- retired aliases: `mesh` → `gradient`, `grain` → `flat`
 
 Fish wallpaper tints `--mn-accent` via [`minnow-glyph-white.svg`](../../public/logos/minnow-glyph-white.svg).
 

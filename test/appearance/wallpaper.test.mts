@@ -59,5 +59,22 @@ describe('wallpaper prefs', () => {
     assert.ok(ids.includes('minnow'));
     assert.ok(ids.includes('custom'));
     assert.ok(ids.includes('underwater'));
+    assert.ok(ids.includes('gradient'));
+    assert.ok(!ids.includes('mesh'));
+    assert.ok(!ids.includes('grain'));
+  });
+
+  test('retired mesh and grain aliases migrate on load', () => {
+    mockLocalStorage();
+    storage.set('minnow.os.wallpaper', 'mesh');
+    assert.equal(loadDesktopPrefs().wallpaper, 'gradient');
+    assert.equal(storage.get('minnow.os.wallpaper'), 'gradient');
+
+    storage.clear();
+    resetDesktopPrefsForTests();
+    mockLocalStorage();
+    storage.set('minnow.os.wallpaper', 'grain');
+    assert.equal(loadDesktopPrefs().wallpaper, 'flat');
+    assert.equal(storage.get('minnow.os.wallpaper'), 'flat');
   });
 });
