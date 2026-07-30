@@ -12,7 +12,7 @@ import { deriveLifecycleFromStatus } from '../types';
 import { hasPendingToolApproval } from '../../tools/approval-queue';
 import { isUserPromptLocked } from '../../ui/user-prompt-lock';
 import { getSubAgentRun, listActiveSubAgentRuns } from './registry';
-import { getHeartbeatConfig } from './wrapper';
+import { getHeartbeatConfig, supervisionMonotonicNow } from './wrapper';
 
 const WATCHDOG_TICK_MS = 5_000;
 
@@ -23,8 +23,8 @@ let repetitionThresholds = {
   sameErrorThreshold: DEFAULT_SELF_HEALING_CONFIG.tier1.sameErrorThreshold,
 };
 
-/** Monotonic clock for progress/heartbeat age (mockable in tests). */
-let monotonicNow = (): number => performance.now();
+/** Optional test override; production uses wrapper supervision clock. */
+let monotonicNowOverride: (() => number) | null = null;
 
 /** Per-run watchdog bookkeeping (not persisted until Phase 3). */
 interface WatchdogRunState {
@@ -64,9 +64,9 @@ export function registerWatchdogHandlers(
   handlers = { ...handlers, ...partial };
 }
 
-/** Test hook: override monotonic clock. */
+/** Test hook: override monotonic clock (must match wrapper `performance.now` mock). */
 export function setWatchdogMonotonicNow(fn: () => number): void {
-  monotonicNow = fn;
+  monotonicNowOverride = fn;
 }
 
 /** Update repetition detection thresholds from merged sub-agents config. */
@@ -90,18 +90,19 @@ function ensureRunState(runId: string): WatchdogRunState {
   return state;
 }
 
-function monotonicDelta(): number {
-  return monotonicNow();
+function monotonicNow(): number {
+  if (monotonicNowOverride) return monotonicNowOverride();
+  return supervisionMonotonicNow();
 }
 
 function getHeartbeatAgeMs(run: SubAgentRun): number | null {
   if (run.lastHeartbeatAt == null) return null;
-  return monotonicDelta() - run.lastHeartbeatAt;
+  return monotonicNow() - run.lastHeartbeatAt;
 }
 
 function getProgressAgeMs(run: SubAgentRun): number | null {
   if (run.lastProgressAt == null) return null;
-  return monotonicDelta() - run.lastProgressAt;
+  return monotonicNow() - run.lastProgressAt;
 }
 
 function isApprovalPausedForRun(run: SubAgentRun): boolean {
@@ -258,7 +259,7 @@ export function observeSubAgentToolCall(
 /** Clear watchdog bookkeeping (tests + controller reset). */
 export function resetWatchdogState(): void {
   runState.clear();
-  monotonicNow = () => performance.now();
+  monotonicNowOverride = null;
   repetitionThresholds = {
     duplicateToolCallThreshold:
       DEFAULT_SELF_HEALING_CONFIG.tier1.duplicateToolCallThreshold,
