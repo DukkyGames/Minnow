@@ -68,6 +68,11 @@ function monotonicDelta(): number {
   return effectiveMonoNow() - visibilityBaseline;
 }
 
+/** Monotonic clock for supervision timestamps (shared with the controller watchdog). */
+export function supervisionMonotonicNow(): number {
+  return monotonicDelta();
+}
+
 function onPageHidden(): void {
   pageHiddenAtMono = performance.now();
 }

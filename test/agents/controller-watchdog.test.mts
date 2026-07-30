@@ -19,7 +19,7 @@ import {
   stopWatchdog,
   tickWatchdog,
 } from '../../src/agents/controller/watchdog.ts';
-import { bumpProgress, recordHeartbeat, setHeartbeatConfig } from '../../src/agents/controller/wrapper.ts';
+import { bumpProgress, recordHeartbeat, resetWrapperState, setHeartbeatConfig, simulatePageVisibilityForTests, supervisionMonotonicNow } from '../../src/agents/controller/wrapper.ts';
 import { resetSubAgentConfigCache } from '../../src/agents/sub-agent-config.ts';
 import {
   resetSubAgentRunIdFactory,
@@ -403,6 +403,38 @@ describe('controller watchdog', () => {
     const run = getSubAgentRun(FIXED_RUN_ID);
     assert.equal(run?.status, 'cancelled');
     assert.match(run?.error ?? '', /watchdog_tier2:duplicate_tool/);
+  });
+
+  test('watchdog does not false-positive after visibility baseline reset', async () => {
+    resetWrapperState();
+    setWatchdogMonotonicNow(() => supervisionMonotonicNow());
+    setSubAgentRunnerFactory(() => hangingRunner());
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'Visibility baseline',
+      wait: false,
+      parentChatId: PARENT_CHAT,
+      parentTurnId: 'turn-watchdog-vis',
+      category: 'research',
+    });
+
+    await waitForRunActive(FIXED_RUN_ID);
+
+    now = 60_000;
+    simulatePageVisibilityForTests('hidden');
+    now = 120_000;
+    simulatePageVisibilityForTests('visible');
+
+    recordHeartbeat(FIXED_RUN_ID);
+    bumpProgress(FIXED_RUN_ID);
+
+    now = 125_000;
+    tickWatchdog();
+    await flushAsync();
+
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.equal(run?.status, 'running');
   });
 
   test('duplicate tool threshold 0 disables repetition detection', async () => {
