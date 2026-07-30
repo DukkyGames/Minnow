@@ -37,30 +37,21 @@ function assistantWithTools(content: string | null, toolCalls: ToolCall[]): ApiM
 }
 
 describe('resolveContextBudget', () => {
-  test('effectiveLimit is min(agent, model) with safety margin', () => {
+  test('effectiveLimit is 90% of model limit', () => {
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 8000, enforcementPolicy: 'slide' },
+      agentConfig: { enforcementPolicy: 'slide' },
       modelLimit: 32000,
     });
-    assert.equal(resolved.agentCap, 8000);
     assert.equal(resolved.modelLimit, 32000);
-    assert.equal(resolved.effectiveLimit, 7200);
+    assert.equal(resolved.effectiveLimit, 28800);
   });
 
-  test('agent null yields no effective limit', () => {
+  test('unknown model limit yields no effective limit', () => {
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: null, enforcementPolicy: 'slide' },
-      modelLimit: 32000,
-    });
-    assert.equal(resolved.effectiveLimit, null);
-  });
-
-  test('uses agent cap only when model limit unknown', () => {
-    const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 10000, enforcementPolicy: 'truncate' },
+      agentConfig: { enforcementPolicy: 'slide' },
       modelLimit: null,
     });
-    assert.equal(resolved.effectiveLimit, 9000);
+    assert.equal(resolved.effectiveLimit, null);
   });
 });
 
@@ -74,11 +65,10 @@ describe('applyContextBudget truncate', () => {
       assistant('d'.repeat(400)),
     ];
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 400, enforcementPolicy: 'truncate' },
-      modelLimit: null,
+      agentConfig: { enforcementPolicy: 'truncate' },
+      modelLimit: 400,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 400,
       enforcementPolicy: 'truncate',
     });
     assert.equal(out.applied, true);
@@ -94,11 +84,10 @@ describe('applyContextBudget truncate', () => {
       user('x'.repeat(2000)),
     ];
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 100, enforcementPolicy: 'truncate' },
-      modelLimit: null,
+      agentConfig: { enforcementPolicy: 'truncate' },
+      modelLimit: 120,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 100,
       enforcementPolicy: 'truncate',
     });
     assert.equal(out.messages[0].role, 'system');
@@ -120,14 +109,12 @@ describe('applyContextBudget slide', () => {
     ];
     const resolved = resolveContextBudget({
       agentConfig: {
-        maxInputTokens: 8,
         enforcementPolicy: 'slide',
         minRecentTurns: 1,
       },
-      modelLimit: null,
+      modelLimit: 8,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 8,
       enforcementPolicy: 'slide',
       minRecentTurns: 1,
     });
@@ -153,11 +140,10 @@ describe('applyContextBudget slide', () => {
       assistant('done'),
     ];
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 12, enforcementPolicy: 'slide' },
-      modelLimit: null,
+      agentConfig: { enforcementPolicy: 'slide' },
+      modelLimit: 16,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 12,
       enforcementPolicy: 'slide',
       minRecentTurns: 1,
     });
@@ -167,10 +153,8 @@ describe('applyContextBudget slide', () => {
   });
 });
 
-describe('applyContextBudget summarize', () => {
-  test('summarizes board-task tool loops after a single user seed', () => {
-    // Orchestrate board chats: one user seed, then many assistant/tool rounds.
-    // Older logic treated that as one turn so summarize could never inject.
+describe('applyContextBudget dropMiddle', () => {
+  test('compresses board-task tool loops after a single user seed', () => {
     const messages: ApiMessage[] = [system('sys')];
     messages.push(user('Execute orchestrate task W1-A'));
     for (let round = 0; round < 8; round += 1) {
@@ -187,22 +171,20 @@ describe('applyContextBudget summarize', () => {
     }
     const resolved = resolveContextBudget({
       agentConfig: {
-        maxInputTokens: 200,
-        enforcementPolicy: 'summarize',
+        enforcementPolicy: 'dropMiddle',
         minRecentTurns: 2,
         summaryReserveTokens: 32,
       },
-      modelLimit: null,
+      modelLimit: 240,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 200,
-      enforcementPolicy: 'summarize',
+      enforcementPolicy: 'dropMiddle',
       minRecentTurns: 2,
       summaryReserveTokens: 32,
     });
     assert.equal(out.applied, true);
     assert.equal(out.summaryInjected, true);
-    assert.ok(out.droppedMessageCount > 0);
+    assert.ok(out.droppedTurns > 0);
     assert.ok(out.tokensAfter <= (resolved.effectiveLimit ?? 0));
     const hasSummary = out.messages.some(
       (m) =>
@@ -224,16 +206,14 @@ describe('applyContextBudget summarize', () => {
     ];
     const resolved = resolveContextBudget({
       agentConfig: {
-        maxInputTokens: 15,
-        enforcementPolicy: 'summarize',
+        enforcementPolicy: 'dropMiddle',
         minRecentTurns: 1,
         summaryReserveTokens: 32,
       },
-      modelLimit: null,
+      modelLimit: 20,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 15,
-      enforcementPolicy: 'summarize',
+      enforcementPolicy: 'dropMiddle',
       minRecentTurns: 1,
       summaryReserveTokens: 32,
     });
@@ -248,17 +228,31 @@ describe('applyContextBudget summarize', () => {
     assert.ok(hasSummary);
     assert.ok(out.tokensAfter < out.tokensBefore);
   });
+
+  test('summarize policy defers to async path (no sync trim)', () => {
+    const messages: ApiMessage[] = [
+      system('sys'),
+      user('a'.repeat(400)),
+      assistant('b'.repeat(400)),
+    ];
+    const resolved = resolveContextBudget({
+      agentConfig: { enforcementPolicy: 'summarize' },
+      modelLimit: 100,
+    });
+    const out = applyContextBudget(messages, resolved);
+    assert.equal(out.applied, false);
+    assert.equal(out.messages.length, messages.length);
+  });
 });
 
 describe('hard truncate single message', () => {
   test('adds truncation marker on oversized user line', () => {
     const messages: ApiMessage[] = [system('s'), user('z'.repeat(8000))];
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 15, enforcementPolicy: 'truncate' },
-      modelLimit: null,
+      agentConfig: { enforcementPolicy: 'truncate' },
+      modelLimit: 20,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 15,
       enforcementPolicy: 'truncate',
     });
     const lastUser = out.messages.find((m) => m.role === 'user');
@@ -299,9 +293,7 @@ function assertValidToolSequence(messages: ApiMessage[]): void {
 }
 
 describe('applyContextBudget preserves tool-call pairing (sub-agent single turn)', () => {
-  test('truncation never orphans a tool result after system', () => {
-    // Reproduces the sub-agent shape: one user task then many assistant/tool
-    // round-trips. Previously message-level truncation produced [system, tool].
+  test('dropMiddle never orphans a tool result after system', () => {
     const messages: ApiMessage[] = [
       system('s'.repeat(400)),
       user('research task ' + 'q'.repeat(200)),
@@ -315,16 +307,14 @@ describe('applyContextBudget preserves tool-call pairing (sub-agent single turn)
       toolResult('call_2', 'export default { plugins: {} }'),
     ];
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 40, enforcementPolicy: 'summarize' },
-      modelLimit: null,
+      agentConfig: { enforcementPolicy: 'dropMiddle' },
+      modelLimit: 50,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 40,
-      enforcementPolicy: 'summarize',
+      enforcementPolicy: 'dropMiddle',
       minRecentTurns: 1,
     });
     assert.equal(out.applied, true);
-    // System survives; the orphaned-tool bug would leave a tool right after it.
     assert.equal(out.messages[0].role, 'system');
     assertValidToolSequence(out.messages);
   });
@@ -339,15 +329,13 @@ describe('applyContextBudget preserves tool-call pairing (sub-agent single turn)
       toolResult('call_9', 'z'.repeat(4000)),
     ];
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 20, enforcementPolicy: 'truncate' },
-      modelLimit: null,
+      agentConfig: { enforcementPolicy: 'truncate' },
+      modelLimit: 24,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 20,
       enforcementPolicy: 'truncate',
     });
     assertValidToolSequence(out.messages);
-    // The assistant that owns call_9 must still be present for its tool result.
     const hasAssistant = out.messages.some(
       (m) => m.role === 'assistant' && m.tool_calls?.some((c) => c.id === 'call_9'),
     );
@@ -362,7 +350,7 @@ describe('formatContextTrimStatus', () => {
   test('includes policy and drop count', () => {
     const line = formatContextTrimStatus('slide', 4, false);
     assert.match(line, /slide/);
-    assert.match(line, /4 older messages/);
+    assert.match(line, /4 older turns/);
   });
 });
 
@@ -376,11 +364,10 @@ describe('applyContextBudget archive', () => {
       assistant('d'.repeat(400)),
     ];
     const resolved = resolveContextBudget({
-      agentConfig: { maxInputTokens: 400, enforcementPolicy: 'archive' },
-      modelLimit: null,
+      agentConfig: { enforcementPolicy: 'archive' },
+      modelLimit: 400,
     });
     const out = applyContextBudget(messages, resolved, {
-      maxInputTokens: 400,
       enforcementPolicy: 'archive',
       minRecentTurns: 1,
     });

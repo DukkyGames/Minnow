@@ -21,7 +21,7 @@ type CapturePostResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-function messageText(content: Message['content']): string {
+function messageText(content: string | undefined | null): string {
   if (typeof content === 'string') return content.trim();
   return '';
 }

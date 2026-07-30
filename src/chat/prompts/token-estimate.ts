@@ -18,11 +18,11 @@ import { pushOutboundSystemMessages } from '../../tools/api-system-messages';
 import {
   agentContextBudgetFromWorkAgent,
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
-  applyContextBudget,
   estimateApiMessagesTokens,
   resolveContextBudget,
   serializeApiMessageForEstimate,
 } from '../context-budget';
+import { estimateContextPolicyTrim } from '../context/apply-policy';
 import {
   resolveOutboundSystemMessages,
   type BuildComposeContextOptions,
@@ -122,31 +122,39 @@ function countHistoryTokensFromApiMessages(messages: ApiMessage[]): number {
   return total;
 }
 
-/** Apply the same per-agent context budget trimming used before each provider send. */
+/** Apply model-window context policy trimming estimate for the context ring. */
 function applyBudgetTrimToHistoryTokens(
   chat: Chat,
   modelId: string | undefined,
   systemText: string,
   userRulesText: string,
   rawHistoryTokens: number,
-): number {
+): { history: number; compressedEstimate: number; wouldCompress: boolean } {
   const apiMessages = buildOutboundApiMessagesForEstimate(chat, systemText, userRulesText);
   const workAgent = resolveActiveWorkAgent(chat);
   const agentConfig = workAgent
     ? agentContextBudgetFromWorkAgent(workAgent)
-    : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
+    : { enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
   const budgetResolved = resolveContextBudget({
     agentConfig,
     modelLimit: resolveModelLimitForEstimate(modelId, chat),
   });
   if (budgetResolved.effectiveLimit == null) {
-    return rawHistoryTokens;
+    return { history: rawHistoryTokens, compressedEstimate: 0, wouldCompress: false };
   }
   if (estimateApiMessagesTokens(apiMessages) <= budgetResolved.effectiveLimit) {
-    return rawHistoryTokens;
+    return { history: rawHistoryTokens, compressedEstimate: 0, wouldCompress: false };
   }
-  const applied = applyContextBudget(apiMessages, budgetResolved, agentConfig);
-  return countHistoryTokensFromApiMessages(applied.messages);
+  const trimmed = estimateContextPolicyTrim(apiMessages, budgetResolved, agentConfig);
+  const historyOnly = countHistoryTokensFromApiMessages(apiMessages);
+  if (!trimmed.wouldCompress) {
+    return { history: historyOnly, compressedEstimate: 0, wouldCompress: false };
+  }
+  return {
+    history: trimmed.historyTokens,
+    compressedEstimate: trimmed.compressedEstimateTokens,
+    wouldCompress: true,
+  };
 }
 
 /**
@@ -183,7 +191,7 @@ export async function resolveOutboundPromptEstimate(
     legacyFallback,
   });
 
-  const trimmedHistory = applyBudgetTrimToHistoryTokens(
+  const trimResult = applyBudgetTrimToHistoryTokens(
     chat,
     options?.modelId,
     outbound.composed,
@@ -191,13 +199,19 @@ export async function resolveOutboundPromptEstimate(
     estimate.history,
   );
 
-  if (trimmedHistory === estimate.history) {
+  if (!trimResult.wouldCompress && trimResult.history === estimate.history) {
     return estimate;
   }
 
+  const compressedExtra = trimResult.compressedEstimate;
+  const historyTokens = trimResult.history;
+
   return {
     ...estimate,
-    history: trimmedHistory,
-    total: estimate.composedSystem + estimate.userRules + trimmedHistory + estimate.tools,
+    history: historyTokens,
+    historyCompressed: trimResult.wouldCompress,
+    compressedContextEstimate: compressedExtra > 0 ? compressedExtra : undefined,
+    total:
+      estimate.composedSystem + estimate.userRules + historyTokens + estimate.tools,
   };
 }

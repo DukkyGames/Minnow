@@ -21,6 +21,8 @@ import {
 import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { normalizeModeId } from '../chat/modes/types';
 import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
+import { contextNoticeLabel } from '../chat/context/context-notice';
+import type { ContextNoticeMessage } from '../types';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -258,6 +260,11 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     if (!msg || !msg.role) continue;
     if (msg.role === 'tool') continue;
 
+    if (msg.role === 'context') {
+      appendContextNotice(area, msg as ContextNoticeMessage, i);
+      continue;
+    }
+
     if (msg.role === 'user') {
       const userMsg = msg;
       if (isHiddenTranscriptUserMessage(userMsg)) {
@@ -470,6 +477,57 @@ function resolveBubbleTargetChat(meta?: BubbleRenderMeta): Chat {
 function bubbleDomStub(): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
   const stub = document.createElement('div');
   return { wrap: stub, bubble: stub };
+}
+
+function appendContextNotice(
+  area: HTMLElement,
+  notice: ContextNoticeMessage,
+  historyIndex: number,
+): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'context-notice';
+  wrap.dataset.historyIndex = String(historyIndex);
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'context-notice__chip';
+  button.textContent = contextNoticeLabel(notice.policy, notice.droppedTurns);
+  button.setAttribute('aria-expanded', 'false');
+
+  const panel = document.createElement('div');
+  panel.className = 'context-notice__panel';
+  panel.hidden = true;
+
+  if (notice.summaryText?.trim()) {
+    const pre = document.createElement('pre');
+    pre.className = 'context-notice__summary';
+    pre.textContent = notice.summaryText;
+    panel.appendChild(pre);
+  } else {
+    const empty = document.createElement('p');
+    empty.className = 'context-notice__empty';
+    empty.textContent = 'No summary text was recorded for this trim.';
+    panel.appendChild(empty);
+  }
+
+  const toggle = (): void => {
+    const open = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', open ? 'false' : 'true');
+    panel.hidden = open;
+    wrap.classList.toggle('is-expanded', !open);
+  };
+
+  button.addEventListener('click', toggle);
+  button.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggle();
+    }
+  });
+
+  wrap.appendChild(button);
+  wrap.appendChild(panel);
+  area.appendChild(wrap);
 }
 
 export function appendBubble(

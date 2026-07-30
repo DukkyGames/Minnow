@@ -167,7 +167,6 @@ export function parseWorkAgentMetaFromMarkdown(
     allowedTools,
     defaultForModes,
     disabled,
-    maxInputTokens: parseNullablePositiveInt(ext.maxInputTokens),
     contextEnforcementPolicy:
       parseContextPolicy(ext.contextEnforcementPolicy) ??
       DEFAULT_CONTEXT_ENFORCEMENT_POLICY,

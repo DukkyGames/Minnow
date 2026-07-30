@@ -37,6 +37,7 @@ export const SETTINGS_PROMPT_CONFIG_ESTIMATE_TOOLTIP =
 export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[] {
   const messages: ApiMessage[] = [];
   for (const m of history) {
+    if (m.role === 'context') continue;
     if (m.role === 'user') {
       messages.push({ role: 'user', content: m.content });
       continue;
@@ -80,10 +81,11 @@ export function serializeMessageContentForEstimate(m: Message): string {
   return '';
 }
 
-/** Sum token estimate across all persisted chat turns. */
+/** Sum token estimate across all persisted chat turns (excludes context notices). */
 export function estimateHistoryTokens(history: Message[]): number {
   let total = 0;
   for (const m of history) {
+    if (m.role === 'context') continue;
     total += estimateTokensFromText(serializeMessageContentForEstimate(m));
   }
   return total;
@@ -102,6 +104,9 @@ export interface OutboundPromptEstimate {
   history: number;
   tools: number;
   legacyFallback: boolean;
+  /** When context compression would apply on send. */
+  historyCompressed?: boolean;
+  compressedContextEstimate?: number;
 }
 
 /** System + rules + tools — excludes chat history (settings prompt config display). */

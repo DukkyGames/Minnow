@@ -24,6 +24,7 @@ export type ContextUsageSectionKey =
   | 'rules'
   | 'tools'
   | 'history'
+  | 'compressed'
   | 'inFlight'
   | 'composer'
   | 'attachments';
@@ -96,6 +97,9 @@ export function buildContextUsageBreakdown(
   attachmentTokens: number,
   inFlightTokens = 0,
 ): ContextUsageSection[] {
+  const historyLabel = estimate.historyCompressed
+    ? 'History (after compression)'
+    : 'History';
   const rows: ContextUsageSection[] = [
     {
       key: 'system',
@@ -104,8 +108,18 @@ export function buildContextUsageBreakdown(
     },
     { key: 'rules', label: 'Rules', tokens: estimate.userRules },
     { key: 'tools', label: 'Tools', tokens: estimate.tools },
-    { key: 'history', label: 'History', tokens: estimate.history },
+    { key: 'history', label: historyLabel, tokens: estimate.history },
   ];
+  if (
+    estimate.compressedContextEstimate != null &&
+    estimate.compressedContextEstimate > 0
+  ) {
+    rows.push({
+      key: 'compressed',
+      label: 'Compressed context (estimate)',
+      tokens: estimate.compressedContextEstimate,
+    });
+  }
   if (inFlightTokens > 0) {
     rows.push({
       key: 'inFlight',

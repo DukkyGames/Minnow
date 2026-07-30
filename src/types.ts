@@ -4,6 +4,7 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type { ContextEnforcementPolicy } from './chat/context-budget';
 import type { SuperPlanStageId, SuperPlanState } from './chat/super-plan/types';
 import type { PinnedSkillState } from './skills/types';
 import type { ChatTokenLedger } from './usage/types';
@@ -212,11 +213,22 @@ export interface ToolExecutionResult {
   codeChange?: CodeChangeStats;
 }
 
+/** Persisted context trim / compress notice (not sent to the model). */
+export interface ContextNoticeMessage {
+  role: 'context';
+  policy: ContextEnforcementPolicy;
+  droppedTurns: number;
+  /** Text sent to the model inside the summary user row, if any. */
+  summaryText?: string;
+  createdAt: number;
+}
+
 export type Message =
   | UserMessage
   | AssistantMessage
   | AssistantToolCallMessage
-  | ToolResultMessage;
+  | ToolResultMessage
+  | ContextNoticeMessage;
 
 /** Multimodal user/assistant payload part (attachments use in later waves). */
 export interface TextContentPart {
@@ -1078,11 +1090,15 @@ export interface Chat {
   codeChangeTotals?: ChatCodeChangeTotals;
   /** Epoch ms when history backfill last rebuilt codeChangeTotals. */
   codeChangeBackfillAt?: number;
-  /** Last archive policy trim stats (MIN-139). */
+  /** Last context trim / compress stats. */
   lastContextTrim?: {
     archived?: number;
     recalled?: number;
     recallTokens?: number;
+    policy?: ContextEnforcementPolicy;
+    droppedTurns?: number;
+    summaryPreview?: string;
+    at?: number;
   };
 }
 

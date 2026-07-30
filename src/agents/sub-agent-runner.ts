@@ -53,10 +53,10 @@ import { resolveModelApi } from '../providers/resolve-model-api';
 import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
-  applyContextBudget,
   estimateApiMessagesTokens,
   resolveContextBudget,
 } from '../chat/context-budget';
+import { applyContextPolicy } from '../chat/context/apply-policy';
 import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from './sub-agent-outcome';
 import { buildSubAgentOutcomeResponseFormat } from './sub-agent-outcome-response-format';
 import {
@@ -541,7 +541,6 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     });
     let toolUseNudgeSent = false;
     const contextBudget = input.contextBudget ?? {
-      maxInputTokens: null,
       enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
     };
     const modelContextLimit =
@@ -635,13 +634,20 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       toolCallsMeta,
     );
 
-    const enforceContextBudget = (turnIndex: number): boolean => {
+    const enforceContextBudget = async (turnIndex: number): Promise<boolean> => {
       const budgetResolved = resolveContextBudget({
         agentConfig: contextBudget,
         modelLimit: modelContextLimit,
       });
-      const limit = budgetResolved.effectiveLimit;
-      const budgetApplied = applyContextBudget(messages, budgetResolved, contextBudget);
+      const budgetApplied = await applyContextPolicy({
+        messages,
+        policy: contextBudget.enforcementPolicy,
+        modelLimit: modelContextLimit,
+        agentConfig: contextBudget,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        signal: input.signal,
+      });
       if (budgetApplied.applied) {
         messages.length = 0;
         messages.push(...budgetApplied.messages);
@@ -653,6 +659,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
           });
         }
       }
+      const limit = budgetResolved.effectiveLimit;
       if (limit != null && estimateApiMessagesTokens(messages) > limit) {
         return false;
       }
@@ -824,7 +831,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     };
 
     for (let turn = 0; ; turn++) {
-      if (!enforceContextBudget(turn)) {
+      if (!(await enforceContextBudget(turn))) {
         return {
           summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
           toolTurns,
@@ -1136,7 +1143,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         continue;
       }
 
-      if (!enforceContextBudget(turn)) {
+      if (!(await enforceContextBudget(turn))) {
         return {
           summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
           toolTurns,

@@ -21,6 +21,7 @@ import {
   resolveWorkAgentContextPolicy,
   subAgentContextPolicySelectValue,
   workAgentContextPolicySelectValue,
+  isContextEnforcementPolicy,
   INHERIT_CONTEXT_POLICY,
 } from '../../src/chat/resolve-context-policy.ts';
 import DEFAULTS from '../../src/agents/defaults/sub-agents.json';
@@ -41,6 +42,10 @@ contextEnforcementPolicy: slide
 `;
 
 describe('resolveContextEnforcementPolicy', () => {
+  test('accepts dropMiddle policy value', () => {
+    assert.equal(isContextEnforcementPolicy('dropMiddle'), true);
+  });
+
   test('user override beats global and shipped', () => {
     assert.equal(
       resolveContextEnforcementPolicy({

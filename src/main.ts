@@ -15,6 +15,7 @@ import './styles/shell-keyboard-help.css';
 import './styles/sidebar.css';
 import './styles/chat-search.css';
 import './styles/messages.css';
+import './styles/context-notice.css';
 import './styles/message-actions.css';
 import './styles/voice.css';
 import './styles/branch-picker.css';
