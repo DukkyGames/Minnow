@@ -242,9 +242,10 @@ import { estimateTokensFromText } from '../chat/prompts/token-estimate';
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   agentContextBudgetFromWorkAgent,
-  applyContextBudget,
-  resolveContextBudget,
 } from '../chat/context-budget';
+import { applyContextPolicy } from '../chat/context/apply-policy';
+import { appendContextNoticeIfNeeded } from '../chat/context/context-notice';
+import { handleCompressCommand } from '../chat/context/compress-command';
 import { resolveWorkAgentContextPolicy } from '../chat/resolve-context-policy';
 import {
   applyArchivePolicy,
@@ -668,6 +669,7 @@ export function buildApiMessages(
 
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
+    if (m.role === 'context') continue;
     if (m.role === 'user') {
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
@@ -1629,7 +1631,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           activeWorkAgent,
           resolveWorkAgentContextPolicy(activeWorkAgent.id),
         )
-      : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
+      : { enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
 
     // Boot resume subscribes once; later tool-loop rounds must POST new generations (MIN-187).
     let activeResumeGenerationId = resumeGenerationId;
@@ -1708,22 +1710,36 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         }
       }
 
-      const budgetResolved = resolveContextBudget({
-        agentConfig: workAgentBudget,
+      const budgetApplied = await applyContextPolicy({
+        messages: preMessages,
+        policy: workAgentBudget.enforcementPolicy,
         modelLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
+        agentConfig: workAgentBudget,
+        providerId: sendProviderId,
+        modelId: sendModelId,
+        signal: chatSignal,
+        onStatus: (level, message) => {
+          if (isStreamDomVisible(chat.id)) setStatus(level, message);
+        },
       });
-      const budgetApplied = applyContextBudget(
-        preMessages,
-        budgetResolved,
-        workAgentBudget,
-      );
       const messages = budgetApplied.messages;
-      if (
-        budgetApplied.applied &&
-        budgetApplied.statusMessage &&
-        isStreamDomVisible(chat.id)
-      ) {
-        setStatus('ok', budgetApplied.statusMessage);
+      if (budgetApplied.applied) {
+        if (budgetApplied.droppedTurns > 0 || budgetApplied.summaryInjected) {
+          appendContextNoticeIfNeeded(chat, {
+            policy: budgetApplied.policy,
+            droppedTurns: budgetApplied.droppedTurns,
+            summaryText: budgetApplied.summaryText,
+          });
+          chat.lastContextTrim = {
+            policy: budgetApplied.policy,
+            droppedTurns: budgetApplied.droppedTurns,
+            summaryPreview: budgetApplied.summaryText?.slice(0, 200),
+            at: Date.now(),
+          };
+        }
+        if (budgetApplied.statusMessage && isStreamDomVisible(chat.id)) {
+          setStatus('ok', budgetApplied.statusMessage);
+        }
       }
       const body = applySamplerToBody(
         {
@@ -2905,6 +2921,26 @@ export async function sendMessageWithTools(
 
   const goalDispatch = handleGoalCommand(chat, rawText, setStatus);
   if (goalDispatch === 'handled') {
+    clearComposerAfterSend(chat, input);
+    return;
+  }
+
+  const sendProviderId =
+    chat.providerId?.trim() ||
+    (document.getElementById('providerSelect') as HTMLSelectElement | null)?.value?.trim() ||
+    '';
+  const sendModelId =
+    chat.modelId?.trim() ||
+    (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ||
+    '';
+
+  const compressDispatch = await handleCompressCommand(
+    chat,
+    rawText,
+    sendProviderId,
+    sendModelId,
+  );
+  if (compressDispatch === 'handled') {
     clearComposerAfterSend(chat, input);
     return;
   }

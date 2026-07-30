@@ -8,7 +8,7 @@ import type { AssistantMessage, Chat, Message } from '../types';
 /** Max user/assistant pairs to include in synthesis context. */
 const MAX_MESSAGES = 12;
 
-function messageText(content: Message['content']): string {
+function messageText(content: string | undefined | null): string {
   if (typeof content === 'string') return content.trim();
   return '';
 }
@@ -50,6 +50,7 @@ function assistantVisibleText(msg: AssistantMessage): string {
 export function buildSynthesisMessages(chat: Chat): Array<{ role: string; content: string }> {
   const rows: Array<{ role: string; content: string }> = [];
   for (const msg of chat.history) {
+    if (msg.role === 'context') continue;
     if (msg.role === 'user') {
       const text = messageText(msg.content);
       if (text) rows.push({ role: 'user', content: text });
@@ -71,6 +72,7 @@ export function buildSynthesisExcerpt(chat: Chat): string {
   let lastUserIdx = -1;
   for (let i = chat.history.length - 1; i >= 0; i -= 1) {
     const msg = chat.history[i];
+    if (msg?.role === 'context') continue;
     if (msg?.role === 'user' && messageText(msg.content)) {
       lastUserIdx = i;
       break;
@@ -78,7 +80,9 @@ export function buildSynthesisExcerpt(chat: Chat): string {
   }
   if (lastUserIdx < 0) return '';
 
-  const userLine = messageText(chat.history[lastUserIdx]!.content);
+  const userRow = chat.history[lastUserIdx];
+  const userLine =
+    userRow?.role === 'user' ? messageText(userRow.content) : '';
 
   let assistantLine = '';
   for (let i = chat.history.length - 1; i > lastUserIdx; i -= 1) {

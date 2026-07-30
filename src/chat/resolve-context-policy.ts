@@ -23,6 +23,7 @@ export function isContextEnforcementPolicy(
 ): value is ContextEnforcementPolicy {
   return (
     value === 'summarize' ||
+    value === 'dropMiddle' ||
     value === 'slide' ||
     value === 'truncate' ||
     value === 'archive'

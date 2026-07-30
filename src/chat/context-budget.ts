@@ -13,18 +13,23 @@ import type { ApiMessage, ContentPart } from '../types';
 import type { ArchiveConfig } from './archive/types';
 
 /** How to fit outbound messages under a token ceiling. */
-export type ContextEnforcementPolicy = 'summarize' | 'slide' | 'truncate' | 'archive';
+export type ContextEnforcementPolicy =
+  | 'summarize'
+  | 'dropMiddle'
+  | 'slide'
+  | 'truncate'
+  | 'archive';
 
-/** Shipped default when a row omits policy. */
+/** Shipped default when a row omits policy (LLM summarize). */
 export const DEFAULT_CONTEXT_ENFORCEMENT_POLICY: ContextEnforcementPolicy = 'summarize';
 
 const SAFETY_MARGIN = 0.9;
 const TRUNCATION_MARKER = '[… truncated for context budget]';
-const SUMMARY_HEADER = '## Prior context (compressed)\n';
+/** Prefix injected before compressed prior-turn summaries (LLM or extractive). */
+export const SUMMARY_HEADER = '## Prior context (compressed)\n';
 
 /** Agent-level budget declaration (work agents + sub-agent types). */
 export interface AgentContextBudgetConfig {
-  maxInputTokens: number | null;
   enforcementPolicy: ContextEnforcementPolicy;
   minRecentTurns?: number;
   summaryReserveTokens?: number;
@@ -34,7 +39,6 @@ export interface AgentContextBudgetConfig {
 
 export interface ResolvedContextBudget {
   effectiveLimit: number | null;
-  agentCap: number | null;
   modelLimit: number | null;
   policy: ContextEnforcementPolicy;
 }
@@ -46,11 +50,15 @@ export interface ApplyContextBudgetResult {
   tokensBefore: number;
   tokensAfter: number;
   droppedMessageCount: number;
+  /** Number of logical turns dropped (slide / summarize / dropMiddle). */
+  droppedTurns: number;
   summaryInjected: boolean;
+  /** Text sent to the model inside the summary user message, if any. */
+  summaryText?: string;
   statusMessage: string | null;
 }
 
-interface TurnSlice {
+export interface TurnSlice {
   start: number;
   end: number;
 }
@@ -95,7 +103,6 @@ export function estimateApiMessagesTokens(messages: ApiMessage[]): number {
 
 export function agentContextBudgetFromWorkAgent(
   agent: {
-    maxInputTokens?: number | null;
     contextEnforcementPolicy?: ContextEnforcementPolicy | null;
     minRecentTurns?: number;
     summaryReserveTokens?: number;
@@ -104,7 +111,6 @@ export function agentContextBudgetFromWorkAgent(
   resolvedPolicy?: ContextEnforcementPolicy,
 ): AgentContextBudgetConfig {
   return {
-    maxInputTokens: normalizePositiveInt(agent.maxInputTokens ?? null),
     enforcementPolicy:
       resolvedPolicy ??
       agent.contextEnforcementPolicy ??
@@ -127,16 +133,12 @@ export function resolveContextBudget(params: {
   modelLimit: number | null;
 }): ResolvedContextBudget {
   const policy = params.agentConfig.enforcementPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY;
-  const agentCap = normalizePositiveInt(params.agentConfig.maxInputTokens);
   const modelLimit = normalizePositiveInt(params.modelLimit);
 
-  let effectiveLimit: number | null = null;
-  if (agentCap != null) {
-    const raw = modelLimit != null ? Math.min(agentCap, modelLimit) : agentCap;
-    effectiveLimit = Math.max(1, Math.floor(raw * SAFETY_MARGIN));
-  }
+  const effectiveLimit =
+    modelLimit != null ? Math.max(1, Math.floor(modelLimit * SAFETY_MARGIN)) : null;
 
-  return { effectiveLimit, agentCap, modelLimit, policy };
+  return { effectiveLimit, modelLimit, policy };
 }
 
 function isPriorContextSummary(msg: ApiMessage): boolean {
@@ -147,7 +149,7 @@ function isPriorContextSummary(msg: ApiMessage): boolean {
   );
 }
 
-function countPinnedSystemMessages(messages: ApiMessage[]): number {
+export function countPinnedSystemMessages(messages: ApiMessage[]): number {
   let n = 0;
   for (const msg of messages) {
     if (msg.role === 'system') n += 1;
@@ -156,7 +158,7 @@ function countPinnedSystemMessages(messages: ApiMessage[]): number {
   return n;
 }
 
-function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnSlice[] {
+export function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnSlice[] {
   const turns: TurnSlice[] = [];
   let i = systemEnd;
   while (i < messages.length) {
@@ -179,7 +181,7 @@ function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnSlice[] 
   return turns;
 }
 
-function rebuildFromTurns(
+export function rebuildFromTurns(
   messages: ApiMessage[],
   systemEnd: number,
   turns: TurnSlice[],
@@ -245,7 +247,7 @@ function sanitizeToolPairing(messages: ApiMessage[]): ApiMessage[] {
   return out;
 }
 
-function collectTurnText(messages: ApiMessage[], turn: TurnSlice): string {
+export function collectTurnText(messages: ApiMessage[], turn: TurnSlice): string {
   const parts: string[] = [];
   for (let i = turn.start; i < turn.end; i += 1) {
     const text = serializeApiMessageForEstimate(messages[i]).trim();
@@ -254,7 +256,7 @@ function collectTurnText(messages: ApiMessage[], turn: TurnSlice): string {
   return parts.join('\n\n');
 }
 
-function buildExtractiveSummary(text: string, maxTokens: number): string {
+export function buildExtractiveSummary(text: string, maxTokens: number): string {
   const budgetChars = Math.max(32, maxTokens * 4);
   const body = text.trim();
   if (!body) return '';
@@ -383,16 +385,16 @@ function applySlidePolicy(
   return { messages: working, dropped };
 }
 
-function applySummarizePolicy(
+/** Drop oldest turns until under limit; returns dropped turn text chunks. */
+export function dropOldestTurnsUntilUnderLimit(
   messages: ApiMessage[],
   limit: number,
   systemEnd: number,
   minRecentTurns: number,
-  summaryReserveTokens: number,
-): { messages: ApiMessage[]; dropped: number; summaryInjected: boolean } {
+): { turns: TurnSlice[]; droppedChunks: string[]; droppedTurns: number } {
   let turns = partitionTurns(messages, systemEnd);
   const droppedChunks: string[] = [];
-  let dropped = 0;
+  let droppedTurns = 0;
 
   while (
     estimateApiMessagesTokens(rebuildFromTurns(messages, systemEnd, turns)) > limit &&
@@ -400,11 +402,53 @@ function applySummarizePolicy(
   ) {
     droppedChunks.push(collectTurnText(messages, turns[0]));
     turns = turns.slice(1);
-    dropped += 1;
+    droppedTurns += 1;
   }
+
+  return { turns, droppedChunks, droppedTurns };
+}
+
+export function injectSummaryMessage(
+  messages: ApiMessage[],
+  systemEnd: number,
+  summaryBody: string,
+): ApiMessage[] {
+  const trimmed = summaryBody.trim();
+  if (!trimmed) return messages;
+  const summaryMsg: ApiMessage = {
+    role: 'user',
+    content: SUMMARY_HEADER + trimmed,
+  };
+  return [
+    ...messages.slice(0, systemEnd),
+    summaryMsg,
+    ...messages.slice(systemEnd),
+  ];
+}
+
+function applyDropMiddlePolicy(
+  messages: ApiMessage[],
+  limit: number,
+  systemEnd: number,
+  minRecentTurns: number,
+  summaryReserveTokens: number,
+): {
+  messages: ApiMessage[];
+  dropped: number;
+  droppedTurns: number;
+  summaryInjected: boolean;
+  summaryText?: string;
+} {
+  const { turns, droppedChunks, droppedTurns } = dropOldestTurnsUntilUnderLimit(
+    messages,
+    limit,
+    systemEnd,
+    minRecentTurns,
+  );
 
   let working = rebuildFromTurns(messages, systemEnd, turns);
   let summaryInjected = false;
+  let summaryText: string | undefined;
 
   if (droppedChunks.length > 0) {
     const summaryBody = buildExtractiveSummary(
@@ -412,40 +456,40 @@ function applySummarizePolicy(
       summaryReserveTokens,
     );
     if (summaryBody.trim()) {
-      const summaryMsg: ApiMessage = {
-        role: 'user',
-        content: SUMMARY_HEADER + summaryBody,
-      };
-      working = [
-        ...working.slice(0, systemEnd),
-        summaryMsg,
-        ...working.slice(systemEnd),
-      ];
+      summaryText = summaryBody;
+      working = injectSummaryMessage(working, systemEnd, summaryBody);
       summaryInjected = true;
     }
   }
 
+  let dropped = 0;
   if (estimateApiMessagesTokens(working) > limit) {
     const trunc = applyTruncatePolicy(working, limit, systemEnd);
     working = trunc.messages;
-    dropped += trunc.dropped;
+    dropped = trunc.dropped;
   }
 
-  return { messages: working, dropped, summaryInjected };
+  return { messages: working, dropped, droppedTurns, summaryInjected, summaryText };
 }
 
 export function formatContextTrimStatus(
   policy: ContextEnforcementPolicy,
-  droppedMessageCount: number,
+  droppedTurns: number,
   summaryInjected: boolean,
 ): string {
-  const parts: string[] = [`Context trimmed (${policy})`];
-  if (droppedMessageCount > 0) {
+  const policyLabel =
+    policy === 'summarize'
+      ? 'summarized'
+      : policy === 'dropMiddle'
+        ? 'drop middle'
+        : policy;
+  const parts: string[] = [`Context trimmed (${policyLabel})`];
+  if (droppedTurns > 0) {
     parts.push(
-      `dropped ${droppedMessageCount} older message${droppedMessageCount === 1 ? '' : 's'}`,
+      `omitted ${droppedTurns} older turn${droppedTurns === 1 ? '' : 's'}`,
     );
   }
-  if (summaryInjected) parts.push('prior turns summarized');
+  if (summaryInjected) parts.push('prior turns compressed');
   return parts.join(': ');
 }
 
@@ -469,15 +513,21 @@ export function applyContextBudget(
     tokensBefore,
     tokensAfter: estimateApiMessagesTokens(next),
     droppedMessageCount: 0,
+    droppedTurns: 0,
     summaryInjected: false,
     statusMessage: null,
     ...extra,
   });
 
-  if (limit == null || resolved.agentCap == null) {
+  if (limit == null) {
     return base(messages, false);
   }
   if (tokensBefore <= limit) {
+    return base(messages, false);
+  }
+
+  // LLM summarize is applied asynchronously via applyContextPolicy.
+  if (policy === 'summarize') {
     return base(messages, false);
   }
 
@@ -490,7 +540,9 @@ export function applyContextBudget(
 
   let nextMessages = messages;
   let dropped = 0;
+  let droppedTurns = 0;
   let summaryInjected = false;
+  let summaryText: string | undefined;
 
   if (policy === 'truncate') {
     const out = applyTruncatePolicy(messages, limit, systemEnd);
@@ -500,8 +552,9 @@ export function applyContextBudget(
     const out = applySlidePolicy(messages, limit, systemEnd, minRecentTurns);
     nextMessages = out.messages;
     dropped = out.dropped;
-  } else {
-    const out = applySummarizePolicy(
+    droppedTurns = out.dropped;
+  } else if (policy === 'dropMiddle') {
+    const out = applyDropMiddlePolicy(
       messages,
       limit,
       systemEnd,
@@ -510,7 +563,9 @@ export function applyContextBudget(
     );
     nextMessages = out.messages;
     dropped = out.dropped;
+    droppedTurns = out.droppedTurns;
     summaryInjected = out.summaryInjected;
+    summaryText = out.summaryText;
   }
 
   let tokensAfter = estimateApiMessagesTokens(nextMessages);
@@ -531,9 +586,6 @@ export function applyContextBudget(
     if (tokensAfter <= limit) break;
   }
 
-  // Guarantee a valid tool-call/tool-result sequence regardless of which policy
-  // ran (a single agent turn with one user message falls through to message-level
-  // truncation, which must never orphan a tool result — see MIN gateway 400s).
   const sanitized = sanitizeToolPairing(nextMessages);
   if (sanitized.length !== nextMessages.length) {
     nextMessages = sanitized;
@@ -547,7 +599,9 @@ export function applyContextBudget(
     tokensBefore,
     tokensAfter,
     droppedMessageCount: dropped,
+    droppedTurns,
     summaryInjected,
-    statusMessage: formatContextTrimStatus(policy, dropped, summaryInjected),
+    summaryText,
+    statusMessage: formatContextTrimStatus(policy, droppedTurns, summaryInjected),
   };
 }

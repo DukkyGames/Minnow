@@ -247,7 +247,6 @@ function openWorkAgentLightbox(agent: WorkAgentDefinition): void {
           initialProviderId: agent.providerId,
           initialModelId: agent.modelId,
           initialDisabled: agent.disabled === true,
-          initialMaxInputTokens: agent.maxInputTokens ?? null,
           initialContextPolicy: workAgentContextPolicySelectValue(agent.id),
           initialArchive: agent.archive,
         });
@@ -285,7 +284,6 @@ function openSubAgentLightbox(
           {
             enabled: type.enabled !== false,
             maxConcurrent: type.maxConcurrent,
-            maxInputTokens: type.maxInputTokens ?? null,
             contextEnforcementPolicy: subAgentContextPolicySelectValue(typeId),
             summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
           },

@@ -1,0 +1,51 @@
+/* Clickable context trim / compress notices in the chat transcript */
+
+.context-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: var(--mn-space-3) 0;
+  gap: var(--mn-space-2);
+}
+
+.context-notice__chip {
+  appearance: none;
+  border: 1px solid var(--mn-border-subtle);
+  background: var(--mn-surface-raised);
+  color: var(--mn-text-secondary);
+  font-size: var(--mn-text-xs);
+  line-height: 1.4;
+  padding: var(--mn-space-1) var(--mn-space-3);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.context-notice__chip:hover,
+.context-notice__chip:focus-visible {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  outline: none;
+}
+
+.context-notice__panel {
+  width: min(100%, 42rem);
+  border: 1px solid var(--mn-border-subtle);
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-sunken);
+  padding: var(--mn-space-3);
+}
+
+.context-notice__summary {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: var(--mn-text-sm);
+  color: var(--mn-text-primary);
+}
+
+.context-notice__empty {
+  margin: 0;
+  font-size: var(--mn-text-sm);
+  color: var(--mn-text-muted);
+}
