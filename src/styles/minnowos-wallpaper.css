@@ -152,7 +152,8 @@
   .mn-os-bubbles span,
   .mn-os-stars span,
   .mn-os-aurora-a,
-  .mn-os-aurora-b {
+  .mn-os-aurora-b,
+  .mn-os-aurora-c {
     animation: none !important;
   }
 
@@ -162,65 +163,99 @@
   }
 }
 
-/* aurora */
+/* aurora — tall curtain bands, readable in picker and on desktop */
 
 .mn-os-wall-aurora {
-  background: linear-gradient(180deg, var(--os-wall-a), var(--os-wall-b));
+  background:
+    radial-gradient(120% 70% at 50% 100%, color-mix(in srgb, var(--os-wall-c) 70%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--os-wall-a), var(--os-wall-b));
 }
 
 .mn-os-aurora {
   position: absolute;
-  inset: -30%;
-  opacity: 0.35;
-  filter: blur(48px);
+  inset: -20% -10%;
+  filter: blur(36px);
   pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* Light themes: screen washes out; multiply keeps curtain color readable. */
+:root[data-theme$='-light'] .mn-os-aurora {
+  mix-blend-mode: multiply;
+  filter: blur(40px);
 }
 
 .mn-os-aurora-a {
+  opacity: 0.72;
   background: radial-gradient(
-    60% 40% at 30% 40%,
-    color-mix(in srgb, var(--os-accent) 55%, transparent),
-    transparent 70%
+    28% 78% at 28% 42%,
+    color-mix(in srgb, var(--os-accent) 78%, transparent),
+    color-mix(in srgb, var(--os-accent) 28%, transparent) 42%,
+    transparent 72%
   );
-  animation: mn-os-aurora-drift-a 28s ease-in-out infinite;
+  animation: mn-os-aurora-drift-a 22s ease-in-out infinite;
 }
 
 .mn-os-aurora-b {
+  opacity: 0.58;
   background: radial-gradient(
-    50% 35% at 70% 60%,
-    color-mix(in srgb, var(--os-accent-2) 45%, transparent),
-    transparent 72%
+    22% 70% at 58% 38%,
+    color-mix(in srgb, var(--os-accent-2) 70%, transparent),
+    color-mix(in srgb, var(--os-accent) 22%, transparent) 45%,
+    transparent 74%
   );
-  animation: mn-os-aurora-drift-b 34s ease-in-out infinite;
-  opacity: 0.28;
+  animation: mn-os-aurora-drift-b 28s ease-in-out infinite;
+}
+
+.mn-os-aurora-c {
+  opacity: 0.42;
+  background: radial-gradient(
+    18% 62% at 78% 48%,
+    color-mix(in srgb, var(--os-accent-2) 55%, transparent),
+    transparent 70%
+  );
+  animation: mn-os-aurora-drift-c 34s ease-in-out infinite;
 }
 
 @keyframes mn-os-aurora-drift-a {
   0%,
   100% {
-    transform: translate(0, 0) scale(1);
+    transform: translate(0, 0) skewX(-4deg) scaleY(1);
   }
 
   50% {
-    transform: translate(6%, -4%) scale(1.08);
+    transform: translate(4%, -3%) skewX(3deg) scaleY(1.06);
   }
 }
 
 @keyframes mn-os-aurora-drift-b {
   0%,
   100% {
-    transform: translate(0, 0) scale(1.05);
+    transform: translate(0, 0) skewX(3deg) scaleY(1.04);
   }
 
   50% {
-    transform: translate(-5%, 3%) scale(1);
+    transform: translate(-3%, 2%) skewX(-5deg) scaleY(1);
   }
 }
 
-/* starfield */
+@keyframes mn-os-aurora-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) skewX(-2deg);
+  }
+
+  50% {
+    transform: translate(-4%, -2%) skewX(4deg);
+  }
+}
+
+/* starfield — stable stars that drift; no opacity pop in/out */
 
 .mn-os-wall-starfield {
-  background: linear-gradient(180deg, var(--os-wall-a), var(--os-wall-b));
+  background:
+    radial-gradient(90% 60% at 50% 0%, color-mix(in srgb, var(--os-wall-c) 55%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--os-wall-a), var(--os-wall-b));
 }
 
 .mn-os-stars {
@@ -232,50 +267,26 @@
 .mn-os-stars span {
   position: absolute;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--os-accent-2) 80%, white);
+  background: color-mix(in srgb, white 55%, var(--os-accent-2));
   animation-name: mn-os-star-drift;
-  animation-timing-function: linear;
+  animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
-  opacity: 0.5;
+}
+
+.mn-os-stars span.is-near {
+  background: color-mix(in srgb, white 75%, var(--os-accent-2));
+  box-shadow: 0 0 3px color-mix(in srgb, var(--os-accent-2) 55%, transparent);
 }
 
 @keyframes mn-os-star-drift {
-  0% {
+  0%,
+  100% {
     transform: translate(0, 0);
-    opacity: 0.2;
   }
 
   50% {
-    opacity: 0.7;
+    transform: translate(10px, -14px);
   }
-
-  100% {
-    transform: translate(12px, -18px);
-    opacity: 0.2;
-  }
-}
-
-/* grain + mesh */
-
-.mn-os-wall-grain,
-.mn-os-wall-mesh {
-  background: var(--os-bg);
-}
-
-.mn-os-wall-mesh {
-  background:
-    radial-gradient(80% 60% at 20% 20%, color-mix(in srgb, var(--os-accent) 12%, transparent), transparent),
-    radial-gradient(70% 55% at 80% 75%, color-mix(in srgb, var(--os-accent-2) 10%, transparent), transparent),
-    linear-gradient(145deg, var(--os-wall-a), var(--os-wall-b));
-}
-
-.mn-os-grain {
-  position: absolute;
-  inset: 0;
-  opacity: 0.06;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  mix-blend-mode: overlay;
 }
 
 /* minnow fish */
