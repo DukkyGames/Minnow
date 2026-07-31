@@ -748,11 +748,13 @@ function ensurePanelDom(): HTMLElement {
 
   centerBtn.className = 'git-panel-center-btn';
 
-  centerBtn.textContent = 'Control Center';
+  centerBtn.textContent = 'Open full view';
 
-  centerBtn.title = 'Open Source Control Center';
+  centerBtn.title = 'Open the Source Control Center';
 
-  centerBtn.setAttribute('aria-label', 'Open Source Control Center');
+  centerBtn.setAttribute('aria-label', 'Open the Source Control Center');
+
+  centerBtn.setAttribute('aria-pressed', 'false');
 
   centerRow.append(toolbarStart, centerBtn);
 
