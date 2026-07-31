@@ -49,6 +49,10 @@ function getComposerControlsRow(root: HTMLElement): HTMLElement | null {
   return root.closest('#composerControls') as HTMLElement | null;
 }
 
+function isHubComposerModeSelector(root: HTMLElement): boolean {
+  return Boolean(root.closest('.input-bar--hub'));
+}
+
 /** Space left in #composerControls for the mode strip (not its current icon-only width). */
 function availableModeSelectorWidth(root: HTMLElement): number {
   const row = getComposerControlsRow(root) ?? root.parentElement;
@@ -89,6 +93,13 @@ function shouldModeSelectorBeCompact(root: HTMLElement): boolean {
 /** Hide segment labels when labelled content cannot fit the space left in the composer row. */
 function syncModeSelectorCompact(root: HTMLElement): void {
   if (root.querySelector('.is-submenu-open')) return;
+
+  // Hub keeps labelled segments (horizontal scroll on the strip when tight).
+  if (isHubComposerModeSelector(root)) {
+    root.classList.remove('mode-segmented--compact');
+    syncPlanSegmentCompactAffordance(root);
+    return;
+  }
 
   if (shouldModeSelectorBeCompact(root)) {
     root.classList.add('mode-segmented--compact');

@@ -13,6 +13,7 @@ import {
 import { StreamingContentAccumulator } from '../api/message-content';
 import { thinkingToCompletionBody } from '../agents/thinking-to-body';
 import { modelCache } from '../app-state';
+import { getPendingAttachments } from '../attachments/store';
 import {
   buildExpandPromptMessages,
   sanitizeExpandedPrompt,
@@ -22,6 +23,7 @@ import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { resolveProvider } from '../providers/store';
 import { getActiveChat } from '../state/sessions';
 import { getActiveModelIdFromDom } from './editor-ai-completion-client';
+import type { Attachment } from '../attachments/types';
 
 /** Room for a paragraph or a short bullet list — not an essay. */
 const EXPAND_MAX_TOKENS = 700;
@@ -41,6 +43,8 @@ export interface ExpandPromptBinding {
 export interface ExpandPromptRequest {
   draft: string;
   signal: AbortSignal;
+  /** Files staged in the composer; defaults to the pending attachment list. */
+  attachments?: readonly Attachment[];
   /** Called with sanitized text as it streams. */
   onPartial?: (text: string) => void;
 }
@@ -100,6 +104,8 @@ export async function fetchExpandedPrompt(
 ): Promise<ExpandPromptResult> {
   const draft = input.draft.trim();
   if (!draft) return { text: null };
+  // Attachments enrich the draft; they never stand in for one.
+  const attachments = input.attachments ?? getPendingAttachments();
 
   const binding = await resolveExpandPromptBinding();
   if (!binding.modelId.trim()) {
@@ -109,7 +115,7 @@ export async function fetchExpandedPrompt(
   const provider = await resolveProvider(binding.providerId);
   const body: Record<string, unknown> = {
     model: binding.modelId,
-    messages: buildExpandPromptMessages(draft),
+    messages: buildExpandPromptMessages(draft, attachments),
     temperature: EXPAND_TEMPERATURE,
     max_tokens: EXPAND_MAX_TOKENS,
     stream: true,
