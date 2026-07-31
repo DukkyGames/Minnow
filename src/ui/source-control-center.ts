@@ -46,6 +46,7 @@ import { createChecksView } from './scc-checks';
 import { createHistoryView } from './scc-history';
 import { createPullsView } from './scc-pulls';
 import { createBranchesView, createStashesView, createWorktreesView } from './scc-refs';
+import { refreshForgeRailBadges, refreshGitRailBadges } from './scc-rail-badges';
 import { createSccPalette, type SccCommand, type SccPaletteHandle } from './scc-palette';
 import {
   button,
@@ -181,11 +182,7 @@ const context: SccContext = {
     await activeView?.refresh();
   },
   goTo: (section) => void showSection(section),
-  setBadge: (section, badge) => {
-    if (badge) badges.set(section, badge);
-    else badges.delete(section);
-    paintRailBadge(section);
-  },
+  setBadge: (section, badge) => applyRailBadge(section, badge),
 };
 
 // ── Shell ────────────────────────────────────────────────────────────────────
@@ -359,6 +356,12 @@ async function showSection(id: SccSectionId): Promise<void> {
   activeView.activate?.();
 }
 
+function applyRailBadge(section: SccSectionId, badge: SccBadge | null): void {
+  if (badge) badges.set(section, badge);
+  else badges.delete(section);
+  paintRailBadge(section);
+}
+
 function paintRailBadge(section: SccSectionId): void {
   const item = railEl?.querySelector<HTMLElement>(`.scc-rail__item[data-section="${section}"]`);
   const slot = item?.querySelector<HTMLElement>('.scc-rail__badge');
@@ -410,11 +413,22 @@ async function refreshGitState(): Promise<void> {
   }
 
   paintHeader();
+
+  await refreshGitRailBadges(applyRailBadge, {
+    cwd,
+    status,
+    localBranchCount: localBranches.length,
+  });
 }
 
 async function refreshForgeState(): Promise<void> {
   forge = await forgeStatus(effectiveCwd());
   paintForgeChip();
+  await refreshForgeRailBadges(applyRailBadge, {
+    cwd: effectiveCwd(),
+    branch: currentBranch,
+    forge,
+  });
 }
 
 function paintHeader(): void {
@@ -865,7 +879,7 @@ function startPolling(): void {
 
   forgeTimer = window.setInterval(() => {
     if (document.hidden) return;
-    // Only the two remote sections need forge polling; the rest would burn gh calls.
+    void refreshForgeState();
     if (activeSection === 'pulls' || activeSection === 'checks') void activeView?.refresh();
   }, FORGE_POLL_MS);
 }

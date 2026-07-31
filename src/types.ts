@@ -1090,6 +1090,8 @@ export interface Chat {
   codeChangeTotals?: ChatCodeChangeTotals;
   /** Epoch ms when history backfill last rebuilt codeChangeTotals. */
   codeChangeBackfillAt?: number;
+  /** Hide Commit / Create PR strip actions after a successful ship from this chat. */
+  codeChangeShipHandled?: boolean;
   /** Last context trim / compress stats. */
   lastContextTrim?: {
     archived?: number;

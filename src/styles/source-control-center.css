@@ -316,6 +316,11 @@
   align-items: center;
 }
 
+/* Flex parents can defeat the UA [hidden] rule on badge slots. */
+.scc-rail__badge[hidden] {
+  display: none !important;
+}
+
 /* ─── Pane ───────────────────────────────────────────────────────────────── */
 
 .scc-pane {
