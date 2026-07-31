@@ -45,10 +45,15 @@ import {
   createRunSupervision,
   getProgressAgeMs,
   getRunSupervision,
+  isSupervisionPageHidden,
   setHeartbeatConfig,
   startHeartbeat,
   stopHeartbeat,
 } from '../agents/controller/wrapper.ts';
+import {
+  onBoardAutoRunStarted,
+  onBoardAutoRunStopped,
+} from '../chat/orchestrate/board-afk-power.ts';
 import { runChatTurn } from '../tools/loop.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
@@ -1235,6 +1240,7 @@ function startTaskChatSupervision(chatId: string): void {
     // it needs stall supervision just as much as afk/auto. Only manual opts out.
     if (mode === 'manual') return;
     if (!isBoardRunning(group)) return;
+    if (isSupervisionPageHidden()) return;
 
     const sup = getRunSupervision(runId);
     if (!sup) return;
@@ -4705,6 +4711,7 @@ export async function recoverInterruptedMergesAfterReload(
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
+  const wasRunning = board.autoRunning === true;
   void clearOomPauseFromElectron();
   board.autoRunning = true;
   // Clear any prior Stop or system pause so the timer resumes and badges clear.
@@ -4714,6 +4721,7 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   logAutoStart(group);
   scheduleSaveSessions();
   emitBoardChange(group.id);
+  if (!wasRunning) onBoardAutoRunStarted();
   void autoDelegateNext(group, plannerChat).catch((err) =>
     reportBackgroundError('auto-delegate-next', err),
   );
@@ -4732,6 +4740,7 @@ export function stopBoardAutoRun(
 ): void {
   const board = group.orchestrateBoard;
   if (!board) return;
+  const wasRunning = board.autoRunning === true;
   const reason = options.reason ?? 'user';
   board.autoRunning = false;
   if (reason === 'system') {
@@ -4784,6 +4793,7 @@ export function stopBoardAutoRun(
   // Flush stop state immediately so reload cannot resurrect auto execution.
   saveSessionsNow(group);
   emitBoardChange(group.id);
+  if (wasRunning) onBoardAutoRunStopped();
 }
 
 /** Pause every auto/sequential board on window close (mirrors pressing Stop). */
@@ -4832,6 +4842,52 @@ export async function autoDelegateNext(
     await resumeBoardTask(group, task.id, plannerChat);
   }
   await drainTaskQueue(group, plannerChat);
+}
+
+/**
+ * After display wake / tab focus, replay stream-end finalizers for task chats that
+ * finished while the renderer was throttled (macOS display sleep).
+ */
+export async function reconcileRunningBoardsAfterDisplayWake(): Promise<void> {
+  if (!sessionState?.groups?.length) return;
+  ensureStreamEndSubscription();
+  for (const group of sessionState.groups) {
+    const board = group.orchestrateBoard;
+    if (!board || !isBoardRunning(group)) continue;
+    const planner = getPlannerChatForGroup(group);
+    if (!planner) continue;
+
+    for (const task of board.tasks) {
+      if (task.status === 'in_progress') {
+        const chatId = task.chatId?.trim();
+        if (chatId && !isTaskChatActive(chatId)) {
+          finalizeBoardTaskOnStreamEnd(group, task, planner);
+        }
+        continue;
+      }
+      if (task.status === 'testing') {
+        const testId = task.testChatId?.trim();
+        if (testId && !isTaskChatActive(testId)) {
+          await finalizeTaskTestingOnStreamEnd(group, task, planner).catch((err) =>
+            reportBackgroundError('wake-finalize-task-testing', err),
+          );
+        }
+      }
+    }
+
+    const finalChatId = board.finalTest?.chatId?.trim();
+    if (
+      board.finalTest?.status === 'in_progress' &&
+      finalChatId &&
+      !isTaskChatActive(finalChatId)
+    ) {
+      finalizeFinalTestOnStreamEnd(group, planner);
+    }
+
+    await reconcileMergingTasks(group, planner);
+    await autoDelegateNext(group, planner);
+    emitBoardChange(group.id);
+  }
 }
 
 function ensureAutoDriveSubscription(): void {

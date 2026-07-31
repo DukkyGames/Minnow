@@ -83,6 +83,11 @@ export const DIAGNOSTICS_OOM_PAUSE = 'minnow:diagnostics:oom-pause';
 /** Renderer → main: clear OOM pause marker after user resumes the board. */
 export const DIAGNOSTICS_CLEAR_OOM_PAUSE = 'minnow:diagnostics:clear-oom-pause';
 
+/** Renderer → main: keep the app awake while AFK orchestrate boards are running. */
+export const POWER_SET_AFK_GUARD = 'minnow:power:set-afk-guard';
+/** Main → renderer: macOS screen unlocked / system resumed from sleep. */
+export const POWER_SCREEN_UNLOCKED = 'minnow:power:screen-unlocked';
+
 /** Renderer → main: current auto-update status snapshot (MIN-384). */
 export const UPDATER_GET_STATUS = 'minnow:updater:get-status';
 /** Renderer → main: user-initiated update check (failures surface inline). */

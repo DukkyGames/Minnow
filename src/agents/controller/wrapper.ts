@@ -117,6 +117,11 @@ export function resetHeartbeatBaselines(): void {
   }
 }
 
+/** True while the page is hidden (display off / background tab) — stall watchdog must not fire. */
+export function isSupervisionPageHidden(): boolean {
+  return pageHiddenAtMono !== null;
+}
+
 /** Update observe-only thresholds from merged sub-agents config. */
 export function setHeartbeatConfig(config: Partial<HeartbeatConfig>): void {
   heartbeatConfig = {

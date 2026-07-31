@@ -356,6 +356,12 @@ export interface MinnowTrayApi {
   onCloseToTrayChanged(callback: (enabled: boolean) => void): () => void;
 }
 
+/** macOS display sleep / system resume hooks for AFK board reliability. */
+export interface MinnowPowerApi {
+  setAfkBoardGuard(active: boolean): void;
+  onScreenUnlocked(callback: () => void): () => void;
+}
+
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
   app: MinnowAppApi;
@@ -363,6 +369,7 @@ export interface MinnowElectronBridge {
   diagnostics?: MinnowDiagnosticsApi;
   updater?: MinnowUpdaterApi;
   tray?: MinnowTrayApi;
+  power?: MinnowPowerApi;
 }
 
 declare global {
