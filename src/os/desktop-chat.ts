@@ -352,7 +352,11 @@ export function wireDesktopComposerControls(inputEl?: HTMLTextAreaElement | null
   });
 
   void import('../ui/context-usage-ring').then((m) => m.bindContextUsageRings());
-  void import('../ui/composer-voice').then((m) => m.initComposerVoice());
+  // Expand mounts after the mic so it lands last in the button row.
+  void import('../ui/composer-voice')
+    .then((m) => m.initComposerVoice())
+    .then(() => import('../ui/composer-expand'))
+    .then((m) => m.initComposerExpand());
 }
 
 /** Scroll transcript container when jump chip is used. */
