@@ -307,13 +307,21 @@
   min-width: 0;
 }
 
-/* Compact toolbar — 28px visual, 44px touch target via padding */
+/* Compact toolbar — smaller than the global 40px .icon-btn (matches preview-header) */
 .file-viewer-header .icon-btn {
   width: 28px;
   height: 28px;
-  padding: calc((var(--touch-min) - 28px) / 2);
-  margin: calc((var(--touch-min) - 28px) / -2);
-  box-sizing: content-box;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+@media (pointer: coarse) {
+  .file-viewer-header .icon-btn {
+    padding: calc((var(--touch-min) - 28px) / 2);
+    margin: calc((var(--touch-min) - 28px) / -2);
+    box-sizing: content-box;
+  }
 }
 
 .file-viewer-header .icon-btn .icon-svg {
