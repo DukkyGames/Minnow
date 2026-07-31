@@ -12,7 +12,7 @@ I've been working on Minnow for the last few months, mostly alone. It isn't fini
 
 **TL;DR:** Free, AGPL workspace for local (or BYO API) models: chat, code, research, orchestration, memory. No accounts, no telemetry. Source and releases on GitHub: https://github.com/DukkyGames/Minnow
 
-**Minnow is a free and open source AI workspace that runs on the models you already have:** LM Studio, Ollama, llama.cpp, or anything OpenAI-compatible, local or cloud. Your keys, chats, and files stay on your disk. It's AGPL-3.0-or-later. Not open core, not a free tier bolted onto a cloud product. If I ever disappeared or changed my mind, someone could fork it and keep going. That guarantee is the whole point.
+**Minnow is a free and open source AI workspace that runs on the models you already have:** LM Studio, Ollama, llama.cpp, or anything OpenAI-compatible, local or cloud. Your keys, chats, and files stay on your disk.
 
 **Privacy and network (checkable):**
 - No Minnow account. No telemetry. No phone-home.
