@@ -135,6 +135,9 @@ export type ChromeIconName =
   | 'openProject'
   | 'terminal'
   | 'browser'
+  | 'deviceMobile'
+  | 'deviceTablet'
+  | 'deviceDesktop'
   | 'designMode'
   | 'dock'
   | 'mic'
@@ -183,7 +186,7 @@ export type MetricIconName =
   | 'metricTotal'
   | 'metricCtx';
 
-/** All 128 semantic icon names. */
+/** All 131 semantic icon names. */
 export type IconName =
   | ShellIconName
   | AppIconName
@@ -310,6 +313,9 @@ export const ICON_CLASS: Record<IconName, string> = {
   openProject: 'fi-rr-folder-open',
   terminal: 'fi-rr-terminal',
   browser: 'fi-rr-browser',
+  deviceMobile: 'fi-rr-mobile',
+  deviceTablet: 'fi-rr-tablet',
+  deviceDesktop: 'fi-rr-computer',
   designMode: 'fi-rr-magic-wand',
   dock: 'fi-rr-layout-fluid',
   mic: 'fi-rr-microphone',
