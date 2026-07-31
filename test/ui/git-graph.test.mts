@@ -9,7 +9,9 @@ import {
   computeSquashLinks,
   detectTrunkBranch,
   extractLocalBranchRefs,
+  graphMarkerWidthPx,
   maxLaneIndex,
+  maxLaneIndexForRow,
 } from '../../src/ui/git-graph.ts';
 import type { GitCommitEntry } from '../../src/state/git-api.ts';
 
@@ -366,5 +368,36 @@ describe('extractLocalBranchRefs', () => {
   it('deduplicates branch names', () => {
     const refs = extractLocalBranchRefs(['main', 'HEAD -> main']);
     assert.deepEqual(refs, ['main']);
+  });
+});
+
+describe('graphMarkerWidthPx', () => {
+  it('uses only lanes active on the row, not the global graph width', () => {
+    const rows = computeGraphLayout(
+      assignCommitVisuals(
+        [
+          commit(E, [D], { refs: ['feature/test'] }),
+          commit(D, [B]),
+          commit(C, [B], { refs: ['HEAD -> main'] }),
+          commit(B, [A]),
+          commit(A, []),
+        ],
+        'main',
+      ),
+    );
+    const step = 14;
+    const globalMaxLane = maxLaneIndex(rows);
+    const globalWidth = Math.max(step, step * (globalMaxLane + 1));
+
+    const lane0Only = rows.find((r) => maxLaneIndexForRow(r) === 0);
+    assert.ok(lane0Only);
+    assert.equal(graphMarkerWidthPx(lane0Only!, step), step);
+
+    const widestRow = rows.find((r) => maxLaneIndexForRow(r) === globalMaxLane);
+    assert.ok(widestRow);
+    assert.equal(graphMarkerWidthPx(widestRow!, step), globalWidth);
+    if (globalMaxLane > 0) {
+      assert.ok(graphMarkerWidthPx(lane0Only!, step) < graphMarkerWidthPx(widestRow!, step));
+    }
   });
 });

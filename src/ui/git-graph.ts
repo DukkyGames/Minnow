@@ -422,15 +422,37 @@ export function computeGraphLayout(
   });
 }
 
-/** Widest lane index any row touches (dot, rail, or curve). */
+/** Widest lane index one row touches (dot, rail, or curve). */
+export function maxLaneIndexForRow(visual: CommitVisual): number {
+  let max = visual.lane;
+  for (const rail of visual.rails) max = Math.max(max, rail.lane);
+  for (const curve of visual.curves) max = Math.max(max, curve.fromLane, curve.toLane);
+  return max;
+}
+
+/** Widest lane index any row in the graph touches. */
 export function maxLaneIndex(visuals: CommitVisual[]): number {
   let max = 0;
   for (const visual of visuals) {
-    max = Math.max(max, visual.lane);
-    for (const rail of visual.rails) max = Math.max(max, rail.lane);
-    for (const curve of visual.curves) max = Math.max(max, curve.fromLane, curve.toLane);
+    max = Math.max(max, maxLaneIndexForRow(visual));
   }
   return max;
+}
+
+/** Marker column width for one row: lanes used on this row plus collapsed sub-dots. */
+export function graphMarkerWidthPx(
+  visual: CommitVisual,
+  step: number,
+  clusters: BranchCluster[] = [],
+  extraCount = 0,
+): number {
+  const laneWidth = Math.max(LANE_STEP, step * (maxLaneIndexForRow(visual) + 1));
+  if (clusters.length === 0 && !extraCount) return laneWidth;
+  const subdotWidth =
+    LANE_STEP +
+    (clusters.length > 0 ? 4 + clusters.length * SUBDOT_STEP : 0) +
+    (extraCount ? 16 : 0);
+  return Math.max(laneWidth, subdotWidth);
 }
 
 /**
@@ -669,6 +691,10 @@ function renderRow(visual: CommitVisual, step: number, ctx: RowContext): HTMLEle
 
   const marker = document.createElement('div');
   marker.className = 'git-graph__marker';
+  marker.style.setProperty(
+    '--git-marker-w',
+    `${graphMarkerWidthPx(visual, step, ctx.clusters ?? [], ctx.extraCount ?? 0)}px`,
+  );
 
   if (visual.rails.length > 0 || visual.curves.length > 0) {
     marker.appendChild(renderRails(visual, step));
@@ -770,7 +796,6 @@ function appendExpandedRows(
   const laidOut = computeGraphLayout(visuals, squashLinks);
   const laneCount = maxLaneIndex(laidOut) + 1;
   const step = laneStep(laneCount);
-  list.style.setProperty('--git-marker-w', `${Math.max(LANE_STEP, step * laneCount)}px`);
 
   for (const visual of laidOut) {
     list.appendChild(renderRow(visual, step, ctx));
@@ -799,12 +824,6 @@ function appendCollapsedRows(
       commit: { ...visual.commit, parents: visual.commit.parents.slice(0, 1) },
     })),
   );
-
-  const maxShown = rows.reduce((max, row) => Math.max(max, row.clusters.length), 0);
-  const hasExtra = rows.some((row) => row.extraCount > 0);
-  const width =
-    LANE_STEP + (maxShown > 0 ? 4 + maxShown * SUBDOT_STEP : 0) + (hasExtra ? 16 : 0);
-  list.style.setProperty('--git-marker-w', `${width}px`);
 
   laidOut.forEach((visual, index) => {
     const { clusters, extraCount } = rows[index];
