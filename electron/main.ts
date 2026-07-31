@@ -10,6 +10,7 @@ import {
   crashReporter,
   dialog,
   ipcMain,
+  powerMonitor,
   session,
   shell,
 } from 'electron';
@@ -36,6 +37,7 @@ import {
   resolveTrayIconPath,
 } from './tray-icon.js';
 import { shouldQuitOnWindowAllClosed } from './tray-close.js';
+import { setAfkBoardPowerGuardActive } from './afk-power-guard.js';
 import {
   EMPTY_TRAY_STATUS,
   type TrayRendererCommand,
@@ -135,6 +137,17 @@ function recoverRenderer(win: BrowserWindow): void {
   win.webContents.reload();
 }
 
+/** Notify the renderer when the display wakes so AFK boards can reconcile stalled finalizers. */
+function wirePowerWakeNotifications(): void {
+  const notify = (): void => {
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send(channels.POWER_SCREEN_UNLOCKED);
+  };
+  powerMonitor.on('resume', notify);
+  powerMonitor.on('unlock-screen', notify);
+}
+
 /** Register app + preview IPC handlers. */
 function registerIpcHandlers(): void {
   registerPreviewHostIpc();
@@ -163,6 +176,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE, () => {
     crashLog.clearOomPauseMarker();
+  });
+
+  ipcMain.handle(channels.POWER_SET_AFK_GUARD, (_event, active: unknown) => {
+    setAfkBoardPowerGuardActive(active === true);
   });
 
   ipcMain.handle(channels.WINDOW_MINIMIZE, (event) => {
@@ -507,6 +524,7 @@ async function bootstrapInner(): Promise<void> {
   }
   configurePreviewSession(session.fromPartition('persist:minnow-preview'));
   registerIpcHandlers();
+  wirePowerWakeNotifications();
   initUpdater({ prepareQuitForUpdate });
 
   closeToTrayEnabled = await readCloseToTrayPreference();
