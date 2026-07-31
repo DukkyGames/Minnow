@@ -32,6 +32,7 @@ import './styles/responsive.css';
 import './styles/mode-selector.css';
 import './styles/mode-icons.css';
 import './styles/composer-controls.css';
+import './styles/composer-expand.css';
 import './styles/composer-message-queue.css';
 import './styles/file-panel.css';
 /* Material Icon Theme (PKief) — colorful file/folder glyphs for Code tree + tabs */
@@ -199,6 +200,7 @@ import {
   initDesktopToolsPopover,
 } from './ui/composer-tools-popover';
 import { initComposerVoice } from './ui/composer-voice';
+import { initComposerExpand } from './ui/composer-expand';
 import { initComposerUndo } from './ui/composer-undo';
 import { initVoiceStatus } from './ui/voice-controls';
 import { dismissOpenLayers } from './ui/status';
@@ -287,6 +289,7 @@ export async function initApp(): Promise<void> {
   initChatAppToolsPopover();
   initDesktopToolsPopover();
   initComposerVoice();
+  initComposerExpand();
   initComposerUndo();
   void initVoiceStatus();
   initAttachments();

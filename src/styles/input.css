@@ -73,7 +73,8 @@
 .input-wrap--inset-actions #msgInput {
   width: 100%;
   box-sizing: border-box;
-  padding-right: calc(14px + 2 * var(--input-inset-btn-size, 32px) + 6px);
+  /* attach + mic + expand */
+  padding-right: calc(14px + 3 * var(--input-inset-btn-size, 32px) + 6px);
   border: none;
   box-shadow: none;
   background: transparent;
