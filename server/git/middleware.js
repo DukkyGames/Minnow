@@ -35,6 +35,23 @@ import {
   worktreeAdd,
   worktreeRemove,
 } from './git-ops.js';
+import {
+  forgeStatus,
+  invalidateForgeStatusCache,
+  prCheckout,
+  prClose,
+  prCreate,
+  prDiff,
+  prList,
+  prMerge,
+  prReady,
+  prView,
+  runCancel,
+  runList,
+  runLog,
+  runRerun,
+  runView,
+} from './forge-ops.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -91,6 +108,25 @@ const OPS = {
   snapshotCreate: (a) => snapshotCreate(a),
   snapshotRestore: (a) => snapshotRestore(a),
   snapshotDiff: (a) => snapshotDiff(a),
+  // Forge layer — pull requests and CI through the user's own `gh` auth.
+  forgeStatus: (a) => forgeStatus(a),
+  forgeRefresh: (a) => {
+    invalidateForgeStatusCache(a?.cwd);
+    return forgeStatus({ ...a, refresh: true });
+  },
+  prList: (a) => prList(a),
+  prView: (a) => prView(a),
+  prDiff: (a) => prDiff(a),
+  prCreate: (a) => prCreate(a),
+  prMerge: (a) => prMerge(a),
+  prCheckout: (a) => prCheckout(a),
+  prReady: (a) => prReady(a),
+  prClose: (a) => prClose(a),
+  runList: (a) => runList(a),
+  runView: (a) => runView(a),
+  runRerun: (a) => runRerun(a),
+  runCancel: (a) => runCancel(a),
+  runLog: (a) => runLog(a),
 };
 
 export async function handleGitRequest(req, res, pathname) {

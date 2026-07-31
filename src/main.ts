@@ -46,7 +46,7 @@ import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
 import './styles/workspace-menu.css';
 import './styles/workspace-folder-picker.css';
-import './styles/git-center-lightbox.css';
+import './styles/source-control-center.css';
 import './styles/git-help-lightbox.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
