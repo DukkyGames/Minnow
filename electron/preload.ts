@@ -404,6 +404,16 @@ const minnowBridge = {
       return () => ipcRenderer.removeListener(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
     },
   },
+  power: {
+    setAfkBoardGuard: (active: boolean): void => {
+      void ipcRenderer.invoke(channels.POWER_SET_AFK_GUARD, active);
+    },
+    onScreenUnlocked: (callback: () => void): (() => void) => {
+      const handler = () => callback();
+      ipcRenderer.on(channels.POWER_SCREEN_UNLOCKED, handler);
+      return () => ipcRenderer.removeListener(channels.POWER_SCREEN_UNLOCKED, handler);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('minnow', minnowBridge);
