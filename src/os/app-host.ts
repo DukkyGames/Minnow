@@ -531,11 +531,9 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
       );
     if (hadFullscreenForeground) closeAllAppPages();
     lastForegroundApp = null;
-    void import('./desktop-state').then(async (m) => {
-      if (m.isDesktopChatActive()) {
-        const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
-        await restoreDesktopSessionOnForeground();
-      }
+    void import('./desktop-state').then(async () => {
+      const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
+      await restoreDesktopSessionOnForeground();
     });
     return;
   }
