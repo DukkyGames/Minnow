@@ -71,7 +71,11 @@ import {
   renderStatsForChat,
   showCachedModelInfo,
 } from './messages';
-import { appendCodeChangeTotalsSpans, updateCodeChangeStrip } from './code-change-strip';
+import {
+  appendChatItemCodeChangeStats,
+  formatChatItemCodeChangeAria,
+  updateCodeChangeStrip,
+} from './code-change-strip';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import { hasCodeChangeTotals } from '../usage/code-change-ledger';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
@@ -117,7 +121,6 @@ import {
 } from './default-model';
 import { syncActiveChatModelUi, onActiveChatModelChange } from './chat-model-ui';
 import { setStatus } from './status';
-import { formatSidebarStatsPreview } from './stats';
 import {
   applyChatItemDotClasses,
   applyGroupHeaderDotClasses,
@@ -434,12 +437,12 @@ export function appendChatRow(
   const isSelected = selectedChatIds.has(chat.id);
   const inGroup = options?.inGroup === true;
   const modelLabel = chat.modelId || 'No model selected';
-  const statsPreview = formatSidebarStatsPreview(chat.lastStats);
+  const codeChangeAria = inGroup ? '' : formatChatItemCodeChangeAria(chat);
   const isDraftOnly = getChatMessageCount(chat) === 0 && hasComposerDraft(chat);
   const displayName = isDraftOnly ? formatDraftChatSidebarName(chat) : chat.name;
   const rowLabel = inGroup
     ? displayName
-    : `${displayName}, ${modelLabel}${statsPreview ? `, ${statsPreview}` : ''}`;
+    : `${displayName}, ${modelLabel}${codeChangeAria ? `, ${codeChangeAria}` : ''}`;
 
   const row = document.createElement('div');
   row.dataset.chatId = chat.id;
@@ -451,7 +454,7 @@ export function appendChatRow(
     (isDraftOnly ? ' chat-item-row--draft' : '');
   row.setAttribute('role', 'listitem');
   row.setAttribute('aria-label', rowLabel);
-  row.title = [displayName, modelLabel, statsPreview].filter(Boolean).join('\n');
+  row.title = [displayName, modelLabel, codeChangeAria].filter(Boolean).join('\n');
   row.tabIndex = 0;
   if (options?.draggable !== false) {
     row.draggable = true;
@@ -567,21 +570,15 @@ export function appendChatRow(
     modelEl.className = 'chat-item-model';
     modelEl.textContent = chat.modelId || '\u2014';
 
-    const statsEl = document.createElement('div');
-    statsEl.className = 'chat-item-stats';
-    const statsPreview = formatSidebarStatsPreview(chat.lastStats);
-    const statsFrag = document.createDocumentFragment();
-    if (statsPreview) {
-      statsFrag.appendChild(document.createTextNode(statsPreview));
-    }
-    if (hasCodeChangeTotals(chat.codeChangeTotals)) {
-      if (statsPreview) statsFrag.appendChild(document.createTextNode(' · '));
-      appendCodeChangeTotalsSpans(statsFrag, chat.codeChangeTotals!);
-    }
-    statsEl.appendChild(statsFrag);
-
     row.appendChild(modelEl);
-    row.appendChild(statsEl);
+    if (hasCodeChangeTotals(chat.codeChangeTotals)) {
+      const statsEl = document.createElement('div');
+      statsEl.className = 'chat-item-stats';
+      const statsFrag = document.createDocumentFragment();
+      appendChatItemCodeChangeStats(statsFrag, chat, chat.codeChangeTotals!);
+      statsEl.appendChild(statsFrag);
+      row.appendChild(statsEl);
+    }
   }
   list.appendChild(row);
 }

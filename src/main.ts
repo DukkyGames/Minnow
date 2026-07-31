@@ -288,6 +288,8 @@ export async function initApp(): Promise<void> {
   initDesktopToolsPopover();
   initComposerVoice();
   initComposerUndo();
+  const { initCodeChangeStripActions } = await import('./ui/code-change-strip-actions');
+  initCodeChangeStripActions();
   void initVoiceStatus();
   initAttachments();
   initContextUsageRing();

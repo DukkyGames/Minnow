@@ -38,6 +38,19 @@ import {
   type SccView,
 } from './scc-shared';
 
+/** Newest run per workflow — shared with the shell for rail badges before Checks is opened. */
+export function rollupChecksRailState(runs: WorkflowRunSummary[]): RunState {
+  const newest = new Map<string, WorkflowRunSummary>();
+  for (const run of runs) {
+    if (!newest.has(run.workflow)) newest.set(run.workflow, run);
+  }
+  const states = [...newest.values()].map((run) => runState(run) as RunState);
+  if (states.includes('failure')) return 'failure';
+  if (states.includes('pending')) return 'pending';
+  if (states.includes('success')) return 'success';
+  return 'none';
+}
+
 export function createChecksView(
   ctx: SccContext,
   options: { getForgeStatus: () => ForgeStatus | null },
@@ -126,15 +139,7 @@ export function createChecksView(
 
   /** The newest run for each workflow decides the rail badge. */
   function rollup(runs: WorkflowRunSummary[]): RunState {
-    const newest = new Map<string, WorkflowRunSummary>();
-    for (const run of runs) {
-      if (!newest.has(run.workflow)) newest.set(run.workflow, run);
-    }
-    const states = [...newest.values()].map((run) => runState(run) as RunState);
-    if (states.includes('failure')) return 'failure';
-    if (states.includes('pending')) return 'pending';
-    if (states.includes('success')) return 'success';
-    return 'none';
+    return rollupChecksRailState(runs);
   }
 
   function renderUnavailable(status: ForgeStatus): void {

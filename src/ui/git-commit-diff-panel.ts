@@ -2,7 +2,7 @@
  * Commit diff review panel in the workspace split (side-by-side per file).
  */
 
-import { gitShow } from '../state/git-api';
+import { gitDiff, gitShow } from '../state/git-api';
 import { showViewerSplit, hideViewerSplit } from './file-layout';
 import { basename } from './file-tree-path';
 import {
@@ -19,10 +19,17 @@ export interface GitCommitDiffPanelOptions {
   subject?: string;
 }
 
+export interface GitWorkingFileDiffPanelOptions {
+  path: string;
+  staged: boolean;
+  cwd?: string;
+}
+
 /** Dispatched when the commit diff panel closes (any path). */
 export const GIT_COMMIT_DIFF_CLOSED_EVENT = 'minnow:git-commit-diff-closed';
 
 let openSha: string | null = null;
+let openWorkingFile: { path: string; staged: boolean } | null = null;
 let paneMarked = false;
 let activeFileIndex = 0;
 let fileEntries: GitPatchFileEntry[] = [];
@@ -87,10 +94,15 @@ function renderFileDiff(index: number): void {
   labels.className = 'git-commit-diff__column-labels';
   const leftLabel = document.createElement('span');
   leftLabel.className = 'git-commit-diff__column-label';
-  leftLabel.textContent = entry.oldPath ? `${entry.oldPath} (parent)` : `${entry.path} (parent)`;
   const rightLabel = document.createElement('span');
   rightLabel.className = 'git-commit-diff__column-label';
-  rightLabel.textContent = entry.path;
+  if (openWorkingFile) {
+    leftLabel.textContent = 'HEAD';
+    rightLabel.textContent = openWorkingFile.staged ? 'Staged' : 'Working tree';
+  } else {
+    leftLabel.textContent = entry.oldPath ? `${entry.oldPath} (parent)` : `${entry.path} (parent)`;
+    rightLabel.textContent = entry.path;
+  }
   labels.append(leftLabel, rightLabel);
   diffBodyEl.appendChild(labels);
 
@@ -180,7 +192,7 @@ function createCloseButton(): HTMLButtonElement {
   return closeBtn;
 }
 
-function mountPanelChrome(shortSha: string, subject: string, statLine: string): void {
+function mountPanelShell(meta: HTMLElement, showFileTabs: boolean): void {
   const host = getViewerHost();
   if (!host) return;
 
@@ -190,6 +202,20 @@ function mountPanelChrome(shortSha: string, subject: string, statLine: string): 
   const shell = document.createElement('div');
   shell.className = 'git-commit-diff';
 
+  fileTabsEl = document.createElement('div');
+  fileTabsEl.className = 'git-commit-diff__file-tabs';
+  fileTabsEl.setAttribute('role', 'tablist');
+  fileTabsEl.setAttribute('aria-label', 'Changed files');
+  fileTabsEl.hidden = !showFileTabs;
+
+  diffBodyEl = document.createElement('div');
+  diffBodyEl.className = 'git-commit-diff__body';
+
+  shell.append(meta, fileTabsEl, diffBodyEl);
+  host.appendChild(shell);
+}
+
+function mountCommitPanelChrome(shortSha: string, subject: string, statLine: string): void {
   const meta = document.createElement('div');
   meta.className = 'git-commit-diff__meta';
 
@@ -204,17 +230,26 @@ function mountPanelChrome(shortSha: string, subject: string, statLine: string): 
   metaText.append(title, detail);
 
   meta.append(metaText, createCloseButton());
+  mountPanelShell(meta, true);
+}
 
-  fileTabsEl = document.createElement('div');
-  fileTabsEl.className = 'git-commit-diff__file-tabs';
-  fileTabsEl.setAttribute('role', 'tablist');
-  fileTabsEl.setAttribute('aria-label', 'Changed files');
+function mountWorkingFilePanelChrome(path: string, staged: boolean): void {
+  const meta = document.createElement('div');
+  meta.className = 'git-commit-diff__meta';
 
-  diffBodyEl = document.createElement('div');
-  diffBodyEl.className = 'git-commit-diff__body';
+  const metaText = document.createElement('div');
+  metaText.className = 'git-commit-diff__meta-text';
+  const title = document.createElement('h2');
+  title.className = 'git-commit-diff__title';
+  title.textContent = basename(path);
+  title.title = path;
+  const detail = document.createElement('p');
+  detail.className = 'git-commit-diff__detail';
+  detail.textContent = `${staged ? 'Staged' : 'Unstaged'} — ${path}`;
+  metaText.append(title, detail);
 
-  shell.append(meta, fileTabsEl, diffBodyEl);
-  host.appendChild(shell);
+  meta.append(metaText, createCloseButton());
+  mountPanelShell(meta, false);
 }
 
 /** Result of attempting to open the commit diff panel. */
@@ -233,6 +268,8 @@ export async function openGitCommitDiffPanel(
     closeGitCommitDiffPanel();
     return { ok: true };
   }
+
+  openWorkingFile = null;
 
   const result = await gitShow({ sha, cwd: options.cwd });
   if (!result.ok) {
@@ -255,18 +292,66 @@ export async function openGitCommitDiffPanel(
   const statLine = result.stat?.trim().split('\n').pop()?.trim() ?? '';
   const subject = options.subject?.trim() ?? '';
 
-  mountPanelChrome(shortSha, subject, statLine);
+  mountCommitPanelChrome(shortSha, subject, statLine);
   buildFileTabs();
   selectFile(0);
 
   return { ok: true };
 }
 
-/** Close the commit diff panel and hide the viewer split when empty. */
-export function closeGitCommitDiffPanel(): void {
-  if (!openSha) return;
+/** Open the side-by-side diff viewer for a staged or unstaged working-tree file. */
+export async function openGitWorkingFileDiffPanel(
+  options: GitWorkingFileDiffPanelOptions,
+): Promise<GitCommitDiffOpenResult> {
+  const path = options.path.trim();
+  if (!path) return { ok: false, error: 'path is required' };
+
+  const staged = options.staged;
+  if (openWorkingFile?.path === path && openWorkingFile.staged === staged) {
+    closeGitCommitDiffPanel();
+    return { ok: true };
+  }
+
+  const result = await gitDiff({ path, cached: staged, cwd: options.cwd });
+  if (!result.ok) {
+    return { ok: false, error: result.error ?? 'Could not load diff' };
+  }
+
+  const { dismissFileViewerForPreview } = await import('./file-viewer');
+  if (!(await dismissFileViewerForPreview())) {
+    return { ok: false, cancelled: true };
+  }
+
+  showViewerSplit();
+  markViewerPane();
 
   openSha = null;
+  openWorkingFile = { path, staged };
+  fileEntries = splitPatchIntoFiles(result.patch ?? '');
+  activeFileIndex = 0;
+
+  mountWorkingFilePanelChrome(path, staged);
+  if (fileEntries.length > 1) {
+    if (fileTabsEl) fileTabsEl.hidden = false;
+    buildFileTabs();
+    const focusIndex = Math.max(
+      0,
+      fileEntries.findIndex((entry) => entry.path === path),
+    );
+    selectFile(focusIndex);
+  } else {
+    selectFile(0);
+  }
+
+  return { ok: true };
+}
+
+/** Close the commit diff panel and hide the viewer split when empty. */
+export function closeGitCommitDiffPanel(): void {
+  if (!openSha && !openWorkingFile) return;
+
+  openSha = null;
+  openWorkingFile = null;
   fileEntries = [];
   activeFileIndex = 0;
   fileTabsEl = null;

@@ -94,6 +94,7 @@ import {
   getOpenGitCommitDiffSha,
   GIT_COMMIT_DIFF_CLOSED_EVENT,
   openGitCommitDiffPanel,
+  openGitWorkingFileDiffPanel,
 } from './git-commit-diff-panel';
 
 import { fetchGitCommitMessage } from './git-commit-message-client';
@@ -1390,7 +1391,7 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
 
   diffBtn.title = 'Open diff';
 
-  diffBtn.addEventListener('click', () => void showFileDiff(entry.path, staged));
+  diffBtn.addEventListener('click', () => void openFileDiffInViewer(entry.path, staged));
 
 
 
@@ -1629,6 +1630,30 @@ async function showCommitDiff(sha: string): Promise<void> {
 }
 
 
+
+async function openFileDiffInViewer(path: string, staged: boolean): Promise<void> {
+  selectedCommitSha = null;
+  syncGraphSelectedCommit();
+
+  const opened = await openGitWorkingFileDiffPanel({
+    path,
+    staged,
+    cwd: getEffectiveCwdArg(),
+  });
+
+  if (!opened.ok) {
+    if ('cancelled' in opened && opened.cancelled) return;
+    const message = 'error' in opened ? opened.error : 'Could not load diff';
+    setStatus(message ?? 'Could not load diff', true);
+    return;
+  }
+
+  expandedDiffPath = null;
+  if (diffHost) {
+    diffHost.hidden = true;
+    diffHost.replaceChildren();
+  }
+}
 
 async function showFileDiff(path: string, staged: boolean): Promise<void> {
 

@@ -18,15 +18,6 @@ export function buildLastStatsSnapshot(stats: Stats | undefined, usage: Usage | 
   };
 }
 
-export function formatSidebarStatsPreview(ls: LastStats | null | undefined): string {
-  if (!ls) return '—';
-  const parts: string[] = [];
-  if (ls.tokens_per_second != null) parts.push(`${Number(ls.tokens_per_second).toFixed(1)} tok/s`);
-  if (ls.time_to_first_token != null) parts.push(`TTFT ${Number(ls.time_to_first_token).toFixed(2)}s`);
-  if (ls.total_tokens != null) parts.push(`${ls.total_tokens} tok`);
-  return parts.length ? parts.join(' · ') : '—';
-}
-
 /** Whether the bottom metrics strip is visible (not fully collapsed). */
 export function isStatsStripOpen(): boolean {
   const strip = document.getElementById('statsStrip');
