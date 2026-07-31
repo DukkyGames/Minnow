@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Tool rows preview — Minnow (dev)</title>
+<script>
+  // Minimal theme boot for the harness. Reads ?theme= (default swamp-dark) so
+  // each scene URL renders in a fixed palette without the app's storage layer.
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var id = params.get('theme') || 'swamp-dark';
+    if (!/^(swamp|desert|ocean|coral|mono|matrix|human|mint)-(dark|light)$/.test(id)) id = 'swamp-dark';
+    var mode = id.indexOf('-light') > 0 ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', id);
+    document.documentElement.style.colorScheme = mode;
+  })();
+</script>
+<style>
+  /* global.css locks the app shell to the viewport; this harness is a long page. */
+  html, body { margin: 0; height: auto !important; overflow: visible !important; }
+  body {
+    background: var(--mn-bg, #0f1216);
+    color: var(--mn-fg, #dfe3e8);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+  }
+  #stage {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 760px;
+    padding: 24px 20px 64px;
+  }
+  #stage h2 {
+    margin: 20px 0 2px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mn-fg-subtle);
+  }
+  #stage h2:first-child { margin-top: 0; }
+</style>
+</head>
+<body>
+<div id="stage" class="chat-area"></div>
+<script type="module" src="./tool-row-preview.ts"></script>
+</body>
+</html>
