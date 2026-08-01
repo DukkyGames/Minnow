@@ -57,8 +57,6 @@ const WALLPAPER_MODES = new Set<WallpaperMode>([
   'minnow',
   'aurora',
   'starfield',
-  'grain',
-  'mesh',
   'custom',
 ]);
 
@@ -315,7 +313,7 @@ export async function toolUploadAppearanceAsset(
   }
 
   if (!localServerAvailableImpl()) {
-    return 'Error: local tool server unavailable — run npm start to read workspace files';
+    return 'Error: Minnow is not running locally — open the app to read workspace files';
   }
 
   let bytes: ArrayBuffer;

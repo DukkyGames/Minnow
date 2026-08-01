@@ -49,11 +49,15 @@ import { setStatus } from './status';
 import { appConfirm } from './app-dialog';
 
 const CONTEXT_POLICY_OPTIONS: { value: ContextEnforcementPolicy; label: string }[] = [
+  { value: 'summarize', label: 'Summarize (LLM, default)' },
+  { value: 'dropMiddle', label: 'Drop middle (fast extractive)' },
   { value: 'slide', label: 'Slide (drop oldest turns)' },
   { value: 'truncate', label: 'Truncate (drop oldest messages)' },
-  { value: 'summarize', label: 'Summarize (compress dropped turns)' },
   { value: 'archive', label: 'Archive (Brain wiki)' },
 ];
+
+const CONTEXT_POLICY_HINT =
+  'Uses the active model\'s context window (90% safety margin). Requires a known context length.';
 
 function buildSummarySchemaSelect(initial: string): HTMLSelectElement {
   const sel = document.createElement('select');
@@ -363,7 +367,7 @@ export function mountPromptFileEditor(
         ta.value,
       );
       if (!saved) {
-        setStatus('err', 'Could not save prompt (npm start required)');
+        setStatus('err', 'Could not save prompt (Minnow must be running)');
         return;
       }
       sourceLabel.textContent =
@@ -410,7 +414,6 @@ interface WorkAgentEditorOptions {
   initialProviderId: string | null;
   initialModelId: string | null;
   initialDisabled: boolean;
-  initialMaxInputTokens: number | null;
   initialContextPolicy: ContextPolicySelectValue;
   initialArchive?: ArchiveConfig;
   onModelSaved?: () => void;
@@ -533,19 +536,12 @@ export function mountWorkAgentConfigEditor(
   container: HTMLElement,
   options: WorkAgentEditorOptions,
 ): void {
-  const maxInputTokensInput = document.createElement('input');
-  maxInputTokensInput.type = 'number';
-  maxInputTokensInput.className = 'settings-select settings-kv-input';
-  maxInputTokensInput.min = '1';
-  maxInputTokensInput.step = '1';
-  maxInputTokensInput.placeholder = 'No cap';
-  maxInputTokensInput.value =
-    options.initialMaxInputTokens != null ? String(options.initialMaxInputTokens) : '';
-
   const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy, {
     allowInherit: true,
   });
   void applyArchiveEmbeddingsGate(contextPolicySel);
+
+  const policyHint = el('p', 'settings-field-hint', CONTEXT_POLICY_HINT);
 
   const archiveInitial = {
     ...DEFAULT_ARCHIVE_CONFIG,
@@ -577,11 +573,9 @@ export function mountWorkAgentConfigEditor(
   });
 
   container.appendChild(
-    createSettingsInputRow('Max input tokens', { input: maxInputTokensInput }).row,
-  );
-  container.appendChild(
     createSettingsSelectRow('Context policy', { select: contextPolicySel }).row,
   );
+  container.appendChild(policyHint);
   container.appendChild(archiveBlock.root);
   container.appendChild(disabledRow);
 
@@ -591,13 +585,9 @@ export function mountWorkAgentConfigEditor(
         label: 'Save agent settings',
         onClick: () => {
           void (async () => {
-            const rawCap = maxInputTokensInput.value.trim();
-            const maxInputTokens =
-              rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
             const policy = contextPolicyFromSelect(contextPolicySel);
             const patch: Parameters<typeof patchWorkAgentOverride>[1] = {
               disabled: disabledCb.checked,
-              maxInputTokens,
               contextEnforcementPolicy: policy,
             };
             if (policy === 'archive') {
@@ -645,13 +635,8 @@ export function mountWorkAgentEditor(
   modelSel.className = 'settings-select';
 
   const maxInputTokensInput = document.createElement('input');
-  maxInputTokensInput.type = 'number';
-  maxInputTokensInput.className = 'settings-select settings-kv-input';
-  maxInputTokensInput.min = '1';
-  maxInputTokensInput.step = '1';
-  maxInputTokensInput.placeholder = 'No cap';
-  maxInputTokensInput.value =
-    options.initialMaxInputTokens != null ? String(options.initialMaxInputTokens) : '';
+  maxInputTokensInput.type = 'hidden';
+  maxInputTokensInput.value = '';
 
   const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy);
 
@@ -720,10 +705,9 @@ export function mountWorkAgentEditor(
     checked: !!options.initialDisabled,
   });
   const budgetBlock = el('div', 'settings-model-row');
-  budgetBlock.appendChild(el('label', 'settings-field-label', 'Max input tokens'));
-  budgetBlock.appendChild(maxInputTokensInput);
   budgetBlock.appendChild(el('label', 'settings-field-label', 'Context policy'));
   budgetBlock.appendChild(contextPolicySel);
+  budgetBlock.appendChild(el('p', 'settings-field-hint', CONTEXT_POLICY_HINT));
 
   container.appendChild(modelBlock);
   container.appendChild(budgetBlock);
@@ -770,14 +754,10 @@ export function mountWorkAgentEditor(
   saveModelBtn.addEventListener('click', () => {
     void (async () => {
       binding.modelId = modelSel.value;
-      const rawCap = maxInputTokensInput.value.trim();
-      const maxInputTokens =
-        rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
       const agent = await patchWorkAgentOverride(options.agentId, {
         providerId: binding.providerId || null,
         modelId: binding.modelId || null,
         disabled: disabledCb.checked,
-        maxInputTokens,
         contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
       });
       if (!agent) {
@@ -828,7 +808,6 @@ export function mountSubAgentTypeEditor(
   initial: {
     enabled: boolean;
     maxConcurrent: number;
-    maxInputTokens: number | null;
     contextEnforcementPolicy: ContextPolicySelectValue;
     summarySchema: string;
   },
@@ -836,7 +815,6 @@ export function mountSubAgentTypeEditor(
     patch: Partial<{
       enabled: boolean;
       maxConcurrent: number;
-      maxInputTokens: number | null;
       contextEnforcementPolicy: ContextEnforcementPolicy | null;
       summarySchema: string;
     }>,
@@ -852,17 +830,10 @@ export function mountSubAgentTypeEditor(
   maxInput.max = '8';
   maxInput.value = String(initial.maxConcurrent);
 
-  const maxInputTokensInput = document.createElement('input');
-  maxInputTokensInput.type = 'number';
-  maxInputTokensInput.className = 'settings-select';
-  maxInputTokensInput.min = '1';
-  maxInputTokensInput.placeholder = 'No cap';
-  maxInputTokensInput.value =
-    initial.maxInputTokens != null ? String(initial.maxInputTokens) : '';
-
   const contextPolicySel = buildContextPolicySelect(initial.contextEnforcementPolicy, {
     allowInherit: true,
   });
+  const policyHint = el('p', 'settings-field-hint', CONTEXT_POLICY_HINT);
   const summarySchemaSel = buildSummarySchemaSelect(initial.summarySchema);
 
   const { row: enabledRow, input: enabledCb } = createSettingsToggleRow(`${label} enabled`, {
@@ -872,11 +843,9 @@ export function mountSubAgentTypeEditor(
   extra.appendChild(enabledRow);
   extra.appendChild(createSettingsInputRow('Max concurrent', { input: maxInput }).row);
   extra.appendChild(
-    createSettingsInputRow('Max input tokens', { input: maxInputTokensInput }).row,
-  );
-  extra.appendChild(
     createSettingsSelectRow('Context policy', { select: contextPolicySel }).row,
   );
+  extra.appendChild(policyHint);
   extra.appendChild(
     createSettingsSelectRow('Summary schema', { select: summarySchemaSel }).row,
   );
@@ -890,10 +859,6 @@ export function mountSubAgentTypeEditor(
             const ok = await onSaveConfig({
               enabled: enabledCb.checked,
               maxConcurrent: Math.max(1, Number(maxInput.value) || 1),
-              maxInputTokens:
-                maxInputTokensInput.value.trim() === ''
-                  ? null
-                  : Math.max(1, Math.floor(Number(maxInputTokensInput.value) || 0)),
               contextEnforcementPolicy: contextPolicyFromSelect(contextPolicySel),
               summarySchema: summarySchemaSel.value,
             });

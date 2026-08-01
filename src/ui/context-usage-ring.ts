@@ -11,7 +11,7 @@ import {
 import { TOKEN_ESTIMATE_TOOLTIP } from '../chat/prompts/token-estimate-core';
 import { getPendingAttachments } from '../attachments/store';
 import { resolveEffectiveChatModelBinding } from './default-model';
-import { getActiveChat } from '../state/sessions';
+import { getActiveChat, sessionState } from '../state/sessions';
 import { getActiveComposerSurface } from './composer-surface';
 import {
   bindContextUsageProfileTabs,
@@ -31,6 +31,8 @@ import {
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> | null = null;
 let lastBudget: ContextBudget | null = null;
+/** Bumps on each refresh so slower async estimates cannot paint a prior chat. */
+let refreshGeneration = 0;
 
 const WARN_PERCENT = 85;
 
@@ -43,7 +45,7 @@ function formatTooltip(budget: ContextBudget): string {
   if (budget.limit != null) {
     lines.push(`Context: ${budget.limit.toLocaleString()} tokens`);
   } else {
-    lines.push('Context limit unknown');
+    lines.push('Context limit unknown — compression disabled');
   }
   lines.push(`Used (approx.): ~${budget.used.toLocaleString()}`);
   if (budget.remaining != null) {
@@ -76,6 +78,8 @@ function paintRingSurface(surface: ContextUsageSurface, budget: ContextBudget): 
     fill.style.strokeDashoffset = String(offset);
   }
 
+  svg.querySelector('.context-usage-ring__fill-code-map')?.remove();
+
   const label =
     budget.limit != null
       ? `Context ${percent}% used, ~${budget.used.toLocaleString()} of ${budget.limit.toLocaleString()} tokens`
@@ -92,9 +96,15 @@ function paintUnavailable(surface: ContextUsageSurface): void {
   button.title = 'Could not estimate context usage.';
 }
 
-async function runRefresh(): Promise<void> {
+function shouldApplyRefreshResult(generation: number, chatIdAtStart: string): boolean {
+  if (generation !== refreshGeneration) return false;
+  return sessionState?.activeId === chatIdAtStart;
+}
+
+async function runRefresh(generation: number): Promise<void> {
+  const chat = getActiveChat();
+  const chatIdAtStart = chat.id;
   try {
-    const chat = getActiveChat();
     const { selectValue } = resolveEffectiveChatModelBinding(chat);
     const modelId = selectValue || chat.modelId || '';
     const budget = await getContextBudget({
@@ -104,15 +114,14 @@ async function runRefresh(): Promise<void> {
       pendingAttachmentTokens: estimateAttachmentTokens(getPendingAttachments()),
       inFlight: getContextInFlightOverlay(chat.id),
     });
+    if (!shouldApplyRefreshResult(generation, chatIdAtStart)) return;
     lastBudget = budget;
-    for (const surface of listContextUsageSurfaces()) {
-      paintRingSurface(surface, budget);
-    }
+    const surface = getActiveContextUsageSurface();
+    paintRingSurface(surface, budget);
     syncContextUsageBreakdownIfOpen(budget);
   } catch {
-    for (const surface of listContextUsageSurfaces()) {
-      paintUnavailable(surface);
-    }
+    if (!shouldApplyRefreshResult(generation, chatIdAtStart)) return;
+    paintUnavailable(getActiveContextUsageSurface());
   }
 }
 
@@ -122,7 +131,8 @@ export function refreshContextUsageRing(): void {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-  inFlight = runRefresh().finally(() => {
+  const generation = ++refreshGeneration;
+  inFlight = runRefresh(generation).finally(() => {
     inFlight = null;
   });
 }
@@ -148,7 +158,8 @@ function bindRingButton(surface: ContextUsageSurface): void {
     if (lastBudget) {
       toggleContextUsageBreakdown(lastBudget, surface);
     } else {
-      void runRefresh().then(() => {
+      const generation = ++refreshGeneration;
+      void runRefresh(generation).then(() => {
         if (lastBudget) toggleContextUsageBreakdown(lastBudget, surface);
       });
     }
@@ -207,4 +218,15 @@ export function initContextUsageRing(): void {
 /** Latest budget snapshot (tests / debug). */
 export function getLastContextBudget(): ContextBudget | null {
   return lastBudget;
+}
+
+/** Reset module state between unit tests. */
+export function resetContextUsageRingForTests(): void {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  inFlight = null;
+  lastBudget = null;
+  refreshGeneration = 0;
 }

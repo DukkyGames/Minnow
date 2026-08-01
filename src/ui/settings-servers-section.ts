@@ -308,7 +308,7 @@ function createServerRow(
   autoCb.type = 'checkbox';
   autoCb.checked = server.autoStart;
   autoCb.dataset.serverAutoStart = server.id;
-  autoRow.append(autoCb, document.createTextNode('Auto-start on npm start'));
+  autoRow.append(autoCb, document.createTextNode('Auto-start when Minnow opens'));
   toolbar.append(autoRow);
 
   const portInline = el('div', 'settings-server-port-inline');
@@ -383,7 +383,7 @@ function createServerRow(
         return;
       }
       enableInput.checked = !enableInput.checked;
-      setStatus('err', 'Could not update server — use npm start');
+      setStatus('err', 'Could not update. Open or restart Minnow.');
     })();
   });
 
@@ -604,7 +604,7 @@ export async function renderServersSettingsSection(mount: HTMLElement): Promise<
 
   const offlineBanner = appendSettingsOfflineHint(
     shell,
-    'Start with <code>npm start</code> to install, start, and configure managed servers.',
+    'Open Minnow to install, start, and configure managed services.',
     {
       id: 'settingsServersOffline',
       searchKey: 'integrations.servers',
@@ -648,7 +648,7 @@ export async function renderServersSettingsSection(mount: HTMLElement): Promise<
         el(
           'p',
           'settings-servers-empty',
-          'Start the tool server to load managed services.',
+          'Open Minnow to load managed services.',
         ),
       );
       return;

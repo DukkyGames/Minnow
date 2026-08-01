@@ -35,6 +35,11 @@ describe('model host filter actions', () => {
       assert.ok(search);
       assert.equal(search?.getAttribute('aria-label'), 'Search models');
 
+      const libraryToggle = host.querySelector('.model-host-filter-library-toggle');
+      assert.ok(libraryToggle);
+      assert.equal(libraryToggle?.getAttribute('aria-label'), 'My Models only');
+      assert.ok(libraryToggle?.querySelector('.minnow-glyph'));
+
       const loadedToggle = host.querySelector('.model-host-filter-loaded-toggle');
       assert.ok(loadedToggle);
       assert.ok(loadedToggle?.hasAttribute('hidden'));
@@ -75,6 +80,7 @@ describe('model host filter actions', () => {
         renderModelSelectMenuRows,
         setModelHostFilter,
         setModelLocalLoadFilter,
+        setModelLibraryFilter,
         setModelSearchQuery,
         clearModelSearchQuery,
       } = await import('../../src/ui/model-select-picker.ts');
@@ -88,6 +94,7 @@ describe('model host filter actions', () => {
 
       setModelHostFilter('all');
       setModelLocalLoadFilter('all');
+      setModelLibraryFilter('all');
       clearModelSearchQuery();
       renderModelSelectMenuRows(menu, sel);
       assert.equal(menu.querySelectorAll('.model-select-option').length, 3);
@@ -114,9 +121,22 @@ describe('model host filter actions', () => {
       renderModelSelectMenuRows(menu, sel);
       assert.equal(menu.querySelectorAll('.model-select-option').length, 2);
 
+      doc.getElementById('modelSelect')!.insertAdjacentHTML(
+        'beforeend',
+        '<option value="minnow-library::gguf:abc" data-provider-id="minnow-library" data-provider-host="local">Local GGUF</option>',
+      );
+      setModelLibraryFilter('library');
+      renderModelSelectMenuRows(menu, sel);
+      assert.equal(menu.querySelectorAll('.model-select-option').length, 1);
+      assert.equal(
+        menu.querySelector('.model-select-option-label')?.textContent,
+        'Local GGUF',
+      );
+
       clearModelSearchQuery();
       setModelHostFilter('all');
       setModelLocalLoadFilter('all');
+      setModelLibraryFilter('all');
     } finally {
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;

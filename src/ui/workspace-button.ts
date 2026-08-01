@@ -107,7 +107,7 @@ export { executeWorkspaceSwitch } from './workspace-switch-guard';
 
 async function onOpenNewWorkspace(): Promise<void> {
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Workspace requires npm start (local server)');
+    setStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
 

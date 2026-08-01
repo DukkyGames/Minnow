@@ -79,12 +79,26 @@ describe('renderToolResult codeChange badge', () => {
     assert.ok(panel.querySelector('.prompt-diff__line--add'));
     assert.equal(panel.querySelector('.prompt-diff__line--unchanged'), null);
     assert.equal(panel.querySelector('.prompt-diff__lineno')?.textContent, '2');
-    assert.equal(wrap.querySelector('.tool-call-pre--result'), null);
-    assert.equal(wrap.querySelector('.tool-call-section-label')?.textContent, 'Arguments');
+    // The diff is the card; the raw result is only reachable through the disclosure.
+    assert.ok(!wrap.querySelector('.tool-call-body > .tool-call-pre--result'));
+    assert.ok(wrap.querySelector('.tool-call-raw-details .tool-call-pre--result'));
+  });
+
+  test('badge replaces the text outcome rather than sitting beside it', () => {
+    window = setupDom();
+    const wrap = renderToolCall('save_file', { path: 'a.ts' });
+    renderToolResult(wrap, 'Saved a.ts', undefined, undefined, {
+      additions: 4,
+      deletions: 0,
+      path: 'a.ts',
+    });
+    const outcome = wrap.querySelector('.tool-call-outcome');
+    assert.ok(outcome.querySelector('.tool-call-code-change'));
+    assert.equal(outcome.textContent, '+4');
   });
 });
 
-describe('renderToolCall display labels', () => {
+describe('renderToolCall row zones', () => {
   /** @type {import('happy-dom').Window | undefined} */
   let window;
 
@@ -93,25 +107,84 @@ describe('renderToolCall display labels', () => {
     window = undefined;
   });
 
-  test('non-file tool uses human-readable label', () => {
+  test('non-file tool leads with its action word', () => {
     window = setupDom();
-    const wrap = renderToolCall('web_search', {});
-    const title = wrap.querySelector('.tool-call-title');
-    assert.equal(title?.textContent, 'Web search');
+    const wrap = renderToolCall('web_search', { query: 'oklch' });
+    assert.equal(wrap.querySelector('.tool-call-action')?.textContent, 'Search web');
+    assert.equal(wrap.querySelector('.tool-call-target')?.textContent, 'oklch');
   });
 
   test('unknown tool falls back to spaced snake_case', () => {
     window = setupDom();
     const wrap = renderToolCall('my_custom_tool', {});
-    const title = wrap.querySelector('.tool-call-title');
-    assert.equal(title?.textContent, 'my custom tool');
+    assert.equal(wrap.querySelector('.tool-call-action')?.textContent, 'my custom tool');
   });
 
-  test('file card uses path basename as title', () => {
+  test('paths split so the file name survives truncation', () => {
+    window = setupDom();
+    const wrap = renderToolCall('read_file', { path: 'src/ui/tool-messages.ts' });
+    const target = wrap.querySelector('.tool-call-target');
+    assert.ok(target?.classList.contains('tool-call-target--path'));
+    assert.equal(target.querySelector('.tool-call-target__dir')?.textContent, 'src/ui/');
+    assert.equal(target.querySelector('.tool-call-target__base')?.textContent, 'tool-messages.ts');
+  });
+
+  test('running rows show a spinner and no outcome', () => {
+    window = setupDom();
+    const wrap = renderToolCall('read_file', { path: 'a.ts' });
+    assert.ok(wrap.querySelector('.tool-call-status .tool-call-spinner'));
+    assert.ok(wrap.querySelector('.tool-call-outcome')?.classList.contains('hidden'));
+  });
+
+  test('settled rows swap the spinner for the tool glyph and a measurement', () => {
+    window = setupDom();
+    const wrap = renderToolCall('read_file', { path: 'a.ts' });
+    renderToolResult(wrap, 'one\ntwo\nthree');
+    assert.equal(wrap.querySelector('.tool-call-spinner'), null);
+    assert.ok(wrap.querySelector('.tool-call-status .tool-call-icon'));
+    assert.equal(wrap.querySelector('.tool-call-outcome')?.textContent, '3 lines');
+  });
+
+  test('failures read as words, with no status pill or check glyph', () => {
+    window = setupDom();
+    const wrap = renderToolCall('read_file', { path: 'test/missing.md' });
+    renderToolResult(wrap, "Error: ENOENT: no such file or directory, stat 'test/missing.md'");
+    const outcome = wrap.querySelector('.tool-call-outcome');
+    assert.equal(outcome?.textContent, 'not found');
+    assert.ok(outcome?.classList.contains('tool-call-outcome--danger'));
+    assert.ok(!wrap.querySelector('.tool-call-status-label'));
+    assert.match(
+      wrap.querySelector('.tool-call-error')?.textContent ?? '',
+      /^File or folder not found/,
+    );
+  });
+
+  test('a structured body keeps the verbatim I/O behind one disclosure', () => {
+    window = setupDom();
+    const wrap = renderToolCall('list_directory', { path: 'docs' });
+    renderToolResult(wrap, '[dir] plans\n[file] readme.md');
+    const disclosures = wrap.querySelectorAll('.tool-call-raw-details');
+    assert.equal(disclosures.length, 1);
+    assert.equal(disclosures[0].querySelector('summary')?.textContent, 'Raw input and output');
+    assert.ok(wrap.querySelector('.tool-call-friendly'));
+  });
+
+  test('tools without a structured body show output once, with no disclosure', () => {
+    window = setupDom();
+    const wrap = renderToolCall('web_search', { query: 'oklch' });
+    renderToolResult(wrap, 'some results');
+    assert.ok(wrap.querySelector('.tool-call-pre--result'));
+    assert.equal(wrap.querySelectorAll('.tool-call-raw-details').length, 0);
+  });
+
+  test('file card links the path and opens by default', () => {
     window = setupDom();
     const wrap = renderToolCall('save_file', { path: 'src/wait-for-vite.mjs' });
-    const title = wrap.querySelector('.tool-call-title');
-    assert.equal(title?.textContent, 'wait-for-vite.mjs');
+    const target = wrap.querySelector('.tool-call-target--file-link');
+    assert.equal(wrap.querySelector('.tool-call-action')?.textContent, 'Write');
+    assert.equal(target?.textContent, 'wait-for-vite.mjs');
+    assert.equal(target?.tagName, 'BUTTON');
+    assert.equal(wrap.dataset.filePath, 'src/wait-for-vite.mjs');
   });
 
   test('file card is open by default with file-card classes', () => {
@@ -123,13 +196,9 @@ describe('renderToolCall display labels', () => {
     assert.equal(details?.open, true);
   });
 
-  test('file card title is a clickable open link', () => {
+  test('file card diff header is a clickable open link', () => {
     window = setupDom();
     const wrap = renderToolCall('save_file', { path: 'src/wait-for-vite.mjs' });
-    const title = wrap.querySelector('.tool-call-title--file-link');
-    assert.ok(title);
-    assert.equal(title?.tagName, 'BUTTON');
-    assert.equal(wrap.dataset.filePath, 'src/wait-for-vite.mjs');
     renderToolResult(wrap, 'Saved', undefined, undefined, {
       additions: 1,
       deletions: 0,
@@ -153,7 +222,7 @@ describe('renderToolCall display labels', () => {
     });
     const panel = wrap.querySelector('.tool-call-diff');
     assert.ok(panel);
-    assert.equal(wrap.querySelector('.tool-call-title')?.textContent, 'wait-for-vite.mjs');
+    assert.equal(wrap.querySelector('.tool-call-target')?.textContent, 'wait-for-vite.mjs');
     const badge = wrap.querySelector('.tool-call-code-change');
     assert.equal(badge?.querySelector('.tool-call-code-change__add')?.textContent, '+2');
     assert.equal(badge?.querySelector('.tool-call-code-change__del')?.textContent, '−1');

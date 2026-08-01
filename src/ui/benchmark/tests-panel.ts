@@ -268,7 +268,7 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
   if (!isLocalServerAvailable()) {
     const hint = document.createElement('p');
     hint.className = 'benchmark-tests-hint';
-    hint.textContent = 'Start the app with npm start to save custom packs or import full datasets.';
+    hint.textContent = 'Open Minnow to save custom packs or import full datasets.';
     mount.appendChild(hint);
   }
 }

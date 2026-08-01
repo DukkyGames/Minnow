@@ -2,7 +2,21 @@
  * Unified tab strip for file viewer and browser preview tabs (MIN-224).
  */
 
-import { getFilePanelState } from '../state/file-panel';
+import {
+  focusPaneSlot,
+  isRightPaneSplitLayoutEnabled,
+  openTabToRightPane,
+  otherPaneSlot,
+} from './right-pane-split';
+import {
+  unifiedStripActiveTabForSlot,
+  moveViewerTabToSlot,
+  movePreviewTabToSlot,
+  previewIdsForSlot,
+  slotOwningPreviewId,
+  slotOwningViewerPath,
+  viewerPathsForSlot,
+} from './right-pane-slot-tabs';
 import {
   getActiveViewerTabPath,
   listViewerTabs,
@@ -15,6 +29,7 @@ import {
   onPreviewTabStoreChange,
   reorderPreviewTab,
 } from './preview-tab-store';
+import type { PaneSlotId } from '../state/file-panel';
 import { createFileTypeIconElement } from './file-type-icons';
 import { iconHtml } from './icon';
 
@@ -66,25 +81,49 @@ export function registerUnifiedPreviewTabHandlers(handlers: {
   onPreviewTabNew = handlers.onNew;
 }
 
-function getTabsContainer(): HTMLElement | null {
+function getTabsContainer(slot: PaneSlotId): HTMLElement | null {
+  if (slot === 'secondary') {
+    return document.getElementById('unifiedTabsSecondary');
+  }
   return document.getElementById('unifiedTabs');
 }
 
-function isPreviewModeActive(): boolean {
-  return getFilePanelState().rightPaneMode === 'preview';
+function getTabBarElement(slot: PaneSlotId): HTMLElement | null {
+  if (slot === 'secondary') {
+    return document.getElementById('unifiedTabBarSecondary');
+  }
+  return document.getElementById('unifiedTabBar');
 }
 
-function isViewerModeActive(): boolean {
-  return getFilePanelState().rightPaneMode === 'viewer';
-}
-
-function scrollActiveTabIntoView(): void {
-  const container = getTabsContainer();
+function scrollActiveTabIntoView(slot: PaneSlotId): void {
+  const container = getTabsContainer(slot);
   if (!container) return;
   const active = container.querySelector('.unified-tab.is-active');
   if (active instanceof HTMLElement) {
     active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+}
+
+/**
+ * Accept a tab dragged from the other pane's strip.
+ * Returns true when the drop was a cross-pane move (reordering is then skipped).
+ */
+function acceptCrossSlotDrop(raw: string, slot: PaneSlotId): boolean {
+  if (!isRightPaneSplitLayoutEnabled()) return false;
+  if (raw.startsWith('file:')) {
+    const path = raw.slice(5);
+    if (!path || slotOwningViewerPath(path) === slot) return false;
+    moveViewerTabToSlot(path, slot);
+  } else if (raw.startsWith('preview:')) {
+    const id = raw.slice(8);
+    if (!id || slotOwningPreviewId(id) === slot) return false;
+    movePreviewTabToSlot(id, slot);
+  } else {
+    return false;
+  }
+  focusPaneSlot(slot);
+  refreshUnifiedRightTabs();
+  return true;
 }
 
 function tabDropIndex(container: HTMLElement, clientX: number, selector: string): number {
@@ -105,11 +144,12 @@ function clearDropIndicator(container: HTMLElement, className: string): void {
 
 function appendFileTab(
   container: HTMLElement,
+  slot: PaneSlotId,
   tab: ReturnType<typeof listViewerTabs>[number],
   activePath: string | null,
-  fileTabs: ReturnType<typeof listViewerTabs>,
+  fileTabs: ReturnType<typeof listViewerTabs>[number][],
 ): void {
-  const isActive = isViewerModeActive() && tab.path === activePath;
+  const isActive = activePath === tab.path;
   const tabEl = document.createElement('div');
   tabEl.className = 'unified-tab unified-tab--file file-viewer-tab';
   tabEl.setAttribute('role', 'tab');
@@ -145,6 +185,7 @@ function appendFileTab(
 
   tabEl.addEventListener('click', () => {
     if (isActive) return;
+    if (isRightPaneSplitLayoutEnabled()) focusPaneSlot(slot);
     void onFileTabActivate(tab.path);
   });
 
@@ -160,6 +201,18 @@ function appendFileTab(
       showFilePanelContextMenu(
         [
           { label: 'Close', action: () => void onFileTabClose(tab.path) },
+          {
+            label: isRightPaneSplitLayoutEnabled() ? 'Move to other pane' : 'Open to the right',
+            action: () => {
+              if (isRightPaneSplitLayoutEnabled()) {
+                moveViewerTabToSlot(tab.path, otherPaneSlot(slot));
+                focusPaneSlot(otherPaneSlot(slot));
+                refreshUnifiedRightTabs();
+                return;
+              }
+              openTabToRightPane('file', tab.path);
+            },
+          },
           {
             label: 'Close others',
             action: () => void onFileTabCloseOthers(tab.path),
@@ -208,9 +261,12 @@ function appendFileTab(
 
   tabEl.addEventListener('drop', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     clearDropIndicator(container, 'unified-tab--drop-before');
     const raw = e.dataTransfer?.getData('text/plain');
-    if (!raw?.startsWith('file:')) return;
+    if (!raw) return;
+    if (acceptCrossSlotDrop(raw, slot)) return;
+    if (!raw.startsWith('file:')) return;
     const fromPath = raw.slice(5);
     if (!fromPath || fromPath === tab.path) return;
     const toIndex = tabDropIndex(container, e.clientX, '.unified-tab--file');
@@ -222,10 +278,11 @@ function appendFileTab(
 
 function appendPreviewTab(
   container: HTMLElement,
+  slot: PaneSlotId,
   tab: ReturnType<typeof listPreviewTabs>[number],
   activeId: string | null,
 ): void {
-  const isActive = isPreviewModeActive() && tab.id === activeId;
+  const isActive = activeId === tab.id;
   const tabEl = document.createElement('div');
   tabEl.className = 'unified-tab unified-tab--preview preview-tab';
   tabEl.setAttribute('role', 'tab');
@@ -261,6 +318,7 @@ function appendPreviewTab(
 
   tabEl.addEventListener('click', () => {
     if (isActive) return;
+    if (isRightPaneSplitLayoutEnabled()) focusPaneSlot(slot);
     void onPreviewTabActivate(tab.id);
   });
 
@@ -292,9 +350,12 @@ function appendPreviewTab(
 
   tabEl.addEventListener('drop', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     clearDropIndicator(container, 'unified-tab--drop-before');
     const raw = e.dataTransfer?.getData('text/plain');
-    if (!raw?.startsWith('preview:')) return;
+    if (!raw) return;
+    if (acceptCrossSlotDrop(raw, slot)) return;
+    if (!raw.startsWith('preview:')) return;
     const fromId = raw.slice(8);
     if (!fromId || fromId === tab.id) return;
     const toIndex = tabDropIndex(container, e.clientX, '.unified-tab--preview');
@@ -304,22 +365,49 @@ function appendPreviewTab(
   container.appendChild(tabEl);
 }
 
-function renderTabStrip(): void {
-  const container = getTabsContainer();
-  if (!container) return;
+/** Whole-strip drop target so a tab can be dragged into an empty pane. */
+function bindStripDropZone(container: HTMLElement, slot: PaneSlotId): void {
+  if (container.dataset.dropZoneBound === '1') return;
+  container.dataset.dropZoneBound = '1';
 
-  const fileTabs = listViewerTabs();
-  const previewTabs = listPreviewTabs();
-  const activePath = getActiveViewerTabPath();
-  const activePreviewId = getActivePreviewTabId();
+  container.addEventListener('dragover', (e) => {
+    if (!isRightPaneSplitLayoutEnabled()) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = 'move';
+    container.classList.add('unified-tabs--drop-target');
+  });
+  container.addEventListener('dragleave', (e) => {
+    if (e.target !== container) return;
+    container.classList.remove('unified-tabs--drop-target');
+  });
+  container.addEventListener('drop', (e) => {
+    container.classList.remove('unified-tabs--drop-target');
+    const raw = e.dataTransfer?.getData('text/plain');
+    if (!raw) return;
+    e.preventDefault();
+    acceptCrossSlotDrop(raw, slot);
+  });
+}
+
+function renderSlotTabStrip(slot: PaneSlotId): void {
+  const container = getTabsContainer(slot);
+  if (!container) return;
+  bindStripDropZone(container, slot);
+
+  const slotViewerPaths = new Set(viewerPathsForSlot(slot));
+  const slotPreviewIds = new Set(previewIdsForSlot(slot));
+  const fileTabs = listViewerTabs().filter((t) => slotViewerPaths.has(t.path));
+  const previewTabs = listPreviewTabs().filter((t) => slotPreviewIds.has(t.id));
+  const { viewerPath: activePath, previewId: activePreviewId } =
+    unifiedStripActiveTabForSlot(slot);
 
   container.replaceChildren();
 
   for (const tab of fileTabs) {
-    appendFileTab(container, tab, activePath, fileTabs);
+    appendFileTab(container, slot, tab, activePath, fileTabs);
   }
   for (const tab of previewTabs) {
-    appendPreviewTab(container, tab, activePreviewId);
+    appendPreviewTab(container, slot, tab, activePreviewId);
   }
 
   const addBtn = document.createElement('button');
@@ -328,15 +416,27 @@ function renderTabStrip(): void {
   addBtn.setAttribute('aria-label', 'New browser tab');
   addBtn.textContent = '+';
   addBtn.addEventListener('click', () => {
+    if (isRightPaneSplitLayoutEnabled()) focusPaneSlot(slot);
     void onPreviewTabNew();
   });
   container.appendChild(addBtn);
 
-  const tabBar = document.getElementById('unifiedTabBar');
+  const tabBar = getTabBarElement(slot);
   const hasTabs = fileTabs.length > 0 || previewTabs.length > 0;
-  tabBar?.classList.toggle('hidden', !hasTabs);
+  // While split, an empty group keeps its strip: it is the drop target and "+" affordance.
+  const keepVisible = isRightPaneSplitLayoutEnabled();
+  tabBar?.classList.toggle('hidden', !hasTabs && !keepVisible);
 
-  scrollActiveTabIntoView();
+  scrollActiveTabIntoView(slot);
+}
+
+function renderTabStrip(): void {
+  renderSlotTabStrip('primary');
+  if (isRightPaneSplitLayoutEnabled()) {
+    renderSlotTabStrip('secondary');
+  } else {
+    getTabBarElement('secondary')?.classList.add('hidden');
+  }
 }
 
 /** Wire unified tab strip (call once from init-file-panel). */
@@ -347,23 +447,33 @@ export function bindUnifiedRightTabs(): void {
   onPreviewTabStoreChange(renderTabStrip);
   renderTabStrip();
 
-  const container = getTabsContainer();
+  bindStripKeyboard('primary');
+  bindStripKeyboard('secondary');
+}
+
+/** Arrow / Ctrl+W / Ctrl+Tab within one group's strip. */
+function bindStripKeyboard(boundSlot: PaneSlotId): void {
+  const container = getTabsContainer(boundSlot);
   if (!container) return;
 
   container.addEventListener('keydown', (e) => {
-    const fileTabs = listViewerTabs();
-    const previewTabs = listPreviewTabs();
+    const slot = isRightPaneSplitLayoutEnabled() ? boundSlot : 'primary';
+    const pathSet = new Set(viewerPathsForSlot(slot));
+    const idSet = new Set(previewIdsForSlot(slot));
+    const fileTabs = listViewerTabs().filter((t) => pathSet.has(t.path));
+    const previewTabs = listPreviewTabs().filter((t) => idSet.has(t.id));
     const total = fileTabs.length + previewTabs.length;
     if (total < 2) return;
 
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
-      const mode = getFilePanelState().rightPaneMode;
+      const { viewerPath: activePath, previewId: activePreviewId } =
+        unifiedStripActiveTabForSlot(slot);
       let currentIdx = -1;
-      if (mode === 'viewer') {
-        currentIdx = fileTabs.findIndex((t) => t.path === getActiveViewerTabPath());
-      } else if (mode === 'preview') {
-        currentIdx = fileTabs.length + previewTabs.findIndex((t) => t.id === getActivePreviewTabId());
+      if (activePath && pathSet.has(activePath)) {
+        currentIdx = fileTabs.findIndex((t) => t.path === activePath);
+      } else if (activePreviewId && idSet.has(activePreviewId)) {
+        currentIdx = fileTabs.length + previewTabs.findIndex((t) => t.id === activePreviewId);
       }
       if (currentIdx < 0) return;
       const nextIdx =
@@ -378,12 +488,12 @@ export function bindUnifiedRightTabs(): void {
 
     if (e.key === 'w' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      if (isViewerModeActive()) {
-        const activePath = getActiveViewerTabPath();
-        if (activePath) void onFileTabClose(activePath);
-      } else if (isPreviewModeActive()) {
-        const activeId = getActivePreviewTabId();
-        if (activeId) void onPreviewTabClose(activeId);
+      const { viewerPath: activePath, previewId: activePreviewId } =
+        unifiedStripActiveTabForSlot(slot);
+      if (activePath) {
+        void onFileTabClose(activePath);
+      } else if (activePreviewId) {
+        void onPreviewTabClose(activePreviewId);
       }
       return;
     }

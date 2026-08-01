@@ -164,7 +164,7 @@ function bindMemoryListActions(listEl: HTMLElement): void {
         await refreshMemoryEntriesList();
         return;
       }
-      setStatus('err', 'Delete failed — use npm start');
+      setStatus('err', 'Delete failed. Open or restart Minnow.');
     })();
   });
 }
@@ -218,10 +218,10 @@ function bindMemoryAddForm(): void {
 
       if (!entry) {
         if (errEl) {
-          errEl.textContent = 'Save failed — start with npm start and try again.';
+          errEl.textContent = 'Save failed. Open or restart Minnow and try again.';
           errEl.classList.remove('hidden');
         }
-        setStatus('err', 'Save failed — use npm start');
+        setStatus('err', 'Could not save. Open or restart Minnow and try again.');
         return;
       }
 
@@ -288,7 +288,7 @@ function bindMemoriesSection(): void {
       });
       setStatus('ok', enableEl.checked ? 'Memory enabled' : 'Memory disabled');
     } catch {
-      setStatus('err', 'Memory settings require npm start');
+      setStatus('err', 'Memory settings require Minnow running locally');
     }
   });
 
@@ -303,7 +303,7 @@ function bindMemoriesSection(): void {
     const id = await backupMemory();
     setStatus(
       id ? 'ok' : 'err',
-      id ? `Memory backup: ${id}` : 'Backup failed. Use npm start.',
+      id ? `Memory backup: ${id}` : 'Backup failed. Open or restart Minnow.',
     );
   });
 
@@ -319,7 +319,7 @@ function bindMemoriesSection(): void {
     const ok = await clearMemory(true);
     setStatus(
       ok ? 'ok' : 'err',
-      ok ? 'Memory cleared (archived)' : 'Clear failed. Use npm start.',
+      ok ? 'Memory cleared (archived)' : 'Clear failed. Open or restart Minnow.',
     );
     if (ok) await refreshMemoryEntriesList();
   });
@@ -349,10 +349,10 @@ async function refreshMemoryEntriesList(): Promise<void> {
 
   if (!status) {
     countEl.textContent = 'Entries: —';
-    hintEl.textContent = 'Start npm start for memory API';
+    hintEl.textContent = 'Open Minnow for memory API';
     const offline = document.createElement('p');
     offline.className = 'settings-section-note';
-    offline.textContent = 'Start npm start to view and manage stored memories.';
+    offline.textContent = 'Open Minnow to view and manage stored memories.';
     listEl.append(offline);
     return;
   }

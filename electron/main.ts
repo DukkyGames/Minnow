@@ -10,6 +10,7 @@ import {
   crashReporter,
   dialog,
   ipcMain,
+  powerMonitor,
   session,
   shell,
 } from 'electron';
@@ -31,7 +32,12 @@ import {
 } from './desktop-shell-config.js';
 import { readLoginItemSnapshot, writeLoginItemOpenAtLogin } from './login-item.js';
 import { createTrayManager, type TrayManager } from './tray.js';
+import {
+  resolveTrayIconFallbackPath,
+  resolveTrayIconPath,
+} from './tray-icon.js';
 import { shouldQuitOnWindowAllClosed } from './tray-close.js';
+import { setAfkBoardPowerGuardActive } from './afk-power-guard.js';
 import {
   EMPTY_TRAY_STATUS,
   type TrayRendererCommand,
@@ -57,6 +63,19 @@ function appIconPath(): string {
     'png',
     'minnow-1024.png',
   );
+}
+
+function appRoot(): string {
+  return app.isPackaged ? app.getAppPath() : getProjectRoot();
+}
+
+/** System tray icon — platform-specific assets under build/tray/. */
+function trayIconPath(): string {
+  return resolveTrayIconPath(process.platform, appRoot());
+}
+
+function trayIconFallbackPath(): string {
+  return resolveTrayIconFallbackPath(appRoot());
 }
 
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
@@ -118,6 +137,17 @@ function recoverRenderer(win: BrowserWindow): void {
   win.webContents.reload();
 }
 
+/** Notify the renderer when the display wakes so AFK boards can reconcile stalled finalizers. */
+function wirePowerWakeNotifications(): void {
+  const notify = (): void => {
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send(channels.POWER_SCREEN_UNLOCKED);
+  };
+  powerMonitor.on('resume', notify);
+  powerMonitor.on('unlock-screen', notify);
+}
+
 /** Register app + preview IPC handlers. */
 function registerIpcHandlers(): void {
   registerPreviewHostIpc();
@@ -146,6 +176,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE, () => {
     crashLog.clearOomPauseMarker();
+  });
+
+  ipcMain.handle(channels.POWER_SET_AFK_GUARD, (_event, active: unknown) => {
+    setAfkBoardPowerGuardActive(active === true);
   });
 
   ipcMain.handle(channels.WINDOW_MINIMIZE, (event) => {
@@ -231,8 +265,25 @@ function wireShellWindowState(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', emit);
 }
 
+/** Ask the renderer to system-pause running boards before tearing down the server. */
+async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<void> {
+  if (win.isDestroyed()) return;
+  try {
+    win.webContents.send(channels.BOARD_PAUSE_FOR_SHUTDOWN);
+    await win.webContents.executeJavaScript(
+      'typeof globalThis.__minnowPauseBoardsForShutdown==="function"&&globalThis.__minnowPauseBoardsForShutdown()',
+      true,
+    );
+  } catch {
+    /* renderer already gone */
+  }
+}
+
 /** Tear down PTY sessions, generations, and in-process HTTP server. */
 async function shutdownRuntime(): Promise<void> {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await pauseOrchestrateBoardsInRenderer(mainWindow);
+  }
   destroyAllPreviewHosts();
   const [ptyHost, generationsStore] = await Promise.all([
     importServerModule<{ destroyAllPtySessions: () => void }>('terminal/pty-host.js'),
@@ -304,7 +355,8 @@ function requestExplicitQuit(): void {
 function ensureTrayManager(): TrayManager {
   if (!trayManager) {
     trayManager = createTrayManager({
-      iconPath: appIconPath,
+      trayIconPath,
+      trayIconFallbackPath,
       focusMainWindow,
       requestQuit: requestExplicitQuit,
       sendTrayCommand: (command) => {
@@ -489,6 +541,7 @@ async function bootstrapInner(): Promise<void> {
   }
   configurePreviewSession(session.fromPartition('persist:minnow-preview'));
   registerIpcHandlers();
+  wirePowerWakeNotifications();
   initUpdater({ prepareQuitForUpdate });
 
   closeToTrayEnabled = await readCloseToTrayPreference();

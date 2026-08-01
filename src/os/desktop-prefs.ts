@@ -28,10 +28,14 @@ const WALLPAPER_MODES = new Set<WallpaperMode>([
   'minnow',
   'aurora',
   'starfield',
-  'grain',
-  'mesh',
   'custom',
 ]);
+
+/** Retired presets map onto the nearest kept mode. */
+const WALLPAPER_ALIASES: Record<string, WallpaperMode> = {
+  mesh: 'gradient',
+  grain: 'flat',
+};
 
 function readStorage(key: string): string | null {
   try {
@@ -63,7 +67,9 @@ function normalizeLayout(value: string | null): DesktopPrefs['desktopLayout'] {
 }
 
 function normalizeWallpaper(value: string | null): WallpaperMode {
-  if (value && WALLPAPER_MODES.has(value as WallpaperMode)) {
+  if (!value) return DEFAULT_DESKTOP_PREFS.wallpaper;
+  if (WALLPAPER_ALIASES[value]) return WALLPAPER_ALIASES[value];
+  if (WALLPAPER_MODES.has(value as WallpaperMode)) {
     return value as WallpaperMode;
   }
   return DEFAULT_DESKTOP_PREFS.wallpaper;
@@ -84,9 +90,15 @@ export function loadDesktopPrefs(): DesktopPrefs {
   }
 
   const wallpaperImageId = readStorage(DESKTOP_PREFS_KEYS.wallpaperImageId) ?? undefined;
+  const rawWallpaper = readStorage(DESKTOP_PREFS_KEYS.wallpaper);
+  const wallpaper = normalizeWallpaper(rawWallpaper);
+  // Persist alias migrations (mesh→gradient, grain→flat) so storage stays clean.
+  if (rawWallpaper && rawWallpaper !== wallpaper) {
+    writeStorage(DESKTOP_PREFS_KEYS.wallpaper, wallpaper);
+  }
   const prefs: DesktopPrefs = {
     desktopLayout,
-    wallpaper: normalizeWallpaper(readStorage(DESKTOP_PREFS_KEYS.wallpaper)),
+    wallpaper,
     wallpaperImageId: wallpaperImageId || undefined,
     wallpaperImageFit: normalizeImageFit(readStorage(DESKTOP_PREFS_KEYS.wallpaperImageFit)),
   };

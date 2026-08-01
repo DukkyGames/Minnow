@@ -83,7 +83,7 @@ function renderSummary(budget: ContextBudget): string {
           <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.used)}</span>
         </div>
       </div>
-      <p class="context-usage-breakdown__limit-unknown">Context limit unknown for this model.</p>
+      <p class="context-usage-breakdown__limit-unknown">Context limit unknown — compression disabled.</p>
     </div>`;
   }
 
@@ -198,9 +198,14 @@ export function bindContextUsageProfileTabs(): void {
   }
 }
 
+function sectionVisible(section: ContextUsageSection): boolean {
+  if (section.tokens > 0) return true;
+  return section.key === 'codeMap';
+}
+
 function renderPanelBody(budget: ContextBudget): string {
   const activeProfile = getPromptMetaSettingsSync().activePromptProfile;
-  const visibleSections = budget.breakdown.filter((section) => section.tokens > 0);
+  const visibleSections = budget.breakdown.filter(sectionVisible);
   const scaleMax = maxSectionTokens(visibleSections.length > 0 ? visibleSections : budget.breakdown);
   const rows = visibleSections
     .map((section) => renderSectionRow(section, budget.used, scaleMax))

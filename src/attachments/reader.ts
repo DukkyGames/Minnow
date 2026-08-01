@@ -185,14 +185,14 @@ async function extractDocumentText(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Could not reach tool server (${message})`);
+    throw new Error(`Could not reach Minnow (${message})`);
   }
 
   let payload: { result?: string; error?: string };
   try {
     payload = (await response.json()) as { result?: string; error?: string };
   } catch {
-    throw new Error(`Invalid response from tool server (HTTP ${response.status})`);
+    throw new Error(`Invalid response from Minnow (HTTP ${response.status})`);
   }
 
   if (!response.ok) {
@@ -253,7 +253,7 @@ export async function processFile(file: File): Promise<Attachment> {
       if (!getLocalServerAvailable()) {
         return errorAttachment(
           file,
-          'PDF and office documents require the local tool server. Run npm start.',
+          'PDF and office documents require Minnow running locally. Open or restart the app.',
         );
       }
       const content = await readFileAsBase64(file);

@@ -3,9 +3,9 @@
 .workspace-menu {
   position: fixed;
   z-index: 50;
-  min-width: 14rem;
-  max-width: min(22rem, calc(100vw - 1rem));
-  max-height: min(20rem, calc(100vh - 4rem));
+  min-width: 18rem;
+  max-width: min(30rem, calc(100vw - 1rem));
+  max-height: min(28rem, calc(100vh - 4rem));
   overflow-y: auto;
   margin: 0;
   padding: 4px 0;

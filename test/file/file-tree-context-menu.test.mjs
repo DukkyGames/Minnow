@@ -40,6 +40,6 @@ describe('file-tree Open in System Explorer', () => {
     const reveal = items.find((item) => item.label === 'Open in System Explorer');
     assert.ok(reveal);
     assert.equal(reveal.disabled, true);
-    assert.match(reveal.title ?? '', /npm start/);
+    assert.match(reveal.title ?? '', /Open Minnow/i);
   });
 });

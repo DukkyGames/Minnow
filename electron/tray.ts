@@ -18,6 +18,7 @@ import {
   type LoginItemSnapshot,
 } from './login-item.js';
 import { shouldHideWindowOnClose } from './tray-close.js';
+import { shouldUseTemplateTrayIcon, type TrayPlatform } from './tray-icon.js';
 import {
   EMPTY_TRAY_STATUS,
   formatTrayAgentLabel,
@@ -28,8 +29,45 @@ import {
 
 const CLOSE_NOTIFICATION_KEY = 'minnow.tray.closeNotificationShown';
 
+function loadImageFromPath(iconPath: string, asTemplate: boolean): Electron.NativeImage {
+  const image = nativeImage.createFromPath(iconPath);
+  if (asTemplate && !image.isEmpty()) {
+    image.setTemplateImage(true);
+  }
+  return image;
+}
+
+/** Load a tray icon with platform template handling and a logo-ladder fallback. */
+function loadTrayIcon(
+  platform: TrayPlatform,
+  primaryPath: string,
+  fallbackPath: string,
+): Electron.NativeImage {
+  const asTemplate = shouldUseTemplateTrayIcon(platform, primaryPath);
+  let image = loadImageFromPath(primaryPath, asTemplate);
+
+  if (!image.isEmpty()) {
+    return image;
+  }
+
+  console.warn(`[electron/tray] icon missing or empty: ${primaryPath}`);
+
+  if (!fs.existsSync(fallbackPath)) {
+    console.warn(`[electron/tray] fallback icon missing: ${fallbackPath}`);
+    return image;
+  }
+
+  const fallbackTemplate = shouldUseTemplateTrayIcon(platform, fallbackPath);
+  image = loadImageFromPath(fallbackPath, fallbackTemplate);
+  if (image.isEmpty()) {
+    console.warn(`[electron/tray] fallback icon empty: ${fallbackPath}`);
+  }
+  return image;
+}
+
 export interface TrayManagerDeps {
-  iconPath: () => string;
+  trayIconPath: () => string;
+  trayIconFallbackPath: () => string;
   focusMainWindow: () => void;
   requestQuit: () => void;
   sendTrayCommand: (command: TrayRendererCommand) => void;
@@ -48,14 +86,6 @@ export interface TrayManager {
   updateStatus: (status: TrayStatusSnapshot) => void;
   maybeNotifyHidden: () => void;
   wireWindowClose: (win: BrowserWindow) => void;
-}
-
-function loadTrayIcon(iconPath: string): Electron.NativeImage {
-  const image = nativeImage.createFromPath(iconPath);
-  if (process.platform === 'darwin' && !image.isEmpty()) {
-    image.setTemplateImage(true);
-  }
-  return image;
 }
 
 /** Persist one-time close notification in Electron userData (not Minnow home). */
@@ -94,7 +124,9 @@ function showCloseNotificationOnce(): void {
 
 export function createTrayManager(deps: TrayManagerDeps): TrayManager {
   let tray: Tray | null = null;
+  let contextMenu: Menu | null = null;
   let status: TrayStatusSnapshot = { ...EMPTY_TRAY_STATUS };
+  const isDarwin = process.platform === 'darwin';
 
   function buildMenu(): Menu {
     const login = deps.getLoginItem();
@@ -147,16 +179,37 @@ export function createTrayManager(deps: TrayManagerDeps): TrayManager {
 
   function rebuildMenu(): void {
     if (!tray || tray.isDestroyed()) return;
-    tray.setContextMenu(buildMenu());
+    contextMenu = buildMenu();
+    // macOS: avoid setContextMenu so we can focus on left-click and pop up the menu ourselves.
+    if (!isDarwin) {
+      tray.setContextMenu(contextMenu);
+    }
+  }
+
+  function popUpTrayMenu(): void {
+    rebuildMenu();
+    tray?.popUpContextMenu(contextMenu ?? undefined);
   }
 
   function ensureTray(): void {
     if (tray && !tray.isDestroyed()) return;
-    const image = loadTrayIcon(deps.iconPath());
+    const image = loadTrayIcon(
+      process.platform,
+      deps.trayIconPath(),
+      deps.trayIconFallbackPath(),
+    );
     tray = new Tray(image);
     tray.setToolTip('Minnow');
-    tray.on('click', () => deps.focusMainWindow());
-    tray.on('double-click', () => deps.focusMainWindow());
+    if (isDarwin) {
+      tray.on('click', () => {
+        deps.focusMainWindow();
+        popUpTrayMenu();
+      });
+      tray.on('right-click', () => popUpTrayMenu());
+    } else {
+      tray.on('click', () => deps.focusMainWindow());
+      tray.on('double-click', () => deps.focusMainWindow());
+    }
     rebuildMenu();
   }
 

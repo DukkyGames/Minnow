@@ -1,6 +1,5 @@
 /**
- * Local model cache scan — HF hub, Minnow artifacts, Ollama, custom dirs.
- * Local model cache scan for HF hub, Minnow artifacts, Ollama, and custom dirs.
+ * Local model cache scan — HF hub, Minnow artifacts, and custom dirs.
  */
 
 import fsp from 'node:fs/promises';
@@ -9,6 +8,9 @@ import path from 'node:path';
 import { getModelsConfig } from './models-config.js';
 import { getModelsRoot, repoDownloadDir } from './paths.js';
 import { scanInstalledArtifacts } from './installed.js';
+
+/** LM Studio / Ollama metadata folders — not model roots. */
+const CUSTOM_DIR_SKIP_NAMES = new Set(['blobs', 'manifests']);
 
 /** Paths that must never be walked (safety). */
 const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
@@ -293,6 +295,7 @@ async function scanHfCache(cache, seen) {
 
 /**
  * Scan a plain directory for model folders (custom model dirs).
+ * Supports flat folders and LM Studio-style publisher/model nesting.
  * @param {string} dirPath
  * @param {Set<string>} seen
  */
@@ -311,47 +314,91 @@ async function scanCustomDir(dirPath, seen) {
   }
 
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('models--')) {
+    if (
+      !entry.isDirectory() ||
+      entry.name.startsWith('.') ||
+      entry.name.startsWith('models--') ||
+      CUSTOM_DIR_SKIP_NAMES.has(entry.name)
+    ) {
       continue;
     }
-    const fp = path.join(expanded, entry.name);
-    if (seen.has(entry.name)) continue;
 
-    const ggufFiles = await collectGgufs(fp);
-    let isModel = ggufFiles.length > 0;
-    if (!isModel) {
-      isModel = await dirLooksLikeModel(fp);
-    }
-    if (!isModel) continue;
-
-    seen.add(entry.name);
-    let sizeBytes = 0;
-    let nbFiles = 0;
-    await walkCount(fp, (sz) => {
-      nbFiles += 1;
-      sizeBytes += sz;
-    });
-
-    let isDiffusion = false;
+    const publisherRoot = path.join(expanded, entry.name);
+    let children;
     try {
-      await fsp.access(path.join(fp, 'model_index.json'));
-      isDiffusion = true;
+      children = await fsp.readdir(publisherRoot, { withFileTypes: true });
     } catch {
-      /* not diffusion */
+      continue;
     }
 
-    out.push({
-      repo_id: entry.name,
-      size_bytes: sizeBytes,
-      nb_files: nbFiles,
-      has_incomplete: false,
-      path: expanded,
-      is_local_dir: true,
-      is_diffusion: isDiffusion,
-      is_gguf: ggufFiles.length > 0,
-      gguf_files: ggufFiles,
-      status: 'local',
-    });
+    const subdirs = children.filter(
+      (c) =>
+        c.isDirectory() &&
+        !c.name.startsWith('.') &&
+        !c.name.startsWith('models--') &&
+        !CUSTOM_DIR_SKIP_NAMES.has(c.name),
+    );
+
+    /** @type {Array<{ repoId: string, modelRoot: string }>} */
+    const modelRoots = [];
+    let nestedEmitted = false;
+
+    for (const sub of subdirs) {
+      const modelRoot = path.join(publisherRoot, sub.name);
+      const ggufFiles = await collectGgufs(modelRoot);
+      let isModel = ggufFiles.length > 0;
+      if (!isModel) {
+        isModel = await dirLooksLikeModel(modelRoot);
+      }
+      if (!isModel) continue;
+      nestedEmitted = true;
+      modelRoots.push({ repoId: `${entry.name}/${sub.name}`, modelRoot });
+    }
+
+    if (!nestedEmitted) {
+      const ggufFiles = await collectGgufs(publisherRoot);
+      let isModel = ggufFiles.length > 0;
+      if (!isModel) {
+        isModel = await dirLooksLikeModel(publisherRoot);
+      }
+      if (isModel) {
+        modelRoots.push({ repoId: entry.name, modelRoot: publisherRoot });
+      }
+    }
+
+    for (const { repoId, modelRoot } of modelRoots) {
+      if (seen.has(repoId)) continue;
+
+      const ggufFiles = await collectGgufs(modelRoot);
+      let sizeBytes = 0;
+      let nbFiles = 0;
+      await walkCount(modelRoot, (sz) => {
+        nbFiles += 1;
+        sizeBytes += sz;
+      });
+
+      let isDiffusion = false;
+      try {
+        await fsp.access(path.join(modelRoot, 'model_index.json'));
+        isDiffusion = true;
+      } catch {
+        /* not diffusion */
+      }
+
+      seen.add(repoId);
+      out.push({
+        repo_id: repoId,
+        size_bytes: sizeBytes,
+        nb_files: nbFiles,
+        has_incomplete: false,
+        path: modelRoot,
+        is_local_dir: true,
+        is_diffusion: isDiffusion,
+        is_gguf: ggufFiles.length > 0,
+        gguf_files: ggufFiles,
+        status: 'local',
+      });
+    }
   }
 
   return out;
@@ -421,14 +468,14 @@ async function walkCount(dir, onFile) {
  * @param {Set<string>} seen
  */
 async function scanMinnowArtifacts(seen) {
-  const artifacts = await scanInstalledArtifacts();
+  const artifacts = await scanInstalledArtifacts({ includeCustomDirs: false });
   /** @type {Map<string, CachedModelRow>} */
   const byRepo = new Map();
 
   for (const art of artifacts) {
-    if (seen.has(art.repoId)) continue;
     let row = byRepo.get(art.repoId);
     if (!row) {
+      if (seen.has(art.repoId)) continue;
       row = {
         repo_id: art.repoId,
         size_bytes: 0,
@@ -444,9 +491,10 @@ async function scanMinnowArtifacts(seen) {
     }
     row.size_bytes += art.sizeBytes;
     row.nb_files += 1;
+    const relPath = path.relative(row.path, art.path).split(path.sep).join('/') || art.filename;
     row.gguf_files.push({
       name: art.filename,
-      rel_path: art.filename,
+      rel_path: relPath,
       size_bytes: art.sizeBytes,
       role: ggufRole(art.filename),
       quant: ggufQuant(art.filename),
@@ -454,47 +502,6 @@ async function scanMinnowArtifacts(seen) {
   }
 
   return [...byRepo.values()];
-}
-
-/**
- * Query Ollama tags API for installed models.
- * @param {Set<string>} seen
- */
-async function scanOllamaApi(seen) {
-  const out = [];
-  const urls = [
-    'http://127.0.0.1:11434/api/tags',
-    'http://localhost:11434/api/tags',
-  ];
-
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(2_500) });
-      if (!res.ok) continue;
-      const data = await res.json();
-      const models = Array.isArray(data?.models) ? data.models : [];
-      for (const item of models) {
-        const name = item?.name || item?.model;
-        if (!name || seen.has(name)) continue;
-        seen.add(name);
-        out.push({
-          repo_id: name,
-          size_bytes: Number(item?.size ?? item?.size_bytes ?? 0),
-          nb_files: 1,
-          has_incomplete: false,
-          path: 'ollama',
-          backend: 'ollama',
-          is_ollama: true,
-          status: 'ollama',
-        });
-      }
-      if (out.length) return out;
-    } catch {
-      /* try next url */
-    }
-  }
-
-  return out;
 }
 
 /**
@@ -518,8 +525,6 @@ export async function listCachedModels() {
   for (const dir of dirs) {
     models.push(...(await scanCustomDir(dir.trim(), seen)));
   }
-
-  models.push(...(await scanOllamaApi(seen)));
 
   models.sort((a, b) => a.repo_id.localeCompare(b.repo_id));
   return { models };

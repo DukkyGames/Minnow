@@ -263,7 +263,7 @@ export async function mountMemoryProposalsPanel(
     if (countEl) countEl.textContent = 'Pending: —';
     const note = document.createElement('p');
     note.className = 'settings-section-note';
-    note.textContent = 'Start npm start to review synthesis proposals.';
+    note.textContent = 'Open Minnow to review synthesis proposals.';
     listEl.append(note);
     return;
   }

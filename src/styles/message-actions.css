@@ -1,6 +1,8 @@
 /* Per-message ⋮ menu (Epic C2) */
-.msg--has-actions {
+.msg.msg--has-actions {
   position: relative;
+  /* .msg is full column width; shrink so absolute top/right hugs the bubble cluster. */
+  width: fit-content;
 }
 
 .message-actions__trigger {

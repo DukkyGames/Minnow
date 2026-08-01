@@ -68,6 +68,11 @@ function monotonicDelta(): number {
   return effectiveMonoNow() - visibilityBaseline;
 }
 
+/** Monotonic clock for supervision timestamps (shared with the controller watchdog). */
+export function supervisionMonotonicNow(): number {
+  return monotonicDelta();
+}
+
 function onPageHidden(): void {
   pageHiddenAtMono = performance.now();
 }
@@ -110,6 +115,11 @@ export function resetHeartbeatBaselines(): void {
     entry.target.lastHeartbeatAt = null;
     entry.target.lastProgressAt = null;
   }
+}
+
+/** True while the page is hidden (display off / background tab) — stall watchdog must not fire. */
+export function isSupervisionPageHidden(): boolean {
+  return pageHiddenAtMono !== null;
 }
 
 /** Update observe-only thresholds from merged sub-agents config. */

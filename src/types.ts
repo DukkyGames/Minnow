@@ -4,6 +4,7 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type { ContextEnforcementPolicy } from './chat/context-budget';
 import type { SuperPlanStageId, SuperPlanState } from './chat/super-plan/types';
 import type { PinnedSkillState } from './skills/types';
 import type { ChatTokenLedger } from './usage/types';
@@ -212,11 +213,34 @@ export interface ToolExecutionResult {
   codeChange?: CodeChangeStats;
 }
 
+/** Persisted context trim / compress notice (not sent to the model). */
+export interface ContextNoticeMessage {
+  role: 'context';
+  policy: ContextEnforcementPolicy;
+  droppedTurns: number;
+  /** Text sent to the model inside the summary user row, if any. */
+  summaryText?: string;
+  createdAt: number;
+}
+
+export type PromptInjectionKind = 'brain-notes' | 'code-map';
+
+/** Persisted Brain / code-map injection notice (not sent to the model). */
+export interface InjectionNoticeMessage {
+  role: 'injection';
+  kind: PromptInjectionKind;
+  /** Raw retrieved block interpolated into the prompt. */
+  body: string;
+  createdAt: number;
+}
+
 export type Message =
   | UserMessage
   | AssistantMessage
   | AssistantToolCallMessage
-  | ToolResultMessage;
+  | ToolResultMessage
+  | ContextNoticeMessage
+  | InjectionNoticeMessage;
 
 /** Multimodal user/assistant payload part (attachments use in later waves). */
 export interface TextContentPart {
@@ -512,6 +536,8 @@ export interface OrchestrateBoardState {
   modelId?: string;
   /** Manual board vs auto-pilot delegation (default manual). */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  /** When true, skip per-task Tester; only final integration test runs verification. */
+  skipPerTaskTesting?: boolean;
   /** True when the user has pressed Start in auto/sequential mode. */
   autoRunning?: boolean;
   /** Orchestrator requested AFK via board_set_autonomy; awaits user confirmation. */
@@ -973,6 +999,10 @@ export interface Chat {
   expertRuntime?: import('./chat/experts/types').ExpertRuntimeSnapshot;
   /** Tri-state thinking override for this chat (inherit uses work-agent / global stack). */
   thinkingMode?: ThinkingTriState;
+  /** Tri-state code map injection override (inherit uses features.codeMapInjectionDefault). */
+  codeMapInjection?: ThinkingTriState;
+  /** Tri-state Brain notes (memory retrieve) override (inherit uses features.memoryInjection). */
+  brainNotesInjection?: ThinkingTriState;
   /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */
   reasoningEffort?: ReasoningEffortOption;
   /** Active Work Agent; null = default / auto from mode (Step 08). */
@@ -1078,11 +1108,15 @@ export interface Chat {
   codeChangeTotals?: ChatCodeChangeTotals;
   /** Epoch ms when history backfill last rebuilt codeChangeTotals. */
   codeChangeBackfillAt?: number;
-  /** Last archive policy trim stats (MIN-139). */
+  /** Last context trim / compress stats. */
   lastContextTrim?: {
     archived?: number;
     recalled?: number;
     recallTokens?: number;
+    policy?: ContextEnforcementPolicy;
+    droppedTurns?: number;
+    summaryPreview?: string;
+    at?: number;
   };
 }
 

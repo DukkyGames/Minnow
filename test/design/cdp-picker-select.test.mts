@@ -124,7 +124,7 @@ describe('CDP picking routing + lifecycle (MIN-370)', () => {
       ...DEFAULT_FILE_PANEL_STATE,
       previewSource: { kind: 'url', url: 'https://example.com/pricing' },
     });
-    setDesignModeUsingIframeGuest(true);
+    setDesignModeUsingIframeGuest('workspace-preview', true);
     assert.equal(shouldUseCdpPicker(), false);
   });
 

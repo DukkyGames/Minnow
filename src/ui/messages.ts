@@ -21,6 +21,20 @@ import {
 import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { normalizeModeId } from '../chat/modes/types';
 import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
+import {
+  contextNoticeAction,
+  contextNoticeOutcome,
+} from '../chat/context/context-notice';
+import {
+  injectionNoticeAction,
+  injectionNoticeOutcome,
+} from '../chat/context/injection-notice';
+import type {
+  ContextNoticeMessage,
+  InjectionNoticeMessage,
+  PromptInjectionKind,
+} from '../types';
+import { createIcon, type IconName } from './icon';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -258,6 +272,16 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     if (!msg || !msg.role) continue;
     if (msg.role === 'tool') continue;
 
+    if (msg.role === 'context') {
+      appendContextNotice(area, msg as ContextNoticeMessage, i);
+      continue;
+    }
+
+    if (msg.role === 'injection') {
+      appendInjectionNotice(area, msg as InjectionNoticeMessage, i);
+      continue;
+    }
+
     if (msg.role === 'user') {
       const userMsg = msg;
       if (isHiddenTranscriptUserMessage(userMsg)) {
@@ -470,6 +494,161 @@ function resolveBubbleTargetChat(meta?: BubbleRenderMeta): Chat {
 function bubbleDomStub(): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
   const stub = document.createElement('div');
   return { wrap: stub, bubble: stub };
+}
+
+interface TranscriptNoticeChipOptions {
+  action: string;
+  outcome: string;
+  icon: IconName;
+  body?: string;
+  historyIndex: number;
+  emptyFallback: string;
+}
+
+function injectionNoticeIcon(kind: PromptInjectionKind): IconName {
+  switch (kind) {
+    case 'brain-notes':
+      return 'appBrain';
+    case 'code-map':
+      return 'appCodeBrainMap';
+    default:
+      return 'fileText';
+  }
+}
+
+function contextNoticeIcon(policy: ContextNoticeMessage['policy']): IconName {
+  return policy === 'archive' ? 'archive' : 'compress';
+}
+
+function appendTranscriptNoticeChip(
+  area: HTMLElement,
+  options: TranscriptNoticeChipOptions,
+  insertBefore?: ChildNode | null,
+): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'context-notice tool-call-msg';
+  wrap.dataset.historyIndex = String(options.historyIndex);
+
+  const details = document.createElement('details');
+  details.className = 'tool-call-details context-notice__details';
+
+  const summary = document.createElement('summary');
+  summary.className = 'tool-call-summary tool-call-summary--ok';
+
+  const statusGlyph = document.createElement('span');
+  statusGlyph.className = 'tool-call-status';
+  statusGlyph.appendChild(
+    createIcon(options.icon, { className: 'tool-call-icon', size: 15 }),
+  );
+
+  const action = document.createElement('span');
+  action.className = 'tool-call-action';
+  action.textContent = options.action;
+
+  const outcome = document.createElement('span');
+  outcome.className = 'tool-call-outcome';
+  outcome.textContent = options.outcome;
+
+  const chevron = createIcon('chevronDown', {
+    className: 'tool-call-chevron',
+    size: 14,
+  });
+
+  summary.appendChild(statusGlyph);
+  summary.appendChild(action);
+  summary.appendChild(outcome);
+  summary.appendChild(chevron);
+
+  const body = document.createElement('div');
+  body.className = 'tool-call-body';
+
+  if (options.body?.trim()) {
+    const pre = document.createElement('pre');
+    pre.className = 'context-notice__summary';
+    pre.textContent = options.body;
+    body.appendChild(pre);
+  } else {
+    const empty = document.createElement('p');
+    empty.className = 'context-notice__empty';
+    empty.textContent = options.emptyFallback;
+    body.appendChild(empty);
+  }
+
+  details.appendChild(summary);
+  details.appendChild(body);
+  wrap.appendChild(details);
+  if (insertBefore) {
+    area.insertBefore(wrap, insertBefore);
+  } else {
+    area.appendChild(wrap);
+  }
+  return wrap;
+}
+
+function appendContextNotice(
+  area: HTMLElement,
+  notice: ContextNoticeMessage,
+  historyIndex: number,
+): void {
+  appendTranscriptNoticeChip(area, {
+    action: contextNoticeAction(notice.policy),
+    outcome: contextNoticeOutcome(notice.droppedTurns, notice.summaryText),
+    icon: contextNoticeIcon(notice.policy),
+    body: notice.summaryText,
+    historyIndex,
+    emptyFallback: 'No summary text was recorded for this trim.',
+  });
+}
+
+function appendInjectionNotice(
+  area: HTMLElement,
+  notice: InjectionNoticeMessage,
+  historyIndex: number,
+  insertBefore?: ChildNode | null,
+): void {
+  const wrap = appendTranscriptNoticeChip(
+    area,
+    {
+      action: injectionNoticeAction(notice.kind),
+      outcome: injectionNoticeOutcome(notice.body),
+      icon: injectionNoticeIcon(notice.kind),
+      body: notice.body,
+      historyIndex,
+      emptyFallback: 'No injection payload was recorded.',
+    },
+    insertBefore,
+  );
+  wrap.classList.add('context-notice--user-turn');
+}
+
+/**
+ * Mount injection notice chips during an in-flight turn (before assistant stream).
+ */
+export function appendInjectionNoticesDom(
+  notices: InjectionNoticeMessage[],
+  startHistoryIndex: number,
+  meta?: { chatId?: string },
+): void {
+  const active = getActiveChat();
+  const targetId = meta?.chatId?.trim() || active.id;
+  if (targetId !== active.id && !isStreamDomVisible(targetId)) return;
+  const chat = resolveBubbleTargetChat({
+    chatId: targetId,
+    historyIndex: startHistoryIndex,
+    turnKind: 'user',
+  });
+  if (shouldStubOrchestrateStreamDom(chat)) return;
+  const mount = getActiveChatMountElement();
+  clearTranscriptEmptyState(mount);
+  // Live tool-loop path mounts the streaming assistant row before injection resolves;
+  // keep injection chips on the user turn (above the in-flight assistant row).
+  const insertBefore = mount.querySelector('.msg.assistant.msg--awaiting-prose');
+  let index = startHistoryIndex;
+  for (const notice of notices) {
+    appendInjectionNotice(mount, notice, index, insertBefore);
+    index += 1;
+  }
+  scrollChatIfPinned();
 }
 
 export function appendBubble(

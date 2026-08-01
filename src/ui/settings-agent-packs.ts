@@ -94,7 +94,7 @@ function buildPackRow(
         try {
           const updated = await patchAgentPackEnabled(pack.id, enabled);
           if (!updated) {
-            setStatus('err', 'Could not update pack (npm start required)');
+            setStatus('err', 'Could not update pack (Minnow must be running)');
             return;
           }
           setStatus('ok', `Pack "${pack.label}" ${enabled ? 'enabled' : 'disabled'}`);
@@ -138,7 +138,7 @@ function appendAuthoringSteps(mount: HTMLElement): void {
       '. You can also copy ',
       codeText('~/.minnow/agent-packs/_template'),
       ' after your first ',
-      codeText('npm start'),
+      codeText('Minnow app'),
       '.',
     ],
     [
@@ -330,7 +330,7 @@ export async function renderAgentPacksSettingsSection(content: HTMLElement): Pro
   if (!isLocalServerAvailable()) {
     appendSettingsOfflineHint(
       authorBody,
-      'Start the dev server (<code>npm start</code>) to download the template, scan packs, and toggle enablement.',
+      'Open Minnow to download the template, scan packs, and toggle enablement.',
     );
   }
 
@@ -345,7 +345,7 @@ export async function renderAgentPacksSettingsSection(content: HTMLElement): Pro
   if (!isLocalServerAvailable()) {
     appendSettingsOfflineHint(
       listBody,
-      'Pack list requires <code>npm start</code>.',
+      'Pack list requires Minnow running locally.',
     );
     return;
   }

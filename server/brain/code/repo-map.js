@@ -3,6 +3,7 @@
  */
 
 import { estimateTokens } from './rank.js';
+import { formatRepoMapInjectionLine, formatRepoMapSymbolLine } from './repo-map-symbols.js';
 
 /**
  * Render signature-only lines until the token budget is exhausted.
@@ -14,12 +15,14 @@ import { estimateTokens } from './rank.js';
  *   signature: string,
  *   pagerank?: number,
  *   kind?: string,
+ *   line_start?: number,
  * }>} symbols — pre-sorted by rank descending
  * @param {number} tokenBudget
- * @param {{ focus?: string }} [opts]
+ * @param {{ focus?: string, profile?: 'default' | 'injection' }} [opts]
  */
 export function renderRepoMap(symbols, tokenBudget, opts = {}) {
   const budget = Math.max(50, Math.floor(tokenBudget));
+  const profile = opts.profile === 'injection' ? 'injection' : 'default';
   const lines = [];
   /** @type {Array<{ type: string, text: string, symbolId?: string, file?: string }>} */
   const entries = [];
@@ -41,7 +44,7 @@ export function renderRepoMap(symbols, tokenBudget, opts = {}) {
     }
     matched += 1;
 
-    if (sym.file !== currentFile) {
+    if (profile !== 'injection' && sym.file !== currentFile) {
       currentFile = sym.file;
       const header = `\n## ${currentFile}`;
       const headerTokens = estimateTokens(header);
@@ -51,8 +54,8 @@ export function renderRepoMap(symbols, tokenBudget, opts = {}) {
       used += headerTokens;
     }
 
-    const sig = sym.signature?.trim() || `${sym.kind ?? 'symbol'} ${sym.id}`;
-    const line = `- ${sig}`;
+    const line =
+      profile === 'injection' ? formatRepoMapInjectionLine(sym) : formatRepoMapSymbolLine(sym);
     const lineTokens = estimateTokens(line);
     if (used + lineTokens > budget) {
       const truncatedLine = '- … (truncated to token budget)';

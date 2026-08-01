@@ -43,6 +43,8 @@ async function refreshCodeChatSurface(): Promise<void> {
   renderSidebar();
   refreshChatJumpChipVisibility();
   await syncCodeFileTreeChrome();
+  const { refreshContextUsageRing } = await import('../ui/context-usage-ring');
+  refreshContextUsageRing();
   void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
 }
 

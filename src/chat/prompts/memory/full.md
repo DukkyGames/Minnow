@@ -35,7 +35,7 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 | Raw document → wiki pages | `brain_ingest_source` |
 | Wiki maintenance note | `brain_append_log` |
 
-**Code tasks:** start with `repo_map` (low-res overview), then `find_symbol` / `read_symbol` to zoom; use `who_calls` for call graph edges. For design intent behind a symbol, use `explain_symbol` then `read_symbol`. Exact strings in files → `grep`.
+/** Code tasks:** when a code map is injected above in the system prompt, use it for orientation, then `find_symbol` / `read_symbol` to zoom; otherwise start with `repo_map` (low-res overview). Use `who_calls` for call graph edges. For design intent behind a symbol, use `explain_symbol` then `read_symbol`. Exact strings in files → `grep`.
 
 Official Minnow documentation and Brain are separate: `minnow_docs_*` reads shipped user manual pages under `documentation/manual/`; `brain_*` reads and writes the user's workspace knowledge. Repo architecture: `documentation/context.md` in the workspace.
 

@@ -29,7 +29,7 @@ export async function runChatBrainCapture(
 
   const serverUp = await detectLocalServer();
   if (!serverUp) {
-    setStatusFn('err', 'Local server unavailable — run npm start');
+    setStatusFn('err', 'Minnow is not running locally — open or restart the app');
     return null;
   }
 
@@ -75,7 +75,7 @@ export async function runResearchBrainCapture(
 ): Promise<BrainCaptureOutcome | null> {
   const serverUp = await detectLocalServer();
   if (!serverUp) {
-    setStatusFn('err', 'Local server unavailable — run npm start');
+    setStatusFn('err', 'Minnow is not running locally — open or restart the app');
     return null;
   }
 

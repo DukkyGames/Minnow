@@ -2988,19 +2988,16 @@ export function normalizeSubAgentsConfig(body) {
       }
     }
 
-    if (row.maxInputTokens !== undefined && row.maxInputTokens !== null) {
-      const cap = Number(row.maxInputTokens);
-      if (!Number.isFinite(cap) || cap < 1) {
-        row.maxInputTokens = null;
-      } else {
-        row.maxInputTokens = Math.floor(cap);
-      }
+    if (row.maxInputTokens !== undefined) {
+      delete row.maxInputTokens;
+      warnings.push(`Removed deprecated maxInputTokens for types.${typeId}`);
     }
 
     const policy = row.contextEnforcementPolicy;
     if (
       policy !== undefined &&
       policy !== 'summarize' &&
+      policy !== 'dropMiddle' &&
       policy !== 'slide' &&
       policy !== 'truncate' &&
       policy !== 'archive'
@@ -3076,16 +3073,16 @@ export function normalizeSubAgentsConfig(body) {
     delete row.maxToolTurns;
   }
 
-  if (base.defaultMaxInputTokens !== undefined && base.defaultMaxInputTokens !== null) {
-    const cap = Number(base.defaultMaxInputTokens);
-    base.defaultMaxInputTokens =
-      Number.isFinite(cap) && cap >= 1000 ? Math.min(Math.floor(cap), 200000) : null;
+  if (base.defaultMaxInputTokens !== undefined) {
+    delete base.defaultMaxInputTokens;
+    warnings.push('Removed deprecated defaultMaxInputTokens');
   }
 
   const defaultPolicy = base.defaultContextEnforcementPolicy;
   if (
     defaultPolicy !== undefined &&
     defaultPolicy !== 'summarize' &&
+    defaultPolicy !== 'dropMiddle' &&
     defaultPolicy !== 'slide' &&
     defaultPolicy !== 'truncate' &&
     defaultPolicy !== 'archive'

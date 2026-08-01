@@ -58,6 +58,15 @@ import {
   shouldAutoRestoreViewerSplitOnBoot,
 } from './preview-restore-policy';
 import { bindWorkspaceSplitResizer } from './workspace-split-resize';
+import { bindRightPaneSplitResizer } from './right-pane-split-resize';
+import {
+  closeRightPaneSplit,
+  focusPaneSlot,
+  splitRightPane,
+} from './right-pane-split';
+import type { PaneSlotId } from '../state/file-panel';
+import { bindSecondaryPreviewControls } from './preview-secondary-slot';
+import { bindSecondaryPreviewDesignControls } from './preview-secondary-design';
 import { sessionState } from '../state/sessions';
 
 let resizerBound = false;
@@ -66,6 +75,7 @@ function bindSplitResizer(): void {
   if (resizerBound) return;
   resizerBound = true;
   bindWorkspaceSplitResizer();
+  bindRightPaneSplitResizer();
 }
 
 function bindFilePanelControls(): void {
@@ -81,11 +91,66 @@ function bindFilePanelControls(): void {
     closeBtn.addEventListener('click', () => closeFileViewer());
   }
 
+  const splitBtn = document.getElementById('btnRightPaneSplit');
+  if (splitBtn) {
+    splitBtn.addEventListener('click', () => splitRightPane());
+  }
+
+  const previewSplitBtn = document.getElementById('btnPreviewPaneSplit');
+  if (previewSplitBtn) {
+    previewSplitBtn.addEventListener('click', () => splitRightPane());
+  }
+
+  document.getElementById('btnFileViewerCloseSecondary')?.addEventListener('click', () => {
+    closeRightPaneSplit();
+  });
+  document.getElementById('btnPreviewCloseSecondary')?.addEventListener('click', () => {
+    closeRightPaneSplit();
+  });
+
   const toggleBtn = document.getElementById('btnFileSidebarCollapse');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', () => {
       void initFileTreeIfNeeded();
     });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== '\\' || !(e.ctrlKey || e.metaKey)) return;
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (
+      !target.closest(
+        '#rightPaneSlotPrimary, #rightPaneSlotSecondary, #fileViewerHost, #previewBody',
+      )
+    ) {
+      return;
+    }
+    e.preventDefault();
+    splitRightPane();
+  });
+
+  bindPaneSlotFocusTracking();
+}
+
+/**
+ * Clicking or tabbing into a pane makes it the focused editor group, so the next file
+ * the user opens (and Ctrl+S / Ctrl+W) targets the pane they are looking at.
+ */
+function bindPaneSlotFocusTracking(): void {
+  const slots: [string, PaneSlotId][] = [
+    ['rightPaneSlotPrimary', 'primary'],
+    ['rightPaneSlotSecondary', 'secondary'],
+  ];
+  for (const [id, slot] of slots) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const focus = (): void => {
+      if (getFilePanelState().rightPaneSplit.focusedSlot === slot) return;
+      focusPaneSlot(slot);
+    };
+    el.addEventListener('pointerdown', focus, true);
+    el.addEventListener('focusin', focus);
   }
 }
 
@@ -150,6 +215,8 @@ export async function initFilePanel(): Promise<void> {
 
   bindSplitResizer();
   bindFilePanelControls();
+  bindSecondaryPreviewControls();
+  bindSecondaryPreviewDesignControls();
   bindFileViewerControls();
   bindFileViewerTabs();
   bindFileViewerContextMenu();

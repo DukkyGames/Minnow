@@ -338,7 +338,7 @@ export const extrasStep: OnboardingStep = {
         el(
           'p',
           'mn-onboarding-notice',
-          'Extras need npm start. Skip now and install later from Settings → Servers.',
+          'Extras need Minnow running locally. Skip now and install later from Settings → Servers.',
         ),
       );
       actions.setPrimaryEnabled(true);

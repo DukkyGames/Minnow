@@ -36,6 +36,15 @@ The **authoritative reference** is [`documentation/context.md`](documentation/co
 - **`npm run build`** → `tsc && vite build` → `dist/`. The `prebuild` step generates `src/skills/builtin-manifest.json`.
 - **`npm run package`** → build + `electron:build` + `electron-builder` (Windows NSIS → `release/`). `package:dir` produces an unpacked directory.
 
+## Performance budgets (MIN-400)
+
+Perf regressions fail CI the same way as `impeccable:detect` — loudly and with numbers.
+
+- **Bundle ceilings** live in [`budgets.json`](budgets.json) (entry JS/CSS, largest lazy JS chunk, total `dist/assets` excluding benchmark data packs). After `npm run build`, run `npm run check:performance-budgets` (or `npm run report:bundle-size -- --check`). Breaches print the chunk name and KB delta vs the limit and vs [`scripts/bundle-size-baseline.json`](scripts/bundle-size-baseline.json).
+- **Raising a budget** requires editing `budgets.json` in the same PR with a short rationale in the commit/PR body, then refresh the baseline: `npm run build && node scripts/check-performance-budgets.mjs --update-baseline`.
+- **Startup** is measured at `markAppReady()` ([`src/boot/app-ready.ts`](src/boot/app-ready.ts)); boot metrics surface in the dev console when `MINNOW_DEBUG=1`, under Settings → About → Performance diagnostics, and in CI via the happy-dom harness (`test/boot/boot-budget-ci.test.mts`).
+- **Long tasks (dev only):** with `MINNOW_DEBUG=1`, main-thread stalls ≥100ms log to the console (`src/boot/long-task-observer.ts`) — local only, no telemetry.
+
 ## Key gotchas
 
 - `postinstall` runs `scripts/sync-impeccable-skill.mjs` (vendors the Impeccable skill) and `scripts/ensure-electron.mjs`. Both are expected and idempotent.

@@ -15,6 +15,7 @@ import './styles/shell-keyboard-help.css';
 import './styles/sidebar.css';
 import './styles/chat-search.css';
 import './styles/messages.css';
+import './styles/context-notice.css';
 import './styles/message-actions.css';
 import './styles/voice.css';
 import './styles/branch-picker.css';
@@ -31,6 +32,7 @@ import './styles/responsive.css';
 import './styles/mode-selector.css';
 import './styles/mode-icons.css';
 import './styles/composer-controls.css';
+import './styles/composer-expand.css';
 import './styles/composer-message-queue.css';
 import './styles/file-panel.css';
 /* Material Icon Theme (PKief) — colorful file/folder glyphs for Code tree + tabs */
@@ -65,6 +67,7 @@ import './styles/plan-progress.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-desktop.css';
 import './styles/desktop-workspace-rail.css';
+import './styles/minnowos-responsive.css';
 import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
@@ -72,11 +75,14 @@ import './styles/models-page.css';
 import './styles/onboarding.css';
 import './styles/app-picker.css';
 import './styles/app-dialog.css';
+/* Phone layer last: it overrides the desktop shell above. */
+import './styles/mobile.css';
 
 import 'highlight.js/styles/github.min.css';
 
 import { installFetchAuth } from './api/install-fetch-auth';
 import { initTheme } from './ui/theme';
+import { initMobileLayout } from './ui/mobile-layout';
 import { initAttachments } from './attachments/store';
 import { initShellHandlers } from './ui/shell-handlers';
 import { installScopedSelectAllHandler } from './ui/scoped-select-all';
@@ -102,6 +108,7 @@ import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
 import { loadChatMeta } from './config/chat-meta';
+import { loadLibraryInferencePrefs } from './config/library-inference-meta';
 import { applySamplerMetaToDrawer, loadSamplerMeta } from './config/sampler-meta';
 import { loadAutopilotMeta } from './config/autopilot-meta';
 import {
@@ -180,6 +187,8 @@ import {
 } from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { initThinkingControl } from './ui/composer-thinking';
+import { initCodeMapInjectionControl } from './ui/composer-code-map';
+import { initBrainNotesInjectionControl } from './ui/composer-brain-notes';
 import {
   initComposerReasoningEffort,
   syncComposerReasoningEffortFromActiveChat,
@@ -198,6 +207,7 @@ import {
   initDesktopToolsPopover,
 } from './ui/composer-tools-popover';
 import { initComposerVoice } from './ui/composer-voice';
+import { initComposerExpand } from './ui/composer-expand';
 import { initComposerUndo } from './ui/composer-undo';
 import { initVoiceStatus } from './ui/voice-controls';
 import { dismissOpenLayers } from './ui/status';
@@ -214,6 +224,7 @@ import { getWorkspacePath } from './state/workspace.ts';
 import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
 import { scheduleMarkAppReady } from './boot/app-ready';
 import { installRendererDiagnostics } from './boot/diagnostics';
+import { installLongTaskObserver } from './boot/long-task-observer';
 import { initNotificationAudioUnlock } from './notifications/sound';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
@@ -286,12 +297,15 @@ export async function initApp(): Promise<void> {
   initChatAppToolsPopover();
   initDesktopToolsPopover();
   initComposerVoice();
+  initComposerExpand();
   initComposerUndo();
   void initVoiceStatus();
   initAttachments();
   initContextUsageRing();
   initModeSelector();
   initThinkingControl();
+  initCodeMapInjectionControl();
+  initBrainNotesInjectionControl();
   initComposerReasoningEffort();
   initOrchestratePlanSelector();
   const { initComposerRunTarget } = await import('./ui/composer-run-target');
@@ -341,6 +355,7 @@ export async function initApp(): Promise<void> {
   await loadSamplerMeta()
     .then(applySamplerMetaToDrawer)
     .catch(() => undefined);
+  await loadLibraryInferencePrefs().catch(() => undefined);
   await loadAutopilotMeta().catch(() => undefined);
   await loadThinkingMeta().catch(() => undefined);
   initStatsStrip();
@@ -432,6 +447,7 @@ async function startApp(): Promise<void> {
     initOsShell();
   }
   installRendererDiagnostics();
+  installLongTaskObserver();
   initNotificationAudioUnlock();
   // Sessions must load before OS routing — Code app mount calls getActiveChat().
   await detectConfigServer();
@@ -451,6 +467,10 @@ installFetchAuth();
 registerServiceWorker();
 
 initTheme();
+
+// Stamp mn-phone / mn-tablet / mn-touch before first paint so the shell never
+// renders a desktop layout and then reflows into the phone one.
+initMobileLayout();
 
 // Keep the inline loader until bundled CSS is applied (avoids unstyled shell FOUC).
 scheduleMarkAppReady();

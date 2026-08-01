@@ -85,8 +85,17 @@ export const SETTINGS_CATEGORIES: SettingsCategoryId[] = [
   'advanced',
 ];
 
+/** Areas reparented into Models without appearing in Settings sub-nav. */
+const SETTINGS_AREA_CATEGORY_OVERRIDES: Partial<
+  Record<SettingsSectionId, SettingsCategoryId>
+> = {
+  voice: 'models',
+};
+
 /** Map legacy area slug → parent category. */
 export function categoryForArea(area: SettingsSectionId): SettingsCategoryId {
+  const override = SETTINGS_AREA_CATEGORY_OVERRIDES[area];
+  if (override) return override;
   for (const category of SETTINGS_CATEGORIES) {
     if (SETTINGS_CATEGORY_AREAS[category].includes(area)) {
       return category;
@@ -163,7 +172,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('general.notifications.soundOnActiveChat', 'Sounds in active chat', 'general', 'notifications'),
   field('general.network', 'Network access', 'general', 'general', {
     keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
-    description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',
+    description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs the app.',
   }),
   field('general.filesystem', 'Filesystem access', 'general', 'general', {
     keywords: ['workspace', 'full disk', 'path', 'sandbox', 'file tools', 'git', 'TOOLS_ALLOW_ALL_PATHS'],

@@ -1,0 +1,34 @@
+/* Context trim / injection rows — same column rhythm as tool-call-msg */
+
+.context-notice {
+  align-self: flex-start;
+  width: min(var(--chat-tool-call-max), 100%);
+}
+
+/* Brain / code-map injection follows the user message (not assistant tool column). */
+.context-notice.context-notice--user-turn {
+  align-self: flex-end;
+}
+
+.context-notice .tool-call-action {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-notice__summary {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: var(--mn-text-sm);
+  color: var(--mn-text-primary);
+}
+
+.context-notice__empty {
+  margin: 0;
+  font-size: var(--mn-text-sm);
+  color: var(--mn-text-muted);
+}

@@ -135,8 +135,12 @@ export type ChromeIconName =
   | 'openProject'
   | 'terminal'
   | 'browser'
+  | 'deviceMobile'
+  | 'deviceTablet'
+  | 'deviceDesktop'
   | 'designMode'
   | 'dock'
+  | 'inspectorPanel'
   | 'mic'
   | 'speaker'
   | 'tools'
@@ -144,7 +148,10 @@ export type ChromeIconName =
   | 'loop'
   | 'sparkles'
   | 'thinkingBrain'
-  | 'inbox';
+  | 'reasoning'
+  | 'codeMapInjection'
+  | 'inbox'
+  | 'moon';
 
 // ── Board ────────────────────────────────────────────────────────────────────
 
@@ -183,7 +190,7 @@ export type MetricIconName =
   | 'metricTotal'
   | 'metricCtx';
 
-/** All 128 semantic icon names. */
+/** All 133 semantic icon names. */
 export type IconName =
   | ShellIconName
   | AppIconName
@@ -306,12 +313,16 @@ export const ICON_CLASS: Record<IconName, string> = {
   expand: 'fi-rr-expand',
   compress: 'fi-rr-compress-alt',
   edit: 'fi-rr-edit',
-  addFolder: 'fi-rr-folder-download',
+  addFolder: 'fi-rr-add-folder',
   openProject: 'fi-rr-folder-open',
   terminal: 'fi-rr-terminal',
   browser: 'fi-rr-browser',
+  deviceMobile: 'fi-rr-mobile',
+  deviceTablet: 'fi-rr-tablet',
+  deviceDesktop: 'fi-rr-computer',
   designMode: 'fi-rr-magic-wand',
   dock: 'fi-rr-layout-fluid',
+  inspectorPanel: 'fi-rr-sidebar-flip',
   mic: 'fi-rr-microphone',
   speaker: 'fi-rr-volume',
   tools: 'fi-rr-tools',
@@ -319,7 +330,10 @@ export const ICON_CLASS: Record<IconName, string> = {
   loop: 'fi-rr-rotate-right',
   sparkles: 'fi-rr-sparkles',
   thinkingBrain: 'fi-sr-brain',
+  reasoning: 'fi-sr-bulb',
+  codeMapInjection: 'fi-rr-sitemap',
   inbox: 'fi-rr-inbox',
+  moon: 'fi-rr-moon',
 
   // Board
   boardBuild: 'fi-sr-hammer',

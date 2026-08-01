@@ -22,8 +22,10 @@ export const DEFAULT_BRAIN_CODE_CONFIG = {
     '**/build/**',
     '**/.minnow/**',
   ],
-  /** Approximate token budget for repo_map output. */
+  /** Approximate token budget for repo_map tool and Brain Code map panel. */
   repoMapTokenBudget: 32000,
+  /** Token budget for per-send code-map injection (injection profile). */
+  repoMapInjectionTokenBudget: 10000,
   /** When to trigger background reindex (MIN-B10 wires automation). */
   reindexCadence: /** @type {CodeReindexCadence} */ ('on-demand'),
   /** Reserved for MIN-B11 semantic code search. */
@@ -46,6 +48,16 @@ export function clampRepoMapTokenBudget(budget) {
 }
 
 /**
+ * Clamp injection-only repo map budget (same numeric range as tool budget).
+ * @param {unknown} budget
+ */
+export function clampRepoMapInjectionTokenBudget(budget) {
+  const n = Number(budget);
+  if (!Number.isFinite(n)) return DEFAULT_BRAIN_CODE_CONFIG.repoMapInjectionTokenBudget;
+  return clampRepoMapTokenBudget(n);
+}
+
+/**
  * Merge partial code-index settings with defaults.
  * @param {Record<string, unknown> | undefined | null} raw
  */
@@ -61,12 +73,16 @@ export function normalizeBrainCodeConfig(raw) {
   const validCadence =
     cadence === 'on-switch' || cadence === 'git-hook' ? cadence : 'on-demand';
   const budget = Number(src.repoMapTokenBudget ?? DEFAULT_BRAIN_CODE_CONFIG.repoMapTokenBudget);
+  const injectionBudget = Number(
+    src.repoMapInjectionTokenBudget ?? DEFAULT_BRAIN_CODE_CONFIG.repoMapInjectionTokenBudget,
+  );
   return {
     ...DEFAULT_BRAIN_CODE_CONFIG,
     enabled: src.enabled !== false,
     includeGlobs,
     excludeGlobs,
     repoMapTokenBudget: clampRepoMapTokenBudget(budget),
+    repoMapInjectionTokenBudget: clampRepoMapInjectionTokenBudget(injectionBudget),
     reindexCadence: validCadence,
     codeEmbeddingsEnabled: src.codeEmbeddingsEnabled === true,
     autoScaffoldIndexConfig: src.autoScaffoldIndexConfig !== false,

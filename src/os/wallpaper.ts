@@ -7,8 +7,6 @@ export type WallpaperMode =
   | 'minnow'
   | 'aurora'
   | 'starfield'
-  | 'grain'
-  | 'mesh'
   | 'custom';
 
 export type WallpaperImageFit = 'cover' | 'contain';
@@ -31,8 +29,6 @@ export const WALLPAPER_CATALOG: Array<{
   { id: 'aurora', label: 'Aurora', animated: true },
   { id: 'starfield', label: 'Starfield', animated: true },
   { id: 'gradient', label: 'Gradient', animated: false },
-  { id: 'mesh', label: 'Mesh', animated: false },
-  { id: 'grain', label: 'Grain', animated: false },
   { id: 'flat', label: 'Flat', animated: false },
   { id: 'custom', label: 'Custom image', animated: false },
 ];
@@ -52,6 +48,10 @@ interface StarSpec {
   size: number;
   dur: number;
   delay: number;
+  /** Stable base opacity — never animated to zero (avoids pop in/out). */
+  op: number;
+  /** Near stars get a soft glow; far stars stay dim points. */
+  near: boolean;
 }
 
 function randomBubbles(count: number): BubbleSpec[] {
@@ -66,17 +66,23 @@ function randomBubbles(count: number): BubbleSpec[] {
 }
 
 function randomStars(count: number): StarSpec[] {
-  return Array.from({ length: count }, () => ({
-    left: Math.random() * 100,
-    top: Math.random() * 100,
-    size: 1 + Math.random() * 2.5,
-    dur: 18 + Math.random() * 30,
-    delay: -Math.random() * 20,
-  }));
+  return Array.from({ length: count }, (_, i) => {
+    // Sparse bright near-stars over a denser far field.
+    const near = i % 5 === 0;
+    return {
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      size: near ? 2.2 + Math.random() * 2.4 : 1.2 + Math.random() * 1.6,
+      dur: near ? 48 + Math.random() * 36 : 72 + Math.random() * 48,
+      delay: -Math.random() * 50,
+      op: near ? 0.78 + Math.random() * 0.2 : 0.45 + Math.random() * 0.3,
+      near,
+    };
+  });
 }
 
 const BUBBLE_CACHE = randomBubbles(16);
-const STAR_CACHE = randomStars(48);
+const STAR_CACHE = randomStars(90);
 
 let minnowCleanup: (() => void) | null = null;
 const previewMinnowCleanups = new WeakMap<HTMLElement, () => void>();
@@ -161,10 +167,12 @@ export function renderWallpaper(
     stars.className = 'mn-os-stars';
     for (const s of STAR_CACHE) {
       const span = document.createElement('span');
+      if (s.near) span.classList.add('is-near');
       span.style.left = `${s.left}%`;
       span.style.top = `${s.top}%`;
       span.style.width = `${s.size}px`;
       span.style.height = `${s.size}px`;
+      span.style.opacity = String(s.op);
       span.style.animationDuration = `${s.dur}s`;
       span.style.animationDelay = `${s.delay}s`;
       stars.appendChild(span);
@@ -173,18 +181,14 @@ export function renderWallpaper(
   }
 
   if (mode === 'aurora') {
+    // Three curtain bands so the wallpaper reads clearly in the picker and on desktop.
     const bandA = document.createElement('div');
     bandA.className = 'mn-os-aurora mn-os-aurora-a';
     const bandB = document.createElement('div');
     bandB.className = 'mn-os-aurora mn-os-aurora-b';
-    wall.appendChild(bandA);
-    wall.appendChild(bandB);
-  }
-
-  if (mode === 'grain') {
-    const grain = document.createElement('div');
-    grain.className = 'mn-os-grain';
-    wall.appendChild(grain);
+    const bandC = document.createElement('div');
+    bandC.className = 'mn-os-aurora mn-os-aurora-c';
+    wall.append(bandA, bandB, bandC);
   }
 
   if (mode === 'minnow') {

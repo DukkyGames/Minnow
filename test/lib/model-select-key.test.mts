@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   applyModelSelectValueToChat,
+  copyChatModelBinding,
   decodeModelSelectKey,
   encodeModelSelectKey,
   findFirstSelectKeyForCanonicalModelId,
@@ -58,5 +59,20 @@ describe('model-select-key', () => {
     applyModelSelectValueToChat(chat, 'plain-model');
     assert.equal(chat.modelId, 'plain-model');
     assert.equal(chat.providerId, undefined);
+  });
+
+  test('copyChatModelBinding copies provider and model onto target chat', () => {
+    const source = { providerId: 'lm-studio', modelId: 'qwen-35b' };
+    const target = { providerId: 'other', modelId: 'gpt' };
+    copyChatModelBinding(source, target);
+    assert.equal(target.modelId, 'qwen-35b');
+    assert.equal(target.providerId, 'lm-studio');
+  });
+
+  test('copyChatModelBinding is a no-op when source has no model id', () => {
+    const target = { providerId: 'keep', modelId: 'keep-model' };
+    copyChatModelBinding({ modelId: '' }, target);
+    assert.equal(target.modelId, 'keep-model');
+    assert.equal(target.providerId, 'keep');
   });
 });

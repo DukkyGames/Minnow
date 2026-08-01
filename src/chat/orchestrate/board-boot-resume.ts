@@ -15,9 +15,12 @@ import {
   probeOomPauseFromElectron,
   setOomPauseActiveForBoot,
 } from './oom-recovery.ts';
+import { syncAfkBoardPowerGuardFromSession } from './board-afk-power.ts';
+import { initOrchestrateBoardDisplayWake } from './board-display-wake.ts';
 
 /** Resume auto/sequential delegation for boards that were running before reload. */
 export async function bootOrchestrateBoardResume(state: SessionState): Promise<void> {
+  initOrchestrateBoardDisplayWake();
   const oomPause = await probeOomPauseFromElectron();
   setOomPauseActiveForBoot(oomPause);
 
@@ -29,6 +32,7 @@ export async function bootOrchestrateBoardResume(state: SessionState): Promise<v
       if (!planner) continue;
       await recoverInterruptedMergesAfterReload(group, planner);
     }
+    syncAfkBoardPowerGuardFromSession(state);
     return;
   }
 
@@ -40,4 +44,5 @@ export async function bootOrchestrateBoardResume(state: SessionState): Promise<v
     if (!isBoardRunning(group)) continue;
     await resumeBoardExecutionAfterReload(group, planner);
   }
+  syncAfkBoardPowerGuardFromSession(state);
 }

@@ -136,15 +136,14 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  margin-inline: 2px;
   color: var(--mn-fg-muted);
   opacity: 0.55;
   list-style: none;
 }
 
 .workspace-picker__crumb-sep-icon {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2.5;
+  --mn-icon-size: 12px;
 }
 
 .workspace-picker__nav-actions {

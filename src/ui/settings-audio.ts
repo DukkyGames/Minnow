@@ -83,7 +83,7 @@ export async function renderAudioSettingsSection(
   if (!serverUp) {
     appendSettingsOfflineHint(
       mount,
-      'Start with <code>npm start</code> to persist audio device settings.',
+      'Open Minnow to persist audio device settings.',
     );
   }
 
@@ -99,20 +99,43 @@ export async function renderAudioSettingsSection(
   inputSelect.id = 'settingsAudioInputDevice';
   inputSelect.className = 'settings-select';
   inputSelect.disabled = !serverUp;
-  const { row: inputRow } = createSettingsSelectRow('Input device', {
-    select: inputSelect,
-    searchKey: 'audio.inputDevice',
-  });
-  devices.appendChild(inputRow);
 
   const outputSelect = document.createElement('select');
   outputSelect.id = 'settingsAudioOutputDevice';
   outputSelect.className = 'settings-select';
   outputSelect.disabled = !serverUp;
+
+  let echoCb!: HTMLInputElement;
+  let noiseCb!: HTMLInputElement;
+  let agcCb!: HTMLInputElement;
+
+  const persistAudioSettings = (): void => {
+    void (async () => {
+      const ok = await saveAudioSettings(inputSelect, outputSelect, echoCb, noiseCb, agcCb);
+      if (!ok) {
+        setStatus('err', 'Could not save audio settings. Open or restart Minnow.');
+        const config = await loadVoiceMeta();
+        await populateDeviceSelect(inputSelect, 'audioinput', config.audio.inputDeviceId);
+        await populateDeviceSelect(outputSelect, 'audiooutput', config.audio.outputDeviceId);
+        echoCb.checked = config.audio.echoCancellation;
+        noiseCb.checked = config.audio.noiseSuppression;
+        agcCb.checked = config.audio.autoGainControl;
+      }
+    })();
+  };
+
+  const { row: inputRow } = createSettingsSelectRow('Input device', {
+    select: inputSelect,
+    searchKey: 'audio.inputDevice',
+    onChange: () => persistAudioSettings(),
+  });
+  devices.appendChild(inputRow);
+
   const { row: outputRow } = createSettingsSelectRow('Output device', {
     select: outputSelect,
     searchKey: 'audio.outputDevice',
     description: 'Output routing uses setSinkId when supported (Chrome / Electron).',
+    onChange: () => persistAudioSettings(),
   });
   devices.appendChild(outputRow);
 
@@ -124,47 +147,38 @@ export async function renderAudioSettingsSection(
     { emphasis: true },
   );
 
-  const { row: echoRow, input: echoCb } = createSettingsToggleRow('Echo cancellation', {
+  const echoToggle = createSettingsToggleRow('Echo cancellation', {
     id: 'settingsAudioEchoCancellation',
     checked: true,
     disabled: !serverUp,
     searchKey: 'audio.echoCancellation',
+    onChange: () => persistAudioSettings(),
   });
-  processing.appendChild(echoRow);
+  echoCb = echoToggle.input;
+  processing.appendChild(echoToggle.row);
 
-  const { row: noiseRow, input: noiseCb } = createSettingsToggleRow('Noise suppression', {
+  const noiseToggle = createSettingsToggleRow('Noise suppression', {
     id: 'settingsAudioNoiseSuppression',
     checked: true,
     disabled: !serverUp,
     searchKey: 'audio.noiseSuppression',
+    onChange: () => persistAudioSettings(),
   });
-  processing.appendChild(noiseRow);
+  noiseCb = noiseToggle.input;
+  processing.appendChild(noiseToggle.row);
 
-  const { row: agcRow, input: agcCb } = createSettingsToggleRow('Auto gain control', {
+  const agcToggle = createSettingsToggleRow('Auto gain control', {
     id: 'settingsAudioAutoGainControl',
     checked: true,
     disabled: !serverUp,
     searchKey: 'audio.autoGainControl',
+    onChange: () => persistAudioSettings(),
   });
-  processing.appendChild(agcRow);
+  agcCb = agcToggle.input;
+  processing.appendChild(agcToggle.row);
 
   const actions = createSettingsActionsRow(
     [
-      {
-        label: 'Save audio settings',
-        variant: 'primary',
-        disabled: !serverUp,
-        onClick: () => {
-          void (async () => {
-            const ok = await saveAudioSettings(inputSelect, outputSelect, echoCb, noiseCb, agcCb);
-            if (!ok) {
-              setStatus('err', 'Could not save audio settings. Use npm start.');
-              return;
-            }
-            setStatus('ok', 'Audio settings saved');
-          })();
-        },
-      },
       {
         label: 'Refresh devices',
         disabled: !serverUp,

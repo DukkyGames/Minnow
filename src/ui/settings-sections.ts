@@ -102,6 +102,7 @@ import {
   createSettingsKvList,
   createSettingsSelectRow,
 } from './settings-controls';
+import { msToSeconds, secondsToMs } from './settings-duration';
 import { renderAboutSettingsSection } from './settings-about';
 import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
 import { renderBoardTestingSettingsSection } from './settings-board-testing';
@@ -167,6 +168,7 @@ const PART_LABELS: Record<PromptPartId, string> = {
   'tool-usage': 'Tool usage',
   info: 'Info',
   memory: 'Memory',
+  'code-map': 'Code map',
   'work-agent': 'Work agent',
   skill: 'Skill',
 };
@@ -436,7 +438,7 @@ async function renderGeneralSection(): Promise<void> {
   if (!serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'File-backed settings require <code>npm start</code>. Values below use browser storage until then.',
+      'Open Minnow to save file-backed settings. Values below use browser storage until then.',
     );
   }
 
@@ -486,7 +488,7 @@ async function renderGeneralSection(): Promise<void> {
   const network = appendSettingsGroup(
     shell,
     'Network access',
-    'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs npm start.',
+    'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs the app.',
     'general.network',
     { emphasis: true },
   );
@@ -1035,7 +1037,7 @@ async function renderWorkAgentsSection(): Promise<void> {
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       mount,
-      'Work agent editing requires <code>npm start</code>.',
+      'Work agent editing requires Minnow running locally.',
     );
     return;
   }
@@ -1073,7 +1075,6 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialProviderId: agent.providerId,
         initialModelId: agent.modelId,
         initialDisabled: agent.disabled === true,
-        initialMaxInputTokens: agent.maxInputTokens ?? null,
         initialContextPolicy: workAgentContextPolicySelectValue(id),
         initialArchive: agent.archive,
         onModelSaved: () => {
@@ -1107,7 +1108,7 @@ async function renderSubAgentsSection(): Promise<void> {
   ): Promise<void> => {
     const fresh = await loadSubAgentConfig();
     const ok = await saveSubAgentConfigToServer({ ...fresh, ...patch });
-    setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Save failed — use npm start');
+    setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Could not save. Open or restart Minnow and try again.');
   };
 
   const { root: enabledSwitch, input: enabledCb } = createSettingsSwitch({
@@ -1128,26 +1129,26 @@ async function renderSubAgentsSection(): Promise<void> {
   const timeoutInput = document.createElement('input');
   timeoutInput.type = 'number';
   timeoutInput.className = 'settings-select settings-kv-input';
-  timeoutInput.min = '1000';
-  timeoutInput.step = '1000';
-  timeoutInput.value = String(config.defaultTimeoutMs);
-  timeoutInput.setAttribute('aria-label', 'Default sub-agent timeout in milliseconds');
+  timeoutInput.min = '1';
+  timeoutInput.step = '1';
+  timeoutInput.value = String(msToSeconds(config.defaultTimeoutMs));
+  timeoutInput.setAttribute('aria-label', 'Default sub-agent timeout in seconds');
   timeoutWrap.appendChild(timeoutInput);
-  timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
+  timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'sec'));
 
   const nudgeWrap = el('span', 'settings-kv-input-wrap');
   const nudgeInput = document.createElement('input');
   nudgeInput.type = 'number';
   nudgeInput.className = 'settings-select settings-kv-input';
   nudgeInput.min = '0';
-  nudgeInput.step = '1000';
-  nudgeInput.value = String(config.checkInNudgeMs ?? 120_000);
+  nudgeInput.step = '1';
+  nudgeInput.value = String(msToSeconds(config.checkInNudgeMs ?? 120_000));
   nudgeInput.setAttribute(
     'aria-label',
-    'Sub-agent check-in nudge interval in milliseconds (0 disables)',
+    'Sub-agent check-in nudge interval in seconds (0 disables)',
   );
   nudgeWrap.appendChild(nudgeInput);
-  nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
+  nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'sec'));
 
   const duplicateToolInput = document.createElement('input');
   duplicateToolInput.type = 'number';
@@ -1228,7 +1229,6 @@ async function renderSubAgentsSection(): Promise<void> {
         {
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
-          maxInputTokens: type.maxInputTokens ?? null,
           contextEnforcementPolicy: subAgentContextPolicySelectValue(id),
           summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
         },
@@ -1248,16 +1248,17 @@ async function renderSubAgentsSection(): Promise<void> {
   });
 
   timeoutInput.addEventListener('change', () => {
-    const value = Math.max(1000, Math.floor(Number(timeoutInput.value) || 1000));
-    timeoutInput.value = String(value);
-    void persistGlobal({ defaultTimeoutMs: value });
+    const seconds = Math.max(1, Math.floor(Number(timeoutInput.value) || 1));
+    timeoutInput.value = String(seconds);
+    void persistGlobal({ defaultTimeoutMs: secondsToMs(seconds) });
   });
 
   nudgeInput.addEventListener('change', () => {
-    const raw = Math.floor(Number(nudgeInput.value) || 0);
-    const value = raw <= 0 ? 0 : Math.min(1_800_000, Math.max(10_000, raw));
-    nudgeInput.value = String(value);
-    void persistGlobal({ checkInNudgeMs: value });
+    const rawSec = Math.floor(Number(nudgeInput.value) || 0);
+    const seconds =
+      rawSec <= 0 ? 0 : Math.min(1_800, Math.max(10, rawSec));
+    nudgeInput.value = String(seconds);
+    void persistGlobal({ checkInNudgeMs: secondsToMs(seconds) });
   });
 
   duplicateToolInput.addEventListener('change', () => {
@@ -1416,13 +1417,13 @@ async function renderToolsSection(): Promise<void> {
   );
   shell.appendChild(lead);
 
-  appendSettingsOfflineHint(shell, 'Server tools need <code>npm start</code> (not npm run dev).', {
+  appendSettingsOfflineHint(shell, 'Some tools need Minnow running locally. Open or restart the app.', {
     id: 'settingsToolsServerBanner',
     hidden: true,
   });
   appendSettingsOfflineHint(
     shell,
-    'Browser tools only work in the Minnow desktop app window (from npm start), not in a separate browser tab.',
+    'Browser tools only work in the Minnow desktop app window, not in a separate browser tab.',
     { id: 'settingsToolsPreviewBanner', hidden: true },
   );
 
@@ -1471,7 +1472,7 @@ async function renderToolsSection(): Promise<void> {
   const catalog = appendSettingsGroup(
     content,
     'Tool catalog',
-    'Each tool can be off, ask before run, or full permission. File and git tools need npm start. Plugin tools appear at the bottom when the server is running.',
+    'Each tool can be off, ask before run, or full permission. File and git tools need Minnow running locally. Plugin tools appear at the bottom when Minnow is running.',
     'integrations.tools',
     { emphasis: true },
   );
@@ -1497,7 +1498,7 @@ async function renderToolsSection(): Promise<void> {
                 await setAllBuiltInToolPermissions('full', list);
                 setStatus('ok', 'All tools set to full permission');
               } catch {
-                setStatus('err', 'Could not save — use npm start');
+                setStatus('err', 'Could not save. Open or restart Minnow and try again.');
               }
             })();
           },
@@ -1515,7 +1516,7 @@ async function renderToolsSection(): Promise<void> {
                 await resetBuiltInToolPermissionsToDefaults(list);
                 setStatus('ok', 'Tool permissions reset to defaults');
               } catch {
-                setStatus('err', 'Could not save — use npm start');
+                setStatus('err', 'Could not save. Open or restart Minnow and try again.');
               }
             })();
           },
@@ -1885,7 +1886,7 @@ function ensureMcpSettingsShell(mount: HTMLElement): {
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'External tool servers connect over stdio and register as ',
+    'External MCP integrations connect over stdio and register as ',
     el('code', undefined, 'mcp__server__tool'),
     '. Language-server diagnostics live under ',
     linkToSettingsSection('Language servers', 'lsp'),
@@ -1897,7 +1898,7 @@ function ensureMcpSettingsShell(mount: HTMLElement): {
 
   const offlineEl = appendSettingsOfflineHint(
     shell,
-    'Start with <code>npm start</code> to load, toggle, and add MCP servers.',
+    'Open Minnow to load, toggle, and add MCP integrations.',
     { id: 'settingsMcpOffline', searchKey: 'integrations.mcp', hidden: true },
   );
   offlineEl.classList.add('settings-mcp-offline');
@@ -2089,7 +2090,7 @@ async function renderMcpSection(): Promise<void> {
         return;
       }
       target.checked = !target.checked;
-      setStatus('err', 'MCP toggle failed — use npm start');
+      setStatus('err', 'Could not update MCP integration. Open or restart Minnow.');
     });
 
     listEl.addEventListener('click', (event) => {
@@ -2164,7 +2165,7 @@ async function renderSkillsSection(): Promise<void> {
   const catalog = appendSettingsGroup(
     content,
     'Skills catalog',
-    'Built-in skills ship with Minnow. Custom skills live under ~/.minnow/skills/ when npm start is running.',
+    'Built-in skills ship with Minnow. Custom skills live under ~/.minnow/skills/ when Minnow is running locally.',
     'integrations.skills',
     { emphasis: true },
   );

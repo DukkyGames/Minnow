@@ -25,6 +25,10 @@ import {
 } from '../../memory/client';
 import type { MemoryEmbeddingsConfig } from '../../memory/types';
 import {
+  fetchCodeMapInjectionDefault,
+  saveCodeMapInjectionDefault,
+} from '../../brain/code-injection-config';
+import {
   fetchSynthesisConfig,
   saveSynthesisConfig,
 } from '../../synthesis/client';
@@ -249,7 +253,7 @@ function bindSettingsSection(): void {
       setStatus('spin', 'Installing git hook…');
       const result = await installBrainGitHook();
       if (!result) {
-        setStatus('err', 'Git hook install failed — is npm start running?');
+        setStatus('err', 'Git hook install failed — is Minnow running?');
         return;
       }
       if (result.error || result.installed === false) {
@@ -293,6 +297,9 @@ function bindSettingsSection(): void {
       const budgetEl = document.getElementById(
         'brainCodeTokenBudget',
       ) as HTMLInputElement | null;
+      const injectionBudgetEl = document.getElementById(
+        'brainCodeInjectionTokenBudget',
+      ) as HTMLInputElement | null;
       const cadenceEl = document.getElementById(
         'brainCodeReindexCadence',
       ) as HTMLSelectElement | null;
@@ -303,12 +310,21 @@ function bindSettingsSection(): void {
         'brainCodeAutoScaffold',
       ) as HTMLInputElement | null;
       const budget = Number(budgetEl?.value ?? 1500);
+      const injectionBudget = Number(injectionBudgetEl?.value ?? 10000);
       if (!Number.isFinite(budget) || budget < 200) {
         setStatus('err', 'Token budget must be at least 200');
         return;
       }
       if (budget > 128_000) {
         setStatus('err', 'Token budget cannot exceed 128000');
+        return;
+      }
+      if (!Number.isFinite(injectionBudget) || injectionBudget < 200) {
+        setStatus('err', 'Injection token budget must be at least 200');
+        return;
+      }
+      if (injectionBudget > 128_000) {
+        setStatus('err', 'Injection token budget cannot exceed 128000');
         return;
       }
       const parseLines = (raw: string) =>
@@ -321,6 +337,7 @@ function bindSettingsSection(): void {
         includeGlobs: parseLines(includeEl?.value ?? ''),
         excludeGlobs: parseLines(excludeEl?.value ?? ''),
         repoMapTokenBudget: Math.round(budget),
+        repoMapInjectionTokenBudget: Math.round(injectionBudget),
         reindexCadence:
           cadenceEl?.value === 'on-switch' || cadenceEl?.value === 'git-hook'
             ? cadenceEl.value
@@ -330,6 +347,23 @@ function bindSettingsSection(): void {
       });
       setStatus(saved ? 'ok' : 'err', saved ? 'Code index settings saved' : 'Save failed');
       if (saved) await refreshCodeSettingsFields();
+    })();
+  });
+
+  const codeMapInjectDefaultEl = document.getElementById(
+    'brainFeatureCodeMapInjectionDefault',
+  ) as HTMLInputElement | null;
+  codeMapInjectDefaultEl?.addEventListener('change', () => {
+    void (async () => {
+      const saved = await saveCodeMapInjectionDefault(codeMapInjectDefaultEl.checked);
+      setStatus(
+        saved ? 'ok' : 'err',
+        saved
+          ? codeMapInjectDefaultEl.checked
+            ? 'Code map injection default on'
+            : 'Code map injection default off'
+          : 'Save failed',
+      );
     })();
   });
 
@@ -587,6 +621,9 @@ async function refreshCodeSettingsFields(): Promise<void> {
   const includeEl = document.getElementById('brainCodeIncludeGlobs') as HTMLTextAreaElement | null;
   const excludeEl = document.getElementById('brainCodeExcludeGlobs') as HTMLTextAreaElement | null;
   const budgetEl = document.getElementById('brainCodeTokenBudget') as HTMLInputElement | null;
+  const injectionBudgetEl = document.getElementById(
+    'brainCodeInjectionTokenBudget',
+  ) as HTMLInputElement | null;
   const cadenceEl = document.getElementById('brainCodeReindexCadence') as HTMLSelectElement | null;
   const embEl = document.getElementById('brainCodeEmbeddingsEnabled') as HTMLInputElement | null;
   const scaffoldEl = document.getElementById('brainCodeAutoScaffold') as HTMLInputElement | null;
@@ -615,6 +652,11 @@ async function refreshCodeSettingsFields(): Promise<void> {
   if (budgetEl && !budgetEl.matches(':focus')) {
     budgetEl.value = String(config.repoMapTokenBudget);
   }
+  if (injectionBudgetEl && !injectionBudgetEl.matches(':focus')) {
+    injectionBudgetEl.value = String(
+      config.repoMapInjectionTokenBudget ?? config.repoMapTokenBudget,
+    );
+  }
   if (cadenceEl && !cadenceEl.matches(':focus')) {
     cadenceEl.value = config.reindexCadence;
   }
@@ -624,6 +666,12 @@ async function refreshCodeSettingsFields(): Promise<void> {
   if (scaffoldEl && !scaffoldEl.matches(':focus')) {
     scaffoldEl.checked = config.autoScaffoldIndexConfig !== false;
   }
+  const injectDefaultEl = document.getElementById(
+    'brainFeatureCodeMapInjectionDefault',
+  ) as HTMLInputElement | null;
+  if (injectDefaultEl && !injectDefaultEl.matches(':focus')) {
+    injectDefaultEl.checked = await fetchCodeMapInjectionDefault();
+  }
   await refreshGitHookStatus();
 }
 
@@ -632,7 +680,7 @@ async function refreshBrainStatusLine(): Promise<void> {
   if (!line) return;
   const status = await fetchBrainStatus();
   if (!status) {
-    line.textContent = 'Offline — start npm start.';
+    line.textContent = 'Offline — open Minnow.';
     return;
   }
   line.textContent = `${status.enabled ? 'Wiki enabled' : 'Wiki disabled'} · ${status.pageCount} pages`;

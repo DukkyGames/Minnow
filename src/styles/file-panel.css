@@ -49,7 +49,8 @@
 }
 
 .workspace-split.viewer-open .file-viewer-pane,
-.workspace-split.viewer-open .preview-pane:not(.hidden) {
+.workspace-split.viewer-open .preview-pane:not(.hidden),
+.workspace-split.viewer-open .right-pane-split {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -100,10 +101,90 @@
 }
 
 .right-pane-column > .file-viewer-pane:not(.hidden),
-.right-pane-column > .preview-pane:not(.hidden) {
+.right-pane-column > .preview-pane:not(.hidden),
+.right-pane-slot > .file-viewer-pane:not(.hidden),
+.right-pane-slot > .preview-pane:not(.hidden) {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+}
+
+.right-pane-split {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Single-slot mode: primary slot must fill the row (default flex shrink was collapsing preview). */
+.right-pane-split > .right-pane-slot:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.right-pane-split.is-active > .right-pane-slot:first-child {
+  flex: var(--right-pane-split-ratio, 0.5) 1 0;
+  min-width: 0;
+}
+
+.right-pane-split.is-active > .right-pane-slot:last-child {
+  flex: calc(1 - var(--right-pane-split-ratio, 0.5)) 1 0;
+  min-width: 0;
+}
+
+/* Split is already open — hide redundant split affordances and trim preview chrome. */
+.right-pane-split.is-active .file-viewer-split,
+.right-pane-split.is-active .preview-pane-split {
+  display: none;
+}
+
+.right-pane-split.is-active .preview-autoreload {
+  display: none;
+}
+
+.right-pane-slot {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid transparent;
+}
+
+.right-pane-slot.hidden {
+  display: none;
+}
+
+.right-pane-slot.is-focused {
+  border-color: var(--mn-accent);
+}
+
+.right-pane-slot-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.right-pane-split-resizer {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--mn-border);
+  touch-action: none;
+}
+
+.right-pane-split-resizer:hover,
+.right-pane-split-resizer.dragging {
+  background: var(--mn-accent-soft);
+}
+
+.right-pane-split-resizer.hidden {
+  display: none;
 }
 
 .unified-tab-bar {
@@ -113,6 +194,10 @@
   width: 100%;
   border-bottom: 1px solid var(--mn-border);
   background: var(--mn-surface-1);
+}
+
+.slot-tab-bar {
+  min-height: 0;
 }
 
 .unified-tab-bar.hidden {
@@ -130,6 +215,13 @@
   overflow-y: hidden;
   scrollbar-width: thin;
   mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent 100%);
+}
+
+/* Drop target when a tab is dragged into the other pane's strip (including an empty one). */
+.unified-tabs--drop-target {
+  background: var(--mn-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--mn-accent);
+  border-radius: 6px;
 }
 
 .unified-tab {
@@ -307,13 +399,21 @@
   min-width: 0;
 }
 
-/* Compact toolbar — 28px visual, 44px touch target via padding */
+/* Compact toolbar — smaller than the global 40px .icon-btn (matches preview-header) */
 .file-viewer-header .icon-btn {
   width: 28px;
   height: 28px;
-  padding: calc((var(--touch-min) - 28px) / 2);
-  margin: calc((var(--touch-min) - 28px) / -2);
-  box-sizing: content-box;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+@media (pointer: coarse) {
+  .file-viewer-header .icon-btn {
+    padding: calc((var(--touch-min) - 28px) / 2);
+    margin: calc((var(--touch-min) - 28px) / -2);
+    box-sizing: content-box;
+  }
 }
 
 .file-viewer-header .icon-btn .icon-svg {
@@ -1267,11 +1367,6 @@
   height: 6px;
   border-radius: 50%;
   background: var(--mn-accent);
-  pointer-events: none;
-}
-
-.file-sidebar.file-sidebar--git .file-sidebar-preview-toggle {
-  opacity: 0.45;
   pointer-events: none;
 }
 

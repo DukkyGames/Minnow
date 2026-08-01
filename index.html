@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0f1216">
 <script>
+  window.__MINNOW_BOOT_ORIGIN_MS = performance.now();
+</script>
+<script>
 (function () {
   var THEME_BG = {
     'swamp-dark': '#0f1216', 'swamp-light': '#f7f7f4',
@@ -607,7 +610,6 @@
       </section>
       <section id="settingsSection-issues" class="settings-section settings-area settings-area--title-suppressed" data-area="issues">
         <h2>Issues</h2>
-        <p class="settings-lead">Types, statuses, priorities, and board columns for the Issues app.</p>
         <div id="settingsIssuesBody" class="settings-section-body"></div>
       </section>
       </div>
@@ -638,6 +640,11 @@
       <section id="settingsSection-usage" class="settings-section settings-area settings-area--title-suppressed" data-area="usage">
         <h2>Usage &amp; cost</h2>
         <div id="settingsUsageBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-voice" class="settings-section settings-section--wide settings-area settings-area--title-suppressed" data-area="voice">
+        <h2>Voice</h2>
+        <p class="settings-lead">Whisper speech-to-text and Qwen3-TTS. Device routing lives under <strong>Settings → Audio</strong>.</p>
+        <div id="modelsVoiceBody" class="settings-section-body"></div>
       </section>
       </div>
       <div class="settings-category" data-category="agents">
@@ -765,10 +772,6 @@
         <div id="settingsWebhooksBody" class="settings-section-body"></div>
       </section>
       </div>
-      <section id="settingsSection-voice" class="settings-section hidden" hidden aria-hidden="true">
-        <h2>Voice</h2>
-        <p class="settings-lead">Voice model settings moved to <strong>Models → Voice</strong> (<code>#/app/models/voice</code>). Device routing remains under <strong>Settings → Audio</strong>.</p>
-      </section>
       </div>
       <div class="settings-category" data-category="advanced">
 
@@ -1073,20 +1076,37 @@
   </div>
 </main>
 
-<main id="modelsView" class="models-page" aria-label="Models">
+<main id="modelsView" class="models-page is-workbench" aria-label="Models">
   <header class="models-page-header">
-    <button type="button" class="icon-btn" id="btnModelsPageBack" aria-label="Back">
-      <i class="fi fi-rr-arrow-left icon-svg" aria-hidden="true"></i>
-    </button>
     <h1 class="models-page-header__title">Models</h1>
+    <div class="models-header-status" id="modelsHeaderStatus" role="status" aria-live="polite"></div>
+    <button
+      type="button"
+      class="icon-btn models-inspector-toggle"
+      id="btnModelsInspector"
+      aria-expanded="true"
+      aria-controls="modelsInspector"
+      aria-label="Toggle model details"
+    >
+      <i class="fi fi-rr-sidebar-flip icon-svg" aria-hidden="true"></i>
+    </button>
   </header>
   <div class="models-page-body">
     <nav class="models-nav" aria-label="Models sections">
       <div class="models-nav__group" role="group" aria-labelledby="modelsNavLocal">
-        <span id="modelsNavLocal" class="models-nav__group-label">Local library</span>
-        <button type="button" data-models-nav="recommend" aria-current="page">Recommendations</button>
-        <button type="button" data-models-nav="installed">Installed</button>
-        <button type="button" data-models-nav="settings">Library</button>
+        <span id="modelsNavLocal" class="models-nav__group-label">Local</span>
+        <button type="button" data-models-nav="installed" aria-current="page">
+          <i class="fi fi-rr-cube icon-svg" aria-hidden="true"></i>My models
+        </button>
+        <button type="button" data-models-nav="recommend">
+          <i class="fi fi-rr-radar icon-svg" aria-hidden="true"></i>Discover
+        </button>
+        <button type="button" data-models-nav="server">
+          <i class="fi fi-rr-square-terminal icon-svg" aria-hidden="true"></i>Local server
+        </button>
+        <button type="button" data-models-nav="settings">
+          <i class="fi fi-rr-disk icon-svg" aria-hidden="true"></i>Storage
+        </button>
       </div>
       <div class="models-nav__group" role="group" aria-labelledby="modelsNavInference">
         <span id="modelsNavInference" class="models-nav__group-label">Inference</span>
@@ -1102,32 +1122,28 @@
       </div>
     </nav>
     <div class="models-content">
-      <section id="modelsSection-recommend" class="models-section is-active">
-        <h2>Recommendations</h2>
-        <p class="models-lead">Ranked local models for your GPU and RAM.</p>
-        <div id="modelsRecommendBody"></div>
+      <section id="modelsSection-installed" class="models-section models-section--flush is-active">
+        <div id="modelsInstalledBody" class="models-surface"></div>
       </section>
-      <section id="modelsSection-installed" class="models-section">
-        <h2>Installed</h2>
-        <p class="models-lead">On-disk files, active downloads, and local serve controls.</p>
-        <div id="modelsInstalledBody"></div>
+      <section id="modelsSection-recommend" class="models-section models-section--flush">
+        <div id="modelsRecommendBody" class="models-surface"></div>
+      </section>
+      <section id="modelsSection-server" class="models-section models-section--flush">
+        <div id="modelsServerBody" class="models-surface"></div>
       </section>
       <section id="modelsSection-settings" class="models-section">
-        <h2>Library</h2>
-        <p class="models-lead">Hugging Face token and extra folders scanned for local models.</p>
+        <h2>Storage</h2>
+        <p class="models-lead">Where Minnow looks for weights, and the token it uses to fetch gated ones.</p>
         <div id="modelsSettingsBody"></div>
       </section>
-      <section id="modelsSection-voice" class="models-section">
-        <h2>Voice</h2>
-        <p class="models-lead">Whisper speech-to-text and Qwen3-TTS. Runtime health and voice options.</p>
-        <div id="modelsVoiceBody"></div>
-      </section>
+      <section id="modelsSection-voice" class="models-section"></section>
       <section id="modelsSection-providers" class="models-section"></section>
       <section id="modelsSection-routing" class="models-section"></section>
       <section id="modelsSection-sampler" class="models-section"></section>
       <section id="modelsSection-thinking" class="models-section"></section>
       <section id="modelsSection-usage" class="models-section"></section>
     </div>
+    <aside class="models-inspector" id="modelsInspector" aria-label="Model details"></aside>
   </div>
 </main>
 
@@ -1426,7 +1442,6 @@
         <div class="brain-code-toolbar">
           <p id="brainCodeStatusLine" class="brain-code-toolbar__status">Checking index…</p>
           <div class="brain-code-toolbar__actions" role="group" aria-label="Code index actions">
-            <button type="button" class="brain-action-btn" id="brainCodeRemapRepo" title="Switch workspace folder for code index">Remap repo</button>
             <button type="button" class="brain-action-btn is-primary" id="brainCodeReindex">Reindex</button>
             <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainCodeResetIndex">Reset index</button>
           </div>
@@ -1541,6 +1556,12 @@
               <label>Repo map token budget
                 <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="1500">
               </label>
+              <label>Code map injection token budget
+                <input type="number" id="brainCodeInjectionTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="10000">
+              </label>
+              <p class="brain-muted">Injection budget applies to per-send composer code-map injection; repo map budget is for the tool and Brain Code map panel.</p>
+              <label><input type="checkbox" id="brainFeatureCodeMapInjectionDefault"> Inject code map by default (inherit)</label>
+              <p class="brain-muted">Per-chat override: Code composer toolbar code-map icon (inherit / on / off).</p>
               <label>Reindex cadence
                 <select id="brainCodeReindexCadence">
                   <option value="on-demand">On demand</option>
@@ -2238,6 +2259,12 @@
               <select id="composerReasoningEffortSelect" class="composer-reasoning-effort-select" aria-label="Reasoning effort" disabled></select>
             </div>
           </div>
+          <div id="composerCodeMapWrap" class="composer-control code-map-control-wrap hidden">
+            <div id="composerCodeMapControl" class="code-map-toggle-host"></div>
+          </div>
+          <div id="composerBrainNotesWrap" class="composer-control brain-notes-control-wrap hidden">
+            <div id="composerBrainNotesControl" class="brain-notes-toggle-host"></div>
+          </div>
           <div class="composer-control context-usage-anchor">
             <button
               type="button"
@@ -2411,6 +2438,17 @@
       <div class="agent-activity-panel__body">
         <ul id="agentActivityList" class="agent-activity-list"></ul>
       </div>
+      <footer class="agent-activity-panel__footer">
+        <button
+          type="button"
+          class="agent-activity-panel__stop-all"
+          id="btnAgentActivityStopAll"
+          aria-label="Stop all agents"
+          disabled
+        >
+          Stop all
+        </button>
+      </footer>
     </section>
 
     <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
@@ -2461,16 +2499,21 @@
   <div class="split-resizer hidden" id="splitResizer" role="separator" aria-orientation="vertical" aria-valuemin="5" aria-valuemax="95" aria-valuenow="55" tabindex="0"></div>
 
   <div class="right-pane-column hidden" id="rightPaneColumn">
-    <header class="unified-tab-bar" id="unifiedTabBar">
+
+  <div class="right-pane-split" id="rightPaneSplit">
+    <div class="right-pane-slot is-focused" id="rightPaneSlotPrimary" data-pane-slot="primary">
+    <header class="unified-tab-bar slot-tab-bar" id="unifiedTabBar">
       <div class="unified-tabs" id="unifiedTabs" role="tablist" aria-label="Editor and browser tabs"></div>
     </header>
-
   <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
     <header class="file-viewer-header">
       <span class="file-viewer-diagnostics" id="fileViewerDiagnostics" hidden></span>
       <span class="file-viewer-intent-status" id="fileViewerIntentStatus" hidden aria-live="polite"></span>
       <button type="button" class="file-viewer-intent-toggle" id="btnFileViewerIntent" aria-pressed="false" title="Intent mode (Ctrl+I)" disabled>
         Intent
+      </button>
+      <button type="button" class="icon-btn file-viewer-split" id="btnRightPaneSplit" aria-label="Split right" title="Split right (Ctrl+\)">
+        <i class="fi fi-rr-columns-3 icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSave" aria-label="Save file" title="Save (Ctrl+S)" disabled>
         <i class="fi fi-rr-disk icon-svg" aria-hidden="true"></i>
@@ -2513,6 +2556,9 @@
       <button type="button" class="icon-btn" id="btnPreviewDevToolsDock" aria-label="Dock DevTools to side" title="Dock DevTools to side" data-dock="bottom" hidden>
         <i class="fi fi-rr-layout-fluid icon-svg" aria-hidden="true"></i>
       </button>
+      <button type="button" class="icon-btn preview-pane-split" id="btnPreviewPaneSplit" aria-label="Split right" title="Split right (Ctrl+\)">
+        <i class="fi fi-sr-columns-3 icon-svg" aria-hidden="true"></i>
+      </button>
       <button type="button" class="icon-btn" id="btnPreviewClose" aria-label="Close preview" title="Close preview">
         <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
       </button>
@@ -2526,6 +2572,63 @@
          rel="noopener noreferrer">Open in new tab</a>
     </div>
   </section>
+    </div>
+
+    <div class="right-pane-split-resizer hidden" id="rightPaneSplitResizer" role="separator"
+         aria-orientation="vertical" aria-label="Resize right pane split"
+         aria-valuemin="35" aria-valuemax="65" aria-valuenow="50" tabindex="0"></div>
+
+    <div class="right-pane-slot hidden" id="rightPaneSlotSecondary" data-pane-slot="secondary">
+      <header class="unified-tab-bar slot-tab-bar" id="unifiedTabBarSecondary">
+        <div class="unified-tabs" id="unifiedTabsSecondary" role="tablist" aria-label="Secondary editor and browser tabs"></div>
+      </header>
+      <section class="file-viewer-pane hidden" id="fileViewerPaneSecondary" aria-label="File viewer (secondary)">
+        <header class="file-viewer-header file-viewer-header--secondary">
+          <span class="right-pane-slot-label" aria-hidden="true">2</span>
+          <span class="file-viewer-diagnostics" id="fileViewerDiagnosticsSecondary" hidden></span>
+          <span class="file-viewer-intent-status" id="fileViewerIntentStatusSecondary" hidden aria-live="polite"></span>
+          <button type="button" class="file-viewer-intent-toggle" id="btnFileViewerIntentSecondary" aria-pressed="false" title="Intent mode (Ctrl+I)" disabled>
+            Intent
+          </button>
+          <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSaveSecondary" aria-label="Save file" title="Save (Ctrl+S)" disabled>
+            <i class="fi fi-rr-disk icon-svg" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerCloseSecondary" aria-label="Close secondary pane" title="Close secondary pane">
+            <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div class="file-viewer-body" id="fileViewerHostSecondary"></div>
+      </section>
+
+      <section class="preview-pane hidden" id="previewPaneSecondary" aria-label="Preview browser (secondary)">
+        <header class="preview-header preview-header--secondary">
+          <span class="right-pane-slot-label" aria-hidden="true">2</span>
+          <button type="button" class="icon-btn" id="btnPreviewBackSecondary" title="Back" aria-label="Preview back" disabled>
+            <i class="fi fi-rr-angle-small-left icon-svg" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="icon-btn" id="btnPreviewForwardSecondary" title="Forward" aria-label="Preview forward" disabled>
+            <i class="fi fi-rr-angle-small-right icon-svg" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="icon-btn" id="btnPreviewReloadSecondary" title="Reload" aria-label="Reload preview">
+            <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
+          </button>
+          <input id="previewUrlInputSecondary" class="preview-url" type="text"
+                 placeholder="index.html or https://…" autocomplete="off"
+                 aria-label="Preview URL or workspace path (secondary)" />
+          <button type="button" class="preview-go" id="btnPreviewGoSecondary">Go</button>
+          <div class="preview-header__trail">
+            <button type="button" class="icon-btn" id="btnPreviewDesignToggleSecondary" aria-label="Design Mode" title="Design Mode" aria-pressed="false">
+              <i class="fi fi-rr-magic-wand icon-svg" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="icon-btn" id="btnPreviewCloseSecondary" aria-label="Close secondary pane" title="Close secondary pane">
+              <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
+            </button>
+          </div>
+        </header>
+        <div class="preview-body" id="previewBodySecondary" aria-label="Preview content area (secondary)"></div>
+        <div class="preview-design-chrome" id="previewDesignChromeSecondary" hidden aria-label="Design Mode tools (secondary)"></div>
+      </section>
+    </div>
   </div>
 
   </div>

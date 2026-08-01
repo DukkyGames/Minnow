@@ -57,6 +57,13 @@ function deriveStreamingOrchestratorActivity(chat: Chat): OrchestratorActivity {
       title: 'Model is reasoning',
     };
   }
+  if (mainTurn?.phase === 'loading_model') {
+    return {
+      kind: 'waiting',
+      text: 'Loading model…',
+      title: 'Loading model into memory',
+    };
+  }
   return {
     kind: 'waiting',
     text: 'Generating…',

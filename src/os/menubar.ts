@@ -17,6 +17,8 @@ import { closeAppSwitcherMenu, initAppSwitcherMenu } from './app-switcher-menu';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
+import { isPhoneWindowSheetOpen } from './shell-chrome';
+import { windowManager } from './window-manager';
 import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
 import { openProductWiki } from '../ui/product-wiki';
@@ -217,9 +219,14 @@ export function renderMenubar(root: HTMLElement): () => void {
   function syncMenubar(): void {
     const view = getOsView();
     const fgApp = getForegroundAppId();
-    const onDesktop = view === 'desktop';
+    // A phone window sheet hides the desktop (and its dock) while the shell still
+    // reports the desktop view — keep the switcher reachable so home stays one tap away.
+    const phoneSheet = isPhoneWindowSheetOpen();
+    const onDesktop = view === 'desktop' && !phoneSheet;
 
-    root.dataset.view = view;
+    // A covering sheet is "in an app" as far as the menubar is concerned, even
+    // though windowed apps technically run inside the desktop view.
+    root.dataset.view = onDesktop ? 'desktop' : 'app';
     brand.hidden = !onDesktop;
     appsBtn.hidden = onDesktop;
     // Dock covers Desktop; dismiss the switcher if we navigated home.
@@ -278,6 +285,8 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   syncMenubar();
   const unsub = subscribeInstances(syncMenubar);
+  // Opening/closing a window does not emit an instance change on its own.
+  const unsubWindows = windowManager.subscribe(syncMenubar);
   const unsubInbox = subscribeNotifications(syncMenubar);
   const unsubPrefs = subscribeAppPreferences(syncMenubar);
   const unsubNotif = onNewNotification((record) => {
@@ -289,6 +298,7 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   return () => {
     unsub();
+    unsubWindows();
     unsubInbox();
     unsubPrefs();
     unsubNotif();

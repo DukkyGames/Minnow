@@ -11,7 +11,7 @@ import {
 } from '../api/generations';
 import { modelCache } from '../app-state';
 import { splitThinkingSegments } from '../api/reasoning';
-import { thinkingToCompletionBody } from '../agents/thinking-to-body';
+import { applyUtilityThinkingOff } from '../agents/merge-thinking-body';
 import { BenchmarkStreamReasoningAccumulator } from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
 import { loadEditorAiCompletionConfig, type EditorAiCompletionConfig } from '../config/editor-ai-completion';
@@ -87,6 +87,7 @@ function buildCommitMessageSystemPrompt(useGitmoji: boolean): string {
   const lines = [
     'You write high-quality git commit messages from git diffs.',
     'Output ONLY the commit message — no markdown fences, explanations, or prefixes like "Commit message:".',
+    'Do not use chain-of-thought, reasoning commentary, or thinking/reasoning tags — go straight to the commit text.',
     'Never output numbered steps, bullet analyses, diff walkthroughs, or markdown headers — go straight to the commit text.',
     '',
     'Subject line:',
@@ -552,12 +553,7 @@ export async function fetchGitCommitMessage(
   const modelCaps =
     modelRow?.capabilities ??
     (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
-  const { body: thinkingPatch } = thinkingToCompletionBody(
-    'off',
-    provider.apiKind,
-    modelCaps,
-  );
-  Object.assign(body, thinkingPatch);
+  applyUtilityThinkingOff(body, provider, modelCaps);
 
   let generationId: string;
   try {

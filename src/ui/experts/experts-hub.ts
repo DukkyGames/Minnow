@@ -478,7 +478,7 @@ async function openEditExpertStep(expertId: string): Promise<void> {
     setStep('edit');
     setFormError(
       'expertsEditError',
-      'Could not load this expert. Run npm start if the tool server is offline.',
+      'Could not load this expert. Open Minnow if the app is not running locally.',
     );
     return;
   }

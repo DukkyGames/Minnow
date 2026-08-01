@@ -21,6 +21,8 @@
 html.minnow-os-enabled {
   --os-safe-bottom: env(safe-area-inset-bottom, 0px);
   --os-dock-reveal-height: 22px;
+  /* #osDockLayer is a stage sibling of #osDesktopLayer — inherit inset here, not only on the desktop layer. */
+  --os-dock-panel-inset: var(--os-dock-reveal-height);
 }
 
 @media (pointer: coarse) {
@@ -931,7 +933,20 @@ html.minnow-os-enabled header.topbar.hidden {
   }
 }
 
+/* Desktop chat session rail drawer — class from desktop-chat-rail.ts (PHONE_MQ / html.mn-phone). */
+html.minnow-os-enabled.mn-os-mobile-desktop-chat-rail .mn-os-stage {
+  overflow: visible;
+}
+
+html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
+  z-index: 49;
+}
+
 @media (max-width: 640px) {
+  #osDockLayer {
+    z-index: 48;
+  }
+
   .mn-os-mb-chat-toggle:not([hidden]) {
     display: grid;
     place-items: center;

@@ -152,4 +152,25 @@ describe('design picker payload', () => {
     assert.equal(picks.length, countAfterEnable);
     picker.destroy();
   });
+
+  test('enable is silent when same-origin guest is not readable yet (iframe still loading)', async () => {
+    const transport = makeTransport({
+      canReadGuest: () => false,
+      async eval() {
+        return null;
+      },
+    });
+    let errorMessage: string | undefined;
+    const picker = createElementPicker({
+      transport,
+      onError: (message) => {
+        errorMessage = message;
+      },
+    });
+
+    await picker.enable();
+    assert.equal(picker.isEnabled(), false);
+    assert.equal(errorMessage, undefined);
+    picker.destroy();
+  });
 });

@@ -58,6 +58,7 @@ export type SettingsSectionId =
   | 'skills'
   | 'skills-library'
   | 'webhooks'
+  | 'voice'
   | 'diagnostics'
   | 'board-testing'
   | 'about';
@@ -95,6 +96,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   skills: 'Skills',
   'skills-library': 'Skills Library',
   webhooks: 'Webhooks',
+  voice: 'Voice',
   diagnostics: 'Health & diagnostics',
   'board-testing': 'Board testing',
   about: 'About',

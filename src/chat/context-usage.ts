@@ -21,9 +21,11 @@ import {
 
 export type ContextUsageSectionKey =
   | 'system'
+  | 'codeMap'
   | 'rules'
   | 'tools'
   | 'history'
+  | 'compressed'
   | 'inFlight'
   | 'composer'
   | 'attachments';
@@ -96,16 +98,47 @@ export function buildContextUsageBreakdown(
   attachmentTokens: number,
   inFlightTokens = 0,
 ): ContextUsageSection[] {
+  const historyLabel = estimate.historyCompressed
+    ? 'History (after compression)'
+    : 'History';
   const rows: ContextUsageSection[] = [
     {
       key: 'system',
       label: estimate.legacyFallback ? 'System (legacy drawer)' : 'System',
-      tokens: estimate.composedSystem,
+      tokens: Math.max(
+        0,
+        estimate.composedSystem - (estimate.codeMapSystem ?? 0),
+      ),
     },
+  ];
+  if (estimate.codeMapSystem != null && estimate.codeMapSystem > 0) {
+    rows.push({
+      key: 'codeMap',
+      label: 'Code map',
+      tokens: estimate.codeMapSystem,
+    });
+  } else if (estimate.codeMapInjectionEnabled) {
+    rows.push({
+      key: 'codeMap',
+      label: 'Code map (loading)',
+      tokens: 0,
+    });
+  }
+  rows.push(
     { key: 'rules', label: 'Rules', tokens: estimate.userRules },
     { key: 'tools', label: 'Tools', tokens: estimate.tools },
-    { key: 'history', label: 'History', tokens: estimate.history },
-  ];
+    { key: 'history', label: historyLabel, tokens: estimate.history },
+  );
+  if (
+    estimate.compressedContextEstimate != null &&
+    estimate.compressedContextEstimate > 0
+  ) {
+    rows.push({
+      key: 'compressed',
+      label: 'Compressed context (estimate)',
+      tokens: estimate.compressedContextEstimate,
+    });
+  }
   if (inFlightTokens > 0) {
     rows.push({
       key: 'inFlight',

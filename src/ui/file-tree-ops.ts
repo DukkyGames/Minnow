@@ -43,7 +43,7 @@ export async function runFileTreeTool(
   args: Record<string, unknown>,
 ): Promise<{ ok: boolean; message: string }> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, message: 'Start with npm start to use file tools.' };
+    return { ok: false, message: 'Open Minnow to use file tools.' };
   }
   try {
     const { executeTool } = await import('../tools/client');
@@ -119,13 +119,17 @@ export function syncViewerAfterPathChange(
     const { getFileTreeListingWorkspaceRoot } = await import('./file-tree-listing-root');
     const workspaceRoot = getFileTreeListingWorkspaceRoot();
 
+    const split = await import('./right-pane-split');
+
     if (operation === 'delete') {
       tabStore.closeViewerTabsUnderAncestor(oldNorm);
       recent.pruneRecentViewerFilesUnderAncestor(oldNorm, workspaceRoot);
       if (tabStore.listViewerTabs().length === 0) {
         viewer.closeFileViewerForce();
       } else {
-        viewer.renderActiveViewerTab();
+        split.collapseEmptySlots();
+        viewer.invalidatePrimaryViewerRender();
+        viewer.renderViewerSlots();
       }
       return;
     }
@@ -133,8 +137,11 @@ export function syncViewerAfterPathChange(
     if (!newPath) return;
     const newNorm = normalizeTreePath(newPath);
     tabStore.remapViewerTabsUnderAncestor(oldNorm, newNorm);
+    const slotTabs = await import('./right-pane-slot-tabs');
+    slotTabs.remapSlotViewerPathsUnderAncestor(oldNorm, newNorm);
     recent.remapRecentViewerFilesUnderAncestor(oldNorm, newNorm, workspaceRoot);
-    viewer.renderActiveViewerTab();
+    viewer.invalidatePrimaryViewerRender();
+    viewer.renderViewerSlots();
   })();
 }
 

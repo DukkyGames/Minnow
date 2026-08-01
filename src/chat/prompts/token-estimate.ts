@@ -2,11 +2,12 @@
  * Browser resolver for outbound prompt token estimate (Feature 25).
  */
 
-import { resolveActiveWorkAgent } from '../../agents/resolve-work-agent';
+import { resolveActiveWorkAgent, resolveActiveWorkAgentId } from '../../agents/resolve-work-agent';
 import {
   applyUiDesignerToolFilter,
   prepareUiDesignerTurn,
 } from '../../agents/ui-designer/runner';
+import { getUserRulesPayloadForSend, loadUserRules } from '../../config/user-rules';
 import { getModelRowForSelectOrCanonicalId } from '../../api/models';
 import { contextLengthFromModelRow } from '../../lib/context-length';
 import { normalizeModeId } from '../modes/types';
@@ -18,15 +19,18 @@ import { pushOutboundSystemMessages } from '../../tools/api-system-messages';
 import {
   agentContextBudgetFromWorkAgent,
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
-  applyContextBudget,
   estimateApiMessagesTokens,
   resolveContextBudget,
   serializeApiMessageForEstimate,
 } from '../context-budget';
+import { estimateContextPolicyTrim } from '../context/apply-policy';
 import {
-  resolveOutboundSystemMessages,
+  resolveExpertContextForSend,
   type BuildComposeContextOptions,
+  buildComposeContext,
 } from './compose-context';
+import { composeSystemPrompt, isCodeMapPartEnabled } from './prompt-composer';
+import type { ComposeContext } from './types';
 import {
   computeOutboundPromptEstimateFromParts,
   estimateTokensFromText,
@@ -122,82 +126,159 @@ function countHistoryTokensFromApiMessages(messages: ApiMessage[]): number {
   return total;
 }
 
-/** Apply the same per-agent context budget trimming used before each provider send. */
+/** Apply model-window context policy trimming estimate for the context ring. */
 function applyBudgetTrimToHistoryTokens(
   chat: Chat,
   modelId: string | undefined,
   systemText: string,
   userRulesText: string,
   rawHistoryTokens: number,
-): number {
+): { history: number; compressedEstimate: number; wouldCompress: boolean } {
   const apiMessages = buildOutboundApiMessagesForEstimate(chat, systemText, userRulesText);
   const workAgent = resolveActiveWorkAgent(chat);
   const agentConfig = workAgent
     ? agentContextBudgetFromWorkAgent(workAgent)
-    : { maxInputTokens: null, enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
+    : { enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY };
   const budgetResolved = resolveContextBudget({
     agentConfig,
     modelLimit: resolveModelLimitForEstimate(modelId, chat),
   });
   if (budgetResolved.effectiveLimit == null) {
-    return rawHistoryTokens;
+    return { history: rawHistoryTokens, compressedEstimate: 0, wouldCompress: false };
   }
   if (estimateApiMessagesTokens(apiMessages) <= budgetResolved.effectiveLimit) {
-    return rawHistoryTokens;
+    return { history: rawHistoryTokens, compressedEstimate: 0, wouldCompress: false };
   }
-  const applied = applyContextBudget(apiMessages, budgetResolved, agentConfig);
-  return countHistoryTokensFromApiMessages(applied.messages);
+  const trimmed = estimateContextPolicyTrim(apiMessages, budgetResolved, agentConfig);
+  const historyOnly = countHistoryTokensFromApiMessages(apiMessages);
+  if (!trimmed.wouldCompress) {
+    return { history: historyOnly, compressedEstimate: 0, wouldCompress: false };
+  }
+  return {
+    history: trimmed.historyTokens,
+    compressedEstimate: trimmed.compressedEstimateTokens,
+    wouldCompress: true,
+  };
 }
 
 /**
  * Approximate first tool-loop request size for the active (or given) chat.
  */
-export async function resolveOutboundPromptEstimate(
+async function resolveOutboundComposeForEstimate(
+  chat: Chat,
   options?: ResolveOutboundPromptEstimateOptions,
-): Promise<OutboundPromptEstimate> {
-  const chat = options?.chat ?? getActiveChat();
+): Promise<{
+  composed: string;
+  userRules: string | null;
+  ctx: ComposeContext;
+  legacyFallback: boolean;
+}> {
   const routeUserText =
     options?.composeOptions?.routeUserText ??
     options?.composeOptions?.userMessagePreview ??
     lastUserRouteText(chat);
-
   const legacyText = readLegacySystemPromptText();
-  let outbound: Awaited<ReturnType<typeof resolveOutboundSystemMessages>>;
+
+  const expertCtx = await resolveExpertContextForSend(chat, routeUserText);
+  const activeWorkAgent = resolveActiveWorkAgent(chat);
+  const workAgentId = resolveActiveWorkAgentId(chat);
+
+  const composeOpts: BuildComposeContextOptions = {
+    ...options?.composeOptions,
+    routeUserText,
+    userMessagePreview: routeUserText,
+    overrides: {
+      expertId: expertCtx.routeSource === 'orphaned' ? null : expertCtx.expertId,
+      expertLabel: expertCtx.expertLabel,
+      workAgentId,
+      workAgentLabel: activeWorkAgent?.label ?? null,
+      ...options?.composeOptions?.overrides,
+    },
+  };
+
+  let ctx: ComposeContext;
   try {
-    outbound = await resolveOutboundSystemMessages(chat, legacyText, {
-      ...options?.composeOptions,
+    ctx = await buildComposeContext(chat, composeOpts);
+  } catch {
+    ctx = await buildComposeContext(chat, {
       routeUserText,
       userMessagePreview: routeUserText,
     });
-  } catch {
-    outbound = { composed: legacyText, userRules: null };
   }
 
-  const legacyFallback = !outbound.composed && !!legacyText;
+  let composedRaw = '';
+  try {
+    composedRaw = composeSystemPrompt(ctx);
+  } catch {
+    composedRaw = '';
+  }
+  const composedTrimmed = composedRaw.trim() || legacyText.trim();
+  const legacyFallback = !composedRaw.trim() && !!legacyText.trim();
+
+  const rulesSettings = await loadUserRules();
+  const userRules = getUserRulesPayloadForSend(rulesSettings);
+
+  return { composed: composedTrimmed, userRules, ctx, legacyFallback };
+}
+
+export async function resolveOutboundPromptEstimate(
+  options?: ResolveOutboundPromptEstimateOptions,
+): Promise<OutboundPromptEstimate> {
+  const chat = options?.chat ?? getActiveChat();
+
+  let composed = '';
+  let userRules: string | null = null;
+  let legacyFallback = false;
+  let ctx: ComposeContext | null = null;
+  try {
+    const resolved = await resolveOutboundComposeForEstimate(chat, options);
+    composed = resolved.composed;
+    userRules = resolved.userRules;
+    legacyFallback = resolved.legacyFallback;
+    ctx = resolved.ctx;
+  } catch {
+    composed = readLegacySystemPromptText();
+    legacyFallback = !!composed.trim();
+  }
 
   const estimate = computeOutboundPromptEstimateFromParts({
-    systemText: outbound.composed,
+    systemText: composed,
     history: chat.history,
     tools: resolveEnabledToolsForEstimate(chat),
-    userRulesText: outbound.userRules ?? '',
+    userRulesText: userRules ?? '',
     legacyFallback,
   });
 
-  const trimmedHistory = applyBudgetTrimToHistoryTokens(
+  if (ctx) {
+    if (ctx.codeMapInjectionEnabled === true) {
+      estimate.codeMapInjectionEnabled = true;
+    }
+    if (isCodeMapPartEnabled(ctx) && ctx.codeMapBlock?.trim()) {
+      estimate.codeMapSystem = estimateTokensFromText(ctx.codeMapBlock);
+    }
+  }
+
+  const trimResult = applyBudgetTrimToHistoryTokens(
     chat,
     options?.modelId,
-    outbound.composed,
-    outbound.userRules ?? '',
+    composed,
+    userRules ?? '',
     estimate.history,
   );
 
-  if (trimmedHistory === estimate.history) {
+  if (!trimResult.wouldCompress && trimResult.history === estimate.history) {
     return estimate;
   }
 
+  const compressedExtra = trimResult.compressedEstimate;
+  const historyTokens = trimResult.history;
+
   return {
     ...estimate,
-    history: trimmedHistory,
-    total: estimate.composedSystem + estimate.userRules + trimmedHistory + estimate.tools,
+    history: historyTokens,
+    historyCompressed: trimResult.wouldCompress,
+    compressedContextEstimate: compressedExtra > 0 ? compressedExtra : undefined,
+    total:
+      estimate.composedSystem + estimate.userRules + historyTokens + estimate.tools,
   };
 }

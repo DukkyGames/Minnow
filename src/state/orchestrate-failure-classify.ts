@@ -23,6 +23,7 @@
  */
 
 import type { BoardTask, Chat } from '../types.ts';
+import { isUiOnlyTranscriptMessage } from '../chat/context/injection-notice.ts';
 
 export type FailureCategory = 'infra' | 'code' | 'stall' | 'merge' | 'unknown';
 
@@ -138,12 +139,11 @@ export function isTransientContextLengthError(text: string): boolean {
 export function extractChatText(chat: Chat): string {
   const parts: string[] = [];
   for (const msg of chat.history) {
+    if (isUiOnlyTranscriptMessage(msg)) continue;
     const content =
-      typeof msg.content === 'string'
+      msg.role === 'user' || msg.role === 'assistant' || msg.role === 'tool'
         ? msg.content
-        : msg.content == null
-          ? ''
-          : JSON.stringify(msg.content);
+        : '';
     if (content) parts.push(content);
   }
   for (const run of chat.runs ?? []) {

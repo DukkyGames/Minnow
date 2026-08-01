@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 import {
   REPO_MAP_TOKEN_BUDGET_MAX,
   REPO_MAP_TOKEN_BUDGET_MIN,
+  clampRepoMapInjectionTokenBudget,
   clampRepoMapTokenBudget,
   normalizeBrainCodeConfig,
 } from '../../../server/brain/code/config.js';
@@ -26,11 +27,28 @@ describe('normalizeBrainCodeConfig', () => {
       REPO_MAP_TOKEN_BUDGET_MIN,
     );
   });
+
+  it('clamps repoMapInjectionTokenBudget to the supported range', () => {
+    assert.equal(
+      normalizeBrainCodeConfig({ repoMapInjectionTokenBudget: 9000 }).repoMapInjectionTokenBudget,
+      9000,
+    );
+    assert.equal(
+      normalizeBrainCodeConfig({ repoMapInjectionTokenBudget: 50 }).repoMapInjectionTokenBudget,
+      REPO_MAP_TOKEN_BUDGET_MIN,
+    );
+  });
 });
 
 describe('clampRepoMapTokenBudget', () => {
   it('floors fractional values and rejects non-finite input', () => {
     assert.equal(clampRepoMapTokenBudget(1500.9), 1500);
     assert.equal(clampRepoMapTokenBudget('nope'), 32000);
+  });
+});
+
+describe('clampRepoMapInjectionTokenBudget', () => {
+  it('defaults to injection budget when input is invalid', () => {
+    assert.equal(clampRepoMapInjectionTokenBudget('nope'), 10000);
   });
 });

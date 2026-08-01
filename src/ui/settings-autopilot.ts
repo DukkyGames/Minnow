@@ -21,6 +21,7 @@ import {
   appendSettingsGroup,
   linkToSettingsSection,
 } from './settings-layout';
+import { msToSeconds, secondsToMs } from './settings-duration';
 import {
   createSettingsKvList,
   createSettingsSelectRow,
@@ -63,16 +64,6 @@ function createKvNumberInput(
   input.value = String(value);
   input.setAttribute('aria-label', options.ariaLabel);
   return { wrap: input, input };
-}
-
-/** Show persisted millisecond durations as whole seconds in the UI. */
-function msToSeconds(ms: number): number {
-  return Math.round(ms / 1000);
-}
-
-/** Convert UI seconds back to persisted milliseconds. */
-function secondsToMs(seconds: number): number {
-  return Math.round(seconds * 1000);
 }
 
 function clampInfraTimeoutSeconds(seconds: number): number {
@@ -127,7 +118,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
       await saveAutopilotMeta(patch);
       setStatus('ok', 'Autopilot settings saved');
     } catch {
-      setStatus('err', 'Save failed — use npm start');
+      setStatus('err', 'Could not save. Open or restart Minnow and try again.');
     }
   };
 
