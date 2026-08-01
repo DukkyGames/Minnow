@@ -3,7 +3,7 @@
  */
 
 import '../styles/dev-server-screen.css';
-import { getSubAgentRun, spawnSubAgent } from '../agents/orchestrator';
+import { cancelSubAgent, getSubAgentRun, spawnSubAgent } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { appAlert, appConfirm } from './app-dialog';
@@ -125,6 +125,7 @@ function syncDetectBanner(): void {
   const titleEl = document.querySelector<HTMLElement>('[data-role="detect-title"]');
   const detailEl = document.querySelector<HTMLElement>('[data-role="detect-detail"]');
   const liveDots = document.querySelector<HTMLElement>('[data-role="detect-live-dots"]');
+  const stopBtn = document.querySelector<HTMLButtonElement>('[data-action="detect-stop"]');
   const detectBtn = document.querySelector<HTMLButtonElement>('[data-action="detect"]');
   if (!banner || !titleEl || !detailEl) return;
 
@@ -133,6 +134,7 @@ function syncDetectBanner(): void {
     banner.classList.remove('is-active', 'is-done', 'is-error');
     detectBtn?.removeAttribute('disabled');
     liveDots?.classList.add('hidden');
+    stopBtn?.classList.add('hidden');
     return;
   }
 
@@ -148,6 +150,11 @@ function syncDetectBanner(): void {
     run?.status === 'failed' || run?.status === 'cancelled',
   );
   liveDots?.classList.toggle('hidden', !live);
+
+  const canStop = Boolean(
+    detectAgentRunId && run && (run.status === 'running' || run.status === 'queued'),
+  );
+  stopBtn?.classList.toggle('hidden', !canStop);
 
   titleEl.textContent = detectRunTitle(run);
   detailEl.textContent = detectRunDetailLine(run);
@@ -233,21 +240,28 @@ function buildShell(): HTMLElement {
       aria-live="polite"
       aria-atomic="true"
     >
-      <div
-        class="stream-status stream-status--generating dev-server-screen__detect-live hidden"
-        data-role="detect-live-dots"
-        aria-hidden="true"
-      >
-        <span class="stream-status__dots">
-          <span class="stream-status__dot"></span>
-          <span class="stream-status__dot"></span>
-          <span class="stream-status__dot"></span>
-        </span>
-      </div>
       <div class="dev-server-screen__detect-copy">
+        <div
+          class="stream-status stream-status--generating dev-server-screen__detect-live hidden"
+          data-role="detect-live-dots"
+          aria-hidden="true"
+        >
+          <span class="stream-status__dots">
+            <span class="stream-status__dot"></span>
+            <span class="stream-status__dot"></span>
+            <span class="stream-status__dot"></span>
+          </span>
+        </div>
         <div class="dev-server-screen__detect-title" data-role="detect-title">Detecting dev servers</div>
         <div class="dev-server-screen__detect-detail" data-role="detect-detail"></div>
       </div>
+      <button
+        type="button"
+        class="dev-server-screen__btn dev-server-screen__detect-stop hidden"
+        data-action="detect-stop"
+      >
+        Stop
+      </button>
     </div>
     <div class="dev-server-screen__body">
       <section class="dev-server-screen__section dev-server-screen__section--servers" aria-label="Server list">
@@ -704,6 +718,12 @@ async function onKill(pid: number, port: number): Promise<void> {
   await refreshAll();
 }
 
+async function onDetectStop(): Promise<void> {
+  if (!detectAgentRunId) return;
+  cancelSubAgent(detectAgentRunId, 'user_cancel');
+  syncDetectBanner();
+}
+
 async function onDetect(): Promise<void> {
   const chat = getActiveChat();
   if (!chat) {
@@ -804,6 +824,7 @@ function wireShellEvents(root: HTMLElement): void {
     if (action === 'refresh') void refreshAll();
     if (action === 'add') openEditForm('new');
     if (action === 'detect') void onDetect();
+    if (action === 'detect-stop') void onDetectStop();
     if (action === 'log-clear') clearActiveLog();
     if (action === 'log-wrap') {
       const pressed = target.getAttribute('aria-pressed') !== 'true';
