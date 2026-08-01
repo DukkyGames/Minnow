@@ -18,12 +18,12 @@ import {
   iconButton,
   textButton,
 } from './dom';
+import { showModelInInspector } from './inspector';
 import {
   dismissLoad,
   getModelsState,
   refreshModels,
   runningServes,
-  selectModel,
   subscribeModelsStore,
   unloadServe,
   type LoadProgress,
@@ -252,7 +252,7 @@ function loadedCard(serve: ServeRecord): HTMLElement {
   if (model) {
     card.addEventListener('click', (event) => {
       if ((event.target as HTMLElement).closest('button')) return;
-      selectModel(model.id);
+      showModelInInspector(model.id);
     });
     card.classList.add('is-selectable');
   }

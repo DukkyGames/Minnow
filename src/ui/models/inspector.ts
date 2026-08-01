@@ -33,6 +33,7 @@ import {
   getModelsState,
   getSelectedModel,
   loadModel,
+  selectModel,
   serveForModel,
   subscribeModelsStore,
   unloadServe,
@@ -215,7 +216,7 @@ function selectField(
 function settingsFor(model: LibraryModel): LlamaServeSettings {
   let draft = draftSettings.get(model.id);
   if (!draft) {
-    draft = { ctx: DEFAULT_CONTEXT_TOKENS, n_gpu_layers: 999, cache_type: 'q8_0' };
+    draft = { ctx: DEFAULT_CONTEXT_TOKENS, n_gpu_layers: 999, cache_type: 'f16' };
     draftSettings.set(model.id, draft);
   }
   return draft;
@@ -227,9 +228,13 @@ function markCustom(model: LibraryModel): void {
   draftProfileKey.set(model.id, 'custom');
 }
 
-function applyProfile(model: LibraryModel, profile: ServeProfile): void {
+function applyProfile(
+  model: LibraryModel,
+  profile: ServeProfile,
+  options?: { contextTokens?: number },
+): void {
   const draft = settingsFor(model);
-  draft.ctx = profile.ctx;
+  draft.ctx = options?.contextTokens ?? profile.ctx;
   draft.n_gpu_layers = profile.n_gpu_layers;
   draft.cache_type = profile.cache_type;
   if (profile.n_cpu_moe) draft.n_cpu_moe = profile.n_cpu_moe;
@@ -332,7 +337,7 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
         { value: 'q4_0', label: 'q4_0 — smaller' },
         { value: 'f16', label: 'f16 — full precision' },
       ],
-      settings.cache_type ?? 'q8_0',
+      settings.cache_type ?? 'f16',
       (v) => {
         settings.cache_type = v;
         markCustom(model);
@@ -489,8 +494,10 @@ async function ensureProfiles(model: LibraryModel): Promise<void> {
       profiles.find((p) => p.fits) ??
       profiles[0];
     // Seed once; a user who already touched a field keeps their values.
-    if (balanced && !profileSeeded.has(model.id)) applyProfile(model, balanced);
-    else render();
+    // Context defaults to product standard — presets mainly size quant, cache, and GPU offload.
+    if (balanced && !profileSeeded.has(model.id)) {
+      applyProfile(model, balanced, { contextTokens: DEFAULT_CONTEXT_TOKENS });
+    } else render();
   } catch {
     profileCache.set(model.id, []);
     render();
@@ -632,8 +639,12 @@ export function initInspector(): void {
   render();
 }
 
-/** Open the inspector on a specific tab (used by the row action buttons). */
-export function showInspectorTab(tab: InspectorTab): void {
+/**
+ * Select a library row and show the inspector (opens the panel when hidden).
+ * Used by My Models rows, quant pickers, and Local Server cards.
+ */
+export function showModelInInspector(modelId: string, tab: InspectorTab = 'info'): void {
+  selectModel(modelId);
   activeTab = tab;
   setModelsInspectorOpen(true);
   render();
@@ -642,4 +653,16 @@ export function showInspectorTab(tab: InspectorTab): void {
     if (!host) return;
     host.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus();
   });
+}
+
+/** Open the inspector on a specific tab for the current selection. */
+export function showInspectorTab(tab: InspectorTab): void {
+  const id = getModelsState().selectedId;
+  if (!id) {
+    activeTab = tab;
+    setModelsInspectorOpen(true);
+    render();
+    return;
+  }
+  showModelInInspector(id, tab);
 }

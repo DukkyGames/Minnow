@@ -3,7 +3,7 @@
  * and persists assistant / tool messages in session history.
  */
 
-import { getChatAbort, setChatAbort, setChatStopReason, setStreaming, takeChatStopReason } from '../app-state';
+import { getChatAbort, setChatAbort, setChatStopReason, setStreaming, takeChatStopReason, modelCache } from '../app-state';
 import {
   beginChatTurnSetup,
   endChatTurnSetup,
@@ -77,6 +77,13 @@ import {
   chatTurnNeedsModelLoad,
   ensureChatModelLoadedForTurn,
 } from '../api/ensure-chat-model-loaded';
+import { fetchCachedModels, listModelServes } from '../models/api-client';
+import { buildLibrary, loadableLibrary } from '../models/library';
+import {
+  isLibraryModelBinding,
+  libraryModelNeedsLoad,
+  resolveServedBindingForLibraryId,
+} from '../models/model-select-library';
 import {
   cancelAssistantBubbleRenderDebounce,
   scheduleAssistantBubbleRender,
@@ -295,7 +302,6 @@ import { resolveSamplerPreset } from '../agents/resolve-sampler';
 import { mergeGlobalSamplerWithLibraryModel } from '../config/library-inference-meta';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';
 import { applySamplerToBody } from '../agents/sampler-types';
-import { modelCache } from '../app-state';
 import { encodeModelSelectKey } from '../lib/model-select-key';
 import { resolveSendCapabilities } from '../providers/model-capabilities';
 import {
@@ -1364,8 +1370,26 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = sendModelId;
   chat.providerId = sendProviderId;
 
+  if (isLibraryModelBinding(sendProviderId, sendModelId)) {
+    const cached = await fetchCachedModels();
+    const library = loadableLibrary(buildLibrary(cached));
+    const serves = await listModelServes().catch(() => []);
+    const served = resolveServedBindingForLibraryId(sendModelId, library, serves);
+    if (served) {
+      sendProviderId = served.providerId;
+      sendModelId = served.modelId;
+      chat.providerId = served.providerId;
+      chat.modelId = served.modelId;
+    } else {
+      sendProviderId = LLAMA_CPP_LOCAL_PROVIDER_ID;
+    }
+  }
+
   const sendProvider = await getActiveProvider(sendProviderId);
-  const pendingModelLoad = chatTurnNeedsModelLoad(sendProvider, sendModelId);
+  const libraryBinding = isLibraryModelBinding(chat.providerId, sendModelId);
+  const pendingModelLoad = libraryBinding
+    ? libraryModelNeedsLoad(sendModelId, modelCache)
+    : chatTurnNeedsModelLoad(sendProvider, sendModelId);
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =
     replaySnapshot?.reasoningEffort ??

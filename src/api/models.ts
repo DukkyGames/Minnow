@@ -50,6 +50,14 @@ import {
   persistDefaultModelValue,
   resolveDefaultModelSelectValue,
 } from '../ui/default-model';
+import {
+  decodeLibraryModelSelectKey,
+  dedupLlamaCppModelsAgainstLibrary,
+  fetchLibraryModelSelectMerge,
+  LIBRARY_MODEL_PROVIDER_ID,
+  loadLibraryModelFromPicker,
+  unloadLibraryModelFromPicker,
+} from '../models/model-select-library';
 import { renderSidebar } from '../ui/sidebar';
 import { setReadyStatus, setStatus } from '../ui/status';
 import { updateStrip } from '../ui/stats';
@@ -118,6 +126,8 @@ function supportsLoadUnloadForSelectValue(
   selectValue: string,
 ): boolean {
   if (!isServerStorageMode()) return false;
+  const libraryId = decodeLibraryModelSelectKey(selectValue);
+  if (libraryId) return true;
   const opt = optionForModelSelectValue(sel, selectValue);
   return opt?.getAttribute('data-supports-load-unload') === '1';
 }
@@ -254,6 +264,30 @@ export async function loadModelForSelectValue(selectValue: string): Promise<void
   if (isModelLoadUnloadBusy()) return;
   const raw = selectValue.trim();
   if (!raw) return;
+
+  const libraryId = decodeLibraryModelSelectKey(raw);
+  if (libraryId) {
+    beginModelLoadUnload('load');
+    updateModelLoadUnloadButtons();
+    updateModelStateDot(raw);
+    syncModelSelectPicker();
+    setStatus('spin', 'Loading model…');
+    try {
+      await loadLibraryModelFromPicker(libraryId);
+      await fetchModels();
+      setStatus('ok', 'Model loaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setStatus('err', message);
+    } finally {
+      endModelLoadUnload();
+      updateModelLoadUnloadButtons();
+      updateModelStateDot(raw);
+      syncModelSelectPicker();
+    }
+    return;
+  }
+
   const decoded = decodeModelSelectKey(raw);
   const modelId = decoded?.modelId ?? raw;
   const chat = getActiveChat();
@@ -290,6 +324,30 @@ export async function unloadModelForSelectValue(selectValue: string): Promise<vo
   if (isModelLoadUnloadBusy()) return;
   const raw = selectValue.trim();
   if (!raw) return;
+
+  const libraryId = decodeLibraryModelSelectKey(raw);
+  if (libraryId) {
+    beginModelLoadUnload('unload');
+    updateModelLoadUnloadButtons();
+    updateModelStateDot(raw);
+    syncModelSelectPicker();
+    setStatus('spin', 'Unloading model…');
+    try {
+      await unloadLibraryModelFromPicker(libraryId);
+      await fetchModels();
+      setStatus('ok', 'Model unloaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setStatus('err', message);
+    } finally {
+      endModelLoadUnload();
+      updateModelLoadUnloadButtons();
+      updateModelStateDot(raw);
+      syncModelSelectPicker();
+    }
+    return;
+  }
+
   const decoded = decodeModelSelectKey(raw);
   const modelId = decoded?.modelId ?? raw;
   const chat = getActiveChat();
@@ -396,9 +454,21 @@ export async function populateMultiProviderModelSelect(
       return null;
     }
 
-    const results = await fetchModelsForAllProviders(enabled, signal ?? new AbortController().signal);
+    let results = await fetchModelsForAllProviders(enabled, signal ?? new AbortController().signal);
+
+    const libraryMerge = await fetchLibraryModelSelectMerge(signal).catch(() => null);
+    if (libraryMerge) {
+      results = dedupLlamaCppModelsAgainstLibrary(
+        results,
+        libraryMerge.library,
+        libraryMerge.serves,
+      );
+    }
+
     const withModels = results.filter((r) => r.models.length > 0);
-    const totalModels = withModels.reduce((n, r) => n + r.models.length, 0);
+    const providerModelCount = withModels.reduce((n, r) => n + r.models.length, 0);
+    const libraryCount = libraryMerge?.cacheEntries.length ?? 0;
+    const totalModels = providerModelCount + libraryCount;
 
     if (totalModels === 0) {
       select.innerHTML = '<option value="">No models found</option>';
@@ -407,6 +477,9 @@ export async function populateMultiProviderModelSelect(
     }
 
     let innerHtml = buildMultiProviderModelSelectInnerHtml(results);
+    if (libraryMerge?.optgroupHtml) {
+      innerHtml = `${innerHtml}${libraryMerge.optgroupHtml}`;
+    }
     if (options?.includeEmptyOption) {
       innerHtml = `<option value="">${escapeHtml(emptyLabel)}</option>${innerHtml}`;
     }
@@ -418,6 +491,11 @@ export async function populateMultiProviderModelSelect(
       for (const m of models) {
         const key = encodeModelSelectKey(provider.id, m.id);
         modelCache.set(key, { ...m, capabilities: catalogCapabilitiesFromRow(m, provider.apiKind) });
+      }
+    }
+    if (libraryMerge) {
+      for (const { key, row } of libraryMerge.cacheEntries) {
+        modelCache.set(key, row);
       }
     }
 
@@ -470,6 +548,17 @@ function pickInitialSelectValue(
         loaded: isModelLoaded(m.state),
       });
     }
+  }
+  for (const key of modelCache.keys()) {
+    const libraryId = decodeLibraryModelSelectKey(key);
+    if (!libraryId) continue;
+    const row = modelCache.get(key);
+    flat.push({
+      providerId: LIBRARY_MODEL_PROVIDER_ID,
+      modelId: libraryId,
+      key,
+      loaded: row ? isModelLoaded(row.state) : false,
+    });
   }
   if (flat.length === 0) return '';
 
@@ -533,10 +622,9 @@ export async function fetchModels(): Promise<void> {
     }
 
     const failures = results.filter((r) => r.error);
-    const withModels = results.filter((r) => r.models.length > 0);
-    const totalModels = withModels.reduce((n, r) => n + r.models.length, 0);
+    const catalogCount = [...sel.options].filter((o) => o.value.trim()).length;
 
-    if (totalModels === 0) {
+    if (catalogCount === 0) {
       const names = failures.map((f) => f.provider.label).join(', ');
       setStatus(
         'err',
@@ -556,14 +644,13 @@ export async function fetchModels(): Promise<void> {
       sel.value = savedDefault;
     } else {
       const chosen = pickInitialSelectValue(results, ac);
-      sel.value = chosen;
-      if (chosen) persistDefaultModelValue(chosen);
+      sel.value = chosen || optionValues.find((v) => v.trim()) || '';
+      if (sel.value) persistDefaultModelValue(sel.value);
     }
 
-    // Do not copy #modelSelect onto the active chat here — composer pickers own per-chat
-    // bindings; send resolves via resolveEffectiveChatModelBinding when modelId is empty.
-
+    const withModels = results.filter((r) => r.models.length > 0);
     const okCount = withModels.length;
+    const totalModels = catalogCount;
     if (failures.length > 0) {
       const failedLabels = failures.map((f) => f.provider.label).join(', ');
       setStatus('ok', `${totalModels} models · ${okCount} providers (${failedLabels} unreachable)`);

@@ -3,6 +3,8 @@
  * Deterministic Quality / Balanced / Speed presets from hardware + model metadata.
  */
 
+import { DEFAULT_CONTEXT_TOKENS } from './default-context-tokens.js';
+
 /**
  * @typedef {object} ServeProfile
  * @property {string} key
@@ -87,8 +89,15 @@ export function computeServeProfiles(system, model, opts = {}) {
 
   /** @type {Array<{ key: string, label: string, quant: string, ctx: number, cache: string, ngpu: number }>} */
   const templates = [
-    { key: 'quality', label: 'Quality', quant: 'Q6_K', ctx: 8192, cache: 'q8_0', ngpu: 999 },
-    { key: 'balanced', label: 'Balanced', quant: baseQuant.includes('Q') ? baseQuant : 'Q4_K_M', ctx: 4096, cache: 'q8_0', ngpu: 999 },
+    { key: 'quality', label: 'Quality', quant: 'Q6_K', ctx: DEFAULT_CONTEXT_TOKENS, cache: 'f16', ngpu: 999 },
+    {
+      key: 'balanced',
+      label: 'Balanced',
+      quant: baseQuant.includes('Q') ? baseQuant : 'Q4_K_M',
+      ctx: DEFAULT_CONTEXT_TOKENS,
+      cache: 'f16',
+      ngpu: 999,
+    },
     { key: 'speed', label: 'Speed', quant: 'Q4_K_M', ctx: 2048, cache: 'q4_0', ngpu: 999 },
   ];
 

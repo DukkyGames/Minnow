@@ -36,14 +36,13 @@ import {
   skeletonRows,
   textButton,
 } from './dom';
-import { showInspectorTab } from './inspector';
+import { showModelInInspector } from './inspector';
 import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
 import {
   getModelsState,
   loadForModel,
   loadModel,
   refreshModels,
-  selectModel,
   serveForModel,
   subscribeModelsStore,
   unloadServe,
@@ -283,8 +282,7 @@ function renderRowActions(model: LibraryModel): HTMLElement {
   }
   wrap.appendChild(
     iconButton('settings-sliders', 'Launch settings', () => {
-      selectModel(model.id);
-      showInspectorTab('load');
+      showModelInInspector(model.id, 'load');
     }),
   );
   return wrap;
@@ -313,7 +311,7 @@ function renderQuantCell(group: LibraryVariantGroup, active: LibraryModel): HTML
   select.addEventListener('click', (event) => event.stopPropagation());
   select.addEventListener('change', () => {
     variantPreferences.set(group.key, select.value);
-    selectModel(select.value);
+    showModelInInspector(select.value);
     render();
   });
   cell.appendChild(select);
@@ -360,7 +358,7 @@ function renderGroupRow(
   }
   row.appendChild(renderRowActions(active));
 
-  const select = () => selectModel(active.id);
+  const select = () => showModelInInspector(active.id);
   row.addEventListener('click', select);
   row.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
