@@ -16,8 +16,10 @@ import {
 } from '../../src/agents/sub-agent-runner.ts';
 import type { SubAgentRunner } from '../../src/agents/types.ts';
 import {
+  getManualStartBlockers,
   isDepsComplete,
   listUnmetTaskDependencies,
+  taskHasManualStartBlockers,
   initBoard,
   isTaskReadyForAuto,
   setBoardNowForTests,
@@ -779,6 +781,88 @@ describe('isDepsComplete', () => {
   test('skips self-edges', () => {
     const board = makeBoard([{ id: 'W1-A', status: 'planned', dependsOn: ['W1-A'] }]);
     assert.equal(isDepsComplete(board, board.tasks[0]), true);
+  });
+});
+
+// ─── getManualStartBlockers ───────────────────────────────────────────────
+
+describe('getManualStartBlockers', () => {
+  function makeBoard(
+    tasks: Array<{ id: string; status: string; wave?: string; dependsOn?: string[] }>,
+    waves: Array<{ id: string }> = [{ id: 'W1' }, { id: 'W2' }],
+  ): any {
+    return {
+      tasks: tasks.map((t) => ({
+        title: t.id,
+        wave: t.wave ?? 'W1',
+        category: 'build',
+        ...t,
+      })),
+      waves: waves.map((w) => ({
+        id: w.id,
+        status: 'planned',
+        taskCount: tasks.filter((t) => (t.wave ?? 'W1') === w.id).length,
+        completeCount: 0,
+      })),
+    };
+  }
+
+  test('returns no blockers when deps and prior waves are satisfied', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'complete', wave: 'W1' },
+      { id: 'W2-A', status: 'planned', wave: 'W2', dependsOn: ['W1-A'] },
+    ]);
+    const task = board.tasks[1];
+    assert.equal(getManualStartBlockers(board, task).length, 0);
+    assert.equal(taskHasManualStartBlockers(board, task), false);
+  });
+
+  test('lists unmet dependsOn blockers', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'in_progress', wave: 'W1' },
+      { id: 'W1-B', status: 'planned', wave: 'W1', dependsOn: ['W1-A'] },
+    ], [{ id: 'W1' }]);
+    const task = board.tasks[1];
+    const blockers = getManualStartBlockers(board, task);
+    assert.equal(blockers.length, 1);
+    assert.equal(blockers[0]?.kind, 'dependsOn');
+    if (blockers[0]?.kind === 'dependsOn') {
+      assert.equal(blockers[0].taskId, 'W1-A');
+      assert.equal(blockers[0].status, 'in_progress');
+    }
+  });
+
+  test('lists prior-wave blocker before dependsOn', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'in_progress', wave: 'W1' },
+      { id: 'W2-A', status: 'planned', wave: 'W2', dependsOn: ['W1-A'] },
+    ]);
+    const task = board.tasks[1];
+    const blockers = getManualStartBlockers(board, task);
+    assert.equal(blockers.length, 2);
+    assert.equal(blockers[0]?.kind, 'priorWave');
+    assert.equal(blockers[1]?.kind, 'dependsOn');
+    if (blockers[0]?.kind === 'priorWave') {
+      assert.deepEqual(blockers[0].incompleteTaskIds, ['W1-A']);
+    }
+  });
+
+  test('quarantined prior wave tasks do not block', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'quarantined', wave: 'W1' },
+      { id: 'W2-A', status: 'planned', wave: 'W2' },
+    ]);
+    const task = board.tasks[1];
+    assert.equal(getManualStartBlockers(board, task).length, 0);
+  });
+
+  test('ignores unknown dependsOn ids', () => {
+    const board = makeBoard(
+      [{ id: 'W1-A', status: 'planned', dependsOn: ['MISSING'] }],
+      [{ id: 'W1' }],
+    );
+    const task = board.tasks[0];
+    assert.equal(getManualStartBlockers(board, task).length, 0);
   });
 });
 

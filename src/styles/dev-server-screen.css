@@ -159,6 +159,23 @@
   color: var(--mn-bg);
 }
 
+.dev-server-screen__btn--compact {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.dev-server-screen__btn--compact[aria-pressed='true'] {
+  background: color-mix(in oklch, var(--mn-accent) 14%, transparent);
+  border-color: color-mix(in oklch, var(--mn-accent) 40%, var(--mn-border));
+  color: var(--mn-accent);
+}
+
+.dev-server-screen__btn--compact.is-busy {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 .dev-server-screen__body {
   flex: 1;
   min-height: 0;
@@ -521,6 +538,35 @@
   font-size: 12px;
 }
 
+.dev-server-ports__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.dev-server-ports__filter {
+  width: min(160px, 36vw);
+}
+
+.dev-server-ports__scope {
+  min-height: 30px;
+  max-width: 132px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 6px);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-size: 12px;
+}
+
+.dev-server-screen__section--ports .dev-server-screen__section-head {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
 /* Solid surface token — avoid color-mix(in oklch, fg 3%, bg): near-achromatic
    --mn-fg drops hue to `none` and paints cool lavender on warm themes (coral-light). */
 .dev-server-log__output-host {
@@ -584,6 +630,47 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  vertical-align: bottom;
+}
+
+.dev-server-ports__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: var(--mn-radius-sm, 6px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.dev-server-ports__sort:hover {
+  color: var(--mn-fg);
+  background: var(--mn-surface-elevated);
+}
+
+.dev-server-ports__sort:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.dev-server-ports__sort.is-active {
+  color: var(--mn-fg);
+}
+
+.dev-server-ports__sort-indicator {
+  min-width: 1ch;
+  font-size: 10px;
+  color: var(--mn-accent);
+}
+
+.dev-server-ports__actions-head {
+  width: 40px;
 }
 
 .dev-server-ports__attr {

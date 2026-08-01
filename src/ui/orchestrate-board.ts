@@ -90,7 +90,6 @@ import {
   getBoardProgressPercent,
   getOrchestrateBoardElapsedMs,
   isTaskStalledForRestart,
-  listUnmetTaskDependencies,
   syncOrchestrateBoardTimer,
   type OrchestrateBoardTimerContext,
 } from '../state/orchestrate-board-store';
@@ -166,6 +165,10 @@ import {
   syncBoardHeaderModelSelect,
   wireBoardHeaderModelSelect,
 } from './orchestrate-board-model-select';
+import {
+  confirmManualTaskStart,
+  confirmManualWaveStart,
+} from './orchestrate-board-manual-start';
 
 export { formatBoardOnboardingPlanDisplay };
 export type { BoardOnboardingBusyPhase };
@@ -968,70 +971,6 @@ function boardExecutionModeToIndex(mode: string): number {
 
 const BOARD_AFK_CONFIRM_MESSAGE =
   'Enable AFK mode? The orchestrator will run fully hands-off and will not prompt you until you press Stop or the board finishes.';
-
-function formatUnmetDependencyLines(
-  board: BoardState,
-  task: BoardTask,
-): string[] {
-  const unmet = listUnmetTaskDependencies(board, task);
-  return unmet.map(
-    (dep) =>
-      `${dep.id}${dep.title.trim() ? ` — ${dep.title.trim()}` : ''} (${dep.status})`,
-  );
-}
-
-function buildManualUnmetDepsConfirmMessage(
-  task: BoardTask,
-  dependencyLines: string[],
-): string {
-  const header = `Task ${task.id} still has unfinished dependencies:`;
-  const list = dependencyLines.map((line) => `• ${line}`).join('\n');
-  return `${header}\n\n${list}\n\nStart anyway?`;
-}
-
-/** Manual mode only: confirm when dependsOn tasks are not complete. */
-async function confirmManualTaskStartIfNeeded(
-  group: ChatGroup,
-  task: BoardTask,
-): Promise<boolean> {
-  const board = group.orchestrateBoard;
-  if (!board || getBoardExecutionMode(board) !== 'manual') return true;
-  const dependencyLines = formatUnmetDependencyLines(board, task);
-  if (!dependencyLines.length) return true;
-  return appConfirm(buildManualUnmetDepsConfirmMessage(task, dependencyLines), {
-    title: 'Unmet dependencies',
-    confirmLabel: 'Start anyway',
-  });
-}
-
-/** Manual mode only: confirm wave start when any planned task has unmet dependsOn. */
-async function confirmManualWaveStartIfNeeded(
-  group: ChatGroup,
-  waveId: number | string,
-): Promise<boolean> {
-  const board = group.orchestrateBoard;
-  if (!board || getBoardExecutionMode(board) !== 'manual') return true;
-  const planned = board.tasks.filter(
-    (t) => t.wave === waveId && t.status === 'planned',
-  );
-  const blocks: string[] = [];
-  for (const task of planned) {
-    const dependencyLines = formatUnmetDependencyLines(board, task);
-    if (!dependencyLines.length) continue;
-    blocks.push(
-      `${task.id}: ${dependencyLines.map((line) => line).join('; ')}`,
-    );
-  }
-  if (!blocks.length) return true;
-  const message =
-    'Some tasks in this wave still have unfinished dependencies:\n\n' +
-    blocks.map((line) => `• ${line}`).join('\n') +
-    '\n\nStart the wave anyway?';
-  return appConfirm(message, {
-    title: 'Unmet dependencies',
-    confirmLabel: 'Start anyway',
-  });
-}
 
 /**
  * Blur a focused header control so native `<select>` menus (isolation mode, etc.)
@@ -2213,19 +2152,13 @@ function buildTaskRecoveryActions(
   }
 
   addRecoveryBtn('Restart', 'recycle', () => {
-    void (async () => {
-      if (!(await confirmManualTaskStartIfNeeded(group, task))) return;
-      await restartBoardTask(group, task.id, plannerChat);
-    })();
+    void restartBoardTask(group, task.id, plannerChat);
   });
   addRecoveryBtn('Continue', 'forward', () => {
     void continueBoardTask(group, task.id, plannerChat);
   });
   addRecoveryBtn('Move to new chat', 'forward', () => {
-    void (async () => {
-      if (!(await confirmManualTaskStartIfNeeded(group, task))) return;
-      await moveTaskToNewChat(group, task.id, plannerChat);
-    })();
+    void moveTaskToNewChat(group, task.id, plannerChat);
   });
 }
 
@@ -2545,7 +2478,7 @@ function buildTaskCard(
     startBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       void (async () => {
-        if (!(await confirmManualTaskStartIfNeeded(group, task))) return;
+        if (!(await confirmManualTaskStart(group, task))) return;
         await startTask(group, task.id, plannerChat);
         refreshActiveBoardIfMounted();
       })();
@@ -2826,7 +2759,7 @@ async function populateKanbanWaves(
     startWaveBtn.disabled = !hasPlanned;
     startWaveBtn.addEventListener('click', () => {
       void (async () => {
-        if (!(await confirmManualWaveStartIfNeeded(group, wave.id))) return;
+        if (!(await confirmManualWaveStart(group, wave.id))) return;
         await startWave(group, wave.id, plannerChat);
         refreshActiveBoardIfMounted();
       })();
