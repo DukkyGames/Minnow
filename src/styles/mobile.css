@@ -155,6 +155,12 @@ html.mn-phone .mn-os-mb-apps:not([hidden]) {
   height: var(--touch-min);
 }
 
+/* Fullscreen apps lift the apps layer above the default dock z-index; keep the
+   reveal tab and launcher above app chrome on phones. */
+html.mn-phone #osDockLayer {
+  z-index: 48;
+}
+
 /* ---------- app switcher ---------- */
 
 /* The popover is anchored inline by JS (which also pins `right: auto`), so

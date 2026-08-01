@@ -1862,8 +1862,68 @@
   margin-inline: auto;
 }
 
-/* Session rail backdrop — mobile drawer only (see @media block below) */
+/* Session rail backdrop — mobile drawer only (see html.mn-phone block below) */
 .mn-os-chat-rail-backdrop {
+  display: none;
+}
+
+/* Phone layout: session list is a fixed drawer (matches PHONE_MQ / html.mn-phone). */
+html.mn-phone .mn-os-chat-rail-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  /* Below expanded panel inside the rail; desktop layer is lifted above dock while open. */
+  z-index: 11;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--mn-overlay);
+  cursor: pointer;
+}
+
+html.mn-phone .mn-os-chat-rail-backdrop.is-open {
+  display: block;
+}
+
+html.mn-phone .mn-os-chat-rail-tabs {
+  margin-top: max(8px, env(safe-area-inset-top, 0px));
+  margin-left: max(8px, env(safe-area-inset-left, 0px));
+}
+
+html.mn-phone .mn-os-chat-rail-tab {
+  width: 56px;
+  height: 56px;
+}
+
+html.mn-phone .mn-os-chat-rail-panel {
+  position: fixed;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  left: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 12;
+  width: min(
+    280px,
+    calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px)
+  ) !important;
+  max-width: 100%;
+  height: auto;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  transform: translateX(-105%);
+  box-shadow: 8px 0 32px -12px rgba(0, 0, 0, 0.35);
+  transition:
+    transform 280ms var(--os-ease-out),
+    opacity 220ms var(--os-ease-out);
+}
+
+html.mn-phone .mn-os-chat-rail.is-expanded .mn-os-chat-rail-panel {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+html.mn-phone .mn-os-chat-rail.is-expanded .mn-os-chat-rail-tabs {
   display: none;
 }
 
@@ -2030,58 +2090,6 @@
 
   .mn-os-chat-empty {
     padding: 32px 16px;
-  }
-
-  /* Session rail: drawer overlay (not inline squeeze) */
-  .mn-os-chat-rail-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 12;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: var(--mn-overlay);
-    cursor: pointer;
-  }
-
-  .mn-os-chat-rail-backdrop.is-open {
-    display: block;
-  }
-
-  .mn-os-chat-rail-tabs {
-    margin-top: max(8px, env(safe-area-inset-top, 0px));
-    margin-left: max(8px, env(safe-area-inset-left, 0px));
-  }
-
-  .mn-os-chat-rail-tab {
-    width: 56px;
-    height: 56px;
-  }
-
-  .mn-os-chat-rail-panel {
-    position: fixed;
-    top: calc(var(--os-menubar-h) + env(safe-area-inset-top, 0px));
-    left: 0;
-    bottom: 0;
-    z-index: 12;
-    width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px)) !important;
-    max-width: 100%;
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    transform: translateX(-105%);
-    box-shadow: 8px 0 32px -12px rgba(0, 0, 0, 0.35);
-    transition:
-      transform 280ms var(--os-ease-out),
-      opacity 220ms var(--os-ease-out);
-  }
-
-  .mn-os-chat-rail.is-expanded .mn-os-chat-rail-panel {
-    transform: translateX(0);
-  }
-
-  .mn-os-chat-rail.is-expanded .mn-os-chat-rail-tabs {
-    display: none;
   }
 
   .mn-os-desktop-research,

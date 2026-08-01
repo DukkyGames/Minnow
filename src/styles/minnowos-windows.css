@@ -305,6 +305,13 @@ html.minnow-os-enabled .mn-os-window-body .brain-page.is-open {
   pointer-events: none !important;
 }
 
+/* Phones: fullscreen apps still expose the in-app dock via the bottom reveal tab. */
+html.mn-phone .mn-os-stage.is-immersive-app #osDockLayer {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+}
+
 :is(.mn-os-stage.is-immersive-app, #osDesktopLayer.is-suppressed-by-fullscreen-app)
   :is(
     .mn-os-composer-dock,

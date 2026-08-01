@@ -80,4 +80,30 @@ describe('shell chrome suppression', () => {
     assert.equal(shouldSuppressDesktopChrome(), false);
     assert.equal(document.querySelector('.mn-os-dock-shell')?.hasAttribute('hidden'), false);
   });
+
+  test('keeps dock reveal on phone for fullscreen apps', () => {
+    const phoneQuery =
+      '(max-width: 640px), (max-width: 1024px) and (max-height: 540px)';
+    window.matchMedia = ((query: string) => ({
+      matches: query === phoneQuery,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+    document.documentElement.classList.add('mn-phone');
+
+    launchInstance('code');
+
+    assert.equal(shouldSuppressDesktopChrome(), true);
+    const shell = document.querySelector('.mn-os-dock-shell');
+    assert.equal(shell?.hasAttribute('hidden'), false);
+    assert.equal(shell?.dataset.shellView, 'app');
+    assert.equal(shell?.dataset.dockOpen, 'false');
+    const reveal = document.querySelector('.mn-os-dock-reveal');
+    assert.equal(reveal?.hasAttribute('hidden'), false);
+  });
 });

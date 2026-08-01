@@ -10,6 +10,7 @@ import {
 } from './instances';
 import { launchApp } from './router';
 import { RESEARCH_LIBRARY_INSTANCE_ID } from './research-constants';
+import { isPhoneLayout } from '../ui/mobile-layout';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { windowManager } from './window-manager';
 import type { AppId } from './types';
@@ -159,12 +160,14 @@ export function initDockLauncher(root: HTMLElement): () => void {
   function syncShellState(): void {
     const immersive = shouldSuppressDesktopChrome();
     const inApp = getOsView() === 'app';
+    const phoneInApp = isPhoneLayout() && inApp;
     root.dataset.shellView = inApp ? 'app' : 'desktop';
     root.dataset.dockOpen = inApp ? (dockOpenInApp ? 'true' : 'false') : 'true';
-    // Fullscreen apps and maximized windows hide the dock entirely.
-    root.hidden = immersive;
-    revealBtn.hidden = immersive || !inApp || dockOpenInApp;
-    hideBtn.hidden = immersive || !inApp || !dockOpenInApp;
+    // Fullscreen apps hide the dock on desktop; phones keep the reveal tab.
+    const hideShell = immersive && !phoneInApp;
+    root.hidden = hideShell;
+    revealBtn.hidden = hideShell || !inApp || dockOpenInApp;
+    hideBtn.hidden = hideShell || !inApp || !dockOpenInApp;
   }
 
   function openDock(): void {

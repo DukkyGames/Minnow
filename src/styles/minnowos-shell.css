@@ -931,6 +931,15 @@ html.minnow-os-enabled header.topbar.hidden {
   }
 }
 
+/* Desktop chat session rail drawer — class from desktop-chat-rail.ts (PHONE_MQ / html.mn-phone). */
+html.minnow-os-enabled.mn-os-mobile-desktop-chat-rail .mn-os-stage {
+  overflow: visible;
+}
+
+html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
+  z-index: 49;
+}
+
 @media (max-width: 640px) {
   .mn-os-mb-chat-toggle:not([hidden]) {
     display: grid;
