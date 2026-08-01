@@ -35,6 +35,9 @@ export {
   normalizeWorkspacePath,
 } from '../../src/state/session-schema.mjs';
 
+/** Teaching-level values accepted for the `education` meta block. */
+const EDUCATION_LEVELS = new Set(['beginner', 'intermediate', 'advanced']);
+
 const BUG_COLUMNS = new Set([
   'reported',
   'investigating',
@@ -1419,6 +1422,24 @@ export function mergeConfigMeta(existing, patch) {
       existingToolCalls.useConstrainedDecoding = false;
     }
     base.toolCalls = existingToolCalls;
+  }
+
+  if (p.education && typeof p.education === 'object') {
+    const existingEducation =
+      base.education && typeof base.education === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.education) }
+        : { enabled: false, level: 'beginner' };
+    const ed = /** @type {Record<string, unknown>} */ (p.education);
+    if (typeof ed.enabled === 'boolean') {
+      existingEducation.enabled = ed.enabled;
+    }
+    if (
+      typeof ed.level === 'string' &&
+      EDUCATION_LEVELS.has(ed.level.trim().toLowerCase())
+    ) {
+      existingEducation.level = ed.level.trim().toLowerCase();
+    }
+    base.education = existingEducation;
   }
 
   if (p.workspace && typeof p.workspace === 'object') {

@@ -159,6 +159,13 @@ const DEFAULT_META = {
   desktopShell: {
     closeToTray: true,
   },
+  // Education Mode: global tutor overlay. Strips file-write tools and rewrites the
+  // prompt to review/question/hint. `level` tunes scaffolding; a future `lock`
+  // sibling ({ pinHash, salt }) slots in without a migration.
+  education: {
+    enabled: false,
+    level: 'beginner',
+  },
   selfHealing: {
     enabled: false,
     tier1: {

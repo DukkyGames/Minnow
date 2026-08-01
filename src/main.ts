@@ -305,6 +305,8 @@ export async function initApp(): Promise<void> {
   initOrchestratePlanSelector();
   const { initComposerRunTarget } = await import('./ui/composer-run-target');
   initComposerRunTarget();
+  const { initEducationBadge } = await import('./ui/composer-education-badge');
+  void initEducationBadge();
   initViewModeToggle();
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();

@@ -105,6 +105,10 @@ export interface ComposeContext {
   orchestratePlanPath?: string | null;
   /** True once a preview browser tool has been invoked in this chat (gates allowlist fragment). */
   browserActivated?: boolean;
+  /** Education Mode overlay: appends the tutor fragment and suppresses delegation guidance. */
+  educationEnabled?: boolean;
+  /** Scaffolding level for {{education_level}} (beginner | intermediate | advanced). */
+  educationLevel?: string | null;
 }
 
 /** Tokens replaced in composed bodies via interpolate.ts. */
@@ -124,6 +128,7 @@ export interface InterpolationVars {
   os: string;
   plan_granularity: string;
   orchestrate_plan: string;
+  education_level: string;
 }
 
 /** List entry returned by GET /api/prompt-configs. */

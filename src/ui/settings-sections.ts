@@ -54,6 +54,7 @@ import { renderNotificationsSettingsSection } from './settings-notifications';
 import { renderNetworkAccessSettings } from './settings-network';
 import { renderDesktopShellSettings } from './settings-desktop-shell';
 import { renderFilesystemAccessSettings } from './settings-filesystem';
+import { renderEducationSettings } from './settings-education';
 import { renderAppUpdatesSettings } from './settings-updates';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderAutopilotSettingsSection } from './settings-autopilot';
@@ -472,6 +473,17 @@ async function renderGeneralSection(): Promise<void> {
     { emphasis: true },
   );
   await appendTerminalControls(chat);
+  if (isAsyncSectionRenderStale('general', generation)) return;
+
+  const education = appendSettingsGroup(
+    shell,
+    'Education Mode',
+    'Turn the assistant into a coding tutor: it reviews, questions, and hints instead of writing the code for you.',
+    'general.education',
+    { emphasis: true },
+  );
+  education.id = 'settingsEducationMode';
+  await renderEducationSettings(education);
   if (isAsyncSectionRenderStale('general', generation)) return;
 
   const filesystem = appendSettingsGroup(
