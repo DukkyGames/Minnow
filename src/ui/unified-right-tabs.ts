@@ -2,7 +2,6 @@
  * Unified tab strip for file viewer and browser preview tabs (MIN-224).
  */
 
-import { getFilePanelState } from '../state/file-panel';
 import {
   focusPaneSlot,
   isRightPaneSplitLayoutEnabled,
@@ -10,9 +9,7 @@ import {
   otherPaneSlot,
 } from './right-pane-split';
 import {
-  activePreviewIdForSlot,
-  activeViewerPathForSlot,
-  getSlotPaneTabs,
+  unifiedStripActiveTabForSlot,
   moveViewerTabToSlot,
   movePreviewTabToSlot,
   previewIdsForSlot,
@@ -401,8 +398,8 @@ function renderSlotTabStrip(slot: PaneSlotId): void {
   const slotPreviewIds = new Set(previewIdsForSlot(slot));
   const fileTabs = listViewerTabs().filter((t) => slotViewerPaths.has(t.path));
   const previewTabs = listPreviewTabs().filter((t) => slotPreviewIds.has(t.id));
-  const activePath = activeViewerPathForSlot(slot);
-  const activePreviewId = activePreviewIdForSlot(slot);
+  const { viewerPath: activePath, previewId: activePreviewId } =
+    unifiedStripActiveTabForSlot(slot);
 
   container.replaceChildren();
 
@@ -470,8 +467,8 @@ function bindStripKeyboard(boundSlot: PaneSlotId): void {
 
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
-      const activePath = activeViewerPathForSlot(slot);
-      const activePreviewId = activePreviewIdForSlot(slot);
+      const { viewerPath: activePath, previewId: activePreviewId } =
+        unifiedStripActiveTabForSlot(slot);
       let currentIdx = -1;
       if (activePath && pathSet.has(activePath)) {
         currentIdx = fileTabs.findIndex((t) => t.path === activePath);
@@ -491,10 +488,9 @@ function bindStripKeyboard(boundSlot: PaneSlotId): void {
 
     if (e.key === 'w' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      const activePath = activeViewerPathForSlot(slot);
-      const activePreviewId = activePreviewIdForSlot(slot);
-      const tabs = getSlotPaneTabs(slot);
-      if (tabs.surface === 'viewer' && activePath) {
+      const { viewerPath: activePath, previewId: activePreviewId } =
+        unifiedStripActiveTabForSlot(slot);
+      if (activePath) {
         void onFileTabClose(activePath);
       } else if (activePreviewId) {
         void onPreviewTabClose(activePreviewId);

@@ -333,7 +333,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   reasoning: 'fi-sr-bulb',
   codeMapInjection: 'fi-rr-sitemap',
   inbox: 'fi-rr-inbox',
-  moon: 'fi-sc-moon',
+  moon: 'fi-rr-moon',
 
   // Board
   boardBuild: 'fi-sr-hammer',

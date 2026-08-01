@@ -19,6 +19,7 @@ import {
   registerPreviewTabOpened,
   registerViewerTabOpened,
   slotOwningViewerPath,
+  unifiedStripActiveTabForSlot,
   unregisterViewerTab,
 } from '../../src/ui/right-pane-slot-tabs.ts';
 import {
@@ -26,6 +27,10 @@ import {
   resetViewerTabStoreForTests,
   restoreWorkspaceViewerTabs,
 } from '../../src/ui/file-viewer-tab-store.ts';
+import {
+  openPreviewTab,
+  resetPreviewTabStoreForTests,
+} from '../../src/ui/preview-tab-store.ts';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 
 async function setupDom(): Promise<void> {
@@ -97,6 +102,7 @@ describe('right-pane split', () => {
     resetInstancesForTests();
     resetFilePanelStateForTests();
     resetViewerTabStoreForTests();
+    resetPreviewTabStoreForTests();
   });
 
   test('enableRightPaneSplit sets split mode and shows resizer', () => {
@@ -237,5 +243,65 @@ describe('right-pane split', () => {
 
     assert.equal(getFilePanelState().rightPaneSplit.enabled, false);
     assert.equal(isRightPaneSplitActive(), false);
+  });
+});
+
+describe('unified strip active tab', () => {
+  beforeEach(async () => {
+    resetInstancesForTests();
+    resetFilePanelStateForTests();
+    resetViewerTabStoreForTests();
+    resetPreviewTabStoreForTests();
+    launchInstance('code');
+    await setupDom();
+  });
+
+  afterEach(() => {
+    resetInstancesForTests();
+    resetFilePanelStateForTests();
+    resetViewerTabStoreForTests();
+    resetPreviewTabStoreForTests();
+  });
+
+  test('preview mode highlights only the browser tab when a file tab is still active in the store', () => {
+    seedOpenFiles(['main.py'], 'main.py');
+    const preview = openPreviewTab({ kind: 'url', url: 'https://example.com' });
+    patchFilePanelState({ rightPaneMode: 'preview', activePreviewTab: preview.id });
+
+    const active = unifiedStripActiveTabForSlot('primary');
+    assert.equal(active.viewerPath, null);
+    assert.equal(active.previewId, preview.id);
+  });
+
+  test('viewer mode highlights only the file tab when a preview tab is still active in the store', () => {
+    seedOpenFiles(['main.py'], 'main.py');
+    const preview = openPreviewTab({ kind: 'url', url: 'https://example.com' });
+    patchFilePanelState({ rightPaneMode: 'viewer', activePreviewTab: preview.id });
+
+    const active = unifiedStripActiveTabForSlot('primary');
+    assert.equal(active.viewerPath, 'main.py');
+    assert.equal(active.previewId, null);
+  });
+
+  test('split preview surface highlights only the preview tab in that slot', () => {
+    seedOpenFiles(['src/a.ts'], 'src/a.ts');
+    const preview = openPreviewTab({ kind: 'url', url: 'https://example.com' });
+    enableRightPaneSplit();
+    registerPreviewTabOpened(preview.id, 'primary');
+    patchFilePanelState({
+      rightPaneSplit: {
+        ...getFilePanelState().rightPaneSplit,
+        primaryTabs: {
+          ...getSlotPaneTabs('primary'),
+          surface: 'preview',
+          activePreviewId: preview.id,
+          activeViewerPath: 'src/a.ts',
+        },
+      },
+    });
+
+    const active = unifiedStripActiveTabForSlot('primary');
+    assert.equal(active.viewerPath, null);
+    assert.equal(active.previewId, preview.id);
   });
 });

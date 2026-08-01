@@ -177,6 +177,48 @@ export function activePreviewIdForSlot(slot: PaneSlotId): string | null {
   return getSlotPaneTabs(slot).activePreviewId;
 }
 
+/**
+ * Single active tab for the unified strip: at most one of viewer or preview is highlighted.
+ * Stored actives for both kinds can remain set while only one surface is shown.
+ */
+export function unifiedStripActiveTabForSlot(slot: PaneSlotId): {
+  viewerPath: string | null;
+  previewId: string | null;
+} {
+  if (isRightPaneSplitLayoutEnabled()) {
+    const tabs = getSlotPaneTabs(slot);
+    if (tabs.surface === 'viewer') {
+      return { viewerPath: tabs.activeViewerPath, previewId: null };
+    }
+    if (tabs.surface === 'preview') {
+      return { viewerPath: null, previewId: tabs.activePreviewId };
+    }
+    return { viewerPath: null, previewId: null };
+  }
+
+  if (slot !== 'primary') {
+    return { viewerPath: null, previewId: null };
+  }
+
+  const state = getFilePanelState();
+  const mode =
+    state.rightPaneMode === 'preview' ||
+    state.rightPaneMode === 'viewer' ||
+    state.rightPaneMode === 'split'
+      ? state.rightPaneMode
+      : state.viewerOpen
+        ? 'viewer'
+        : null;
+
+  if (mode === 'preview') {
+    return { viewerPath: null, previewId: getActivePreviewTabId() };
+  }
+  if (mode === 'viewer') {
+    return { viewerPath: getActiveViewerTabPath(), previewId: null };
+  }
+  return { viewerPath: null, previewId: null };
+}
+
 /** Make `path` the active viewer tab of `slot` (no-op when the slot does not own it). */
 export function setSlotActiveViewerPath(slot: PaneSlotId, path: string): void {
   if (!splitStateEnabled()) return;
