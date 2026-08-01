@@ -4,7 +4,8 @@
 
 import { stopGeneration } from '../chat/stop-generation.ts';
 import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
-import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
+import { isOrchestratePlanComplete, hasIncompleteOrchestrateWork } from '../chat/orchestrate/plan-complete.ts';
+import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import {
   isOomPauseActive,
@@ -17,7 +18,7 @@ import {
   subscribeChatStreamActivity,
   subscribeChatStreamEnd,
 } from '../chat/streaming-state.ts';
-import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
+import { isChatTurnSetupPending, endChatTurnSetup } from '../chat/chat-turn-guard.ts';
 import {
   getAutopilotMetaSync,
   resolveAutoProvisionInfra,
@@ -56,6 +57,7 @@ import {
 } from '../chat/orchestrate/board-afk-power.ts';
 import { runChatTurn } from '../tools/loop.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
+import { setStreaming } from '../app-state.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
@@ -78,7 +80,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents, type OrchestrateBoardTimerContext } from './orchestrate-board-store.ts';
 import {
   acquirePipelineHold,
   heldTaskIdsForOccupancy,
@@ -4810,10 +4812,20 @@ export function pauseAllRunningBoardsForShutdown(): void {
   }
 }
 
+export type AutoDelegateNextOptions = {
+  /**
+   * When false, only launch newly-ready planned tasks (and drain the queue).
+   * Wake reconcile sets this false so a fresh launch reservation is not mistaken
+   * for a leaked slot before streaming/turn-setup begins.
+   */
+  allowStalledRestart?: boolean;
+};
+
 /** Start all ready planned tasks up to the concurrency cap (auto-pilot / sequential). */
 export async function autoDelegateNext(
   group: ChatGroup,
   plannerChat: Chat,
+  options: AutoDelegateNextOptions = {},
 ): Promise<void> {
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
@@ -4821,12 +4833,14 @@ export async function autoDelegateNext(
   const board = group.orchestrateBoard;
   if (!board || !isBoardRunning(group)) return;
 
+  const allowStalledRestart = options.allowStalledRestart !== false;
   const waveOrder = new Map(board.waves.map((w, i) => [String(w.id), i]));
   const ready = board.tasks
     .filter(
       (t) =>
         isTaskReadyForAuto(board, t) ||
-        isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck),
+        (allowStalledRestart &&
+          isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck)),
     )
     .sort((a, b) => {
       const wa = waveOrder.get(String(a.wave)) ?? 999;
@@ -4844,48 +4858,134 @@ export async function autoDelegateNext(
   await drainTaskQueue(group, plannerChat);
 }
 
+function isBoardCandidateForWakeReconcile(group: ChatGroup): boolean {
+  const board = group.orchestrateBoard;
+  if (!board || !isBoardAutoMode(group)) return false;
+  if (isBoardRunning(group)) return true;
+  return (
+    board.systemPaused === true &&
+    board.userStopped !== true &&
+    hasIncompleteOrchestrateWork(board)
+  );
+}
+
+/** Restore auto-run after sleep/lock system pause (not user Stop). */
+function resumeSystemPausedBoardAfterWake(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board?.systemPaused || board.userStopped === true) return;
+  if (!hasIncompleteOrchestrateWork(board)) return;
+  if (isUserStoppedChat(plannerChat)) return;
+  const wasRunning = board.autoRunning === true;
+  board.autoRunning = true;
+  board.systemPaused = false;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  if (!wasRunning) onBoardAutoRunStarted();
+}
+
+/**
+ * Clear leaked streaming / launch flags when the task chat transcript already ended
+ * (common after macOS display sleep throttling).
+ */
+function reconcileStaleBoardTaskChatActivity(chatId: string): boolean {
+  const trimmed = chatId.trim();
+  if (!trimmed) return false;
+  const chat = findChatById(trimmed);
+
+  if (isTaskChatActiveForStallCheck(trimmed)) {
+    if (!chat) return false;
+    const outcome = resolveTaskChatStreamOutcome(chat);
+    if (outcome !== 'completed' && outcome !== 'stopped') return false;
+    if (
+      isLaunchReserved(trimmed) &&
+      !isChatStreaming(trimmed) &&
+      !isChatTurnSetupPending(trimmed)
+    ) {
+      releaseLaunchSlot(trimmed);
+    }
+    if (isChatTurnSetupPending(trimmed)) {
+      endChatTurnSetup(trimmed);
+    }
+    if (isChatStreaming(trimmed)) {
+      // Do not notifyChatStreamEnded here — wake finalizers replay once below.
+      // Stream-end subscribers also drain the queue and can race autoDelegateNext.
+      setStreaming(false, trimmed);
+    }
+  }
+
+  return !isTaskChatActiveForStallCheck(trimmed);
+}
+
+function boardTimerContextForWake(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+  plannerChat: Chat,
+): OrchestrateBoardTimerContext {
+  return {
+    isStreaming: isChatStreaming(plannerChat.id),
+    activeRunCount: 0,
+    userStopped: board.userStopped === true,
+  };
+}
+
+async function reconcileBoardTasksAfterWake(group: ChatGroup, planner: Chat): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+
+  for (const task of board.tasks) {
+    if (task.status === 'in_progress') {
+      const chatId = task.chatId?.trim();
+      if (chatId && reconcileStaleBoardTaskChatActivity(chatId)) {
+        finalizeBoardTaskOnStreamEnd(group, task, planner);
+      }
+      continue;
+    }
+    if (task.status === 'testing') {
+      const testId = task.testChatId?.trim();
+      if (testId && reconcileStaleBoardTaskChatActivity(testId)) {
+        await finalizeTaskTestingOnStreamEnd(group, task, planner).catch((err) =>
+          reportBackgroundError('wake-finalize-task-testing', err),
+        );
+      }
+    }
+  }
+
+  const finalChatId = board.finalTest?.chatId?.trim();
+  if (board.finalTest?.status === 'in_progress' && finalChatId) {
+    if (reconcileStaleBoardTaskChatActivity(finalChatId)) {
+      finalizeFinalTestOnStreamEnd(group, planner);
+    }
+  }
+}
+
 /**
  * After display wake / tab focus, replay stream-end finalizers for task chats that
  * finished while the renderer was throttled (macOS display sleep).
  */
-export async function reconcileRunningBoardsAfterDisplayWake(): Promise<void> {
+export type DisplayWakeReconcileOptions = {
+  allowStalledRestart?: boolean;
+};
+
+export async function reconcileRunningBoardsAfterDisplayWake(
+  options: DisplayWakeReconcileOptions = {},
+): Promise<void> {
   if (!sessionState?.groups?.length) return;
   ensureStreamEndSubscription();
+  const allowStalledRestart = options.allowStalledRestart === true;
   for (const group of sessionState.groups) {
-    const board = group.orchestrateBoard;
-    if (!board || !isBoardRunning(group)) continue;
+    if (!isBoardCandidateForWakeReconcile(group)) continue;
     const planner = getPlannerChatForGroup(group);
     if (!planner) continue;
 
-    for (const task of board.tasks) {
-      if (task.status === 'in_progress') {
-        const chatId = task.chatId?.trim();
-        if (chatId && !isTaskChatActive(chatId)) {
-          finalizeBoardTaskOnStreamEnd(group, task, planner);
-        }
-        continue;
-      }
-      if (task.status === 'testing') {
-        const testId = task.testChatId?.trim();
-        if (testId && !isTaskChatActive(testId)) {
-          await finalizeTaskTestingOnStreamEnd(group, task, planner).catch((err) =>
-            reportBackgroundError('wake-finalize-task-testing', err),
-          );
-        }
-      }
-    }
+    resumeSystemPausedBoardAfterWake(group, planner);
+    await reconcileBoardTasksAfterWake(group, planner);
 
-    const finalChatId = board.finalTest?.chatId?.trim();
-    if (
-      board.finalTest?.status === 'in_progress' &&
-      finalChatId &&
-      !isTaskChatActive(finalChatId)
-    ) {
-      finalizeFinalTestOnStreamEnd(group, planner);
+    await reconcileMergingTasks(group, planner, {
+      isFixerChatActive: isTaskChatActiveForStallCheck,
+    });
+    if (isBoardRunning(group)) {
+      await autoDelegateNext(group, planner, { allowStalledRestart });
     }
-
-    await reconcileMergingTasks(group, planner);
-    await autoDelegateNext(group, planner);
+    syncOrchestrateBoardTimer(group, planner, boardTimerContextForWake(group.orchestrateBoard!, planner));
     emitBoardChange(group.id);
   }
 }

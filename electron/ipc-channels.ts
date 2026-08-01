@@ -87,6 +87,8 @@ export const DIAGNOSTICS_CLEAR_OOM_PAUSE = 'minnow:diagnostics:clear-oom-pause';
 export const POWER_SET_AFK_GUARD = 'minnow:power:set-afk-guard';
 /** Main → renderer: macOS screen unlocked / system resumed from sleep. */
 export const POWER_SCREEN_UNLOCKED = 'minnow:power:screen-unlocked';
+/** Main → renderer: pause auto-running boards before app quit. */
+export const BOARD_PAUSE_FOR_SHUTDOWN = 'minnow:board:pause-for-shutdown';
 
 /** Renderer → main: current auto-update status snapshot (MIN-384). */
 export const UPDATER_GET_STATUS = 'minnow:updater:get-status';

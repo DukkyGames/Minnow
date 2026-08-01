@@ -362,6 +362,11 @@ export interface MinnowPowerApi {
   onScreenUnlocked(callback: () => void): () => void;
 }
 
+/** Orchestrate board lifecycle hooks from the main process. */
+export interface MinnowBoardApi {
+  onPauseForShutdown(callback: () => void): () => void;
+}
+
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
   app: MinnowAppApi;
@@ -370,6 +375,7 @@ export interface MinnowElectronBridge {
   updater?: MinnowUpdaterApi;
   tray?: MinnowTrayApi;
   power?: MinnowPowerApi;
+  board?: MinnowBoardApi;
 }
 
 declare global {
