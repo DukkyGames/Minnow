@@ -27,6 +27,7 @@ import { buildCallGraph } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import { renderSymbolInspector } from './inspector';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
+import { openCodeRefInViewer } from '../code-ref-link';
 let bindingsDone = false;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
@@ -91,6 +92,31 @@ function renderRepoMapEntry(entry: BrainCodeRepoMapEntry): HTMLElement {
 
   line.textContent = entry.text;
   return line;
+}
+
+/** Open the symbol definition in the Code file viewer with the line range selected. */
+function openSymbolInEditor(sym: BrainCodeSymbolMatch): void {
+  openCodeRefInViewer({
+    workspacePath: sym.file.replace(/\\/g, '/'),
+    startLine: sym.line_start,
+    endLine: sym.line_end,
+  });
+}
+
+/** Primary action to jump from Brain code search into the workspace editor. */
+function buildOpenInEditorButton(sym: BrainCodeSymbolMatch): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'brain-action-btn is-ghost brain-code-detail-open';
+  btn.textContent = 'Open in editor';
+  const range =
+    sym.line_start === sym.line_end
+      ? `line ${sym.line_start}`
+      : `lines ${sym.line_start}–${sym.line_end}`;
+  btn.title = `Open ${sym.file} (${range}) in the file viewer`;
+  btn.setAttribute('aria-label', `Open ${sym.file} in editor, ${range}`);
+  btn.addEventListener('click', () => openSymbolInEditor(sym));
+  return btn;
 }
 
 /** Mark the active symbol row in the repo map. */
@@ -230,19 +256,22 @@ async function selectSymbol(symbolId: string): Promise<void> {
 
   const head = document.createElement('div');
   head.className = 'brain-code-detail-head';
+  const headText = document.createElement('div');
+  headText.className = 'brain-code-detail-head__text';
   const title = document.createElement('h3');
   title.className = 'brain-code-detail-title';
   title.textContent = sym.name;
   const meta = document.createElement('p');
   meta.className = 'brain-code-detail-meta';
   meta.textContent = `${sym.kind} · ${sym.file}:${sym.line_start}-${sym.line_end}`;
-  head.append(title, meta);
+  headText.append(title, meta);
   if (sym.signature) {
     const sig = document.createElement('p');
     sig.className = 'brain-code-detail-signature';
     sig.textContent = sym.signature;
-    head.append(sig);
+    headText.append(sig);
   }
+  head.append(headText, buildOpenInEditorButton(sym));
   detail.append(head);
 
   if (def?.text) {
