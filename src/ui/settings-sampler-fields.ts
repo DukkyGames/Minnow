@@ -56,17 +56,52 @@ export function buildSamplerFieldInputs(
   const fields: Array<{
     key: keyof SamplerPreset;
     label: string;
+    description: string;
     step: string;
     min: string;
     max: string;
   }> = [
-    { key: 'temperature', label: 'Temperature', step: '0.05', min: '0', max: '2' },
-    { key: 'topP', label: 'Top P', step: '0.05', min: '0', max: '1' },
-    { key: 'topK', label: 'Top K', step: '1', min: '1', max: '200' },
-    { key: 'minP', label: 'Min P', step: '0.01', min: '0', max: '1' },
+    {
+      key: 'temperature',
+      label: 'Temperature',
+      description:
+        'How much each token choice varies. Lower stays focused; higher explores more wording.',
+      step: '0.05',
+      min: '0',
+      max: '2',
+    },
+    {
+      key: 'topP',
+      label: 'Top P',
+      description:
+        'Nucleus sampling: keeps likely tokens until their combined probability reaches this value. 1.0 disables the cutoff.',
+      step: '0.05',
+      min: '0',
+      max: '1',
+    },
+    {
+      key: 'topK',
+      label: 'Top K',
+      description:
+        'Only the top K candidates are considered each step. Smaller K tightens output; larger K allows more variety.',
+      step: '1',
+      min: '1',
+      max: '200',
+    },
+    {
+      key: 'minP',
+      label: 'Min P',
+      description:
+        'Drops tokens much less likely than the best pick. Trims noise without a fixed K limit.',
+      step: '0.01',
+      min: '0',
+      max: '1',
+    },
     {
       key: 'repetitionPenalty',
       label: 'Repeat penalty',
+      description:
+        'Penalizes tokens already in the reply. Above 1.0 reduces repeated phrases; 1.0 is neutral.',
       step: '0.01',
       min: '1',
       max: '2',
@@ -74,6 +109,8 @@ export function buildSamplerFieldInputs(
     {
       key: 'presencePenalty',
       label: 'Presence penalty',
+      description:
+        'Favors tokens not used yet in the reply. Helps when the model circles the same idea.',
       step: '0.1',
       min: '0',
       max: '2',
@@ -84,6 +121,8 @@ export function buildSamplerFieldInputs(
     fields.push({
       key: 'maxTokens',
       label: 'Max tokens',
+      description:
+        'Upper bound on completion length for one response. The model may stop sooner on its own.',
       step: '1',
       min: '1',
       max: '131072',
@@ -115,6 +154,11 @@ export function buildSamplerFieldInputs(
       mount = wrap;
       root.appendChild(wrap);
       mount.appendChild(labelEl);
+
+      const hintId = inputId ? `${inputId}-hint` : undefined;
+      const hintEl = el('p', 'settings-sampler-field__hint', field.description);
+      if (hintId) hintEl.id = hintId;
+      mount.appendChild(hintEl);
     } else {
       root.appendChild(el('label', 'settings-field-label', field.label));
     }
@@ -125,6 +169,9 @@ export function buildSamplerFieldInputs(
       ? 'settings-sampler-field__input'
       : 'settings-select settings-kv-input';
     if (inputId) input.id = inputId;
+    if (useGrid && inputId) {
+      input.setAttribute('aria-describedby', `${inputId}-hint`);
+    }
     input.step = field.step;
     input.min = field.min;
     input.max = field.max;

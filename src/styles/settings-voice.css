@@ -180,3 +180,28 @@
   margin-top: 18px;
   border-top: 1px solid var(--mn-border);
 }
+
+/* STT/TTS fields: label + hint stack on the left, control on the right */
+.settings-voice .models-voice-fieldset .models-voice-field.settings-row {
+  align-items: flex-start;
+  gap: 16px 20px;
+}
+
+.settings-voice .models-voice-fieldset .models-voice-field .settings-row__label {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+}
+
+.settings-voice .models-voice-fieldset .models-voice-field .settings-row__control {
+  flex: 0 1 16rem;
+  align-self: center;
+}
+
+.settings-voice .models-voice-fieldset .models-voice-field.settings-toggle-row {
+  align-items: flex-start;
+  gap: 16px 20px;
+}
+
+.settings-voice .models-voice-fieldset .models-voice-field.settings-toggle-row .settings-switch {
+  margin-top: 2px;
+}

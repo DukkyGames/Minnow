@@ -10,6 +10,7 @@ import type {
 import type { SttCatalogEntry } from './catalog-stt';
 import type { TtsCatalogEntry } from './catalog-tts';
 import { createSettingsRadioRow } from '../ui/settings-controls';
+import { createSettingsToggleRow } from '../ui/settings-switch';
 
 type FieldGroup = 'basic' | 'advanced';
 
@@ -247,6 +248,20 @@ function renderField(
 ): void {
   if (spec.showWhen && !spec.showWhen(config, catalog)) return;
 
+  const value = config[spec.key];
+
+  if (spec.type === 'checkbox') {
+    const { row, input } = createSettingsToggleRow(spec.label, {
+      id: fieldId(spec.key),
+      checked: Boolean(value),
+      description: spec.hint,
+    });
+    input.dataset.voiceSttKey = spec.key;
+    row.classList.add('models-voice-field');
+    mount.appendChild(row);
+    return;
+  }
+
   const wrap = document.createElement('div');
   wrap.className = 'settings-row models-voice-field';
 
@@ -258,20 +273,20 @@ function renderField(
   label.htmlFor = fieldId(spec.key);
   label.textContent = spec.label;
   labelCol.appendChild(label);
+  if (spec.hint) {
+    const desc = document.createElement('span');
+    desc.className = 'settings-row__desc';
+    desc.textContent = spec.hint;
+    labelCol.appendChild(desc);
+  }
   wrap.appendChild(labelCol);
 
   const controlWrap = document.createElement('div');
   controlWrap.className = 'settings-row__control';
 
-  const value = config[spec.key];
   let control: HTMLInputElement | HTMLSelectElement;
 
-  if (spec.type === 'checkbox') {
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = Boolean(value);
-    control = checkbox;
-  } else if (spec.type === 'select') {
+  if (spec.type === 'select') {
     const select = document.createElement('select');
     select.className = 'settings-select';
     for (const opt of spec.options ?? []) {
@@ -302,13 +317,6 @@ function renderField(
   control.dataset.voiceSttKey = spec.key;
   controlWrap.appendChild(control);
   wrap.appendChild(controlWrap);
-
-  if (spec.hint) {
-    const hint = document.createElement('p');
-    hint.className = 'settings-field-hint field-hint';
-    hint.textContent = spec.hint;
-    wrap.appendChild(hint);
-  }
 
   mount.appendChild(wrap);
 }
@@ -475,6 +483,19 @@ function ttsFieldId(id: string): string {
 }
 
 function renderTtsControl(spec: TtsFieldSpec, value: unknown, mount: HTMLElement): void {
+  if (spec.type === 'checkbox') {
+    const { row, input } = createSettingsToggleRow(spec.label, {
+      id: ttsFieldId(spec.id),
+      checked: Boolean(value),
+      description: spec.hint,
+    });
+    input.dataset.voiceTtsKey = spec.id;
+    row.classList.add('models-voice-field');
+    if (spec.panel) row.dataset.ttsPanel = spec.panel;
+    mount.appendChild(row);
+    return;
+  }
+
   const wrap = document.createElement('div');
   wrap.className = 'settings-row models-voice-field';
   wrap.dataset.ttsPanel = spec.panel ?? '';
@@ -486,18 +507,19 @@ function renderTtsControl(spec: TtsFieldSpec, value: unknown, mount: HTMLElement
   label.htmlFor = ttsFieldId(spec.id);
   label.textContent = spec.label;
   labelCol.appendChild(label);
+  if (spec.hint) {
+    const desc = document.createElement('span');
+    desc.className = 'settings-row__desc';
+    desc.textContent = spec.hint;
+    labelCol.appendChild(desc);
+  }
   wrap.appendChild(labelCol);
 
   const controlWrap = document.createElement('div');
   controlWrap.className = 'settings-row__control';
 
   let control: HTMLInputElement | HTMLSelectElement;
-  if (spec.type === 'checkbox') {
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = Boolean(value);
-    control = checkbox;
-  } else if (spec.type === 'select') {
+  if (spec.type === 'select') {
     const select = document.createElement('select');
     select.className = 'settings-select';
     for (const opt of spec.options ?? []) {
@@ -532,13 +554,6 @@ function renderTtsControl(spec: TtsFieldSpec, value: unknown, mount: HTMLElement
   control.dataset.voiceTtsKey = spec.id;
   controlWrap.appendChild(control);
   wrap.appendChild(controlWrap);
-
-  if (spec.hint) {
-    const hint = document.createElement('p');
-    hint.className = 'settings-field-hint field-hint';
-    hint.textContent = spec.hint;
-    wrap.appendChild(hint);
-  }
 
   mount.appendChild(wrap);
 }
