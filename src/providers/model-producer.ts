@@ -148,14 +148,30 @@ function slugFromRegex(modelId: string): string | null {
   return null;
 }
 
-/** Resolve producer slug from a canonical model id (not composite select key). */
+/** True when the slug is a model family (Qwen, Google, …), not an HF quantizer org. */
+export function isKnownModelMakerSlug(slug: string): boolean {
+  const key = slug.trim().toLowerCase();
+  return key !== 'other' && key in PRODUCER_DISPLAY_NAMES;
+}
+
+/**
+ * Resolve producer slug from a canonical model id (not composite select key).
+ * Quantizer paths (`lmstudio-community/gemma-…`) match the model name, not the uploader.
+ */
 export function producerSlugFromModelId(modelId: string): string {
   const trimmed = modelId.trim();
   if (!trimmed) return 'other';
 
+  const fromFull = slugFromRegex(trimmed);
+  if (fromFull) return fromFull;
+
   const slash = trimmed.indexOf('/');
   if (slash > 0) {
-    return normalizeSlug(trimmed.slice(0, slash));
+    const fromTail = slugFromRegex(trimmed.slice(slash + 1));
+    if (fromTail) return fromTail;
+    const orgSlug = normalizeSlug(trimmed.slice(0, slash));
+    if (isKnownModelMakerSlug(orgSlug)) return orgSlug;
+    return 'other';
   }
 
   return slugFromRegex(trimmed) ?? 'other';

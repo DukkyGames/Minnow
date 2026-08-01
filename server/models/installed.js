@@ -12,6 +12,25 @@ import { listDownloads } from './download.js';
 /** Paths that must never be walked (safety). */
 const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
 
+/** LM Studio / Ollama metadata folders — not model roots. */
+const CUSTOM_DIR_SKIP_NAMES = new Set(['blobs', 'manifests']);
+
+/**
+ * Repo id for a GGUF under a configured extra folder.
+ * Flat layout: `local-llama`. Nested (LM Studio): `publisher/ModelFolder-GGUF`.
+ * @param {string} publisherName Immediate child of the configured root
+ * @param {string} publisherRoot Absolute path to that child
+ * @param {string} ggufFullPath Absolute path to the weight file
+ */
+export function customArtifactRepoId(publisherName, publisherRoot, ggufFullPath) {
+  const parentDir = path.dirname(ggufFullPath);
+  const rel = path.relative(publisherRoot, parentDir);
+  if (!rel || rel === '.') return publisherName;
+  const top = rel.split(path.sep)[0];
+  if (!top || CUSTOM_DIR_SKIP_NAMES.has(top)) return publisherName;
+  return `${publisherName}/${top}`;
+}
+
 /**
  * @typedef {object} InstalledArtifact
  * @property {string} repoId
@@ -93,7 +112,12 @@ async function scanCustomDirArtifacts(seenPaths) {
     }
 
     for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('models--')) {
+      if (
+        !entry.isDirectory() ||
+        entry.name.startsWith('.') ||
+        entry.name.startsWith('models--') ||
+        CUSTOM_DIR_SKIP_NAMES.has(entry.name)
+      ) {
         continue;
       }
       const modelDir = path.join(expanded, entry.name);
@@ -105,7 +129,7 @@ async function scanCustomDirArtifacts(seenPaths) {
           const stat = await fsp.stat(full);
           if (!stat.isFile()) return;
           out.push({
-            repoId: entry.name,
+            repoId: customArtifactRepoId(entry.name, modelDir, full),
             filename,
             path: full,
             sizeBytes: stat.size,
@@ -122,9 +146,11 @@ async function scanCustomDirArtifacts(seenPaths) {
 }
 
 /**
+ * @param {{ includeCustomDirs?: boolean }} [options]
  * @returns {Promise<InstalledArtifact[]>}
  */
-export async function scanInstalledArtifacts() {
+export async function scanInstalledArtifacts(options = {}) {
+  const includeCustomDirs = options.includeCustomDirs !== false;
   const seenPaths = new Set();
   const out = [];
   const root = path.join(getModelsRoot(), 'artifacts');
@@ -168,7 +194,9 @@ export async function scanInstalledArtifacts() {
     }
   }
 
-  out.push(...(await scanCustomDirArtifacts(seenPaths)));
+  if (includeCustomDirs) {
+    out.push(...(await scanCustomDirArtifacts(seenPaths)));
+  }
 
   out.sort((a, b) => b.mtimeMs - a.mtimeMs);
   return out;

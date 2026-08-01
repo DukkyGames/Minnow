@@ -254,8 +254,12 @@ async function openAppPage(
       break;
     }
     case 'models': {
-      const { openModels } = await import('../ui/models-page');
-      openModels((route.modelsSection ?? options?.modelsSection ?? 'recommend') as import('../ui/models-page').ModelsSectionId);
+      const { openModels, DEFAULT_MODELS_SECTION } = await import('../ui/models-page');
+      openModels(
+        (route.modelsSection ??
+          options?.modelsSection ??
+          DEFAULT_MODELS_SECTION) as import('../ui/models-page').ModelsSectionId,
+      );
       break;
     }
     case 'brain': {
