@@ -147,7 +147,8 @@
     padding-bottom: 10px;
   }
 
-  .chat-new-wide {
+  .chat-new-wide,
+  .chat-new-group-wide {
     min-height: var(--touch-min);
   }
 

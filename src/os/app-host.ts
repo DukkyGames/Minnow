@@ -20,6 +20,7 @@ import { windowManager } from './window-manager';
 import { syncSchedulerSidePanel } from './scheduler-side-panel';
 import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
 import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
+import { isPhoneLayout } from '../ui/mobile-layout';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
@@ -500,9 +501,16 @@ function syncWindowSurfaces(snapshot: InstanceSnapshot, generation: number): voi
     const options =
       inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
     void ensureWindowSurface(inst.id, inst.appId, options, generation);
+    const win = windowManager.findWindowByInstance(inst.id);
+    if (!win) continue;
     if (inst.id === snapshot.foregroundId) {
-      const win = windowManager.findWindowByInstance(inst.id);
-      if (win) windowManager.focus(win.id);
+      // Restoring a minimized window is launchInstance's job — doing it here
+      // would undo an explicit minimize on the next sync.
+      windowManager.focus(win.id);
+    } else if (snapshot.view === 'desktop' && isPhoneLayout() && !win.minimized) {
+      // Phone windows fill the stage, so an open one hides the desktop entirely.
+      // Going home parks them instead of forcing the user to close the app.
+      windowManager.minimize(win.id, true);
     }
   }
 

@@ -1467,6 +1467,81 @@ button.issues-detail__activity-chip {
   }
 }
 
+/* Phone: one column of chrome, thumb-sized controls, swipeable board. */
+@media (max-width: 640px) {
+  .issues-header {
+    gap: 8px 12px;
+    padding: 10px var(--mn-phone-pad-right, 14px) 10px var(--mn-phone-pad-left, 14px);
+  }
+
+  .issues-header__controls {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .issues-filter-bar {
+    gap: 8px;
+    padding: 8px var(--mn-phone-pad-right, 14px) 10px var(--mn-phone-pad-left, 14px);
+  }
+
+  /* Search and quick capture own a full row; the pickers share the one above. */
+  .issues-search,
+  .issues-quick-capture {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .issues-filter {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+
+  .issues-view-toggle button,
+  .issues-filter,
+  .issues-search,
+  .issues-hide-done,
+  .issues-quick-capture input,
+  .issues-btn {
+    min-height: var(--touch-min);
+  }
+
+  /* Board columns become swipeable cards instead of 2.5 squeezed lanes. */
+  .issues-kanban {
+    padding: 12px var(--mn-phone-pad-right, 14px) 24px var(--mn-phone-pad-left, 14px);
+    scroll-snap-type: x mandatory;
+    scroll-padding-left: var(--mn-phone-pad-left, 14px);
+    overscroll-behavior-x: contain;
+  }
+
+  .issues-column {
+    flex: 0 0 min(80vw, 300px);
+    min-width: 0;
+    scroll-snap-align: start;
+  }
+
+  .issues-new-form__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .issues-new-form__actions {
+    flex-wrap: wrap;
+  }
+
+  .issues-new-form__actions .issues-btn {
+    flex: 1 1 8rem;
+  }
+
+  /* Detail replaces the list on phones — give the escape hatch real weight. */
+  .issues-detail__close {
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+  }
+
+  .issues-detail__header {
+    padding-inline: var(--mn-phone-pad-left, 14px) var(--mn-phone-pad-right, 14px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .issues-view-toggle button,
   .issues-btn,

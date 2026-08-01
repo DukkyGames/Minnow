@@ -363,52 +363,51 @@
   transition: none;
 }
 
-@media (max-width: 640px) {
-  .mn-os-workspace-rail-drawer {
-    position: fixed;
-    top: calc(var(--os-menubar-h) + env(safe-area-inset-top, 0px));
-    right: 0;
-    bottom: 0;
-    z-index: 20;
-    width: min(360px, calc(100vw - 20px)) !important;
-    max-width: 100%;
-    padding-right: env(safe-area-inset-right, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    transform: translateX(105%);
-    box-shadow: -8px 0 32px -12px rgba(0, 0, 0, 0.35);
-    transition:
-      transform 280ms var(--os-ease-out),
-      opacity 220ms var(--os-ease-out);
-  }
+/* Match PHONE_MQ / html.mn-phone (includes short landscape phones). */
+html.mn-phone .mn-os-workspace-rail-drawer {
+  position: fixed;
+  top: calc(var(--os-menubar-h) + env(safe-area-inset-top, 0px));
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: min(360px, calc(100vw - 20px)) !important;
+  max-width: 100%;
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  transform: translateX(105%);
+  box-shadow: -8px 0 32px -12px rgba(0, 0, 0, 0.35);
+  transition:
+    transform 280ms var(--os-ease-out),
+    opacity 220ms var(--os-ease-out);
+}
 
-  .mn-os-workspace-rail.is-expanded .mn-os-workspace-rail-drawer {
-    transform: translateX(0);
-  }
+html.mn-phone .mn-os-workspace-rail.is-expanded .mn-os-workspace-rail-drawer {
+  transform: translateX(0);
+}
 
-  .mn-os-workspace-rail-tabs {
-    margin-top: max(8px, env(safe-area-inset-top, 0px));
-  }
+html.mn-phone .mn-os-workspace-rail-tabs {
+  margin-top: max(8px, env(safe-area-inset-top, 0px));
+}
 
-  .mn-os-workspace-rail-tab {
-    margin-right: max(8px, env(safe-area-inset-right, 0px));
-  }
+html.mn-phone .mn-os-workspace-rail-tab {
+  margin-right: max(8px, env(safe-area-inset-right, 0px));
+}
 
-  .mn-os-workspace-rail-drawer-segment-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
+html.mn-phone .mn-os-workspace-rail-drawer-segment-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
-  .mn-os-workspace-rail-drawer-segment {
-    min-height: var(--touch-min, 44px);
-    padding: 0 10px;
-  }
+html.mn-phone .mn-os-workspace-rail-drawer-segment {
+  min-height: var(--touch-min, 44px);
+  padding: 0 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {

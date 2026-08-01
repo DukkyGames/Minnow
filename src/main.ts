@@ -67,6 +67,7 @@ import './styles/plan-progress.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-desktop.css';
 import './styles/desktop-workspace-rail.css';
+import './styles/minnowos-responsive.css';
 import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
@@ -74,11 +75,14 @@ import './styles/models-page.css';
 import './styles/onboarding.css';
 import './styles/app-picker.css';
 import './styles/app-dialog.css';
+/* Phone layer last: it overrides the desktop shell above. */
+import './styles/mobile.css';
 
 import 'highlight.js/styles/github.min.css';
 
 import { installFetchAuth } from './api/install-fetch-auth';
 import { initTheme } from './ui/theme';
+import { initMobileLayout } from './ui/mobile-layout';
 import { initAttachments } from './attachments/store';
 import { initShellHandlers } from './ui/shell-handlers';
 import { installScopedSelectAllHandler } from './ui/scoped-select-all';
@@ -461,6 +465,10 @@ installFetchAuth();
 registerServiceWorker();
 
 initTheme();
+
+// Stamp mn-phone / mn-tablet / mn-touch before first paint so the shell never
+// renders a desktop layout and then reflows into the phone one.
+initMobileLayout();
 
 // Keep the inline loader until bundled CSS is applied (avoids unstyled shell FOUC).
 scheduleMarkAppReady();
