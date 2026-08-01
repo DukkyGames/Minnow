@@ -26,6 +26,7 @@ import {
   validateEditorAiBinding,
 } from '../editor-ai-completion-client';
 import { extractEditorCodeFromReasoning } from '../editor-model-output';
+import { normalizeCompletionIndentation } from '../editor-ai-completion-prompt';
 import { sanitizeQuickEditText } from '../editor-quick-edit/diff-apply';
 import { resolveLanguageDescription } from '../editor-language';
 import type { ResolveIntentLineInput, IntentResolveResult } from './types';
@@ -43,8 +44,20 @@ export function systemPromptForIntent(filePath: string): string {
     `into one correct line of ${label} code. ` +
     'The intent line may have typos or syntax errors — fix them in your output. ' +
     'Return ONLY the code for that single line — no markdown fences, explanations, ' +
-    'or surrounding context.'
+    'or surrounding context. Match the intent line leading indentation when the ' +
+    'language uses significant whitespace.'
   );
+}
+
+/**
+ * Intent mode replaces one editor line. Keep a single line and restore indentation
+ * from the document prefix (same rules as inline AI completion).
+ */
+export function alignIntentResolvedCode(code: string, docPrefixToLineEnd: string): string {
+  const normalized = code.replace(/\r\n/g, '\n').trimEnd();
+  if (!normalized) return '';
+  const oneLine = normalized.split('\n')[0] ?? '';
+  return normalizeCompletionIndentation(oneLine, docPrefixToLineEnd);
 }
 
 function buildIntentMessages(input: ResolveIntentLineInput & { filePath: string }): ApiMessage[] {
@@ -110,12 +123,19 @@ export function finalizeIntentResolveDisplay(
   reasoningText: string,
   intentText: string,
   reasoningFallback: boolean,
+  docPrefixToLineEnd?: string,
 ): string {
-  const primary = sanitizeQuickEditText(
+  const align = (raw: string): string => {
+    const cleaned = sanitizeQuickEditText(raw, intentText);
+    if (!cleaned.trim()) return '';
+    if (!docPrefixToLineEnd) return cleaned.split('\n')[0] ?? cleaned;
+    return alignIntentResolvedCode(cleaned, docPrefixToLineEnd);
+  };
+
+  const primary = align(
     resolveEditorCompletionDisplayText(contentText, reasoningText, {
       reasoningFallback,
     }),
-    intentText,
   );
   if (primary.trim()) return primary;
   if (!reasoningFallback) return '';
@@ -126,7 +146,7 @@ export function finalizeIntentResolveDisplay(
   if (!combined) return '';
   const mined = extractEditorCodeFromReasoning(combined);
   if (!mined.trim()) return '';
-  return sanitizeQuickEditText(mined, intentText);
+  return align(mined);
 }
 
 /** Stream a single-line intent resolve. */
@@ -180,12 +200,15 @@ export async function resolveIntentLine(
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
+  const docPrefixToLineEnd = input.docPrefixToLineEnd ?? '';
+
   const emit = (reasoningFallback = false): string =>
     finalizeIntentResolveDisplay(
       contentAcc.getText(),
       reasoningAcc.getText(),
       input.intentText,
       reasoningFallback,
+      docPrefixToLineEnd || undefined,
     );
 
   return new Promise<IntentResolveResult>((resolve) => {

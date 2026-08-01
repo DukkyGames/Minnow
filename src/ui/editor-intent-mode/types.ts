@@ -46,6 +46,8 @@ export interface ResolveIntentLineInput {
   intentText: string;
   above: string[];
   below: string[];
+  /** Document text from start through the end of the intent line (for indentation alignment). */
+  docPrefixToLineEnd?: string;
   signal: AbortSignal;
   onPartial?: (text: string) => void;
 }

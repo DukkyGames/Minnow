@@ -8,7 +8,7 @@ import type { EditorIntentModeConfig } from '../../config/editor-intent-mode';
 import { contextHashForRegion, resolvedContext, resolvedLineIndices } from './context';
 import { parseRegionKey } from './controls';
 import { intentRecheckPlugin, type IntentResolveDriver } from './recheck';
-import { resolveIntentLine } from './resolver';
+import { resolveIntentLine, alignIntentResolvedCode } from './resolver';
 import {
   addIntentRegion,
   findIntentRegionAt,
@@ -234,13 +234,13 @@ class IntentTriggerPlugin implements IntentResolveDriver {
     if (shouldSkipIntentResolve(state, lineNumber, intentOverride)) return;
 
     const line = state.doc.line(lineNumber);
-    const intentText = (intentOverride ?? line.text).trim();
-    if (!intentText) return;
+    const lineContent = (intentOverride ?? line.text).replace(/\s+$/, '');
+    if (!lineContent.trim()) return;
 
     if (existingRegion) {
       this.view.dispatch({
         annotations: intentSystemTransaction.of(true),
-        changes: { from: existingRegion.from, to: existingRegion.to, insert: intentText },
+        changes: { from: existingRegion.from, to: existingRegion.to, insert: lineContent },
         effects: removeIntentRegion.of({
           from: existingRegion.from,
           to: existingRegion.to,
@@ -269,9 +269,13 @@ class IntentTriggerPlugin implements IntentResolveDriver {
         this.config.contextWindow,
       );
 
+      const intentLine = this.view.state.doc.line(lineNumber);
+      const docPrefixToLineEnd = this.view.state.doc.sliceString(0, intentLine.to);
+
       const result = await resolveFn({
         filePath: this.opts.filePath,
-        intentText,
+        intentText: lineContent,
+        docPrefixToLineEnd,
         above,
         below,
         signal: controller.signal,
@@ -281,13 +285,16 @@ class IntentTriggerPlugin implements IntentResolveDriver {
       if (!isIntentModeEnabled(this.view.state)) return;
 
       const freshLine = this.view.state.doc.line(lineNumber);
-      const code = result.text;
+      let code = result.text;
       if (!code) {
         this.opts.onStatus?.(
           result.error ?? 'Intent resolve failed — check provider and model in Settings',
         );
         return;
       }
+
+      const lineEndPrefix = this.view.state.doc.sliceString(0, freshLine.to);
+      code = alignIntentResolvedCode(code, lineEndPrefix);
 
       if (code.trim() === freshLine.text.trim()) {
         this.opts.onStatus?.(INTENT_NO_CHANGE_MESSAGE);
@@ -305,7 +312,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
       const draftRegion: IntentRegion = {
         from: regionFrom,
         to: regionFrom + code.length,
-        intentText,
+        intentText: lineContent,
         ctxHash: '',
         stale: false,
       };
@@ -323,7 +330,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
           addIntentRegion.of({
             from: regionFrom,
             to: regionFrom + code.length,
-            intentText,
+            intentText: lineContent,
             ctxHash,
             stale: false,
           }),

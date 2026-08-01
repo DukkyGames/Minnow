@@ -14,7 +14,7 @@ import {
   setEditorAiCompletionConfigForTests,
 } from '../../../src/config/editor-ai-completion.ts';
 import { DEFAULT_EDITOR_INTENT_MODE } from '../../../src/config/editor-intent-mode.ts';
-import { resolveIntentLine, finalizeIntentResolveDisplay } from '../../../src/ui/editor-intent-mode/resolver.ts';
+import { resolveIntentLine, finalizeIntentResolveDisplay, alignIntentResolvedCode } from '../../../src/ui/editor-intent-mode/resolver.ts';
 import { BenchmarkStreamReasoningAccumulator } from '../../../src/benchmark/stream-text.ts';
 import { StreamingContentAccumulator } from '../../../src/api/message-content.ts';
 
@@ -147,6 +147,24 @@ describe('resolveIntentLine', () => {
       true,
     );
     assert.equal(text, 'const fixed = 1;');
+  });
+
+  test('restores leading indent for nested intent lines', () => {
+    const prefix = 'def count_cats(cats):\n    ';
+    const aligned = alignIntentResolvedCode('cat_count += 1', prefix);
+    assert.equal(aligned, '    cat_count += 1');
+  });
+
+  test('finalizeIntentResolveDisplay aligns to doc prefix', () => {
+    const prefix = 'def count_cats(cats):\n    ';
+    const text = finalizeIntentResolveDisplay(
+      'for cat in cats:',
+      '',
+      'loop cats',
+      false,
+      prefix,
+    );
+    assert.equal(text, '    for cat in cats:');
   });
 });
 
