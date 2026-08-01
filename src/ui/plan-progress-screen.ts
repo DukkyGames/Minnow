@@ -11,7 +11,10 @@ import {
 } from '../chat/super-plan/types';
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { subscribeToResearchStream } from '../research/client';
+import type { MainTurnPhase } from '../chat/main-turn-activity';
 import type { Chat } from '../types';
+
+type PlanActivityPhase = MainTurnPhase | null;
 
 export const PLAN_PROGRESS_MOUNT_ID = 'orchestratePlanProgressMount';
 export const PLAN_PROGRESS_RESEARCH_MOUNT_ID = 'orchestratePlanResearchFeedMount';
@@ -124,7 +127,7 @@ export function superPlanProgressLabel(state: SuperPlanState): string {
  */
 export function superPlanStageDetail(
   state: SuperPlanState,
-  activity?: { phase?: 'thinking' | 'generating' | 'tools' | null; currentTool?: string },
+  activity?: { phase?: PlanActivityPhase; currentTool?: string },
 ): string {
   const stageId = state.activeStage;
   const record = state.stages[stageId];
@@ -139,6 +142,8 @@ export function superPlanStageDetail(
   }
   if (activity?.phase === 'tools' && activity.currentTool?.trim()) {
     parts.push(`tool: ${activity.currentTool.trim()}`);
+  } else if (activity?.phase === 'loading_model') {
+    parts.push('loading model…');
   } else if (activity?.phase === 'thinking') {
     parts.push('model thinking…');
   } else if (activity?.phase === 'generating') {
@@ -149,7 +154,7 @@ export function superPlanStageDetail(
 
 export interface RegularPlanWorkingStepInput {
   hasPlanSave?: boolean;
-  activityPhase?: 'thinking' | 'generating' | 'tools' | null;
+  activityPhase?: PlanActivityPhase;
   currentTool?: string;
 }
 
@@ -158,7 +163,7 @@ export function regularPlanWorkingStepIndex(
   input: RegularPlanWorkingStepInput,
 ): RegularPlanDisplayStepIndex {
   if (input.hasPlanSave) return 2;
-  if (input.activityPhase === 'generating') return 1;
+  if (input.activityPhase === 'generating' || input.activityPhase === 'loading_model') return 1;
   if (input.activityPhase === 'tools') {
     const tool = input.currentTool?.trim().toLowerCase() ?? '';
     if (tool === 'save_file' || tool === 'make_directory') return 1;
@@ -176,7 +181,7 @@ export function regularPlanProgressLabel(stepIndex: RegularPlanDisplayStepIndex)
 /** Derive regular-plan stepper inputs from chat history + main-turn activity. */
 export function regularPlanWorkingStepFromChat(
   chat: Chat,
-  activityPhase?: 'thinking' | 'generating' | 'tools' | null,
+  activityPhase?: PlanActivityPhase,
   currentTool?: string,
 ): RegularPlanDisplayStepIndex {
   return regularPlanWorkingStepIndex({
@@ -301,7 +306,7 @@ export class PlanProgressPanel {
 
   applySuperPlanState(
     state: SuperPlanState,
-    activity?: { phase?: 'thinking' | 'generating' | 'tools' | null; currentTool?: string },
+    activity?: { phase?: PlanActivityPhase; currentTool?: string },
   ): void {
     if (!this.root) return;
     this.stepIndex = superPlanStateToDisplayStep(state);

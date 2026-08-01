@@ -32,6 +32,7 @@ import {
 import { appendChatRow } from './sidebar';
 import { syncChatItemDotsInDom } from './chat-item-dot';
 import { syncChatItemLoopIconsInDom } from './chat-item-loop-icon';
+import { syncActiveChatModelUi } from './chat-model-ui';
 import type { Chat } from '../types';
 
 const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
@@ -188,6 +189,7 @@ export async function createNewDesktopChat(): Promise<void> {
       const desktopChat = await import('../os/desktop-chat');
       desktopChat.activateDesktopChatSession(active.id);
       renderDesktopChatRail(path);
+      syncActiveChatModelUi();
       return;
     }
   } catch {
@@ -213,6 +215,7 @@ export async function createNewDesktopChat(): Promise<void> {
   desktopChat.activateDesktopChatSession(chat.id);
   resetComposerForEphemeralReuse();
   renderDesktopChatRail(path);
+  syncActiveChatModelUi();
 
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   input?.focus();
