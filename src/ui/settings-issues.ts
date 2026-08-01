@@ -2,6 +2,9 @@
  * Settings → Issues — taxonomy CRUD for types, statuses, and priorities.
  */
 
+import '../styles/settings-general.css';
+import '../styles/settings-issues.css';
+
 import { appAlert, appConfirm, appPrompt } from './app-dialog';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import {
@@ -24,6 +27,7 @@ import {
 } from '../state/issues-taxonomy-store';
 import { appendSettingsGroup } from './settings-layout';
 import { appendSettingsOfflineHint } from './settings-controls';
+import { createIcon } from './icon';
 import { setStatus } from './status';
 
 type TaxonomyKind = 'types' | 'statuses' | 'priorities';
@@ -84,6 +88,20 @@ function moveItem<T extends TaxonomyItem>(items: T[], id: string, delta: -1 | 1)
   return next.sort((a, b) => a.order - b.order).map((item, i) => ({ ...item, order: i }));
 }
 
+function appendTableColgroup(table: HTMLTableElement, withStatusColumns: boolean): void {
+  const colgroup = document.createElement('colgroup');
+  const cols = [
+    el('col', 'settings-issues-col-label'),
+    el('col', 'settings-issues-col-id'),
+  ];
+  if (withStatusColumns) {
+    cols.push(el('col', 'settings-issues-col-role'), el('col', 'settings-issues-col-options'));
+  }
+  cols.push(el('col', 'settings-issues-col-order'), el('col', 'settings-issues-col-actions'));
+  colgroup.append(...cols);
+  table.appendChild(colgroup);
+}
+
 function renderTaxonomyTable(
   mount: HTMLElement,
   kind: TaxonomyKind,
@@ -92,7 +110,8 @@ function renderTaxonomyTable(
   searchKey: string,
   onChange: () => void,
 ): void {
-  const body = appendSettingsGroup(mount, title, hint, searchKey);
+  const withStatusColumns = kind === 'statuses';
+  const body = appendSettingsGroup(mount, title, hint, searchKey, { emphasis: true });
   const taxonomy = getIssuesTaxonomySync();
   const items =
     kind === 'types'
@@ -101,43 +120,67 @@ function renderTaxonomyTable(
         ? sortedStatuses(taxonomy)
         : sortedPriorities(taxonomy);
 
-  const table = el('div', 'settings-issues-table');
-  const head = el('div', 'settings-issues-table__head');
-  head.append(
-    el('span', undefined, 'Label'),
-    el('span', undefined, 'Id'),
-    kind === 'statuses' ? el('span', undefined, 'Role') : document.createComment(''),
-    el('span', undefined, 'Order'),
-    el('span', undefined, ''),
-  );
-  table.appendChild(head);
+  const wrap = el('div', 'settings-issues-table-wrap');
+  const table = document.createElement('table');
+  table.className = 'settings-issues-table';
 
-  const list = el('div', 'settings-issues-table__body');
+  appendTableColgroup(table, withStatusColumns);
+
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  const headers = ['Label', 'Id', ...(withStatusColumns ? ['Role', 'Options'] : []), 'Order', ''];
+  for (const label of headers) {
+    const th = document.createElement('th');
+    th.scope = 'col';
+    if (label) th.textContent = label;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
   if (!items.length) {
-    list.appendChild(el('p', 'settings-issues-empty', 'No items yet.'));
+    const emptyRow = document.createElement('tr');
+    emptyRow.className = 'settings-issues-empty';
+    const cell = document.createElement('td');
+    cell.colSpan = headers.length;
+    cell.textContent = 'No items yet.';
+    emptyRow.appendChild(cell);
+    tbody.appendChild(emptyRow);
+  } else {
+    for (const item of items) {
+      tbody.appendChild(renderTaxonomyRow(kind, item, withStatusColumns, onChange));
+    }
   }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  body.appendChild(wrap);
 
-  for (const item of items) {
-    list.appendChild(renderTaxonomyRow(kind, item, onChange));
-  }
-  table.appendChild(list);
-
-  const addRow = el('div', 'settings-issues-add');
+  const toolbar = el('div', 'settings-issues-toolbar');
   const addBtn = el('button', 'settings-inline-btn', `Add ${kind.slice(0, -1)}`);
   addBtn.type = 'button';
   addBtn.addEventListener('click', () => {
     void promptAndAddItem(kind, onChange);
   });
-  addRow.appendChild(addBtn);
-  body.append(table, addRow);
+  toolbar.appendChild(addBtn);
+  body.appendChild(toolbar);
+}
+
+function labeledCell(label: string, content: HTMLElement): HTMLTableCellElement {
+  const td = document.createElement('td');
+  td.dataset.label = label;
+  td.appendChild(content);
+  return td;
 }
 
 function renderTaxonomyRow(
   kind: TaxonomyKind,
   item: TaxonomyItem | StatusItem,
+  withStatusColumns: boolean,
   onChange: () => void,
-): HTMLElement {
-  const row = el('div', 'settings-issues-row');
+): HTMLTableRowElement {
+  const row = document.createElement('tr');
+  row.className = 'settings-issues-row';
   row.dataset.taxonomyId = item.id;
 
   const labelInput = document.createElement('input');
@@ -151,9 +194,12 @@ function renderTaxonomyRow(
 
   const idCode = el('code', 'settings-issues-id', item.id);
 
-  row.append(labelInput, idCode);
+  row.append(
+    labeledCell('Label', labelInput),
+    labeledCell('Id', idCode),
+  );
 
-  if (kind === 'statuses') {
+  if (withStatusColumns) {
     const status = item as StatusItem;
     const roleSel = document.createElement('select');
     roleSel.className = 'settings-input settings-issues-role';
@@ -186,7 +232,7 @@ function renderTaxonomyRow(
     boardChk.type = 'checkbox';
     boardChk.checked = status.boardVisible !== false;
     boardChk.setAttribute('aria-label', `Board column for ${item.id}`);
-    boardLabel.append(boardChk, document.createTextNode(' Board'));
+    boardLabel.append(boardChk, document.createTextNode('Board'));
     boardChk.addEventListener('change', () => {
       void updateStatusFlags(item.id, { boardVisible: boardChk.checked }, onChange);
     });
@@ -197,34 +243,38 @@ function renderTaxonomyRow(
     closedChk.type = 'checkbox';
     closedChk.checked = Boolean(status.isClosed);
     closedChk.setAttribute('aria-label', `Closed for ${item.id}`);
-    closedLabel.append(closedChk, document.createTextNode(' Closed'));
+    closedLabel.append(closedChk, document.createTextNode('Closed'));
     closedChk.addEventListener('change', () => {
       void updateStatusFlags(item.id, { isClosed: closedChk.checked }, onChange);
     });
 
     flags.append(boardLabel, closedLabel);
-    row.append(roleSel, flags);
-  } else {
-    row.append(el('span'), el('span'));
+    row.append(labeledCell('Role', roleSel), labeledCell('Options', flags));
   }
 
   const orderWrap = el('div', 'settings-issues-order');
-  const upBtn = el('button', 'settings-icon-btn', '↑');
+  const upBtn = el('button', 'settings-action-btn settings-issues-order-btn');
   upBtn.type = 'button';
   upBtn.title = 'Move up';
   upBtn.setAttribute('aria-label', `Move ${item.id} up`);
+  upBtn.appendChild(
+    createIcon('arrowUp', { className: 'settings-issues-order-btn__icon', size: 16 }),
+  );
   upBtn.addEventListener('click', () => {
     void reorderItem(kind, item.id, -1, onChange);
   });
-  const downBtn = el('button', 'settings-icon-btn', '↓');
+  const downBtn = el('button', 'settings-action-btn settings-issues-order-btn');
   downBtn.type = 'button';
   downBtn.title = 'Move down';
   downBtn.setAttribute('aria-label', `Move ${item.id} down`);
+  downBtn.appendChild(
+    createIcon('arrowDown', { className: 'settings-issues-order-btn__icon', size: 16 }),
+  );
   downBtn.addEventListener('click', () => {
     void reorderItem(kind, item.id, 1, onChange);
   });
   orderWrap.append(upBtn, downBtn);
-  row.appendChild(orderWrap);
+  row.appendChild(labeledCell('Order', orderWrap));
 
   const actions = el('div', 'settings-issues-actions');
   const delBtn = el('button', 'settings-inline-btn settings-inline-btn--danger', 'Delete');
@@ -233,7 +283,11 @@ function renderTaxonomyRow(
     void deleteItem(kind, item.id, onChange);
   });
   actions.appendChild(delBtn);
-  row.appendChild(actions);
+  const actionsCell = document.createElement('td');
+  actionsCell.className = 'settings-issues-actions';
+  actionsCell.dataset.label = 'Actions';
+  actionsCell.appendChild(actions);
+  row.appendChild(actionsCell);
 
   return row;
 }
@@ -357,84 +411,88 @@ async function promptAndAddItem(kind: TaxonomyKind, onChange: () => void): Promi
   if (await persistTaxonomy(next, 'Item added')) onChange();
 }
 
-/** Render Issues taxonomy settings into the mount node. */
-export function renderIssuesSettingsSection(mount: HTMLElement): void {
-  mount.replaceChildren();
-
+function appendIssuesIntro(mount: HTMLElement): void {
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       mount,
       'Issues taxonomy is saved in this browser. Run <code>npm start</code> to persist under <code>~/.minnow/issues/taxonomy.json</code>.',
     );
-  } else {
-    mount.appendChild(
-      el(
-        'p',
-        'settings-section-note',
-        'Customize issue types, workflow statuses, and priorities. Status roles power agent workflows and board columns.',
-      ),
-    );
+    return;
   }
+  mount.appendChild(
+    el(
+      'p',
+      'settings-section-note',
+      'Types, statuses, and priorities for the Issues app. Status roles and board options drive agent workflows and kanban columns.',
+    ),
+  );
+}
 
+function renderIssuesTaxonomyPanels(content: HTMLElement, onChange: () => void): void {
+  renderTaxonomyTable(
+    content,
+    'types',
+    'Types',
+    'Bug, task, idea, note, or your own kinds.',
+    'apps.issues.types',
+    onChange,
+  );
+  renderTaxonomyTable(
+    content,
+    'statuses',
+    'Statuses',
+    'Assign workflow roles so agents know which column means triage, in progress, review, and done.',
+    'apps.issues.statuses',
+    onChange,
+  );
+  renderTaxonomyTable(
+    content,
+    'priorities',
+    'Priorities',
+    'Urgency levels for sorting and filters.',
+    'apps.issues.priorities',
+    onChange,
+  );
+
+  const dangerBody = appendSettingsGroup(
+    content,
+    'Defaults',
+    'Restore built-in types, statuses, and priorities. Existing issues keep their current field values.',
+    'apps.issues.reset',
+    { emphasis: true },
+  );
+  dangerBody.parentElement?.classList.add('settings-issues-danger-zone');
+
+  const resetBtn = el('button', 'settings-inline-btn', 'Restore defaults');
+  resetBtn.type = 'button';
+  resetBtn.addEventListener('click', () => {
+    void (async () => {
+      const ok = await appConfirm(
+        'Restore the built-in types, statuses, and priorities? Existing issues keep their current values.',
+        { confirmLabel: 'Restore', title: 'Restore defaults' },
+      );
+      if (!ok) return;
+      if (await persistTaxonomy(createDefaultIssuesTaxonomy(), 'Defaults restored')) {
+        onChange();
+      }
+    })();
+  });
+  dangerBody.appendChild(resetBtn);
+}
+
+/** Render Issues taxonomy settings into the mount node. */
+export function renderIssuesSettingsSection(mount: HTMLElement): void {
   const refresh = (): void => {
     mount.replaceChildren();
-    if (!isServerStorageMode()) {
-      appendSettingsOfflineHint(
-        mount,
-        'Issues taxonomy is saved in this browser. Run <code>npm start</code> to persist under <code>~/.minnow/issues/taxonomy.json</code>.',
-      );
-    } else {
-      mount.appendChild(
-        el(
-          'p',
-          'settings-section-note',
-          'Customize issue types, workflow statuses, and priorities. Status roles power agent workflows and board columns.',
-        ),
-      );
-    }
 
-    renderTaxonomyTable(
-      mount,
-      'types',
-      'Types',
-      'Bug, task, idea, note, or your own kinds.',
-      'apps.issues.types',
-      refresh,
-    );
-    renderTaxonomyTable(
-      mount,
-      'statuses',
-      'Statuses',
-      'Assign workflow roles so agents know which column means triage, in progress, review, and done.',
-      'apps.issues.statuses',
-      refresh,
-    );
-    renderTaxonomyTable(
-      mount,
-      'priorities',
-      'Priorities',
-      'Urgency levels for sorting and filters.',
-      'apps.issues.priorities',
-      refresh,
-    );
+    const shell = el('div', 'settings-general settings-issues');
+    mount.appendChild(shell);
 
-    const resetRow = el('div', 'settings-issues-reset');
-    const resetBtn = el('button', 'settings-inline-btn', 'Restore defaults');
-    resetBtn.type = 'button';
-    resetBtn.addEventListener('click', () => {
-      void (async () => {
-        const ok = await appConfirm(
-          'Restore the built-in types, statuses, and priorities? Existing issues keep their current values.',
-          { confirmLabel: 'Restore', title: 'Restore defaults' },
-        );
-        if (!ok) return;
-        if (await persistTaxonomy(createDefaultIssuesTaxonomy(), 'Defaults restored')) {
-          refresh();
-        }
-      })();
-    });
-    resetRow.appendChild(resetBtn);
-    mount.appendChild(resetRow);
+    const content = el('div', 'settings-general__content');
+    shell.appendChild(content);
+
+    appendIssuesIntro(content);
+    renderIssuesTaxonomyPanels(content, refresh);
   };
 
   refresh();
