@@ -10,6 +10,7 @@ import { listExperts } from '../experts/registry';
 import { normalizeModeId } from '../modes/types';
 import { loadExpertsConfig } from '../../config/experts-config';
 import { loadPromptMetaSettings } from '../../config/prompt-meta';
+import { loadEducationMeta } from '../../config/education-meta';
 import {
   getUserRulesPayloadForSend,
   loadUserRules,
@@ -72,6 +73,7 @@ export async function buildComposeContext(
 ): Promise<ComposeContext> {
   const meta = await loadPromptMetaSettings();
   const profile: PromptProfile = meta.activePromptProfile;
+  const education = await loadEducationMeta();
 
   let customConfig = null;
   if (profile === 'custom' && meta.activePromptConfigId) {
@@ -162,6 +164,8 @@ export async function buildComposeContext(
     browserActivated:
       options?.overrides?.browserActivated ??
       chatHistoryHasBrowserToolUse(chat.history),
+    educationEnabled: education.enabled,
+    educationLevel: education.level,
     ...options?.overrides,
   };
 

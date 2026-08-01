@@ -89,6 +89,20 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'general.toolCalls.constrained': meta('toolCalls.useConstrainedDecoding', 'boolean', {
     refreshAreas: ['general', 'tools'],
   }),
+  // writable: false is the lock. server/settings/update.js skips non-writable
+  // fields, so the agent cannot switch Education Mode off through update_settings
+  // even before the tool-level block. Reads still work, which is what we want:
+  // the agent should know it is teaching.
+  'general.education': section(['general']),
+  'general.education.enabled': meta('education.enabled', 'boolean', {
+    refreshAreas: ['general', 'tools'],
+    writable: false,
+  }),
+  'general.education.level': meta('education.level', 'enum', {
+    allowedValues: ['beginner', 'intermediate', 'advanced'],
+    refreshAreas: ['general'],
+    writable: false,
+  }),
   'agents.watchdog': section(['watchdog']),
   'agents.watchdog.generation': meta('chat.generationIdleTimeoutMs', 'number', {
     refreshAreas: ['watchdog'],

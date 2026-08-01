@@ -7,6 +7,8 @@ import type { AutopilotExecutionMode } from '../../config/autopilot-meta';
 import { getBoardGroupForChat } from '../../state/chat-groups';
 import type { Chat } from '../../types';
 import { isExternalDynamicTool } from './tool-policy';
+import { applyEducationToolFilter } from './education-overlay';
+import { isEducationModeEnabledSync } from '../../config/education-meta';
 import {
   BOARD_ROLE_BOARD_SUBSET,
   type BoardMemberRole,
@@ -108,7 +110,7 @@ export function applyBoardMemberToolFilter(
   const roleAllowed = expandBoardRoleAllowedTools(role);
   const stripUserPrompts = isHandsOffMode(executionMode);
 
-  return defs.filter((def) => {
+  const filtered = defs.filter((def) => {
     const name = def.function.name;
     if (BOARD_MEMBER_STRIPPED_TOOLS.has(name)) return false;
     // MCP/plugin tools are gated in Settings, not the board role matrix (MIN-333).
@@ -116,4 +118,8 @@ export function applyBoardMemberToolFilter(
     if (stripUserPrompts && USER_BLOCKING_TOOLS.has(name)) return false;
     return true;
   });
+
+  // Build and fix roles carry their own files-write allowlist that bypasses the
+  // mode matrix, so Education Mode has to strip it here too.
+  return applyEducationToolFilter(isEducationModeEnabledSync(), filtered);
 }

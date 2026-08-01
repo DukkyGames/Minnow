@@ -6,6 +6,7 @@ import { interpolatePromptBody } from '../chat/prompts/interpolate';
 import { loadPromptById } from '../chat/prompts/prompt-loader';
 import { fetchPromptFile } from '../chat/prompts/prompt-file-api';
 import { getPromptMetaSettingsSync } from '../config/prompt-meta';
+import { isEducationModeEnabledSync } from '../config/education-meta';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { fetchMemoryEnabled, retrieveMemoryBlock } from '../memory/client';
 import {
@@ -91,6 +92,23 @@ Notes below are from the Brain wiki — treat as context and verify against the 
 Use \`brain_search\` for fuzzy lookup; \`brain_read_page\` / \`brain_write_page\` for structured pages; \`save_memory\` for quick facts under pages/facts/. Skip secrets and one-off state. Confirm only after a write tool succeeds.
 Before returning, make one \`save_memory\` call **only if** your task produced a user correction, a root cause that took real digging (symptom → cause → fix), a decision + why with rejected alternatives, an approach that failed, or a discovered convention/environment quirk. Give it a specific searchable title; at most one page. Otherwise save nothing.`;
 
+const SUB_AGENT_EDUCATION_RULES = `
+
+### Education Mode (sub-agent)
+Education Mode is on for this workspace. The user is a student learning to program, and they write all of the code. You cannot edit files, and your findings are relayed back to them.
+Never put a complete or near-complete implementation in your summary, findings, or artifacts — not as a code block, not as line-by-line instructions. Report what you found, where it lives, and what the misunderstanding looks like. Snippets are a few lines at most and must illustrate a concept, never be the answer.`;
+
+/**
+ * Sub-agents build their own prompt rather than going through composeSystemPrompt,
+ * so the tutor rule has to be appended here too. Their write tools are already
+ * stripped by resolveSubAgentTools; this stops a researcher returning the finished
+ * implementation in its report instead.
+ */
+export function appendSubAgentEducationRules(systemPrompt: string): string {
+  if (!isEducationModeEnabledSync()) return systemPrompt;
+  return `${systemPrompt}${SUB_AGENT_EDUCATION_RULES}`;
+}
+
 /** Inject retrieved memories and optional save_memory guidance for sub-agents. */
 export async function appendSubAgentMemorySection(
   systemPrompt: string,
@@ -133,6 +151,7 @@ export async function appendSubAgentMemorySection(
       os: typeof navigator !== 'undefined' ? navigator.platform : 'node',
       plan_granularity: '',
       orchestrate_plan: '',
+      education_level: '',
     });
     if (section.trim()) {
       result = `${result}\n\n---\n\n${section.trim()}`;
@@ -182,5 +201,9 @@ ${task}`;
     parentChat,
   );
   const withUntrustedPolicy = `${withMemory}${SUB_AGENT_UNTRUSTED_POLICY}`;
-  return appendSubAgentAskQuestionRules(withUntrustedPolicy, enabledToolNames);
+  const withAskQuestion = appendSubAgentAskQuestionRules(
+    withUntrustedPolicy,
+    enabledToolNames,
+  );
+  return appendSubAgentEducationRules(withAskQuestion);
 }

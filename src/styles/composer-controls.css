@@ -639,6 +639,49 @@
   }
 }
 
+/* Education Mode indicator — same geometry as the run-target chip so the strip
+   keeps one control vocabulary. Outlined rather than filled: the active mode
+   segment beside it already carries the solid accent, and this is a state
+   annotation, not a second primary action. */
+.composer-education-badge {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 4px 9px;
+  min-height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--mn-accent) 55%, var(--mn-border));
+  background: transparent;
+  color: var(--mn-accent);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
+}
+
+.composer-education-badge__label {
+  white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-education-badge:hover {
+    border-color: var(--mn-accent);
+    background: color-mix(in srgb, var(--mn-accent) 10%, transparent);
+  }
+}
+
+.composer-education-badge:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
 /* MIN-276: per-chat run target + branch composer controls */
 .composer-run-target-wrap {
   gap: 4px;

@@ -313,6 +313,84 @@
     ]
   },
   {
+    "key": "general.education",
+    "label": "Education Mode",
+    "description": "Turn the assistant into a coding tutor: it reviews, questions, and hints, but never edits your files.",
+    "keywords": [
+      "learn",
+      "teach",
+      "tutor",
+      "student",
+      "school",
+      "class",
+      "socratic",
+      "beginner"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
+    "key": "general.education.enabled",
+    "label": "Education Mode",
+    "description": "The assistant reviews and guides, but will not write or edit code for you. It can still read your project, run your tests, and open files in the editor to point at the code it means.",
+    "keywords": [
+      "learn",
+      "teach",
+      "tutor",
+      "student",
+      "school",
+      "class",
+      "socratic",
+      "read only"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "education.enabled",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general",
+      "tools"
+    ]
+  },
+  {
+    "key": "general.education.level",
+    "label": "Teaching level",
+    "description": "How much scaffolding the tutor gives before it expects you to take over.",
+    "keywords": [
+      "beginner",
+      "intermediate",
+      "advanced",
+      "tutor",
+      "scaffolding",
+      "socratic"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "education.level",
+    "type": "enum",
+    "allowedValues": [
+      "beginner",
+      "intermediate",
+      "advanced"
+    ],
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.toolCalls.constrained",
     "label": "Constrained tool calls",
     "description": "Validate tool arguments with JSON Schema when the provider supports structured output.",
@@ -2135,6 +2213,84 @@
     ]
   },
   {
+    "key": "advanced.boardTesting",
+    "label": "Board testing",
+    "description": "Manual orchestrate board workflow: in-process fake model, seed test board, validate diagnostic logs.",
+    "keywords": [
+      "orchestrate",
+      "fake model",
+      "seed board",
+      "board log",
+      "kanban",
+      "test board"
+    ],
+    "category": "advanced",
+    "area": "board-testing",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "board-testing"
+    ]
+  },
+  {
+    "key": "advanced.boardTesting.fakeModel",
+    "label": "Fake model",
+    "keywords": [
+      "fake-board",
+      "openai stub",
+      "deterministic model"
+    ],
+    "category": "advanced",
+    "area": "board-testing",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "board-testing"
+    ]
+  },
+  {
+    "key": "advanced.boardTesting.seed",
+    "label": "Seed test board",
+    "keywords": [
+      "quick preset",
+      "smoke preset",
+      "board_init",
+      "planner"
+    ],
+    "category": "advanced",
+    "area": "board-testing",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "board-testing"
+    ]
+  },
+  {
+    "key": "advanced.boardTesting.log",
+    "label": "Validate board log",
+    "keywords": [
+      "jsonl",
+      "invariants",
+      "check-board-log",
+      "orchestrate log"
+    ],
+    "category": "advanced",
+    "area": "board-testing",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "board-testing"
+    ]
+  },
+  {
     "key": "about.info",
     "label": "Build info",
     "keywords": [
@@ -2622,6 +2778,32 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.read_file_range",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.open_in_editor",
+    "label": "Tool permission: open_in_editor",
+    "description": "Permission mode for the open_in_editor tool (off, ask, or full).",
+    "keywords": [
+      "open_in_editor",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.open_in_editor",
     "type": "enum",
     "allowedValues": [
       "off",

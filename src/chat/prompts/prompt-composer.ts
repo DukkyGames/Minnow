@@ -295,7 +295,9 @@ function resolveSubAgentDelegationBody(ctx: ComposeContext, profile: PromptProfi
     !modeId ||
     !isModeId(modeId) ||
     !SUB_AGENT_DELEGATION_MODE_IDS.has(modeId) ||
-    !contextHasSpawnSubAgentTool(ctx)
+    !contextHasSpawnSubAgentTool(ctx) ||
+    // Delegating implementation is exactly what Education Mode exists to prevent.
+    ctx.educationEnabled === true
   ) {
     return '';
   }
@@ -375,6 +377,23 @@ function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile)
   return loaded?.body?.trim() ?? '';
 }
 
+/**
+ * Education Mode tutor fragment.
+ *
+ * Appended after the whole part loop rather than inside the tool-usage fragment
+ * chain, for two reasons. It must have the literal final word: it overrides the
+ * mode body, the work-agent body, and every other fragment. And the tool-usage
+ * chain is skipped whenever that part resolves empty (a custom profile with
+ * tool-usage disabled), which would silently drop the one layer that can enforce
+ * "no complete solutions in chat".
+ */
+function resolveEducationBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (ctx.educationEnabled !== true) return '';
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'education', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 function buildInterpolationVars(ctx: ComposeContext): InterpolationVars {
   const modeId = ctx.modeId ?? '';
   const modeLabel =
@@ -401,6 +420,7 @@ function buildInterpolationVars(ctx: ComposeContext): InterpolationVars {
     os: typeof navigator !== 'undefined' ? navigator.platform : 'node',
     plan_granularity: ctx.planGranularity ?? 'medium',
     orchestrate_plan: ctx.orchestratePlanPath ?? '',
+    education_level: ctx.educationLevel?.trim() || 'beginner',
   };
 }
 
@@ -501,6 +521,17 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
           sections.push(appearanceInterpolated.trim());
         }
       }
+    }
+  }
+
+  const educationRaw = resolveEducationBody(
+    ctx,
+    effectiveProfile === 'lite' ? 'lite' : 'full',
+  );
+  if (educationRaw.trim()) {
+    const educationInterpolated = interpolatePromptBody(educationRaw, vars);
+    if (educationInterpolated.trim()) {
+      sections.push(educationInterpolated.trim());
     }
   }
 

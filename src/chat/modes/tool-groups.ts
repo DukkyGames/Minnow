@@ -24,6 +24,8 @@ export const TOOL_GROUP_IDS = {
     'get_file_metadata',
     'search_in_file',
     'grep',
+    // View-only: opens the user's editor on a file, never writes to it.
+    'open_in_editor',
   ],
   'files-write': [
     'save_file',

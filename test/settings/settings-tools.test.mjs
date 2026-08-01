@@ -89,4 +89,48 @@ describe('settings agent tools', () => {
     const field = getFieldByKey('integrations.search.apiKeys');
     assert.equal(field?.sensitivity, 'secret');
   });
+
+  // Without the education branch in mergeConfigMeta the PUT is silently dropped.
+  it('education block survives mergeConfigMeta', async () => {
+    const { writeResource } = await import('../../server/config/store.js');
+    await writeResource('meta', { education: { enabled: true, level: 'advanced' } });
+    const meta = await readResource('meta');
+    assert.equal(meta.education?.enabled, true);
+    assert.equal(meta.education?.level, 'advanced');
+
+    // Partial patches must not clobber the sibling key.
+    await writeResource('meta', { education: { level: 'intermediate' } });
+    const after = await readResource('meta');
+    assert.equal(after.education?.enabled, true);
+    assert.equal(after.education?.level, 'intermediate');
+  });
+
+  it('education block rejects an unknown level', async () => {
+    const { writeResource } = await import('../../server/config/store.js');
+    await writeResource('meta', { education: { level: 'expert' } });
+    const meta = await readResource('meta');
+    assert.notEqual(meta.education?.level, 'expert');
+  });
+
+  it('update_settings cannot switch Education Mode off', async () => {
+    const { writeResource } = await import('../../server/config/store.js');
+    await writeResource('meta', { education: { enabled: true, level: 'beginner' } });
+
+    const out = await executeServerTool('update_settings', {
+      changes: [{ key: 'general.education.enabled', value: false }],
+      confirmed: true,
+    });
+    assert.match(out.result, /skipped/i);
+    assert.match(out.result, /not writable/i);
+
+    const meta = await readResource('meta');
+    assert.equal(meta.education?.enabled, true);
+  });
+
+  it('get_settings still reports Education Mode so the agent knows it is teaching', async () => {
+    const out = await executeServerTool('get_settings', {
+      keys: ['general.education.enabled'],
+    });
+    assert.match(out.result, /general\.education\.enabled/);
+  });
 });

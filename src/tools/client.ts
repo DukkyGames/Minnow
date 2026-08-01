@@ -17,6 +17,9 @@ import {
   setLocalServerAvailable,
 } from './config';
 import { blockPlanModeWriteWithContent } from '../chat/modes/plan-write-guard';
+import { blockEducationToolCall } from '../chat/modes/education-guard';
+import { applyEducationToolFilter } from '../chat/modes/education-overlay';
+import { isEducationModeEnabledSync } from '../config/education-meta';
 import {
   filterToolsByMode,
   isToolAllowedForMode,
@@ -144,6 +147,11 @@ export interface ExecuteToolContext {
   extraPathRoots?: string[];
   /** Benchmark runs bypass Ask permission modals and path-ack prompts. */
   benchmarkAutonomous?: boolean;
+  /**
+   * When `user`, Education Mode does not block the call (Code viewer / file tree).
+   * Agent and headless paths omit this so write tools stay denied for the tutor.
+   */
+  toolCaller?: 'user' | 'agent';
 }
 
 // run_python is intentionally excluded: the streaming path can only spawn a single
@@ -432,6 +440,10 @@ async function executeToolInner(
       name,
     );
     if (blocked) return blocked;
+    const educationBlock = blockEducationToolCall(name, enrichedArgs, context.toolCaller);
+    if (educationBlock) {
+      return { content: educationBlock };
+    }
     const planWriteBlock = blockPlanModeWriteWithContent(context.modeId, name, enrichedArgs);
     if (planWriteBlock) {
       return { content: planWriteBlock };
@@ -459,6 +471,11 @@ async function executeToolInner(
     name,
   );
   if (blocked) return blocked;
+
+  const educationBlock = blockEducationToolCall(name, enrichedArgs, context.toolCaller);
+  if (educationBlock) {
+    return { content: educationBlock };
+  }
 
   const planWriteBlock = blockPlanModeWriteWithContent(context.modeId, name, enrichedArgs);
   if (planWriteBlock) {
@@ -580,7 +597,7 @@ export function getEnabledToolDefinitionsForMode(
   const dynamic = getEnabledDynamicToolDefinitions().filter((def) =>
     isToolAllowedForMode(normalized, def.function.name),
   );
-  return [...builtins, ...dynamic];
+  return applyEducationToolFilter(isEducationModeEnabledSync(), [...builtins, ...dynamic]);
 }
 
 /**
@@ -597,9 +614,11 @@ export function getEnabledToolDefinitionsForChat(
     defs = injectBoardMemberSubsetTools(defs);
   }
   defs = applyBoardMemberToolFilter(defs, chat, executionMode);
-  if (normalized !== 'orchestrate') return defs;
-
-  return applyOrchestrateAutoToolFilter(defs, executionMode);
+  if (normalized === 'orchestrate') {
+    defs = applyOrchestrateAutoToolFilter(defs, executionMode);
+  }
+  // Last, so no earlier filter (board role allowlist, expert snapshot) can re-add a write tool.
+  return applyEducationToolFilter(isEducationModeEnabledSync(), defs);
 }
 
 /** Alias for send path — built-in, MCP, and plugin tools after mode + permission filters. */
@@ -773,12 +792,16 @@ async function executeServerTool(
     args: Record<string, unknown>;
     modeId?: string;
     workspaceRoot?: string;
+    toolCaller?: 'user' | 'agent';
   } = { name, args };
   if (modeId != null && String(modeId).trim()) {
     payload.modeId = String(modeId).trim();
   }
   if (workspaceRoot) {
     payload.workspaceRoot = workspaceRoot;
+  }
+  if (context?.toolCaller === 'user' || context?.toolCaller === 'agent') {
+    payload.toolCaller = context.toolCaller;
   }
   try {
     response = await fetch('/api/tools', {

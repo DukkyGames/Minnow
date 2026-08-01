@@ -30,7 +30,7 @@ Everything written down about Minnow, in one index. New here? Read [Setup](guide
 
 ## Maintaining Minnow
 
-Release and internal-inventory docs live in [`maintainer/`](maintainer/) — [releasing](maintainer/releasing.md), [macOS signing](maintainer/macos-signing.md), the full [settings reference](maintainer/settings-reference.md), and the [prompt ownership matrix](maintainer/prompt-ownership-matrix.md).
+Release and internal-inventory docs live in [`maintainer/`](maintainer/) — [releasing](maintainer/releasing.md), [macOS signing](maintainer/macos-signing.md), the full [settings reference](maintainer/settings-reference.md), the [prompt ownership matrix](maintainer/prompt-ownership-matrix.md), and the [Discord server setup](maintainer/discord-setup.md).
 
 ## Working folders
 

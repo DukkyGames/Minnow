@@ -35,6 +35,9 @@ export {
   normalizeWorkspacePath,
 } from '../../src/state/session-schema.mjs';
 
+/** Teaching-level values accepted for the `education` meta block. */
+const EDUCATION_LEVELS = new Set(['beginner', 'intermediate', 'advanced']);
+
 const BUG_COLUMNS = new Set([
   'reported',
   'investigating',
@@ -559,6 +562,10 @@ function defaultPermissionForTool(id, enabled) {
   if (id === 'search_settings' || id === 'get_settings' || id === 'get_appearance') {
     return enabled ? 'full' : 'off';
   }
+  // View-only editor navigation: prompting per "look at this line" would kill the tool.
+  if (id === 'open_in_editor') {
+    return enabled ? 'full' : 'off';
+  }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
@@ -591,6 +598,7 @@ export function normalizeToolConfig(raw) {
     'who_calls',
     'read_symbol',
     'explain_symbol',
+    'open_in_editor',
   ]);
   const enabled = {};
   const permissionsDefault = {};
@@ -1419,6 +1427,24 @@ export function mergeConfigMeta(existing, patch) {
       existingToolCalls.useConstrainedDecoding = false;
     }
     base.toolCalls = existingToolCalls;
+  }
+
+  if (p.education && typeof p.education === 'object') {
+    const existingEducation =
+      base.education && typeof base.education === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.education) }
+        : { enabled: false, level: 'beginner' };
+    const ed = /** @type {Record<string, unknown>} */ (p.education);
+    if (typeof ed.enabled === 'boolean') {
+      existingEducation.enabled = ed.enabled;
+    }
+    if (
+      typeof ed.level === 'string' &&
+      EDUCATION_LEVELS.has(ed.level.trim().toLowerCase())
+    ) {
+      existingEducation.level = ed.level.trim().toLowerCase();
+    }
+    base.education = existingEducation;
   }
 
   if (p.workspace && typeof p.workspace === 'object') {

@@ -2,6 +2,8 @@
  * Resolve which OpenAI tool definitions a sub-agent may call.
  */
 
+import { applyEducationToolFilter } from '../chat/modes/education-overlay';
+import { isEducationModeEnabledSync } from '../config/education-meta';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { SubAgentTypeConfig } from './types';
 
@@ -15,6 +17,11 @@ const META_SPAWN_TOOLS = new Set([
 /**
  * Filter parent-enabled tools by sub-agent allow/deny lists.
  * Always removes recursive spawn tools unless type is reserved "orchestrator" (v1: never).
+ *
+ * The Education Mode filter runs last and cannot be undone by a type's
+ * `allowedTools`. This path matters most: resolveSubAgentToolModeId silently
+ * upgrades plan-family sub-agents to Build policy, so without it a student could
+ * get code written simply by asking for a sub-agent.
  */
 export function resolveSubAgentTools(
   typeConfig: SubAgentTypeConfig,
@@ -34,5 +41,5 @@ export function resolveSubAgentTools(
   ]);
   tools = tools.filter((t) => !deny.has(t.function.name));
 
-  return tools;
+  return applyEducationToolFilter(isEducationModeEnabledSync(), tools);
 }

@@ -159,6 +159,13 @@ const DEFAULT_META = {
   desktopShell: {
     closeToTray: true,
   },
+  // Education Mode: global tutor overlay. Strips file-write tools and rewrites the
+  // prompt to review/question/hint. `level` tunes scaffolding; a future `lock`
+  // sibling ({ pinHash, salt }) slots in without a migration.
+  education: {
+    enabled: false,
+    level: 'beginner',
+  },
   selfHealing: {
     enabled: false,
     tier1: {
@@ -371,10 +378,15 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'recall_chat_context',
   'recall_turn_full',
   'read_diagnostics',
+  'open_in_editor',
 ]);
 
 function defaultPermissionForTool(id, enabled) {
   if (id === 'search_settings' || id === 'get_settings' || id === 'get_appearance') {
+    return enabled ? 'full' : 'off';
+  }
+  // View-only editor navigation: prompting per "look at this line" would kill the tool.
+  if (id === 'open_in_editor') {
     return enabled ? 'full' : 'off';
   }
   if (id === 'read_diagnostics') {

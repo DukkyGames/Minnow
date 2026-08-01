@@ -452,6 +452,10 @@ export async function writeResource(resource, body) {
       const { resetBrowserConfigCache } = await import('../cdp/browser-config.js');
       resetBrowserConfigCache();
     }
+    if (body && typeof body === 'object' && 'education' in /** @type {Record<string, unknown>} */ (body)) {
+      const { resetEducationCache } = await import('./education.js');
+      resetEducationCache();
+    }
     if (body && typeof body === 'object' && 'server' in /** @type {Record<string, unknown>} */ (body)) {
       const { setConfigNetworkAccess, resolveConfigNetworkAccess } = await import('../network/access.js');
       setConfigNetworkAccess(resolveConfigNetworkAccess(merged));

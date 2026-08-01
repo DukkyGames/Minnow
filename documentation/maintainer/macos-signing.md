@@ -83,7 +83,7 @@ You should see ✓ for the certificate, `.env.signing`, and notarization credent
 npm run package:mac
 ```
 
-[`scripts/electron-builder-run.mjs`](../../scripts/electron-builder-run.mjs) loads `.env.signing`, picks the first **Developer ID Application** identity in your keychain (override with `CSC_NAME` — use the name only, e.g. `Grim Media (TEAMID)`, not the `Developer ID Application:` prefix), signs with hardened runtime + entitlements in [`build/entitlements.mac.plist`](../../build/entitlements.mac.plist), and notarizes when credentials are present.
+[`scripts/electron-builder-run.mjs`](../../scripts/electron-builder-run.mjs) loads `.env.signing`, picks the first **Developer ID Application** identity in your keychain (override with `CSC_NAME` — use the name only, e.g. `Henri Grimm (TEAMID)`, not the `Developer ID Application:` prefix), signs with hardened runtime + entitlements in [`build/entitlements.mac.plist`](../../build/entitlements.mac.plist), and notarizes when credentials are present.
 
 Output lands in `release/pkg/`:
 

@@ -18,11 +18,14 @@ export function setFileTreeListingWorkspaceRoot(root: string | undefined): void 
 }
 
 /** Context forwarded to executeTool for file-tree-scoped reads and writes. */
-export function buildFileTreeToolContext(): { workspaceRoot?: string } {
+export function buildFileTreeToolContext(): {
+  workspaceRoot?: string;
+  toolCaller: 'user';
+} {
   if (listingWorkspaceRoot) {
-    return { workspaceRoot: listingWorkspaceRoot };
+    return { workspaceRoot: listingWorkspaceRoot, toolCaller: 'user' };
   }
-  return {};
+  return { toolCaller: 'user' };
 }
 
 /** Muted sidebar suffix when browsing a task worktree (e.g. " · task-abc"). */

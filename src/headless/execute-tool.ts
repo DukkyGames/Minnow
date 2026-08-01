@@ -3,6 +3,9 @@
  */
 
 import { blockPlanModeWriteWithContent } from '../chat/modes/plan-write-guard';
+import { blockEducationToolCall } from '../chat/modes/education-guard';
+import { applyEducationCatalogFilter } from '../chat/modes/education-overlay';
+import { isEducationModeEnabledSync } from '../config/education-meta';
 import { isToolAllowedForMode, filterToolsByMode } from '../chat/modes/tool-policy';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
@@ -47,6 +50,8 @@ const BROWSER_ONLY_TOOLS = new Set([
   'board_report',
   'delegate_tasks',
   'request_browser_origin_access',
+  // Needs the Code viewer pane; there is no editor to open in headless runs.
+  'open_in_editor',
 ]);
 
 const UI_BROWSER_PREFIXES = ['browser_'];
@@ -74,7 +79,10 @@ export function getHeadlessToolDefinitions(modeId: ModeId): OpenAIFunctionDefini
     if (!tool.serverRequired) return false;
     return true;
   });
-  return filterToolsByMode(catalog, modeId).map((t) => t.definition);
+  const allowed = filterToolsByMode(catalog, modeId);
+  return applyEducationCatalogFilter(isEducationModeEnabledSync(), allowed).map(
+    (t) => t.definition,
+  );
 }
 
 async function postServerTool(
@@ -194,6 +202,11 @@ export async function executeHeadlessTool(
     name,
   );
   if (blocked) return blocked;
+
+  const educationBlock = blockEducationToolCall(name, args);
+  if (educationBlock) {
+    return { content: educationBlock };
+  }
 
   const planWriteBlock = blockPlanModeWriteWithContent(modeId, name, args);
   if (planWriteBlock) {

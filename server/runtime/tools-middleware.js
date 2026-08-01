@@ -29,6 +29,7 @@ import {
   blockPlanModeWrite,
   resolveModeIdFromToolsBody,
 } from '../tools/plan-write-guard.js';
+import { blockEducationToolCall } from '../tools/education-guard.js';
 import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 import { assessUnixPipeOnWindows } from '../tools/windows-pipe-guard.js';
@@ -1398,6 +1399,14 @@ export function createToolsMiddleware() {
           return;
         }
         const modeId = resolveModeIdFromToolsBody(body);
+        const toolCaller =
+          body?.toolCaller === 'user' || body?.toolCaller === 'agent' ? body.toolCaller : undefined;
+        const educationBlock = await blockEducationToolCall(name, args, toolCaller);
+        if (educationBlock) {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ result: educationBlock }));
+          return;
+        }
         const planWriteBlock = blockPlanModeWrite(modeId, name, args);
         if (planWriteBlock) {
           res.statusCode = 200;
