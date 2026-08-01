@@ -35,8 +35,16 @@ import {
   teardownDevServerLogView,
 } from './dev-server-log-view';
 import {
+  cyclePortsListSort,
+  DEFAULT_PORTS_LIST_SORT,
   deriveDevServerRowView,
+  filterListeningPorts,
   labelPortAttribution,
+  portsListSortAriaSort,
+  sortListeningPorts,
+  type PortsListSort,
+  type PortsScopeFilter,
+  type PortsSortKey,
 } from './dev-server-screen-view';
 import { subAgentLiveStatusLine } from './sub-agent-live-status';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
@@ -44,17 +52,11 @@ import { formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/wo
 import { listWorktrees } from '../state/worktree-service';
 import { getWorkspacePath } from '../state/workspace';
 import type { ParsedWorktree } from '../lib/worktree-list-parse';
-import { iconHtml } from './icon';
-
 const ROOT_ID = 'devServerScreenRoot';
 const CHAT_AREA_CLASS = 'chat-area--dev-server';
 const MAIN_COLUMN_CLASS = 'main-column--dev-server';
 const POLL_FAST_MS = 2000;
 const POLL_SLOW_MS = 10000;
-
-const ICON_REFRESH = iconHtml('refresh', { className: 'dev-server-screen__icon-svg' });
-
-const ICON_AUTO = iconHtml('loop', { className: 'dev-server-screen__icon-svg' });
 
 const SETUP_TASK = `Register the workspace dev server using manage_dev_servers (action=create) or by creating startup.md at the workspace root.
 
@@ -82,6 +84,9 @@ let selectedId: string | null = null;
 let editingId: string | null = null;
 let showAddForm = false;
 let portsAuto = true;
+let portsFilterQuery = '';
+let portsScopeFilter: PortsScopeFilter = 'all';
+let portsSort: PortsListSort = { ...DEFAULT_PORTS_LIST_SORT };
 let logsCollapsed = false;
 let portsCollapsed = false;
 /** Git worktrees available for dev-server spawn (refreshed on screen open). */
@@ -296,12 +301,36 @@ function buildShell(): HTMLElement {
             <span class="dev-server-screen__chevron" aria-hidden="true">▾</span>
             <span class="dev-server-screen__section-title">Ports (listening)</span>
           </button>
-          <div class="dev-server-screen__row-actions">
-            <button type="button" class="dev-server-screen__icon-btn" data-action="ports-refresh" aria-label="Refresh ports" title="Refresh ports">
-              ${ICON_REFRESH}
+          <div class="dev-server-ports__toolbar">
+            <input
+              type="search"
+              class="dev-server-log__filter dev-server-ports__filter"
+              data-role="ports-filter"
+              placeholder="Search…"
+              aria-label="Search listening ports"
+            />
+            <select class="dev-server-ports__scope" data-role="ports-scope" aria-label="Filter ports by source">
+              <option value="all">All</option>
+              <option value="linked">Dev servers</option>
+              <option value="protected">Protected</option>
+              <option value="other">Other</option>
+            </select>
+            <button
+              type="button"
+              class="dev-server-screen__btn dev-server-screen__btn--compact"
+              data-action="ports-refresh"
+              aria-label="Refresh port list"
+            >
+              Refresh
             </button>
-            <button type="button" class="dev-server-screen__icon-btn" data-action="ports-auto" aria-pressed="true" aria-label="Auto-refresh ports" title="Auto-refresh ports">
-              ${ICON_AUTO}
+            <button
+              type="button"
+              class="dev-server-screen__btn dev-server-screen__btn--compact"
+              data-action="ports-auto"
+              aria-pressed="true"
+              aria-label="Live port updates"
+            >
+              Live
             </button>
           </div>
         </div>
@@ -553,6 +582,18 @@ function escapeAttr(value: string): string {
     .replace(/</g, '&lt;');
 }
 
+function portsSortHeaderCell(label: string, key: PortsSortKey): string {
+  const ariaSort = portsListSortAriaSort(portsSort, key);
+  const active = portsSort.key === key;
+  const dirHint = active ? `, ${portsSort.direction === 'asc' ? 'ascending' : 'descending'}` : '';
+  return `<th scope="col" aria-sort="${ariaSort}">
+    <button type="button" class="dev-server-ports__sort${active ? ' is-active' : ''}" data-ports-sort="${key}" aria-label="Sort by ${label}${dirHint}">
+      <span class="dev-server-ports__sort-label">${label}</span>
+      <span class="dev-server-ports__sort-indicator" aria-hidden="true">${active ? (portsSort.direction === 'asc' ? '↑' : '↓') : ''}</span>
+    </button>
+  </th>`;
+}
+
 function renderPorts(): void {
   const host = document.querySelector<HTMLElement>('[data-role="ports-table"]');
   if (!host) return;
@@ -560,14 +601,23 @@ function renderPorts(): void {
     host.innerHTML = `<div class="dev-server-screen__empty">No listening ports reported.</div>`;
     return;
   }
-  const rows = ports
+  const visible = filterListeningPorts(ports, servers, {
+    query: portsFilterQuery,
+    scope: portsScopeFilter,
+  });
+  if (!visible.length) {
+    host.innerHTML = `<div class="dev-server-screen__empty">No ports match your search or filter.</div>`;
+    return;
+  }
+  const sorted = sortListeningPorts(visible, servers, portsSort);
+  const rows = sorted
     .map((p) => {
-      const attr = labelPortAttribution(p, servers);
       const attrLabel = p.protected
         ? 'Minnow (protected)'
-        : attr
-          ? `← ${attr}`
-          : '';
+        : (() => {
+            const attr = labelPortAttribution(p, servers);
+            return attr ? `← ${attr}` : '';
+          })();
       const killDisabled = p.protected ? 'disabled' : '';
       return `<tr>
         <td>${p.port}</td>
@@ -579,7 +629,13 @@ function renderPorts(): void {
     })
     .join('');
   host.innerHTML = `<table>
-    <thead><tr><th>Port</th><th>Process</th><th>PID</th><th></th><th></th></tr></thead>
+    <thead><tr>
+      ${portsSortHeaderCell('Port', 'port')}
+      ${portsSortHeaderCell('Process', 'process')}
+      ${portsSortHeaderCell('PID', 'pid')}
+      ${portsSortHeaderCell('Source', 'source')}
+      <th scope="col" class="dev-server-ports__actions-head"><span class="visually-hidden">Actions</span></th>
+    </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
   host.querySelectorAll<HTMLButtonElement>('[data-kill-pid]').forEach((btn) => {
@@ -609,7 +665,7 @@ function syncPortsAutoButton(): void {
   const btn = document.querySelector<HTMLButtonElement>('[data-action="ports-auto"]');
   if (!btn) return;
   btn.setAttribute('aria-pressed', portsAuto ? 'true' : 'false');
-  btn.title = portsAuto ? 'Auto-refresh on (click to pause)' : 'Auto-refresh off (click to enable)';
+  btn.title = portsAuto ? 'Live updates on (click to pause)' : 'Live updates off (click to enable)';
 }
 
 function syncSectionCollapse(): void {
@@ -818,6 +874,12 @@ async function onSaveEdit(): Promise<void> {
 
 function wireShellEvents(root: HTMLElement): void {
   root.addEventListener('click', (ev) => {
+    const sortBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-ports-sort]');
+    if (sortBtn?.dataset.portsSort) {
+      portsSort = cyclePortsListSort(portsSort, sortBtn.dataset.portsSort as PortsSortKey);
+      renderPorts();
+      return;
+    }
     const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-action]');
     if (!target) return;
     const action = target.dataset.action;
@@ -860,6 +922,17 @@ function wireShellEvents(root: HTMLElement): void {
 
   const filter = root.querySelector<HTMLInputElement>('[data-role="log-filter"]');
   filter?.addEventListener('input', () => setLogFilter(filter.value));
+
+  const portsFilter = root.querySelector<HTMLInputElement>('[data-role="ports-filter"]');
+  portsFilter?.addEventListener('input', () => {
+    portsFilterQuery = portsFilter.value;
+    renderPorts();
+  });
+  const portsScope = root.querySelector<HTMLSelectElement>('[data-role="ports-scope"]');
+  portsScope?.addEventListener('change', () => {
+    portsScopeFilter = (portsScope.value as PortsScopeFilter) || 'all';
+    renderPorts();
+  });
 }
 
 function syncRailButton(): void {
@@ -924,6 +997,9 @@ export function closeDevServerScreen(options?: {
   logsCollapsed = false;
   portsCollapsed = false;
   portsAuto = true;
+  portsFilterQuery = '';
+  portsScopeFilter = 'all';
+  portsSort = { ...DEFAULT_PORTS_LIST_SORT };
   knownWorktrees = [];
   pendingWorktreeById.clear();
   clearDetectAgentState();
