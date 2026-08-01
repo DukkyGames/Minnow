@@ -172,6 +172,17 @@
   cursor: pointer;
 }
 
+.model-host-filter-library-toggle .minnow-glyph {
+  width: 14px;
+  height: 14px;
+}
+
+.model-host-filter-library-toggle[aria-pressed='true'] {
+  color: var(--mn-fg-on-accent);
+  border-color: var(--mn-accent);
+  background: var(--mn-accent);
+}
+
 .model-host-filter-loaded-toggle[aria-pressed='true'] {
   color: var(--mn-success);
   border-color: color-mix(in srgb, var(--mn-success) 45%, var(--mn-border));
@@ -230,10 +241,22 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .model-host-filter-action:hover:not(:disabled):not(.is-busy) {
+  .model-host-filter-action:hover:not(:disabled):not(.is-busy):not([aria-pressed='true']) {
     background: var(--mn-bg);
     color: var(--mn-fg);
     border-color: var(--mn-border-strong);
+  }
+
+  .model-host-filter-library-toggle[aria-pressed='true']:hover:not(:disabled):not(.is-busy) {
+    color: var(--mn-fg-on-accent);
+    border-color: var(--mn-accent);
+    background: color-mix(in srgb, var(--mn-accent) 88%, var(--mn-fg));
+  }
+
+  .model-host-filter-loaded-toggle[aria-pressed='true']:hover:not(:disabled):not(.is-busy) {
+    color: var(--mn-success);
+    border-color: color-mix(in srgb, var(--mn-success) 55%, var(--mn-border));
+    background: color-mix(in srgb, var(--mn-success) 20%, transparent);
   }
 }
 
