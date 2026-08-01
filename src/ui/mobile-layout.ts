@@ -20,9 +20,12 @@
  * Keep in sync with the `html.mn-phone` rules in styles/mobile.css.
  */
 export const PHONE_MQ = '(max-width: 640px), (max-width: 1024px) and (max-height: 540px)';
-/** Tablets and split-screen desktop windows — denser than phone, no dual rails. */
+/**
+ * Touch tablets in the mid-width band — not every desktop browser window between
+ * 641px and 1024px (that looked like permanent "iPad mode" in the web shell).
+ */
 export const TABLET_MQ =
-  '(min-width: 641px) and (max-width: 1024px) and (min-height: 541px)';
+  '(min-width: 641px) and (max-width: 1024px) and (min-height: 541px) and (pointer: coarse)';
 /** Touch-first input; true on tablets and touchscreen laptops as well as phones. */
 export const COARSE_POINTER_MQ = '(pointer: coarse)';
 
@@ -39,12 +42,23 @@ function query(mq: string): MediaQueryList | null {
   return window.matchMedia(mq);
 }
 
+function bindMqChange(mq: MediaQueryList | null, handler: () => void): void {
+  if (!mq) return;
+  if (typeof mq.addEventListener === 'function') {
+    mq.addEventListener('change', handler);
+    return;
+  }
+  if (typeof mq.addListener === 'function') {
+    mq.addListener(handler);
+  }
+}
+
 /** True when the viewport is phone-sized. Safe to call before init. */
 export function isPhoneLayout(): boolean {
   return (phoneMq ?? query(PHONE_MQ))?.matches ?? false;
 }
 
-/** True on tablet-width viewports (excludes phones). */
+/** True on tablet-width touch viewports (excludes phones and mouse-driven browsers). */
 export function isTabletLayout(): boolean {
   return (tabletMq ?? query(TABLET_MQ))?.matches ?? false;
 }
@@ -72,15 +86,12 @@ function syncFlags(): void {
  * and tests may both call it.
  */
 export function initMobileLayout(): void {
-  if (installed) {
-    syncFlags();
-    return;
-  }
   phoneMq = query(PHONE_MQ);
   tabletMq = query(TABLET_MQ);
   coarseMq = query(COARSE_POINTER_MQ);
   syncFlags();
-  if (!phoneMq?.addEventListener) return;
+
+  if (installed) return;
   installed = true;
 
   const onChange = () => {
@@ -91,11 +102,23 @@ export function initMobileLayout(): void {
     for (const listener of listeners) listener(nowPhone);
   };
 
-  phoneMq.addEventListener('change', onChange);
-  tabletMq?.addEventListener?.('change', onChange);
-  coarseMq?.addEventListener?.('change', onChange);
-  // Backstop: a dropped media-query event would leave the shell stuck in phone
-  // chrome on a desktop viewport, which is worse than the cost of this check.
+  bindMqChange(phoneMq, onChange);
+  bindMqChange(tabletMq, onChange);
+  bindMqChange(coarseMq, onChange);
+
+  if (typeof window === 'undefined') return;
+
+  // Backstop: a dropped media-query event would leave flags stuck on resize.
   window.addEventListener('resize', onChange, { passive: true });
   window.addEventListener('orientationchange', onChange, { passive: true });
+  window.visualViewport?.addEventListener('resize', onChange, { passive: true });
+}
+
+/** Test hook — reset listener installation between cases. */
+export function resetMobileLayoutForTests(): void {
+  installed = false;
+  phoneMq = null;
+  tabletMq = null;
+  coarseMq = null;
+  listeners.clear();
 }

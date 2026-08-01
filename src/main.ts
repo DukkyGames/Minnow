@@ -67,6 +67,7 @@ import './styles/plan-progress.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-desktop.css';
 import './styles/desktop-workspace-rail.css';
+import './styles/minnowos-responsive.css';
 import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
 import './styles/chat-app.css';

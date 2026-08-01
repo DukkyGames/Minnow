@@ -29,6 +29,7 @@
 .mn-os-desk-hero {
   width: 100%;
   max-width: 760px;
+  min-width: 0;
   text-align: center;
   display: flex;
   flex-direction: column;
