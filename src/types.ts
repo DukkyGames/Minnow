@@ -223,12 +223,24 @@ export interface ContextNoticeMessage {
   createdAt: number;
 }
 
+export type PromptInjectionKind = 'brain-notes' | 'code-map';
+
+/** Persisted Brain / code-map injection notice (not sent to the model). */
+export interface InjectionNoticeMessage {
+  role: 'injection';
+  kind: PromptInjectionKind;
+  /** Raw retrieved block interpolated into the prompt. */
+  body: string;
+  createdAt: number;
+}
+
 export type Message =
   | UserMessage
   | AssistantMessage
   | AssistantToolCallMessage
   | ToolResultMessage
-  | ContextNoticeMessage;
+  | ContextNoticeMessage
+  | InjectionNoticeMessage;
 
 /** Multimodal user/assistant payload part (attachments use in later waves). */
 export interface TextContentPart {

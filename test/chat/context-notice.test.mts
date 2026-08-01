@@ -4,11 +4,17 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { appendContextNoticeIfNeeded } from '../../src/chat/context/context-notice.ts';
+import { appendContextNoticeIfNeeded, contextNoticeAction, contextNoticeOutcome } from '../../src/chat/context/context-notice.ts';
 import { historyToApiMessagesForEstimate } from '../../src/chat/prompts/token-estimate-core.ts';
 import type { Chat } from '../../src/types.ts';
 
 describe('context notice', () => {
+  test('contextNoticeAction and outcome format transcript row copy', () => {
+    assert.equal(contextNoticeAction('summarize'), 'Context summarized');
+    assert.equal(contextNoticeOutcome(2), '2 turns omitted');
+    assert.equal(contextNoticeOutcome(0, 'line one\nline two'), '2 line summary');
+  });
+
   test('appendContextNoticeIfNeeded dedupes identical consecutive notices', () => {
     const chat: Chat = {
       id: 'c1',

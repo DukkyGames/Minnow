@@ -1,38 +1,16 @@
-/* Clickable context trim / compress notices in the chat transcript */
+/* Context trim / injection rows — same column rhythm as tool-call-msg */
 
 .context-notice {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin: var(--mn-space-3) 0;
-  gap: var(--mn-space-2);
+  align-self: flex-start;
+  width: min(var(--chat-tool-call-max), 100%);
 }
 
-.context-notice__chip {
-  appearance: none;
-  border: 1px solid var(--mn-border-subtle);
-  background: var(--mn-surface-raised);
-  color: var(--mn-text-secondary);
-  font-size: var(--mn-text-xs);
-  line-height: 1.4;
-  padding: var(--mn-space-1) var(--mn-space-3);
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-.context-notice__chip:hover,
-.context-notice__chip:focus-visible {
-  border-color: var(--mn-border-strong);
-  color: var(--mn-text-primary);
-  outline: none;
-}
-
-.context-notice__panel {
-  width: min(100%, 42rem);
-  border: 1px solid var(--mn-border-subtle);
-  border-radius: var(--mn-radius-md);
-  background: var(--mn-surface-sunken);
-  padding: var(--mn-space-3);
+.context-notice .tool-call-action {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .context-notice__summary {

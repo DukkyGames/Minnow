@@ -29,6 +29,39 @@ export function contextNoticeLabel(
   }
 }
 
+/** Primary label for the context trim transcript row (tool-call action column). */
+export function contextNoticeAction(policy: ContextEnforcementPolicy): string {
+  switch (policy) {
+    case 'summarize':
+      return 'Context summarized';
+    case 'dropMiddle':
+      return 'Context compressed';
+    case 'slide':
+      return 'Context trimmed';
+    case 'truncate':
+      return 'Context truncated';
+    case 'archive':
+      return 'Context archived';
+    default:
+      return 'Context trimmed';
+  }
+}
+
+/** Bench-style outcome text for the context trim transcript row. */
+export function contextNoticeOutcome(
+  droppedTurns: number,
+  summaryText?: string,
+): string {
+  if (droppedTurns > 0) {
+    return `${droppedTurns} turn${droppedTurns === 1 ? '' : 's'} omitted`;
+  }
+  if (summaryText?.trim()) {
+    const lines = summaryText.trim().split('\n').length;
+    return lines === 1 ? '1 line summary' : `${lines} line summary`;
+  }
+  return 'Trimmed';
+}
+
 /**
  * Append a context notice unless the last row is a duplicate (same policy + dropped count).
  */
