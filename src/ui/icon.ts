@@ -310,7 +310,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   expand: 'fi-rr-expand',
   compress: 'fi-rr-compress-alt',
   edit: 'fi-rr-edit',
-  addFolder: 'fi-rr-folder-download',
+  addFolder: 'fi-rr-add-folder',
   openProject: 'fi-rr-folder-open',
   terminal: 'fi-rr-terminal',
   browser: 'fi-rr-browser',
