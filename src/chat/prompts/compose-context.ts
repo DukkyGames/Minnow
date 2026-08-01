@@ -114,15 +114,12 @@ export async function buildComposeContext(
   let codeMapBlock: string | null = null;
   const injectCodeMap = await shouldInjectCodeMap(chat);
   if (injectCodeMap) {
-    const focus =
-      options?.routeUserText ??
-      options?.userMessagePreview ??
-      '';
     const codeConfig = await fetchBrainCodeConfig();
+    // Full ranked map within token budget — do not pass the user message as `focus`
+    // (repo-map focus is a contiguous substring filter on symbol id/path/signature).
     codeMapBlock =
       (await retrieveCodeMapBlock({
         repoPath: worktreeCwd ?? resolveComposeCwd(),
-        focus,
         tokenBudget: codeConfig?.repoMapTokenBudget,
         ensureIndexed: true,
       })) || null;

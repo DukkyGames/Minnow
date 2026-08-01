@@ -328,7 +328,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   loop: 'fi-rr-rotate-right',
   sparkles: 'fi-rr-sparkles',
   thinkingBrain: 'fi-sr-brain',
-  codeMapInjection: 'fi-sr-syringe',
+  codeMapInjection: 'fi-rr-sitemap',
   inbox: 'fi-rr-inbox',
 
   // Board
