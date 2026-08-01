@@ -109,6 +109,9 @@ export interface OutboundPromptEstimate {
   codeMapSystem?: number;
   /** Resolved on for this estimate (map may still be loading). */
   codeMapInjectionEnabled?: boolean;
+  /** Approximate tokens for injected context documents (subset of composedSystem). */
+  contextDocumentsSystem?: number;
+  contextDocumentsInjectionEnabled?: boolean;
   /** When context compression would apply on send. */
   historyCompressed?: boolean;
   compressedContextEstimate?: number;

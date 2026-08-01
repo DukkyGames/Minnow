@@ -379,6 +379,12 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['cursor rules', 'instructions', 'groups'],
   }),
   field('agents.rules.addGroup', 'Add rule group', 'agents', 'rules'),
+  field('agents.rules.contextDocuments', 'Workspace context documents', 'agents', 'rules', {
+    keywords: ['agents.md', 'context.md', 'cursor rules', 'injection', 'workspace'],
+  }),
+  field('agents.rules.contextDocuments.default', 'Inject context documents by default', 'agents', 'rules'),
+  field('agents.rules.contextDocuments.presets', 'Context document presets', 'agents', 'rules'),
+  field('agents.rules.contextDocuments.custom', 'Custom context document paths', 'agents', 'rules'),
 
   // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {

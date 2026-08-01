@@ -53,6 +53,7 @@ const CHAT_PASSTHROUGH_KEYS = new Set([
   'thinkingMode',
   'codeMapInjection',
   'brainNotesInjection',
+  'contextDocumentsInjection',
   'reasoningEffort',
   'uiDesignerMode',
   'pendingSteerMessage',

@@ -78,6 +78,7 @@ function isPromptPartId(value: string): value is PromptPartId {
     'info',
     'memory',
     'code-map',
+    'context-documents',
     'work-agent',
     'skill',
   ].includes(value);

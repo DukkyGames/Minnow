@@ -10,6 +10,7 @@ const INJECTION_BODY_MAX_CHARS = 24_000;
 export interface PromptInjectionBlocks {
   brainNotes: string | null;
   codeMap: string | null;
+  contextDocuments: string | null;
 }
 
 export function injectionNoticeLabel(kind: PromptInjectionKind): string {
@@ -18,6 +19,8 @@ export function injectionNoticeLabel(kind: PromptInjectionKind): string {
       return 'Brain notes injected…';
     case 'code-map':
       return 'Code map injected…';
+    case 'context-documents':
+      return 'Context documents injected…';
     default:
       return 'Context injected…';
   }
@@ -30,6 +33,8 @@ export function injectionNoticeAction(kind: PromptInjectionKind): string {
       return 'Brain notes';
     case 'code-map':
       return 'Code map';
+    case 'context-documents':
+      return 'Context documents';
     default:
       return 'Context';
   }
@@ -91,6 +96,7 @@ export function appendInjectionNoticesForTurn(
   const candidates: Array<{ kind: PromptInjectionKind; raw: string | null }> = [
     { kind: 'brain-notes', raw: blocks.brainNotes },
     { kind: 'code-map', raw: blocks.codeMap },
+    { kind: 'context-documents', raw: blocks.contextDocuments },
   ];
 
   for (const { kind, raw } of candidates) {

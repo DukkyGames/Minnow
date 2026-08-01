@@ -568,6 +568,16 @@
   align-items: center;
 }
 
+.context-documents-toggle-host {
+  display: flex;
+  align-items: center;
+}
+
+.context-documents-control-wrap {
+  display: flex;
+  align-items: center;
+}
+
 .thinking-toggle-host {
   display: inline-flex;
 }

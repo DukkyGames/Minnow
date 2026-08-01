@@ -452,6 +452,7 @@ export async function sendMessage(): Promise<void> {
   // C.1: defensive hydrate before first history mutation (no-op when lazy flag is off).
   await ensureChatHistoryLoaded(chat.id);
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
+  const firstUserSend = shouldScheduleTitle;
   chat.history.push({ role: 'user', content: text });
   clearComposerAfterSend(chat, input);
   recordChatMessage(chat);
@@ -462,6 +463,7 @@ export async function sendMessage(): Promise<void> {
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: text,
     routeUserText: text,
+    firstUserSend,
   });
 
   const injectionAdded = appendInjectionNoticesForTurn(

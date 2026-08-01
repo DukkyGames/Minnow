@@ -25,6 +25,9 @@ import { shouldInjectCodeMap } from '../../brain/code-injection-config';
 import { retrieveCodeMapBlock } from '../../brain/code-map-injection';
 import { extractCodeMapFocusHints } from '../../brain/code-map-focus';
 import { fetchBrainCodeConfig } from '../../brain/client';
+import { loadContextDocumentsSettings, shouldInjectContextDocuments } from '../../chat/context-documents/config';
+import { retrieveContextDocumentsBlock } from '../../chat/context-documents/injection';
+import { shouldRunFirstTurnInjections } from './first-turn-injection';
 import { loadPromptConfig } from './prompt-configs';
 import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
@@ -54,6 +57,8 @@ export interface BuildComposeContextOptions {
   attachmentWorkspacePaths?: string[];
   /** When set, used for expert routing instead of last history message. */
   routeUserText?: string;
+  /** First user message send (set before history.push); gates first-turn injections. */
+  firstUserSend?: boolean;
   overrides?: Partial<ComposeContext>;
 }
 
@@ -94,7 +99,10 @@ export async function buildComposeContext(
     'general-assistant';
 
   let memoryBlock: string | null = null;
-  const injectMemory = await shouldInjectMemory(chat);
+  const runFirstTurn = shouldRunFirstTurnInjections(chat, {
+    firstUserSend: options?.firstUserSend,
+  });
+  const injectMemory = runFirstTurn && (await shouldInjectMemory(chat));
   if (injectMemory) {
     const query =
       options?.routeUserText ??
@@ -115,7 +123,7 @@ export async function buildComposeContext(
   const worktreeCwd = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
 
   let codeMapBlock: string | null = null;
-  const injectCodeMap = await shouldInjectCodeMap(chat);
+  const injectCodeMap = runFirstTurn && (await shouldInjectCodeMap(chat));
   if (injectCodeMap) {
     const codeConfig = await fetchBrainCodeConfig();
     const preview =
@@ -134,6 +142,19 @@ export async function buildComposeContext(
         profile: 'injection',
       })) || null;
   }
+
+  let contextDocumentsBlock: string | null = null;
+  const injectContextDocuments =
+    runFirstTurn && (await shouldInjectContextDocuments(chat));
+  if (injectContextDocuments) {
+    const { documents } = await loadContextDocumentsSettings();
+    contextDocumentsBlock =
+      (await retrieveContextDocumentsBlock({
+        repoPath: worktreeCwd ?? resolveComposeCwd(),
+        documents,
+      })) || null;
+  }
+
   const ctx: ComposeContext = {
     profile,
     customConfigId: meta.activePromptConfigId,
@@ -148,6 +169,8 @@ export async function buildComposeContext(
     memoryEnabled: injectMemory,
     codeMapBlock,
     codeMapInjectionEnabled: injectCodeMap,
+    contextDocumentsBlock,
+    contextDocumentsInjectionEnabled: injectContextDocuments,
     enabledToolIds,
     infoPresetId,
     planGranularity: meta.planGranularity ?? 'medium',
@@ -254,6 +277,7 @@ export async function resolveComposedSystemPrompt(
 export interface OutboundInjectionBlocks {
   brainNotes: string | null;
   codeMap: string | null;
+  contextDocuments: string | null;
 }
 
 /** Outbound system messages for LM Studio (composed prompt + optional user rules). */
@@ -279,6 +303,7 @@ export async function resolveOutboundSystemMessages(
   let injectionBlocks: OutboundInjectionBlocks = {
     brainNotes: null,
     codeMap: null,
+    contextDocuments: null,
   };
   try {
     const { composeSystemPrompt } = await import('./prompt-composer');
@@ -286,9 +311,11 @@ export async function resolveOutboundSystemMessages(
     composedRaw = composeSystemPrompt(ctx);
     const brain = ctx.memoryBlock?.trim() ?? '';
     const codeMap = ctx.codeMapBlock?.trim() ?? '';
+    const contextDocuments = ctx.contextDocumentsBlock?.trim() ?? '';
     injectionBlocks = {
       brainNotes: brain || null,
       codeMap: codeMap || null,
+      contextDocuments: contextDocuments || null,
     };
   } catch {
     composedRaw = '';

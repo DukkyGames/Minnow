@@ -17,6 +17,7 @@ describe('injection notice', () => {
   test('injectionNoticeLabel uses ellipsis copy', () => {
     assert.equal(injectionNoticeLabel('brain-notes'), 'Brain notes injected…');
     assert.equal(injectionNoticeLabel('code-map'), 'Code map injected…');
+    assert.equal(injectionNoticeLabel('context-documents'), 'Context documents injected…');
   });
 
   test('injectionNoticeAction and outcome format transcript row copy', () => {
@@ -38,6 +39,7 @@ describe('injection notice', () => {
     const added = appendInjectionNoticesForTurn(chat, {
       brainNotes: 'wiki hit',
       codeMap: 'export function main() {}',
+      contextDocuments: null,
     });
     assert.equal(added.length, 2);
     assert.equal(chat.history.length, 3);
@@ -60,6 +62,7 @@ describe('injection notice', () => {
     const added = appendInjectionNoticesForTurn(chat, {
       brainNotes: '   ',
       codeMap: null,
+      contextDocuments: null,
     });
     assert.equal(added.length, 0);
     assert.equal(chat.history.length, 1);
@@ -73,8 +76,8 @@ describe('injection notice', () => {
       createdAt: 1,
       updatedAt: 1,
     };
-    appendInjectionNoticesForTurn(chat, { brainNotes: 'same', codeMap: null });
-    appendInjectionNoticesForTurn(chat, { brainNotes: 'same', codeMap: null });
+    appendInjectionNoticesForTurn(chat, { brainNotes: 'same', codeMap: null, contextDocuments: null });
+    appendInjectionNoticesForTurn(chat, { brainNotes: 'same', codeMap: null, contextDocuments: null });
     assert.equal(chat.history.length, 2);
   });
 

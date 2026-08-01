@@ -23,6 +23,7 @@ import type { ReasoningEffortOption as EffortOption } from '../types';
 import { syncThinkingControlFromActiveChat } from './composer-thinking';
 import { syncComposerCodeMapFromActiveChat } from './composer-code-map';
 import { syncComposerBrainNotesFromActiveChat } from './composer-brain-notes';
+import { syncComposerContextDocumentsFromActiveChat } from './composer-context-documents';
 import { isComposerRecoveryBlocked } from './composer-send';
 
 let selectEl: HTMLSelectElement | null = null;
@@ -100,6 +101,7 @@ function onSelectChange(): void {
   syncThinkingControlFromActiveChat();
   void syncComposerCodeMapFromActiveChat();
   void syncComposerBrainNotesFromActiveChat();
+  void syncComposerContextDocumentsFromActiveChat();
 }
 
 function isLevelDropdownVisible(): boolean {
@@ -136,6 +138,7 @@ export function syncComposerReasoningEffortFromActiveChat(): void {
   syncThinkingControlFromActiveChat();
   void syncComposerCodeMapFromActiveChat();
   void syncComposerBrainNotesFromActiveChat();
+  void syncComposerContextDocumentsFromActiveChat();
 }
 
 /** Re-run sync when streaming / recovery gates change (loop.ts). */

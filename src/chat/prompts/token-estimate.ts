@@ -29,7 +29,7 @@ import {
   type BuildComposeContextOptions,
   buildComposeContext,
 } from './compose-context';
-import { composeSystemPrompt, isCodeMapPartEnabled } from './prompt-composer';
+import { composeSystemPrompt, isCodeMapPartEnabled, isContextDocumentsPartEnabled } from './prompt-composer';
 import type { ComposeContext } from './types';
 import {
   computeOutboundPromptEstimateFromParts,
@@ -255,6 +255,12 @@ export async function resolveOutboundPromptEstimate(
     }
     if (isCodeMapPartEnabled(ctx) && ctx.codeMapBlock?.trim()) {
       estimate.codeMapSystem = estimateTokensFromText(ctx.codeMapBlock);
+    }
+    if (ctx.contextDocumentsInjectionEnabled === true) {
+      estimate.contextDocumentsInjectionEnabled = true;
+    }
+    if (isContextDocumentsPartEnabled(ctx) && ctx.contextDocumentsBlock?.trim()) {
+      estimate.contextDocumentsSystem = estimateTokensFromText(ctx.contextDocumentsBlock);
     }
   }
 

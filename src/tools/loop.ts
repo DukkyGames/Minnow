@@ -633,6 +633,8 @@ export interface RunChatTurnOptions {
   shouldScheduleTitle?: boolean;
   /** Run title job after the first turn completes (avoids competing with main chat for TTFT). */
   deferTitleUntilTurnEnd?: boolean;
+  /** First user message in chat (capture before history.push). */
+  firstUserSend?: boolean;
   /** Pre-resolved skill body when skillId is set (composer path). */
   skillBody?: string | null;
   /** Re-subscribe to an existing backend generation (boot resume); skips POST. */
@@ -1147,6 +1149,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     titleSeed = userText || rawText,
     shouldScheduleTitle = false,
     deferTitleUntilTurnEnd = false,
+    firstUserSend: firstUserSendOption,
     skillBody: presetSkillBody = null,
     resumeGenerationId,
     ownsGlobalStreaming = true,
@@ -1245,6 +1248,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 
   chat.modelId = modelId || chat.modelId;
+
+  const firstUserSendForInjections = pushUser
+    ? (firstUserSendOption ?? isFirstUserMessagePending(chat))
+    : false;
 
   if (pushUser) {
     if (clearPostToolTailBeforeSend(chat)) {
@@ -1608,6 +1615,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     attachmentWorkspacePaths: validAttachments
       .map((a) => a.workspacePath?.trim())
       .filter((p): p is string => Boolean(p)),
+    firstUserSend: firstUserSendForInjections,
     overrides: { skillBody },
   });
   const sysPrompt =
@@ -2933,6 +2941,7 @@ export async function sendProgrammaticChatText(
     (userText || rawText || validAttachments[0]?.name || 'Attachment');
   const deferTitleUntilTurnEnd =
     options.deferTitleUntilTurnEnd ?? isFirstUserMessagePending(chat);
+  const firstUserSend = deferTitleUntilTurnEnd;
 
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
@@ -2952,6 +2961,7 @@ export async function sendProgrammaticChatText(
     validAttachments,
     titleSeed,
     deferTitleUntilTurnEnd,
+    firstUserSend,
     skillBody,
     composerSurface: options.composerSurface,
     goalDriven: options.goalDriven ?? false,

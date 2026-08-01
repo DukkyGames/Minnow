@@ -22,6 +22,7 @@ import {
 export type ContextUsageSectionKey =
   | 'system'
   | 'codeMap'
+  | 'contextDocuments'
   | 'rules'
   | 'tools'
   | 'history'
@@ -107,7 +108,9 @@ export function buildContextUsageBreakdown(
       label: estimate.legacyFallback ? 'System (legacy drawer)' : 'System',
       tokens: Math.max(
         0,
-        estimate.composedSystem - (estimate.codeMapSystem ?? 0),
+        estimate.composedSystem -
+          (estimate.codeMapSystem ?? 0) -
+          (estimate.contextDocumentsSystem ?? 0),
       ),
     },
   ];
@@ -121,6 +124,19 @@ export function buildContextUsageBreakdown(
     rows.push({
       key: 'codeMap',
       label: 'Code map (loading)',
+      tokens: 0,
+    });
+  }
+  if (estimate.contextDocumentsSystem != null && estimate.contextDocumentsSystem > 0) {
+    rows.push({
+      key: 'contextDocuments',
+      label: 'Context documents',
+      tokens: estimate.contextDocumentsSystem,
+    });
+  } else if (estimate.contextDocumentsInjectionEnabled) {
+    rows.push({
+      key: 'contextDocuments',
+      label: 'Context documents (loading)',
       tokens: 0,
     });
   }

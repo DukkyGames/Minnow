@@ -171,6 +171,7 @@
   color: var(--mn-fg);
   cursor: pointer;
   user-select: none;
+  border-radius: var(--radius-sm);
 }
 
 .settings-checklist__option input[type='checkbox'] {

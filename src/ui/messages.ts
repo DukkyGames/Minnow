@@ -511,6 +511,8 @@ function injectionNoticeIcon(kind: PromptInjectionKind): IconName {
       return 'appBrain';
     case 'code-map':
       return 'appCodeBrainMap';
+    case 'context-documents':
+      return 'contextDocuments';
     default:
       return 'fileText';
   }

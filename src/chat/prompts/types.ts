@@ -14,6 +14,7 @@ export type PromptPartId =
   | 'info'
   | 'memory'
   | 'code-map'
+  | 'context-documents'
   | 'work-agent'
   | 'skill';
 
@@ -97,6 +98,10 @@ export interface ComposeContext {
   codeMapBlock: string | null;
   /** True when code map injection is resolved on for this send (even if block fetch failed). */
   codeMapInjectionEnabled?: boolean;
+  /** Wrapped workspace context document body for {{context_documents}}. */
+  contextDocumentsBlock: string | null;
+  /** True when context document injection is resolved on for this send. */
+  contextDocumentsInjectionEnabled?: boolean;
   enabledToolIds: string[];
   infoPresetId: string | null;
   userMessagePreview?: string;
@@ -116,6 +121,7 @@ export interface InterpolationVars {
   cwd: string;
   memory: string;
   code_map?: string;
+  context_documents?: string;
   user_message: string;
   work_agent: string;
   work_agent_label: string;

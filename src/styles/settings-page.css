@@ -2787,3 +2787,84 @@ html.mn-phone .settings-page--in-os-window .settings-page-header {
   margin-top: 4px;
 }
 
+.settings-context-documents-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 2px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-general .settings-group--emphasis .settings-context-documents-panel {
+  gap: 20px;
+}
+
+.settings-context-documents-checklist {
+  max-height: min(22rem, 52vh);
+  overflow: auto;
+}
+
+.settings-checklist__option--stacked {
+  align-items: flex-start;
+  min-height: 0;
+  padding: 8px 2px;
+}
+
+.settings-checklist__option--stacked input[type='checkbox'] {
+  margin-top: 2px;
+}
+
+.settings-context-documents-checklist__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-context-documents-checklist__desc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+}
+
+.settings-context-documents-custom__hint {
+  margin: -2px 0 0;
+}
+
+.settings-context-documents-custom__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-context-documents-custom__empty {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+  border: 1px dashed var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-context-documents-custom__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-context-documents-custom__row .settings-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-context-documents-custom__row .settings-inline-btn {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.settings-context-documents-custom__add {
+  align-self: flex-start;
+}
+

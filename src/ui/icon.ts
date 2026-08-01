@@ -150,6 +150,7 @@ export type ChromeIconName =
   | 'thinkingBrain'
   | 'reasoning'
   | 'codeMapInjection'
+  | 'contextDocuments'
   | 'inbox'
   | 'moon';
 
@@ -332,6 +333,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   thinkingBrain: 'fi-sr-brain',
   reasoning: 'fi-sr-bulb',
   codeMapInjection: 'fi-rr-sitemap',
+  contextDocuments: 'fi-rr-document-signed',
   inbox: 'fi-rr-inbox',
   moon: 'fi-rr-moon',
 

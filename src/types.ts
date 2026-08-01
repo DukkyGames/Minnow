@@ -223,7 +223,7 @@ export interface ContextNoticeMessage {
   createdAt: number;
 }
 
-export type PromptInjectionKind = 'brain-notes' | 'code-map';
+export type PromptInjectionKind = 'brain-notes' | 'code-map' | 'context-documents';
 
 /** Persisted Brain / code-map injection notice (not sent to the model). */
 export interface InjectionNoticeMessage {
@@ -1003,6 +1003,8 @@ export interface Chat {
   codeMapInjection?: ThinkingTriState;
   /** Tri-state Brain notes (memory retrieve) override (inherit uses features.memoryInjection). */
   brainNotesInjection?: ThinkingTriState;
+  /** Tri-state workspace context documents override (inherit uses features.contextDocumentsInjectionDefault). */
+  contextDocumentsInjection?: ThinkingTriState;
   /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */
   reasoningEffort?: ReasoningEffortOption;
   /** Active Work Agent; null = default / auto from mode (Step 08). */

@@ -169,6 +169,7 @@ const PART_LABELS: Record<PromptPartId, string> = {
   info: 'Info',
   memory: 'Memory',
   'code-map': 'Code map',
+  'context-documents': 'Context documents',
   'work-agent': 'Work agent',
   skill: 'Skill',
 };

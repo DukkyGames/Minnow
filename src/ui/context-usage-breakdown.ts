@@ -200,7 +200,7 @@ export function bindContextUsageProfileTabs(): void {
 
 function sectionVisible(section: ContextUsageSection): boolean {
   if (section.tokens > 0) return true;
-  return section.key === 'codeMap';
+  return section.key === 'codeMap' || section.key === 'contextDocuments';
 }
 
 function renderPanelBody(budget: ContextBudget): string {

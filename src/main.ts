@@ -189,6 +189,7 @@ import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-sele
 import { initThinkingControl } from './ui/composer-thinking';
 import { initCodeMapInjectionControl } from './ui/composer-code-map';
 import { initBrainNotesInjectionControl } from './ui/composer-brain-notes';
+import { initContextDocumentsInjectionControl } from './ui/composer-context-documents';
 import {
   initComposerReasoningEffort,
   syncComposerReasoningEffortFromActiveChat,
@@ -306,6 +307,7 @@ export async function initApp(): Promise<void> {
   initThinkingControl();
   initCodeMapInjectionControl();
   initBrainNotesInjectionControl();
+  initContextDocumentsInjectionControl();
   initComposerReasoningEffort();
   initOrchestratePlanSelector();
   const { initComposerRunTarget } = await import('./ui/composer-run-target');
