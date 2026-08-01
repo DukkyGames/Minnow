@@ -6,6 +6,7 @@ import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-dis
 import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-resume';
 import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
+import { copyChatModelBinding } from '../lib/model-select-key';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { normalizeModeId } from '../chat/modes/types';
 import { isAssistantChat } from '../state/session-workspace-scope';
@@ -28,6 +29,7 @@ import {
   rememberWorkspaceActiveChat,
   scheduleSaveSessions,
   sessionState,
+  touchChat,
 } from '../state/sessions';
 import { refreshChatJumpChipVisibility } from '../ui/chat-scroll';
 import { syncChatItemDotsInDom } from '../ui/chat-item-dot';
@@ -129,7 +131,16 @@ async function ensureReadyForSend(): Promise<boolean> {
     // Only bootstrap when the active row is not already a desktop sandbox thread (avoids
     // resolveActiveAssistantChatId jumping back to a remembered listed chat).
     if (!isExpertChat(chat) && isEphemeralEmptyChat(chat) && !onDesktopThread) {
+      const composerModelBinding = { modelId: chat.modelId, providerId: chat.providerId };
       await ensureActiveDesktopAssistantChat();
+      const desktopChat = getActiveChat();
+      copyChatModelBinding(composerModelBinding, desktopChat);
+      if (composerModelBinding.modelId?.trim()) {
+        touchChat(desktopChat);
+        scheduleSaveSessions();
+      }
+      const { syncActiveChatModelUi } = await import('../ui/chat-model-ui');
+      syncActiveChatModelUi();
       desktopWorkspacePath = await getDesktopWorkspacePath();
     }
     if (!desktopWorkspacePath) {
@@ -205,7 +216,14 @@ function createFreshAssistantChat(
   workspacePath: string,
   state: NonNullable<typeof sessionState>,
 ): void {
+  const previous =
+    state.activeId != null
+      ? state.chats.find((c) => c.id === state.activeId) ?? null
+      : null;
   const chat = createDesktopChat(workspacePath, newChatId());
+  if (previous) {
+    copyChatModelBinding(previous, chat);
+  }
   seedNewChatComposerRunTarget(chat);
   state.chats.unshift(chat);
   state.activeId = chat.id;
