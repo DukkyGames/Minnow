@@ -918,28 +918,38 @@
   z-index: 2;
 }
 
-/* Thinking: keep mode glyph upright; spin only an outer ring. */
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon {
+/* Collapsed rail + Chat app narrow rail: spin ring on mode glyph while generating */
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='working'] .chat-item-icon,
+.chat-app-page:not(.is-rail-expanded) .chat-app-rail-list .chat-item-row[data-dot-state='working'] .chat-item-icon {
   position: relative;
   opacity: 1;
 }
 
-.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon::after {
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='working'] .chat-item-icon::after,
+.chat-app-page:not(.is-rail-expanded) .chat-app-rail-list .chat-item-row[data-dot-state='working'] .chat-item-icon::after {
   content: '';
   position: absolute;
-  inset: -2px;
+  inset: -4px;
   box-sizing: border-box;
-  border-radius: 4px;
-  border: 2px solid var(--mn-border);
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--mn-accent) 22%, var(--mn-border));
   border-top-color: var(--mn-accent);
-  animation: tool-call-spin 0.75s linear infinite;
+  animation: tool-call-spin 0.85s linear infinite;
   pointer-events: none;
 }
 
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row.active[data-dot-state='working'] .chat-item-icon::after,
+.chat-app-page:not(.is-rail-expanded) .chat-app-rail-list .chat-item-row.active[data-dot-state='working'] .chat-item-icon::after {
+  border-color: color-mix(in srgb, var(--mn-accent) 35%, var(--mn-border));
+  border-top-color: var(--mn-accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-icon::after {
+  .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='working'] .chat-item-icon::after,
+  .chat-app-page:not(.is-rail-expanded) .chat-app-rail-list .chat-item-row[data-dot-state='working'] .chat-item-icon::after {
     animation: none;
-    opacity: 0.7;
+    border-top-color: var(--mn-accent);
+    opacity: 0.85;
   }
 }
 
@@ -976,8 +986,17 @@
   display: none;
 }
 
-.chat-item-dot[data-dot-state='thinking'] {
+.chat-item-dot[data-dot-state='working'] {
   display: none;
+  background: transparent;
+}
+
+/* Expanded sidebar: accent ring spinner (not the semantic unread/error dot). */
+.chat-sidebar:not(.collapsed) .chat-item-dot[data-dot-state='working'],
+.chat-sidebar.collapsed.mobile-open .chat-item-dot[data-dot-state='working'] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
 }
 
