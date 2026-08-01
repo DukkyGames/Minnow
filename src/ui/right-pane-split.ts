@@ -1,5 +1,9 @@
 /**
  * Vertical two-slot split inside the Code workspace right column.
+ *
+ * Each slot is an independent editor group: it owns its tab list (see
+ * right-pane-slot-tabs) and renders that list's active tab into its own pane.
+ * The focused slot is the one global commands (open, save, close) act on.
  */
 
 import {
@@ -7,16 +11,27 @@ import {
   getFilePanelState,
   patchFilePanelState,
   type PaneSlotId,
-  type RightPaneSplitState,
   type SlotContent,
-  type SlotPaneTabs,
 } from '../state/file-panel';
 import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isMobileLayout } from './file-layout';
-import { bootstrapSlotTabsOnSplitEnable } from './right-pane-slot-tabs';
-import { getActiveViewerTabPath } from './file-viewer-tab-store';
-import { getActivePreviewTabId } from './preview-tab-store';
+import {
+  activePreviewIdForSlot,
+  activeViewerPathForSlot,
+  bootstrapSlotTabsOnSplitEnable,
+  getSlotPaneTabs,
+  isSlotEmpty,
+  mergeSecondarySlotTabsIntoPrimary,
+  reconcileSlotTabsWithStores,
+  registerPreviewTabOpened,
+  registerViewerTabOpened,
+  slotContentFromTabs,
+  slotOwningPreviewId,
+  slotOwningViewerPath,
+} from './right-pane-slot-tabs';
+import { adoptActiveViewerTabPath, getActiveViewerTabPath } from './file-viewer-tab-store';
+import { activatePreviewTab } from './preview-tab-store';
 
 /** Same surface rule as desktop-workspace-mounts (no import — avoids module cycle). */
 function isDesktopWorkspaceHostingSurface(): boolean {
@@ -46,6 +61,10 @@ export function getFocusedPaneSlot(): PaneSlotId {
   return getFilePanelState().rightPaneSplit.focusedSlot;
 }
 
+export function otherPaneSlot(slot: PaneSlotId): PaneSlotId {
+  return slot === 'primary' ? 'secondary' : 'primary';
+}
+
 export function getSlotContent(slot: PaneSlotId): SlotContent {
   const split = getFilePanelState().rightPaneSplit;
   return slot === 'primary' ? split.primary : split.secondary;
@@ -60,8 +79,6 @@ export function getFocusedPreviewInstanceId(): string {
   }
   const secondary = getSlotContent('secondary');
   if (secondary.kind === 'preview') return WORKSPACE_PREVIEW_SECONDARY_INSTANCE;
-  const primary = getSlotContent('primary');
-  if (primary.kind === 'preview') return 'workspace-preview';
   return 'workspace-preview';
 }
 
@@ -106,20 +123,12 @@ function syncSlotPaneVisibility(slot: PaneSlotId, content: SlotContent): void {
   const { slotEl, viewerPane, previewPane } = slotElements(slot);
   if (!slotEl) return;
 
-  const showViewer = content.kind === 'viewer';
+  // A slot with no tabs still shows its (empty) viewer pane so the pane is not a void.
   const showPreview = content.kind === 'preview';
+  const showViewer = !showPreview;
 
-  if (viewerPane) {
-    viewerPane.classList.toggle('hidden', !showViewer);
-  }
-  if (previewPane) {
-    previewPane.classList.toggle('hidden', !showPreview);
-  }
-
-  if (content.kind === 'none') {
-    if (viewerPane) viewerPane.classList.add('hidden');
-    if (previewPane) previewPane.classList.add('hidden');
-  }
+  if (viewerPane) viewerPane.classList.toggle('hidden', !showViewer);
+  if (previewPane) previewPane.classList.toggle('hidden', !showPreview);
 }
 
 /** Apply split chrome, slot visibility, and focus ring from persisted state. */
@@ -158,14 +167,7 @@ export function applyRightPaneSplitDom(): void {
   syncSlotPaneVisibility('primary', split.primary);
   syncSlotPaneVisibility('secondary', split.secondary);
 
-  void import('./file-viewer-secondary-slot').then((m) => {
-    const sec = split.secondary;
-    if (sec.kind === 'viewer') {
-      m.renderSecondaryViewerSlot(sec.tabPath);
-    } else {
-      m.destroySecondaryViewerSlot();
-    }
-  });
+  void import('./file-viewer').then((m) => m.renderViewerSlots());
 
   void import('./preview-secondary-slot').then((m) => {
     const sec = split.secondary;
@@ -184,65 +186,75 @@ export function applyRightPaneSplitDom(): void {
   void import('./unified-right-tabs').then((m) => m.refreshUnifiedRightTabs());
 }
 
+/**
+ * Move split focus. The global active viewer/preview pointers follow focus so that
+ * save, close, and "open file" act on the pane the user is actually looking at.
+ */
 export function focusPaneSlot(slot: PaneSlotId): void {
-  if (!isRightPaneSplitActive()) return;
-  patchFilePanelState({
-    rightPaneSplit: { ...getFilePanelState().rightPaneSplit, focusedSlot: slot },
-  });
-  applyRightPaneSplitDom();
-}
-
-export function setSlotContent(slot: PaneSlotId, content: SlotContent): void {
+  if (!isRightPaneSplitLayoutEnabled()) return;
   const split = getFilePanelState().rightPaneSplit;
-  const next: RightPaneSplitState = {
-    ...split,
-    enabled: true,
-    primary: slot === 'primary' ? content : split.primary,
-    secondary: slot === 'secondary' ? content : split.secondary,
-  };
-  patchFilePanelState({
-    rightPaneSplit: next,
-    rightPaneMode: 'split',
-    viewerOpen: true,
-  });
+  if (split.focusedSlot !== slot) {
+    patchFilePanelState({ rightPaneSplit: { ...split, focusedSlot: slot } });
+  }
+  adoptActiveViewerTabPath(activeViewerPathForSlot(slot));
+  // Only move the global preview pointer when this group is actually showing a browser.
+  if (getSlotPaneTabs(slot).surface === 'preview') {
+    const previewId = activePreviewIdForSlot(slot);
+    if (previewId) activatePreviewTab(previewId);
+  }
   applyRightPaneSplitDom();
-  void import('./file-layout').then((m) => m.applyFileSidebarVisuals());
 }
 
-/** Enable split with current primary content and optional secondary content. */
+/** Tab count in a slot (or in the global stores when the split is off). */
+function slotTabCount(slot: PaneSlotId): number {
+  if (!getFilePanelState().rightPaneSplit.enabled) {
+    const state = getFilePanelState();
+    return slot === 'primary' ? state.openViewerTabs.length + state.previewTabs.length : 0;
+  }
+  const tabs = getSlotPaneTabs(slot);
+  return tabs.viewerPaths.length + tabs.previewIds.length;
+}
+
+/** Active content of a slot, resolved through its tab list. */
+function activeContentForSlot(slot: PaneSlotId): SlotContent {
+  if (!isRightPaneSplitLayoutEnabled()) return defaultPrimarySlotContent();
+  return slotContentFromTabs(getSlotPaneTabs(slot));
+}
+
+function ownerOfContent(content: SlotContent): PaneSlotId | null {
+  if (content.kind === 'viewer' && content.tabPath) return slotOwningViewerPath(content.tabPath);
+  if (content.kind === 'preview' && content.tabId) return slotOwningPreviewId(content.tabId);
+  return null;
+}
+
+/**
+ * Move a tab into `target`, unless that would leave its current group with nothing.
+ *
+ * One rule for every split entry point: a group never empties by giving up its last
+ * tab — the new group just opens blank, and the next file the user picks lands in it.
+ * (A path can only live in one group: two CodeMirror views over one tab model would
+ * fight over the dirty flag and cached buffer.)
+ */
+function moveContentToSlot(content: SlotContent, target: PaneSlotId): void {
+  if (content.kind === 'none') return;
+  const owner = ownerOfContent(content);
+  if (owner === target) return;
+  if (owner && slotTabCount(owner) <= 1) return;
+  if (content.kind === 'viewer' && content.tabPath) {
+    registerViewerTabOpened(content.tabPath, target);
+  } else if (content.kind === 'preview' && content.tabId) {
+    registerPreviewTabOpened(content.tabId, target);
+  }
+}
+
+/**
+ * Enable the split: the primary group adopts every open tab, then `secondary`
+ * (when given) moves across under {@link moveContentToSlot}'s rule.
+ */
 export function enableRightPaneSplit(secondary?: SlotContent): void {
   if (isMobileLayout() || isDesktopWorkspaceHostingSurface()) return;
-  const state = getFilePanelState();
-  const primary = defaultPrimarySlotContent();
-  let sec: SlotContent = secondary ?? { kind: 'none' };
 
-  if (sec.kind === 'none' && primary.kind === 'viewer' && primary.tabPath) {
-    sec = { kind: 'viewer', tabPath: primary.tabPath };
-  }
-  if (sec.kind === 'none' && primary.kind === 'preview' && primary.tabId) {
-    sec = { kind: 'preview', tabId: primary.tabId };
-  }
-
-  let secondaryTabs: SlotPaneTabs = { ...EMPTY_SLOT_PANE_TABS };
-  if (sec.kind === 'viewer' && sec.tabPath) {
-    secondaryTabs = {
-      viewerPaths: [sec.tabPath],
-      activeViewerPath: sec.tabPath,
-      previewIds: [],
-      activePreviewId: null,
-      surface: 'viewer',
-    };
-  } else if (sec.kind === 'preview' && sec.tabId) {
-    secondaryTabs = {
-      viewerPaths: [],
-      activeViewerPath: null,
-      previewIds: [sec.tabId],
-      activePreviewId: sec.tabId,
-      surface: 'preview',
-    };
-  }
-
-  bootstrapSlotTabsOnSplitEnable(secondaryTabs);
+  bootstrapSlotTabsOnSplitEnable();
   patchFilePanelState({
     rightPaneMode: 'split',
     viewerOpen: true,
@@ -250,70 +262,62 @@ export function enableRightPaneSplit(secondary?: SlotContent): void {
       ...getFilePanelState().rightPaneSplit,
       enabled: true,
       focusedSlot: 'secondary',
-      secondary: sec,
     },
   });
+
+  if (secondary) moveContentToSlot(secondary, 'secondary');
+
+  focusPaneSlot('secondary');
   applyRightPaneSplitDom();
   void import('./file-layout').then((layout) => layout.applyFileSidebarVisuals());
   void import('./unified-right-tabs').then((tabs) => tabs.refreshUnifiedRightTabs());
 }
 
-/** Split right: duplicate active file in secondary slot (VS Code parity). */
-export function splitRightViewer(): void {
-  const path = getActiveViewerTabPath();
-  if (!path) return;
-  const state = getFilePanelState();
-  if (!state.rightPaneSplit.enabled) {
-    enableRightPaneSplit({ kind: 'viewer', tabPath: path });
-    return;
-  }
-  void import('./right-pane-slot-tabs').then((m) => {
-    m.moveViewerTabToSlot(path, 'secondary');
-    focusPaneSlot('secondary');
-    void import('./unified-right-tabs').then((tabs) => tabs.refreshUnifiedRightTabs());
-  });
-}
-
-/** Split right from whichever surface is active (file viewer or browser preview). */
+/** Split right from whichever pane is focused, moving its active tab across. */
 export function splitRightPane(): void {
-  const path = getActiveViewerTabPath();
-  if (path) {
-    splitRightViewer();
+  if (isMobileLayout() || isDesktopWorkspaceHostingSurface()) return;
+
+  if (!isRightPaneSplitLayoutEnabled()) {
+    enableRightPaneSplit(defaultPrimarySlotContent());
     return;
   }
-  const previewId = getActivePreviewTabId();
-  if (!previewId) return;
-  const state = getFilePanelState();
-  if (!state.rightPaneSplit.enabled) {
-    enableRightPaneSplit({ kind: 'preview', tabId: previewId });
-    return;
-  }
-  setSlotContent('secondary', { kind: 'preview', tabId: previewId });
-  focusPaneSlot('secondary');
+
+  const source = getFocusedPaneSlot();
+  const target = otherPaneSlot(source);
+  moveContentToSlot(activeContentForSlot(source), target);
+  focusPaneSlot(target);
+  void import('./file-layout').then((m) => m.applyFileSidebarVisuals());
 }
 
-/** Open unified tab in secondary slot (creates split when needed). */
+/** Open a unified tab in the other pane (creates the split when needed). */
 export function openTabToRightPane(kind: 'file' | 'preview', id: string): void {
   if (isMobileLayout() || isDesktopWorkspaceHostingSurface()) return;
   const content: SlotContent =
     kind === 'file' ? { kind: 'viewer', tabPath: id } : { kind: 'preview', tabId: id };
-  if (!isRightPaneSplitActive()) {
+  if (!isRightPaneSplitLayoutEnabled()) {
     enableRightPaneSplit(content);
     return;
   }
-  void import('./right-pane-slot-tabs').then((m) => {
-    if (kind === 'file') m.moveViewerTabToSlot(id, 'secondary');
-    else m.movePreviewTabToSlot(id, 'secondary');
-    focusPaneSlot('secondary');
-    void import('./unified-right-tabs').then((tabs) => tabs.refreshUnifiedRightTabs());
-  });
+  moveContentToSlot(content, 'secondary');
+  focusPaneSlot('secondary');
+  void import('./file-layout').then((m) => m.applyFileSidebarVisuals());
 }
 
+/** Close the split, folding the secondary group's tabs back into the primary. */
 export function closeRightPaneSplit(): void {
   const split = getFilePanelState().rightPaneSplit;
   if (!split.enabled) return;
 
-  const primary = split.primary.kind !== 'none' ? split.primary : split.secondary;
+  const merged = mergeSecondarySlotTabsIntoPrimary();
+  // Fall back to the slot contents when the lists are empty (prefs written before the
+  // per-slot tab model, or a split enabled without a bootstrap pass).
+  const fromTabs = slotContentFromTabs(merged);
+  const primary =
+    fromTabs.kind !== 'none'
+      ? fromTabs
+      : split.primary.kind !== 'none'
+        ? split.primary
+        : split.secondary;
   let rightPaneMode: 'viewer' | 'preview' | null = null;
   if (primary.kind === 'viewer') rightPaneMode = 'viewer';
   if (primary.kind === 'preview') rightPaneMode = 'preview';
@@ -322,20 +326,47 @@ export function closeRightPaneSplit(): void {
     rightPaneSplit: {
       ...split,
       enabled: false,
+      focusedSlot: 'primary',
+      primary,
       secondary: { kind: 'none' },
-      primary: primary.kind !== 'none' ? primary : defaultPrimarySlotContent(),
+      primaryTabs: merged,
       secondaryTabs: { ...EMPTY_SLOT_PANE_TABS },
     },
     rightPaneMode,
     viewerOpen: rightPaneMode !== null,
   });
 
+  if (primary.kind === 'viewer' && primary.tabPath) {
+    adoptActiveViewerTabPath(primary.tabPath);
+  }
+  if (primary.kind === 'preview' && primary.tabId) {
+    activatePreviewTab(primary.tabId);
+  }
+
   void import('./file-viewer-secondary-slot').then((m) => m.destroySecondaryViewerSlot());
   void import('./preview-secondary-slot').then((m) => m.hideSecondaryPreviewSlot());
 
   applyRightPaneSplitDom();
+  void import('./file-viewer').then((m) => m.renderViewerSlots());
   void import('./file-layout').then((m) => {
     m.reconcileRightSplitDomWithState();
     m.applyFileSidebarVisuals();
   });
+}
+
+/**
+ * Collapse the split once a group runs out of tabs — an editor group with no tabs is
+ * dead space, and its surviving sibling merges back into a single full-width pane.
+ */
+export function collapseEmptySlots(): void {
+  if (!getFilePanelState().rightPaneSplit.enabled) return;
+  reconcileSlotTabsWithStores();
+  if (isSlotEmpty('secondary') || isSlotEmpty('primary')) {
+    closeRightPaneSplit();
+  }
+}
+
+/** Re-sync slot ownership against the live tab stores (restore / external mutations). */
+export function reconcileRightPaneSlots(): void {
+  reconcileSlotTabsWithStores();
 }

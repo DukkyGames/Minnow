@@ -1005,17 +1005,21 @@ export async function activatePreviewTabGuest(
   options?: { forceLoad?: boolean; slot?: PaneSlotId },
 ): Promise<void> {
   activatePreviewTab(tabId);
-  void import('./right-pane-slot-tabs').then((m) => m.registerPreviewTabOpened(tabId, options?.slot));
   const { showPreviewSplit } = await import('./file-layout');
-  const { getFocusedPaneSlot, isRightPaneSplitLayoutEnabled } = await import('./right-pane-split');
-  showPreviewSplit({ tabId, slot: options?.slot });
+  const split = await import('./right-pane-split');
+  const splitLayout = split.isRightPaneSplitLayoutEnabled();
 
-  const splitLayout = isRightPaneSplitLayoutEnabled();
-  const targetSlot = options?.slot ?? (splitLayout ? getFocusedPaneSlot() : 'primary');
-  const secondaryPreviewSlot = splitLayout && targetSlot === 'secondary';
+  // Ownership decides the pane: a tab already living in the other group is revealed
+  // there rather than yanked into the focused one.
+  const slotTabs = await import('./right-pane-slot-tabs');
+  const targetSlot = splitLayout
+    ? slotTabs.registerPreviewTabOpened(tabId, options?.slot)
+    : 'primary';
+  if (splitLayout) split.focusPaneSlot(targetSlot);
+  showPreviewSplit({ tabId, slot: targetSlot });
 
-  if (secondaryPreviewSlot) {
-    syncPreviewChromeFromState();
+  if (splitLayout && targetSlot === 'secondary') {
+    // The primary header/address bar belongs to the other group — leave it alone.
     const tab = getPreviewTab(tabId);
     if (!tab) return;
     const { renderSecondaryPreviewSlot } = await import('./preview-secondary-slot');
@@ -1103,10 +1107,16 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
   const tabs = listPreviewTabs();
   const isLastTab = tabs.length <= 1;
 
+  const slotTabs = await import('./right-pane-slot-tabs');
+  const split = await import('./right-pane-split');
+  const owningSlot = slotTabs.slotOwningPreviewId(tabId);
+
   if (usesElectronPreview()) {
     const api = getPreviewApi();
+    // Close the guest in the instance that owns it, not always the primary one.
+    const instanceId = owningSlot ? split.previewInstanceIdForSlot(owningSlot) : undefined;
     if (api?.tabs?.close) {
-      await api.tabs.close(tabId);
+      await api.tabs.close(tabId, instanceId);
     } else {
       await clearPreviewGuest(tabId);
     }
@@ -1114,7 +1124,8 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
   destroyPreviewFrame(tabId);
   clearLoadedTabGuest(tabId);
   closePreviewTab(tabId);
-  void import('./right-pane-slot-tabs').then((m) => m.unregisterPreviewTab(tabId));
+  slotTabs.unregisterPreviewTab(tabId);
+  split.collapseEmptySlots();
 
   if (isLastTab) {
     cancelDeferredPreviewLoad();

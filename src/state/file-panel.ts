@@ -608,14 +608,28 @@ export function setFilePanelState(next: FilePanelState): void {
       next.recentViewerFilesByWorkspace ?? {},
     ),
     rightPaneSplit: next.rightPaneSplit
-      ? {
-          ...next.rightPaneSplit,
-          primary: { ...next.rightPaneSplit.primary },
-          secondary: { ...next.rightPaneSplit.secondary },
-          primaryTabs: { ...next.rightPaneSplit.primaryTabs, viewerPaths: [...next.rightPaneSplit.primaryTabs.viewerPaths], previewIds: [...next.rightPaneSplit.primaryTabs.previewIds] },
-          secondaryTabs: { ...next.rightPaneSplit.secondaryTabs, viewerPaths: [...next.rightPaneSplit.secondaryTabs.viewerPaths], previewIds: [...next.rightPaneSplit.secondaryTabs.previewIds] },
-        }
+      ? cloneRightPaneSplit(next.rightPaneSplit)
       : panelState.rightPaneSplit,
+  };
+}
+
+function cloneSlotPaneTabs(tabs: SlotPaneTabs | undefined): SlotPaneTabs {
+  if (!tabs) return { ...EMPTY_SLOT_PANE_TABS };
+  return {
+    ...tabs,
+    viewerPaths: [...(tabs.viewerPaths ?? [])],
+    previewIds: [...(tabs.previewIds ?? [])],
+  };
+}
+
+/** Deep-copy a split state, tolerating callers/prefs that predate the slot tab lists. */
+function cloneRightPaneSplit(split: RightPaneSplitState): RightPaneSplitState {
+  return {
+    ...split,
+    primary: { ...split.primary },
+    secondary: { ...split.secondary },
+    primaryTabs: cloneSlotPaneTabs(split.primaryTabs),
+    secondaryTabs: cloneSlotPaneTabs(split.secondaryTabs),
   };
 }
 
@@ -648,21 +662,7 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
         : cloneRecentViewerFilesByWorkspace(panelState.recentViewerFilesByWorkspace),
     rightPaneSplit:
       partial.rightPaneSplit !== undefined
-        ? {
-            ...partial.rightPaneSplit,
-            primary: { ...partial.rightPaneSplit.primary },
-            secondary: { ...partial.rightPaneSplit.secondary },
-            primaryTabs: {
-              ...partial.rightPaneSplit.primaryTabs,
-              viewerPaths: [...partial.rightPaneSplit.primaryTabs.viewerPaths],
-              previewIds: [...partial.rightPaneSplit.primaryTabs.previewIds],
-            },
-            secondaryTabs: {
-              ...partial.rightPaneSplit.secondaryTabs,
-              viewerPaths: [...partial.rightPaneSplit.secondaryTabs.viewerPaths],
-              previewIds: [...partial.rightPaneSplit.secondaryTabs.previewIds],
-            },
-          }
+        ? cloneRightPaneSplit(partial.rightPaneSplit)
         : panelState.rightPaneSplit,
   };
   const splitEnabled = merged.rightPaneSplit.enabled;

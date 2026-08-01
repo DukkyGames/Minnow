@@ -61,8 +61,10 @@ import { bindWorkspaceSplitResizer } from './workspace-split-resize';
 import { bindRightPaneSplitResizer } from './right-pane-split-resize';
 import {
   closeRightPaneSplit,
+  focusPaneSlot,
   splitRightPane,
 } from './right-pane-split';
+import type { PaneSlotId } from '../state/file-panel';
 import { bindSecondaryPreviewControls } from './preview-secondary-slot';
 import { sessionState } from '../state/sessions';
 
@@ -116,10 +118,39 @@ function bindFilePanelControls(): void {
     if (e.key !== '\\' || !(e.ctrlKey || e.metaKey)) return;
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
-    if (!target.closest('#fileViewerPane, #fileViewerHost, #previewPane, #previewBody')) return;
+    if (
+      !target.closest(
+        '#rightPaneSlotPrimary, #rightPaneSlotSecondary, #fileViewerHost, #previewBody',
+      )
+    ) {
+      return;
+    }
     e.preventDefault();
     splitRightPane();
   });
+
+  bindPaneSlotFocusTracking();
+}
+
+/**
+ * Clicking or tabbing into a pane makes it the focused editor group, so the next file
+ * the user opens (and Ctrl+S / Ctrl+W) targets the pane they are looking at.
+ */
+function bindPaneSlotFocusTracking(): void {
+  const slots: [string, PaneSlotId][] = [
+    ['rightPaneSlotPrimary', 'primary'],
+    ['rightPaneSlotSecondary', 'secondary'],
+  ];
+  for (const [id, slot] of slots) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const focus = (): void => {
+      if (getFilePanelState().rightPaneSplit.focusedSlot === slot) return;
+      focusPaneSlot(slot);
+    };
+    el.addEventListener('pointerdown', focus, true);
+    el.addEventListener('focusin', focus);
+  }
 }
 
 /** React to local server ping success/failure (after detectLocalServer). */
