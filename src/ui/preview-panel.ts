@@ -9,6 +9,7 @@ import type { MinnowPreviewApi } from '../electron';
 import {
   getFilePanelState,
   patchFilePanelState,
+  type PaneSlotId,
   type PreviewDevToolsDock,
   type PreviewSource,
 } from '../state/file-panel';
@@ -999,10 +1000,29 @@ function applySourceToPreview(source: PreviewSource, cacheBust?: number, tabId?:
   showActiveTabFrame();
 }
 
-export async function activatePreviewTabGuest(tabId: string, options?: { forceLoad?: boolean }): Promise<void> {
+export async function activatePreviewTabGuest(
+  tabId: string,
+  options?: { forceLoad?: boolean; slot?: PaneSlotId },
+): Promise<void> {
   activatePreviewTab(tabId);
+  void import('./right-pane-slot-tabs').then((m) => m.registerPreviewTabOpened(tabId, options?.slot));
   const { showPreviewSplit } = await import('./file-layout');
-  showPreviewSplit();
+  const { getFocusedPaneSlot, isRightPaneSplitLayoutEnabled } = await import('./right-pane-split');
+  showPreviewSplit({ tabId, slot: options?.slot });
+
+  const splitLayout = isRightPaneSplitLayoutEnabled();
+  const targetSlot = options?.slot ?? (splitLayout ? getFocusedPaneSlot() : 'primary');
+  const secondaryPreviewSlot = splitLayout && targetSlot === 'secondary';
+
+  if (secondaryPreviewSlot) {
+    syncPreviewChromeFromState();
+    const tab = getPreviewTab(tabId);
+    if (!tab) return;
+    const { renderSecondaryPreviewSlot } = await import('./preview-secondary-slot');
+    await renderSecondaryPreviewSlot(tabId);
+    return;
+  }
+
   showActiveTabFrame();
   syncPreviewChromeFromState();
 
@@ -1094,6 +1114,7 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
   destroyPreviewFrame(tabId);
   clearLoadedTabGuest(tabId);
   closePreviewTab(tabId);
+  void import('./right-pane-slot-tabs').then((m) => m.unregisterPreviewTab(tabId));
 
   if (isLastTab) {
     cancelDeferredPreviewLoad();

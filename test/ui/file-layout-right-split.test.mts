@@ -83,6 +83,22 @@ describe('file-layout right split reconcile (MIN-342)', () => {
     assert.equal(document.getElementById('workspaceSplit')?.classList.contains('viewer-open'), false);
   });
 
+  test('repairRightPaneDomStructure moves primary panes from column into rightPaneSlotPrimary', async () => {
+    const { repairRightPaneDomStructure } = await import('../../src/ui/file-layout.ts');
+    const column = document.getElementById('rightPaneColumn')!;
+    const primarySlot = document.createElement('div');
+    primarySlot.id = 'rightPaneSlotPrimary';
+    column.prepend(primarySlot);
+    const viewer = document.getElementById('fileViewerPane')!;
+    const preview = document.getElementById('previewPane')!;
+    column.appendChild(viewer);
+    column.appendChild(preview);
+
+    assert.equal(repairRightPaneDomStructure(), true);
+    assert.equal(viewer.parentElement, primarySlot);
+    assert.equal(preview.parentElement, primarySlot);
+  });
+
   test('repairRightPaneDomStructure moves panes from workspaceSplit into rightPaneColumn', async () => {
     const { repairRightPaneDomStructure } = await import('../../src/ui/file-layout.ts');
     const split = document.getElementById('workspaceSplit')!;

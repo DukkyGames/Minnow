@@ -4,6 +4,19 @@
 
 import { getFilePanelState } from '../state/file-panel';
 import {
+  focusPaneSlot,
+  getFocusedPaneSlot,
+  isRightPaneSplitLayoutEnabled,
+  openTabToRightPane,
+} from './right-pane-split';
+import {
+  activePreviewIdForSlot,
+  activeViewerPathForSlot,
+  getSlotPaneTabs,
+  previewIdsForSlot,
+  viewerPathsForSlot,
+} from './right-pane-slot-tabs';
+import {
   getActiveViewerTabPath,
   listViewerTabs,
   onViewerTabStoreChange,
@@ -15,6 +28,7 @@ import {
   onPreviewTabStoreChange,
   reorderPreviewTab,
 } from './preview-tab-store';
+import type { PaneSlotId } from '../state/file-panel';
 import { createFileTypeIconElement } from './file-type-icons';
 import { iconHtml } from './icon';
 
@@ -66,20 +80,22 @@ export function registerUnifiedPreviewTabHandlers(handlers: {
   onPreviewTabNew = handlers.onNew;
 }
 
-function getTabsContainer(): HTMLElement | null {
+function getTabsContainer(slot: PaneSlotId): HTMLElement | null {
+  if (slot === 'secondary') {
+    return document.getElementById('unifiedTabsSecondary');
+  }
   return document.getElementById('unifiedTabs');
 }
 
-function isPreviewModeActive(): boolean {
-  return getFilePanelState().rightPaneMode === 'preview';
+function getTabBarElement(slot: PaneSlotId): HTMLElement | null {
+  if (slot === 'secondary') {
+    return document.getElementById('unifiedTabBarSecondary');
+  }
+  return document.getElementById('unifiedTabBar');
 }
 
-function isViewerModeActive(): boolean {
-  return getFilePanelState().rightPaneMode === 'viewer';
-}
-
-function scrollActiveTabIntoView(): void {
-  const container = getTabsContainer();
+function scrollActiveTabIntoView(slot: PaneSlotId): void {
+  const container = getTabsContainer(slot);
   if (!container) return;
   const active = container.querySelector('.unified-tab.is-active');
   if (active instanceof HTMLElement) {
@@ -105,11 +121,12 @@ function clearDropIndicator(container: HTMLElement, className: string): void {
 
 function appendFileTab(
   container: HTMLElement,
+  slot: PaneSlotId,
   tab: ReturnType<typeof listViewerTabs>[number],
   activePath: string | null,
-  fileTabs: ReturnType<typeof listViewerTabs>,
+  fileTabs: ReturnType<typeof listViewerTabs>[number][],
 ): void {
-  const isActive = isViewerModeActive() && tab.path === activePath;
+  const isActive = activePath === tab.path;
   const tabEl = document.createElement('div');
   tabEl.className = 'unified-tab unified-tab--file file-viewer-tab';
   tabEl.setAttribute('role', 'tab');
@@ -145,6 +162,7 @@ function appendFileTab(
 
   tabEl.addEventListener('click', () => {
     if (isActive) return;
+    if (isRightPaneSplitLayoutEnabled()) focusPaneSlot(slot);
     void onFileTabActivate(tab.path);
   });
 
@@ -160,6 +178,10 @@ function appendFileTab(
       showFilePanelContextMenu(
         [
           { label: 'Close', action: () => void onFileTabClose(tab.path) },
+          {
+            label: 'Open to the right',
+            action: () => openTabToRightPane('file', tab.path),
+          },
           {
             label: 'Close others',
             action: () => void onFileTabCloseOthers(tab.path),
@@ -222,10 +244,11 @@ function appendFileTab(
 
 function appendPreviewTab(
   container: HTMLElement,
+  slot: PaneSlotId,
   tab: ReturnType<typeof listPreviewTabs>[number],
   activeId: string | null,
 ): void {
-  const isActive = isPreviewModeActive() && tab.id === activeId;
+  const isActive = activeId === tab.id;
   const tabEl = document.createElement('div');
   tabEl.className = 'unified-tab unified-tab--preview preview-tab';
   tabEl.setAttribute('role', 'tab');
@@ -261,6 +284,7 @@ function appendPreviewTab(
 
   tabEl.addEventListener('click', () => {
     if (isActive) return;
+    if (isRightPaneSplitLayoutEnabled()) focusPaneSlot(slot);
     void onPreviewTabActivate(tab.id);
   });
 
@@ -304,22 +328,24 @@ function appendPreviewTab(
   container.appendChild(tabEl);
 }
 
-function renderTabStrip(): void {
-  const container = getTabsContainer();
+function renderSlotTabStrip(slot: PaneSlotId): void {
+  const container = getTabsContainer(slot);
   if (!container) return;
 
-  const fileTabs = listViewerTabs();
-  const previewTabs = listPreviewTabs();
-  const activePath = getActiveViewerTabPath();
-  const activePreviewId = getActivePreviewTabId();
+  const slotViewerPaths = new Set(viewerPathsForSlot(slot));
+  const slotPreviewIds = new Set(previewIdsForSlot(slot));
+  const fileTabs = listViewerTabs().filter((t) => slotViewerPaths.has(t.path));
+  const previewTabs = listPreviewTabs().filter((t) => slotPreviewIds.has(t.id));
+  const activePath = activeViewerPathForSlot(slot);
+  const activePreviewId = activePreviewIdForSlot(slot);
 
   container.replaceChildren();
 
   for (const tab of fileTabs) {
-    appendFileTab(container, tab, activePath, fileTabs);
+    appendFileTab(container, slot, tab, activePath, fileTabs);
   }
   for (const tab of previewTabs) {
-    appendPreviewTab(container, tab, activePreviewId);
+    appendPreviewTab(container, slot, tab, activePreviewId);
   }
 
   const addBtn = document.createElement('button');
@@ -328,15 +354,26 @@ function renderTabStrip(): void {
   addBtn.setAttribute('aria-label', 'New browser tab');
   addBtn.textContent = '+';
   addBtn.addEventListener('click', () => {
+    if (isRightPaneSplitLayoutEnabled()) focusPaneSlot(slot);
     void onPreviewTabNew();
   });
   container.appendChild(addBtn);
 
-  const tabBar = document.getElementById('unifiedTabBar');
+  const tabBar = getTabBarElement(slot);
   const hasTabs = fileTabs.length > 0 || previewTabs.length > 0;
   tabBar?.classList.toggle('hidden', !hasTabs);
 
-  scrollActiveTabIntoView();
+  scrollActiveTabIntoView(slot);
+}
+
+function renderTabStrip(): void {
+  renderSlotTabStrip('primary');
+  if (isRightPaneSplitLayoutEnabled()) {
+    renderSlotTabStrip('secondary');
+    getTabBarElement('secondary')?.classList.remove('hidden');
+  } else {
+    getTabBarElement('secondary')?.classList.add('hidden');
+  }
 }
 
 /** Wire unified tab strip (call once from init-file-panel). */
@@ -347,23 +384,27 @@ export function bindUnifiedRightTabs(): void {
   onPreviewTabStoreChange(renderTabStrip);
   renderTabStrip();
 
-  const container = getTabsContainer();
+  const container = getTabsContainer('primary');
   if (!container) return;
 
   container.addEventListener('keydown', (e) => {
-    const fileTabs = listViewerTabs();
-    const previewTabs = listPreviewTabs();
+    const slot = isRightPaneSplitLayoutEnabled() ? getFocusedPaneSlot() : 'primary';
+    const pathSet = new Set(viewerPathsForSlot(slot));
+    const idSet = new Set(previewIdsForSlot(slot));
+    const fileTabs = listViewerTabs().filter((t) => pathSet.has(t.path));
+    const previewTabs = listPreviewTabs().filter((t) => idSet.has(t.id));
     const total = fileTabs.length + previewTabs.length;
     if (total < 2) return;
 
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
-      const mode = getFilePanelState().rightPaneMode;
+      const activePath = activeViewerPathForSlot(slot);
+      const activePreviewId = activePreviewIdForSlot(slot);
       let currentIdx = -1;
-      if (mode === 'viewer') {
-        currentIdx = fileTabs.findIndex((t) => t.path === getActiveViewerTabPath());
-      } else if (mode === 'preview') {
-        currentIdx = fileTabs.length + previewTabs.findIndex((t) => t.id === getActivePreviewTabId());
+      if (activePath && pathSet.has(activePath)) {
+        currentIdx = fileTabs.findIndex((t) => t.path === activePath);
+      } else if (activePreviewId && idSet.has(activePreviewId)) {
+        currentIdx = fileTabs.length + previewTabs.findIndex((t) => t.id === activePreviewId);
       }
       if (currentIdx < 0) return;
       const nextIdx =
@@ -378,12 +419,13 @@ export function bindUnifiedRightTabs(): void {
 
     if (e.key === 'w' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      if (isViewerModeActive()) {
-        const activePath = getActiveViewerTabPath();
-        if (activePath) void onFileTabClose(activePath);
-      } else if (isPreviewModeActive()) {
-        const activeId = getActivePreviewTabId();
-        if (activeId) void onPreviewTabClose(activeId);
+      const activePath = activeViewerPathForSlot(slot);
+      const activePreviewId = activePreviewIdForSlot(slot);
+      const tabs = getSlotPaneTabs(slot);
+      if (tabs.surface === 'viewer' && activePath) {
+        void onFileTabClose(activePath);
+      } else if (activePreviewId) {
+        void onPreviewTabClose(activePreviewId);
       }
       return;
     }

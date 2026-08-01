@@ -7,6 +7,7 @@
 import type { MinnowPreviewBounds } from '../electron';
 import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
+import { isRightPaneSplitActive } from './right-pane-split';
 
 const FULLSCREEN_OVERLAY_IDS = [
   'issuesView',
@@ -65,7 +66,22 @@ function isDesktopBrowserMountActive(): boolean {
 
 /** True when the preview split pane is the active right pane and not CSS-hidden. */
 export function isPreviewPaneDomVisible(): boolean {
-  if (getFilePanelState().rightPaneMode !== 'preview') return false;
+  const state = getFilePanelState();
+  if (state.rightPaneMode === 'split' && isRightPaneSplitActive()) {
+    const primaryPreview = state.rightPaneSplit.primary.kind === 'preview';
+    const secondaryPreview = state.rightPaneSplit.secondary.kind === 'preview';
+    if (!primaryPreview && !secondaryPreview) return false;
+    if (primaryPreview) {
+      const pane = document.getElementById('previewPane');
+      if (pane && !pane.classList.contains('hidden')) return true;
+    }
+    if (secondaryPreview) {
+      const pane = document.getElementById('previewPaneSecondary');
+      if (pane && !pane.classList.contains('hidden')) return true;
+    }
+    return false;
+  }
+  if (state.rightPaneMode !== 'preview') return false;
   const pane = document.getElementById('previewPane');
   if (!pane) return false;
   // Desktop drawer CSS keeps #previewPane flex-visible even when .hidden lingers briefly.
@@ -247,6 +263,11 @@ export function scheduleElectronPreviewHostVisibilitySync(): void {
 
 /** Alias for callers that distinguish visibility from bounds — same combined sync. */
 export const scheduleElectronPreviewHostLayoutSync = scheduleElectronPreviewHostVisibilitySync;
+
+/** Debounced bounds sync for workspace-preview-secondary slot. */
+export function scheduleSecondaryPreviewHostLayoutSync(): void {
+  void import('./preview-secondary-slot').then((m) => m.scheduleSecondaryPreviewHostLayoutSync());
+}
 
 /** Test helper — reset guest visibility tracking between cases. */
 export function resetPreviewGuestVisibilityForTests(): void {

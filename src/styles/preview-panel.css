@@ -1,4 +1,4 @@
-/* In-app browser preview panel (right split, mutually exclusive with file viewer) */
+/* In-app browser preview panel (right split; per-slot visibility when split is active) */
 
 .preview-pane {
   display: flex;

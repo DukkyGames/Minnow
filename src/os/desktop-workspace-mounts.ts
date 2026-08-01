@@ -80,11 +80,12 @@ function captureRecords(): void {
   if (records.length) return;
   for (const target of REPARENT_TARGETS) {
     const node = document.getElementById(target.nodeId);
-    const codeParent = document.getElementById(target.codeParentId);
-    if (!node || !codeParent) continue;
+    const anchorParent = document.getElementById(target.codeParentId);
+    if (!node?.parentElement || !anchorParent) continue;
+    if (!anchorParent.contains(node)) continue;
     records.push({
       node,
-      codeParent,
+      codeParent: node.parentElement,
       codeNextSibling: node.nextSibling,
       desktopHostId: target.desktopHostId,
       nodeId: target.nodeId,
@@ -213,6 +214,11 @@ async function applySurfaceChange(
   if (liveSurface !== nextSurface) return false;
 
   if (nextSurface === 'desktop') {
+    if (getFilePanelState().rightPaneSplit.enabled) {
+      const split = await import('../ui/right-pane-split');
+      if (generation !== syncGeneration) return false;
+      split.closeRightPaneSplit();
+    }
     for (const record of records) {
       mountToDesktop(record.desktopHostId, record.node);
     }

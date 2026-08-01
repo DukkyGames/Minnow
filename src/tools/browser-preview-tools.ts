@@ -382,7 +382,10 @@ export async function executeBrowserPreviewTool(
 ): Promise<ToolExecutionResult> {
   // MIN-364: optional instance override (undocumented in tool schemas today — no consumer
   // targets a non-default preview instance yet). Falls back to workspace-preview when absent.
-  const instance = typeof args.instance === 'string' && args.instance.trim() ? args.instance.trim() : undefined;
+  const instance =
+    typeof args.instance === 'string' && args.instance.trim()
+      ? args.instance.trim()
+      : (await import('../ui/right-pane-split')).getFocusedPreviewInstanceId();
 
   try {
     switch (name) {

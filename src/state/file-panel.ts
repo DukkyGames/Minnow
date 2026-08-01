@@ -10,7 +10,58 @@ export type PreviewSource =
   | { kind: 'url'; url: string };
 
 /** Which pane occupies the right split (null = closed). */
-export type RightPaneMode = 'viewer' | 'preview' | null;
+export type RightPaneMode = 'viewer' | 'preview' | 'split' | null;
+
+/** Primary or secondary slot inside the right-pane vertical split. */
+export type PaneSlotId = 'primary' | 'secondary';
+
+/** Content shown in one right-pane slot when split is enabled. */
+export type SlotContent =
+  | { kind: 'none' }
+  | { kind: 'viewer'; tabPath: string | null }
+  | { kind: 'preview'; tabId: string | null };
+
+/** Tab lists owned by one split slot (file + browser tabs in that pane). */
+export interface SlotPaneTabs {
+  viewerPaths: string[];
+  activeViewerPath: string | null;
+  previewIds: string[];
+  activePreviewId: string | null;
+  surface: 'viewer' | 'preview' | 'none';
+}
+
+export const EMPTY_SLOT_PANE_TABS: SlotPaneTabs = {
+  viewerPaths: [],
+  activeViewerPath: null,
+  previewIds: [],
+  activePreviewId: null,
+  surface: 'none',
+};
+
+/** Vertical split inside the Code workspace right column (two independent surfaces). */
+export interface RightPaneSplitState {
+  enabled: boolean;
+  /** Primary slot width share (0.35–0.65). */
+  ratio: number;
+  focusedSlot: PaneSlotId;
+  primary: SlotContent;
+  secondary: SlotContent;
+  primaryTabs: SlotPaneTabs;
+  secondaryTabs: SlotPaneTabs;
+}
+
+export const RIGHT_PANE_SPLIT_RATIO_MIN = 0.35;
+export const RIGHT_PANE_SPLIT_RATIO_MAX = 0.65;
+
+export const DEFAULT_RIGHT_PANE_SPLIT: RightPaneSplitState = {
+  enabled: false,
+  ratio: 0.5,
+  focusedSlot: 'primary',
+  primary: { kind: 'none' },
+  secondary: { kind: 'none' },
+  primaryTabs: { ...EMPTY_SLOT_PANE_TABS },
+  secondaryTabs: { ...EMPTY_SLOT_PANE_TABS },
+};
 
 /** Where DevTools attaches relative to the preview guest. */
 export type PreviewDevToolsDock = 'bottom' | 'side' | 'popout';
@@ -72,6 +123,8 @@ export interface FilePanelState {
    */
   recentViewerFilesByWorkspace: RecentViewerFilesByWorkspace;
   treeRoot: string;
+  /** Two-slot right column (file+file, file+browser, browser+browser). */
+  rightPaneSplit: RightPaneSplitState;
 }
 
 export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
@@ -90,6 +143,7 @@ export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
   activePreviewTab: null,
   recentViewerFilesByWorkspace: {},
   treeRoot: '.',
+  rightPaneSplit: { ...DEFAULT_RIGHT_PANE_SPLIT },
 };
 
 /** Persisted split ratio bounds (main column share when the right pane is open). */
@@ -130,12 +184,186 @@ function normalizePreviewSource(raw: unknown): PreviewSource | null {
   return null;
 }
 
+function clampRightPaneSplitRatio(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_RIGHT_PANE_SPLIT.ratio;
+  return Math.min(
+    RIGHT_PANE_SPLIT_RATIO_MAX,
+    Math.max(RIGHT_PANE_SPLIT_RATIO_MIN, value),
+  );
+}
+
+function normalizeSlotContent(raw: unknown): SlotContent {
+  if (!raw || typeof raw !== 'object') return { kind: 'none' };
+  const row = raw as Record<string, unknown>;
+  if (row.kind === 'viewer') {
+    const tabPath =
+      typeof row.tabPath === 'string' && row.tabPath.trim()
+        ? row.tabPath.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '')
+        : null;
+    return { kind: 'viewer', tabPath };
+  }
+  if (row.kind === 'preview') {
+    const tabId = typeof row.tabId === 'string' && row.tabId.trim() ? row.tabId.trim() : null;
+    return { kind: 'preview', tabId };
+  }
+  return { kind: 'none' };
+}
+
+function deriveSlotFromLegacy(
+  rightPaneMode: RightPaneMode,
+  activeViewerTab: string | null,
+  activePreviewTab: string | null,
+): SlotContent {
+  if (rightPaneMode === 'preview') {
+    return { kind: 'preview', tabId: activePreviewTab };
+  }
+  if (rightPaneMode === 'viewer' || activeViewerTab) {
+    return { kind: 'viewer', tabPath: activeViewerTab };
+  }
+  return { kind: 'none' };
+}
+
+function normalizeSlotPaneTabs(
+  raw: unknown,
+  legacy: SlotContent,
+  viewerPaths: string[],
+  activeViewer: string | null,
+  previewIds: string[],
+  activePreview: string | null,
+): SlotPaneTabs {
+  if (raw && typeof raw === 'object') {
+    const row = raw as Record<string, unknown>;
+    const paths = normalizeViewerTabPaths(row.viewerPaths ?? row.viewerTabPaths);
+    const ids: string[] = [];
+    if (Array.isArray(row.previewIds)) {
+      for (const entry of row.previewIds) {
+        if (typeof entry === 'string' && entry.trim()) ids.push(entry.trim());
+      }
+    }
+    const activeViewerPath =
+      typeof row.activeViewerPath === 'string' && paths.includes(row.activeViewerPath)
+        ? row.activeViewerPath
+        : paths.length > 0
+          ? paths[paths.length - 1]!
+          : null;
+    const activePreviewId =
+      typeof row.activePreviewId === 'string' && ids.includes(row.activePreviewId)
+        ? row.activePreviewId
+        : ids.length > 0
+          ? ids[ids.length - 1]!
+          : null;
+    let surface: SlotPaneTabs['surface'] = 'none';
+    if (row.surface === 'viewer' || row.surface === 'preview') {
+      surface = row.surface;
+    } else if (legacy.kind === 'viewer') surface = 'viewer';
+    else if (legacy.kind === 'preview') surface = 'preview';
+    else if (activeViewerPath) surface = 'viewer';
+    else if (activePreviewId) surface = 'preview';
+    return {
+      viewerPaths: paths,
+      activeViewerPath,
+      previewIds: ids,
+      activePreviewId,
+      surface,
+    };
+  }
+  if (legacy.kind === 'viewer' && legacy.tabPath) {
+    const paths = viewerPaths.length > 0 ? viewerPaths : [legacy.tabPath];
+    return {
+      viewerPaths: paths,
+      activeViewerPath: legacy.tabPath,
+      previewIds: [],
+      activePreviewId: null,
+      surface: 'viewer',
+    };
+  }
+  if (legacy.kind === 'preview' && legacy.tabId) {
+    const ids = previewIds.length > 0 ? previewIds : [legacy.tabId];
+    return {
+      viewerPaths: [],
+      activeViewerPath: null,
+      previewIds: ids,
+      activePreviewId: legacy.tabId,
+      surface: 'preview',
+    };
+  }
+  return { ...EMPTY_SLOT_PANE_TABS };
+}
+
+function normalizeRightPaneSplit(
+  raw: unknown,
+  rightPaneMode: RightPaneMode,
+  activeViewerTab: string | null,
+  activePreviewTab: string | null,
+  openViewerTabs: string[],
+  previewTabIds: string[],
+): RightPaneSplitState {
+  const legacyPrimary = deriveSlotFromLegacy(rightPaneMode, activeViewerTab, activePreviewTab);
+  if (!raw || typeof raw !== 'object') {
+    return {
+      ...DEFAULT_RIGHT_PANE_SPLIT,
+      primary: legacyPrimary,
+      primaryTabs: normalizeSlotPaneTabs(
+        undefined,
+        legacyPrimary,
+        openViewerTabs,
+        activeViewerTab,
+        previewTabIds,
+        activePreviewTab,
+      ),
+    };
+  }
+  const row = raw as Record<string, unknown>;
+  const enabled = row.enabled === true;
+  const focusedSlot: PaneSlotId = row.focusedSlot === 'secondary' ? 'secondary' : 'primary';
+  const primary = normalizeSlotContent(row.primary);
+  const secondary = normalizeSlotContent(row.secondary);
+  const ratio = clampRightPaneSplitRatio(
+    typeof row.ratio === 'number' ? row.ratio : DEFAULT_RIGHT_PANE_SPLIT.ratio,
+  );
+  const primaryLegacy = primary.kind === 'none' ? legacyPrimary : primary;
+  const primaryTabs = normalizeSlotPaneTabs(
+    row.primaryTabs,
+    primaryLegacy,
+    openViewerTabs,
+    activeViewerTab,
+    previewTabIds,
+    activePreviewTab,
+  );
+  const secondaryTabs = enabled
+    ? normalizeSlotPaneTabs(row.secondaryTabs, secondary, [], null, [], null)
+    : { ...EMPTY_SLOT_PANE_TABS };
+  if (!enabled) {
+    return {
+      enabled: false,
+      ratio,
+      focusedSlot,
+      primary: legacyPrimary,
+      secondary: { kind: 'none' },
+      primaryTabs,
+      secondaryTabs: { ...EMPTY_SLOT_PANE_TABS },
+    };
+  }
+  return {
+    enabled: true,
+    ratio,
+    focusedSlot,
+    primary: primaryLegacy,
+    secondary,
+    primaryTabs,
+    secondaryTabs,
+  };
+}
+
 function normalizeRightPaneMode(
   raw: unknown,
   viewerOpen: boolean,
   previewSource: PreviewSource | null,
+  splitEnabled: boolean,
 ): RightPaneMode {
+  if (splitEnabled) return 'split';
   if (raw === 'viewer' || raw === 'preview') return raw;
+  if (raw === 'split') return null;
   // Older configs saved viewerOpen without rightPaneMode/previewSource after browser open.
   if (previewSource && viewerOpen) return 'preview';
   if (viewerOpen) return 'viewer';
@@ -260,7 +488,29 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
     : [];
   const viewerOpenLegacy = row.viewerOpen === true;
   const previewSource = normalizePreviewSource(row.previewSource);
-  const rightPaneMode = normalizeRightPaneMode(row.rightPaneMode, viewerOpenLegacy, previewSource);
+  const openViewerTabsEarly = normalizeViewerTabPaths(row.openViewerTabs);
+  const previewTabsEarly = normalizePreviewTabs(row.previewTabs, previewSource);
+  const activePreviewTabEarly = normalizeActivePreviewTab(row.activePreviewTab, previewTabsEarly);
+  const activeViewerTabEarly = normalizeActiveViewerTab(
+    row.activeViewerTab,
+    openViewerTabsEarly,
+    typeof row.selectedPath === 'string' ? row.selectedPath : null,
+  );
+  const previewTabIdsEarly = previewTabsEarly.map((t) => t.id);
+  const rightPaneSplitEarly = normalizeRightPaneSplit(
+    row.rightPaneSplit,
+    normalizeRightPaneMode(row.rightPaneMode, viewerOpenLegacy, previewSource, false),
+    activeViewerTabEarly,
+    activePreviewTabEarly,
+    openViewerTabsEarly,
+    previewTabIdsEarly,
+  );
+  const rightPaneMode = normalizeRightPaneMode(
+    row.rightPaneMode,
+    viewerOpenLegacy,
+    previewSource,
+    rightPaneSplitEarly.enabled,
+  );
   const viewerOpen = rightPaneMode !== null;
   const selectedPath = typeof row.selectedPath === 'string' ? row.selectedPath : null;
   const openViewerTabs = normalizeViewerTabPaths(row.openViewerTabs);
@@ -314,6 +564,14 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
       row.recentViewerFilesByWorkspace,
     ),
     treeRoot: typeof row.treeRoot === 'string' && row.treeRoot.trim() ? row.treeRoot : '.',
+    rightPaneSplit: normalizeRightPaneSplit(
+      row.rightPaneSplit,
+      rightPaneMode,
+      activeViewerTab,
+      activePreviewTab,
+      tabs,
+      previewTabs.map((t) => t.id),
+    ),
   };
 }
 
@@ -349,6 +607,15 @@ export function setFilePanelState(next: FilePanelState): void {
     recentViewerFilesByWorkspace: cloneRecentViewerFilesByWorkspace(
       next.recentViewerFilesByWorkspace ?? {},
     ),
+    rightPaneSplit: next.rightPaneSplit
+      ? {
+          ...next.rightPaneSplit,
+          primary: { ...next.rightPaneSplit.primary },
+          secondary: { ...next.rightPaneSplit.secondary },
+          primaryTabs: { ...next.rightPaneSplit.primaryTabs, viewerPaths: [...next.rightPaneSplit.primaryTabs.viewerPaths], previewIds: [...next.rightPaneSplit.primaryTabs.previewIds] },
+          secondaryTabs: { ...next.rightPaneSplit.secondaryTabs, viewerPaths: [...next.rightPaneSplit.secondaryTabs.viewerPaths], previewIds: [...next.rightPaneSplit.secondaryTabs.previewIds] },
+        }
+      : panelState.rightPaneSplit,
   };
 }
 
@@ -379,17 +646,50 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
       partial.recentViewerFilesByWorkspace !== undefined
         ? cloneRecentViewerFilesByWorkspace(partial.recentViewerFilesByWorkspace)
         : cloneRecentViewerFilesByWorkspace(panelState.recentViewerFilesByWorkspace),
+    rightPaneSplit:
+      partial.rightPaneSplit !== undefined
+        ? {
+            ...partial.rightPaneSplit,
+            primary: { ...partial.rightPaneSplit.primary },
+            secondary: { ...partial.rightPaneSplit.secondary },
+            primaryTabs: {
+              ...partial.rightPaneSplit.primaryTabs,
+              viewerPaths: [...partial.rightPaneSplit.primaryTabs.viewerPaths],
+              previewIds: [...partial.rightPaneSplit.primaryTabs.previewIds],
+            },
+            secondaryTabs: {
+              ...partial.rightPaneSplit.secondaryTabs,
+              viewerPaths: [...partial.rightPaneSplit.secondaryTabs.viewerPaths],
+              previewIds: [...partial.rightPaneSplit.secondaryTabs.previewIds],
+            },
+          }
+        : panelState.rightPaneSplit,
   };
+  const splitEnabled = merged.rightPaneSplit.enabled;
   const rightPaneMode =
     partial.rightPaneMode !== undefined
-      ? partial.rightPaneMode
-      : partial.viewerOpen === true
-        ? merged.rightPaneMode === 'preview'
-          ? 'preview'
-          : 'viewer'
-        : partial.viewerOpen === false
-          ? null
-          : merged.rightPaneMode;
+      ? partial.rightPaneMode === 'split' && !splitEnabled
+        ? merged.openViewerTabs.length > 0
+          ? 'viewer'
+          : merged.previewTabs.length > 0
+            ? 'preview'
+            : null
+        : partial.rightPaneMode
+      : splitEnabled
+        ? 'split'
+        : partial.viewerOpen === true
+          ? merged.rightPaneMode === 'preview'
+            ? 'preview'
+            : 'viewer'
+          : partial.viewerOpen === false
+            ? null
+            : merged.rightPaneMode === 'split' && !splitEnabled
+              ? merged.openViewerTabs.length > 0
+                ? 'viewer'
+                : merged.previewTabs.length > 0
+                  ? 'preview'
+                  : null
+              : merged.rightPaneMode;
   panelState = {
     ...merged,
     rightPaneMode,
