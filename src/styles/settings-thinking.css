@@ -1,12 +1,6 @@
 /**
- * Settings → Thinking — budget field layout inside emphasis panels.
+ * Settings → Thinking — budget field inside emphasis panels.
  */
-
-.settings-general .settings-group--emphasis .settings-thinking-budget-row {
-  margin-top: 4px;
-  padding-top: 14px;
-  border-top: 1px solid var(--mn-border);
-}
 
 .settings-general .settings-group--emphasis .settings-actions {
   margin-top: 4px;
@@ -14,14 +8,38 @@
   border-top: 1px solid var(--mn-border);
 }
 
-.settings-general .settings-thinking-budget-row {
+.settings-general .settings-thinking-budget-row.settings-row {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+.settings-general .settings-thinking-budget-row.settings-row .settings-row__control {
+  flex: 0 1 auto;
+  max-width: 8.5rem;
+}
+
+.settings-general .settings-thinking-budget-row.settings-row .settings-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.settings-general .settings-thinking-budget-row.is-disabled .settings-input {
+  cursor: not-allowed;
+}
+
+/* Routing / agent overrides: stacked field */
+.settings-general .settings-thinking-budget-row:not(.settings-row) {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin: 0;
 }
 
-.settings-general .settings-thinking-budget-row .settings-field-label {
+.settings-general .settings-thinking-budget-row:not(.settings-row) .settings-field-label {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -30,7 +48,7 @@
   color: var(--mn-fg-muted);
 }
 
-.settings-general .settings-thinking-budget-row .settings-input {
+.settings-general .settings-thinking-budget-row:not(.settings-row) .settings-input {
   width: 100%;
   max-width: 12rem;
   box-sizing: border-box;
@@ -39,7 +57,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.settings-general .settings-thinking-budget-row .settings-field-hint {
+.settings-general .settings-thinking-budget-row:not(.settings-row) .settings-field-hint {
   margin: 0;
   max-width: 72ch;
 }

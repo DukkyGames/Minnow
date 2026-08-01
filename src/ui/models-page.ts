@@ -18,6 +18,10 @@ import {
   type ModelsSectionId,
 } from './models-section-ids';
 import { initInspector } from './models/inspector';
+import {
+  readModelsInspectorPreference,
+  setModelsInspectorOpen,
+} from './models/inspector-visibility';
 import { restoreReparentedSettingsSections } from './models/settings-reparent';
 import { getModelsState, runningServes, subscribeModelsStore, teardownModelsStore } from './models/store';
 import { teardownServerSection } from './models/server-panel';
@@ -102,19 +106,6 @@ function setActiveSection(section: ModelsSectionId): void {
   void renderModelsSection(section);
 }
 
-/** Persisted inspector visibility — collapsed state survives navigation. */
-function setInspectorOpen(open: boolean): void {
-  const root = getModelsRoot();
-  root?.classList.toggle('is-inspector-hidden', !open);
-  const toggle = document.getElementById('btnModelsInspector');
-  toggle?.setAttribute('aria-expanded', String(open));
-  try {
-    localStorage.setItem('minnow.models.inspector', open ? '1' : '0');
-  } catch {
-    /* private mode */
-  }
-}
-
 function bindStaticSections(): void {
   if (staticBindingsDone) return;
   staticBindingsDone = true;
@@ -128,19 +119,14 @@ function bindStaticSections(): void {
   const toggle = document.getElementById('btnModelsInspector');
   toggle?.addEventListener('click', () => {
     const hidden = getModelsRoot()?.classList.contains('is-inspector-hidden');
-    setInspectorOpen(Boolean(hidden));
+    setModelsInspectorOpen(Boolean(hidden));
   });
 
-  let stored: string | null = null;
-  try {
-    stored = localStorage.getItem('minnow.models.inspector');
-  } catch {
-    stored = null;
-  }
+  const stored = readModelsInspectorPreference();
   // Below ~1040px the inspector overlays the table, so it starts closed unless
   // the user has said otherwise.
   const wideEnough = (getModelsRoot()?.clientWidth ?? window.innerWidth) >= 1040;
-  setInspectorOpen(stored ? stored !== '0' : wideEnough);
+  setModelsInspectorOpen(stored ? stored !== '0' : wideEnough);
 
   initInspector();
   if (!statusBound) {

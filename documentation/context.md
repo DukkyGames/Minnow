@@ -413,7 +413,7 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 | App | Route | Server / storage |
 |-----|-------|------------------|
-| **Models** | `#/app/models` | `/api/models/*`, `/api/system/hardware`, downloads, serve |
+| **Models** | `#/app/models` | `/api/models/*`, `/api/system/hardware`, downloads, serve; **Inference** nav (**Routing**, **Sampler**, **Thinking**) persists edits on change (no Save rows; [`settings-model-routing.ts`](../src/ui/settings-model-routing.ts), [`settings-sampler.ts`](../src/ui/settings-sampler.ts), [`settings-thinking.ts`](../src/ui/settings-thinking.ts)) |
 | **Compare** | `#/app/compare` | `server/compare/`, `~/.minnow/compare/` |
 | **Bench** | `#/app/bench` | `src/benchmark/`, `~/.minnow/benchmarks/` |
 | **Evals** | Headless API / `~/.minnow/evals/` (no Settings page; Bench covers in-app runs) | `server/evals/`, `~/.minnow/evals/` |

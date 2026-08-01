@@ -33,7 +33,10 @@ export function iconButton(
   btn.title = label;
   btn.setAttribute('aria-label', label);
   btn.appendChild(icon(glyph));
-  btn.addEventListener('click', onClick);
+  btn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    onClick();
+  });
   return btn;
 }
 

@@ -21,6 +21,7 @@ import {
   icon,
   textButton,
 } from './dom';
+import { setModelsInspectorOpen } from './inspector-visibility';
 import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
 import {
   getModelsState,
@@ -592,5 +593,11 @@ export function initInspector(): void {
 /** Open the inspector on a specific tab (used by the row action buttons). */
 export function showInspectorTab(tab: InspectorTab): void {
   activeTab = tab;
+  setModelsInspectorOpen(true);
   render();
+  queueMicrotask(() => {
+    const host = root();
+    if (!host) return;
+    host.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus();
+  });
 }
