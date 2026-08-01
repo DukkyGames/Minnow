@@ -1,0 +1,175 @@
+/**
+ * Models → Voice (reparented settings section): catalog rows and runtime status.
+ */
+
+.settings-voice-panel-summary {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-voice-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.settings-voice-panel[hidden] {
+  display: none;
+}
+
+.settings-voice-catalog-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.settings-voice-catalog-item__main {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.settings-voice-catalog-item__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.settings-voice-catalog-item__name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.settings-voice-catalog-item__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+}
+
+.settings-voice-catalog-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-voice-runtime {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-voice-runtime__status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-voice-runtime__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mn-fg-muted);
+}
+
+.settings-voice-runtime__dot--ready {
+  background: var(--mn-success);
+}
+
+.settings-voice-runtime__dot--busy {
+  background: var(--mn-warning);
+}
+
+.settings-voice-runtime__dot--error {
+  background: var(--mn-danger);
+}
+
+.settings-voice-runtime__dot--stopped {
+  background: var(--mn-fg-muted);
+}
+
+.settings-voice-runtime__dot--idle {
+  background: color-mix(in srgb, var(--mn-fg-muted) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .settings-voice-runtime__dot--busy {
+    animation: settings-voice-runtime-pulse 1.4s var(--ease-out) infinite;
+  }
+}
+
+@keyframes settings-voice-runtime-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.settings-voice-runtime__label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.settings-voice-runtime__status {
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-voice-runtime__detail {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+}
+
+.settings-voice-runtime__progress {
+  width: 100%;
+}
+
+.settings-voice-runtime__progress.is-hidden {
+  display: none;
+}
+
+.settings-voice-bench-input {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: 24rem;
+}
+
+.settings-voice-bench-result {
+  min-height: 1.25em;
+  margin: 8px 0 0;
+}
+
+.settings-voice .models-voice-fieldset {
+  padding: 0;
+  margin: 16px 0 0;
+  border: none;
+}
+
+.settings-voice .models-voice-fieldset legend {
+  padding: 0;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.settings-voice .models-voice-fieldset--advanced {
+  padding-top: 14px;
+  margin-top: 18px;
+  border-top: 1px solid var(--mn-border);
+}

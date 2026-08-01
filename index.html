@@ -639,6 +639,11 @@
         <h2>Usage &amp; cost</h2>
         <div id="settingsUsageBody" class="settings-section-body"></div>
       </section>
+      <section id="settingsSection-voice" class="settings-section settings-section--wide settings-area settings-area--title-suppressed" data-area="voice">
+        <h2>Voice</h2>
+        <p class="settings-lead">Whisper speech-to-text and Qwen3-TTS. Device routing lives under <strong>Settings → Audio</strong>.</p>
+        <div id="modelsVoiceBody" class="settings-section-body"></div>
+      </section>
       </div>
       <div class="settings-category" data-category="agents">
 
@@ -765,10 +770,6 @@
         <div id="settingsWebhooksBody" class="settings-section-body"></div>
       </section>
       </div>
-      <section id="settingsSection-voice" class="settings-section hidden" hidden aria-hidden="true">
-        <h2>Voice</h2>
-        <p class="settings-lead">Voice model settings moved to <strong>Models → Voice</strong> (<code>#/app/models/voice</code>). Device routing remains under <strong>Settings → Audio</strong>.</p>
-      </section>
       </div>
       <div class="settings-category" data-category="advanced">
 
@@ -1133,11 +1134,7 @@
         <p class="models-lead">Where Minnow looks for weights, and the token it uses to fetch gated ones.</p>
         <div id="modelsSettingsBody"></div>
       </section>
-      <section id="modelsSection-voice" class="models-section">
-        <h2>Voice</h2>
-        <p class="models-lead">Whisper speech-to-text and Qwen3-TTS. Runtime health and voice options.</p>
-        <div id="modelsVoiceBody"></div>
-      </section>
+      <section id="modelsSection-voice" class="models-section"></section>
       <section id="modelsSection-providers" class="models-section"></section>
       <section id="modelsSection-routing" class="models-section"></section>
       <section id="modelsSection-sampler" class="models-section"></section>

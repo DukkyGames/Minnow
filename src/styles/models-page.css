@@ -1399,6 +1399,10 @@
   margin-top: 10px;
 }
 
+.models-inline-form + .models-btn {
+  margin-top: 10px;
+}
+
 .models-inline-form .models-field__input {
   flex: 1 1 16rem;
   min-width: 10rem;

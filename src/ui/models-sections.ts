@@ -37,6 +37,7 @@ export async function renderModelsSection(section: ModelsSectionId): Promise<voi
       await mountModelsSettingsSection();
       break;
     case 'voice':
+      await reparentSettingsSectionIntoModels('voice', 'voice');
       mountVoicePanel();
       break;
     default: {
