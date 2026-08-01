@@ -2,7 +2,7 @@
  * Per-chat main turn activity (phase, tool name, model) for the global agent activity panel.
  */
 
-export type MainTurnPhase = 'generating' | 'tools' | 'thinking';
+export type MainTurnPhase = 'loading_model' | 'generating' | 'tools' | 'thinking';
 
 export interface MainTurnActivity {
   chatId: string;

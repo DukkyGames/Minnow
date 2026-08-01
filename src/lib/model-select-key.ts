@@ -63,6 +63,22 @@ export function resolveModelSelectValueForChat(
   return match ?? '';
 }
 
+/** Copy provider/model binding from one chat row onto another (desktop composer handoff). */
+export function copyChatModelBinding(
+  source: ModelSelectChatBinding,
+  target: ModelSelectChatBinding,
+): void {
+  const modelId = source.modelId?.trim();
+  if (!modelId) return;
+  target.modelId = modelId;
+  const providerId = source.providerId?.trim();
+  if (providerId) {
+    target.providerId = providerId;
+  } else {
+    delete target.providerId;
+  }
+}
+
 /** Persist a native or composite `<select>` value onto a chat session. */
 export function applyModelSelectValueToChat(
   chat: ModelSelectChatBinding,
