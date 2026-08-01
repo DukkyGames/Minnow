@@ -12,7 +12,7 @@ import type { Chat } from '../types';
 const chatLastOpenedAt = new Map<string, number>();
 
 /** Per-chat stream phase for sidebar thinking dots (concurrent streams). */
-const streamPhaseByChatId = new Map<string, 'generating' | 'thinking'>();
+const streamPhaseByChatId = new Map<string, 'loading_model' | 'generating' | 'thinking'>();
 
 /** Active chat id while tool approval or ask_question UI is open. */
 let inputPendingChatId: string | null = null;
@@ -22,7 +22,7 @@ export type ChatItemDotState = 'idle' | 'unread' | 'needs-input' | 'error' | 'th
 export interface ChatItemDotContext {
   activeChatId: string | null;
   streamingChatIds: ReadonlySet<string>;
-  streamPhaseByChatId: ReadonlyMap<string, 'generating' | 'thinking'>;
+  streamPhaseByChatId: ReadonlyMap<string, 'loading_model' | 'generating' | 'thinking'>;
   inputPendingChatId: string | null;
 }
 
@@ -180,13 +180,13 @@ export const refreshSidebarChatDots = syncChatItemDotsInDom;
 /** Read the last-known stream phase for sidebar dots / stream DOM remount. */
 export function getSidebarStreamPhase(
   chatId: string,
-): 'generating' | 'thinking' | null {
+): 'loading_model' | 'generating' | 'thinking' | null {
   return streamPhaseByChatId.get(chatId) ?? null;
 }
 
 /** Called when the model enters or leaves the reasoning SSE phase for a chat. */
 export function setSidebarStreamPhase(
-  phase: 'generating' | 'thinking' | null,
+  phase: 'loading_model' | 'generating' | 'thinking' | null,
   chatId?: string,
 ): void {
   const id = chatId?.trim() || getActiveChat().id;

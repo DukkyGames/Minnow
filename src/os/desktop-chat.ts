@@ -7,6 +7,8 @@ import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-r
 import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { normalizeModeId } from '../chat/modes/types';
+import { isAssistantChat } from '../state/session-workspace-scope';
 import {
   DESKTOP_APP_ID,
   createDesktopChat,
@@ -114,14 +116,25 @@ async function ensureDesktopWorkspaceReady(): Promise<boolean> {
 
 async function ensureReadyForSend(): Promise<boolean> {
   try {
-    const chat = getActiveChat();
-    // Only bootstrap a sandbox chat when nothing is active yet — do not replace a
-    // branched (or other in-progress) project chat after branch switching.
-    if (!isExpertChat(chat) && isEphemeralEmptyChat(chat)) {
-      await ensureActiveDesktopAssistantChat();
-    }
     if (!desktopWorkspacePath) {
       desktopWorkspacePath = await getDesktopWorkspacePath();
+    }
+    const chat = getActiveChat();
+    const desktopPath = desktopWorkspacePath?.trim() ?? '';
+    const onDesktopThread =
+      Boolean(desktopPath) &&
+      !isExpertChat(chat) &&
+      normalizeModeId(chat.modeId) === 'desktop' &&
+      isAssistantChat(chat, desktopPath);
+    // Only bootstrap when the active row is not already a desktop sandbox thread (avoids
+    // resolveActiveAssistantChatId jumping back to a remembered listed chat).
+    if (!isExpertChat(chat) && isEphemeralEmptyChat(chat) && !onDesktopThread) {
+      await ensureActiveDesktopAssistantChat();
+      desktopWorkspacePath = await getDesktopWorkspacePath();
+    }
+    if (!desktopWorkspacePath) {
+      setStatus('err', 'Desktop workspace unavailable — run npm start');
+      return false;
     }
     return true;
   } catch {
@@ -200,6 +213,7 @@ function createFreshAssistantChat(
   syncPanelFromActiveChat({ forceFileTree: true });
   rememberActiveChatForApp(DESKTOP_APP_ID, chat.id);
   scheduleSaveSessions();
+  void import('../ui/chat-model-ui').then((m) => m.syncActiveChatModelUi());
 }
 
 /**

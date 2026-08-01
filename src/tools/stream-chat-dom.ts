@@ -51,6 +51,8 @@ export function remountStreamDomForChat(chatId: string): void {
   const phase = getSidebarStreamPhase(chatId);
   if (phase === 'thinking') {
     row.streamStatus.setPhase('thinking');
+  } else if (phase === 'loading_model') {
+    row.streamStatus.setPhase('loading_model');
   } else if (phase === 'generating') {
     row.streamStatus.setPhase('generating');
   }

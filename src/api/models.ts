@@ -47,7 +47,6 @@ import { syncComposerReasoningEffortFromActiveChat } from '../ui/composer-reason
 import { resolveModelHostFilterLoadUnloadValue } from '../ui/model-host-filter-context';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import {
-  applyDefaultModelToChat,
   persistDefaultModelValue,
   resolveDefaultModelSelectValue,
 } from '../ui/default-model';
@@ -561,10 +560,8 @@ export async function fetchModels(): Promise<void> {
       if (chosen) persistDefaultModelValue(chosen);
     }
 
-    if (!ac.modelId?.trim() && sel.value) {
-      applyDefaultModelToChat(ac);
-      touchChat(ac);
-    }
+    // Do not copy #modelSelect onto the active chat here — composer pickers own per-chat
+    // bindings; send resolves via resolveEffectiveChatModelBinding when modelId is empty.
 
     const okCount = withModels.length;
     if (failures.length > 0) {
