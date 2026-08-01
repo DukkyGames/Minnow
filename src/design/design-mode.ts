@@ -28,6 +28,7 @@ import {
   type DrawDesignTool,
   type SelectDesignTool,
 } from './design-tool';
+import { clearDesignModeNotice } from './design-notice';
 import { createPickerTransport } from './element-picker';
 import type { ShapeKind } from './shape-model';
 import {
@@ -536,6 +537,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   document.addEventListener('keydown', keyHandler);
 
   session.destroy = (): void => {
+    clearDesignModeNotice(host);
     session.disarmTool();
     document.removeEventListener('keydown', keyHandler);
     session.captureLayer.remove();
