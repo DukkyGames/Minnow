@@ -134,6 +134,16 @@
   min-width: 0;
 }
 
+/* Split is already open — hide redundant split affordances and trim preview chrome. */
+.right-pane-split.is-active .file-viewer-split,
+.right-pane-split.is-active .preview-pane-split {
+  display: none;
+}
+
+.right-pane-split.is-active .preview-autoreload {
+  display: none;
+}
+
 .right-pane-slot {
   display: flex;
   flex-direction: column;

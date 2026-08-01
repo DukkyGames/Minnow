@@ -56,7 +56,7 @@ primary pane's, so an unqualified `tabs.activate` switches the *left* pane.
 - [`src/ui/file-viewer.ts`](../../src/ui/file-viewer.ts) — primary group (full editor: AI,
   Intent, LSP, quick edit). `renderActiveViewerTab()` paints `primaryTabs.activeViewerPath`
 - [`src/ui/file-viewer-secondary-slot.ts`](../../src/ui/file-viewer-secondary-slot.ts) —
-  secondary group (plain CodeMirror + `Ctrl+S`, plus the read-only preview modes)
+  secondary group (CodeMirror + Intent, plus the read-only preview modes)
 - [`src/ui/preview-secondary-slot.ts`](../../src/ui/preview-secondary-slot.ts) — secondary
   preview guest + `bindSecondaryPreviewControls()`
 - [`src/ui/unified-right-tabs.ts`](../../src/ui/unified-right-tabs.ts) — per-group tab strips,
