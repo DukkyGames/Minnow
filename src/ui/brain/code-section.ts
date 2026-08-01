@@ -27,12 +27,6 @@ import { buildCallGraph } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import { renderSymbolInspector } from './inspector';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
-import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
-import { setWorkspacePath } from '../../config/workspace-api';
-import { confirmAndStopBoardsForWorkspaceSwitch } from '../workspace-switch-guard';
-import { setWorkspaceFromServer } from '../../state/workspace';
-import { refreshFileTreeViaBridge } from '../file-tree-refresh-bridge';
-
 let bindingsDone = false;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
@@ -508,28 +502,6 @@ async function runReindex(): Promise<void> {
   await refreshRepoMap();
 }
 
-/** Switch workspace folder for code index (remap repo). */
-async function remapCodeRepo(): Promise<void> {
-  const result = await openWorkspaceFolderPicker();
-  if (result.cancelled || !result.path) return;
-  const allowed = await confirmAndStopBoardsForWorkspaceSwitch(result.path);
-  if (!allowed) {
-    setActionStatus('ok', 'Workspace unchanged');
-    return;
-  }
-  setActionStatus('spin', 'Switching workspace…');
-  const info = await setWorkspacePath(result.path);
-  if (!info) {
-    setActionStatus('err', 'Could not switch workspace.');
-    return;
-  }
-  setWorkspaceFromServer(info);
-  refreshFileTreeViaBridge();
-  setActionStatus('ok', `Workspace: ${info.label || info.path}`);
-  await refreshCodeStatus();
-  await refreshRepoMap();
-}
-
 /** Drop the SQLite code index for the active workspace. */
 async function runResetIndex(): Promise<void> {
   const btn = document.getElementById('brainCodeResetIndex') as HTMLButtonElement | null;
@@ -558,10 +530,6 @@ function bindCodeSection(): void {
 
   document.getElementById('brainCodeResetIndex')?.addEventListener('click', () => {
     void runResetIndex();
-  });
-
-  document.getElementById('brainCodeRemapRepo')?.addEventListener('click', () => {
-    void remapCodeRepo();
   });
 
   const searchEl = document.getElementById('brainCodeSearch') as HTMLInputElement | null;

@@ -121,6 +121,23 @@ describe('checkBoardLog', () => {
     });
   });
 
+  test('status-transitions allows in_progress → complete when skip per-task testing', () => {
+    resetSeq();
+    const events = [
+      status('W1-A', 'planned', 'in_progress'),
+      started('W1-A'),
+      ev('build_verdict', 'W1-A', { verdict: 'pass' }),
+      ev('merge_result', 'W1-A', { outcome: 'skipped' }),
+      status('W1-A', 'in_progress', 'complete'),
+    ];
+    const result = checkBoardLog(events, {
+      tasks: [{ id: 'W1-A', wave: 'W1' }],
+      skipPerTaskTesting: true,
+      skip: ['wave-order', 'dependency-order', 'quarantine-cascade', 'final-test-order'],
+    });
+    assert.equal(result.ok, true, JSON.stringify(result.violations));
+  });
+
   test('status-transitions allows fast merge path testing → complete', () => {
     resetSeq();
     const events = [

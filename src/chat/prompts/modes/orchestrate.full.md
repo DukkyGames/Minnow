@@ -99,3 +99,13 @@ You may raise or lower autonomy (`manual` / `sequential` / `auto`) yourself via 
 - Task chats are linked via `board_task_id` on `spawn_sub_agent` (set automatically — do not call `spawn_sub_agent`; the category field determines agent type)
 
 After `board_init`, end your turn. If the user enables **Auto** or **Sequential** on the board, the next ready wave starts automatically.
+
+### Skip per-task tests (board header)
+
+The user may enable **Skip per-task tests** on the board header before pressing **Start**. When that flag is on:
+
+- Each task still requires a Builder **`board_report`** pass after implementation.
+- Per-task **Tester** chats do **not** run; tasks merge and complete after a successful build report.
+- The **full-board final integration test** (`FULL_BOARD`) is unchanged and still runs after every task reaches a terminal state.
+
+You do not set this flag via `board_init` — it is a client-side board option only.
