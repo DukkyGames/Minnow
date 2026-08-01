@@ -1256,6 +1256,25 @@
   border-top: 1px solid var(--mn-border);
 }
 
+.brain-code-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 12px;
+  margin-bottom: 4px;
+}
+
+.brain-code-detail-head__text {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.brain-code-detail-open {
+  flex-shrink: 0;
+  min-height: var(--touch-min, 44px);
+}
+
 .brain-code-detail-title {
   margin: 0 0 4px;
   font-size: 16px;
