@@ -72,7 +72,7 @@ export async function renderWebhooksSettingsSection(mount: HTMLElement): Promise
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       mount,
-      'Webhook settings require <code>npm start</code> (server storage on disk).',
+      'Webhook settings are saved on this device. Open Minnow to manage them.',
     );
     return;
   }
@@ -81,7 +81,7 @@ export async function renderWebhooksSettingsSection(mount: HTMLElement): Promise
   if (mode !== 'server') {
     appendSettingsOfflineHint(
       mount,
-      'Connect with <code>npm start</code> to manage outgoing webhooks.',
+      'Open Minnow to manage outgoing webhooks.',
     );
     return;
   }

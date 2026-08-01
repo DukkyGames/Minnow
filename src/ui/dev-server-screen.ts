@@ -423,7 +423,7 @@ function renderServerList(): void {
     empty.className = 'dev-server-screen__empty';
     empty.textContent = online
       ? 'No servers yet. Add one, or Detect servers to write startup.md.'
-      : 'Local server offline — start Minnow with npm start.';
+      : 'Minnow is not running locally. Open or restart the app.';
     list.appendChild(empty);
     return;
   }

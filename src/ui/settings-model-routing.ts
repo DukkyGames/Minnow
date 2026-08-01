@@ -788,7 +788,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
   if (!isConfigServerMode(storageMode)) {
     appendSettingsOfflineHint(
       shell,
-      'Model routing needs <code>npm start</code>. Values below are read-only until the server is running.',
+      'Model routing needs Minnow running locally. Values below are read-only until then.',
       { searchKey: 'models.routing' },
     );
   }
@@ -811,7 +811,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     if (catalog.offline) {
       appendSettingsOfflineHint(
         shell,
-        'Run <code>npm start</code> to load bindings from <code>~/.minnow</code>.',
+        'Open Minnow to load bindings from <code>~/.minnow</code>.',
         { searchKey: 'models.routing' },
       );
       return;
@@ -848,7 +848,7 @@ export async function mountStandaloneRoutingEditor(
   if (!isConfigServerMode(storageMode)) {
     appendSettingsOfflineHint(
       panel,
-      'Model binding requires <code>npm start</code>.',
+      'Model binding requires Minnow running locally.',
     );
     return false;
   }

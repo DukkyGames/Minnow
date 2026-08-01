@@ -43,7 +43,7 @@ export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<
   if (!isServerStorageMode() || !serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'Start with <code>npm start</code> to persist sampler defaults to <code>~/.minnow/config.json</code>. Values below use browser storage until then.',
+      'Open Minnow to persist sampler defaults to <code>~/.minnow/config.json</code>. Values below use browser storage until then.',
       { searchKey: 'models.sampler' },
     );
   }

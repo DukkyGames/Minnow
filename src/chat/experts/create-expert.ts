@@ -145,7 +145,7 @@ export async function createExpertFromDescription(
   const fullSaved = await savePromptFileOverride('experts', expertId, 'full', validated.full);
   const liteSaved = await savePromptFileOverride('experts', expertId, 'lite', validated.lite);
   if (!fullSaved || !liteSaved) {
-    throw new Error('Could not save expert files. Run npm start so the tool server is available.');
+    throw new Error('Could not save expert files. Open or restart Minnow.');
   }
 
   await syncExpertRegistryFromServer();

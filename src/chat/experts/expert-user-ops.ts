@@ -69,7 +69,7 @@ export async function saveUserExpert(input: SaveUserExpertInput): Promise<void> 
   const fullSaved = await savePromptFileOverride('experts', input.id, 'full', fullMarkdown);
   const liteSaved = await savePromptFileOverride('experts', input.id, 'lite', liteMarkdown);
   if (!fullSaved || !liteSaved) {
-    throw new Error('Could not save expert. Run npm start so the tool server is available.');
+    throw new Error('Could not save expert. Open or restart Minnow.');
   }
 
   await syncExpertRegistryFromServer();

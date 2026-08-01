@@ -24,7 +24,7 @@ import {
 export { isElectronPreviewAvailable } from './minnow-shell';
 
 const DESKTOP_SHELL_MESSAGE =
-  'Error: Browser automation runs in the Minnow desktop shell. Use the Minnow app window from npm start or npm run electron:dev — not a separate browser tab.';
+  'Error: Browser automation runs in the Minnow desktop app. Use the Minnow app window — not a separate browser tab.';
 
 const STALE_SHELL_MESSAGE =
   'Error: Browser automation IPC is missing. Quit the app, run npm run electron:build, then restart the desktop shell.';

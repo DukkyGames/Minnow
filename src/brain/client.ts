@@ -328,7 +328,7 @@ async function brainMutate<T extends Record<string, unknown>>(
   body: Record<string, unknown>,
 ): Promise<BrainMutationResult & T> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, error: 'Offline — start npm start.' } as BrainMutationResult & T;
+    return { ok: false, error: 'Offline — open Minnow.' } as BrainMutationResult & T;
   }
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -353,7 +353,7 @@ async function brainMutate<T extends Record<string, unknown>>(
 /** Delete one wiki page by relative path. */
 export async function deleteBrainPage(relPath: string): Promise<BrainMutationResult> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, error: 'Offline — start npm start.' };
+    return { ok: false, error: 'Offline — open Minnow.' };
   }
   try {
     const qs = new URLSearchParams({ path: relPath });
@@ -383,7 +383,7 @@ export async function deleteBrainArchive(
   workspaceKey?: string,
 ): Promise<BrainMutationResult> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, error: 'Offline — start npm start.' };
+    return { ok: false, error: 'Offline — open Minnow.' };
   }
   try {
     const qs = workspaceKey

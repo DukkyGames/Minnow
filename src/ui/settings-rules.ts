@@ -51,7 +51,7 @@ async function persistRules(
       'ok',
       mode === 'server'
         ? okMessage
-        : 'Saved locally — start npm start to persist to disk',
+        : 'Saved locally — open Minnow to persist to disk',
     );
     return true;
   } catch (err) {
@@ -302,7 +302,7 @@ export async function renderRulesSettingsSection(
   if (!serverUp) {
     appendSettingsOfflineHint(
       mount,
-      'Start with <code>npm start</code> to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.',
+      'Open Minnow to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.',
       { searchKey: 'agents.rules.offline' },
     );
   }

@@ -98,7 +98,7 @@ describe('resolveWebSearchExecution', () => {
     );
     assert.equal(route.kind, 'error');
     if (route.kind === 'error') {
-      assert.match(route.message, /npm start/i);
+      assert.match(route.message, /Minnow/i);
     }
   });
 
@@ -181,7 +181,7 @@ describe('resolveWebSearchExecution', () => {
     assert.equal(route.kind, 'error');
     if (route.kind === 'error') {
       assert.match(route.message, /SearXNG/i);
-      assert.match(route.message, /npm start/i);
+      assert.match(route.message, /Minnow/i);
     }
   });
 });

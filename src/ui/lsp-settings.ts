@@ -1208,7 +1208,7 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
 
       if (!ok) {
 
-        setStatus('err', 'Failed to save custom LSP — use npm start');
+        setStatus('err', 'Could not save custom language server. Open or restart Minnow.');
 
         return;
 
@@ -1294,7 +1294,7 @@ export async function renderLspSection(): Promise<void> {
 
       content,
 
-      'Start with <code>npm start</code> to load server status, toggle analyzers, and save <code>~/.minnow/lsp.json</code>.',
+      'Open Minnow to load language server status, toggle analyzers, and save <code>~/.minnow/lsp.json</code>.',
 
     );
 
@@ -1314,7 +1314,7 @@ export async function renderLspSection(): Promise<void> {
 
       content,
 
-      'Could not load language server config. Confirm <code>npm start</code> is running.',
+      'Could not load language server config. Confirm Minnow is running locally.',
 
     );
 
@@ -1358,7 +1358,7 @@ export async function renderLspSection(): Promise<void> {
 
           ok ? 'ok' : 'err',
 
-          ok ? 'Language servers updated' : 'Save failed — use npm start',
+          ok ? 'Language servers updated' : 'Could not save. Open or restart Minnow and try again.',
 
         );
 
@@ -1398,7 +1398,7 @@ export async function renderLspSection(): Promise<void> {
 
     }
 
-    setStatus('err', 'LSP save failed — use npm start');
+    setStatus('err', 'Could not save language server settings. Open or restart Minnow.');
 
     await renderLspSection();
 
@@ -1429,7 +1429,7 @@ export async function renderLspSection(): Promise<void> {
 
     }
 
-    setStatus('err', 'Remove failed — use npm start');
+    setStatus('err', 'Could not remove. Open or restart Minnow and try again.');
 
   };
 
@@ -1441,7 +1441,7 @@ export async function renderLspSection(): Promise<void> {
 
     'Language servers',
 
-    'Installed toggles download optional binaries to ~/.minnow/lsp-servers. Enabled toggles start analyzers when npm start is running.',
+    'Installed toggles download optional binaries to ~/.minnow/lsp-servers. Enabled toggles start analyzers when Minnow is running locally.',
 
     'integrations.lsp',
 

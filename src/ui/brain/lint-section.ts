@@ -250,7 +250,7 @@ async function runLint(): Promise<void> {
     mount.replaceChildren();
     const err = document.createElement('p');
     err.className = 'brain-error';
-    err.textContent = 'Lint failed. Start npm start and try again.';
+    err.textContent = 'Lint failed. Open Minnow and try again.';
     mount.append(err);
     return;
   }
@@ -274,7 +274,7 @@ async function runCleanup(): Promise<void> {
     mount.replaceChildren();
     const err = document.createElement('p');
     err.className = 'brain-error';
-    err.textContent = 'Cleanup failed. Start npm start and try again.';
+    err.textContent = 'Cleanup failed. Open Minnow and try again.';
     mount.append(err);
     return;
   }
@@ -312,7 +312,7 @@ async function runPrune(apply: boolean): Promise<void> {
     err.dataset.lintGroup = 'weak-links';
     const msg = document.createElement('p');
     msg.className = 'brain-error';
-    msg.textContent = 'Link check failed. Start npm start and try again.';
+    msg.textContent = 'Link check failed. Open Minnow and try again.';
     err.append(msg);
     holder.append(err);
   }

@@ -264,7 +264,7 @@ export function fillToolsSection(
       const hint = document.createElement('p');
       hint.className = 'tool-group-hint';
       hint.textContent =
-        'Requires the Minnow desktop shell (Electron) and npm start for allowlist config.';
+        'Requires the Minnow desktop app for allowlist configuration.';
       bodyNodes.push(hint);
     }
 

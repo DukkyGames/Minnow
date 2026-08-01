@@ -26,7 +26,7 @@ export async function revealPathInSystemExplorer(
   }
 
   if (!isLocalServerAvailable()) {
-    const message = 'Start with npm start to open paths in the system explorer.';
+    const message = 'Open Minnow to open paths in the system explorer.';
     setStatus('err', message);
     return { ok: false, message };
   }

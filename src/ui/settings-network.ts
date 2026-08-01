@@ -35,7 +35,7 @@ function warningBanner(message: string): HTMLElement {
 function restartBanner(): HTMLElement {
   const p = el('p', 'settings-network-restart');
   p.setAttribute('role', 'status');
-  p.textContent = 'Restart Minnow to apply this change (stop and run npm start again).';
+  p.textContent = 'Restart Minnow to apply this change.';
   return p;
 }
 
@@ -89,7 +89,7 @@ export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<v
   if (serverUp !== 'server') {
     appendSettingsOfflineHint(
       mount,
-      'Network access settings require <code>npm start</code> (config.json on disk). Start the full dev server, then reopen Settings.',
+      'Network access settings are saved on this device. Open Minnow, then reopen Settings.',
     );
     return;
   }

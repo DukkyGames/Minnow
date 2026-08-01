@@ -574,7 +574,7 @@ function ensureProvidersShell(): HTMLElement {
 
   providersOfflineEl = appendSettingsOfflineHint(
     shell,
-    'Run <code>npm start</code> to add or edit providers.',
+    'Open Minnow to add or edit providers.',
     { id: 'settingsProvidersOffline', searchKey: 'models.providers', hidden: true },
   );
 
@@ -1512,7 +1512,7 @@ export async function renderProvidersSettingsSection(): Promise<void> {
       el(
         'p',
         'settings-providers-empty',
-        'Run npm start to add OpenAI-compatible and LM Studio backends.',
+        'Open Minnow to add OpenAI-compatible and LM Studio backends.',
       ),
     );
     return;
