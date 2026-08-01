@@ -66,6 +66,7 @@ import {
 } from './right-pane-split';
 import type { PaneSlotId } from '../state/file-panel';
 import { bindSecondaryPreviewControls } from './preview-secondary-slot';
+import { bindSecondaryPreviewDesignControls } from './preview-secondary-design';
 import { sessionState } from '../state/sessions';
 
 let resizerBound = false;
@@ -215,6 +216,7 @@ export async function initFilePanel(): Promise<void> {
   bindSplitResizer();
   bindFilePanelControls();
   bindSecondaryPreviewControls();
+  bindSecondaryPreviewDesignControls();
   bindFileViewerControls();
   bindFileViewerTabs();
   bindFileViewerContextMenu();

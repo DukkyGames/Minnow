@@ -150,7 +150,8 @@ export type ChromeIconName =
   | 'thinkingBrain'
   | 'reasoning'
   | 'codeMapInjection'
-  | 'inbox';
+  | 'inbox'
+  | 'moon';
 
 // ── Board ────────────────────────────────────────────────────────────────────
 
@@ -189,7 +190,7 @@ export type MetricIconName =
   | 'metricTotal'
   | 'metricCtx';
 
-/** All 132 semantic icon names. */
+/** All 133 semantic icon names. */
 export type IconName =
   | ShellIconName
   | AppIconName
@@ -332,6 +333,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   reasoning: 'fi-sr-bulb',
   codeMapInjection: 'fi-rr-sitemap',
   inbox: 'fi-rr-inbox',
+  moon: 'fi-sc-moon',
 
   // Board
   boardBuild: 'fi-sr-hammer',
