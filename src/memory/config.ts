@@ -2,8 +2,30 @@
  * Memory enablement helpers for compose path and settings.
  */
 
+import {
+  mergeThinkingTriState,
+  normalizeThinkingTriState,
+  type ThinkingTriState,
+} from '../agents/thinking-types';
 import { fetchMemoryEnabled } from './client';
 import type { Chat } from '../types';
+
+/** Per-chat Brain notes injection override (inherit / on / off). */
+export type BrainNotesInjectionTriState = ThinkingTriState;
+
+export function resolveBrainNotesInjectionTriState(chat: Chat): BrainNotesInjectionTriState {
+  return normalizeThinkingTriState(chat.brainNotesInjection, 'inherit');
+}
+
+/** Resolved on/off after merging chat tri-state with the global memoryInjection default. */
+export function resolveBrainNotesInjectionEnabled(
+  chat: Chat,
+  globalDefault: boolean,
+): boolean {
+  const base = globalDefault ? 'on' : 'off';
+  const tri = resolveBrainNotesInjectionTriState(chat);
+  return mergeThinkingTriState(base, tri) === 'on';
+}
 
 /** Per-chat override: null = follow global. */
 export function isMemoryEnabledForChat(
@@ -77,8 +99,10 @@ export async function saveMemorySettings(options: {
 
 /** Resolve whether memory retrieval should run for this send. */
 export async function shouldInjectMemory(chat: Chat): Promise<boolean> {
-  const injectionOn = await fetchMemoryInjectionEnabled();
-  if (!injectionOn) return false;
+  const globalInjectionDefault = await fetchMemoryInjectionEnabled();
+  if (!resolveBrainNotesInjectionEnabled(chat, globalInjectionDefault)) {
+    return false;
+  }
   if (chat.kind === 'expert' && chat.expertRuntime?.memoryEnabled === false) {
     return false;
   }
