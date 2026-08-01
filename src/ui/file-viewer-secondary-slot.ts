@@ -38,6 +38,7 @@ import {
   syncSecondaryIntentToolbarChrome,
   updateSecondaryViewerChrome,
 } from './file-viewer';
+import { codeSelectionDragExtension } from './editor-code-selection-drag';
 
 let secondaryView: EditorView | null = null;
 let secondaryPath: string | null = null;
@@ -243,6 +244,7 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
         ...minnowEditorExtensions(),
         ...langExts,
         ...intentExts,
+        ...(tab.readOnlyExcerpt ? [] : [codeSelectionDragExtension(path)]),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged || secondaryPath !== path) return;
           const text = update.state.doc.toString();

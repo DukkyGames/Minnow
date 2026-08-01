@@ -508,7 +508,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 
 ## File attachments
 
-[`src/attachments/`](../src/attachments/) — composer chips, max **10 MB**. Images → VLM `image_url` parts when model supports vision. PDF/office → server `read_document` when `npm start`.
+[`src/attachments/`](../src/attachments/) — composer chips, max **10 MB**. Images → VLM `image_url` parts when model supports vision. PDF/office → server `read_document` when `npm start`. **Editor selection drag:** dragging highlighted code from the file viewer into the composer queues a `codeRef` chip (`application/x-minnow-code-selection` in [`code-selection-drag.ts`](../src/attachments/code-selection-drag.ts), wired in [`editor-code-selection-drag.ts`](../src/ui/editor-code-selection-drag.ts) and [`composer-drop.ts`](../src/ui/composer-drop.ts)); plain `text/plain` drops no longer masquerade as workspace paths when they look like code (e.g. `cat_count = 0`).
 
 **Document read (agents):** `read_document` extracts plain text from PDF and office files. Prefer `path` (workspace-relative) for on-disk files; `content` (base64) remains for composer attachments. Output is capped (~32k chars) via `capTextOutput`; corrupt `.xlsx` / `.xls` binaries are rejected before parsing.
 

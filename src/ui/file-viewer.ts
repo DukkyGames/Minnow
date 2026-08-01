@@ -55,6 +55,7 @@ import {
   toggleIntentMode,
 } from './editor-intent-mode';
 import { addCodeReferenceToComposer } from '../attachments/code-ref';
+import { codeSelectionDragExtension } from './editor-code-selection-drag';
 import {
   buildFileViewerContextMenuItems,
   editorQuickEditExtensions,
@@ -752,6 +753,7 @@ function mountEditor(tab: ViewerTabState, content: string): void {
         }),
         ...minnowEditorExtensions(),
         ...langExts,
+        ...(tab.readOnlyExcerpt ? [] : [codeSelectionDragExtension(path)]),
       ],
     });
     if (generation !== mountGeneration) return;
