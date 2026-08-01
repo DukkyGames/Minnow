@@ -11,6 +11,7 @@ import {
   filterLibrary,
   inferArchFromName,
   inferParamsFromName,
+  loadableLibrary,
 } from '../../src/models/library.ts';
 
 function ggufRow(overrides: Partial<CachedModelRow> = {}): CachedModelRow {
@@ -50,6 +51,8 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].quant, 'Q4_K_M');
     assert.equal(rows[0].name, 'Qwen3-8B-Q4_K_M');
     assert.equal(rows[0].publisher, 'qwen');
+    assert.equal(rows[0].producerSlug, 'qwen');
+    assert.equal(rows[0].producerName, 'Qwen');
     assert.equal(rows[0].servable, true);
   });
 
@@ -143,7 +146,7 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].servable, false);
   });
 
-  test('Ollama tags are servable through their own runtime', () => {
+  test('Ollama tags are not listed as loadable My Models rows', () => {
     const rows = buildLibrary([
       {
         repo_id: 'llama3:8b',
@@ -157,12 +160,53 @@ describe('buildLibrary', () => {
     ]);
     assert.equal(rows[0].format, 'Ollama');
     assert.equal(rows[0].publisher, 'ollama');
-    assert.equal(rows[0].servable, true);
+    assert.equal(rows[0].servable, false);
+    assert.equal(loadableLibrary(rows).length, 0);
   });
 
   test('flags incomplete downloads', () => {
     const rows = buildLibrary([ggufRow({ has_incomplete: true })]);
     assert.equal(rows[0].incomplete, true);
+  });
+
+  test('resolves maker from the weight name when the repo publisher is a quantizer', () => {
+    const rows = buildLibrary([
+      ggufRow({
+        repo_id: 'lmstudio-community/Qwen3.5-9B-GGUF',
+        path: '/models/lms',
+        gguf_files: [
+          {
+            name: 'Qwen3.5-9B-Q4_K_M.gguf',
+            rel_path: 'Qwen3.5-9B-Q4_K_M.gguf',
+            size_bytes: 5e9,
+            role: 'model',
+            quant: 'Q4_K_M',
+          },
+        ],
+      }),
+    ]);
+    assert.equal(rows[0].publisher, 'lmstudio-community');
+    assert.equal(rows[0].producerSlug, 'qwen');
+    assert.equal(rows[0].producerName, 'Qwen');
+  });
+});
+
+describe('loadableLibrary', () => {
+  test('drops non-servable scan rows', () => {
+    const all = buildLibrary([
+      ggufRow(),
+      {
+        repo_id: 'meta-llama/Llama-3-8B',
+        size_bytes: 16_000_000_000,
+        nb_files: 12,
+        has_incomplete: false,
+        path: '/home/u/.cache/huggingface/hub',
+        status: 'cached',
+      },
+    ]);
+    const rows = loadableLibrary(all);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].format, 'GGUF');
   });
 });
 
@@ -192,8 +236,14 @@ describe('filterLibrary', () => {
     assert.equal(rows[0].publisher, 'google');
   });
 
+  test('filters by maker slug', () => {
+    const rows = filterLibrary(models, { producer: 'google' });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].producerSlug, 'google');
+  });
+
   test('sorts largest first', () => {
-    const rows = filterLibrary(models, { sort: 'size' });
+    const rows = filterLibrary(models, { listSort: { key: 'size', direction: 'desc' } });
     assert.ok(rows[0].sizeBytes >= rows[1].sizeBytes);
   });
 });

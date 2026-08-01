@@ -5,6 +5,8 @@
 
 import { fetchModelsConfig, saveModelsConfig } from '../../models/api-client';
 import { setStatus } from '../status';
+import { getLocalServerAvailable } from '../../tools/client';
+import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
 import { el, emptyState, icon, iconButton, textButton } from './dom';
 import { refreshModels } from './store';
 
@@ -42,6 +44,27 @@ export async function mountModelsSettingsSection(): Promise<void> {
   }
 
   let dirs = [...config.modelDirs];
+  let dirsSaveInFlight = false;
+
+  /** Persist extra scan folders and refresh the library index. */
+  const persistDirs = async (okMessage: string): Promise<boolean> => {
+    if (dirsSaveInFlight) return false;
+    dirsSaveInFlight = true;
+    try {
+      const next = await saveModelsConfig({ modelDirs: dirs });
+      dirs = [...next.modelDirs];
+      renderDirs();
+      setStatus('ok', okMessage);
+      void refreshModels({ fresh: true });
+      return true;
+    } catch (err: unknown) {
+      setStatus('err', err instanceof Error ? err.message : 'Save failed');
+      return false;
+    } finally {
+      dirsSaveInFlight = false;
+    }
+  };
+
   const fragment = document.createDocumentFragment();
 
   // Scan roots
@@ -77,6 +100,7 @@ export async function mountModelsSettingsSection(): Promise<void> {
         iconButton('cross-circle', `Remove ${dir}`, () => {
           dirs = dirs.filter((d) => d !== dir);
           renderDirs();
+          void persistDirs('Folder removed.');
         }),
       );
       dirsList.appendChild(row);
@@ -90,8 +114,8 @@ export async function mountModelsSettingsSection(): Promise<void> {
   dirInput.type = 'text';
   dirInput.placeholder = '~/models or C:\\models';
   dirInput.setAttribute('aria-label', 'Folder to scan');
-  const addDir = () => {
-    const value = dirInput.value.trim();
+  const addDirFromPath = (rawPath: string): void => {
+    const value = rawPath.trim();
     if (!value) return;
     if (dirs.includes(value)) {
       setStatus('err', 'That folder is already in the list.');
@@ -100,33 +124,32 @@ export async function mountModelsSettingsSection(): Promise<void> {
     dirs = [...dirs, value];
     dirInput.value = '';
     renderDirs();
+    void persistDirs('Folder added.');
   };
+
+  const addDir = () => addDirFromPath(dirInput.value);
   dirInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       addDir();
     }
   });
-  addRow.append(dirInput, textButton('Add', addDir));
+  const browseBtn = textButton('Browse…', () => {
+    void (async () => {
+      if (!getLocalServerAvailable()) {
+        setStatus('err', 'Folder browse requires npm start (local server)');
+        return;
+      }
+      const initial = dirInput.value.trim() || dirs[dirs.length - 1];
+      const result = await openWorkspaceFolderPicker({
+        initialPath: initial || undefined,
+      });
+      if (result.cancelled || !result.path) return;
+      addDirFromPath(result.path);
+    })();
+  });
+  addRow.append(dirInput, browseBtn, textButton('Add', addDir));
   dirsBlock.appendChild(addRow);
-
-  const saveDirs = textButton(
-    'Save folders',
-    () => {
-      void saveModelsConfig({ modelDirs: dirs })
-        .then((next) => {
-          dirs = [...next.modelDirs];
-          renderDirs();
-          setStatus('ok', 'Scan folders saved.');
-          void refreshModels({ fresh: true });
-        })
-        .catch((err: unknown) => {
-          setStatus('err', err instanceof Error ? err.message : 'Save failed');
-        });
-    },
-    'primary',
-  );
-  dirsBlock.appendChild(saveDirs);
   fragment.appendChild(dirsBlock);
 
   // Hugging Face token

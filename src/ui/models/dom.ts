@@ -155,3 +155,18 @@ export function textButton(
   btn.addEventListener('click', onClick);
   return btn;
 }
+
+/** True when the models catalog/library search field has focus (call before replacing DOM). */
+export function isModelsSearchInputFocused(): boolean {
+  const active = document.activeElement;
+  return active instanceof HTMLInputElement && active.classList.contains('models-search__input');
+}
+
+/** Restore focus and caret after a full toolbar re-render. */
+export function restoreModelsSearchInputFocus(host: ParentNode): void {
+  const input = host.querySelector<HTMLInputElement>('.models-search__input');
+  if (!input) return;
+  input.focus();
+  const end = input.value.length;
+  input.setSelectionRange(end, end);
+}

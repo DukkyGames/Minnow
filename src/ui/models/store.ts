@@ -138,8 +138,9 @@ export function refreshModels(options?: { hardware?: boolean; fresh?: boolean })
       state.runtimes = runtimes;
       state.error = null;
 
-      if (state.selectedId && !state.library.some((m) => m.id === state.selectedId)) {
-        state.selectedId = null;
+      if (state.selectedId) {
+        const selected = state.library.find((m) => m.id === state.selectedId);
+        if (!selected || !selected.servable) state.selectedId = null;
       }
       // Resume tracking work that was still in flight when the app reopened.
       for (const serve of serves) {

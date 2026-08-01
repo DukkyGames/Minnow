@@ -35,6 +35,17 @@ describe('producerSlugFromModelId', () => {
   test('unknown model falls back to other', () => {
     assert.equal(producerSlugFromModelId('unknown-foo-bar'), 'other');
   });
+
+  test('quantizer org path resolves maker from the model segment', () => {
+    assert.equal(producerSlugFromModelId('lmstudio-community/gemma-4-12B-it-GGUF'), 'google');
+    assert.equal(producerSlugFromModelId('hugging-quants/Llama-3.2-3B-Instruct-GGUF'), 'meta');
+    assert.equal(producerSlugFromModelId('lmstudio-community/Qwen3.5-9B-GGUF'), 'qwen');
+  });
+
+  test('quantizer org alone is not a maker', () => {
+    assert.equal(producerSlugFromModelId('lmstudio-community'), 'other');
+    assert.equal(producerSlugFromModelId('hugging-quants'), 'other');
+  });
 });
 
 describe('producerDisplayName', () => {
@@ -80,5 +91,12 @@ describe('resolveModelProducer', () => {
     assert.equal(p.slug, 'other');
     assert.equal(p.displayName, 'Other');
     assert.equal(p.logoSvg, null);
+  });
+
+  test('quantizer repo id matches logo and display name', () => {
+    const p = resolveModelProducer('lmstudio-community/gemma-4-12B-it-GGUF');
+    assert.equal(p.slug, 'google');
+    assert.equal(p.displayName, 'Google');
+    assert.ok(p.logoSvg);
   });
 });

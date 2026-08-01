@@ -7,10 +7,32 @@
  * model file becomes its own row.
  */
 
+import {
+  isKnownModelMakerSlug,
+  modelProducerLogoSvg,
+  producerDisplayName,
+  producerSlugFromModelId,
+  resolveModelProducer,
+} from '../providers/model-producer';
 import { getModels } from './catalog';
+import {
+  DEFAULT_LIBRARY_LIST_SORT,
+  sortLibraryForList,
+  type LibraryListSort,
+  type LibrarySortPreset,
+} from './library-sort';
 import { inferUseCase, paramsB as catalogParamsB } from './quant';
 import type { CachedModelRow, ServeRecord } from './api-client';
 import type { CatalogModel } from './types';
+
+export type { LibraryListSort, LibraryTableSortKey, LibrarySortPreset } from './library-sort';
+export {
+  ariaSortValue as libraryAriaSortValue,
+  cycleLibraryListSort,
+  DEFAULT_LIBRARY_LIST_SORT,
+  presetForSort,
+  sortFromPreset,
+} from './library-sort';
 
 export type LibraryFormat = 'GGUF' | 'MLX' | 'SafeTensors' | 'Diffusion' | 'Ollama' | 'Unknown';
 export type LibrarySource = 'downloaded' | 'hf-cache' | 'local-dir' | 'ollama';
@@ -22,6 +44,12 @@ export interface LibraryModel {
   name: string;
   repoId: string;
   publisher: string;
+  /** Normalized maker slug (qwen, google, meta, …). */
+  producerSlug: string;
+  /** Friendly maker label for the table and filters. */
+  producerName: string;
+  /** Model id passed to logo detection (catalog name, repo, or file stem). */
+  producerLogoId: string;
   format: LibraryFormat;
   quant: string;
   arch: string;
@@ -60,6 +88,41 @@ function publisherOf(repoId: string, source: LibrarySource): string {
   if (repoId.includes('/')) return repoId.split('/')[0];
   if (source === 'ollama') return 'ollama';
   return 'local';
+}
+
+/** Who built the weights (Qwen, Google, …), not the HF repo that packaged the GGUF. */
+function libraryProducer(
+  entry: CatalogModel | null,
+  repoId: string,
+  displayName: string,
+): { slug: string; name: string; logoId: string } {
+  if (entry?.provider) {
+    const slug = producerSlugFromModelId(entry.provider);
+    if (isKnownModelMakerSlug(slug)) {
+      const logoId = entry.name || repoId || displayName;
+      return { slug, name: producerDisplayName(slug), logoId };
+    }
+  }
+
+  const candidates = [entry?.name, displayName, repoId].filter(Boolean) as string[];
+  for (const id of candidates) {
+    const resolved = resolveModelProducer(id);
+    if (isKnownModelMakerSlug(resolved.slug)) {
+      return { slug: resolved.slug, name: resolved.displayName, logoId: id };
+    }
+  }
+
+  for (const id of candidates) {
+    if (!modelProducerLogoSvg(id)) continue;
+    const slug = producerSlugFromModelId(id);
+    if (isKnownModelMakerSlug(slug)) {
+      return { slug, name: producerDisplayName(slug), logoId: id };
+    }
+  }
+
+  const fallbackId = candidates[0] ?? displayName;
+  const fallback = resolveModelProducer(fallbackId);
+  return { slug: fallback.slug, name: fallback.displayName, logoId: fallbackId };
 }
 
 /**
@@ -202,11 +265,16 @@ export function buildLibrary(cached: CachedModelRow[]): LibraryModel[] {
 
     if (!modelFiles.length) {
       const entry = matchCatalogEntry(row.repo_id);
+      const displayName = row.repo_id.split('/').pop() || row.repo_id;
+      const producer = libraryProducer(entry, row.repo_id, displayName);
       out.push({
         id: `repo:${row.repo_id}`,
-        name: row.repo_id.split('/').pop() || row.repo_id,
+        name: displayName,
         repoId: row.repo_id,
         publisher,
+        producerSlug: producer.slug,
+        producerName: producer.name,
+        producerLogoId: producer.logoId,
         format: row.is_ollama ? 'Ollama' : nonGgufFormat(row),
         // No weights file on disk, so any catalog quant would describe a build
         // that is not actually here.
@@ -220,8 +288,8 @@ export function buildLibrary(cached: CachedModelRow[]): LibraryModel[] {
         path: null,
         fileName: null,
         source,
-        // Ollama models load through the Ollama runtime rather than a file path.
-        servable: source === 'ollama',
+        // Ollama-managed tags are not shown in My Models (use the Ollama provider instead).
+        servable: false,
         incomplete: row.has_incomplete,
         isMoe: entry?.is_moe ?? false,
       });
@@ -232,11 +300,15 @@ export function buildLibrary(cached: CachedModelRow[]): LibraryModel[] {
       const entry = matchCatalogEntry(row.repo_id, file.name);
       const path = ggufPath(row, file.rel_path, source);
       const name = displayNameFromFile(file.name);
+      const producer = libraryProducer(entry, row.repo_id, name);
       out.push({
         id: `gguf:${row.repo_id}:${file.rel_path}`,
         name,
         repoId: row.repo_id,
         publisher,
+        producerSlug: producer.slug,
+        producerName: producer.name,
+        producerLogoId: producer.logoId,
         format: 'GGUF',
         quant: file.quant || entry?.quantization || '',
         arch: entry?.architecture ?? inferArchFromName(name || row.repo_id),
@@ -273,13 +345,20 @@ export function activeServeFor(
   );
 }
 
-export type LibrarySortKey = 'name' | 'size' | 'params' | 'publisher';
+/** Toolbar preset ids for My Models sort (maps to {@link LibraryListSort}). */
+export type LibrarySortKey = LibrarySortPreset;
+
+/** Rows the My Models table lists (GGUF with a resolved path). */
+export function loadableLibrary(models: LibraryModel[]): LibraryModel[] {
+  return models.filter((m) => m.servable && m.source !== 'ollama');
+}
 
 export interface LibraryFilter {
   search?: string;
   format?: string;
   publisher?: string;
-  sort?: LibrarySortKey;
+  producer?: string;
+  listSort?: LibraryListSort;
 }
 
 /** Apply the My Models toolbar filters. */
@@ -288,6 +367,7 @@ export function filterLibrary(models: LibraryModel[], filter: LibraryFilter): Li
   const rows = models.filter((m) => {
     if (filter.format && m.format !== filter.format) return false;
     if (filter.publisher && m.publisher !== filter.publisher) return false;
+    if (filter.producer && m.producerSlug !== filter.producer) return false;
     if (!needle) return true;
     return (
       m.name.toLowerCase().includes(needle) ||
@@ -297,13 +377,5 @@ export function filterLibrary(models: LibraryModel[], filter: LibraryFilter): Li
     );
   });
 
-  const sort = filter.sort ?? 'name';
-  return rows.sort((a, b) => {
-    if (sort === 'size') return b.sizeBytes - a.sizeBytes;
-    if (sort === 'params') return (b.paramsB ?? 0) - (a.paramsB ?? 0);
-    if (sort === 'publisher') {
-      return a.publisher.localeCompare(b.publisher) || a.name.localeCompare(b.name);
-    }
-    return a.name.localeCompare(b.name);
-  });
+  return sortLibraryForList(rows, filter.listSort ?? DEFAULT_LIBRARY_LIST_SORT);
 }

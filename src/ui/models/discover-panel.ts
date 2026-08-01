@@ -5,6 +5,7 @@
 
 import { resolveDownloadRepo, type DownloadJob } from '../../models/api-client';
 import { getModels } from '../../models/catalog';
+import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
 import {
   defaultGpuGroupIndex,
   hardwareForGpuBudget,
@@ -21,6 +22,8 @@ import {
   formatBytes,
   icon,
   iconButton,
+  isModelsSearchInputFocused,
+  restoreModelsSearchInputFocus,
   skeletonRows,
   textButton,
 } from './dom';
@@ -75,14 +78,13 @@ const filters: DiscoverFilters = {
   search: '',
   useCase: '',
   quant: '',
-  targetContext: 8192,
+  targetContext: DEFAULT_CONTEXT_TOKENS,
   sort: 'score',
   fitOnly: true,
 };
 
 let gpuGroupIndex: number | null = null;
 let bound = false;
-let searchFocused = false;
 
 function mount(): HTMLElement | null {
   return document.getElementById('modelsRecommendBody');
@@ -173,12 +175,6 @@ function renderFilters(): HTMLElement {
     filters.search = search.value;
     render();
   });
-  search.addEventListener('focus', () => {
-    searchFocused = true;
-  });
-  search.addEventListener('blur', () => {
-    searchFocused = false;
-  });
   searchWrap.appendChild(search);
   bar.appendChild(searchWrap);
 
@@ -239,8 +235,8 @@ function renderFilters(): HTMLElement {
   const ctx = el('input', 'models-range__input') as HTMLInputElement;
   ctx.type = 'range';
   ctx.min = '2048';
-  ctx.max = '131072';
-  ctx.step = '2048';
+  ctx.max = '262144';
+  ctx.step = '1000';
   ctx.value = String(filters.targetContext);
   ctx.setAttribute('aria-label', 'Target context length');
   ctx.addEventListener('input', () => {
@@ -446,13 +442,9 @@ export function render(): void {
     fragment.appendChild(list);
   }
 
+  const refocusSearch = isModelsSearchInputFocused();
   host.replaceChildren(fragment);
-
-  if (searchFocused) {
-    const input = host.querySelector<HTMLInputElement>('.models-search__input');
-    input?.focus();
-    input?.setSelectionRange(input.value.length, input.value.length);
-  }
+  if (refocusSearch) restoreModelsSearchInputFocus(host);
 }
 
 /** Mount Discover (idempotent). */
