@@ -1,6 +1,5 @@
 /**
- * Local model cache scan — HF hub, Minnow artifacts, Ollama, custom dirs.
- * Local model cache scan for HF hub, Minnow artifacts, Ollama, and custom dirs.
+ * Local model cache scan — HF hub, Minnow artifacts, and custom dirs.
  */
 
 import fsp from 'node:fs/promises';
@@ -506,47 +505,6 @@ async function scanMinnowArtifacts(seen) {
 }
 
 /**
- * Query Ollama tags API for installed models.
- * @param {Set<string>} seen
- */
-async function scanOllamaApi(seen) {
-  const out = [];
-  const urls = [
-    'http://127.0.0.1:11434/api/tags',
-    'http://localhost:11434/api/tags',
-  ];
-
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(2_500) });
-      if (!res.ok) continue;
-      const data = await res.json();
-      const models = Array.isArray(data?.models) ? data.models : [];
-      for (const item of models) {
-        const name = item?.name || item?.model;
-        if (!name || seen.has(name)) continue;
-        seen.add(name);
-        out.push({
-          repo_id: name,
-          size_bytes: Number(item?.size ?? item?.size_bytes ?? 0),
-          nb_files: 1,
-          has_incomplete: false,
-          path: 'ollama',
-          backend: 'ollama',
-          is_ollama: true,
-          status: 'ollama',
-        });
-      }
-      if (out.length) return out;
-    } catch {
-      /* try next url */
-    }
-  }
-
-  return out;
-}
-
-/**
  * Full cached model scan (local machine).
  * @returns {Promise<{ models: CachedModelRow[] }>}
  */
@@ -567,8 +525,6 @@ export async function listCachedModels() {
   for (const dir of dirs) {
     models.push(...(await scanCustomDir(dir.trim(), seen)));
   }
-
-  models.push(...(await scanOllamaApi(seen)));
 
   models.sort((a, b) => a.repo_id.localeCompare(b.repo_id));
   return { models };

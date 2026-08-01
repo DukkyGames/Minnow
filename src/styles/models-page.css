@@ -63,8 +63,16 @@
   white-space: nowrap;
 }
 
+/* Compact header control — global .icon-btn is 40px; this sits beside status text. */
 .models-inspector-toggle {
   flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.models-inspector-toggle .icon-svg {
+  --mn-icon-size: 15px;
 }
 
 /* ------------------------------------------------------------------ body */
@@ -143,18 +151,31 @@
   display: flex;
   flex: 1;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
+  /* Workbench tables scroll inside .models-surface; settings-style sections scroll here. */
+  overflow: hidden;
+}
+
+.models-content:has(.models-section.is-active:not(.models-section--flush)) {
+  overflow-y: auto;
 }
 
 .models-section {
   display: none;
+  box-sizing: border-box;
+  width: 100%;
   padding: 24px var(--models-gutter);
-  overflow-y: auto;
-  max-width: 56rem;
 }
 
 .models-section.is-active {
   display: block;
+}
+
+/* Keep section titles readable without capping the scroll column width. */
+.models-section:not(.models-section--flush) > h2,
+.models-section:not(.models-section--flush) > .models-lead {
+  max-width: 56rem;
 }
 
 /* Workbench sections own their whole column and scroll internally. */
@@ -690,7 +711,7 @@
 .models-table__head,
 .models-row {
   display: grid;
-  grid-template-columns: minmax(0, 2.4fr) minmax(0, 0.9fr) 4.5rem 6rem 4.5rem 5.5rem minmax(8rem, auto);
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.05fr) 4.5rem 6rem 4.5rem 5.5rem minmax(8rem, auto);
   gap: 12px;
   align-items: center;
   padding: 0 var(--models-gutter);
@@ -714,13 +735,81 @@
   text-transform: uppercase;
 }
 
+/* Clickable column headers — sort by that field. */
+.models-table__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  min-width: 0;
+}
+
+.models-table__sort:hover {
+  color: var(--mn-fg);
+}
+
+.models-table__sort:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.models-table__sort.is-active {
+  color: var(--mn-fg);
+}
+
+.models-table__sort-indicator {
+  display: inline-block;
+  width: 0.55em;
+  flex-shrink: 0;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0;
+  transform: translateY(-0.5px);
+}
+
+.models-table__sort.is-active .models-table__sort-indicator {
+  opacity: 0.85;
+}
+
+.models-table__sort[aria-sort='ascending'] .models-table__sort-indicator::before {
+  content: '▲';
+}
+
+.models-table__sort[aria-sort='descending'] .models-table__sort-indicator::before {
+  content: '▼';
+}
+
 .models-table__group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
   padding: 16px var(--models-gutter) 6px;
   font-size: 11px;
   font-weight: 600;
   color: var(--mn-fg-muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.models-table__group .model-producer-logo {
+  width: 12px;
+  height: 12px;
+}
+
+.models-table__group .model-producer-logo svg {
+  width: 12px;
+  height: 12px;
 }
 
 .models-row {
@@ -777,8 +866,48 @@
   color: var(--mn-fg-muted);
 }
 
+.models-row__cell--quant {
+  min-width: 0;
+}
+
+.models-row__quant-select {
+  width: 100%;
+  max-width: 11rem;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .models-row__cell--size {
   text-align: right;
+}
+
+/* Size values are right-aligned; the sort control must span the track and align the same way. */
+.models-table__sort.models-row__cell--size {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.models-row__cell--maker {
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: normal;
+  color: var(--mn-fg);
+}
+
+.models-row__maker {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.models-row__maker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .models-row__loaded-badge {
@@ -1636,14 +1765,14 @@
 
 /* ------------------------------------------------------------ responsive */
 
-/* Drop the publisher and context columns before the name starts truncating. */
+/* Drop quant and context before the name and maker start truncating. */
 @container models (max-width: 1180px) {
   .models-table__head,
   .models-row {
-    grid-template-columns: minmax(0, 2.2fr) 4.5rem 6rem 5.5rem minmax(8rem, auto);
+    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) 4.5rem 5.5rem minmax(8rem, auto);
   }
 
-  .models-row__cell--publisher,
+  .models-row__cell--quant,
   .models-row__cell--context {
     display: none;
   }

@@ -7,6 +7,7 @@
  */
 
 import { fetchServeProfiles, type LlamaServeSettings, type ServeProfile } from '../../models/api-client';
+import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
 import { capabilityLabel, type LibraryModel } from '../../models/library';
 import { setStatus } from '../status';
 import {
@@ -32,8 +33,6 @@ import {
 
 type InspectorTab = 'info' | 'load' | 'inference';
 
-/** Default llama-server context when no preset or user value is set. */
-const DEFAULT_CONTEXT_TOKENS = 125_000;
 const CONTEXT_SLIDER_MIN = 2_048;
 const CONTEXT_SLIDER_MAX = 262_144;
 const CONTEXT_SLIDER_STEP = 1_000;
