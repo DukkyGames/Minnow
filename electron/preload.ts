@@ -414,6 +414,13 @@ const minnowBridge = {
       return () => ipcRenderer.removeListener(channels.POWER_SCREEN_UNLOCKED, handler);
     },
   },
+  board: {
+    onPauseForShutdown: (callback: () => void): (() => void) => {
+      const handler = () => callback();
+      ipcRenderer.on(channels.BOARD_PAUSE_FOR_SHUTDOWN, handler);
+      return () => ipcRenderer.removeListener(channels.BOARD_PAUSE_FOR_SHUTDOWN, handler);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('minnow', minnowBridge);

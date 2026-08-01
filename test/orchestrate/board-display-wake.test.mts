@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import { Window } from 'happy-dom';
 import { resetAutopilotMetaCache } from '../../src/config/autopilot-meta.ts';
 import {
   onBoardAutoRunStarted,
@@ -14,6 +15,9 @@ import {
 import {
   reconcileRunningBoardsAfterDisplayWake,
 } from '../../src/state/orchestrate-board-actions.ts';
+import { resetBoardDisplayWakeLivenessForTests } from '../../src/chat/orchestrate/board-display-wake.ts';
+import { registerOrchestrateBoardShutdownHandler, resetOrchestrateBoardShutdownRegistrationForTests } from '../../src/chat/orchestrate/board-shutdown.ts';
+import { setStreaming } from '../../src/app-state.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import type { Chat, ChatGroup } from '../../src/types.ts';
@@ -97,14 +101,29 @@ function makeGroup(): ChatGroup {
 }
 
 describe('board display wake reconcile', () => {
+  /** @type {import('happy-dom').Window | undefined} */
+  let happyDomWindow: import('happy-dom').Window | undefined;
+
   beforeEach(() => {
     process.env.MINNOW_TEST = '1';
+    happyDomWindow = new Window();
+    globalThis.window = happyDomWindow;
+    globalThis.document = happyDomWindow.document;
   });
 
   afterEach(() => {
     delete process.env.MINNOW_TEST;
     resetAutopilotMetaCache();
     resetAfkBoardPowerGuardForTests();
+    resetOrchestrateBoardShutdownRegistrationForTests();
+    resetBoardDisplayWakeLivenessForTests();
+    setStreaming(false);
+    happyDomWindow?.close();
+    happyDomWindow = undefined;
+    // @ts-expect-error test teardown
+    delete globalThis.window;
+    // @ts-expect-error test teardown
+    delete globalThis.document;
   });
 
   test('reconcile advances in_progress task when build chat already finished', async () => {
@@ -123,6 +142,92 @@ describe('board display wake reconcile', () => {
 
     const task = group.orchestrateBoard!.tasks[0]!;
     assert.equal(task.status, 'testing');
+  });
+
+  test('reconcile advances when streaming flag stuck after completed build', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    setStreaming(true, TASK_CHAT_ID);
+
+    await reconcileRunningBoardsAfterDisplayWake();
+
+    const task = group.orchestrateBoard!.tasks[0]!;
+    assert.equal(task.status, 'testing');
+  });
+
+  test('reconcile auto-resumes system-paused board and advances finished build', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+    const board = group.orchestrateBoard!;
+    board.autoRunning = false;
+    board.systemPaused = true;
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    await reconcileRunningBoardsAfterDisplayWake();
+
+    assert.equal(board.autoRunning, true);
+    assert.equal(board.systemPaused, false);
+    assert.equal(board.tasks[0]!.status, 'testing');
+  });
+
+  test('reconcile does not auto-resume after user Stop', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+    const board = group.orchestrateBoard!;
+    board.autoRunning = false;
+    board.systemPaused = true;
+    board.userStopped = true;
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    await reconcileRunningBoardsAfterDisplayWake();
+
+    assert.equal(board.autoRunning, false);
+    assert.equal(board.tasks[0]!.status, 'in_progress');
+  });
+
+  test('quit shutdown hook system-pauses running boards', () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    resetOrchestrateBoardShutdownRegistrationForTests();
+    registerOrchestrateBoardShutdownHandler();
+    assert.equal(typeof window.__minnowPauseBoardsForShutdown, 'function');
+
+    window.__minnowPauseBoardsForShutdown!();
+
+    assert.equal(group.orchestrateBoard!.autoRunning, false);
+    assert.equal(group.orchestrateBoard!.systemPaused, true);
   });
 
   test('AFK power guard ref-count tracks board start/stop', () => {

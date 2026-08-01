@@ -265,8 +265,25 @@ function wireShellWindowState(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', emit);
 }
 
+/** Ask the renderer to system-pause running boards before tearing down the server. */
+async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<void> {
+  if (win.isDestroyed()) return;
+  try {
+    win.webContents.send(channels.BOARD_PAUSE_FOR_SHUTDOWN);
+    await win.webContents.executeJavaScript(
+      'typeof globalThis.__minnowPauseBoardsForShutdown==="function"&&globalThis.__minnowPauseBoardsForShutdown()',
+      true,
+    );
+  } catch {
+    /* renderer already gone */
+  }
+}
+
 /** Tear down PTY sessions, generations, and in-process HTTP server. */
 async function shutdownRuntime(): Promise<void> {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await pauseOrchestrateBoardsInRenderer(mainWindow);
+  }
   destroyAllPreviewHosts();
   const [ptyHost, generationsStore] = await Promise.all([
     importServerModule<{ destroyAllPtySessions: () => void }>('terminal/pty-host.js'),
