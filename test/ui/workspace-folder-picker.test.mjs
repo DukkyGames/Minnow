@@ -142,6 +142,72 @@ describe('workspace-folder-picker', { concurrency: false }, () => {
     resetWorkspaceFolderPickerForTests();
   });
 
+  test('breadcrumb parent navigates with absolute Unix path', async () => {
+    setupDom();
+    resetWorkspaceFolderPickerForTests();
+
+    const browsedPaths = [];
+    const childPath = '/Users/henri/Development/Minnow/project';
+    const parentPath = '/Users/henri/Development/Minnow';
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      if (!path.includes('/api/workspace/browse')) {
+        throw new Error(`unexpected fetch: ${url}`);
+      }
+      const q = new URL(path, 'http://127.0.0.1').searchParams.get('path') ?? '';
+      browsedPaths.push(q);
+      if (!q) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            path: '',
+            parent: null,
+            entries: [],
+          }),
+        };
+      }
+      if (q === childPath) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            path: childPath,
+            parent: parentPath,
+            entries: [],
+          }),
+        };
+      }
+      if (q === parentPath) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            path: parentPath,
+            parent: '/Users/henri',
+            entries: [],
+          }),
+        };
+      }
+      throw new Error(`unexpected browse path: ${q}`);
+    };
+
+    void openWorkspaceFolderPicker({ initialPath: childPath });
+    await flushPromises();
+
+    const crumbButtons = [...document.querySelectorAll('.workspace-picker__crumb-btn')];
+    const parentCrumb = crumbButtons.find((btn) => btn.title === parentPath);
+    assert.ok(parentCrumb, `expected breadcrumb for ${parentPath}`);
+    parentCrumb.click();
+    await flushPromises();
+
+    assert.ok(
+      browsedPaths.includes(parentPath),
+      `expected browse of ${parentPath}, got ${browsedPaths.join(', ')}`,
+    );
+    resetWorkspaceFolderPickerForTests();
+  });
+
   test('reuses existing overlay DOM and still wires listeners after reset', async () => {
     setupDom();
     resetWorkspaceFolderPickerForTests();
