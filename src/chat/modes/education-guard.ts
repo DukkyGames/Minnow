@@ -262,8 +262,11 @@ export function blockEducationModeWrite(
   enabled: boolean,
   toolName: string,
   args: Record<string, unknown> = {},
+  toolCaller?: 'user' | 'agent',
 ): string | null {
   if (!enabled) return null;
+  // Students edit their own files in the Code viewer and tree; only agent dispatch is blocked.
+  if (toolCaller === 'user') return null;
 
   if (toolName === 'update_settings') return SETTINGS_MESSAGE;
   if (EDUCATION_DENIED_TOOL_IDS.has(toolName)) return WRITE_TOOL_MESSAGE;
@@ -280,6 +283,12 @@ export function blockEducationModeWrite(
 export function blockEducationToolCall(
   toolName: string,
   args: Record<string, unknown> = {},
+  toolCaller?: 'user' | 'agent',
 ): string | null {
-  return blockEducationModeWrite(isEducationModeEnabledSync(), toolName, args);
+  return blockEducationModeWrite(
+    isEducationModeEnabledSync(),
+    toolName,
+    args,
+    toolCaller,
+  );
 }

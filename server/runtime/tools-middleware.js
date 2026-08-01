@@ -1399,7 +1399,9 @@ export function createToolsMiddleware() {
           return;
         }
         const modeId = resolveModeIdFromToolsBody(body);
-        const educationBlock = await blockEducationToolCall(name, args);
+        const toolCaller =
+          body?.toolCaller === 'user' || body?.toolCaller === 'agent' ? body.toolCaller : undefined;
+        const educationBlock = await blockEducationToolCall(name, args, toolCaller);
         if (educationBlock) {
           res.statusCode = 200;
           res.end(JSON.stringify({ result: educationBlock }));

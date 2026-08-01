@@ -147,6 +147,11 @@ export interface ExecuteToolContext {
   extraPathRoots?: string[];
   /** Benchmark runs bypass Ask permission modals and path-ack prompts. */
   benchmarkAutonomous?: boolean;
+  /**
+   * When `user`, Education Mode does not block the call (Code viewer / file tree).
+   * Agent and headless paths omit this so write tools stay denied for the tutor.
+   */
+  toolCaller?: 'user' | 'agent';
 }
 
 // run_python is intentionally excluded: the streaming path can only spawn a single
@@ -435,7 +440,7 @@ async function executeToolInner(
       name,
     );
     if (blocked) return blocked;
-    const educationBlock = blockEducationToolCall(name, enrichedArgs);
+    const educationBlock = blockEducationToolCall(name, enrichedArgs, context.toolCaller);
     if (educationBlock) {
       return { content: educationBlock };
     }
@@ -467,7 +472,7 @@ async function executeToolInner(
   );
   if (blocked) return blocked;
 
-  const educationBlock = blockEducationToolCall(name, enrichedArgs);
+  const educationBlock = blockEducationToolCall(name, enrichedArgs, context.toolCaller);
   if (educationBlock) {
     return { content: educationBlock };
   }
@@ -787,12 +792,16 @@ async function executeServerTool(
     args: Record<string, unknown>;
     modeId?: string;
     workspaceRoot?: string;
+    toolCaller?: 'user' | 'agent';
   } = { name, args };
   if (modeId != null && String(modeId).trim()) {
     payload.modeId = String(modeId).trim();
   }
   if (workspaceRoot) {
     payload.workspaceRoot = workspaceRoot;
+  }
+  if (context?.toolCaller === 'user' || context?.toolCaller === 'agent') {
+    payload.toolCaller = context.toolCaller;
   }
   try {
     response = await fetch('/api/tools', {

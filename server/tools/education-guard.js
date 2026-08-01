@@ -250,8 +250,9 @@ export function blockEducationShellWrite(command) {
  * @param {Record<string, unknown>} [args]
  * @returns {string | null}
  */
-export function blockEducationModeWrite(enabled, toolName, args = {}) {
+export function blockEducationModeWrite(enabled, toolName, args = {}, toolCaller) {
   if (!enabled) return null;
+  if (toolCaller === 'user') return null;
 
   if (toolName === 'update_settings') return SETTINGS_MESSAGE;
   if (EDUCATION_DENIED_TOOL_IDS.has(toolName)) return WRITE_TOOL_MESSAGE;
@@ -275,6 +276,6 @@ export function blockEducationModeWrite(enabled, toolName, args = {}) {
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string | null>}
  */
-export async function blockEducationToolCall(toolName, args = {}) {
-  return blockEducationModeWrite(await isEducationModeEnabled(), toolName, args);
+export async function blockEducationToolCall(toolName, args = {}, toolCaller) {
+  return blockEducationModeWrite(await isEducationModeEnabled(), toolName, args, toolCaller);
 }

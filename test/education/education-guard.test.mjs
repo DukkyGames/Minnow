@@ -143,6 +143,15 @@ describe('education tool dispatch guard', () => {
     assert.match(out, /review it/);
   });
 
+  test('user-initiated file tools bypass the guard (Code viewer / tree)', () => {
+    assert.equal(
+      blockEducationModeWrite(true, 'save_file', { path: 'src/a.ts' }, 'user'),
+      null,
+    );
+    assert.equal(blockEducationModeWrite(true, 'delete_path', { path: 'src/a.ts' }, 'user'), null);
+    assert.ok(blockEducationModeWrite(true, 'save_file', { path: 'src/a.ts' }, 'agent'));
+  });
+
   test('shell tools route through the denylist, read-only calls pass', () => {
     assert.equal(blockEducationModeWrite(true, 'execute_command', { command: 'npm test' }), null);
     assert.ok(blockEducationModeWrite(true, 'execute_command', { command: 'rm -rf src' }));
