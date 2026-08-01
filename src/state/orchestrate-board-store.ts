@@ -705,20 +705,38 @@ export function isPriorWavesComplete(
   return true;
 }
 
+export type UnmetBoardTaskDependency = {
+  id: string;
+  title: string;
+  status: BoardTask['status'];
+};
+
+/** dependsOn tasks that are known on the board and not yet complete. */
+export function listUnmetTaskDependencies(
+  board: OrchestrateBoardState,
+  task: BoardTask,
+): UnmetBoardTaskDependency[] {
+  if (isTaskInDependencyCycle(board, task.id)) return [];
+  if (!task.dependsOn?.length) return [];
+  const unmet: UnmetBoardTaskDependency[] = [];
+  for (const depId of task.dependsOn) {
+    if (depId === task.id) continue;
+    const dep = board.tasks.find((t) => t.id === depId);
+    if (!dep) continue;
+    if (dep.status !== 'complete') {
+      unmet.push({ id: dep.id, title: dep.title, status: dep.status });
+    }
+  }
+  return unmet;
+}
+
 /** True when all explicit dependsOn tasks are complete (or when the task has none). */
 export function isDepsComplete(
   board: OrchestrateBoardState,
   task: BoardTask,
 ): boolean {
   if (isTaskInDependencyCycle(board, task.id)) return false;
-  if (!task.dependsOn?.length) return true;
-  for (const depId of task.dependsOn) {
-    if (depId === task.id) continue; // skip self-edges
-    const dep = board.tasks.find((t) => t.id === depId);
-    if (!dep) continue; // unknown ids: don't hard-block
-    if (dep.status !== 'complete') return false;
-  }
-  return true;
+  return listUnmetTaskDependencies(board, task).length === 0;
 }
 
 /**

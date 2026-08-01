@@ -1278,11 +1278,6 @@
   pointer-events: none;
 }
 
-.file-sidebar.file-sidebar--git .file-sidebar-preview-toggle {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
 .file-sidebar-title {
   font-size: 11px;
   font-weight: 600;
