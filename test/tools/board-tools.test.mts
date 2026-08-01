@@ -17,6 +17,7 @@ import {
 import type { SubAgentRunner } from '../../src/agents/types.ts';
 import {
   isDepsComplete,
+  listUnmetTaskDependencies,
   initBoard,
   isTaskReadyForAuto,
   setBoardNowForTests,
@@ -755,6 +756,17 @@ describe('isDepsComplete', () => {
       { id: 'W1-B', status: 'planned', dependsOn: ['W1-A'] },
     ]);
     assert.equal(isDepsComplete(board, board.tasks[1]), false);
+  });
+
+  test('listUnmetTaskDependencies lists incomplete deps', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'in_progress' },
+      { id: 'W1-B', status: 'planned', dependsOn: ['W1-A'] },
+    ]);
+    const unmet = listUnmetTaskDependencies(board, board.tasks[1]);
+    assert.equal(unmet.length, 1);
+    assert.equal(unmet[0]?.id, 'W1-A');
+    assert.equal(unmet[0]?.status, 'in_progress');
   });
 
   test('skips unknown dep ids (does not block)', () => {
