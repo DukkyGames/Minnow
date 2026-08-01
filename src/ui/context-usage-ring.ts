@@ -78,6 +78,8 @@ function paintRingSurface(surface: ContextUsageSurface, budget: ContextBudget): 
     fill.style.strokeDashoffset = String(offset);
   }
 
+  svg.querySelector('.context-usage-ring__fill-code-map')?.remove();
+
   const label =
     budget.limit != null
       ? `Context ${percent}% used, ~${budget.used.toLocaleString()} of ${budget.limit.toLocaleString()} tokens`

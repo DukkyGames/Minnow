@@ -109,6 +109,30 @@ describe('buildContextUsageBreakdown', () => {
     assert.equal(rows.find((r) => r.key === 'composer')?.tokens, 8);
     assert.equal(rows.find((r) => r.key === 'attachments')?.tokens, 4);
   });
+
+  test('splits code map from system and shows loading row when injection is on', () => {
+    const estimate = computeOutboundPromptEstimateFromParts({
+      systemText: 'sys',
+      history: [],
+      tools: [],
+    });
+    estimate.composedSystem = 1000;
+    estimate.codeMapSystem = 400;
+    estimate.codeMapInjectionEnabled = true;
+    const rows = buildContextUsageBreakdown(estimate, 0, 0);
+    assert.equal(rows.find((r) => r.key === 'system')?.tokens, 600);
+    assert.equal(rows.find((r) => r.key === 'codeMap')?.tokens, 400);
+
+    const loadingEstimate = computeOutboundPromptEstimateFromParts({
+      systemText: 'sys',
+      history: [],
+      tools: [],
+    });
+    loadingEstimate.codeMapInjectionEnabled = true;
+    const loadingRows = buildContextUsageBreakdown(loadingEstimate, 0, 0);
+    assert.equal(loadingRows.find((r) => r.key === 'codeMap')?.label, 'Code map (loading)');
+    assert.equal(loadingRows.find((r) => r.key === 'codeMap')?.tokens, 0);
+  });
 });
 
 describe('computeContextUsagePercent', () => {
