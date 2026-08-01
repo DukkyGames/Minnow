@@ -104,6 +104,7 @@ import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
 import { loadChatMeta } from './config/chat-meta';
+import { loadLibraryInferencePrefs } from './config/library-inference-meta';
 import { applySamplerMetaToDrawer, loadSamplerMeta } from './config/sampler-meta';
 import { loadAutopilotMeta } from './config/autopilot-meta';
 import {
@@ -345,6 +346,7 @@ export async function initApp(): Promise<void> {
   await loadSamplerMeta()
     .then(applySamplerMetaToDrawer)
     .catch(() => undefined);
+  await loadLibraryInferencePrefs().catch(() => undefined);
   await loadAutopilotMeta().catch(() => undefined);
   await loadThinkingMeta().catch(() => undefined);
   initStatsStrip();

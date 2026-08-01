@@ -8,6 +8,10 @@
 
 import { selectProviderModel } from '../../api/models';
 import {
+  getLibrarySamplerForId,
+  saveLibraryInferenceSampler,
+} from '../../config/library-inference-meta';
+import {
   cancelModelDownload,
   fetchCachedModels,
   fetchInstalledModels,
@@ -289,6 +293,16 @@ export async function loadModel(
     });
     state.serves.unshift(serve);
     await selectProviderModel(serve.providerId, serve.modelLabel).catch(() => false);
+    const sampler = getLibrarySamplerForId(model.id);
+    if (sampler) {
+      void saveLibraryInferenceSampler({
+        libraryId: model.id,
+        sampler,
+        aliases: [serve.modelLabel, model.name, model.fileName ?? undefined].filter(
+          (value): value is string => Boolean(value?.trim()),
+        ),
+      }).catch(() => undefined);
+    }
     emit();
     return serve;
   }
@@ -311,6 +325,16 @@ export async function loadModel(
 
   state.serves.unshift(serve);
   trackLoad(serve, model.id);
+  const sampler = getLibrarySamplerForId(model.id);
+  if (sampler) {
+    void saveLibraryInferenceSampler({
+      libraryId: model.id,
+      sampler,
+      aliases: [serve.modelLabel, model.name, model.fileName ?? undefined].filter(
+        (value): value is string => Boolean(value?.trim()),
+      ),
+    }).catch(() => undefined);
+  }
   return serve;
 }
 

@@ -33,7 +33,7 @@ export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Temperature, penalties, and token limits for main chat. Per-role overrides live under ',
+    'Temperature, penalties, and token limits for main chat. Per-model overrides live in the Models app inspector (Inference tab); per-role overrides live under ',
     linkToSettingsSection('Routing', 'model-routing'),
     '. Changes apply as soon as you edit a field.',
   );
