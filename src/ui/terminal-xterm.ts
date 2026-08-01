@@ -430,6 +430,21 @@ export function focusTerminalXterm(): void {
   term?.focus();
 }
 
+/**
+ * Insert plain text at the shell prompt (file-tree drag-drop, paste helpers).
+ * Updates the in-memory line buffer used for per-tab history navigation.
+ */
+export function insertTextAtTerminalInput(text: string): void {
+  if (!text) return;
+  const t = ensureTerminal();
+  if (!t) return;
+  t.focus();
+  if (activeWs?.readyState === WebSocket.OPEN) {
+    trackLineBufferInput(text);
+    sendPtyInput(text);
+  }
+}
+
 export function fitTerminalXterm(): void {
   const sid = activeWs
     ? new URL(activeWs.url).searchParams.get('sessionId')

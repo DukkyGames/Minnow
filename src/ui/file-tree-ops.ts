@@ -14,6 +14,7 @@ import {
 } from './file-tree-clipboard';
 import { parseToolResult } from './file-tree-parse-result';
 import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
+import { copyTextToClipboard } from './terminal-copy-shortcut';
 import {
   basename,
   dirname,
@@ -314,6 +315,13 @@ export async function commitCreate(
 export function copyPathToClipboard(path: string): void {
   setFileTreeClipboard('copy', [normalizeTreePath(path)]);
   setStatus('ok', `Copied ${basename(path)}`);
+}
+
+/** Copy workspace-relative path string to the OS clipboard. */
+export async function copyWorkspacePathStringToClipboard(path: string): Promise<void> {
+  const normalized = normalizeTreePath(path);
+  await copyTextToClipboard(normalized);
+  setStatus('ok', `Copied path ${basename(path)}`);
 }
 
 /** Cut path to in-memory clipboard. */

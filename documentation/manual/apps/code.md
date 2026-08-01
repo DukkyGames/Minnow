@@ -66,9 +66,9 @@ Full file operations, keyboard-driven when the tree has focus:
 | **Ctrl/Cmd+C / X / V** | Copy, cut, paste within the workspace |
 | **Delete** | Delete |
 
-Right-click for the context menu, including **Open in System Explorer** — reveals the file in Windows Explorer, Finder or your Linux file manager.
+Right-click for the context menu, including **Open in System Explorer** and **Copy path** (workspace-relative path on the system clipboard).
 
-Drag a file into the composer to attach it as a workspace reference the model can read with tools.
+Drag a file into the composer to attach it as a workspace reference the model can read with tools. Drag a file or folder into the terminal to insert its path at the shell prompt.
 
 When an agent writes files, the tree patches only the affected folders instead of rebuilding. Your scroll position, keyboard focus and expanded folders survive.
 
