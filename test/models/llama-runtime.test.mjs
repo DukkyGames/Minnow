@@ -3,9 +3,13 @@
  */
 
 import assert from 'node:assert/strict';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, test } from 'node:test';
 import {
   LLAMA_CPP_RELEASE_TAG,
+  copyFlattenedExtractContents,
   isLlamaRuntimeInstallable,
   pickLlamaReleaseAssetName,
 } from '../../server/models/llama-runtime.js';
@@ -34,5 +38,18 @@ describe('llama runtime', () => {
       return;
     }
     assert.fail(`unexpected platform ${process.platform}`);
+  });
+
+  test('copyFlattenedExtractContents merges cudart-style trees without llama-server', async () => {
+    const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-llama-test-'));
+    const extractDir = path.join(tmp, 'extract');
+    const nested = path.join(extractDir, 'cudart-llama-bin-win-cuda-12.4-x64');
+    await fsp.mkdir(nested, { recursive: true });
+    await fsp.writeFile(path.join(nested, 'cudart64_12.dll'), 'dll', 'utf8');
+    const managedRoot = path.join(tmp, 'managed');
+    await copyFlattenedExtractContents(extractDir, managedRoot);
+    const dll = path.join(managedRoot, 'cudart64_12.dll');
+    assert.ok(await fsp.stat(dll));
+    await fsp.rm(tmp, { recursive: true, force: true });
   });
 });

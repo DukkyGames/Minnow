@@ -31,6 +31,8 @@ import {
   resolveModelHostFilterLoadUnloadValue,
   setModelHostFilterLoadUnloadResolver,
 } from './model-host-filter-context';
+import { MINNOW_GLYPH_HEADER_HTML } from './minnow-glyph';
+import { isLibraryModelProviderId } from '../models/model-select-library';
 
 /** Refresh icon reused for compact refresh controls in model picker filter bars. */
 const MODEL_REFRESH_ICON_HTML = iconHtml('refresh');
@@ -41,6 +43,7 @@ const BROWSE_ALL_LIMIT = 12;
 const COLLAPSED_STORAGE_KEY = 'minnow-model-producer-collapsed';
 const HOST_FILTER_STORAGE_KEY = 'minnow-model-host-filter';
 const LOCAL_LOAD_FILTER_STORAGE_KEY = 'minnow-model-local-load-filter';
+const LIBRARY_FILTER_STORAGE_KEY = 'minnow-model-library-filter';
 const MODEL_SEARCH_DEBOUNCE_MS = 150;
 
 /** Filter models by provider host: all, loopback/local, or remote/cloud APIs. */
@@ -51,6 +54,9 @@ const MODEL_LOADED_TOGGLE_ICON_HTML = iconHtml('statusPass');
 
 /** When host is Local: show only models loaded in memory. */
 export type ModelLocalLoadFilter = 'all' | 'loaded';
+
+/** When on: show only My Models (minnow-library) rows in the picker. */
+export type ModelLibraryFilter = 'all' | 'library';
 
 const HOST_FILTER_CHOICES: { id: ModelHostFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -64,6 +70,7 @@ let chromePopoverRegistered = false;
 let auxiliaryChromePopoverRegistered = false;
 let hostFilter: ModelHostFilter = loadModelHostFilter();
 let localLoadFilter: ModelLocalLoadFilter = loadModelLocalLoadFilter();
+let libraryFilter: ModelLibraryFilter = loadModelLibraryFilter();
 let modelSearchQuery = '';
 let modelSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let modelMenuActiveIndex = -1;
@@ -200,6 +207,16 @@ function loadModelLocalLoadFilter(): ModelLocalLoadFilter {
   return 'all';
 }
 
+function loadModelLibraryFilter(): ModelLibraryFilter {
+  try {
+    const raw = localStorage.getItem(LIBRARY_FILTER_STORAGE_KEY);
+    if (raw === 'library') return 'library';
+  } catch {
+    /* ignore private mode */
+  }
+  return 'all';
+}
+
 /** Active local/cloud filter for model picker menus (persisted in localStorage). */
 export function getModelHostFilter(): ModelHostFilter {
   return hostFilter;
@@ -233,6 +250,27 @@ export function setModelLocalLoadFilter(filter: ModelLocalLoadFilter): void {
 export function toggleModelLocalLoadFilter(): ModelLocalLoadFilter {
   const next: ModelLocalLoadFilter = localLoadFilter === 'loaded' ? 'all' : 'loaded';
   setModelLocalLoadFilter(next);
+  return next;
+}
+
+/** Active My Models-only filter for model picker menus (persisted in localStorage). */
+export function getModelLibraryFilter(): ModelLibraryFilter {
+  return libraryFilter;
+}
+
+export function setModelLibraryFilter(filter: ModelLibraryFilter): void {
+  libraryFilter = filter;
+  try {
+    localStorage.setItem(LIBRARY_FILTER_STORAGE_KEY, filter);
+  } catch {
+    /* ignore quota / private mode */
+  }
+  syncAllModelHostFilterBars();
+}
+
+export function toggleModelLibraryFilter(): ModelLibraryFilter {
+  const next: ModelLibraryFilter = libraryFilter === 'library' ? 'all' : 'library';
+  setModelLibraryFilter(next);
   return next;
 }
 
@@ -282,6 +320,7 @@ function syncAllModelHostFilterSearchInputs(): void {
 function syncAllModelHostFilterBars(): void {
   const currentHost = getModelHostFilter();
   const loadedOnly = getModelLocalLoadFilter() === 'loaded';
+  const libraryOnly = getModelLibraryFilter() === 'library';
   for (const bar of document.querySelectorAll('.model-select-host-filter')) {
     for (const btn of bar.querySelectorAll<HTMLButtonElement>('.model-host-filter-segment')) {
       const id = btn.dataset.filter as ModelHostFilter | undefined;
@@ -296,6 +335,15 @@ function syncAllModelHostFilterBars(): void {
       loadedToggle.title = loadedOnly
         ? 'Showing loaded models only'
         : 'Show loaded models only';
+    }
+    const libraryToggle = bar.querySelector<HTMLButtonElement>(
+      '.model-host-filter-library-toggle',
+    );
+    if (libraryToggle) {
+      libraryToggle.setAttribute('aria-pressed', libraryOnly ? 'true' : 'false');
+      libraryToggle.title = libraryOnly
+        ? 'Showing My Models only'
+        : 'Show My Models only';
     }
   }
 }
@@ -349,6 +397,22 @@ function filterOptionsByLocalLoad(
   return options.filter((opt) => optionMatchesLocalLoadFilter(opt, filter));
 }
 
+function optionMatchesLibraryFilter(
+  opt: HTMLOptionElement,
+  filter: ModelLibraryFilter,
+): boolean {
+  if (filter === 'all') return true;
+  return isLibraryModelProviderId(providerIdForOption(opt));
+}
+
+function filterOptionsByLibrary(
+  options: HTMLOptionElement[],
+  filter: ModelLibraryFilter,
+): HTMLOptionElement[] {
+  if (filter === 'all') return options;
+  return options.filter((opt) => optionMatchesLibraryFilter(opt, filter));
+}
+
 function optionMatchesSearch(opt: HTMLOptionElement, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -377,9 +441,11 @@ function filterOptionsBySearch(
 function emptyFilterMessage(
   hostFilter: ModelHostFilter,
   loadFilter: ModelLocalLoadFilter,
+  libraryFilter: ModelLibraryFilter,
   searchQuery: string,
 ): string {
   if (searchQuery.trim()) return 'No matching models';
+  if (libraryFilter === 'library') return 'No My Models';
   if (hostFilter === 'local' && loadFilter === 'loaded') return 'No loaded local models';
   if (hostFilter === 'local') return 'No local models';
   if (hostFilter === 'cloud') return 'No cloud models';
@@ -513,6 +579,27 @@ function mountModelHostFilterSearch(
   bar.appendChild(searchWrap);
 }
 
+function mountModelHostFilterLibraryToggle(
+  toolbarEnd: HTMLDivElement,
+  onFilterChange: () => void,
+): void {
+  const libraryToggle = document.createElement('button');
+  libraryToggle.type = 'button';
+  libraryToggle.className =
+    'model-host-filter-action model-host-filter-library-toggle';
+  libraryToggle.innerHTML = MINNOW_GLYPH_HEADER_HTML;
+  libraryToggle.setAttribute('aria-label', 'My Models only');
+  libraryToggle.setAttribute('aria-pressed', 'false');
+  libraryToggle.title = 'Show My Models only';
+  libraryToggle.addEventListener('mousedown', (e) => e.preventDefault());
+  libraryToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleModelLibraryFilter();
+    onFilterChange();
+  });
+  toolbarEnd.appendChild(libraryToggle);
+}
+
 function mountModelHostFilterLoadedToggle(
   toolbarEnd: HTMLDivElement,
   onFilterChange: () => void,
@@ -581,6 +668,7 @@ export function mountModelHostFilterBar(
 
   controls.appendChild(segments);
   controls.appendChild(toolbarEnd);
+  mountModelHostFilterLibraryToggle(toolbarEnd, options.onFilterChange);
   mountModelHostFilterLoadedToggle(toolbarEnd, options.onFilterChange);
   mountModelHostFilterActions(bar, toolbarEnd, options);
   bar.appendChild(controls);
@@ -1035,17 +1123,19 @@ export function renderModelSelectMenuRows(
 
   const hostFilter = getModelHostFilter();
   const loadFilter = getModelLocalLoadFilter();
+  const libraryFilter = getModelLibraryFilter();
   const searchQuery = getModelSearchQuery();
   let options = filterOptionsByHost(allOptions, hostFilter);
   if (hostFilter === 'local') {
     options = filterOptionsByLocalLoad(options, loadFilter);
   }
+  options = filterOptionsByLibrary(options, libraryFilter);
   options = filterOptionsBySearch(options, searchQuery);
   if (options.length === 0) {
     const empty = document.createElement('li');
     empty.className = 'model-select-empty-filter';
     empty.setAttribute('role', 'presentation');
-    empty.textContent = emptyFilterMessage(hostFilter, loadFilter, searchQuery);
+    empty.textContent = emptyFilterMessage(hostFilter, loadFilter, libraryFilter, searchQuery);
     menu.appendChild(empty);
     return;
   }

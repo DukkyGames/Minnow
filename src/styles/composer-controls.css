@@ -548,6 +548,26 @@
   cursor: not-allowed;
 }
 
+.code-map-toggle-host {
+  display: flex;
+  align-items: center;
+}
+
+.code-map-control-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.brain-notes-toggle-host {
+  display: flex;
+  align-items: center;
+}
+
+.brain-notes-control-wrap {
+  display: flex;
+  align-items: center;
+}
+
 .thinking-toggle-host {
   display: inline-flex;
 }

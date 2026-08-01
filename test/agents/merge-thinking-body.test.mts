@@ -37,6 +37,27 @@ describe('mergeThinkingIntoCompletionBody', () => {
     assert.deepEqual(merged.reasoning, { effort: 'medium' });
   });
 
+  test('utility off forces reasoning_effort off for level-only catalogs', () => {
+    const body: Record<string, unknown> = {};
+    mergeThinkingIntoCompletionBody(
+      body,
+      'off',
+      {
+        id: 'lm-studio-local',
+        apiKind: 'openai-v1',
+        autoApi: false,
+        modelApiOverrides: {},
+      },
+      {
+        ...levelCaps,
+        reasoningAllowedOptions: ['low', 'medium', 'high'],
+      },
+      'off',
+      'openai-v1',
+    );
+    assert.deepEqual(body.thinking, { type: 'disabled' });
+  });
+
   test('llama-cpp applies default request budget when feature is supported', () => {
     const body: Record<string, unknown> = {};
     const { nativeBudgetApplied } = mergeThinkingIntoCompletionBody(

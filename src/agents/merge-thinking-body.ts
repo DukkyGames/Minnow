@@ -24,6 +24,26 @@ export interface MergeThinkingResult<T> {
   nativeBudgetApplied: boolean;
 }
 
+/**
+ * Disable thinking/reasoning for short utility completions (git commit message, inline edit, etc.).
+ * Ignores chat composer toggles; uses effort `off` for level-based reasoning catalogs.
+ */
+export function applyUtilityThinkingOff(
+  body: Record<string, unknown>,
+  provider: Pick<ProviderPublic, 'id' | 'apiKind' | 'autoApi' | 'modelApiOverrides'>,
+  modelCapabilities?: ModelCapabilities | null,
+  modelApi?: ApiKind,
+): void {
+  mergeThinkingIntoCompletionBody(
+    body,
+    'off',
+    provider,
+    modelCapabilities,
+    'off',
+    modelApi,
+  );
+}
+
 /** Merge provider-specific thinking fields into an outbound completion body. */
 export function mergeThinkingIntoCompletionBody<T extends Record<string, unknown>>(
   body: T,

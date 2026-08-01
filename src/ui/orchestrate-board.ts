@@ -19,6 +19,10 @@ import {
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
 import { isOrchestrateBoardFinished, isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
+import {
+  getKanbanColumnDefs,
+  getWaveCompactLaneDefs,
+} from '../chat/orchestrate/board-kanban-columns.ts';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { sumUsageSegments } from '../chat/orchestrate/stats-math';
 import {
@@ -45,12 +49,14 @@ import {
 import { isOomPauseActive } from '../chat/orchestrate/oom-recovery.ts';
 import {
   activateAfk,
+  boardSkipsPerTaskTesting,
   cancelPendingAfk,
   continueBoardTask,
   countRunningTaskChats,
   recoverMergingBoardTask,
   getBoardExecutionMode,
   isBoardRunning,
+  isBoardSkipPerTaskTestingLocked,
   isTaskChatActive,
   isTaskChatActiveForStallCheck,
   listRunningBoardTaskSlots,
@@ -61,6 +67,7 @@ import {
   restartBoardTask,
   setBoardExecutionMode,
   setBoardIsolationMode,
+  setBoardSkipPerTaskTesting,
   setBoardMaxConcurrent,
   startBoardAutoRun,
   startFinalIntegrationTestForPlannerChat,
@@ -532,6 +539,7 @@ export function buildKanbanRefreshKey(
   const parts: string[] = [
     `run:${running}/${cap}`,
     `mode:${getBoardExecutionMode(board)}`,
+    `skip:${board.skipPerTaskTesting ? 1 : 0}`,
     `stream:${isChatStreaming(plannerChat.id) ? 1 : 0}`,
   ];
   for (const wave of board.waves) {
@@ -1260,6 +1268,27 @@ function wireBoardHeaderControls(
   isoWrapper.appendChild(isoSelect);
   controls.appendChild(isoWrapper);
 
+  const skipWrapper = document.createElement('label');
+  skipWrapper.className = 'board-header__skip-per-task-tests';
+  skipWrapper.title =
+    'Build and merge each task; run one full-board test at the end.';
+  const skipInput = document.createElement('input');
+  skipInput.type = 'checkbox';
+  skipInput.className = 'board-header__skip-per-task-tests-input';
+  skipInput.checked = boardSkipsPerTaskTesting(board);
+  skipInput.disabled = isBoardSkipPerTaskTestingLocked(board);
+  skipInput.setAttribute('aria-label', 'Skip per-task tests');
+  skipInput.addEventListener('change', () => {
+    setBoardSkipPerTaskTesting(group, skipInput.checked, plannerChat);
+    refreshActiveBoardIfMounted();
+  });
+  const skipText = document.createElement('span');
+  skipText.className = 'board-header__skip-per-task-tests-label';
+  skipText.textContent = 'Skip per-task tests';
+  skipWrapper.appendChild(skipInput);
+  skipWrapper.appendChild(skipText);
+  controls.appendChild(skipWrapper);
+
   // Start / Stop button (shown in sequential, auto, and afk modes)
   if (currentMode !== 'manual') {
     const running = isBoardRunning(group);
@@ -1440,6 +1469,14 @@ function buildBoardHeader(
 
   const finalBanner = buildFinalTestBanner(board, group, plannerChat);
   if (finalBanner) meta.appendChild(finalBanner);
+
+  if (boardSkipsPerTaskTesting(board)) {
+    const skipHint = document.createElement('p');
+    skipHint.className = 'board-header__skip-per-task-tests-hint';
+    skipHint.setAttribute('role', 'status');
+    skipHint.textContent = 'Per-task testing off · final test after all tasks';
+    meta.appendChild(skipHint);
+  }
 
   header.appendChild(toolbar);
   if (meta.childElementCount > 0) {
@@ -2005,6 +2042,9 @@ function buildStatusActionButtons(
   plannerChat: Chat,
   row: HTMLElement,
 ): void {
+  const skipPerTaskTests = group.orchestrateBoard
+    ? boardSkipsPerTaskTesting(group.orchestrateBoard)
+    : false;
   const addBtn = (
     label: string,
     status: BoardTaskStatus,
@@ -2028,7 +2068,7 @@ function buildStatusActionButtons(
   if (task.status === 'planned' || task.status === 'blocked') {
     addBtn('In progress', 'in_progress', 'forward');
   }
-  if (task.status === 'in_progress') {
+  if (task.status === 'in_progress' && !skipPerTaskTests) {
     addBtn('Testing', 'testing', 'forward');
   }
   if (task.status === 'testing') {
@@ -2407,7 +2447,10 @@ function buildTaskCard(
       void stopTask(group, task.id, plannerChat).then(() => refreshActiveBoardIfMounted());
     });
     toolbar.appendChild(stopBtn);
-  } else if (task.status === 'testing') {
+  } else if (
+    task.status === 'testing' &&
+    !(group.orchestrateBoard && boardSkipsPerTaskTesting(group.orchestrateBoard))
+  ) {
     const runTestsBtn = document.createElement('button');
     runTestsBtn.type = 'button';
     runTestsBtn.className = 'board-btn board-btn--compact board-btn--primary board-task-card__btn--run-tests';
@@ -2528,12 +2571,14 @@ function buildWaveCompactSummary(
   const laneMeta = document.createElement('div');
   laneMeta.className = 'board-wave-compact__lanes';
   laneMeta.setAttribute('aria-hidden', 'true');
-  const lanes: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
-    { label: 'Plan', statuses: ['planned', 'blocked'] },
-    { label: 'Run', statuses: ['in_progress', 'merging'] },
-    { label: 'Test', statuses: ['testing'] },
-    { label: 'Done', statuses: ['complete', 'failed', 'quarantined'] },
-  ];
+  const board = group.orchestrateBoard;
+  const lanes = board ? getWaveCompactLaneDefs(board) : getWaveCompactLaneDefs({
+    planPath: '',
+    tasks: waveTasks,
+    waves: [],
+    startedAt: 0,
+    lastUpdatedAt: 0,
+  });
   for (const lane of lanes) {
     const count = waveTasks.filter((t) => lane.statuses.includes(t.status)).length;
     const cell = document.createElement('span');
@@ -2599,12 +2644,11 @@ function renderKanbanColumns(
   grid.className = 'kanban-grid';
   // Stable key lets us restore horizontal scroll (phone lane swipe) across rebuilds.
   if (scrollKeyPrefix) grid.dataset.boardScrollKey = `grid:${scrollKeyPrefix}`;
-  const columns: Array<{ id: string; label: string; statuses: BoardTaskStatus[] }> = [
-    { id: 'planned', label: 'Planned', statuses: ['planned', 'blocked'] },
-    { id: 'in_progress', label: 'In Progress', statuses: ['in_progress', 'merging'] },
-    { id: 'testing', label: 'Testing', statuses: ['testing'] },
-    { id: 'complete', label: 'Complete', statuses: ['complete', 'failed', 'quarantined'] },
-  ];
+  const board = group.orchestrateBoard;
+  if (!board) {
+    return grid;
+  }
+  const columns = getKanbanColumnDefs(board);
   for (const col of columns) {
     const column = document.createElement('section');
     column.className = 'kanban-column';
@@ -2820,6 +2864,15 @@ function refreshBoardDom(
   ) as HTMLSelectElement | null;
   if (isolationSelect) {
     isolationSelect.value = board.isolationMode ?? 'auto';
+  }
+
+  const skipInput = root.querySelector(
+    '.board-header__skip-per-task-tests-input',
+  ) as HTMLInputElement | null;
+  if (skipInput) {
+    skipInput.checked = boardSkipsPerTaskTesting(board);
+    skipInput.disabled = isBoardSkipPerTaskTestingLocked(board);
+    skipInput.setAttribute('aria-disabled', skipInput.disabled ? 'true' : 'false');
   }
 
   syncBoardHeaderModelSelect(root, group, board, plannerChat);

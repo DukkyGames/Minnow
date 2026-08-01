@@ -328,7 +328,13 @@ export function onModelSelectChange(): void {
   updateModelLoadUnloadButtons();
   syncModelSelectPicker();
   showCachedModelInfo();
-  void import('./composer-model-trigger').then((m) => m.syncComposerModelTriggers());
+  const active = getActiveChat();
+  if (isEphemeralEmptyChat(active)) {
+    applyDefaultModelToChat(active);
+    touchChat(active);
+    scheduleSaveSessions();
+  }
+  syncActiveChatModelUi();
 }
 
 /** Refresh main column after workspace folder changes. */

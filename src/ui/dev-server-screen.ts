@@ -3,7 +3,9 @@
  */
 
 import '../styles/dev-server-screen.css';
-import { spawnSubAgent } from '../agents/orchestrator';
+import { getSubAgentRun, spawnSubAgent } from '../agents/orchestrator';
+import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
+import type { SubAgentRun } from '../agents/types';
 import { appAlert, appConfirm } from './app-dialog';
 import {
   createDevServerApi,
@@ -36,6 +38,7 @@ import {
   deriveDevServerRowView,
   labelPortAttribution,
 } from './dev-server-screen-view';
+import { subAgentLiveStatusLine } from './sub-agent-live-status';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
 import { formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
 import { listWorktrees } from '../state/worktree-service';
@@ -85,6 +88,89 @@ let portsCollapsed = false;
 let knownWorktrees: ParsedWorktree[] = [];
 /** Per-server worktree pick when starting (falls back to def.worktreeRoot). */
 const pendingWorktreeById = new Map<string, string>();
+/** Sub-agent run spawned by Detect servers (toolbar). */
+let detectAgentRunId: string | null = null;
+let detectAgentPending = false;
+let detectRunListenerBound = false;
+
+function detectRunDetailLine(run: SubAgentRun | undefined): string {
+  if (!run) return 'Starting background agent…';
+  const live = run.status === 'running' || run.status === 'queued';
+  if (live) {
+    return (
+      subAgentLiveStatusLine(run, true) ||
+      'Scanning package.json, README, and startup files for dev servers…'
+    );
+  }
+  if (run.status === 'completed') {
+    return 'Finished. New servers should appear in the list below.';
+  }
+  if (run.status === 'failed') {
+    return run.error?.trim() || 'Detection failed. Check the parent chat for details.';
+  }
+  if (run.status === 'cancelled') return 'Detection stopped.';
+  return 'Looking for dev servers…';
+}
+
+function detectRunTitle(run: SubAgentRun | undefined): string {
+  if (!run) return 'Detecting dev servers';
+  if (run.status === 'completed') return 'Detection complete';
+  if (run.status === 'failed') return 'Detection failed';
+  if (run.status === 'cancelled') return 'Detection stopped';
+  return 'Detecting dev servers';
+}
+
+function syncDetectBanner(): void {
+  const banner = document.querySelector<HTMLElement>('[data-role="detect-banner"]');
+  const titleEl = document.querySelector<HTMLElement>('[data-role="detect-title"]');
+  const detailEl = document.querySelector<HTMLElement>('[data-role="detect-detail"]');
+  const liveDots = document.querySelector<HTMLElement>('[data-role="detect-live-dots"]');
+  const detectBtn = document.querySelector<HTMLButtonElement>('[data-action="detect"]');
+  if (!banner || !titleEl || !detailEl) return;
+
+  if (!detectAgentRunId && !detectAgentPending) {
+    banner.classList.add('hidden');
+    banner.classList.remove('is-active', 'is-done', 'is-error');
+    detectBtn?.removeAttribute('disabled');
+    liveDots?.classList.add('hidden');
+    return;
+  }
+
+  const run = detectAgentRunId ? getSubAgentRun(detectAgentRunId) : undefined;
+  const live =
+    detectAgentPending || !run || run.status === 'running' || run.status === 'queued';
+
+  banner.classList.remove('hidden');
+  banner.classList.toggle('is-active', live);
+  banner.classList.toggle('is-done', run?.status === 'completed');
+  banner.classList.toggle(
+    'is-error',
+    run?.status === 'failed' || run?.status === 'cancelled',
+  );
+  liveDots?.classList.toggle('hidden', !live);
+
+  titleEl.textContent = detectRunTitle(run);
+  detailEl.textContent = detectRunDetailLine(run);
+  if (live) detectBtn?.setAttribute('disabled', 'true');
+  else detectBtn?.removeAttribute('disabled');
+}
+
+function bindDetectRunListener(): void {
+  if (detectRunListenerBound) return;
+  detectRunListenerBound = true;
+  subscribeSubAgentRuns((run) => {
+    if (!detectAgentRunId || run.runId !== detectAgentRunId) return;
+    syncDetectBanner();
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+      void refreshAll();
+    }
+  });
+}
+
+function clearDetectAgentState(): void {
+  detectAgentRunId = null;
+  detectAgentPending = false;
+}
 
 export function isDevServerScreenOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
@@ -138,6 +224,29 @@ function buildShell(): HTMLElement {
         <button type="button" class="dev-server-screen__btn" data-action="detect">Detect servers</button>
         <button type="button" class="dev-server-screen__btn" data-action="refresh">Refresh</button>
         <button type="button" class="dev-server-screen__btn dev-server-screen__btn--primary" data-action="add">+ Add server</button>
+      </div>
+    </div>
+    <div
+      class="dev-server-screen__detect-banner hidden"
+      data-role="detect-banner"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div
+        class="stream-status stream-status--generating dev-server-screen__detect-live hidden"
+        data-role="detect-live-dots"
+        aria-hidden="true"
+      >
+        <span class="stream-status__dots">
+          <span class="stream-status__dot"></span>
+          <span class="stream-status__dot"></span>
+          <span class="stream-status__dot"></span>
+        </span>
+      </div>
+      <div class="dev-server-screen__detect-copy">
+        <div class="dev-server-screen__detect-title" data-role="detect-title">Detecting dev servers</div>
+        <div class="dev-server-screen__detect-detail" data-role="detect-detail"></div>
       </div>
     </div>
     <div class="dev-server-screen__body">
@@ -601,13 +710,27 @@ async function onDetect(): Promise<void> {
     await appAlert('Open a chat first so Detect can spawn a setup agent.');
     return;
   }
-  await spawnSubAgent({
-    type: 'generalPurpose',
-    task: SETUP_TASK,
-    wait: false,
-    parentChatId: chat.id,
-    modeId: 'build',
-  });
+  bindDetectRunListener();
+  detectAgentPending = true;
+  detectAgentRunId = null;
+  syncDetectBanner();
+  try {
+    const result = await spawnSubAgent({
+      type: 'generalPurpose',
+      task: SETUP_TASK,
+      wait: false,
+      parentChatId: chat.id,
+      modeId: 'build',
+    });
+    if ('runId' in result) {
+      detectAgentRunId = result.runId;
+    }
+  } catch (err) {
+    await appAlert(err instanceof Error ? err.message : String(err));
+  } finally {
+    detectAgentPending = false;
+    syncDetectBanner();
+  }
 }
 
 async function onSaveEdit(): Promise<void> {
@@ -782,6 +905,7 @@ export function closeDevServerScreen(options?: {
   portsAuto = true;
   knownWorktrees = [];
   pendingWorktreeById.clear();
+  clearDetectAgentState();
   syncRailButton();
 
   if (!options?.skipNavigate) {

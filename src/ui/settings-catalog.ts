@@ -85,8 +85,17 @@ export const SETTINGS_CATEGORIES: SettingsCategoryId[] = [
   'advanced',
 ];
 
+/** Areas reparented into Models without appearing in Settings sub-nav. */
+const SETTINGS_AREA_CATEGORY_OVERRIDES: Partial<
+  Record<SettingsSectionId, SettingsCategoryId>
+> = {
+  voice: 'models',
+};
+
 /** Map legacy area slug → parent category. */
 export function categoryForArea(area: SettingsSectionId): SettingsCategoryId {
+  const override = SETTINGS_AREA_CATEGORY_OVERRIDES[area];
+  if (override) return override;
   for (const category of SETTINGS_CATEGORIES) {
     if (SETTINGS_CATEGORY_AREAS[category].includes(area)) {
       return category;

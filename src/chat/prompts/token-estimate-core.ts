@@ -4,6 +4,7 @@
 
 import type { ApiMessage, AssistantToolCallMessage, Message } from '../../types';
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
+import { isUiOnlyTranscriptMessage } from '../context/injection-notice';
 
 /** Rough token proxy for English-ish text; not model-accurate. */
 export function estimateTokensFromText(text: string): number {
@@ -37,7 +38,7 @@ export const SETTINGS_PROMPT_CONFIG_ESTIMATE_TOOLTIP =
 export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[] {
   const messages: ApiMessage[] = [];
   for (const m of history) {
-    if (m.role === 'context') continue;
+    if (isUiOnlyTranscriptMessage(m)) continue;
     if (m.role === 'user') {
       messages.push({ role: 'user', content: m.content });
       continue;
@@ -85,7 +86,7 @@ export function serializeMessageContentForEstimate(m: Message): string {
 export function estimateHistoryTokens(history: Message[]): number {
   let total = 0;
   for (const m of history) {
-    if (m.role === 'context') continue;
+    if (isUiOnlyTranscriptMessage(m)) continue;
     total += estimateTokensFromText(serializeMessageContentForEstimate(m));
   }
   return total;
@@ -104,6 +105,10 @@ export interface OutboundPromptEstimate {
   history: number;
   tools: number;
   legacyFallback: boolean;
+  /** Approximate tokens for injected code map (subset of composedSystem). */
+  codeMapSystem?: number;
+  /** Resolved on for this estimate (map may still be loading). */
+  codeMapInjectionEnabled?: boolean;
   /** When context compression would apply on send. */
   historyCompressed?: boolean;
   compressedContextEstimate?: number;

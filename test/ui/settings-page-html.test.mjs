@@ -213,11 +213,13 @@ describe('settings page HTML', () => {
     assert.match(html, /data-category="apps"/);
   });
 
-  test('voice settings redirect notice in index.html', () => {
+  test('voice section uses settings layout in models app', () => {
     assert.match(html, /id="settingsSection-voice"/);
-    assert.match(html, /Models → Voice/);
+    assert.match(html, /data-area="voice"/);
     assert.match(html, /id="modelsSection-voice"/);
     assert.match(html, /id="modelsVoiceBody"/);
+    assert.match(html, /class="settings-section-body"/);
+    assert.doesNotMatch(html, /Voice model settings moved to/);
   });
 
   test('composer tools button and popover exist in index.html', () => {

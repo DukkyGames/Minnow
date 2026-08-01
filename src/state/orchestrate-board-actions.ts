@@ -1106,7 +1106,6 @@ export function finalizeBoardTaskOnStreamEnd(
     );
     teardownBoardTaskChatResources(chat, sessionState?.groups);
     logBuildVerdict(group, task.id, 'pass');
-    moveTaskStatus(group, task.id, 'testing', plannerChat);
 
     const builderChat = findChatById(chatId);
     if (builderChat) {
@@ -1127,6 +1126,18 @@ export function finalizeBoardTaskOnStreamEnd(
         modelId: modelId || undefined,
       });
     }
+
+    const boardAfterPass = group.orchestrateBoard;
+    if (boardAfterPass && boardSkipsPerTaskTesting(boardAfterPass)) {
+      if (isBoardRunning(group)) {
+        void completeTaskAfterVerificationPass(group, freshTask, plannerChat).catch((err) =>
+          reportBackgroundError('skip-per-task-merge', err),
+        );
+      }
+      return;
+    }
+
+    moveTaskStatus(group, task.id, 'testing', plannerChat);
 
     if (isBoardRunning(group)) {
       void startTaskTesting(group, task.id, plannerChat).catch((err) =>
@@ -1619,7 +1630,7 @@ function listChatRunningBoardTaskSlots(
       });
     }
     const testId = task.testChatId?.trim();
-    if (testId) {
+    if (testId && !(boardSkipsPerTaskTesting(board) && task.status !== 'testing')) {
       push(testId, {
         taskId: task.id,
         title: task.title,
@@ -1872,6 +1883,15 @@ async function resumeBoardTask(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (
+    task.status === 'in_progress' &&
+    board &&
+    boardSkipsPerTaskTesting(board) &&
+    resolveBoardReport(task)?.outcome === 'pass'
+  ) {
+    await completeTaskAfterVerificationPass(group, task, plannerChat);
+    return;
+  }
   if (task.status === 'testing') {
     await startTaskTesting(group, taskId, plannerChat, {
       allowPreReservedTestChat: true,
@@ -3287,30 +3307,37 @@ async function finalizeEnvFixerOnStreamEnd(
           await startTask(group, fresh.id, plannerChat);
         }
       } else {
-        moveTaskStatus(group, fresh.id, 'testing', plannerChat);
         updateTask(
           group,
           fresh.id,
           { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
           plannerChat,
         );
-        if (isBoardRunning(group)) {
-          const testChat = getOrCreateBoardChat({
-            group,
-            plannerChat,
-            existingId: fresh.testChatId?.trim(),
-            role: 'tester',
-            name: `Test ${fresh.id}: ${fresh.title}`,
-            taskId: fresh.id,
-            taskChatField: 'testChatId',
-          });
-          reserveLaunchSlot(testChat.id, group, 'test', fresh.id);
-          await startTaskTesting(group, fresh.id, plannerChat, {
-            enqueueAtFront: true,
-            allowPreReservedTestChat: true,
-          });
+        const boardAfterFix = group.orchestrateBoard;
+        if (boardAfterFix && boardSkipsPerTaskTesting(boardAfterFix)) {
+          if (isBoardRunning(group)) {
+            await completeTaskAfterVerificationPass(group, fresh, plannerChat);
+          }
+        } else {
+          moveTaskStatus(group, fresh.id, 'testing', plannerChat);
+          if (isBoardRunning(group)) {
+            const testChat = getOrCreateBoardChat({
+              group,
+              plannerChat,
+              existingId: fresh.testChatId?.trim(),
+              role: 'tester',
+              name: `Test ${fresh.id}: ${fresh.title}`,
+              taskId: fresh.id,
+              taskChatField: 'testChatId',
+            });
+            reserveLaunchSlot(testChat.id, group, 'test', fresh.id);
+            await startTaskTesting(group, fresh.id, plannerChat, {
+              enqueueAtFront: true,
+              allowPreReservedTestChat: true,
+            });
+          }
+          // Paused: the resume sweep routes `testing` → startTaskTesting.
         }
-        // Paused: the resume sweep routes `testing` → startTaskTesting.
       }
       return;
     }
@@ -3754,6 +3781,104 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
   return null;
 }
 
+/** True when the board header skip-per-task-tests option is enabled. */
+export function boardSkipsPerTaskTesting(board: OrchestrateBoardState): boolean {
+  return board.skipPerTaskTesting === true;
+}
+
+/** Skip toggle is frozen after Start or once any task leaves planned/blocked. */
+export function isBoardSkipPerTaskTestingLocked(board: OrchestrateBoardState): boolean {
+  if (board.autoRunning === true) return true;
+  return board.tasks.some((t) => t.status !== 'planned' && t.status !== 'blocked');
+}
+
+/** Persist skip-per-task-tests (header only, before first run). */
+export function setBoardSkipPerTaskTesting(
+  group: ChatGroup,
+  value: boolean,
+  _plannerChat: Chat,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board || isBoardSkipPerTaskTestingLocked(board)) return;
+  const next = value === true;
+  if (boardSkipsPerTaskTesting(board) === next) return;
+  if (next) {
+    board.skipPerTaskTesting = true;
+  } else {
+    delete board.skipPerTaskTesting;
+  }
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
+/** Merge + complete after build or tester verification passes (shared path). */
+export async function completeTaskAfterVerificationPass(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
+  const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+  updateTask(group, fresh.id, { error: undefined }, plannerChat);
+  const hold = acquireBoardPipelineHold(group, fresh.id, 'merge');
+  try {
+    const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
+    if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
+      moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+    } else if (mergeResult.outcome === 'conflict') {
+      updateTask(
+        group,
+        fresh.id,
+        {
+          error: `Integration merge conflict on ${fresh.worktreeBranch ?? fresh.id}`,
+        },
+        plannerChat,
+      );
+      await startMergeConflictFixer(
+        group,
+        fresh,
+        plannerChat,
+        mergeResult.conflictedFiles,
+        mergeResult.integrationSha,
+      );
+    } else {
+      const mergeSummary = mergeResult.message || 'Integration merge failed';
+      updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
+      void runSelfHeal(
+        group,
+        fresh,
+        plannerChat,
+        { phase: 'merge', category: 'merge', summary: mergeSummary },
+        makeSelfHealDeps(),
+      ).catch((err) => reportBackgroundError('self-heal-merge', err));
+      return;
+    }
+
+    const testChatIdAfterMerge = fresh.testChatId?.trim();
+    const testChat = testChatIdAfterMerge ? findChatById(testChatIdAfterMerge) : null;
+    if (testChat) {
+      const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+      const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
+      const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
+        ? lastAssistant.content
+        : '';
+      schedulePostTurnSynthesis({
+        chatId: testChat.id,
+        messages: buildSynthesisMessages(testChat),
+        roundCount: testChat.history.filter((m) => m.role === 'assistant').length,
+        toolCount: 0,
+        sourceExcerpt: buildSynthesisExcerpt(testChat),
+        assistantText,
+        force: true,
+        providerId: providerId || undefined,
+        modelId: modelId || undefined,
+      });
+    }
+  } finally {
+    releasePipelineHold(hold);
+  }
+}
+
 /** Route per-task Tester verdict after its chat stream ends. */
 export async function finalizeTaskTestingOnStreamEnd(
   group: ChatGroup,
@@ -3879,65 +4004,7 @@ async function finalizeTaskTestingOnStreamEndImpl(
   );
 
   if (outcome === 'pass') {
-    updateTask(group, fresh.id, { error: undefined }, plannerChat);
-    const hold = acquireBoardPipelineHold(group, fresh.id, 'merge');
-    try {
-      const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
-      if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
-        moveTaskStatus(group, fresh.id, 'complete', plannerChat);
-      } else if (mergeResult.outcome === 'conflict') {
-        updateTask(
-          group,
-          fresh.id,
-          {
-            error: `Integration merge conflict on ${fresh.worktreeBranch ?? fresh.id}`,
-          },
-          plannerChat,
-        );
-        await startMergeConflictFixer(
-          group,
-          fresh,
-          plannerChat,
-          mergeResult.conflictedFiles,
-          mergeResult.integrationSha,
-        );
-      } else {
-        // Merge-failed (non-conflict error) → self-heal merge path.
-        const mergeSummary = mergeResult.message || 'Integration merge failed';
-        updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
-        void runSelfHeal(
-          group,
-          fresh,
-          plannerChat,
-          { phase: 'merge', category: 'merge', summary: mergeSummary },
-          makeSelfHealDeps(),
-        ).catch((err) => reportBackgroundError('self-heal-merge', err));
-        return;
-      }
-
-      const testChatIdAfterMerge = fresh.testChatId?.trim();
-      const testChat = testChatIdAfterMerge ? findChatById(testChatIdAfterMerge) : null;
-      if (testChat) {
-        const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
-        const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
-        const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
-          ? lastAssistant.content
-          : '';
-        schedulePostTurnSynthesis({
-          chatId: testChat.id,
-          messages: buildSynthesisMessages(testChat),
-          roundCount: testChat.history.filter((m) => m.role === 'assistant').length,
-          toolCount: 0,
-          sourceExcerpt: buildSynthesisExcerpt(testChat),
-          assistantText,
-          force: true,
-          providerId: providerId || undefined,
-          modelId: modelId || undefined,
-        });
-      }
-    } finally {
-      releasePipelineHold(hold);
-    }
+    await completeTaskAfterVerificationPass(group, fresh, plannerChat);
     return;
   }
 

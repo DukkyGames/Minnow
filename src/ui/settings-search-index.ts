@@ -132,6 +132,24 @@ const BRAIN_MEMORY_SEARCH: SettingsSearchEntry[] = [
   },
 ];
 
+const BRAIN_CODE_SEARCH: SettingsSearchEntry[] = [
+  {
+    id: 'brain:code-map-injection-default',
+    label: 'Inject code map by default',
+    sectionId: 'prompting',
+    kind: 'brain-section',
+    brainSection: 'settings',
+    searchKey: 'knowledge.code.injectionDefault',
+    keywords: [
+      'code map injection',
+      'repo map injection',
+      'code map default',
+      'codeMapInjectionDefault',
+    ],
+    hint: 'Brain app',
+  },
+];
+
 function sectionEntry(sectionId: SettingsSectionId): SettingsSearchEntry {
   const label = SETTINGS_SECTION_LABELS[sectionId];
   return {
@@ -289,6 +307,7 @@ export function buildSettingsSearchIndex(): SettingsSearchEntry[] {
     ...categoryEntries(),
     MODELS_VOICE_SEARCH,
     ...BRAIN_MEMORY_SEARCH,
+    ...BRAIN_CODE_SEARCH,
     ...navGroupEntries(),
     ...catalogFieldEntries(),
     ...toolCategoryEntries(),

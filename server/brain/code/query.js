@@ -8,11 +8,12 @@ import { getLspWorkspaceSymbols } from '../../lsp/manager.js';
 import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
 import { brainWorkspaceKeyFromPath } from '../paths.js';
 import { loadBrainConfig } from '../store.js';
-import { clampRepoMapTokenBudget, normalizeBrainCodeConfig } from './config.js';
+import { clampRepoMapInjectionTokenBudget, clampRepoMapTokenBudget, normalizeBrainCodeConfig } from './config.js';
 import { getCodeDb, getIndexStats } from './schema.js';
 import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
-import { ensureIndexFreshForQuery } from './cascade.js';
+import { prepareRepoMapSymbols, prepareRepoMapSymbolsForInjection } from './repo-map-symbols.js';
+import { ensureIndexFreshForQuery, runCascade } from './cascade.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
 /** Load merged config.brain.code settings. */
@@ -28,6 +29,42 @@ export function activeRepoKey() {
 }
 
 /**
+ * Normalize optional repo key from API/tool args (slug only).
+ * @param {unknown} repoParam
+ */
+export function resolveRepoKey(repoParam) {
+  const requested = typeof repoParam === 'string' ? repoParam.trim() : '';
+  if (!requested) return activeRepoKey();
+  if (!/^[a-z0-9._-]+$/i.test(requested)) {
+    const err = new Error('Invalid repo key');
+    err.statusCode = 400;
+    throw err;
+  }
+  return requested.toLowerCase();
+}
+
+/**
+ * Warm a cold code index (shared by repo_map tool and /api/brain/code/repo-map).
+ * Cascade runs only when the requested repo matches the active workspace key.
+ * @param {string} [repo]
+ * @returns {Promise<{ repo: string, symbolCount: number }>}
+ */
+export async function ensureWarmCodeIndex(repo) {
+  const key = resolveRepoKey(repo);
+  const db = getCodeDb(key);
+  let stats = getIndexStats(db);
+  if (!stats.symbolCount && key === activeRepoKey()) {
+    const reindex = await runCascade({ trigger: 'manual', force: true });
+    if (!reindex.indexedFiles && !reindex.skipped) {
+      stats = getIndexStats(db);
+      return { repo: key, symbolCount: stats.symbolCount ?? 0 };
+    }
+    stats = getIndexStats(db);
+  }
+  return { repo: key, symbolCount: stats.symbolCount ?? 0 };
+}
+
+/**
  * Index status for the active workspace.
  */
 export async function queryCodeStatus() {
@@ -40,6 +77,7 @@ export async function queryCodeStatus() {
     repo,
     ...stats,
     repoMapTokenBudget: code.repoMapTokenBudget,
+    repoMapInjectionTokenBudget: code.repoMapInjectionTokenBudget,
     reindexCadence: code.reindexCadence,
   };
 }
@@ -309,28 +347,38 @@ export async function readSymbol(symbolRef) {
 
 /**
  * Token-budgeted signature map, optionally focused on a substring.
- * @param {{ repo?: string, focus?: string, tokenBudget?: number, focusFiles?: string[] }} [opts]
+ * @param {{ repo?: string, focus?: string, tokenBudget?: number, focusFiles?: string[], profile?: 'default' | 'injection' }} [opts]
  */
 export async function repoMap(opts = {}) {
   await ensureIndexFreshForQuery();
   const code = await loadBrainCodeConfig();
-  const repo = opts.repo?.trim() || activeRepoKey();
+  const repo = resolveRepoKey(opts.repo);
   const db = getCodeDb(repo);
   if (opts.focusFiles?.length) {
     recomputePageRank(db, new Set(opts.focusFiles));
   }
 
-  const budget = clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
+  const profile = opts.profile === 'injection' ? 'injection' : 'default';
+  const budget =
+    profile === 'injection'
+      ? clampRepoMapInjectionTokenBudget(
+          opts.tokenBudget ?? code.repoMapInjectionTokenBudget,
+        )
+      : clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
   const rows = db
     .prepare(
-      `SELECT id, file, signature, kind, pagerank, usage_count
+      `SELECT id, file, signature, kind, pagerank, usage_count, line_start
        FROM symbols
        WHERE repo = ?
        ORDER BY pagerank DESC, usage_count DESC, file, line_start`,
     )
     .all(repo);
 
-  return renderRepoMap(rows, budget, { focus: opts.focus });
+  const symbols =
+    profile === 'injection'
+      ? prepareRepoMapSymbolsForInjection(rows)
+      : prepareRepoMapSymbols(rows);
+  return renderRepoMap(symbols, budget, { focus: opts.focus, profile });
 }
 
 /**

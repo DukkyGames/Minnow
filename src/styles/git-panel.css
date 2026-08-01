@@ -640,17 +640,18 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 8px;
-  padding: 5px 0;
+  padding: 0;
 }
 
-/* Spacer column; rails and dot anchor to the body so they span the full row height. */
+/* Graph gutter: rails and dots are positioned inside this column so lanes never bleed into commit text. */
 .git-graph__marker {
-  position: static;
+  position: relative;
   flex: none;
   width: var(--git-marker-w);
   min-height: 18px;
+  overflow: hidden;
 }
 
 .git-graph__rails {
@@ -783,6 +784,7 @@ html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__ico
   display: flex;
   flex-direction: column;
   gap: 3px;
+  padding: 5px 0;
   font-size: 12px;
 }
 

@@ -9,6 +9,8 @@ import type {
 } from '../config/voice-meta';
 import type { SttCatalogEntry } from './catalog-stt';
 import type { TtsCatalogEntry } from './catalog-tts';
+import { createSettingsRadioRow } from '../ui/settings-controls';
+import { createSettingsToggleRow } from '../ui/settings-switch';
 
 type FieldGroup = 'basic' | 'advanced';
 
@@ -246,26 +248,47 @@ function renderField(
 ): void {
   if (spec.showWhen && !spec.showWhen(config, catalog)) return;
 
-  const wrap = document.createElement('div');
-  wrap.className = 'models-voice-field';
-
-  const label = document.createElement('label');
-  label.className = 'models-voice-field__label';
-  label.htmlFor = fieldId(spec.key);
-  label.textContent = spec.label;
-  wrap.appendChild(label);
-
   const value = config[spec.key];
-  let control: HTMLInputElement | HTMLSelectElement;
 
   if (spec.type === 'checkbox') {
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = Boolean(value);
-    control = checkbox;
-  } else if (spec.type === 'select') {
+    const { row, input } = createSettingsToggleRow(spec.label, {
+      id: fieldId(spec.key),
+      checked: Boolean(value),
+      description: spec.hint,
+    });
+    input.dataset.voiceSttKey = spec.key;
+    row.classList.add('models-voice-field');
+    mount.appendChild(row);
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-row models-voice-field';
+
+  const labelCol = document.createElement('div');
+  labelCol.className = 'settings-row__label';
+
+  const label = document.createElement('label');
+  label.className = 'settings-row__title';
+  label.htmlFor = fieldId(spec.key);
+  label.textContent = spec.label;
+  labelCol.appendChild(label);
+  if (spec.hint) {
+    const desc = document.createElement('span');
+    desc.className = 'settings-row__desc';
+    desc.textContent = spec.hint;
+    labelCol.appendChild(desc);
+  }
+  wrap.appendChild(labelCol);
+
+  const controlWrap = document.createElement('div');
+  controlWrap.className = 'settings-row__control';
+
+  let control: HTMLInputElement | HTMLSelectElement;
+
+  if (spec.type === 'select') {
     const select = document.createElement('select');
-    select.className = 'models-voice-field__input';
+    select.className = 'settings-select';
     for (const opt of spec.options ?? []) {
       const option = document.createElement('option');
       option.value = opt.value;
@@ -276,7 +299,7 @@ function renderField(
     control = select;
   } else {
     const textInput = document.createElement('input');
-    textInput.className = 'models-voice-field__input';
+    textInput.className = 'settings-input';
     textInput.type = spec.type;
     if (spec.type === 'number') {
       if (spec.min != null) textInput.min = String(spec.min);
@@ -292,14 +315,8 @@ function renderField(
 
   control.id = fieldId(spec.key);
   control.dataset.voiceSttKey = spec.key;
-  wrap.appendChild(control);
-
-  if (spec.hint) {
-    const hint = document.createElement('p');
-    hint.className = 'field-hint';
-    hint.textContent = spec.hint;
-    wrap.appendChild(hint);
-  }
+  controlWrap.appendChild(control);
+  wrap.appendChild(controlWrap);
 
   mount.appendChild(wrap);
 }
@@ -338,27 +355,16 @@ export function renderSttSettingsForm(options: RenderSttSettingsFormOptions): vo
   const { mount, config, catalogEntry, onBackendChange } = options;
   mount.replaceChildren();
 
-  const backendRow = document.createElement('div');
-  backendRow.className = 'models-voice-backend-toggle';
-  const backendLabel = document.createElement('span');
-  backendLabel.className = 'models-voice-field__label';
-  backendLabel.textContent = 'Backend';
-  backendRow.appendChild(backendLabel);
-
-  const toggle = document.createElement('div');
-  toggle.className = 'models-voice-backend-toggle__buttons';
-  for (const value of ['local', 'provider'] as const) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'models-inline-btn';
-    btn.textContent = value === 'local' ? 'Local' : 'External API';
-    btn.dataset.voiceSttBackend = value;
-    btn.setAttribute('aria-pressed', config.stt.backend === value ? 'true' : 'false');
-    btn.classList.toggle('is-primary', config.stt.backend === value);
-    btn.addEventListener('click', () => onBackendChange?.(value));
-    toggle.appendChild(btn);
-  }
-  backendRow.appendChild(toggle);
+  const { row: backendRow } = createSettingsRadioRow('Backend', {
+    name: 'voiceSttBackend',
+    options: [
+      { value: 'local', label: 'Local' },
+      { value: 'provider', label: 'External API' },
+    ],
+    value: config.stt.backend,
+    onChange: (value) => onBackendChange?.(value as 'local' | 'provider'),
+    searchKey: 'models.voice.stt.backend',
+  });
   mount.appendChild(backendRow);
 
   const providerPanel = document.createElement('div');
@@ -366,17 +372,17 @@ export function renderSttSettingsForm(options: RenderSttSettingsFormOptions): vo
   providerPanel.id = 'modelsVoiceSttProviderPanel';
   providerPanel.hidden = config.stt.backend !== 'provider';
   providerPanel.innerHTML = `
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceSttProviderId">Provider</label>
-      <select class="models-voice-field__input" id="voiceSttProviderId"></select>
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceSttProviderId">Provider</label></div>
+      <div class="settings-row__control"><select class="settings-select" id="voiceSttProviderId"></select></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceSttProviderModel">Model</label>
-      <input class="models-voice-field__input" id="voiceSttProviderModel" type="text" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceSttProviderModel">Model</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceSttProviderModel" type="text" /></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceSttProviderLanguage">Language</label>
-      <input class="models-voice-field__input" id="voiceSttProviderLanguage" type="text" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceSttProviderLanguage">Language</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceSttProviderLanguage" type="text" /></div>
     </div>
   `;
   mount.appendChild(providerPanel);
@@ -448,11 +454,10 @@ export function setSttBackendUi(backend: 'local' | 'provider'): void {
   const localPanel = document.getElementById('modelsVoiceSttLocalPanel');
   providerPanel?.toggleAttribute('hidden', backend !== 'provider');
   localPanel?.toggleAttribute('hidden', backend !== 'local');
-  for (const btn of document.querySelectorAll('[data-voice-stt-backend]')) {
-    const el = btn as HTMLButtonElement;
-    const active = el.dataset.voiceSttBackend === backend;
-    el.classList.toggle('is-primary', active);
-    el.setAttribute('aria-pressed', active ? 'true' : 'false');
+  for (const input of document.querySelectorAll<HTMLInputElement>('input[name="voiceSttBackend"]')) {
+    const active = input.value === backend;
+    input.checked = active;
+    input.closest('label')?.classList.toggle('is-active', active);
   }
 }
 
@@ -478,25 +483,45 @@ function ttsFieldId(id: string): string {
 }
 
 function renderTtsControl(spec: TtsFieldSpec, value: unknown, mount: HTMLElement): void {
+  if (spec.type === 'checkbox') {
+    const { row, input } = createSettingsToggleRow(spec.label, {
+      id: ttsFieldId(spec.id),
+      checked: Boolean(value),
+      description: spec.hint,
+    });
+    input.dataset.voiceTtsKey = spec.id;
+    row.classList.add('models-voice-field');
+    if (spec.panel) row.dataset.ttsPanel = spec.panel;
+    mount.appendChild(row);
+    return;
+  }
+
   const wrap = document.createElement('div');
-  wrap.className = 'models-voice-field';
+  wrap.className = 'settings-row models-voice-field';
   wrap.dataset.ttsPanel = spec.panel ?? '';
 
+  const labelCol = document.createElement('div');
+  labelCol.className = 'settings-row__label';
   const label = document.createElement('label');
-  label.className = 'models-voice-field__label';
+  label.className = 'settings-row__title';
   label.htmlFor = ttsFieldId(spec.id);
   label.textContent = spec.label;
-  wrap.appendChild(label);
+  labelCol.appendChild(label);
+  if (spec.hint) {
+    const desc = document.createElement('span');
+    desc.className = 'settings-row__desc';
+    desc.textContent = spec.hint;
+    labelCol.appendChild(desc);
+  }
+  wrap.appendChild(labelCol);
+
+  const controlWrap = document.createElement('div');
+  controlWrap.className = 'settings-row__control';
 
   let control: HTMLInputElement | HTMLSelectElement;
-  if (spec.type === 'checkbox') {
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = Boolean(value);
-    control = checkbox;
-  } else if (spec.type === 'select') {
+  if (spec.type === 'select') {
     const select = document.createElement('select');
-    select.className = 'models-voice-field__input';
+    select.className = 'settings-select';
     for (const opt of spec.options ?? []) {
       const option = document.createElement('option');
       option.value = opt.value;
@@ -507,13 +532,13 @@ function renderTtsControl(spec: TtsFieldSpec, value: unknown, mount: HTMLElement
     control = select;
   } else if (spec.type === 'file') {
     const fileInput = document.createElement('input');
-    fileInput.className = 'models-voice-field__input';
+    fileInput.className = 'settings-input';
     fileInput.type = 'file';
     fileInput.accept = 'audio/*';
     control = fileInput;
   } else {
     const textInput = document.createElement('input');
-    textInput.className = 'models-voice-field__input';
+    textInput.className = 'settings-input';
     textInput.type = spec.type;
     if (spec.type === 'number') {
       if (spec.min != null) textInput.min = String(spec.min);
@@ -527,14 +552,8 @@ function renderTtsControl(spec: TtsFieldSpec, value: unknown, mount: HTMLElement
 
   control.id = ttsFieldId(spec.id);
   control.dataset.voiceTtsKey = spec.id;
-  wrap.appendChild(control);
-
-  if (spec.hint) {
-    const hint = document.createElement('p');
-    hint.className = 'field-hint';
-    hint.textContent = spec.hint;
-    wrap.appendChild(hint);
-  }
+  controlWrap.appendChild(control);
+  wrap.appendChild(controlWrap);
 
   mount.appendChild(wrap);
 }
@@ -560,58 +579,48 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
   const { mount, config, catalogEntry, clonePrompts, onBackendChange, onModeChange } = options;
   mount.replaceChildren();
 
-  const backendRow = document.createElement('div');
-  backendRow.className = 'models-voice-backend-toggle';
-  backendRow.appendChild(Object.assign(document.createElement('span'), {
-    className: 'models-voice-field__label',
-    textContent: 'Backend',
-  }));
-  const toggle = document.createElement('div');
-  toggle.className = 'models-voice-backend-toggle__buttons';
-  for (const value of ['local', 'provider', 'browser'] as const) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'models-inline-btn';
-    btn.textContent =
-      value === 'local' ? 'Local' : value === 'provider' ? 'External API' : 'Browser';
-    btn.dataset.voiceTtsBackend = value;
-    btn.setAttribute('aria-pressed', config.tts.backend === value ? 'true' : 'false');
-    btn.classList.toggle('is-primary', config.tts.backend === value);
-    btn.addEventListener('click', () => onBackendChange?.(value));
-    toggle.appendChild(btn);
-  }
-  backendRow.appendChild(toggle);
+  const { row: backendRow } = createSettingsRadioRow('Backend', {
+    name: 'voiceTtsBackend',
+    options: [
+      { value: 'local', label: 'Local' },
+      { value: 'provider', label: 'External API' },
+      { value: 'browser', label: 'Browser' },
+    ],
+    value: config.tts.backend,
+    onChange: (value) => onBackendChange?.(value as TtsBackend),
+    searchKey: 'models.voice.tts.backend',
+  });
   mount.appendChild(backendRow);
 
   const providerPanel = document.createElement('div');
   providerPanel.id = 'modelsVoiceTtsProviderPanel';
   providerPanel.hidden = config.tts.backend !== 'provider';
   providerPanel.innerHTML = `
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsProviderId">Provider</label>
-      <select class="models-voice-field__input" id="voiceTtsProviderId"></select>
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsProviderId">Provider</label></div>
+      <div class="settings-row__control"><select class="settings-select" id="voiceTtsProviderId"></select></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsProviderModel">Model</label>
-      <input class="models-voice-field__input" id="voiceTtsProviderModel" type="text" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsProviderModel">Model</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceTtsProviderModel" type="text" /></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsProviderVoice">Voice</label>
-      <input class="models-voice-field__input" id="voiceTtsProviderVoice" type="text" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsProviderVoice">Voice</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceTtsProviderVoice" type="text" /></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsProviderSpeed">Speed</label>
-      <input class="models-voice-field__input" id="voiceTtsProviderSpeed" type="number" min="0.25" max="4" step="0.05" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsProviderSpeed">Speed</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceTtsProviderSpeed" type="number" min="0.25" max="4" step="0.05" /></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsProviderFormat">Format</label>
-      <select class="models-voice-field__input" id="voiceTtsProviderFormat">
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsProviderFormat">Format</label></div>
+      <div class="settings-row__control"><select class="settings-select" id="voiceTtsProviderFormat">
         <option value="mp3">mp3</option>
         <option value="wav">wav</option>
         <option value="opus">opus</option>
         <option value="aac">aac</option>
         <option value="flac">flac</option>
-      </select>
+      </select></div>
     </div>
   `;
   mount.appendChild(providerPanel);
@@ -620,21 +629,21 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
   browserPanel.id = 'modelsVoiceTtsBrowserPanel';
   browserPanel.hidden = config.tts.backend !== 'browser';
   browserPanel.innerHTML = `
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsBrowserVoice">speechSynthesis voice</label>
-      <select class="models-voice-field__input" id="voiceTtsBrowserVoice"></select>
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsBrowserVoice">speechSynthesis voice</label></div>
+      <div class="settings-row__control"><select class="settings-select" id="voiceTtsBrowserVoice"></select></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsBrowserRate">Rate</label>
-      <input class="models-voice-field__input" id="voiceTtsBrowserRate" type="number" min="0.25" max="4" step="0.05" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsBrowserRate">Rate</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceTtsBrowserRate" type="number" min="0.25" max="4" step="0.05" /></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsBrowserPitch">Pitch</label>
-      <input class="models-voice-field__input" id="voiceTtsBrowserPitch" type="number" min="0" max="2" step="0.05" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsBrowserPitch">Pitch</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceTtsBrowserPitch" type="number" min="0" max="2" step="0.05" /></div>
     </div>
-    <div class="models-voice-field">
-      <label class="models-voice-field__label" for="voiceTtsBrowserVolume">Volume</label>
-      <input class="models-voice-field__input" id="voiceTtsBrowserVolume" type="number" min="0" max="1" step="0.05" />
+    <div class="settings-row models-voice-field">
+      <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsBrowserVolume">Volume</label></div>
+      <div class="settings-row__control"><input class="settings-input" id="voiceTtsBrowserVolume" type="number" min="0" max="1" step="0.05" /></div>
     </div>
   `;
   mount.appendChild(browserPanel);
@@ -707,24 +716,29 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
     runtime,
   );
   const streamingRow = document.createElement('div');
-  streamingRow.className = 'models-voice-field';
+  streamingRow.className = 'settings-row models-voice-field';
   streamingRow.innerHTML = `
-    <label class="models-voice-field__label" for="voiceTtsStreaming">Streaming</label>
-    <input type="checkbox" id="voiceTtsStreaming" ${config.tts.streaming ? 'checked' : ''} />
+    <div class="settings-row__label"><label class="settings-row__title" for="voiceTtsStreaming">Streaming</label></div>
+    <div class="settings-row__control"><input type="checkbox" id="voiceTtsStreaming" ${config.tts.streaming ? 'checked' : ''} /></div>
   `;
   runtime.appendChild(streamingRow);
   localPanel.appendChild(runtime);
 
   const modePanel = document.createElement('div');
-  modePanel.className = 'models-voice-field';
-  const modeLabel = document.createElement('label');
-  modeLabel.className = 'models-voice-field__label';
-  modeLabel.htmlFor = 'voiceTtsMode';
-  modeLabel.textContent = 'Mode';
+  modePanel.className = 'settings-row models-voice-field';
+  const modeLabel = document.createElement('div');
+  modeLabel.className = 'settings-row__label';
+  const modeLabelText = document.createElement('label');
+  modeLabelText.className = 'settings-row__title';
+  modeLabelText.htmlFor = 'voiceTtsMode';
+  modeLabelText.textContent = 'Mode';
+  modeLabel.appendChild(modeLabelText);
   modePanel.appendChild(modeLabel);
+  const modeControl = document.createElement('div');
+  modeControl.className = 'settings-row__control';
   const modeSelect = document.createElement('select');
   modeSelect.id = 'voiceTtsMode';
-  modeSelect.className = 'models-voice-field__input';
+  modeSelect.className = 'settings-select';
   for (const value of ['custom_voice', 'voice_design', 'voice_clone'] as const) {
     const opt = document.createElement('option');
     opt.value = value;
@@ -742,7 +756,8 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
     setTtsModePanels(mode);
     onModeChange?.(mode);
   });
-  modePanel.appendChild(modeSelect);
+  modeControl.appendChild(modeSelect);
+  modePanel.appendChild(modeControl);
   localPanel.appendChild(modePanel);
 
   const customPanel = document.createElement('fieldset');
@@ -843,15 +858,20 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
     clonePanel,
   );
   const promptRow = document.createElement('div');
-  promptRow.className = 'models-voice-field';
+  promptRow.className = 'settings-row models-voice-field';
+  const promptLabelCol = document.createElement('div');
+  promptLabelCol.className = 'settings-row__label';
   const promptLabel = document.createElement('label');
-  promptLabel.className = 'models-voice-field__label';
+  promptLabel.className = 'settings-row__title';
   promptLabel.htmlFor = 'voiceClone.savedPromptId';
   promptLabel.textContent = 'Saved prompt';
-  promptRow.appendChild(promptLabel);
+  promptLabelCol.appendChild(promptLabel);
+  promptRow.appendChild(promptLabelCol);
+  const promptControl = document.createElement('div');
+  promptControl.className = 'settings-row__control';
   const promptSelect = document.createElement('select');
   promptSelect.id = 'voiceClone.savedPromptId';
-  promptSelect.className = 'models-voice-field__input';
+  promptSelect.className = 'settings-select';
   const emptyOpt = document.createElement('option');
   emptyOpt.value = '';
   emptyOpt.textContent = 'None';
@@ -863,7 +883,8 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
     if (config.tts.local.voiceClone.savedPromptId === prompt.id) opt.selected = true;
     promptSelect.appendChild(opt);
   }
-  promptRow.appendChild(promptSelect);
+  promptControl.appendChild(promptSelect);
+  promptRow.appendChild(promptControl);
   clonePanel.appendChild(promptRow);
   localPanel.appendChild(clonePanel);
 
@@ -1120,11 +1141,10 @@ export function setTtsBackendUi(backend: TtsBackend): void {
   document.getElementById('modelsVoiceTtsProviderPanel')?.toggleAttribute('hidden', backend !== 'provider');
   document.getElementById('modelsVoiceTtsBrowserPanel')?.toggleAttribute('hidden', backend !== 'browser');
   document.getElementById('modelsVoiceTtsLocalPanel')?.toggleAttribute('hidden', backend !== 'local');
-  for (const btn of document.querySelectorAll('[data-voice-tts-backend]')) {
-    const el = btn as HTMLButtonElement;
-    const active = el.dataset.voiceTtsBackend === backend;
-    el.classList.toggle('is-primary', active);
-    el.setAttribute('aria-pressed', active ? 'true' : 'false');
+  for (const input of document.querySelectorAll<HTMLInputElement>('input[name="voiceTtsBackend"]')) {
+    const active = input.value === backend;
+    input.checked = active;
+    input.closest('label')?.classList.toggle('is-active', active);
   }
 }
 

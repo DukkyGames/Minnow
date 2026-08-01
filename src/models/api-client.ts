@@ -69,6 +69,7 @@ export interface CachedModelRow {
   is_gguf?: boolean;
   is_ollama?: boolean;
   is_local_dir?: boolean;
+  is_diffusion?: boolean;
   status?: string;
   gguf_files?: Array<{
     name: string;
@@ -307,6 +308,8 @@ export async function startModelServe(payload: {
   isMoe?: boolean;
   weightsGb?: number;
   llama?: LlamaServeSettings;
+  /** Return as soon as the process spawns; poll fetchModelServe for readiness. */
+  async?: boolean;
 }): Promise<ServeRecord> {
   const res = await fetch('/api/models/serve', {
     method: 'POST',
@@ -327,6 +330,40 @@ export async function listModelServes(): Promise<ServeRecord[]> {
   const res = await fetch('/api/models/serve');
   const data = await parseJson<{ serves: ServeRecord[] }>(res);
   return data.serves;
+}
+
+/** Poll a single serve — used while an async start is still loading. */
+export async function fetchModelServe(serveId: string): Promise<ServeRecord | null> {
+  const res = await fetch(`/api/models/serve/${serveId}`);
+  if (res.status === 404) return null;
+  const data = await parseJson<{ serve: ServeRecord }>(res);
+  return data.serve;
+}
+
+/** Read the trailing bytes of a serve's runtime log. */
+export async function fetchServeLog(
+  serveId: string,
+  bytes?: number,
+): Promise<{ text: string; offset: number }> {
+  const qs = bytes ? `?bytes=${bytes}` : '';
+  const res = await fetch(`/api/models/serve/${serveId}/logs${qs}`);
+  return parseJson(res);
+}
+
+/** Follow a serve's runtime log — emits the tail, then appended chunks. */
+export function subscribeServeLog(
+  serveId: string,
+  onChunk: (event: { text: string; offset: number; initial?: boolean }) => void,
+): () => void {
+  const source = new EventSource(withSessionToken(`/api/models/serve/${serveId}/logs/stream`));
+  source.onmessage = (msg) => {
+    try {
+      onChunk(JSON.parse(msg.data));
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  return () => source.close();
 }
 
 /** Resolve the GGUF download repo for a catalog row. */

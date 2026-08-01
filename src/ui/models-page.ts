@@ -1,52 +1,38 @@
 /**
- * Models full-page app — hardware recommendations + moved provider/model settings.
+ * Models full-page app — a local-model workbench: library, catalog, local
+ * server, plus the provider and inference settings that used to live in
+ * Settings.
  */
 
 import '../styles/models-page.css';
+import '../styles/settings-sampler.css';
 
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 import { renderModelsSection } from './models-sections';
+import {
+  DEFAULT_MODELS_SECTION,
+  MODELS_SECTIONS as SECTIONS,
+  MODELS_SECTION_LABELS as SECTION_LABELS,
+  WORKBENCH_SECTIONS,
+  type ModelsSectionId,
+} from './models-section-ids';
+import { initInspector } from './models/inspector';
+import {
+  readModelsInspectorPreference,
+  setModelsInspectorOpen,
+} from './models/inspector-visibility';
 import { restoreReparentedSettingsSections } from './models/settings-reparent';
+import { getModelsState, runningServes, subscribeModelsStore, teardownModelsStore } from './models/store';
+import { teardownServerSection } from './models/server-panel';
 
-export type ModelsSectionId =
-  | 'recommend'
-  | 'installed'
-  | 'settings'
-  | 'voice'
-  | 'providers'
-  | 'routing'
-  | 'sampler'
-  | 'thinking'
-  | 'usage';
+export type { ModelsSectionId };
+export { DEFAULT_MODELS_SECTION };
 
-const SECTIONS: ModelsSectionId[] = [
-  'recommend',
-  'installed',
-  'settings',
-  'voice',
-  'providers',
-  'routing',
-  'sampler',
-  'thinking',
-  'usage',
-];
-
-const SECTION_LABELS: Record<ModelsSectionId, string> = {
-  recommend: 'Recommendations',
-  installed: 'Installed',
-  settings: 'Library',
-  voice: 'Voice',
-  providers: 'Providers',
-  routing: 'Routing',
-  sampler: 'Sampler',
-  thinking: 'Thinking',
-  usage: 'Usage & cost',
-};
-
-let activeSection: ModelsSectionId = 'recommend';
+let activeSection: ModelsSectionId = DEFAULT_MODELS_SECTION;
 let staticBindingsDone = false;
+let statusBound = false;
 
 function getModelsRoot(): HTMLElement | null {
   return document.getElementById('modelsView');
@@ -61,11 +47,47 @@ function parseHashSection(): ModelsSectionId {
   const match = hash.match(/^(?:app\/models|models)(?:\/([\w-]+))?/);
   const id = match?.[1] as ModelsSectionId | undefined;
   if (id && SECTIONS.includes(id)) return id;
-  return 'recommend';
+  return DEFAULT_MODELS_SECTION;
+}
+
+/** Mirror runtime state into the app header so it reads from any section. */
+function renderHeaderStatus(): void {
+  const host = document.getElementById('modelsHeaderStatus');
+  if (!host) return;
+  const serves = runningServes();
+  const running = serves.filter((s) => s.status === 'running');
+  const loads = getModelsState().loads;
+  // A failed load stays on screen until dismissed; it must not read as busy.
+  const loading = loads.some((l) => !l.error) || serves.length > running.length;
+  const failed = !loading && loads.some((l) => l.error);
+
+  host.replaceChildren();
+  const dot = document.createElement('span');
+  const tone = running.length ? 'running' : loading ? 'starting' : failed ? 'error' : 'stopped';
+  dot.className = `models-dot models-dot--${tone}`;
+  const label = document.createElement('span');
+  label.className = 'models-header-status__label';
+
+  if (running.length) {
+    label.textContent =
+      running.length === 1
+        ? `${running[0].modelLabel} · ${running[0].baseUrl}`
+        : `${running.length} models serving`;
+  } else if (loading) {
+    label.textContent = 'Loading a model…';
+  } else if (failed) {
+    label.textContent = 'Load failed';
+  } else {
+    label.textContent = 'No model loaded';
+  }
+  host.append(dot, label);
 }
 
 function setActiveSection(section: ModelsSectionId): void {
   activeSection = section;
+  const root = getModelsRoot();
+  root?.classList.toggle('is-workbench', WORKBENCH_SECTIONS.has(section));
+
   for (const id of SECTIONS) {
     const panel = document.getElementById(`modelsSection-${id}`);
     const nav = document.querySelector(
@@ -89,16 +111,30 @@ function bindStaticSections(): void {
   if (staticBindingsDone) return;
   staticBindingsDone = true;
 
-  document.getElementById('btnModelsPageBack')?.addEventListener('click', () => {
-    if (requestCloseWindowApp('models')) return;
-    closeModels();
-  });
-
   for (const id of SECTIONS) {
     document
       .querySelector(`[data-models-nav="${id}"]`)
       ?.addEventListener('click', () => setActiveSection(id));
   }
+
+  const toggle = document.getElementById('btnModelsInspector');
+  toggle?.addEventListener('click', () => {
+    const hidden = getModelsRoot()?.classList.contains('is-inspector-hidden');
+    setModelsInspectorOpen(Boolean(hidden));
+  });
+
+  const stored = readModelsInspectorPreference();
+  // Below ~1040px the inspector overlays the table, so it starts closed unless
+  // the user has said otherwise.
+  const wideEnough = (getModelsRoot()?.clientWidth ?? window.innerWidth) >= 1040;
+  setModelsInspectorOpen(stored ? stored !== '0' : wideEnough);
+
+  initInspector();
+  if (!statusBound) {
+    statusBound = true;
+    subscribeModelsStore(() => renderHeaderStatus());
+  }
+  renderHeaderStatus();
 }
 
 function closeOtherFullPages(): void {
@@ -166,6 +202,8 @@ export function closeModels(options?: { skipNavigate?: boolean }): void {
 
   root.classList.remove('is-open');
   restoreReparentedSettingsSections();
+  teardownServerSection();
+  teardownModelsStore();
 
   if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
@@ -185,7 +223,7 @@ export function closeModels(options?: { skipNavigate?: boolean }): void {
 }
 
 export function openModelsFromTopbar(): void {
-  openModels('recommend');
+  openModels(DEFAULT_MODELS_SECTION);
 }
 
 export function isModelsPageOpen(): boolean {
