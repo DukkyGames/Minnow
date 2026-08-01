@@ -33,6 +33,21 @@ export function persistDefaultModelValue(value: string): void {
   }
 }
 
+/**
+ * Refresh provider/model on a chat that already has a per-chat binding.
+ * Never reads the global #modelSelect default — only the catalog option for this chat.
+ */
+export function syncPerChatModelBindingFromCatalog(chat: ModelSelectChatBinding): void {
+  const mid = chat.modelId?.trim();
+  if (!mid) return;
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
+  const optionValues = sel ? [...sel.options].map((o) => o.value) : [];
+  const chatValue = resolveModelSelectValueForChat(chat, optionValues);
+  if (chatValue) {
+    applyModelSelectValueToChat(chat, chatValue);
+  }
+}
+
 /** Read canonical model id + optional provider from the default #modelSelect. */
 export function readDefaultModelBinding(): { modelId: string; providerId?: string } {
   const raw = (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value ?? '';

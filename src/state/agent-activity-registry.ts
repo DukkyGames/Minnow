@@ -68,6 +68,7 @@ function contextFor(
 function mapMainTurnPhase(phase: MainTurnActivity['phase']): AgentActivityStatus {
   if (phase === 'tools') return 'tools';
   if (phase === 'thinking') return 'generating';
+  if (phase === 'loading_model') return 'generating';
   return 'generating';
 }
 

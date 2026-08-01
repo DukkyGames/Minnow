@@ -6,7 +6,10 @@
 import { formatThinkingDuration } from './thinking-duration';
 import { humanizeToolName } from './tool-messages';
 
-export type StreamPhase = 'generating' | 'thinking' | 'prose' | 'done';
+export type StreamPhase = 'loading_model' | 'generating' | 'thinking' | 'prose' | 'done';
+
+/** Visible while the local model is loading into memory before the first token. */
+export const STREAM_LABEL_LOADING_MODEL = 'Loading model…';
 
 /** Visible while waiting for reasoning or prose (no tokens yet). */
 export const STREAM_LABEL_GENERATING = 'Generating response…';
@@ -14,7 +17,8 @@ export const STREAM_LABEL_GENERATING = 'Generating response…';
 /** Visible while reasoning SSE is active (thought bubbles are primary). */
 export const STREAM_LABEL_THINKING = 'Thinking…';
 
-const LABEL_BY_PHASE: Record<'generating' | 'thinking', string> = {
+const LABEL_BY_PHASE: Record<'loading_model' | 'generating' | 'thinking', string> = {
+  loading_model: STREAM_LABEL_LOADING_MODEL,
   generating: STREAM_LABEL_GENERATING,
   thinking: STREAM_LABEL_THINKING,
 };
@@ -106,10 +110,18 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
 
     statusEl.classList.remove('hidden');
     statusEl.setAttribute('aria-busy', 'true');
-    statusEl.classList.remove('stream-status--generating', 'stream-status--thinking');
-    statusEl.classList.add(
-      phase === 'thinking' ? 'stream-status--thinking' : 'stream-status--generating',
+    statusEl.classList.remove(
+      'stream-status--loading-model',
+      'stream-status--generating',
+      'stream-status--thinking',
     );
+    if (phase === 'thinking') {
+      statusEl.classList.add('stream-status--thinking');
+    } else if (phase === 'loading_model') {
+      statusEl.classList.add('stream-status--loading-model');
+    } else {
+      statusEl.classList.add('stream-status--generating');
+    }
     labelEl.textContent = LABEL_BY_PHASE[phase];
     wrap.dataset.streamPhase = phase;
     if (phase !== 'thinking') {
