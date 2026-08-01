@@ -148,6 +148,7 @@ export type ChromeIconName =
   | 'loop'
   | 'sparkles'
   | 'thinkingBrain'
+  | 'reasoning'
   | 'codeMapInjection'
   | 'inbox';
 
@@ -188,7 +189,7 @@ export type MetricIconName =
   | 'metricTotal'
   | 'metricCtx';
 
-/** All 131 semantic icon names. */
+/** All 132 semantic icon names. */
 export type IconName =
   | ShellIconName
   | AppIconName
@@ -328,6 +329,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   loop: 'fi-rr-rotate-right',
   sparkles: 'fi-rr-sparkles',
   thinkingBrain: 'fi-sr-brain',
+  reasoning: 'fi-sr-bulb',
   codeMapInjection: 'fi-rr-sitemap',
   inbox: 'fi-rr-inbox',
 
