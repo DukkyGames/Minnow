@@ -140,6 +140,7 @@ export type ChromeIconName =
   | 'deviceDesktop'
   | 'designMode'
   | 'dock'
+  | 'inspectorPanel'
   | 'mic'
   | 'speaker'
   | 'tools'
@@ -318,6 +319,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   deviceDesktop: 'fi-rr-computer',
   designMode: 'fi-rr-magic-wand',
   dock: 'fi-rr-layout-fluid',
+  inspectorPanel: 'fi-rr-sidebar-flip',
   mic: 'fi-rr-microphone',
   speaker: 'fi-rr-volume',
   tools: 'fi-rr-tools',

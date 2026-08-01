@@ -2,10 +2,11 @@
  * Lazy-render Models app section panels.
  */
 
-import type { ModelsSectionId } from './models-page';
-import { mountRecommendSection } from './models/recommend-panel';
-import { mountInstalledSection } from './models/installed-panel';
+import type { ModelsSectionId } from './models-section-ids';
+import { mountDiscoverSection } from './models/discover-panel';
+import { mountLibrarySection } from './models/library-panel';
 import { mountModelsSettingsSection } from './models/models-settings-panel';
+import { mountServerSection } from './models/server-panel';
 import { reparentSettingsSectionIntoModels } from './models/settings-reparent';
 import { mountVoicePanel } from './models/voice-panel';
 
@@ -23,16 +24,20 @@ const SETTINGS_SECTION_BY_MODELS: Partial<
 /** Render a Models section on first activation. */
 export async function renderModelsSection(section: ModelsSectionId): Promise<void> {
   switch (section) {
-    case 'recommend':
-      await mountRecommendSection();
-      break;
     case 'installed':
-      mountInstalledSection();
+      mountLibrarySection();
+      break;
+    case 'recommend':
+      mountDiscoverSection();
+      break;
+    case 'server':
+      mountServerSection();
       break;
     case 'settings':
       await mountModelsSettingsSection();
       break;
     case 'voice':
+      await reparentSettingsSectionIntoModels('voice', 'voice');
       mountVoicePanel();
       break;
     default: {

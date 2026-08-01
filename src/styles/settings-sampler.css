@@ -32,6 +32,13 @@
   color: var(--mn-fg-muted);
 }
 
+.settings-sampler-field__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-subtle);
+}
+
 .settings-sampler-field__input {
   width: 100%;
   box-sizing: border-box;

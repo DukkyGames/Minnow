@@ -8,7 +8,8 @@ import { listInstalled } from './installed.js';
 import { getModelsConfig, patchModelsConfig } from './models-config.js';
 import { computeServeProfiles } from './profiles.js';
 import { detectRuntimes } from './runtime-detect.js';
-import { listServes, startServe, stopServe } from './serve.js';
+import { getServe, listServes, startServe, stopServe } from './serve.js';
+import { readServeLogTail, subscribeServeLog } from './serve-logs.js';
 import { validateJobId, validateServeId } from './validate.js';
 import { detectHardware } from '../system/hardware.js';
 import {
@@ -294,10 +295,74 @@ export async function handleModelsRequest(req, res, pathname) {
     return true;
   }
 
+  const serveLogStreamMatch = pathname.match(/^\/api\/models\/serve\/([^/]+)\/logs\/stream$/);
+  if (serveLogStreamMatch && req.method === 'GET') {
+    let serve;
+    try {
+      serve = await getServe(validateServeId(serveLogStreamMatch[1]));
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      return true;
+    }
+    if (!serve?.runId) {
+      sendJson(res, 404, { error: 'No log for this serve' });
+      return true;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    const unsubscribe = subscribeServeLog(serve.runId, (event) => {
+      try {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        unsubscribe();
+      }
+    });
+    req.on('close', () => unsubscribe());
+    return true;
+  }
+
+  const serveLogMatch = pathname.match(/^\/api\/models\/serve\/([^/]+)\/logs$/);
+  if (serveLogMatch && req.method === 'GET') {
+    try {
+      const serve = await getServe(validateServeId(serveLogMatch[1]));
+      if (!serve) {
+        sendJson(res, 404, { error: 'Serve session not found' });
+        return true;
+      }
+      const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const bytes = Number(parsed.searchParams.get('bytes'));
+      const tail = serve.runId
+        ? await readServeLogTail(serve.runId, Number.isFinite(bytes) ? bytes : undefined)
+        : null;
+      sendJson(res, 200, { text: tail?.text ?? '', offset: tail?.size ?? 0 });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
   const serveStopMatch = pathname.match(/^\/api\/models\/serve\/([^/]+)\/stop$/);
   if (serveStopMatch && req.method === 'POST') {
     try {
       const serve = await stopServe(validateServeId(serveStopMatch[1]));
+      sendJson(res, 200, { serve });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  const serveGetMatch = pathname.match(/^\/api\/models\/serve\/([^/]+)$/);
+  if (serveGetMatch && req.method === 'GET') {
+    try {
+      const serve = await getServe(validateServeId(serveGetMatch[1]));
+      if (!serve) {
+        sendJson(res, 404, { error: 'Serve session not found' });
+        return true;
+      }
       sendJson(res, 200, { serve });
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
