@@ -8,11 +8,11 @@ import { getLspWorkspaceSymbols } from '../../lsp/manager.js';
 import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
 import { brainWorkspaceKeyFromPath } from '../paths.js';
 import { loadBrainConfig } from '../store.js';
-import { clampRepoMapTokenBudget, normalizeBrainCodeConfig } from './config.js';
+import { clampRepoMapInjectionTokenBudget, clampRepoMapTokenBudget, normalizeBrainCodeConfig } from './config.js';
 import { getCodeDb, getIndexStats } from './schema.js';
 import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
-import { prepareRepoMapSymbols } from './repo-map-symbols.js';
+import { prepareRepoMapSymbols, prepareRepoMapSymbolsForInjection } from './repo-map-symbols.js';
 import { ensureIndexFreshForQuery, runCascade } from './cascade.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
@@ -77,6 +77,7 @@ export async function queryCodeStatus() {
     repo,
     ...stats,
     repoMapTokenBudget: code.repoMapTokenBudget,
+    repoMapInjectionTokenBudget: code.repoMapInjectionTokenBudget,
     reindexCadence: code.reindexCadence,
   };
 }
@@ -346,7 +347,7 @@ export async function readSymbol(symbolRef) {
 
 /**
  * Token-budgeted signature map, optionally focused on a substring.
- * @param {{ repo?: string, focus?: string, tokenBudget?: number, focusFiles?: string[] }} [opts]
+ * @param {{ repo?: string, focus?: string, tokenBudget?: number, focusFiles?: string[], profile?: 'default' | 'injection' }} [opts]
  */
 export async function repoMap(opts = {}) {
   await ensureIndexFreshForQuery();
@@ -357,7 +358,13 @@ export async function repoMap(opts = {}) {
     recomputePageRank(db, new Set(opts.focusFiles));
   }
 
-  const budget = clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
+  const profile = opts.profile === 'injection' ? 'injection' : 'default';
+  const budget =
+    profile === 'injection'
+      ? clampRepoMapInjectionTokenBudget(
+          opts.tokenBudget ?? code.repoMapInjectionTokenBudget,
+        )
+      : clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
   const rows = db
     .prepare(
       `SELECT id, file, signature, kind, pagerank, usage_count, line_start
@@ -367,8 +374,11 @@ export async function repoMap(opts = {}) {
     )
     .all(repo);
 
-  const symbols = prepareRepoMapSymbols(rows);
-  return renderRepoMap(symbols, budget, { focus: opts.focus });
+  const symbols =
+    profile === 'injection'
+      ? prepareRepoMapSymbolsForInjection(rows)
+      : prepareRepoMapSymbols(rows);
+  return renderRepoMap(symbols, budget, { focus: opts.focus, profile });
 }
 
 /**

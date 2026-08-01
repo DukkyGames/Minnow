@@ -23,11 +23,13 @@ describe('retrieveCodeMapBlock', () => {
         return {
           ok: true,
           json: async () => ({
-            code: { enabled: true, repoMapTokenBudget: 1500 },
+            code: { enabled: true, repoMapTokenBudget: 1500, repoMapInjectionTokenBudget: 1200 },
           }),
         } as Response;
       }
       if (url.includes('/api/brain/code/repo-map') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}'));
+        assert.equal(body.profile, 'injection');
         return {
           ok: true,
           json: async () => ({

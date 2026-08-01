@@ -1605,6 +1605,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: userText || rawText,
     routeUserText: userText || rawText,
+    attachmentWorkspacePaths: validAttachments
+      .map((a) => a.workspacePath?.trim())
+      .filter((p): p is string => Boolean(p)),
     overrides: { skillBody },
   });
   const sysPrompt =

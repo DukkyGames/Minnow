@@ -101,6 +101,8 @@ export interface BrainCodeConfig {
   includeGlobs: string[];
   excludeGlobs: string[];
   repoMapTokenBudget: number;
+  /** Per-send code-map injection cap (injection profile on server). */
+  repoMapInjectionTokenBudget: number;
   reindexCadence: BrainCodeReindexCadence;
   codeEmbeddingsEnabled: boolean;
   /** Write .minnow/jsconfig.json when JS/TS sources lack ts/js config. */

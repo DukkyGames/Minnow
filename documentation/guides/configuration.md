@@ -42,6 +42,7 @@ Managed through Settings; edit directly only if you know the shape ([`server/con
 
 - **Provider / workspace** — active provider id and current workspace path.
 - **`features.*`** — feature flags (e.g. `memoryInjection`, `codeMapInjectionDefault` for per-send repo map injection when chat tri-state is `inherit`).
+- **`brain.code`** — code index settings: `repoMapTokenBudget` (tool / Brain map panel), `repoMapInjectionTokenBudget` (per-send injection profile), include/exclude globs, reindex cadence.
 - **`memory`** — `enabled`, inject char caps, and `embeddings` (`enabled`, `backend`, `modelId`, `providerId`, `blendWeight`, …).
 - **`synthesis`** — post-turn memory/skill auto-learning (enabled, confidence threshold, utility model overrides). Default is suggest-and-confirm.
 - **`toolCalls.useConstrainedDecoding`** — optional JSON-Schema-constrained tool turns.

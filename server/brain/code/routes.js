@@ -177,11 +177,16 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       if (ensureIndexed) {
         await ensureWarmCodeIndex(repo);
       }
+      const profile =
+        body.profile === 'injection' || url.searchParams.get('profile') === 'injection'
+          ? 'injection'
+          : 'default';
       const map = await repoMap({
         repo,
         focus: focus ? String(focus) : undefined,
         tokenBudget: tokenBudget > 0 ? tokenBudget : undefined,
         focusFiles: Array.isArray(body.focusFiles) ? body.focusFiles.map(String) : undefined,
+        profile,
       });
       sendJson(res, 200, map);
       return true;
