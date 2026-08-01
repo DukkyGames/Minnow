@@ -7,6 +7,13 @@ import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { encodeModelSelectKey } from '../lib/model-select-key';
 import { providerSupportsModelLoadUnload } from '../providers/capabilities';
+import {
+  isLibraryModelBinding,
+  loadLibraryModelFromPicker,
+  resolveServedBindingForLibraryId,
+} from '../models/model-select-library';
+import { fetchCachedModels, listModelServes } from '../models/api-client';
+import { buildLibrary, loadableLibrary } from '../models/library';
 import { listProviders } from '../providers/store';
 import type { ProviderPublic } from '../providers/types';
 import {
@@ -65,9 +72,16 @@ export function chatTurnNeedsModelLoad(
   modelId: string,
 ): boolean {
   if (!isServerStorageMode()) return false;
-  if (!provider || !providerSupportsModelLoadUnload(provider)) return false;
   const mid = modelId.trim();
   if (!mid) return false;
+
+  if (isLibraryModelBinding(provider?.id, mid)) {
+    const row = modelCache.get(encodeModelSelectKey(provider!.id, mid));
+    if (row && isModelLoaded(row.state)) return false;
+    return true;
+  }
+
+  if (!provider || !providerSupportsModelLoadUnload(provider)) return false;
   return !modelRowIsLoaded(provider.id, mid);
 }
 
@@ -98,6 +112,43 @@ export async function ensureChatModelLoadedForTurn(
   const pid = providerId.trim();
   const mid = modelId.trim();
   if (!pid || !mid) return;
+
+  if (isLibraryModelBinding(pid, mid)) {
+    const selectValue = encodeModelSelectKey(pid, mid);
+    if (modelRowIsLoaded(pid, mid)) return;
+
+    if (isModelLoadUnloadBusy()) {
+      await waitForModelLoadUnloadIdle(signal);
+      if (modelRowIsLoaded(pid, mid)) return;
+    }
+
+    beginModelLoadUnload('load');
+    updateModelLoadUnloadButtons();
+    updateModelStateDot(selectValue);
+    syncModelSelectPicker();
+    try {
+      await loadLibraryModelFromPicker(mid);
+      await fetchModels();
+    } finally {
+      endModelLoadUnload();
+      updateModelLoadUnloadButtons();
+      updateModelStateDot(selectValue);
+      syncModelSelectPicker();
+    }
+
+    const cached = await fetchCachedModels();
+    const library = loadableLibrary(buildLibrary(cached));
+    const serves = await listModelServes().catch(() => []);
+    const served = resolveServedBindingForLibraryId(mid, library, serves);
+    if (served) {
+      const chat = (await import('../state/sessions')).getActiveChat();
+      chat.providerId = served.providerId;
+      chat.modelId = served.modelId;
+      (await import('../state/sessions')).touchChat(chat);
+      (await import('../state/sessions')).scheduleSaveSessions();
+    }
+    return;
+  }
 
   const { providers } = await listProviders();
   const provider = providers.find((p) => p.id === pid && p.enabled !== false);

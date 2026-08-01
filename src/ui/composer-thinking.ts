@@ -1,7 +1,8 @@
 /**
- * Composer thinking toggle — brain icon (on / off) with inherit default + user override.
- * For level-based models, the brain sits beside the effort dropdown: off hides the dropdown
- * and sets reasoningEffort to `off`; on restores a default level.
+ * Composer thinking toggle — bulb icon (on / off) with inherit default + user override.
+ * For level-based models, the bulb sits beside the effort dropdown: off hides the dropdown
+ * and sets reasoningEffort to `off`; on restores a default level. Off/on-only models use
+ * the bulb tri-state toggle only (no Off/On select).
  */
 
 import { resolveThinkingMode, resolveThinkingBudgetTokens } from '../agents/resolve-thinking';
@@ -136,7 +137,7 @@ function onToggleClick(): void {
   applyChatThinkingMode(nextThinkingTriStateOnClick(tri, resolved.mode));
 }
 
-/** Mount brain thinking toggle into #composerThinkingControl. */
+/** Mount reasoning toggle into #composerThinkingControl. */
 export function initThinkingControl(): void {
   rootEl = document.getElementById('composerThinkingControl');
   if (!rootEl) return;
@@ -147,16 +148,16 @@ export function initThinkingControl(): void {
   toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
   toggleBtn.className = 'thinking-toggle-btn';
-  toggleBtn.setAttribute('aria-label', 'Thinking mode');
+  toggleBtn.setAttribute('aria-label', 'Reasoning');
   toggleBtn.addEventListener('click', onToggleClick);
 
-  const icon = createIcon('thinkingBrain', { className: 'thinking-toggle-icon' });
+  const icon = createIcon('reasoning', { className: 'thinking-toggle-icon' });
   toggleBtn.appendChild(icon);
   rootEl.appendChild(toggleBtn);
   void ensureSessionsReady().then(() => syncThinkingControlFromActiveChat());
 }
 
-/** Sync brain toggle from active chat, inheritance, and model capabilities. */
+/** Sync reasoning toggle from active chat, inheritance, and model capabilities. */
 export function syncThinkingControlFromActiveChat(): void {
   if (!sessionState) return;
   const caps = effectiveCapabilities();
@@ -212,7 +213,7 @@ export function syncThinkingControlFromActiveChat(): void {
   if (!supports) {
     toggleBtn.title = 'Effective model does not advertise reasoning support';
   } else if (!allowed) {
-    toggleBtn.title = `Model does not support thinking ${resolved.mode}`;
+    toggleBtn.title = `Model does not support reasoning ${resolved.mode}`;
   } else if (tri === 'inherit') {
     const budget = resolveThinkingBudgetTokens({
       kind: 'work-agent',
@@ -222,7 +223,9 @@ export function syncThinkingControlFromActiveChat(): void {
       formatThinkingInheritedLabel(tri, resolved.mode, resolved.sourceLabel) +
       formatBudgetHint(budget);
   } else {
-    toggleBtn.title = effectiveOn ? 'Thinking on (chat override)' : 'Thinking off (chat override)';
+    toggleBtn.title = effectiveOn
+      ? 'Reasoning on (chat override)'
+      : 'Reasoning off (chat override)';
   }
 }
 

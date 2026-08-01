@@ -3,7 +3,7 @@
  * and persists assistant / tool messages in session history.
  */
 
-import { getChatAbort, setChatAbort, setChatStopReason, setStreaming, takeChatStopReason } from '../app-state';
+import { getChatAbort, setChatAbort, setChatStopReason, setStreaming, takeChatStopReason, modelCache } from '../app-state';
 import {
   beginChatTurnSetup,
   endChatTurnSetup,
@@ -77,6 +77,13 @@ import {
   chatTurnNeedsModelLoad,
   ensureChatModelLoadedForTurn,
 } from '../api/ensure-chat-model-loaded';
+import { fetchCachedModels, listModelServes } from '../models/api-client';
+import { buildLibrary, loadableLibrary } from '../models/library';
+import {
+  isLibraryModelBinding,
+  libraryModelNeedsLoad,
+  resolveServedBindingForLibraryId,
+} from '../models/model-select-library';
 import {
   cancelAssistantBubbleRenderDebounce,
   scheduleAssistantBubbleRender,
@@ -181,6 +188,7 @@ import { setBugBoardExecutorContext } from './bug-board-tools';
 import {
   appendBubble,
   anchorPersistedThoughtsOnRow,
+  appendInjectionNoticesDom,
   appendStats,
   appendStreamingAssistantRow,
   assistantProseHasVisibleContent,
@@ -252,6 +260,10 @@ import {
 } from '../chat/context-budget';
 import { applyContextPolicy } from '../chat/context/apply-policy';
 import { appendContextNoticeIfNeeded } from '../chat/context/context-notice';
+import {
+  appendInjectionNoticesForTurn,
+  isUiOnlyTranscriptMessage,
+} from '../chat/context/injection-notice';
 import { handleCompressCommand } from '../chat/context/compress-command';
 import { resolveWorkAgentContextPolicy } from '../chat/resolve-context-policy';
 import {
@@ -292,9 +304,9 @@ import {
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort';
 import { resolveSamplerPreset } from '../agents/resolve-sampler';
+import { mergeGlobalSamplerWithLibraryModel } from '../config/library-inference-meta';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';
 import { applySamplerToBody } from '../agents/sampler-types';
-import { modelCache } from '../app-state';
 import { encodeModelSelectKey } from '../lib/model-select-key';
 import { resolveSendCapabilities } from '../providers/model-capabilities';
 import {
@@ -676,7 +688,7 @@ export function buildApiMessages(
 
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
-    if (m.role === 'context') continue;
+    if (isUiOnlyTranscriptMessage(m)) continue;
     if (m.role === 'user') {
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
@@ -1194,13 +1206,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
   }
   const modelId = replaySnapshot?.modelId ?? chat.modelId?.trim() ?? '';
-  const globalSampler = readGlobalSamplerForSend(
-    replaySnapshot
-      ? {
-          temperature: replaySnapshot.temperature,
-          maxTokens: replaySnapshot.maxTokens,
-        }
-      : undefined,
+  const globalSampler = mergeGlobalSamplerWithLibraryModel(
+    readGlobalSamplerForSend(
+      replaySnapshot
+        ? {
+            temperature: replaySnapshot.temperature,
+            maxTokens: replaySnapshot.maxTokens,
+          }
+        : undefined,
+    ),
+    modelId,
   );
   const legacySysPrompt = (
     document.getElementById('systemPrompt') as HTMLTextAreaElement
@@ -1360,8 +1375,26 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = sendModelId;
   chat.providerId = sendProviderId;
 
+  if (isLibraryModelBinding(sendProviderId, sendModelId)) {
+    const cached = await fetchCachedModels();
+    const library = loadableLibrary(buildLibrary(cached));
+    const serves = await listModelServes().catch(() => []);
+    const served = resolveServedBindingForLibraryId(sendModelId, library, serves);
+    if (served) {
+      sendProviderId = served.providerId;
+      sendModelId = served.modelId;
+      chat.providerId = served.providerId;
+      chat.modelId = served.modelId;
+    } else {
+      sendProviderId = LLAMA_CPP_LOCAL_PROVIDER_ID;
+    }
+  }
+
   const sendProvider = await getActiveProvider(sendProviderId);
-  const pendingModelLoad = chatTurnNeedsModelLoad(sendProvider, sendModelId);
+  const libraryBinding = isLibraryModelBinding(chat.providerId, sendModelId);
+  const pendingModelLoad = libraryBinding
+    ? libraryModelNeedsLoad(sendModelId, modelCache)
+    : chatTurnNeedsModelLoad(sendProvider, sendModelId);
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =
     replaySnapshot?.reasoningEffort ??
@@ -1572,6 +1605,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: userText || rawText,
     routeUserText: userText || rawText,
+    attachmentWorkspacePaths: validAttachments
+      .map((a) => a.workspacePath?.trim())
+      .filter((p): p is string => Boolean(p)),
     overrides: { skillBody },
   });
   const sysPrompt =
@@ -1579,6 +1615,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     replaySnapshot?.composedSystemPrompt ??
     outbound.composed;
   const userRulesContent = replaySnapshot?.userRulesContent ?? outbound.userRules;
+
+  if (pushUser) {
+    const injectionAdded = appendInjectionNoticesForTurn(
+      chat,
+      outbound.injectionBlocks,
+    );
+    if (injectionAdded.length > 0) {
+      scheduleSaveSessions();
+      if (isStreamDomVisible(chat.id)) {
+        appendInjectionNoticesDom(
+          injectionAdded,
+          chat.history.length - injectionAdded.length,
+          { chatId: chat.id },
+        );
+      }
+    }
+  }
 
   if (!resumeGenerationId) {
     const forkHistoryIndex = resolveForkHistoryIndex(chat, pushUser);

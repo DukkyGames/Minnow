@@ -1,6 +1,6 @@
 /**
- * Composer reasoning effort dropdown — level options (low / medium / high) beside the brain
- * toggle. Hidden when reasoning is off or the model only supports binary off/on.
+ * Composer reasoning effort dropdown — low / medium / high beside the brain toggle.
+ * Off/on-only models use the brain toggle alone (see composer-thinking.ts).
  */
 
 import { resolveThinkingMode } from '../agents/resolve-thinking';
@@ -8,7 +8,7 @@ import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   formatReasoningEffortLabel,
   getComposerReasoningLevelOptions,
-  modelUsesComposerReasoningDropdown,
+  modelUsesComposerReasoningLevelDropdown,
   normalizeReasoningAllowedOptions,
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort';
@@ -21,6 +21,8 @@ import {
 } from '../state/sessions';
 import type { ReasoningEffortOption as EffortOption } from '../types';
 import { syncThinkingControlFromActiveChat } from './composer-thinking';
+import { syncComposerCodeMapFromActiveChat } from './composer-code-map';
+import { syncComposerBrainNotesFromActiveChat } from './composer-brain-notes';
 import { isComposerRecoveryBlocked } from './composer-send';
 
 let selectEl: HTMLSelectElement | null = null;
@@ -34,10 +36,13 @@ function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> {
   return resolveSendCapabilities(providerId, modelId);
 }
 
-function getLevelOptions(): EffortOption[] {
+function getAllowedOptions(): EffortOption[] {
   const caps = effectiveCapabilities();
-  const allowed = normalizeReasoningAllowedOptions(caps?.reasoningAllowedOptions ?? []);
-  return getComposerReasoningLevelOptions(allowed);
+  return normalizeReasoningAllowedOptions(caps?.reasoningAllowedOptions ?? []);
+}
+
+function getLevelOptions(): EffortOption[] {
+  return getComposerReasoningLevelOptions(getAllowedOptions());
 }
 
 /** Drop saved effort when the active model no longer allows it (except explicit off). */
@@ -70,11 +75,10 @@ function resolveDisplayEffort(levels: EffortOption[]): EffortOption | undefined 
   return levels.includes('medium') ? 'medium' : levels[0];
 }
 
-function populateSelect(levels: EffortOption[]): void {
+function populateSelect(options: EffortOption[], display: EffortOption | undefined): void {
   if (!selectEl) return;
-  const display = resolveDisplayEffort(levels);
   selectEl.replaceChildren();
-  for (const option of levels) {
+  for (const option of options) {
     const el = document.createElement('option');
     el.value = option;
     el.textContent = formatReasoningEffortLabel(option);
@@ -94,11 +98,13 @@ function onSelectChange(): void {
   touchChat(chat);
   scheduleSaveSessions();
   syncThinkingControlFromActiveChat();
+  void syncComposerCodeMapFromActiveChat();
+  void syncComposerBrainNotesFromActiveChat();
 }
 
-function isDropdownVisible(): boolean {
+function isLevelDropdownVisible(): boolean {
   const caps = effectiveCapabilities();
-  if (!modelUsesComposerReasoningDropdown(caps)) return false;
+  if (!modelUsesComposerReasoningLevelDropdown(caps)) return false;
   return getActiveChat().reasoningEffort !== 'off';
 }
 
@@ -115,21 +121,25 @@ export function syncComposerReasoningEffortFromActiveChat(): void {
   validateAndClearInvalidEffort();
 
   const caps = effectiveCapabilities();
-  const hasLevels = modelUsesComposerReasoningDropdown(caps);
-  const visible = hasLevels && isDropdownVisible();
+  const visible = isLevelDropdownVisible();
   const disabled = isActiveChatStreaming() || isComposerRecoveryBlocked();
-  const levels = getLevelOptions();
 
   if (wrapEl) wrapEl.classList.toggle('hidden', !visible);
   if (selectEl) {
     selectEl.disabled = !visible || disabled;
-    if (visible) populateSelect(levels);
+    if (visible) {
+      const levels = getLevelOptions();
+      populateSelect(levels, resolveDisplayEffort(levels));
+    }
   }
 
   syncThinkingControlFromActiveChat();
+  void syncComposerCodeMapFromActiveChat();
+  void syncComposerBrainNotesFromActiveChat();
 }
 
 /** Re-run sync when streaming / recovery gates change (loop.ts). */
 export function refreshComposerReasoningEffortDisabled(): void {
   syncComposerReasoningEffortFromActiveChat();
 }
+

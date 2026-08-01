@@ -1,4 +1,5 @@
 import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
+import { isPhoneLayout, onPhoneLayoutChange } from '../ui/mobile-layout';
 import { rememberFocusBeforeWindowActivate, restoreFocusAfterWindowsClosed } from './window-focus-memory';
 import { getAppById } from './app-registry';
 import {
@@ -44,6 +45,13 @@ type WindowListener = (windows: readonly OsWindowRecord[]) => void;
 
 const DEFAULT_BOUNDS: WindowBounds = { x: 80, y: 48, width: 920, height: 640 };
 
+/** Full-stage bounds — what a window occupies when it is maximized. */
+function stageFillBounds(): WindowBounds {
+  const stage = document.getElementById('osStage') ?? document.body;
+  const { width, height } = getStageDimensions(stage);
+  return { x: 0, y: 0, width, height };
+}
+
 class WindowManager {
   private windows = new Map<string, OsWindowRecord>();
   private frames = new Map<string, WindowFrame>();
@@ -72,6 +80,28 @@ class WindowManager {
     if (!stage || typeof ResizeObserver === 'undefined') return;
     this.stageResizeObserver = new ResizeObserver(() => this.onStageResize());
     this.stageResizeObserver.observe(stage);
+  }
+
+  /**
+   * Re-fit windows when the viewport crosses the phone breakpoint. Entering phone
+   * layout maximizes everything so no window is left as an unreachable sliver.
+   */
+  syncWindowsToLayout(): void {
+    if (isPhoneLayout()) {
+      const fill = stageFillBounds();
+      for (const [id, frame] of this.frames) {
+        const record = this.windows.get(id);
+        if (!record || record.maximized) continue;
+        record.preMaximizeBounds = { ...record.bounds };
+        record.maximized = true;
+        record.snapMode = 'maximize';
+        record.bounds = fill;
+        frame.setBounds(fill, { snapMode: 'maximize', maximized: true });
+      }
+      this.emit();
+      return;
+    }
+    this.reclampWindowsToStage();
   }
 
   /** Fit all open windows to the current stage viewport. */
@@ -127,20 +157,24 @@ class WindowManager {
     const manageInstance = options?.manageInstance !== false;
     const persisted = persistBounds ? this.loadPersistedBounds(appId) : null;
     const id = `osw-${++this.zCounter}-${appId}`;
+    // Phones have no window management: every window opens as a full-stage app
+    // sheet, which also tells the shell to collapse the dock behind it.
+    const phone = isPhoneLayout();
 
     const record: OsWindowRecord = {
       id,
       appId,
       instanceId,
       title,
-      bounds:
-        options?.bounds ??
-        persisted?.bounds ??
-        (appId === 'calendar' ? centeredCalendarBounds() : { ...DEFAULT_BOUNDS }),
+      bounds: phone
+        ? stageFillBounds()
+        : (options?.bounds ??
+          persisted?.bounds ??
+          (appId === 'calendar' ? centeredCalendarBounds() : { ...DEFAULT_BOUNDS })),
       zIndex: ++this.zCounter,
       minimized: false,
-      maximized: persisted?.maximized ?? false,
-      snapMode: persisted?.snapMode ?? null,
+      maximized: phone || (persisted?.maximized ?? false),
+      snapMode: phone ? 'maximize' : (persisted?.snapMode ?? null),
       preMaximizeBounds: null,
       manageInstance,
       persistBounds,
@@ -253,6 +287,8 @@ class WindowManager {
     const record = this.windows.get(windowId);
     const frame = this.frames.get(windowId);
     if (!record || !frame) return;
+    // Restoring to a floating rect on a phone would leave an unusable sliver.
+    if (isPhoneLayout()) return;
 
     if (record.maximized) {
       const persisted = this.loadPersistedBounds(record.appId).bounds;
@@ -368,6 +404,9 @@ class WindowManager {
 
   private persistBounds(record: OsWindowRecord): void {
     if (!record.persistBounds) return;
+    // Phone geometry is always full-stage; writing it would make desktop windows
+    // reopen maximized on the next launch.
+    if (isPhoneLayout()) return;
     try {
       const raw = localStorage.getItem(WINDOWS_STORAGE_KEY);
       const parsed: PersistedWindowsMap = raw ? (JSON.parse(raw) as PersistedWindowsMap) : {};
@@ -384,6 +423,8 @@ class WindowManager {
 }
 
 export const windowManager = new WindowManager();
+
+onPhoneLayoutChange(() => windowManager.syncWindowsToLayout());
 
 export type { WindowBounds };
 

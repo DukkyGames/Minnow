@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  detectPreferredLlamaVariant,
   expectedAssetNames,
   listInstallableVariants,
   resolveLlamaAssets,
@@ -64,5 +65,17 @@ describe('llama variant', () => {
   test('isGpuCapableVariant distinguishes CPU from CUDA', () => {
     assert.equal(isGpuCapableVariant('cpu'), false);
     assert.equal(isGpuCapableVariant('cuda-12.4'), true);
+  });
+
+  test('detectPreferredLlamaVariant prefers CUDA when hardware.backend is cuda', async () => {
+    if (process.platform === 'darwin') return;
+    const variant = await detectPreferredLlamaVariant({ backend: 'cuda' }, MOCK_ASSETS);
+    assert.equal(variant, 'cuda-12.4');
+  });
+
+  test('detectPreferredLlamaVariant falls back to Vulkan without CUDA backend', async () => {
+    if (process.platform === 'darwin') return;
+    const variant = await detectPreferredLlamaVariant({ backend: 'cpu_x86' }, MOCK_ASSETS);
+    assert.equal(variant, 'vulkan');
   });
 });

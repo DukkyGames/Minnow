@@ -9,7 +9,9 @@ import {
   loadBrainCodeConfig,
   queryCodeStatus,
   readSymbol,
+  ensureWarmCodeIndex,
   repoMap,
+  resolveRepoKey,
   whoCalls,
 } from './query.js';
 import { saveBrainConfig } from '../store.js';
@@ -166,11 +168,25 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const tokenBudget = Number(
         url.searchParams.get('tokenBudget') ?? body.tokenBudget ?? body.token_budget ?? 0,
       );
+      const repoParam = body.repo ?? url.searchParams.get('repo') ?? undefined;
+      const repo = resolveRepoKey(repoParam);
+      const ensureIndexed =
+        body.ensureIndexed === true ||
+        url.searchParams.get('ensureIndexed') === 'true' ||
+        url.searchParams.get('ensureIndexed') === '1';
+      if (ensureIndexed) {
+        await ensureWarmCodeIndex(repo);
+      }
+      const profile =
+        body.profile === 'injection' || url.searchParams.get('profile') === 'injection'
+          ? 'injection'
+          : 'default';
       const map = await repoMap({
-        repo: body.repo ?? url.searchParams.get('repo') ?? undefined,
+        repo,
         focus: focus ? String(focus) : undefined,
         tokenBudget: tokenBudget > 0 ? tokenBudget : undefined,
         focusFiles: Array.isArray(body.focusFiles) ? body.focusFiles.map(String) : undefined,
+        profile,
       });
       sendJson(res, 200, map);
       return true;

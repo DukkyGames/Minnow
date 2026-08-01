@@ -319,6 +319,30 @@ async function extractArchive(archivePath, destDir) {
 }
 
 /**
+ * Copy all files from an extracted archive into the managed install root (flat).
+ * Used for Windows cudart companion zips — they ship CUDA DLLs only, no llama-server.
+ * @param {string} extractDir
+ * @param {string} managedRoot
+ */
+export async function copyFlattenedExtractContents(extractDir, managedRoot) {
+  await fsp.mkdir(managedRoot, { recursive: true });
+
+  async function walk(dir) {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        await walk(full);
+      } else {
+        await fsp.copyFile(full, path.join(managedRoot, ent.name));
+      }
+    }
+  }
+
+  await walk(extractDir);
+}
+
+/**
  * Copy extracted binaries into the managed install root.
  * @param {string} extractDir
  * @param {string} managedRoot
@@ -465,7 +489,7 @@ async function installManagedLlamaServer(opts) {
         await extractArchive(companionPath, companionExtract);
         await fsp.rm(managedRoot, { recursive: true, force: true });
         await fsp.mkdir(managedRoot, { recursive: true });
-        await copyExtractedBinaries(companionExtract, managedRoot);
+        await copyFlattenedExtractContents(companionExtract, managedRoot);
       }
     }
 

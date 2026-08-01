@@ -9,7 +9,7 @@ import { isServerStorageMode } from '../config/storage-mode';
 import { loadSamplerMeta, saveSamplerMeta } from '../config/sampler-meta';
 import { detectLocalServer } from '../tools/client';
 import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
-import { appendSettingsOfflineHint, createSettingsActionsRow } from './settings-controls';
+import { appendSettingsOfflineHint } from './settings-controls';
 import { buildSamplerFieldInputs } from './settings-sampler-fields';
 import { setStatus } from './status';
 
@@ -33,9 +33,9 @@ export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Temperature, penalties, and token limits for main chat. Per-role overrides live under ',
+    'Temperature, penalties, and token limits for main chat. Per-model overrides live in the Models app inspector (Inference tab); per-role overrides live under ',
     linkToSettingsSection('Routing', 'model-routing'),
-    '.',
+    '. Changes apply as soon as you edit a field.',
   );
   shell.appendChild(lead);
 
@@ -68,27 +68,24 @@ export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<
 
   body.appendChild(globalFields.root);
 
-  body.appendChild(
-    createSettingsActionsRow(
-      [
-        {
-          label: 'Save global defaults',
-          variant: 'primary',
-          onClick: () => {
-            void (async () => {
-              const patch = globalFields.readPatch();
-              if (!patch) {
-                setStatus('err', 'Enter at least one global sampler value');
-                return;
-              }
-              const next = await saveSamplerMeta(patch);
-              globalFields.setValues(next);
-              setStatus('ok', 'Global sampler defaults saved');
-            })();
-          },
-        },
-      ],
-      { searchKey: 'models.sampler' },
-    ),
-  );
+  let skipAutoSave = true;
+
+  const persistGlobalSampler = async (): Promise<void> => {
+    const patch = globalFields.readPatch();
+    if (!patch) return;
+    try {
+      const next = await saveSamplerMeta(patch);
+      globalFields.setValues(next);
+      setStatus('ok', 'Sampler defaults updated');
+    } catch {
+      setStatus('err', 'Could not save sampler defaults');
+    }
+  };
+
+  globalFields.root.addEventListener('change', () => {
+    if (skipAutoSave) return;
+    void persistGlobalSampler();
+  });
+
+  skipAutoSave = false;
 }

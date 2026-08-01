@@ -1,0 +1,261 @@
+/**
+ * Merge My Models (local GGUF library) into the top-bar / composer model picker.
+ * Uses a synthetic provider id so load/unload can start or stop Minnow serves.
+ */
+
+import { isServerStorageMode } from '../config/storage-mode';
+import { buildTopBarModelOptionHtml } from '../lib/format-model-label';
+import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
+import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../providers/types';
+import type { ProviderModelsResult } from '../providers/fetch-all-models';
+import type { LmModelRecord } from '../types';
+import {
+  fetchCachedModels,
+  listModelServes,
+  type ServeRecord,
+} from './api-client';
+import {
+  activeServeFor,
+  buildLibrary,
+  loadableLibrary,
+  type LibraryModel,
+} from './library';
+
+/** Pseudo-provider id for composite #modelSelect keys (not in providers registry). */
+export const LIBRARY_MODEL_PROVIDER_ID = 'minnow-library';
+
+/** Optgroup label in the model picker. */
+export const LIBRARY_MODEL_OPTGROUP_LABEL = 'My Models';
+
+export function isLibraryModelProviderId(providerId: string | undefined): boolean {
+  return providerId?.trim() === LIBRARY_MODEL_PROVIDER_ID;
+}
+
+/** True when chat/send binding points at a local library row. */
+export function isLibraryModelBinding(providerId: string | undefined, modelId: string | undefined): boolean {
+  const pid = providerId?.trim();
+  const mid = modelId?.trim();
+  if (!pid || !mid) return false;
+  return isLibraryModelProviderId(pid) && mid.startsWith('gguf:');
+}
+
+export function encodeLibraryModelSelectKey(libraryId: string): string {
+  return encodeModelSelectKey(LIBRARY_MODEL_PROVIDER_ID, libraryId.trim());
+}
+
+export function decodeLibraryModelSelectKey(selectValue: string): string | null {
+  const decoded = decodeModelSelectKey(selectValue.trim());
+  if (!decoded || !isLibraryModelProviderId(decoded.providerId)) return null;
+  return decoded.modelId.trim() || null;
+}
+
+export interface LibraryModelSelectMerge {
+  optgroupHtml: string;
+  cacheEntries: Array<{ key: string; row: LmModelRecord }>;
+  library: LibraryModel[];
+  serves: ServeRecord[];
+}
+
+function serveLoadState(serve: ServeRecord | undefined): LmModelRecord['state'] {
+  if (!serve) return 'not loaded';
+  if (serve.status === 'running') return 'loaded';
+  if (serve.status === 'starting') return 'not loaded';
+  return 'not loaded';
+}
+
+/** Load-state for one library row from active serves. */
+export function libraryModelLoadState(
+  model: LibraryModel,
+  serves: ServeRecord[],
+): LmModelRecord['state'] {
+  return serveLoadState(activeServeFor(model, serves));
+}
+
+/** Running serve for a library id, if any. */
+export function activeServeForLibraryId(
+  libraryId: string,
+  library: LibraryModel[],
+  serves: ServeRecord[],
+): ServeRecord | undefined {
+  const model = library.find((m) => m.id === libraryId.trim());
+  if (!model) return undefined;
+  return activeServeFor(model, serves);
+}
+
+/** Provider + upstream model id once a library row is served on llama-cpp-local. */
+export function resolveServedBindingForLibraryId(
+  libraryId: string,
+  library: LibraryModel[],
+  serves: ServeRecord[],
+  providerModels?: ProviderModelsResult[],
+): { providerId: string; modelId: string } | null {
+  const serve = activeServeForLibraryId(libraryId, library, serves);
+  if (!serve || serve.status !== 'running') return null;
+
+  const model = library.find((m) => m.id === libraryId.trim());
+  const label = serve.modelLabel?.trim() || model?.name?.trim() || '';
+  if (!label) return null;
+
+  const llama =
+    providerModels?.find((r) => r.provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID) ?? null;
+  if (llama) {
+    const hit = llama.models.find(
+      (m) => m.id === label || m.id.toLowerCase() === label.toLowerCase(),
+    );
+    if (hit) {
+      return { providerId: LLAMA_CPP_LOCAL_PROVIDER_ID, modelId: hit.id };
+    }
+  }
+
+  return { providerId: serve.providerId || LLAMA_CPP_LOCAL_PROVIDER_ID, modelId: label };
+}
+
+/** True when a My Models row is not loaded in a Minnow serve yet. */
+export function libraryModelNeedsLoad(
+  libraryId: string,
+  cache: ReadonlyMap<string, LmModelRecord>,
+): boolean {
+  const key = encodeLibraryModelSelectKey(libraryId);
+  const row = cache.get(key);
+  if (!row) return true;
+  const state = row.state?.trim().toLowerCase();
+  return state !== 'loaded';
+}
+
+/**
+ * Drop llama-cpp-local catalog rows that duplicate a My Models row already listed
+ * under the library optgroup (same served label / display name).
+ */
+export function dedupLlamaCppModelsAgainstLibrary(
+  results: ProviderModelsResult[],
+  library: LibraryModel[],
+  serves: ServeRecord[],
+): ProviderModelsResult[] {
+  const names = new Set(library.map((m) => m.name.trim().toLowerCase()).filter(Boolean));
+  for (const serve of serves) {
+    if (serve.status !== 'running' && serve.status !== 'starting') continue;
+    const label = serve.modelLabel?.trim().toLowerCase();
+    if (label) names.add(label);
+  }
+  if (names.size === 0) return results;
+
+  return results.map((entry) => {
+    if (entry.provider.id !== LLAMA_CPP_LOCAL_PROVIDER_ID) return entry;
+    const models = entry.models.filter((m) => !names.has(m.id.trim().toLowerCase()));
+    return { ...entry, models };
+  });
+}
+
+/**
+ * Fetch local weights and build optgroup HTML + modelCache rows for the picker.
+ * Returns null when the tool server is down or the library scan is empty.
+ */
+export async function fetchLibraryModelSelectMerge(
+  signal?: AbortSignal,
+): Promise<LibraryModelSelectMerge | null> {
+  if (!isServerStorageMode()) return null;
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+
+  const [cached, serves] = await Promise.all([
+    fetchCachedModels(),
+    listModelServes().catch(() => [] as ServeRecord[]),
+  ]);
+
+  const library = loadableLibrary(buildLibrary(cached));
+  if (library.length === 0) return null;
+
+  const cacheEntries: Array<{ key: string; row: LmModelRecord }> = [];
+  const opts = library
+    .map((model) => {
+      const key = encodeLibraryModelSelectKey(model.id);
+      const state = libraryModelLoadState(model, serves);
+      cacheEntries.push({
+        key,
+        row: {
+          id: model.id,
+          type: 'llm',
+          state,
+          quantization: model.quant || undefined,
+          max_context_length: model.contextLength ?? undefined,
+        },
+      });
+      return buildTopBarModelOptionHtml({
+        value: key,
+        model: {
+          id: model.name,
+          quantization: model.quant || undefined,
+          state,
+        },
+        providerId: LIBRARY_MODEL_PROVIDER_ID,
+        providerLabel: LIBRARY_MODEL_OPTGROUP_LABEL,
+        providerBaseUrl: 'http://127.0.0.1',
+        supportsModelLoadUnload: true,
+      });
+    })
+    .join('');
+
+  const optgroupHtml = `<optgroup label="${LIBRARY_MODEL_OPTGROUP_LABEL}">${opts}</optgroup>`;
+  return { optgroupHtml, cacheEntries, library, serves };
+}
+
+const SERVE_POLL_MS = 400;
+const SERVE_POLL_MAX_MS = 120_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function findLibraryModel(libraryId: string): Promise<LibraryModel | null> {
+  const cached = await fetchCachedModels();
+  const library = loadableLibrary(buildLibrary(cached));
+  return library.find((m) => m.id === libraryId.trim()) ?? null;
+}
+
+/** Start a Minnow serve for a library row (waits until running or failed). */
+export async function loadLibraryModelFromPicker(libraryId: string): Promise<void> {
+  const id = libraryId.trim();
+  if (!id) throw new Error('No model selected');
+
+  const model = await findLibraryModel(id);
+  if (!model) throw new Error('Model not found in My Models');
+
+  const serves = await listModelServes().catch(() => [] as ServeRecord[]);
+  const existing = activeServeFor(model, serves);
+  if (existing?.status === 'running') return;
+
+  const { loadModel } = await import('../ui/models/store');
+  await loadModel(model);
+
+  const started = Date.now();
+  while (Date.now() - started < SERVE_POLL_MAX_MS) {
+    const nextServes = await listModelServes().catch(() => [] as ServeRecord[]);
+    const serve = activeServeFor(model, nextServes);
+    if (serve?.status === 'running') return;
+    if (serve?.status === 'error') {
+      throw new Error(serve.error?.trim() || 'Model failed to load');
+    }
+    if (serve?.status === 'stopped' && serve.error) {
+      throw new Error(serve.error.trim());
+    }
+    await sleep(SERVE_POLL_MS);
+  }
+  throw new Error('Timed out waiting for model to load');
+}
+
+/** Stop the serve holding a library row, if any. */
+export async function unloadLibraryModelFromPicker(libraryId: string): Promise<void> {
+  const id = libraryId.trim();
+  if (!id) return;
+
+  const model = await findLibraryModel(id);
+  if (!model) return;
+
+  const serves = await listModelServes().catch(() => [] as ServeRecord[]);
+  const serve = activeServeFor(model, serves);
+  if (!serve) return;
+
+  const { unloadServe } = await import('../ui/models/store');
+  await unloadServe(serve.id);
+}

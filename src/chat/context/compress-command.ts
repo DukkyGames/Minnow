@@ -22,13 +22,14 @@ import { isChatStreaming } from '../streaming-state';
 import { historyToApiMessagesForEstimate } from '../prompts/token-estimate-core';
 import type { Chat, Message } from '../../types';
 import { appendContextNoticeIfNeeded } from './context-notice';
+import { isUiOnlyTranscriptRole } from './injection-notice';
 import { summarizeDroppedTurns } from './llm-summarize';
 import { parseCompressSlashInput } from './parse-compress-command';
 
 export type CompressCommandDispatch = 'handled' | null;
 
 function transcriptHistory(history: Message[]): Message[] {
-  return history.filter((m) => m.role !== 'context');
+  return history.filter((m) => !isUiOnlyTranscriptRole(m.role));
 }
 
 function rebuildHistoryAfterCompress(

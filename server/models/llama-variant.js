@@ -198,7 +198,10 @@ export function listInstallableVariants(assets) {
  */
 export async function detectPreferredLlamaVariant(hardware, releaseAssets) {
   const hw = hardware ?? (await detectHardware());
-  const gpuBackend = String(hw.gpu_backend ?? hw.gpuBackend ?? '').toLowerCase();
+  // detectHardware() exposes `backend`; legacy probes may use gpu_backend.
+  const gpuBackend = String(
+    hw.gpu_backend ?? hw.gpuBackend ?? hw.backend ?? '',
+  ).toLowerCase();
   const assets = releaseAssets ?? (await fetchReleaseAssetList());
 
   const installable = listInstallableVariants(assets);

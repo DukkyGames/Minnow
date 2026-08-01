@@ -41,7 +41,8 @@ Default: `~/.minnow` (`%USERPROFILE%\.minnow` on Windows). The path is printed a
 Managed through Settings; edit directly only if you know the shape ([`server/config/validators.js`](../../server/config/validators.js) normalizes it on load). Notable keys:
 
 - **Provider / workspace** — active provider id and current workspace path.
-- **`features.*`** — feature flags (e.g. `memoryInjection`).
+- **`features.*`** — feature flags (e.g. `memoryInjection`, `codeMapInjectionDefault` for per-send repo map injection when chat tri-state is `inherit`).
+- **`brain.code`** — code index settings: `repoMapTokenBudget` (tool / Brain map panel), `repoMapInjectionTokenBudget` (per-send injection profile), include/exclude globs, reindex cadence.
 - **`memory`** — `enabled`, inject char caps, and `embeddings` (`enabled`, `backend`, `modelId`, `providerId`, `blendWeight`, …).
 - **`synthesis`** — post-turn memory/skill auto-learning (enabled, confidence threshold, utility model overrides). Default is suggest-and-confirm.
 - **`toolCalls.useConstrainedDecoding`** — optional JSON-Schema-constrained tool turns.

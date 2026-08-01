@@ -75,7 +75,7 @@ describe('syncComposerReasoningEffortFromActiveChat', () => {
     teardownDom();
   });
 
-  test('shows brain toggle for off/on models and hides level dropdown', () => {
+  test('shows brain only for off/on models (no Off/On select)', () => {
     setupDom();
     seedChat({ providerId: 'openai', modelId: 'kimi-k2' });
 
@@ -100,9 +100,11 @@ describe('syncComposerReasoningEffortFromActiveChat', () => {
     const thinkingWrap = document.getElementById('composerThinkingWrap');
     const dropdownWrap = document.getElementById('composerReasoningEffortWrap');
     const thinkingControl = document.getElementById('composerThinkingControl');
+    const select = document.getElementById('composerReasoningEffortSelect') as HTMLSelectElement;
 
     assert.ok(!thinkingWrap?.classList.contains('hidden'));
     assert.ok(dropdownWrap?.classList.contains('hidden'));
+    assert.equal(select.options.length, 0);
     assert.ok(!thinkingControl?.classList.contains('hidden'));
   });
 

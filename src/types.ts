@@ -223,12 +223,24 @@ export interface ContextNoticeMessage {
   createdAt: number;
 }
 
+export type PromptInjectionKind = 'brain-notes' | 'code-map';
+
+/** Persisted Brain / code-map injection notice (not sent to the model). */
+export interface InjectionNoticeMessage {
+  role: 'injection';
+  kind: PromptInjectionKind;
+  /** Raw retrieved block interpolated into the prompt. */
+  body: string;
+  createdAt: number;
+}
+
 export type Message =
   | UserMessage
   | AssistantMessage
   | AssistantToolCallMessage
   | ToolResultMessage
-  | ContextNoticeMessage;
+  | ContextNoticeMessage
+  | InjectionNoticeMessage;
 
 /** Multimodal user/assistant payload part (attachments use in later waves). */
 export interface TextContentPart {
@@ -524,6 +536,8 @@ export interface OrchestrateBoardState {
   modelId?: string;
   /** Manual board vs auto-pilot delegation (default manual). */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  /** When true, skip per-task Tester; only final integration test runs verification. */
+  skipPerTaskTesting?: boolean;
   /** True when the user has pressed Start in auto/sequential mode. */
   autoRunning?: boolean;
   /** Orchestrator requested AFK via board_set_autonomy; awaits user confirmation. */
@@ -985,6 +999,10 @@ export interface Chat {
   expertRuntime?: import('./chat/experts/types').ExpertRuntimeSnapshot;
   /** Tri-state thinking override for this chat (inherit uses work-agent / global stack). */
   thinkingMode?: ThinkingTriState;
+  /** Tri-state code map injection override (inherit uses features.codeMapInjectionDefault). */
+  codeMapInjection?: ThinkingTriState;
+  /** Tri-state Brain notes (memory retrieve) override (inherit uses features.memoryInjection). */
+  brainNotesInjection?: ThinkingTriState;
   /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */
   reasoningEffort?: ReasoningEffortOption;
   /** Active Work Agent; null = default / auto from mode (Step 08). */
