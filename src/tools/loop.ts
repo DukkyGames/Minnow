@@ -292,6 +292,7 @@ import {
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort';
 import { resolveSamplerPreset } from '../agents/resolve-sampler';
+import { mergeGlobalSamplerWithLibraryModel } from '../config/library-inference-meta';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';
 import { applySamplerToBody } from '../agents/sampler-types';
 import { modelCache } from '../app-state';
@@ -1194,13 +1195,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
   }
   const modelId = replaySnapshot?.modelId ?? chat.modelId?.trim() ?? '';
-  const globalSampler = readGlobalSamplerForSend(
-    replaySnapshot
-      ? {
-          temperature: replaySnapshot.temperature,
-          maxTokens: replaySnapshot.maxTokens,
-        }
-      : undefined,
+  const globalSampler = mergeGlobalSamplerWithLibraryModel(
+    readGlobalSamplerForSend(
+      replaySnapshot
+        ? {
+            temperature: replaySnapshot.temperature,
+            maxTokens: replaySnapshot.maxTokens,
+          }
+        : undefined,
+    ),
+    modelId,
   );
   const legacySysPrompt = (
     document.getElementById('systemPrompt') as HTMLTextAreaElement

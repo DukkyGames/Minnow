@@ -5,6 +5,7 @@
  */
 
 import '../styles/models-page.css';
+import '../styles/settings-sampler.css';
 
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';

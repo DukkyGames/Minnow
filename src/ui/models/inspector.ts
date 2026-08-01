@@ -3,10 +3,16 @@
  *
  * Info describes the selected weights, Load owns the llama.cpp launch config
  * (replacing the old serve modal), and Inference shows what the running process
- * was actually given plus where the global sampler lives.
+ * was actually given plus per-model sampling overrides.
  */
 
+import {
+  getLibrarySamplerForId,
+  loadLibraryInferencePrefs,
+  saveLibraryInferenceSampler,
+} from '../../config/library-inference-meta';
 import { fetchServeProfiles, type LlamaServeSettings, type ServeProfile } from '../../models/api-client';
+import { buildSamplerFieldInputs } from '../settings-sampler-fields';
 import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
 import { capabilityLabel, type LibraryModel } from '../../models/library';
 import { setStatus } from '../status';
@@ -406,18 +412,53 @@ function renderInferenceTab(model: LibraryModel, body: HTMLElement): void {
   }
   body.appendChild(block);
 
-  const samplerBlock = el('section', 'models-inspector__block');
+  const samplerBlock = el('section', 'models-inspector__block models-inspector__sampler');
   samplerBlock.append(
     el('h3', 'models-block__label', 'Sampling'),
     el(
       'p',
       'models-muted',
-      'Temperature, top-p, and penalties are set once and apply to every model Minnow talks to.',
+      'Override global sampler defaults for this model. Empty fields inherit from Settings → Sampler.',
     ),
   );
+
+  const aliases = [
+    serve?.modelLabel,
+    model.name,
+    model.fileName ?? undefined,
+  ].filter((value): value is string => Boolean(value?.trim()));
+
+  const stored = getLibrarySamplerForId(model.id);
+  const samplerFields = buildSamplerFieldInputs(stored, {
+    includeMaxTokens: true,
+    emptyPlaceholder: 'Inherit',
+  });
+  samplerBlock.appendChild(samplerFields.root);
+
+  let skipAutoSave = true;
+  const persistSampler = (): void => {
+    if (skipAutoSave) return;
+    const patch = samplerFields.readPatch();
+    void saveLibraryInferenceSampler({
+      libraryId: model.id,
+      sampler: patch,
+      aliases,
+    })
+      .then(() => {
+        setStatus('ok', 'Sampling settings saved');
+      })
+      .catch((err: unknown) => {
+        setStatus('err', err instanceof Error ? err.message : 'Could not save sampling settings');
+      });
+  };
+  samplerFields.root.addEventListener('change', persistSampler);
+  queueMicrotask(() => {
+    skipAutoSave = false;
+  });
+
   const links = el('div', 'models-link-row');
   links.append(
-    textButton('Sampler', () => openSection('sampler')),
+    textButton('Global sampler', () => openSection('sampler')),
     textButton('Thinking', () => openSection('thinking')),
   );
   samplerBlock.appendChild(links);
@@ -581,6 +622,7 @@ export function render(): void {
 
 /** Wire the inspector to the store (idempotent). */
 export function initInspector(): void {
+  void loadLibraryInferencePrefs();
   if (bound) {
     render();
     return;

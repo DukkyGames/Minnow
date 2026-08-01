@@ -6,6 +6,7 @@ import { cancelDownload, listDownloads, startDownload, subscribeDownload } from 
 import { listCachedModels } from './cached.js';
 import { listInstalled } from './installed.js';
 import { getModelsConfig, patchModelsConfig } from './models-config.js';
+import { getInferencePrefs, setLibraryInferenceSampler } from './inference-prefs.js';
 import { computeServeProfiles } from './profiles.js';
 import { detectRuntimes } from './runtime-detect.js';
 import { getServe, listServes, startServe, stopServe } from './serve.js';
@@ -159,6 +160,33 @@ export async function handleModelsRequest(req, res, pathname) {
         hfTokenMasked: hfToken ? `${hfToken.slice(0, 4)}…${hfToken.slice(-4)}` : '',
         modelDirs: Array.isArray(models.modelDirs) ? models.modelDirs : [],
       });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/inference' && req.method === 'GET') {
+    const inference = await getInferencePrefs();
+    sendJson(res, 200, inference);
+    return true;
+  }
+
+  if (pathname === '/api/models/inference' && req.method === 'PUT') {
+    try {
+      const body = await readJsonBody(req);
+      const libraryId = typeof body.libraryId === 'string' ? body.libraryId : '';
+      const sampler =
+        body.sampler === null
+          ? null
+          : body.sampler && typeof body.sampler === 'object'
+            ? body.sampler
+            : null;
+      const aliases = Array.isArray(body.aliases)
+        ? body.aliases.filter((a) => typeof a === 'string')
+        : [];
+      const inference = await setLibraryInferenceSampler(libraryId, sampler, aliases);
+      sendJson(res, 200, { ok: true, ...inference });
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
     }
