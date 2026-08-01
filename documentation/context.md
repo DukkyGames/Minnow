@@ -192,7 +192,7 @@ Wire format may use multimodal `ContentPart[]` for VLMs; built in [`src/tools/lo
 
 ### Backend-owned generations
 
-Main chat: `POST /api/generations` + `GET .../stream` with replay. Client stores `chat.currentGenerationId`; reload re-subscribes via [`src/chat/generation-resume.ts`](../src/chat/generation-resume.ts). Stop: [`src/chat/stop-generation.ts`](../src/chat/stop-generation.ts).
+Main chat: `POST /api/generations` + `GET .../stream` with replay. Client stores `chat.currentGenerationId`; reload re-subscribes via [`src/chat/generation-resume.ts`](../src/chat/generation-resume.ts). Stop: [`src/chat/stop-generation.ts`](../src/chat/stop-generation.ts). **Agent activity panel** ([`src/ui/agent-activity-panel.ts`](../src/ui/agent-activity-panel.ts), sidebar footer): lists in-flight main turns, sub-agents, and title jobs. **Stop all** (footer, confirm via [`appConfirm`](../src/ui/app-dialog.ts)) calls [`stopAllAgentActivity`](../src/chat/stop-all-agent-activity.ts) to halt orchestrate boards, Super Plan, streaming chats, sub-agents, title jobs, and desktop research runs; `/loop` schedules are left running.
 
 SSE parsing: [`src/api/sse-parse.ts`](../src/api/sse-parse.ts) — event boundaries and glued JSON chunks; do not `Response.json()` on the generations shim.
 

@@ -20,6 +20,11 @@ import {
 import { listTitleJobInflightChatIds } from '../chat/titles/inflight';
 import { getTitleScheduleContext } from '../chat/titles/schedule';
 import {
+  hasStopAllAgentActivityTargets,
+  stopAllAgentActivity,
+} from '../chat/stop-all-agent-activity';
+import { appConfirm } from './app-dialog';
+import {
   buildAgentActivitySnapshot,
   formatAgentActivityElapsed,
   formatAgentActivityStatusLine,
@@ -132,6 +137,7 @@ async function refreshAgentActivityBadgeOnly(): Promise<void> {
     resolveSubAgentLabel: (type) => subAgentLabelCache.get(type) ?? type,
   });
   updateBadgeCount(rows.length);
+  updateStopAllButtonState();
 }
 
 function mergeTitleJobActivity(): TitleJobActivity[] {
@@ -180,6 +186,12 @@ async function loadContextFills(chats: { id: string }[]): Promise<Map<string, Ag
     }),
   );
   return map;
+}
+
+function updateStopAllButtonState(): void {
+  const btn = document.getElementById('btnAgentActivityStopAll');
+  if (!(btn instanceof HTMLButtonElement)) return;
+  btn.disabled = !hasStopAllAgentActivityTargets();
 }
 
 function updateBadgeCount(count: number): void {
@@ -344,6 +356,7 @@ export async function refreshAgentActivityPanel(forceContext = false): Promise<v
   });
 
   updateBadgeCount(rows.length);
+  updateStopAllButtonState();
 
   if (rows.length === 0) {
     renderEmptyState(list);
@@ -368,11 +381,26 @@ function bindActivitySubscriptions(): void {
   subscribeTitleJobActivity(() => scheduleRefresh());
 }
 
+const STOP_ALL_CONFIRM_MESSAGE =
+  'Stop all agents? Running chats, orchestrate boards, sub-agents, and background jobs will be cancelled.';
+
+async function handleStopAllClick(): Promise<void> {
+  if (!hasStopAllAgentActivityTargets()) return;
+  const proceed = await appConfirm(STOP_ALL_CONFIRM_MESSAGE);
+  if (!proceed) return;
+  stopAllAgentActivity();
+  await refreshAgentActivityPanel(false);
+}
+
 function bindPanelChrome(): void {
   getToggleBtn()?.addEventListener('click', () => toggleAgentActivityPanel());
 
   document.getElementById('btnAgentActivityClose')?.addEventListener('click', () => {
     setAgentActivityPanelOpen(false);
+  });
+
+  document.getElementById('btnAgentActivityStopAll')?.addEventListener('click', () => {
+    void handleStopAllClick();
   });
 
   document.addEventListener('keydown', (e) => {
