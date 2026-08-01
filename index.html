@@ -1073,20 +1073,40 @@
   </div>
 </main>
 
-<main id="modelsView" class="models-page" aria-label="Models">
+<main id="modelsView" class="models-page is-workbench" aria-label="Models">
   <header class="models-page-header">
     <button type="button" class="icon-btn" id="btnModelsPageBack" aria-label="Back">
       <i class="fi fi-rr-arrow-left icon-svg" aria-hidden="true"></i>
     </button>
     <h1 class="models-page-header__title">Models</h1>
+    <div class="models-header-status" id="modelsHeaderStatus" role="status" aria-live="polite"></div>
+    <button
+      type="button"
+      class="icon-btn models-inspector-toggle"
+      id="btnModelsInspector"
+      aria-expanded="true"
+      aria-controls="modelsInspector"
+      aria-label="Toggle model details"
+    >
+      <i class="fi fi-rr-layout-fluid icon-svg" aria-hidden="true"></i>
+    </button>
   </header>
   <div class="models-page-body">
     <nav class="models-nav" aria-label="Models sections">
       <div class="models-nav__group" role="group" aria-labelledby="modelsNavLocal">
-        <span id="modelsNavLocal" class="models-nav__group-label">Local library</span>
-        <button type="button" data-models-nav="recommend" aria-current="page">Recommendations</button>
-        <button type="button" data-models-nav="installed">Installed</button>
-        <button type="button" data-models-nav="settings">Library</button>
+        <span id="modelsNavLocal" class="models-nav__group-label">Local</span>
+        <button type="button" data-models-nav="installed" aria-current="page">
+          <i class="fi fi-rr-cube icon-svg" aria-hidden="true"></i>My models
+        </button>
+        <button type="button" data-models-nav="recommend">
+          <i class="fi fi-rr-radar icon-svg" aria-hidden="true"></i>Discover
+        </button>
+        <button type="button" data-models-nav="server">
+          <i class="fi fi-rr-square-terminal icon-svg" aria-hidden="true"></i>Local server
+        </button>
+        <button type="button" data-models-nav="settings">
+          <i class="fi fi-rr-disk icon-svg" aria-hidden="true"></i>Storage
+        </button>
       </div>
       <div class="models-nav__group" role="group" aria-labelledby="modelsNavInference">
         <span id="modelsNavInference" class="models-nav__group-label">Inference</span>
@@ -1102,19 +1122,18 @@
       </div>
     </nav>
     <div class="models-content">
-      <section id="modelsSection-recommend" class="models-section is-active">
-        <h2>Recommendations</h2>
-        <p class="models-lead">Ranked local models for your GPU and RAM.</p>
-        <div id="modelsRecommendBody"></div>
+      <section id="modelsSection-installed" class="models-section models-section--flush is-active">
+        <div id="modelsInstalledBody" class="models-surface"></div>
       </section>
-      <section id="modelsSection-installed" class="models-section">
-        <h2>Installed</h2>
-        <p class="models-lead">On-disk files, active downloads, and local serve controls.</p>
-        <div id="modelsInstalledBody"></div>
+      <section id="modelsSection-recommend" class="models-section models-section--flush">
+        <div id="modelsRecommendBody" class="models-surface"></div>
+      </section>
+      <section id="modelsSection-server" class="models-section models-section--flush">
+        <div id="modelsServerBody" class="models-surface"></div>
       </section>
       <section id="modelsSection-settings" class="models-section">
-        <h2>Library</h2>
-        <p class="models-lead">Hugging Face token and extra folders scanned for local models.</p>
+        <h2>Storage</h2>
+        <p class="models-lead">Where Minnow looks for weights, and the token it uses to fetch gated ones.</p>
         <div id="modelsSettingsBody"></div>
       </section>
       <section id="modelsSection-voice" class="models-section">
@@ -1128,6 +1147,7 @@
       <section id="modelsSection-thinking" class="models-section"></section>
       <section id="modelsSection-usage" class="models-section"></section>
     </div>
+    <aside class="models-inspector" id="modelsInspector" aria-label="Model details"></aside>
   </div>
 </main>
 

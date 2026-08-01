@@ -18,6 +18,7 @@ import {
 } from './desktop-state';
 import { getAppById, isAppId } from './app-registry';
 import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
+import { DEFAULT_MODELS_SECTION } from '../ui/models-section-ids';
 import {
   getForegroundAppId,
   getInstanceSnapshot,
@@ -121,7 +122,7 @@ export function resolveLegacyHash(hash: string): {
   }
   if (trimmed === '#/models' || trimmed.startsWith('#/models/')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^models(?:\/([\w-]+))?/);
-    const section = match?.[1] ?? 'recommend';
+    const section = match?.[1] ?? DEFAULT_MODELS_SECTION;
     return { hash: `#/app/models/${section}`, modelsSection: section };
   }
   if (trimmed === '#/brain' || trimmed.startsWith('#/brain/')) {
@@ -160,7 +161,7 @@ export function parseOsHash(hash: string): OsRoute {
       route.settingsSection = pendingSettingsSection;
     }
     if (route.appId === 'models') {
-      route.modelsSection = appMatch[2] ?? pendingModelsSection ?? 'recommend';
+      route.modelsSection = appMatch[2] ?? pendingModelsSection ?? DEFAULT_MODELS_SECTION;
     }
     if (route.appId === 'brain') {
       route.brainSection = appMatch[2] ?? pendingBrainSection ?? 'graph';

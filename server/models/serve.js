@@ -287,7 +287,7 @@ async function registerServeProvider(opts) {
 }
 
 /**
- * @param {{ modelPath: string, runtime?: string, port?: number, modelLabel?: string, profile?: string, hardware?: object, llama?: object, quant?: string, paramsB?: number, isMoe?: boolean, weightsGb?: number }} body
+ * @param {{ modelPath: string, runtime?: string, port?: number, modelLabel?: string, profile?: string, hardware?: object, llama?: object, quant?: string, paramsB?: number, isMoe?: boolean, weightsGb?: number, async?: boolean }} body
  */
 export async function startServe(body) {
   await loadServes();
@@ -426,26 +426,40 @@ export async function startServe(body) {
   row.pid = run.pid;
   await saveServes();
 
-  const healthy = await waitForHealth(baseUrl, 60_000, run.runId);
-  if (!healthy.ok) {
-    await stopActiveRun(run.runId);
-    row.status = 'error';
-    row.error = healthy.error;
-    row.stoppedAt = Date.now();
+  /** Wait for health, then promote the row and register the provider. */
+  const settle = async () => {
+    const healthy = await waitForHealth(baseUrl, 60_000, run.runId);
+    if (!healthy.ok) {
+      await stopActiveRun(run.runId);
+      row.status = 'error';
+      row.error = healthy.error;
+      row.stoppedAt = Date.now();
+      await saveServes();
+      throw new Error(row.error);
+    }
+
+    row.status = 'running';
+    warnIfReasoningBudgetCliFlag(userSettings, llamaConfig.defaults);
+    try {
+      const supportsThinkingBudget = await detectLlamaThinkingBudgetSupport(llamaServerPath);
+      await setProviderThinkingBudgetSupport(LLAMA_CPP_LOCAL_ID, supportsThinkingBudget);
+    } catch (err) {
+      console.warn('[llama-cpp] thinking budget feature detect failed:', err);
+    }
+    await upsertLlamaCppProvider({ baseUrl, enabled: true });
     await saveServes();
-    throw new Error(row.error);
+  };
+
+  // Async start returns while the model is still loading; callers poll
+  // GET /api/models/serve/:id and follow the log stream for progress.
+  if (body.async === true) {
+    void settle().catch(() => {
+      /* row already carries status:'error' + error text */
+    });
+    return publicServe(row);
   }
 
-  row.status = 'running';
-  warnIfReasoningBudgetCliFlag(userSettings, llamaConfig.defaults);
-  try {
-    const supportsThinkingBudget = await detectLlamaThinkingBudgetSupport(llamaServerPath);
-    await setProviderThinkingBudgetSupport(LLAMA_CPP_LOCAL_ID, supportsThinkingBudget);
-  } catch (err) {
-    console.warn('[llama-cpp] thinking budget feature detect failed:', err);
-  }
-  await upsertLlamaCppProvider({ baseUrl, enabled: true });
-  await saveServes();
+  await settle();
   return publicServe(row);
 }
 
@@ -495,6 +509,17 @@ export async function stopServe(serveId) {
 export async function listServes() {
   await loadServes();
   return servesCache.map(publicServe);
+}
+
+/**
+ * Single serve record — used to poll a starting model until it is running.
+ * @param {string} serveId
+ */
+export async function getServe(serveId) {
+  await loadServes();
+  validateServeId(serveId);
+  const row = servesCache.find((s) => s.id === serveId);
+  return row ? publicServe(row) : null;
 }
 
 export async function shutdownAllModelServes() {
