@@ -127,6 +127,7 @@ function manualChunkForNodeModule(id: string): string | undefined {
 /** Vite build: relative asset paths for PWA / static hosting. */
 export default defineConfig({
   base: './',
+  envPrefix: ['VITE_', 'MINNOW_'],
   plugins: [uiconsWoff2OnlyPlugin(), cssBeforeEntryScriptPlugin()],
   optimizeDeps: {
     // Finish the first dep crawl before serving requests (avoids stale dist-* chunk URLs).
