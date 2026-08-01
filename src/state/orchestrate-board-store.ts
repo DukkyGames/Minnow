@@ -711,12 +711,11 @@ export type UnmetBoardTaskDependency = {
   status: BoardTask['status'];
 };
 
-/** dependsOn tasks that are known on the board and not yet complete. */
-export function listUnmetTaskDependencies(
+/** Known dependsOn targets that are not yet complete (ignores dependency cycles). */
+function listIncompleteDependsOnTasks(
   board: OrchestrateBoardState,
   task: BoardTask,
 ): UnmetBoardTaskDependency[] {
-  if (isTaskInDependencyCycle(board, task.id)) return [];
   if (!task.dependsOn?.length) return [];
   const unmet: UnmetBoardTaskDependency[] = [];
   for (const depId of task.dependsOn) {
@@ -728,6 +727,64 @@ export function listUnmetTaskDependencies(
     }
   }
   return unmet;
+}
+
+/** dependsOn tasks that are known on the board and not yet complete. */
+export function listUnmetTaskDependencies(
+  board: OrchestrateBoardState,
+  task: BoardTask,
+): UnmetBoardTaskDependency[] {
+  if (isTaskInDependencyCycle(board, task.id)) return [];
+  return listIncompleteDependsOnTasks(board, task);
+}
+
+export type ManualStartBlocker =
+  | { kind: 'dependsOn'; taskId: string; title?: string; status: string }
+  | { kind: 'priorWave'; waveId: string; incompleteTaskIds: string[] };
+
+/** Manual Start gating: prior-wave barriers first, then unmet dependsOn (mirrors auto readiness). */
+export function getManualStartBlockers(
+  board: OrchestrateBoardState,
+  task: BoardTask,
+): ManualStartBlocker[] {
+  const blockers: ManualStartBlocker[] = [];
+  const waveIndex = board.waves.findIndex((w) => String(w.id) === String(task.wave));
+  if (waveIndex > 0) {
+    for (let i = 0; i < waveIndex; i += 1) {
+      const priorWaveId = board.waves[i]!.id;
+      const priorTasks = board.tasks.filter(
+        (t) => String(t.wave) === String(priorWaveId),
+      );
+      const incompleteTaskIds = priorTasks
+        .filter((t) => t.status !== 'complete' && t.status !== 'quarantined')
+        .map((t) => t.id);
+      if (incompleteTaskIds.length) {
+        blockers.push({
+          kind: 'priorWave',
+          waveId: String(priorWaveId),
+          incompleteTaskIds,
+        });
+      }
+    }
+  }
+  if (!isDepsComplete(board, task)) {
+    for (const dep of listIncompleteDependsOnTasks(board, task)) {
+      blockers.push({
+        kind: 'dependsOn',
+        taskId: dep.id,
+        title: dep.title,
+        status: dep.status,
+      });
+    }
+  }
+  return blockers;
+}
+
+export function taskHasManualStartBlockers(
+  board: OrchestrateBoardState,
+  task: BoardTask,
+): boolean {
+  return getManualStartBlockers(board, task).length > 0;
 }
 
 /** True when all explicit dependsOn tasks are complete (or when the task has none). */
