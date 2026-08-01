@@ -8,10 +8,15 @@ import {
   applyFinalTestFailureReopens,
   applyTaskTestFailureState,
   clearMissingReportNudgesForTests,
+  completeTaskAfterVerificationPass,
+  finalizeBoardTaskOnStreamEnd,
   finalizeFinalTestOnStreamEnd,
   finalizeTaskTestingOnStreamEnd,
   getMissingReportNudgeCountForTests,
+  isBoardSkipPerTaskTestingLocked,
   MISSING_REPORT_NUDGE_CAP,
+  setBoardSkipPerTaskTesting,
+  startTaskTesting,
   tryTriggerFinalIntegrationTest,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { isOrchestratePlanComplete } from '../../src/chat/orchestrate/plan-complete.ts';
@@ -27,6 +32,7 @@ import type { Chat, ChatGroup } from '../../src/types.ts';
 const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
 const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
 const TEST_CHAT_ID = '33333333-3333-3333-3333-333333333333';
+const BUILD_CHAT_ID = '22222222-2222-2222-2222-222222222222';
 
 function makePlanner(): Chat {
   return {
@@ -431,6 +437,103 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.match(deliveries[0]!, /exhausting its automatic retries/i);
 
     setOrchestratorReportDeliverHook(null);
+  });
+});
+
+describe('skip per-task testing', () => {
+  beforeEach(() => {
+    setSessionStateForTests(null);
+    clearMissingReportNudgesForTests();
+  });
+
+  test('setBoardSkipPerTaskTesting locks after a task leaves planned', () => {
+    const group = makeGroup({ 'W1-A': 'planned', 'W1-B': 'planned' });
+    const planner = makePlanner();
+    setBoardSkipPerTaskTesting(group, true, planner);
+    assert.equal(group.orchestrateBoard!.skipPerTaskTesting, true);
+    updateTask(group, 'W1-A', { status: 'in_progress' }, planner);
+    assert.equal(isBoardSkipPerTaskTestingLocked(group.orchestrateBoard!), true);
+    setBoardSkipPerTaskTesting(group, false, planner);
+    assert.equal(group.orchestrateBoard!.skipPerTaskTesting, true);
+  });
+
+  test('build pass with skip merges to complete without entering testing', async () => {
+    const group = makeGroup({ 'W1-A': 'in_progress' });
+    const planner = makePlanner();
+    group.orchestrateBoard!.skipPerTaskTesting = true;
+    group.orchestrateBoard!.autoRunning = true;
+    group.orchestrateBoard!.executionMode = 'auto';
+    const buildChat: Chat = {
+      id: BUILD_CHAT_ID,
+      name: 'Build',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      history: [{ role: 'assistant', content: 'done' }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+    updateTask(
+      group,
+      'W1-A',
+      {
+        chatId: BUILD_CHAT_ID,
+        boardReport: { outcome: 'pass', summary: 'build ok' },
+      },
+      planner,
+    );
+    setSessionStateForTests({
+      chats: [planner, buildChat],
+      groups: [group],
+      activeChatId: BUILD_CHAT_ID,
+    });
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.notEqual(updated.status, 'testing');
+    assert.equal(updated.status, 'complete');
+  });
+
+  test('startTaskTesting still runs for legacy testing-column tasks when skip is on', async () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    try {
+      const group = makeGroup({ 'W1-A': 'testing' });
+      const planner = makePlanner();
+      group.orchestrateBoard!.skipPerTaskTesting = true;
+      group.orchestrateBoard!.autoRunning = true;
+      group.orchestrateBoard!.executionMode = 'auto';
+      updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+      setSessionStateForTests({ chats: [planner], groups: [group], activeChatId: PLANNER_ID });
+      await startTaskTesting(group, 'W1-A', planner);
+      const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+      assert.equal(updated.testChatId, TEST_CHAT_ID);
+    } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('final integration still arms when skip is on and all tasks complete', () => {
+    const group = makeGroup({ 'W1-A': 'complete', 'W1-B': 'complete' });
+    const planner = makePlanner();
+    group.orchestrateBoard!.skipPerTaskTesting = true;
+    group.orchestrateBoard!.executionMode = 'manual';
+    tryTriggerFinalIntegrationTest(group, planner);
+    assert.equal(group.orchestrateBoard!.finalTest?.status, 'pending');
+  });
+
+  test('completeTaskAfterVerificationPass marks task complete on skipped merge', async () => {
+    const group = makeGroup({ 'W1-A': 'in_progress' });
+    const planner = makePlanner();
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    await completeTaskAfterVerificationPass(group, task, planner);
+    assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
   });
 });
 

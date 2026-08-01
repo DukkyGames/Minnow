@@ -524,6 +524,8 @@ export interface OrchestrateBoardState {
   modelId?: string;
   /** Manual board vs auto-pilot delegation (default manual). */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  /** When true, skip per-task Tester; only final integration test runs verification. */
+  skipPerTaskTesting?: boolean;
   /** True when the user has pressed Start in auto/sequential mode. */
   autoRunning?: boolean;
   /** Orchestrator requested AFK via board_set_autonomy; awaits user confirmation. */

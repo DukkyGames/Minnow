@@ -75,6 +75,8 @@ export interface BoardLogCheckOptions {
   strictEvidence?: boolean;
   /** Explicit mode when the log starts after the mode_change event. */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  /** Board skipped per-task Tester (in_progress may jump to complete after merge). */
+  skipPerTaskTesting?: boolean;
   skip?: BoardLogInvariantId[];
 }
 
@@ -162,6 +164,7 @@ interface CheckContext {
   caps: { build: number; test: number; fixer: number; nudge: number };
   timelines: Map<string, TaskTimeline>;
   stats: Record<string, number>;
+  skipPerTaskTesting: boolean;
 }
 
 function parseEventSeq(id: string): number {
@@ -183,13 +186,18 @@ function isSkipped(ctx: CheckContext, id: BoardLogInvariantId, skip?: BoardLogIn
   return skip?.includes(id) === true;
 }
 
-function isLegalStatusEdge(from: BoardTaskStatus | undefined, to: BoardTaskStatus): boolean {
+function isLegalStatusEdge(
+  from: BoardTaskStatus | undefined,
+  to: BoardTaskStatus,
+  skipPerTaskTesting: boolean,
+): boolean {
   if (!from) return to === 'planned' || to === 'in_progress';
   if (to === 'failed' || to === 'blocked') return true;
   if (to === 'planned' && REOPEN_FROM.has(from)) return true;
   if (to === 'quarantined') return true;
   // Clean/skipped merges complete in-process without a visible merging phase.
   if (from === 'testing' && to === 'complete') return true;
+  if (skipPerTaskTesting && from === 'in_progress' && to === 'complete') return true;
   // Test failure reopens the Builder without going through merging.
   if (from === 'testing' && to === 'in_progress') return true;
   return FORWARD_CHAIN[from] === to;
@@ -278,6 +286,7 @@ function initContext(events: readonly BoardLogEvent[], opts: BoardLogCheckOption
       final_test_started: 0,
       final_test_verdict: 0,
     },
+    skipPerTaskTesting: opts.skipPerTaskTesting === true,
   };
 }
 
@@ -325,7 +334,7 @@ function checkStatusTransitions(ctx: CheckContext, violations: BoardLogViolation
       const from = event.detail?.from;
       const to = event.detail?.to;
       if (!to) continue;
-      if (!isLegalStatusEdge(from, to)) {
+      if (!isLegalStatusEdge(from, to, ctx.skipPerTaskTesting)) {
         violations.push({
           id: 'status-transitions',
           message: `illegal task_status edge ${from ?? '?'} → ${to}`,
@@ -337,7 +346,7 @@ function checkStatusTransitions(ctx: CheckContext, violations: BoardLogViolation
     }
     if (event.type === 'task_quarantined') {
       const from = event.detail?.from;
-      if (from && !isLegalStatusEdge(from, 'quarantined')) {
+      if (from && !isLegalStatusEdge(from, 'quarantined', ctx.skipPerTaskTesting)) {
         violations.push({
           id: 'status-transitions',
           message: `illegal quarantine from ${from}`,
