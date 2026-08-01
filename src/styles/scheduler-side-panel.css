@@ -101,7 +101,10 @@
   flex: 1;
   min-height: 0;
   max-width: none;
-  overflow: auto;
+  /* Vertical only: the sticky footer's -14px bleed would otherwise make the
+     whole panel scroll sideways by the gutter width. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .scheduler-panel-mount--side .scheduler-panel {

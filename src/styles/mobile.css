@@ -1,0 +1,359 @@
+/* ============================================================
+   Minnow — phone layer.
+
+   Minnow Shell is a desktop metaphor: floating windows, a dock, hover-revealed
+   controls. None of that survives a 375px touchscreen, so on phones the shell
+   becomes an app stack: every window and side panel is a full-stage sheet with
+   one header, one way out, and 44px targets.
+
+   Everything here is gated on `html.mn-phone` / `html.mn-touch` rather than a
+   media query. Two reasons: the shell's own JS reads the same breakpoint (window
+   geometry, drag suppression, parking sheets on home), so a single definition in
+   ui/mobile-layout.ts keeps CSS and behaviour from drifting; and the extra class
+   gives these rules the specificity to beat page CSS that Vite injects later
+   from a dynamic import (settings, models, brain, issues, research).
+
+   Loaded last in main.ts, after the statically imported stylesheets.
+   ============================================================ */
+
+:root {
+  --mn-safe-top: env(safe-area-inset-top, 0px);
+  --mn-safe-right: env(safe-area-inset-right, 0px);
+  --mn-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --mn-safe-left: env(safe-area-inset-left, 0px);
+  /* Horizontal breathing room for full-bleed phone surfaces. */
+  --mn-phone-gutter: 14px;
+  --mn-phone-pad-left: max(var(--mn-phone-gutter), var(--mn-safe-left));
+  --mn-phone-pad-right: max(var(--mn-phone-gutter), var(--mn-safe-right));
+}
+
+/* ---------- window frames become app sheets ---------- */
+
+/* Geometry keys off `is-phone-sheet` rather than `mn-phone`: WindowFrame adds
+   that class in the same call that strips the inline left/top/width/height, so
+   the frame can never end up with neither source of geometry. */
+html.mn-phone .mn-os-window.is-phone-sheet {
+  inset: 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+html.mn-phone .mn-os-window {
+  border: none;
+  border-radius: 0;
+  background: var(--os-bg);
+  /* Blur over a full-screen surface costs a lot and shows nothing. */
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+html.mn-phone .mn-os-window.is-focused {
+  border: none;
+  box-shadow: none;
+}
+
+/* Drag and resize are pointer affordances; the sheet fills the stage anyway. */
+html.mn-phone .mn-os-window-resize-grips {
+  display: none;
+}
+
+html.mn-phone .mn-os-window-drag {
+  cursor: default;
+}
+
+/* 48px = the 44px close target plus 2px of breathing room, and no more: the
+   menubar already costs 46px above it. */
+html.mn-phone .mn-os-window-titlebar {
+  min-height: 48px;
+  padding: 0 2px 0 var(--mn-phone-pad-left);
+  gap: 4px;
+  background: var(--os-surface-1);
+}
+
+html.mn-phone .mn-os-window-title {
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+/* No taskbar to minimize into, and maximize is the only state. */
+html.mn-phone .mn-os-window-btn--minimize,
+html.mn-phone .mn-os-window-btn--maximize {
+  display: none;
+}
+
+html.mn-phone .mn-os-window-controls {
+  margin-left: 8px;
+  margin-right: max(0px, calc(var(--mn-safe-right) - 4px));
+}
+
+html.mn-phone .mn-os-window-btn--close {
+  width: var(--touch-min);
+  height: var(--touch-min);
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+}
+
+html.mn-phone .mn-os-window-btn--close .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+html.mn-phone .mn-os-window-body {
+  padding-bottom: var(--mn-safe-bottom);
+  /* Momentum scrolling inside the sheet, not rubber-banding the shell. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Snap previews only exist to guide a drag. */
+html.mn-phone .mn-os-window-snap-preview {
+  display: none;
+}
+
+/* ---------- side panels become sheets ---------- */
+
+html.mn-phone .mn-os-scheduler-side-panel {
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  width: auto;
+  min-width: 0;
+  border-left: none;
+  border-radius: 0;
+  backdrop-filter: none;
+  background: var(--os-bg);
+  box-shadow: none;
+  padding-bottom: var(--mn-safe-bottom);
+}
+
+html.mn-phone .mn-os-scheduler-side-panel__hdr {
+  min-height: 52px;
+  align-items: center;
+  padding: 8px var(--mn-phone-pad-right) 8px var(--mn-phone-pad-left);
+}
+
+html.mn-phone .mn-os-scheduler-side-panel__close {
+  width: var(--touch-min);
+  height: var(--touch-min);
+  flex: none;
+}
+
+/* ---------- menubar ---------- */
+
+/* Notch clearance. The stage is `flex: 1` below the bar, so growing the bar
+   is enough — nothing else needs to know about the inset. */
+html.mn-phone .mn-os-menubar {
+  padding-top: var(--mn-safe-top);
+  height: calc(var(--os-menubar-h) + var(--mn-safe-top));
+}
+
+/* The apps grid is the only way home once a sheet covers the dock. */
+html.mn-phone .mn-os-mb-apps:not([hidden]) {
+  width: var(--touch-min);
+  height: var(--touch-min);
+}
+
+/* ---------- app switcher ---------- */
+
+/* The popover is anchored inline by JS (which also pins `right: auto`), so
+   widen it here rather than trying to stretch it between two edges. */
+html.mn-phone .mn-os-app-switcher {
+  left: var(--mn-phone-pad-left) !important;
+  width: calc(100vw - var(--mn-phone-pad-left) - var(--mn-phone-pad-right)) !important;
+  max-width: none;
+  max-height: min(70dvh, calc(100dvh - var(--os-menubar-h) - var(--mn-safe-top) - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+html.mn-phone .mn-os-app-switcher__tile {
+  min-height: var(--touch-min);
+}
+
+/* ---------- floating app chrome ---------- */
+
+/* Brain and Settings float their header (and Brain its rail) as an inset card
+   over the surface below. Inside a full-screen sheet that reads as a card in a
+   card, and the 8–10px margins cost width the content needs. */
+html.mn-phone .brain-overlay-surface {
+  margin: 0;
+  border-inline: none;
+  border-top: none;
+  border-radius: 0;
+  background: var(--mn-surface-1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html.mn-phone .brain-page-header.brain-overlay-surface {
+  padding-inline: var(--mn-phone-pad-left) var(--mn-phone-pad-right);
+}
+
+/* ---------- overlays: menus, popovers, dialogs ---------- */
+
+/* Anchored popovers are placed by JS against window.innerWidth; cap their
+   intrinsic width so the clamp has something reachable to work with. */
+html.mn-phone .composer-tools-popover,
+html.mn-phone .composer-model-menu,
+html.mn-phone .mn-os-notif-menu,
+html.mn-phone .workspace-menu,
+html.mn-phone .skill-picker,
+html.mn-phone .branch-picker__menu,
+html.mn-phone .chat-search-popover,
+html.mn-phone .context-usage-breakdown,
+html.mn-phone .file-tree-context-menu,
+html.mn-phone .model-select-menu,
+html.mn-phone .model-select-popover {
+  max-width: calc(100vw - var(--mn-phone-pad-left) - var(--mn-phone-pad-right));
+  max-height: min(60dvh, calc(100dvh - 140px));
+  overscroll-behavior: contain;
+}
+
+html.mn-phone .app-dialog-panel {
+  width: calc(100vw - var(--mn-phone-pad-left) - var(--mn-phone-pad-right));
+  max-height: min(84dvh, calc(100dvh - var(--mn-safe-top) - var(--mn-safe-bottom) - 24px));
+}
+
+/* Stack dialog buttons: side-by-side, two of them barely clear 40px each. */
+html.mn-phone .app-dialog-panel__actions {
+  flex-direction: column-reverse;
+  align-items: stretch;
+}
+
+html.mn-phone .app-dialog-panel__btn {
+  width: 100%;
+  min-height: var(--touch-min);
+}
+
+/* ---------- form controls ---------- */
+
+/* iOS zooms the viewport when a focused field is under 16px. Every text entry
+   the user can reach on a phone opts out. */
+html.mn-phone input[type='text'],
+html.mn-phone input[type='search'],
+html.mn-phone input[type='email'],
+html.mn-phone input[type='url'],
+html.mn-phone input[type='number'],
+html.mn-phone input[type='password'],
+html.mn-phone input:not([type]),
+html.mn-phone textarea,
+html.mn-phone select {
+  font-size: 16px;
+}
+
+html.mn-phone input:not([type='checkbox']):not([type='radio']):not([type='range']),
+html.mn-phone select {
+  min-height: var(--touch-min);
+}
+
+html.mn-phone input[type='checkbox'],
+html.mn-phone input[type='radio'] {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- touch targets ---------- */
+
+/* Icon-only chrome buttons across app headers and rails. */
+html.mn-touch :is(.icon-btn, .models-icon-btn, .brain-action-btn--icon) {
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+}
+
+/* Composer chrome sits at the bottom of the primary chat surface, where every
+   interaction is a thumb. The controls read as text-sized labels on desktop;
+   pad them out without changing the type size. */
+html.mn-phone .composer-model-trigger-row {
+  min-height: 36px;
+}
+
+html.mn-phone .composer-model-trigger {
+  min-height: 36px;
+  padding: 4px 8px;
+  max-width: min(18rem, 56vw);
+}
+
+html.mn-phone .context-usage-ring {
+  width: 40px;
+  height: 40px;
+}
+
+/* Mode, run target, thinking, and code-map controls sit on the same row and
+   are 23–28px tall on desktop. 38px keeps them in one row while staying
+   hittable; the row wraps rather than shrinking further. */
+html.mn-phone :is(.mode-segment, .composer-run-target-btn) {
+  min-height: 38px;
+}
+
+html.mn-phone .mode-segmented--compact .mode-segment {
+  min-width: 38px;
+}
+
+html.mn-phone :is(.thinking-toggle-btn, .composer-tools-btn, .composer-mic-btn) {
+  width: 38px;
+  height: 38px;
+}
+
+html.mn-phone .composer-controls,
+html.mn-phone .composer-controls__trail {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+/* ---------- Brain: graph overlays and tree rows ---------- */
+
+html.mn-phone :is(
+  .brain-graph-tree-toggle,
+  .brain-graph-readout__toggle
+) {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+/* Tree and hub lists are the main way to navigate Brain without a pointer. */
+html.mn-phone :is(
+  .brain-tree__folder,
+  .brain-tree__page,
+  .brain-graph-hub,
+  .brain-graph-legend__item
+) {
+  min-height: 36px;
+}
+
+/* Header actions (create, delete, rebuild) are 19px tall by default — the label
+   sets the height and the padding is 4px. */
+html.mn-phone .brain-action-btn {
+  min-height: 36px;
+}
+
+html.mn-phone .brain-action-btn--icon {
+  min-width: 36px;
+}
+
+/* ---------- other app chrome ---------- */
+
+html.mn-phone .mn-os-research-toolbar-btn {
+  min-height: 36px;
+}
+
+/* Column sort controls double as the list header; they are the only way to
+   reorder issues on a phone. */
+html.mn-phone .issues-list-head__sort {
+  min-height: 32px;
+}
+
+/* ---------- scroll containment ---------- */
+
+/* Scoped to the shell: it is a fixed app frame, so the document itself never
+   scrolls and rubber-banding it only detaches the chrome. Other entry points
+   (companion window, standalone pages) keep normal document scrolling. */
+html.mn-phone.minnow-os-enabled,
+html.mn-phone.minnow-os-enabled body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
