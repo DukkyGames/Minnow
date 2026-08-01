@@ -85,7 +85,8 @@ function isMemoryPartEnabled(ctx: ComposeContext): boolean {
   return ctx.memoryEnabled === true && contextHasBrainWriteTools(ctx);
 }
 
-function isCodeMapPartEnabled(ctx: ComposeContext): boolean {
+/** True when the outbound prompt will include the code-map part (injection on + non-empty map). */
+export function isCodeMapPartEnabled(ctx: ComposeContext): boolean {
   return (
     ctx.codeMapInjectionEnabled === true && Boolean(ctx.codeMapBlock?.trim())
   );

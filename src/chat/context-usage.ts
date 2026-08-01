@@ -117,6 +117,12 @@ export function buildContextUsageBreakdown(
       label: 'Code map',
       tokens: estimate.codeMapSystem,
     });
+  } else if (estimate.codeMapInjectionEnabled) {
+    rows.push({
+      key: 'codeMap',
+      label: 'Code map (loading)',
+      tokens: 0,
+    });
   }
   rows.push(
     { key: 'rules', label: 'Rules', tokens: estimate.userRules },

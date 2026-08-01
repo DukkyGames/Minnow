@@ -106,6 +106,8 @@ export interface OutboundPromptEstimate {
   legacyFallback: boolean;
   /** Approximate tokens for injected code map (subset of composedSystem). */
   codeMapSystem?: number;
+  /** Resolved on for this estimate (map may still be loading). */
+  codeMapInjectionEnabled?: boolean;
   /** When context compression would apply on send. */
   historyCompressed?: boolean;
   compressedContextEstimate?: number;
