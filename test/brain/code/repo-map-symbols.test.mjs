@@ -6,9 +6,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderRepoMap } from '../../../server/brain/code/repo-map.js';
 import {
+  formatRepoMapInjectionLine,
   formatRepoMapSymbolLine,
+  isRepoMapInjectionTestPath,
   isRepoMapTestPath,
   prepareRepoMapSymbols,
+  prepareRepoMapSymbolsForInjection,
 } from '../../../server/brain/code/repo-map-symbols.js';
 
 describe('repo-map symbols', () => {
@@ -96,5 +99,65 @@ describe('repo-map symbols', () => {
     const map = renderRepoMap(rows, 120);
     assert.ok(map.text.includes('dispatch'));
     assert.ok(!map.text.includes('property status'));
+  });
+
+  it('injection profile drops nested constants, callbacks, and vitest setup paths', () => {
+    const rows = [
+      {
+        id: 'ws:executeDay',
+        file: 'server/simulation/tick.ts',
+        kind: 'function',
+        signature: 'function executeDay(): void',
+        pagerank: 0.7,
+        line_start: 12,
+      },
+      {
+        id: 'ws:BaseAgent.decide.system',
+        file: 'server/agents/base.ts',
+        kind: 'constant',
+        signature: 'constant system',
+        pagerank: 0.99,
+        line_start: 44,
+      },
+      {
+        id: 'ws:BaseAgent.decide.retryFn.map() callback',
+        file: 'server/agents/base.ts',
+        kind: 'function',
+        signature: 'function map() callback',
+        pagerank: 0.98,
+        line_start: 55,
+      },
+      {
+        id: 'ws:setup',
+        file: 'vitest.setup.ts',
+        kind: 'function',
+        signature: 'function setup()',
+        pagerank: 0.97,
+        line_start: 1,
+      },
+    ];
+    const wide = prepareRepoMapSymbols(rows);
+    const injection = prepareRepoMapSymbolsForInjection(rows);
+    assert.equal(wide.length, 4);
+    assert.equal(injection.length, 1);
+    assert.equal(injection[0].id, 'ws:executeDay');
+  });
+
+  it('formatRepoMapInjectionLine includes path and line anchor', () => {
+    const line = formatRepoMapInjectionLine({
+      id: 'ws:SimulationOrchestrator',
+      file: 'server/simulation/engine.ts',
+      kind: 'class',
+      signature: 'class SimulationOrchestrator',
+      line_start: 42,
+    });
+    assert.equal(line, '- server/simulation/engine.ts:42 [class] SimulationOrchestrator');
+  });
+
+  it('isRepoMapInjectionTestPath covers vitest setup and vitest test files', () => {
+    assert.equal(isRepoMapInjectionTestPath('vitest.setup.ts'), true);
+    assert.equal(isRepoMapInjectionTestPath('server/llm/client.vitest.ts'), true);
+    assert.equal(isRepoMapInjectionTestPath('test-ws.cjs'), true);
+    assert.equal(isRepoMapTestPath('src/foo.ts'), false);
   });
 });

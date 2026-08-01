@@ -236,19 +236,28 @@ export async function fetchBrainGitHookStatus(): Promise<BrainCodeGitHookStatus 
 export async function fetchBrainCodeRepoMap(options?: {
   repo?: string;
   focus?: string;
+  focusFiles?: string[];
   tokenBudget?: number;
   ensureIndexed?: boolean;
+  profile?: 'default' | 'injection';
 }): Promise<BrainCodeRepoMap | null> {
-  if (options?.repo?.trim() || options?.ensureIndexed === true) {
+  if (
+    options?.repo?.trim() ||
+    options?.ensureIndexed === true ||
+    options?.profile === 'injection' ||
+    (options?.focusFiles?.length ?? 0) > 0
+  ) {
     return brainFetch<BrainCodeRepoMap>('/api/brain/code/repo-map', {
       method: 'POST',
       body: JSON.stringify({
         ...(options.repo?.trim() ? { repo: options.repo.trim() } : {}),
         ...(options.focus?.trim() ? { focus: options.focus.trim() } : {}),
+        ...(options.focusFiles?.length ? { focusFiles: options.focusFiles } : {}),
         ...(options.tokenBudget && options.tokenBudget > 0
           ? { tokenBudget: options.tokenBudget }
           : {}),
         ...(options.ensureIndexed === true ? { ensureIndexed: true } : {}),
+        ...(options.profile === 'injection' ? { profile: 'injection' } : {}),
       }),
     });
   }

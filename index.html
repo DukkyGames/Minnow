@@ -1553,6 +1553,10 @@
               <label>Repo map token budget
                 <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="1500">
               </label>
+              <label>Code map injection token budget
+                <input type="number" id="brainCodeInjectionTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="10000">
+              </label>
+              <p class="brain-muted">Injection budget applies to per-send composer code-map injection; repo map budget is for the tool and Brain Code map panel.</p>
               <label><input type="checkbox" id="brainFeatureCodeMapInjectionDefault"> Inject code map by default (inherit)</label>
               <p class="brain-muted">Per-chat override: Code composer toolbar code-map icon (inherit / on / off).</p>
               <label>Reindex cadence

@@ -33,6 +33,36 @@ let lastAppliedCapabilities: ProviderCapabilitiesFile | null = null;
 
 let probeAbort: AbortController | null = null;
 
+/** Match chat model ids to catalog rows when slash-prefixed ids differ (e.g. deepseek/deepseek-v4-flash). */
+function modelIdsMatchForCapabilities(chatModelId: string, catalogModelId: string): boolean {
+  const chat = chatModelId.trim().toLowerCase();
+  const catalog = catalogModelId.trim().toLowerCase();
+  if (!chat || !catalog) return false;
+  if (chat === catalog) return true;
+  const chatTail = chat.includes('/') ? chat.slice(chat.lastIndexOf('/') + 1) : chat;
+  const catalogTail = catalog.includes('/') ? catalog.slice(catalog.lastIndexOf('/') + 1) : catalog;
+  return chatTail === catalogTail;
+}
+
+function findModelCacheRow(providerId: string, modelId: string): LmModelRecord | undefined {
+  const pid = providerId.trim();
+  const mid = modelId.trim();
+  if (!pid || !mid) return undefined;
+
+  const exact = modelCache.get(encodeModelSelectKey(pid, mid));
+  if (exact) return exact;
+
+  for (const [key, row] of modelCache.entries()) {
+    const decoded = decodeModelSelectKey(key);
+    if (!decoded || decoded.providerId !== pid) continue;
+    if (modelIdsMatchForCapabilities(mid, decoded.modelId)) return row;
+  }
+
+  const fallbackKey = findFirstSelectKeyForCanonicalModelId(modelCache.keys(), mid);
+  if (fallbackKey) return modelCache.get(fallbackKey);
+  return undefined;
+}
+
 /** ISO timestamp of the last capabilities file applied to modelCache. */
 export function getLastCapabilitiesProbedAt(): string | undefined {
   const at = lastAppliedCapabilities?.probedAt;
@@ -152,7 +182,7 @@ export function resolveSendCapabilities(
   const mid = modelId.trim();
   if (!pid || !mid) return undefined;
 
-  const row = modelCache.get(encodeModelSelectKey(pid, mid));
+  const row = findModelCacheRow(pid, mid);
   if (!row) return undefined;
 
   const kind =

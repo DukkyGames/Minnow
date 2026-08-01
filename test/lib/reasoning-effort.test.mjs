@@ -10,6 +10,7 @@ import {
   inferReasoningOptionsFromModelId,
   modelHasSelectableReasoningEffort,
   modelShowsComposerBrainToggle,
+  modelUsesComposerReasoningBinaryDropdown,
   modelUsesComposerReasoningDropdown,
   modelUsesComposerThinkingToggle,
   normalizeReasoningAllowedOptions,
@@ -72,9 +73,10 @@ describe('composer reasoning control helpers', () => {
     assert.equal(modelShowsComposerBrainToggle(caps), true);
   });
 
-  test('brain toggle when only off/on are allowed', () => {
+  test('brain toggle when only off/on are allowed (no binary effort select)', () => {
     const caps = { reasoningAllowedOptions: ['off', 'on'] };
     assert.equal(modelUsesComposerReasoningDropdown(caps), false);
+    assert.equal(modelUsesComposerReasoningBinaryDropdown(caps), false);
     assert.equal(modelUsesComposerThinkingToggle(caps), true);
     assert.equal(modelShowsComposerBrainToggle(caps), true);
   });

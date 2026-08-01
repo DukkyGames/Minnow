@@ -297,6 +297,9 @@ function bindSettingsSection(): void {
       const budgetEl = document.getElementById(
         'brainCodeTokenBudget',
       ) as HTMLInputElement | null;
+      const injectionBudgetEl = document.getElementById(
+        'brainCodeInjectionTokenBudget',
+      ) as HTMLInputElement | null;
       const cadenceEl = document.getElementById(
         'brainCodeReindexCadence',
       ) as HTMLSelectElement | null;
@@ -307,12 +310,21 @@ function bindSettingsSection(): void {
         'brainCodeAutoScaffold',
       ) as HTMLInputElement | null;
       const budget = Number(budgetEl?.value ?? 1500);
+      const injectionBudget = Number(injectionBudgetEl?.value ?? 10000);
       if (!Number.isFinite(budget) || budget < 200) {
         setStatus('err', 'Token budget must be at least 200');
         return;
       }
       if (budget > 128_000) {
         setStatus('err', 'Token budget cannot exceed 128000');
+        return;
+      }
+      if (!Number.isFinite(injectionBudget) || injectionBudget < 200) {
+        setStatus('err', 'Injection token budget must be at least 200');
+        return;
+      }
+      if (injectionBudget > 128_000) {
+        setStatus('err', 'Injection token budget cannot exceed 128000');
         return;
       }
       const parseLines = (raw: string) =>
@@ -325,6 +337,7 @@ function bindSettingsSection(): void {
         includeGlobs: parseLines(includeEl?.value ?? ''),
         excludeGlobs: parseLines(excludeEl?.value ?? ''),
         repoMapTokenBudget: Math.round(budget),
+        repoMapInjectionTokenBudget: Math.round(injectionBudget),
         reindexCadence:
           cadenceEl?.value === 'on-switch' || cadenceEl?.value === 'git-hook'
             ? cadenceEl.value
@@ -608,6 +621,9 @@ async function refreshCodeSettingsFields(): Promise<void> {
   const includeEl = document.getElementById('brainCodeIncludeGlobs') as HTMLTextAreaElement | null;
   const excludeEl = document.getElementById('brainCodeExcludeGlobs') as HTMLTextAreaElement | null;
   const budgetEl = document.getElementById('brainCodeTokenBudget') as HTMLInputElement | null;
+  const injectionBudgetEl = document.getElementById(
+    'brainCodeInjectionTokenBudget',
+  ) as HTMLInputElement | null;
   const cadenceEl = document.getElementById('brainCodeReindexCadence') as HTMLSelectElement | null;
   const embEl = document.getElementById('brainCodeEmbeddingsEnabled') as HTMLInputElement | null;
   const scaffoldEl = document.getElementById('brainCodeAutoScaffold') as HTMLInputElement | null;
@@ -635,6 +651,11 @@ async function refreshCodeSettingsFields(): Promise<void> {
   }
   if (budgetEl && !budgetEl.matches(':focus')) {
     budgetEl.value = String(config.repoMapTokenBudget);
+  }
+  if (injectionBudgetEl && !injectionBudgetEl.matches(':focus')) {
+    injectionBudgetEl.value = String(
+      config.repoMapInjectionTokenBudget ?? config.repoMapTokenBudget,
+    );
   }
   if (cadenceEl && !cadenceEl.matches(':focus')) {
     cadenceEl.value = config.reindexCadence;

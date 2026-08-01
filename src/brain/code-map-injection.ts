@@ -10,8 +10,11 @@ export interface RetrieveCodeMapBlockOptions {
   /** Absolute workspace or worktree root for repo key resolution. */
   repoPath: string;
   focus?: string;
+  focusFiles?: string[];
   tokenBudget?: number;
   ensureIndexed?: boolean;
+  /** Injection uses a higher-signal profile on the server (default for this helper). */
+  profile?: 'default' | 'injection';
 }
 
 /** Ranked repo map wrapped for untrusted prompt injection; empty when unavailable. */
@@ -25,11 +28,19 @@ export async function retrieveCodeMapBlock(
   if (!repoPath) return '';
 
   const repo = brainWorkspaceKeyFromPath(repoPath);
+  const profile = options.profile ?? 'injection';
+  const defaultBudget =
+    profile === 'injection'
+      ? config.repoMapInjectionTokenBudget ?? config.repoMapTokenBudget
+      : config.repoMapTokenBudget;
+
   const map = await fetchBrainCodeRepoMap({
     repo,
     focus: options.focus,
-    tokenBudget: options.tokenBudget ?? config.repoMapTokenBudget,
+    focusFiles: options.focusFiles,
+    tokenBudget: options.tokenBudget ?? defaultBudget,
     ensureIndexed: options.ensureIndexed !== false,
+    profile,
   });
 
   const text = map?.text?.trim() ?? '';

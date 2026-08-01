@@ -23,6 +23,7 @@ import { retrieveMemoryBlock } from '../../memory/client';
 import { shouldInjectMemory } from '../../memory/config';
 import { shouldInjectCodeMap } from '../../brain/code-injection-config';
 import { retrieveCodeMapBlock } from '../../brain/code-map-injection';
+import { extractCodeMapFocusHints } from '../../brain/code-map-focus';
 import { fetchBrainCodeConfig } from '../../brain/client';
 import { loadPromptConfig } from './prompt-configs';
 import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
@@ -49,6 +50,8 @@ function getEnabledToolIdsForChat(chat: Chat): string[] {
 
 export interface BuildComposeContextOptions {
   userMessagePreview?: string;
+  /** Workspace paths from composer attachments (bias injection PageRank). */
+  attachmentWorkspacePaths?: string[];
   /** When set, used for expert routing instead of last history message. */
   routeUserText?: string;
   overrides?: Partial<ComposeContext>;
@@ -115,13 +118,20 @@ export async function buildComposeContext(
   const injectCodeMap = await shouldInjectCodeMap(chat);
   if (injectCodeMap) {
     const codeConfig = await fetchBrainCodeConfig();
-    // Full ranked map within token budget — do not pass the user message as `focus`
-    // (repo-map focus is a contiguous substring filter on symbol id/path/signature).
+    const preview =
+      options?.routeUserText ?? options?.userMessagePreview ?? '';
+    const focusHints = extractCodeMapFocusHints(
+      preview,
+      options?.attachmentWorkspacePaths,
+    );
     codeMapBlock =
       (await retrieveCodeMapBlock({
         repoPath: worktreeCwd ?? resolveComposeCwd(),
-        tokenBudget: codeConfig?.repoMapTokenBudget,
+        tokenBudget: codeConfig?.repoMapInjectionTokenBudget ?? codeConfig?.repoMapTokenBudget,
+        focus: focusHints.focus,
+        focusFiles: focusHints.focusFiles.length ? focusHints.focusFiles : undefined,
         ensureIndexed: true,
+        profile: 'injection',
       })) || null;
   }
   const ctx: ComposeContext = {
