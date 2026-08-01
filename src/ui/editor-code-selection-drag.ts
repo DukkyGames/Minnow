@@ -2,7 +2,8 @@
  * CodeMirror dragstart: selection → composer code-reference chips.
  */
 
-import { EditorView, type Extension } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
+import type { Extension } from '@codemirror/state';
 import { setCodeSelectionDragData } from '../attachments/code-selection-drag';
 import { lineNumbersForRange } from './editor-quick-edit/selection-fence';
 
