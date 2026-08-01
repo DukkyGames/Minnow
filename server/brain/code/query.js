@@ -12,6 +12,7 @@ import { clampRepoMapTokenBudget, normalizeBrainCodeConfig } from './config.js';
 import { getCodeDb, getIndexStats } from './schema.js';
 import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
+import { prepareRepoMapSymbols } from './repo-map-symbols.js';
 import { ensureIndexFreshForQuery, runCascade } from './cascade.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
@@ -359,14 +360,15 @@ export async function repoMap(opts = {}) {
   const budget = clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
   const rows = db
     .prepare(
-      `SELECT id, file, signature, kind, pagerank, usage_count
+      `SELECT id, file, signature, kind, pagerank, usage_count, line_start
        FROM symbols
        WHERE repo = ?
        ORDER BY pagerank DESC, usage_count DESC, file, line_start`,
     )
     .all(repo);
 
-  return renderRepoMap(rows, budget, { focus: opts.focus });
+  const symbols = prepareRepoMapSymbols(rows);
+  return renderRepoMap(symbols, budget, { focus: opts.focus });
 }
 
 /**

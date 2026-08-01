@@ -5,6 +5,11 @@
   width: min(var(--chat-tool-call-max), 100%);
 }
 
+/* Brain / code-map injection follows the user message (not assistant tool column). */
+.context-notice.context-notice--user-turn {
+  align-self: flex-end;
+}
+
 .context-notice .tool-call-action {
   flex: 1 1 auto;
   min-width: 0;

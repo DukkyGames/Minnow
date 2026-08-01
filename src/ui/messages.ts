@@ -523,7 +523,8 @@ function contextNoticeIcon(policy: ContextNoticeMessage['policy']): IconName {
 function appendTranscriptNoticeChip(
   area: HTMLElement,
   options: TranscriptNoticeChipOptions,
-): void {
+  insertBefore?: ChildNode | null,
+): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'context-notice tool-call-msg';
   wrap.dataset.historyIndex = String(options.historyIndex);
@@ -576,7 +577,12 @@ function appendTranscriptNoticeChip(
   details.appendChild(summary);
   details.appendChild(body);
   wrap.appendChild(details);
-  area.appendChild(wrap);
+  if (insertBefore) {
+    area.insertBefore(wrap, insertBefore);
+  } else {
+    area.appendChild(wrap);
+  }
+  return wrap;
 }
 
 function appendContextNotice(
@@ -598,15 +604,21 @@ function appendInjectionNotice(
   area: HTMLElement,
   notice: InjectionNoticeMessage,
   historyIndex: number,
+  insertBefore?: ChildNode | null,
 ): void {
-  appendTranscriptNoticeChip(area, {
-    action: injectionNoticeAction(notice.kind),
-    outcome: injectionNoticeOutcome(notice.body),
-    icon: injectionNoticeIcon(notice.kind),
-    body: notice.body,
-    historyIndex,
-    emptyFallback: 'No injection payload was recorded.',
-  });
+  const wrap = appendTranscriptNoticeChip(
+    area,
+    {
+      action: injectionNoticeAction(notice.kind),
+      outcome: injectionNoticeOutcome(notice.body),
+      icon: injectionNoticeIcon(notice.kind),
+      body: notice.body,
+      historyIndex,
+      emptyFallback: 'No injection payload was recorded.',
+    },
+    insertBefore,
+  );
+  wrap.classList.add('context-notice--user-turn');
 }
 
 /**
@@ -628,9 +640,12 @@ export function appendInjectionNoticesDom(
   if (shouldStubOrchestrateStreamDom(chat)) return;
   const mount = getActiveChatMountElement();
   clearTranscriptEmptyState(mount);
+  // Live tool-loop path mounts the streaming assistant row before injection resolves;
+  // keep injection chips on the user turn (above the in-flight assistant row).
+  const insertBefore = mount.querySelector('.msg.assistant.msg--awaiting-prose');
   let index = startHistoryIndex;
   for (const notice of notices) {
-    appendInjectionNotice(mount, notice, index);
+    appendInjectionNotice(mount, notice, index, insertBefore);
     index += 1;
   }
   scrollChatIfPinned();
