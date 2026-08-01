@@ -49,7 +49,7 @@ CodeMirror with syntax highlighting, plus two AI editing modes and real language
 | **Ctrl/Cmd+F** | Find and replace |
 | **Escape** | Dismiss ghost text, or blur the editor so Tab navigates the app again |
 
-**Quick Edit** is a surgical change to a selection. **Intent mode** is different: you write what a line should do, and Minnow resolves it into code, then re-checks resolved regions when their surrounding context changes. Both are configured in **Settings → Integrations → Editor**, which also controls ghost-text behaviour, how much import and language-server context goes into completions, and caching.
+**Quick Edit** is a surgical change to a selection. **Intent mode** is different: you write what a line should do (English, pseudocode, or even broken code), and Minnow resolves it when you move to another line or press Enter. Resolved lines re-check when neighbors change (optional auto-recheck in Settings). Both modes share the editor AI model with inline completion. Configure them in **Settings → Integrations → Editor**, which also controls ghost-text behaviour, how much import and language-server context goes into completions, and caching.
 
 Language-server diagnostics, hover and signature help work where a server is installed — TypeScript and JavaScript are bundled. See [Integrations](../extend/integrations.md).
 

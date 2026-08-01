@@ -129,7 +129,7 @@ function renderIntentSettingsGroup(
 
   appendNumberSetting(
     group,
-    'Pause before resolve',
+    'Pause before blur resolve',
     'settingsIntentDebounceMs',
     config.debounceMs,
     200,
@@ -138,7 +138,7 @@ function renderIntentSettingsGroup(
     'ms',
     (ms) => {
       void saveEditorIntentModeConfig({ debounceMs: ms }).then(() => {
-        setStatus('ok', 'Resolve debounce saved');
+        setStatus('ok', 'Blur resolve delay saved');
         refresh();
       });
     },

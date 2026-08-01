@@ -4,6 +4,11 @@
 
 import type { EditorIntentModeConfig } from '../../config/editor-intent-mode';
 
+export interface IntentResolveResult {
+  text: string | null;
+  error?: string;
+}
+
 /** Metadata for a line resolved from plain intent into code. */
 export interface IntentRegion {
   from: number;
@@ -27,6 +32,12 @@ export interface IntentModeOptions {
   onStaleCount?: (count: number) => void;
   /** Optional status line under the editor (errors / resolving). */
   onStatus?: (message: string | null) => void;
+  /**
+   * Override intent resolve (tests). Defaults to {@link resolveIntentLine}.
+   */
+  resolveLineFn?: (
+    input: ResolveIntentLineInput & { filePath: string },
+  ) => Promise<IntentResolveResult>;
 }
 
 /** Input for a single-line intent resolve request. */

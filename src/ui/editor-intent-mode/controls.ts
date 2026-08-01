@@ -109,44 +109,63 @@ export function buildIntentDecorations(
   meta: IntentDecorationMeta,
   _contextWindow: number,
 ): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
   const { enabled, regions, resolvingLine, doc } = meta;
   if (!enabled) return Decoration.none;
+
+  type DecoEntry = { from: number; to: number; deco: Decoration };
+  const entries: DecoEntry[] = [];
 
   const resolvedLines = new Set<number>();
   for (const region of regions) {
     const line = doc.lineAt(region.from);
     resolvedLines.add(line.number);
-    const lineDeco = Decoration.line({
-      class: region.stale ? 'cm-intent-line--stale' : 'cm-intent-line--resolved',
+    entries.push({
+      from: line.from,
+      to: line.from,
+      deco: Decoration.line({
+        class: region.stale ? 'cm-intent-line--stale' : 'cm-intent-line--resolved',
+      }),
     });
-    builder.add(line.from, line.from, lineDeco);
-
-    const controls = Decoration.widget({
-      widget: new IntentControlsWidget(regionKey(region), region.stale),
-      side: 1,
+    entries.push({
+      from: region.to,
+      to: region.to,
+      deco: Decoration.widget({
+        widget: new IntentControlsWidget(regionKey(region), region.stale),
+        side: 1,
+      }),
     });
-    builder.add(region.to, region.to, controls);
   }
 
   if (resolvingLine !== null && resolvingLine >= 1 && resolvingLine <= doc.lines) {
     const line = doc.line(resolvingLine);
-    builder.add(line.from, line.from, Decoration.line({ class: 'cm-intent-line--resolving' }));
-    builder.add(
-      line.to,
-      line.to,
-      Decoration.widget({ widget: new IntentSpinnerWidget(), side: 1 }),
-    );
+    entries.push({
+      from: line.from,
+      to: line.from,
+      deco: Decoration.line({ class: 'cm-intent-line--resolving' }),
+    });
+    entries.push({
+      from: line.to,
+      to: line.to,
+      deco: Decoration.widget({ widget: new IntentSpinnerWidget(), side: 1 }),
+    });
   }
 
   for (let n = 1; n <= doc.lines; n += 1) {
     if (resolvedLines.has(n) || resolvingLine === n) continue;
     const line = doc.line(n);
-    const text = line.text;
-    if (text.trim().length === 0) continue;
-    builder.add(line.from, line.from, Decoration.line({ class: 'cm-intent-line--pending' }));
+    if (line.text.trim().length === 0) continue;
+    entries.push({
+      from: line.from,
+      to: line.from,
+      deco: Decoration.line({ class: 'cm-intent-line--pending' }),
+    });
   }
 
+  entries.sort((a, b) => a.from - b.from || a.to - b.to);
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const entry of entries) {
+    builder.add(entry.from, entry.to, entry.deco);
+  }
   return builder.finish();
 }
 

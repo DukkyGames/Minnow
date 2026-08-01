@@ -177,6 +177,23 @@ export function isLineResolved(state: EditorState, lineNumber: number): boolean 
   return findIntentRegionOnLine(state, lineNumber) !== null;
 }
 
+/**
+ * Skip automatic resolve when the line is unchanged resolved code (region spans the
+ * full line). Retries pass intentOverride and always run.
+ */
+export function shouldSkipIntentResolve(
+  state: EditorState,
+  lineNumber: number,
+  intentOverride?: string,
+): boolean {
+  if (intentOverride) return false;
+  const region = findIntentRegionOnLine(state, lineNumber);
+  if (!region) return false;
+  const line = state.doc.line(lineNumber);
+  if (region.from !== line.from || region.to !== line.to) return false;
+  return state.doc.sliceString(line.from, line.to).trim().length > 0;
+}
+
 /** Initialize enabled flag for a newly mounted editor. */
 export function intentModeInitialEffect(enabled: boolean): StateEffect<boolean> {
   return setIntentModeEnabled.of(enabled);

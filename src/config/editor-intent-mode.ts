@@ -9,7 +9,7 @@ export interface EditorIntentModeConfig {
   enabledByDefault: boolean;
   /** Auto-recheck stale resolved lines after neighbor edits (default off). */
   autoRecheckDefault: boolean;
-  /** Debounce before resolving a line after leaving it. */
+  /** Delay before resolving the current line when the editor loses focus. */
   debounceMs: number;
   /** Lines of resolved context above/below the intent line. */
   contextWindow: number;

@@ -19,12 +19,16 @@ import {
   intentModeInitialEffect,
   intentSystemTransaction,
   isIntentModeEnabled,
-  isLineResolved,
   removeIntentRegion,
   setIntentModeEnabled,
   setResolvingLine,
+  shouldSkipIntentResolve,
 } from './state';
 import type { IntentModeOptions, IntentRegion } from './types';
+
+/** Shown when the model returns text identical to the current line. */
+export const INTENT_NO_CHANGE_MESSAGE =
+  'Model returned no change — try Retry or rephrase the intent line.';
 
 /** Toggle Intent mode for the active editor. */
 export function toggleIntentMode(view: EditorView): boolean {
@@ -52,10 +56,10 @@ export function revertIntentRegion(view: EditorView, region: IntentRegion): void
 }
 
 class IntentTriggerPlugin implements IntentResolveDriver {
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Delay blur resolve so focus hops to intent controls do not fire early. */
   private blurTimer: ReturnType<typeof setTimeout> | null = null;
-  private abortController: AbortController | null = null;
-  private pendingLine: number | null = null;
+  /** In-flight generation abort per line. */
+  private readonly inFlightByLine = new Map<number, AbortController>();
   private lastLineNumber = 1;
   private readonly opts: IntentModeOptions;
   private readonly config: EditorIntentModeConfig;
@@ -73,7 +77,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
 
   update(update: import('@codemirror/view').ViewUpdate): void {
     if (!isIntentModeEnabled(update.state)) {
-      this.cancelInFlight();
+      this.cancelAllInFlight();
       this.notifyChrome(update.state);
       return;
     }
@@ -82,7 +86,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
     const lineNumber = update.state.doc.lineAt(head).number;
 
     if (update.selectionSet && lineNumber !== this.lastLineNumber) {
-      this.scheduleResolve(this.lastLineNumber);
+      this.flushResolveOnLineLeave(this.lastLineNumber);
       this.lastLineNumber = lineNumber;
     }
 
@@ -90,7 +94,15 @@ class IntentTriggerPlugin implements IntentResolveDriver {
       const prevHead = update.startState.selection.main.head;
       const prevLine = update.startState.doc.lineAt(prevHead).number;
       if (prevLine !== lineNumber) {
-        this.scheduleResolve(prevLine);
+        this.flushResolveOnLineLeave(prevLine);
+      }
+      const userTypedOnLine = update.transactions.some(
+        (tr) =>
+          tr.isUserEvent('input') &&
+          tr.annotation(intentSystemTransaction) !== true,
+      );
+      if (userTypedOnLine) {
+        this.cancelInFlightForLine(lineNumber);
       }
       this.lastLineNumber = lineNumber;
     }
@@ -105,7 +117,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
   }
 
   destroy(): void {
-    this.cancelInFlight();
+    this.cancelAllInFlight();
     this.view.dom.removeEventListener('minnow-intent-revert', this.onRevert);
     this.view.dom.removeEventListener('minnow-intent-retry', this.onRetry);
     this.view.dom.removeEventListener('blur', this.onBlur, true);
@@ -113,7 +125,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
   }
 
   isResolveInFlight(): boolean {
-    return this.abortController !== null || this.pendingLine !== null;
+    return this.inFlightByLine.size > 0;
   }
 
   resolveLine(lineNumber: number, intentOverride?: string): void {
@@ -153,7 +165,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
     this.blurTimer = setTimeout(() => {
       this.blurTimer = null;
       if (!isIntentModeEnabled(this.view.state)) return;
-      this.scheduleResolve(this.lastLineNumber);
+      this.flushResolveOnLineLeave(this.lastLineNumber);
     }, this.config.debounceMs);
   };
 
@@ -168,28 +180,33 @@ class IntentTriggerPlugin implements IntentResolveDriver {
     revertIntentRegion(this.view, region);
   };
 
-  private scheduleResolve(lineNumber: number): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
+  /** Resolve as soon as the cursor leaves a line (not debounced with other lines). */
+  private flushResolveOnLineLeave(lineNumber: number): void {
+    queueMicrotask(() => {
+      if (!isIntentModeEnabled(this.view.state)) return;
       void this.runResolve(lineNumber);
-    }, this.config.debounceMs);
+    });
   }
 
-  private cancelInFlight(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
+  private cancelInFlightForLine(lineNumber: number): void {
+    const controller = this.inFlightByLine.get(lineNumber);
+    if (!controller) return;
+    controller.abort();
+    this.inFlightByLine.delete(lineNumber);
+    const row = this.view.state.field(intentModeField);
+    if (row.resolvingLine === lineNumber) {
+      this.view.dispatch({ effects: setResolvingLine.of(null) });
     }
+  }
+
+  private cancelAllInFlight(): void {
     if (this.blurTimer) {
       clearTimeout(this.blurTimer);
       this.blurTimer = null;
     }
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
+    for (const line of [...this.inFlightByLine.keys()]) {
+      this.cancelInFlightForLine(line);
     }
-    this.pendingLine = null;
     if (this.view.state.field(intentModeField).resolvingLine !== null) {
       this.view.dispatch({ effects: setResolvingLine.of(null) });
     }
@@ -214,7 +231,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
       return;
     }
     if (lineNumber < 1 || lineNumber > state.doc.lines) return;
-    if (!intentOverride && isLineResolved(state, lineNumber)) return;
+    if (shouldSkipIntentResolve(state, lineNumber, intentOverride)) return;
 
     const line = state.doc.line(lineNumber);
     const intentText = (intentOverride ?? line.text).trim();
@@ -231,13 +248,14 @@ class IntentTriggerPlugin implements IntentResolveDriver {
       });
     }
 
-    this.cancelInFlight();
+    this.cancelInFlightForLine(lineNumber);
     const controller = new AbortController();
-    this.abortController = controller;
-    this.pendingLine = lineNumber;
+    this.inFlightByLine.set(lineNumber, controller);
 
     this.view.dispatch({ effects: setResolvingLine.of(lineNumber) });
     this.opts.onStatus?.('Resolving intent…');
+
+    const resolveFn = this.opts.resolveLineFn ?? resolveIntentLine;
 
     try {
       const docText = this.view.state.doc.toString();
@@ -251,7 +269,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
         this.config.contextWindow,
       );
 
-      const code = await resolveIntentLine({
+      const result = await resolveFn({
         filePath: this.opts.filePath,
         intentText,
         above,
@@ -263,8 +281,16 @@ class IntentTriggerPlugin implements IntentResolveDriver {
       if (!isIntentModeEnabled(this.view.state)) return;
 
       const freshLine = this.view.state.doc.line(lineNumber);
+      const code = result.text;
       if (!code) {
-        this.opts.onStatus?.('Intent resolve failed — check provider and model in Settings');
+        this.opts.onStatus?.(
+          result.error ?? 'Intent resolve failed — check provider and model in Settings',
+        );
+        return;
+      }
+
+      if (code.trim() === freshLine.text.trim()) {
+        this.opts.onStatus?.(INTENT_NO_CHANGE_MESSAGE);
         return;
       }
 
@@ -309,9 +335,8 @@ class IntentTriggerPlugin implements IntentResolveDriver {
     } catch {
       this.opts.onStatus?.('Intent resolve failed — check provider and model in Settings');
     } finally {
-      if (this.abortController === controller) {
-        this.abortController = null;
-        this.pendingLine = null;
+      if (this.inFlightByLine.get(lineNumber) === controller) {
+        this.inFlightByLine.delete(lineNumber);
         if (this.view.state.field(intentModeField).resolvingLine === lineNumber) {
           this.view.dispatch({ effects: setResolvingLine.of(null) });
         }
@@ -372,4 +397,5 @@ export {
   getIntentStaleCount,
   isIntentModeEnabled,
   findIntentRegionOnLine,
+  shouldSkipIntentResolve,
 } from './state';

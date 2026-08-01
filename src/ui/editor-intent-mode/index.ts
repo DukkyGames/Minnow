@@ -23,3 +23,5 @@ export {
   changeIntersectsRegion,
 } from './context';
 export { systemPromptForIntent, resolveIntentLine } from './resolver';
+export type { IntentResolveDeps } from './resolver';
+export type { IntentResolveResult } from './types';
