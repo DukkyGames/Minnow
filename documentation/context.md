@@ -166,7 +166,7 @@ Middleware registration: [`server/runtime/middlewares.js`](../server/runtime/mid
 
 `initApp()`: tool config → prompts → work agents → sessions → Issues store (migrate leftover bugs if needed) → tool handlers → models → render chat.
 
-Loader dismiss: [`src/boot/app-ready.ts`](../src/boot/app-ready.ts) on `DOMContentLoaded`, not `window.load`.
+Loader dismiss: [`src/boot/app-ready.ts`](../src/boot/app-ready.ts) on `DOMContentLoaded`, not `window.load`. Boot timing (`__MINNOW_BOOT_ORIGIN_MS` in `index.html` → `recordAppReadyMetrics` in [`src/boot/boot-metrics.ts`](../src/boot/boot-metrics.ts)) is surfaced in Settings → About → Performance diagnostics and gated in CI via [`test/boot/boot-budget-ci.test.mts`](../test/boot/boot-budget-ci.test.mts). Bundle ceilings: [`budgets.json`](../budgets.json), enforced by [`scripts/check-performance-budgets.mjs`](../scripts/check-performance-budgets.mjs) after `vite build`.
 
 ---
 

@@ -224,6 +224,7 @@ import { getWorkspacePath } from './state/workspace.ts';
 import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
 import { scheduleMarkAppReady } from './boot/app-ready';
 import { installRendererDiagnostics } from './boot/diagnostics';
+import { installLongTaskObserver } from './boot/long-task-observer';
 import { initNotificationAudioUnlock } from './notifications/sound';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
@@ -446,6 +447,7 @@ async function startApp(): Promise<void> {
     initOsShell();
   }
   installRendererDiagnostics();
+  installLongTaskObserver();
   initNotificationAudioUnlock();
   // Sessions must load before OS routing — Code app mount calls getActiveChat().
   await detectConfigServer();

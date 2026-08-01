@@ -14,6 +14,7 @@ import {
   fetchDiagnosticsHealth,
   type DiagnosticsHealthPayload,
 } from './health-strip';
+import { getBootMetrics } from '../boot/boot-metrics';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -98,4 +99,19 @@ export async function renderAboutSettingsSection(): Promise<void> {
       { className: 'settings-kv about-build__kv', searchKey: 'about.version' },
     ),
   );
+
+  const boot = getBootMetrics();
+  const perfDetails = el('details', 'about-build__perf-diag');
+  perfDetails.appendChild(el('summary', 'about-build__perf-summary', 'Performance diagnostics'));
+  const perfBody = el('div', 'about-build__perf-body');
+  const bootLabel =
+    boot != null ? `${boot.appReadyMs.toFixed(1)} ms to shell ready` : 'Shell ready — pending first boot';
+  perfBody.appendChild(
+    createSettingsKvList(
+      [{ term: 'Boot (app-ready)', value: monoValue(bootLabel) }],
+      { className: 'settings-kv about-build__kv', searchKey: 'about.boot' },
+    ),
+  );
+  perfDetails.appendChild(perfBody);
+  build.appendChild(perfDetails);
 }

@@ -104,7 +104,9 @@ Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs 
 | `npm run caveman:sync` | Refresh the upstream Caveman `SKILL.md`. |
 | `npm run build:benchmark-packs` | Rebuild benchmark task packs into `public/benchmark-packs/`. |
 | `npm run report:bundle-size` | Print production chunk sizes from `dist/assets` (run after `npm run build`). |
-| `npm run report:bundle-size:ci` | Same as above; exits non-zero when entry chunk exceeds 1500 KB or data packs ship as JS. |
+| `npm run report:bundle-size -- --check` | Same report; exits non-zero when any ceiling in `budgets.json` is exceeded. |
+| `npm run check:performance-budgets` | CI gate: enforce `budgets.json` after a production build (includes baseline diff in errors). |
+| `npm run report:bundle-size:ci` | Alias for `check:performance-budgets`. |
 
 ## Orchestrate board dev tools
 
@@ -139,7 +141,7 @@ Other `scripts/*.mjs` cover stepwise feature smokes, Electron launch, token/CSS 
 | `TOOLS_ALLOW_ALL_PATHS=1` | Let file/git tools resolve outside the workspace root (use with care). |
 | `MINNOW_OAUTH_REDIRECT_BASE` | Override the OAuth redirect base URL. |
 | `MINNOW_NETWORK` | `local` (default) or `lan` — bind dev server to loopback vs all interfaces. Overrides `config.json` → `server.networkAccess`. Restart after changing Settings. On Windows, allow inbound TCP on the dev port in Firewall if LAN clients cannot connect. |
-| `MINNOW_DEBUG` | Verbose server logging. |
+| `MINNOW_DEBUG` | Verbose server logging; in the renderer also enables boot timing console lines and long-task (≥100ms) PerformanceObserver logs. |
 | `MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION` | Allow UI-only tools in headless runs. |
 | `MINNOW_PLUGIN_UNSAFE` | Allow unsigned/unsafe tool plugins. |
 | `MINNOW_TTS_USE_COMPILE` | Opt into compiled TTS path. |
