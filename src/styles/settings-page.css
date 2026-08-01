@@ -2076,9 +2076,35 @@ label.settings-action-btn {
   min-height: 0;
 }
 
-.settings-page--os-embedded .settings-page-header {
+.settings-page--os-embedded.settings-page--in-os-window {
+  box-sizing: border-box;
+  /* Padding (not header margin) — survives mn-os-app-layer overflow:hidden clipping. */
+  padding: 8px 10px 0;
+}
+
+.settings-page--os-embedded:not(.settings-page--in-os-window) .settings-page-header {
   grid-template-columns: auto 1fr auto;
   padding: 0 12px;
+}
+
+/* Floating OS window — matches Brain `brain-overlay-surface`. */
+.settings-page--in-os-window .settings-page-header {
+  grid-template-columns: auto 1fr auto;
+  margin: 0;
+  padding: 9px 14px;
+  min-height: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: var(--shadow-card);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .settings-page--in-os-window .settings-page-header {
+    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 }
 
 .settings-page--os-embedded .settings-page-body {

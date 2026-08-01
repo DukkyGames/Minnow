@@ -35,7 +35,8 @@ html.is-scheduler-side-panel-open .mn-os-side-panels-layer {
   box-shadow:
     0 18px 48px color-mix(in srgb, var(--os-bg) 55%, transparent),
     0 0 0 1px color-mix(in srgb, var(--os-border) 40%, transparent);
-  overflow: hidden;
+  /* clip: window must not scroll — settings scrollIntoView used to shift titlebar controls. */
+  overflow: clip;
   pointer-events: auto;
   transition:
     box-shadow 0.2s var(--os-ease-out),
@@ -281,28 +282,9 @@ html.minnow-os-enabled .mn-os-window-body .brain-page.is-open {
   width: 100%;
 }
 
-.mn-os-window-body > .settings-page .settings-page-header,
+.mn-os-window-body > .settings-page:not(.settings-page--in-os-window) .settings-page-header,
 .mn-os-window-body > .models-page .models-page-header {
   min-height: 44px;
-}
-
-/* Settings window: floating header inset matches Brain overlay chrome (titlebar control padding). */
-.mn-os-window-body > .settings-page--os-embedded .settings-page-header {
-  margin: 8px 10px 0;
-  padding: 9px 14px;
-  min-height: 0;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-md);
-  background: var(--mn-surface-1);
-  box-shadow: var(--shadow-card);
-}
-
-@supports (backdrop-filter: blur(1px)) {
-  .mn-os-window-body > .settings-page--os-embedded .settings-page-header {
-    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
 }
 
 /* Stage: blur desktop only for fullscreen / legacy layer apps */

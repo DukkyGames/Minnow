@@ -137,6 +137,7 @@ export class WindowFrame {
     this.wireInteractions(titlebar, grips);
     this.applyBoundsToDom();
     this.applyMinimizedState();
+    this.resetRootScroll();
   }
 
   getBounds(): WindowBounds {
@@ -242,6 +243,11 @@ export class WindowFrame {
     this.root.classList.toggle('is-minimized', this.minimized);
   }
 
+  /** OS windows are not scroll containers; keep titlebar aligned with the frame. */
+  private resetRootScroll(): void {
+    this.root.scrollTop = 0;
+  }
+
   private emitBoundsChange(): void {
     this.onBoundsChange?.(this.getBounds(), {
       snapMode: this.snapMode,
@@ -312,6 +318,7 @@ export class WindowFrame {
   private wireInteractions(titlebar: HTMLElement, grips: HTMLElement): void {
     this.root.addEventListener('mousedown', () => this.onFocus?.());
     this.root.addEventListener('focusin', () => {
+      this.resetRootScroll();
       if (this.root.classList.contains('is-focused')) return;
       this.onFocus?.();
     });
