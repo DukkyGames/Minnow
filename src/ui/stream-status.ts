@@ -80,7 +80,7 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
 
   const syncElapsedVisibility = (): void => {
     const show =
-      currentPhase === 'thinking' && elapsedEl.textContent.length > 0;
+      currentPhase === 'thinking' && (elapsedEl.textContent?.length ?? 0) > 0;
     elapsedEl.hidden = !show;
   };
 

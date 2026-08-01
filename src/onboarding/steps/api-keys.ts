@@ -53,7 +53,7 @@ export const apiKeysStep: OnboardingStep = {
     const keysWrap = el('div', 'mn-onboarding-form-grid');
     if (provider === 'tavily') {
       const wrap = el('label', 'mn-onboarding-field-label');
-      wrap.appendChild(el('span', null, 'Tavily API key'));
+      wrap.appendChild(el('span', undefined, 'Tavily API key'));
       const input = el('input', 'mn-onboarding-field') as HTMLInputElement;
       input.type = 'password';
       input.value = tavilyKey;
@@ -66,7 +66,7 @@ export const apiKeysStep: OnboardingStep = {
       keysWrap.appendChild(wrap);
     } else if (provider === 'brave') {
       const wrap = el('label', 'mn-onboarding-field-label');
-      wrap.appendChild(el('span', null, 'Brave Search API key'));
+      wrap.appendChild(el('span', undefined, 'Brave Search API key'));
       const input = el('input', 'mn-onboarding-field') as HTMLInputElement;
       input.type = 'password';
       input.value = braveKey;

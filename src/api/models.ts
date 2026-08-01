@@ -144,7 +144,11 @@ export function syncModelLoadUnloadButtonElement(btn: HTMLButtonElement): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   if (!sel) return;
 
-  const raw = resolveModelHostFilterLoadUnloadValue(btn.closest('.model-select-host-filter'));
+  const hostFilter = btn.closest('.model-select-host-filter');
+  // closest() is Element | null; host-filter nodes are always HTMLElements in the DOM.
+  const raw = resolveModelHostFilterLoadUnloadValue(
+    hostFilter ? (hostFilter as HTMLElement) : null,
+  );
   const supportsUnload = supportsLoadUnloadForSelectValue(sel, raw);
 
   if (!supportsUnload) {
@@ -169,7 +173,10 @@ export function syncModelLoadUnloadIconButtonElement(btn: HTMLButtonElement): vo
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   if (!sel) return;
 
-  const raw = resolveModelHostFilterLoadUnloadValue(btn.closest('.model-select-host-filter'));
+  const hostFilter = btn.closest('.model-select-host-filter');
+  const raw = resolveModelHostFilterLoadUnloadValue(
+    hostFilter ? (hostFilter as HTMLElement) : null,
+  );
   const supportsUnload = supportsLoadUnloadForSelectValue(sel, raw);
 
   if (!supportsUnload) {

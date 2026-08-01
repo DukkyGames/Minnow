@@ -175,11 +175,12 @@ async function saveAdvanced(
         setStatus('err', 'Unknown sub-agent type');
         return;
       }
+      const samplerPatch = samplerFields.readPatch();
       const ok = await saveSubAgentConfigToServer({
         types: {
           [row.id]: {
             ...existing,
-            sampler: samplerFields.readPatch(),
+            ...(samplerPatch != null ? { sampler: samplerPatch } : {}),
             thinkingMode: thinkingSelect.value as ThinkingTriState,
             ...(thinkingBudgetFields
               ? {

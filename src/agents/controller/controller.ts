@@ -365,7 +365,7 @@ function syncBoardTaskOnLifecycle(
         status: 'blocked',
         endedAt: Date.now(),
         error: error ?? 'blocked',
-        assignedRunId: null,
+        assignedRunId: undefined,
         lastRunId: run.runId,
       },
       chat,
@@ -392,7 +392,7 @@ function syncBoardTaskOnSettle(
 
   const settlePatch = {
     lastRunId: run.runId,
-    assignedRunId: null as string | null,
+    assignedRunId: undefined,
   };
 
   if (status === 'completed' && !maxTurnFailure) {
@@ -1321,7 +1321,7 @@ async function finalizeReconciledCompleted(
     {
       status: 'complete',
       endedAt: Date.now(),
-      assignedRunId: null,
+      assignedRunId: undefined,
       lastRunId: record.runId,
       error: undefined,
     },
@@ -1384,7 +1384,7 @@ async function reconcileInterruptedRecord(record: PersistedRunRecord): Promise<v
       status: 'blocked',
       endedAt: Date.now(),
       error: 'interrupted',
-      assignedRunId: null,
+      assignedRunId: undefined,
       lastRunId: record.runId,
     },
     chat,

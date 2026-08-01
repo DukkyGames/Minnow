@@ -4,7 +4,7 @@
 
 import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { isUiOnlyTranscriptMessage } from '../chat/context/injection-notice';
-import type { AssistantMessage, Chat, Message } from '../types';
+import type { Chat } from '../types';
 
 /** Max user/assistant pairs to include in synthesis context. */
 const MAX_MESSAGES = 12;
@@ -41,7 +41,7 @@ export function stripThinkingForExcerpt(text: string): string {
 }
 
 /** User-visible assistant prose — never fall back to thinking-only content. */
-function assistantVisibleText(msg: AssistantMessage): string {
+function assistantVisibleText(msg: { content?: string | null }): string {
   return stripThinkingForExcerpt(messageText(msg.content));
 }
 

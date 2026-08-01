@@ -98,7 +98,7 @@ function renderFallback(container: HTMLElement, ctx: OnboardingContext): void {
   card.appendChild(
     el(
       'p',
-      null,
+      undefined,
       'The guided tour is a live chat with your model, so it needs a connected provider' +
         (ctx.serverAvailable ? '.' : ' and Minnow running locally.'),
     ),
@@ -106,7 +106,7 @@ function renderFallback(container: HTMLElement, ctx: OnboardingContext): void {
   card.appendChild(
     el(
       'p',
-      null,
+      undefined,
       'You can finish setup now and meet Minnow later — rerun this wizard anytime from Settings → General → Run setup again.',
     ),
   );

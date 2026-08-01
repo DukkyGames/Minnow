@@ -292,7 +292,7 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
         options,
       );
       if (signedOut) {
-        options.onSignedOut();
+        options.onSignedOut?.();
       } else {
         signOutBtn.disabled = false;
       }

@@ -544,7 +544,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 ## Testing and CI
 
 - **`npm test`** — discovers `test/**/*.test.{js,mjs,mts,ts}` via [`test/run-all.mjs`](../test/run-all.mjs).
-- **`npx tsc --noEmit`** — typecheck (no ESLint config).
+- **`npx tsc --noEmit`** — typecheck for `src/` with **`strict: true`** in root [`tsconfig.json`](../tsconfig.json) (no ESLint config); CI enforces the same command on Windows and Ubuntu.
 - **CI:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Windows + Ubuntu.
 
 Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, `test:a11y`, …).
@@ -576,6 +576,7 @@ Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, `
 
 ## Conventions for contributors
 
+- Root [`tsconfig.json`](../tsconfig.json) typechecks **`src/`** with **`strict: true`**; keep `npx tsc --noEmit` clean before merge (CI gate). Enablement plan: [`plans/typescript-strict-enablement.md`](plans/typescript-strict-enablement.md).
 - Match surrounding code style; CSS uses `--mn-*` tokens only ([`tokens.css`](../src/styles/tokens.css)).
 - Update **this file** when architecture, APIs, or storage change.
 - Feature plans and historical notes live in [`documentation/plans/`](plans/) — not here.

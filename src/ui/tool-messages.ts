@@ -567,7 +567,8 @@ function appendCodeChangeDiffPanel(
   workspacePath?: string,
 ): void {
   body.querySelector('.tool-call-diff')?.remove();
-  const lines = codeChange?.diffLines;
+  if (!codeChange) return;
+  const lines = codeChange.diffLines;
   if (!lines?.length) return;
 
   const panel = document.createElement('div');

@@ -382,7 +382,7 @@ export function showQuestionCardsModal(
       }
     }
     if (!host) {
-      host = getQuestionHost();
+      host = getQuestionHost() ?? undefined;
     }
     if (!host) {
       resolve({ status: 'cancelled', answers: [] });

@@ -113,8 +113,11 @@ export function syncStatsStripLayoutForViewer(viewerOpen: boolean): void {
 export function updateStatsExpandPreview(): void {
   const preview = document.getElementById('statsExpandPreview');
   if (!preview) return;
-  const tps = document.getElementById('stripTPS')!.textContent.trim();
-  const total = document.getElementById('stripTotal')!.textContent.trim();
+  const tpsEl = document.getElementById('stripTPS');
+  const totalEl = document.getElementById('stripTotal');
+  if (!tpsEl || !totalEl) return;
+  const tps = tpsEl.textContent?.trim() ?? '';
+  const total = totalEl.textContent?.trim() ?? '';
   const trim = getActiveChat().lastContextTrim;
   const archiveChip =
     trim?.archived != null && trim.archived > 0

@@ -364,7 +364,7 @@ export function syncBoardOnboardingBusyUI(
 
   if (planName && planSelect) {
     planName.textContent = formatBoardOnboardingPlanDisplay(planSelect.value);
-    planName.title = planSelect.value.trim() || undefined;
+    planName.title = planSelect.value.trim() || '';
     planName.classList.toggle('hidden', !showLoader || !planSelect.value.trim());
   }
 

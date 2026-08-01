@@ -831,10 +831,10 @@ async function clearPreviewGuest(tabId?: string): Promise<void> {
     return;
   }
   if (api.clear) {
-    await api.clear(id);
+    await api.clear(id ?? undefined);
     return;
   }
-  await api.loadURL('about:blank', id);
+  await api.loadURL('about:blank', id ?? undefined);
 }
 
 async function loadSourceInPreview(
@@ -847,10 +847,11 @@ async function loadSourceInPreview(
   const id = resolveTabId(tabId);
   setPreviewLoading(true, id ?? undefined);
   const url = resolvePreviewLoadUrl(source, cacheBust, getFileTreeListingWorkspaceRoot());
+  const tabKey = id ?? undefined;
   if (api.loadSource) {
-    await api.loadSource({ kind: 'url', url, cacheBust }, id);
+    await api.loadSource({ kind: 'url', url, cacheBust }, tabKey);
   } else {
-    await api.loadURL(url, id);
+    await api.loadURL(url, tabKey);
   }
   await showPreviewHost();
 }

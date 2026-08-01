@@ -102,7 +102,7 @@ export const calendarStep: OnboardingStep = {
       const addField = (id: string, fieldLabel: string, value: string, type = 'text') => {
         const wrap = el('label', 'mn-onboarding-field-label');
         wrap.htmlFor = id;
-        wrap.appendChild(el('span', null, fieldLabel));
+        wrap.appendChild(el('span', undefined, fieldLabel));
         const input = el('input', 'mn-onboarding-field') as HTMLInputElement;
         input.id = id;
         input.type = type;

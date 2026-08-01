@@ -98,7 +98,7 @@ function resolveModelLimitForEstimate(modelId: string | undefined, chat: Chat): 
   const id = modelId?.trim();
   if (!id) return null;
   const cached = getModelRowForSelectOrCanonicalId(id);
-  if (cached) return contextLengthFromModelRow(cached);
+  if (cached) return contextLengthFromModelRow(cached) ?? null;
   return null;
 }
 

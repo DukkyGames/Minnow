@@ -224,11 +224,11 @@ function parsePathFields(
     chatCompletionsPath: chat,
     ...(messagesPath ? { messagesPath } : {}),
     ...(autoApi ? { autoApi: true } : {}),
-    ...(modelApiOverrides === undefined
+    ...(modelApiOverrides === undefined || modelApiOverrides === null
       ? {}
-      : modelApiOverrides && Object.keys(modelApiOverrides).length > 0
+      : Object.keys(modelApiOverrides).length > 0
         ? { modelApiOverrides }
-        : { modelApiOverrides: null }),
+        : {}),
   };
 }
 

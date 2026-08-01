@@ -722,6 +722,7 @@ function showGroupContextMenu(
         if (sessionState?.activeBoardGroupId === groupId) {
           exitBoardViewForNavigation();
         }
+        if (!group) return;
         for (const chatId of listBoardGroupChatIds(group, sessionState?.chats ?? [])) {
           if (isChatStreaming(chatId)) {
             stopGeneration(chatId, 'system');

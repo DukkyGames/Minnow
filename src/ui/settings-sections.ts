@@ -1200,7 +1200,9 @@ async function renderSubAgentsSection(): Promise<void> {
 
   const saveTypePatch = async (
     typeId: string,
-    patch: Partial<SubAgentTypeConfig & { contextEnforcementPolicy: ContextEnforcementPolicy | null }>,
+    patch: Omit<Partial<SubAgentTypeConfig>, 'contextEnforcementPolicy'> & {
+      contextEnforcementPolicy?: ContextEnforcementPolicy | null;
+    },
   ): Promise<boolean> => {
     const userOverrides = getSubAgentUserOverridesSync() ?? {};
     const typeUser = { ...(userOverrides.types?.[typeId] ?? {}) };

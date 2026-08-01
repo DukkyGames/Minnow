@@ -84,6 +84,7 @@ export async function recordMainChatTurnUsage(
 ): Promise<void> {
   const usage = opts.streamMeta.usage;
   if (!hasMeasurableUsage(usage)) return;
+  const measuredUsage = usage as Usage;
   const { stats } = finalizeResponseMeta(
     opts.streamMeta,
     opts.t0,
@@ -98,7 +99,7 @@ export async function recordMainChatTurnUsage(
     },
     providerId: opts.providerId,
     modelId: opts.modelId,
-    usage,
+    usage: measuredUsage,
     stats,
   });
 }
@@ -123,6 +124,7 @@ export async function recordSubAgentTurnUsage(
   if (!chat) return;
   const usage = opts.streamMeta.usage;
   if (!hasMeasurableUsage(usage)) return;
+  const measuredUsage = usage as Usage;
   const { stats } = finalizeResponseMeta(
     opts.streamMeta,
     opts.t0,
@@ -137,7 +139,7 @@ export async function recordSubAgentTurnUsage(
     },
     providerId: opts.providerId,
     modelId: opts.modelId,
-    usage,
+    usage: measuredUsage,
     stats,
   });
 }

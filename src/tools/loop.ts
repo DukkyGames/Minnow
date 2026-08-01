@@ -2640,7 +2640,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (normalizeModeId(chat.modeId) === 'orchestrate') {
       const board = getBoardGroupForChat(chat)?.orchestrateBoard;
       if (board?.activeParentTurnId) {
-        board.activeParentTurnId = null;
+        delete board.activeParentTurnId;
         touchChat(chat);
         scheduleSaveSessions();
       }
@@ -2749,8 +2749,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         burstPartyConfetti();
       }
       if (turnRunId) {
+        const endedRunId = turnRunId;
         void import('../notifications/chat-turn.js').then((mod) => {
-          mod.notifyChatTurnEnded(chat.id, turnRunId);
+          mod.notifyChatTurnEnded(chat.id, endedRunId);
         });
       }
     }

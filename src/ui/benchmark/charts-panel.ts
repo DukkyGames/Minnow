@@ -682,7 +682,7 @@ function renderHistoryChart(campaigns: BenchmarkCampaign[], aggregates: ModelAgg
       const pts = s.points.map((p) => {
         const x = padL + p.x * xStep;
         const y = padT + plotH * (1 - Math.max(0, Math.min(1, p.y)));
-        return { x, y, ...p };
+        return { ...p, x, y };
       });
       const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
       const dots = pts

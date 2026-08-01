@@ -462,7 +462,7 @@ export async function runIssueSendToBoard(
       ...(boardChatId ? { boardChatId } : {}),
     });
 
-    return { ok: true, boardChatId };
+    return { ok: true, ...(boardChatId ? { boardChatId } : {}) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };

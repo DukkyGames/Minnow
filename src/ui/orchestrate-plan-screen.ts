@@ -496,14 +496,14 @@ function mountPlanProgressPanel(chat: Chat): void {
     const activity = getMainTurnActivity(chat.id);
     planProgressPanel.applySuperPlanState(chat.superPlan, {
       phase: activity?.phase ?? null,
-      currentTool: activity?.currentTool,
+      currentTool: activity?.currentTool ?? undefined,
     });
   } else {
     const activity = getMainTurnActivity(chat.id);
     const step = regularPlanWorkingStepFromChat(
       chat,
       activity?.phase ?? null,
-      activity?.currentTool,
+      activity?.currentTool ?? undefined,
     );
     planProgressPanel.applyRegularPlanStep(step);
   }
@@ -515,7 +515,7 @@ function syncPlanProgressFromChat(chat: Chat): void {
     const activity = getMainTurnActivity(chat.id);
     planProgressPanel.applySuperPlanState(chat.superPlan, {
       phase: activity?.phase ?? null,
-      currentTool: activity?.currentTool,
+      currentTool: activity?.currentTool ?? undefined,
     });
     syncWorkingPhaseControls(chat);
     return;
@@ -524,7 +524,7 @@ function syncPlanProgressFromChat(chat: Chat): void {
   const step = regularPlanWorkingStepFromChat(
     chat,
     activity?.phase ?? null,
-    activity?.currentTool,
+    activity?.currentTool ?? undefined,
   );
   planProgressPanel.applyRegularPlanStep(step);
 }

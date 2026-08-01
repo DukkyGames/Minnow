@@ -241,23 +241,25 @@ export async function fetchBrainCodeRepoMap(options?: {
   ensureIndexed?: boolean;
   profile?: 'default' | 'injection';
 }): Promise<BrainCodeRepoMap | null> {
-  if (
-    options?.repo?.trim() ||
-    options?.ensureIndexed === true ||
-    options?.profile === 'injection' ||
-    (options?.focusFiles?.length ?? 0) > 0
-  ) {
+  const postBody =
+    options &&
+    (options.repo?.trim() ||
+      options.ensureIndexed === true ||
+      options.profile === 'injection' ||
+      (options.focusFiles?.length ?? 0) > 0);
+  if (postBody) {
+    const opts = options;
     return brainFetch<BrainCodeRepoMap>('/api/brain/code/repo-map', {
       method: 'POST',
       body: JSON.stringify({
-        ...(options.repo?.trim() ? { repo: options.repo.trim() } : {}),
-        ...(options.focus?.trim() ? { focus: options.focus.trim() } : {}),
-        ...(options.focusFiles?.length ? { focusFiles: options.focusFiles } : {}),
-        ...(options.tokenBudget && options.tokenBudget > 0
-          ? { tokenBudget: options.tokenBudget }
+        ...(opts.repo?.trim() ? { repo: opts.repo.trim() } : {}),
+        ...(opts.focus?.trim() ? { focus: opts.focus.trim() } : {}),
+        ...(opts.focusFiles?.length ? { focusFiles: opts.focusFiles } : {}),
+        ...(opts.tokenBudget && opts.tokenBudget > 0
+          ? { tokenBudget: opts.tokenBudget }
           : {}),
-        ...(options.ensureIndexed === true ? { ensureIndexed: true } : {}),
-        ...(options.profile === 'injection' ? { profile: 'injection' } : {}),
+        ...(opts.ensureIndexed === true ? { ensureIndexed: true } : {}),
+        ...(opts.profile === 'injection' ? { profile: 'injection' } : {}),
       }),
     });
   }

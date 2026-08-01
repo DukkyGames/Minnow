@@ -66,7 +66,7 @@ export class PlanActivityCollector {
       if (updated.id !== this.chatId || !updated.superPlan) return;
       this.recordStage(updated.superPlan);
       if (this.lastPaused !== updated.superPlan.paused) {
-        this.lastPaused = updated.superPlan.paused;
+        this.lastPaused = updated.superPlan.paused ?? null;
         this.buffer.append(
           entryFromSuperPlanStage(
             updated.superPlan.activeStage,

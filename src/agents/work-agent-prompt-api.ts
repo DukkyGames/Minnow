@@ -105,7 +105,7 @@ export async function patchWorkAgentOverride(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { agent: import('./work-agent-types').WorkAgentDefinition };
-    mergeUserWorkAgentOverride(agentId, patch);
+    mergeUserWorkAgentOverride(agentId, patch as import('./work-agent-types').WorkAgentUserOverride);
     return data.agent ?? null;
   } catch {
     return null;

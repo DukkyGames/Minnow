@@ -64,7 +64,9 @@ export interface AgentCenterCard {
 
 async function saveSubAgentTypePatch(
   typeId: string,
-  patch: Partial<SubAgentTypeConfig & { contextEnforcementPolicy: import('../chat/context-budget').ContextEnforcementPolicy | null }>,
+  patch: Omit<Partial<SubAgentTypeConfig>, 'contextEnforcementPolicy'> & {
+    contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy | null;
+  },
 ): Promise<boolean> {
   const userOverrides = getSubAgentUserOverridesSync() ?? {};
   const typeUser = { ...(userOverrides.types?.[typeId] ?? {}) };

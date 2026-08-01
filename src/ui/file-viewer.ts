@@ -371,7 +371,7 @@ function syncSecondaryIntentToolbarAvailability(tab: ViewerTabState | null): voi
 /** Secondary pane header (save + intent) — mirrors primary chrome for the secondary tab. */
 export function updateSecondaryViewerChrome(): void {
   const path = secondarySlotViewerPath();
-  const tab = path ? getViewerTab(path) : null;
+  const tab = path ? (getViewerTab(path) ?? null) : null;
   const saveBtn = getSecondarySaveButton();
   if (saveBtn) {
     void import('./file-viewer-secondary-slot').then((m) => {

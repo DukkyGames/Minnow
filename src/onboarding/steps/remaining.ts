@@ -228,7 +228,7 @@ export const doneStep: OnboardingStep = {
     rows.forEach(([label, ok]) => {
       const li = el('li', 'mn-onboarding-checklist__row');
       li.appendChild(el('span', ok ? 'is-ok' : 'is-muted', ok ? '✓' : '–'));
-      li.appendChild(el('span', null, label));
+      li.appendChild(el('span', undefined, label));
       checklist.appendChild(li);
     });
     container.appendChild(checklist);

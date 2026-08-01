@@ -5,8 +5,12 @@
 export {};
 
 import type { ThemeId } from './theme';
+import type { MinnowElectronBridge } from './electron';
 
 declare global {
+  /** Electron preload bridge (`globalThis.minnow` / `window.minnow`). */
+  var minnow: MinnowElectronBridge | undefined;
+
   interface Window {
     /** Dev-only: `initTheme` assigns `applyTheme` when `import.meta.env.DEV`. */
     __setTheme?: (id: ThemeId) => void;

@@ -200,17 +200,20 @@ function setHeaderTitle(text: string): void {
 }
 
 function renderSkillList(): void {
-  if (!listEl || !pickerEl || !headerEl) return;
+  const list = listEl;
+  const picker = pickerEl;
+  const header = headerEl;
+  if (!list || !picker || !header) return;
 
-  headerEl.classList.add('hidden');
+  header.classList.add('hidden');
   const items = filteredPickerRows();
-  listEl.innerHTML = '';
+  list.innerHTML = '';
 
   if (items.length === 0) {
     const empty = document.createElement('li');
     empty.className = 'skill-picker__empty';
     empty.textContent = 'No matching skills or commands';
-    listEl.appendChild(empty);
+    list.appendChild(empty);
     activeIndex = 0;
     if (open) positionPicker();
     return;
@@ -228,7 +231,7 @@ function renderSkillList(): void {
     li.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
     if (i === activeIndex) {
       li.classList.add('skill-picker__item--active');
-      pickerEl.setAttribute('aria-activedescendant', li.id);
+      picker.setAttribute('aria-activedescendant', li.id);
     }
 
     const badge = document.createElement('span');
@@ -272,26 +275,30 @@ function renderSkillList(): void {
       applyPickerRow(row);
     });
 
-    listEl.appendChild(li);
+    list.appendChild(li);
   });
 
   if (open) positionPicker();
 }
 
 function renderOptionRows(): void {
-  if (!listEl || !pickerEl || !headerEl || !pendingSkill) return;
+  const list = listEl;
+  const picker = pickerEl;
+  const header = headerEl;
+  const skill = pendingSkill;
+  if (!list || !picker || !header || !skill) return;
 
-  headerEl.classList.remove('hidden');
-  setHeaderTitle(pendingSkill.label);
+  header.classList.remove('hidden');
+  setHeaderTitle(skill.label);
 
   const options = filteredSkillOptions();
-  listEl.innerHTML = '';
+  list.innerHTML = '';
 
   if (options.length === 0) {
     const empty = document.createElement('li');
     empty.className = 'skill-picker__empty';
     empty.textContent = 'No matching options';
-    listEl.appendChild(empty);
+    list.appendChild(empty);
     activeIndex = 0;
     if (open) positionPicker();
     return;
@@ -313,17 +320,17 @@ function renderOptionRows(): void {
       group.className = 'skill-picker__group';
       group.setAttribute('role', 'presentation');
       group.textContent = option.group;
-      listEl.appendChild(group);
+      list.appendChild(group);
     }
 
     const li = document.createElement('li');
     li.className = 'skill-picker__item skill-picker__item--option';
     li.setAttribute('role', 'option');
-    li.id = `skill-opt-${pendingSkill!.id}-${option.id}`;
+    li.id = `skill-opt-${skill.id}-${option.id}`;
     li.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
     if (i === activeIndex) {
       li.classList.add('skill-picker__item--active');
-      pickerEl.setAttribute('aria-activedescendant', li.id);
+      picker.setAttribute('aria-activedescendant', li.id);
     }
 
     const badge = document.createElement('span');
@@ -352,7 +359,7 @@ function renderOptionRows(): void {
       applySkillOption(option.id);
     });
 
-    listEl.appendChild(li);
+    list.appendChild(li);
   });
 
   if (open) positionPicker();

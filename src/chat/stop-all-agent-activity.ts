@@ -26,7 +26,7 @@ import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 
 function hasRunningBoardWork(): boolean {
   if (!sessionState) return false;
-  for (const group of sessionState.groups) {
+  for (const group of sessionState.groups ?? []) {
     const board = group.orchestrateBoard;
     if (!board) continue;
     if (isBoardRunning(group) || countRunningTaskChats(board) > 0) return true;
@@ -126,7 +126,7 @@ export function stopAllAgentActivity(): void {
   const handledChatIds = new Set<string>();
 
   if (sessionState) {
-    for (const group of sessionState.groups) {
+    for (const group of sessionState.groups ?? []) {
       const board = group.orchestrateBoard;
       if (!board) continue;
       if (!isBoardRunning(group) && countRunningTaskChats(board) === 0) continue;
