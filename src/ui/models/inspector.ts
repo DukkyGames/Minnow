@@ -32,6 +32,12 @@ import {
 
 type InspectorTab = 'info' | 'load' | 'inference';
 
+/** Default llama-server context when no preset or user value is set. */
+const DEFAULT_CONTEXT_TOKENS = 125_000;
+const CONTEXT_SLIDER_MIN = 2_048;
+const CONTEXT_SLIDER_MAX = 262_144;
+const CONTEXT_SLIDER_STEP = 1_000;
+
 const TAB_LABELS: Record<InspectorTab, { label: string; glyph: string }> = {
   info: { label: 'Info', glyph: 'list' },
   load: { label: 'Load', glyph: 'inbox-in' },
@@ -117,6 +123,44 @@ function renderInfoTab(model: LibraryModel, body: HTMLElement): void {
   }
 }
 
+function contextLengthField(
+  value: number | undefined,
+  onChange: (value: number) => void,
+): HTMLElement {
+  const ctx = value ?? DEFAULT_CONTEXT_TOKENS;
+  const wrap = el('label', 'models-field');
+  const head = el('div', 'models-field__range-head');
+  head.append(el('span', 'models-field__label', 'Context length'));
+  const valueEl = el('span', 'models-field__range-value', ctx.toLocaleString());
+  head.appendChild(valueEl);
+  wrap.appendChild(head);
+
+  const range = el('input', 'models-field__range') as HTMLInputElement;
+  range.type = 'range';
+  range.min = String(CONTEXT_SLIDER_MIN);
+  range.max = String(CONTEXT_SLIDER_MAX);
+  range.step = String(CONTEXT_SLIDER_STEP);
+  range.value = String(clampContextSlider(ctx));
+  range.setAttribute('aria-valuemin', range.min);
+  range.setAttribute('aria-valuemax', range.max);
+  range.setAttribute('aria-valuenow', range.value);
+  range.setAttribute('aria-label', 'Context length in tokens');
+  range.addEventListener('input', () => {
+    const next = Number(range.value);
+    valueEl.textContent = next.toLocaleString();
+    range.setAttribute('aria-valuenow', String(next));
+    onChange(next);
+  });
+  wrap.appendChild(range);
+  return wrap;
+}
+
+function clampContextSlider(tokens: number): number {
+  const stepped =
+    Math.round(tokens / CONTEXT_SLIDER_STEP) * CONTEXT_SLIDER_STEP;
+  return Math.min(CONTEXT_SLIDER_MAX, Math.max(CONTEXT_SLIDER_MIN, stepped));
+}
+
 function numberField(
   label: string,
   value: number | undefined,
@@ -165,7 +209,7 @@ function selectField(
 function settingsFor(model: LibraryModel): LlamaServeSettings {
   let draft = draftSettings.get(model.id);
   if (!draft) {
-    draft = { ctx: 4096, n_gpu_layers: 999, cache_type: 'q8_0' };
+    draft = { ctx: DEFAULT_CONTEXT_TOKENS, n_gpu_layers: 999, cache_type: 'q8_0' };
     draftSettings.set(model.id, draft);
   }
   return draft;
@@ -247,8 +291,8 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   const configBlock = el('section', 'models-inspector__block');
   configBlock.appendChild(el('h3', 'models-block__label', 'Launch'));
   configBlock.append(
-    numberField('Context length', settings.ctx, '4096', (v) => {
-      settings.ctx = v ?? 4096;
+    contextLengthField(settings.ctx, (v) => {
+      settings.ctx = v;
       markCustom(model);
     }),
     selectField(

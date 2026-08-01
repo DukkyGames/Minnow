@@ -119,11 +119,6 @@ function bindStaticSections(): void {
   if (staticBindingsDone) return;
   staticBindingsDone = true;
 
-  document.getElementById('btnModelsPageBack')?.addEventListener('click', () => {
-    if (requestCloseWindowApp('models')) return;
-    closeModels();
-  });
-
   for (const id of SECTIONS) {
     document
       .querySelector(`[data-models-nav="${id}"]`)

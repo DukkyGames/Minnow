@@ -1369,6 +1369,28 @@
   outline: none;
 }
 
+.models-field__range-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.models-field__range-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.models-field__range {
+  width: 100%;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--mn-accent);
+}
+
 .models-inline-form {
   display: flex;
   flex-wrap: wrap;
