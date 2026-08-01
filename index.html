@@ -2614,12 +2614,16 @@
                  aria-label="Preview URL or workspace path (secondary)" />
           <button type="button" class="preview-go" id="btnPreviewGoSecondary">Go</button>
           <div class="preview-header__trail">
+            <button type="button" class="icon-btn" id="btnPreviewDesignToggleSecondary" aria-label="Design Mode" title="Design Mode" aria-pressed="false">
+              <i class="fi fi-rr-magic-wand icon-svg" aria-hidden="true"></i>
+            </button>
             <button type="button" class="icon-btn" id="btnPreviewCloseSecondary" aria-label="Close secondary pane" title="Close secondary pane">
               <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
             </button>
           </div>
         </header>
         <div class="preview-body" id="previewBodySecondary" aria-label="Preview content area (secondary)"></div>
+        <div class="preview-design-chrome" id="previewDesignChromeSecondary" hidden aria-label="Design Mode tools (secondary)"></div>
       </section>
     </div>
   </div>

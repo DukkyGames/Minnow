@@ -49,7 +49,7 @@ function sourceToAddressBar(source: PreviewSource): string {
   return source.path;
 }
 
-function getSecondaryPreviewTabId(): string | null {
+export function getSecondaryPreviewTabId(): string | null {
   if (activeSecondaryTabId) return activeSecondaryTabId;
   const sec = getSlotContent('secondary');
   if (sec.kind === 'preview' && sec.tabId) return sec.tabId;

@@ -334,7 +334,7 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   if (!body) return;
 
   const usingIframe = usesDesignModeIframeGuest();
-  setDesignModeUsingIframeGuest(usingIframe);
+  setDesignModeUsingIframeGuest(DESIGN_MODE_INSTANCE_ID, usingIframe);
 
   const designOn = usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
   const session = getDesignModeSession(DESIGN_MODE_INSTANCE_ID);
@@ -383,8 +383,11 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   }
 }
 
+/** Primary workspace preview — exported for secondary design guest sync. */
+export const syncPrimaryDesignModeElectronGuest = syncDesignModeElectronGuest;
+
 /** Design Mode is a Code-workspace tool — hidden and disabled on the Minnow desktop browser drawer. */
-async function isPreviewDesignModeAvailable(): Promise<boolean> {
+export async function isPreviewDesignModeAvailable(): Promise<boolean> {
   const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
   return !isDesktopWorkspaceHostingActive();
 }
@@ -399,6 +402,11 @@ export async function syncPreviewDesignToolbarForSurface(): Promise<void> {
 
   if (designBtn) designBtn.hidden = !available;
   syncAnnotationsToggleVisibility(available);
+
+  const secondaryDesignBtn = document.getElementById(
+    'btnPreviewDesignToggleSecondary',
+  ) as HTMLButtonElement | null;
+  if (secondaryDesignBtn) secondaryDesignBtn.hidden = !available;
 
   if (available) return;
 

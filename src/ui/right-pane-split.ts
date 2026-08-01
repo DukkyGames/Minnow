@@ -345,6 +345,7 @@ export function closeRightPaneSplit(): void {
 
   void import('./file-viewer-secondary-slot').then((m) => m.destroySecondaryViewerSlot());
   void import('./preview-secondary-slot').then((m) => m.hideSecondaryPreviewSlot());
+  void import('./preview-secondary-design').then((m) => m.teardownSecondaryDesignModeGuest());
 
   applyRightPaneSplitDom();
   void import('./file-viewer').then((m) => m.renderViewerSlots());

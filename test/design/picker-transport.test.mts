@@ -52,7 +52,7 @@ describe('design picker transport', () => {
     childWin.document.body.innerHTML = '<div id="x">ok</div>';
     Object.defineProperty(frame, 'contentWindow', { configurable: true, value: childWin });
 
-    setDesignModeUsingIframeGuest(true);
+    setDesignModeUsingIframeGuest('workspace-preview', true);
     const transport = createPickerTransport();
     assert.equal(transport.mode, 'iframe');
     const result = await transport.eval('document.getElementById("x").textContent');

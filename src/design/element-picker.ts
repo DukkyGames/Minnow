@@ -4,8 +4,10 @@
  * Mode-free: no hub, no agent coupling — just guest DOM selection.
  */
 
-import { getFilePanelState } from '../state/file-panel';
+import { previewSourceForDesignInstance } from '../ui/preview-design-source';
 import { isDesignModeUsingIframeGuest } from '../ui/preview-design-mode-guest';
+import { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from '../ui/preview-design-mode-mount';
+import { WORKSPACE_PREVIEW_SECONDARY_INSTANCE } from '../ui/right-pane-split';
 
 /** Stable pick payload returned from the guest (JSON-cloneable). */
 export interface PickedElement {
@@ -662,20 +664,31 @@ function unwrapExecJsResult(raw: unknown): unknown {
  * frame is unhidden. The legacy `#previewFrame` id is kept as a fallback for older mounts
  * and existing tests.
  */
-export function getPreviewGuestFrame(): HTMLIFrameElement | null {
+export function getPreviewGuestFrame(designInstanceId?: string): HTMLIFrameElement | null {
+  if (designInstanceId === WORKSPACE_PREVIEW_SECONDARY_INSTANCE) {
+    const body = document.getElementById('previewBodySecondary');
+    const active = body?.querySelector<HTMLIFrameElement>('iframe.preview-frame:not([hidden])');
+    if (active) return active;
+    return body?.querySelector<HTMLIFrameElement>('iframe.preview-frame') ?? null;
+  }
   const body = document.getElementById('previewBody');
   const active = body?.querySelector<HTMLIFrameElement>('iframe.preview-frame:not([hidden])');
   if (active) return active;
   return document.getElementById('previewFrame') as HTMLIFrameElement | null;
 }
 
-function getPreviewFrame(): HTMLIFrameElement | null {
-  return getPreviewGuestFrame();
+/** @deprecated Use {@link getPreviewGuestFrame} with an instance id when in split view. */
+function getPreviewGuestFrameLegacy(): HTMLIFrameElement | null {
+  return getPreviewGuestFrame(WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID);
 }
 
-/** True when the current preview page is a cross-origin URL (exported for MIN-370 CDP routing). */
-export function isCrossOriginPreview(): boolean {
-  const source = getFilePanelState().previewSource;
+function getPreviewFrame(designInstanceId?: string): HTMLIFrameElement | null {
+  return getPreviewGuestFrame(designInstanceId);
+}
+
+/** True when the preview page for a design instance is a cross-origin URL. */
+export function isCrossOriginPreviewForInstance(instanceId: string): boolean {
+  const source = previewSourceForDesignInstance(instanceId);
   if (!source || source.kind !== 'url') return false;
   try {
     const origin = new URL(source.url).origin;
@@ -685,17 +698,28 @@ export function isCrossOriginPreview(): boolean {
   }
 }
 
+/** @deprecated Use {@link isCrossOriginPreviewForInstance}. */
+export function isCrossOriginPreview(): boolean {
+  return isCrossOriginPreviewForInstance(WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID);
+}
+
 /** Detect Electron execJs vs iframe guest access. */
-export function createPickerTransport(): PickerTransport {
+export function createPickerTransport(
+  designInstanceId: string = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
+): PickerTransport {
   const preview = window.minnow?.preview;
   // In Electron Design Mode the visible guest is a same-origin iframe and the native
   // WebContentsView is hidden. execJs targets that hidden native view, so it would enable and
   // poll the picker on a guest the user can't click. Read the iframe directly instead.
-  if (preview && typeof preview.execJs === 'function' && !isDesignModeUsingIframeGuest()) {
+  if (
+    preview &&
+    typeof preview.execJs === 'function' &&
+    !isDesignModeUsingIframeGuest(designInstanceId)
+  ) {
     return {
       mode: 'electron',
       async eval(expression: string): Promise<unknown> {
-        const raw = await preview.execJs(expression);
+        const raw = await preview.execJs(expression, undefined, designInstanceId);
         return unwrapExecJsResult(raw);
       },
       canReadGuest(): boolean {
@@ -704,7 +728,7 @@ export function createPickerTransport(): PickerTransport {
     };
   }
 
-  const frame = getPreviewFrame();
+  const frame = getPreviewFrame(designInstanceId);
   let guestReadable = false;
   if (frame) {
     try {
@@ -992,14 +1016,11 @@ export function createCdpElementPicker(
  * True when the CDP picking path should be used instead of execJs/iframe injection: Electron,
  * with a cross-origin preview page where script injection is undesirable/blocked.
  */
-export function shouldUseCdpPicker(): boolean {
-  // CDP inspect runs on the native WebContentsView. When Design Mode drives the iframe guest
-  // (same-origin pages, or Draw/Comment on cross-origin), the native view is hidden — execJs/
-  // iframe injection is the correct path instead.
+export function shouldUseCdpPicker(designInstanceId: string = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID): boolean {
   return (
     Boolean(window.minnow?.preview?.cdpPicker) &&
-    isCrossOriginPreview() &&
-    !isDesignModeUsingIframeGuest()
+    isCrossOriginPreviewForInstance(designInstanceId) &&
+    !isDesignModeUsingIframeGuest(designInstanceId)
   );
 }
 
@@ -1008,10 +1029,15 @@ export function shouldUseCdpPicker(): boolean {
  * otherwise the existing execJs/iframe picker (same-origin, or the `npm start` fallback).
  */
 export function createBestElementPicker(
-  options: Omit<ElementPickerOptions, 'transport'>,
+  options: Omit<ElementPickerOptions, 'transport'> & { designInstanceId?: string },
 ): ElementPicker {
-  if (shouldUseCdpPicker()) {
-    return createCdpElementPicker(options);
+  const designInstanceId = options.designInstanceId ?? WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID;
+  const { designInstanceId: _drop, ...pickerOptions } = options;
+  if (shouldUseCdpPicker(designInstanceId)) {
+    return createCdpElementPicker(pickerOptions);
   }
-  return createElementPicker({ ...options, transport: createPickerTransport() });
+  return createElementPicker({
+    ...pickerOptions,
+    transport: createPickerTransport(designInstanceId),
+  });
 }
