@@ -2023,6 +2023,11 @@ html.mn-phone .mn-os-chat-rail.is-expanded .mn-os-chat-rail-tabs {
     transform: translateY(calc(100% + 40px));
   }
 
+  /* Desktop view has no reveal tab — sit the launcher on the home indicator. */
+  .mn-os-dock-shell[data-shell-view='desktop'] .mn-os-dock-panel {
+    bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   .mn-os-dock-reveal,
   .mn-os-dock-hide {
     min-height: var(--touch-min);

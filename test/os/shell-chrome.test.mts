@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { initDockLauncher } from '../../src/os/dock-launcher.ts';
 import {
+  getOsView,
   launchInstance,
   resetInstancesForTests,
 } from '../../src/os/instances.ts';
@@ -81,7 +82,7 @@ describe('shell chrome suppression', () => {
     assert.equal(document.querySelector('.mn-os-dock-shell')?.hasAttribute('hidden'), false);
   });
 
-  test('keeps dock reveal on phone for fullscreen apps', () => {
+  test('keeps dock on phone desktop when a maximized window sheet is open', () => {
     const phoneQuery =
       '(max-width: 640px), (max-width: 1024px) and (max-height: 540px)';
     window.matchMedia = ((query: string) => ({
@@ -96,14 +97,15 @@ describe('shell chrome suppression', () => {
     })) as typeof window.matchMedia;
     document.documentElement.classList.add('mn-phone');
 
-    launchInstance('code');
+    launchInstance('brain');
+    const windowId = windowManager.open('brain', { instanceId: 'inst-phone' });
+    windowManager.toggleMaximize(windowId);
 
+    assert.equal(getOsView(), 'desktop');
     assert.equal(shouldSuppressDesktopChrome(), true);
     const shell = document.querySelector('.mn-os-dock-shell');
     assert.equal(shell?.hasAttribute('hidden'), false);
-    assert.equal(shell?.dataset.shellView, 'app');
-    assert.equal(shell?.dataset.dockOpen, 'false');
-    const reveal = document.querySelector('.mn-os-dock-reveal');
-    assert.equal(reveal?.hasAttribute('hidden'), false);
+    assert.equal(shell?.dataset.shellView, 'desktop');
   });
+
 });
