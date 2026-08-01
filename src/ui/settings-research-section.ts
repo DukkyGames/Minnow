@@ -202,7 +202,7 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
       shell,
 
-      'Start with <code>npm start</code> to load and save research settings (<code>research.json</code>).',
+      'Open Minnow to load and save research settings (<code>research.json</code>).',
 
       { searchKey: 'integrations.deepResearch' },
 
@@ -508,7 +508,7 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   } catch {
 
-    setStatus('err', 'Could not load research settings — use npm start');
+    setStatus('err', 'Could not load research settings. Open or restart Minnow.');
 
   }
 
@@ -648,7 +648,7 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
               } catch {
 
-                setStatus('err', 'Could not save research settings — use npm start');
+                setStatus('err', 'Could not save research settings. Open or restart Minnow.');
 
               }
 

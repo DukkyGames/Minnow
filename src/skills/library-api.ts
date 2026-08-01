@@ -189,7 +189,7 @@ export async function installPackSkills(
   options: { skillIds?: string[]; all?: boolean },
 ): Promise<LibraryInstalledSkill[]> {
   if (!isLocalServerAvailable()) {
-    throw new Error('Skills Library install needs network — start npm start and check your connection.');
+    throw new Error('Skills Library install needs network — open Minnow and check your connection.');
   }
 
   const res = await fetch('/api/skills/library/install', {
@@ -210,7 +210,7 @@ export async function installSkillFromGitHubUrl(
   subpath?: string,
 ): Promise<LibraryInstalledSkill[]> {
   if (!isLocalServerAvailable()) {
-    throw new Error('Add-from-URL needs network — start npm start and check your connection.');
+    throw new Error('Add-from-URL needs network — open Minnow and check your connection.');
   }
 
   const body: { repoUrl: string; subpath?: string } = { repoUrl: repoUrl.trim() };
@@ -231,7 +231,7 @@ export async function installSkillFromGitHubUrl(
 /** Remove an installed library skill from ~/.minnow/skills/. */
 export async function removeInstalledLibrarySkill(skillId: string): Promise<void> {
   if (!isLocalServerAvailable()) {
-    throw new Error('Remove needs npm start — start the tool server and try again.');
+    throw new Error('Remove needs Minnow running locally — open or restart the app and try again.');
   }
 
   const res = await fetch('/api/skills/library/remove', {
@@ -248,7 +248,7 @@ export async function removeInstalledLibrarySkill(skillId: string): Promise<void
 /** Remove every skill installed from a curated pack. */
 export async function removePackSkills(packId: string): Promise<string[]> {
   if (!isLocalServerAvailable()) {
-    throw new Error('Remove needs npm start — start the tool server and try again.');
+    throw new Error('Remove needs Minnow running locally — open or restart the app and try again.');
   }
 
   const res = await fetch('/api/skills/library/remove', {

@@ -253,7 +253,7 @@ function bindSettingsSection(): void {
       setStatus('spin', 'Installing git hook…');
       const result = await installBrainGitHook();
       if (!result) {
-        setStatus('err', 'Git hook install failed — is npm start running?');
+        setStatus('err', 'Git hook install failed — is Minnow running?');
         return;
       }
       if (result.error || result.installed === false) {
@@ -680,7 +680,7 @@ async function refreshBrainStatusLine(): Promise<void> {
   if (!line) return;
   const status = await fetchBrainStatus();
   if (!status) {
-    line.textContent = 'Offline — start npm start.';
+    line.textContent = 'Offline — open Minnow.';
     return;
   }
   line.textContent = `${status.enabled ? 'Wiki enabled' : 'Wiki disabled'} · ${status.pageCount} pages`;

@@ -84,7 +84,7 @@ async function runGitSetupSkillTurn(
 async function ensureToolServerForGitSetup(): Promise<boolean> {
   const serverUp = await detectLocalServer();
   if (!serverUp) {
-    setStatus('err', 'Tool server required for git setup — run npm start');
+    setStatus('err', 'Minnow must be running locally for git setup — open or restart the app.');
   }
   return serverUp;
 }

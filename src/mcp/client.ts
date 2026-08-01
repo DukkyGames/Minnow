@@ -91,7 +91,7 @@ export async function updateMcpSecrets(
       flags: { hasContext7ApiKey: body.hasContext7ApiKey === true },
     };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -138,7 +138,7 @@ export async function createMcpServer(
     }
     return { ok: true, server: body.server };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 

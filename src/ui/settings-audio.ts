@@ -83,7 +83,7 @@ export async function renderAudioSettingsSection(
   if (!serverUp) {
     appendSettingsOfflineHint(
       mount,
-      'Start with <code>npm start</code> to persist audio device settings.',
+      'Open Minnow to persist audio device settings.',
     );
   }
 
@@ -113,7 +113,7 @@ export async function renderAudioSettingsSection(
     void (async () => {
       const ok = await saveAudioSettings(inputSelect, outputSelect, echoCb, noiseCb, agcCb);
       if (!ok) {
-        setStatus('err', 'Could not save audio settings. Use npm start.');
+        setStatus('err', 'Could not save audio settings. Open or restart Minnow.');
         const config = await loadVoiceMeta();
         await populateDeviceSelect(inputSelect, 'audioinput', config.audio.inputDeviceId);
         await populateDeviceSelect(outputSelect, 'audiooutput', config.audio.outputDeviceId);

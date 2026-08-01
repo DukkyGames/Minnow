@@ -58,7 +58,7 @@ export async function renderSkillsLibrarySettingsSection(mount: HTMLElement): Pr
       el(
         'p',
         'settings-server-banner',
-        'Pack cards load offline from the shipped index. Install, remove, and add-from-URL need npm start.',
+        'Pack cards load offline from the shipped index. Install, remove, and add-from-URL need Minnow running locally.',
       ),
     );
   }
@@ -545,5 +545,5 @@ export async function renderSkillsLibrarySettingsSection(mount: HTMLElement): Pr
 
   packs = await fetchLibraryPacks();
   renderPackGrid();
-  appendSettingsOfflineHint(mount, 'Skills Library install/remove needs npm start.');
+  appendSettingsOfflineHint(mount, 'Skills Library install/remove needs Minnow running locally.');
 }

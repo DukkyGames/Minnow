@@ -242,7 +242,7 @@ export async function renderUsageSettingsSection(): Promise<void> {
   if (!isServerStorageMode() || !serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'Start with <code>npm start</code> to edit provider pricing on the server. Session ledger data below is still available in this browser.',
+      'Open Minnow to edit provider pricing on this device. Session ledger data below is still available in this browser.',
       { id: 'settingsUsageOffline', searchKey: 'models.usage' },
     );
   }

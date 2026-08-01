@@ -22,7 +22,7 @@ export async function renderLogSection(): Promise<void> {
   if (!online) {
     const note = document.createElement('p');
     note.className = 'brain-muted';
-    note.textContent = 'Start npm start to view the wiki log.';
+    note.textContent = 'Open Minnow to view the wiki log.';
     mount.append(note);
     return;
   }

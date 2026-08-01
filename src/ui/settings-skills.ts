@@ -57,7 +57,7 @@ function mountSkillEditor(
     'settings-field-hint',
     skill.source === 'builtin'
       ? 'Saving creates or updates ~/.minnow/skills/ override (built-in ships in src/skills/).'
-      : 'Stored in ~/.minnow/skills/. Requires npm start.',
+      : 'Stored in ~/.minnow/skills/. Requires Minnow running locally.',
   );
   body.appendChild(hint);
 
@@ -79,7 +79,7 @@ function mountSkillEditor(
     const detail = await fetchSkillById(skill.id);
     if (!detail?.body) {
       ta.value = '';
-      ta.placeholder = 'Could not load skill (npm start required for custom skills).';
+      ta.placeholder = 'Could not load skill (Minnow must be running for custom skills).';
       return;
     }
     ta.value =
@@ -225,7 +225,7 @@ export async function renderSkillsSettingsSection(mount: HTMLElement): Promise<v
       el(
         'p',
         'settings-server-banner',
-        'Start npm start to add custom skills and save edits to ~/.minnow/skills/.',
+        'Open Minnow to add custom skills and save edits to ~/.minnow/skills/.',
       ),
     );
   }

@@ -89,7 +89,7 @@ export async function importExternalFilesToWorkspace(
   }
 
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Start with npm start to import files into the workspace.');
+    setStatus('err', 'Open Minnow to import files into the workspace.');
     return { imported: 0, errors: ['Tool server unavailable'] };
   }
 

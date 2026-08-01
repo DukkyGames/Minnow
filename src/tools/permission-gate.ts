@@ -187,7 +187,7 @@ export async function maybeBlockToolForUserApproval(
   const workspace: ToolApprovalRequest['workspace'] = workspaceRoot
     ? { label: getWorkspaceLabel() || workspaceRoot, path: workspaceRoot }
     : {
-        hint: 'Not loaded — start with npm start and choose a workspace folder.',
+        hint: 'Not loaded — open Minnow and choose a workspace folder.',
       };
 
   const decision = await enqueueToolApproval({

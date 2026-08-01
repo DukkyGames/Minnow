@@ -141,7 +141,7 @@ export async function renderSchedulerPanel(
     el(
       'p',
       'scheduler-notice__text',
-      'Jobs run only while Minnow is open (npm start or the desktop app). Stopping the server pauses every schedule.',
+      'Jobs run only while Minnow is open. Closing the app pauses every schedule.',
     ),
   );
   panel.appendChild(notice);
@@ -155,7 +155,7 @@ export async function renderSchedulerPanel(
       el(
         'p',
         'scheduler-offline__hint',
-        'Run npm start to create and manage scheduled jobs.',
+        'Open Minnow to create and manage scheduled jobs.',
       ),
     );
     panel.appendChild(offline);

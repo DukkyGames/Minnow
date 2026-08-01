@@ -63,7 +63,7 @@ export async function toolRecallChatContext(
 
   const result = await retrieveArchive(query, workspaceKey, scope, topK);
   if (!result) {
-    return 'Error: Brain archive retrieve failed (is npm start running?)';
+    return 'Error: Brain archive retrieve failed (is Minnow running locally?)';
   }
 
   const scopeNote =

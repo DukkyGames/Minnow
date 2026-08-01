@@ -62,7 +62,7 @@ function buildOpenInSystemExplorerItem(path: string, offline: boolean): MenuItem
   return {
     label: 'Open in System Explorer',
     disabled: offline,
-    title: offline ? 'Start with npm start to use this action' : undefined,
+    title: offline ? 'Open Minnow to use this action' : undefined,
     action: () => void revealPathInSystemExplorer(path),
   };
 }

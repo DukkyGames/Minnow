@@ -367,7 +367,7 @@ export function mountPromptFileEditor(
         ta.value,
       );
       if (!saved) {
-        setStatus('err', 'Could not save prompt (npm start required)');
+        setStatus('err', 'Could not save prompt (Minnow must be running)');
         return;
       }
       sourceLabel.textContent =

@@ -14,7 +14,7 @@ export { CHAT_APP_ID, DESKTOP_APP_ID, createAssistantChat, createDesktopChat };
 export async function ensureActiveDesktopAssistantChat(): Promise<Chat> {
   const desktopWorkspacePath = await getDesktopWorkspacePath();
   if (!desktopWorkspacePath) {
-    throw new Error('Desktop workspace is unavailable (start the tool server with npm start)');
+    throw new Error('Desktop workspace is unavailable (open or restart Minnow)');
   }
   const { activateDesktopAssistantChatForApp } = await import('../state/sessions');
   return activateDesktopAssistantChatForApp(desktopWorkspacePath);

@@ -210,7 +210,7 @@ class IntentTriggerPlugin implements IntentResolveDriver {
     if (!isIntentModeEnabled(state)) return;
     if (state.readOnly) return;
     if (!this.opts.canRequest()) {
-      this.opts.onStatus?.('Intent mode unavailable (start npm start and configure a provider).');
+      this.opts.onStatus?.('Intent mode unavailable (open Minnow and configure a provider).');
       return;
     }
     if (lineNumber < 1 || lineNumber > state.doc.lines) return;

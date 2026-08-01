@@ -172,7 +172,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('general.notifications.soundOnActiveChat', 'Sounds in active chat', 'general', 'notifications'),
   field('general.network', 'Network access', 'general', 'general', {
     keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
-    description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',
+    description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs the app.',
   }),
   field('general.filesystem', 'Filesystem access', 'general', 'general', {
     keywords: ['workspace', 'full disk', 'path', 'sandbox', 'file tools', 'git', 'TOOLS_ALLOW_ALL_PATHS'],

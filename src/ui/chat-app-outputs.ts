@@ -144,7 +144,7 @@ export async function refreshChatAppOutputsPanel(): Promise<void> {
 
   const listing = await listChatsWorkspaceFiles('');
   if (!listing) {
-    renderEmptyState(body, 'Outputs unavailable — run npm start');
+    renderEmptyState(body, 'Outputs unavailable — open Minnow');
     return;
   }
 

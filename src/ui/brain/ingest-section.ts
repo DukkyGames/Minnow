@@ -41,7 +41,7 @@ function bindIngestSection(): void {
       });
 
       if (!result) {
-        setIngestStatus('err', 'Ingest failed. Check npm start and a configured utility model.');
+        setIngestStatus('err', 'Ingest failed. Check that Minnow is running and a utility model is configured.');
         return;
       }
 

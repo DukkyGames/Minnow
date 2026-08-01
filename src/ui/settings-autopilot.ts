@@ -118,7 +118,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
       await saveAutopilotMeta(patch);
       setStatus('ok', 'Autopilot settings saved');
     } catch {
-      setStatus('err', 'Save failed — use npm start');
+      setStatus('err', 'Could not save. Open or restart Minnow and try again.');
     }
   };
 

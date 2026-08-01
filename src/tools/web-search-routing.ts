@@ -64,7 +64,7 @@ export function resolveWebSearchExecution(
       return {
         kind: 'error',
         message:
-          'Error: SearXNG web search requires the local tool server. Run npm start (not npm run dev).',
+          'Error: SearXNG web search needs Minnow running locally. Open or restart the app.',
       };
     }
     return { kind: 'searxng' };
@@ -95,7 +95,7 @@ export function resolveWebSearchExecution(
       return {
         kind: 'error',
         message:
-          'Error: Tavily web search requires the local tool server. Run npm start (not npm run dev).',
+          'Error: Tavily web search needs Minnow running locally. Open or restart the app.',
       };
     }
     return { kind: 'tavily' };
@@ -105,7 +105,7 @@ export function resolveWebSearchExecution(
     return {
       kind: 'error',
       message:
-        'Error: DuckDuckGo web search requires the local tool server. Run npm start (not npm run dev).',
+        'Error: DuckDuckGo web search needs Minnow running locally. Open or restart the app.',
     };
   }
   return { kind: 'ddg' };

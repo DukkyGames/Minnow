@@ -142,7 +142,7 @@ async function saveEditForm(): Promise<void> {
   setEditStatus('spin', 'Saving…');
   const saved = await saveBrainPage({ path: relPath, title, body, tags, source: 'user' });
   if (!saved) {
-    setEditStatus('err', 'Save failed. Is npm start running?');
+    setEditStatus('err', 'Save failed. Is Minnow running?');
     return;
   }
 

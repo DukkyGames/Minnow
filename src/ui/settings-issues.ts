@@ -59,7 +59,7 @@ async function persistTaxonomy(
       'ok',
       mode === 'server'
         ? okMessage
-        : 'Saved locally — start npm start to persist to ~/.minnow',
+        : 'Saved locally — open Minnow to persist to ~/.minnow',
     );
     return true;
   } catch (err) {
@@ -415,7 +415,7 @@ function appendIssuesIntro(mount: HTMLElement): void {
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       mount,
-      'Issues taxonomy is saved in this browser. Run <code>npm start</code> to persist under <code>~/.minnow/issues/taxonomy.json</code>.',
+      'Issues taxonomy is saved in this browser. Open Minnow to persist under <code>~/.minnow/issues/taxonomy.json</code>.',
     );
     return;
   }

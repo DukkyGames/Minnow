@@ -80,7 +80,7 @@ export async function executeDesktopWorkspaceSwitch(
 
 async function onOpenDesktopWorkspaceFolder(): Promise<void> {
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Workspace requires npm start (local server)');
+    setStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
 

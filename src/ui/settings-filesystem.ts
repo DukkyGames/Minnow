@@ -61,7 +61,7 @@ export async function renderFilesystemAccessSettings(mount: HTMLElement): Promis
   if (serverUp !== 'server') {
     appendSettingsOfflineHint(
       mount,
-      'Filesystem access settings require <code>npm start</code> (config.json on disk). Start the full dev server, then reopen Settings.',
+      'Filesystem access settings are saved on this device. Open Minnow, then reopen Settings.',
     );
     return;
   }
