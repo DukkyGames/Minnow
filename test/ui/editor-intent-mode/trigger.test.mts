@@ -108,6 +108,27 @@ describe('shouldSkipIntentResolve', () => {
 
     assert.equal(shouldSkipIntentResolve(state, 1), false);
   });
+
+  test('does not skip when full line still shows stored intent text', () => {
+    let state = EditorState.create({
+      doc: 'set x to 1',
+      extensions: [intentModeField],
+    });
+    state = state.update({ effects: [setIntentModeEnabled.of(true)] }).state;
+    state = state.update({
+      effects: [
+        addIntentRegion.of({
+          from: 0,
+          to: 10,
+          intentText: 'set x to 1',
+          ctxHash: 'h',
+          stale: false,
+        }),
+      ],
+    }).state;
+
+    assert.equal(shouldSkipIntentResolve(state, 1), false);
+  });
 });
 
 describe('Intent trigger scheduling', () => {

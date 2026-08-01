@@ -14,7 +14,7 @@ import {
   setEditorAiCompletionConfigForTests,
 } from '../../../src/config/editor-ai-completion.ts';
 import { DEFAULT_EDITOR_INTENT_MODE } from '../../../src/config/editor-intent-mode.ts';
-import { resolveIntentLine } from '../../../src/ui/editor-intent-mode/resolver.ts';
+import { resolveIntentLine, finalizeIntentResolveDisplay } from '../../../src/ui/editor-intent-mode/resolver.ts';
 import { BenchmarkStreamReasoningAccumulator } from '../../../src/benchmark/stream-text.ts';
 import { StreamingContentAccumulator } from '../../../src/api/message-content.ts';
 
@@ -137,6 +137,16 @@ describe('resolveIntentLine', () => {
 
     assert.equal(result.text, null);
     assert.equal(result.error, EDITOR_AI_EMPTY_COMPLETION_MESSAGE);
+  });
+
+  test('mines a code line from prose-heavy content at stream end', () => {
+    const text = finalizeIntentResolveDisplay(
+      'The user wants me to fix this line.',
+      '```typescript\nconst fixed = 1;\n```',
+      'broken line',
+      true,
+    );
+    assert.equal(text, 'const fixed = 1;');
   });
 });
 

@@ -25,6 +25,7 @@ import {
   resolveEditorCompletionDisplayText,
   validateEditorAiBinding,
 } from '../editor-ai-completion-client';
+import { extractEditorCodeFromReasoning } from '../editor-model-output';
 import { sanitizeQuickEditText } from '../editor-quick-edit/diff-apply';
 import { resolveLanguageDescription } from '../editor-language';
 import type { ResolveIntentLineInput, IntentResolveResult } from './types';
@@ -100,6 +101,34 @@ function createGenerationErrorMessage(err: unknown): string {
   return EDITOR_AI_REQUEST_FAILED_MESSAGE;
 }
 
+/**
+ * Sanitize streamed model output for a single intent line. When the model replies with
+ * prose in the content channel, fall back to mining a code line from content + reasoning.
+ */
+export function finalizeIntentResolveDisplay(
+  contentText: string,
+  reasoningText: string,
+  intentText: string,
+  reasoningFallback: boolean,
+): string {
+  const primary = sanitizeQuickEditText(
+    resolveEditorCompletionDisplayText(contentText, reasoningText, {
+      reasoningFallback,
+    }),
+    intentText,
+  );
+  if (primary.trim()) return primary;
+  if (!reasoningFallback) return '';
+  const combined = [contentText, reasoningText]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join('\n');
+  if (!combined) return '';
+  const mined = extractEditorCodeFromReasoning(combined);
+  if (!mined.trim()) return '';
+  return sanitizeQuickEditText(mined, intentText);
+}
+
 /** Stream a single-line intent resolve. */
 export async function resolveIntentLine(
   input: ResolveIntentLineInput & { filePath: string },
@@ -152,13 +181,11 @@ export async function resolveIntentLine(
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
   const emit = (reasoningFallback = false): string =>
-    sanitizeQuickEditText(
-      resolveEditorCompletionDisplayText(
-        contentAcc.getText(),
-        reasoningAcc.getText(),
-        { reasoningFallback },
-      ),
+    finalizeIntentResolveDisplay(
+      contentAcc.getText(),
+      reasoningAcc.getText(),
       input.intentText,
+      reasoningFallback,
     );
 
   return new Promise<IntentResolveResult>((resolve) => {

@@ -12,6 +12,7 @@ import {
   type Extension,
   type Transaction,
 } from '@codemirror/state';
+import { forEachDiagnostic } from '@codemirror/lint';
 import { EditorView } from '@codemirror/view';
 import {
   buildIntentDecorations,
@@ -177,6 +178,16 @@ export function isLineResolved(state: EditorState, lineNumber: number): boolean 
   return findIntentRegionOnLine(state, lineNumber) !== null;
 }
 
+/** True when LSP/CodeMirror reports an error diagnostic overlapping a line span. */
+function lineHasErrorDiagnostic(state: EditorState, lineFrom: number, lineTo: number): boolean {
+  let hasError = false;
+  forEachDiagnostic(state, (diag) => {
+    if (diag.severity !== 'error') return;
+    if (diag.from <= lineTo && diag.to >= lineFrom) hasError = true;
+  });
+  return hasError;
+}
+
 /**
  * Skip automatic resolve when the line is unchanged resolved code (region spans the
  * full line). Retries pass intentOverride and always run.
@@ -191,7 +202,13 @@ export function shouldSkipIntentResolve(
   if (!region) return false;
   const line = state.doc.line(lineNumber);
   if (region.from !== line.from || region.to !== line.to) return false;
-  return state.doc.sliceString(line.from, line.to).trim().length > 0;
+  const lineText = state.doc.sliceString(line.from, line.to).trim();
+  if (lineText.length === 0) return false;
+  // Line still shows stored intent (e.g. user reverted text but region not cleared yet).
+  if (lineText === region.intentText.trim()) return false;
+  // Re-resolve when the line still has a syntax/type error (broken generated code).
+  if (lineHasErrorDiagnostic(state, line.from, line.to)) return false;
+  return true;
 }
 
 /** Initialize enabled flag for a newly mounted editor. */
