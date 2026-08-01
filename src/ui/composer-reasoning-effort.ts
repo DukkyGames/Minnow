@@ -21,6 +21,7 @@ import {
 } from '../state/sessions';
 import type { ReasoningEffortOption as EffortOption } from '../types';
 import { syncThinkingControlFromActiveChat } from './composer-thinking';
+import { syncComposerCodeMapFromActiveChat } from './composer-code-map';
 import { isComposerRecoveryBlocked } from './composer-send';
 
 let selectEl: HTMLSelectElement | null = null;
@@ -94,6 +95,7 @@ function onSelectChange(): void {
   touchChat(chat);
   scheduleSaveSessions();
   syncThinkingControlFromActiveChat();
+  void syncComposerCodeMapFromActiveChat();
 }
 
 function isDropdownVisible(): boolean {
@@ -127,6 +129,7 @@ export function syncComposerReasoningEffortFromActiveChat(): void {
   }
 
   syncThinkingControlFromActiveChat();
+  void syncComposerCodeMapFromActiveChat();
 }
 
 /** Re-run sync when streaming / recovery gates change (loop.ts). */

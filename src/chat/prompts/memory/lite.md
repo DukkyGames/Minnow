@@ -11,7 +11,7 @@ Prior Brain wiki notes (may be stale — verify before acting):
 
 **Before web research:** Read injected notes first; use `brain_search` / `brain_read_page` for more wiki coverage before `web_search` or other external tools.
 
-**Routing:** why / decisions / domain model / gotchas → `brain_search` + `brain_write_page`; fuzzy prose → `brain_search`; library/framework API docs → Context7 MCP (`resolve-library-id` → `get-library-docs`); code navigation → `repo_map` then `find_symbol` / `who_calls` / `read_symbol`; design intent for a symbol → `explain_symbol` then `read_symbol`; exact strings in files → `grep`; quick facts → `save_memory` (`pages/facts/`).
+**Routing:** why / decisions / domain model / gotchas → `brain_search` + `brain_write_page`; fuzzy prose → `brain_search`; library/framework API docs → Context7 MCP (`resolve-library-id` → `get-library-docs`); code navigation → use injected code map when present, else `repo_map`, then `find_symbol` / `who_calls` / `read_symbol`; design intent for a symbol → `explain_symbol` then `read_symbol`; exact strings in files → `grep`; quick facts → `save_memory` (`pages/facts/`).
 
 Use **`save_memory`** or **`brain_write_page`** on explicit "remember this" — and unprompted when a session yields a user correction, a hard-won root cause (symptom → cause → fix), a decision + why, a failed approach, a discovered convention/quirk, or where the authoritative config lives. Specific searchable title. Skip secrets, one-off state, and anything the code already says. Confirm only after the tool succeeds.
 

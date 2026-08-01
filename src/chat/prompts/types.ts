@@ -13,6 +13,7 @@ export type PromptPartId =
   | 'tool-usage'
   | 'info'
   | 'memory'
+  | 'code-map'
   | 'work-agent'
   | 'skill';
 
@@ -92,6 +93,10 @@ export interface ComposeContext {
   memoryBlock: string | null;
   /** True when memory retrieval/saving is enabled for this chat (injects save guidance even with an empty wiki). */
   memoryEnabled?: boolean;
+  /** Wrapped repo map body for {{code_map}} when injection resolved on. */
+  codeMapBlock: string | null;
+  /** True when code map injection is resolved on for this send (even if block fetch failed). */
+  codeMapInjectionEnabled?: boolean;
   enabledToolIds: string[];
   infoPresetId: string | null;
   userMessagePreview?: string;
@@ -110,6 +115,7 @@ export interface InterpolationVars {
   expert: string;
   cwd: string;
   memory: string;
+  code_map?: string;
   user_message: string;
   work_agent: string;
   work_agent_label: string;

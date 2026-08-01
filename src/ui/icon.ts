@@ -148,6 +148,7 @@ export type ChromeIconName =
   | 'loop'
   | 'sparkles'
   | 'thinkingBrain'
+  | 'codeMapInjection'
   | 'inbox';
 
 // ── Board ────────────────────────────────────────────────────────────────────
@@ -327,6 +328,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   loop: 'fi-rr-rotate-right',
   sparkles: 'fi-rr-sparkles',
   thinkingBrain: 'fi-sr-brain',
+  codeMapInjection: 'fi-sr-syringe',
   inbox: 'fi-rr-inbox',
 
   // Board

@@ -168,6 +168,7 @@ const PART_LABELS: Record<PromptPartId, string> = {
   'tool-usage': 'Tool usage',
   info: 'Info',
   memory: 'Memory',
+  'code-map': 'Code map',
   'work-agent': 'Work agent',
   skill: 'Skill',
 };

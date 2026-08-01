@@ -8,7 +8,7 @@ import { loadPromptMetaSettings } from '../../config/prompt-meta';
 import { loadBuiltinPromptById } from './prompt-loader';
 import type { PromptKind, PromptPartId, PromptProfile } from './types';
 
-const PARTS_WITHOUT_DIFF = new Set<PromptPartId>(['memory', 'skill']);
+const PARTS_WITHOUT_DIFF = new Set<PromptPartId>(['memory', 'code-map', 'skill']);
 
 /** Parts that cannot be diffed in Settings (resolved at send from session). */
 export function isPromptPartDiffSupported(partId: PromptPartId): boolean {
