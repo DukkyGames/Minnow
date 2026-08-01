@@ -21,6 +21,9 @@ import { loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
 import { retrieveMemoryBlock } from '../../memory/client';
 import { shouldInjectMemory } from '../../memory/config';
+import { shouldInjectCodeMap } from '../../brain/code-injection-config';
+import { retrieveCodeMapBlock } from '../../brain/code-map-injection';
+import { fetchBrainCodeConfig } from '../../brain/client';
 import { loadPromptConfig } from './prompt-configs';
 import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
@@ -107,6 +110,23 @@ export async function buildComposeContext(
   }
 
   const worktreeCwd = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
+
+  let codeMapBlock: string | null = null;
+  const injectCodeMap = await shouldInjectCodeMap(chat);
+  if (injectCodeMap) {
+    const focus =
+      options?.routeUserText ??
+      options?.userMessagePreview ??
+      '';
+    const codeConfig = await fetchBrainCodeConfig();
+    codeMapBlock =
+      (await retrieveCodeMapBlock({
+        repoPath: worktreeCwd ?? resolveComposeCwd(),
+        focus,
+        tokenBudget: codeConfig?.repoMapTokenBudget,
+        ensureIndexed: true,
+      })) || null;
+  }
   const ctx: ComposeContext = {
     profile,
     customConfigId: meta.activePromptConfigId,
@@ -119,6 +139,8 @@ export async function buildComposeContext(
     skillBody: null,
     memoryBlock,
     memoryEnabled: injectMemory,
+    codeMapBlock,
+    codeMapInjectionEnabled: injectCodeMap,
     enabledToolIds,
     infoPresetId,
     planGranularity: meta.planGranularity ?? 'medium',

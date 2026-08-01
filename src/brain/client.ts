@@ -234,9 +234,24 @@ export async function fetchBrainGitHookStatus(): Promise<BrainCodeGitHookStatus 
 
 /** Token-budgeted signature repo map. */
 export async function fetchBrainCodeRepoMap(options?: {
+  repo?: string;
   focus?: string;
   tokenBudget?: number;
+  ensureIndexed?: boolean;
 }): Promise<BrainCodeRepoMap | null> {
+  if (options?.repo?.trim() || options?.ensureIndexed === true) {
+    return brainFetch<BrainCodeRepoMap>('/api/brain/code/repo-map', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(options.repo?.trim() ? { repo: options.repo.trim() } : {}),
+        ...(options.focus?.trim() ? { focus: options.focus.trim() } : {}),
+        ...(options.tokenBudget && options.tokenBudget > 0
+          ? { tokenBudget: options.tokenBudget }
+          : {}),
+        ...(options.ensureIndexed === true ? { ensureIndexed: true } : {}),
+      }),
+    });
+  }
   const qs = new URLSearchParams();
   if (options?.focus?.trim()) qs.set('focus', options.focus.trim());
   if (options?.tokenBudget && options.tokenBudget > 0) {

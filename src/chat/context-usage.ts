@@ -21,6 +21,7 @@ import {
 
 export type ContextUsageSectionKey =
   | 'system'
+  | 'codeMap'
   | 'rules'
   | 'tools'
   | 'history'
@@ -104,12 +105,24 @@ export function buildContextUsageBreakdown(
     {
       key: 'system',
       label: estimate.legacyFallback ? 'System (legacy drawer)' : 'System',
-      tokens: estimate.composedSystem,
+      tokens: Math.max(
+        0,
+        estimate.composedSystem - (estimate.codeMapSystem ?? 0),
+      ),
     },
+  ];
+  if (estimate.codeMapSystem != null && estimate.codeMapSystem > 0) {
+    rows.push({
+      key: 'codeMap',
+      label: 'Code map',
+      tokens: estimate.codeMapSystem,
+    });
+  }
+  rows.push(
     { key: 'rules', label: 'Rules', tokens: estimate.userRules },
     { key: 'tools', label: 'Tools', tokens: estimate.tools },
     { key: 'history', label: historyLabel, tokens: estimate.history },
-  ];
+  );
   if (
     estimate.compressedContextEstimate != null &&
     estimate.compressedContextEstimate > 0

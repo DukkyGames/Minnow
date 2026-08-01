@@ -987,6 +987,8 @@ export interface Chat {
   expertRuntime?: import('./chat/experts/types').ExpertRuntimeSnapshot;
   /** Tri-state thinking override for this chat (inherit uses work-agent / global stack). */
   thinkingMode?: ThinkingTriState;
+  /** Tri-state code map injection override (inherit uses features.codeMapInjectionDefault). */
+  codeMapInjection?: ThinkingTriState;
   /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */
   reasoningEffort?: ReasoningEffortOption;
   /** Active Work Agent; null = default / auto from mode (Step 08). */

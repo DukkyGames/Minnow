@@ -12,7 +12,7 @@ import { clampRepoMapTokenBudget, normalizeBrainCodeConfig } from './config.js';
 import { getCodeDb, getIndexStats } from './schema.js';
 import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
-import { ensureIndexFreshForQuery } from './cascade.js';
+import { ensureIndexFreshForQuery, runCascade } from './cascade.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
 /** Load merged config.brain.code settings. */
@@ -25,6 +25,42 @@ export async function loadBrainCodeConfig() {
 /** Active workspace repo key for symbol ids. */
 export function activeRepoKey() {
   return brainWorkspaceKeyFromPath(getEffectiveWorkspaceRoot()) || 'workspace';
+}
+
+/**
+ * Normalize optional repo key from API/tool args (slug only).
+ * @param {unknown} repoParam
+ */
+export function resolveRepoKey(repoParam) {
+  const requested = typeof repoParam === 'string' ? repoParam.trim() : '';
+  if (!requested) return activeRepoKey();
+  if (!/^[a-z0-9._-]+$/i.test(requested)) {
+    const err = new Error('Invalid repo key');
+    err.statusCode = 400;
+    throw err;
+  }
+  return requested.toLowerCase();
+}
+
+/**
+ * Warm a cold code index (shared by repo_map tool and /api/brain/code/repo-map).
+ * Cascade runs only when the requested repo matches the active workspace key.
+ * @param {string} [repo]
+ * @returns {Promise<{ repo: string, symbolCount: number }>}
+ */
+export async function ensureWarmCodeIndex(repo) {
+  const key = resolveRepoKey(repo);
+  const db = getCodeDb(key);
+  let stats = getIndexStats(db);
+  if (!stats.symbolCount && key === activeRepoKey()) {
+    const reindex = await runCascade({ trigger: 'manual', force: true });
+    if (!reindex.indexedFiles && !reindex.skipped) {
+      stats = getIndexStats(db);
+      return { repo: key, symbolCount: stats.symbolCount ?? 0 };
+    }
+    stats = getIndexStats(db);
+  }
+  return { repo: key, symbolCount: stats.symbolCount ?? 0 };
 }
 
 /**
@@ -314,7 +350,7 @@ export async function readSymbol(symbolRef) {
 export async function repoMap(opts = {}) {
   await ensureIndexFreshForQuery();
   const code = await loadBrainCodeConfig();
-  const repo = opts.repo?.trim() || activeRepoKey();
+  const repo = resolveRepoKey(opts.repo);
   const db = getCodeDb(repo);
   if (opts.focusFiles?.length) {
     recomputePageRank(db, new Set(opts.focusFiles));

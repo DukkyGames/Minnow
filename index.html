@@ -1553,6 +1553,8 @@
               <label>Repo map token budget
                 <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="1500">
               </label>
+              <label><input type="checkbox" id="brainFeatureCodeMapInjectionDefault"> Inject code map by default (inherit)</label>
+              <p class="brain-muted">Per-chat override: Code composer toolbar code-map icon (inherit / on / off).</p>
               <label>Reindex cadence
                 <select id="brainCodeReindexCadence">
                   <option value="on-demand">On demand</option>
@@ -2249,6 +2251,9 @@
               <label class="visually-hidden" for="composerReasoningEffortSelect">Reasoning effort</label>
               <select id="composerReasoningEffortSelect" class="composer-reasoning-effort-select" aria-label="Reasoning effort" disabled></select>
             </div>
+          </div>
+          <div id="composerCodeMapWrap" class="composer-control code-map-control-wrap hidden">
+            <div id="composerCodeMapControl" class="code-map-toggle-host"></div>
           </div>
           <div class="composer-control context-usage-anchor">
             <button

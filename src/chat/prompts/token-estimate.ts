@@ -26,6 +26,7 @@ import { estimateContextPolicyTrim } from '../context/apply-policy';
 import {
   resolveOutboundSystemMessages,
   type BuildComposeContextOptions,
+  buildComposeContext,
 } from './compose-context';
 import {
   computeOutboundPromptEstimateFromParts,
@@ -183,6 +184,20 @@ export async function resolveOutboundPromptEstimate(
 
   const legacyFallback = !outbound.composed && !!legacyText;
 
+  let codeMapSystem = 0;
+  try {
+    const ctx = await buildComposeContext(chat, {
+      ...options?.composeOptions,
+      routeUserText,
+      userMessagePreview: routeUserText,
+    });
+    if (ctx.codeMapBlock?.trim()) {
+      codeMapSystem = estimateTokensFromText(ctx.codeMapBlock);
+    }
+  } catch {
+    codeMapSystem = 0;
+  }
+
   const estimate = computeOutboundPromptEstimateFromParts({
     systemText: outbound.composed,
     history: chat.history,
@@ -190,6 +205,10 @@ export async function resolveOutboundPromptEstimate(
     userRulesText: outbound.userRules ?? '',
     legacyFallback,
   });
+
+  if (codeMapSystem > 0) {
+    estimate.codeMapSystem = codeMapSystem;
+  }
 
   const trimResult = applyBudgetTrimToHistoryTokens(
     chat,

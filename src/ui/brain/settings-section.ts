@@ -25,6 +25,10 @@ import {
 } from '../../memory/client';
 import type { MemoryEmbeddingsConfig } from '../../memory/types';
 import {
+  fetchCodeMapInjectionDefault,
+  saveCodeMapInjectionDefault,
+} from '../../brain/code-injection-config';
+import {
   fetchSynthesisConfig,
   saveSynthesisConfig,
 } from '../../synthesis/client';
@@ -333,6 +337,23 @@ function bindSettingsSection(): void {
     })();
   });
 
+  const codeMapInjectDefaultEl = document.getElementById(
+    'brainFeatureCodeMapInjectionDefault',
+  ) as HTMLInputElement | null;
+  codeMapInjectDefaultEl?.addEventListener('change', () => {
+    void (async () => {
+      const saved = await saveCodeMapInjectionDefault(codeMapInjectDefaultEl.checked);
+      setStatus(
+        saved ? 'ok' : 'err',
+        saved
+          ? codeMapInjectDefaultEl.checked
+            ? 'Code map injection default on'
+            : 'Code map injection default off'
+          : 'Save failed',
+      );
+    })();
+  });
+
   document.getElementById('brainDangerClearWiki')?.addEventListener('click', () => {
     void (async () => {
       const backupEl = document.getElementById(
@@ -623,6 +644,12 @@ async function refreshCodeSettingsFields(): Promise<void> {
   }
   if (scaffoldEl && !scaffoldEl.matches(':focus')) {
     scaffoldEl.checked = config.autoScaffoldIndexConfig !== false;
+  }
+  const injectDefaultEl = document.getElementById(
+    'brainFeatureCodeMapInjectionDefault',
+  ) as HTMLInputElement | null;
+  if (injectDefaultEl && !injectDefaultEl.matches(':focus')) {
+    injectDefaultEl.checked = await fetchCodeMapInjectionDefault();
   }
   await refreshGitHookStatus();
 }
