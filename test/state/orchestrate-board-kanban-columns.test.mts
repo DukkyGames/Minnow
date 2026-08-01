@@ -7,7 +7,7 @@ import { describe, test } from 'node:test';
 import {
   boardShowsTestingKanbanColumn,
   getKanbanColumnDefs,
-} from '../../src/ui/orchestrate-board.ts';
+} from '../../src/chat/orchestrate/board-kanban-columns.ts';
 import type { OrchestrateBoardState } from '../../src/types.ts';
 
 function makeBoard(
