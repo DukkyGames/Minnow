@@ -3,6 +3,7 @@
  */
 
 import { estimateTokens } from './rank.js';
+import { formatRepoMapSymbolLine } from './repo-map-symbols.js';
 
 /**
  * Render signature-only lines until the token budget is exhausted.
@@ -51,8 +52,7 @@ export function renderRepoMap(symbols, tokenBudget, opts = {}) {
       used += headerTokens;
     }
 
-    const sig = sym.signature?.trim() || `${sym.kind ?? 'symbol'} ${sym.id}`;
-    const line = `- ${sig}`;
+    const line = formatRepoMapSymbolLine(sym);
     const lineTokens = estimateTokens(line);
     if (used + lineTokens > budget) {
       const truncatedLine = '- … (truncated to token budget)';
