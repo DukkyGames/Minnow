@@ -252,13 +252,12 @@
   border-radius: var(--mn-radius-xs, 4px);
 }
 
-/* Per-tool bubble badges (summary row) */
+/* Per-tool row badges (lives inside the summary's outcome zone) */
 .tool-call-code-change {
   flex-shrink: 0;
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  margin-left: auto;
   font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-size: 11px;
   font-weight: 500;
@@ -288,14 +287,4 @@
 .tool-call-details--file > summary {
   cursor: default;
   pointer-events: none;
-}
-
-.tool-call-details--file .tool-call-section-label:first-child,
-.tool-call-details--file .tool-call-pre--args {
-  display: none;
-}
-
-.tool-call-msg--file.tool-call-msg--ok .tool-call-pre--result,
-.tool-call-msg--file.tool-call-msg--ok .tool-call-section-label {
-  display: none;
 }
