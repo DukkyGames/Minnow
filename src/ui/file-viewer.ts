@@ -288,9 +288,39 @@ function setIntentModeEnabledForPath(path: string, enabled: boolean): void {
   updateIntentToolbarChrome(enabled, 0);
 }
 
+/** Per-path Intent toggle memory (shared by primary and secondary editors). */
+export function rememberIntentModeEnabledForPath(path: string, enabled: boolean): void {
+  intentModeEnabledByPath.set(path, enabled);
+}
+
+export function isIntentModeEnabledForViewerPath(path: string, defaultEnabled: boolean): boolean {
+  return isIntentModeEnabledForPath(path, defaultEnabled);
+}
+
 function updateIntentToolbarChrome(enabled: boolean, staleCount: number): void {
   const toggle = editorIntentToggleEl ?? getIntentToggleButton();
   const status = editorIntentStatusEl ?? getIntentStatusElement();
+  applyIntentToolbarChrome(toggle, status, enabled, staleCount);
+}
+
+function getSecondaryIntentToggleButton(): HTMLButtonElement | null {
+  return document.getElementById('btnFileViewerIntentSecondary') as HTMLButtonElement | null;
+}
+
+function getSecondaryIntentStatusElement(): HTMLElement | null {
+  return document.getElementById('fileViewerIntentStatusSecondary');
+}
+
+function getSecondarySaveButton(): HTMLButtonElement | null {
+  return document.getElementById('btnFileViewerSaveSecondary') as HTMLButtonElement | null;
+}
+
+function applyIntentToolbarChrome(
+  toggle: HTMLButtonElement | null,
+  status: HTMLElement | null,
+  enabled: boolean,
+  staleCount: number,
+): void {
   if (toggle) {
     toggle.classList.toggle('is-active', enabled);
     toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
@@ -309,6 +339,67 @@ function updateIntentToolbarChrome(enabled: boolean, staleCount: number): void {
   } else {
     status.textContent = 'in sync';
     status.className = 'file-viewer-intent-status file-viewer-intent-status--ok';
+  }
+}
+
+/** Intent chrome for the secondary editor group header. */
+export function syncSecondaryIntentToolbarChrome(enabled: boolean, staleCount: number): void {
+  applyIntentToolbarChrome(
+    getSecondaryIntentToggleButton(),
+    getSecondaryIntentStatusElement(),
+    enabled,
+    staleCount,
+  );
+}
+
+function syncSecondaryIntentToolbarAvailability(tab: ViewerTabState | null): void {
+  const toggle = getSecondaryIntentToggleButton();
+  if (!toggle) return;
+  void import('./file-viewer-secondary-slot').then((m) => {
+    const secondaryView = m.getSecondaryViewerEditorView();
+    const available =
+      Boolean(tab) &&
+      tab!.viewMode === 'editor' &&
+      !tab!.readOnlyExcerpt &&
+      getLocalServerAvailable() &&
+      Boolean(secondaryView);
+    toggle.disabled = !available;
+  });
+}
+
+/** Secondary pane header (save + intent) — mirrors primary chrome for the secondary tab. */
+export function updateSecondaryViewerChrome(): void {
+  const path = secondarySlotViewerPath();
+  const tab = path ? getViewerTab(path) : null;
+  const saveBtn = getSecondarySaveButton();
+  if (saveBtn) {
+    void import('./file-viewer-secondary-slot').then((m) => {
+      const secondaryView = m.getSecondaryViewerEditorView();
+      const canSave = Boolean(
+        tab &&
+          secondaryView &&
+          tab.isDirty &&
+          !tab.readOnlyExcerpt &&
+          tab.viewMode === 'editor' &&
+          !isSaving,
+      );
+      saveBtn.disabled = !canSave;
+      saveBtn.classList.toggle('file-viewer-save--active', canSave);
+      saveBtn.setAttribute('aria-busy', isSaving ? 'true' : 'false');
+    });
+  }
+  syncSecondaryIntentToolbarAvailability(tab);
+  if (tab && tab.viewMode === 'editor') {
+    void import('./file-viewer-secondary-slot').then((m) => {
+      const secondaryView = m.getSecondaryViewerEditorView();
+      if (!secondaryView) return;
+      syncSecondaryIntentToolbarChrome(
+        isIntentModeEnabled(secondaryView.state),
+        0,
+      );
+    });
+  } else {
+    syncSecondaryIntentToolbarChrome(false, 0);
   }
 }
 
@@ -486,6 +577,7 @@ function updateViewerChrome(): void {
   }
   refreshFileViewerTabs();
   syncIntentToolbarAvailability(tab);
+  updateSecondaryViewerChrome();
 }
 
 function mountMarkdownPreview(tab: ViewerTabState, content: string): void {
@@ -1352,12 +1444,33 @@ export function bindFileViewerControls(): void {
     });
   }
 
+  const secondarySaveBtn = getSecondarySaveButton();
+  if (secondarySaveBtn) {
+    secondarySaveBtn.addEventListener('click', () => {
+      const path = secondarySlotViewerPath();
+      if (path) void saveViewerTabByPath(path);
+    });
+  }
+
   editorIntentToggleEl = getIntentToggleButton();
   editorIntentStatusEl = getIntentStatusElement();
   if (editorIntentToggleEl) {
     editorIntentToggleEl.addEventListener('click', () => {
       if (!editorView || !getLocalServerAvailable()) return;
       toggleIntentMode(editorView);
+    });
+  }
+
+  const secondaryIntentBtn = getSecondaryIntentToggleButton();
+  if (secondaryIntentBtn) {
+    secondaryIntentBtn.addEventListener('click', () => {
+      if (!getLocalServerAvailable()) return;
+      void import('./file-viewer-secondary-slot').then((m) => {
+        const view = m.getSecondaryViewerEditorView();
+        if (!view) return;
+        toggleIntentMode(view);
+        syncSecondaryIntentToolbarChrome(isIntentModeEnabled(view.state), 0);
+      });
     });
   }
 

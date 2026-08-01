@@ -3,10 +3,7 @@
  *
  * Renders the secondary slot's own active tab into #fileViewerHostSecondary. It shares
  * the tab store with the primary group (one buffer per path, and a path only ever lives
- * in one slot), but keeps its own CodeMirror view, load trigger, and save binding.
- *
- * Scope: plain editing plus the read-only preview modes. The AI/Intent/LSP chrome is
- * bound to the primary pane's header controls and stays there.
+ * in one slot), but keeps its own CodeMirror view, load trigger, and header chrome.
  */
 
 import { EditorState } from '@codemirror/state';
@@ -20,15 +17,26 @@ import {
 } from './file-viewer-tab-store';
 import { editorCoreExtensions } from './editor-core-extensions';
 import { loadEditorSettings } from '../config/editor-settings';
+import { loadEditorIntentModeConfig } from '../config/editor-intent-mode';
 import { loadLanguageExtensionsForPath } from './editor-language';
 import { minnowEditorExtensions } from './codemirror-theme';
 import { notifyLspDocument } from '../lsp/completion-client';
 import { resolveDocumentHtmlLoadUrl, resolvePreviewLoadUrl } from './preview-load-url';
 import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
+import { getLocalServerAvailable } from '../tools/client';
+import {
+  editorIntentModeExtensions,
+  isIntentModeEnabled,
+  mountIntentModeEditor,
+} from './editor-intent-mode/extensions';
 import {
   ensureViewerTabLoaded,
+  isIntentModeEnabledForViewerPath,
+  rememberIntentModeEnabledForPath,
   registerSecondaryEditorSnapshot,
   saveViewerTabByPath,
+  syncSecondaryIntentToolbarChrome,
+  updateSecondaryViewerChrome,
 } from './file-viewer';
 
 let secondaryView: EditorView | null = null;
@@ -83,6 +91,7 @@ export function destroySecondaryViewerSlot(): void {
   renderKey = null;
   const host = getHost();
   if (host) host.replaceChildren();
+  updateSecondaryViewerChrome();
 }
 
 function renderKeyFor(tab: ViewerTabState): string {
@@ -182,6 +191,29 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
   void (async () => {
     const editorSettings = await loadEditorSettings();
     const langExts = await loadLanguageExtensionsForPath(path);
+    const intentConfig = await loadEditorIntentModeConfig();
+    const intentInitialEnabled = isIntentModeEnabledForViewerPath(
+      path,
+      intentConfig.enabledByDefault,
+    );
+    const intentExts =
+      !tab.readOnlyExcerpt && getLocalServerAvailable()
+        ? editorIntentModeExtensions({
+            filePath: path,
+            config: intentConfig,
+            canRequest: () => getLocalServerAvailable(),
+            initialEnabled: intentInitialEnabled,
+            onEnabledChange: (enabled) => {
+              rememberIntentModeEnabledForPath(path, enabled);
+              syncSecondaryIntentToolbarChrome(enabled, 0);
+            },
+            onStaleCount: (count) => {
+              if (!secondaryView || secondaryPath !== path) return;
+              syncSecondaryIntentToolbarChrome(isIntentModeEnabled(secondaryView.state), count);
+            },
+            onStatus: () => undefined,
+          })
+        : [];
     const state = EditorState.create({
       doc: content,
       extensions: [
@@ -210,6 +242,7 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
         }),
         ...minnowEditorExtensions(),
         ...langExts,
+        ...intentExts,
         EditorView.updateListener.of((update) => {
           if (!update.docChanged || secondaryPath !== path) return;
           const text = update.state.doc.toString();
@@ -220,6 +253,7 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
             text,
             isViewerDocDirty(text, liveTab.originalContent),
           );
+          updateSecondaryViewerChrome();
           if (lspTimer) clearTimeout(lspTimer);
           lspTimer = setTimeout(() => {
             void notifyLspDocument(path, 'change', text);
@@ -231,7 +265,11 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
     if (pendingMountPath === path) pendingMountPath = null;
     secondaryPath = path;
     secondaryView = new EditorView({ state, parent: mount });
+    if (!tab.readOnlyExcerpt && getLocalServerAvailable()) {
+      mountIntentModeEditor(secondaryView, intentInitialEnabled);
+    }
     void notifyLspDocument(path, 'open', content);
+    updateSecondaryViewerChrome();
   })();
 }
 
@@ -286,6 +324,7 @@ export function renderSecondaryViewerSlot(tabPath: string | null): void {
     return;
   }
   mountEditor(host, tab, content);
+  updateSecondaryViewerChrome();
 }
 
 /** Live CodeMirror view of the secondary group, when one is mounted. */

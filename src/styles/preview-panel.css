@@ -117,6 +117,15 @@
   --mn-icon-size: 15px;
 }
 
+/* Secondary split pane: pin close (and future trail actions) on the trailing edge. */
+.preview-header--secondary .preview-header__trail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* .icon-btn sets display:flex, which overrides the native [hidden] rule */
 #btnPreviewDesignToggle[hidden],
 #btnPreviewAnnotationsToggle[hidden],
