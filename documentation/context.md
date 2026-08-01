@@ -462,6 +462,8 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app → Providers. C
 
 `fetchModels()` loads all enabled providers. Main chat streams via generations API; `postChatCompletions` shim for headless/sub-agents.
 
+**My Models local scan:** Hugging Face hub cache, `~/.minnow/models/artifacts`, and **extra folders** (`config.models.modelDirs`, Models → Storage) are merged in [`server/models/cached.js`](../server/models/cached.js). LM Studio–style trees (`<root>/<publisher>/<ModelFolder>/*.gguf`) emit one row per model folder; flat layouts (`<root>/<modelName>/*.gguf`) still work. `blobs` / `manifests` under a publisher are ignored.
+
 **Fallback chains:** `config.json` → `fallbackChains` — sequential retry before first upstream byte ([`server/generations/fallback.js`](../server/generations/fallback.js)).
 
 **Constrained decoding:** optional `response_format` JSON Schema on tool turns when provider supports it.
