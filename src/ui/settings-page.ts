@@ -103,6 +103,13 @@ function writeSettingsHash(slug: string): void {
   }
 }
 
+/** Dock/window shell: hide in-app back (Brain pattern); OS titlebar owns close. */
+function syncSettingsWindowChrome(): void {
+  document
+    .getElementById('btnSettingsPageBack')
+    ?.classList.toggle('hidden', isOsEmbedded());
+}
+
 /** Parse `#/settings/<category|legacy-area>`. */
 function parseHashRoute(): {
   category: SettingsCategoryId;
@@ -379,6 +386,7 @@ export function openSettings(
   }
 
   root.classList.add('is-open');
+  syncSettingsWindowChrome();
   if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     document.querySelector('header.topbar')?.classList.add('hidden');
@@ -489,6 +497,7 @@ export function initSettingsPage(): void {
   if (root && isOsEmbedded()) {
     root.classList.add('settings-page--os-embedded');
   }
+  syncSettingsWindowChrome();
 
   registerWindowTeardown('settings', () => closeSettings({ skipNavigate: true }));
   upgradeSettingsCheckboxes();

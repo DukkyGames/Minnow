@@ -286,6 +286,25 @@ html.minnow-os-enabled .mn-os-window-body .brain-page.is-open {
   min-height: 44px;
 }
 
+/* Settings window: floating header inset matches Brain overlay chrome (titlebar control padding). */
+.mn-os-window-body > .settings-page--os-embedded .settings-page-header {
+  margin: 8px 10px 0;
+  padding: 9px 14px;
+  min-height: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: var(--shadow-card);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .mn-os-window-body > .settings-page--os-embedded .settings-page-header {
+    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
 /* Stage: blur desktop only for fullscreen / legacy layer apps */
 .mn-os-stage.is-in-app-fullscreen .mn-os-desktop-layer {
   transform: scale(0.965);
