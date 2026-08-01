@@ -2,6 +2,9 @@
  * Models → Voice — runtime, STT catalog/downloads/settings, TTS shell.
  */
 
+import '../../styles/settings-general.css';
+import '../../styles/settings-voice.css';
+
 import { loadVoiceMeta, saveVoiceMeta, type VoiceConfig, type VoiceTtsLocalConfig } from '../../config/voice-meta';
 import { fetchHardware } from '../../models/hardware-client';
 import type { HardwareSnapshot } from '../../models/types';
@@ -48,6 +51,8 @@ import {
 } from '../../voice/settings-form';
 import { analyzeSttFit, analyzeTtsFit, VOICE_FIT_BADGE_CLASS } from '../../voice/voice-fit';
 import { fetchSttStatus, fetchTtsStatus, synthesizeSpeech } from '../voice-controls';
+import { createSettingsActionsRow } from '../settings-controls';
+import { appendSettingsCrosslinks, appendSettingsGroup } from '../settings-layout';
 
 type VoiceSubSection = 'stt' | 'tts';
 
@@ -75,6 +80,18 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+function voiceActionButton(label: string, variant?: 'primary'): HTMLButtonElement {
+  const btn = el(
+    'button',
+    variant === 'primary'
+      ? 'settings-action-btn settings-action-btn--primary'
+      : 'settings-action-btn',
+    label,
+  );
+  btn.type = 'button';
+  return btn;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -84,8 +101,8 @@ function formatBytes(bytes: number): string {
 
 function setActiveSubSection(sub: VoiceSubSection): void {
   activeSub = sub;
-  document.getElementById('modelsVoiceSttPanel')?.classList.toggle('is-active', sub === 'stt');
-  document.getElementById('modelsVoiceTtsPanel')?.classList.toggle('is-active', sub === 'tts');
+  document.getElementById('modelsVoiceSttPanel')?.toggleAttribute('hidden', sub !== 'stt');
+  document.getElementById('modelsVoiceTtsPanel')?.toggleAttribute('hidden', sub !== 'tts');
   for (const id of ['stt', 'tts'] as const) {
     const tab = document.querySelector(`[data-voice-subnav="${id}"]`);
     const selected = id === sub;
@@ -114,16 +131,16 @@ function healthLabel(health: VoiceRuntimeHealth): string {
 function runtimeHealthDotClass(health: VoiceRuntimeHealth): string {
   switch (health) {
     case 'ready':
-      return 'models-voice-runtime__dot--ready';
+      return 'settings-voice-runtime__dot--ready';
     case 'installing':
     case 'starting':
-      return 'models-voice-runtime__dot--busy';
+      return 'settings-voice-runtime__dot--busy';
     case 'error':
-      return 'models-voice-runtime__dot--error';
+      return 'settings-voice-runtime__dot--error';
     case 'stopped':
-      return 'models-voice-runtime__dot--stopped';
+      return 'settings-voice-runtime__dot--stopped';
     default:
-      return 'models-voice-runtime__dot--idle';
+      return 'settings-voice-runtime__dot--idle';
   }
 }
 
@@ -139,20 +156,20 @@ function runtimeUsesCuda(): boolean {
 }
 
 function updateRuntimeCardUi(): void {
-  const card = document.querySelector('.models-voice-runtime');
+  const card = document.getElementById('modelsVoiceRuntime');
   if (!card || !runtimeStatus) return;
 
-  const dotEl = card.querySelector('.models-voice-runtime__dot');
-  const statusEl = card.querySelector('.models-voice-runtime__status');
-  const detailEl = card.querySelector('.models-voice-runtime__detail');
-  const progressEl = card.querySelector('.models-voice-runtime__progress');
+  const dotEl = card.querySelector('.settings-voice-runtime__dot');
+  const statusEl = card.querySelector('.settings-voice-runtime__status');
+  const detailEl = card.querySelector('.settings-voice-runtime__detail');
+  const progressEl = card.querySelector('.settings-voice-runtime__progress');
   const installBtn = card.querySelector('[data-voice-action="install"]') as HTMLButtonElement | null;
   const repairBtn = card.querySelector('[data-voice-action="repair"]') as HTMLButtonElement | null;
   const startBtn = card.querySelector('[data-voice-action="start"]') as HTMLButtonElement | null;
   const stopBtn = card.querySelector('[data-voice-action="stop"]') as HTMLButtonElement | null;
 
   if (dotEl) {
-    dotEl.className = `models-voice-runtime__dot ${runtimeHealthDotClass(runtimeStatus.health)}`;
+    dotEl.className = `settings-voice-runtime__dot ${runtimeHealthDotClass(runtimeStatus.health)}`;
   }
 
   if (statusEl) {
@@ -194,11 +211,11 @@ function updateRuntimeCardUi(): void {
 
   if (installBtn) {
     installBtn.disabled = installing || installed;
-    installBtn.classList.toggle('is-hidden', installed);
+    installBtn.hidden = installed;
   }
   if (repairBtn) {
     repairBtn.disabled = installing;
-    repairBtn.classList.toggle('is-hidden', !installed);
+    repairBtn.hidden = !installed;
   }
   if (startBtn) startBtn.disabled = installing || !installed || running;
   if (stopBtn) stopBtn.disabled = installing || !running;
@@ -248,80 +265,80 @@ function beginInstallProgressStream(): void {
 }
 
 function renderRuntimeCard(mount: HTMLElement): void {
-  const card = el('section', 'models-voice-runtime');
+  const card = el('div', 'settings-voice-runtime');
+  card.id = 'modelsVoiceRuntime';
   card.dataset.settingsSearchKey = 'models.voice.runtime';
-  card.setAttribute('aria-label', 'Python voice runtime');
 
-  const main = el('div', 'models-voice-runtime__main');
-  const identity = el('div', 'models-voice-runtime__identity');
-  identity.append(
-    el('span', 'models-voice-runtime__dot models-voice-runtime__dot--idle'),
-    el('span', 'models-voice-runtime__title', 'Python voice runtime'),
-    el('span', 'models-voice-runtime__status', 'Not installed'),
+  const statusRow = el('div', 'settings-voice-runtime__status-row');
+  statusRow.append(
+    el('span', 'settings-voice-runtime__dot settings-voice-runtime__dot--idle'),
+    el('span', 'settings-voice-runtime__label', 'Worker status'),
+    el('span', 'settings-voice-runtime__status', 'Not installed'),
   );
-  main.appendChild(identity);
-  main.appendChild(
-    el('span', 'models-voice-runtime__detail', 'Whisper STT and Qwen3-TTS worker'),
+  card.appendChild(statusRow);
+  card.appendChild(
+    el('p', 'settings-voice-runtime__detail', 'Whisper STT and Qwen3-TTS worker'),
   );
 
-  const progressWrap = el('div', 'models-voice-runtime__progress is-hidden');
+  const progressWrap = el('div', 'settings-voice-runtime__progress is-hidden');
   const progress = el('div', 'models-download-progress');
   const bar = el('div', 'models-download-progress__bar');
   bar.style.width = '0%';
   progress.append(bar, el('span', 'models-download-progress__label', ''));
   progressWrap.appendChild(progress);
-  main.appendChild(progressWrap);
-  card.appendChild(main);
+  card.appendChild(progressWrap);
 
-  const actions = el('div', 'models-voice-runtime__actions');
-  const installBtn = el('button', 'models-inline-btn is-primary', 'Install');
-  installBtn.type = 'button';
-  installBtn.dataset.voiceAction = 'install';
-  installBtn.addEventListener('click', () => {
-    void (async () => {
-      beginInstallProgressStream();
-      await installRuntime();
-      await refreshRuntimeStatus();
-    })();
-  });
-  actions.appendChild(installBtn);
+  card.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Install',
+          variant: 'primary',
+          dataset: { voiceAction: 'install' },
+          onClick: () => {
+            void (async () => {
+              beginInstallProgressStream();
+              await installRuntime();
+              await refreshRuntimeStatus();
+            })();
+          },
+        },
+        {
+          label: 'Repair',
+          dataset: { voiceAction: 'repair' },
+          onClick: () => {
+            void (async () => {
+              beginInstallProgressStream();
+              await repairRuntime();
+              await refreshRuntimeStatus();
+            })();
+          },
+        },
+        {
+          label: 'Start',
+          dataset: { voiceAction: 'start' },
+          onClick: () => {
+            void (async () => {
+              await startVoiceWorker();
+              await refreshRuntimeStatus();
+            })();
+          },
+        },
+        {
+          label: 'Stop',
+          dataset: { voiceAction: 'stop' },
+          onClick: () => {
+            void (async () => {
+              await stopVoiceWorker();
+              await refreshRuntimeStatus();
+            })();
+          },
+        },
+      ],
+      { searchKey: 'models.voice.runtime.actions' },
+    ),
+  );
 
-  const repairBtn = el('button', 'models-inline-btn', 'Repair');
-  repairBtn.type = 'button';
-  repairBtn.dataset.voiceAction = 'repair';
-  repairBtn.classList.add('is-hidden');
-  repairBtn.addEventListener('click', () => {
-    void (async () => {
-      beginInstallProgressStream();
-      await repairRuntime();
-      await refreshRuntimeStatus();
-    })();
-  });
-  actions.appendChild(repairBtn);
-
-  const startBtn = el('button', 'models-inline-btn', 'Start');
-  startBtn.type = 'button';
-  startBtn.dataset.voiceAction = 'start';
-  startBtn.addEventListener('click', () => {
-    void (async () => {
-      await startVoiceWorker();
-      await refreshRuntimeStatus();
-    })();
-  });
-  actions.appendChild(startBtn);
-
-  const stopBtn = el('button', 'models-inline-btn', 'Stop');
-  stopBtn.type = 'button';
-  stopBtn.dataset.voiceAction = 'stop';
-  stopBtn.addEventListener('click', () => {
-    void (async () => {
-      await stopVoiceWorker();
-      await refreshRuntimeStatus();
-    })();
-  });
-  actions.appendChild(stopBtn);
-
-  card.appendChild(actions);
   mount.appendChild(card);
 }
 
@@ -379,11 +396,12 @@ function renderDownloadProgress(job: VoiceDownloadJob): HTMLElement {
 
 function renderCatalogRowActions(
   row: HTMLElement,
+  main: HTMLElement,
   entry: { modelId: string },
   kind: 'stt' | 'tts',
   installed: boolean,
 ): void {
-  const actions = el('div', 'models-voice-row__actions');
+  const actions = el('div', 'settings-voice-catalog-item__actions');
   const activeJob = [...activeDownloads.values()].find(
     (j) =>
       j.modelId === entry.modelId &&
@@ -393,19 +411,16 @@ function renderCatalogRowActions(
 
   if (activeJob) {
     ensureDownloadSubscription(activeJob);
-    const main = row.querySelector('.models-voice-row__main');
+    const main = row.querySelector('.settings-voice-catalog-item__main');
     if (main) main.appendChild(renderDownloadProgress(activeJob));
-    const cancelBtn = el('button', 'models-inline-btn', 'Cancel');
-    cancelBtn.type = 'button';
+    const cancelBtn = voiceActionButton('Cancel');
     cancelBtn.addEventListener('click', () => {
       void cancelVoiceDownload(activeJob.id).then(() => refreshVoicePanelUi());
     });
     actions.appendChild(cancelBtn);
   } else {
-    const downloadBtn = el('button', 'models-inline-btn', installed ? 'Installed' : 'Download');
-    downloadBtn.type = 'button';
+    const downloadBtn = voiceActionButton(installed ? 'Installed' : 'Download', installed ? undefined : 'primary');
     downloadBtn.disabled = installed;
-    if (installed) downloadBtn.classList.add('is-installed');
     downloadBtn.addEventListener('click', () => {
       void (async () => {
         try {
@@ -425,11 +440,11 @@ function renderCatalogRowActions(
 }
 
 function renderSttCatalogRow(entry: (typeof STT_CATALOG)[number]): HTMLElement {
-  const row = el('article', 'models-voice-row');
+  const row = el('li', 'settings-entity-list__item settings-voice-catalog-item');
   const fit = hardware ? analyzeSttFit(entry, hardware) : null;
-  const main = el('div', 'models-voice-row__main');
-  const head = el('div', 'models-voice-row__head');
-  head.append(el('span', 'models-voice-row__name', entry.label));
+  const main = el('div', 'settings-voice-catalog-item__main');
+  const head = el('div', 'settings-voice-catalog-item__head');
+  head.append(el('span', 'settings-voice-catalog-item__name', entry.label));
   if (fit) {
     head.append(
       el('span', `models-fit-badge ${VOICE_FIT_BADGE_CLASS[fit.fitLevel]}`, fit.label),
@@ -439,52 +454,46 @@ function renderSttCatalogRow(entry: (typeof STT_CATALOG)[number]): HTMLElement {
   }
   main.appendChild(head);
   main.appendChild(
-    el('p', 'models-voice-row__meta', `${entry.modelId} · ${entry.params}`),
+    el('p', 'settings-voice-catalog-item__meta', `${entry.modelId} · ${entry.params}`),
   );
   row.appendChild(main);
 
   const installed = isModelInstalled(entry.modelId, 'stt');
-  renderCatalogRowActions(row, entry, 'stt', installed);
+  renderCatalogRowActions(row, main, entry, 'stt', installed);
   return row;
 }
 
 function renderInstalledList(): HTMLElement {
-  const section = el('section', 'models-voice-zone models-voice-installed');
-  section.appendChild(el('h4', 'models-section-subtitle', 'Installed'));
-  const list = el('div', 'models-voice-list models-voice-list--installed');
+  const list = el('ul', 'settings-entity-list');
   const rows = installedManifest?.stt ?? [];
   if (!rows.length) {
-    list.appendChild(el('p', 'models-voice-empty', 'No Whisper models downloaded yet.'));
-  } else {
-    for (const row of rows) {
-      const item = el('article', 'models-voice-row models-voice-row--installed');
-      const main = el('div', 'models-voice-row__main');
-      const head = el('div', 'models-voice-row__head');
-      head.append(el('span', 'models-voice-row__name', row.modelId));
-      if (row.sizeBytes) {
-        head.append(el('span', 'models-fit-badge', formatBytes(row.sizeBytes)));
-      }
-      main.appendChild(head);
-      item.appendChild(main);
-
-      const actions = el('div', 'models-voice-row__actions');
-      const useBtn = el('button', 'models-inline-btn is-primary', 'Use');
-      useBtn.type = 'button';
-      useBtn.addEventListener('click', () => {
-        void applySttModelSelection(row.modelId);
-      });
-      const delBtn = el('button', 'models-inline-btn', 'Delete');
-      delBtn.type = 'button';
-      delBtn.addEventListener('click', () => {
-        void deleteVoiceModel('stt', row.modelId).then(() => refreshInstalledManifest());
-      });
-      actions.append(useBtn, delBtn);
-      item.appendChild(actions);
-      list.appendChild(item);
-    }
+    return el('p', 'settings-field-hint', 'No Whisper models downloaded yet.');
   }
-  section.appendChild(list);
-  return section;
+  for (const row of rows) {
+    const item = el('li', 'settings-entity-list__item settings-voice-catalog-item');
+    const main = el('div', 'settings-voice-catalog-item__main');
+    const head = el('div', 'settings-voice-catalog-item__head');
+    head.append(el('span', 'settings-voice-catalog-item__name', row.modelId));
+    if (row.sizeBytes) {
+      head.append(el('span', 'models-fit-badge', formatBytes(row.sizeBytes)));
+    }
+    main.appendChild(head);
+    item.appendChild(main);
+
+    const actions = el('div', 'settings-voice-catalog-item__actions');
+    const useBtn = voiceActionButton('Use', 'primary');
+    useBtn.addEventListener('click', () => {
+      void applySttModelSelection(row.modelId);
+    });
+    const delBtn = voiceActionButton('Delete');
+    delBtn.addEventListener('click', () => {
+      void deleteVoiceModel('stt', row.modelId).then(() => refreshInstalledManifest());
+    });
+    actions.append(useBtn, delBtn);
+    item.appendChild(actions);
+    list.appendChild(item);
+  }
+  return list;
 }
 
 async function applySttModelSelection(modelId: string): Promise<void> {
@@ -680,62 +689,83 @@ async function runMicTest(): Promise<void> {
 }
 
 function mountSttPanel(panel: HTMLElement): void {
-  const header = el('header', 'models-voice-panel__header');
-  header.append(
-    el('h3', 'models-voice-panel__title', 'Speech-to-text'),
-    el('span', 'models-voice-active-chip', ''),
+  const summary = el('p', 'settings-voice-panel-summary');
+  summary.id = 'modelsVoiceSttBackendSummary';
+  panel.appendChild(summary);
+
+  const catalogBody = appendSettingsGroup(
+    panel,
+    'Catalog',
+    'Download a Whisper model sized for your GPU.',
+    'models.voice.stt.catalog',
+    { emphasis: true },
   );
-  const chip = header.querySelector('.models-voice-active-chip');
-  if (chip) chip.id = 'modelsVoiceSttBackendSummary';
-  panel.appendChild(header);
-
-  const catalogZone = el('section', 'models-voice-zone');
-  catalogZone.appendChild(el('h4', 'models-section-subtitle', 'Catalog'));
-  const catalogMount = el('div', 'models-voice-list');
+  const catalogMount = el('ul', 'settings-entity-list');
   catalogMount.id = 'modelsVoiceSttCatalog';
-  catalogZone.appendChild(catalogMount);
-  panel.appendChild(catalogZone);
+  catalogBody.appendChild(catalogMount);
 
-  panel.appendChild(renderInstalledList());
+  const installedBody = appendSettingsGroup(
+    panel,
+    'Installed',
+    undefined,
+    'models.voice.stt.installed',
+    { emphasis: true },
+  );
+  const installedMount = el('div');
+  installedMount.id = 'modelsVoiceSttInstalledMount';
+  installedBody.appendChild(installedMount);
 
-  const configZone = el('section', 'models-voice-zone models-voice-zone--config');
-  configZone.appendChild(el('h4', 'models-section-subtitle', 'Configuration'));
-  const settingsShell = el('div', 'models-voice-settings-shell');
+  const configBody = appendSettingsGroup(
+    panel,
+    'Configuration',
+    'Backend, decoding options, and provider overrides.',
+    'models.voice.stt.config',
+    { emphasis: true },
+  );
+  const settingsShell = el('div', 'settings-voice-form-shell');
   settingsShell.id = 'modelsVoiceSttSettings';
-  configZone.appendChild(settingsShell);
-  panel.appendChild(configZone);
+  configBody.appendChild(settingsShell);
 
-  const benchZone = el('section', 'models-voice-zone models-voice-zone--bench');
-  benchZone.appendChild(el('h4', 'models-section-subtitle', 'Test bench'));
-  const actions = el('div', 'models-voice-bench');
-  const saveBtn = el('button', 'models-inline-btn is-primary', 'Save settings');
-  saveBtn.type = 'button';
-  saveBtn.addEventListener('click', () => {
-    void saveSttSettings();
-  });
-  actions.appendChild(saveBtn);
+  const benchBody = appendSettingsGroup(
+    panel,
+    'Test bench',
+    'Save settings, then record a short clip to verify transcription.',
+    'models.voice.stt.bench',
+    { emphasis: true },
+  );
+  benchBody.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Save settings',
+          variant: 'primary',
+          onClick: () => {
+            void saveSttSettings();
+          },
+        },
+        {
+          label: 'Test mic',
+          id: 'modelsVoiceSttTestMic',
+          onClick: () => {
+            void runMicTest();
+          },
+        },
+      ],
+      { searchKey: 'models.voice.stt.bench.actions' },
+    ),
+  );
 
-  const testBtn = el('button', 'models-inline-btn', 'Test mic');
-  testBtn.type = 'button';
-  testBtn.id = 'modelsVoiceSttTestMic';
-  testBtn.addEventListener('click', () => {
-    void runMicTest();
-  });
-  actions.appendChild(testBtn);
-  benchZone.appendChild(actions);
-
-  const resultEl = el('p', 'models-voice-bench__result field-hint', '');
+  const resultEl = el('p', 'settings-voice-bench-result settings-field-hint', '');
   resultEl.id = 'modelsVoiceSttTestResult';
-  benchZone.appendChild(resultEl);
-  panel.appendChild(benchZone);
+  benchBody.appendChild(resultEl);
 }
 
 function renderTtsCatalogRow(entry: (typeof TTS_CATALOG)[number]): HTMLElement {
-  const row = el('article', 'models-voice-row');
+  const row = el('li', 'settings-entity-list__item settings-voice-catalog-item');
   const fit = hardware ? analyzeTtsFit(entry, hardware) : null;
-  const main = el('div', 'models-voice-row__main');
-  const head = el('div', 'models-voice-row__head');
-  head.append(el('span', 'models-voice-row__name', entry.label));
+  const main = el('div', 'settings-voice-catalog-item__main');
+  const head = el('div', 'settings-voice-catalog-item__head');
+  head.append(el('span', 'settings-voice-catalog-item__name', entry.label));
   if (fit) {
     head.append(
       el('span', `models-fit-badge ${VOICE_FIT_BADGE_CLASS[fit.fitLevel]}`, fit.label),
@@ -745,52 +775,46 @@ function renderTtsCatalogRow(entry: (typeof TTS_CATALOG)[number]): HTMLElement {
   }
   main.appendChild(head);
   main.appendChild(
-    el('p', 'models-voice-row__meta', `${entry.modelId} · ${entry.params}`),
+    el('p', 'settings-voice-catalog-item__meta', `${entry.modelId} · ${entry.params}`),
   );
   row.appendChild(main);
 
   const installed = isModelInstalled(entry.modelId, 'tts');
-  renderCatalogRowActions(row, entry, 'tts', installed);
+  renderCatalogRowActions(row, main, entry, 'tts', installed);
   return row;
 }
 
 function renderTtsInstalledList(): HTMLElement {
-  const section = el('section', 'models-voice-zone models-voice-installed models-voice-installed--tts');
-  section.appendChild(el('h4', 'models-section-subtitle', 'Installed'));
-  const list = el('div', 'models-voice-list models-voice-list--installed');
+  const list = el('ul', 'settings-entity-list');
   const rows = (installedManifest?.tts ?? []).filter((row) => row.mode !== 'tokenizer');
   if (!rows.length) {
-    list.appendChild(el('p', 'models-voice-empty', 'No Qwen3-TTS models downloaded yet.'));
-  } else {
-    for (const row of rows) {
-      const item = el('article', 'models-voice-row models-voice-row--installed');
-      const main = el('div', 'models-voice-row__main');
-      const head = el('div', 'models-voice-row__head');
-      head.append(el('span', 'models-voice-row__name', row.modelId));
-      if (row.sizeBytes) {
-        head.append(el('span', 'models-fit-badge', formatBytes(row.sizeBytes)));
-      }
-      main.appendChild(head);
-      item.appendChild(main);
-
-      const actions = el('div', 'models-voice-row__actions');
-      const useBtn = el('button', 'models-inline-btn is-primary', 'Use');
-      useBtn.type = 'button';
-      useBtn.addEventListener('click', () => {
-        void applyTtsModelSelection(row.modelId);
-      });
-      const delBtn = el('button', 'models-inline-btn', 'Delete');
-      delBtn.type = 'button';
-      delBtn.addEventListener('click', () => {
-        void deleteVoiceModel('tts', row.modelId).then(() => refreshInstalledManifest());
-      });
-      actions.append(useBtn, delBtn);
-      item.appendChild(actions);
-      list.appendChild(item);
-    }
+    return el('p', 'settings-field-hint', 'No Qwen3-TTS models downloaded yet.');
   }
-  section.appendChild(list);
-  return section;
+  for (const row of rows) {
+    const item = el('li', 'settings-entity-list__item settings-voice-catalog-item');
+    const main = el('div', 'settings-voice-catalog-item__main');
+    const head = el('div', 'settings-voice-catalog-item__head');
+    head.append(el('span', 'settings-voice-catalog-item__name', row.modelId));
+    if (row.sizeBytes) {
+      head.append(el('span', 'models-fit-badge', formatBytes(row.sizeBytes)));
+    }
+    main.appendChild(head);
+    item.appendChild(main);
+
+    const actions = el('div', 'settings-voice-catalog-item__actions');
+    const useBtn = voiceActionButton('Use', 'primary');
+    useBtn.addEventListener('click', () => {
+      void applyTtsModelSelection(row.modelId);
+    });
+    const delBtn = voiceActionButton('Delete');
+    delBtn.addEventListener('click', () => {
+      void deleteVoiceModel('tts', row.modelId).then(() => refreshInstalledManifest());
+    });
+    actions.append(useBtn, delBtn);
+    item.appendChild(actions);
+    list.appendChild(item);
+  }
+  return list;
 }
 
 async function applyTtsModelSelection(modelId: string): Promise<void> {
@@ -960,64 +984,84 @@ async function runTtsVoiceTest(): Promise<void> {
 }
 
 function mountTtsPanel(panel: HTMLElement): void {
-  const header = el('header', 'models-voice-panel__header');
-  header.append(
-    el('h3', 'models-voice-panel__title', 'Text-to-speech'),
-    el('span', 'models-voice-active-chip', ''),
+  const summary = el('p', 'settings-voice-panel-summary');
+  summary.id = 'modelsVoiceTtsBackendSummary';
+  panel.appendChild(summary);
+
+  const catalogBody = appendSettingsGroup(
+    panel,
+    'Catalog',
+    'Download a Qwen3-TTS checkpoint for local read-aloud.',
+    'models.voice.tts.catalog',
+    { emphasis: true },
   );
-  const chip = header.querySelector('.models-voice-active-chip');
-  if (chip) chip.id = 'modelsVoiceTtsBackendSummary';
-  panel.appendChild(header);
-
-  const catalogZone = el('section', 'models-voice-zone');
-  catalogZone.appendChild(el('h4', 'models-section-subtitle', 'Catalog'));
-  const catalogMount = el('div', 'models-voice-list');
+  const catalogMount = el('ul', 'settings-entity-list');
   catalogMount.id = 'modelsVoiceTtsCatalog';
-  catalogZone.appendChild(catalogMount);
-  panel.appendChild(catalogZone);
+  catalogBody.appendChild(catalogMount);
 
-  const installedPlaceholder = el('div');
-  installedPlaceholder.id = 'modelsVoiceTtsInstalledMount';
-  panel.appendChild(installedPlaceholder);
+  const installedBody = appendSettingsGroup(
+    panel,
+    'Installed',
+    undefined,
+    'models.voice.tts.installed',
+    { emphasis: true },
+  );
+  const installedMount = el('div');
+  installedMount.id = 'modelsVoiceTtsInstalledMount';
+  installedBody.appendChild(installedMount);
 
-  const configZone = el('section', 'models-voice-zone models-voice-zone--config');
-  configZone.appendChild(el('h4', 'models-section-subtitle', 'Configuration'));
-  const settingsShell = el('div', 'models-voice-settings-shell');
+  const configBody = appendSettingsGroup(
+    panel,
+    'Configuration',
+    'Backend, voice mode, and synthesis parameters.',
+    'models.voice.tts.config',
+    { emphasis: true },
+  );
+  const settingsShell = el('div', 'settings-voice-form-shell');
   settingsShell.id = 'modelsVoiceTtsSettings';
-  configZone.appendChild(settingsShell);
-  panel.appendChild(configZone);
+  configBody.appendChild(settingsShell);
 
-  const benchZone = el('section', 'models-voice-zone models-voice-zone--bench');
-  benchZone.appendChild(el('h4', 'models-section-subtitle', 'Test bench'));
-  const actions = el('div', 'models-voice-bench');
-  const saveBtn = el('button', 'models-inline-btn is-primary', 'Save settings');
-  saveBtn.type = 'button';
-  saveBtn.addEventListener('click', () => {
-    void saveTtsSettings();
-  });
-  actions.appendChild(saveBtn);
+  const benchBody = appendSettingsGroup(
+    panel,
+    'Test bench',
+    'Save settings, then play a short sample phrase.',
+    'models.voice.tts.bench',
+    { emphasis: true },
+  );
 
-  const testInput = el('input', 'models-voice-bench__input');
+  const testInput = el('input', 'settings-input settings-voice-bench-input');
   testInput.type = 'text';
   testInput.id = 'modelsVoiceTtsTestText';
   testInput.value = 'Hello from Minnow voice.';
   testInput.placeholder = 'Sample phrase';
   testInput.setAttribute('aria-label', 'Sample text for voice test');
-  actions.appendChild(testInput);
+  benchBody.appendChild(testInput);
 
-  const testBtn = el('button', 'models-inline-btn', 'Test voice');
-  testBtn.type = 'button';
-  testBtn.id = 'modelsVoiceTtsTestBtn';
-  testBtn.addEventListener('click', () => {
-    void runTtsVoiceTest();
-  });
-  actions.appendChild(testBtn);
-  benchZone.appendChild(actions);
+  benchBody.appendChild(
+    createSettingsActionsRow(
+      [
+        {
+          label: 'Save settings',
+          variant: 'primary',
+          onClick: () => {
+            void saveTtsSettings();
+          },
+        },
+        {
+          label: 'Test voice',
+          id: 'modelsVoiceTtsTestBtn',
+          onClick: () => {
+            void runTtsVoiceTest();
+          },
+        },
+      ],
+      { searchKey: 'models.voice.tts.bench.actions' },
+    ),
+  );
 
-  const resultEl = el('p', 'models-voice-bench__result field-hint', '');
+  const resultEl = el('p', 'settings-voice-bench-result settings-field-hint', '');
   resultEl.id = 'modelsVoiceTtsTestResult';
-  benchZone.appendChild(resultEl);
-  panel.appendChild(benchZone);
+  benchBody.appendChild(resultEl);
 }
 
 async function refreshInstalledManifest(): Promise<void> {
@@ -1036,9 +1080,9 @@ async function refreshVoicePanelUi(): Promise<void> {
     for (const entry of STT_CATALOG) {
       sttCatalogMount.appendChild(renderSttCatalogRow(entry));
     }
-    const sttInstalled = document.querySelector('.models-voice-installed:not(.models-voice-installed--tts)');
-    if (sttInstalled?.parentElement) {
-      sttInstalled.replaceWith(renderInstalledList());
+    const sttInstalledMount = document.getElementById('modelsVoiceSttInstalledMount');
+    if (sttInstalledMount) {
+      sttInstalledMount.replaceChildren(renderInstalledList());
     }
   }
 
@@ -1090,39 +1134,57 @@ export function mountVoicePanel(): void {
   mounted = true;
 
   body.replaceChildren();
-  renderRuntimeCard(body);
+  const shell = el('div', 'settings-general settings-voice');
+  body.appendChild(shell);
 
-  const subnav = el('nav', 'models-voice-tabs');
-  subnav.setAttribute('role', 'tablist');
-  subnav.setAttribute('aria-label', 'Voice STT and TTS');
+  const runtimeBody = appendSettingsGroup(
+    shell,
+    'Python voice runtime',
+    'Install and start the local worker used for Whisper and Qwen3-TTS.',
+    'models.voice.runtime',
+    { emphasis: true },
+  );
+  renderRuntimeCard(runtimeBody);
+
+  const tabs = el('div', 'settings-profile-tabs');
+  tabs.setAttribute('role', 'tablist');
+  tabs.setAttribute('aria-label', 'Speech-to-text and text-to-speech');
   for (const id of ['stt', 'tts'] as const) {
-    const btn = el('button', 'models-voice-tabs__tab', id === 'stt' ? 'Speech-to-text' : 'Text-to-speech');
+    const btn = el(
+      'button',
+      'settings-profile-tab',
+      id === 'stt' ? 'Speech-to-text' : 'Text-to-speech',
+    );
     btn.type = 'button';
     btn.id = id === 'stt' ? 'modelsVoiceTabStt' : 'modelsVoiceTabTts';
     btn.role = 'tab';
     btn.dataset.voiceSubnav = id;
     btn.setAttribute('aria-controls', id === 'stt' ? 'modelsVoiceSttPanel' : 'modelsVoiceTtsPanel');
     btn.addEventListener('click', () => setActiveSubSection(id));
-    subnav.appendChild(btn);
+    tabs.appendChild(btn);
   }
-  body.appendChild(subnav);
+  shell.appendChild(tabs);
 
-  const panels = el('div', 'models-voice-panels');
-  const sttPanel = el('section', 'models-voice-panel is-active');
+  const content = el('div', 'settings-general__content settings-voice-panels');
+  const sttPanel = el('section', 'settings-voice-panel');
   sttPanel.id = 'modelsVoiceSttPanel';
   sttPanel.role = 'tabpanel';
   sttPanel.setAttribute('aria-labelledby', 'modelsVoiceTabStt');
   mountSttPanel(sttPanel);
-  panels.appendChild(sttPanel);
+  content.appendChild(sttPanel);
 
-  const ttsPanel = el('section', 'models-voice-panel');
+  const ttsPanel = el('section', 'settings-voice-panel');
   ttsPanel.id = 'modelsVoiceTtsPanel';
   ttsPanel.role = 'tabpanel';
+  ttsPanel.hidden = true;
   ttsPanel.setAttribute('aria-labelledby', 'modelsVoiceTabTts');
   mountTtsPanel(ttsPanel);
-  panels.appendChild(ttsPanel);
+  content.appendChild(ttsPanel);
 
-  body.appendChild(panels);
+  shell.appendChild(content);
+
+  appendSettingsCrosslinks(shell, [{ label: 'Audio devices', sectionId: 'audio' }]);
+
   setActiveSubSection(activeSub);
 
   void (async () => {
