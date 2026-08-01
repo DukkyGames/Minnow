@@ -5,15 +5,19 @@
 import { getFilePanelState } from '../state/file-panel';
 import {
   focusPaneSlot,
-  getFocusedPaneSlot,
   isRightPaneSplitLayoutEnabled,
   openTabToRightPane,
+  otherPaneSlot,
 } from './right-pane-split';
 import {
   activePreviewIdForSlot,
   activeViewerPathForSlot,
   getSlotPaneTabs,
+  moveViewerTabToSlot,
+  movePreviewTabToSlot,
   previewIdsForSlot,
+  slotOwningPreviewId,
+  slotOwningViewerPath,
   viewerPathsForSlot,
 } from './right-pane-slot-tabs';
 import {
@@ -103,6 +107,28 @@ function scrollActiveTabIntoView(slot: PaneSlotId): void {
   }
 }
 
+/**
+ * Accept a tab dragged from the other pane's strip.
+ * Returns true when the drop was a cross-pane move (reordering is then skipped).
+ */
+function acceptCrossSlotDrop(raw: string, slot: PaneSlotId): boolean {
+  if (!isRightPaneSplitLayoutEnabled()) return false;
+  if (raw.startsWith('file:')) {
+    const path = raw.slice(5);
+    if (!path || slotOwningViewerPath(path) === slot) return false;
+    moveViewerTabToSlot(path, slot);
+  } else if (raw.startsWith('preview:')) {
+    const id = raw.slice(8);
+    if (!id || slotOwningPreviewId(id) === slot) return false;
+    movePreviewTabToSlot(id, slot);
+  } else {
+    return false;
+  }
+  focusPaneSlot(slot);
+  refreshUnifiedRightTabs();
+  return true;
+}
+
 function tabDropIndex(container: HTMLElement, clientX: number, selector: string): number {
   const tabs = [...container.querySelectorAll<HTMLElement>(selector)];
   for (let i = 0; i < tabs.length; i++) {
@@ -179,8 +205,16 @@ function appendFileTab(
         [
           { label: 'Close', action: () => void onFileTabClose(tab.path) },
           {
-            label: 'Open to the right',
-            action: () => openTabToRightPane('file', tab.path),
+            label: isRightPaneSplitLayoutEnabled() ? 'Move to other pane' : 'Open to the right',
+            action: () => {
+              if (isRightPaneSplitLayoutEnabled()) {
+                moveViewerTabToSlot(tab.path, otherPaneSlot(slot));
+                focusPaneSlot(otherPaneSlot(slot));
+                refreshUnifiedRightTabs();
+                return;
+              }
+              openTabToRightPane('file', tab.path);
+            },
           },
           {
             label: 'Close others',
@@ -230,9 +264,12 @@ function appendFileTab(
 
   tabEl.addEventListener('drop', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     clearDropIndicator(container, 'unified-tab--drop-before');
     const raw = e.dataTransfer?.getData('text/plain');
-    if (!raw?.startsWith('file:')) return;
+    if (!raw) return;
+    if (acceptCrossSlotDrop(raw, slot)) return;
+    if (!raw.startsWith('file:')) return;
     const fromPath = raw.slice(5);
     if (!fromPath || fromPath === tab.path) return;
     const toIndex = tabDropIndex(container, e.clientX, '.unified-tab--file');
@@ -316,9 +353,12 @@ function appendPreviewTab(
 
   tabEl.addEventListener('drop', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     clearDropIndicator(container, 'unified-tab--drop-before');
     const raw = e.dataTransfer?.getData('text/plain');
-    if (!raw?.startsWith('preview:')) return;
+    if (!raw) return;
+    if (acceptCrossSlotDrop(raw, slot)) return;
+    if (!raw.startsWith('preview:')) return;
     const fromId = raw.slice(8);
     if (!fromId || fromId === tab.id) return;
     const toIndex = tabDropIndex(container, e.clientX, '.unified-tab--preview');
@@ -328,9 +368,34 @@ function appendPreviewTab(
   container.appendChild(tabEl);
 }
 
+/** Whole-strip drop target so a tab can be dragged into an empty pane. */
+function bindStripDropZone(container: HTMLElement, slot: PaneSlotId): void {
+  if (container.dataset.dropZoneBound === '1') return;
+  container.dataset.dropZoneBound = '1';
+
+  container.addEventListener('dragover', (e) => {
+    if (!isRightPaneSplitLayoutEnabled()) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = 'move';
+    container.classList.add('unified-tabs--drop-target');
+  });
+  container.addEventListener('dragleave', (e) => {
+    if (e.target !== container) return;
+    container.classList.remove('unified-tabs--drop-target');
+  });
+  container.addEventListener('drop', (e) => {
+    container.classList.remove('unified-tabs--drop-target');
+    const raw = e.dataTransfer?.getData('text/plain');
+    if (!raw) return;
+    e.preventDefault();
+    acceptCrossSlotDrop(raw, slot);
+  });
+}
+
 function renderSlotTabStrip(slot: PaneSlotId): void {
   const container = getTabsContainer(slot);
   if (!container) return;
+  bindStripDropZone(container, slot);
 
   const slotViewerPaths = new Set(viewerPathsForSlot(slot));
   const slotPreviewIds = new Set(previewIdsForSlot(slot));
@@ -361,7 +426,9 @@ function renderSlotTabStrip(slot: PaneSlotId): void {
 
   const tabBar = getTabBarElement(slot);
   const hasTabs = fileTabs.length > 0 || previewTabs.length > 0;
-  tabBar?.classList.toggle('hidden', !hasTabs);
+  // While split, an empty group keeps its strip: it is the drop target and "+" affordance.
+  const keepVisible = isRightPaneSplitLayoutEnabled();
+  tabBar?.classList.toggle('hidden', !hasTabs && !keepVisible);
 
   scrollActiveTabIntoView(slot);
 }
@@ -370,7 +437,6 @@ function renderTabStrip(): void {
   renderSlotTabStrip('primary');
   if (isRightPaneSplitLayoutEnabled()) {
     renderSlotTabStrip('secondary');
-    getTabBarElement('secondary')?.classList.remove('hidden');
   } else {
     getTabBarElement('secondary')?.classList.add('hidden');
   }
@@ -384,11 +450,17 @@ export function bindUnifiedRightTabs(): void {
   onPreviewTabStoreChange(renderTabStrip);
   renderTabStrip();
 
-  const container = getTabsContainer('primary');
+  bindStripKeyboard('primary');
+  bindStripKeyboard('secondary');
+}
+
+/** Arrow / Ctrl+W / Ctrl+Tab within one group's strip. */
+function bindStripKeyboard(boundSlot: PaneSlotId): void {
+  const container = getTabsContainer(boundSlot);
   if (!container) return;
 
   container.addEventListener('keydown', (e) => {
-    const slot = isRightPaneSplitLayoutEnabled() ? getFocusedPaneSlot() : 'primary';
+    const slot = isRightPaneSplitLayoutEnabled() ? boundSlot : 'primary';
     const pathSet = new Set(viewerPathsForSlot(slot));
     const idSet = new Set(previewIdsForSlot(slot));
     const fileTabs = listViewerTabs().filter((t) => pathSet.has(t.path));

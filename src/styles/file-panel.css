@@ -207,6 +207,13 @@
   mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent 100%);
 }
 
+/* Drop target when a tab is dragged into the other pane's strip (including an empty one). */
+.unified-tabs--drop-target {
+  background: var(--mn-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--mn-accent);
+  border-radius: 6px;
+}
+
 .unified-tab {
   display: inline-flex;
   align-items: center;

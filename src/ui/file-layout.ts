@@ -17,7 +17,6 @@ import {
 } from './sidebar-resize';
 import {
   applyRightPaneSplitDom,
-  getFocusedPaneSlot,
   isRightPaneSplitActive,
   isRightPaneSplitLayoutEnabled,
 } from './right-pane-split';
@@ -349,17 +348,9 @@ export function showViewerSplit(): void {
   clearChatColumnDragCollapsed();
   const state = getFilePanelState();
   if (state.rightPaneMode === 'split' && state.rightPaneSplit.enabled) {
-    patchFilePanelState({
-      rightPaneSplit: {
-        ...state.rightPaneSplit,
-        primary: {
-          kind: 'viewer',
-          tabPath: state.activeViewerTab ?? state.openViewerTabs.at(-1) ?? null,
-        },
-      },
-      viewerOpen: true,
-      rightPaneMode: 'split',
-    });
+    // Slot content is derived from each group's own tab list — forcing the globally
+    // active file into the primary slot is what made a file open in both panes.
+    patchFilePanelState({ viewerOpen: true, rightPaneMode: 'split' });
     applyFileSidebarVisuals();
     return;
   }
@@ -401,24 +392,12 @@ export type ShowPreviewSplitOptions = {
 };
 
 /** Show preview pane; keeps file tabs in the unified strip. */
-export function showPreviewSplit(options?: ShowPreviewSplitOptions): void {
+export function showPreviewSplit(_options?: ShowPreviewSplitOptions): void {
   clearChatColumnDragCollapsed();
-  const state = getFilePanelState();
-  const tabId =
-    options?.tabId ?? state.activePreviewTab ?? state.previewTabs.at(-1)?.id ?? null;
 
   if (isRightPaneSplitLayoutEnabled()) {
-    const slot = options?.slot ?? getFocusedPaneSlot();
-    const previewContent = { kind: 'preview' as const, tabId };
-    patchFilePanelState({
-      rightPaneSplit: {
-        ...state.rightPaneSplit,
-        primary: slot === 'primary' ? previewContent : state.rightPaneSplit.primary,
-        secondary: slot === 'secondary' ? previewContent : state.rightPaneSplit.secondary,
-      },
-      viewerOpen: true,
-      rightPaneMode: 'split',
-    });
+    // Which slot shows the tab is decided by registerPreviewTabOpened ownership.
+    patchFilePanelState({ viewerOpen: true, rightPaneMode: 'split' });
     showRightPaneColumnDom();
     applyFileSidebarVisuals();
     scheduleElectronPreviewHostLayoutAfterSplitChange();

@@ -164,6 +164,25 @@ function setActiveInternal(path: string | null): void {
   });
 }
 
+/**
+ * Point the global "active tab" at a slot's active path when split focus moves.
+ *
+ * The active path doubles as "which tab keyboard/save commands act on", so it must
+ * follow the focused pane. Content stays keyed per tab, so this never loads anything.
+ */
+export function adoptActiveViewerTabPath(path: string | null): void {
+  const key = path ? tabKey(path) : null;
+  if (key !== null && !tabs.has(key)) return;
+  if (activeTabPath === key) return;
+  activeTabPath = key;
+  if (key) {
+    setActiveInternal(key);
+  } else {
+    patchFilePanelState({ activeViewerTab: null });
+  }
+  emitChange();
+}
+
 /** Snapshot editor buffer from the active tab before switching away. */
 export function snapshotActiveTabEditorContent(content: string, dirty: boolean): void {
   const tab = getActiveViewerTab();
@@ -200,8 +219,9 @@ export function updateActiveTabFromEditor(content: string, dirty: boolean): void
   }
 }
 
-export function markActiveTabSaved(content: string): void {
-  const tab = getActiveViewerTab();
+/** Adopt saved content as the clean baseline for a specific tab (split-safe). */
+export function markViewerTabSaved(path: string, content: string): void {
+  const tab = getViewerTab(path);
   if (!tab) return;
   // Keep baseline in CM's LF form so a no-op leave does not look dirty.
   const normalized = normalizeViewerDocText(content);
@@ -210,6 +230,7 @@ export function markActiveTabSaved(content: string): void {
   tab.isDirty = false;
   emitChange();
 }
+
 
 /** Apply load result to a specific tab (by path) so async loads cannot land on the wrong tab. */
 export function setViewerTabLoadState(
