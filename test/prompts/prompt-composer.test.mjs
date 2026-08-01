@@ -48,6 +48,8 @@ describe('prompt-composer', () => {
       'info',
       'skill',
       'memory',
+      'code-map',
+      'context-documents',
     ]);
   });
 

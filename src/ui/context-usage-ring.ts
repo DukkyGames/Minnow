@@ -102,6 +102,7 @@ function shouldApplyRefreshResult(generation: number, chatIdAtStart: string): bo
 }
 
 async function runRefresh(generation: number): Promise<void> {
+  if (!sessionState) return;
   const chat = getActiveChat();
   const chatIdAtStart = chat.id;
   try {
@@ -127,6 +128,7 @@ async function runRefresh(generation: number): Promise<void> {
 
 /** Recompute context ring immediately. */
 export function refreshContextUsageRing(): void {
+  if (!sessionState) return;
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;

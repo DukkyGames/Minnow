@@ -18,6 +18,7 @@ const {
 } = await import('../../src/ui/sidebar.ts');
 const { onActiveChatModelChange } = await import('../../src/ui/chat-model-ui.ts');
 const { readPersistedDefaultModelValue } = await import('../../src/ui/default-model.ts');
+const { resetContextUsageRingForTests } = await import('../../src/ui/context-usage-ring.ts');
 
 /** @type {import('happy-dom').Window | undefined} */
 let win;
@@ -67,6 +68,7 @@ function appendModelOption(select, providerId, modelId, label = modelId) {
 describe('model select active chat binding', { concurrency: false }, () => {
   afterEach(async () => {
     appState.setStreaming(false);
+    resetContextUsageRingForTests();
     setSessionStateForTests(null);
     try {
       localStorage.removeItem('minnow-default-model-select');
@@ -130,6 +132,7 @@ describe('model select active chat binding', { concurrency: false }, () => {
     chat.id = 'chat-1';
     chat.providerId = 'prov-a';
     chat.modelId = 'model-a';
+    chat.history.push({ role: 'user', content: 'fixture' });
 
     setSessionStateForTests({
       version: 2,

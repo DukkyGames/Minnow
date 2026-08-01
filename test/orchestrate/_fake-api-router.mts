@@ -186,6 +186,13 @@ export function installFakeApiRouter(
       });
     }
 
+    if (url.includes('/api/models/cached') && method === 'GET') {
+      return Response.json({ models: [] });
+    }
+    if (url.includes('/api/models/serve') && method === 'GET') {
+      return Response.json({ serves: [] });
+    }
+
     if (url.includes('/api/workspace/dev-server') || url.includes('/api/terminal/')) {
       return Response.json({ ok: true });
     }
@@ -256,6 +263,13 @@ export function installFakeApiRouter(
       const op = typeof body?.op === 'string' ? body.op : '';
       const payload = worktreeResponse(op, script, worktreeOverrides);
       return Response.json(payload);
+    }
+
+    if (url.includes('/api/preview/file/') && method === 'GET') {
+      return new Response('# stub\n', {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
     }
 
     unroutedRequests.push({ method, url });

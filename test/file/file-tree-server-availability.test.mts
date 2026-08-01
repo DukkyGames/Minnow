@@ -56,6 +56,9 @@ describe('file tree server availability', { concurrency: false }, () => {
 
     setFileTreeServerAvailable(false);
     renderFileTree();
-    assert.match(document.getElementById('fileTreeHost')?.textContent ?? '', /npm start/i);
+    assert.match(
+      document.getElementById('fileTreeHost')?.textContent ?? '',
+      /open minnow/i,
+    );
   });
 });
