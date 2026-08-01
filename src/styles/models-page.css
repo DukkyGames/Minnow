@@ -1882,6 +1882,53 @@
   }
 }
 
+/* Phone: the container query above already stacks the layout; this sizes the
+   controls for thumbs and lets the inspector own the full sheet. */
+@container models (max-width: 560px) {
+  .models-page-body {
+    --models-inspector-w: 100%;
+  }
+
+  .models-inspector {
+    width: 100%;
+  }
+
+  .models-toolbar {
+    gap: 8px;
+  }
+
+  .models-search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .models-search__input,
+  .models-select,
+  .models-range {
+    height: 40px;
+  }
+
+  .models-select {
+    max-width: none;
+    flex: 1 1 8rem;
+  }
+
+  .models-toolbar__count {
+    margin-left: 0;
+  }
+
+  .models-btn,
+  .models-icon-btn,
+  .models-inspector-toggle {
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  .models-card__actions {
+    flex-wrap: wrap;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .models-dot--starting,
   .models-spinner,

@@ -41,6 +41,7 @@ import {
   updateSettingsNavActive,
 } from './settings-search-navigate';
 import { upgradeSettingsCheckboxes } from './settings-switch';
+import { initSettingsMobileNav } from './settings-mobile-nav';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import {
   closeInstance,
@@ -530,6 +531,8 @@ export function initSettingsPage(): void {
     ?.addEventListener('click', () => {
       closeSettings();
     });
+
+  initSettingsMobileNav();
 
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash.startsWith('#/settings')) {

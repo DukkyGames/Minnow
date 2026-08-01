@@ -1123,3 +1123,56 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* Phone: the inspector is a sheet over the graph, not a 180px side column. */
+@media (max-width: 640px) {
+  :root {
+    --brain-inspector-w: 100%;
+  }
+
+  .brain-page.is-graph-canvas-bg .brain-inspector.is-open {
+    left: var(--brain-graph-overlay-pad);
+    right: var(--brain-graph-overlay-pad);
+    top: auto;
+    bottom: var(--brain-graph-overlay-pad);
+    max-height: min(62dvh, 480px);
+    overscroll-behavior: contain;
+  }
+
+  .brain-inspector__close {
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+  }
+
+  /* Resize is a pointer gesture; the sheet is full width anyway. */
+  .brain-inspector__resize {
+    display: none;
+  }
+
+  .brain-graph-toolbar {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .brain-graph-toolbar__search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .brain-graph-toolbar__primary {
+    margin-left: 0;
+  }
+
+  .brain-graph-seg .brain-action-btn {
+    min-height: 38px;
+    padding: 7px 10px;
+  }
+
+  .brain-graph-readout__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .brain-rail__btn {
+    min-width: var(--touch-min);
+  }
+}

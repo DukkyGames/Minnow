@@ -26,6 +26,8 @@ import {
   launchInstance,
   showDesktop,
 } from './instances';
+import { isPhoneLayout } from '../ui/mobile-layout';
+import { windowManager } from './window-manager';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
 import { APP_SWITCHER_DESKTOP_ID } from './surface-id';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
@@ -39,6 +41,17 @@ function notifyAppUnavailable(appId: AppId): void {
   void import('../ui/toast').then((m) => {
     m.showToast(`${name} is turned off. Restore it in Settings → Apps.`, 'error');
   });
+}
+
+/**
+ * Minimize open window sheets so the phone desktop is actually visible. The app
+ * instance stays alive; relaunching it from the dock restores the sheet.
+ */
+function parkPhoneWindowSheets(): void {
+  if (!isPhoneLayout()) return;
+  for (const win of windowManager.getWindows()) {
+    if (!win.minimized) windowManager.minimize(win.id, true);
+  }
 }
 
 /** Block unavailable apps: toast (when user-disabled) and return to desktop. */
@@ -233,6 +246,9 @@ function syncForegroundLifecycle(nextApp: AppId | null): void {
 function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'desktop') {
     syncForegroundLifecycle(null);
+    // Windowed apps live in the desktop view, so showDesktop() alone leaves a
+    // phone's full-stage window sheet covering the home surface.
+    parkPhoneWindowSheets();
     const comingFromFullscreenApp = getOsView() === 'app';
     const pendingResearch = consumePendingDesktopResearchActivation();
     const pendingExperts = consumePendingDesktopExpertsActivation();
