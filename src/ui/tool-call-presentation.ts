@@ -75,6 +75,7 @@ const TOOL_ICON: Record<string, IconName> = {
   read_file_range: 'fileText',
   read_document: 'fileText',
   get_file_metadata: 'fileText',
+  open_in_editor: 'appCode',
   save_file: 'save',
   append_file: 'plus',
   insert_at_line: 'plus',
@@ -209,6 +210,7 @@ const TOOL_ACTION: Record<string, string> = {
   read_file_range: 'Read',
   read_document: 'Read doc',
   get_file_metadata: 'File info',
+  open_in_editor: 'Open in editor',
   save_file: 'Write',
   append_file: 'Append',
   insert_at_line: 'Insert',
@@ -303,6 +305,7 @@ const PATH_ARG_TOOLS = new Set([
   'read_file',
   'read_file_range',
   'read_document',
+  'open_in_editor',
   'save_file',
   'append_file',
   'insert_at_line',
@@ -622,6 +625,17 @@ function buildToolTarget(
     const end = numberArg(args, 'end_line');
     if (p && start != null && end != null) {
       return { text: `${normalizePathLabel(p)}:${start}-${end}`, kind: 'path' };
+    }
+    return path();
+  }
+
+  if (toolName === 'open_in_editor') {
+    const p = stringArg(args, 'path');
+    const start = numberArg(args, 'start_line');
+    if (p && start != null) {
+      const end = numberArg(args, 'end_line');
+      const suffix = end != null && end > start ? `${start}-${end}` : String(start);
+      return { text: `${normalizePathLabel(p)}:${suffix}`, kind: 'path' };
     }
     return path();
   }

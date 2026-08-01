@@ -42,8 +42,10 @@ async function main() {
   }
 
   const productName = pkg.build?.productName ?? 'Minnow';
-  const company = typeof pkg.author === 'string' ? pkg.author : 'Grim Media';
+  const company = typeof pkg.author === 'string' ? pkg.author : 'Henri Grimm';
   const version = typeof pkg.version === 'string' ? pkg.version : '1.0.0';
+  const copyright =
+    typeof pkg.build?.copyright === 'string' ? pkg.build.copyright : `Copyright (C) ${company}`;
 
   await rcedit(exe, {
     icon,
@@ -53,7 +55,7 @@ async function main() {
       CompanyName: company,
       FileDescription: productName,
       ProductName: productName,
-      LegalCopyright: `Copyright (c) ${company}`,
+      LegalCopyright: copyright,
     },
   });
 

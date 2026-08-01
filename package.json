@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.2",
   "description": "Local-first AI chat client for LM Studio and OpenAI-compatible providers",
-  "author": "Grim Media",
+  "author": "Henri Grimm",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "main": "electron/dist/main.js",
@@ -207,6 +207,7 @@
   "build": {
     "appId": "org.grimmedia.minnow",
     "productName": "Minnow",
+    "copyright": "Copyright (C) 2026 Henri Grimm. Licensed under the GNU AGPL-3.0-or-later.",
     "publish": {
       "provider": "github",
       "owner": "DukkyGames",

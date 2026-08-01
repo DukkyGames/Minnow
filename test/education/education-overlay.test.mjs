@@ -44,6 +44,8 @@ describe('education tool overlay', () => {
       'git_diff',
       'read_file',
       'grep',
+      // Pointing at code is the tutor's replacement for pasting it.
+      'open_in_editor',
       'repo_map',
       'find_symbol',
       'get_lsp_diagnostics',

@@ -50,6 +50,7 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'read_symbol',
   'explain_symbol',
   'read_file',
+  'open_in_editor',
   'todo_write',
 ]);
 
@@ -77,8 +78,19 @@ const SETTINGS_READ_TOOL_IDS = new Set(['search_settings', 'get_settings']);
 /** Appearance read tool defaults to permission `full`. */
 const APPEARANCE_READ_TOOL_IDS = new Set(['get_appearance']);
 
+/**
+ * Editor navigation defaults to permission `full`: it only moves the user's own
+ * viewer to a file they can already see, and an approval modal per "look at this
+ * line" would make the tool useless.
+ */
+const EDITOR_VIEW_TOOL_IDS = new Set(['open_in_editor']);
+
 function defaultPermissionForTool(id: string, enabled: boolean): ToolPermissionMode {
-  if (SETTINGS_READ_TOOL_IDS.has(id) || APPEARANCE_READ_TOOL_IDS.has(id)) {
+  if (
+    SETTINGS_READ_TOOL_IDS.has(id) ||
+    APPEARANCE_READ_TOOL_IDS.has(id) ||
+    EDITOR_VIEW_TOOL_IDS.has(id)
+  ) {
     return enabled ? 'full' : 'off';
   }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {

@@ -52,7 +52,7 @@ export async function renderEducationSettings(mount: HTMLElement): Promise<void>
     searchKey: 'general.education.enabled',
     checked: current.enabled,
     description:
-      'The assistant reviews and guides, but will not write or edit code for you. It can still read your project and run your tests.',
+      'The assistant reviews and guides, but will not write or edit code for you. It can still read your project, run your tests, and open files in the editor to point at the code it means.',
   });
   mount.appendChild(toggleRow);
 

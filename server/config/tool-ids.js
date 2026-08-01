@@ -51,6 +51,7 @@ export const ALL_TOOL_IDS = [
   'list_directory',
   'read_file',
   'read_file_range',
+  'open_in_editor',
   'save_file',
   'append_file',
   'insert_at_line',

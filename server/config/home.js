@@ -378,10 +378,15 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'recall_chat_context',
   'recall_turn_full',
   'read_diagnostics',
+  'open_in_editor',
 ]);
 
 function defaultPermissionForTool(id, enabled) {
   if (id === 'search_settings' || id === 'get_settings' || id === 'get_appearance') {
+    return enabled ? 'full' : 'off';
+  }
+  // View-only editor navigation: prompting per "look at this line" would kill the tool.
+  if (id === 'open_in_editor') {
     return enabled ? 'full' : 'off';
   }
   if (id === 'read_diagnostics') {

@@ -102,4 +102,6 @@ Full index: [documentation/](documentation/README.md).
 
 ---
 
+Copyright (C) 2026 Henri Grimm.
+
 **License:** [GNU AGPL-3.0-or-later](LICENSE). Third-party notices: [THIRD_PARTY_NOTICES.md](documentation/THIRD_PARTY_NOTICES.md).

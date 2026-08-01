@@ -339,7 +339,7 @@
   {
     "key": "general.education.enabled",
     "label": "Education Mode",
-    "description": "The assistant reviews and guides, but will not write or edit code for you. It can still read your project and run your tests.",
+    "description": "The assistant reviews and guides, but will not write or edit code for you. It can still read your project, run your tests, and open files in the editor to point at the code it means.",
     "keywords": [
       "learn",
       "teach",
@@ -2778,6 +2778,32 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.read_file_range",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.open_in_editor",
+    "label": "Tool permission: open_in_editor",
+    "description": "Permission mode for the open_in_editor tool (off, ask, or full).",
+    "keywords": [
+      "open_in_editor",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.open_in_editor",
     "type": "enum",
     "allowedValues": [
       "off",

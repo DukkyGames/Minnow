@@ -24,6 +24,7 @@ import {
   toolUpdateAppearance,
   toolUploadAppearanceAsset,
 } from './appearance-tools';
+import { toolOpenInEditor } from './open-editor-tool';
 import { toolLaunchMinnowApp } from './os-launch-tool';
 import { toolRecallChatContext } from './recall-chat-context';
 import { toolRecallTurnFull } from './recall-turn-full';
@@ -64,6 +65,8 @@ export async function executeBrowserTool(
         return toolGetSystemInfo();
       case 'launch_minnow_app':
         return toolLaunchMinnowApp(args);
+      case 'open_in_editor':
+        return await toolOpenInEditor(args);
       case 'recall_chat_context':
         return await toolRecallChatContext(args);
       case 'recall_turn_full':

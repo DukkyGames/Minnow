@@ -93,6 +93,24 @@ describe('education prompt fragment', () => {
     assert.match(loaded.body, /Hint ladder/i);
   });
 
+  for (const profile of ['full', 'lite']) {
+    test(`${profile} variant places the tutor inside Minnow with the editor tool`, () => {
+      const loaded = loadPromptById('tool-usage', 'education', profile);
+      assert.ok(loaded?.body);
+      // The tutor kept asking students which code editor they were using.
+      assert.match(loaded.body, /Minnow is their editor/);
+      assert.match(loaded.body, /Never ask what editor/i);
+      assert.match(loaded.body, /open_in_editor/);
+      assert.match(loaded.body, /\{\{cwd\}\}/);
+    });
+  }
+
+  test('interpolates the workspace path into the tutor fragment', () => {
+    const out = composeSystemPrompt(ctx({ educationEnabled: true, cwd: '/repo/shop' }));
+    assert.match(out, /workspace is `\/repo\/shop`/);
+    assert.doesNotMatch(out, /\{\{cwd\}\}/);
+  });
+
   for (const modeId of ['build', 'general', 'debug', 'plan', 'orchestrate']) {
     test(`appears in ${modeId} mode when the flag is on`, () => {
       const out = composeSystemPrompt(ctx({ modeId, educationEnabled: true }));

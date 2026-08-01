@@ -61,7 +61,7 @@ function generateCsr() {
   }
 
   const email = process.env.APPLE_ID?.trim() || 'you@example.com';
-  const cn = process.env.MINNOW_SIGNING_CN?.trim() || 'Grim Media';
+  const cn = process.env.MINNOW_SIGNING_CN?.trim() || 'Henri Grimm';
 
   const result = spawnSync(
     'openssl',

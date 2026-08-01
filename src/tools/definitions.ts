@@ -424,6 +424,24 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'open_in_editor',
+    label: 'Open in editor',
+    description:
+      "Opens a workspace file in Minnow's Code editor and highlights a line range for the user.",
+    category: 'files',
+    serverRequired: false,
+    definition: toolSchema(
+      'open_in_editor',
+      "Open a file in the user's editor and highlight lines, so they see the code you mean. View-only; nothing is written.",
+      {
+        path: { type: 'string', description: 'Relative file path' },
+        start_line: { type: 'integer', description: 'First line to highlight (1-based)' },
+        end_line: { type: 'integer', description: 'Last line (inclusive, default start_line)' },
+      },
+      ['path'],
+    ),
+  },
+  {
     id: 'save_file',
     label: 'Save file',
     description: 'Creates or overwrites a file with the given content.',

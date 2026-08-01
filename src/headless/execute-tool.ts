@@ -50,6 +50,8 @@ const BROWSER_ONLY_TOOLS = new Set([
   'board_report',
   'delegate_tasks',
   'request_browser_origin_access',
+  // Needs the Code viewer pane; there is no editor to open in headless runs.
+  'open_in_editor',
 ]);
 
 const UI_BROWSER_PREFIXES = ['browser_'];

@@ -193,7 +193,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('general.education.enabled', 'Education Mode', 'general', 'general', {
     keywords: ['learn', 'teach', 'tutor', 'student', 'school', 'class', 'socratic', 'read only'],
     description:
-      'The assistant reviews and guides, but will not write or edit code for you. It can still read your project and run your tests.',
+      'The assistant reviews and guides, but will not write or edit code for you. It can still read your project, run your tests, and open files in the editor to point at the code it means.',
   }),
   field('general.education.level', 'Teaching level', 'general', 'general', {
     keywords: ['beginner', 'intermediate', 'advanced', 'tutor', 'scaffolding', 'socratic'],

@@ -562,6 +562,10 @@ function defaultPermissionForTool(id, enabled) {
   if (id === 'search_settings' || id === 'get_settings' || id === 'get_appearance') {
     return enabled ? 'full' : 'off';
   }
+  // View-only editor navigation: prompting per "look at this line" would kill the tool.
+  if (id === 'open_in_editor') {
+    return enabled ? 'full' : 'off';
+  }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
@@ -594,6 +598,7 @@ export function normalizeToolConfig(raw) {
     'who_calls',
     'read_symbol',
     'explain_symbol',
+    'open_in_editor',
   ]);
   const enabled = {};
   const permissionsDefault = {};
