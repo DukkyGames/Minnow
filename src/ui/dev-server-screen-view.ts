@@ -401,3 +401,134 @@ export function labelPortAttribution(
   }
   return null;
 }
+
+/** Scope filter for the listening-ports table. */
+export type PortsScopeFilter = 'all' | 'linked' | 'protected' | 'other';
+
+export interface PortsFilterState {
+  query: string;
+  scope: PortsScopeFilter;
+}
+
+function portSearchHaystack(row: ListeningPortRow, servers: DevServerListItem[]): string {
+  const attr = labelPortAttribution(row, servers);
+  return [
+    String(row.port),
+    String(row.pid),
+    row.process,
+    row.address,
+    attr ?? '',
+    row.protected ? 'protected minnow' : '',
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+function matchesPortsScope(
+  row: ListeningPortRow,
+  servers: DevServerListItem[],
+  scope: PortsScopeFilter,
+): boolean {
+  if (scope === 'all') return true;
+  if (scope === 'protected') return row.protected;
+  const linked = labelPortAttribution(row, servers) != null;
+  if (scope === 'linked') return linked;
+  return !row.protected && !linked;
+}
+
+/** Client-side search + scope filter for the ports panel (does not refetch). */
+export function filterListeningPorts(
+  ports: ListeningPortRow[],
+  servers: DevServerListItem[],
+  filter: PortsFilterState,
+): ListeningPortRow[] {
+  const q = filter.query.trim().toLowerCase();
+  return ports.filter((row) => {
+    if (!matchesPortsScope(row, servers, filter.scope)) return false;
+    if (!q) return true;
+    return portSearchHaystack(row, servers).includes(q);
+  });
+}
+
+/** Sortable columns in the listening-ports table. */
+export type PortsSortKey = 'port' | 'process' | 'pid' | 'source';
+
+export type PortsSortDirection = 'asc' | 'desc';
+
+export type PortsListSort = {
+  key: PortsSortKey;
+  direction: PortsSortDirection;
+};
+
+export const DEFAULT_PORTS_LIST_SORT: PortsListSort = {
+  key: 'port',
+  direction: 'asc',
+};
+
+/** Display label used for the Source column and for sorting. */
+export function portSourceSortLabel(
+  row: ListeningPortRow,
+  servers: DevServerListItem[],
+): string {
+  if (row.protected) return 'Minnow (protected)';
+  const attr = labelPortAttribution(row, servers);
+  return attr ?? '';
+}
+
+export function defaultDirectionForPortsSortKey(key: PortsSortKey): PortsSortDirection {
+  return 'asc';
+}
+
+/** Toggle direction on the same column, or switch column with a sensible default. */
+export function cyclePortsListSort(current: PortsListSort, nextKey: PortsSortKey): PortsListSort {
+  if (current.key === nextKey) {
+    return {
+      key: nextKey,
+      direction: current.direction === 'asc' ? 'desc' : 'asc',
+    };
+  }
+  return { key: nextKey, direction: defaultDirectionForPortsSortKey(nextKey) };
+}
+
+/** aria-sort value for the active column header. */
+export function portsListSortAriaSort(
+  sort: PortsListSort,
+  column: PortsSortKey,
+): 'none' | 'ascending' | 'descending' {
+  if (sort.key !== column) return 'none';
+  return sort.direction === 'asc' ? 'ascending' : 'descending';
+}
+
+/** Sort a port list after filtering (stable tie-break on port number). */
+export function sortListeningPorts(
+  ports: ListeningPortRow[],
+  servers: DevServerListItem[],
+  sort: PortsListSort,
+): ListeningPortRow[] {
+  const sign = sort.direction === 'asc' ? 1 : -1;
+  return [...ports].sort((a, b) => {
+    let cmp = 0;
+    switch (sort.key) {
+      case 'port':
+        cmp = a.port - b.port;
+        break;
+      case 'pid':
+        cmp = a.pid - b.pid;
+        break;
+      case 'process':
+        cmp = a.process.localeCompare(b.process, undefined, { sensitivity: 'base' });
+        break;
+      case 'source':
+        cmp = portSourceSortLabel(a, servers).localeCompare(
+          portSourceSortLabel(b, servers),
+          undefined,
+          { sensitivity: 'base' },
+        );
+        break;
+      default:
+        cmp = 0;
+    }
+    if (cmp === 0) cmp = a.port - b.port;
+    return cmp * sign;
+  });
+}
