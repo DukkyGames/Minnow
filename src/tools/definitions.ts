@@ -1805,6 +1805,67 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'minnow_docs_search',
+    label: 'Minnow docs search',
+    description: 'Search the official shipped Minnow user manual. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_search',
+      'Search official Minnow user manual pages (`documentation/manual/`). Use for Minnow setup, apps, modes, tools, settings, and troubleshooting — not repo architecture (`context.md`). Results include source paths for citations.',
+      {
+        query: {
+          type: 'string',
+          description: 'Natural-language documentation query',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum results to return (default 8, max 20)',
+        },
+        section: {
+          type: 'string',
+          description: 'Optional exact catalog section such as Get started or Apps',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'minnow_docs_read',
+    label: 'Minnow docs read',
+    description: 'Read a user manual page from the shipped Minnow wiki. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_read',
+      'Read one user manual page from a path returned by minnow_docs_search or minnow_docs_list. Cite the returned Source path when answering.',
+      {
+        path: {
+          type: 'string',
+          description: 'Allowlisted path such as documentation/manual/get-started/install.md',
+        },
+      },
+      ['path'],
+    ),
+  },
+  {
+    id: 'minnow_docs_list',
+    label: 'Minnow docs list',
+    description: 'List the shipped Minnow user manual catalog. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_list',
+      'List user manual metadata (`documentation/manual/`), optionally restricted to a path prefix.',
+      {
+        prefix: {
+          type: 'string',
+          description: 'Optional path prefix such as documentation/manual/get-started/',
+        },
+      },
+    ),
+  },
+  {
     id: 'brain_write_page',
     label: 'Brain write page',
     description: 'Create or update a Brain wiki page. Requires Minnow running locally.',

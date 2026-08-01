@@ -4351,6 +4351,84 @@
     ]
   },
   {
+    "key": "integrations.tools.permission.minnow_docs_search",
+    "label": "Tool permission: minnow_docs_search",
+    "description": "Permission mode for the minnow_docs_search tool (off, ask, or full).",
+    "keywords": [
+      "minnow_docs_search",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.minnow_docs_search",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.minnow_docs_read",
+    "label": "Tool permission: minnow_docs_read",
+    "description": "Permission mode for the minnow_docs_read tool (off, ask, or full).",
+    "keywords": [
+      "minnow_docs_read",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.minnow_docs_read",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.minnow_docs_list",
+    "label": "Tool permission: minnow_docs_list",
+    "description": "Permission mode for the minnow_docs_list tool (off, ask, or full).",
+    "keywords": [
+      "minnow_docs_list",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.minnow_docs_list",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.permission.brain_write_page",
     "label": "Tool permission: brain_write_page",
     "description": "Permission mode for the brain_write_page tool (off, ask, or full).",

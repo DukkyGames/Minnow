@@ -325,6 +325,10 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
 
 function applyRouteFromHash(): void {
   if (applyingRoute) return;
+  if (window.location.hash === '#/wiki' || window.location.hash.startsWith('#/wiki/')) {
+    void import('../ui/product-wiki').then((module) => module.initProductWiki());
+    return;
+  }
   applyingRoute = true;
   try {
     const raw = window.location.hash;

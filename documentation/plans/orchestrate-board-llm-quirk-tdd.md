@@ -98,5 +98,5 @@ Run `npm run test:board` — as of this pass **5 failing tests** (intended):
 
 ## Related
 
-- [Orchestrate board testing guide](../guides/orchestrate-board-testing.md)
+- [Orchestrate board testing guide](../contributor/orchestrate-board-testing.md)
 - [Orchestrate boards in context.md](../context.md#orchestrate-boards)

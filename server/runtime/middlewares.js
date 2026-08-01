@@ -21,6 +21,7 @@ import { createMcpMiddleware } from '../mcp/middleware.js';
 import { createServersMiddleware } from '../servers/index.js';
 import { createMemoryMiddleware } from '../memory/middleware.js';
 import { createBrainMiddleware } from '../brain/middleware.js';
+import { createProductWikiMiddleware } from '../product-wiki/middleware.js';
 import { createPreviewMiddleware } from '../preview/middleware.js';
 import { createDesignAnnotationsMiddleware } from '../design/annotations-routes.js';
 import { createSourceMapMiddleware } from '../design/source-map-routes.js';
@@ -99,6 +100,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   );
   connectApp.use(createMemoryMiddleware());
   connectApp.use(createBrainMiddleware());
+  connectApp.use(createProductWikiMiddleware());
   connectApp.use(createWebhooksMiddleware());
   connectApp.use(createLspMiddleware(() => getWorkspaceRoot()));
   connectApp.use(createMcpMiddleware());

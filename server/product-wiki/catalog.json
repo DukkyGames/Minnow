@@ -1,0 +1,566 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": "documentation/manual/README.md",
+      "title": "Minnow manual",
+      "summary": "Minnow is a local first AI workspace that runs on your own computer. It talks to models you host yourself — LM Studio, Ollama, llama server , or any OpenAI compatible endpoint — and it can also talk to cloud APIs if you give it a key. Either way, your chats, notes, files, and cre",
+      "headings": [
+        "Start here",
+        "Finding help while you work",
+        "Everything in this manual",
+        "Get started",
+        "Core concepts",
+        "Chat",
+        "Apps",
+        "Orchestrate",
+        "Extend Minnow",
+        "Reference"
+      ],
+      "section": "Overview",
+      "hash": "21263ab04ba19ab88a103434f91b923ac7726ff6aa05217104de07f4959e8307"
+    },
+    {
+      "path": "documentation/manual/get-started/install.md",
+      "title": "Install and first launch",
+      "summary": "Minnow ships as a normal desktop application. This page covers getting it onto your machine, what happens the first time it opens, and how updates work afterwards. Once it is running, go straight to Connect a model — the interface works without one, but nothing can answer you unt",
+      "headings": [
+        "Download",
+        "If Windows blocks the installer",
+        "What happens on first launch",
+        "Closing, quitting, and the tray",
+        "Updates",
+        "Quick health check",
+        "Next"
+      ],
+      "section": "Get started",
+      "hash": "ba25d187fc4597bd0c08e12d8299edf0c829068999c2571fa0347c5a9c234d1f"
+    },
+    {
+      "path": "documentation/manual/get-started/connect-a-model.md",
+      "title": "Connect a model",
+      "summary": "Minnow does not ship a model. It speaks the OpenAI compatible chat API, which means it can talk to almost anything: a local runtime on your own machine, a model Minnow downloads and serves for you, or a cloud API you pay for. You need at least one, and you can have several at onc",
+      "headings": [
+        "Pick your route",
+        "LM Studio",
+        "Ollama",
+        "Serve a model inside Minnow",
+        "Cloud APIs",
+        "Choosing the model for a turn",
+        "Routing: which model does what",
+        "Fallbacks",
+        "When the picker stays empty",
+        "Next",
+        "Related"
+      ],
+      "section": "Get started",
+      "hash": "fc0f300f07891314b2d4a90d5ab8ec67f68a1e8d78c14eb9a22dab68267b45da"
+    },
+    {
+      "path": "documentation/manual/get-started/first-chat.md",
+      "title": "Your first chat",
+      "summary": "The desktop is the chat. There is no \"open the chat app\" step — you land in it, and everything else opens around it. This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what you just saw. The desktop Area What it is Dock (top) La",
+      "headings": [
+        "The desktop",
+        "Send something",
+        "Approving a tool",
+        "The mode strip",
+        "The context ring",
+        "Attachments",
+        "Slash skills",
+        "Opening another app",
+        "Where your conversations go",
+        "Next steps"
+      ],
+      "section": "Get started",
+      "hash": "d0a67ad1a289186e7fac7367fb0eba4d2e79b2716efdcf4737f47d56c47441e1"
+    },
+    {
+      "path": "documentation/manual/concepts/how-minnow-works.md",
+      "title": "How Minnow works",
+      "summary": "Read this page once and most of the product stops needing explanation. Minnow is three things stacked together: 1. A desktop shell with a dock, a menubar, floating windows and fullscreen apps. It is where you work. 2. A local tool server on port 9473. It does everything the brows",
+      "headings": [
+        "The loop",
+        "Local by default",
+        "The workspace boundary",
+        "Modes decide what exists",
+        "Apps are surfaces, not silos",
+        "Agents all the way down",
+        "When the server is not there",
+        "Related"
+      ],
+      "section": "Core concepts",
+      "hash": "47cfef9a565108a3fe8f5ca9768008f8fe9221e515848e36c44ec7f88f34f3aa"
+    },
+    {
+      "path": "documentation/manual/concepts/modes.md",
+      "title": "Modes",
+      "summary": "A mode changes two things at once: the instructions the model gets, and the tools that exist for that turn. It is the most consequential control in the composer, and it is one click. Nine modes exist. Four are in the composer strip; the rest belong to a surface or a workflow and ",
+      "headings": [
+        "The four you choose",
+        "What Plan mode actually blocks",
+        "The five you enter",
+        "Tool access at a glance",
+        "Modes are a ceiling, not a grant",
+        "Practical mode picking",
+        "Related"
+      ],
+      "section": "Core concepts",
+      "hash": "470ec47e5851577fcfc56872f7f53e465fb32aa856a1739915c34a626d08bdf8"
+    },
+    {
+      "path": "documentation/manual/concepts/tools-and-permissions.md",
+      "title": "Tools and permissions",
+      "summary": "A tool is a function the model may call: read a file, run a command, search the web, write a Brain page, open a browser tab. Minnow ships 114 of them, of which 106 are exposed in this build — the rest belong to apps held behind the release gate. Tools are what make Minnow useful ",
+      "headings": [
+        "The three permission levels",
+        "Where to set them",
+        "The categories",
+        "What is on by default",
+        "The workspace boundary",
+        "Content the model reads is data, not instructions",
+        "Caching",
+        "Tools that are not built in",
+        "Practical setups",
+        "Related"
+      ],
+      "section": "Core concepts",
+      "hash": "1404254e35da327d40bc506874ba4af1fa565b8e9560da7a5f09979c2c484fd0"
+    },
+    {
+      "path": "documentation/manual/concepts/context-and-memory.md",
+      "title": "Context, memory, and rules",
+      "summary": "A model has no memory. Every turn, Minnow rebuilds everything it knows from scratch and sends it. Understanding what goes into that rebuild is the difference between an assistant that seems sharp and one that seems to have early onset amnesia. Three separate mechanisms feed it, a",
+      "headings": [
+        "The context window",
+        "Context policy for agents",
+        "Memory",
+        "Saving a memory",
+        "What belongs in memory",
+        "Rules",
+        "Prompt profiles",
+        "Recall",
+        "Related"
+      ],
+      "section": "Core concepts",
+      "hash": "27e1aae9bd66be2dd8ac600a25228d0e7307c875a20e16dff7ec0ee87022d117"
+    },
+    {
+      "path": "documentation/manual/chat/chatting.md",
+      "title": "Working in chat",
+      "summary": "The basics of chat take one minute. The controls on this page are the ones that make a long agent session survivable: correcting a run without killing it, queueing your next instruction, undoing a turn that touched files, and going back to an answer you liked better. The composer",
+      "headings": [
+        "The composer",
+        "While the model is working",
+        "Watching what agents do",
+        "Undoing a turn",
+        "Branches",
+        "Managing conversations",
+        "Notifications",
+        "Asking you questions",
+        "Related"
+      ],
+      "section": "Chat",
+      "hash": "0a80d78db4e4a922067a3e8af02d5bb22d15668b3c14bd08c221fec4231e0a21"
+    },
+    {
+      "path": "documentation/manual/chat/skills-and-commands.md",
+      "title": "Skills and slash commands",
+      "summary": "Type / at the start of an empty composer and a picker opens. It holds two different kinds of thing: Skills — packaged instructions that shape how the model does one job. Commands — /goal and /loop , which change how the chat behaves rather than what the model is told. Navigate wi",
+      "headings": [
+        "Skills",
+        "Installing more",
+        "Writing your own",
+        "`/goal`",
+        "`/loop`",
+        "Related"
+      ],
+      "section": "Chat",
+      "hash": "f6f196239dfa66c8f7cb1dd39406241f866832397cff89be38f98dfafe3c3aba"
+    },
+    {
+      "path": "documentation/manual/apps/overview.md",
+      "title": "Apps overview",
+      "summary": "Minnow is one desktop with eight apps on it. All eight are core : always installed, always on, no toggles. There is no app store. They share one chat engine, one tool set, one session store and one workspace. Opening Code does not start a different assistant — it gives the same a",
+      "headings": [
+        "The eight",
+        "Chat",
+        "Code",
+        "Research",
+        "Models",
+        "Brain",
+        "Issues",
+        "Scheduler",
+        "Settings",
+        "Beyond the dock",
+        "Not in this release",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "fdc143117eb00d2f793afc2c7ca7c831119707e0fdfc41815e1cffd7d171efd2"
+    },
+    {
+      "path": "documentation/manual/apps/code.md",
+      "title": "Code",
+      "summary": "Code is the development environment: a file tree, an editor with AI completion and language server intelligence, terminals, git, dev servers, and a browser preview — with chat sitting beside all of it, working on the same folder you are. Open it from the dock. It takes the full s",
+      "headings": [
+        "Open a project",
+        "The layout",
+        "The editor",
+        "The file tree",
+        "Terminal",
+        "Git",
+        "Dev servers",
+        "Browser preview",
+        "Working with the assistant here",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "4b727fd57127edc45136a774b99d9a28d9ce906b5db689513477836071d75c49"
+    },
+    {
+      "path": "documentation/manual/apps/research.md",
+      "title": "Research",
+      "summary": "Research is for questions that deserve more than one search. You describe what you want to know; an agent runs several rounds of searching, opening pages, extracting what matters and synthesizing — then writes you a report with sources. Use chat for \"what is the syntax for X\". Us",
+      "headings": [
+        "Running a search",
+        "What the engine does",
+        "The library",
+        "Search providers",
+        "Safety",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "44ec5b927f86d9ee86eed65cacddd6a9dce9380c8b400b0fb9fcc14bdf270aef"
+    },
+    {
+      "path": "documentation/manual/apps/brain.md",
+      "title": "Brain",
+      "summary": "Brain is Minnow's memory, and it is not a black box. It is a wiki of markdown pages in a folder on your disk that you can read, edit, delete and back up. The assistant searches and writes it with tools; you curate it. Open it from the dock. It opens as a floating window. Brain is",
+      "headings": [
+        "The sections",
+        "How things get in",
+        "How things come out",
+        "The code index",
+        "Keeping it healthy",
+        "What belongs here",
+        "Your data",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "ba86a187b2d6b3bdf7589b20b9d4856e668647ddccb0a5d7cedceffce9a1496c"
+    },
+    {
+      "path": "documentation/manual/apps/models.md",
+      "title": "Models",
+      "summary": "Everything about models lives here: what your machine can run, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. Open it from the dock. It opens as a floating window with nine sections. Section What it i",
+      "headings": [
+        "Recommendations",
+        "Library and Installed",
+        "Providers",
+        "Routing",
+        "Sampler",
+        "Thinking",
+        "Usage & cost",
+        "Voice",
+        "Choosing the model for a turn",
+        "When the picker is empty",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "0fa8f5bfea5998be3c5e8eadf05b3af16e3350f8f9b32eb2836ba08c85dce0ce"
+    },
+    {
+      "path": "documentation/manual/apps/issues.md",
+      "title": "Issues",
+      "summary": "A tracker that agents can use. Issues is a Linear style list and board for work in your workspace, with the difference that the assistant can file, triage, expand and close items through tools — so \"I found three problems while reading this\" becomes three real cards instead of a ",
+      "headings": [
+        "Views",
+        "Working with issues",
+        "Handing an issue to an agent",
+        "Git conventions",
+        "Taxonomy",
+        "Automatic bug filing",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "bce70bf7cd7fee1f729b56e84524192e071d5067bc50587489000a77da0dc420"
+    },
+    {
+      "path": "documentation/manual/apps/scheduler.md",
+      "title": "Scheduler",
+      "summary": "Scheduler runs a prompt on a schedule, without a conversation. Each job is a headless agent run in a workspace you choose with a model you choose — a nightly test summary, a Monday dependency check, a periodic sync of notes into Brain. Open it from the dock or the menubar. It ope",
+      "headings": [
+        "The one rule",
+        "Creating a job",
+        "Schedules",
+        "Writing a prompt that works unattended",
+        "Run history",
+        "Scheduler or `/loop`?",
+        "Troubleshooting",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "c58690905de9e0e5e2a27449f0ffc00b376aa4e029aa64b5b559636d9bb398a0"
+    },
+    {
+      "path": "documentation/manual/apps/settings.md",
+      "title": "Settings",
+      "summary": "Everything configurable, in seven categories. Open it from the dock or the menubar gear. Find things by searching Press Ctrl+K / Cmd+K with Settings open. Type a keyword — \"webhook\", \"tray\", \"MCP\", \"temperature\", \"memory\" — and the results deep link straight to the control, highl",
+      "headings": [
+        "Find things by searching",
+        "The map",
+        "General",
+        "Apps",
+        "Appearance",
+        "Models",
+        "Agents",
+        "Integrations",
+        "Advanced",
+        "Where settings are stored",
+        "Related"
+      ],
+      "section": "Apps",
+      "hash": "ce253c42bc0658b28348bfee3710724e8afa525a07251d4b0ee4b926072f547d"
+    },
+    {
+      "path": "documentation/manual/orchestrate/boards.md",
+      "title": "Orchestrate boards",
+      "summary": "A board turns a plan document into a kanban of tasks that agents work through — building, testing, fixing and merging — while you watch or while you are away. This is the most powerful thing in Minnow and the one that most rewards understanding before you press Start. The shape o",
+      "headings": [
+        "The shape of it",
+        "Starting a board",
+        "The board",
+        "Execution modes",
+        "Worktree isolation",
+        "Model and concurrency",
+        "When things fail",
+        "Finishing",
+        "Global defaults",
+        "Board chats are locked",
+        "Getting good results",
+        "Related"
+      ],
+      "section": "Orchestrate",
+      "hash": "c05537774e58728e0aad281b85f46d559eec01ca0f33b523ef84b66f7b0c0522"
+    },
+    {
+      "path": "documentation/manual/orchestrate/super-plan.md",
+      "title": "Super Plan",
+      "summary": "Super Plan is for the ideas that are too vague to build. Instead of answering your one paragraph request with a plan that quietly invents your requirements, it interviews you first, then researches, drafts, has a reviewer critique the draft, redrafts, and presents a plan you can ",
+      "headings": [
+        "Starting one",
+        "The pipeline",
+        "The interview",
+        "Configuration",
+        "What you end up with",
+        "Plan, Super Plan, or a board?",
+        "Related"
+      ],
+      "section": "Orchestrate",
+      "hash": "25c42a58ef556e6d3a477a5ea12a61f1a333579a32e03f3abe37d806afa8b981"
+    },
+    {
+      "path": "documentation/manual/orchestrate/agents.md",
+      "title": "Agents, sub-agents, and packs",
+      "summary": "Minnow does not have one assistant. It has a system of them, and the differences between the kinds matter once you start delegating real work. Kind What it is Where it runs Work agent A role with its own prompt and model binding The main chat, or a board chat Sub agent A nested a",
+      "headings": [
+        "Work agents",
+        "Sub-agents",
+        "Delegating well",
+        "Board members",
+        "Autopilot",
+        "Watchdog",
+        "Agent packs",
+        "Context budgets",
+        "Related"
+      ],
+      "section": "Orchestrate",
+      "hash": "e00645590f38d20a74048d2ed974e7c8491b329a90ffe54d907b22d731121bd1"
+    },
+    {
+      "path": "documentation/manual/extend/integrations.md",
+      "title": "Integrations",
+      "summary": "Ways to give Minnow capabilities it does not ship with, and to connect it to things outside itself. All of these live under Settings → Integrations . MCP servers The Model Context Protocol is a standard for exposing tools to an AI client. Any MCP server you add contributes its to",
+      "headings": [
+        "MCP servers",
+        "Language servers",
+        "Browser automation",
+        "Web search",
+        "Dev servers",
+        "Webhooks",
+        "Native plugins",
+        "Document handling",
+        "Related"
+      ],
+      "section": "Extend Minnow",
+      "hash": "8453383cdc4d2d7f085b3710bd1f5784ad5aa8248424160176d23771d8bc2b17"
+    },
+    {
+      "path": "documentation/manual/extend/voice.md",
+      "title": "Voice",
+      "summary": "Minnow can listen and speak. Both run locally by default — the audio does not leave your machine unless you deliberately point voice at a cloud provider. Set it up in Models → Voice . Dictation The microphone button in the composer. Press it, talk, and your words appear in the co",
+      "headings": [
+        "Dictation",
+        "Speech-to-text models",
+        "Text-to-speech",
+        "The Python worker",
+        "Audio devices",
+        "Where the models live",
+        "Related"
+      ],
+      "section": "Extend Minnow",
+      "hash": "163f1fbc1c23cc3d808133d393ee4fa5cd0e3449b1e706cbb86a4d016fdfbb6e"
+    },
+    {
+      "path": "documentation/manual/extend/companion.md",
+      "title": "Use Minnow from another device",
+      "summary": "Minnow can serve an authenticated companion to a phone or tablet on the same network — pick up a conversation from the sofa, check on a long agent run, add a scheduled job. It is deliberately a local network feature. It is not a way to expose Minnow to the internet, and port forw",
+      "headings": [
+        "Turn it on and pair",
+        "What you get",
+        "Revoking a device",
+        "The security boundary",
+        "Limits worth knowing",
+        "When it does not work",
+        "Related"
+      ],
+      "section": "Extend Minnow",
+      "hash": "dbafbed3dd8a326188c4b0a791bd913be4ea37a35f222cd1db32dd1835f0afc7"
+    },
+    {
+      "path": "documentation/manual/reference/keyboard-shortcuts.md",
+      "title": "Keyboard shortcuts",
+      "summary": "Mod means Ctrl on Windows and Linux, Cmd on macOS. Press ? anywhere outside a text field for the built in shortcut sheet. Single key shortcuts — ? , the tool approval digits — are suppressed while you are typing in a field. Chords with a modifier generally still work. Shell Keys ",
+      "headings": [
+        "Shell",
+        "Chat",
+        "Code editor",
+        "File tree",
+        "Terminal",
+        "Browser preview",
+        "Orchestrate board",
+        "Issues",
+        "Settings",
+        "This manual",
+        "Related"
+      ],
+      "section": "Reference",
+      "hash": "f4941275d392b7143009b69db1a0c4281d0256a50aeaf262c151dd38bbe1d8ff"
+    },
+    {
+      "path": "documentation/manual/reference/configuration.md",
+      "title": "Where your data lives",
+      "summary": "Everything Minnow keeps lives in one folder, called Minnow home . Chats, settings, your Brain wiki, encrypted credentials, downloaded models, logs — all of it, in files you can inspect, back up, or delete. Platform Path Windows %USERPROFILE%\\.minnow macOS and Linux /.minnow Set t",
+      "headings": [
+        "What to back up",
+        "The layout",
+        "Encrypted secrets",
+        "A clean profile",
+        "Editing files by hand",
+        "Related"
+      ],
+      "section": "Reference",
+      "hash": "7125286be8e3afc6b17eb30e683a51b38352902664061cec15ff203f411b820b"
+    },
+    {
+      "path": "documentation/manual/reference/privacy-and-security.md",
+      "title": "Privacy and security",
+      "summary": "Minnow runs on your machine, and the honest version of \"local first\" is not \"nothing ever leaves\" — it is \"nothing leaves unless you sent it somewhere\". This page is the precise version of that claim, and the list of what protects you when an agent goes wrong. What never leaves N",
+      "headings": [
+        "What never leaves",
+        "What does leave, and only when you cause it",
+        "The network boundary",
+        "Secrets",
+        "Containing agents",
+        "Prompt injection",
+        "Data you should not put in Brain",
+        "Deleting things",
+        "Related"
+      ],
+      "section": "Reference",
+      "hash": "160c04bd1f3b94f330e5e18a00bbe98cd4b294c39da8581281f02726e7ffab67"
+    },
+    {
+      "path": "documentation/manual/reference/troubleshooting.md",
+      "title": "Troubleshooting",
+      "summary": "Symptoms and fixes, roughly in the order people hit them. Paths refer to the in app Settings app. Start here Before anything else, open Settings → Advanced → Health & diagnostics . It probes each subsystem, groups recent errors, and tails the local log. Copy report produces a red",
+      "headings": [
+        "Start here",
+        "Nothing answers me",
+        "Tools and files",
+        "The model forgets things",
+        "Agents and boards",
+        "Scheduler",
+        "Voice",
+        "Updates and install",
+        "Data and secrets",
+        "Apps that are not there",
+        "Still stuck",
+        "Related"
+      ],
+      "section": "Reference",
+      "hash": "306811077dbd38fd2b9e465f34e3316a047bf9351168ab6b80ac0113604ddfd2"
+    },
+    {
+      "path": "documentation/manual/reference/glossary.md",
+      "title": "Glossary",
+      "summary": "Terms Minnow uses, in the sense Minnow means them. AFK mode — The most autonomous orchestrate board setting. Runs hands off until you press Stop or the board finishes, and will not prompt you. Board — A kanban of tasks generated from a plan document, worked by agents. See Orchest",
+      "headings": [
+        "Related"
+      ],
+      "section": "Reference",
+      "hash": "15f6ee5fe684cf14ad9d503b98877f125f74e9b4b25fc2ba2747e92ca621b2d4"
+    },
+    {
+      "path": "documentation/manual/reference/wiki-and-brain.md",
+      "title": "Wiki and Brain",
+      "summary": "Minnow has two knowledge surfaces and they get confused constantly, because both answer questions and both look like wikis. The difference is simple: one is about Minnow and you cannot edit it; the other is about your work and it is entirely yours. The short version Minnow wiki B",
+      "headings": [
+        "The short version",
+        "The Minnow wiki",
+        "Brain",
+        "Asking chat about Minnow",
+        "The GitHub Wiki",
+        "Which one do I want?",
+        "Related"
+      ],
+      "section": "Reference",
+      "hash": "4729ed5758c338b9705695c1811a4e13db7451deaab0f98b6e118cb1aaac2430"
+    },
+    {
+      "path": "documentation/manual/reference/roadmap.md",
+      "title": "Roadmap",
+      "summary": "The full roadmap is its own page in this wiki — open Roadmap from the navigation, or search for it. It describes product direction, not delivery dates. Two things people usually come here for: Why is an app missing from my dock? Compare, Benchmarking, Experts, Calendar and Email ",
+      "headings": [
+        "Related"
+      ],
+      "section": "Reference",
+      "hash": "057c4ea5bf5cb3e3b0ef89374ea3456f78ca0a37a975cec38b2a2c3bef333f2c"
+    },
+    {
+      "path": "documentation/ROADMAP.md",
+      "title": "Minnow roadmap",
+      "summary": "Minnow develops as one local first workspace: plan, build, run agents, and keep knowledge without a cloud account. This page describes product direction, not delivery dates. Individual engineering work is tracked in Linear and versioned plans under documentation/plans/ . Shipped ",
+      "headings": [
+        "Shipped",
+        "Active direction",
+        "Behind the release gate",
+        "How priorities are chosen"
+      ],
+      "section": "Roadmap",
+      "hash": "94ed98bb6e0b5a50be4276389a2aefb397c4f8835ce8998e097215747ede1d41"
+    },
+    {
+      "path": "documentation/THIRD_PARTY_NOTICES.md",
+      "title": "Third-party notices",
+      "summary": "Material Icon Theme Minnow uses Material Icon Theme (PKief / Material Extensions) for file and folder icons in the Code file tree and editor tabs. Package: https://www.npmjs.com/package/material icon theme Repository: https://github.com/material extensions/vscode material icon th",
+      "headings": [
+        "Material Icon Theme",
+        "Uicons (Flaticon)"
+      ],
+      "section": "Legal",
+      "hash": "0ea20d06dae95b7a5bd813656406d7684bb77c463895df0b9368d6f4353a61f0"
+    }
+  ]
+}

@@ -1,0 +1,749 @@
+/**
+ * Minnow official wiki overlay — flat documentation desk, not a card dashboard.
+ */
+
+.product-wiki {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.product-wiki.hidden {
+  display: none;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.product-wiki__header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--topbar-h, 52px);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
+}
+
+.product-wiki__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.product-wiki__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.product-wiki__identity-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.product-wiki__identity-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.product-wiki__identity-text span {
+  overflow: hidden;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-wiki__search {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  max-width: 520px;
+  height: 38px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  padding: 0 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  color: var(--mn-fg-muted);
+  background: var(--mn-bg);
+}
+
+.product-wiki__search:focus-within {
+  border-color: var(--mn-accent);
+}
+
+.product-wiki__search .icon-svg {
+  flex-shrink: 0;
+  --mn-icon-size: 16px;
+  opacity: 0.72;
+}
+
+.product-wiki__search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  color: var(--mn-fg);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.product-wiki__search input::placeholder {
+  color: var(--mn-fg-muted);
+}
+
+.product-wiki__search kbd {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: 4px;
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-2, var(--mn-surface-1));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.product-wiki__header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.product-wiki__icon-button {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  color: var(--mn-fg);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.product-wiki__nav-toggle {
+  display: none;
+}
+
+.product-wiki__icon-button:focus-visible,
+.product-wiki__nav-page:focus-visible,
+.product-wiki__result:focus-visible,
+.product-wiki__toc-link:focus-visible,
+.product-wiki__search input:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .product-wiki__icon-button:hover,
+  .product-wiki__nav-page:hover,
+  .product-wiki__result:hover,
+  .product-wiki__toc-link:hover {
+    color: var(--mn-fg);
+    background: color-mix(in srgb, var(--mn-fg) 6%, var(--mn-surface-1));
+  }
+}
+
+/* ── Body shell ─────────────────────────────────────────────────────────── */
+
+.product-wiki__body {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(200px, 272px) minmax(0, 1fr);
+}
+
+.product-wiki__nav {
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--mn-border);
+  background: var(--mn-surface-0);
+}
+
+.product-wiki__nav-content {
+  padding: 14px 10px 40px;
+  /* Keep nav copy readable; summaries are title-only except the current page. */
+  color: var(--mn-fg);
+}
+
+.product-wiki__nav-group {
+  margin-bottom: 20px;
+}
+
+.product-wiki__nav-group:last-child {
+  margin-bottom: 0;
+}
+
+.product-wiki__nav-group h2,
+.product-wiki__results-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 6px;
+  padding: 8px 8px 6px;
+  color: var(--mn-fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--mn-surface-0);
+  box-shadow: 0 1px 0 var(--mn-border);
+}
+
+.product-wiki__nav-page,
+.product-wiki__result {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--mn-fg);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.product-wiki__nav-page[aria-current='page'] {
+  border-color: var(--mn-border-strong, var(--mn-border));
+  background: var(--mn-surface-1);
+  font-weight: 600;
+}
+
+.product-wiki__nav-page strong,
+.product-wiki__result strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.product-wiki__nav-page[aria-current='page'] strong {
+  color: var(--mn-fg);
+}
+
+.product-wiki__nav-page-summary {
+  display: none;
+  overflow: hidden;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.product-wiki__nav-page[aria-current='page'] .product-wiki__nav-page-summary {
+  display: -webkit-box;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .product-wiki__nav-page:not([aria-current='page']):hover .product-wiki__nav-page-summary {
+    display: -webkit-box;
+  }
+}
+
+.product-wiki__result {
+  padding-block: 10px;
+  border-bottom: 1px solid var(--mn-border);
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+.product-wiki__result:last-child {
+  border-bottom: none;
+}
+
+.product-wiki__result-section {
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.product-wiki__result > span:last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.product-wiki__empty {
+  margin: 16px 8px;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── Article column ─────────────────────────────────────────────────────── */
+
+.product-wiki__article {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scroll-padding-top: 20px;
+  background: var(--mn-bg);
+}
+
+.product-wiki__article-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 32px;
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  padding: 28px 32px 72px;
+}
+
+@media (min-width: 1080px) {
+  .product-wiki__article-grid:has(.product-wiki__toc:not(.hidden)) {
+    grid-template-columns: minmax(0, 1fr) 200px;
+  }
+}
+
+.product-wiki__article-main {
+  min-width: 0;
+}
+
+.product-wiki__doc-header {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.product-wiki__doc-eyebrow {
+  margin: 0 0 8px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.product-wiki__doc-title {
+  margin: 0 0 10px;
+  max-width: 28ch;
+  font-size: 1.65rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.product-wiki__doc-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.product-wiki__doc-path span {
+  color: var(--mn-fg-muted);
+}
+
+.product-wiki__doc-path-sep {
+  margin: 0 4px;
+  color: var(--mn-fg-muted);
+  opacity: 0.55;
+  user-select: none;
+}
+
+.product-wiki__toc {
+  display: none;
+}
+
+@media (min-width: 1080px) {
+  .product-wiki__toc:not(.hidden) {
+    display: block;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: calc(100vh - var(--topbar-h, 52px) - 56px);
+    overflow-y: auto;
+    padding-top: 4px;
+  }
+}
+
+.product-wiki__toc-label {
+  margin: 0 0 10px;
+  color: var(--mn-fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.product-wiki__toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.product-wiki__toc-link {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--mn-fg-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.product-wiki__toc-link.is-depth-3 {
+  padding-left: 16px;
+  font-size: 11px;
+}
+
+.product-wiki__toc-link.is-active {
+  color: var(--mn-fg);
+  background: color-mix(in srgb, var(--mn-accent) 14%, var(--mn-surface-1));
+  font-weight: 600;
+}
+
+.product-wiki__article-footer {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.product-wiki__source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .product-wiki__source-link:hover {
+    color: var(--mn-accent);
+  }
+}
+
+.product-wiki__state {
+  padding: 48px 0;
+  color: var(--mn-fg-muted);
+  font-size: 14px;
+}
+
+.product-wiki__state.is-error {
+  color: var(--mn-danger);
+}
+
+/* ── Markdown prose ───────────────────────────────────────────────────────── */
+
+.product-wiki-markdown {
+  max-width: 72ch;
+  font-size: 14px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* Index-style pages with tables need full column width. */
+.product-wiki-markdown:has(table) {
+  max-width: none;
+}
+
+.product-wiki-markdown > :first-child {
+  margin-top: 0;
+}
+
+/* Page title already lives in the doc header when the article opens with h1. */
+.product-wiki-markdown > h1:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.product-wiki-markdown h2,
+.product-wiki-markdown h3,
+.product-wiki-markdown h4 {
+  color: var(--mn-fg);
+  line-height: 1.25;
+  text-wrap: balance;
+  scroll-margin-top: 16px;
+}
+
+.product-wiki-markdown h2 {
+  margin: 2.4rem 0 0.75rem;
+  padding-top: 0.25rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.product-wiki-markdown h3 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.product-wiki-markdown h4 {
+  margin: 1.35rem 0 0.45rem;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.product-wiki-markdown p,
+.product-wiki-markdown ul,
+.product-wiki-markdown ol,
+.product-wiki-markdown blockquote {
+  margin: 0.75rem 0;
+}
+
+.product-wiki-markdown li {
+  margin: 0.35rem 0;
+}
+
+.product-wiki-markdown a {
+  color: var(--mn-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .product-wiki-markdown a:hover {
+    color: var(--mn-fg);
+  }
+}
+
+.product-wiki-markdown code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--mn-code-inline-bg);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+}
+
+.product-wiki-markdown pre {
+  overflow-x: auto;
+  margin: 1rem 0;
+  padding: 14px 16px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-code-bg);
+}
+
+.product-wiki-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 13px;
+}
+
+.product-wiki-markdown table {
+  display: table;
+  width: 100%;
+  max-width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.product-wiki-markdown thead {
+  background: var(--mn-surface-2);
+}
+
+.product-wiki-markdown th,
+.product-wiki-markdown td {
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.product-wiki-markdown th {
+  color: var(--mn-fg);
+  background: var(--mn-surface-2);
+  font-weight: 600;
+}
+
+.product-wiki-markdown td {
+  background: var(--mn-bg);
+}
+
+.product-wiki-markdown tbody tr:nth-child(even) td {
+  background: var(--mn-surface-0);
+}
+
+.product-wiki-markdown blockquote {
+  margin: 1rem 0;
+  padding: 10px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-0);
+}
+
+.product-wiki__scrim {
+  display: none;
+}
+
+/* ── Compact layouts ──────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .product-wiki__header {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .product-wiki__identity-text span {
+    display: none;
+  }
+
+  .product-wiki__nav-toggle {
+    display: inline-flex;
+  }
+
+  .product-wiki__search {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  .product-wiki__search kbd {
+    display: none;
+  }
+
+  .product-wiki__header-actions {
+    margin-left: auto;
+  }
+
+  .product-wiki__body {
+    display: block;
+  }
+
+  .product-wiki__nav {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 2;
+    width: min(88vw, 300px);
+    border-right: 1px solid var(--mn-border-strong, var(--mn-border));
+    transform: translateX(-100%);
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .product-wiki.is-nav-open .product-wiki__nav {
+    transform: translateX(0);
+  }
+
+  .product-wiki__scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: none;
+    border: 0;
+    background: var(--mn-overlay);
+    cursor: pointer;
+  }
+
+  .product-wiki.is-nav-open .product-wiki__scrim {
+    display: block;
+  }
+
+  .product-wiki__article {
+    height: 100%;
+  }
+
+  .product-wiki__article-grid {
+    padding: 20px 18px 56px;
+  }
+
+  .product-wiki__doc-title {
+    font-size: 1.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-wiki__nav {
+    transition: none;
+  }
+
+  .product-wiki__icon-button,
+  .product-wiki__nav-page,
+  .product-wiki__toc-link {
+    transition: none;
+  }
+}

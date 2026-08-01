@@ -6,7 +6,7 @@
 
 **Primary surfaces:** Orchestrate runtime, board testing API, Settings → Advanced → Board testing, CI
 
-**Related:** [`orchestrate-board-testing.md`](../guides/orchestrate-board-testing.md), [`orchestrate-board-llm-quirk-tdd.md`](orchestrate-board-llm-quirk-tdd.md), [`orchestrate-board-model-rethink.md`](orchestrate-board-model-rethink.md)
+**Related:** [`orchestrate-board-testing.md`](../contributor/orchestrate-board-testing.md), [`orchestrate-board-llm-quirk-tdd.md`](orchestrate-board-llm-quirk-tdd.md), [`orchestrate-board-model-rethink.md`](orchestrate-board-model-rethink.md)
 
 ## Goal
 

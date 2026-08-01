@@ -21,7 +21,7 @@ npm install
 npm start
 ```
 
-Load a model in LM Studio (or point Minnow at your provider), and the desktop window opens on `http://localhost:9473`. Full walkthrough: **[Setup guide](documentation/guides/setup.md)**.
+Load a model in LM Studio (or point Minnow at your provider), and the desktop window opens on `http://localhost:9473`. Full walkthrough: **[Setup from source](documentation/contributor/setup-from-source.md)**.
 
 Prefer an installer? Packaged builds are on [Releases](https://github.com/DukkyGames/Minnow/releases) and update themselves.
 
@@ -42,7 +42,7 @@ One desktop shell and eight apps. All of them ship finished and always on; there
 | **Scheduler** | Recurring agent jobs. |
 | **Settings** | Appearance, tools, modes, skills, providers, integrations. |
 
-Underneath: **111 built-in tools** (files, git, LSP, web, browser automation, agents), sub-agents, work agents, **15 bundled skills**, MCP, and per-tool permissions you control.
+Underneath: **114 built-in tools** (files, git, LSP, web, browser automation, agents, and official-doc retrieval), sub-agents, work agents, **15 bundled skills**, MCP, and per-tool permissions you control.
 
 Two things worth the tour on their own:
 
@@ -91,11 +91,11 @@ Working in the codebase? Start with [AGENTS.md](AGENTS.md) and [documentation/co
 
 | Doc | What's in it |
 |-----|--------------|
-| [Setup](documentation/guides/setup.md) | Install, providers, first run |
+| [Setup from source](documentation/contributor/setup-from-source.md) | Clone, install, providers, first run |
 | [Apps](documentation/guides/apps.md) | Tour of the eight apps and the modes |
-| [Commands](documentation/guides/commands.md) | Every script, flag, and environment variable |
+| [Commands](documentation/contributor/commands.md) | Every script, flag, and environment variable |
 | [Configuration](documentation/guides/configuration.md) | `~/.minnow`, providers, secrets |
-| [Architecture](documentation/guides/architecture.md) | How the three processes fit together |
+| [Architecture](documentation/contributor/architecture.md) | How the three processes fit together |
 | [Troubleshooting](documentation/guides/troubleshooting.md) | When something won't start |
 
 Full index: [documentation/](documentation/README.md).

@@ -39,7 +39,7 @@ The reference point is **Blender**, not a SaaS product: one complete suite cover
 ### Platform capabilities
 
 - **Four composer modes** — General, Build, Plan, Debug (Issues workflows) — plus Orchestrate from the hub and Super Plan under Plan. Each has tuned prompts and tool policy.
-- **Agent layer** — 111 built-in tools (103 in a default build; app-bound tools are hidden with their app), sub-agents, work agents, skills (`/commands`), tool permissions (Full / Ask / Off), MCP and local plugins.
+- **Agent layer** — 114 built-in tools (106 in a default build; app-bound tools are hidden with their app), sub-agents, work agents, skills (`/commands`), tool permissions (Full / Ask / Off), MCP and local plugins.
 - **Minnow apps** — a fixed core set (Code, Chat, Research, Models, Brain, Issues, Scheduler, Settings) from the dock. No optional-app picker; unfinished apps stay release-gated off.
 - **Workspace tools** — memory synthesis, voice I/O, browser CDP automation (Electron), webhooks, semantic embeddings.
 
