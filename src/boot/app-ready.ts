@@ -22,7 +22,7 @@ function isBundledStylesheetLink(link: HTMLLinkElement): boolean {
     const url = new URL(href, location.href);
     if (url.origin !== location.origin) return false;
     if (url.pathname.includes('/node_modules/')) return false;
-    if (import.meta.env.PROD && !url.pathname.includes('/assets/')) return false;
+    if (import.meta.env?.PROD && !url.pathname.includes('/assets/')) return false;
     return true;
   } catch {
     return false;
@@ -91,7 +91,7 @@ function hasViteInjectedModuleStyles(): boolean {
 
 /** Dev-only: wait for Vite HMR `<style data-vite-dev-id>` tags (not `<link>` bundles). */
 export function whenViteInjectedStylesReady(): Promise<void> {
-  if (!import.meta.env.DEV) {
+  if (import.meta.env?.DEV !== true) {
     return Promise.resolve();
   }
   if (hasViteInjectedModuleStyles()) {
@@ -137,8 +137,15 @@ export function whenAppShellStyled(
   });
 }
 
+import {
+  logBootMetricsIfDebug,
+  recordAppReadyMetrics,
+} from './boot-metrics.ts';
+
 /** Dismiss the inline loading shell (see index.html `#app-loader`). */
 export function markAppReady(): void {
+  const snapshot = recordAppReadyMetrics();
+  logBootMetricsIfDebug(snapshot);
   const loader = document.getElementById('app-loader');
   if (loader) {
     loader.setAttribute('aria-busy', 'false');
