@@ -1,140 +1,156 @@
 /**
- * Models → Library — HF token and custom model directories.
+ * Models → Storage — where Minnow looks for weights, and the token it uses to
+ * fetch gated ones.
  */
 
 import { fetchModelsConfig, saveModelsConfig } from '../../models/api-client';
 import { setStatus } from '../status';
+import { el, emptyState, icon, iconButton, textButton } from './dom';
+import { refreshModels } from './store';
 
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
+/** Folders Minnow always scans, shown so the extra list reads as additive. */
+const BUILT_IN_ROOTS = [
+  { path: '~/.minnow/models', note: 'Downloads started from Discover' },
+  { path: '~/.cache/huggingface/hub', note: 'Hugging Face hub cache' },
+];
+
+function field(label: string, hint: string, control: HTMLElement): HTMLElement {
+  const wrap = el('div', 'models-field-block');
+  wrap.append(el('span', 'models-field__label', label), control, el('p', 'models-hint', hint));
+  return wrap;
 }
 
-/** Render Models library panel (HF token + scan directories). */
+/** Render the Storage panel. */
 export async function mountModelsSettingsSection(): Promise<void> {
   const mount = document.getElementById('modelsSettingsBody');
   if (!mount) return;
   mount.replaceChildren(el('p', 'models-muted', 'Loading…'));
 
+  let config;
   try {
-    const config = await fetchModelsConfig();
-    mount.replaceChildren();
-
-    const hfZone = el('section', 'models-library-zone');
-    hfZone.appendChild(el('h3', 'models-section-subtitle', 'Hugging Face token'));
-    hfZone.appendChild(
-      el(
-        'p',
-        'models-muted',
-        'Optional. Needed for gated models and higher download limits.',
-      ),
+    config = await fetchModelsConfig();
+  } catch (err) {
+    mount.replaceChildren(
+      emptyState({
+        glyph: 'triangle-warning',
+        title: 'Could not read storage settings',
+        body: err instanceof Error ? err.message : 'Unknown error.',
+        action: { label: 'Try again', onClick: () => void mountModelsSettingsSection() },
+      }),
     );
+    return;
+  }
 
-    const hfRow = el('div', 'models-settings-row');
-    const hfInput = document.createElement('input');
-    hfInput.type = 'password';
-    hfInput.className = 'models-settings-input';
-    hfInput.autocomplete = 'off';
-    hfInput.placeholder = config.hfTokenConfigured
-      ? `Stored (${config.hfTokenMasked}) — enter to replace`
-      : 'hf_…';
-    hfRow.append(hfInput);
-    hfZone.appendChild(hfRow);
+  let dirs = [...config.modelDirs];
+  const fragment = document.createDocumentFragment();
 
-    const hfActions = el('div', 'models-installed-actions');
-    const saveHf = el('button', 'models-inline-btn is-primary', 'Save token');
-    saveHf.type = 'button';
-    const clearHf = el('button', 'models-inline-btn', 'Clear token');
-    clearHf.type = 'button';
-    clearHf.hidden = !config.hfTokenConfigured;
-    hfActions.append(saveHf, clearHf);
-    hfZone.appendChild(hfActions);
-    mount.appendChild(hfZone);
+  // Scan roots
+  const rootsBlock = el('section', 'models-block');
+  rootsBlock.appendChild(el('h3', 'models-block__label', 'Always scanned'));
+  const roots = el('div', 'models-path-list');
+  for (const root of BUILT_IN_ROOTS) {
+    const row = el('div', 'models-path-row is-builtin');
+    row.append(icon('folder'), el('span', 'models-path-row__path', root.path));
+    row.appendChild(el('span', 'models-path-row__note', root.note));
+    roots.appendChild(row);
+  }
+  rootsBlock.appendChild(roots);
+  fragment.appendChild(rootsBlock);
 
-    const dirsZone = el('section', 'models-library-zone models-library-zone--split');
-    dirsZone.appendChild(el('h3', 'models-section-subtitle', 'Extra scan folders'));
-    dirsZone.appendChild(
-      el(
-        'p',
-        'models-muted',
-        'Also scanned by Recommendations and Installed, besides the HF cache and ~/.minnow/models.',
-      ),
-    );
+  // Extra folders
+  const dirsBlock = el('section', 'models-block');
+  dirsBlock.appendChild(el('h3', 'models-block__label', 'Extra folders'));
+  const dirsList = el('div', 'models-path-list');
 
-    const dirsList = el('div', 'models-model-dirs');
-    const renderDirs = (dirs: string[]) => {
-      dirsList.replaceChildren();
-      if (!dirs.length) {
-        dirsList.appendChild(el('p', 'models-muted', 'No extra folders yet.'));
-        return;
-      }
-      for (const dir of dirs) {
-        const tag = el('span', 'models-model-dir-tag', dir);
-        dirsList.appendChild(tag);
-      }
-    };
-    renderDirs(config.modelDirs);
+  const renderDirs = () => {
+    dirsList.replaceChildren();
+    if (!dirs.length) {
+      dirsList.appendChild(
+        el('p', 'models-muted', 'None yet. Add a folder holding GGUF files to include it in every scan.'),
+      );
+      return;
+    }
+    for (const dir of dirs) {
+      const row = el('div', 'models-path-row');
+      row.append(icon('folder-open'), el('span', 'models-path-row__path', dir));
+      row.appendChild(
+        iconButton('cross-circle', `Remove ${dir}`, () => {
+          dirs = dirs.filter((d) => d !== dir);
+          renderDirs();
+        }),
+      );
+      dirsList.appendChild(row);
+    }
+  };
+  renderDirs();
+  dirsBlock.appendChild(dirsList);
 
-    const dirInput = document.createElement('input');
-    dirInput.type = 'text';
-    dirInput.className = 'models-settings-input';
-    dirInput.placeholder = '~/models or C:\\models';
-    const addDirBtn = el('button', 'models-inline-btn', 'Add folder');
-    addDirBtn.type = 'button';
-    const dirRow = el('div', 'models-settings-row');
-    dirRow.append(dirInput, addDirBtn);
-    dirsZone.append(dirsList, dirRow);
+  const addRow = el('div', 'models-inline-form');
+  const dirInput = el('input', 'models-field__input') as HTMLInputElement;
+  dirInput.type = 'text';
+  dirInput.placeholder = '~/models or C:\\models';
+  dirInput.setAttribute('aria-label', 'Folder to scan');
+  const addDir = () => {
+    const value = dirInput.value.trim();
+    if (!value) return;
+    if (dirs.includes(value)) {
+      setStatus('err', 'That folder is already in the list.');
+      return;
+    }
+    dirs = [...dirs, value];
+    dirInput.value = '';
+    renderDirs();
+  };
+  dirInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addDir();
+    }
+  });
+  addRow.append(dirInput, textButton('Add', addDir));
+  dirsBlock.appendChild(addRow);
 
-    let currentDirs = [...config.modelDirs];
-    addDirBtn.addEventListener('click', () => {
-      const val = dirInput.value.trim();
-      if (!val || currentDirs.includes(val)) return;
-      currentDirs = [...currentDirs, val];
-      dirInput.value = '';
-      renderDirs(currentDirs);
-    });
-
-    const saveDirs = el('button', 'models-inline-btn is-primary', 'Save folders');
-    saveDirs.type = 'button';
-    saveDirs.addEventListener('click', () => {
-      void saveModelsConfig({ modelDirs: currentDirs })
+  const saveDirs = textButton(
+    'Save folders',
+    () => {
+      void saveModelsConfig({ modelDirs: dirs })
         .then((next) => {
-          currentDirs = [...next.modelDirs];
-          renderDirs(currentDirs);
+          dirs = [...next.modelDirs];
+          renderDirs();
           setStatus('ok', 'Scan folders saved.');
+          void refreshModels({ fresh: true });
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           setStatus('err', err instanceof Error ? err.message : 'Save failed');
         });
-    });
-    dirsZone.appendChild(saveDirs);
-    mount.appendChild(dirsZone);
+    },
+    'primary',
+  );
+  dirsBlock.appendChild(saveDirs);
+  fragment.appendChild(dirsBlock);
 
-    saveHf.addEventListener('click', () => {
-      const token = hfInput.value.trim();
-      if (!token) {
-        setStatus('err', 'Enter a token or use Clear.');
-        return;
-      }
-      void saveModelsConfig({ hfToken: token })
-        .then((next) => {
-          hfInput.value = '';
-          hfInput.placeholder = `Stored (${next.hfTokenMasked}) — enter to replace`;
-          clearHf.hidden = !next.hfTokenConfigured;
-          setStatus('ok', 'Hugging Face token saved.');
-        })
-        .catch((err) => {
-          setStatus('err', err instanceof Error ? err.message : 'Save failed');
-        });
-    });
+  // Hugging Face token
+  const hfBlock = el('section', 'models-block');
+  hfBlock.appendChild(el('h3', 'models-block__label', 'Hugging Face token'));
+  const hfInput = el('input', 'models-field__input') as HTMLInputElement;
+  hfInput.type = 'password';
+  hfInput.autocomplete = 'off';
+  hfInput.placeholder = config.hfTokenConfigured
+    ? `Stored (${config.hfTokenMasked}) — enter a new one to replace`
+    : 'hf_…';
+  hfInput.setAttribute('aria-label', 'Hugging Face access token');
+  hfBlock.appendChild(
+    field(
+      'Access token',
+      'Only needed for gated repositories and higher download rate limits. Stored encrypted under ~/.minnow.',
+      hfInput,
+    ),
+  );
 
-    clearHf.addEventListener('click', () => {
+  const hfActions = el('div', 'models-inline-form');
+  const clearHf = textButton(
+    'Clear',
+    () => {
       void saveModelsConfig({ clearHfToken: true })
         .then(() => {
           hfInput.value = '';
@@ -142,14 +158,38 @@ export async function mountModelsSettingsSection(): Promise<void> {
           clearHf.hidden = true;
           setStatus('ok', 'Hugging Face token cleared.');
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           setStatus('err', err instanceof Error ? err.message : 'Clear failed');
         });
-    });
-  } catch (err) {
-    mount.replaceChildren();
-    mount.appendChild(
-      el('p', 'models-error', err instanceof Error ? err.message : 'Failed to load library settings.'),
-    );
-  }
+    },
+    'danger',
+  );
+  clearHf.hidden = !config.hfTokenConfigured;
+
+  const saveHf = textButton(
+    'Save token',
+    () => {
+      const token = hfInput.value.trim();
+      if (!token) {
+        setStatus('err', 'Enter a token, or use Clear to remove the stored one.');
+        return;
+      }
+      void saveModelsConfig({ hfToken: token })
+        .then((next) => {
+          hfInput.value = '';
+          hfInput.placeholder = `Stored (${next.hfTokenMasked}) — enter a new one to replace`;
+          clearHf.hidden = !next.hfTokenConfigured;
+          setStatus('ok', 'Hugging Face token saved.');
+        })
+        .catch((err: unknown) => {
+          setStatus('err', err instanceof Error ? err.message : 'Save failed');
+        });
+    },
+    'primary',
+  );
+  hfActions.append(saveHf, clearHf);
+  hfBlock.appendChild(hfActions);
+  fragment.appendChild(hfBlock);
+
+  mount.replaceChildren(fragment);
 }
