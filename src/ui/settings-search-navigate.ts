@@ -36,6 +36,41 @@ const TARGET_FLASH_CLASS = 'settings-search-target-flash';
 
 const FLASH_MS = 1800;
 
+const SETTINGS_CONTENT_SCROLL_PAD = 12;
+
+/** Scroll inside `.settings-content` so floating OS window chrome is not shifted. */
+export function scrollSettingsTargetIntoView(
+  target: HTMLElement,
+  options?: Pick<ScrollIntoViewOptions, 'block' | 'behavior'>,
+): void {
+  const scrollParent = target.closest('.settings-content');
+  if (!(scrollParent instanceof HTMLElement)) {
+    target.scrollIntoView(options);
+    return;
+  }
+
+  const behavior = options?.behavior ?? 'smooth';
+  const block = options?.block ?? 'start';
+  const parentRect = scrollParent.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  let delta = 0;
+  if (block === 'center') {
+    delta =
+      targetRect.top -
+      parentRect.top -
+      (parentRect.height - targetRect.height) / 2;
+  } else if (block === 'end') {
+    delta = targetRect.bottom - parentRect.bottom;
+  } else {
+    delta = targetRect.top - parentRect.top - SETTINGS_CONTENT_SCROLL_PAD;
+  }
+
+  scrollParent.scrollTo({
+    top: Math.max(0, scrollParent.scrollTop + delta),
+    behavior,
+  });
+}
+
 /** Open ancestor disclosure panels so a search hit is visible. */
 function expandSettingsDetailsForTarget(node: HTMLElement): void {
   let current: HTMLElement | null = node;
@@ -193,7 +228,7 @@ export function scrollToSettingsHub(hubId: string): void {
 
   const hub = document.getElementById(`settingsHub-${hubId}`);
 
-  hub?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (hub) scrollSettingsTargetIntoView(hub, { block: 'start', behavior: 'smooth' });
 
 }
 
@@ -285,7 +320,7 @@ export function scrollToSettingsArea(
 
   const root = getSectionRoot(sectionId);
 
-  root?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (root) scrollSettingsTargetIntoView(root, { block: 'start', behavior: 'smooth' });
 
 }
 
@@ -420,7 +455,7 @@ export async function navigateToSettingsSearchEntry(
 
 
 
-  target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  scrollSettingsTargetIntoView(target, { block: 'center', behavior: 'smooth' });
 
   flashSettingsSearchTarget(target);
 

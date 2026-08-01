@@ -410,6 +410,9 @@ function shouldBlurDesktop(snapshot: InstanceSnapshot): boolean {
 function stashWindowContent(appId: AppId): void {
   const el = layerForApp(appId);
   if (!el) return;
+  if (appId === 'settings') {
+    el.classList.remove('settings-page--in-os-window');
+  }
   const appsLayer = getAppsLayer();
   if (appsLayer && el.parentElement !== appsLayer) {
     appsLayer.appendChild(el);
@@ -440,6 +443,9 @@ async function ensureWindowSurface(
   const content = layerForApp(appId);
   if (body && content && content.parentElement !== body) {
     body.appendChild(content);
+  }
+  if (appId === 'settings' && content) {
+    content.classList.add('settings-page--in-os-window');
   }
   mountedWindowInstances.add(instanceId);
 

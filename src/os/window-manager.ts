@@ -184,6 +184,7 @@ class WindowManager {
         this.emit();
       },
     });
+    frame.root.dataset.appId = appId;
     frame.root.style.zIndex = String(record.zIndex);
     this.frames.set(id, frame);
     if (options?.activate !== false) {

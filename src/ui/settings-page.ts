@@ -36,6 +36,7 @@ import {
   activateIntegrationsHub,
   flashSettingsSearchTarget,
   resolveSettingsSearchDomTarget,
+  scrollSettingsTargetIntoView,
   scrollToSettingsArea,
   updateSettingsNavActive,
 } from './settings-search-navigate';
@@ -103,8 +104,23 @@ function writeSettingsHash(slug: string): void {
   }
 }
 
-/** Dock/window shell: hide in-app back (Brain pattern); OS titlebar owns close. */
-function syncSettingsWindowChrome(): void {
+/** Class on #settingsView while it is mounted in a floating OS window frame. */
+export const SETTINGS_IN_OS_WINDOW_CLASS = 'settings-page--in-os-window';
+
+/** Keep window chrome classes in sync after reparent between apps layer and window body. */
+function syncSettingsOsWindowChrome(): void {
+  const root = getSettingsRoot();
+  if (!root) return;
+  const inWindow = Boolean(root.closest('.mn-os-window-body'));
+  // Only add here — app-host stashWindowContent removes the class on unmount.
+  // toggle(false) during reparent/async open was stripping inset styles mid-flight.
+  if (inWindow) {
+    root.classList.add(SETTINGS_IN_OS_WINDOW_CLASS);
+    const osWindow = root.closest('.mn-os-window');
+    if (osWindow instanceof HTMLElement) {
+      osWindow.scrollTop = 0;
+    }
+  }
   document
     .getElementById('btnSettingsPageBack')
     ?.classList.toggle('hidden', isOsEmbedded());
@@ -206,7 +222,7 @@ export function setActiveArea(
         if (searchKey) {
           const target = resolveSettingsSearchDomTarget(area, searchKey);
           if (target) {
-            target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            scrollSettingsTargetIntoView(target, { block: 'center', behavior: 'smooth' });
             flashSettingsSearchTarget(target);
             return;
           }
@@ -259,7 +275,7 @@ function setActiveIntegrationsHub(hubId: SettingsIntegrationsHubId): void {
     void detectLocalServer().then(() => refreshPromptTokenEstimate());
     requestAnimationFrame(() => {
       const hub = document.getElementById(`settingsHub-${hubId}`);
-      hub?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (hub) scrollSettingsTargetIntoView(hub, { block: 'start', behavior: 'smooth' });
     });
   });
 }
@@ -386,7 +402,8 @@ export function openSettings(
   }
 
   root.classList.add('is-open');
-  syncSettingsWindowChrome();
+  syncSettingsOsWindowChrome();
+  requestAnimationFrame(() => syncSettingsOsWindowChrome());
   if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     document.querySelector('header.topbar')?.classList.add('hidden');
@@ -497,7 +514,7 @@ export function initSettingsPage(): void {
   if (root && isOsEmbedded()) {
     root.classList.add('settings-page--os-embedded');
   }
-  syncSettingsWindowChrome();
+  syncSettingsOsWindowChrome();
 
   registerWindowTeardown('settings', () => closeSettings({ skipNavigate: true }));
   upgradeSettingsCheckboxes();
