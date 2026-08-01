@@ -236,7 +236,7 @@ export async function renderMenuList(): Promise<void> {
 /** Open or close the menu for tests and the top bar button. */
 export async function toggleWorkspaceMenu(btn: HTMLButtonElement): Promise<void> {
   if (!menuDeps.isServerAvailable()) {
-    menuDeps.reportStatus('err', 'Workspace requires npm start (local server)');
+    menuDeps.reportStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
 

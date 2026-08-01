@@ -144,12 +144,12 @@ async function ensureReadyForSend(): Promise<boolean> {
       desktopWorkspacePath = await getDesktopWorkspacePath();
     }
     if (!desktopWorkspacePath) {
-      setStatus('err', 'Desktop workspace unavailable — run npm start');
+      setStatus('err', 'Desktop workspace unavailable — open Minnow');
       return false;
     }
     return true;
   } catch {
-    setStatus('err', 'Desktop workspace unavailable — run npm start');
+    setStatus('err', 'Desktop workspace unavailable — open Minnow');
     return false;
   }
 }

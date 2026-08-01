@@ -272,7 +272,7 @@ export function formatFetchNetworkError(url, err, options = {}) {
       ? ' The site may block cross-origin requests (CORS).'
       : '';
   const startHint = options.suggestNpmStart
-    ? ' Run `npm start` for server-side page fetch (no browser CORS).'
+    ? ' Open Minnow for in-app page fetch (avoids browser CORS limits).'
     : '';
   return `Error: fetch failed for ${url} (${message}).${corsHint}${startHint}`;
 }

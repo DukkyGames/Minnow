@@ -137,7 +137,7 @@ export async function mountModelsSettingsSection(): Promise<void> {
   const browseBtn = textButton('Browse…', () => {
     void (async () => {
       if (!getLocalServerAvailable()) {
-        setStatus('err', 'Folder browse requires npm start (local server)');
+        setStatus('err', 'Folder browse requires Minnow running locally');
         return;
       }
       const initial = dirInput.value.trim() || dirs[dirs.length - 1];

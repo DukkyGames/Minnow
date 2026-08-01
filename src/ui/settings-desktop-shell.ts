@@ -35,7 +35,7 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
   if (serverUp !== 'server') {
     appendSettingsOfflineHint(
       mount,
-      'Close-to-tray requires <code>npm start</code> so preferences can be saved to config.json.',
+      'Close-to-tray requires Minnow running locally so preferences can be saved to config.json.',
     );
   }
 

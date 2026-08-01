@@ -641,7 +641,7 @@ async function refreshGitPanel(): Promise<void> {
   if (!host) return;
 
   if (!isLocalServerAvailable()) {
-    renderError(host, 'Git unavailable (tool server offline).', () => void refreshGitPanel());
+    renderError(host, 'Git unavailable (Minnow is not running locally).', () => void refreshGitPanel());
     return;
   }
 
@@ -873,7 +873,7 @@ async function refreshWorkspacePanel(): Promise<void> {
 
   host.replaceChildren();
   if (!rows.length) {
-    renderEmpty(host, 'Workspace services offline. Start npm start for Brain and terminal counts.');
+    renderEmpty(host, 'Workspace services offline. Open Minnow for Brain and terminal counts.');
     return;
   }
 

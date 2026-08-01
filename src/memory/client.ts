@@ -53,7 +53,7 @@ async function memoryEmbeddingsFetch<T>(
   init?: RequestInit,
 ): Promise<MemoryEmbeddingsOpResult<T>> {
   if (!isLocalServerAvailable()) {
-    return { kind: 'err', error: 'Start with npm start to use memory embeddings.' };
+    return { kind: 'err', error: 'Open Minnow to use memory embeddings.' };
   }
   try {
     const res = await fetch(`${API_BASE}${path}`, {

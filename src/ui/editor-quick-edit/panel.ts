@@ -185,7 +185,7 @@ async function runQuickEditStream(
     const panel = ensurePanel();
     const err = document.createElement('p');
     err.className = 'editor-quick-edit-panel__error';
-    err.textContent = 'Quick edit unavailable — start npm start and configure a provider.';
+    err.textContent = 'Quick edit unavailable — open Minnow and configure a provider.';
     panel.appendChild(err);
     return;
   }

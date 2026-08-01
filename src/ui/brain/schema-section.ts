@@ -66,7 +66,7 @@ export async function renderSchemaSection(): Promise<void> {
     editor.value = '';
     editor.disabled = true;
     refreshSchemaPreview();
-    setSchemaStatus('err', 'Offline — start npm start.');
+    setSchemaStatus('err', 'Offline — open Minnow.');
     return;
   }
 

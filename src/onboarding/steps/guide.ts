@@ -100,7 +100,7 @@ function renderFallback(container: HTMLElement, ctx: OnboardingContext): void {
       'p',
       null,
       'The guided tour is a live chat with your model, so it needs a connected provider' +
-        (ctx.serverAvailable ? '.' : ' and the Minnow server (npm start).'),
+        (ctx.serverAvailable ? '.' : ' and Minnow running locally.'),
     ),
   );
   card.appendChild(

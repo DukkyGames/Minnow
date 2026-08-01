@@ -97,12 +97,12 @@ describe('rankSentencesByQuery', () => {
 });
 
 describe('formatFetchNetworkError', () => {
-  it('includes URL and npm start hint when requested', () => {
+  it('includes URL and Minnow hint when requested', () => {
     const msg = formatFetchNetworkError('https://example.com', new TypeError('Failed to fetch'), {
       suggestNpmStart: true,
     });
     assert.match(msg, /https:\/\/example\.com/);
-    assert.match(msg, /npm start/);
+    assert.match(msg, /Open Minnow/i);
     assert.match(msg, /CORS/i);
   });
 });

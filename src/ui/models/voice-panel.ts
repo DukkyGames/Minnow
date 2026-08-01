@@ -571,7 +571,7 @@ async function saveSttSettings(): Promise<void> {
     },
   });
   if (!saved) {
-    setStatus('err', 'Could not save STT settings. Use npm start.');
+    setStatus('err', 'Could not save STT settings. Open or restart Minnow.');
     return;
   }
   voiceConfig = saved;
@@ -926,7 +926,7 @@ async function saveTtsSettings(): Promise<void> {
     },
   });
   if (!saved) {
-    setStatus('err', 'Could not save TTS settings. Use npm start.');
+    setStatus('err', 'Could not save TTS settings. Open or restart Minnow.');
     return;
   }
   voiceConfig = saved;

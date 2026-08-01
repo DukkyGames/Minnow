@@ -47,7 +47,7 @@ function buildDesktopToolsAnchor(): HTMLElement {
       <h2 class="composer-tools-popover__title">Tools</h2>
     </header>
     <div id="desktopToolsStatus" class="composer-tools-popover__status hidden" role="status" aria-live="polite">
-      <p id="desktopToolsServerBanner" class="composer-tools-popover__notice hidden">Server tools need <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <p id="desktopToolsServerBanner" class="composer-tools-popover__notice hidden">Some tools need Minnow running locally. Open or restart the app.</p>
       <p id="desktopToolsPreviewBanner" class="composer-tools-popover__notice hidden">Browser tools need the Minnow desktop app window.</p>
     </div>
     <div id="desktopToolsList" class="tools-list tools-list--composer"></div>

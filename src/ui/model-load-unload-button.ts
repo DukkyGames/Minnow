@@ -99,7 +99,7 @@ export function setModelLoadUnloadButtonUnsupported(
   btn.setAttribute('aria-label', 'Load model');
   btn.title = serverMode
     ? 'Model load/unload is not supported for this provider'
-    : 'Start with npm start to load or unload models';
+    : 'Open Minnow to load or unload models';
 }
 
 /** Show spinner on a compact icon-only Load/Unload control. */
@@ -152,5 +152,5 @@ export function setModelLoadUnloadIconButtonUnsupported(
   btn.setAttribute('aria-label', 'Load model');
   btn.title = serverMode
     ? 'Model load/unload is not supported for this provider'
-    : 'Start with npm start to load or unload models';
+    : 'Open Minnow to load or unload models';
 }

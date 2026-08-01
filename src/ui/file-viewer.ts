@@ -694,7 +694,7 @@ async function mountPdfPreview(tab: ViewerTabState, src: string): Promise<void> 
     updateViewerChrome();
   } catch {
     setViewerError(
-      'Could not load PDF preview. Is the tool server running (npm start)?',
+      'Could not load PDF preview. Is Minnow running locally?',
     );
   }
 }
@@ -871,7 +871,7 @@ export function renderActiveViewerTab(): void {
       );
       mountImagePreview(tab, src, () => {
         setViewerError(
-          'Could not load image preview. Is the tool server running (npm start)?',
+          'Could not load image preview. Is Minnow running locally?',
         );
       });
     }
@@ -897,7 +897,7 @@ export function renderActiveViewerTab(): void {
     const label = tab.viewMode === 'spreadsheet' ? 'Spreadsheet preview' : 'Word document preview';
     mountDocumentHtmlPreview(tab, src, label, () => {
       setViewerError(
-        'Could not load document preview. Is the tool server running (npm start)?',
+        'Could not load document preview. Is Minnow running locally?',
       );
     });
     return;

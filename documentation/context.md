@@ -17,6 +17,7 @@ Minnow is a **local-first AI workspace**: a **Vite + TypeScript SPA**, a **Node 
 | **Tool server** (`server.js`, `server/`) | Vite dev host, `/api/*`, file/git/shell tools, generations SSE, persistence under `~/.minnow` |
 
 - **`npm start`** — Vite + tool server (default port **9473**) + Electron.
+- **UI offline copy (MIN-529):** Settings banners, status lines, and tool errors shown in the SPA avoid `npm start` and internal backend jargon; prefer **Open or restart Minnow** (see [`src/copy/local-session.ts`](../src/copy/local-session.ts)).
 - **`npm run dev`** — Vite only; most server features unavailable.
 - **`npm run electron:dev`** — Vite + Electron with HMR.
 - **Dev boot:** `server.js` clears stale `~/.minnow/run/dev-host.json` on start and writes the bound URL only after Vite warmup; `scripts/wait-for-minnow-dev.mjs` ignores dev-host metadata when the writer PID is gone so Electron does not attach to an orphaned server on the preferred port.

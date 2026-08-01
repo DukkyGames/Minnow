@@ -90,7 +90,7 @@ async function dismissFileViewerForPreview(): Promise<boolean> {
 }
 
 const BROWSER_PREVIEW_HINT =
-  'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
+  'Full Chromium preview (any website or local file) runs in the Minnow desktop app.';
 const PREVIEW_FILE_API = '/api/preview/file/';
 const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;

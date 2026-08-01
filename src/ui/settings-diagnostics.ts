@@ -198,7 +198,7 @@ export async function renderDiagnosticsSettingsSection(): Promise<void> {
   if (!serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'Diagnostics require <code>npm start</code>. Crash logs may still exist under <code>~/.minnow/logs/</code>.',
+      'Diagnostics require Minnow running locally. Crash logs may still exist under <code>~/.minnow/logs/</code>.',
     );
   }
 

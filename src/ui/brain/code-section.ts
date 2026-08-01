@@ -144,7 +144,7 @@ async function refreshRepoMap(): Promise<void> {
 
   if (!map) {
     mapEl.replaceChildren();
-    mapEl.textContent = 'Repo map unavailable. Start npm start and reindex.';
+    mapEl.textContent = 'Repo map unavailable. Open Minnow and reindex.';
     if (budgetEl) budgetEl.textContent = '';
     return;
   }
@@ -168,7 +168,7 @@ async function refreshCodeStatus(): Promise<void> {
   if (!line) return;
 
   if (!status) {
-    line.textContent = 'Offline — start npm start.';
+    line.textContent = 'Offline — open Minnow.';
     return;
   }
 
@@ -371,7 +371,7 @@ async function refreshExplainPanel(symbolId: string): Promise<void> {
   emptyEl.replaceChildren();
 
   if (!result) {
-    showExplainEmpty('Explain unavailable. Start npm start.', { icon: 'offline' });
+    showExplainEmpty('Explain unavailable. Open Minnow.', { icon: 'offline' });
     return;
   }
 
@@ -497,7 +497,7 @@ async function runSymbolSearch(query: string): Promise<void> {
   const result = await findBrainCodeSymbol(trimmed, 25);
   if (!result) {
     renderSearchResults([]);
-    setActionStatus('err', 'Search failed. Is npm start running?');
+    setActionStatus('err', 'Search failed. Is Minnow running?');
     return;
   }
 

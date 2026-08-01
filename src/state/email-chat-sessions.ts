@@ -21,7 +21,7 @@ export async function ensureActiveEmailAssistantChat(): Promise<{
 }> {
   const workspacePath = await getChatsWorkspacePath();
   if (!workspacePath) {
-    throw new Error('Email assistant workspace is unavailable. Start Minnow with npm start.');
+    throw new Error('Email assistant workspace is unavailable. Open or restart Minnow.');
   }
 
   const { activateEmailAssistantChatForApp } = await import('./sessions');

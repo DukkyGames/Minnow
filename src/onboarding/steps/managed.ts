@@ -261,7 +261,7 @@ export const providerManagedStep: OnboardingStep = {
 
           'mn-onboarding-notice',
 
-          'Local installs need npm start. You can finish theme and permissions now, then run setup again later.',
+          'Local installs need Minnow running locally. You can finish theme and permissions now, then run setup again later.',
 
         ),
 

@@ -46,7 +46,7 @@ const PROVIDER_OPTIONS: { value: SearchProvider; label: string }[] = [
   { value: 'searxng', label: 'SearXNG (local instance)' },
   { value: 'tavily', label: 'Tavily API' },
   { value: 'brave', label: 'Brave Search API' },
-  { value: 'duckduckgo', label: 'DuckDuckGo (local server)' },
+  { value: 'duckduckgo', label: 'DuckDuckGo (on this device)' },
   { value: 'disabled', label: 'Disabled' },
 ];
 
@@ -124,7 +124,7 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   if (!serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'Start with <code>npm start</code> to load and save search settings (<code>search.json</code>).',
+      'Open Minnow to load and save search settings (<code>search.json</code>).',
     );
   }
 
@@ -262,7 +262,7 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     current = await loadSearchConfig();
     configuredSearxngUrl = current.searxngUrl;
   } catch {
-    setStatus('err', 'Could not load search settings — use npm start');
+    setStatus('err', 'Could not load search settings. Open or restart Minnow.');
   }
 
   const applyToForm = (config: SearchConfig): void => {
@@ -333,7 +333,7 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
                 applyToForm(saved);
                 setStatus('ok', 'Search settings saved');
               } catch {
-                setStatus('err', 'Could not save search settings — use npm start');
+                setStatus('err', 'Could not save search settings. Open or restart Minnow.');
               }
             })();
           },

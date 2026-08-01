@@ -283,7 +283,7 @@ class EditorAiCompletionPlugin {
 
     if (state.readOnly) return;
     if (!this.opts.canRequest()) {
-      this.opts.onStatus?.('AI completion unavailable (start npm start and configure a provider).');
+      this.opts.onStatus?.('AI completion unavailable (open Minnow and configure a provider).');
       return;
     }
     this.opts.onStatus?.(null);

@@ -113,7 +113,7 @@ export async function browseResearchWorkspace(
     return null;
   }
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Workspace browse requires npm start (local server)');
+    setStatus('err', 'Workspace browse requires Minnow running locally');
     return null;
   }
 

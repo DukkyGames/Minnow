@@ -154,7 +154,7 @@ export const memoryStep: OnboardingStep = {
 
     if (!ctx.configServerAvailable) {
       container.appendChild(
-        el('p', 'mn-onboarding-notice', 'Full memory features need npm start.'),
+        el('p', 'mn-onboarding-notice', 'Full memory features need Minnow running locally.'),
       );
     } else {
       void (async () => {

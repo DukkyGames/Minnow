@@ -523,7 +523,7 @@ function renderOfflineEmpty(host: HTMLElement): void {
   host.innerHTML = '';
   const msg = document.createElement('p');
   msg.className = 'file-tree-empty';
-  msg.textContent = 'Start with npm start to browse project files.';
+  msg.textContent = 'Open Minnow to browse project files.';
   host.appendChild(msg);
 }
 

@@ -69,7 +69,7 @@ export async function renderBrowserSettingsSection(mount: HTMLElement): Promise<
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       shell,
-      'Browser settings require <code>npm start</code> (config.json on disk).',
+      'Browser settings are saved on this device. Open Minnow to edit them.',
     );
     return;
   }
@@ -78,7 +78,7 @@ export async function renderBrowserSettingsSection(mount: HTMLElement): Promise<
   if (mode !== 'server') {
     appendSettingsOfflineHint(
       shell,
-      'Connect with <code>npm start</code> to edit browser settings.',
+      'Open Minnow to edit browser settings.',
     );
     return;
   }

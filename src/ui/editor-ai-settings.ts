@@ -249,7 +249,7 @@ function renderEditorSettingsBody(
   if (!online) {
     appendSettingsOfflineHint(
       content,
-      'Start with <code>npm start</code> to sync settings to <code>~/.minnow/config.json</code>. Changes below use browser storage until then.',
+      'Open Minnow to sync settings to <code>~/.minnow/config.json</code>. Changes below use browser storage until then.',
     );
   }
 
@@ -275,7 +275,7 @@ function renderEditorSettingsBody(
     },
     {
       term: 'Storage',
-      value: online ? '~/.minnow/config.json' : 'Browser (until npm start)',
+      value: online ? '~/.minnow/config.json' : 'Browser (until Minnow is running)',
     },
   ]);
 

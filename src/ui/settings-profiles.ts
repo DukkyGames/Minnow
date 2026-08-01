@@ -93,7 +93,7 @@ export function mountSetupProfilesPanel(
   const offline = el(
     'p',
     'settings-field-hint settings-setup-profiles__offline hidden',
-    'Setup profiles require npm start (tool server). Capture and apply are disabled offline.',
+    'Setup profiles require Minnow running locally. Capture and apply are disabled offline.',
   );
   block.appendChild(offline);
 
