@@ -19,6 +19,10 @@ import {
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
 import { isOrchestrateBoardFinished, isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
+import {
+  getKanbanColumnDefs,
+  getWaveCompactLaneDefs,
+} from '../chat/orchestrate/board-kanban-columns.ts';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { sumUsageSegments } from '../chat/orchestrate/stats-math';
 import {
@@ -2552,46 +2556,6 @@ function compactTaskStatusLabel(task: BoardTask, taskStreaming: boolean): string
   }
 }
 
-/** True when the Testing kanban lane should appear (legacy in-flight testers). */
-export function boardShowsTestingKanbanColumn(board: BoardState): boolean {
-  if (!boardSkipsPerTaskTesting(board)) return true;
-  return board.tasks.some((t) => t.status === 'testing');
-}
-
-/** Kanban column layout for the board (3 lanes when skip is on and no legacy testing). */
-export function getKanbanColumnDefs(
-  board: BoardState,
-): Array<{ id: string; label: string; statuses: BoardTaskStatus[] }> {
-  const columns: Array<{ id: string; label: string; statuses: BoardTaskStatus[] }> = [
-    { id: 'planned', label: 'Planned', statuses: ['planned', 'blocked'] },
-    { id: 'in_progress', label: 'In Progress', statuses: ['in_progress', 'merging'] },
-  ];
-  if (boardShowsTestingKanbanColumn(board)) {
-    columns.push({ id: 'testing', label: 'Testing', statuses: ['testing'] });
-  }
-  columns.push({
-    id: 'complete',
-    label: 'Complete',
-    statuses: ['complete', 'failed', 'quarantined'],
-  });
-  return columns;
-}
-
-/** Compact wave strip lane labels (drops Test when skip is on). */
-function getWaveCompactLaneDefs(
-  board: BoardState,
-): Array<{ label: string; statuses: BoardTaskStatus[] }> {
-  const lanes: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
-    { label: 'Plan', statuses: ['planned', 'blocked'] },
-    { label: 'Run', statuses: ['in_progress', 'merging'] },
-  ];
-  if (boardShowsTestingKanbanColumn(board)) {
-    lanes.push({ label: 'Test', statuses: ['testing'] });
-  }
-  lanes.push({ label: 'Done', statuses: ['complete', 'failed', 'quarantined'] });
-  return lanes;
-}
-
 /** Horizontal task strip shown while a wave kanban is collapsed. */
 function buildWaveCompactSummary(
   waveTasks: BoardTask[],
@@ -2608,14 +2572,13 @@ function buildWaveCompactSummary(
   laneMeta.className = 'board-wave-compact__lanes';
   laneMeta.setAttribute('aria-hidden', 'true');
   const board = group.orchestrateBoard;
-  const lanes = board
-    ? getWaveCompactLaneDefs(board)
-    : [
-        { label: 'Plan', statuses: ['planned', 'blocked'] as BoardTaskStatus[] },
-        { label: 'Run', statuses: ['in_progress', 'merging'] as BoardTaskStatus[] },
-        { label: 'Test', statuses: ['testing'] as BoardTaskStatus[] },
-        { label: 'Done', statuses: ['complete', 'failed', 'quarantined'] as BoardTaskStatus[] },
-      ];
+  const lanes = board ? getWaveCompactLaneDefs(board) : getWaveCompactLaneDefs({
+    planPath: '',
+    tasks: waveTasks,
+    waves: [],
+    startedAt: 0,
+    lastUpdatedAt: 0,
+  });
   for (const lane of lanes) {
     const count = waveTasks.filter((t) => lane.statuses.includes(t.status)).length;
     const cell = document.createElement('span');
@@ -2682,9 +2645,10 @@ function renderKanbanColumns(
   // Stable key lets us restore horizontal scroll (phone lane swipe) across rebuilds.
   if (scrollKeyPrefix) grid.dataset.boardScrollKey = `grid:${scrollKeyPrefix}`;
   const board = group.orchestrateBoard;
-  const columns = getKanbanColumnDefs(
-    board ?? ({ tasks } as BoardState),
-  );
+  if (!board) {
+    return grid;
+  }
+  const columns = getKanbanColumnDefs(board);
   for (const col of columns) {
     const column = document.createElement('section');
     column.className = 'kanban-column';
