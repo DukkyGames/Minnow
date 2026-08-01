@@ -188,6 +188,7 @@ import { setBugBoardExecutorContext } from './bug-board-tools';
 import {
   appendBubble,
   anchorPersistedThoughtsOnRow,
+  appendInjectionNoticesDom,
   appendStats,
   appendStreamingAssistantRow,
   assistantProseHasVisibleContent,
@@ -259,6 +260,10 @@ import {
 } from '../chat/context-budget';
 import { applyContextPolicy } from '../chat/context/apply-policy';
 import { appendContextNoticeIfNeeded } from '../chat/context/context-notice';
+import {
+  appendInjectionNoticesForTurn,
+  isUiOnlyTranscriptMessage,
+} from '../chat/context/injection-notice';
 import { handleCompressCommand } from '../chat/context/compress-command';
 import { resolveWorkAgentContextPolicy } from '../chat/resolve-context-policy';
 import {
@@ -683,7 +688,7 @@ export function buildApiMessages(
 
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
-    if (m.role === 'context') continue;
+    if (isUiOnlyTranscriptMessage(m)) continue;
     if (m.role === 'user') {
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
@@ -1607,6 +1612,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     replaySnapshot?.composedSystemPrompt ??
     outbound.composed;
   const userRulesContent = replaySnapshot?.userRulesContent ?? outbound.userRules;
+
+  if (pushUser) {
+    const injectionAdded = appendInjectionNoticesForTurn(
+      chat,
+      outbound.injectionBlocks,
+    );
+    if (injectionAdded.length > 0) {
+      scheduleSaveSessions();
+      if (isStreamDomVisible(chat.id)) {
+        appendInjectionNoticesDom(
+          injectionAdded,
+          chat.history.length - injectionAdded.length,
+          { chatId: chat.id },
+        );
+      }
+    }
+  }
 
   if (!resumeGenerationId) {
     const forkHistoryIndex = resolveForkHistoryIndex(chat, pushUser);
