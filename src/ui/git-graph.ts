@@ -499,6 +499,32 @@ export function computeCollapsedRows(
     });
 }
 
+/**
+ * Collapsed history: one vertical lane on the mainline only.
+ * Full graph layout is skipped so hidden branch lanes cannot spill into the text column.
+ */
+export function computeCollapsedMainlineLayout(visuals: CommitVisual[]): CommitVisual[] {
+  const count = visuals.length;
+  if (count === 0) return [];
+
+  return visuals.map((visual, index) => {
+    const rails: GraphRail[] = [];
+    const colorIndex = visual.colorIndex;
+
+    if (count > 1) {
+      if (index === 0) {
+        rails.push({ lane: 0, colorIndex, kind: 'down' });
+      } else if (index === count - 1) {
+        rails.push({ lane: 0, colorIndex, kind: 'up' });
+      } else {
+        rails.push({ lane: 0, colorIndex, kind: 'through' });
+      }
+    }
+
+    return { ...visual, lane: 0, rails, curves: [] };
+  });
+}
+
 /** Lane center spacing; shrinks when the graph is wider than MAX_FULL_LANES. */
 function laneStep(laneCount: number): number {
   if (laneCount <= MAX_FULL_LANES) return LANE_STEP;
@@ -791,14 +817,7 @@ function appendCollapsedRows(
     return;
   }
 
-  // Lay out the mainline alone; merge parents are stripped so hidden branch
-  // lanes don't leave dangling rails.
-  const laidOut = computeGraphLayout(
-    rows.map(({ visual }) => ({
-      ...visual,
-      commit: { ...visual.commit, parents: visual.commit.parents.slice(0, 1) },
-    })),
-  );
+  const laidOut = computeCollapsedMainlineLayout(rows.map(({ visual }) => visual));
 
   const maxShown = rows.reduce((max, row) => Math.max(max, row.clusters.length), 0);
   const hasExtra = rows.some((row) => row.extraCount > 0);
