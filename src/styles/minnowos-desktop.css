@@ -2011,67 +2011,6 @@ html.mn-phone .mn-os-chat-rail.is-expanded .mn-os-chat-rail-tabs {
     padding: 14px 16px;
   }
 
-  /* Dock: scroll horizontally instead of overflowing the viewport */
-  .mn-os-dock-panel {
-    left: max(10px, env(safe-area-inset-left, 0px));
-    right: max(10px, env(safe-area-inset-right, 0px));
-    width: auto;
-    transform: none;
-  }
-
-  /* Closed dock: slide down without conflicting X-centering from desktop rules */
-  .mn-os-dock-shell[data-shell-view='app'][data-dock-open='false'] .mn-os-dock-panel {
-    transform: translateY(calc(100% + 40px));
-  }
-
-  /* Desktop view has no reveal tab — sit the launcher on the home indicator. */
-  .mn-os-dock-shell[data-shell-view='desktop'] .mn-os-dock-panel {
-    bottom: env(safe-area-inset-bottom, 0px);
-  }
-
-  .mn-os-dock-reveal,
-  .mn-os-dock-hide {
-    min-height: var(--touch-min);
-    width: 56px;
-  }
-
-  .mn-os-dock {
-    max-width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding: 8px;
-    border-radius: 16px;
-  }
-
-  .mn-os-dock::-webkit-scrollbar {
-    display: none;
-  }
-
-  .mn-os-tile-dock {
-    width: 64px;
-    flex: none;
-    padding: 8px 4px 6px;
-  }
-
-  .mn-os-tile-dock .mn-os-tile-ico {
-    width: 40px;
-    height: 40px;
-  }
-
-  .mn-os-tile-dock .mn-os-tile-ico .icon-svg {
-    --mn-icon-size: 16px;
-  }
-
-  .mn-os-tile-dock .mn-os-tile-name {
-    font-size: 10px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   /* Minimized previews: fit narrow screens */
   .mn-os-composer-dock {
     width: calc(

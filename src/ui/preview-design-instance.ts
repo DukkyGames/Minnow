@@ -174,7 +174,8 @@ export async function toggleDesignModeForInstance(
       await syncDesignModeGuestForInstance(instanceId);
     },
   });
-  await syncDesignModeGuestForInstance(instanceId);
+  // Guest sync already ran via onArmedToolChange during enable (before the Select picker binds).
+  // A second sync here re-bound the picker while CDP enable was still in flight.
 }
 
 /** Tear down secondary design iframe and session when the split closes. */

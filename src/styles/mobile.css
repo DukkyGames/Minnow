@@ -160,6 +160,63 @@ html.mn-phone #osDockLayer {
   z-index: 48;
 }
 
+/* App launcher dock — keyed to PHONE_MQ / html.mn-phone (portrait and short landscape).
+   Do not stretch the panel with left+right; that layout hid the dock in portrait while
+   centered positioning still worked on landscape phones (width > 640px). */
+html.mn-phone .mn-os-dock-panel {
+  max-width: calc(
+    100vw - max(20px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px)) -
+      var(--os-workspace-drawer-inset, 0px)
+  );
+}
+
+html.mn-phone .mn-os-dock-shell[data-shell-view='desktop'] .mn-os-dock-panel {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html.mn-phone .mn-os-dock-reveal,
+html.mn-phone .mn-os-dock-hide {
+  min-height: var(--touch-min);
+  width: 56px;
+}
+
+html.mn-phone .mn-os-dock {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 8px;
+  border-radius: 16px;
+}
+
+html.mn-phone .mn-os-dock::-webkit-scrollbar {
+  display: none;
+}
+
+html.mn-phone .mn-os-tile-dock {
+  width: 64px;
+  flex: none;
+  padding: 8px 4px 6px;
+}
+
+html.mn-phone .mn-os-tile-dock .mn-os-tile-ico {
+  width: 40px;
+  height: 40px;
+}
+
+html.mn-phone .mn-os-tile-dock .mn-os-tile-ico .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+html.mn-phone .mn-os-tile-dock .mn-os-tile-name {
+  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------- app switcher ---------- */
 
 /* The popover is anchored inline by JS (which also pins `right: auto`), so

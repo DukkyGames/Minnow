@@ -1,5 +1,31 @@
 /* Design Mode overlay chrome — tool strip + viewport/dark-mode framing (MIN-365). */
 
+/* Inline notice on the preview host (Select picker / CDP errors) — not a global toast. */
+.mn-design-notice {
+  position: absolute;
+  z-index: 5;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(420px, calc(100% - 24px));
+  padding: 8px 12px;
+  border: 1px solid var(--mn-danger-border);
+  border-radius: var(--mn-radius-md, 8px);
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.mn-design-notice--info {
+  border-color: var(--mn-border);
+  background: var(--mn-surface-2);
+  color: var(--mn-text-secondary);
+}
+
 #btnPreviewDesignToggle[aria-pressed='true'] {
   background: var(--mn-accent-soft);
   color: var(--mn-accent);

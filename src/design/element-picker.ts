@@ -77,6 +77,8 @@ export interface PickerTransport {
 
 export interface ElementPickerOptions {
   transport: PickerTransport;
+  /** Preview instance — used for per-pane cross-origin checks (split secondary browser). */
+  designInstanceId?: string;
   onPick: (picked: PickedElement) => void | Promise<void>;
   onError?: (message: string) => void;
 }
@@ -824,7 +826,12 @@ function normalizeStringRecord(raw: unknown): Record<string, string> {
 
 /** Factory for the Design Mode element picker. */
 export function createElementPicker(options: ElementPickerOptions): ElementPicker {
-  const { transport, onPick, onError } = options;
+  const {
+    transport,
+    onPick,
+    onError,
+    designInstanceId = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
+  } = options;
   let enabled = false;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let iframeClickHandler: ((ev: MouseEvent) => void) | null = null;
@@ -909,8 +916,13 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
   return {
     async enable(): Promise<void> {
       if (enabled) return;
-      if (isCrossOriginPreview() || !transport.canReadGuest()) {
+      const crossOrigin = isCrossOriginPreviewForInstance(designInstanceId);
+      if (crossOrigin) {
         onError?.('cross-origin preview: element picker disabled, use region draw');
+        return;
+      }
+      // Same-origin guest may still be loading — refreshGuestBinding retries on iframe load.
+      if (!transport.canReadGuest()) {
         return;
       }
       try {
@@ -1038,6 +1050,7 @@ export function createBestElementPicker(
   }
   return createElementPicker({
     ...pickerOptions,
+    designInstanceId,
     transport: createPickerTransport(designInstanceId),
   });
 }

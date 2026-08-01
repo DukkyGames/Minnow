@@ -22,7 +22,7 @@ import { addDesignRefToComposer } from '../attachments/design-ref';
 import { updateAttachmentSourceMapping } from '../attachments/store';
 import { previewSourceForDesignInstance } from '../ui/preview-design-source';
 import { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from '../ui/preview-design-mode-mount';
-import { showToast } from '../ui/toast';
+import { clearDesignModeNotice, setDesignModeNotice } from './design-notice';
 import {
   boundingRectOfShape,
   newPinId,
@@ -175,7 +175,7 @@ export function createSelectDesignTool(): SelectDesignTool {
         const friendly = /cross-origin/i.test(message)
           ? 'Element selection is unavailable on a cross-origin preview. Use Draw or Comment to mark a region instead.'
           : `Element picker unavailable: ${message}`;
-        showToast(friendly, 'error');
+        setDesignModeNotice(ctx?.host, friendly, 'error');
       },
     });
     try {
@@ -194,6 +194,9 @@ export function createSelectDesignTool(): SelectDesignTool {
     }
     transport = armedTransport;
     picker = nextPicker;
+    if (nextPicker.isEnabled()) {
+      clearDesignModeNotice(ctx.host);
+    }
   }
 
   async function handlePick(picked: PickedElement): Promise<void> {
@@ -265,6 +268,7 @@ export function createSelectDesignTool(): SelectDesignTool {
     },
     disarm() {
       bindGeneration += 1;
+      clearDesignModeNotice(ctx?.host);
       void teardownPicker();
       resetSelection();
       ctx = null;
