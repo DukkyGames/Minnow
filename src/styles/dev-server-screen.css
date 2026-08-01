@@ -56,6 +56,54 @@
   flex-wrap: wrap;
 }
 
+.dev-server-screen__detect-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 18px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 6px);
+  background: color-mix(in oklch, var(--mn-surface-elevated) 72%, var(--mn-bg));
+  flex-shrink: 0;
+}
+
+.dev-server-screen__detect-banner.is-active {
+  border-color: color-mix(in oklch, var(--mn-accent) 35%, var(--mn-border));
+}
+
+.dev-server-screen__detect-banner.is-done {
+  border-color: color-mix(in oklch, var(--mn-success) 40%, var(--mn-border));
+}
+
+.dev-server-screen__detect-banner.is-error {
+  border-color: color-mix(in oklch, var(--mn-danger) 35%, var(--mn-border));
+}
+
+.dev-server-screen__detect-live {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+}
+
+.dev-server-screen__detect-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dev-server-screen__detect-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.dev-server-screen__detect-detail {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
 .dev-server-screen__btn {
   min-height: 36px;
   padding: 0 12px;
