@@ -6,6 +6,7 @@ import { ICON_CHEVRON_RIGHT, ICON_FILE_TREE } from '../constants';
 import {
   getFilePanelState,
   patchFilePanelState,
+  type PaneSlotId,
   type RightPaneMode,
 } from '../state/file-panel';
 import { syncStatsStripLayoutForViewer } from './stats';
@@ -14,6 +15,12 @@ import {
   syncAppBodySidebarWidthVars,
   syncFileSidebarResizer,
 } from './sidebar-resize';
+import {
+  applyRightPaneSplitDom,
+  getFocusedPaneSlot,
+  isRightPaneSplitActive,
+  isRightPaneSplitLayoutEnabled,
+} from './right-pane-split';
 
 let chatColumnDragCollapsed = false;
 
@@ -21,7 +28,12 @@ export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-const RIGHT_PANE_CHILD_IDS = ['fileViewerPane', 'previewPane'] as const;
+const RIGHT_PANE_CHILD_IDS = [
+  'fileViewerPane',
+  'previewPane',
+  'fileViewerPaneSecondary',
+  'previewPaneSecondary',
+] as const;
 
 /**
  * MIN-224: viewer/preview panes must live inside #rightPaneColumn (below #unifiedTabs).
@@ -41,6 +53,18 @@ export function repairRightPaneDomStructure(): boolean {
       repaired = true;
     }
   }
+
+  const primarySlot = document.getElementById('rightPaneSlotPrimary');
+  if (primarySlot) {
+    for (const paneId of ['fileViewerPane', 'previewPane'] as const) {
+      const pane = document.getElementById(paneId);
+      if (pane?.parentElement === column) {
+        primarySlot.appendChild(pane);
+        repaired = true;
+      }
+    }
+  }
+
   return repaired;
 }
 
@@ -85,7 +109,11 @@ export function openMobileFileSidebar(): void {
 
 function resolvedRightPaneMode(): RightPaneMode {
   const state = getFilePanelState();
-  if (state.rightPaneMode === 'preview' || state.rightPaneMode === 'viewer') {
+  if (
+    state.rightPaneMode === 'preview' ||
+    state.rightPaneMode === 'viewer' ||
+    state.rightPaneMode === 'split'
+  ) {
     return state.rightPaneMode;
   }
   return state.viewerOpen ? 'viewer' : null;
@@ -140,27 +168,44 @@ export function reconcileRightSplitDomWithState(): void {
     return;
   }
   showRightPaneColumnDom();
+
+  if (mode === 'split' && isRightPaneSplitActive()) {
+    applyRightPaneSplitDom();
+    return;
+  }
+
   if (mode === 'preview') {
     hideViewerPaneDom();
+    document.getElementById('fileViewerPaneSecondary')?.classList.add('hidden');
     if (!isRightPaneDomVisible('preview')) {
       document.getElementById('previewPane')?.classList.remove('hidden');
       schedulePreviewGuestResyncAfterReconcile();
     }
+    document.getElementById('previewPaneSecondary')?.classList.add('hidden');
     return;
   }
-  hidePreviewPaneDom();
-  void window.minnow?.preview.hide();
-  if (!isRightPaneDomVisible('viewer')) {
-    document.getElementById('fileViewerPane')?.classList.remove('hidden');
+
+  if (mode === 'viewer' || mode === 'split') {
+    hidePreviewPaneDom();
+    document.getElementById('previewPaneSecondary')?.classList.add('hidden');
+    void window.minnow?.preview.hide();
+    if (!isRightPaneDomVisible('viewer')) {
+      document.getElementById('fileViewerPane')?.classList.remove('hidden');
+    }
+    if (mode !== 'split') {
+      document.getElementById('fileViewerPaneSecondary')?.classList.add('hidden');
+    }
   }
 }
 
 /** Sync Electron preview guest bounds after workspace split geometry changes. */
 function scheduleElectronPreviewHostLayoutAfterSplitChange(): void {
-  if (getFilePanelState().rightPaneMode !== 'preview') return;
+  const mode = getFilePanelState().rightPaneMode;
+  if (mode !== 'preview' && mode !== 'split') return;
   if (!window.minnow?.preview) return;
   void import('./preview-electron-visibility').then((m) => {
     m.scheduleElectronPreviewHostLayoutSync();
+    m.scheduleSecondaryPreviewHostLayoutSync?.();
   });
 }
 
@@ -181,6 +226,9 @@ function refreshUnifiedTabsIfPresent(): void {
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
 export function applyFileSidebarVisuals(): void {
   reconcileRightSplitDomWithState();
+  if (isRightPaneSplitActive()) {
+    applyRightPaneSplitDom();
+  }
 
   const side = document.getElementById('fileSidebar');
   const btn = document.getElementById('btnFileSidebarCollapse');
@@ -228,14 +276,18 @@ export function applyFileSidebarVisuals(): void {
 
   const previewBtn = document.getElementById('btnPreviewToggle');
   if (previewBtn) {
-    const previewOpen = state.rightPaneMode === 'preview';
+    const previewOpen =
+      state.rightPaneMode === 'preview' ||
+      (state.rightPaneMode === 'split' &&
+        (state.rightPaneSplit.primary.kind === 'preview' ||
+          state.rightPaneSplit.secondary.kind === 'preview'));
     previewBtn.classList.toggle('is-active', previewOpen);
     previewBtn.setAttribute('aria-pressed', previewOpen ? 'true' : 'false');
   }
 
   syncAppBodySidebarWidthVars();
   syncFileSidebarResizer();
-  if (state.rightPaneMode === 'preview') {
+  if (state.rightPaneMode === 'preview' || state.rightPaneMode === 'split') {
     scheduleElectronPreviewHostLayoutAfterSplitChange();
   }
 }
@@ -295,6 +347,22 @@ function fallbackRightPaneModeAfterClose(closedMode: Exclude<RightPaneMode, null
 /** Show split viewer pane; keeps preview tabs in the unified strip. */
 export function showViewerSplit(): void {
   clearChatColumnDragCollapsed();
+  const state = getFilePanelState();
+  if (state.rightPaneMode === 'split' && state.rightPaneSplit.enabled) {
+    patchFilePanelState({
+      rightPaneSplit: {
+        ...state.rightPaneSplit,
+        primary: {
+          kind: 'viewer',
+          tabPath: state.activeViewerTab ?? state.openViewerTabs.at(-1) ?? null,
+        },
+      },
+      viewerOpen: true,
+      rightPaneMode: 'split',
+    });
+    applyFileSidebarVisuals();
+    return;
+  }
   hidePreviewPaneDom();
   void window.minnow?.preview.hide();
   showRightPaneColumnDom();
@@ -327,9 +395,35 @@ export function hideViewerSplit(options?: { skipPreviewFallback?: boolean }): vo
   applyFileSidebarVisuals();
 }
 
+export type ShowPreviewSplitOptions = {
+  tabId?: string | null;
+  slot?: PaneSlotId;
+};
+
 /** Show preview pane; keeps file tabs in the unified strip. */
-export function showPreviewSplit(): void {
+export function showPreviewSplit(options?: ShowPreviewSplitOptions): void {
   clearChatColumnDragCollapsed();
+  const state = getFilePanelState();
+  const tabId =
+    options?.tabId ?? state.activePreviewTab ?? state.previewTabs.at(-1)?.id ?? null;
+
+  if (isRightPaneSplitLayoutEnabled()) {
+    const slot = options?.slot ?? getFocusedPaneSlot();
+    const previewContent = { kind: 'preview' as const, tabId };
+    patchFilePanelState({
+      rightPaneSplit: {
+        ...state.rightPaneSplit,
+        primary: slot === 'primary' ? previewContent : state.rightPaneSplit.primary,
+        secondary: slot === 'secondary' ? previewContent : state.rightPaneSplit.secondary,
+      },
+      viewerOpen: true,
+      rightPaneMode: 'split',
+    });
+    showRightPaneColumnDom();
+    applyFileSidebarVisuals();
+    scheduleElectronPreviewHostLayoutAfterSplitChange();
+    return;
+  }
   hideViewerPaneDom();
   showRightPaneColumnDom();
   patchFilePanelState({

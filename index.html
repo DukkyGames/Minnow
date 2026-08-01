@@ -2496,16 +2496,21 @@
   <div class="split-resizer hidden" id="splitResizer" role="separator" aria-orientation="vertical" aria-valuemin="5" aria-valuemax="95" aria-valuenow="55" tabindex="0"></div>
 
   <div class="right-pane-column hidden" id="rightPaneColumn">
-    <header class="unified-tab-bar" id="unifiedTabBar">
+
+  <div class="right-pane-split" id="rightPaneSplit">
+    <div class="right-pane-slot is-focused" id="rightPaneSlotPrimary" data-pane-slot="primary">
+    <header class="unified-tab-bar slot-tab-bar" id="unifiedTabBar">
       <div class="unified-tabs" id="unifiedTabs" role="tablist" aria-label="Editor and browser tabs"></div>
     </header>
-
   <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
     <header class="file-viewer-header">
       <span class="file-viewer-diagnostics" id="fileViewerDiagnostics" hidden></span>
       <span class="file-viewer-intent-status" id="fileViewerIntentStatus" hidden aria-live="polite"></span>
       <button type="button" class="file-viewer-intent-toggle" id="btnFileViewerIntent" aria-pressed="false" title="Intent mode (Ctrl+I)" disabled>
         Intent
+      </button>
+      <button type="button" class="icon-btn file-viewer-split" id="btnRightPaneSplit" aria-label="Split right" title="Split right (Ctrl+\)">
+        <i class="fi fi-rr-columns icon-svg" aria-hidden="true"></i>
       </button>
       <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSave" aria-label="Save file" title="Save (Ctrl+S)" disabled>
         <i class="fi fi-rr-disk icon-svg" aria-hidden="true"></i>
@@ -2548,6 +2553,9 @@
       <button type="button" class="icon-btn" id="btnPreviewDevToolsDock" aria-label="Dock DevTools to side" title="Dock DevTools to side" data-dock="bottom" hidden>
         <i class="fi fi-rr-layout-fluid icon-svg" aria-hidden="true"></i>
       </button>
+      <button type="button" class="icon-btn preview-pane-split" id="btnPreviewPaneSplit" aria-label="Split right" title="Split right (Ctrl+\)">
+        <i class="fi fi-rr-columns icon-svg" aria-hidden="true"></i>
+      </button>
       <button type="button" class="icon-btn" id="btnPreviewClose" aria-label="Close preview" title="Close preview">
         <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
       </button>
@@ -2561,6 +2569,49 @@
          rel="noopener noreferrer">Open in new tab</a>
     </div>
   </section>
+    </div>
+
+    <div class="right-pane-split-resizer hidden" id="rightPaneSplitResizer" role="separator"
+         aria-orientation="vertical" aria-label="Resize right pane split"
+         aria-valuemin="35" aria-valuemax="65" aria-valuenow="50" tabindex="0"></div>
+
+    <div class="right-pane-slot hidden" id="rightPaneSlotSecondary" data-pane-slot="secondary">
+      <header class="unified-tab-bar slot-tab-bar" id="unifiedTabBarSecondary">
+        <div class="unified-tabs" id="unifiedTabsSecondary" role="tablist" aria-label="Secondary editor and browser tabs"></div>
+      </header>
+      <section class="file-viewer-pane hidden" id="fileViewerPaneSecondary" aria-label="File viewer (secondary)">
+        <header class="file-viewer-header">
+          <span class="right-pane-slot-label" aria-hidden="true">2</span>
+          <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerCloseSecondary" aria-label="Close secondary pane" title="Close secondary pane">
+            <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div class="file-viewer-body" id="fileViewerHostSecondary"></div>
+      </section>
+
+      <section class="preview-pane hidden" id="previewPaneSecondary" aria-label="Preview browser (secondary)">
+        <header class="preview-header preview-header--secondary">
+          <span class="right-pane-slot-label" aria-hidden="true">2</span>
+          <button type="button" class="icon-btn" id="btnPreviewBackSecondary" title="Back" aria-label="Preview back" disabled>
+            <i class="fi fi-rr-angle-small-left icon-svg" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="icon-btn" id="btnPreviewForwardSecondary" title="Forward" aria-label="Preview forward" disabled>
+            <i class="fi fi-rr-angle-small-right icon-svg" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="icon-btn" id="btnPreviewReloadSecondary" title="Reload" aria-label="Reload preview">
+            <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
+          </button>
+          <input id="previewUrlInputSecondary" class="preview-url" type="text"
+                 placeholder="index.html or https://…" autocomplete="off"
+                 aria-label="Preview URL or workspace path (secondary)" />
+          <button type="button" class="preview-go" id="btnPreviewGoSecondary">Go</button>
+          <button type="button" class="icon-btn" id="btnPreviewCloseSecondary" aria-label="Close secondary pane" title="Close secondary pane">
+            <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div class="preview-body" id="previewBodySecondary" aria-label="Preview content area (secondary)"></div>
+      </section>
+    </div>
   </div>
 
   </div>

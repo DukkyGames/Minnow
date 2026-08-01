@@ -909,6 +909,20 @@ export function renderActiveViewerTab(): void {
   }
 
   mountEditor(tab, content);
+  syncSecondaryViewerIfSplit();
+}
+
+function syncSecondaryViewerIfSplit(): void {
+  void import('./right-pane-split').then((m) => {
+    if (!m.isRightPaneSplitActive()) return;
+    const split = getFilePanelState().rightPaneSplit;
+    const secContent = split.secondary;
+    if (secContent.kind === 'viewer') {
+      void import('./file-viewer-secondary-slot').then((sec) => {
+        sec.renderSecondaryViewerSlot(secContent.tabPath);
+      });
+    }
+  });
 }
 
 /** Confirm when leaving a dirty active editor tab (Save / Discard / Cancel). */
@@ -950,6 +964,11 @@ async function activateTabAndRender(path: string, options?: { skipUnsavedGuard?:
     beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!ok) return false;
+  const state = getFilePanelState();
+  if (state.rightPaneMode === 'split' && state.rightPaneSplit.enabled) {
+    const { registerViewerTabOpened } = await import('./right-pane-slot-tabs');
+    registerViewerTabOpened(path);
+  }
   showViewerSplit();
   renderActiveViewerTab();
   renderFileTreeViaBridge();
@@ -968,6 +987,7 @@ export async function closeViewerTab(path: string): Promise<void> {
     destroyEditor();
   }
   removeViewerTab(path);
+  void import('./right-pane-slot-tabs').then((m) => m.unregisterViewerTab(path));
 
   if (listViewerTabs().length === 0) {
     patchFilePanelState({ openViewerTabs: [], activeViewerTab: null, selectedPath: null });
@@ -1318,6 +1338,7 @@ export async function openWorkspaceImageInViewer(relativePath: string): Promise<
   });
   if (!result) return;
   noteRecentViewerOpen(relativePath);
+  void import('./right-pane-slot-tabs').then((m) => m.registerViewerTabOpened(relativePath));
   showViewerSplit();
   renderActiveViewerTab();
   renderFileTreeViaBridge();
@@ -1409,6 +1430,7 @@ export async function openFileInViewer(
   }
 
   noteRecentViewerOpen(relativePath);
+  void import('./right-pane-slot-tabs').then((m) => m.registerViewerTabOpened(relativePath));
   showViewerSplit();
 
   const mounts = await import('../os/desktop-workspace-mounts');

@@ -58,6 +58,12 @@ import {
   shouldAutoRestoreViewerSplitOnBoot,
 } from './preview-restore-policy';
 import { bindWorkspaceSplitResizer } from './workspace-split-resize';
+import { bindRightPaneSplitResizer } from './right-pane-split-resize';
+import {
+  closeRightPaneSplit,
+  splitRightPane,
+} from './right-pane-split';
+import { bindSecondaryPreviewControls } from './preview-secondary-slot';
 import { sessionState } from '../state/sessions';
 
 let resizerBound = false;
@@ -66,6 +72,7 @@ function bindSplitResizer(): void {
   if (resizerBound) return;
   resizerBound = true;
   bindWorkspaceSplitResizer();
+  bindRightPaneSplitResizer();
 }
 
 function bindFilePanelControls(): void {
@@ -81,12 +88,38 @@ function bindFilePanelControls(): void {
     closeBtn.addEventListener('click', () => closeFileViewer());
   }
 
+  const splitBtn = document.getElementById('btnRightPaneSplit');
+  if (splitBtn) {
+    splitBtn.addEventListener('click', () => splitRightPane());
+  }
+
+  const previewSplitBtn = document.getElementById('btnPreviewPaneSplit');
+  if (previewSplitBtn) {
+    previewSplitBtn.addEventListener('click', () => splitRightPane());
+  }
+
+  document.getElementById('btnFileViewerCloseSecondary')?.addEventListener('click', () => {
+    closeRightPaneSplit();
+  });
+  document.getElementById('btnPreviewCloseSecondary')?.addEventListener('click', () => {
+    closeRightPaneSplit();
+  });
+
   const toggleBtn = document.getElementById('btnFileSidebarCollapse');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', () => {
       void initFileTreeIfNeeded();
     });
   }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== '\\' || !(e.ctrlKey || e.metaKey)) return;
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.closest('#fileViewerPane, #fileViewerHost, #previewPane, #previewBody')) return;
+    e.preventDefault();
+    splitRightPane();
+  });
 }
 
 /** React to local server ping success/failure (after detectLocalServer). */
@@ -150,6 +183,7 @@ export async function initFilePanel(): Promise<void> {
 
   bindSplitResizer();
   bindFilePanelControls();
+  bindSecondaryPreviewControls();
   bindFileViewerControls();
   bindFileViewerTabs();
   bindFileViewerContextMenu();
