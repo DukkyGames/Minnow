@@ -11,6 +11,7 @@ import {
   deleteGroup,
   dismissActiveBoardView,
   findBoardGroupForPlanner,
+  findBoardGroupForPlanPath,
   getBoardGroupForChat,
   getGroupActivityAt,
   getGroupsForWorkspace,
@@ -96,6 +97,29 @@ describe('chat groups', () => {
     sessionState.activeBoardGroupId = group.id;
     assert.equal(group.viewMode, 'board');
     assert.equal(sessionState.activeBoardGroupId, group.id);
+  });
+
+  test('findBoardGroupForPlanPath matches normalized plan in workspace', () => {
+    const planner = createEmptyChatObject('', WS);
+    planner.id = PLANNER_ID;
+    planner.modeId = 'orchestrate';
+    planner.orchestratePlanPath = PLAN_PATH;
+    setSessionStateForTests({
+      version: 5,
+      activeId: planner.id,
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [planner],
+    });
+    const group = getOrCreateBoardGroup(planner);
+    group.orchestratePlanPath = PLAN_PATH;
+
+    assert.equal(
+      findBoardGroupForPlanPath(WS, 'documentation/plans/demo-plan.md')?.id,
+      group.id,
+    );
+    assert.equal(findBoardGroupForPlanPath(WS, 'documentation/plans/other.md'), undefined);
+    assert.equal(findBoardGroupForPlanPath('/other/workspace', PLAN_PATH), undefined);
   });
 
   test('resolveBoardRestoreGroupOnSwitch returns group when leaving task chat for planner', () => {

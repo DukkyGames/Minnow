@@ -6,6 +6,7 @@
 
 import { getChatAbort, setChatStopReason } from '../app-state.ts';
 import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup.ts';
+import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path.ts';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
@@ -325,6 +326,25 @@ export function getBoardGroupForChat(chat: Chat): ChatGroup | undefined {
   if (memberGroupId) {
     const memberGroup = findGroupById(memberGroupId);
     if (memberGroup?.orchestrateBoard) return memberGroup;
+  }
+  return undefined;
+}
+
+/** Board folder for a normalized plan path in a workspace (avoids duplicate launches). */
+export function findBoardGroupForPlanPath(
+  workspacePath: string,
+  planPath: string,
+): ChatGroup | undefined {
+  const normalized = normalizeOrchestratePlanPath(planPath.trim());
+  if (!normalized) return undefined;
+  const workspace = normalizeWorkspacePath(workspacePath);
+  for (const group of requireSession().groups ?? []) {
+    const groupPlan = group.orchestratePlanPath?.trim();
+    if (!groupPlan) continue;
+    if (normalizeOrchestratePlanPath(groupPlan) !== normalized) continue;
+    if (normalizeWorkspacePath(group.workspacePath ?? '') !== workspace) continue;
+    if (!group.plannerChatId?.trim()) continue;
+    return group;
   }
   return undefined;
 }
