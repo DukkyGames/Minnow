@@ -6,3 +6,4 @@ release/
 .env.signing
 build/macos-signing/
 public/material-icons/
+test.log

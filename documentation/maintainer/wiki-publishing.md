@@ -53,7 +53,7 @@ Published:
 - `documentation/plugins/`
 - `documentation/agent-packs/`
 
-Not published — excluded by directory segment (`EXCLUDED_SEGMENTS` in [`scripts/product-wiki-catalog-lib.mjs`](../../scripts/product-wiki-catalog-lib.mjs)):
+Not published — excluded by directory segment (`PRODUCT_WIKI_EXCLUDED_SEGMENTS` in [`src/product-wiki/path-filter.mjs`](../../src/product-wiki/path-filter.mjs)):
 
 `archive/` · `extracts/` · `images/` · `memory/` · `plans/` · `schemas/` · `specs/` · `templates/`
 

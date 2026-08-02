@@ -4,10 +4,9 @@
 
 import {
   createFakeModelServer,
-  FAKE_MODEL_ID,
-  FAKE_PROVIDER_ID,
   normalizeScenario,
 } from '../../../scripts/fake-model-server.mjs';
+import { FAKE_MODEL_ID, FAKE_PROVIDER_ID } from './fake-model-ids.js';
 import { createProvider, listProviders, updateProvider } from '../../providers/store.js';
 import { sanitizeFakeModelRequest } from './sanitize.js';
 
