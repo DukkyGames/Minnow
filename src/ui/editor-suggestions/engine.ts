@@ -48,8 +48,10 @@ import {
   isIntentEnabled,
   setIntentEnabled,
   setSuggestion,
+  createCompletionSuggestion,
   type IntentSuggestion,
 } from './state';
+import { recordCompletionEvent } from '../editor-ai-telemetry';
 
 /** Shown once an intent proposal is painted. */
 export const INTENT_READY_MESSAGE = 'Intent proposal ready — Tab to accept, Esc to dismiss';
@@ -460,11 +462,11 @@ export class SuggestionEnginePlugin {
         binding,
         signal: controller.signal,
         recentEdits: this.recentEdits.snapshot(),
-        onPartial: (partial) => {
+        onPartial: (partial, options) => {
           if (controller.signal.aborted) return;
           if (isLspBusy(this.view.state)) return;
           if (this.requestPos !== pos) return;
-          this.paintCompletion(pos, partial);
+          this.paintCompletion(pos, partial, options?.fromCache ? 'cache' : 'stream');
         },
       });
 
@@ -473,8 +475,8 @@ export class SuggestionEnginePlugin {
       if (this.view.state.selection.main.head !== pos) return;
       if (this.requestPos !== pos) return;
 
-      this.paintCompletion(pos, result.text ?? '');
       if (result.text) {
+        this.paintCompletion(pos, result.text, 'stream');
         this.opts.onStatus?.('AI suggestion ready — Tab to accept, Esc to dismiss');
       } else if (!controller.signal.aborted && result.error) {
         this.opts.onStatus?.(result.error);
@@ -492,7 +494,11 @@ export class SuggestionEnginePlugin {
     }
   }
 
-  private paintCompletion(pos: number, text: string): void {
+  private paintCompletion(
+    pos: number,
+    text: string,
+    origin: 'stream' | 'cache',
+  ): void {
     if (isLspBusy(this.view.state)) return;
     if (!text) {
       if (hasSuggestion(this.view.state)) {
@@ -502,7 +508,8 @@ export class SuggestionEnginePlugin {
     }
     if (this.view.state.selection.main.head !== pos) return;
 
-    const currentText = getCompletionSuggestion(this.view.state)?.text ?? '';
+    const current = getCompletionSuggestion(this.view.state);
+    const currentText = current?.text ?? '';
     if (
       currentText &&
       !shouldReplaceGhostPartial(currentText, text, this.requestPrefix, this.requestSuffix)
@@ -510,8 +517,13 @@ export class SuggestionEnginePlugin {
       return;
     }
 
+    const next = createCompletionSuggestion(text, pos, origin, current);
+    if (!current || current.id !== next.id) {
+      recordCompletionEvent({ type: 'shown' });
+    }
+
     this.view.dispatch({
-      effects: setSuggestion.of({ kind: 'completion', text, pos }),
+      effects: setSuggestion.of(next),
     });
   }
 }

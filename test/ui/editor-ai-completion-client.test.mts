@@ -15,6 +15,11 @@ import {
   resolveEditorAiBinding,
   setCachedEditorAiCompletion,
   EDITOR_AI_NO_MODEL_MESSAGE,
+  EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE,
+  EDITOR_AI_COMPLETION_PROSE_MESSAGE,
+  EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE,
+  EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE,
+  editorAiCompletionRejectionMessage,
   fetchEditorAiCompletion,
   buildMessagesForEditorAiCompletion,
 } from '../../src/ui/editor-ai-completion-client.ts';
@@ -229,10 +234,71 @@ describe('fetchEditorAiCompletion transport', () => {
 
 describe('alignCompletionForInsert', () => {
   test('aligns streamed text against prefix and suffix', () => {
-    assert.equal(
-      alignCompletionForInsert('42;}', 'const x = ', '}'),
-      '42;',
+    const result = alignCompletionForInsert('42;}}}', 'const x = ', '}}}');
+    assert.equal(result.rejected, false);
+    assert.equal(result.text, '42;');
+  });
+
+  test('returns rejection metadata for prose', () => {
+    const result = alignCompletionForInsert(
+      "Here's the answer:\nfoo",
+      'const x = ',
+      '',
     );
+    assert.equal(result.rejected, true);
+    assert.equal(result.reason, 'prose');
+  });
+});
+
+describe('editorAiCompletionRejectionMessage', () => {
+  test('maps alignment reasons to user-facing copy', () => {
+    assert.equal(editorAiCompletionRejectionMessage('oversized'), EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE);
+    assert.equal(editorAiCompletionRejectionMessage('prose'), EDITOR_AI_COMPLETION_PROSE_MESSAGE);
+    assert.equal(
+      editorAiCompletionRejectionMessage('prefix_echo'),
+      EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE,
+    );
+    assert.equal(
+      editorAiCompletionRejectionMessage('full_rewrite'),
+      EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE,
+    );
+  });
+});
+
+describe('fetchEditorAiCompletion rejection', () => {
+  test('returns prose message when alignment rejects streamed output', async () => {
+    const doc = 'const x = ';
+    const state = EditorState.create({ doc });
+    const result = await fetchEditorAiCompletion({
+      state,
+      cursorPos: doc.length,
+      filePath: 'demo.ts',
+      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false },
+      binding: { providerId: 'test-provider', modelId: 'coder-1' },
+      signal: new AbortController().signal,
+      deps: {
+        resolveProvider: async () => ({
+          id: 'test-provider',
+          apiKind: 'openai-v1',
+        }),
+        buildMessagesAsync: async (input) => ({
+          messages: buildMessagesForEditorAiCompletion(input),
+          prefix: 'const x = ',
+          suffix: '',
+        }),
+        createGeneration: async () => ({ generationId: 'gen-prose' }),
+        subscribeToGeneration: (_id, handlers) => {
+          handlers.onChunk?.({
+            choices: [{ delta: { content: "Here's the completion:\n42;" } }],
+          });
+          handlers.onEnd?.({ status: 'complete' });
+          return () => {};
+        },
+        cancelGeneration: async () => {},
+      },
+    });
+    assert.equal(result.text, null);
+    assert.equal(result.error, EDITOR_AI_COMPLETION_PROSE_MESSAGE);
   });
 });
 

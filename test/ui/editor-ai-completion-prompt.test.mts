@@ -18,6 +18,8 @@ import {
   shouldReplaceGhostPartial,
   symbolsEnclosingLine,
   trimOverlapWithDocument,
+  isUnchangedPrefixEcho,
+  isMeaningfulDocumentOverlap,
 } from '../../src/ui/editor-ai-completion-prompt.ts';
 import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-completion.ts';
 
@@ -158,15 +160,28 @@ describe('editor AI completion prompt', () => {
   });
 
   test('longestOverlapSuffixPrefix finds shared boundary', () => {
-    assert.equal(longestOverlapSuffixPrefix('abc', 'bcd'), 2);
+    assert.equal(longestOverlapSuffixPrefix('abc', 'bcd'), 0);
     assert.equal(longestOverlapSuffixPrefix('foo', 'bar'), 0);
+    assert.equal(longestOverlapSuffixPrefix('ab(((', '(((x'), 3);
   });
 
-  test('trimOverlapWithDocument removes prefix overlap', () => {
-    assert.equal(
-      trimOverlapWithDocument('world', 'hello ', ' !'),
-      'world',
-    );
+  test('isMeaningfulDocumentOverlap ignores short identifier clashes', () => {
+    assert.equal(isMeaningfulDocumentOverlap('bc'), false);
+    assert.equal(isMeaningfulDocumentOverlap(' );'), true);
+  });
+
+  test('trimOverlapWithDocument removes meaningful prefix overlap', () => {
+    assert.equal(trimOverlapWithDocument('world', 'hello ', ' !'), 'world');
+    assert.equal(trimOverlapWithDocument('); next', 'if (x', ' next'), ');');
+  });
+
+  test('isUnchangedPrefixEcho allows short non-echo inserts', () => {
+    assert.equal(isUnchangedPrefixEcho(');', 'return arr'), false);
+    assert.equal(isUnchangedPrefixEcho(';', 'const x = 1'), false);
+  });
+
+  test('isUnchangedPrefixEcho rejects long prefix repeats', () => {
+    assert.equal(isUnchangedPrefixEcho('const x = ', 'const x = '), true);
   });
 
   test('alignAndValidateCompletionText rejects prose', () => {
@@ -189,11 +204,21 @@ describe('editor AI completion prompt', () => {
     assert.equal(result.reason, 'prefix_echo');
   });
 
+  test('alignAndValidateCompletionText allows single-character closers', () => {
+    const result = alignAndValidateCompletionText({
+      raw: ');',
+      prefix: 'return arr',
+      suffix: '',
+    });
+    assert.equal(result.rejected, false);
+    assert.equal(result.text, ');');
+  });
+
   test('alignAndValidateCompletionText trims suffix overlap', () => {
     const result = alignAndValidateCompletionText({
-      raw: '42;}\n',
+      raw: '42;}}}\n',
       prefix: 'const x = ',
-      suffix: '}\n',
+      suffix: '}}}\n',
     });
     assert.equal(result.text, '42;');
   });

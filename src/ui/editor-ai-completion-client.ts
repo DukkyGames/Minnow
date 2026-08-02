@@ -32,9 +32,12 @@ import {
   alignAndValidateCompletionText,
   buildEditorAiCompletionMessages,
   buildEditorAiCompletionMessagesAsync,
+  DEFAULT_MAX_INSERT_CHARS,
+  type AlignCompletionResult,
   type EditorAiPromptInput,
 } from './editor-ai-completion-prompt';
 import { stripEditorModelOutput, extractEditorCodeFromReasoning } from './editor-model-output';
+import { recordCompletionEvent } from './editor-ai-telemetry';
 
 export interface EditorAiBinding {
   providerId: string;
@@ -52,6 +55,18 @@ export const EDITOR_AI_REQUEST_FAILED_MESSAGE =
 /** Shown when the model streams successfully but yields no insertable text. */
 export const EDITOR_AI_EMPTY_COMPLETION_MESSAGE =
   'Model returned no completion text. Try a coder model or disable thinking in your provider.';
+
+export const EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE =
+  'Completion too long for inline insert — lower max tokens or edit a smaller region.';
+
+export const EDITOR_AI_COMPLETION_PROSE_MESSAGE =
+  'Model returned explanation instead of code — try a coder model.';
+
+export const EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE =
+  'Model repeated existing text — no suggestion shown.';
+
+export const EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE =
+  'Completion would replace most of the file — rejected.';
 
 export interface EditorAiCompletionResult {
   text: string | null;
@@ -131,7 +146,7 @@ export interface FetchEditorAiCompletionInput extends EditorAiPromptInput {
   binding: EditorAiBinding;
   signal: AbortSignal;
   /** Called as streamed text arrives (already sanitized). */
-  onPartial?: (text: string) => void;
+  onPartial?: (text: string, options?: { fromCache?: boolean }) => void;
   deps?: EditorAiCompletionDeps;
 }
 
@@ -211,6 +226,29 @@ function createGenerationErrorMessage(err: unknown): string {
   return EDITOR_AI_REQUEST_FAILED_MESSAGE;
 }
 
+/** Map alignment rejection codes to status-bar copy. */
+export function editorAiCompletionRejectionMessage(reason: string | undefined): string {
+  switch (reason) {
+    case 'oversized':
+      return EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE;
+    case 'prose':
+      return EDITOR_AI_COMPLETION_PROSE_MESSAGE;
+    case 'prefix_echo':
+      return EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE;
+    case 'full_rewrite':
+      return EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE;
+    case 'empty':
+    case 'empty_after_trim':
+      return EDITOR_AI_EMPTY_COMPLETION_MESSAGE;
+    default:
+      return EDITOR_AI_EMPTY_COMPLETION_MESSAGE;
+  }
+}
+
+function maxInsertCharsForConfig(config: EditorAiCompletionConfig): number {
+  return Math.min(DEFAULT_MAX_INSERT_CHARS, config.maxTokens * 4);
+}
+
 /** Merge streamed chunks into displayable completion text (content channel only). */
 export function resolveEditorCompletionRawText(
   contentAcc: StreamingContentAccumulator,
@@ -228,8 +266,14 @@ export function alignCompletionForInsert(
   raw: string,
   prefix: string,
   suffix: string,
-): string {
-  return alignAndValidateCompletionText({ raw, prefix, suffix }).text;
+  options?: { maxInsertChars?: number },
+): AlignCompletionResult {
+  return alignAndValidateCompletionText({
+    raw,
+    prefix,
+    suffix,
+    maxInsertChars: options?.maxInsertChars,
+  });
 }
 
 /** Stream a single inline completion via /api/generations (parsed SSE chunks). */
@@ -250,6 +294,9 @@ export async function fetchEditorAiCompletion(
     modelId,
   });
   const { prefix, suffix, messages } = promptResult;
+  const maxInsertChars = maxInsertCharsForConfig(input.config);
+
+  recordCompletionEvent({ type: 'request' });
 
   if (input.config.enableCompletionCache !== false) {
     const cached = getCachedEditorAiCompletion(
@@ -261,10 +308,12 @@ export async function fetchEditorAiCompletion(
       cache,
     );
     if (cached !== undefined) {
-      if (cached) input.onPartial?.(cached);
-      return cached.length > 0
-        ? { text: cached }
-        : { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE };
+      recordCompletionEvent({ type: 'cache_hit' });
+      if (cached) input.onPartial?.(cached, { fromCache: true });
+      if (cached.length > 0) {
+        return { text: cached };
+      }
+      return { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE };
     }
   }
 
@@ -300,21 +349,46 @@ export async function fetchEditorAiCompletion(
 
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
+  const requestStartedAt = performance.now();
+  let firstTokenRecorded = false;
 
-  const emitFromAccumulators = (reasoningFallback = false): string => {
+  const alignForInsert = (raw: string): AlignCompletionResult =>
+    alignCompletionForInsert(raw, prefix, suffix, { maxInsertChars });
+
+  const emitFromAccumulators = (reasoningFallback = false): AlignCompletionResult => {
     const raw = resolveEditorCompletionDisplayText(
       contentAcc.getText(),
       reasoningAcc.getText(),
       { reasoningFallback },
     );
-    return alignCompletionForInsert(raw, prefix, suffix);
+    return alignForInsert(raw);
+  };
+
+  const finishAligned = (aligned: AlignCompletionResult): EditorAiCompletionResult => {
+    if (aligned.rejected) {
+      const reason = aligned.reason ?? 'empty';
+      recordCompletionEvent({ type: 'reject', reason });
+      return { text: null, error: editorAiCompletionRejectionMessage(reason) };
+    }
+    if (!aligned.text.trim()) {
+      recordCompletionEvent({ type: 'reject', reason: 'empty' });
+      return { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE };
+    }
+    return { text: aligned.text };
   };
 
   return new Promise<EditorAiCompletionResult>((resolve) => {
     let settled = false;
+    let firstTokenMs = 0;
     const finish = (result: EditorAiCompletionResult): void => {
       if (settled) return;
       settled = true;
+      const totalMs = performance.now() - requestStartedAt;
+      recordCompletionEvent({
+        type: 'timing',
+        firstTokenMs: firstTokenRecorded ? firstTokenMs : totalMs,
+        totalMs,
+      });
       if (result.text && input.config.enableCompletionCache !== false) {
         setCachedEditorAiCompletion(
           input.binding,
@@ -335,8 +409,14 @@ export async function fetchEditorAiCompletion(
       onChunk: (chunk) => {
         contentAcc.ingestChoice(chunk.choices?.[0]);
         reasoningAcc.ingestChunk(chunk);
-        const cleaned = emitFromAccumulators(false);
-        if (cleaned) input.onPartial?.(cleaned);
+        const aligned = emitFromAccumulators(false);
+        if (!aligned.rejected && aligned.text) {
+          if (!firstTokenRecorded) {
+            firstTokenRecorded = true;
+            firstTokenMs = performance.now() - requestStartedAt;
+          }
+          input.onPartial?.(aligned.text);
+        }
       },
       onEnd: (event?: GenerationEndEvent) => {
         unsubscribe?.();
@@ -344,12 +424,8 @@ export async function fetchEditorAiCompletion(
           finish({ text: null, error: generationEndErrorMessage(event) });
           return;
         }
-        const cleaned = emitFromAccumulators(true);
-        finish(
-          cleaned.length > 0
-            ? { text: cleaned }
-            : { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE },
-        );
+        const aligned = emitFromAccumulators(true);
+        finish(finishAligned(aligned));
       },
       onTransportError: (err) => {
         unsubscribe?.();

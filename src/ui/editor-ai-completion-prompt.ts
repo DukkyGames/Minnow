@@ -215,11 +215,21 @@ export function cursorIndentAt(prefix: string): string {
   return match ? match[0] : '';
 }
 
-/** Longest suffix of `a` that equals a prefix of `b`. */
+/** Minimum overlap length before trimming document boundaries. */
+const MEANINGFUL_OVERLAP_MIN_LEN = 3;
+
+/** Overlap must be long enough and include a boundary (not a 1–2 char identifier clash). */
+export function isMeaningfulDocumentOverlap(slice: string): boolean {
+  if (slice.length < MEANINGFUL_OVERLAP_MIN_LEN) return false;
+  return /[^\w]/.test(slice) || slice.includes('\n');
+}
+
+/** Longest suffix of `a` that equals a prefix of `b` (meaningful overlaps only). */
 export function longestOverlapSuffixPrefix(a: string, b: string): number {
   const max = Math.min(a.length, b.length);
   for (let len = max; len > 0; len -= 1) {
-    if (a.slice(-len) === b.slice(0, len)) return len;
+    const sliceA = a.slice(-len);
+    if (sliceA === b.slice(0, len) && isMeaningfulDocumentOverlap(sliceA)) return len;
   }
   return 0;
 }
@@ -560,9 +570,14 @@ export function isUnchangedPrefixEcho(text: string, prefix: string): boolean {
   const trimmed = text.trimEnd();
   if (!trimmed) return true;
   const prefixTail = prefix.trimEnd();
-  return prefixTail.endsWith(trimmed) || trimmed === prefixTail;
+  if (trimmed === prefixTail) return true;
+  if (!prefixTail.endsWith(trimmed)) return false;
+  if (trimmed.length >= 3) return true;
+  const lineStart = prefix.lastIndexOf('\n') + 1;
+  const lastLine = prefixTail.slice(lineStart);
+  if (!lastLine.length) return false;
+  return trimmed.length / lastLine.length >= 0.8;
 }
-  /^(?:here(?:'s| is)|the following|this (?:code|snippet|completion)|sure[,!]?|certainly)/i;
 
 /** True when output looks like explanatory prose rather than insertable code. */
 export function looksLikeProse(text: string): boolean {

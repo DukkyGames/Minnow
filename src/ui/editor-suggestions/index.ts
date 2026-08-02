@@ -80,6 +80,7 @@ export {
   acceptCompletionGhost,
   acceptIntentProposal,
   acceptPartialCompletionGhost,
+  createCompletionSuggestion,
   dismissSuggestion,
   getCompletionSuggestion,
   getIntentSuggestion,
@@ -97,7 +98,13 @@ export {
   suggestionField,
   toggleIntentMode,
 } from './state';
-export type { CompletionSuggestion, IntentSuggestion, Suggestion } from './state';
+export type {
+  AiGhostValue,
+  CompletionSuggestion,
+  CompletionSuggestionOrigin,
+  IntentSuggestion,
+  Suggestion,
+} from './state';
 export {
   classifyIntentLine,
   intentInstructionFromLine,

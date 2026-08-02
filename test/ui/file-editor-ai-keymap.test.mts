@@ -45,6 +45,10 @@ import {
   hashCompletionContext,
 } from '../../src/ui/editor-ai-completion-cache.ts';
 import {
+  editorAiEscapeBinding,
+  editorAiTabBinding,
+} from '../../src/ui/file-editor-ai-extensions.ts';
+import {
   buildEditorAiCompletionMessages,
   nextPartialGhostChunk,
   PROMPT_VERSION,
@@ -219,6 +223,15 @@ describe('editor AI prompt + cache (Phase 6)', () => {
     });
     assert.equal(result.messages.length, 2);
     assert.match(String(result.messages[1].content), /<CURSOR>/);
+  });
+
+  test('deprecated ghost keymap aliases use correct binding indices', () => {
+    assert.equal(editorAiTabBinding.key, 'Tab');
+    assert.equal(editorAiEscapeBinding.key, 'Escape');
+    assert.equal(
+      editorSuggestionKeymapBindings.indexOf(editorAiEscapeBinding),
+      2,
+    );
   });
 
   test('nextPartialGhostChunk accepts word or line', () => {

@@ -11,15 +11,27 @@ import {
   type Transaction,
 } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
+import { randomUUID } from '../../lib/random-id';
 import { nextPartialGhostChunk } from '../editor-ai-completion-prompt';
+import { recordCompletionEvent } from '../editor-ai-telemetry';
 import { buildSuggestionDecorations } from './decorations';
+
+/** Where a completion ghost was sourced from. */
+export type CompletionSuggestionOrigin = 'stream' | 'cache' | 'test';
 
 /** Inline completion ghost text inserted at {@link CompletionSuggestion.pos}. */
 export interface CompletionSuggestion {
   kind: 'completion';
   text: string;
   pos: number;
+  id: string;
+  shownAt: number;
+  origin: CompletionSuggestionOrigin;
+  consumed: boolean;
 }
+
+/** @deprecated Use {@link CompletionSuggestion}. */
+export type AiGhostValue = CompletionSuggestion;
 
 /**
  * Proposed replacement for the document range `[from, to)`. `intentText` is the
@@ -33,6 +45,33 @@ export interface IntentSuggestion {
   intentText: string;
   text: string;
   streaming: boolean;
+}
+
+/** Build a completion ghost value for display at the cursor. */
+export function createCompletionSuggestion(
+  text: string,
+  pos: number,
+  origin: CompletionSuggestionOrigin,
+  previous?: CompletionSuggestion | null,
+): CompletionSuggestion {
+  if (
+    previous &&
+    !previous.consumed &&
+    previous.pos === pos &&
+    text.startsWith(previous.text) &&
+    previous.text.length > 0
+  ) {
+    return { ...previous, text, origin };
+  }
+  return {
+    kind: 'completion',
+    text,
+    pos,
+    id: randomUUID(),
+    shownAt: Date.now(),
+    origin,
+    consumed: false,
+  };
 }
 
 export type Suggestion = CompletionSuggestion | IntentSuggestion;
@@ -178,6 +217,7 @@ export function acceptCompletionGhost(view: EditorView): boolean {
   const ghost = getCompletionSuggestion(view.state);
   if (!ghost) return false;
   const insertPos = ghost.pos;
+  recordCompletionEvent({ type: 'accepted' });
   view.dispatch({
     changes: { from: insertPos, insert: ghost.text },
     effects: setSuggestion.of(null),
@@ -197,7 +237,14 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
   view.dispatch({
     changes: { from: insertPos, insert: chunk },
     effects: setSuggestion.of(
-      remainder ? { kind: 'completion', text: remainder, pos: insertPos + chunk.length } : null,
+      remainder
+        ? {
+            ...ghost,
+            consumed: true,
+            text: remainder,
+            pos: insertPos + chunk.length,
+          }
+        : null,
     ),
     selection: EditorSelection.cursor(insertPos + chunk.length),
   });
@@ -229,6 +276,9 @@ export function acceptIntentProposal(view: EditorView): boolean {
 /** Clear any visible suggestion without touching the document. */
 export function dismissSuggestion(view: EditorView): boolean {
   if (!hasSuggestion(view.state)) return false;
+  if (hasCompletionSuggestion(view.state)) {
+    recordCompletionEvent({ type: 'dismissed' });
+  }
   view.dispatch({ effects: setSuggestion.of(null) });
   return true;
 }
@@ -239,7 +289,9 @@ export function setCompletionSuggestionForTest(
   text: string,
   pos: number,
 ): void {
-  view.dispatch({ effects: setSuggestion.of({ kind: 'completion', text, pos }) });
+  view.dispatch({
+    effects: setSuggestion.of(createCompletionSuggestion(text, pos, 'test')),
+  });
 }
 
 /** Test helper: show an intent proposal over the given range. */
