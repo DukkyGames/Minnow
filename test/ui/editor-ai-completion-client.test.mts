@@ -180,6 +180,47 @@ describe('editor AI completion cache (Phase 6)', () => {
       undefined,
     );
   });
+
+  test('cache hit skips network and async prompt build', async () => {
+    resetEditorAiCompletionCache();
+    const doc = 'const x = ';
+    const state = EditorState.create({ doc });
+    const binding = { providerId: 'test-provider', modelId: 'coder-1' };
+    const config = { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: true };
+    setCachedEditorAiCompletion(binding, config, 'demo.ts', 'const x = ', '', 'cached;');
+
+    let createCalled = false;
+    let buildCalled = false;
+
+    const result = await fetchEditorAiCompletion({
+      state,
+      cursorPos: doc.length,
+      filePath: 'demo.ts',
+      config,
+      binding,
+      signal: new AbortController().signal,
+      deps: {
+        resolveProvider: async () => ({
+          id: 'test-provider',
+          apiKind: 'openai-v1',
+        }),
+        buildMessagesAsync: async () => {
+          buildCalled = true;
+          return { messages: [], prefix: 'const x = ', suffix: '' };
+        },
+        createGeneration: async () => {
+          createCalled = true;
+          return { generationId: 'gen-cache' };
+        },
+        subscribeToGeneration: () => () => {},
+        cancelGeneration: async () => {},
+      },
+    });
+
+    assert.equal(result.text, 'cached;');
+    assert.equal(createCalled, false);
+    assert.equal(buildCalled, false);
+  });
 });
 
 describe('fetchEditorAiCompletion transport', () => {

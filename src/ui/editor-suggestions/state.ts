@@ -27,7 +27,8 @@ export interface CompletionSuggestion {
   id: string;
   shownAt: number;
   origin: CompletionSuggestionOrigin;
-  consumed: boolean;
+  /** Prefix of the model completion already typed through or partial-accepted. */
+  consumed: string;
 }
 
 /** @deprecated Use {@link CompletionSuggestion}. */
@@ -56,7 +57,6 @@ export function createCompletionSuggestion(
 ): CompletionSuggestion {
   if (
     previous &&
-    !previous.consumed &&
     previous.pos === pos &&
     text.startsWith(previous.text) &&
     previous.text.length > 0
@@ -70,7 +70,7 @@ export function createCompletionSuggestion(
     id: randomUUID(),
     shownAt: Date.now(),
     origin,
-    consumed: false,
+    consumed: '',
   };
 }
 
@@ -151,12 +151,92 @@ export function resolveSuggestionAfterTransaction(
   if (!suggestion) return null;
 
   if (suggestion.kind === 'completion') {
-    if (tr.docChanged) return null;
-    if (!tr.state.selection.eq(tr.startState.selection)) return null;
-    return suggestion;
+    return mapCompletionSuggestion(suggestion, tr);
   }
 
   return mapIntentSuggestion(suggestion, tr);
+}
+
+const CLOSE_BRACKET_PAIRS: Record<string, string> = {
+  '(': ')',
+  '[': ']',
+  '{': '}',
+  '"': '"',
+  "'": "'",
+};
+
+/** Split a single-key closeBrackets insert into typed vs auto-closed suffix. */
+export function splitCloseBracketInsert(inserted: string): {
+  typed: string;
+  autoClosed: string;
+} {
+  if (inserted.length < 2) {
+    return { typed: inserted, autoClosed: '' };
+  }
+  const open = inserted[0]!;
+  const expectedClose = CLOSE_BRACKET_PAIRS[open];
+  if (!expectedClose || inserted[1] !== expectedClose) {
+    return { typed: inserted, autoClosed: '' };
+  }
+  if (inserted.length === 2) {
+    return { typed: open, autoClosed: expectedClose };
+  }
+  return { typed: inserted, autoClosed: '' };
+}
+
+/**
+ * Map a completion ghost through a document change (type-through) or keep it on
+ * selection-only updates when the cursor stays at the anchor.
+ */
+export function mapCompletionSuggestion(
+  suggestion: CompletionSuggestion,
+  tr: Transaction,
+): CompletionSuggestion | null {
+  const mappedPos = tr.changes.mapPos(suggestion.pos, 1);
+
+  if (!tr.docChanged) {
+    const head = tr.state.selection.main.head;
+    if (head === mappedPos) {
+      return suggestion.pos === mappedPos ? suggestion : { ...suggestion, pos: mappedPos };
+    }
+    return null;
+  }
+
+  let changeCount = 0;
+  let insertFrom = 0;
+  let insertTo = 0;
+  let inserted = '';
+  tr.changes.iterChanges((fromA, toA, fromB, toB, insert) => {
+    changeCount += 1;
+    insertFrom = fromB;
+    insertTo = toB;
+    inserted = insert.toString();
+  });
+  if (changeCount !== 1) return null;
+  if (insertTo !== insertFrom + inserted.length) return null;
+  if (insertFrom !== tr.changes.mapPos(suggestion.pos, -1)) return null;
+
+  const selection = tr.state.selection.main;
+  if (!selection.empty || selection.head !== insertTo) return null;
+
+  const { typed, autoClosed } = splitCloseBracketInsert(inserted);
+  if (!typed) return null;
+  if (!suggestion.text.startsWith(typed)) return null;
+
+  let remainder = suggestion.text.slice(typed.length);
+  if (autoClosed && remainder.startsWith(autoClosed)) {
+    remainder = remainder.slice(autoClosed.length);
+  }
+
+  const consumed = suggestion.consumed + typed;
+  if (!remainder) return null;
+
+  return {
+    ...suggestion,
+    pos: insertTo,
+    text: remainder,
+    consumed,
+  };
 }
 
 interface SuggestionFieldValue {
@@ -240,7 +320,7 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
       remainder
         ? {
             ...ghost,
-            consumed: true,
+            consumed: ghost.consumed + chunk,
             text: remainder,
             pos: insertPos + chunk.length,
           }

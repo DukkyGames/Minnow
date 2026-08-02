@@ -3,7 +3,7 @@
  * Phase 6: structured context, LSP signals, cursor-aware alignment.
  */
 
-import type { EditorState } from '@codemirror/state';
+import type { EditorState, Transaction } from '@codemirror/state';
 import type { ApiMessage } from '../types';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { stripEditorModelOutput } from './editor-model-output';
@@ -72,6 +72,31 @@ export class EditorRecentEditsRing {
       if (before === after) continue;
       this.push({ lineNumber: i + 1, before, after });
     }
+  }
+
+  /** Record line-level edits from one CodeMirror transaction. */
+  recordTransaction(tr: Transaction): void {
+    if (!tr.docChanged) return;
+    const oldDoc = tr.startState.doc;
+    const newDoc = tr.state.doc;
+    tr.changes.iterChanges((fromA, toA, fromB, toB) => {
+      const startOld = oldDoc.lineAt(fromA).number;
+      const endOld = oldDoc.lineAt(Math.max(fromA, toA)).number;
+      const newAnchor = Math.min(fromB, newDoc.length);
+      const newEnd = Math.min(toB, newDoc.length);
+      const startNew = newDoc.lineAt(newAnchor).number;
+      const endNewLine = newDoc.lineAt(Math.max(newAnchor, newEnd > newAnchor ? newEnd - 1 : newEnd)).number;
+      const lineCount = Math.max(endOld - startOld + 1, endNewLine - startNew + 1);
+      for (let i = 0; i < lineCount; i += 1) {
+        const oldNum = startOld + i;
+        const before = oldNum <= oldDoc.lines ? oldDoc.line(oldNum).text : '';
+        const newNum = startNew + i;
+        const after = newNum <= newDoc.lines ? newDoc.line(newNum).text : '';
+        if (before !== after) {
+          this.push({ lineNumber: newNum, before, after });
+        }
+      }
+    });
   }
 
   private push(entry: RecentEditLine): void {

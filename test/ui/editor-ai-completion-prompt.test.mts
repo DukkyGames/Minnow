@@ -121,6 +121,21 @@ describe('editor AI completion prompt', () => {
     assert.equal(snap[0].after, 'line TWO');
   });
 
+  test('EditorRecentEditsRing recordTransaction uses line-level diffs', () => {
+    const ring = new EditorRecentEditsRing(4);
+    const state = EditorState.create({ doc: 'line one\nline two' });
+    const tr = state.update({
+      changes: { from: 14, to: 17, insert: 'TWO' },
+      selection: { anchor: 17, head: 17 },
+    });
+    ring.recordTransaction(tr);
+    const snap = ring.snapshot();
+    assert.equal(snap.length, 1);
+    assert.equal(snap[0].lineNumber, 2);
+    assert.equal(snap[0].before, 'line two');
+    assert.equal(snap[0].after, 'line TWO');
+  });
+
   test('symbolsEnclosingLine finds nested symbols', () => {
     const names = symbolsEnclosingLine(
       [

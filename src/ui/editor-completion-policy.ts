@@ -4,9 +4,15 @@
 
 import { completionStatus, pickedCompletion } from '@codemirror/autocomplete';
 import type { EditorState, Transaction } from '@codemirror/state';
+import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 
 /** Default pause after accepting an LSP/snippet item before AI may schedule. */
 export const COMPLETION_ACCEPT_COOLDOWN_MS = 300;
+
+/** Completion transport mode for cache keys and policy (A2 may extend). */
+export function completionModeAt(config: EditorAiCompletionConfig): string {
+  return config.useNativeFim ? 'native-fim' : 'chat';
+}
 
 /** View-update slice passed into {@link shouldScheduleAi}. */
 export interface ShouldScheduleAiUpdate {

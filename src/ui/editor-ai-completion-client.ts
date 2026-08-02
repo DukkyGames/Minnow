@@ -33,6 +33,7 @@ import {
   buildEditorAiCompletionMessages,
   buildEditorAiCompletionMessagesAsync,
   DEFAULT_MAX_INSERT_CHARS,
+  extractPrefixSuffix,
   type AlignCompletionResult,
   type EditorAiPromptInput,
 } from './editor-ai-completion-prompt';
@@ -289,11 +290,8 @@ export async function fetchEditorAiCompletion(
   const cache = deps.cache ?? editorAiCompletionCache;
 
   const modelId = input.binding.modelId.trim();
-  const promptResult = await buildMessages({
-    ...input,
-    modelId,
-  });
-  const { prefix, suffix, messages } = promptResult;
+  const cursorPos = input.cursorPos;
+  const { prefix, suffix } = extractPrefixSuffix(input.state.doc, cursorPos, input.config);
   const maxInsertChars = maxInsertCharsForConfig(input.config);
 
   recordCompletionEvent({ type: 'request' });
@@ -316,6 +314,12 @@ export async function fetchEditorAiCompletion(
       return { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE };
     }
   }
+
+  const promptResult = await buildMessages({
+    ...input,
+    modelId,
+  });
+  const { messages } = promptResult;
 
   const provider = await resolveProv(input.binding.providerId);
   const body: Record<string, unknown> = {
@@ -404,6 +408,8 @@ export async function fetchEditorAiCompletion(
     };
 
     let unsubscribe: (() => void) | null = null;
+    let lastEmittedLen = 0;
+    let lastEmittedLines = 1;
     unsubscribe = subscribeGen(generationId, {
       signal: input.signal,
       onChunk: (chunk) => {
@@ -411,6 +417,15 @@ export async function fetchEditorAiCompletion(
         reasoningAcc.ingestChunk(chunk);
         const aligned = emitFromAccumulators(false);
         if (!aligned.rejected && aligned.text) {
+          const len = aligned.text.length;
+          const lines = aligned.text.split('\n').length;
+          const grewEnough = len - lastEmittedLen >= 8;
+          const gainedNewline = lines > lastEmittedLines;
+          if (lastEmittedLen > 0 && !grewEnough && !gainedNewline) {
+            return;
+          }
+          lastEmittedLen = len;
+          lastEmittedLines = lines;
           if (!firstTokenRecorded) {
             firstTokenRecorded = true;
             firstTokenMs = performance.now() - requestStartedAt;

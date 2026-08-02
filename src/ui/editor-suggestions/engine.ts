@@ -128,7 +128,7 @@ export class SuggestionEnginePlugin {
     const { state } = update;
 
     if (isLspBusy(state)) {
-      this.cancelInFlight(true, update.transactions[0]);
+      this.cancelInFlight(false, update.transactions[0]);
       return;
     }
 
@@ -137,11 +137,13 @@ export class SuggestionEnginePlugin {
         this.completionAcceptedAt = Date.now();
       }
       if (tr.docChanged) {
-        this.recentEdits.recordDocChange(
-          tr.startState.doc.toString(),
-          tr.state.doc.toString(),
-        );
+        this.recentEdits.recordTransaction(tr);
       }
+    }
+
+    if (update.selectionSet && !update.docChanged) {
+      const ghostSurvived = getCompletionSuggestion(state) !== null;
+      this.cancelInFlight(!ghostSurvived);
     }
 
     const intentToggled = update.transactions.some((tr) =>
@@ -169,11 +171,8 @@ export class SuggestionEnginePlugin {
     }
 
     if (update.docChanged) {
-      // Abort in-flight work, but leave any painted suggestion to the field's
-      // own rules: a completion clears on every doc change, while an intent
-      // proposal maps through the transaction and survives edits that do not
-      // touch the text it was generated from.
-      this.cancelInFlight(false);
+      const ghostSurvived = getCompletionSuggestion(state) !== null;
+      this.cancelInFlight(!ghostSurvived);
     }
 
     if (state.readOnly) return;
@@ -464,14 +463,20 @@ export class SuggestionEnginePlugin {
         recentEdits: this.recentEdits.snapshot(),
         onPartial: (partial, options) => {
           if (controller.signal.aborted) return;
-          if (isLspBusy(this.view.state)) return;
           if (this.requestPos !== pos) return;
+          const liveGhost = getCompletionSuggestion(this.view.state);
+          if (liveGhost?.consumed) {
+            if (!partial.startsWith(liveGhost.consumed)) {
+              controller.abort();
+              this.view.dispatch({ effects: setSuggestion.of(null) });
+              return;
+            }
+          }
           this.paintCompletion(pos, partial, options?.fromCache ? 'cache' : 'stream');
         },
       });
 
       if (controller.signal.aborted) return;
-      if (isLspBusy(this.view.state)) return;
       if (this.view.state.selection.main.head !== pos) return;
       if (this.requestPos !== pos) return;
 
@@ -499,16 +504,30 @@ export class SuggestionEnginePlugin {
     text: string,
     origin: 'stream' | 'cache',
   ): void {
-    if (isLspBusy(this.view.state)) return;
     if (!text) {
       if (hasSuggestion(this.view.state)) {
         this.view.dispatch({ effects: setSuggestion.of(null) });
       }
       return;
     }
-    if (this.view.state.selection.main.head !== pos) return;
 
     const current = getCompletionSuggestion(this.view.state);
+    const anchorPos = current?.pos ?? pos;
+    if (this.view.state.selection.main.head !== anchorPos) return;
+
+    const consumedPrefix = current?.consumed ?? '';
+    if (consumedPrefix && !text.startsWith(consumedPrefix)) {
+      this.view.dispatch({ effects: setSuggestion.of(null) });
+      return;
+    }
+    const remainder = consumedPrefix ? text.slice(consumedPrefix.length) : text;
+    if (!remainder) {
+      if (hasSuggestion(this.view.state)) {
+        this.view.dispatch({ effects: setSuggestion.of(null) });
+      }
+      return;
+    }
+
     const currentText = current?.text ?? '';
     if (
       currentText &&
@@ -517,7 +536,7 @@ export class SuggestionEnginePlugin {
       return;
     }
 
-    const next = createCompletionSuggestion(text, pos, origin, current);
+    const next = createCompletionSuggestion(remainder, anchorPos, origin, current);
     if (!current || current.id !== next.id) {
       recordCompletionEvent({ type: 'shown' });
     }
