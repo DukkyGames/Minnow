@@ -4,6 +4,7 @@
 
 import { nextThinkingTriStateOnClick } from './composer-thinking';
 import {
+  chatUsesDesktopSandboxWorkspace,
   fetchCodeMapInjectionDefault,
   resolveCodeMapInjectionEnabled,
   resolveCodeMapInjectionTriState,
@@ -94,9 +95,11 @@ export async function syncComposerCodeMapFromActiveChat(): Promise<void> {
   if (!sessionState) return;
 
   const wrap = document.getElementById('composerCodeMapWrap');
-  const workspace = getWorkspacePath().trim() || getActiveChat().workspacePath?.trim() || '';
+  const chat = getActiveChat();
+  const workspace = getWorkspacePath().trim() || chat.workspacePath?.trim() || '';
   const code = await fetchBrainCodeConfig();
-  const show = Boolean(workspace && code?.enabled);
+  const onDesktopSandbox = await chatUsesDesktopSandboxWorkspace(chat);
+  const show = Boolean(workspace && code?.enabled && !onDesktopSandbox);
 
   if (wrap) {
     wrap.classList.toggle('hidden', !show);
@@ -109,7 +112,6 @@ export async function syncComposerCodeMapFromActiveChat(): Promise<void> {
   const globalDefault = await fetchCodeMapInjectionDefault();
   cachedGlobalDefault = globalDefault;
 
-  const chat = getActiveChat();
   const tri = resolveCodeMapInjectionTriState(chat);
   const resolvedOn = resolveCodeMapInjectionEnabled(chat, globalDefault);
   const disabled = isActiveChatStreaming() || isComposerRecoveryBlocked();

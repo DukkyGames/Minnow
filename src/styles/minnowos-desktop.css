@@ -864,6 +864,23 @@
   height: 20px;
 }
 
+.mn-os-desktop-input-row .mn-os-desktop-comp-btn.brain-notes-toggle-btn .thinking-toggle-icon {
+  --mn-icon-size: 20px;
+}
+
+.mn-os-desktop-input-row .mn-os-desktop-comp-btn.brain-notes-toggle-btn[aria-pressed='false'] {
+  color: var(--os-text-dim);
+}
+
+.mn-os-desktop-input-row .mn-os-desktop-comp-btn.brain-notes-toggle-btn[aria-pressed='false'] .thinking-toggle-icon {
+  opacity: 0.38;
+}
+
+.mn-os-desktop-input-row .mn-os-desktop-comp-btn.brain-notes-toggle-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .mn-os-desktop-comp-btn:hover {
     background: var(--os-surface-3);

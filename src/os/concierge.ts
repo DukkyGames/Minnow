@@ -111,6 +111,15 @@ function buildDesktopComposer(): HTMLElement {
   const row = document.createElement('div');
   row.className = 'mn-os-desktop-input-row';
 
+  const brainNotesWrap = document.createElement('div');
+  brainNotesWrap.id = 'desktopBrainNotesWrap';
+  brainNotesWrap.className = 'desktop-brain-notes-wrap hidden';
+
+  const brainNotesControl = document.createElement('div');
+  brainNotesControl.id = 'desktopBrainNotesControl';
+  brainNotesControl.className = 'brain-notes-toggle-host';
+  brainNotesWrap.appendChild(brainNotesControl);
+
   const attachBtn = document.createElement('button');
   attachBtn.type = 'button';
   attachBtn.id = 'btnDesktopAttach';
@@ -170,7 +179,7 @@ function buildDesktopComposer(): HTMLElement {
   sendBtn.setAttribute('aria-label', 'Send message');
   sendBtn.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
-  row.append(attachBtn, inputStack, toolsAnchor, contextAnchor, sendBtn);
+  row.append(brainNotesWrap, attachBtn, inputStack, toolsAnchor, contextAnchor, sendBtn);
   root.append(toolApprovalHost, questionHost, modelTriggerRow, row);
   return root;
 }

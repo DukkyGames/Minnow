@@ -44,6 +44,7 @@ import { iconHtml } from '../ui/icon';
 import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-draft';
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
+import { syncComposerBrainNotesFromActiveChat } from '../ui/composer-brain-notes';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from '../ui/git-panel';
 import { seedNewChatComposerRunTarget } from '../ui/new-chat-run-target-seed';
 import { renderChatFromHistory } from '../ui/messages';
@@ -207,6 +208,7 @@ export async function startNewDesktopGeneralChat(): Promise<void> {
   renderDesktopChatMessages();
   syncDesktopComposerSendState();
   refreshContextUsageRing();
+  void syncComposerBrainNotesFromActiveChat();
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   input?.focus();
 }
@@ -263,6 +265,7 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
     syncChatItemDotsInDom();
     syncDesktopComposerSendState();
     refreshContextUsageRing();
+    void syncComposerBrainNotesFromActiveChat();
     void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
     return;
   }
@@ -281,6 +284,7 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
   syncChatItemDotsInDom();
   syncDesktopComposerSendState();
   refreshContextUsageRing();
+  void syncComposerBrainNotesFromActiveChat();
   void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
 }
 
@@ -349,6 +353,7 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
     syncChatItemDotsInDom();
   }
   refreshContextUsageRing();
+  void syncComposerBrainNotesFromActiveChat();
 
   await applyDesktopSeed(options?.seed);
 

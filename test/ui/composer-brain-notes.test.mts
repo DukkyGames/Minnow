@@ -30,6 +30,9 @@ function setupDom(): void {
     <div id="composerBrainNotesWrap" class="composer-control brain-notes-control-wrap hidden">
       <div id="composerBrainNotesControl" class="brain-notes-toggle-host"></div>
     </div>
+    <div id="desktopBrainNotesWrap" class="desktop-brain-notes-wrap hidden">
+      <div id="desktopBrainNotesControl" class="brain-notes-toggle-host"></div>
+    </div>
   `;
 }
 
@@ -86,7 +89,9 @@ describe('syncComposerBrainNotesFromActiveChat', () => {
     initBrainNotesInjectionControl();
     await syncComposerBrainNotesFromActiveChat();
 
-    const btn = document.querySelector('.brain-notes-toggle-btn') as HTMLButtonElement;
+    const buttons = document.querySelectorAll('.brain-notes-toggle-btn');
+    assert.equal(buttons.length, 2);
+    const btn = buttons[0] as HTMLButtonElement;
     assert.ok(btn);
     assert.equal(btn.getAttribute('aria-pressed'), 'false');
 
