@@ -8,6 +8,11 @@ import {
   type EditorIntentModeConfig,
 } from '../config/editor-intent-mode';
 import { appendSettingsGroup } from './settings-layout';
+import {
+  appendProviderModelFields,
+  fillModelSelect,
+  fillProviderSelect,
+} from './settings-model-binding';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -24,6 +29,16 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function kbdKey(label: string): HTMLElement {
   return el('kbd', 'settings-editor-kbd', label);
+}
+
+function appendShortcutRow(list: HTMLElement, term: string, keys: string[]): void {
+  list.append(el('dt', 'settings-kv__term', term));
+  const dd = el('dd', 'settings-kv__value');
+  keys.forEach((key, index) => {
+    if (index > 0) dd.append(document.createTextNode('+'));
+    dd.append(kbdKey(key));
+  });
+  list.append(dd);
 }
 
 function appendNumberSetting(
@@ -64,6 +79,121 @@ function appendNumberSetting(
   mount.append(kv);
 }
 
+function appendSigilSetting(
+  mount: HTMLElement,
+  config: EditorIntentModeConfig,
+  refresh: () => void,
+): void {
+  const kv = el('dl', 'settings-kv settings-editor-debounce');
+  kv.append(el('dt', 'settings-kv__term', 'Trigger prefix'));
+  const dd = el('dd', 'settings-kv__value');
+  const wrap = el('span', 'settings-kv-input-wrap settings-editor-debounce__control');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.id = 'settingsIntentSigil';
+  input.value = config.sigil;
+  input.placeholder = 'none — detect prose';
+  input.className = 'settings-select settings-kv-input';
+  input.setAttribute('aria-label', 'Intent trigger prefix');
+  wrap.append(input);
+  dd.append(wrap);
+  kv.append(dd);
+  input.addEventListener('change', () => {
+    const sigil = input.value.trim();
+    input.value = sigil;
+    void saveEditorIntentModeConfig({ sigil }).then(() => {
+      setStatus('ok', sigil ? `Intent prefix set to “${sigil}”` : 'Intent prefix cleared');
+      refresh();
+    });
+  });
+  mount.append(kv);
+}
+
+function appendModelPin(
+  mount: HTMLElement,
+  config: EditorIntentModeConfig,
+  refresh: () => void,
+): void {
+  const pinned = Boolean(config.providerId && config.modelId);
+
+  const sharedRadio = document.createElement('input');
+  sharedRadio.type = 'radio';
+  sharedRadio.name = 'editorIntentModelSource';
+  sharedRadio.id = 'editorIntentModelSourceShared';
+  sharedRadio.checked = !pinned;
+
+  const pinRadio = document.createElement('input');
+  pinRadio.type = 'radio';
+  pinRadio.name = 'editorIntentModelSource';
+  pinRadio.id = 'editorIntentModelSourcePin';
+  pinRadio.checked = pinned;
+
+  const sourceRow = el('div', 'settings-editor-source-radios');
+  const sharedLabel = el('label', 'settings-inline-radio');
+  sharedLabel.htmlFor = sharedRadio.id;
+  sharedLabel.append(sharedRadio, document.createTextNode(' Use inline completion model'));
+  const pinLabel = el('label', 'settings-inline-radio');
+  pinLabel.htmlFor = pinRadio.id;
+  pinLabel.append(pinRadio, document.createTextNode(' Pin provider and model'));
+  sourceRow.append(sharedLabel, pinLabel);
+  mount.append(sourceRow);
+
+  const panel = el('div', 'settings-editor-model-panel');
+  panel.hidden = !pinned;
+  const grid = el('div', 'settings-editor-model-grid settings-routing-row__selects');
+  const { providerSelect, modelSelect } = appendProviderModelFields(
+    grid,
+    { provider: 'settingsIntentProvider', model: 'settingsIntentModel' },
+    { provider: 'Provider', model: 'Model' },
+    'inline',
+  );
+  panel.append(grid);
+  mount.append(panel);
+
+  void (async () => {
+    await fillProviderSelect(providerSelect, config.providerId);
+    await fillModelSelect(
+      modelSelect,
+      config.providerId || providerSelect.value,
+      config.modelId,
+      { includeEmptyOption: false },
+    );
+  })();
+
+  const persistPin = (): void => {
+    const providerId = providerSelect.value.trim();
+    const modelId = modelSelect.value.trim();
+    if (!providerId || !modelId) return;
+    void saveEditorIntentModeConfig({ providerId, modelId }).then(() => {
+      setStatus('ok', 'Intent model pinned');
+      refresh();
+    });
+  };
+
+  sharedRadio.addEventListener('change', () => {
+    if (!sharedRadio.checked) return;
+    panel.hidden = true;
+    void saveEditorIntentModeConfig({ providerId: '', modelId: '' }).then(() => {
+      setStatus('ok', 'Intent follows the inline completion model');
+      refresh();
+    });
+  });
+
+  pinRadio.addEventListener('change', () => {
+    if (!pinRadio.checked) return;
+    panel.hidden = false;
+    persistPin();
+  });
+
+  providerSelect.addEventListener('change', () => {
+    void fillModelSelect(modelSelect, providerSelect.value, '', {
+      includeEmptyOption: false,
+    }).then(persistPin);
+  });
+
+  modelSelect.addEventListener('change', persistPin);
+}
+
 /** Append Intent mode settings group into an existing Editor settings mount. */
 export async function appendEditorIntentSettings(
   mount: HTMLElement,
@@ -81,7 +211,7 @@ function renderIntentSettingsGroup(
   const group = appendSettingsGroup(
     mount,
     'Intent mode',
-    'Type plain intent on a line; leave the line to resolve it in place. Uses the same model as inline completion and Quick Edit.',
+    'Write plain intent on a line and idle — a proposal appears below it. Tab accepts, Esc dismisses, and Ctrl+Z undoes an accepted proposal.',
   );
 
   const { row: defaultRow } = createSettingsToggleRow('Enable by default in new files', {
@@ -95,103 +225,55 @@ function renderIntentSettingsGroup(
   });
   group.append(defaultRow);
 
-  const { row: recheckRow } = createSettingsToggleRow('Auto-recheck stale lines', {
-    checked: config.autoRecheckDefault,
-    ariaLabel: 'Automatically re-resolve lines flagged stale after neighbor edits',
-    onChange: async (enabled) => {
-      await saveEditorIntentModeConfig({ autoRecheckDefault: enabled });
-      setStatus('ok', enabled ? 'Auto-recheck on' : 'Auto-recheck off');
-      refresh();
-    },
-  });
-  group.append(recheckRow);
-
-  group.append(
-    el(
-      'p',
-      'settings-group__lead',
-      'Auto-recheck lets the local model re-edit stale resolved lines. Off by default.',
-    ),
-  );
-
   const shortcuts = el('dl', 'settings-kv settings-editor-shortcuts');
-  shortcuts.append(el('dt', 'settings-kv__term', 'Toggle Intent mode'));
-  const toggleDd = el('dd', 'settings-kv__value');
-  toggleDd.append(kbdKey('Ctrl'), document.createTextNode('+'), kbdKey('I'));
-  shortcuts.append(toggleDd);
-  shortcuts.append(el('dt', 'settings-kv__term', 'Resolve'));
-  shortcuts.append(
-    el('dd', 'settings-kv__value', 'Leave the line (Enter, move cursor, or blur)'),
-  );
-  shortcuts.append(el('dt', 'settings-kv__term', 'Revert'));
-  shortcuts.append(el('dd', 'settings-kv__value', 'Click a resolved line or use Revert control'));
+  appendShortcutRow(shortcuts, 'Accept proposal', ['Tab']);
+  appendShortcutRow(shortcuts, 'Dismiss proposal', ['Esc']);
+  appendShortcutRow(shortcuts, 'Force resolve on this line', ['Ctrl', 'Enter']);
+  appendShortcutRow(shortcuts, 'Toggle Intent mode', ['Ctrl', 'I']);
   group.append(shortcuts);
 
   appendNumberSetting(
     group,
-    'Pause before blur resolve',
+    'Idle pause before proposing',
     'settingsIntentDebounceMs',
     config.debounceMs,
-    200,
+    100,
     2000,
     50,
     'ms',
     (ms) => {
       void saveEditorIntentModeConfig({ debounceMs: ms }).then(() => {
-        setStatus('ok', 'Blur resolve delay saved');
+        setStatus('ok', 'Intent debounce saved');
         refresh();
       });
     },
   );
 
+  appendSigilSetting(group, config, refresh);
+  group.append(
+    el(
+      'p',
+      'settings-group__lead',
+      'With no prefix, lines that read as plain English are detected automatically. Set a prefix (e.g. “??”) to trigger only on lines that start with it.',
+    ),
+  );
+
   appendNumberSetting(
     group,
-    'Context window',
-    'settingsIntentContextWindow',
-    config.contextWindow,
-    1,
-    20,
-    1,
-    'lines',
+    'Max tokens',
+    'settingsIntentMaxTokens',
+    config.maxTokens,
+    128,
+    4096,
+    64,
+    'tokens',
     (n) => {
-      void saveEditorIntentModeConfig({ contextWindow: n }).then(() => {
-        setStatus('ok', 'Context window saved');
+      void saveEditorIntentModeConfig({ maxTokens: n }).then(() => {
+        setStatus('ok', 'Intent token budget saved');
         refresh();
       });
     },
   );
 
-  appendNumberSetting(
-    group,
-    'Recheck delay',
-    'settingsIntentRecheckDelayMs',
-    config.recheckDelayMs,
-    200,
-    5000,
-    100,
-    'ms',
-    (ms) => {
-      void saveEditorIntentModeConfig({ recheckDelayMs: ms }).then(() => {
-        setStatus('ok', 'Recheck delay saved');
-        refresh();
-      });
-    },
-  );
-
-  appendNumberSetting(
-    group,
-    'Max recheck passes',
-    'settingsIntentMaxRecheckPasses',
-    config.maxRecheckPasses,
-    1,
-    32,
-    1,
-    'passes',
-    (n) => {
-      void saveEditorIntentModeConfig({ maxRecheckPasses: n }).then(() => {
-        setStatus('ok', 'Recheck budget saved');
-        refresh();
-      });
-    },
-  );
+  appendModelPin(group, config, refresh);
 }

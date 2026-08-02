@@ -31,14 +31,15 @@ import {
   lspCompletionKeymapBindings,
 } from '../../src/ui/file-editor-keymap.ts';
 import {
-  acceptEditorAiGhost,
-  acceptPartialEditorAiGhost,
-  dismissEditorAiGhost,
-  editorAiCompletionExtensions,
-  editorAiGhostKeymapBindings,
-  hasEditorAiGhost,
-  setEditorAiGhostForTest,
-} from '../../src/ui/file-editor-ai-extensions.ts';
+  acceptCompletionGhost,
+  acceptPartialCompletionGhost,
+  dismissSuggestion,
+  editorSuggestionBaseExtensions,
+  editorSuggestionExtensions,
+  editorSuggestionKeymapBindings,
+  hasCompletionSuggestion,
+  setCompletionSuggestionForTest,
+} from '../../src/ui/editor-suggestions/index.ts';
 import {
   buildCompletionCacheKey,
   hashCompletionContext,
@@ -84,7 +85,8 @@ function mountEditorWithAi(doc: string): EditorView {
       doc,
       extensions: [
         ...fileEditorKeymapExtensions(),
-        ...editorAiCompletionExtensions({
+        ...editorSuggestionBaseExtensions(),
+        ...editorSuggestionExtensions({
           filePath: 'test.ts',
           config: { ...DEFAULT_EDITOR_AI_COMPLETION, enabled: true },
           canRequest: () => false,
@@ -100,22 +102,22 @@ describe('file editor AI keymap', () => {
     setupDom();
     const view = mountEditorWithAi('const ');
     const pos = view.state.doc.length;
-    setEditorAiGhostForTest(view, 'x = 1;', pos);
-    assert.equal(hasEditorAiGhost(view.state), true);
+    setCompletionSuggestionForTest(view, 'x = 1;', pos);
+    assert.equal(hasCompletionSuggestion(view.state), true);
 
-    const handled = editorAiGhostKeymapBindings[0].run!(view);
+    const handled = editorSuggestionKeymapBindings[0].run!(view);
     assert.equal(handled, true);
     assert.equal(view.state.doc.toString(), 'const x = 1;');
-    assert.equal(hasEditorAiGhost(view.state), false);
+    assert.equal(hasCompletionSuggestion(view.state), false);
   });
 
   test('Mod-ArrowRight partial accept when ghost is visible', () => {
     setupDom();
     const view = mountEditorWithAi('const ');
     const pos = view.state.doc.length;
-    setEditorAiGhostForTest(view, 'x = 1;\nmore', pos);
+    setCompletionSuggestionForTest(view, 'x = 1;\nmore', pos);
 
-    const partialBinding = editorAiGhostKeymapBindings.find(
+    const partialBinding = editorSuggestionKeymapBindings.find(
       (b) => b.key === 'Mod-ArrowRight',
     );
     assert.ok(partialBinding);
@@ -123,14 +125,14 @@ describe('file editor AI keymap', () => {
     const handled = partialBinding!.run!(view);
     assert.equal(handled, true);
     assert.match(view.state.doc.toString(), /^const x/);
-    assert.equal(hasEditorAiGhost(view.state), true);
+    assert.equal(hasCompletionSuggestion(view.state), true);
   });
 
   test('Tab indents when no ghost is active', () => {
     setupDom();
     const view = mountEditorWithAi('line');
     view.focus();
-    const aiHandled = editorAiGhostKeymapBindings[0].run!(view);
+    const aiHandled = editorSuggestionKeymapBindings[0].run!(view);
     assert.equal(aiHandled, false);
     const indentHandled = fileEditorTabBinding.run!(view);
     assert.equal(indentHandled, true);
@@ -140,12 +142,12 @@ describe('file editor AI keymap', () => {
   test('Escape dismisses ghost (preventDefault binding)', () => {
     setupDom();
     const view = mountEditorWithAi('abc');
-    setEditorAiGhostForTest(view, 'ghost', 3);
+    setCompletionSuggestionForTest(view, 'ghost', 3);
 
-    const escapeBinding = editorAiGhostKeymapBindings.find((b) => b.key === 'Escape');
+    const escapeBinding = editorSuggestionKeymapBindings.find((b) => b.key === 'Escape');
     const dismissed = escapeBinding!.run!(view);
     assert.equal(dismissed, true);
-    assert.equal(hasEditorAiGhost(view.state), false);
+    assert.equal(hasCompletionSuggestion(view.state), false);
     assert.equal(escapeBinding?.preventDefault, true);
   });
 
@@ -160,30 +162,30 @@ describe('file editor AI keymap', () => {
   test('ghost Escape binding returns false when no ghost', () => {
     setupDom();
     const view = mountEditorWithAi('abc');
-    const escapeBinding = editorAiGhostKeymapBindings.find((b) => b.key === 'Escape');
+    const escapeBinding = editorSuggestionKeymapBindings.find((b) => b.key === 'Escape');
     const handled = escapeBinding!.run!(view);
     assert.equal(handled, false);
   });
 
-  test('acceptEditorAiGhost and dismissEditorAiGhost helpers', () => {
+  test('acceptCompletionGhost and dismissSuggestion helpers', () => {
     setupDom();
     const view = mountEditorWithAi('fn(');
-    setEditorAiGhostForTest(view, 'a, b', 3);
-    assert.equal(acceptEditorAiGhost(view), true);
+    setCompletionSuggestionForTest(view, 'a, b', 3);
+    assert.equal(acceptCompletionGhost(view), true);
     assert.equal(view.state.doc.toString(), 'fn(a, b');
 
-    setEditorAiGhostForTest(view, 'tmp', 6);
-    assert.equal(dismissEditorAiGhost(view), true);
+    setCompletionSuggestionForTest(view, 'tmp', 6);
+    assert.equal(dismissSuggestion(view), true);
     assert.equal(view.state.doc.toString(), 'fn(a, b');
   });
 
-  test('acceptPartialEditorAiGhost accepts one chunk', () => {
+  test('acceptPartialCompletionGhost accepts one chunk', () => {
     setupDom();
     const view = mountEditorWithAi('a');
-    setEditorAiGhostForTest(view, 'bc def', 1);
-    assert.equal(acceptPartialEditorAiGhost(view), true);
+    setCompletionSuggestionForTest(view, 'bc def', 1);
+    assert.equal(acceptPartialCompletionGhost(view), true);
     assert.equal(view.state.doc.toString(), 'abc ');
-    assert.equal(hasEditorAiGhost(view.state), true);
+    assert.equal(hasCompletionSuggestion(view.state), true);
   });
 
 });
