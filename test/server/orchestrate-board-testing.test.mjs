@@ -13,6 +13,8 @@ import { stopFakeModel } from '../../server/orchestrate/board-testing/fake-model
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
 import { httpRequest, rmTestHome, setTestHome } from '../config/test-helpers.js';
 
+process.env.MINNOW_TEST = '1';
+
 const GROUP_ID = 'grp_a0000000-0000-4000-8000-000000000001';
 const TEST_BOARD_PLANNER_ID = 'a0000000-0000-4000-8000-000000000001';
 
