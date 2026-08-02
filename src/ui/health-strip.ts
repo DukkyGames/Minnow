@@ -20,7 +20,7 @@ export type DiagnosticsHealthPayload = {
     tools?: { ok?: boolean };
     memory?: { ok?: boolean };
     brain?: { ok?: boolean };
-    lsp?: { ok?: boolean; running?: number };
+    lsp?: { ok?: boolean; running?: number; lastBridgeError?: string };
     pty?: { ok?: boolean; sessions?: number };
     electron?: { ok?: boolean | null; available?: boolean };
   };
@@ -72,7 +72,8 @@ export function healthRowsFromPayload(payload: DiagnosticsHealthPayload | null):
       ok: c.lsp?.ok !== false,
       label: 'LSP',
       detail:
-        typeof c.lsp?.running === 'number' ? `${c.lsp.running} running` : undefined,
+        c.lsp?.lastBridgeError ??
+        (typeof c.lsp?.running === 'number' ? `${c.lsp.running} running` : undefined),
     },
     {
       ok: c.pty?.ok !== false,

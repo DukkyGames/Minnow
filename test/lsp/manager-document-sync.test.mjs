@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
 import {
+  buildDidChangeContentChangesForTest,
+  getLspDiagnosticsMapForTest,
   getLspDocumentSyncForTest,
   getLspStructuredDiagnostics,
   notifyLspDocument,
@@ -92,5 +94,26 @@ describe('LSP document sync', () => {
     const sync = getLspDocumentSyncForTest(SAMPLE_PATH);
     assert.equal(sync?.version, 2);
     assert.equal(sync?.text, 'second\n');
+  });
+
+  test('incremental sync builds ranged contentChanges', () => {
+    const changes = buildDidChangeContentChangesForTest(2, 'let x = 1;\n', 'let x = 2;\n');
+    assert.equal(changes.length, 1);
+    assert.ok(changes[0].range);
+    assert.equal(changes[0].text, '2');
+  });
+
+  test('didClose drops cached publishDiagnostics for the file', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') return;
+
+    shutdownAllLsp();
+    const editorText = 'let x = 1\n';
+    await notifyLspDocument(SAMPLE_PATH, 'open', editorText);
+    const { diagnostics } = await getLspStructuredDiagnostics(SAMPLE_PATH, editorText);
+    assert.ok(diagnostics.length > 0);
+    assert.ok(getLspDiagnosticsMapForTest(SAMPLE_PATH));
+
+    await notifyLspDocument(SAMPLE_PATH, 'close');
+    assert.equal(getLspDiagnosticsMapForTest(SAMPLE_PATH), undefined);
   });
 });

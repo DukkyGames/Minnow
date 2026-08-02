@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+  CancellationTokenSource,
   createMessageConnection,
   StreamMessageReader,
   StreamMessageWriter,
@@ -35,6 +36,16 @@ const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
 const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = 15_000;
 /** Default timeout for indexing/search LSP requests (workspace/symbol, documentSymbol). */
 const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 6000;
+const LSP_COMPLETION_TIMEOUT_MS = 1500;
+const LSP_HOVER_TIMEOUT_MS = 1000;
+const LSP_SIGNATURE_TIMEOUT_MS = 1000;
+const LSP_DEFINITION_TIMEOUT_MS = 3000;
+const LSP_INITIALIZE_TIMEOUT_MS = 20_000;
+const MAX_LSP_STDERR_LINES = 80;
+const MAX_DIAGNOSTIC_SNAPSHOT_ENTRIES = 128;
+
+/** Last client-visible LSP bridge failure (timeouts, spawn, request errors). */
+let lastLspBridgeError = null;
 
 /** @type {Record<string, { processes: Map<string, object>, pendingConnections: Map<string, Promise<object>>, documentSync: Map<string, { version: number, text: string }>, diagnosticSnapshots: Map<string, { revision: string, formatted: string }> }>} */
 const scopeStores = {
@@ -448,7 +459,7 @@ function spawnLspChild(argv, workspaceRoot = lspWorkspaceRoot()) {
     const stderrLines = [];
     child.stderr?.on('data', (chunk) => {
       const text = String(chunk);
-      stderrLines.push(text);
+      appendStderrLine(stderrLines, text);
       if (text.trim()) {
         console.error(`[lsp] stderr: ${text.trimEnd()}`);
       }
@@ -488,14 +499,158 @@ function isSkippableWorkspaceSymbolError(message) {
  * @template T
  * @param {Promise<T>} promise
  * @param {number} [ms]
+ * @param {() => void} [onTimeout]
  */
-function withRequestTimeout(promise, ms = DEFAULT_LSP_REQUEST_TIMEOUT_MS) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`LSP request timed out after ${ms}ms`)), ms);
-    }),
-  ]);
+function withRequestTimeout(promise, ms = DEFAULT_LSP_REQUEST_TIMEOUT_MS, onTimeout) {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try {
+        onTimeout?.();
+      } catch {
+        /* ignore */
+      }
+      reject(new Error(`LSP request timed out after ${ms}ms`));
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  });
+}
+
+/**
+ * Send an LSP request with cancellation + timeout (clears timer and cancels on hang).
+ * @template T
+ * @param {import('vscode-jsonrpc').MessageConnection} connection
+ * @param {string} method
+ * @param {unknown} [params]
+ * @param {number} [ms]
+ */
+async function sendLspRequest(connection, method, params, ms = DEFAULT_LSP_REQUEST_TIMEOUT_MS) {
+  const cts = new CancellationTokenSource();
+  try {
+    const request =
+      params === undefined
+        ? connection.sendRequest(method, cts.token)
+        : connection.sendRequest(method, params, cts.token);
+    return await withRequestTimeout(request, ms, () => cts.cancel());
+  } finally {
+    cts.dispose();
+  }
+}
+
+function recordLspBridgeError(message, extra = {}) {
+  lastLspBridgeError = {
+    message: String(message),
+    at: new Date().toISOString(),
+    ...extra,
+  };
+}
+
+/** @internal Test-only — race helper for timer leak checks. */
+export function withRequestTimeoutForTest(promise, ms, onTimeout) {
+  return withRequestTimeout(promise, ms, onTimeout);
+}
+
+/** Snapshot for diagnostics health / settings. */
+export function getLspBridgeHealthSnapshot() {
+  return { lastBridgeError: lastLspBridgeError };
+}
+
+/** LSP TextDocumentSyncChangeKind — 1 full, 2 incremental. */
+function textDocumentSyncChangeKind(capabilities) {
+  const cap = capabilities?.textDocumentSync;
+  if (cap == null) return 1;
+  if (typeof cap === 'number') {
+    return cap === 2 ? 2 : 1;
+  }
+  if (typeof cap === 'object' && cap.change != null) {
+    return Number(cap.change) === 2 ? 2 : 1;
+  }
+  return 1;
+}
+
+function offsetToLspPosition(text, offset) {
+  const clamped = Math.max(0, Math.min(offset, text.length));
+  const head = text.slice(0, clamped);
+  const lines = head.split('\n');
+  const line = lines.length - 1;
+  const character = lines[lines.length - 1]?.length ?? 0;
+  return { line, character };
+}
+
+/** Build didChange contentChanges — incremental when the server advertises sync kind 2. */
+function buildDidChangeContentChanges(syncKind, previousText, nextText) {
+  if (syncKind !== 2 || previousText === nextText) {
+    return [{ text: nextText }];
+  }
+  let start = 0;
+  const prevLen = previousText.length;
+  const nextLen = nextText.length;
+  while (
+    start < prevLen &&
+    start < nextLen &&
+    previousText[start] === nextText[start]
+  ) {
+    start += 1;
+  }
+  let endPrev = prevLen;
+  let endNext = nextLen;
+  while (
+    endPrev > start &&
+    endNext > start &&
+    previousText[endPrev - 1] === nextText[endNext - 1]
+  ) {
+    endPrev -= 1;
+    endNext -= 1;
+  }
+  return [
+    {
+      range: {
+        start: offsetToLspPosition(previousText, start),
+        end: offsetToLspPosition(previousText, endPrev),
+      },
+      text: nextText.slice(start, endNext),
+    },
+  ];
+}
+
+/** @internal Test-only — incremental vs full didChange payloads. */
+export function buildDidChangeContentChangesForTest(syncKind, previousText, nextText) {
+  return buildDidChangeContentChanges(syncKind, previousText, nextText);
+}
+
+function appendStderrLine(stderrLines, text) {
+  stderrLines.push(text);
+  while (stderrLines.length > MAX_LSP_STDERR_LINES) {
+    stderrLines.shift();
+  }
+}
+
+function trimDiagnosticSnapshotsLru(store) {
+  while (store.diagnosticSnapshots.size > MAX_DIAGNOSTIC_SNAPSHOT_ENTRIES) {
+    const oldest = store.diagnosticSnapshots.keys().next().value;
+    if (oldest === undefined) break;
+    store.diagnosticSnapshots.delete(oldest);
+  }
+}
+
+function bindLspClientHandlers(connection, serverId, config) {
+  connection.onRequest('workspace/configuration', () => {
+    const settings =
+      config?.settings && typeof config.settings === 'object' ? config.settings : {};
+    return [settings];
+  });
+  connection.onRequest('client/registerCapability', () => null);
+  connection.onRequest('client/unregisterCapability', () => null);
+  connection.onRequest('window/workDoneProgress/cancel', () => null);
+  connection.onNotification('window/logMessage', () => {});
+  connection.onNotification('window/showMessage', () => {});
+  connection.onNotification('$/progress', () => {});
+  connection.onNotification('window/workDoneProgress/create', () => {});
 }
 
 /** User-facing hint when TypeScript has no loaded project for workspace search. */
@@ -648,6 +803,10 @@ async function connectLspServer(scope, serverId, config) {
   try {
     child = await spawnLspChild(argv, workspaceRoot);
   } catch (err) {
+    recordLspBridgeError(formatLspSpawnError(serverId, displayBin, err), {
+      serverId,
+      kind: 'spawn',
+    });
     throw new Error(formatLspSpawnError(serverId, displayBin, err));
   }
 
@@ -662,8 +821,11 @@ async function connectLspServer(scope, serverId, config) {
     diagnostics: new Map(),
     ready: false,
     serverCapabilities: {},
+    textDocumentSyncKind: 1,
     completionTriggerCharacters: [],
   };
+
+  bindLspClientHandlers(connection, serverId, config);
 
   connection.onNotification('textDocument/publishDiagnostics', (params) => {
     const uri = normalizeFileUri(params?.uri);
@@ -678,7 +840,7 @@ async function connectLspServer(scope, serverId, config) {
 
   try {
     connection.listen();
-    const initResult = await connection.sendRequest('initialize', {
+    const initParams = {
       processId: process.pid,
       rootUri: workspaceRootUri(workspaceRoot),
       ...(serverId === 'typescript'
@@ -713,13 +875,21 @@ async function connectLspServer(scope, serverId, config) {
         },
         workspace: {
           symbol: {},
+          configuration: true,
         },
       },
-    });
+    };
+    const initResult = await sendLspRequest(
+      connection,
+      'initialize',
+      initParams,
+      LSP_INITIALIZE_TIMEOUT_MS,
+    );
     state.serverCapabilities =
       initResult && typeof initResult === 'object' && initResult.capabilities
         ? initResult.capabilities
         : {};
+    state.textDocumentSyncKind = textDocumentSyncChangeKind(state.serverCapabilities);
     const completionProvider = state.serverCapabilities.completionProvider ?? {};
     state.completionTriggerCharacters = Array.isArray(completionProvider.triggerCharacters)
       ? completionProvider.triggerCharacters.map(String)
@@ -728,6 +898,11 @@ async function connectLspServer(scope, serverId, config) {
     state.ready = true;
     return state;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    recordLspBridgeError(`[${serverId}] initialize failed: ${message}`, {
+      serverId,
+      kind: 'initialize',
+    });
     discardLspState(scope, processKey, state);
     throw err;
   }
@@ -783,13 +958,18 @@ async function notifyLspDocumentForScope(scope, relativePath, event, text) {
       if (existing.text === body) {
         return { ok: true };
       }
+      const previousText = existing.text;
       const nextVersion = existing.version + 1;
       store.documentSync.set(fileUri, { version: nextVersion, text: body });
       for (const { id, config } of matchers) {
         const state = await getConnection(scope, id, config);
         await state.connection.sendNotification('textDocument/didChange', {
           textDocument: { uri: fileUri, version: nextVersion },
-          contentChanges: [{ text: body }],
+          contentChanges: buildDidChangeContentChanges(
+            state.textDocumentSyncKind ?? 1,
+            previousText,
+            body,
+          ),
         });
       }
       return { ok: true };
@@ -813,12 +993,17 @@ async function notifyLspDocumentForScope(scope, relativePath, event, text) {
     const prev = store.documentSync.get(fileUri) ?? { version: 0, text: '' };
     const nextVersion = prev.version + 1;
     const nextText = text ?? prev.text;
+    const previousText = prev.text;
     store.documentSync.set(fileUri, { version: nextVersion, text: nextText });
     for (const { id, config } of matchers) {
       const state = await getConnection(scope, id, config);
       await state.connection.sendNotification('textDocument/didChange', {
         textDocument: { uri: fileUri, version: nextVersion },
-        contentChanges: [{ text: nextText }],
+        contentChanges: buildDidChangeContentChanges(
+          state.textDocumentSyncKind ?? 1,
+          previousText,
+          nextText,
+        ),
       });
     }
     return { ok: true };
@@ -828,6 +1013,7 @@ async function notifyLspDocumentForScope(scope, relativePath, event, text) {
     store.documentSync.delete(fileUri);
     for (const { id, config } of matchers) {
       const state = await getConnection(scope, id, config);
+      state.diagnostics.delete(fileUri);
       await state.connection.sendNotification('textDocument/didClose', {
         textDocument: { uri: fileUri },
       });
@@ -876,11 +1062,6 @@ async function ensureDocumentSyncedForScope(scope, relativePath, options = {}) {
  */
 async function ensureDocumentSynced(relativePath, options = {}) {
   return ensureDocumentSyncedForScope(LSP_SCOPE_EDITOR, relativePath, options);
-}
-
-/** Brief wait for publishDiagnostics after the document is already synced. */
-async function awaitPublishedDiagnostics() {
-  await new Promise((r) => setTimeout(r, 200));
 }
 
 async function withLspMatchers(relativePath, handler, options = {}) {
@@ -970,9 +1151,11 @@ export async function getLspCompletions(relativePath, line, character, options =
       for (const ch of state.completionTriggerCharacters ?? []) {
         triggerCharacters.add(ch);
       }
-      const result = await state.connection.sendRequest(
+      const result = await sendLspRequest(
+        state.connection,
         'textDocument/completion',
         completionParams,
+        LSP_COMPLETION_TIMEOUT_MS,
       );
       const parsed = parseCompletionResult(result);
       if (parsed.isIncomplete) isIncomplete = true;
@@ -984,6 +1167,7 @@ export async function getLspCompletions(relativePath, line, character, options =
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      recordLspBridgeError(`[${id}] completion: ${message}`, { serverId: id, kind: 'request' });
       return {
         items,
         isIncomplete,
@@ -1069,6 +1253,7 @@ export async function getLspDiagnostics(relativePath) {
 
   const formatted = parts.join('\n\n');
   agentStore.diagnosticSnapshots.set(fileUri, { revision, formatted });
+  trimDiagnosticSnapshotsLru(agentStore);
   return formatted;
 }
 
@@ -1078,34 +1263,56 @@ export async function getLspDiagnostics(relativePath) {
  * @param {string} [editorText] - Current editor buffer; avoids disk fallback when provided.
  */
 export async function getLspStructuredDiagnostics(relativePath, editorText) {
-  const syncOpts =
-    typeof editorText === 'string' ? { editorText } : {};
-  const ctx = await withLspMatchers(
-    relativePath,
-    async ({ matchers, fileUri }) => ({
-      ok: true,
-      matchers,
-      fileUri,
-    }),
-    syncOpts,
-  );
-  if (!ctx.ok) {
-    return { diagnostics: [], error: ctx.error };
+  const merged = await loadMergedLspConfig();
+  if (merged.enabled === false) {
+    return { diagnostics: [], error: 'LSP is disabled' };
+  }
+  if (!relativePath || relativePath.includes('..')) {
+    return { diagnostics: [], error: 'Invalid path' };
+  }
+  const matchers = matchServersForPath(merged, relativePath);
+  if (matchers.length === 0) {
+    return { diagnostics: [], error: `No LSP server configured for ${relativePath}` };
   }
 
-  const parts = [];
-  for (const { id, config } of ctx.matchers) {
-    try {
+  const fileUri = toFileUri(relativePath);
+  const syncOpts =
+    typeof editorText === 'string' ? { editorText } : {};
+
+  const waiters = matchers.map(({ id }) => {
+    const { promise, cancel } = createDiagnosticWaiter(LSP_SCOPE_EDITOR, id, fileUri);
+    return { id, promise, cancel };
+  });
+
+  try {
+    await Promise.all(
+      matchers.map(async ({ id, config }) => getConnection(LSP_SCOPE_EDITOR, id, config)),
+    );
+    await ensureDocumentSyncedForScope(LSP_SCOPE_EDITOR, relativePath, {
+      ...syncOpts,
+      forceChange: true,
+    });
+
+    const settled = await Promise.all(waiters.map((w) => w.promise));
+
+    const parts = [];
+    for (let i = 0; i < matchers.length; i += 1) {
+      const { id, config } = matchers[i];
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      await awaitPublishedDiagnostics();
-      const diags = state.diagnostics.get(ctx.fileUri) ?? [];
+      const waiterResult = settled[i];
+      const diags =
+        waiterResult?.receivedAny === true
+          ? waiterResult.diagnostics
+          : (state.diagnostics.get(fileUri) ?? []);
       parts.push(...normalizeStructuredDiagnostics(diags));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { diagnostics: parts, error: `[${id}] ${message}` };
     }
+    return { diagnostics: parts };
+  } catch (err) {
+    for (const w of waiters) w.cancel();
+    const message = err instanceof Error ? err.message : String(err);
+    recordLspBridgeError(message, { kind: 'diagnostics' });
+    return { diagnostics: [], error: message };
   }
-  return { diagnostics: parts };
 }
 
 /**
@@ -1124,13 +1331,19 @@ export async function getLspHover(relativePath, line, character) {
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const hover = await state.connection.sendRequest('textDocument/hover', {
-        textDocument: { uri: ctx.fileUri },
-        position: { line, character },
-      });
+      const hover = await sendLspRequest(
+        state.connection,
+        'textDocument/hover',
+        {
+          textDocument: { uri: ctx.fileUri },
+          position: { line, character },
+        },
+        LSP_HOVER_TIMEOUT_MS,
+      );
       return { hover: hover ?? null };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      recordLspBridgeError(`[${id}] hover: ${message}`, { serverId: id, kind: 'request' });
       return { hover: null, error: `[${id}] ${message}` };
     }
   }
@@ -1153,72 +1366,21 @@ export async function getLspDefinition(relativePath, line, character) {
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const result = await state.connection.sendRequest('textDocument/definition', {
-        textDocument: { uri: ctx.fileUri },
-        position: { line, character },
-      });
+      const result = await sendLspRequest(
+        state.connection,
+        'textDocument/definition',
+        {
+          textDocument: { uri: ctx.fileUri },
+          position: { line, character },
+        },
+        LSP_DEFINITION_TIMEOUT_MS,
+      );
       if (result != null) {
         return { locations: result };
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { locations: [], error: `[${id}] ${message}` };
-    }
-  }
-  return { locations: [] };
-}
-
-/** Type definition — same shape as definition. */
-export async function getLspTypeDefinition(relativePath, line, character) {
-  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
-    ok: true,
-    matchers,
-    fileUri,
-  }));
-  if (!ctx.ok) {
-    return { locations: [], error: ctx.error };
-  }
-
-  for (const { id, config } of ctx.matchers) {
-    try {
-      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const result = await state.connection.sendRequest('textDocument/typeDefinition', {
-        textDocument: { uri: ctx.fileUri },
-        position: { line, character },
-      });
-      if (result != null) {
-        return { locations: result };
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { locations: [], error: `[${id}] ${message}` };
-    }
-  }
-  return { locations: [] };
-}
-
-/** Find references at a 0-based position. */
-export async function getLspReferences(relativePath, line, character) {
-  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
-    ok: true,
-    matchers,
-    fileUri,
-  }));
-  if (!ctx.ok) {
-    return { locations: [], error: ctx.error };
-  }
-
-  for (const { id, config } of ctx.matchers) {
-    try {
-      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const result = await state.connection.sendRequest('textDocument/references', {
-        textDocument: { uri: ctx.fileUri },
-        position: { line, character },
-        context: { includeDeclaration: true },
-      });
-      return { locations: Array.isArray(result) ? result : [] };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      recordLspBridgeError(`[${id}] definition: ${message}`, { serverId: id, kind: 'request' });
       return { locations: [], error: `[${id}] ${message}` };
     }
   }
@@ -1241,16 +1403,19 @@ export async function getLspSignatureHelp(relativePath, line, character) {
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const signatureHelp = await state.connection.sendRequest(
+      const signatureHelp = await sendLspRequest(
+        state.connection,
         'textDocument/signatureHelp',
         {
           textDocument: { uri: ctx.fileUri },
           position: { line, character },
         },
+        LSP_SIGNATURE_TIMEOUT_MS,
       );
       return { signatureHelp: signatureHelp ?? null };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      recordLspBridgeError(`[${id}] signature: ${message}`, { serverId: id, kind: 'request' });
       return { signatureHelp: null, error: `[${id}] ${message}` };
     }
   }
@@ -1273,10 +1438,12 @@ export async function getLspDocumentSymbols(relativePath) {
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const result = await withRequestTimeout(
-        state.connection.sendRequest('textDocument/documentSymbol', {
+      const result = await sendLspRequest(
+        state.connection,
+        'textDocument/documentSymbol',
+        {
           textDocument: { uri: ctx.fileUri },
-        }),
+        },
       );
       const raw = Array.isArray(result) ? result : [];
       const symbols = raw.map(normalizeDocumentSymbol).filter(Boolean);
@@ -1308,10 +1475,12 @@ export async function getLspWorkspaceSymbols(query) {
       if (!serverSupportsWorkspaceSymbols(id, config, state.serverCapabilities)) {
         continue;
       }
-      const result = await withRequestTimeout(
-        state.connection.sendRequest('workspace/symbol', {
+      const result = await sendLspRequest(
+        state.connection,
+        'workspace/symbol',
+        {
           query: q,
-        }),
+        },
       );
       const raw = Array.isArray(result) ? result : [];
       for (const sym of raw) {
@@ -1355,12 +1524,14 @@ export async function getLspCallHierarchy(relativePath, line, character) {
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const prepared = await state.connection.sendRequest(
+      const prepared = await sendLspRequest(
+        state.connection,
         'textDocument/prepareCallHierarchy',
         {
           textDocument: { uri: ctx.fileUri },
           position: { line, character },
         },
+        LSP_DEFINITION_TIMEOUT_MS,
       );
       const items = Array.isArray(prepared) ? prepared : prepared ? [prepared] : [];
       if (items.length === 0) {
@@ -1368,12 +1539,18 @@ export async function getLspCallHierarchy(relativePath, line, character) {
       }
       const rawItem = items[0];
       const [incomingRaw, outgoingRaw] = await Promise.all([
-        state.connection.sendRequest('callHierarchy/incomingCalls', {
-          item: rawItem,
-        }),
-        state.connection.sendRequest('callHierarchy/outgoingCalls', {
-          item: rawItem,
-        }),
+        sendLspRequest(
+          state.connection,
+          'callHierarchy/incomingCalls',
+          { item: rawItem },
+          LSP_DEFINITION_TIMEOUT_MS,
+        ),
+        sendLspRequest(
+          state.connection,
+          'callHierarchy/outgoingCalls',
+          { item: rawItem },
+          LSP_DEFINITION_TIMEOUT_MS,
+        ),
       ]);
       return {
         item: normalizeCallHierarchyItem(rawItem),
@@ -1412,7 +1589,12 @@ export async function resolveLspCompletion(relativePath, item) {
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
-      const resolved = await state.connection.sendRequest('completionItem/resolve', item);
+      const resolved = await sendLspRequest(
+        state.connection,
+        'completionItem/resolve',
+        item,
+        LSP_COMPLETION_TIMEOUT_MS,
+      );
       const [normalized] = normalizeCompletionItems([resolved]);
       return { item: normalized ?? null };
     } catch (err) {
@@ -1494,6 +1676,19 @@ export function getLspDocumentSyncForTest(relativePath, scope = LSP_SCOPE_EDITOR
   const entry = getScopeStore(scope).documentSync.get(fileUri);
   if (!entry) return null;
   return { version: entry.version, text: entry.text };
+}
+
+/** @internal Test-only — cached publishDiagnostics entry for a server + path. */
+export function getLspDiagnosticsMapForTest(
+  relativePath,
+  serverId = 'fake',
+  scope = LSP_SCOPE_EDITOR,
+) {
+  const fileUri = toFileUri(relativePath);
+  const processKey = connectionProcessKey(scope, serverId);
+  const state = getScopeStore(scope).processes.get(processKey);
+  if (!state) return undefined;
+  return state.diagnostics.get(fileUri);
 }
 
 /** @internal Test-only — tune diagnostic waiter timeouts. */

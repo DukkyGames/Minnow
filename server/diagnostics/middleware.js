@@ -8,7 +8,7 @@ import { clearDiagnosticLogs } from './ring-log.js';
 import { loadDiagnosticLogTail, loadGroupedErrors } from './store.js';
 import { formatDiagnosticReportMarkdown } from './redact.js';
 import { logRendererDiagnostic } from './process-handlers.js';
-import { listLspServers } from '../lsp/manager.js';
+import { listLspServers, getLspBridgeHealthSnapshot } from '../lsp/manager.js';
 import { listPtySessionMeta } from '../terminal/pty-host.js';
 
 const require = createRequire(import.meta.url);
@@ -55,11 +55,15 @@ function sendJson(res, status, payload) {
 export async function buildDiagnosticsHealth() {
   let lspRunning = 0;
   let lspOk = true;
+  let lspBridgeError = null;
   try {
     const servers = await listLspServers();
     lspRunning = servers.filter((s) => s.running).length;
-    // LSP processes are on-demand; idle configured servers are healthy.
-    lspOk = true;
+    const bridge = getLspBridgeHealthSnapshot();
+    lspBridgeError = bridge.lastBridgeError ?? null;
+    if (lspBridgeError?.message) {
+      lspOk = false;
+    }
   } catch {
     lspOk = false;
   }
@@ -87,7 +91,11 @@ export async function buildDiagnosticsHealth() {
       tools: { ok: true },
       memory: { ok: true },
       brain: { ok: true },
-      lsp: { ok: lspOk, running: lspRunning },
+      lsp: {
+        ok: lspOk,
+        running: lspRunning,
+        ...(lspBridgeError?.message ? { lastBridgeError: lspBridgeError.message } : {}),
+      },
       pty: { ok: ptyOk, sessions: ptySessions },
       electron: {
         ok: process.versions.electron ? true : null,

@@ -13,7 +13,11 @@ import { handleConfigRequest } from '../../server/config/middleware.js';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
 import { createLspMiddleware } from '../../server/lsp/middleware.js';
-import { shutdownAllLsp } from '../../server/lsp/manager.js';
+import {
+  getLspDocumentSyncForTest,
+  notifyLspDocument,
+  shutdownAllLsp,
+} from '../../server/lsp/manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -31,6 +35,31 @@ function httpGet(baseUrl, pathname) {
       });
     });
     r.on('error', reject);
+    r.end();
+  });
+}
+
+function httpPut(baseUrl, pathname, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(pathname, baseUrl);
+    const payload = JSON.stringify(body);
+    const r = httpRequestNode(
+      url,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks).toString('utf8');
+          resolve({ status: res.statusCode, json: raw ? JSON.parse(raw) : {} });
+        });
+      },
+    );
+    r.on('error', reject);
+    r.write(payload);
     r.end();
   });
 }
@@ -110,6 +139,47 @@ describe('GET /api/config/lsp catalog', () => {
     assert.equal(ts.disabled, false);
     assert.equal(ts.hasCommand, true);
     assert.equal(ts.defaultEnabled, true);
+  });
+
+  test('PUT /api/config/lsp shuts down running LSP processes', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') return;
+
+    const fakeHome = path.join(__dirname, '../fixtures/lsp-config-put-home');
+    process.env.MINNOW_HOME = fakeHome;
+    resetMinnowHomeCache();
+    invalidateLspConfigCache();
+    shutdownAllLsp();
+    await fs.rm(fakeHome, { recursive: true, force: true });
+    await fs.mkdir(fakeHome, { recursive: true });
+    await fs.writeFile(
+      path.join(fakeHome, 'lsp.json'),
+      `${JSON.stringify(
+        {
+          enabled: true,
+          lsp: {
+            fake: {
+              disabled: false,
+              command: ['node', 'test/fixtures/fake-lsp.mjs'],
+              extensions: ['.fake'],
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+
+    await notifyLspDocument('test/fixtures/sample.fake', 'open', 'let x = 1\n');
+    assert.ok(getLspDocumentSyncForTest('test/fixtures/sample.fake'));
+
+    const putRes = await httpPut(baseUrl, '/api/config/lsp', { enabled: true });
+    assert.equal(putRes.status, 200);
+    assert.equal(getLspDocumentSyncForTest('test/fixtures/sample.fake'), null);
+
+    process.env.MINNOW_HOME = homeDir;
+    resetMinnowHomeCache();
+    invalidateLspConfigCache();
   });
 });
 

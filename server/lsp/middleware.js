@@ -23,6 +23,7 @@ import {
   listLspServers,
   notifyLspDocument,
   resolveLspCompletion,
+  shutdownAllLsp,
 } from './manager.js';
 import {
   getBundleJob,
@@ -425,6 +426,7 @@ export function createLspMiddleware(resolveProjectRoot) {
         }
         await fs.writeFile(filePath, `${JSON.stringify(nextCfg, null, 2)}\n`, 'utf8');
         invalidateLspConfigCache();
+        shutdownAllLsp();
         sendJson(res, 200, { ok: true });
         return;
       }

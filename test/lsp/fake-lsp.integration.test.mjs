@@ -9,7 +9,7 @@ import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
-import { getLspDiagnostics, shutdownAllLsp } from '../../server/lsp/manager.js';
+import { getLspDiagnostics, getLspSignatureHelp, shutdownAllLsp } from '../../server/lsp/manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -70,5 +70,14 @@ describe('fake LSP integration', () => {
     const text =
       hover?.contents?.value ?? (typeof hover?.contents === 'string' ? hover.contents : '');
     assert.match(String(text), /Fake hover/i);
+  });
+
+  test('getLspSignatureHelp returns fixture signature', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
+      return;
+    }
+    const { signatureHelp } = await getLspSignatureHelp('test/fixtures/sample.fake', 0, 0);
+    assert.ok(signatureHelp?.signatures?.length);
+    assert.match(String(signatureHelp.signatures[0].label ?? ''), /fakeFn/i);
   });
 });
