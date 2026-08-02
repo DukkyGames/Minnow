@@ -79,6 +79,10 @@ function trayIconFallbackPath(): string {
 }
 
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
+// Vite HMR needs eval in dev; packaged builds do not. Suppress Electron's expected dev-only CSP warning.
+if (isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
 const devUrl = (
   process.env.MINNOW_DEV_URL?.trim() || `http://localhost:${resolveMinnowPort()}/`
 ).replace(/\/?$/, '/');

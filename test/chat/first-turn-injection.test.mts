@@ -41,4 +41,13 @@ describe('shouldRunFirstTurnInjections', () => {
     const chat = chatWithHistory([]);
     assert.equal(shouldRunFirstTurnInjections(chat, { firstUserSend: false }), false);
   });
+
+  test('skips when lazy history is unloaded but messageCount shows prior turns', () => {
+    const chat: Chat = {
+      ...chatWithHistory([]),
+      historyLoaded: false,
+      messageCount: 4,
+    };
+    assert.equal(shouldRunFirstTurnInjections(chat), false);
+  });
 });

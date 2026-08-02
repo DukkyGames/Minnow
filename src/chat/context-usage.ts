@@ -279,8 +279,9 @@ export function assembleContextBudget(params: {
 export async function getContextBudget(
   options?: GetContextBudgetOptions,
 ): Promise<ContextBudget> {
-  const { getActiveChat } = await import('../state/sessions');
+  const { getActiveChat, ensureChatHistoryLoaded } = await import('../state/sessions');
   const chat = options?.chat ?? getActiveChat();
+  await ensureChatHistoryLoaded(chat.id);
   const modelId =
     options?.modelId?.trim() ||
     chat.modelId?.trim() ||
