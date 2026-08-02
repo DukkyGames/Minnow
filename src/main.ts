@@ -453,10 +453,8 @@ async function startApp(): Promise<void> {
   initNotificationAudioUnlock();
   // Sessions must load before OS routing — Code app mount calls getActiveChat().
   await detectConfigServer();
-  await loadSessionsFromStorage();
-  // Probe the tool server before routing — Code boot initializes the file tree during
-  // initOsRouter() and reads this flag (MIN-436).
-  await detectLocalServer();
+  // Probe the tool server in parallel with session hydrate — Code boot reads this flag (MIN-436).
+  await Promise.all([loadSessionsFromStorage(), detectLocalServer()]);
   if (isOsShellEnabled()) {
     initOsRouter();
   }

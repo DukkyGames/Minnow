@@ -161,9 +161,8 @@ Middleware registration: [`server/runtime/middlewares.js`](../server/runtime/mid
 
 [`src/main.ts`](../src/main.ts):
 
-1. `detectConfigServer()` → `loadSessionsFromStorage()` (before OS router).
-2. `detectLocalServer()` (before Code file panel init).
-3. `initOsRouter()` when Minnow enabled.
+1. `detectConfigServer()` → `loadSessionsFromStorage()` and `detectLocalServer()` in parallel (before OS router).
+2. `initOsRouter()` when Minnow enabled (first hash sync — do not call `syncOsRouteFromHash` from `initOsShell` before the probe completes).
 
 `initApp()`: tool config → prompts → work agents → sessions → Issues store (migrate leftover bugs if needed) → tool handlers → models → render chat.
 

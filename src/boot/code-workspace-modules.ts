@@ -11,6 +11,10 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
   if (initialized) return Promise.resolve();
   if (!initPromise) {
     initPromise = (async () => {
+      const { detectLocalServer } = await import('../tools/client');
+      // Code can foreground while startApp is still probing; file tree needs the flag set.
+      await detectLocalServer();
+
       const filePanel = await import('../ui/init-file-panel');
       await filePanel.initFilePanel();
       filePanel.onFilePanelServerAvailabilityChanged();
