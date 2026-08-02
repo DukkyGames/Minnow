@@ -197,6 +197,29 @@ export function installFakeApiRouter(
       return Response.json({ ok: true });
     }
 
+    if (url.includes('/api/desktop-workspace')) {
+      if (url.includes('/api/desktop-workspace/list')) {
+        return Response.json({ entries: [] });
+      }
+      if (url.includes('/api/desktop-workspace/download')) {
+        return new Response('', { status: 200 });
+      }
+      if (method === 'PUT') {
+        return Response.json({
+          ok: true,
+          path: '/tmp/minnow-desktop-workspace',
+          label: 'workspace',
+          fileCount: 0,
+        });
+      }
+      return Response.json({
+        ok: true,
+        path: '/tmp/minnow-desktop-workspace',
+        label: 'workspace',
+        fileCount: 0,
+      });
+    }
+
     if (url.includes('/api/orchestrate/board-log')) {
       if (method === 'GET') {
         return new Response(null, { status: 204 });
