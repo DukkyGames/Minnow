@@ -1702,13 +1702,21 @@ export function mergeConfigMeta(existing, patch) {
         : {
             enabledByDefault: false,
             debounceMs: 400,
+            contextWindow: 5,
+            autoResolveOnLineLeave: false,
             sigil: '',
             providerId: '',
             modelId: '',
-            maxTokens: 768,
+            maxTokens: 400,
           };
     const e = /** @type {Record<string, unknown>} */ (p.editorIntentMode);
     if (typeof e.enabledByDefault === 'boolean') existing.enabledByDefault = e.enabledByDefault;
+    if (typeof e.autoResolveOnLineLeave === 'boolean') {
+      existing.autoResolveOnLineLeave = e.autoResolveOnLineLeave;
+    }
+    if (typeof e.contextWindow === 'number' && Number.isFinite(e.contextWindow)) {
+      existing.contextWindow = Math.min(20, Math.max(1, Math.round(e.contextWindow)));
+    }
     if (typeof e.debounceMs === 'number' && Number.isFinite(e.debounceMs)) {
       existing.debounceMs = Math.min(2000, Math.max(100, Math.round(e.debounceMs)));
     }

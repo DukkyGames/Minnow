@@ -21,6 +21,14 @@ import { nextPartialGhostChunk } from '../editor-ai-completion-prompt';
 import { completionInsertChangeSpecs } from '../editor-completion-accept';
 import { recordCompletionEvent } from '../editor-ai-telemetry';
 import { buildSuggestionDecorations } from './decorations';
+import { intentReplaceChangeSpecs } from './intent-accept';
+import {
+  addAcceptedIntentRegion,
+  getAcceptedIntentRegions,
+  intentSystemTransaction,
+} from './intent-regions';
+import { contextHashForRegion } from './intent-context';
+import { getEditorIntentModeConfigSync } from '../../config/editor-intent-mode';
 
 /** Where a completion ghost was sourced from. */
 export type CompletionSuggestionOrigin = 'stream' | 'cache' | 'test';
@@ -394,10 +402,40 @@ export function acceptIntentProposal(view: EditorView): boolean {
     view.dispatch({ effects: setSuggestion.of(null) });
     return false;
   }
+  const ctx = view.state.field(completionAcceptContextField, false);
+  const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
+  const filePath = ctx?.filePath ?? '';
+  const intentConfig = getEditorIntentModeConfigSync();
+  const regions = getAcceptedIntentRegions(view.state);
+  const draftRegion = {
+    from,
+    to: from + text.length,
+    intentText: proposal.intentText,
+    ctxHash: '',
+    stale: false,
+  };
+  const ctxHash = contextHashForRegion(
+    view.state.doc,
+    [...regions, draftRegion],
+    draftRegion,
+    intentConfig.contextWindow,
+  );
+  const changes = intentReplaceChangeSpecs(view.state, from, to, text, filePath, config);
+  const mappedEnd = view.state.changes(changes).mapPos(from + text.length, 1);
   view.dispatch({
-    changes: { from, to, insert: text },
-    selection: EditorSelection.cursor(from + text.length),
-    effects: setSuggestion.of(null),
+    annotations: intentSystemTransaction.of(true),
+    changes,
+    selection: EditorSelection.cursor(mappedEnd),
+    effects: [
+      setSuggestion.of(null),
+      addAcceptedIntentRegion.of({
+        from,
+        to: from + text.length,
+        intentText: proposal.intentText,
+        ctxHash,
+        stale: false,
+      }),
+    ],
     userEvent: 'input.complete',
   });
   return true;

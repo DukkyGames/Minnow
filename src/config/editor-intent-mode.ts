@@ -9,6 +9,13 @@ export interface EditorIntentModeConfig {
   enabledByDefault: boolean;
   /** Idle pause on an intent line before a proposal is requested. */
   debounceMs: number;
+  /** Lines above/below the intent line included in resolve context. */
+  contextWindow: number;
+  /**
+   * When true, leaving a line (cursor move or blur) debounces an intent resolve on
+   * the line you left. Mod+Enter remains the primary explicit trigger (default off).
+   */
+  autoResolveOnLineLeave: boolean;
   /**
    * Optional explicit prefix. When set, only lines starting with it are treated
    * as intent — the prose heuristic is bypassed entirely.
@@ -27,10 +34,12 @@ const STORAGE_KEY = 'minnow.editorIntentMode';
 export const DEFAULT_EDITOR_INTENT_MODE: EditorIntentModeConfig = {
   enabledByDefault: false,
   debounceMs: 400,
+  contextWindow: 5,
+  autoResolveOnLineLeave: false,
   sigil: '',
   providerId: '',
   modelId: '',
-  maxTokens: 768,
+  maxTokens: 400,
 };
 
 let cached: EditorIntentModeConfig | null = null;
@@ -54,6 +63,8 @@ export function parseEditorIntentModeBlock(raw: unknown): EditorIntentModeConfig
   return {
     enabledByDefault: block.enabledByDefault === true,
     debounceMs: clampInt(block.debounceMs, 100, 2000, DEFAULT_EDITOR_INTENT_MODE.debounceMs),
+    contextWindow: clampInt(block.contextWindow, 1, 20, DEFAULT_EDITOR_INTENT_MODE.contextWindow),
+    autoResolveOnLineLeave: block.autoResolveOnLineLeave === true,
     sigil: readString(block.sigil, DEFAULT_EDITOR_INTENT_MODE.sigil),
     providerId: readString(block.providerId, DEFAULT_EDITOR_INTENT_MODE.providerId),
     modelId: readString(block.modelId, DEFAULT_EDITOR_INTENT_MODE.modelId),
@@ -120,6 +131,14 @@ export async function saveEditorIntentModeConfig(
       patch.debounceMs !== undefined
         ? clampInt(patch.debounceMs, 100, 2000, current.debounceMs)
         : current.debounceMs,
+    contextWindow:
+      patch.contextWindow !== undefined
+        ? clampInt(patch.contextWindow, 1, 20, current.contextWindow)
+        : current.contextWindow,
+    autoResolveOnLineLeave:
+      patch.autoResolveOnLineLeave !== undefined
+        ? patch.autoResolveOnLineLeave
+        : current.autoResolveOnLineLeave,
     sigil: patch.sigil !== undefined ? patch.sigil.trim() : current.sigil,
     providerId:
       patch.providerId !== undefined ? patch.providerId.trim() : current.providerId,

@@ -37,8 +37,11 @@ import { streamEditorGeneration, type EditorAiStreamDeps } from '../editor-ai-st
 import { resolveLanguageDescription } from '../editor-language';
 import { leadingWhitespace } from './intent-heuristic';
 
-/** Floor for intent output — the replacement may span several lines. */
-export const INTENT_MIN_MAX_TOKENS = 768;
+/** Default cap for intent replacement output. */
+export const INTENT_DEFAULT_MAX_TOKENS = 400;
+
+/** Stop sequences for intent resolve (OpenAI-style). */
+export const INTENT_STOP_SEQUENCES = ['```', '\n\n\n'];
 
 export interface IntentResolveResult {
   text: string | null;
@@ -55,6 +58,10 @@ export interface IntentPromptContext {
   prefix: string;
   /** Document text after the intent line. */
   suffix: string;
+  /** Neighbor lines above the intent line (prompt context). */
+  above?: string[];
+  /** Neighbor lines below the intent line (prompt context). */
+  below?: string[];
   recentEdits?: RecentEditLine[];
 }
 
@@ -91,13 +98,25 @@ function formatRecentEdits(edits: RecentEditLine[] | undefined): string {
 
 /** Build the instruct-style messages for an intent resolve. */
 export function buildIntentMessages(input: IntentPromptContext): ApiMessage[] {
+  const aboveBlock =
+    input.above && input.above.length > 0
+      ? input.above.join('\n')
+      : '(none)';
+  const belowBlock =
+    input.below && input.below.length > 0
+      ? input.below.join('\n')
+      : '(none)';
   const sections = [
     `File: ${input.filePath.trim() || 'untitled'}`,
-    '--- code before ---',
-    input.prefix || '(none)',
+    '--- resolved context above ---',
+    aboveBlock,
     '--- intent line to replace ---',
     input.instruction || input.intentText,
-    '--- code after ---',
+    '--- resolved context below ---',
+    belowBlock,
+    '--- code before (full prefix) ---',
+    input.prefix || '(none)',
+    '--- code after (full suffix) ---',
     input.suffix || '(none)',
   ];
   const edits = formatRecentEdits(input.recentEdits);
@@ -134,15 +153,14 @@ export function reindentBlock(lines: string[], baseIndent: string): string[] {
  * Normalize a multi-line replacement: first line via the shared completion
  * indentation rules, remaining lines shifted by the same delta.
  */
-export function alignIntentBlock(code: string, baseIndent: string): string {
+export function alignIntentBlock(code: string, baseIndent: string, indentUnit = '  '): string {
   const normalized = code.replace(/\r\n/g, '\n').replace(/\s+$/, '');
   if (!normalized.trim()) return '';
   const lines = normalized.split('\n');
-  // reindentCompletionText keys off cursor indent in `prefix`; simulate an intent
-  // line ending at baseIndent, and a completion that starts on the next line.
   const syntheticPrefix = `\n${baseIndent}`;
-  const firstAligned = reindentCompletionText(`\n${lines[0] ?? ''}`, syntheticPrefix, '  ');
+  const firstAligned = reindentCompletionText(`\n${lines[0] ?? ''}`, syntheticPrefix, indentUnit);
   const targetIndent = leadingWhitespace(firstAligned.replace(/^\n+/, ''));
+  if (lines.length === 1) return targetIndent + lines[0]!.slice(leadingWhitespace(lines[0]!).length);
   return reindentBlock(lines, targetIndent).join('\n');
 }
 
@@ -226,15 +244,16 @@ export async function resolveIntentSuggestion(
   }
 
   const provider = await resolveProv(binding.providerId);
-  const maxTokens = Math.max(
-    input.intentConfig?.maxTokens ?? config.maxTokens,
-    INTENT_MIN_MAX_TOKENS,
+  const maxTokens = Math.min(
+    input.intentConfig?.maxTokens ?? INTENT_DEFAULT_MAX_TOKENS,
+    INTENT_DEFAULT_MAX_TOKENS,
   );
   const body: Record<string, unknown> = {
     model: binding.modelId || undefined,
     messages: buildIntentMessages(input),
-    temperature: Math.min(config.temperature + 0.1, 1),
+    temperature: 0.1,
     max_tokens: maxTokens,
+    stop: INTENT_STOP_SEQUENCES,
     stream: true,
   };
 
