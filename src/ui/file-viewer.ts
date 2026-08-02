@@ -438,7 +438,8 @@ function scheduleLspChangeNotify(path: string, text: string): void {
   }, LSP_CHANGE_DEBOUNCE_MS);
 }
 
-async function isLspEnabledForViewer(): Promise<boolean> {
+/** Whether the file viewer should sync documents to LSP (config + local server). */
+export async function isLspEnabledForViewer(): Promise<boolean> {
   if (!getLocalServerAvailable()) return false;
   const cfg = await fetchLspConfig();
   return cfg?.enabled === true;
@@ -1441,10 +1442,13 @@ export function bindFileViewerControls(): void {
     void (async () => {
       await loadEditorAiCompletionConfig();
       const tab = primarySlotViewerTab();
-      if (!tab || tab.viewMode !== 'editor' || tab.loadStatus !== 'ready') return;
-      if (!editorView || !editorAiOpts) return;
-      // intentEnabledField sits outside the compartment, so the toggle survives.
-      reconfigureEditorSuggestions(editorView, editorAiOpts);
+      if (tab?.viewMode === 'editor' && tab.loadStatus === 'ready' && editorView && editorAiOpts) {
+        // intentEnabledField sits outside the compartment, so the toggle survives.
+        reconfigureEditorSuggestions(editorView, editorAiOpts);
+      }
+      void import('./file-viewer-secondary-slot').then((m) => {
+        m.reconfigureSecondaryEditorSuggestions();
+      });
       const config = getEditorAiCompletionConfigSync();
       if (config.enabled && getLocalServerAvailable()) {
         attachEditorAiModelSelectListener();
