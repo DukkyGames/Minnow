@@ -13,6 +13,7 @@ import {
   fieldsForArea,
   type SettingsCategoryId,
 } from './settings-catalog';
+import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 
 export type { SettingsCategoryId } from './settings-catalog';
 export {
@@ -138,7 +139,9 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    sections: ['diagnostics', 'board-testing'],
+    sections: isBoardTestingSettingsVisible()
+      ? ['diagnostics', 'board-testing']
+      : ['diagnostics'],
   },
 ];
 

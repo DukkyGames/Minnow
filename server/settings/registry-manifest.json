@@ -222,7 +222,7 @@
   {
     "key": "general.network",
     "label": "Network access",
-    "description": "Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.",
+    "description": "Let other devices on your Wi-Fi open Minnow in a browser while this PC runs the app.",
     "keywords": [
       "lan",
       "wifi",
@@ -574,75 +574,6 @@
   {
     "key": "apps.optional.code",
     "label": "Code app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.experts",
-    "label": "Experts app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.bench",
-    "label": "Benchmarking app",
-    "keywords": [
-      "bench",
-      "benchmark"
-    ],
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.compare",
-    "label": "Compare app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.email",
-    "label": "Email app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.calendar",
-    "label": "Calendar app",
     "category": "apps",
     "area": "apps",
     "storage": "section",
@@ -1219,24 +1150,6 @@
     ]
   },
   {
-    "key": "agents.experts",
-    "label": "Experts",
-    "keywords": [
-      "persona",
-      "specialist",
-      "expert lab"
-    ],
-    "category": "agents",
-    "area": "agent-center",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "agent-center"
-    ]
-  },
-  {
     "key": "agents.workAgents",
     "label": "Work agents",
     "category": "agents",
@@ -1641,6 +1554,65 @@
   {
     "key": "agents.rules.addGroup",
     "label": "Add rule group",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments",
+    "label": "Workspace context documents",
+    "keywords": [
+      "agents.md",
+      "context.md",
+      "cursor rules",
+      "injection",
+      "workspace"
+    ],
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments.default",
+    "label": "Inject context documents by default",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments.presets",
+    "label": "Context document presets",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments.custom",
+    "label": "Custom context document paths",
     "category": "agents",
     "area": "rules",
     "storage": "section",

@@ -11,6 +11,7 @@ import {
   onSystemPromptPresetChange,
 } from './settings';
 import { clearChat } from './messages';
+import { isAppAvailable } from '../os/app-preferences';
 import {
   closeMobileSidebar,
   toggleSidebarCollapsed,
@@ -63,9 +64,11 @@ export function initShellHandlers(): void {
     void import('../research/panel').then((m) => m.openResearchFromTopbar());
   });
   wireClick('btnBenchmark', () => {
+    if (!isAppAvailable('bench')) return;
     void import('../ui/benchmark-page').then((m) => m.openBenchmarkFromTopbar());
   });
   wireClick('btnExpertLab', () => {
+    if (!isAppAvailable('experts')) return;
     void import('../ui/experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
   });
   wireClick('btnSettings', () => {

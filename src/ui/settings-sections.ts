@@ -105,6 +105,7 @@ import {
 import { msToSeconds, secondsToMs } from './settings-duration';
 import { renderAboutSettingsSection } from './settings-about';
 import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
+import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 import { renderBoardTestingSettingsSection } from './settings-board-testing';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAppsSettingsSection } from './settings-apps';
@@ -2299,6 +2300,9 @@ export async function refreshSettingsSection(
       await renderDiagnosticsSettingsSection();
       break;
     case 'board-testing':
+      if (!isBoardTestingSettingsVisible()) {
+        break;
+      }
       await renderBoardTestingSettingsSection();
       break;
     case 'providers':

@@ -31,7 +31,7 @@ If you want to verify before trusting me: clone the repo, `npm install && npm st
 - **Issues:** issue tracking the agent files and works through itself.
 - **Scheduler:** recurring agent jobs.
 
-Underneath: 111 built-in tools, sub-agents, work agents, 15 bundled skills, MCP support, and permissions you control on every one.
+Underneath: 103 built-in tools in a default build (111 in tree; eight calendar/email tools stay gated with those apps), sub-agents, work agents, 15 bundled skills, MCP support, and permissions you control on every one.
 
 **The piece I'm proudest of is Orchestrator boards.** Give it a plan and it turns that plan into a kanban board. Builder and Tester agents work through waves of tasks, each one in its own isolated git worktree so nothing steps on anything else, merging back at the end. Run it by hand, task by task, or let it go and check in later. Pair it with Super Plan (idea through interview, spec, research, and a reviewed plan before any code gets written) and it starts behaving like a small team instead of a chat box that occasionally writes files. None of it is gated. There's no "orchestration is the paid tier." That's not a thing I ever want Minnow to have.
 

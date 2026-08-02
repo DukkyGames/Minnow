@@ -65,7 +65,7 @@ row('execute_command', { command: 'npm run build' });
 row('read_file', { path: 'package.json' });
 
 heading('Failed');
-row('read_file', { path: 'test/sample-project.md' }, "Error: ENOENT: no such file or directory, stat 'C:\\Users\\dukky\\Projects\\PackMan\\test\\sample-project.md'");
+row('read_file', { path: 'test/sample-project.md' }, "Error: ENOENT: no such file or directory, stat 'test/sample-project.md'");
 row('execute_command', { command: 'npm run typecheck' }, 'Error: npm run typecheck (exit 1)\n\nstdout:\n2 errors');
 
 heading('Expanded — directory listing');

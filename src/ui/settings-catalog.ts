@@ -3,7 +3,9 @@
  * Feeds search index, live in-page filter, and chat deep-links.
  */
 
+import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 import type { SettingsSectionId } from './settings-page-types';
+import { filterSettingsCatalogEntries } from './settings-catalog-filter';
 
 /** Top-level sidebar categories. */
 export type SettingsCategoryId =
@@ -133,8 +135,8 @@ function field(
   return { key, label, category, area, ...extras };
 }
 
-/** Static field catalog — union with dynamic registry entries in search index. */
-export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
+/** Static field catalog source — filtered for release gates in SETTINGS_FIELD_CATALOG. */
+const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   // —— General ——
   field('general.updates', 'App updates', 'general', 'general', {
     keywords: ['update', 'version', 'upgrade', 'beta', 'release', 'restart', 'auto-update'],
@@ -482,3 +484,8 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('about.version', 'App version', 'general', 'about'),
 ];
+
+/** Searchable catalog rows (release-gated optional apps, dev-only board testing). */
+export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = filterSettingsCatalogEntries(
+  SETTINGS_FIELD_CATALOG_ALL,
+);

@@ -257,7 +257,7 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     if (comingFromFullscreenApp) {
       if (pendingResearch !== null) {
         prepareDesktopResearchSurface();
-      } else if (pendingExperts !== null) {
+      } else if (pendingExperts !== null && isAppAvailable('experts')) {
         prepareDesktopExpertsSurface();
       } else if (pendingChat !== null) {
         prepareDesktopChatSurface();
@@ -269,7 +269,11 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
       return;
     }
     if (pendingExperts !== null) {
-      void activateDesktopExperts(pendingExperts);
+      if (isAppAvailable('experts')) {
+        void activateDesktopExperts(pendingExperts);
+      } else {
+        void import('./desktop-launch').then((m) => m.restoreDesktopSessionOnForeground());
+      }
       return;
     }
     if (pendingChat !== null) {
@@ -343,7 +347,7 @@ function applyRouteFromHash(): void {
       if (legacy.desktopResearch) {
         queueDesktopResearchActivation(pendingLaunchOptions);
       }
-      if (legacy.desktopExperts) {
+      if (legacy.desktopExperts && isAppAvailable('experts')) {
         queueDesktopExpertsActivation(pendingLaunchOptions);
       }
       window.location.hash = legacy.hash;

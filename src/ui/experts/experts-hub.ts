@@ -51,6 +51,7 @@ import {
   isDesktopExpertsHubActive,
 } from '../../os/desktop-state';
 import { launchApp, navigateToDesktop } from '../../os/router';
+import { isAppAvailable } from '../../os/app-preferences';
 
 export { openExpertChatInShell } from './experts-scope';
 
@@ -699,6 +700,9 @@ export interface OpenExpertsOptions {
 
 /** Open Experts' Lab (`#/experts` / `#/app/experts`). */
 export function openExperts(options?: OpenExpertsOptions): void {
+  if (!isAppAvailable('experts')) {
+    return;
+  }
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) return;

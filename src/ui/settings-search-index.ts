@@ -6,6 +6,7 @@ import DEFAULT_SUB_AGENTS from '../agents/defaults/sub-agents.json';
 import { listWorkAgents } from '../agents/work-agent-registry';
 import { listExperts } from '../chat/experts/registry';
 import { listModes } from '../chat/modes/registry';
+import { isDeveloperReleased } from '../os/app-registry';
 import {
   BUILT_IN_TOOLS,
   type ToolCategory,
@@ -228,6 +229,9 @@ function modeEntries(): SettingsSearchEntry[] {
 }
 
 function expertEntries(): SettingsSearchEntry[] {
+  if (!isDeveloperReleased('experts')) {
+    return [];
+  }
   return listExperts().map((expert) => ({
     id: `expert:${expert.meta.id}`,
     label: expert.meta.label,
