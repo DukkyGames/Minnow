@@ -3,7 +3,7 @@
  */
 
 import path from 'node:path';
-import { FAKE_PROVIDER_ID } from '../../../scripts/fake-model-server.mjs';
+import { FAKE_PROVIDER_ID } from '../board-testing/fake-model-ids.js';
 import { listProviders } from '../../providers/store.js';
 import { patchSessionState, readWholeSessionState } from '../../config/sessions-repo.js';
 import { getWorkspaceRoot } from '../../workspace/root.js';

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isProductWikiPath } from '../../scripts/product-wiki-catalog-lib.mjs';
+import { isProductWikiPath } from '../../src/product-wiki/path-filter.mjs';
 import { getAppRoot } from '../workspace/root.js';
 
 const CATALOG_PATH = fileURLToPath(new URL('./catalog.json', import.meta.url));

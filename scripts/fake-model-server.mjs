@@ -12,12 +12,16 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import {
+  FAKE_MODEL_ID,
+  FAKE_PROVIDER_ID,
+} from '../server/orchestrate/board-testing/fake-model-ids.js';
+
+export { FAKE_MODEL_ID, FAKE_PROVIDER_ID };
 
 /** @typedef {{ role?: string; taskId?: string; nth?: number }} ScenarioMatch */
 /** @typedef {{ match?: ScenarioMatch; emit: string[] }} ScenarioStep */
 
-export const FAKE_MODEL_ID = 'fake-board-model';
-export const FAKE_PROVIDER_ID = 'fake-board';
 const DEFAULT_PORT = 18765;
 
 /** Every HTTP request recorded for assertions (method, url, body, parsed context). */

@@ -4,12 +4,22 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { WebContents } from 'electron';
 import { importServerModule } from './server-import.js';
 
 const CONFIG_FILE = 'config.json';
 
 /** Default when config is missing or invalid. */
 export const DEFAULT_CLOSE_TO_TRAY = true;
+
+/** Main Minnow window default zoom (Electron factor; 0.8 = 80%). */
+export const DEFAULT_SHELL_ZOOM_FACTOR = 0.8;
+
+/** Apply the shipped default shell zoom to the main renderer. */
+export function applyDefaultShellZoom(contents: WebContents): void {
+  if (contents.isDestroyed()) return;
+  contents.setZoomFactor(DEFAULT_SHELL_ZOOM_FACTOR);
+}
 
 function normalizeCloseToTray(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object') return DEFAULT_CLOSE_TO_TRAY;

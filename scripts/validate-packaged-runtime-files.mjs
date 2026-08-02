@@ -23,6 +23,7 @@ const REQUIRED_RUNTIME_PATHS = [
   'src/skills/builtin-manifest.json',
   'src/chat/prompts/work-agents/registry.json',
   'src/state/session-schema.mjs',
+  'src/product-wiki/path-filter.mjs',
   'build/icon.ico',
 ];
 
@@ -33,29 +34,64 @@ const REQUIRED_RUNTIME_DIRS = [
   'src/evals/packs',
 ];
 
+/** @returns {string[]} */
+function loadElectronBuilderFilePatterns() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  return pkg.build?.files ?? [];
+}
+
 /**
- * Collect import specifiers from server .js files that reference ../../src/.
- * @param {string} dir
- * @returns {string[]}
+ * Whether a repo-relative path is included by electron-builder "files" (negation patterns ignored).
+ * @param {string} relativePath
+ * @param {string[]} patterns
  */
-function collectServerSrcImports(dir) {
+function isIncludedInElectronFiles(relativePath, patterns) {
+  const normalized = relativePath.replace(/\\/g, '/');
+  for (const pattern of patterns) {
+    if (pattern.startsWith('!')) continue;
+    const p = pattern.replace(/\\/g, '/');
+    if (p.endsWith('/**')) {
+      const prefix = p.slice(0, -3);
+      if (normalized === prefix || normalized.startsWith(`${prefix}/`)) return true;
+      continue;
+    }
+    if (p.includes('*')) continue;
+    if (normalized === p) return true;
+  }
+  return false;
+}
+
+/**
+ * Collect repo-relative imports from server .js files under src/ or scripts/.
+ * @param {string} dir
+ * @returns {{ src: string[], scripts: string[] }}
+ */
+function collectServerRuntimeImports(dir) {
   /** @type {string[]} */
-  const imports = [];
+  const src = [];
+  /** @type {string[]} */
+  const scripts = [];
+  const importRe = /from\s+['"]((?:\.\.\/)+(?:src|scripts)\/[^'"]+)['"]/g;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      imports.push(...collectServerSrcImports(full));
+      const nested = collectServerRuntimeImports(full);
+      src.push(...nested.src);
+      scripts.push(...nested.scripts);
       continue;
     }
     if (!entry.name.endsWith('.js')) continue;
     const text = fs.readFileSync(full, 'utf8');
-    const re = /from\s+['"](\.\.\/\.\.\/src\/[^'"]+)['"]/g;
     let match;
-    while ((match = re.exec(text)) !== null) {
-      imports.push(match[1].replace(/\//g, path.sep));
+    while ((match = importRe.exec(text)) !== null) {
+      const resolved = path
+        .relative(repoRoot, path.resolve(path.dirname(full), match[1]))
+        .replace(/\\/g, '/');
+      if (resolved.startsWith('src/')) src.push(resolved);
+      else if (resolved.startsWith('scripts/')) scripts.push(resolved);
     }
   }
-  return imports;
+  return { src, scripts };
 }
 
 function assertExists(relPath) {
@@ -74,13 +110,31 @@ function main() {
     assertExists(rel);
   }
 
-  const dynamicImports = collectServerSrcImports(serverRoot);
-  for (const relImport of dynamicImports) {
+  const electronFiles = loadElectronBuilderFilePatterns();
+  const dynamicImports = collectServerRuntimeImports(serverRoot);
+  const uniqueSrc = [...new Set(dynamicImports.src)];
+  const uniqueScripts = [...new Set(dynamicImports.scripts)];
+
+  for (const relImport of uniqueSrc) {
     assertExists(relImport);
+    if (!isIncludedInElectronFiles(relImport, electronFiles)) {
+      throw new Error(
+        `Server src import is not listed in electron-builder files: ${relImport}`,
+      );
+    }
+  }
+
+  const unpackagedScripts = uniqueScripts.filter(
+    (relImport) => !isIncludedInElectronFiles(relImport, electronFiles),
+  );
+  if (unpackagedScripts.length) {
+    throw new Error(
+      `Server scripts imports missing from electron-builder files: ${unpackagedScripts.join(', ')}`,
+    );
   }
 
   console.log(
-    `[validate-packaged-runtime-files] OK — ${REQUIRED_RUNTIME_PATHS.length} files, ${REQUIRED_RUNTIME_DIRS.length} trees, ${dynamicImports.length} server src imports`,
+    `[validate-packaged-runtime-files] OK — ${REQUIRED_RUNTIME_PATHS.length} files, ${REQUIRED_RUNTIME_DIRS.length} trees, ${uniqueSrc.length} server src imports, ${uniqueScripts.length} server scripts imports`,
   );
 }
 

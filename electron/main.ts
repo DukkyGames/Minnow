@@ -27,6 +27,7 @@ import { loadWindowState, trackWindowState } from './window-state.js';
 import { resolveMinnowPort } from './minnow-port.js';
 import { disposeUpdater, initUpdater } from './updater.js';
 import {
+  applyDefaultShellZoom,
   readCloseToTrayPreference,
   writeCloseToTrayPreference,
 } from './desktop-shell-config.js';
@@ -413,6 +414,8 @@ async function createMainWindow(): Promise<BrowserWindow> {
       backgroundThrottling: false,
     },
   });
+
+  applyDefaultShellZoom(win.webContents);
 
   if (saved.isMaximized) {
     win.maximize();
