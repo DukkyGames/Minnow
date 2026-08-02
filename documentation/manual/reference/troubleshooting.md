@@ -95,7 +95,7 @@ Compare, Benchmarking, Experts, Calendar and Email are behind a release gate in 
 
 ## Still stuck
 
-Take **Copy report** from Health & diagnostics and open a [GitHub issue](https://github.com/DukkyGames/Minnow/issues). It includes version, platform and recent errors with paths and secrets redacted, which is most of what anyone will ask you for.
+Take **Copy report** from Health & diagnostics and open a [GitHub issue](https://github.com/HenriGrimm/Minnow/issues). It includes version, platform and recent errors with paths and secrets redacted, which is most of what anyone will ask you for.
 
 ## Related
 

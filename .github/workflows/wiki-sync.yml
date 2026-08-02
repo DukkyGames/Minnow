@@ -32,7 +32,12 @@ jobs:
 
       - name: Clone GitHub Wiki
         run: |
-          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" /tmp/minnow-wiki
+          set -euo pipefail
+          remote="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          if ! git clone "$remote" /tmp/minnow-wiki; then
+            echo "::error::Could not clone ${GITHUB_REPOSITORY}.wiki.git. Wikis are enabled on this repo, but GitHub only creates the wiki git repository after the first page is saved in the UI. Open https://github.com/${GITHUB_REPOSITORY}/wiki/_new (title: Home, any body), save once, then re-run this workflow."
+            exit 1
+          fi
 
       - name: Stage generated wiki pages
         run: node scripts/publish-github-wiki.mjs --output /tmp/minnow-wiki

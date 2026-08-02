@@ -194,5 +194,10 @@ describe('GitHub Wiki staging contract', () => {
     assert.match(script, /_Sidebar\.md/u);
     assert.match(script, /collectGitHubWikiPublishPaths/u);
     assert.match(workflow, /WIKI_SYNC_TOKEN/u);
+    const publishScript = await fs.readFile(
+      path.join(repositoryRoot, 'scripts/push-github-wiki.mjs'),
+      'utf8',
+    );
+    assert.match(publishScript, /Minnow\.wiki\.git/u);
   });
 });

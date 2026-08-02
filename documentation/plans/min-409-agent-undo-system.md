@@ -51,7 +51,7 @@ todos:
 # MIN-409 — Agent undo system
 
 **Linear:** [MIN-409](https://linear.app/minnowai/issue/MIN-409/28agent-undo-system)  
-**GitHub:** [#535](https://github.com/DukkyGames/Minnow/issues/535)  
+**GitHub:** [#535](https://github.com/HenriGrimm/Minnow/issues/535)  
 **Worktree:** `C:\Users\dukky\.cursor\worktrees\min409-ee66a399`  
 **Branch:** `henri/min-409-28agent-undo-system`
 

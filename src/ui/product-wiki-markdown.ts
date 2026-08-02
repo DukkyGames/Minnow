@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 import { marked } from 'marked';
 
-const REPOSITORY_BASE = 'https://github.com/DukkyGames/Minnow/blob/main/';
+const REPOSITORY_BASE = 'https://github.com/HenriGrimm/Minnow/blob/main/';
 let markedConfigured = false;
 
 /** Configure the shared Markdown parser once. */

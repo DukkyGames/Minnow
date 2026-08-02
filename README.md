@@ -15,7 +15,7 @@ Minnow runs on the models you already have: [LM Studio](https://lmstudio.ai/), O
 ## Quick start
 
 ```bash
-git clone https://github.com/DukkyGames/Minnow.git
+git clone https://github.com/HenriGrimm/Minnow.git
 cd Minnow
 npm install
 npm start
@@ -23,7 +23,7 @@ npm start
 
 Load a model in LM Studio (or point Minnow at your provider), and the desktop window opens on `http://localhost:9473`. Full walkthrough: **[Setup from source](documentation/contributor/setup-from-source.md)**.
 
-Prefer an installer? Packaged builds are on [Releases](https://github.com/DukkyGames/Minnow/releases) and update themselves.
+Prefer an installer? Packaged builds are on [Releases](https://github.com/HenriGrimm/Minnow/releases) and update themselves.
 
 ---
 
@@ -80,8 +80,8 @@ Minnow is meant to be taken apart. Everything the app does, you can extend witho
 Minnow is built in the open by a small community and one maintainer. Issues, pull requests, docs fixes, skills, and themes are all welcome — a first-time contribution is as good as a feature.
 
 - 💬 [Discord](https://discord.gg/U4FPzv9K4X)
-- 🐛 [Issues](https://github.com/DukkyGames/Minnow/issues)
-- ❤️ [Sponsor](https://github.com/sponsors/DukkyGames) — development is funded by the people who use it, which is what keeps it free for everyone else.
+- 🐛 [Issues](https://github.com/HenriGrimm/Minnow/issues)
+- ❤️ [Sponsor](https://github.com/sponsors/HenriGrimm) — development is funded by the people who use it, which is what keeps it free for everyone else.
 
 Working in the codebase? Start with [AGENTS.md](AGENTS.md) and [documentation/context.md](documentation/context.md).
 

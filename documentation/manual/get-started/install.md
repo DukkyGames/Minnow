@@ -6,13 +6,13 @@ Once it is running, go straight to [Connect a model](connect-a-model.md) — the
 
 ## Download
 
-Get the installer from [Minnow Releases](https://github.com/DukkyGames/Minnow/releases).
+Get the installer from [Minnow Releases](https://github.com/HenriGrimm/Minnow/releases).
 
 | Platform | What you download |
 |----------|-------------------|
 | Windows | NSIS installer (`.exe`) |
 | macOS | `.dmg`, or `.zip` if you prefer to unzip into Applications yourself |
-| Linux | No packaged build. Run from source — see the [GitHub Wiki](https://github.com/DukkyGames/Minnow/wiki). |
+| Linux | No packaged build. Run from source — see the [GitHub Wiki](https://github.com/HenriGrimm/Minnow/wiki). |
 
 ### If Windows blocks the installer
 

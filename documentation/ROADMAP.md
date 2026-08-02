@@ -34,4 +34,4 @@ See [Apps overview](manual/apps/overview.md#not-in-this-release) for what users 
 4. Accessibility and documentation.
 5. New surfaces only after existing ones are complete.
 
-Feature requests and bug reports belong in the [GitHub issue tracker](https://github.com/DukkyGames/Minnow/issues). Roadmap entries describe direction and do not promise a release date.
+Feature requests and bug reports belong in the [GitHub issue tracker](https://github.com/HenriGrimm/Minnow/issues). Roadmap entries describe direction and do not promise a release date.

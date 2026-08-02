@@ -10,7 +10,7 @@ Draft for r/LocalLLaMA (or similar). Adjust title/flair to the subreddit's rules
 
 I've been working on Minnow for the last few months, mostly alone. It isn't finished. There are bugs. But some things have happened recently that convinced me it's time to get it into people's hands anyway, unfinished edges and all. This is an open beta, and I want as much feedback as I can get.
 
-**TL;DR:** Free, AGPL workspace for local (or BYO API) models: chat, code, research, orchestration, memory. No accounts, no telemetry. Source and releases on GitHub: https://github.com/DukkyGames/Minnow
+**TL;DR:** Free, AGPL workspace for local (or BYO API) models: chat, code, research, orchestration, memory. No accounts, no telemetry. Source and releases on GitHub: https://github.com/HenriGrimm/Minnow
 
 **Minnow is a free and open source AI workspace that runs on the models you already have:** LM Studio, Ollama, llama.cpp, or anything OpenAI-compatible, local or cloud. Your keys, chats, and files stay on your disk. It's AGPL-3.0-or-later. Not open core, not a free tier bolted onto a cloud product. If I ever disappeared or changed my mind, someone could fork it and keep going. That guarantee is the whole point.
 
@@ -59,10 +59,10 @@ If you want the best results per dollar: use a bigger, stronger model for planni
 **I need your help.** Minnow works, but it's a big project and it has its fair share of bugs. If you try it and something breaks, a bug report is genuinely the most useful thing you can give me right now. Feedback and reports are the best way to help!
 
 **Links:**
-- **Repo:** https://github.com/DukkyGames/Minnow
-- **License (AGPL-3.0-or-later):** https://github.com/DukkyGames/Minnow/blob/main/LICENSE
-- **Releases / installer:** https://github.com/DukkyGames/Minnow/releases
-- **Setup:** https://github.com/DukkyGames/Minnow/blob/main/documentation/guides/setup.md
+- **Repo:** https://github.com/HenriGrimm/Minnow
+- **License (AGPL-3.0-or-later):** https://github.com/HenriGrimm/Minnow/blob/main/LICENSE
+- **Releases / installer:** https://github.com/HenriGrimm/Minnow/releases
+- **Setup:** https://github.com/HenriGrimm/Minnow/blob/main/documentation/guides/setup.md
 - **Discord:** https://discord.gg/U4FPzv9K4X
 
 Open weights got us here. I'd like to help make sure they're what gets us the rest of the way, too.

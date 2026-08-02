@@ -17,7 +17,7 @@ Native modules (`better-sqlite3`, `@lydell/node-pty`) ship prebuilt binaries for
 ## 2. Clone and install
 
 ```bash
-git clone https://github.com/DukkyGames/Minnow.git
+git clone https://github.com/HenriGrimm/Minnow.git
 cd Minnow
 npm install
 ```

@@ -13,7 +13,7 @@ import { renderProductWikiMarkdown } from './product-wiki-markdown';
 
 const DEFAULT_PAGE_PATH = 'documentation/manual/README.md';
 const REPOSITORY_EDIT_BASE =
-  'https://github.com/DukkyGames/Minnow/edit/main/';
+  'https://github.com/HenriGrimm/Minnow/edit/main/';
 let initialized = false;
 let returnHash = '#/desktop';
 let catalog: ProductWikiEntry[] = [];

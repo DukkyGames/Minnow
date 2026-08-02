@@ -24,7 +24,7 @@ The manual you are reading. It ships inside the build, so it always matches the 
 
 It is an overlay, not an app. Opening it does not disturb whatever you were doing; closing it puts you back.
 
-Developer material — architecture, setup from source, contributing — is deliberately not in here. It lives on the [GitHub Wiki](https://github.com/DukkyGames/Minnow/wiki).
+Developer material — architecture, setup from source, contributing — is deliberately not in here. It lives on the [GitHub Wiki](https://github.com/HenriGrimm/Minnow/wiki).
 
 ## Brain
 

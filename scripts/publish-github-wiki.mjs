@@ -9,7 +9,7 @@ import {
 } from './product-wiki-catalog-lib.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const repositoryBlobBase = 'https://github.com/DukkyGames/Minnow/blob/main/';
+const repositoryBlobBase = 'https://github.com/HenriGrimm/Minnow/blob/main/';
 
 /** Parse the optional staging output directory. */
 function readOutputArgument() {
@@ -132,7 +132,7 @@ async function main() {
   );
   await writeFile(
     path.join(outputDirectory, '_Footer.md'),
-    'Generated from [`documentation/`](https://github.com/DukkyGames/Minnow/tree/main/documentation). Do not edit generated pages directly.\n',
+    'Generated from [`documentation/`](https://github.com/HenriGrimm/Minnow/tree/main/documentation). Do not edit generated pages directly.\n',
     'utf8',
   );
   console.log(`Staged ${entries.length} wiki pages in ${outputDirectory}.`);

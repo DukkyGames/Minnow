@@ -1,7 +1,7 @@
 {
   "name": "minnow",
   "private": true,
-  "version": "1.0.2",
+  "version": "0.0.1",
   "description": "Local-first AI chat client for LM Studio and OpenAI-compatible providers",
   "author": "Grim Media",
   "license": "AGPL-3.0-or-later",
@@ -30,6 +30,7 @@
     "settings-registry:generate": "tsx scripts/generate-settings-registry.mjs",
     "wiki:generate": "node scripts/generate-product-wiki-catalog.mjs",
     "wiki:stage": "node scripts/publish-github-wiki.mjs",
+    "wiki:publish": "node scripts/push-github-wiki.mjs",
     "matt-pocock-skills:update": "node scripts/sync-matt-pocock-skills.mjs",
     "test": "node test/run-all.mjs",
     "test:check-coverage": "node test/check-test-coverage.mjs",
@@ -212,7 +213,7 @@
     "productName": "Minnow",
     "publish": {
       "provider": "github",
-      "owner": "DukkyGames",
+      "owner": "HenriGrimm",
       "repo": "Minnow"
     },
     "directories": {

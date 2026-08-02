@@ -5,7 +5,7 @@ The GitHub Wiki is a generated public mirror of Minnow's versioned documentation
 ## One-time setup
 
 1. Enable **Wikis** in the GitHub repository settings.
-2. Create the first GitHub Wiki page in the web interface if `DukkyGames/Minnow.wiki.git` does not exist yet. Its content will be replaced by the first sync.
+2. **Initialize the wiki git repo** (required once): open [Create wiki page](https://github.com/HenriGrimm/Minnow/wiki/_new), set the title to **Home**, add any placeholder body, and click **Save page**. Until this exists, `git clone …/Minnow.wiki.git` fails with “repository not found” and the Publish GitHub Wiki workflow cannot run. The first sync replaces that page with generated content from `documentation/README.md`.
 3. Add a repository Actions secret named `WIKI_SYNC_TOKEN`. Use a fine-grained token that can write repository contents for Minnow. If the repository's `GITHUB_TOKEN` can push to the wiki, the dedicated secret may be omitted.
 4. Run the **Publish GitHub Wiki** workflow manually once.
 
@@ -19,6 +19,14 @@ npm run wiki:stage -- --output /tmp/minnow-wiki-preview
 ```
 
 Open the staging directory to inspect `_Home.md`, `_Sidebar.md`, `_Footer.md`, and flattened page names. The staging script rewrites links between published pages and sends repository-only links to GitHub source.
+
+To publish from a maintainer machine (after the one-time **Home** page above):
+
+```bash
+npm run wiki:publish
+```
+
+Uses `WIKI_SYNC_TOKEN` when set, otherwise `gh auth token`. CI uses the **Publish GitHub Wiki** workflow instead.
 
 ## Publication rules
 

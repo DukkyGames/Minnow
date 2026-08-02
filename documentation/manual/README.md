@@ -4,7 +4,7 @@ Minnow is a local-first AI workspace that runs on your own computer. It talks to
 
 What you get is not a chat box. It is a desktop with eight apps: a full code workspace with an editor, terminal and git; a deep-research agent; a personal knowledge wiki the model can read and write; an issue tracker; a job scheduler; and a model manager that can download and serve weights for you. A chat assistant sits underneath all of it and can drive most of it with tools.
 
-This manual covers the packaged desktop app you install from GitHub Releases. If you build from source, everything here still applies, plus the developer setup notes in the [GitHub Wiki](https://github.com/DukkyGames/Minnow/wiki).
+This manual covers the packaged desktop app you install from GitHub Releases. If you build from source, everything here still applies, plus the developer setup notes in the [GitHub Wiki](https://github.com/HenriGrimm/Minnow/wiki).
 
 ## Start here
 

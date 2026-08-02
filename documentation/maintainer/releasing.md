@@ -3,7 +3,7 @@
 How updates flow through Minnow — **releasing** a new version (for maintainers) and
 **receiving** one (for users). Auto-update is built on
 [`electron-updater`](https://www.electron.build/auto-update) against **GitHub Releases**
-(`DukkyGames/Minnow`). Implementation: [`electron/updater.ts`](../../electron/updater.ts) +
+([`HenriGrimm/Minnow`](https://github.com/HenriGrimm/Minnow)). Implementation: [`electron/updater.ts`](../../electron/updater.ts) +
 [`electron/updater-core.ts`](../../electron/updater-core.ts); UI in
 [`src/ui/settings-updates.ts`](../../src/ui/settings-updates.ts) and
 [`src/os/update-menubar.ts`](../../src/os/update-menubar.ts). Tracked in
@@ -50,7 +50,7 @@ This runs `build → electron:build → electron-builder` and writes to `release
 
 ### 3. Create the GitHub release
 
-On <https://github.com/DukkyGames/Minnow/releases> → **Draft a new release**:
+On <https://github.com/HenriGrimm/Minnow/releases> → **Draft a new release**:
 
 - **Tag:** `v<version>` (e.g. `v1.0.1`), created against the commit you packaged from.
 - **Attach all three files** from `release/pkg/`. `latest.yml` is the one that matters —
