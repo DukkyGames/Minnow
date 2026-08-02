@@ -188,6 +188,7 @@ Wire format may use multimodal `ContentPart[]` for VLMs; built in [`src/tools/lo
 - Each chat has `workspacePath`; sidebar lists current workspace (+ Unassigned legacy).
 - Max **50** chats; newest `lastMessageAt` first.
 - **Desktop chat** uses a configurable workspace folder (default `~/.minnow/workspace`); change it from the desktop **Files** drawer (MRU select or folder picker). Persisted in `config.json` as `desktopWorkspace.path`. The file tree reloads on switch; `list_directory` tool-cache scopes include `workspaceRoot` so listings from one desktop folder are not reused for another. Legacy Chat app uses `~/.minnow/chats`.
+- **Code workspace** (`GET/PUT /api/workspace`, [`server/workspace/root.js`](../server/workspace/root.js)): defaults to the Minnow install root until the user opens/creates a project. `isDefault` stays true for placeholder roots (install dir, `app.asar`) and until `workspace.userChosen` is set by an explicit pick. Minnow Shell foregrounds Code with the welcome screen ([`src/ui/welcome-page.ts`](../src/ui/welcome-page.ts)) while `isDefault` is true instead of loading the file tree against the bundle.
 - **Email assistant chats** reuse the chats workspace for normal file permissions but persist with `Chat.appScope === 'email'`, `modeId === 'email'`, and `lastActiveChatIdByApp.email`, so they stay out of Code, Desktop, and Chat app rails.
 
 ### Backend-owned generations

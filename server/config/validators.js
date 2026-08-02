@@ -1436,6 +1436,9 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof w.path === 'string' && w.path.trim()) {
       existingWorkspace.path = w.path.trim();
     }
+    if (typeof w.userChosen === 'boolean') {
+      existingWorkspace.userChosen = w.userChosen;
+    }
     if (Array.isArray(w.recentPaths)) {
       const trimmed = w.recentPaths
         .filter((p) => typeof p === 'string')

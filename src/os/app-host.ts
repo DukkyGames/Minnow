@@ -316,15 +316,13 @@ async function openAppPage(
       const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
       await ensureCodeWorkspaceModules();
       const welcome = await import('../ui/welcome-page');
-      const { isDefaultWorkspace } = await import('../state/workspace');
+      const launchWorkspacePath = options?.workspacePath?.trim();
+      if (welcome.shouldPromptCodeWorkspaceWelcome(launchWorkspacePath)) {
+        welcome.openWelcome({ skipHash: true });
+        break;
+      }
       if (welcome.isWelcomePageOpen()) {
         welcome.closeWelcome({ skipHash: true });
-      } else if (
-        isDefaultWorkspace() &&
-        !welcome.isWelcomeDismissedForSession() &&
-        !options?.workspacePath?.trim()
-      ) {
-        welcome.openWelcome({ skipHash: true });
       }
       const route = getCurrentRoute();
       const wantsChat =

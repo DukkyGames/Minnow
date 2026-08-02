@@ -57,6 +57,17 @@ export function isWelcomeDismissedForSession(): boolean {
   return welcomeDismissedForSession;
 }
 
+/** Whether welcome should open when foregrounding the Code app (Minnow Shell). */
+export function shouldPromptCodeWorkspaceWelcome(launchWorkspacePath?: string): boolean {
+  if (isWelcomeDismissedForSession()) {
+    return false;
+  }
+  if (launchWorkspacePath?.trim()) {
+    return false;
+  }
+  return isDefaultWorkspace();
+}
+
 /** Whether welcome should open after init when workspace sync completes. */
 export function shouldShowWelcomeOnBoot(): boolean {
   if (isOsShellEnabled()) return false;

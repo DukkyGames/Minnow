@@ -17,6 +17,8 @@ let APP_ROOT = path.resolve(process.cwd());
 export const MAX_RECENT_WORKSPACES = 10;
 
 let workspaceRoot = APP_ROOT;
+/** False until the user explicitly picks or creates a workspace folder. */
+let workspaceUserChosen = false;
 
 /** Set Minnow app root (e.g. Electron resources path). */
 export function setAppRoot(dir) {
@@ -31,6 +33,33 @@ export function getAppRoot() {
 /** Active workspace for AI tools and file tree. */
 export function getWorkspaceRoot() {
   return workspaceRoot;
+}
+
+/** Whether the user has explicitly chosen a workspace (welcome / picker / PUT). */
+export function isWorkspaceUserChosen() {
+  return workspaceUserChosen;
+}
+
+/**
+ * Bundled Minnow install roots are not real project folders (packaged app.asar, etc.).
+ * @param {string} absPath
+ * @returns {boolean}
+ */
+export function isPlaceholderWorkspacePath(absPath) {
+  const resolved = path.resolve(String(absPath).trim());
+  const appRoot = path.resolve(getAppRoot());
+  if (resolved === appRoot) {
+    return true;
+  }
+  const base = path.basename(resolved).toLowerCase();
+  if (base === 'app.asar') {
+    return true;
+  }
+  const stripAsar = (p) => p.replace(/\.asar$/i, '');
+  if (stripAsar(resolved) === stripAsar(appRoot)) {
+    return true;
+  }
+  return false;
 }
 
 /** Short label for UI (folder basename). */
@@ -194,6 +223,25 @@ export async function validateWorkspacePath(userPath) {
 }
 
 /**
+ * @param {object} meta config.json root
+ * @param {string | null} savedPath
+ * @returns {boolean}
+ */
+function resolveWorkspaceUserChosenFromMeta(meta, savedPath) {
+  const ws = meta?.workspace;
+  if (ws && typeof ws === 'object' && typeof ws.userChosen === 'boolean') {
+    return ws.userChosen;
+  }
+  if (savedPath && savedPath.trim()) {
+    const resolved = path.resolve(savedPath.trim());
+    if (!isPlaceholderWorkspacePath(resolved)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Load persisted workspace from ~/.minnow/config.json (falls back to app root).
  */
 export async function initWorkspaceRoot() {
@@ -204,6 +252,8 @@ export async function initWorkspaceRoot() {
     typeof meta.workspace.path === 'string'
       ? meta.workspace.path
       : null;
+
+  workspaceUserChosen = resolveWorkspaceUserChosenFromMeta(meta, saved);
 
   if (saved && saved.trim()) {
     try {
@@ -216,6 +266,7 @@ export async function initWorkspaceRoot() {
   }
 
   workspaceRoot = getAppRoot();
+  workspaceUserChosen = false;
   return workspaceRoot;
 }
 
@@ -246,8 +297,9 @@ export async function setWorkspaceRoot(userPath) {
       console.warn(`[brain] cascade on workspace switch failed: ${message}`);
     }
   }
+  workspaceUserChosen = true;
   const meta = (await readConfigJson('config.json')) ?? {};
-  const merged = mergeConfigMeta(meta, { workspace: { path: resolved } });
+  const merged = mergeConfigMeta(meta, { workspace: { path: resolved, userChosen: true } });
   await writeConfigJson('config.json', merged);
   await touchRecentWorkspacePath(resolved);
   try {
@@ -261,9 +313,11 @@ export async function setWorkspaceRoot(userPath) {
 
 /** Current workspace info for API responses. */
 export function getWorkspaceInfo() {
+  const placeholder = isPlaceholderWorkspacePath(workspaceRoot);
   return {
     path: workspaceRoot,
     label: workspaceLabel(workspaceRoot),
-    isDefault: path.resolve(workspaceRoot) === getAppRoot(),
+    isDefault: !workspaceUserChosen || placeholder,
+    userChosen: workspaceUserChosen,
   };
 }

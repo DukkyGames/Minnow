@@ -89,6 +89,7 @@ const {
   resetWelcomeStateForTests,
   shouldShowWelcomeOnBoot,
   validateProjectFolderName,
+  shouldPromptCodeWorkspaceWelcome,
 } = await import('../../src/ui/welcome-page.ts');
 
 const { resetWorkspaceStateForTests, setWorkspaceFromServer } = await import(
@@ -138,6 +139,19 @@ describe('welcome-page', { concurrency: false }, () => {
     });
     window.location.hash = '#/';
     assert.equal(shouldShowWelcomeOnBoot(), false);
+  });
+
+  test('shouldPromptCodeWorkspaceWelcome when default workspace and no launch path', () => {
+    setupWelcomeDom();
+    resetWelcomeStateForTests();
+    resetWorkspaceStateForTests();
+    setWorkspaceFromServer({
+      path: '/minnow/app.asar',
+      label: 'app.asar',
+      isDefault: true,
+    });
+    assert.equal(shouldPromptCodeWorkspaceWelcome(), true);
+    assert.equal(shouldPromptCodeWorkspaceWelcome('/projects/x'), false);
   });
 
   test('openWelcome shows OS overlay and hides app body', () => {

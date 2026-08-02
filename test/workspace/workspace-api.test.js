@@ -9,7 +9,10 @@ import {
   dedupeRecentPaths,
   getWorkspaceInfo,
   initWorkspaceRoot,
+  isPlaceholderWorkspacePath,
+  isWorkspaceUserChosen,
   normalizeWorkspacePathKey,
+  setAppRoot,
   setWorkspaceRoot,
 } from '../../server/workspace/root.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
@@ -248,6 +251,27 @@ describe('workspace API', () => {
     await initWorkspaceRoot();
     const info = getWorkspaceInfo();
     assert.equal(path.resolve(info.path), path.resolve(workspaceDir));
+    assert.equal(isWorkspaceUserChosen(), true);
+    assert.equal(info.isDefault, false);
+  });
+
+  test('placeholder install root is default until user chooses', async () => {
+    const priorRoot = path.resolve(process.cwd());
+    const fakeAppRoot = path.join(homeDir, 'fake-install');
+    await fs.mkdir(fakeAppRoot, { recursive: true });
+    setAppRoot(fakeAppRoot);
+    await fs.writeFile(
+      path.join(homeDir, 'config.json'),
+      JSON.stringify({ workspace: { path: fakeAppRoot } }),
+      'utf8',
+    );
+    await initWorkspaceRoot();
+    assert.equal(isPlaceholderWorkspacePath(fakeAppRoot), true);
+    const info = getWorkspaceInfo();
+    assert.equal(info.isDefault, true);
+    assert.equal(isWorkspaceUserChosen(), false);
+    setAppRoot(priorRoot);
+    await initWorkspaceRoot();
   });
 
   test('GET browse without path returns quick roots', async () => {
