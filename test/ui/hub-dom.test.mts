@@ -65,4 +65,23 @@ describe('hub teardown', () => {
       'composer stays inside hub slot after remount',
     );
   });
+
+  test('teardownHub before chatArea.replaceChildren keeps composer in the document', () => {
+    setupDom();
+    const chat = createEmptyChatObject('test-model');
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      chats: [chat],
+      sidebarCollapsed: false,
+    });
+
+    renderHub(chat);
+    assert.ok(document.querySelector('.hub-composer-slot .input-bar'));
+
+    teardownHub();
+    document.getElementById('chatArea')!.replaceChildren();
+
+    assert.ok(document.getElementById('msgInput'), 'composer survives when hub is torn down first');
+  });
 });

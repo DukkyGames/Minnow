@@ -158,6 +158,8 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   if (isDevServerScreenOpen()) {
     closeDevServerScreen({ skipNavigate: true, restoreChat: false });
   }
+  const { teardownHub } = await import('./hub');
+  teardownHub();
 }
 
 /** Open the Brain code section inside the Code app main column. */

@@ -94,6 +94,8 @@ function restoreComposer(): void {
   if (input) {
     input.placeholder = 'Type a message…';
   }
+  composerRestoreParent = null;
+  composerRestoreNext = null;
 }
 
 function formatCompactCount(n: number): string {
