@@ -7,10 +7,12 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../lib/ripgrep-path.js';
 import { getWorkspaceRoot } from './root.js';
 
 const execFileAsync = promisify(execFile);
+
+const rgExecutable = getRipgrepPath();
 
 /** Cache TTL so hub refreshes stay cheap. */
 const LOC_CACHE_TTL_MS = 45_000;
@@ -32,7 +34,7 @@ let locCache = { at: 0, key: '', lines: 0, files: 0 };
  */
 async function listTextFiles(root) {
   const { stdout } = await execFileAsync(
-    rgPath,
+    rgExecutable,
     [
       '--files',
       '--no-messages',

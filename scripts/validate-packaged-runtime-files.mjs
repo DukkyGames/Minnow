@@ -103,6 +103,19 @@ function assertExists(relPath) {
 }
 
 function main() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  const asarUnpack = pkg.build?.asarUnpack ?? [];
+  for (const required of [
+    'node_modules/@vscode/ripgrep/**',
+    'node_modules/@vscode/ripgrep-*/**',
+  ]) {
+    if (!asarUnpack.includes(required)) {
+      throw new Error(
+        `electron-builder asarUnpack missing ripgrep pattern: ${required}`,
+      );
+    }
+  }
+
   for (const rel of REQUIRED_RUNTIME_PATHS) {
     assertExists(rel);
   }

@@ -63,6 +63,7 @@
     "package:dir": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --dir",
     "package:win": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
     "package:mac": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --mac",
+    "package:linux": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
     "signing:check": "node scripts/check-macos-signing.mjs",
     "signing:setup": "node scripts/check-macos-signing.mjs --setup",
     "start": "node server.js",
@@ -251,7 +252,9 @@
       "!src/**/*.css"
     ],
     "asarUnpack": [
-      "node_modules/@lydell/node-pty/**"
+      "node_modules/@lydell/node-pty/**",
+      "node_modules/@vscode/ripgrep/**",
+      "node_modules/@vscode/ripgrep-*/**"
     ],
     "extraResources": [
       {
@@ -288,6 +291,17 @@
       "artifactName": "${productName}-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "icon": "public/logos/minnow-logo/minnow/png/minnow-1024.png",
+      "category": "Development",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "synopsis": "Local-first AI workspace",
+      "description": "Minnow — local-first AI workspace for chat, code, research, and orchestration."
     }
   }
 }
