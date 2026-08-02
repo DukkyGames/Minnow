@@ -5,6 +5,10 @@
   "description": "Local-first AI chat client for LM Studio and OpenAI-compatible providers",
   "author": "Grim Media",
   "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henrigrimm/minnow.git"
+  },
   "type": "module",
   "main": "electron/dist/main.js",
   "bin": {
@@ -213,8 +217,8 @@
     "productName": "Minnow",
     "publish": {
       "provider": "github",
-      "owner": "HenriGrimm",
-      "repo": "Minnow"
+      "owner": "henrigrimm",
+      "repo": "minnow"
     },
     "directories": {
       "output": "release/pkg"
