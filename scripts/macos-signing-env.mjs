@@ -119,7 +119,8 @@ export function electronBuilderSigningArgs() {
   if (hasNotarizationCredentials()) {
     const teamId = process.env.APPLE_TEAM_ID?.trim();
     console.log(`[signing] Notarization enabled (team ${teamId}).`);
-    args.push(`--config.mac.notarize.teamId=${teamId}`);
+    // electron-builder 26+: notarize is boolean only; APPLE_* env vars supply credentials.
+    args.push('--config.mac.notarize=true');
   } else {
     console.warn(
       '[signing] Signed build, but notarization credentials missing — app may still be quarantined.',
