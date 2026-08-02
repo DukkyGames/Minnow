@@ -3,6 +3,8 @@ import { describe, test } from 'node:test';
 import { EditorState } from '@codemirror/state';
 import {
   PROMPT_VERSION,
+  EDITOR_AI_FIM_MARKER,
+  PROMPT_SECTION_CAPS,
   alignAndValidateCompletionText,
   applyContextBudget,
   buildEditorAiCompletionMessages,
@@ -67,13 +69,56 @@ describe('editor AI completion prompt', () => {
     assert.match(content, /File: src\/demo\.ts/);
     assert.match(content, /Language: TypeScript/);
     assert.match(content, /Insertion constraints:/);
-    assert.match(content, /Before cursor:/);
-    assert.match(content, /<CURSOR>/);
-    assert.match(content, /After cursor:/);
+    assert.match(content, /<file>/);
+    assert.match(content, new RegExp(EDITOR_AI_FIM_MARKER.replace(/\|/g, '\\|')));
+    assert.doesNotMatch(content, /Before cursor:/);
+    assert.doesNotMatch(content, /After cursor:/);
+    assert.doesNotMatch(content, /Broader context before cursor:/);
+    assert.doesNotMatch(content, /Text after cursor:/);
   });
 
   test('PROMPT_VERSION is exported for cache invalidation', () => {
-    assert.equal(PROMPT_VERSION, '6');
+    assert.equal(PROMPT_VERSION, '7');
+  });
+
+  test('buildEditorAiCompletionMessages includes prefix and suffix once in file block', () => {
+    const doc = 'alpha\nconst x = 1;\nomega\n';
+    const state = EditorState.create({ doc });
+    const pos = doc.indexOf('1;');
+    const { messages } = buildEditorAiCompletionMessages({
+      state,
+      cursorPos: pos,
+      filePath: 'src/demo.ts',
+      config: TEST_CONFIG,
+    });
+    const content = String(messages[1].content);
+    const marker = EDITOR_AI_FIM_MARKER;
+    const fileMatch = content.match(/<file>\n([\s\S]*?)\n<\/file>/);
+    assert.ok(fileMatch, 'expected <file> block');
+    const fileInner = fileMatch[1]!;
+    assert.equal(fileInner.split(marker).length - 1, 1);
+    assert.match(fileInner, /^alpha\nconst x = /);
+    assert.match(fileInner, /<|fim|>1;\nomega\n$/);
+  });
+
+  test('buildEditorAiCompletionMessages caps optional context sections', () => {
+    const doc = 'const a = 1;\n';
+    const state = EditorState.create({ doc });
+    const longSymbols = 'x'.repeat(PROMPT_SECTION_CAPS.symbols + 50);
+    const longDiag = 'd'.repeat(PROMPT_SECTION_CAPS.diagnostics + 50);
+    const { messages } = buildEditorAiCompletionMessages({
+      state,
+      cursorPos: doc.length,
+      filePath: 'src/demo.ts',
+      config: TEST_CONFIG,
+      lspSymbols: longSymbols,
+      lspDiagnostics: longDiag,
+    });
+    const content = String(messages[1].content);
+    const symbolsSection = content.match(/Enclosing symbols:\n([^\n]+)/)?.[1] ?? '';
+    const diagSection = content.match(/Nearby diagnostics:\n([^\n]+)/)?.[1] ?? '';
+    assert.equal(symbolsSection.length, PROMPT_SECTION_CAPS.symbols);
+    assert.equal(diagSection.length, PROMPT_SECTION_CAPS.diagnostics);
   });
 
   test('buildEditorAiCompletionMessages includes import and LSP context', () => {

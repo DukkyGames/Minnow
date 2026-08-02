@@ -172,7 +172,7 @@ describe('resolveIntentSuggestion', () => {
     );
   });
 
-  test('passes fallbackRole utility so intent routes to the utility chain', async () => {
+  test('passes fallbackRole editor-completion so intent routes to the editor chain', async () => {
     let seenOptions: Record<string, unknown> | undefined;
     await resolveIntentSuggestion(
       baseInput({
@@ -196,7 +196,7 @@ describe('resolveIntentSuggestion', () => {
         },
       },
     );
-    assert.equal(seenOptions?.fallbackRole, 'utility');
+    assert.equal(seenOptions?.fallbackRole, 'editor-completion');
     assert.equal(seenOptions?.persist, false);
   });
 

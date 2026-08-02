@@ -94,6 +94,21 @@ function buildProviderOptions(body) {
 }
 
 /**
+ * Map OpenAI `stop` (string or array) to AI SDK `stopSequences` (max 8 entries).
+ * @param {Record<string, unknown>} body
+ * @returns {string[] | undefined}
+ */
+function openAiStopToStopSequences(body) {
+  const raw = body.stop;
+  if (raw == null) return undefined;
+  const list = Array.isArray(raw) ? raw : [raw];
+  const sequences = list
+    .filter((entry) => typeof entry === 'string' && entry.length > 0)
+    .slice(0, 8);
+  return sequences.length > 0 ? sequences : undefined;
+}
+
+/**
  * @param {Record<string, unknown>} body
  * @param {import('@ai-sdk/provider-utils').ProviderOptions | undefined} providerOptions
  * @returns {boolean}
@@ -151,6 +166,10 @@ function buildGenerationCallOptions(body, provider, abortSignal) {
   }
   if (providerOptions) {
     options.providerOptions = providerOptions;
+  }
+  const stopSequences = openAiStopToStopSequences(body);
+  if (stopSequences) {
+    options.stopSequences = stopSequences;
   }
 
   return options;

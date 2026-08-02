@@ -12,8 +12,9 @@ export const COMPLETION_ACCEPT_COOLDOWN_MS = 300;
 /** Inline completion shape: single-line vs multi-line continuation. */
 export type CompletionMode = 'single' | 'multi';
 
-/** Cache transport label (legacy native-FIM flag — retained for cache key stability). */
+/** Cache transport label (legacy native-FIM flag — retained for cache key stability only). */
 export function completionCacheTransportMode(config: EditorAiCompletionConfig): string {
+  // `useNativeFim` is deprecated and ignored; always chat/FIM messages (see editor-ai-completion config).
   return config.useNativeFim ? 'native-fim' : 'chat';
 }
 

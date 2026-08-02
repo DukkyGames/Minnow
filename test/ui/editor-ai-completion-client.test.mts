@@ -45,6 +45,7 @@ import {
   resetEditorAiCompletionCache,
 } from '../../src/ui/editor-ai-completion-cache.ts';
 import { PROMPT_VERSION } from '../../src/ui/editor-ai-completion-prompt.ts';
+import { EDITOR_AI_GENERATION_FALLBACK_ROLE } from '../../src/ui/editor-ai-stream.ts';
 
 let domWindow: Window | null = null;
 
@@ -148,7 +149,7 @@ describe('editor AI completion cache (Phase 6)', () => {
     });
     assert.notEqual(keyA, keyB);
     assert.match(keyA, /^[a-z0-9]+$/);
-    assert.equal(PROMPT_VERSION, '6');
+    assert.equal(PROMPT_VERSION, '7');
   });
 
   test('LRU cache evicts oldest entry at capacity', () => {
@@ -224,16 +225,17 @@ describe('editor AI completion cache (Phase 6)', () => {
 });
 
 describe('fetchEditorAiCompletion transport', () => {
-  test('sends structured chat messages, not raw prompt', async () => {
+  test('sends structured chat messages, stop sequences, capped max_tokens, and fallback role', async () => {
     const doc = 'const x = ';
     const state = EditorState.create({ doc });
     let capturedBody: Record<string, unknown> | null = null;
+    let capturedOptions: Record<string, unknown> | undefined;
 
     const result = await fetchEditorAiCompletion({
       state,
       cursorPos: doc.length,
       filePath: 'demo.ts',
-      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false },
+      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false, maxTokens: 256 },
       binding: { providerId: 'test-provider', modelId: 'coder-1' },
       signal: new AbortController().signal,
       deps: {
@@ -246,8 +248,9 @@ describe('fetchEditorAiCompletion transport', () => {
           prefix: 'const x = ',
           suffix: '',
         }),
-        createGeneration: async (_providerId, body) => {
-          capturedBody = body;
+        createGeneration: async (_providerId, body, options) => {
+          capturedBody = body as Record<string, unknown>;
+          capturedOptions = options as Record<string, unknown>;
           return { generationId: 'gen-1' };
         },
         subscribeToGeneration: (_id, handlers) => {
@@ -265,11 +268,13 @@ describe('fetchEditorAiCompletion transport', () => {
     assert.ok(capturedBody);
     assert.ok(Array.isArray(capturedBody.messages));
     assert.equal('prompt' in capturedBody, false);
+    assert.deepEqual(capturedBody.stop, ['\n\n\n', '```', '<|fim|>', '\n</file>']);
+    assert.equal(capturedBody.max_tokens, 192);
+    assert.equal(capturedOptions?.fallbackRole, EDITOR_AI_GENERATION_FALLBACK_ROLE);
+    assert.notEqual(capturedOptions?.persist, true);
     const messages = capturedBody.messages as Array<{ role: string; content: string }>;
     assert.equal(messages.length, 2);
-    assert.equal(messages[0].role, 'system');
-    assert.equal(messages[1].role, 'user');
-    assert.match(messages[1].content, /<CURSOR>/);
+    assert.match(messages[1].content, /<\|fim\|>/);
   });
 });
 

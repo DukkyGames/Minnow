@@ -4,10 +4,7 @@
 
 import { extractMessageText } from '../api/chat';
 import {
-  cancelGeneration,
-  createGeneration,
   formatGenerationErrorMessage,
-  subscribeToGeneration,
   type GenerationEndEvent,
 } from '../api/generations';
 import { modelCache } from '../app-state';
@@ -43,6 +40,12 @@ import {
 import { completionModeAt } from './editor-completion-policy';
 import { stripEditorModelOutput, extractEditorCodeFromReasoning } from './editor-model-output';
 import { recordCompletionEvent } from './editor-ai-telemetry';
+import {
+  editorCompletionMaxTokens,
+  editorCompletionStopSequences,
+  streamEditorGeneration,
+  type EditorAiStreamDeps,
+} from './editor-ai-stream';
 
 export interface EditorAiBinding {
   providerId: string;
@@ -83,10 +86,7 @@ export type EditorAiBindingValidation =
   | { ok: false; message: string };
 
 /** Injectable seams for deterministic tests. */
-export interface EditorAiCompletionDeps {
-  createGeneration?: typeof createGeneration;
-  subscribeToGeneration?: typeof subscribeToGeneration;
-  cancelGeneration?: typeof cancelGeneration;
+export interface EditorAiCompletionDeps extends EditorAiStreamDeps {
   resolveProvider?: typeof resolveProvider;
   buildMessagesAsync?: typeof buildEditorAiCompletionMessagesAsync;
   cache?: typeof editorAiCompletionCache;
@@ -302,15 +302,13 @@ export async function fetchEditorAiCompletion(
   input: FetchEditorAiCompletionInput,
 ): Promise<EditorAiCompletionResult> {
   const deps = input.deps ?? {};
-  const createGen = deps.createGeneration ?? createGeneration;
-  const subscribeGen = deps.subscribeToGeneration ?? subscribeToGeneration;
-  const cancelGen = deps.cancelGeneration ?? cancelGeneration;
   const resolveProv = deps.resolveProvider ?? resolveProvider;
   const buildMessages = deps.buildMessagesAsync ?? buildEditorAiCompletionMessagesAsync;
   const cache = deps.cache ?? editorAiCompletionCache;
 
   const modelId = input.binding.modelId.trim();
   const cursorPos = input.cursorPos;
+  const completionMode = completionModeAt(input.state, cursorPos);
   const { prefix, suffix } = extractPrefixSuffix(input.state.doc, cursorPos, input.config);
   const maxInsertChars = maxInsertCharsForConfig(input.config);
 
@@ -345,7 +343,8 @@ export async function fetchEditorAiCompletion(
   const body: Record<string, unknown> = {
     model: modelId || undefined,
     temperature: input.config.temperature,
-    max_tokens: input.config.maxTokens,
+    max_tokens: editorCompletionMaxTokens(input.config.maxTokens, completionMode),
+    stop: editorCompletionStopSequences(completionMode),
     stream: true,
     messages,
   };
@@ -363,13 +362,6 @@ export async function fetchEditorAiCompletion(
     modelCaps,
   );
   Object.assign(body, thinkingPatch);
-
-  let generationId: string;
-  try {
-    ({ generationId } = await createGen(provider.id, body, { persist: false }));
-  } catch (err) {
-    return { text: null, error: createGenerationErrorMessage(err) };
-  }
 
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
@@ -432,58 +424,54 @@ export async function fetchEditorAiCompletion(
       resolve(result);
     };
 
-    let unsubscribe: (() => void) | null = null;
     let lastEmittedLen = 0;
     let lastEmittedLines = 1;
-    unsubscribe = subscribeGen(generationId, {
-      signal: input.signal,
-      onChunk: (chunk) => {
-        contentAcc.ingestChoice(chunk.choices?.[0]);
-        reasoningAcc.ingestChunk(chunk);
-        const aligned = emitFromAccumulators(false);
-        if (!aligned.rejected && aligned.text) {
-          const len = aligned.text.length;
-          const lines = aligned.text.split('\n').length;
-          const grewEnough = len - lastEmittedLen >= 8;
-          const gainedNewline = lines > lastEmittedLines;
-          if (lastEmittedLen > 0 && !grewEnough && !gainedNewline) {
+
+    void streamEditorGeneration(
+      provider.id,
+      body,
+      input.signal,
+      {
+        onChunk: (chunk) => {
+          contentAcc.ingestChoice(chunk.choices?.[0]);
+          reasoningAcc.ingestChunk(chunk);
+          const aligned = emitFromAccumulators(false);
+          if (!aligned.rejected && aligned.text) {
+            const len = aligned.text.length;
+            const lines = aligned.text.split('\n').length;
+            const grewEnough = len - lastEmittedLen >= 8;
+            const gainedNewline = lines > lastEmittedLines;
+            if (lastEmittedLen > 0 && !grewEnough && !gainedNewline) {
+              return;
+            }
+            lastEmittedLen = len;
+            lastEmittedLines = lines;
+            if (!firstTokenRecorded) {
+              firstTokenRecorded = true;
+              firstTokenMs = performance.now() - requestStartedAt;
+            }
+            input.onPartial?.(aligned.text);
+          }
+        },
+        onEnd: (event?: GenerationEndEvent) => {
+          if (event?.status === 'error') {
+            finish({ text: null, error: generationEndErrorMessage(event) });
             return;
           }
-          lastEmittedLen = len;
-          lastEmittedLines = lines;
-          if (!firstTokenRecorded) {
-            firstTokenRecorded = true;
-            firstTokenMs = performance.now() - requestStartedAt;
-          }
-          input.onPartial?.(aligned.text);
-        }
+          const aligned = emitFromAccumulators(true);
+          finish(finishAligned(aligned));
+        },
+        onTransportError: (err) => {
+          finish({ text: null, error: createGenerationErrorMessage(err) });
+        },
+        onAbort: () => {
+          finish({ text: null });
+        },
       },
-      onEnd: (event?: GenerationEndEvent) => {
-        unsubscribe?.();
-        if (event?.status === 'error') {
-          finish({ text: null, error: generationEndErrorMessage(event) });
-          return;
-        }
-        const aligned = emitFromAccumulators(true);
-        finish(finishAligned(aligned));
-      },
-      onTransportError: (err) => {
-        unsubscribe?.();
-        finish({ text: null, error: createGenerationErrorMessage(err) });
-      },
+      deps,
+    ).catch((err) => {
+      finish({ text: null, error: createGenerationErrorMessage(err) });
     });
-
-    input.signal.addEventListener(
-      'abort',
-      () => {
-        unsubscribe?.();
-        void cancelGen(generationId).catch(() => {
-          /* best-effort */
-        });
-        finish({ text: null });
-      },
-      { once: true },
-    );
   });
 }
 

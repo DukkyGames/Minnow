@@ -58,5 +58,27 @@ export function computeEffectiveGoalEvalBinding(
   return { providerId, modelId, usesChatDefault };
 }
 
+/** Pure editor AI binding (matches resolveEditorAiBinding when useChatModel is set). */
+export function computeEffectiveEditorCompletionBinding(
+  editor: {
+    useChatModel: boolean;
+    providerId: string;
+    modelId: string;
+  },
+  chat: ChatBindingContext,
+): { providerId: string; modelId: string; usesChatDefault: boolean } {
+  if (editor.useChatModel) {
+    return {
+      providerId: editor.providerId.trim() || chat.providerId,
+      modelId: chat.modelId.trim() || editor.modelId.trim(),
+      usesChatDefault: true,
+    };
+  }
+  const modelId = editor.modelId.trim() || chat.modelId.trim();
+  const providerId = editor.providerId.trim() || chat.providerId?.trim() || '';
+  const usesChatDefault = !editor.modelId.trim();
+  return { providerId, modelId, usesChatDefault };
+}
+
 export { resolveSubAgentModelBinding, resolveUiDesignerModel };
 export type { Chat };

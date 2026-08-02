@@ -253,6 +253,51 @@ describe('pumpAnthropicUpstream', () => {
     assert.equal(callOptions.topP, undefined);
   });
 
+  test('maps OpenAI stop to stopSequences (string or array, max 8)', async () => {
+    const streamText = mock.fn(() => ({
+      fullStream: (async function* () {
+        yield {
+          type: 'finish',
+          finishReason: 'stop',
+          totalUsage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            inputTokenDetails: { noCacheTokens: 1 },
+            outputTokenDetails: { textTokens: 1 },
+          },
+        };
+      })(),
+    }));
+
+    __setAnthropicPumpMocksForTests({
+      streamText,
+      buildAnthropicProvider: fakeAnthropicProvider,
+    });
+
+    const stops = ['\n', '```', '<|fim|>', '\n</file>', 'extra'];
+    const state = createGenerationState({
+      providerId: CANDIDATE.providerId,
+      body: {
+        model: CANDIDATE.modelId,
+        stream: true,
+        stop: stops,
+        messages: [{ role: 'user', content: 'Hi' }],
+      },
+    });
+    activeStates.push(state);
+
+    await pumpAnthropicUpstream({
+      state,
+      runtime: RUNTIME,
+      candidate: CANDIDATE,
+      ...PUMP_OPTS,
+    });
+
+    const callOptions = streamText.mock.calls[0]?.arguments[0];
+    assert.deepEqual(callOptions.stopSequences, stops.slice(0, 8));
+  });
+
   test('non-streaming path emits OpenAI chat.completion JSON via appendChunk', async () => {
     const generateText = mock.fn(async () => ({
       text: 'All done',

@@ -5,10 +5,7 @@
  */
 
 import {
-  cancelGeneration,
-  createGeneration,
   formatGenerationErrorMessage,
-  subscribeToGeneration,
   type GenerationEndEvent,
 } from '../../api/generations';
 import { modelCache } from '../../app-state';
@@ -36,6 +33,7 @@ import {
 import { reindentCompletionText, type RecentEditLine } from '../editor-ai-completion-prompt';
 import { extractEditorCodeFromReasoning } from '../editor-model-output';
 import { sanitizeQuickEditText } from '../editor-quick-edit/diff-apply';
+import { streamEditorGeneration, type EditorAiStreamDeps } from '../editor-ai-stream';
 import { resolveLanguageDescription } from '../editor-language';
 import { leadingWhitespace } from './intent-heuristic';
 
@@ -140,9 +138,11 @@ export function alignIntentBlock(code: string, baseIndent: string): string {
   const normalized = code.replace(/\r\n/g, '\n').replace(/\s+$/, '');
   if (!normalized.trim()) return '';
   const lines = normalized.split('\n');
-  const targetIndent = leadingWhitespace(
-    reindentCompletionText(lines[0] ?? '', baseIndent, '  '),
-  );
+  // reindentCompletionText keys off cursor indent in `prefix`; simulate an intent
+  // line ending at baseIndent, and a completion that starts on the next line.
+  const syntheticPrefix = `\n${baseIndent}`;
+  const firstAligned = reindentCompletionText(`\n${lines[0] ?? ''}`, syntheticPrefix, '  ');
+  const targetIndent = leadingWhitespace(firstAligned.replace(/^\n+/, ''));
   return reindentBlock(lines, targetIndent).join('\n');
 }
 
@@ -179,10 +179,7 @@ export function finalizeIntentText(
   return align(mined);
 }
 
-export interface IntentResolveDeps {
-  createGeneration?: typeof createGeneration;
-  subscribeToGeneration?: typeof subscribeToGeneration;
-  cancelGeneration?: typeof cancelGeneration;
+export interface IntentResolveDeps extends EditorAiStreamDeps {
   resolveProvider?: typeof resolveProvider;
   resolveBinding?: typeof resolveEditorAiBinding;
 }
@@ -217,9 +214,6 @@ export async function resolveIntentSuggestion(
   input: ResolveIntentInput,
   deps: IntentResolveDeps = {},
 ): Promise<IntentResolveResult> {
-  const createGen = deps.createGeneration ?? createGeneration;
-  const subscribeGen = deps.subscribeToGeneration ?? subscribeToGeneration;
-  const cancelGen = deps.cancelGeneration ?? cancelGeneration;
   const resolveProv = deps.resolveProvider ?? resolveProvider;
   const resolveBinding = deps.resolveBinding ?? resolveEditorAiBinding;
 
@@ -253,16 +247,6 @@ export async function resolveIntentSuggestion(
   const { body: thinkingPatch } = thinkingToCompletionBody('off', provider.apiKind, modelCaps);
   Object.assign(body, thinkingPatch);
 
-  let generationId: string;
-  try {
-    ({ generationId } = await createGen(provider.id, body, {
-      persist: false,
-      fallbackRole: 'utility',
-    }));
-  } catch (err) {
-    return { text: null, error: createGenerationErrorMessage(err) };
-  }
-
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
@@ -283,44 +267,39 @@ export async function resolveIntentSuggestion(
       resolve(result);
     };
 
-    let unsubscribe: (() => void) | null = null;
-    unsubscribe = subscribeGen(generationId, {
-      signal: input.signal,
-      onChunk: (chunk: ChatCompletionChunk) => {
-        contentAcc.ingestChoice(chunk.choices?.[0]);
-        reasoningAcc.ingestChunk(chunk);
-        const cleaned = emit(false);
-        if (cleaned) input.onPartial?.(cleaned);
+    void streamEditorGeneration(
+      provider.id,
+      body,
+      input.signal,
+      {
+        onChunk: (chunk: ChatCompletionChunk) => {
+          contentAcc.ingestChoice(chunk.choices?.[0]);
+          reasoningAcc.ingestChunk(chunk);
+          const cleaned = emit(false);
+          if (cleaned) input.onPartial?.(cleaned);
+        },
+        onEnd: (event?: GenerationEndEvent) => {
+          if (event?.status === 'error') {
+            finish({ text: null, error: generationEndErrorMessage(event) });
+            return;
+          }
+          const cleaned = emit(true);
+          finish(
+            cleaned.length > 0
+              ? { text: cleaned }
+              : { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE },
+          );
+        },
+        onTransportError: (err: unknown) => {
+          finish({ text: null, error: createGenerationErrorMessage(err) });
+        },
+        onAbort: () => {
+          finish({ text: null });
+        },
       },
-      onEnd: (event?: GenerationEndEvent) => {
-        unsubscribe?.();
-        if (event?.status === 'error') {
-          finish({ text: null, error: generationEndErrorMessage(event) });
-          return;
-        }
-        const cleaned = emit(true);
-        finish(
-          cleaned.length > 0
-            ? { text: cleaned }
-            : { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE },
-        );
-      },
-      onTransportError: (err: unknown) => {
-        unsubscribe?.();
-        finish({ text: null, error: createGenerationErrorMessage(err) });
-      },
+      deps,
+    ).catch((err) => {
+      finish({ text: null, error: createGenerationErrorMessage(err) });
     });
-
-    input.signal.addEventListener(
-      'abort',
-      () => {
-        unsubscribe?.();
-        void cancelGen(generationId).catch(() => {
-          /* best-effort */
-        });
-        finish({ text: null });
-      },
-      { once: true },
-    );
   });
 }

@@ -11,11 +11,23 @@ import type { CompletionMode } from './editor-completion-policy';
 import { stripEditorModelOutput } from './editor-model-output';
 
 /** Bump when prompt layout or validation rules change (cache invalidation). */
-export const PROMPT_VERSION = '6';
+export const PROMPT_VERSION = '7';
+
+/** Per-section character caps for optional context blocks (v7 prompt). */
+export const PROMPT_SECTION_CAPS = {
+  symbols: 200,
+  diagnostics: 400,
+  hover: 400,
+  imports: 600,
+  recentEdits: 400,
+} as const;
+
+export const EDITOR_AI_FIM_MARKER = '<|fim|>';
 
 export const EDITOR_AI_COMPLETION_SYSTEM =
-  'You are a code completion engine. Output only the text that should appear at the cursor. ' +
-  'No explanations, markdown fences, thinking tags, or comments unless they belong at the insertion point. ' +
+  'You are a code completion engine. The user message contains a <file> block with a ' +
+  `${EDITOR_AI_FIM_MARKER} marker. Output only the text that should replace ${EDITOR_AI_FIM_MARKER} — ` +
+  'no explanations, markdown fences, thinking tags, or comments unless they belong at the insertion point. ' +
   'Never wrap output in reasoning or thinking markup.';
 
 /** Default total character budget for optional prompt context blocks. */
@@ -288,14 +300,22 @@ export function applyContextBudget(
   return kept;
 }
 
+function capPromptSection(text: string, maxChars: number): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  if (trimmed.length <= maxChars) return trimmed;
+  return trimmed.slice(0, maxChars);
+}
+
 function formatRecentEdits(edits: RecentEditLine[]): string {
   if (!edits.length) return '';
-  return edits
+  const body = edits
     .map(
       (e) =>
         `L${e.lineNumber} before: ${e.before}\nL${e.lineNumber} after: ${e.after}`,
     )
     .join('\n');
+  return capPromptSection(body, PROMPT_SECTION_CAPS.recentEdits);
 }
 
 /** Build chat messages for a fill-in-the-middle completion request. */
@@ -326,16 +346,14 @@ export function buildEditorAiCompletionMessages(
         ? `Recent edits:\n${formatRecentEdits(input.recentEdits)}`
         : '',
     },
-    {
-      key: 'suffix',
-      priority: 3,
-      text: suffix.trim() ? `Text after cursor:\n${suffix}` : '',
-    },
   ];
 
   if (input.config.includeImportContext !== false) {
-    const imports = extractImportSymbols(input.state.doc.toString());
-    if (imports.trim()) {
+    const imports = capPromptSection(
+      extractImportSymbols(input.state.doc.toString()),
+      PROMPT_SECTION_CAPS.imports,
+    );
+    if (imports) {
       contextSections.push({
         key: 'imports',
         priority: 4,
@@ -344,43 +362,53 @@ export function buildEditorAiCompletionMessages(
     }
   }
 
-  const lspParts: string[] = [];
   if (input.lspSymbols?.trim()) {
-    lspParts.push(`Enclosing symbols:\n${input.lspSymbols.trim()}`);
+    const symbols = capPromptSection(input.lspSymbols.trim(), PROMPT_SECTION_CAPS.symbols);
+    if (symbols) {
+      contextSections.push({
+        key: 'symbols',
+        priority: 5,
+        text: `Enclosing symbols:\n${symbols}`,
+      });
+    }
   }
   if (input.lspDiagnostics?.trim()) {
-    lspParts.push(`Nearby diagnostics:\n${input.lspDiagnostics.trim()}`);
+    const diagnostics = capPromptSection(
+      input.lspDiagnostics.trim(),
+      PROMPT_SECTION_CAPS.diagnostics,
+    );
+    if (diagnostics) {
+      contextSections.push({
+        key: 'diagnostics',
+        priority: 5,
+        text: `Nearby diagnostics:\n${diagnostics}`,
+      });
+    }
   }
   if (input.lspHover?.trim()) {
-    lspParts.push(`Symbol at cursor:\n${input.lspHover.trim()}`);
+    const hover = capPromptSection(input.lspHover.trim(), PROMPT_SECTION_CAPS.hover);
+    if (hover) {
+      contextSections.push({
+        key: 'hover',
+        priority: 5,
+        text: `Symbol at cursor:\n${hover}`,
+      });
+    }
   }
-  if (lspParts.length > 0) {
-    contextSections.push({
-      key: 'lsp',
-      priority: 5,
-      text: lspParts.join('\n\n'),
-    });
-  }
-
-  contextSections.push({
-    key: 'broader',
-    priority: 6,
-    text: prefix.length > currentLineBefore.length
-      ? `Broader context before cursor:\n${prefix.slice(0, -currentLineBefore.length)}`
-      : '',
-  });
 
   const budget = input.config.contextBudgetChars ?? DEFAULT_CONTEXT_BUDGET_CHARS;
   const contextBlocks = applyContextBudget(contextSections, budget);
 
   const constraints = [
     'Insertion constraints:',
-    '- Output only text to insert at <CURSOR>; no surrounding code already in the file.',
+    `- Output only the text that replaces ${EDITOR_AI_FIM_MARKER} in the <file> block.`,
     '- Preserve required leading newlines and match indentation when continuing a block.',
     indent ? `- Cursor indentation: ${JSON.stringify(indent)}` : '- Cursor indentation: (none)',
-    '- Do not repeat text already before or after the cursor.',
+    '- Do not repeat surrounding code from the <file> block.',
     '- No explanations, markdown fences, or full-file rewrites.',
   ].join('\n');
+
+  const fileBlock = `<file>\n${prefix}${EDITOR_AI_FIM_MARKER}${suffix}\n</file>`;
 
   const userBody = [
     `File: ${pathLine}`,
@@ -388,11 +416,7 @@ export function buildEditorAiCompletionMessages(
     '---',
     constraints,
     ...(contextBlocks.length > 0 ? ['---', ...contextBlocks, '---'] : ['---']),
-    'Before cursor:',
-    prefix,
-    '<CURSOR>',
-    'After cursor:',
-    suffix,
+    fileBlock,
   ].join('\n');
 
   const messages: ApiMessage[] = [
