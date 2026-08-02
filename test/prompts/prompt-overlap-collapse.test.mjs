@@ -124,7 +124,8 @@ describe('prompt overlap collapse (MIN-335 / MIN-379)', () => {
       infoPresetId: 'general-assistant',
     });
 
-    const currentTokens = estimateTokensFromText(current);
+    // Normalize newlines so Windows checkouts (CRLF) match Linux CI token estimates.
+    const currentTokens = estimateTokensFromText(current.replace(/\r\n/g, '\n'));
     // Pre-MIN-379: base + build mode + builder + tool-usage stack (~5900 tok).
     const preMin379BuildTokens = 5900;
     const saved = preMin379BuildTokens - currentTokens;
