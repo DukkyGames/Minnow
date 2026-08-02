@@ -80,4 +80,14 @@ describe('fake LSP integration', () => {
     assert.ok(signatureHelp?.signatures?.length);
     assert.match(String(signatureHelp.signatures[0].label ?? ''), /fakeFn/i);
   });
+
+  test('getLspDocumentFormatting returns fixture edits', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
+      return;
+    }
+    const { getLspDocumentFormatting } = await import('../../server/lsp/manager.js');
+    const { edits } = await getLspDocumentFormatting('test/fixtures/sample.fake');
+    assert.ok(Array.isArray(edits));
+    assert.equal(edits[0]?.newText, 'formatted');
+  });
 });

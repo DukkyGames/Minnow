@@ -133803,7 +133803,7 @@ var init_file_editor_ai_extensions = __esm({
       }
     ];
     editorAiTabBinding = editorAiGhostKeymapBindings[0];
-    editorAiEscapeBinding = editorAiGhostKeymapBindings[1];
+    editorAiEscapeBinding = editorAiGhostKeymapBindings[2];
     EditorAiCompletionPlugin = class {
       constructor(view2, opts) {
         this.view = view2;

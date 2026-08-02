@@ -285,3 +285,30 @@ export async function fetchLspDocumentSymbols(
     symbols: data.ok && Array.isArray(data.data.symbols) ? data.data.symbols : [],
   };
 }
+
+export interface LspFormatResponse {
+  edits: LspTextEdit[];
+  serverId?: string;
+  error?: string;
+}
+
+/** Whole-document format via POST /api/lsp/format. */
+export async function fetchLspDocumentFormat(
+  path: string,
+  options?: { text?: string; tabSize?: number; insertSpaces?: boolean },
+): Promise<LspFormatResponse> {
+  const body: Record<string, unknown> = { path };
+  if (options?.text !== undefined) body.text = options.text;
+  if (options?.tabSize !== undefined) body.tabSize = options.tabSize;
+  if (options?.insertSpaces !== undefined) body.insertSpaces = options.insertSpaces;
+  const data = await postLspJson<LspFormatResponse>('/api/lsp/format', body);
+  if (!data.ok) {
+    return { edits: [], error: data.error };
+  }
+  const payload = data.data;
+  return {
+    edits: Array.isArray(payload.edits) ? payload.edits : [],
+    serverId: payload.serverId,
+    error: payload.error,
+  };
+}

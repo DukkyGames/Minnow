@@ -28,6 +28,8 @@ export interface LspServerStatus {
 /** Merged LSP config from GET /api/config/lsp */
 export interface LspConfigResponse {
   enabled: boolean;
+  /** LSP languageIds that receive textDocument/formatting on save (opt-in; default none). */
+  formatOnSaveLanguageIds?: string[];
   lsp: Record<string, LspServerConfig>;
   servers: LspServerStatus[];
 }
@@ -45,6 +47,7 @@ export interface LspServerConfig {
 /** Partial update for PUT /api/config/lsp */
 export interface LspConfigPatch {
   enabled?: boolean;
+  formatOnSaveLanguageIds?: string[];
   lsp?: Record<string, LspServerConfig>;
   removeLspIds?: string[];
 }

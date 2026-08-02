@@ -18,6 +18,8 @@ import { buildLspProcessEnv } from './paths.js';
 import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import {
   matchServersForPath,
+  serverSupportsDocumentFormatting,
+  serverSupportsRangeFormatting,
   serverSupportsWorkspaceSymbols,
 } from '../../src/lsp/merge-config.mjs';
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
@@ -40,6 +42,7 @@ const LSP_COMPLETION_TIMEOUT_MS = 1500;
 const LSP_HOVER_TIMEOUT_MS = 1000;
 const LSP_SIGNATURE_TIMEOUT_MS = 1000;
 const LSP_DEFINITION_TIMEOUT_MS = 3000;
+const LSP_FORMAT_TIMEOUT_MS = 10_000;
 const LSP_INITIALIZE_TIMEOUT_MS = 20_000;
 const MAX_LSP_STDERR_LINES = 80;
 const MAX_DIAGNOSTIC_SNAPSHOT_ENTRIES = 128;
@@ -1568,6 +1571,120 @@ export async function getLspCallHierarchy(relativePath, line, character) {
     }
   }
   return { item: null, incomingCalls: [], outgoingCalls: [] };
+}
+
+function normalizeTextEdits(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const edit of raw) {
+    if (!edit || typeof edit !== 'object') continue;
+    const range = edit.range;
+    if (!range || typeof range !== 'object') continue;
+    const start = range.start;
+    const end = range.end;
+    if (!start || !end) continue;
+    out.push({
+      range: {
+        start: { line: Number(start.line) || 0, character: Number(start.character) || 0 },
+        end: { line: Number(end.line) || 0, character: Number(end.character) || 0 },
+      },
+      newText: typeof edit.newText === 'string' ? edit.newText : '',
+    });
+  }
+  return out;
+}
+
+/**
+ * Whole-document formatting (first server that advertises documentFormattingProvider).
+ * @param {string} relativePath
+ * @param {{ editorText?: string, tabSize?: number, insertSpaces?: boolean }} [options]
+ */
+export async function getLspDocumentFormatting(relativePath, options = {}) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }), { editorText: options.editorText });
+  if (!ctx.ok) {
+    return { edits: [], error: ctx.error };
+  }
+
+  const tabSize = Number.isFinite(options.tabSize) ? options.tabSize : 2;
+  const insertSpaces = options.insertSpaces !== false;
+  const formatOptions = { tabSize, insertSpaces };
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
+      if (!serverSupportsDocumentFormatting(state.serverCapabilities)) {
+        continue;
+      }
+      const edits = await sendLspRequest(
+        state.connection,
+        'textDocument/formatting',
+        {
+          textDocument: { uri: ctx.fileUri },
+          options: formatOptions,
+        },
+        LSP_FORMAT_TIMEOUT_MS,
+      );
+      return { edits: normalizeTextEdits(edits), serverId: id };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      recordLspBridgeError(`[${id}] formatting: ${message}`, { serverId: id, kind: 'request' });
+      return { edits: [], error: `[${id}] ${message}` };
+    }
+  }
+  return { edits: [], error: 'No document formatting provider for this file' };
+}
+
+/**
+ * Range formatting at LSP positions (first server with documentRangeFormattingProvider).
+ * @param {string} relativePath
+ * @param {{ start: { line: number, character: number }, end: { line: number, character: number } }} range
+ * @param {{ editorText?: string, tabSize?: number, insertSpaces?: boolean }} [options]
+ */
+export async function getLspRangeFormatting(relativePath, range, options = {}) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }), { editorText: options.editorText });
+  if (!ctx.ok) {
+    return { edits: [], error: ctx.error };
+  }
+
+  const tabSize = Number.isFinite(options.tabSize) ? options.tabSize : 2;
+  const insertSpaces = options.insertSpaces !== false;
+  const formatOptions = { tabSize, insertSpaces };
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
+      if (!serverSupportsRangeFormatting(state.serverCapabilities)) {
+        continue;
+      }
+      const edits = await sendLspRequest(
+        state.connection,
+        'textDocument/rangeFormatting',
+        {
+          textDocument: { uri: ctx.fileUri },
+          range,
+          options: formatOptions,
+        },
+        LSP_FORMAT_TIMEOUT_MS,
+      );
+      return { edits: normalizeTextEdits(edits), serverId: id };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      recordLspBridgeError(`[${id}] rangeFormatting: ${message}`, {
+        serverId: id,
+        kind: 'request',
+      });
+      return { edits: [], error: `[${id}] ${message}` };
+    }
+  }
+  return { edits: [], error: 'No range formatting provider for this file' };
 }
 
 /**
