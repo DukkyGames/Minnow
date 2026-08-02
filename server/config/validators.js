@@ -1701,28 +1701,22 @@ export function mergeConfigMeta(existing, patch) {
         ? { .../** @type {Record<string, unknown>} */ (base.editorIntentMode) }
         : {
             enabledByDefault: false,
-            autoRecheckDefault: false,
-            debounceMs: 450,
-            contextWindow: 5,
-            recheckDelayMs: 600,
-            maxRecheckPasses: 8,
+            debounceMs: 400,
+            sigil: '',
+            providerId: '',
+            modelId: '',
+            maxTokens: 768,
           };
     const e = /** @type {Record<string, unknown>} */ (p.editorIntentMode);
     if (typeof e.enabledByDefault === 'boolean') existing.enabledByDefault = e.enabledByDefault;
-    if (typeof e.autoRecheckDefault === 'boolean') {
-      existing.autoRecheckDefault = e.autoRecheckDefault;
-    }
     if (typeof e.debounceMs === 'number' && Number.isFinite(e.debounceMs)) {
-      existing.debounceMs = Math.min(2000, Math.max(200, Math.round(e.debounceMs)));
+      existing.debounceMs = Math.min(2000, Math.max(100, Math.round(e.debounceMs)));
     }
-    if (typeof e.contextWindow === 'number' && Number.isFinite(e.contextWindow)) {
-      existing.contextWindow = Math.min(20, Math.max(1, Math.round(e.contextWindow)));
-    }
-    if (typeof e.recheckDelayMs === 'number' && Number.isFinite(e.recheckDelayMs)) {
-      existing.recheckDelayMs = Math.min(5000, Math.max(200, Math.round(e.recheckDelayMs)));
-    }
-    if (typeof e.maxRecheckPasses === 'number' && Number.isFinite(e.maxRecheckPasses)) {
-      existing.maxRecheckPasses = Math.min(32, Math.max(1, Math.round(e.maxRecheckPasses)));
+    if (typeof e.sigil === 'string') existing.sigil = e.sigil.trim();
+    if (typeof e.providerId === 'string') existing.providerId = e.providerId.trim();
+    if (typeof e.modelId === 'string') existing.modelId = e.modelId.trim();
+    if (typeof e.maxTokens === 'number' && Number.isFinite(e.maxTokens)) {
+      existing.maxTokens = Math.min(4096, Math.max(128, Math.round(e.maxTokens)));
     }
     base.editorIntentMode = existing;
   }

@@ -2,11 +2,12 @@
  * Client-side workspace root — synced from /api/workspace when npm start is running.
  */
 
-import { fetchWorkspace, type WorkspaceInfo } from '../config/workspace-api';
+import { fetchWorkspace, type WorkspaceInfo, type WorkspaceRecentItem } from '../config/workspace-api';
 
 let workspacePath = '';
 let workspaceLabel = '';
 let workspaceIsDefault = true;
+let workspaceRecent: WorkspaceRecentItem[] = [];
 
 /** Absolute path of the AI workspace folder. */
 export function getWorkspacePath(): string {
@@ -27,6 +28,14 @@ function applyWorkspaceInfo(info: WorkspaceInfo): void {
   workspacePath = info.path ?? '';
   workspaceLabel = info.label ?? '';
   workspaceIsDefault = info.isDefault === true;
+  if (Array.isArray(info.recent)) {
+    workspaceRecent = info.recent;
+  }
+}
+
+/** MRU rows last seen from GET/PUT workspace (instant workspace menu paint). */
+export function getWorkspaceRecentItems(): readonly WorkspaceRecentItem[] {
+  return workspaceRecent;
 }
 
 /** Load workspace from server; leaves prior values if unavailable. */
@@ -47,4 +56,5 @@ export function resetWorkspaceStateForTests(): void {
   workspacePath = '';
   workspaceLabel = '';
   workspaceIsDefault = true;
+  workspaceRecent = [];
 }

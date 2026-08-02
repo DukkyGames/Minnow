@@ -142,7 +142,13 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.msg.user { align-self: flex-end; align-items: flex-end; }
+.msg.user {
+  align-self: flex-end;
+  align-items: flex-end;
+  /* Shrink-wrap so short text is not squeezed by the full-width flex row (overflow-wrap: anywhere on bubbles). */
+  width: fit-content;
+  max-width: 100%;
+}
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
 
 .msg.assistant.msg--stopped .msg-stopped-chip {
@@ -290,6 +296,9 @@
   border: none;
   color: var(--mn-fg);
   border-bottom-right-radius: var(--radius-sm);
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .msg-bubble.msg-bubble--user-parts {

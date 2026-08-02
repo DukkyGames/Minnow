@@ -7,6 +7,7 @@ import {
   removeRecentWorkspace,
   type WorkspaceRecentItem,
 } from '../config/workspace-api';
+import { getWorkspaceRecentItems, setWorkspaceFromServer } from '../state/workspace';
 import {
   registerChromePopover,
   unregisterChromePopover,
@@ -201,13 +202,9 @@ async function selectRecentWorkspace(absPath: string): Promise<void> {
   }
 }
 
-/** Re-fetch workspace and paint MRU rows. */
-export async function renderMenuList(): Promise<void> {
-  const menu = ensureMenu();
+/** Paint MRU rows plus footer actions into the menu element. */
+function paintWorkspaceMenuList(menu: HTMLUListElement, recent: WorkspaceRecentItem[]): void {
   menu.innerHTML = '';
-
-  const info = await fetchWorkspace();
-  const recent = info?.recent ?? [];
 
   for (const item of recent) {
     menu.appendChild(createRecentRow(item));
@@ -233,6 +230,22 @@ export async function renderMenuList(): Promise<void> {
   menu.appendChild(openLi);
 }
 
+/** Re-fetch workspace and paint MRU rows. */
+export async function renderMenuList(): Promise<void> {
+  const menu = ensureMenu();
+  const cached = getWorkspaceRecentItems();
+  if (cached.length > 0) {
+    paintWorkspaceMenuList(menu, [...cached]);
+  }
+
+  const info = await fetchWorkspace();
+  if (info) {
+    setWorkspaceFromServer(info);
+  }
+  const recent = info?.recent ?? [...cached];
+  paintWorkspaceMenuList(menu, [...recent]);
+}
+
 /** Open or close the menu for tests and the top bar button. */
 export async function toggleWorkspaceMenu(btn: HTMLButtonElement): Promise<void> {
   if (!menuDeps.isServerAvailable()) {
@@ -247,6 +260,19 @@ export async function toggleWorkspaceMenu(btn: HTMLButtonElement): Promise<void>
 
   anchorBtn = btn;
   const menu = ensureMenu();
+  const cached = getWorkspaceRecentItems();
+  if (cached.length > 0) {
+    paintWorkspaceMenuList(menu, [...cached]);
+    menu.classList.remove('hidden');
+    positionMenu(btn, menu);
+    menuOpen = true;
+    registerChromePopover();
+    setAnchorExpanded(true);
+    attachGlobalListeners();
+    void renderMenuList();
+    return;
+  }
+
   await renderMenuList();
   menu.classList.remove('hidden');
   positionMenu(btn, menu);

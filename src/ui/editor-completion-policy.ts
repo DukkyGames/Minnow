@@ -35,9 +35,28 @@ export function isLspBusy(state: EditorState): boolean {
   return status === 'pending' || status === 'active';
 }
 
-/** AI Tab binding should yield so LSP (or indent) can handle the key. */
-export function shouldAiTabYieldToLsp(state: EditorState): boolean {
-  return isLspBusy(state);
+/** What the editor's Tab key should do right now. */
+export type SuggestionTabTarget = 'lsp' | 'intent' | 'completion' | 'indent';
+
+/** Which suggestion kinds are currently painted in the editor. */
+export interface VisibleSuggestions {
+  intent: boolean;
+  completion: boolean;
+}
+
+/**
+ * Arbitrate Tab between the LSP menu, an intent proposal, a completion ghost,
+ * and plain indentation. `lsp` and `indent` mean the suggestion keymap must
+ * return false so the lower-precedence file editor keymap handles the key.
+ */
+export function suggestionTabTarget(
+  state: EditorState,
+  visible: VisibleSuggestions,
+): SuggestionTabTarget {
+  if (isLspBusy(state)) return 'lsp';
+  if (visible.intent) return 'intent';
+  if (visible.completion) return 'completion';
+  return 'indent';
 }
 
 /** LSP Tab binding should take precedence over indent (pending or active). */

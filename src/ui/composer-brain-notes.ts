@@ -22,8 +22,31 @@ import { createIcon } from './icon';
 import { isComposerRecoveryBlocked } from './composer-send';
 import { refreshContextUsageRing } from './context-usage-ring';
 
-let rootEl: HTMLElement | null = null;
-let toggleBtn: HTMLButtonElement | null = null;
+interface BrainNotesMount {
+  rootId: string;
+  wrapId?: string;
+  buttonClass: string;
+  rootEl: HTMLElement | null;
+  toggleBtn: HTMLButtonElement | null;
+}
+
+const mounts: BrainNotesMount[] = [
+  {
+    rootId: 'composerBrainNotesControl',
+    wrapId: 'composerBrainNotesWrap',
+    buttonClass: 'brain-notes-toggle-btn thinking-toggle-btn',
+    rootEl: null,
+    toggleBtn: null,
+  },
+  {
+    rootId: 'desktopBrainNotesControl',
+    wrapId: 'desktopBrainNotesWrap',
+    buttonClass: 'mn-os-desktop-comp-btn brain-notes-toggle-btn thinking-toggle-btn',
+    rootEl: null,
+    toggleBtn: null,
+  },
+];
+
 let cachedGlobalDefault: boolean | null = null;
 
 function formatBrainNotesTitle(
@@ -55,7 +78,6 @@ function applyChatBrainNotesInjection(mode: ThinkingTriState): void {
 }
 
 async function onToggleClick(): Promise<void> {
-  if (toggleBtn?.disabled) return;
   const globalDefault =
     cachedGlobalDefault ?? (await fetchMemoryInjectionEnabled());
   cachedGlobalDefault = globalDefault;
@@ -66,17 +88,16 @@ async function onToggleClick(): Promise<void> {
   applyChatBrainNotesInjection(nextThinkingTriStateOnClick(tri, resolvedMode));
 }
 
-/** Mount Brain notes toggle into #composerBrainNotesControl. */
-export function initBrainNotesInjectionControl(): void {
-  rootEl = document.getElementById('composerBrainNotesControl');
+function mountBrainNotesControl(config: (typeof mounts)[number]): void {
+  const rootEl = document.getElementById(config.rootId);
   if (!rootEl) return;
 
   rootEl.innerHTML = '';
   rootEl.className = 'brain-notes-toggle-host';
 
-  toggleBtn = document.createElement('button');
+  const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
-  toggleBtn.className = 'brain-notes-toggle-btn thinking-toggle-btn';
+  toggleBtn.className = config.buttonClass;
   toggleBtn.setAttribute('aria-label', 'Brain notes injection');
   toggleBtn.addEventListener('click', () => {
     void onToggleClick();
@@ -85,6 +106,16 @@ export function initBrainNotesInjectionControl(): void {
   const icon = createIcon('brainMemories', { className: 'thinking-toggle-icon' });
   toggleBtn.appendChild(icon);
   rootEl.appendChild(toggleBtn);
+
+  config.rootEl = rootEl;
+  config.toggleBtn = toggleBtn;
+}
+
+/** Mount Brain notes toggles for Code and desktop composers. */
+export function initBrainNotesInjectionControl(): void {
+  for (const mount of mounts) {
+    mountBrainNotesControl(mount);
+  }
   void ensureSessionsReady().then(() => syncComposerBrainNotesFromActiveChat());
 }
 
@@ -92,17 +123,8 @@ export function initBrainNotesInjectionControl(): void {
 export async function syncComposerBrainNotesFromActiveChat(): Promise<void> {
   if (!sessionState) return;
 
-  const wrap = document.getElementById('composerBrainNotesWrap');
   const storeEnabled = await fetchMemoryEnabled();
   const show = storeEnabled;
-
-  if (wrap) {
-    wrap.classList.toggle('hidden', !show);
-  }
-  if (rootEl) {
-    rootEl.classList.toggle('hidden', !show);
-  }
-  if (!toggleBtn || !show) return;
 
   const globalDefault = await fetchMemoryInjectionEnabled();
   cachedGlobalDefault = globalDefault;
@@ -111,12 +133,25 @@ export async function syncComposerBrainNotesFromActiveChat(): Promise<void> {
   const tri = resolveBrainNotesInjectionTriState(chat);
   const resolvedOn = resolveBrainNotesInjectionEnabled(chat, globalDefault);
   const disabled = isActiveChatStreaming() || isComposerRecoveryBlocked();
+  const title = formatBrainNotesTitle(tri, resolvedOn, globalDefault);
 
-  toggleBtn.setAttribute('aria-pressed', resolvedOn ? 'true' : 'false');
-  toggleBtn.dataset.inherit = tri === 'inherit' ? 'true' : 'false';
-  toggleBtn.dataset.brainNotesTri = tri;
-  toggleBtn.disabled = disabled;
-  toggleBtn.title = formatBrainNotesTitle(tri, resolvedOn, globalDefault);
+  for (const mount of mounts) {
+    if (mount.wrapId) {
+      const wrap = document.getElementById(mount.wrapId);
+      wrap?.classList.toggle('hidden', !show);
+    }
+    if (mount.rootEl) {
+      mount.rootEl.classList.toggle('hidden', !show);
+    }
+    const toggleBtn = mount.toggleBtn;
+    if (!toggleBtn || !show) continue;
+
+    toggleBtn.setAttribute('aria-pressed', resolvedOn ? 'true' : 'false');
+    toggleBtn.dataset.inherit = tri === 'inherit' ? 'true' : 'false';
+    toggleBtn.dataset.brainNotesTri = tri;
+    toggleBtn.disabled = disabled;
+    toggleBtn.title = title;
+  }
 }
 
 export function refreshBrainNotesControlDisabled(): void {

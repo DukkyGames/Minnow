@@ -28,10 +28,11 @@ import {
 import { StreamingContentAccumulator } from '../../src/api/message-content.ts';
 import { BenchmarkStreamReasoningAccumulator } from '../../src/benchmark/stream-text.ts';
 import {
-  editorAiCompletionExtensions,
-  hasEditorAiGhost,
-  setEditorAiGhostForTest,
-} from '../../src/ui/file-editor-ai-extensions.ts';
+  editorSuggestionBaseExtensions,
+  editorSuggestionExtensions,
+  hasCompletionSuggestion,
+  setCompletionSuggestionForTest,
+} from '../../src/ui/editor-suggestions/index.ts';
 import { fileEditorKeymapExtensions } from '../../src/ui/file-editor-keymap.ts';
 import {
   EditorAiCompletionCache,
@@ -379,7 +380,8 @@ describe('editor AI ghost DOM', () => {
         doc: 'const x = ',
         extensions: [
           ...fileEditorKeymapExtensions(),
-          ...editorAiCompletionExtensions({
+          ...editorSuggestionBaseExtensions(),
+          ...editorSuggestionExtensions({
             filePath: 'test.ts',
             config: DEFAULT_EDITOR_AI_COMPLETION,
             canRequest: () => false,
@@ -390,8 +392,8 @@ describe('editor AI ghost DOM', () => {
     });
 
     const pos = view.state.doc.length;
-    setEditorAiGhostForTest(view, '42;', pos);
-    assert.equal(hasEditorAiGhost(view.state), true);
+    setCompletionSuggestionForTest(view, '42;', pos);
+    assert.equal(hasCompletionSuggestion(view.state), true);
     const ghost = parent.querySelector('.cm-ai-ghost-text');
     assert.ok(ghost, 'expected ghost span in editor DOM');
     assert.equal(ghost?.textContent, '42;');

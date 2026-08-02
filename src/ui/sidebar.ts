@@ -341,6 +341,7 @@ export function onModelSelectChange(): void {
 export async function applyWorkspaceScopedSession(
   newPath: string,
   previousPath?: string,
+  options?: { skipFileTreeSync?: boolean },
 ): Promise<void> {
   clearChatSelection();
   // Workspace switch may enter/leave a git repo — recheck Undo visibility.
@@ -359,8 +360,10 @@ export async function applyWorkspaceScopedSession(
     syncComposerRunTargetFromActiveChat();
     syncComposerUndoFromActiveChat();
     syncViewModeToggleFromActiveChat();
-    clearPanelCwdUserOverride();
-    syncPanelFromActiveChat({ forceFileTree: true });
+    if (!options?.skipFileTreeSync) {
+      clearPanelCwdUserOverride();
+      syncPanelFromActiveChat({ forceFileTree: true });
+    }
     syncWorkAgentDevFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
     void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());

@@ -38,7 +38,10 @@ import {
   loadEditorAiCompletionConfig,
   getEditorAiCompletionConfigSync,
 } from '../config/editor-ai-completion';
-import { loadEditorIntentModeConfig } from '../config/editor-intent-mode';
+import {
+  getEditorIntentModeConfigSync,
+  loadEditorIntentModeConfig,
+} from '../config/editor-intent-mode';
 import { EDITOR_AI_NO_MODEL_MESSAGE } from './editor-ai-completion-client';
 import { loadEditorSettings } from '../config/editor-settings';
 import { minnowEditorExtensions } from './codemirror-theme';
@@ -47,13 +50,15 @@ import { loadLanguageExtensionsForPath } from './editor-language';
 import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
 import { setLspDiagnosticsChromeListener } from './lsp-editor';
-import { editorAiCompletionExtensions, editorAiCompletionCompartmentExtension, reconfigureEditorAiCompletion, type EditorAiExtensionOptions } from './file-editor-ai-extensions';
 import {
-  editorIntentModeExtensions,
-  mountIntentModeEditor,
-  isIntentModeEnabled,
-  toggleIntentMode,
-} from './editor-intent-mode';
+  editorSuggestionBaseExtensions,
+  editorSuggestionCompartmentExtension,
+  editorSuggestionExtensions,
+  mountEditorSuggestions,
+  reconfigureEditorSuggestions,
+  type EditorSuggestionOptions,
+} from './editor-suggestions';
+import { isIntentEnabled, toggleIntentMode } from './editor-suggestions';
 import { addCodeReferenceToComposer } from '../attachments/code-ref';
 import { codeSelectionDragExtension } from './editor-code-selection-drag';
 import {
@@ -120,13 +125,12 @@ let viewerContextMenuBound = false;
 let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 let editorAiStatusEl: HTMLElement | null = null;
-let editorIntentStatusEl: HTMLElement | null = null;
 let editorIntentToggleEl: HTMLButtonElement | null = null;
 /** Per-document Intent mode enabled flag (session only). */
 const intentModeEnabledByPath = new Map<string, boolean>();
 let editorAiModelSelectListener: (() => void) | null = null;
-/** Live AI extension options for hot-reload without remounting the editor. */
-let editorAiOpts: EditorAiExtensionOptions | null = null;
+/** Live suggestion options for hot-reload without remounting the editor. */
+let editorAiOpts: EditorSuggestionOptions | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
 /** Blob URL for the active PDF preview; revoked when the tab unmounts. */
 let activePdfPreviewBlobUrl: string | null = null;
@@ -273,10 +277,6 @@ function getIntentToggleButton(): HTMLButtonElement | null {
   return document.getElementById('btnFileViewerIntent') as HTMLButtonElement | null;
 }
 
-function getIntentStatusElement(): HTMLElement | null {
-  return document.getElementById('fileViewerIntentStatus');
-}
-
 function isIntentModeEnabledForPath(path: string, defaultEnabled: boolean): boolean {
   if (intentModeEnabledByPath.has(path)) {
     return intentModeEnabledByPath.get(path) === true;
@@ -286,7 +286,7 @@ function isIntentModeEnabledForPath(path: string, defaultEnabled: boolean): bool
 
 function setIntentModeEnabledForPath(path: string, enabled: boolean): void {
   intentModeEnabledByPath.set(path, enabled);
-  updateIntentToolbarChrome(enabled, 0);
+  updateIntentToolbarChrome(enabled);
 }
 
 /** Per-path Intent toggle memory (shared by primary and secondary editors). */
@@ -298,59 +298,40 @@ export function isIntentModeEnabledForViewerPath(path: string, defaultEnabled: b
   return isIntentModeEnabledForPath(path, defaultEnabled);
 }
 
-function updateIntentToolbarChrome(enabled: boolean, staleCount: number): void {
-  const toggle = editorIntentToggleEl ?? getIntentToggleButton();
-  const status = editorIntentStatusEl ?? getIntentStatusElement();
-  applyIntentToolbarChrome(toggle, status, enabled, staleCount);
+function updateIntentToolbarChrome(enabled: boolean): void {
+  applyIntentToolbarChrome(editorIntentToggleEl ?? getIntentToggleButton(), enabled);
 }
 
 function getSecondaryIntentToggleButton(): HTMLButtonElement | null {
   return document.getElementById('btnFileViewerIntentSecondary') as HTMLButtonElement | null;
 }
 
-function getSecondaryIntentStatusElement(): HTMLElement | null {
-  return document.getElementById('fileViewerIntentStatusSecondary');
-}
-
 function getSecondarySaveButton(): HTMLButtonElement | null {
   return document.getElementById('btnFileViewerSaveSecondary') as HTMLButtonElement | null;
 }
 
-function applyIntentToolbarChrome(
-  toggle: HTMLButtonElement | null,
-  status: HTMLElement | null,
-  enabled: boolean,
-  staleCount: number,
-): void {
-  if (toggle) {
-    toggle.classList.toggle('is-active', enabled);
-    toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-  }
-  if (!status) return;
-  if (!enabled) {
-    status.hidden = true;
-    status.textContent = '';
-    status.className = 'file-viewer-intent-status';
-    return;
-  }
-  status.hidden = false;
-  if (staleCount > 0) {
-    status.textContent = `${staleCount} stale`;
-    status.className = 'file-viewer-intent-status file-viewer-intent-status--stale';
-  } else {
-    status.textContent = 'in sync';
-    status.className = 'file-viewer-intent-status file-viewer-intent-status--ok';
-  }
+function applyIntentToolbarChrome(toggle: HTMLButtonElement | null, enabled: boolean): void {
+  if (!toggle) return;
+  toggle.classList.toggle('is-active', enabled);
+  toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  if (!enabled) toggle.classList.remove('is-busy');
+}
+
+/** Spinner on the toggle while an intent proposal is being generated. */
+function applyIntentBusyChrome(toggle: HTMLButtonElement | null, busy: boolean): void {
+  if (!toggle) return;
+  toggle.classList.toggle('is-busy', busy);
+  toggle.setAttribute('aria-busy', busy ? 'true' : 'false');
 }
 
 /** Intent chrome for the secondary editor group header. */
-export function syncSecondaryIntentToolbarChrome(enabled: boolean, staleCount: number): void {
-  applyIntentToolbarChrome(
-    getSecondaryIntentToggleButton(),
-    getSecondaryIntentStatusElement(),
-    enabled,
-    staleCount,
-  );
+export function syncSecondaryIntentToolbarChrome(enabled: boolean): void {
+  applyIntentToolbarChrome(getSecondaryIntentToggleButton(), enabled);
+}
+
+/** Intent busy chrome for the secondary editor group header. */
+export function syncSecondaryIntentBusyChrome(busy: boolean): void {
+  applyIntentBusyChrome(getSecondaryIntentToggleButton(), busy);
 }
 
 function syncSecondaryIntentToolbarAvailability(tab: ViewerTabState | null): void {
@@ -394,13 +375,10 @@ export function updateSecondaryViewerChrome(): void {
     void import('./file-viewer-secondary-slot').then((m) => {
       const secondaryView = m.getSecondaryViewerEditorView();
       if (!secondaryView) return;
-      syncSecondaryIntentToolbarChrome(
-        isIntentModeEnabled(secondaryView.state),
-        0,
-      );
+      syncSecondaryIntentToolbarChrome(isIntentEnabled(secondaryView.state));
     });
   } else {
-    syncSecondaryIntentToolbarChrome(false, 0);
+    syncSecondaryIntentToolbarChrome(false);
   }
 }
 
@@ -648,10 +626,12 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     const useEditorAi =
       editorAiConfig.enabled && !tab.readOnlyExcerpt && getLocalServerAvailable();
     const canMountEditorAi = !tab.readOnlyExcerpt && getLocalServerAvailable();
+    const intentInitialEnabled = isIntentModeEnabledForPath(path, intentConfig.enabledByDefault);
     editorAiOpts = canMountEditorAi
       ? {
           filePath: path,
           getConfig: getEditorAiCompletionConfigSync,
+          getIntentConfig: getEditorIntentModeConfigSync,
           canRequest: () => getLocalServerAvailable(),
           onStatus: (message) => {
             if (!editorAiStatusEl) return;
@@ -662,17 +642,21 @@ function mountEditor(tab: ViewerTabState, content: string): void {
               editorAiStatusEl.hidden = true;
             }
           },
+          onIntentEnabledChange: (enabled) => {
+            setIntentModeEnabledForPath(path, enabled);
+          },
+          onIntentBusyChange: (busy) => {
+            applyIntentBusyChrome(editorIntentToggleEl ?? getIntentToggleButton(), busy);
+          },
         }
       : null;
-    const aiExts = canMountEditorAi
-      ? [
-          editorAiCompletionCompartmentExtension(
-            useEditorAi && editorAiOpts
-              ? editorAiCompletionExtensions(editorAiOpts)
-              : [],
-          ),
-        ]
-      : [];
+    const aiExts =
+      canMountEditorAi && editorAiOpts
+        ? [
+            ...editorSuggestionBaseExtensions(),
+            editorSuggestionCompartmentExtension(editorSuggestionExtensions(editorAiOpts)),
+          ]
+        : [];
     if (useEditorAi) attachEditorAiModelSelectListener();
     const quickEditExts =
       !tab.readOnlyExcerpt && getLocalServerAvailable()
@@ -681,33 +665,6 @@ function mountEditor(tab: ViewerTabState, content: string): void {
             canRequest: () => getLocalServerAvailable(),
           })
         : [];
-    const intentInitialEnabled = isIntentModeEnabledForPath(path, intentConfig.enabledByDefault);
-    const intentExts =
-      !tab.readOnlyExcerpt && getLocalServerAvailable()
-        ? editorIntentModeExtensions({
-            filePath: path,
-            config: intentConfig,
-            canRequest: () => getLocalServerAvailable(),
-            initialEnabled: intentInitialEnabled,
-            onEnabledChange: (enabled) => {
-              setIntentModeEnabledForPath(path, enabled);
-            },
-            onStaleCount: (count) => {
-              if (!editorView) return;
-              updateIntentToolbarChrome(isIntentModeEnabled(editorView.state), count);
-            },
-            onStatus: (message) => {
-              if (!editorAiStatusEl) return;
-              if (message) {
-                editorAiStatusEl.textContent = message;
-                editorAiStatusEl.hidden = false;
-              } else if (!editorAiConfig.enabled) {
-                editorAiStatusEl.hidden = true;
-              }
-            },
-          })
-        : [];
-
     const state = EditorState.create({
       doc: content,
       extensions: [
@@ -736,7 +693,6 @@ function mountEditor(tab: ViewerTabState, content: string): void {
         ...fileEditorKeymapExtensions(),
         ...aiExts,
         ...quickEditExts,
-        ...intentExts,
         keymap.of([
           {
             key: 'Mod-s',
@@ -769,9 +725,9 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     if (liveTab && !liveTab.readOnlyExcerpt && !liveTab.isDirty) {
       rebaselineViewerTabFromEditor(path, editorView.state.doc.toString());
     }
-    if (intentExts.length > 0) {
-      mountIntentModeEditor(editorView, intentInitialEnabled);
-      updateIntentToolbarChrome(intentInitialEnabled, 0);
+    if (aiExts.length > 0) {
+      mountEditorSuggestions(editorView, intentInitialEnabled);
+      updateIntentToolbarChrome(intentInitialEnabled);
     }
     syncIntentToolbarAvailability(tab);
 
@@ -1455,7 +1411,6 @@ export function bindFileViewerControls(): void {
   }
 
   editorIntentToggleEl = getIntentToggleButton();
-  editorIntentStatusEl = getIntentStatusElement();
   if (editorIntentToggleEl) {
     editorIntentToggleEl.addEventListener('click', () => {
       if (!editorView || !getLocalServerAvailable()) return;
@@ -1471,7 +1426,7 @@ export function bindFileViewerControls(): void {
         const view = m.getSecondaryViewerEditorView();
         if (!view) return;
         toggleIntentMode(view);
-        syncSecondaryIntentToolbarChrome(isIntentModeEnabled(view.state), 0);
+        syncSecondaryIntentToolbarChrome(isIntentEnabled(view.state));
       });
     });
   }
@@ -1488,7 +1443,8 @@ export function bindFileViewerControls(): void {
       const tab = primarySlotViewerTab();
       if (!tab || tab.viewMode !== 'editor' || tab.loadStatus !== 'ready') return;
       if (!editorView || !editorAiOpts) return;
-      reconfigureEditorAiCompletion(editorView, editorAiOpts);
+      // intentEnabledField sits outside the compartment, so the toggle survives.
+      reconfigureEditorSuggestions(editorView, editorAiOpts);
       const config = getEditorAiCompletionConfigSync();
       if (config.enabled && getLocalServerAvailable()) {
         attachEditorAiModelSelectListener();

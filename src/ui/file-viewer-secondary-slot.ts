@@ -17,7 +17,11 @@ import {
 } from './file-viewer-tab-store';
 import { editorCoreExtensions } from './editor-core-extensions';
 import { loadEditorSettings } from '../config/editor-settings';
-import { loadEditorIntentModeConfig } from '../config/editor-intent-mode';
+import {
+  getEditorIntentModeConfigSync,
+  loadEditorIntentModeConfig,
+} from '../config/editor-intent-mode';
+import { getEditorAiCompletionConfigSync } from '../config/editor-ai-completion';
 import { loadLanguageExtensionsForPath } from './editor-language';
 import { minnowEditorExtensions } from './codemirror-theme';
 import { notifyLspDocument } from '../lsp/completion-client';
@@ -25,16 +29,17 @@ import { resolveDocumentHtmlLoadUrl, resolvePreviewLoadUrl } from './preview-loa
 import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import { getLocalServerAvailable } from '../tools/client';
 import {
-  editorIntentModeExtensions,
-  isIntentModeEnabled,
-  mountIntentModeEditor,
-} from './editor-intent-mode/extensions';
+  editorSuggestionBaseExtensions,
+  editorSuggestionExtensions,
+  mountEditorSuggestions,
+} from './editor-suggestions';
 import {
   ensureViewerTabLoaded,
   isIntentModeEnabledForViewerPath,
   rememberIntentModeEnabledForPath,
   registerSecondaryEditorSnapshot,
   saveViewerTabByPath,
+  syncSecondaryIntentBusyChrome,
   syncSecondaryIntentToolbarChrome,
   updateSecondaryViewerChrome,
 } from './file-viewer';
@@ -186,6 +191,11 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
   mount.className = 'file-viewer-editor-mount';
   host.appendChild(mount);
 
+  const aiStatus = document.createElement('p');
+  aiStatus.className = 'file-viewer-ai-status field-hint';
+  aiStatus.hidden = true;
+  host.appendChild(aiStatus);
+
   const path = tab.path;
   pendingMountPath = path;
 
@@ -197,24 +207,34 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
       path,
       intentConfig.enabledByDefault,
     );
-    const intentExts =
-      !tab.readOnlyExcerpt && getLocalServerAvailable()
-        ? editorIntentModeExtensions({
+    const canMountSuggestions = !tab.readOnlyExcerpt && getLocalServerAvailable();
+    const suggestionExts = canMountSuggestions
+      ? [
+          ...editorSuggestionBaseExtensions(),
+          ...editorSuggestionExtensions({
             filePath: path,
-            config: intentConfig,
+            getConfig: getEditorAiCompletionConfigSync,
+            getIntentConfig: getEditorIntentModeConfigSync,
             canRequest: () => getLocalServerAvailable(),
-            initialEnabled: intentInitialEnabled,
-            onEnabledChange: (enabled) => {
+            onStatus: (message) => {
+              if (!aiStatus.isConnected) return;
+              if (message) {
+                aiStatus.textContent = message;
+                aiStatus.hidden = false;
+              } else {
+                aiStatus.hidden = true;
+              }
+            },
+            onIntentEnabledChange: (enabled) => {
               rememberIntentModeEnabledForPath(path, enabled);
-              syncSecondaryIntentToolbarChrome(enabled, 0);
+              syncSecondaryIntentToolbarChrome(enabled);
             },
-            onStaleCount: (count) => {
-              if (!secondaryView || secondaryPath !== path) return;
-              syncSecondaryIntentToolbarChrome(isIntentModeEnabled(secondaryView.state), count);
+            onIntentBusyChange: (busy) => {
+              syncSecondaryIntentBusyChrome(busy);
             },
-            onStatus: () => undefined,
-          })
-        : [];
+          }),
+        ]
+      : [];
     const state = EditorState.create({
       doc: content,
       extensions: [
@@ -243,7 +263,7 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
         }),
         ...minnowEditorExtensions(),
         ...langExts,
-        ...intentExts,
+        ...suggestionExts,
         ...(tab.readOnlyExcerpt ? [] : [codeSelectionDragExtension(path)]),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged || secondaryPath !== path) return;
@@ -267,8 +287,8 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
     if (pendingMountPath === path) pendingMountPath = null;
     secondaryPath = path;
     secondaryView = new EditorView({ state, parent: mount });
-    if (!tab.readOnlyExcerpt && getLocalServerAvailable()) {
-      mountIntentModeEditor(secondaryView, intentInitialEnabled);
+    if (suggestionExts.length > 0) {
+      mountEditorSuggestions(secondaryView, intentInitialEnabled);
     }
     void notifyLspDocument(path, 'open', content);
     updateSecondaryViewerChrome();

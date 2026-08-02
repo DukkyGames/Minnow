@@ -7,6 +7,11 @@ import {
   normalizeThinkingTriState,
   type ThinkingTriState,
 } from '../agents/thinking-types';
+import {
+  getCachedDesktopWorkspacePath,
+  getDesktopWorkspacePath,
+  isDesktopWorkspacePath,
+} from '../lib/desktop-workspace';
 import { fetchBrainCodeConfig } from './client';
 import { getWorkspacePath } from '../state/workspace';
 import { sessionState } from '../state/sessions';
@@ -75,8 +80,22 @@ export function resolveCodeMapInjectionEnabled(
   return mergeThinkingTriState(base, tri) === 'on';
 }
 
+/** True when the chat's tool workspace is the Minnow desktop sandbox (not Code app project). */
+export async function chatUsesDesktopSandboxWorkspace(chat: Chat): Promise<boolean> {
+  const desktopPath =
+    getCachedDesktopWorkspacePath() ?? (await getDesktopWorkspacePath());
+  if (!desktopPath) return false;
+  const worktreeCwd = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
+  const cwd = worktreeCwd?.trim() || getWorkspacePath().trim();
+  if (!cwd) return false;
+  return isDesktopWorkspacePath(cwd, desktopPath);
+}
+
 /** Whether compose should fetch and inject the repo map for this send. */
 export async function shouldInjectCodeMap(chat: Chat): Promise<boolean> {
+  if (await chatUsesDesktopSandboxWorkspace(chat)) {
+    return false;
+  }
   const globalDefault = await fetchCodeMapInjectionDefault();
   if (!resolveCodeMapInjectionEnabled(chat, globalDefault)) {
     return false;

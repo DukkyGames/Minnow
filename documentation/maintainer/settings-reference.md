@@ -402,7 +402,7 @@ Per bundled LSP: install/uninstall, enable/disable. See Settings → Language bu
 
 **Code editing** (`config.editorSettings`): word wrap, show whitespace, font size, tab size.
 
-**Intent mode** (`config.editorIntentMode`, limited UI): enabled by default, auto-recheck, debounce, context window, recheck delay, max recheck passes.
+**Intent mode** (`config.editorIntentMode`): enabled by default, idle debounce, trigger prefix (sigil), max tokens, and an optional provider/model pin (empty = follow the ghost-text binding).
 
 ### Webhooks (`webhooks.json`)
 

@@ -6,11 +6,15 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
 import {
+  chatUsesDesktopSandboxWorkspace,
   fetchCodeMapInjectionDefault,
   resolveCodeMapInjectionEnabled,
   resolveCodeMapInjectionTriState,
   saveCodeMapInjectionDefault,
+  shouldInjectCodeMap,
 } from '../../../src/brain/code-injection-config.ts';
+import { resetDesktopWorkspacePathCache } from '../../../src/lib/desktop-workspace.ts';
+import { setLocalServerAvailableForTests } from '../../../src/tools/config.ts';
 import type { Chat } from '../../../src/types.ts';
 
 const CHAT_ID = '11111111-1111-1111-1111-111111111111';
@@ -109,5 +113,45 @@ describe('saveCodeMapInjectionDefault', () => {
       features?: { codeMapInjectionDefault?: boolean };
     };
     assert.equal(parsed.features?.codeMapInjectionDefault, true);
+  });
+});
+
+describe('shouldInjectCodeMap', () => {
+  it('returns false for desktop sandbox workspace chats', async () => {
+    resetDesktopWorkspacePathCache();
+    setLocalServerAvailableForTests(true);
+    const desktopPath = 'C:/Users/me/.minnow/workspace';
+    const chat = baseChat({
+      workspacePath: desktopPath,
+      codeMapInjection: 'on',
+    });
+
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes('/api/desktop-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ path: desktopPath, fileCount: 0 }),
+        } as Response;
+      }
+      if (url.includes('/api/config/file')) {
+        return {
+          ok: true,
+          json: async () => ({ features: { codeMapInjectionDefault: true } }),
+        } as Response;
+      }
+      if (url.includes('/api/brain/code/config')) {
+        return {
+          ok: true,
+          json: async () => ({ enabled: true, repoMapTokenBudget: 8000 }),
+        } as Response;
+      }
+      return { ok: false } as Response;
+    };
+
+    assert.equal(await shouldInjectCodeMap(chat), false);
+    assert.equal(await chatUsesDesktopSandboxWorkspace(chat), true);
+    setLocalServerAvailableForTests(false);
+    resetDesktopWorkspacePathCache();
   });
 });

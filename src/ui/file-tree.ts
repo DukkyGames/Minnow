@@ -850,10 +850,19 @@ export async function refreshFileTree(): Promise<void> {
   }
 
   const expanded = [...getFilePanelState().expandedDirs];
-  for (const dir of expanded) {
-    loadingDirs.add(dir);
-    await fetchListing(dir);
-    loadingDirs.delete(dir);
+  if (expanded.length > 0) {
+    for (const dir of expanded) {
+      loadingDirs.add(dir);
+    }
+    await Promise.all(
+      expanded.map(async (dir) => {
+        try {
+          await fetchListing(dir);
+        } finally {
+          loadingDirs.delete(dir);
+        }
+      }),
+    );
   }
 
   renderFileTree();

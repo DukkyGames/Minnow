@@ -22,8 +22,8 @@ import {
   hasCompletionAccept,
   isLspBusy,
   isMeaningfulEditText,
-  shouldAiTabYieldToLsp,
   shouldLspTabTakePrecedence,
+  suggestionTabTarget,
   shouldScheduleAi,
 } from '../../src/ui/editor-completion-policy.ts';
 import {
@@ -31,10 +31,11 @@ import {
   fileEditorTabBinding,
 } from '../../src/ui/file-editor-keymap.ts';
 import {
-  editorAiCompletionExtensions,
-  editorAiGhostKeymapBindings,
-  setEditorAiGhostForTest,
-} from '../../src/ui/file-editor-ai-extensions.ts';
+  editorSuggestionBaseExtensions,
+  editorSuggestionExtensions,
+  editorSuggestionKeymapBindings,
+  setCompletionSuggestionForTest,
+} from '../../src/ui/editor-suggestions/index.ts';
 
 let domWindow: Window | null = null;
 
@@ -145,7 +146,7 @@ describe('editor completion policy', () => {
     startCompletion(pendingView);
     assert.equal(await waitForCompletionStatus(pendingView, 'pending'), 'pending');
     assert.equal(isLspBusy(pendingView.state), true);
-    assert.equal(shouldAiTabYieldToLsp(pendingView.state), true);
+    assert.equal(suggestionTabTarget(pendingView.state, { intent: false, completion: true }), 'lsp');
     assert.equal(shouldLspTabTakePrecedence(pendingView.state), true);
     pendingView.destroy();
   });
@@ -165,7 +166,7 @@ describe('editor completion policy', () => {
   test('isLspBusy is false when completion is idle', () => {
     const state = EditorState.create({ doc: 'idle' });
     assert.equal(isLspBusy(state), false);
-    assert.equal(shouldAiTabYieldToLsp(state), false);
+    assert.equal(suggestionTabTarget(state, { intent: false, completion: true }), 'completion');
   });
 
   test('shouldScheduleAi rejects read-only, range selection, IME, and LSP busy', async () => {
@@ -321,7 +322,8 @@ describe('editor completion keymap coordination', () => {
             override: [source],
           }),
           ...fileEditorKeymapExtensions(),
-          ...editorAiCompletionExtensions({
+          ...editorSuggestionBaseExtensions(),
+          ...editorSuggestionExtensions({
             filePath: 'test.ts',
             config: { ...DEFAULT_EDITOR_AI_COMPLETION, enabled: true },
             canRequest: () => false,
@@ -336,9 +338,9 @@ describe('editor completion keymap coordination', () => {
     const view = mountEditorWithAiAndLsp('con', () => new Promise(() => {}));
     startCompletion(view);
     assert.equal(await waitForCompletionStatus(view, 'pending'), 'pending');
-    setEditorAiGhostForTest(view, 'sole.log()', 3);
+    setCompletionSuggestionForTest(view, 'sole.log()', 3);
 
-    assert.equal(editorAiGhostKeymapBindings[0].run!(view), false);
+    assert.equal(editorSuggestionKeymapBindings[0].run!(view), false);
 
     const before = view.state.doc.toString();
     assert.equal(fileEditorTabBinding.run!(view), true);
@@ -353,9 +355,9 @@ describe('editor completion keymap coordination', () => {
     }));
     startCompletion(view);
     assert.equal(await waitForCompletionStatus(view, 'active'), 'active');
-    setEditorAiGhostForTest(view, 'sole.log()', 3);
+    setCompletionSuggestionForTest(view, 'sole.log()', 3);
 
-    assert.equal(editorAiGhostKeymapBindings[0].run!(view), false);
+    assert.equal(editorSuggestionKeymapBindings[0].run!(view), false);
     assert.equal(shouldLspTabTakePrecedence(view.state), true);
     assert.equal(fileEditorTabBinding.run!(view), true);
     view.destroy();

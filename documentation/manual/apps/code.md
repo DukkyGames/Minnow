@@ -39,7 +39,8 @@ CodeMirror with syntax highlighting, plus two AI editing modes and real language
 |------|--------|
 | **Ctrl/Cmd+K** | Quick Edit on the selection — describe a change, get a diff |
 | **Ctrl/Cmd+I** | Toggle Intent mode |
-| **Tab** | Accept AI ghost text or an open completion; otherwise indent |
+| **Ctrl/Cmd+Enter** | Force an intent proposal for the current line |
+| **Tab** | Accept an intent proposal, AI ghost text, or an open completion; otherwise indent |
 | **Ctrl/Cmd+→** | Accept the next word of ghost text |
 | **Ctrl+Space** | Trigger a completion |
 | **F12** or **Ctrl/Cmd+click** | Go to definition |
@@ -47,9 +48,13 @@ CodeMirror with syntax highlighting, plus two AI editing modes and real language
 | **Ctrl/Cmd+W** | Close the tab |
 | **Ctrl/Cmd+Tab** | Cycle tabs |
 | **Ctrl/Cmd+F** | Find and replace |
-| **Escape** | Dismiss ghost text, or blur the editor so Tab navigates the app again |
+| **Escape** | Dismiss a proposal or ghost text, or blur the editor so Tab navigates the app again |
 
-**Quick Edit** is a surgical change to a selection. **Intent mode** is different: you write what a line should do (English, pseudocode, or even broken code), and Minnow resolves it when you move to another line or press Enter. Resolved lines re-check when neighbors change (optional auto-recheck in Settings). Both modes share the editor AI model with inline completion. Configure them in **Settings → Integrations → Editor**, which also controls ghost-text behaviour, how much import and language-server context goes into completions, and caching.
+**Quick Edit** is a surgical change to a selection. **Intent mode** is different: you write what a line should do (English, pseudocode, or even broken code) and pause — a proposal appears below the line. **Tab** accepts it and the text becomes ordinary code; **Esc** dismisses it; **Ctrl+Z** undoes an accepted proposal like any other edit. Nothing is written to your file until you press Tab.
+
+Intent auto-triggers on lines that read as plain English (and on comment lines holding plain English) in files Minnow recognises as source code. If the detection gets in your way, set a **trigger prefix** in Settings — then only lines starting with it are treated as intent. **Ctrl/Cmd+Enter** always forces a proposal, whatever the line looks like.
+
+Intent shares the editor AI model with inline completion and Quick Edit by default, and can be pinned to its own provider and model. Configure it in **Settings → Integrations → Editor**, which also controls ghost-text behaviour, how much import and language-server context goes into completions, and caching.
 
 Language-server diagnostics, hover and signature help work where a server is installed — TypeScript and JavaScript are bundled. See [Integrations](../extend/integrations.md).
 

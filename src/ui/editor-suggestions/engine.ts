@@ -1,0 +1,527 @@
+/**
+ * The single suggestion engine: one debounce timer, one AbortController, and
+ * one place that decides whether the cursor wants a completion or an intent
+ * resolve. There is exactly one trigger path — no blur flush, no line-leave
+ * flush, no recheck cascade.
+ */
+
+import type { EditorState, Transaction } from '@codemirror/state';
+import { EditorView, type ViewUpdate } from '@codemirror/view';
+import { pickedCompletion } from '@codemirror/autocomplete';
+import {
+  getEditorAiCompletionConfigSync,
+  type EditorAiCompletionConfig,
+} from '../../config/editor-ai-completion';
+import {
+  getEditorIntentModeConfigSync,
+  type EditorIntentModeConfig,
+} from '../../config/editor-intent-mode';
+import {
+  fetchEditorAiCompletion,
+  resolveEditorAiBinding,
+  validateEditorAiBinding,
+} from '../editor-ai-completion-client';
+import {
+  EditorRecentEditsRing,
+  extractPrefixSuffix,
+  shouldReplaceGhostPartial,
+} from '../editor-ai-completion-prompt';
+import {
+  didLspCloseWithoutAccept,
+  isLspBusy,
+  shouldScheduleAi,
+} from '../editor-completion-policy';
+import { resolveLanguageDescription } from '../editor-language';
+import {
+  classifyIntentLine,
+  intentInstructionFromLine,
+  isIntentEligibleLanguage,
+  leadingWhitespace,
+  lineCommentForLanguage,
+  type ClassifyIntentOptions,
+} from './intent-heuristic';
+import { resolveIntentSuggestion, type ResolveIntentInput } from './intent-prompt';
+import {
+  getCompletionSuggestion,
+  getIntentSuggestion,
+  hasSuggestion,
+  isIntentEnabled,
+  setIntentEnabled,
+  setSuggestion,
+  type IntentSuggestion,
+} from './state';
+
+/** Shown once an intent proposal is painted. */
+export const INTENT_READY_MESSAGE = 'Intent proposal ready — Tab to accept, Esc to dismiss';
+
+/** Shown when the model echoes the intent line back unchanged. */
+export const INTENT_NO_CHANGE_MESSAGE =
+  'Model returned no change — rephrase the line or press Ctrl+Enter to retry.';
+
+/** Generic intent failure. */
+export const INTENT_FAILED_MESSAGE =
+  'Intent resolve failed — check provider and model in Settings';
+
+/** Re-dispatch a streaming partial only after this much new text. */
+const PARTIAL_CHAR_THRESHOLD = 24;
+
+export interface EditorSuggestionOptions {
+  filePath: string;
+  /** @deprecated Prefer getConfig — static config is not refreshed after Settings saves. */
+  config?: EditorAiCompletionConfig;
+  /** Live inline-completion settings (re-read on each request). */
+  getConfig?: () => EditorAiCompletionConfig;
+  /** Live Intent mode settings (re-read on each request). */
+  getIntentConfig?: () => EditorIntentModeConfig;
+  /** When false, no requests are made (npm start / provider offline). */
+  canRequest: () => boolean;
+  onStatus?: (message: string | null) => void;
+  /** Fired when the user toggles Intent mode for this editor. */
+  onIntentEnabledChange?: (enabled: boolean) => void;
+  /** Fired when an intent request starts or finishes (spinner chrome). */
+  onIntentBusyChange?: (busy: boolean) => void;
+  /** Override the intent resolve (tests). */
+  resolveIntentFn?: (input: ResolveIntentInput) => Promise<{ text: string | null; error?: string }>;
+}
+
+interface IntentAnchor {
+  from: number;
+  to: number;
+  intentText: string;
+}
+
+/** Engine instances by view — the keymap needs the instance for Mod-Enter. */
+const enginesByView = new WeakMap<EditorView, SuggestionEnginePlugin>();
+
+export class SuggestionEnginePlugin {
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private abortController: AbortController | null = null;
+  private requestPos = -1;
+  /** Epoch ms when an LSP completion item was last accepted (cooldown for AI). */
+  private completionAcceptedAt = 0;
+  private readonly recentEdits = new EditorRecentEditsRing();
+  /** Prefix/suffix from the active completion request (monotonic partial validation). */
+  private requestPrefix = '';
+  private requestSuffix = '';
+  /** Last streamed intent partial that was painted (flicker throttle). */
+  private lastPartial = '';
+  private intentBusy = false;
+  private readonly languageName: string | null;
+
+  constructor(
+    private readonly view: EditorView,
+    private readonly opts: EditorSuggestionOptions,
+  ) {
+    this.languageName = resolveLanguageDescription(opts.filePath)?.name ?? null;
+    enginesByView.set(view, this);
+  }
+
+  destroy(): void {
+    this.cancelInFlight(false);
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    enginesByView.delete(this.view);
+  }
+
+  update(update: ViewUpdate): void {
+    const { state } = update;
+
+    if (isLspBusy(state)) {
+      this.cancelInFlight(true, update.transactions[0]);
+      return;
+    }
+
+    for (const tr of update.transactions) {
+      if (tr.annotation(pickedCompletion) != null) {
+        this.completionAcceptedAt = Date.now();
+      }
+      if (tr.docChanged) {
+        this.recentEdits.recordDocChange(
+          tr.startState.doc.toString(),
+          tr.state.doc.toString(),
+        );
+      }
+    }
+
+    const intentToggled = update.transactions.some((tr) =>
+      tr.effects.some((effect) => effect.is(setIntentEnabled)),
+    );
+    if (intentToggled) {
+      const enabled = isIntentEnabled(state);
+      this.opts.onIntentEnabledChange?.(enabled);
+      if (!enabled) this.cancelInFlight(true);
+    }
+
+    const lspClosedWithoutAccept = didLspCloseWithoutAccept(
+      update.startState,
+      state,
+      update.transactions,
+    );
+
+    if (
+      !update.docChanged &&
+      !update.selectionSet &&
+      !lspClosedWithoutAccept &&
+      !intentToggled
+    ) {
+      return;
+    }
+
+    if (update.docChanged) {
+      // Abort in-flight work, but leave any painted suggestion to the field's
+      // own rules: a completion clears on every doc change, while an intent
+      // proposal maps through the transaction and survives edits that do not
+      // touch the text it was generated from.
+      this.cancelInFlight(false);
+    }
+
+    if (state.readOnly) return;
+    if (!this.opts.canRequest()) {
+      this.opts.onStatus?.('AI completion unavailable (open Minnow and configure a provider).');
+      return;
+    }
+    this.opts.onStatus?.(null);
+
+    if (this.wantsIntent(state)) {
+      this.scheduleIntent(this.anchorAtCursor(state), false);
+      return;
+    }
+
+    const config = this.resolveConfig();
+    if (!config.enabled) return;
+    if (
+      !shouldScheduleAi(
+        {
+          docChanged: update.docChanged,
+          selectionSet: update.selectionSet,
+          readOnly: state.readOnly,
+          state,
+          transactions: update.transactions,
+          lspClosedWithoutAccept,
+        },
+        {
+          isComposing: this.view.composing,
+          completionAcceptedAt: this.completionAcceptedAt,
+        },
+      )
+    ) {
+      return;
+    }
+
+    this.scheduleCompletion(state.selection.main.head);
+  }
+
+  /** Mod-Enter: resolve the current line as intent regardless of the heuristic. */
+  force(): boolean {
+    const state = this.view.state;
+    if (state.readOnly) return false;
+    if (!this.opts.canRequest()) {
+      this.opts.onStatus?.('Intent mode unavailable (open Minnow and configure a provider).');
+      return false;
+    }
+    const anchor = this.anchorAtCursor(state);
+    if (!anchor.intentText.trim()) return false;
+    this.scheduleIntent(anchor, true);
+    return true;
+  }
+
+  private resolveConfig(): EditorAiCompletionConfig {
+    return this.opts.getConfig?.() ?? this.opts.config ?? getEditorAiCompletionConfigSync();
+  }
+
+  private resolveIntentConfig(): EditorIntentModeConfig {
+    return this.opts.getIntentConfig?.() ?? getEditorIntentModeConfigSync();
+  }
+
+  private classifyOptions(): ClassifyIntentOptions {
+    return {
+      sigil: this.resolveIntentConfig().sigil,
+      lineComment: lineCommentForLanguage(this.languageName) ?? undefined,
+    };
+  }
+
+  private anchorAtCursor(state: EditorState): IntentAnchor {
+    const line = state.doc.lineAt(state.selection.main.head);
+    return { from: line.from, to: line.to, intentText: line.text };
+  }
+
+  /** Auto-trigger gate: Intent on, single cursor, real language, prose line. */
+  private wantsIntent(state: EditorState): boolean {
+    if (!isIntentEnabled(state)) return false;
+    if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return false;
+    if (!isIntentEligibleLanguage(this.languageName)) return false;
+    const line = state.doc.lineAt(state.selection.main.head);
+    return classifyIntentLine(line.text, this.classifyOptions()) === 'intent';
+  }
+
+  private scheduleCompletion(pos: number): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    const delay = this.resolveConfig().debounceMs;
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      void this.requestCompletion(pos);
+    }, delay);
+  }
+
+  private scheduleIntent(anchor: IntentAnchor, force: boolean): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    const delay = force ? 0 : this.resolveIntentConfig().debounceMs;
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      void this.requestIntent(anchor, force);
+    }, delay);
+  }
+
+  /** Abort in-flight work; optionally clear the visible suggestion. */
+  private cancelInFlight(clear: boolean, tr?: Transaction): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+    this.setIntentBusy(false);
+    const explicitSet = tr?.effects.some((effect) => effect.is(setSuggestion)) ?? false;
+    if (clear && !explicitSet && hasSuggestion(this.view.state)) {
+      const view = this.view;
+      queueMicrotask(() => {
+        if (hasSuggestion(view.state)) {
+          view.dispatch({ effects: setSuggestion.of(null) });
+        }
+      });
+    }
+  }
+
+  private setIntentBusy(busy: boolean): void {
+    if (this.intentBusy === busy) return;
+    this.intentBusy = busy;
+    this.opts.onIntentBusyChange?.(busy);
+  }
+
+  private anchorStillValid(anchor: IntentAnchor): boolean {
+    const doc = this.view.state.doc;
+    if (anchor.to > doc.length) return false;
+    return doc.sliceString(anchor.from, anchor.to) === anchor.intentText;
+  }
+
+  private cursorInsideAnchor(anchor: IntentAnchor): boolean {
+    const head = this.view.state.selection.main.head;
+    return head >= anchor.from && head <= anchor.to;
+  }
+
+  /** Paint an intent proposal after re-checking every guard. */
+  private showIntent(anchor: IntentAnchor, text: string, streaming: boolean): boolean {
+    if (isLspBusy(this.view.state)) return false;
+    if (!this.anchorStillValid(anchor)) return false;
+    if (!this.cursorInsideAnchor(anchor)) return false;
+
+    const cleaned = text.replace(/\s+$/, '');
+    if (!cleaned.trim()) return false;
+    if (cleaned.trim() === anchor.intentText.trim()) {
+      if (!streaming) this.opts.onStatus?.(INTENT_NO_CHANGE_MESSAGE);
+      return false;
+    }
+
+    const proposal: IntentSuggestion = {
+      kind: 'intent',
+      from: anchor.from,
+      to: anchor.to,
+      intentText: anchor.intentText,
+      text: cleaned,
+      streaming,
+    };
+    this.view.dispatch({ effects: setSuggestion.of(proposal) });
+    return true;
+  }
+
+  /** Throttle streaming repaints to whole lines or sizeable growth. */
+  private shouldPaintPartial(text: string): boolean {
+    if (!text) return false;
+    const previous = this.lastPartial;
+    if (!previous) {
+      this.lastPartial = text;
+      return true;
+    }
+    const gainedLine =
+      text.split('\n').length > previous.split('\n').length;
+    const grewEnough = text.length - previous.length > PARTIAL_CHAR_THRESHOLD;
+    if (!gainedLine && !grewEnough) return false;
+    this.lastPartial = text;
+    return true;
+  }
+
+  private async requestIntent(anchor: IntentAnchor, force: boolean): Promise<void> {
+    const state = this.view.state;
+    if (state.readOnly) return;
+    if (!force && !isIntentEnabled(state)) return;
+    if (!this.opts.canRequest()) return;
+    if (!this.anchorStillValid(anchor)) return;
+    if (!this.cursorInsideAnchor(anchor)) return;
+    if (!anchor.intentText.trim()) return;
+
+    // A settled proposal for this exact anchor is already on screen.
+    const existing = getIntentSuggestion(state);
+    if (
+      !force &&
+      existing &&
+      existing.from === anchor.from &&
+      existing.to === anchor.to &&
+      existing.intentText === anchor.intentText &&
+      !existing.streaming
+    ) {
+      return;
+    }
+
+    this.cancelInFlight(false);
+    const controller = new AbortController();
+    this.abortController = controller;
+    this.lastPartial = '';
+    this.setIntentBusy(true);
+
+    const config = this.resolveConfig();
+    const intentConfig = this.resolveIntentConfig();
+    const classify = this.classifyOptions();
+    // Anchor prefix at the line start and suffix at the line end so the intent
+    // text is not duplicated into both halves of the context.
+    const { prefix } = extractPrefixSuffix(state.doc, anchor.from, config);
+    const { suffix } = extractPrefixSuffix(state.doc, anchor.to, config);
+    const resolveFn = this.opts.resolveIntentFn ?? resolveIntentSuggestion;
+
+    try {
+      const result = await resolveFn({
+        filePath: this.opts.filePath,
+        intentText: anchor.intentText,
+        instruction: intentInstructionFromLine(anchor.intentText, classify),
+        prefix,
+        suffix,
+        baseIndent: leadingWhitespace(anchor.intentText),
+        recentEdits: this.recentEdits.snapshot(),
+        config,
+        intentConfig,
+        signal: controller.signal,
+        onPartial: (partial) => {
+          if (controller.signal.aborted) return;
+          if (!this.shouldPaintPartial(partial)) return;
+          this.showIntent(anchor, partial, true);
+        },
+      });
+
+      if (controller.signal.aborted) return;
+      if (!result.text) {
+        if (result.error) this.opts.onStatus?.(result.error);
+        return;
+      }
+      if (this.showIntent(anchor, result.text, false)) {
+        this.opts.onStatus?.(INTENT_READY_MESSAGE);
+      }
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      const message =
+        err instanceof Error && err.message.trim() ? err.message : INTENT_FAILED_MESSAGE;
+      this.opts.onStatus?.(message);
+    } finally {
+      if (this.abortController === controller) {
+        this.abortController = null;
+        this.setIntentBusy(false);
+      }
+    }
+  }
+
+  private async requestCompletion(pos: number): Promise<void> {
+    const { state } = this.view;
+    const config = this.resolveConfig();
+    if (!config.enabled) return;
+    if (state.readOnly) return;
+    if (isLspBusy(state)) return;
+    if (state.selection.main.head !== pos) return;
+
+    const controller = new AbortController();
+    this.abortController = controller;
+    this.requestPos = pos;
+
+    try {
+      const binding = await resolveEditorAiBinding(config);
+      const validation = validateEditorAiBinding(binding);
+      if (validation.ok === false) {
+        this.opts.onStatus?.(validation.message);
+        return;
+      }
+
+      const { prefix, suffix } = extractPrefixSuffix(state.doc, pos, config);
+      this.requestPrefix = prefix;
+      this.requestSuffix = suffix;
+
+      const result = await fetchEditorAiCompletion({
+        state,
+        cursorPos: pos,
+        filePath: this.opts.filePath,
+        config,
+        binding,
+        signal: controller.signal,
+        recentEdits: this.recentEdits.snapshot(),
+        onPartial: (partial) => {
+          if (controller.signal.aborted) return;
+          if (isLspBusy(this.view.state)) return;
+          if (this.requestPos !== pos) return;
+          this.paintCompletion(pos, partial);
+        },
+      });
+
+      if (controller.signal.aborted) return;
+      if (isLspBusy(this.view.state)) return;
+      if (this.view.state.selection.main.head !== pos) return;
+      if (this.requestPos !== pos) return;
+
+      this.paintCompletion(pos, result.text ?? '');
+      if (result.text) {
+        this.opts.onStatus?.('AI suggestion ready — Tab to accept, Esc to dismiss');
+      } else if (!controller.signal.aborted && result.error) {
+        this.opts.onStatus?.(result.error);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : 'AI completion failed — check provider and model in Settings';
+      this.opts.onStatus?.(message);
+    } finally {
+      if (this.abortController === controller) {
+        this.abortController = null;
+      }
+    }
+  }
+
+  private paintCompletion(pos: number, text: string): void {
+    if (isLspBusy(this.view.state)) return;
+    if (!text) {
+      if (hasSuggestion(this.view.state)) {
+        this.view.dispatch({ effects: setSuggestion.of(null) });
+      }
+      return;
+    }
+    if (this.view.state.selection.main.head !== pos) return;
+
+    const currentText = getCompletionSuggestion(this.view.state)?.text ?? '';
+    if (
+      currentText &&
+      !shouldReplaceGhostPartial(currentText, text, this.requestPrefix, this.requestSuffix)
+    ) {
+      return;
+    }
+
+    this.view.dispatch({
+      effects: setSuggestion.of({ kind: 'completion', text, pos }),
+    });
+  }
+}
+
+/** Force an intent resolve on the current line (Mod-Enter). */
+export function forceIntentResolve(view: EditorView): boolean {
+  return enginesByView.get(view)?.force() ?? false;
+}
+
+/** Test seam: the live engine for a view, when mounted. */
+export function getSuggestionEngine(view: EditorView): SuggestionEnginePlugin | undefined {
+  return enginesByView.get(view);
+}

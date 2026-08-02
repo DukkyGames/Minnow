@@ -675,11 +675,18 @@ function materializeChatHistory(chat: Chat, messages: Message[]): void {
   if (current.length > incoming.length) {
     chat.historyLoaded = true;
     chat.messageCount = current.length;
+    if (sessionState) {
+      captureDirtyTrackingShadow(sessionState);
+    }
     return;
   }
   chat.history = incoming;
   chat.historyLoaded = true;
   chat.messageCount = chat.history.length;
+  // Server hydrate is not a local edit — refresh shadow so dirty verifier stays quiet.
+  if (sessionState) {
+    captureDirtyTrackingShadow(sessionState);
+  }
 }
 
 /** Mark every chat as fully loaded (whole-blob boot / flag-off path). */
