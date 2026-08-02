@@ -9,6 +9,7 @@ export type EditorAiCompletionRejectReason =
   | 'prose'
   | 'oversized'
   | 'full_rewrite'
+  | 'unbalanced'
   | (string & {});
 
 export type EditorAiCompletionEvent =

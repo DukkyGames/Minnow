@@ -5,6 +5,7 @@
 
 import {
   EditorSelection,
+  Facet,
   StateEffect,
   StateField,
   type EditorState,
@@ -12,7 +13,12 @@ import {
 } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import { randomUUID } from '../../lib/random-id';
+import {
+  getEditorAiCompletionConfigSync,
+  type EditorAiCompletionConfig,
+} from '../../config/editor-ai-completion';
 import { nextPartialGhostChunk } from '../editor-ai-completion-prompt';
+import { completionInsertChangeSpecs } from '../editor-completion-accept';
 import { recordCompletionEvent } from '../editor-ai-telemetry';
 import { buildSuggestionDecorations } from './decorations';
 
@@ -78,6 +84,34 @@ export type Suggestion = CompletionSuggestion | IntentSuggestion;
 
 /** Set or clear the visible suggestion. An explicit effect always wins. */
 export const setSuggestion = StateEffect.define<Suggestion | null>();
+
+/** File path + config for completion accept (indentRange Layer B). */
+export interface CompletionAcceptContext {
+  filePath: string;
+  getConfig?: () => EditorAiCompletionConfig;
+}
+
+export const setCompletionAcceptContext = StateEffect.define<CompletionAcceptContext>();
+
+/** Initial accept context supplied when suggestion extensions are mounted. */
+export const completionAcceptContextFacet = Facet.define<
+  CompletionAcceptContext,
+  CompletionAcceptContext | null
+>({
+  combine: (values) => values[0] ?? null,
+});
+
+export const completionAcceptContextField = StateField.define<CompletionAcceptContext | null>({
+  create(state) {
+    return state.facet(completionAcceptContextFacet);
+  },
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setCompletionAcceptContext)) return effect.value;
+    }
+    return value;
+  },
+});
 
 /** Toggle Intent mode for one editor. */
 export const setIntentEnabled = StateEffect.define<boolean>();
@@ -297,11 +331,22 @@ export function acceptCompletionGhost(view: EditorView): boolean {
   const ghost = getCompletionSuggestion(view.state);
   if (!ghost) return false;
   const insertPos = ghost.pos;
+  const ctx = view.state.field(completionAcceptContextField, false);
+  const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
+  const filePath = ctx?.filePath ?? '';
   recordCompletionEvent({ type: 'accepted' });
+  const changes = completionInsertChangeSpecs(
+    view.state,
+    insertPos,
+    ghost.text,
+    filePath,
+    config,
+  );
+  const mappedEnd = view.state.changes(changes).mapPos(insertPos + ghost.text.length, 1);
   view.dispatch({
-    changes: { from: insertPos, insert: ghost.text },
+    changes,
     effects: setSuggestion.of(null),
-    selection: EditorSelection.cursor(insertPos + ghost.text.length),
+    selection: EditorSelection.cursor(mappedEnd),
   });
   return true;
 }
@@ -314,19 +359,24 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
   if (!chunk) return false;
   const insertPos = ghost.pos;
   const remainder = ghost.text.slice(chunk.length);
+  const ctx = view.state.field(completionAcceptContextField, false);
+  const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
+  const filePath = ctx?.filePath ?? '';
+  const changes = completionInsertChangeSpecs(view.state, insertPos, chunk, filePath, config);
+  const mappedEnd = view.state.changes(changes).mapPos(insertPos + chunk.length, 1);
   view.dispatch({
-    changes: { from: insertPos, insert: chunk },
+    changes,
     effects: setSuggestion.of(
       remainder
         ? {
             ...ghost,
             consumed: ghost.consumed + chunk,
             text: remainder,
-            pos: insertPos + chunk.length,
+            pos: mappedEnd,
           }
         : null,
     ),
-    selection: EditorSelection.cursor(insertPos + chunk.length),
+    selection: EditorSelection.cursor(mappedEnd),
   });
   return true;
 }

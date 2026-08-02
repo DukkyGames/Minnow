@@ -33,7 +33,7 @@ import {
   validateEditorAiBinding,
   type EditorAiBinding,
 } from '../editor-ai-completion-client';
-import { normalizeCompletionIndentation, type RecentEditLine } from '../editor-ai-completion-prompt';
+import { reindentCompletionText, type RecentEditLine } from '../editor-ai-completion-prompt';
 import { extractEditorCodeFromReasoning } from '../editor-model-output';
 import { sanitizeQuickEditText } from '../editor-quick-edit/diff-apply';
 import { resolveLanguageDescription } from '../editor-language';
@@ -140,11 +140,8 @@ export function alignIntentBlock(code: string, baseIndent: string): string {
   const normalized = code.replace(/\r\n/g, '\n').replace(/\s+$/, '');
   if (!normalized.trim()) return '';
   const lines = normalized.split('\n');
-  // normalizeCompletionIndentation decides where the first line belongs (it
-  // adopts the document indentation only when the model emitted none);
-  // reindentBlock then shifts the whole block by that same delta.
   const targetIndent = leadingWhitespace(
-    normalizeCompletionIndentation(lines[0] ?? '', baseIndent),
+    reindentCompletionText(lines[0] ?? '', baseIndent, '  '),
   );
   return reindentBlock(lines, targetIndent).join('\n');
 }

@@ -3,7 +3,7 @@
  */
 
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
-import { completionModeAt } from './editor-completion-policy';
+import { completionCacheTransportMode } from './editor-completion-policy';
 import { PROMPT_VERSION } from './editor-ai-completion-prompt';
 
 /** Default time-to-live for cached completions (5 minutes). */
@@ -45,7 +45,7 @@ export function hashCompletionSettings(config: EditorAiCompletionConfig): string
     config.includeLspHover,
     config.includeLspContext,
     config.contextBudgetChars,
-    completionModeAt(config),
+    completionCacheTransportMode(config),
   ].join('\0');
   return hashCompletionContext(payload);
 }

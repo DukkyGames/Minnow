@@ -6,6 +6,8 @@
 import type { EditorState, Transaction } from '@codemirror/state';
 import type { ApiMessage } from '../types';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
+import { alignCompletionBrackets } from './editor-completion-brackets';
+import type { CompletionMode } from './editor-completion-policy';
 import { stripEditorModelOutput } from './editor-model-output';
 
 /** Bump when prompt layout or validation rules change (cache invalidation). */
@@ -579,6 +581,9 @@ export interface AlignCompletionInput {
   prefix: string;
   suffix: string;
   maxInsertChars?: number;
+  indentUnitStr?: string;
+  completionMode?: CompletionMode;
+  fenceLang?: string;
 }
 
 export interface AlignCompletionResult {
@@ -612,22 +617,65 @@ export function looksLikeProse(text: string): boolean {
   return false;
 }
 
-/** Normalize model indentation to match the cursor line without stripping required newlines. */
-export function normalizeCompletionIndentation(text: string, prefix: string): string {
+function tabWidthFromIndentUnit(indentUnitStr: string): number {
+  return indentUnitStr.length > 0 ? indentUnitStr.length : 2;
+}
+
+function expandIndentToColumns(indent: string, tabWidth: number): number {
+  let col = 0;
+  for (const ch of indent) {
+    if (ch === '\t') {
+      col += tabWidth - (col % tabWidth);
+    } else if (ch === ' ') {
+      col += 1;
+    }
+  }
+  return col;
+}
+
+function columnsToIndentUnitStr(col: number, indentUnitStr: string): string {
+  const unit = indentUnitStr.length > 0 ? indentUnitStr : '  ';
+  const units = Math.floor(col / unit.length);
+  return unit.repeat(units);
+}
+
+/**
+ * Re-indent model completion text: preserve leading newlines, strip leading ws on
+ * line 0, anchor continuation lines to the cursor indent, normalize tabs/spaces.
+ */
+export function reindentCompletionText(
+  text: string,
+  prefix: string,
+  indentUnitStr: string,
+): string {
   if (!text) return '';
   const leadingNewlines = text.match(/^\n+/)?.[0] ?? '';
   const body = text.slice(leadingNewlines.length);
   if (!body) return leadingNewlines;
 
+  const unit = indentUnitStr.length > 0 ? indentUnitStr : '  ';
+  const tabWidth = tabWidthFromIndentUnit(unit);
   const cursorIndent = cursorIndentAt(prefix);
-  const bodyLeading = body.match(/^[\t ]*/)?.[0] ?? '';
-  const bodyRest = body.slice(bodyLeading.length);
+  const cursorCols = expandIndentToColumns(cursorIndent, tabWidth);
 
-  if (!cursorIndent) return leadingNewlines + body;
-  if (!bodyLeading && bodyRest) {
-    return leadingNewlines + cursorIndent + bodyRest;
+  const lines = body.split('\n');
+  const firstLeading = lines[0]?.match(/^[\t ]*/)?.[0] ?? '';
+  if (leadingNewlines.length > 0) {
+    lines[0] = columnsToIndentUnitStr(cursorCols, unit) + lines[0]!.slice(firstLeading.length);
+  } else {
+    lines[0] = lines[0]!.slice(firstLeading.length);
   }
-  return leadingNewlines + body;
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    if (!line.trim()) {
+      lines[i] = '';
+      continue;
+    }
+    lines[i] = columnsToIndentUnitStr(cursorCols, unit) + line.trimStart();
+  }
+
+  return leadingNewlines + lines.join('\n');
 }
 
 /** Remove longest overlaps with document prefix and suffix. */
@@ -678,7 +726,11 @@ export function alignAndValidateCompletionText(
   }
 
   text = text.replace(/\r\n/g, '\n');
-  text = normalizeCompletionIndentation(text, input.prefix);
+  text = reindentCompletionText(
+    text,
+    input.prefix,
+    input.indentUnitStr ?? '  ',
+  );
 
   if (input.prefix && text.startsWith(input.prefix)) {
     const stripped = text.slice(input.prefix.length);
@@ -696,6 +748,20 @@ export function alignAndValidateCompletionText(
   }
 
   text = trimOverlapWithDocument(text, input.prefix, input.suffix);
+
+  const fenceLang = input.fenceLang ?? '';
+  const bracketed = alignCompletionBrackets(text, input.prefix, input.suffix, fenceLang);
+  if (bracketed.rejected) {
+    return { text: '', rejected: true, reason: 'unbalanced' };
+  }
+  text = bracketed.text;
+
+  if (input.completionMode === 'single') {
+    const newlineIdx = text.indexOf('\n');
+    if (newlineIdx >= 0) {
+      text = text.slice(0, newlineIdx);
+    }
+  }
 
   if (!text.trim()) {
     return { text: '', rejected: true, reason: 'empty_after_trim' };

@@ -9,9 +9,23 @@ import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 /** Default pause after accepting an LSP/snippet item before AI may schedule. */
 export const COMPLETION_ACCEPT_COOLDOWN_MS = 300;
 
-/** Completion transport mode for cache keys and policy (A2 may extend). */
-export function completionModeAt(config: EditorAiCompletionConfig): string {
+/** Inline completion shape: single-line vs multi-line continuation. */
+export type CompletionMode = 'single' | 'multi';
+
+/** Cache transport label (legacy native-FIM flag — retained for cache key stability). */
+export function completionCacheTransportMode(config: EditorAiCompletionConfig): string {
   return config.useNativeFim ? 'native-fim' : 'chat';
+}
+
+/**
+ * Whether the cursor sits on a blank tail of the line (multi-line completions)
+ * or mid-line (single-line insert only).
+ */
+export function completionModeAt(state: EditorState, pos: number): CompletionMode {
+  const clamped = Math.max(0, Math.min(pos, state.doc.length));
+  const line = state.doc.lineAt(clamped);
+  const rest = state.doc.sliceString(clamped, line.to);
+  return /^\s*$/.test(rest) ? 'multi' : 'single';
 }
 
 /** View-update slice passed into {@link shouldScheduleAi}. */

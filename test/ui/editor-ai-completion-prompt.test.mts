@@ -13,7 +13,7 @@ import {
   formatNearbyDiagnostics,
   languageHintFromPath,
   longestOverlapSuffixPrefix,
-  normalizeCompletionIndentation,
+  reindentCompletionText,
   sanitizeCompletionText,
   shouldReplaceGhostPartial,
   symbolsEnclosingLine,
@@ -162,10 +162,10 @@ describe('editor AI completion prompt', () => {
     assert.doesNotMatch(text, /far/);
   });
 
-  test('normalizeCompletionIndentation preserves leading newlines', () => {
+  test('reindentCompletionText preserves leading newlines', () => {
     const prefix = 'function fn() {\n  ';
     assert.equal(
-      normalizeCompletionIndentation('\nreturn 1;', prefix),
+      reindentCompletionText('\nreturn 1;', prefix, '  '),
       '\n  return 1;',
     );
   });
@@ -247,6 +247,29 @@ describe('editor AI completion prompt', () => {
     });
     assert.equal(result.rejected, true);
     assert.equal(result.reason, 'oversized');
+  });
+
+  test('alignAndValidateCompletionText rejects unbalanced bracket inserts', () => {
+    const result = alignAndValidateCompletionText({
+      raw: '((((',
+      prefix: 'x',
+      suffix: '',
+      fenceLang: 'typescript',
+    });
+    assert.equal(result.rejected, true);
+    assert.equal(result.reason, 'unbalanced');
+  });
+
+  test('alignAndValidateCompletionText truncates at newline in single mode', () => {
+    const result = alignAndValidateCompletionText({
+      raw: 'foo\nbar',
+      prefix: 'const x = ',
+      suffix: 'rest',
+      completionMode: 'single',
+      fenceLang: 'typescript',
+    });
+    assert.equal(result.rejected, false);
+    assert.equal(result.text, 'foo');
   });
 
   test('sanitizeCompletionText strips markdown fences', () => {

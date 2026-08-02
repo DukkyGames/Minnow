@@ -17,12 +17,14 @@ import {
   resolveEditorCompletionText,
 } from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
+import type { EditorState } from '@codemirror/state';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { getActiveChat } from '../state/sessions';
 import { resolveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../types';
+import { indentUnitStrFromState } from './editor-completion-accept';
 import {
   buildCompletionCacheKey,
   editorAiCompletionCache,
@@ -34,9 +36,11 @@ import {
   buildEditorAiCompletionMessagesAsync,
   DEFAULT_MAX_INSERT_CHARS,
   extractPrefixSuffix,
+  fenceLangFromPath,
   type AlignCompletionResult,
   type EditorAiPromptInput,
 } from './editor-ai-completion-prompt';
+import { completionModeAt } from './editor-completion-policy';
 import { stripEditorModelOutput, extractEditorCodeFromReasoning } from './editor-model-output';
 import { recordCompletionEvent } from './editor-ai-telemetry';
 
@@ -238,6 +242,8 @@ export function editorAiCompletionRejectionMessage(reason: string | undefined): 
       return EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE;
     case 'full_rewrite':
       return EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE;
+    case 'unbalanced':
+      return EDITOR_AI_EMPTY_COMPLETION_MESSAGE;
     case 'empty':
     case 'empty_after_trim':
       return EDITOR_AI_EMPTY_COMPLETION_MESSAGE;
@@ -267,13 +273,27 @@ export function alignCompletionForInsert(
   raw: string,
   prefix: string,
   suffix: string,
-  options?: { maxInsertChars?: number },
+  options?: {
+    maxInsertChars?: number;
+    state?: EditorState;
+    cursorPos?: number;
+    filePath?: string;
+  },
 ): AlignCompletionResult {
+  const indentUnitStr = options?.state != null ? indentUnitStrFromState(options.state) : '  ';
+  const completionMode =
+    options?.state != null && options.cursorPos != null
+      ? completionModeAt(options.state, options.cursorPos)
+      : undefined;
+  const fenceLang = options?.filePath ? fenceLangFromPath(options.filePath) : '';
   return alignAndValidateCompletionText({
     raw,
     prefix,
     suffix,
     maxInsertChars: options?.maxInsertChars,
+    indentUnitStr,
+    completionMode,
+    fenceLang,
   });
 }
 
@@ -357,7 +377,12 @@ export async function fetchEditorAiCompletion(
   let firstTokenRecorded = false;
 
   const alignForInsert = (raw: string): AlignCompletionResult =>
-    alignCompletionForInsert(raw, prefix, suffix, { maxInsertChars });
+    alignCompletionForInsert(raw, prefix, suffix, {
+      maxInsertChars,
+      state: input.state,
+      cursorPos,
+      filePath: input.filePath,
+    });
 
   const emitFromAccumulators = (reasoningFallback = false): AlignCompletionResult => {
     const raw = resolveEditorCompletionDisplayText(

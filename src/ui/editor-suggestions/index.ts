@@ -14,6 +14,8 @@ import {
   intentEnabledField,
   setIntentEnabled,
   suggestionField,
+  completionAcceptContextFacet,
+  completionAcceptContextField,
 } from './state';
 
 /** Compartment for hot-reloading suggestions without remounting the editor. */
@@ -29,7 +31,15 @@ export function editorSuggestionBaseExtensions(): Extension[] {
 
 /** Suggestion field, engine plugin, and the single Tab/Esc keymap. */
 export function editorSuggestionExtensions(opts: EditorSuggestionOptions): Extension[] {
+  const acceptContext = {
+    filePath: opts.filePath,
+    getConfig:
+      opts.getConfig ??
+      (() => opts.config ?? getEditorAiCompletionConfigSync()),
+  };
   return [
+    completionAcceptContextFacet.of(acceptContext),
+    Prec.high(completionAcceptContextField),
     Prec.high(suggestionField),
     ViewPlugin.define((view) => new SuggestionEnginePlugin(view, opts)),
     Prec.highest(keymap.of(editorSuggestionKeymapBindings)),
