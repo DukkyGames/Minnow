@@ -27,7 +27,7 @@ Two things happen behind the scenes:
 - Minnow creates its home folder, `%USERPROFILE%\.minnow` on Windows or `~/.minnow` elsewhere, and scaffolds the folders it uses. Empty directories in there are normal. See [Where your data lives](../reference/configuration.md).
 - A local tool server starts on port **9473**. It is what lets chat read files, run git, open a terminal, and save your sessions. It listens on loopback only unless you deliberately turn on LAN access.
 
-You will usually also get the **first-run setup wizard**: a short guided flow for picking a theme, choosing a provider, selecting a model, setting tool permissions, and turning memory on. It ends by handing you to a real assistant chat rather than a scripted demo, so you can ask it questions immediately. You can skip it and run it again later from **Settings → General → Run setup again**.
+You will usually also get the **first-run setup wizard**: a short guided flow for picking a theme, choosing a provider, selecting a model, setting tool permissions, and turning memory on. You can skip it and run it again later from **Settings → General → Run setup again**.
 
 ## Closing, quitting, and the tray
 

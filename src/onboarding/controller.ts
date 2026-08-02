@@ -8,7 +8,6 @@ import { navigateToSettingsField } from '../ui/settings-page';
 import { mountStepSidebar, type StepSidebarHandle } from './step-sidebar';
 import { getApplicableSteps, resolveStepIndex, ONBOARDING_STEPS } from './steps/registry';
 import { warmProviderProbes } from './steps/provider';
-import { resetGuideChatState } from './steps/guide';
 import {
   buildOnboardingContext,
   loadOnboardingState,
@@ -312,7 +311,6 @@ async function skipCurrent(): Promise<void> {
 export async function rerunOnboardingFromSettings(): Promise<void> {
   const { resetOnboardingForRerun } = await import('./state');
   await resetOnboardingForRerun();
-  resetGuideChatState();
   await mountOnboarding({ force: true });
 }
 

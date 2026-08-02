@@ -13,9 +13,9 @@ const DISCORD_INVITE_URL = 'https://discord.gg/U4FPzv9K4X';
 
 /** The three settings setup actually walks through, previewed up front. */
 const SETUP_PREVIEW: ReadonlyArray<{ name: string; desc: string }> = [
-  { name: 'Appearance', desc: 'Pick a theme and make it yours.' },
-  { name: 'Models', desc: 'Connect the models you’ll build with.' },
-  { name: 'Permissions', desc: 'Set what your agents can do.' },
+  { name: 'Appearance', desc: 'Choose a theme that suits you.' },
+  { name: 'Models', desc: 'Connect the models you’ll work with.' },
+  { name: 'Permissions', desc: 'Decide what your agents can do on their own.' },
 ];
 
 /** Identity, the personal note, and the signature. */
@@ -31,27 +31,42 @@ function renderVoice(): HTMLElement {
   const wordmarkBlock = el('div', 'mn-onboarding-welcome__wordmark-block');
   wordmarkBlock.appendChild(el('h1', 'mn-onboarding-welcome__wordmark', 'Minnow'));
   wordmarkBlock.appendChild(
-    el('p', 'mn-onboarding-welcome__tagline', 'An AI workspace for Everyone.'),
+    el(
+      'p',
+      'mn-onboarding-welcome__tagline',
+      'One workspace for the models you already run.',
+    ),
   );
   brand.appendChild(wordmarkBlock);
   voice.appendChild(brand);
 
   const letter = el('div', 'mn-onboarding-welcome__letter');
   letter.appendChild(
-    el('p', 'mn-onboarding-welcome__letter-lead', 'Hi, welcome to Minnow.'),
+    el(
+      'p',
+      'mn-onboarding-welcome__letter-lead',
+      'Minnow is a workspace for all models. What started as a basic chat, has spiraled into a full-featured workspace for chat, code, research, and orchestration...',
+    ),
   );
   letter.appendChild(
     el(
       'p',
       undefined,
-      'I built Minnow because AI should feel accessible, not locked behind someone else’s gate. Linus Torvalds (Linux) and Ton Roosendaal (Blender) showed what happens when powerful tools stay open, and personally, I don’t think a closed model of AI serves people well in the long run. This is a place where anyone can make anything, freely and openly.',
+      'It works with LM Studio, Ollama, or any endpoint you point it at. There’s no Minnow account, and nothing phones home. Your keys, chats, and files stay on your disk.',
+    ),
+  );
+  letter.appendChild(
+    el(
+      'p',
+      undefined,
+      'It’s very much still a work in progress, so you will hit some rough edges, but it’s at a point where it feels like it could actually be useful.',
     ),
   );
 
   const wip = el('p');
   wip.appendChild(
     document.createTextNode(
-      'It’s early and still rough in places. If something breaks or feels off, tell us on ',
+      'When something breaks — or just feels wrong — say so on ',
     ),
   );
   const discord = el('a', 'mn-onboarding-settings-link') as HTMLAnchorElement;
@@ -60,15 +75,19 @@ function renderVoice(): HTMLElement {
   discord.rel = 'noopener noreferrer';
   discord.textContent = 'Discord';
   wip.appendChild(discord);
-  wip.appendChild(document.createTextNode('. It genuinely helps.'));
+  wip.appendChild(
+    document.createTextNode(
+      ' or open an issue on GitHub. Nothing helps more than that.',
+    ),
+  );
   letter.appendChild(wip);
 
-  letter.appendChild(el('p', undefined, 'Thanks for giving it a shot.'));
+  letter.appendChild(el('p', undefined, 'Thanks for being here this early.'));
   voice.appendChild(letter);
 
   const sign = el('div', 'mn-onboarding-welcome__sign');
-  sign.appendChild(el('span', 'mn-onboarding-welcome__sign-name', 'Dukkus'));
-  sign.appendChild(el('span', 'mn-onboarding-welcome__sign-role', 'Creator of Minnow'));
+  sign.appendChild(el('span', 'mn-onboarding-welcome__sign-name', 'Henri Grimm'));
+  sign.appendChild(el('span', 'mn-onboarding-welcome__sign-role', 'Minnow Developer'));
   voice.appendChild(sign);
 
   return voice;
@@ -97,7 +116,7 @@ function renderPlan(): HTMLElement {
     el(
       'p',
       'mn-onboarding-welcome__plan-meta',
-      'About 2 minutes. Skip anything and finish later.',
+      'About two minutes. Skip anything and come back to it later.',
     ),
   );
 

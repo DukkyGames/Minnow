@@ -27,7 +27,6 @@ import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingChatId } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
 import { resolveBoardOnboardingQuestionHost } from './orchestrate-board-onboarding-questions';
-import { resolveOnboardingGuideQuestionHost } from '../onboarding/guide-questions';
 import { resolvePromptComposerShell, resolveQuestionHost } from './prompt-host-resolve';
 import {
   acquireUserPromptLock,
@@ -212,13 +211,6 @@ function unparkActiveQuestionModal(): void {
     return;
   }
 
-  const guideHost = resolveOnboardingGuideQuestionHost(state.chatId);
-  if (guideHost) {
-    migrateActiveQuestionModalToHost(guideHost);
-    activateEmbeddedQuestionChrome(state);
-    return;
-  }
-
   const boardHost = resolveBoardOnboardingQuestionHost(state.chatId);
   if (boardHost) {
     migrateActiveQuestionModalToHost(boardHost);
@@ -368,16 +360,10 @@ export function showQuestionCardsModal(
         host = planHost;
         embedded = true;
       } else {
-        const guideHost = resolveOnboardingGuideQuestionHost(options.chatId);
-        if (guideHost) {
-          host = guideHost;
+        const boardHost = resolveBoardOnboardingQuestionHost(options.chatId);
+        if (boardHost) {
+          host = boardHost;
           embedded = true;
-        } else {
-          const boardHost = resolveBoardOnboardingQuestionHost(options.chatId);
-          if (boardHost) {
-            host = boardHost;
-            embedded = true;
-          }
         }
       }
     }

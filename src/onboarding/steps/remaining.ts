@@ -223,7 +223,6 @@ export const doneStep: OnboardingStep = {
       ['Tool permissions', Boolean(ctx.state.steps.permissions?.done)],
       ['Memory and Brain', Boolean(ctx.state.steps.memory?.done)],
       ['Context7 library docs', Boolean(ctx.state.steps.context7?.done)],
-      ['Guided tour chat', Boolean(ctx.state.steps.explainer?.done)],
     ];
     rows.forEach(([label, ok]) => {
       const li = el('li', 'mn-onboarding-checklist__row');

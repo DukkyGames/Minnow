@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-07-31T23:46:14.735Z",
+  "createdAt": "2026-08-02T19:34:28.698Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -203,11 +203,11 @@
   },
   "editorIntentMode": {
     "enabledByDefault": false,
-    "autoRecheckDefault": false,
-    "debounceMs": 450,
-    "contextWindow": 5,
-    "recheckDelayMs": 600,
-    "maxRecheckPasses": 8
+    "debounceMs": 400,
+    "sigil": "",
+    "providerId": "",
+    "modelId": "",
+    "maxTokens": 768
   },
   "editorSettings": {
     "fontSize": 13,
@@ -237,9 +237,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-21oKuc",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-xn5h2x",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-21oKuc"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-xn5h2x"
     ]
   }
 }

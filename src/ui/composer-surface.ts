@@ -49,17 +49,6 @@ function resolveComposerKey(): AppId | 'desktop' {
 
 /** Composer for the foreground Minnow app; Code app when shell is on desktop idle. */
 export function getActiveComposerSurface(): ComposerSurface {
-  // First-run wizard chat: while the onboarding overlay's composer exists it owns
-  // the surface (the overlay is modal above every app surface).
-  const onboardingInput = document.getElementById(
-    'onboardingChatInput',
-  ) as HTMLTextAreaElement | null;
-  if (onboardingInput) {
-    return {
-      inputEl: onboardingInput,
-      sendBtnEl: document.getElementById('onboardingChatSendBtn') as HTMLButtonElement | null,
-    };
-  }
   const key = resolveComposerKey();
   const registered = registry.get(key);
   if (registered) return registered;

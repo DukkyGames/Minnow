@@ -98,7 +98,7 @@ Mark each section **Pass / Fail / Skip (reason)**.
 - [ ] Provider path: local (LM Studio / Ollama) **or** cloud — credentials save; errors are readable
 - [ ] Model pick: menubar chip lists models after refresh
 - [ ] Extras / permissions / memory steps complete without console errors
-- [ ] Guide chat (onboarding mode) finishes; desktop is usable
+- [ ] Finish step opens desktop; desktop is usable
 - [ ] Skip: Email and Calendar steps (not applicable when apps are hidden)
 
 ### First desktop minute
