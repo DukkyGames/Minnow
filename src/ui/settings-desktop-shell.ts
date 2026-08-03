@@ -1,11 +1,14 @@
 /**
- * Settings → General: Desktop app (close-to-tray, launch at startup).
+ * Settings → General: Desktop app (close-to-tray, launch at startup, interface zoom).
  */
 
 import { detectConfigServer } from '../config/storage-mode';
 import { setStatus } from './status';
-import { appendSettingsOfflineHint } from './settings-controls';
+import { appendSettingsOfflineHint, createSettingsSelectRow } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
+
+/** Match electron/shell-zoom.ts presets (renderer cannot import the main process module). */
+const SHELL_ZOOM_PRESET_PERCENTS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 200] as const;
 
 function isElectronShell(): boolean {
   return window.minnow?.app?.isElectron === true;
@@ -39,10 +42,29 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
     );
   }
 
-  const [closeToTray, loginItem] = await Promise.all([
+  const [closeToTray, loginItem, zoomPercent] = await Promise.all([
     api.getCloseToTray(),
     api.getLoginItem(),
+    api.getZoomPercent(),
   ]);
+
+  const zoomOptions = SHELL_ZOOM_PRESET_PERCENTS.map((value) => ({
+    value: String(value),
+    label: `${value}%`,
+  }));
+  const zoomKey = String(zoomPercent);
+  if (!zoomOptions.some((opt) => opt.value === zoomKey)) {
+    zoomOptions.push({ value: zoomKey, label: `${zoomPercent}%` });
+  }
+
+  const { row: zoomRow, select: zoomSelect } = createSettingsSelectRow('Interface zoom', {
+    searchKey: 'general.desktop.zoom',
+    description:
+      'Scale the Minnow desktop window. Ctrl/Cmd + and − adjust zoom; the value here updates to match.',
+    options: zoomOptions,
+    value: zoomKey,
+    disabled: serverUp !== 'server',
+  });
 
   const { row: closeRow, input: closeInput } = createSettingsToggleRow(
     'Keep Minnow running after closing the window',
@@ -69,7 +91,26 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
     },
   );
 
-  mount.append(closeRow, loginRow);
+  mount.append(zoomRow, closeRow, loginRow);
+
+  zoomSelect.addEventListener('change', () => {
+    void (async () => {
+      const raw = Number.parseInt(zoomSelect.value, 10);
+      if (!Number.isFinite(raw)) return;
+      try {
+        const next = await api.setZoomPercent(raw);
+        zoomSelect.value = String(next);
+        setStatus('ok', `Interface zoom set to ${next}%`);
+      } catch {
+        zoomSelect.value = String(await api.getZoomPercent());
+        setStatus('err', 'Could not save zoom preference');
+      }
+    })();
+  });
+
+  api.onZoomPercentChanged((percent) => {
+    zoomSelect.value = String(percent);
+  });
 
   closeInput.addEventListener('change', () => {
     void (async () => {

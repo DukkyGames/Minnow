@@ -84,6 +84,9 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'general.desktop.closeToTray': meta('desktopShell.closeToTray', 'boolean', {
     refreshAreas: ['general'],
   }),
+  'general.desktop.zoom': meta('desktopShell.zoomPercent', 'number', {
+    refreshAreas: ['general'],
+  }),
   'general.desktop.launchAtStartup': section(['general']),
   'general.chat.terminal': section(['general']),
   'general.toolCalls.constrained': meta('toolCalls.useConstrainedDecoding', 'boolean', {

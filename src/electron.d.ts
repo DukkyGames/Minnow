@@ -354,6 +354,9 @@ export interface MinnowTrayApi {
   setLoginItem(enabled: boolean): Promise<MinnowLoginItemSnapshot>;
   onCommand(callback: (command: MinnowTrayCommand) => void): () => void;
   onCloseToTrayChanged(callback: (enabled: boolean) => void): () => void;
+  getZoomPercent(): Promise<number>;
+  setZoomPercent(percent: number): Promise<number>;
+  onZoomPercentChanged(callback: (percent: number) => void): () => void;
 }
 
 /** macOS display sleep / system resume hooks for AFK board reliability. */

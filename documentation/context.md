@@ -541,7 +541,7 @@ Config: `config.editorIntentMode` (`enabledByDefault`, `debounceMs`, `sigil`, `p
 ## Electron and packaging
 
 - **Dev:** `npm start` spawns Electron after Vite is up.
-- **Shell zoom:** Main window defaults to **80%** (`DEFAULT_SHELL_ZOOM_FACTOR` in [`electron/desktop-shell-config.ts`](../electron/desktop-shell-config.ts)); users can still change zoom with the usual Chromium shortcuts and Electron persists per-origin zoom.
+- **Shell zoom:** Main window default **80%** (`config.desktopShell.zoomPercent`, [`electron/shell-zoom.ts`](../electron/shell-zoom.ts)). Applied on load so it overrides stale Chromium per-host zoom; **Settings → General → Desktop app → Interface zoom** and Ctrl/Cmd +/− keep config in sync.
 - **Package:** `npm run package` → `release/pkg` (NSIS on Windows). `npm run package:linux` → AppImage on Linux; on Windows/macOS use `npm run package:linux:docker` (Docker + `electronuserland/builder:22`). `npm run package:mac` / `package:win` target a single OS.
 - **Native binaries in asar:** `electron-builder` `asarUnpack` must include subprocess executables (e.g. `@lydell/node-pty`, `@vscode/ripgrep*`). [`server/lib/ripgrep-path.js`](../server/lib/ripgrep-path.js) remaps `@vscode/ripgrep` paths from `app.asar` → `app.asar.unpacked` before spawn and **never** execs through `app.asar/…` (Electron’s `existsSync` can lie on asar paths; macOS then fails spawn with `ENOTDIR`). `grep`, `find_files`, Brain code index, research codebase search, and workspace LOC all depend on it.
 - **Preview browser:** requires Electron (`window.minnow.preview`); hidden in plain browser tabs.

@@ -127,3 +127,9 @@ export const TRAY_SET_LOGIN_ITEM = 'minnow:tray:set-login-item';
 export const TRAY_COMMAND = 'minnow:tray:command';
 /** Main → renderer: close-to-tray preference changed. */
 export const TRAY_CLOSE_TO_TRAY_CHANGED = 'minnow:tray:close-to-tray-changed';
+/** Renderer → main: read persisted shell zoom percent. */
+export const SHELL_GET_ZOOM_PERCENT = 'minnow:shell:get-zoom-percent';
+/** Renderer → main: persist and apply shell zoom percent. */
+export const SHELL_SET_ZOOM_PERCENT = 'minnow:shell:set-zoom-percent';
+/** Main → renderer: shell zoom percent changed (settings or keyboard shortcuts). */
+export const SHELL_ZOOM_PERCENT_CHANGED = 'minnow:shell:zoom-percent-changed';

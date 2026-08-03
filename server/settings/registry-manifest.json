@@ -84,6 +84,28 @@
     ]
   },
   {
+    "key": "general.desktop.zoom",
+    "label": "Interface zoom",
+    "keywords": [
+      "zoom",
+      "scale",
+      "size",
+      "magnify",
+      "desktop",
+      "ui"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "desktopShell.zoomPercent",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.desktop.launchAtStartup",
     "label": "Launch Minnow at startup",
     "keywords": [

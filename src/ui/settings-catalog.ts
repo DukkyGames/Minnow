@@ -153,6 +153,10 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('general.desktop.closeToTray', 'Keep Minnow running after closing the window', 'general', 'general', {
     keywords: ['tray', 'background', 'close', 'hide'],
   }),
+  field('general.desktop.zoom', 'Interface zoom', 'general', 'general', {
+    keywords: ['zoom', 'scale', 'size', 'magnify', 'desktop', 'ui'],
+    description: 'Scale the Minnow desktop window (Electron shell only).',
+  }),
   field('general.desktop.launchAtStartup', 'Launch Minnow at startup', 'general', 'general', {
     keywords: ['login', 'boot', 'startup', 'open at login'],
   }),

@@ -27,10 +27,12 @@ import { loadWindowState, trackWindowState } from './window-state.js';
 import { resolveMinnowPort } from './minnow-port.js';
 import { disposeUpdater, initUpdater } from './updater.js';
 import {
-  applyDefaultShellZoom,
   readCloseToTrayPreference,
+  readShellZoomPercent,
   writeCloseToTrayPreference,
+  writeShellZoomPercent,
 } from './desktop-shell-config.js';
+import { applyShellZoom, DEFAULT_SHELL_ZOOM_PERCENT, shellZoomFactorFromPercent, wireShellZoom } from './shell-zoom.js';
 import { readLoginItemSnapshot, writeLoginItemOpenAtLogin } from './login-item.js';
 import { createTrayManager, type TrayManager } from './tray.js';
 import {
@@ -92,6 +94,7 @@ let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
 let quitInProgress = false;
 let closeToTrayEnabled = true;
+let shellZoomPercent = DEFAULT_SHELL_ZOOM_PERCENT;
 let trayManager: TrayManager | null = null;
 let bootstrapPromise: Promise<void> | null = null;
 const queuedTrayCommands: TrayRendererCommand[] = [];
@@ -254,6 +257,19 @@ function registerIpcHandlers(): void {
     trayManager?.rebuildMenu();
     return next;
   });
+
+  ipcMain.handle(channels.SHELL_GET_ZOOM_PERCENT, () => shellZoomPercent);
+
+  ipcMain.handle(channels.SHELL_SET_ZOOM_PERCENT, async (_event, percent: unknown) => {
+    if (typeof percent !== 'number' || !Number.isFinite(percent)) return shellZoomPercent;
+    shellZoomPercent = await writeShellZoomPercent(percent);
+    const win = mainWindow;
+    if (win && !win.isDestroyed()) {
+      applyShellZoom(win.webContents, shellZoomPercent);
+      win.webContents.send(channels.SHELL_ZOOM_PERCENT_CHANGED, shellZoomPercent);
+    }
+    return shellZoomPercent;
+  });
 }
 
 /** Push shell maximize state to the renderer for menubar control icons. */
@@ -410,12 +426,23 @@ async function createMainWindow(): Promise<BrowserWindow> {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: false,
+      zoomFactor: shellZoomFactorFromPercent(shellZoomPercent),
       // Keep AFK board/chat timers + SSE delivery alive when the display sleeps.
       backgroundThrottling: false,
     },
   });
 
-  applyDefaultShellZoom(win.webContents);
+  wireShellZoom(win, {
+    readPercent: async () => shellZoomPercent,
+    writePercent: async (percent) => {
+      shellZoomPercent = await writeShellZoomPercent(percent);
+      return shellZoomPercent;
+    },
+    notifyPercentChanged: (percent) => {
+      if (win.isDestroyed()) return;
+      win.webContents.send(channels.SHELL_ZOOM_PERCENT_CHANGED, percent);
+    },
+  });
 
   if (saved.isMaximized) {
     win.maximize();
@@ -552,6 +579,7 @@ async function bootstrapInner(): Promise<void> {
   initUpdater({ prepareQuitForUpdate });
 
   closeToTrayEnabled = await readCloseToTrayPreference();
+  shellZoomPercent = await readShellZoomPercent();
   const tray = ensureTrayManager();
   tray.ensureTray();
   tray.updateStatus({ ...EMPTY_TRAY_STATUS });

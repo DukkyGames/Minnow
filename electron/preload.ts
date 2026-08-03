@@ -403,6 +403,14 @@ const minnowBridge = {
       ipcRenderer.on(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
       return () => ipcRenderer.removeListener(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
     },
+    getZoomPercent: (): Promise<number> => ipcRenderer.invoke(channels.SHELL_GET_ZOOM_PERCENT),
+    setZoomPercent: (percent: number): Promise<number> =>
+      ipcRenderer.invoke(channels.SHELL_SET_ZOOM_PERCENT, percent),
+    onZoomPercentChanged: (callback: (percent: number) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, percent: number) => callback(percent);
+      ipcRenderer.on(channels.SHELL_ZOOM_PERCENT_CHANGED, handler);
+      return () => ipcRenderer.removeListener(channels.SHELL_ZOOM_PERCENT_CHANGED, handler);
+    },
   },
   power: {
     setAfkBoardGuard: (active: boolean): void => {

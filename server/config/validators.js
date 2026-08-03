@@ -1767,10 +1767,16 @@ export function mergeConfigMeta(existing, patch) {
     const existingShell =
       base.desktopShell && typeof base.desktopShell === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.desktopShell) }
-        : { closeToTray: true };
+        : { closeToTray: true, zoomPercent: 80 };
     const ds = /** @type {Record<string, unknown>} */ (p.desktopShell);
     if (typeof ds.closeToTray === 'boolean') {
       existingShell.closeToTray = ds.closeToTray;
+    }
+    if (typeof ds.zoomPercent === 'number' && Number.isFinite(ds.zoomPercent)) {
+      const rounded = Math.round(ds.zoomPercent);
+      if (rounded >= 50 && rounded <= 300) {
+        existingShell.zoomPercent = rounded;
+      }
     }
     base.desktopShell = existingShell;
   }
