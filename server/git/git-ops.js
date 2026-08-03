@@ -773,7 +773,7 @@ export async function show({ cwd, sha } = {}) {
   }
 
   const { stat, patch } = splitShowOutput(result.stdout);
-  return { ok: true, patch, stat };
+  return { ok: true, patch, stat, stdout: result.stdout };
 }
 
 /** Detect merge/rebase/cherry-pick conflict from git stderr/stdout. */

@@ -157,6 +157,8 @@ describe('git API', () => {
     assert.equal(detail.ok, true);
     assert.match(detail.stat ?? '', /files? changed/);
     assert.match(detail.patch ?? '', /diff --git/);
+    assert.match(detail.stdout ?? '', /diff --git/);
+    assert.match(detail.stdout ?? '', /Author:/);
   });
 
   test('branches lists current branch', async () => {
