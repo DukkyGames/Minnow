@@ -47,7 +47,7 @@ function buildDesktopToolsAnchor(): HTMLElement {
       <h2 class="composer-tools-popover__title">Tools</h2>
     </header>
     <div id="desktopToolsStatus" class="composer-tools-popover__status hidden" role="status" aria-live="polite">
-      <p id="desktopToolsServerBanner" class="composer-tools-popover__notice hidden">Server tools need <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <p id="desktopToolsServerBanner" class="composer-tools-popover__notice hidden">Some tools need Minnow running locally. Open or restart the app.</p>
       <p id="desktopToolsPreviewBanner" class="composer-tools-popover__notice hidden">Browser tools need the Minnow desktop app window.</p>
     </div>
     <div id="desktopToolsList" class="tools-list tools-list--composer"></div>
@@ -111,6 +111,15 @@ function buildDesktopComposer(): HTMLElement {
   const row = document.createElement('div');
   row.className = 'mn-os-desktop-input-row';
 
+  const brainNotesWrap = document.createElement('div');
+  brainNotesWrap.id = 'desktopBrainNotesWrap';
+  brainNotesWrap.className = 'desktop-brain-notes-wrap hidden';
+
+  const brainNotesControl = document.createElement('div');
+  brainNotesControl.id = 'desktopBrainNotesControl';
+  brainNotesControl.className = 'brain-notes-toggle-host';
+  brainNotesWrap.appendChild(brainNotesControl);
+
   const attachBtn = document.createElement('button');
   attachBtn.type = 'button';
   attachBtn.id = 'btnDesktopAttach';
@@ -170,7 +179,7 @@ function buildDesktopComposer(): HTMLElement {
   sendBtn.setAttribute('aria-label', 'Send message');
   sendBtn.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
-  row.append(attachBtn, inputStack, toolsAnchor, contextAnchor, sendBtn);
+  row.append(brainNotesWrap, attachBtn, inputStack, toolsAnchor, contextAnchor, sendBtn);
   root.append(toolApprovalHost, questionHost, modelTriggerRow, row);
   return root;
 }

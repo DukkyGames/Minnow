@@ -21,6 +21,8 @@ import {
 
 export type ContextUsageSectionKey =
   | 'system'
+  | 'codeMap'
+  | 'contextDocuments'
   | 'rules'
   | 'tools'
   | 'history'
@@ -104,12 +106,45 @@ export function buildContextUsageBreakdown(
     {
       key: 'system',
       label: estimate.legacyFallback ? 'System (legacy drawer)' : 'System',
-      tokens: estimate.composedSystem,
+      tokens: Math.max(
+        0,
+        estimate.composedSystem -
+          (estimate.codeMapSystem ?? 0) -
+          (estimate.contextDocumentsSystem ?? 0),
+      ),
     },
+  ];
+  if (estimate.codeMapSystem != null && estimate.codeMapSystem > 0) {
+    rows.push({
+      key: 'codeMap',
+      label: 'Code map',
+      tokens: estimate.codeMapSystem,
+    });
+  } else if (estimate.codeMapInjectionEnabled) {
+    rows.push({
+      key: 'codeMap',
+      label: 'Code map (loading)',
+      tokens: 0,
+    });
+  }
+  if (estimate.contextDocumentsSystem != null && estimate.contextDocumentsSystem > 0) {
+    rows.push({
+      key: 'contextDocuments',
+      label: 'Context documents',
+      tokens: estimate.contextDocumentsSystem,
+    });
+  } else if (estimate.contextDocumentsInjectionEnabled) {
+    rows.push({
+      key: 'contextDocuments',
+      label: 'Context documents (loading)',
+      tokens: 0,
+    });
+  }
+  rows.push(
     { key: 'rules', label: 'Rules', tokens: estimate.userRules },
     { key: 'tools', label: 'Tools', tokens: estimate.tools },
     { key: 'history', label: historyLabel, tokens: estimate.history },
-  ];
+  );
   if (
     estimate.compressedContextEstimate != null &&
     estimate.compressedContextEstimate > 0
@@ -244,8 +279,9 @@ export function assembleContextBudget(params: {
 export async function getContextBudget(
   options?: GetContextBudgetOptions,
 ): Promise<ContextBudget> {
-  const { getActiveChat } = await import('../state/sessions');
+  const { getActiveChat, ensureChatHistoryLoaded } = await import('../state/sessions');
   const chat = options?.chat ?? getActiveChat();
+  await ensureChatHistoryLoaded(chat.id);
   const modelId =
     options?.modelId?.trim() ||
     chat.modelId?.trim() ||

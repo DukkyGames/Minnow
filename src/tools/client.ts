@@ -311,7 +311,7 @@ async function executeToolInner(
     if (!isLocalServerAvailable()) {
       return {
         content:
-          'Error: MCP and plugin tools require the local server. Run `npm start` (not Vite-only dev).',
+          'Error: MCP and plugin tools require Minnow running locally. Open or restart the app.',
       };
     }
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
@@ -486,7 +486,7 @@ async function executeToolBodyAfterGates(
     if (!isElectronPreviewAvailable()) {
       return {
         content:
-          'Error: Browser automation runs in the Minnow desktop shell. Use the Minnow app window from npm start or npm run electron:dev — not a separate browser tab.',
+          'Error: Browser automation runs in the Minnow desktop app. Use the Minnow app window — not a separate browser tab.',
       };
     }
     if (name === 'browser_navigate') {
@@ -504,7 +504,7 @@ async function executeToolBodyAfterGates(
     if (!isLocalServerAvailable()) {
       return {
         content:
-          'Error: local tool server is not available. Run `npm start` for file, git, and code tools.',
+          'Error: File, git, and code tools need Minnow running locally. Open or restart the app.',
       };
     }
     const useStreaming =
@@ -788,7 +788,7 @@ async function executeServerTool(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { content: `Error: failed to reach tool server (${message})` };
+    return { content: `Error: failed to reach Minnow (${message})` };
   }
 
   let responsePayload: {
@@ -801,13 +801,13 @@ async function executeServerTool(
     responsePayload = (await response.json()) as typeof responsePayload;
   } catch {
     return {
-      content: `Error: invalid JSON from tool server (HTTP ${response.status})`,
+      content: `Error: invalid JSON from Minnow (HTTP ${response.status})`,
     };
   }
 
   if (!response.ok) {
     return {
-      content: `Error: ${responsePayload.error ?? `tool server HTTP ${response.status}`}`,
+      content: `Error: ${responsePayload.error ?? `Minnow request failed (HTTP ${response.status})`}`,
     };
   }
 

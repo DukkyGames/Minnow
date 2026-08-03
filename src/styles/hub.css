@@ -47,7 +47,7 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 
 .hub-inner {
   width: 100%;
-  max-width: 840px;
+  max-width: 1024px;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
@@ -260,7 +260,8 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 }
 
 .input-bar--hub .input-wrap--inset-actions #msgInput {
-  padding-right: calc(8px + 2 * var(--input-inset-btn-size, 36px) + 4px);
+  /* attach + mic + expand */
+  padding-right: calc(8px + 3 * var(--input-inset-btn-size, 36px) + 4px);
 }
 
 /* Same grid row as .input-row so send aligns with the message/plan field */

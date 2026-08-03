@@ -94,6 +94,7 @@ function pathToSegments(absPath: string): { label: string; path: string }[] {
   }
 
   const isWin = /^[A-Za-z]:/.test(trimmed);
+  const isAbsoluteUnix = !isWin && trimmed.startsWith('/');
   const sep = isWin ? '\\' : '/';
   const parts = trimmed.replace(/\\/g, '/').split('/').filter(Boolean);
   const segments: { label: string; path: string }[] = [];
@@ -108,7 +109,9 @@ function pathToSegments(absPath: string): { label: string; path: string }[] {
     const prevPath = segments[i - 1]?.path ?? '';
     const path =
       i === 0
-        ? part
+        ? isAbsoluteUnix
+          ? `/${part}`
+          : part
         : `${prevPath.replace(new RegExp(`${sep.replace('\\', '\\\\')}+$`), '')}${sep}${part}`;
     segments.push({ label: part, path });
   }

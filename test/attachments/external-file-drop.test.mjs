@@ -42,6 +42,29 @@ describe('external-file-drop', () => {
     assert.equal(hasWorkspaceFileDrag(transfer), true);
   });
 
+  test('hasWorkspaceFileDrag rejects code-like single lines', () => {
+    const transfer = makeTransfer(['text/plain'], [], { 'text/plain': 'cat_count = 0' });
+    assert.equal(hasWorkspaceFileDrag(transfer), false);
+  });
+
+  test('classifyFileDrag prefers code selection MIME', () => {
+    const transfer = makeTransfer(
+      ['application/x-minnow-code-selection', 'text/plain'],
+      [],
+      {
+        'application/x-minnow-code-selection': JSON.stringify({
+          workspacePath: 'main.py',
+          startLine: 1,
+          endLine: 1,
+          text: 'cat_count = 0',
+        }),
+        'text/plain': 'cat_count = 0',
+      },
+    );
+    assert.equal(classifyFileDrag(transfer), 'codeSelection');
+    assert.equal(hasWorkspaceFileDrag(transfer), false);
+  });
+
   test('hasExternalFileDrag detects Files type', () => {
     assert.equal(hasExternalFileDrag(makeTransfer(['Files'])), true);
     assert.equal(hasExternalFileDrag(makeTransfer(['text/plain'])), false);

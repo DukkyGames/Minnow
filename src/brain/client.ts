@@ -234,9 +234,35 @@ export async function fetchBrainGitHookStatus(): Promise<BrainCodeGitHookStatus 
 
 /** Token-budgeted signature repo map. */
 export async function fetchBrainCodeRepoMap(options?: {
+  repo?: string;
   focus?: string;
+  focusFiles?: string[];
   tokenBudget?: number;
+  ensureIndexed?: boolean;
+  profile?: 'default' | 'injection';
 }): Promise<BrainCodeRepoMap | null> {
+  const postBody =
+    options &&
+    (options.repo?.trim() ||
+      options.ensureIndexed === true ||
+      options.profile === 'injection' ||
+      (options.focusFiles?.length ?? 0) > 0);
+  if (postBody) {
+    const opts = options;
+    return brainFetch<BrainCodeRepoMap>('/api/brain/code/repo-map', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(opts.repo?.trim() ? { repo: opts.repo.trim() } : {}),
+        ...(opts.focus?.trim() ? { focus: opts.focus.trim() } : {}),
+        ...(opts.focusFiles?.length ? { focusFiles: opts.focusFiles } : {}),
+        ...(opts.tokenBudget && opts.tokenBudget > 0
+          ? { tokenBudget: opts.tokenBudget }
+          : {}),
+        ...(opts.ensureIndexed === true ? { ensureIndexed: true } : {}),
+        ...(opts.profile === 'injection' ? { profile: 'injection' } : {}),
+      }),
+    });
+  }
   const qs = new URLSearchParams();
   if (options?.focus?.trim()) qs.set('focus', options.focus.trim());
   if (options?.tokenBudget && options.tokenBudget > 0) {
@@ -304,7 +330,7 @@ async function brainMutate<T extends Record<string, unknown>>(
   body: Record<string, unknown>,
 ): Promise<BrainMutationResult & T> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, error: 'Offline — start npm start.' } as BrainMutationResult & T;
+    return { ok: false, error: 'Offline — open Minnow.' } as BrainMutationResult & T;
   }
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -329,7 +355,7 @@ async function brainMutate<T extends Record<string, unknown>>(
 /** Delete one wiki page by relative path. */
 export async function deleteBrainPage(relPath: string): Promise<BrainMutationResult> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, error: 'Offline — start npm start.' };
+    return { ok: false, error: 'Offline — open Minnow.' };
   }
   try {
     const qs = new URLSearchParams({ path: relPath });
@@ -359,7 +385,7 @@ export async function deleteBrainArchive(
   workspaceKey?: string,
 ): Promise<BrainMutationResult> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, error: 'Offline — start npm start.' };
+    return { ok: false, error: 'Offline — open Minnow.' };
   }
   try {
     const qs = workspaceKey

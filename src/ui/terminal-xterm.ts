@@ -281,12 +281,15 @@ function ensureTerminal(): Terminal | null {
   hostEl.setAttribute('aria-label', 'Terminal');
   hostEl.setAttribute('aria-keyshortcuts', 'Control+C Meta+C');
 
+  const activeTerminal = term;
+  if (!activeTerminal) return null;
+
   // Copy selected text on Ctrl/Cmd+C; otherwise Ctrl+C still sends SIGINT to the PTY.
-  term.attachCustomKeyEventHandler((event) => {
-    if (!shouldCopyTerminalSelectionOnKeydown(event, term.hasSelection())) {
+  activeTerminal.attachCustomKeyEventHandler((event) => {
+    if (!shouldCopyTerminalSelectionOnKeydown(event, activeTerminal.hasSelection())) {
       return true;
     }
-    const selection = term.getSelection();
+    const selection = activeTerminal.getSelection();
     if (selection) {
       event.preventDefault();
       void copyTextToClipboard(selection);
@@ -294,7 +297,7 @@ function ensureTerminal(): Terminal | null {
     return false;
   });
 
-  term.onData((data) => {
+  activeTerminal.onData((data) => {
     if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
 
     if (handleHistoryKeys(data)) return;
@@ -428,6 +431,21 @@ export async function detachTerminalTab(
 
 export function focusTerminalXterm(): void {
   term?.focus();
+}
+
+/**
+ * Insert plain text at the shell prompt (file-tree drag-drop, paste helpers).
+ * Updates the in-memory line buffer used for per-tab history navigation.
+ */
+export function insertTextAtTerminalInput(text: string): void {
+  if (!text) return;
+  const t = ensureTerminal();
+  if (!t) return;
+  t.focus();
+  if (activeWs?.readyState === WebSocket.OPEN) {
+    trackLineBufferInput(text);
+    sendPtyInput(text);
+  }
 }
 
 export function fitTerminalXterm(): void {

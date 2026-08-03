@@ -159,7 +159,8 @@ async function runSubAgentNonStreamTurn(
   const message = chunk.choices?.[0]?.message;
   const fullText = extractAssistantCompletionText(message);
   const reasoningText = extractReasoningMessage(message).trim();
-  const finishReason = chunk.choices?.[0]?.finish_reason;
+  const finishReasonRaw = chunk.choices?.[0]?.finish_reason;
+  const finishReason = finishReasonRaw == null ? undefined : finishReasonRaw;
   return {
     fullText,
     reasoningText,
@@ -192,7 +193,7 @@ function resolveSubAgentModelContextLimit(modelId: string): number | null {
   if (!id) return null;
   const cached = getModelRowForSelectOrCanonicalId(id);
   if (!cached) return null;
-  return contextLengthFromModelRow(cached);
+  return contextLengthFromModelRow(cached) ?? null;
 }
 
 /** Throttle live transcript pushes so the drawer can keep up while streaming. */

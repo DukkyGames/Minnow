@@ -33,6 +33,6 @@ export function formatThinkingInheritedLabel(
   sourceLabel: string,
 ): string {
   if (triState !== 'inherit') return '';
-  const modeLabel = resolved === 'on' ? 'On' : 'Off';
+  const modeLabel = resolved === 'on' ? 'Reasoning on' : 'Reasoning off';
   return `Inherited · ${modeLabel} (${sourceLabel})`;
 }

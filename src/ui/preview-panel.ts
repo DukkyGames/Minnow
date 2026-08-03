@@ -9,6 +9,7 @@ import type { MinnowPreviewApi } from '../electron';
 import {
   getFilePanelState,
   patchFilePanelState,
+  type PaneSlotId,
   type PreviewDevToolsDock,
   type PreviewSource,
 } from '../state/file-panel';
@@ -89,7 +90,7 @@ async function dismissFileViewerForPreview(): Promise<boolean> {
 }
 
 const BROWSER_PREVIEW_HINT =
-  'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
+  'Full Chromium preview (any website or local file) runs in the Minnow desktop app.';
 const PREVIEW_FILE_API = '/api/preview/file/';
 const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;
@@ -333,7 +334,7 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   if (!body) return;
 
   const usingIframe = usesDesignModeIframeGuest();
-  setDesignModeUsingIframeGuest(usingIframe);
+  setDesignModeUsingIframeGuest(DESIGN_MODE_INSTANCE_ID, usingIframe);
 
   const designOn = usesElectronPreview() && isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID);
   const session = getDesignModeSession(DESIGN_MODE_INSTANCE_ID);
@@ -382,8 +383,11 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   }
 }
 
+/** Primary workspace preview — exported for secondary design guest sync. */
+export const syncPrimaryDesignModeElectronGuest = syncDesignModeElectronGuest;
+
 /** Design Mode is a Code-workspace tool — hidden and disabled on the Minnow desktop browser drawer. */
-async function isPreviewDesignModeAvailable(): Promise<boolean> {
+export async function isPreviewDesignModeAvailable(): Promise<boolean> {
   const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
   return !isDesktopWorkspaceHostingActive();
 }
@@ -398,6 +402,11 @@ export async function syncPreviewDesignToolbarForSurface(): Promise<void> {
 
   if (designBtn) designBtn.hidden = !available;
   syncAnnotationsToggleVisibility(available);
+
+  const secondaryDesignBtn = document.getElementById(
+    'btnPreviewDesignToggleSecondary',
+  ) as HTMLButtonElement | null;
+  if (secondaryDesignBtn) secondaryDesignBtn.hidden = !available;
 
   if (available) return;
 
@@ -822,10 +831,10 @@ async function clearPreviewGuest(tabId?: string): Promise<void> {
     return;
   }
   if (api.clear) {
-    await api.clear(id);
+    await api.clear(id ?? undefined);
     return;
   }
-  await api.loadURL('about:blank', id);
+  await api.loadURL('about:blank', id ?? undefined);
 }
 
 async function loadSourceInPreview(
@@ -838,10 +847,11 @@ async function loadSourceInPreview(
   const id = resolveTabId(tabId);
   setPreviewLoading(true, id ?? undefined);
   const url = resolvePreviewLoadUrl(source, cacheBust, getFileTreeListingWorkspaceRoot());
+  const tabKey = id ?? undefined;
   if (api.loadSource) {
-    await api.loadSource({ kind: 'url', url, cacheBust }, id);
+    await api.loadSource({ kind: 'url', url, cacheBust }, tabKey);
   } else {
-    await api.loadURL(url, id);
+    await api.loadURL(url, tabKey);
   }
   await showPreviewHost();
 }
@@ -999,10 +1009,33 @@ function applySourceToPreview(source: PreviewSource, cacheBust?: number, tabId?:
   showActiveTabFrame();
 }
 
-export async function activatePreviewTabGuest(tabId: string, options?: { forceLoad?: boolean }): Promise<void> {
+export async function activatePreviewTabGuest(
+  tabId: string,
+  options?: { forceLoad?: boolean; slot?: PaneSlotId },
+): Promise<void> {
   activatePreviewTab(tabId);
   const { showPreviewSplit } = await import('./file-layout');
-  showPreviewSplit();
+  const split = await import('./right-pane-split');
+  const splitLayout = split.isRightPaneSplitLayoutEnabled();
+
+  // Ownership decides the pane: a tab already living in the other group is revealed
+  // there rather than yanked into the focused one.
+  const slotTabs = await import('./right-pane-slot-tabs');
+  const targetSlot = splitLayout
+    ? slotTabs.registerPreviewTabOpened(tabId, options?.slot)
+    : 'primary';
+  if (splitLayout) split.focusPaneSlot(targetSlot);
+  showPreviewSplit({ tabId, slot: targetSlot });
+
+  if (splitLayout && targetSlot === 'secondary') {
+    // The primary header/address bar belongs to the other group — leave it alone.
+    const tab = getPreviewTab(tabId);
+    if (!tab) return;
+    const { renderSecondaryPreviewSlot } = await import('./preview-secondary-slot');
+    await renderSecondaryPreviewSlot(tabId);
+    return;
+  }
+
   showActiveTabFrame();
   syncPreviewChromeFromState();
 
@@ -1083,10 +1116,16 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
   const tabs = listPreviewTabs();
   const isLastTab = tabs.length <= 1;
 
+  const slotTabs = await import('./right-pane-slot-tabs');
+  const split = await import('./right-pane-split');
+  const owningSlot = slotTabs.slotOwningPreviewId(tabId);
+
   if (usesElectronPreview()) {
     const api = getPreviewApi();
+    // Close the guest in the instance that owns it, not always the primary one.
+    const instanceId = owningSlot ? split.previewInstanceIdForSlot(owningSlot) : undefined;
     if (api?.tabs?.close) {
-      await api.tabs.close(tabId);
+      await api.tabs.close(tabId, instanceId);
     } else {
       await clearPreviewGuest(tabId);
     }
@@ -1094,6 +1133,8 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
   destroyPreviewFrame(tabId);
   clearLoadedTabGuest(tabId);
   closePreviewTab(tabId);
+  slotTabs.unregisterPreviewTab(tabId);
+  split.collapseEmptySlots();
 
   if (isLastTab) {
     cancelDeferredPreviewLoad();

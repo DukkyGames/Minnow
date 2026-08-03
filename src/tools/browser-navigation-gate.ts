@@ -141,7 +141,7 @@ export async function maybeBlockBrowserNavigation(
   if (!check) {
     return {
       content:
-        'Error: Could not verify browser allowlist (is npm start running?). Retry browser_navigate after the server is up.',
+        'Error: Could not verify browser allowlist (is Minnow running locally?). Retry browser_navigate after the app is running.',
     };
   }
   if (check.allowed) {
@@ -222,7 +222,7 @@ export async function maybeBlockBrowserNavigation(
   const recheck = await checkBrowserNavigationAllowed(url);
   if (!recheck?.allowed) {
     return {
-      content: 'Error: Could not update browser allowlist (is npm start running?)',
+      content: 'Error: Could not update browser allowlist (is Minnow running locally?)',
     };
   }
 
@@ -244,7 +244,7 @@ export async function applyBrowserOriginDecision(
   const ok = await approveBrowserNavigation(url, decision);
   if (!ok) {
     return {
-      content: 'Error: Could not update browser allowlist (is npm start running?)',
+      content: 'Error: Could not update browser allowlist (is Minnow running locally?)',
     };
   }
   return null;

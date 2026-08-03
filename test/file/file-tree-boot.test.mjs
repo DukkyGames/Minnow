@@ -21,13 +21,13 @@ function setupFileTreeDom() {
 }
 
 describe('file tree boot', { concurrency: false }, () => {
-  test('offline empty state mentions npm start', () => {
+  test('offline empty state mentions opening Minnow', () => {
     setupFileTreeDom();
     invalidateFileTreeCache();
     setFileTreeServerAvailable(false);
     renderFileTree();
     const host = document.getElementById('fileTreeHost');
-    assert.match(host?.textContent ?? '', /npm start/i);
+    assert.match(host?.textContent ?? '', /open minnow/i);
   });
 
   test('online with empty cache shows Loading project…', () => {
@@ -46,6 +46,6 @@ describe('file tree boot', { concurrency: false }, () => {
     setFileTreeServerAvailable(false);
     renderFileTree();
     const host = document.getElementById('fileTreeHost');
-    assert.match(host?.textContent ?? '', /npm start/i);
+    assert.match(host?.textContent ?? '', /open minnow/i);
   });
 });

@@ -82,6 +82,10 @@ export function showViewerUnsavedDialog(message: string): Promise<ViewerUnsavedC
   messageEl.textContent = message;
   showDialog();
 
+  const saveButton = saveBtn;
+  const discardButton = discardBtn;
+  const cancelButton = cancelBtn;
+
   return new Promise((resolve) => {
     const finish = (choice: ViewerUnsavedChoice): void => {
       hideDialog();
@@ -101,16 +105,16 @@ export function showViewerUnsavedDialog(message: string): Promise<ViewerUnsavedC
     };
 
     const cleanup = (): void => {
-      saveBtn?.removeEventListener('click', onSave);
-      discardBtn?.removeEventListener('click', onDiscard);
-      cancelBtn?.removeEventListener('click', onCancel);
+      saveButton.removeEventListener('click', onSave);
+      discardButton.removeEventListener('click', onDiscard);
+      cancelButton.removeEventListener('click', onCancel);
       document.removeEventListener('keydown', onKeyDown, true);
     };
 
-    saveBtn.addEventListener('click', onSave);
-    discardBtn.addEventListener('click', onDiscard);
-    cancelBtn.addEventListener('click', onCancel);
+    saveButton.addEventListener('click', onSave);
+    discardButton.addEventListener('click', onDiscard);
+    cancelButton.addEventListener('click', onCancel);
     document.addEventListener('keydown', onKeyDown, true);
-    cancelBtn.focus();
+    cancelButton.focus();
   });
 }

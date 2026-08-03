@@ -354,6 +354,20 @@ export interface MinnowTrayApi {
   setLoginItem(enabled: boolean): Promise<MinnowLoginItemSnapshot>;
   onCommand(callback: (command: MinnowTrayCommand) => void): () => void;
   onCloseToTrayChanged(callback: (enabled: boolean) => void): () => void;
+  getZoomPercent(): Promise<number>;
+  setZoomPercent(percent: number): Promise<number>;
+  onZoomPercentChanged(callback: (percent: number) => void): () => void;
+}
+
+/** macOS display sleep / system resume hooks for AFK board reliability. */
+export interface MinnowPowerApi {
+  setAfkBoardGuard(active: boolean): void;
+  onScreenUnlocked(callback: () => void): () => void;
+}
+
+/** Orchestrate board lifecycle hooks from the main process. */
+export interface MinnowBoardApi {
+  onPauseForShutdown(callback: () => void): () => void;
 }
 
 export interface MinnowElectronBridge {
@@ -363,6 +377,8 @@ export interface MinnowElectronBridge {
   diagnostics?: MinnowDiagnosticsApi;
   updater?: MinnowUpdaterApi;
   tray?: MinnowTrayApi;
+  power?: MinnowPowerApi;
+  board?: MinnowBoardApi;
 }
 
 declare global {

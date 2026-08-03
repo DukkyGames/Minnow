@@ -25,18 +25,13 @@ import {
   restoreDesktopWorkspaceDrawerWidth,
   syncDesktopWorkspaceRailResize,
 } from './desktop-workspace-rail-resize';
-
-const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
+import { isPhoneLayout, onPhoneLayoutChange, PHONE_MQ } from '../ui/mobile-layout';
 
 /** Collapsed tab glyphs — 75% of the left chat rail icon (28px). */
 
 let mobileMq: MediaQueryList | null = null;
 let mobileMqListener: ((event: MediaQueryListEvent) => void) | null = null;
 let chromeSubscribed = false;
-
-function isMobileDesktopLayout(): boolean {
-  return window.matchMedia(MOBILE_DESKTOP_MQ).matches;
-}
 
 function getRailRoot(): HTMLElement | null {
   return document.querySelector('.mn-os-workspace-rail');
@@ -49,7 +44,7 @@ function getRailBackdrop(): HTMLButtonElement | null {
 function syncRailBackdrop(): void {
   const backdrop = getRailBackdrop();
   if (!backdrop) return;
-  const show = isMobileDesktopLayout() && isDesktopWorkspacePanelOpen();
+  const show = isPhoneLayout() && isDesktopWorkspacePanelOpen();
   backdrop.classList.toggle('is-open', show);
   backdrop.setAttribute('aria-hidden', show ? 'false' : 'true');
   backdrop.tabIndex = show ? 0 : -1;
@@ -384,9 +379,10 @@ export function wireDesktopWorkspaceRail(): void {
   }
 
   if (!mobileMq && typeof window.matchMedia === 'function') {
-    mobileMq = window.matchMedia(MOBILE_DESKTOP_MQ);
+    mobileMq = window.matchMedia(PHONE_MQ);
     mobileMqListener = () => syncRailBackdrop();
     mobileMq.addEventListener('change', mobileMqListener);
+    onPhoneLayoutChange(() => syncRailBackdrop());
   }
 
   if (!chromeSubscribed) {

@@ -84,11 +84,15 @@ describe('memory vector sync', { concurrency: 1 }, () => {
   });
 
   test('createEntry persists when scheduled vector sync fails', async () => {
+    await clearVectorStore();
     const meta = await createEntry({
       id: FIXTURE_ID_B,
       title: 'Persisted despite vector failure',
       body: 'Markdown body remains on disk.',
       tags: ['test'],
+      // Avoid racing fire-and-forget embedder I/O from createPage; this case
+      // exercises explicit syncEntryVector failure handling below.
+      skipVectorSync: true,
     });
     assert.equal(meta.id, FIXTURE_ID_B);
 

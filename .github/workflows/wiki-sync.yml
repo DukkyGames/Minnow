@@ -1,0 +1,56 @@
+name: Publish GitHub Wiki
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'documentation/**'
+      - 'scripts/generate-product-wiki-catalog.mjs'
+      - 'scripts/product-wiki-catalog-lib.mjs'
+      - 'scripts/publish-github-wiki.mjs'
+      - '.github/workflows/wiki-sync.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: github-wiki-publish
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      WIKI_TOKEN: ${{ secrets.WIKI_SYNC_TOKEN || github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate product wiki catalog
+        run: node scripts/generate-product-wiki-catalog.mjs
+
+      - name: Clone GitHub Wiki
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          if ! git clone "$remote" /tmp/minnow-wiki; then
+            echo "::error::Could not clone ${GITHUB_REPOSITORY}.wiki.git. Wikis are enabled on this repo, but GitHub only creates the wiki git repository after the first page is saved in the UI. Open https://github.com/${GITHUB_REPOSITORY}/wiki/_new (title: Home, any body), save once, then re-run this workflow."
+            exit 1
+          fi
+
+      - name: Stage generated wiki pages
+        run: node scripts/publish-github-wiki.mjs --output /tmp/minnow-wiki
+
+      - name: Publish changed pages
+        working-directory: /tmp/minnow-wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "Wiki is already current."
+            exit 0
+          fi
+          git commit -m "📚 Sync Minnow documentation"
+          git push origin HEAD:master

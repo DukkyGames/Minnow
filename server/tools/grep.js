@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../lib/ripgrep-path.js';
 import { truncateUtf8 } from '../../src/lib/fetch-web-content.mjs';
 import {
   DEFAULT_MAX_LINE_CHARS,
@@ -17,6 +17,9 @@ import {
 } from './output-cap.js';
 
 const execFileAsync = promisify(execFile);
+
+/** Resolved once at load; remap for Electron asar.unpacked when packaged. */
+const rgExecutable = getRipgrepPath();
 
 /** Default max lines returned per request. */
 export const GREP_DEFAULT_HEAD_LIMIT = 200;
@@ -319,7 +322,7 @@ export async function runGrepSearch(args, deps) {
 
   let stdout = '';
   try {
-    const result = await execFileAsync(rgPath, rgArgs, {
+    const result = await execFileAsync(rgExecutable, rgArgs, {
       cwd: workspaceRoot,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
@@ -410,7 +413,7 @@ export async function runFindFilesSearch(args, deps, options = {}) {
 
   let stdout = '';
   try {
-    const result = await execFileAsync(rgPath, rgArgs, {
+    const result = await execFileAsync(rgExecutable, rgArgs, {
       cwd: workspaceRoot,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,

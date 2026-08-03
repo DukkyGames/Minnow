@@ -160,7 +160,7 @@ export async function updateProvider(
   payload: UpdateProviderPayload,
 ): Promise<{ ok: true; provider: ProviderPublic } | { ok: false; error: string }> {
   if (!isServerStorageMode()) {
-    return { ok: false, error: 'Provider registry requires npm start' };
+    return { ok: false, error: 'Provider settings need Minnow running locally.' };
   }
   try {
     const res = await fetch(`/api/providers/${encodeURIComponent(id)}`, {
@@ -177,7 +177,7 @@ export async function updateProvider(
     providersAvailable = true;
     return { ok: true, provider: body };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -186,7 +186,7 @@ export async function createProvider(
   payload: CreateProviderPayload,
 ): Promise<{ ok: true; provider: ProviderPublic } | { ok: false; error: string }> {
   if (!isServerStorageMode()) {
-    return { ok: false, error: 'Provider registry requires npm start' };
+    return { ok: false, error: 'Provider settings need Minnow running locally.' };
   }
   try {
     const res = await fetch('/api/providers', {
@@ -203,7 +203,7 @@ export async function createProvider(
     providersAvailable = true;
     return { ok: true, provider: body };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -212,7 +212,7 @@ export async function deleteProvider(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isServerStorageMode() || !providersAvailable) {
-    return { ok: false, error: 'Provider registry requires npm start' };
+    return { ok: false, error: 'Provider settings need Minnow running locally.' };
   }
   try {
     const res = await fetch(`/api/providers/${encodeURIComponent(id)}`, {
@@ -229,7 +229,7 @@ export async function deleteProvider(
       error: body.error ?? `Failed to remove provider (HTTP ${res.status})`,
     };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -239,7 +239,7 @@ export async function updateProviderSecrets(
   secrets: { apiKey?: string; bearerToken?: string },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isServerStorageMode() || !providersAvailable) {
-    return { ok: false, error: 'Provider registry requires npm start' };
+    return { ok: false, error: 'Provider settings need Minnow running locally.' };
   }
   try {
     const res = await fetch(`/api/providers/${encodeURIComponent(id)}/secrets`, {
@@ -255,7 +255,7 @@ export async function updateProviderSecrets(
     invalidateProviderCache();
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 

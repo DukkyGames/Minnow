@@ -2,6 +2,8 @@
  * Composer drag-and-drop: workspace file-tree paths and OS files (Explorer) → composer.
  */
 
+import { addCodeReferenceToComposer } from '../attachments/code-ref';
+import { parseCodeSelectionDragData } from '../attachments/code-selection-drag';
 import { addAttachments } from '../attachments/store';
 import {
   classifyFileDrag,
@@ -117,6 +119,14 @@ function bindDropTarget(
       const files = filesFromDataTransfer(event.dataTransfer);
       if (files.length) {
         void addAttachments(files);
+      }
+      return;
+    }
+
+    if (kind === 'codeSelection' && event.dataTransfer) {
+      const payload = parseCodeSelectionDragData(event.dataTransfer);
+      if (payload) {
+        addCodeReferenceToComposer(payload);
       }
       return;
     }

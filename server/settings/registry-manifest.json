@@ -84,6 +84,28 @@
     ]
   },
   {
+    "key": "general.desktop.zoom",
+    "label": "Interface zoom",
+    "keywords": [
+      "zoom",
+      "scale",
+      "size",
+      "magnify",
+      "desktop",
+      "ui"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "desktopShell.zoomPercent",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.desktop.launchAtStartup",
     "label": "Launch Minnow at startup",
     "keywords": [
@@ -222,7 +244,7 @@
   {
     "key": "general.network",
     "label": "Network access",
-    "description": "Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.",
+    "description": "Let other devices on your Wi-Fi open Minnow in a browser while this PC runs the app.",
     "keywords": [
       "lan",
       "wifi",
@@ -574,75 +596,6 @@
   {
     "key": "apps.optional.code",
     "label": "Code app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.experts",
-    "label": "Experts app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.bench",
-    "label": "Benchmarking app",
-    "keywords": [
-      "bench",
-      "benchmark"
-    ],
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.compare",
-    "label": "Compare app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.email",
-    "label": "Email app",
-    "category": "apps",
-    "area": "apps",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "apps"
-    ]
-  },
-  {
-    "key": "apps.optional.calendar",
-    "label": "Calendar app",
     "category": "apps",
     "area": "apps",
     "storage": "section",
@@ -1219,24 +1172,6 @@
     ]
   },
   {
-    "key": "agents.experts",
-    "label": "Experts",
-    "keywords": [
-      "persona",
-      "specialist",
-      "expert lab"
-    ],
-    "category": "agents",
-    "area": "agent-center",
-    "storage": "section",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "agent-center"
-    ]
-  },
-  {
     "key": "agents.workAgents",
     "label": "Work agents",
     "category": "agents",
@@ -1641,6 +1576,65 @@
   {
     "key": "agents.rules.addGroup",
     "label": "Add rule group",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments",
+    "label": "Workspace context documents",
+    "keywords": [
+      "agents.md",
+      "context.md",
+      "cursor rules",
+      "injection",
+      "workspace"
+    ],
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments.default",
+    "label": "Inject context documents by default",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments.presets",
+    "label": "Context document presets",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.contextDocuments.custom",
+    "label": "Custom context document paths",
     "category": "agents",
     "area": "rules",
     "storage": "section",
@@ -4338,6 +4332,84 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.brain_list",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.minnow_docs_search",
+    "label": "Tool permission: minnow_docs_search",
+    "description": "Permission mode for the minnow_docs_search tool (off, ask, or full).",
+    "keywords": [
+      "minnow_docs_search",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.minnow_docs_search",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.minnow_docs_read",
+    "label": "Tool permission: minnow_docs_read",
+    "description": "Permission mode for the minnow_docs_read tool (off, ask, or full).",
+    "keywords": [
+      "minnow_docs_read",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.minnow_docs_read",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.minnow_docs_list",
+    "label": "Tool permission: minnow_docs_list",
+    "description": "Permission mode for the minnow_docs_list tool (off, ask, or full).",
+    "keywords": [
+      "minnow_docs_list",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.minnow_docs_list",
     "type": "enum",
     "allowedValues": [
       "off",

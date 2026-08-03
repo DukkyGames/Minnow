@@ -13,6 +13,7 @@ import {
   fieldsForArea,
   type SettingsCategoryId,
 } from './settings-catalog';
+import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 
 export type { SettingsCategoryId } from './settings-catalog';
 export {
@@ -58,6 +59,7 @@ export type SettingsSectionId =
   | 'skills'
   | 'skills-library'
   | 'webhooks'
+  | 'voice'
   | 'diagnostics'
   | 'board-testing'
   | 'about';
@@ -95,6 +97,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   skills: 'Skills',
   'skills-library': 'Skills Library',
   webhooks: 'Webhooks',
+  voice: 'Voice',
   diagnostics: 'Health & diagnostics',
   'board-testing': 'Board testing',
   about: 'About',
@@ -136,7 +139,9 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    sections: ['diagnostics', 'board-testing'],
+    sections: isBoardTestingSettingsVisible()
+      ? ['diagnostics', 'board-testing']
+      : ['diagnostics'],
   },
 ];
 

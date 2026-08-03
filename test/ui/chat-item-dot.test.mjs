@@ -47,30 +47,48 @@ describe('chat-item-dot resolveChatItemDotState', () => {
     );
   });
 
-  test('background chat in thinking stream resolves thinking but dot stays hidden', () => {
+  test('background chat in thinking stream resolves working but dot stays non-actionable', () => {
     const c = ctx({
       streamingChatIds: new Set(['chat-b']),
       streamPhaseByChatId: new Map([['chat-b', 'thinking']]),
     });
-    assert.equal(resolveChatItemDotState(chat({ id: 'chat-b' }), c), 'thinking');
+    assert.equal(resolveChatItemDotState(chat({ id: 'chat-b' }), c), 'working');
   });
 
-  test('active chat streaming generating only is idle', () => {
+  test('active chat streaming generating shows working', () => {
     const c = ctx({
       activeChatId: 'chat-a',
       streamingChatIds: new Set(['chat-a']),
       streamPhaseByChatId: new Map([['chat-a', 'generating']]),
     });
-    assert.equal(resolveChatItemDotState(chat({}), c), 'idle');
+    assert.equal(resolveChatItemDotState(chat({}), c), 'working');
   });
 
-  test('active chat in thinking stream phase shows thinking', () => {
+  test('active chat in thinking stream phase shows working', () => {
     const c = ctx({
       activeChatId: 'chat-a',
       streamingChatIds: new Set(['chat-a']),
       streamPhaseByChatId: new Map([['chat-a', 'thinking']]),
     });
-    assert.equal(resolveChatItemDotState(chat({}), c), 'thinking');
+    assert.equal(resolveChatItemDotState(chat({}), c), 'working');
+  });
+
+  test('active chat streaming loading_model shows working', () => {
+    const c = ctx({
+      activeChatId: 'chat-a',
+      streamingChatIds: new Set(['chat-a']),
+      streamPhaseByChatId: new Map([['chat-a', 'loading_model']]),
+    });
+    assert.equal(resolveChatItemDotState(chat({}), c), 'working');
+  });
+
+  test('background chat streaming generating shows working', () => {
+    const c = ctx({
+      activeChatId: 'other',
+      streamingChatIds: new Set(['chat-b']),
+      streamPhaseByChatId: new Map([['chat-b', 'generating']]),
+    });
+    assert.equal(resolveChatItemDotState(chat({ id: 'chat-b' }), c), 'working');
   });
 
   test('needs-input beats error and unread', () => {
@@ -105,7 +123,7 @@ describe('chat-item-dot resolveChatItemDotState', () => {
     );
   });
 
-  test('needs-input beats thinking', () => {
+  test('needs-input beats working', () => {
     const c = ctx({
       activeChatId: 'chat-a',
       streamingChatIds: new Set(['chat-a']),
@@ -122,7 +140,7 @@ describe('chat-item-dot visibility helpers', () => {
     assert.equal(isChatItemDotVisible('needs-input'), true);
     assert.equal(isChatItemDotVisible('error'), true);
     assert.equal(isChatItemDotVisible('idle'), false);
-    assert.equal(isChatItemDotVisible('thinking'), false);
+    assert.equal(isChatItemDotVisible('working'), false);
   });
 
   test('resolveGroupHeaderDotState picks highest-priority member state', () => {

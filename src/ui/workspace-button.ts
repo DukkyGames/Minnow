@@ -4,7 +4,6 @@
 
 import type { WorkspaceInfo } from '../config/workspace-api';
 import { executeWorkspaceSwitch, dismissBoardViewOutsideWorkspace } from './workspace-switch-guard';
-import { patchFilePanelState } from '../state/file-panel';
 import {
   getWorkspacePath,
   loadWorkspaceFromServer,
@@ -12,7 +11,6 @@ import {
 } from '../state/workspace';
 import { getLocalServerAvailable } from '../tools/client';
 import { clearCachesForWorkspace } from '../tools/result-cache';
-import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
 import { setStatus } from './status';
 import { applyWorkspaceScopedSession } from './sidebar';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
@@ -69,25 +67,17 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   const closedCodeMap = teardownCodeBrainMapBeforeChatPaint();
   const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
   const closedIssuesEmbed = teardownIssuesEmbedBeforeChatPaint();
-  // Await history hydrate for the workspace's active chat before any re-paint.
-  await applyWorkspaceScopedSession(info.path, previousPath);
+  const { syncFileTreeToPanelWorktree } = await import('./file-tree');
+  // Hydrate chat + file tree in parallel; tree refresh is owned here (not sidebar forceFileTree).
+  await Promise.all([
+    applyWorkspaceScopedSession(info.path, previousPath, { skipFileTreeSync: true }),
+    syncFileTreeToPanelWorktree(undefined, { force: true }),
+  ]);
   if (closedCodeMap || closedIssuesEmbed) {
     const { getActiveChat } = await import('../state/sessions');
     const { renderChatFromHistory } = await import('./messages');
     renderChatFromHistory(getActiveChat());
   }
-
-  const { closeFileViewerForce } = await import('./file-viewer');
-  closeFileViewerForce();
-  patchFilePanelState({
-    expandedDirs: [],
-    selectedPath: null,
-    openViewerTabs: [],
-    activeViewerTab: null,
-  });
-  const { syncFileTreeToPanelWorktree } = await import('./file-tree');
-  await syncFileTreeToPanelWorktree(undefined);
-  await refreshFileTreeViaBridge();
 
   setStatus('ok', `Workspace: ${info.label}`);
   const { refreshHubLiveData } = await import('./hub');
@@ -107,7 +97,7 @@ export { executeWorkspaceSwitch } from './workspace-switch-guard';
 
 async function onOpenNewWorkspace(): Promise<void> {
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Workspace requires npm start (local server)');
+    setStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
 

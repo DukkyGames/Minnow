@@ -1,0 +1,91 @@
+/* Composer Expand — one-click prompt expansion (Code, Chat, desktop) */
+
+.composer-expand-btn {
+  position: relative;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.composer-expand-btn__icon {
+  position: relative;
+  z-index: 1;
+  transition:
+    opacity 0.2s var(--ease-out),
+    transform 0.18s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-expand-btn:not(:disabled):not(.composer-expand-btn--busy):hover {
+    color: var(--mn-accent);
+  }
+
+  .composer-expand-btn:not(:disabled):not(.composer-expand-btn--busy):hover
+    .composer-expand-btn__icon {
+    transform: scale(1.08);
+  }
+}
+
+.composer-expand-btn__spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--mn-border);
+  border-top-color: var(--mn-accent);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.composer-expand-btn--busy {
+  color: var(--mn-accent);
+}
+
+.composer-expand-btn--busy .composer-expand-btn__icon {
+  opacity: 0.25;
+}
+
+.composer-expand-btn--busy .composer-expand-btn__spinner {
+  opacity: 1;
+  animation: composer-expand-spin 0.75s linear infinite;
+}
+
+/* Textarea while the expansion streams in */
+.composer-expanding {
+  caret-color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .composer-expanding {
+    animation: composer-expand-glow 1.6s var(--ease-out) infinite;
+  }
+}
+
+@keyframes composer-expand-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes composer-expand-glow {
+  0%,
+  100% {
+    color: var(--mn-fg);
+  }
+
+  50% {
+    color: color-mix(in srgb, var(--mn-fg) 72%, var(--mn-accent));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-expand-btn--busy .composer-expand-btn__spinner {
+    animation-duration: 1.6s;
+  }
+
+  .composer-expand-btn:not(:disabled):hover .composer-expand-btn__icon {
+    transform: none;
+  }
+}

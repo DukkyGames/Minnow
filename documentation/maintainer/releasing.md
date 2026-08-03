@@ -3,13 +3,13 @@
 How updates flow through Minnow — **releasing** a new version (for maintainers) and
 **receiving** one (for users). Auto-update is built on
 [`electron-updater`](https://www.electron.build/auto-update) against **GitHub Releases**
-(`DukkyGames/Minnow`). Implementation: [`electron/updater.ts`](../../electron/updater.ts) +
+([`henrigrimm/minnow`](https://github.com/henrigrimm/minnow)). Implementation: [`electron/updater.ts`](../../electron/updater.ts) +
 [`electron/updater-core.ts`](../../electron/updater-core.ts); UI in
 [`src/ui/settings-updates.ts`](../../src/ui/settings-updates.ts) and
 [`src/os/update-menubar.ts`](../../src/os/update-menubar.ts). Tracked in
 [MIN-384](https://linear.app/minnowai/issue/MIN-384).
 
-> **Platform support today:** Windows (NSIS) and **signed** macOS (Developer ID + notarization). Unsigned macOS installs show a disabled updater with a signing note. Dev and browser sessions can't self-update and show a hint instead of controls.
+> **Platform support today:** Windows (NSIS), Linux (AppImage), and **signed** macOS (Developer ID + notarization). Unsigned macOS installs show a disabled updater with a signing note. On Windows/macOS hosts, build Linux with `npm run package:linux:docker` (Docker). Dev and browser sessions can't self-update and show a hint instead of controls.
 
 ---
 
@@ -50,11 +50,14 @@ This runs `build → electron:build → electron-builder` and writes to `release
 
 ### 3. Create the GitHub release
 
-On <https://github.com/DukkyGames/Minnow/releases> → **Draft a new release**:
+On <https://github.com/henrigrimm/minnow/releases> → **Draft a new release**:
 
 - **Tag:** `v<version>` (e.g. `v1.0.1`), created against the commit you packaged from.
 - **Attach all three files** from `release/pkg/`. `latest.yml` is the one that matters —
   without it, installed apps never see the release. Include the `.exe` and `.blockmap` too.
+- **Publish the release** (do not leave it as a **draft**). Draft releases are invisible to
+  `electron-updater`; Settings will show **Could not check for updates** until the release is
+  published.
 - **Release notes / body:** this text is what users see under **"What's new"** in Settings
   and in the menubar popover. Write it for users, not as a changelog dump.
 

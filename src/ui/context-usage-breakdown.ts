@@ -198,9 +198,14 @@ export function bindContextUsageProfileTabs(): void {
   }
 }
 
+function sectionVisible(section: ContextUsageSection): boolean {
+  if (section.tokens > 0) return true;
+  return section.key === 'codeMap' || section.key === 'contextDocuments';
+}
+
 function renderPanelBody(budget: ContextBudget): string {
   const activeProfile = getPromptMetaSettingsSync().activePromptProfile;
-  const visibleSections = budget.breakdown.filter((section) => section.tokens > 0);
+  const visibleSections = budget.breakdown.filter(sectionVisible);
   const scaleMax = maxSectionTokens(visibleSections.length > 0 ? visibleSections : budget.breakdown);
   const rows = visibleSections
     .map((section) => renderSectionRow(section, budget.used, scaleMax))

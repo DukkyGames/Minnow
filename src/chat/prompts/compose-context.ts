@@ -21,6 +21,13 @@ import { loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
 import { retrieveMemoryBlock } from '../../memory/client';
 import { shouldInjectMemory } from '../../memory/config';
+import { shouldInjectCodeMap } from '../../brain/code-injection-config';
+import { retrieveCodeMapBlock } from '../../brain/code-map-injection';
+import { extractCodeMapFocusHints } from '../../brain/code-map-focus';
+import { fetchBrainCodeConfig } from '../../brain/client';
+import { loadContextDocumentsSettings, shouldInjectContextDocuments } from '../../chat/context-documents/config';
+import { retrieveContextDocumentsBlock } from '../../chat/context-documents/injection';
+import { shouldRunFirstTurnInjections } from './first-turn-injection';
 import { loadPromptConfig } from './prompt-configs';
 import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
@@ -46,8 +53,12 @@ function getEnabledToolIdsForChat(chat: Chat): string[] {
 
 export interface BuildComposeContextOptions {
   userMessagePreview?: string;
+  /** Workspace paths from composer attachments (bias injection PageRank). */
+  attachmentWorkspacePaths?: string[];
   /** When set, used for expert routing instead of last history message. */
   routeUserText?: string;
+  /** First user message send (set before history.push); gates first-turn injections. */
+  firstUserSend?: boolean;
   overrides?: Partial<ComposeContext>;
 }
 
@@ -88,7 +99,10 @@ export async function buildComposeContext(
     'general-assistant';
 
   let memoryBlock: string | null = null;
-  const injectMemory = await shouldInjectMemory(chat);
+  const runFirstTurn = shouldRunFirstTurnInjections(chat, {
+    firstUserSend: options?.firstUserSend,
+  });
+  const injectMemory = runFirstTurn && (await shouldInjectMemory(chat));
   if (injectMemory) {
     const query =
       options?.routeUserText ??
@@ -107,6 +121,40 @@ export async function buildComposeContext(
   }
 
   const worktreeCwd = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
+
+  let codeMapBlock: string | null = null;
+  const injectCodeMap = runFirstTurn && (await shouldInjectCodeMap(chat));
+  if (injectCodeMap) {
+    const codeConfig = await fetchBrainCodeConfig();
+    const preview =
+      options?.routeUserText ?? options?.userMessagePreview ?? '';
+    const focusHints = extractCodeMapFocusHints(
+      preview,
+      options?.attachmentWorkspacePaths,
+    );
+    codeMapBlock =
+      (await retrieveCodeMapBlock({
+        repoPath: worktreeCwd ?? resolveComposeCwd(),
+        tokenBudget: codeConfig?.repoMapInjectionTokenBudget ?? codeConfig?.repoMapTokenBudget,
+        focus: focusHints.focus,
+        focusFiles: focusHints.focusFiles.length ? focusHints.focusFiles : undefined,
+        ensureIndexed: true,
+        profile: 'injection',
+      })) || null;
+  }
+
+  let contextDocumentsBlock: string | null = null;
+  const injectContextDocuments =
+    runFirstTurn && (await shouldInjectContextDocuments(chat));
+  if (injectContextDocuments) {
+    const { documents } = await loadContextDocumentsSettings();
+    contextDocumentsBlock =
+      (await retrieveContextDocumentsBlock({
+        repoPath: worktreeCwd ?? resolveComposeCwd(),
+        documents,
+      })) || null;
+  }
+
   const ctx: ComposeContext = {
     profile,
     customConfigId: meta.activePromptConfigId,
@@ -119,6 +167,10 @@ export async function buildComposeContext(
     skillBody: null,
     memoryBlock,
     memoryEnabled: injectMemory,
+    codeMapBlock,
+    codeMapInjectionEnabled: injectCodeMap,
+    contextDocumentsBlock,
+    contextDocumentsInjectionEnabled: injectContextDocuments,
     enabledToolIds,
     infoPresetId,
     planGranularity: meta.planGranularity ?? 'medium',
@@ -180,24 +232,23 @@ export async function resolveExpertContextForSend(
 }
 
 /**
- * Resolve composed system prompt for send path (async config + compose).
+ * Single compose-context build for send (expert + work-agent overrides).
  */
-export async function resolveComposedSystemPrompt(
+export async function resolveComposeContextForSend(
   chat: Chat,
   options?: BuildComposeContextOptions,
-): Promise<string> {
-  const { composeSystemPrompt } = await import('./prompt-composer');
+): Promise<ComposeContext> {
   const routeText =
     options?.routeUserText ??
     options?.userMessagePreview ??
-  '';
+    '';
 
   const expertCtx = await resolveExpertContextForSend(chat, routeText);
 
   const activeWorkAgent = resolveActiveWorkAgent(chat);
   const workAgentId = resolveActiveWorkAgentId(chat);
 
-  const ctx = await buildComposeContext(chat, {
+  return buildComposeContext(chat, {
     ...options,
     overrides: {
       expertId:
@@ -208,7 +259,25 @@ export async function resolveComposedSystemPrompt(
       ...options?.overrides,
     },
   });
+}
+
+/**
+ * Resolve composed system prompt for send path (async config + compose).
+ */
+export async function resolveComposedSystemPrompt(
+  chat: Chat,
+  options?: BuildComposeContextOptions,
+): Promise<string> {
+  const { composeSystemPrompt } = await import('./prompt-composer');
+  const ctx = await resolveComposeContextForSend(chat, options);
   return composeSystemPrompt(ctx);
+}
+
+/** Raw injection payloads for the outgoing send (UI transcript chips). */
+export interface OutboundInjectionBlocks {
+  brainNotes: string | null;
+  codeMap: string | null;
+  contextDocuments: string | null;
 }
 
 /** Outbound system messages for LM Studio (composed prompt + optional user rules). */
@@ -217,6 +286,8 @@ export interface OutboundSystemMessages {
   composed: string;
   /** Second system message body when rules are enabled and non-empty. */
   userRules: string | null;
+  /** Retrieved Brain / code-map bodies from the same compose pass. */
+  injectionBlocks: OutboundInjectionBlocks;
 }
 
 /**
@@ -229,13 +300,28 @@ export async function resolveOutboundSystemMessages(
   options?: BuildComposeContextOptions,
 ): Promise<OutboundSystemMessages> {
   let composedRaw = '';
+  let injectionBlocks: OutboundInjectionBlocks = {
+    brainNotes: null,
+    codeMap: null,
+    contextDocuments: null,
+  };
   try {
-    composedRaw = await resolveComposedSystemPrompt(chat, options);
+    const { composeSystemPrompt } = await import('./prompt-composer');
+    const ctx = await resolveComposeContextForSend(chat, options);
+    composedRaw = composeSystemPrompt(ctx);
+    const brain = ctx.memoryBlock?.trim() ?? '';
+    const codeMap = ctx.codeMapBlock?.trim() ?? '';
+    const contextDocuments = ctx.contextDocumentsBlock?.trim() ?? '';
+    injectionBlocks = {
+      brainNotes: brain || null,
+      codeMap: codeMap || null,
+      contextDocuments: contextDocuments || null,
+    };
   } catch {
     composedRaw = '';
   }
   const composed = composedRaw.trim() || legacySysPrompt.trim();
   const rulesSettings = await loadUserRules();
   const userRules = getUserRulesPayloadForSend(rulesSettings);
-  return { composed, userRules };
+  return { composed, userRules, injectionBlocks };
 }

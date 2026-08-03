@@ -153,8 +153,13 @@ export async function fetchResearchLibrary(
     : Array.isArray(payload.research)
       ? payload.research
       : [];
-  const items = raw.map((row) => normalizeLibraryItem(row));
+  const items = raw.map((row) => normalizeLibraryItem(libraryWireRow(row)));
   return { items };
+}
+
+/** Coerce API / legacy library rows to a plain record for normalization. */
+function libraryWireRow(row: Record<string, unknown> | import('./types').ResearchLibraryItem): Record<string, unknown> {
+  return { ...row };
 }
 
 function normalizeLibraryItem(row: Record<string, unknown>): import('./types').ResearchLibraryItem {

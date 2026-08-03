@@ -204,6 +204,7 @@ export async function createEntry(input) {
       : [],
     source,
     pinned: Boolean(input.pinned),
+    skipVectorSync: Boolean(input.skipVectorSync),
   });
 
   return pageMetaToEntryMeta(page.meta);

@@ -1760,102 +1760,7 @@ label.settings-action-btn {
   overflow-wrap: anywhere;
 }
 
-/* Settings → Issues taxonomy tables */
-
-.settings-issues-table {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm, 6px);
-  overflow: hidden;
-}
-
-.settings-issues-table__head,
-.settings-issues-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 1.4fr) minmax(88px, 0.9fr) minmax(100px, 1fr) auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-}
-
-.settings-issues-table__head {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--mn-fg-muted);
-  background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 6%, transparent));
-  border-bottom: 1px solid var(--mn-border);
-}
-
-.settings-issues-row {
-  border-bottom: 1px solid var(--mn-border);
-  font-size: 13px;
-}
-
-.settings-issues-row:last-child {
-  border-bottom: none;
-}
-
-.settings-issues-id {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
-  color: var(--mn-fg-muted);
-}
-
-.settings-issues-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  font-size: 12px;
-}
-
-.settings-issues-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--mn-fg-muted);
-}
-
-.settings-issues-order {
-  display: flex;
-  gap: 4px;
-}
-
-.settings-issues-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.settings-issues-add,
-.settings-issues-reset {
-  margin-top: 10px;
-}
-
-.settings-issues-empty {
-  margin: 0;
-  padding: 12px 10px;
-  font-size: 13px;
-  color: var(--mn-fg-muted);
-}
-
-.settings-inline-btn--danger {
-  color: var(--mn-danger);
-}
-
-@media (max-width: 720px) {
-  .settings-issues-table__head {
-    display: none;
-  }
-
-  .settings-issues-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-}
-
+/* Settings → Issues: see settings-issues.css */
 
 .settings-mcp-remove {
   margin-left: auto;
@@ -2165,15 +2070,180 @@ label.settings-action-btn {
   }
 }
 
+/* ---------- phone: list screen → section screen ---------- */
+
+.settings-phone-bar {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  padding: 4px 12px 4px 4px;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  flex-shrink: 0;
+}
+
+.settings-phone-bar__back {
+  display: grid;
+  place-items: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  cursor: pointer;
+}
+
+.settings-phone-bar__back .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+.settings-phone-bar__back:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.settings-phone-bar__title {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Phone (see ui/mobile-layout.ts — includes landscape phones, which are wide
+   but far too short for the wrapped-pill nav above). */
+/* Back to a plain vertical list — the wrapped pill row from the 768px block
+   is taller than the viewport once every group is rendered. */
+html.mn-phone .settings-page-body {
+  position: relative;
+}
+
+html.mn-phone .settings-nav {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  /* The 768px block packs pills to the start; a full-width list needs stretch. */
+  align-items: stretch;
+  gap: 0;
+  padding: 8px var(--mn-phone-pad-right, 14px) 24px var(--mn-phone-pad-left, 14px);
+  border-bottom: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+html.mn-phone .settings-nav-group {
+  flex: none;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+html.mn-phone .settings-nav__item {
+  width: 100%;
+  flex: none;
+  min-height: var(--touch-min);
+  padding: 10px 12px;
+  font-size: 15px;
+}
+
+/* One pane at a time. */
+html.mn-phone .settings-page:not(.settings-page--phone-section) .settings-content {
+  display: none;
+}
+
+html.mn-phone .settings-page--phone-section .settings-nav {
+  display: none;
+}
+
+/* Search belongs to the list screen. Keeping it on the section screen stacks a
+   third title bar over the content and repeats what the phone bar already says. */
+html.mn-phone .settings-page--phone-section .settings-page-header {
+  display: none;
+}
+
+html.mn-phone .settings-page--phone-section .settings-phone-bar {
+  display: flex;
+}
+
+html.mn-phone .settings-content {
+  --settings-content-pad-x: var(--mn-phone-gutter, 14px);
+  padding: 0 var(--mn-phone-pad-right, 14px) 32px var(--mn-phone-pad-left, 14px);
+}
+
+/* Search results replace the list, so the finder needs the full header row. */
+html.mn-phone .settings-page-header {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0 var(--mn-phone-pad-right, 14px) 0 4px;
+}
+
+html.mn-phone .settings-page-header > .icon-btn {
+  margin-left: 0;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+}
+
+/* The window sheet already frames the app; a second inset card just eats
+   70px of a 812px screen before the first setting. */
+html.mn-phone .settings-page--os-embedded.settings-page--in-os-window {
+  padding: 0;
+}
+
+html.mn-phone .settings-page--in-os-window .settings-page-header {
+  margin: 0;
+  padding: 0 var(--mn-phone-pad-right, 14px) 0 4px;
+  min-height: 48px;
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  border-radius: 0;
+  background: var(--mn-bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+
 /* Minnow embedded app shell (settings opened from dock, not full browser route). */
 .settings-page--os-embedded {
   height: 100%;
   min-height: 0;
 }
 
-.settings-page--os-embedded .settings-page-header {
+.settings-page--os-embedded.settings-page--in-os-window {
+  box-sizing: border-box;
+  /* Padding (not header margin) — survives mn-os-app-layer overflow:hidden clipping. */
+  padding: 8px 10px 0;
+}
+
+.settings-page--os-embedded:not(.settings-page--in-os-window) .settings-page-header {
   grid-template-columns: auto 1fr auto;
   padding: 0 12px;
+}
+
+/* Floating OS window — matches Brain `brain-overlay-surface`. */
+.settings-page--in-os-window .settings-page-header {
+  grid-template-columns: auto 1fr auto;
+  margin: 0;
+  padding: 9px 14px;
+  min-height: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: var(--shadow-card);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .settings-page--in-os-window .settings-page-header {
+    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 }
 
 .settings-page--os-embedded .settings-page-body {
@@ -2715,5 +2785,86 @@ label.settings-action-btn {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+.settings-context-documents-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 2px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-general .settings-group--emphasis .settings-context-documents-panel {
+  gap: 20px;
+}
+
+.settings-context-documents-checklist {
+  max-height: min(22rem, 52vh);
+  overflow: auto;
+}
+
+.settings-checklist__option--stacked {
+  align-items: flex-start;
+  min-height: 0;
+  padding: 8px 2px;
+}
+
+.settings-checklist__option--stacked input[type='checkbox'] {
+  margin-top: 2px;
+}
+
+.settings-context-documents-checklist__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-context-documents-checklist__desc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+}
+
+.settings-context-documents-custom__hint {
+  margin: -2px 0 0;
+}
+
+.settings-context-documents-custom__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-context-documents-custom__empty {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+  border: 1px dashed var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-context-documents-custom__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-context-documents-custom__row .settings-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-context-documents-custom__row .settings-inline-btn {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.settings-context-documents-custom__add {
+  align-self: flex-start;
 }
 

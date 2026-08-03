@@ -324,7 +324,7 @@ async function ensureReadyForSend(): Promise<boolean> {
     }
     return true;
   } catch {
-    setStatus('err', 'Chats workspace unavailable — run npm start');
+    setStatus('err', 'Chats workspace unavailable — open Minnow');
     return false;
   }
 }

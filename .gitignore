@@ -2,6 +2,8 @@ node_modules/
 dist/
 electron/dist/
 release/
+.env
 .env.signing
 build/macos-signing/
 public/material-icons/
+test.log

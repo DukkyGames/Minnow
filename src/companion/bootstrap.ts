@@ -45,7 +45,7 @@ function installModePicker(): void {
   }
   const syncValue = () => {
     try {
-      const modeId = getActiveChat().modeId;
+      const modeId = getActiveChat().modeId ?? 'general';
       select!.value = listComposerModes().some((mode) => mode.id === modeId) ? modeId : 'general';
     } catch {
       select!.value = 'general';

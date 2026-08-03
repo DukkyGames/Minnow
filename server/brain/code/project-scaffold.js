@@ -8,9 +8,11 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../../lib/ripgrep-path.js';
 
 const execFileAsync = promisify(execFile);
+
+const rgExecutable = getRipgrepPath();
 
 /** Relative path of the Minnow-managed jsconfig inside a workspace. */
 export const BRAIN_JS_CONFIG_REL = '.minnow/jsconfig.json';
@@ -36,7 +38,7 @@ async function rgListFiles(root, includeGlobs) {
   }
   args.push(root);
   try {
-    const { stdout } = await execFileAsync(rgPath, args, {
+    const { stdout } = await execFileAsync(rgExecutable, args, {
       cwd: root,
       maxBuffer: 4 * 1024 * 1024,
       windowsHide: true,

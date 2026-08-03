@@ -25,6 +25,7 @@ import {
 import {
   hideViewerPaneDom,
   hideViewerSplit,
+  isMobileLayout,
   showViewerSplit,
 } from './file-layout';
 import { isMarkdownFilePath } from './file-markdown-path';
@@ -37,7 +38,10 @@ import {
   loadEditorAiCompletionConfig,
   getEditorAiCompletionConfigSync,
 } from '../config/editor-ai-completion';
-import { loadEditorIntentModeConfig } from '../config/editor-intent-mode';
+import {
+  getEditorIntentModeConfigSync,
+  loadEditorIntentModeConfig,
+} from '../config/editor-intent-mode';
 import { EDITOR_AI_NO_MODEL_MESSAGE } from './editor-ai-completion-client';
 import { loadEditorSettings } from '../config/editor-settings';
 import { minnowEditorExtensions } from './codemirror-theme';
@@ -46,14 +50,17 @@ import { loadLanguageExtensionsForPath } from './editor-language';
 import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
 import { setLspDiagnosticsChromeListener } from './lsp-editor';
-import { editorAiCompletionExtensions, editorAiCompletionCompartmentExtension, reconfigureEditorAiCompletion, type EditorAiExtensionOptions } from './file-editor-ai-extensions';
 import {
-  editorIntentModeExtensions,
-  mountIntentModeEditor,
-  isIntentModeEnabled,
-  toggleIntentMode,
-} from './editor-intent-mode';
+  editorSuggestionBaseExtensions,
+  editorSuggestionCompartmentExtension,
+  editorSuggestionExtensions,
+  mountEditorSuggestions,
+  reconfigureEditorSuggestions,
+  type EditorSuggestionOptions,
+} from './editor-suggestions';
+import { isIntentEnabled, toggleIntentMode } from './editor-suggestions';
 import { addCodeReferenceToComposer } from '../attachments/code-ref';
+import { codeSelectionDragExtension } from './editor-code-selection-drag';
 import {
   buildFileViewerContextMenuItems,
   editorQuickEditExtensions,
@@ -62,9 +69,8 @@ import {
 } from './editor-quick-edit';
 import {
   activateViewerTab,
+  adoptActiveViewerTabPath,
   clearAllViewerTabs,
-  closeOtherViewerTabs,
-  closeViewerTabsToRight,
   getActiveViewerTab,
   getActiveViewerTabPath,
   getOpenViewerTabPaths,
@@ -74,7 +80,7 @@ import {
   isViewerDocDirty,
   isViewerTabDirty,
   listViewerTabs,
-  markActiveTabSaved,
+  markViewerTabSaved,
   normalizeViewerDocText,
   openViewerTab,
   rebaselineViewerTabFromEditor,
@@ -107,19 +113,24 @@ let editorViewPath: string | null = null;
 /** Monotonic token so stale async `mountEditor` completions are discarded. */
 let mountGeneration = 0;
 let markdownPreviewEl: HTMLElement | null = null;
+/** What the primary host is painting right now — guards against redundant remounts. */
+let primaryRenderKey: string | null = null;
+/** Path of an async editor mount that has not attached its EditorView yet. */
+let pendingMountPath: string | null = null;
+/** Paths with an in-flight content load — both panes can ask for the same tab. */
+const loadsInFlight = new Set<string>();
 let isSaving = false;
 let viewerControlsBound = false;
 let viewerContextMenuBound = false;
 let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 let editorAiStatusEl: HTMLElement | null = null;
-let editorIntentStatusEl: HTMLElement | null = null;
 let editorIntentToggleEl: HTMLButtonElement | null = null;
 /** Per-document Intent mode enabled flag (session only). */
 const intentModeEnabledByPath = new Map<string, boolean>();
 let editorAiModelSelectListener: (() => void) | null = null;
-/** Live AI extension options for hot-reload without remounting the editor. */
-let editorAiOpts: EditorAiExtensionOptions | null = null;
+/** Live suggestion options for hot-reload without remounting the editor. */
+let editorAiOpts: EditorSuggestionOptions | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
 /** Blob URL for the active PDF preview; revoked when the tab unmounts. */
 let activePdfPreviewBlobUrl: string | null = null;
@@ -128,6 +139,97 @@ function revokeActivePdfPreviewBlob(): void {
   if (!activePdfPreviewBlobUrl) return;
   URL.revokeObjectURL(activePdfPreviewBlobUrl);
   activePdfPreviewBlobUrl = null;
+}
+
+/**
+ * True when the right pane is showing two editor groups.
+ *
+ * Read straight from state (not `right-pane-split`) so this hot path stays free of the
+ * file-layout ↔ right-pane-split import cycle.
+ */
+function splitLayoutEnabled(): boolean {
+  const state = getFilePanelState();
+  return (
+    state.rightPaneSplit.enabled && state.rightPaneMode === 'split' && !isMobileLayout()
+  );
+}
+
+/**
+ * Path the **primary** pane renders.
+ *
+ * This is the slot's own active tab, not the global active tab: with the split open the
+ * global pointer follows the focused pane, which may be the secondary one.
+ */
+function primarySlotViewerPath(): string | null {
+  if (!splitLayoutEnabled()) return getActiveViewerTabPath();
+  return getFilePanelState().rightPaneSplit.primaryTabs.activeViewerPath;
+}
+
+function primarySlotViewerTab(): ViewerTabState | null {
+  const path = primarySlotViewerPath();
+  if (!path) return null;
+  return getViewerTab(path) ?? null;
+}
+
+/** Path the secondary pane renders (null when the split is closed). */
+function secondarySlotViewerPath(): string | null {
+  if (!splitLayoutEnabled()) return null;
+  const tabs = getFilePanelState().rightPaneSplit.secondaryTabs;
+  return tabs.surface === 'preview' ? null : tabs.activeViewerPath;
+}
+
+/** True when the primary pane is currently showing a browser tab instead of a file. */
+function primarySlotShowsPreview(): boolean {
+  if (!splitLayoutEnabled()) return getFilePanelState().rightPaneMode === 'preview';
+  return getFilePanelState().rightPaneSplit.primary.kind === 'preview';
+}
+
+/** Repaint whichever pane(s) are showing `path` after its content or mode changed. */
+function renderViewerSlotsForPath(path: string): void {
+  if (primarySlotViewerPath() === path) renderActiveViewerTab();
+  if (secondarySlotViewerPath() === path) renderSecondarySlot();
+}
+
+function renderSecondarySlot(): void {
+  if (!splitLayoutEnabled()) return;
+  const tabs = getFilePanelState().rightPaneSplit.secondaryTabs;
+  void import('./file-viewer-secondary-slot').then((m) => {
+    if (tabs.surface === 'preview') {
+      m.destroySecondaryViewerSlot();
+      return;
+    }
+    // null path renders the "open a file in this pane" hint for an empty group.
+    m.renderSecondaryViewerSlot(tabs.activeViewerPath);
+  });
+}
+
+/** Repaint both editor groups from their own slot tab lists. */
+export function renderViewerSlots(): void {
+  renderActiveViewerTab();
+  renderSecondarySlot();
+}
+
+/** Identity of what the primary host is currently painting. */
+function primaryRenderKeyFor(tab: ViewerTabState): string {
+  return `${tab.path}::${tab.viewMode}::${tab.loadStatus}`;
+}
+
+/** True when the primary host already shows this tab and needs no remount. */
+function primaryRenderIsCurrent(tab: ViewerTabState): boolean {
+  if (primaryRenderKey !== primaryRenderKeyFor(tab)) return false;
+  const host = getViewerHost();
+  if (!host || host.childElementCount === 0) return false;
+  if (tab.viewMode === 'editor') {
+    // An in-flight async mount for the same tab counts as current.
+    return (editorView !== null && editorViewPath === tab.path) || pendingMountPath === tab.path;
+  }
+  if (tab.viewMode === 'markdown-preview') return markdownPreviewEl !== null;
+  return true;
+}
+
+/** Force the next {@link renderActiveViewerTab} to remount (content or mode changed). */
+export function invalidatePrimaryViewerRender(): void {
+  primaryRenderKey = null;
 }
 
 /** Strip "N: " prefixes from read_file_range output (EOL-normalized for the editor). */
@@ -159,7 +261,7 @@ export function shouldUseMarkdownPreview(path: string, asCode?: boolean): boolea
 
 /** True when the viewer is showing markdown preview (not the code editor). */
 export function isMarkdownPreviewActive(): boolean {
-  const tab = getActiveViewerTab();
+  const tab = primarySlotViewerTab();
   return tab?.viewMode === 'markdown-preview' && markdownPreviewEl !== null;
 }
 
@@ -175,10 +277,6 @@ function getIntentToggleButton(): HTMLButtonElement | null {
   return document.getElementById('btnFileViewerIntent') as HTMLButtonElement | null;
 }
 
-function getIntentStatusElement(): HTMLElement | null {
-  return document.getElementById('fileViewerIntentStatus');
-}
-
 function isIntentModeEnabledForPath(path: string, defaultEnabled: boolean): boolean {
   if (intentModeEnabledByPath.has(path)) {
     return intentModeEnabledByPath.get(path) === true;
@@ -188,30 +286,99 @@ function isIntentModeEnabledForPath(path: string, defaultEnabled: boolean): bool
 
 function setIntentModeEnabledForPath(path: string, enabled: boolean): void {
   intentModeEnabledByPath.set(path, enabled);
-  updateIntentToolbarChrome(enabled, 0);
+  updateIntentToolbarChrome(enabled);
 }
 
-function updateIntentToolbarChrome(enabled: boolean, staleCount: number): void {
-  const toggle = editorIntentToggleEl ?? getIntentToggleButton();
-  const status = editorIntentStatusEl ?? getIntentStatusElement();
-  if (toggle) {
-    toggle.classList.toggle('is-active', enabled);
-    toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+/** Per-path Intent toggle memory (shared by primary and secondary editors). */
+export function rememberIntentModeEnabledForPath(path: string, enabled: boolean): void {
+  intentModeEnabledByPath.set(path, enabled);
+}
+
+export function isIntentModeEnabledForViewerPath(path: string, defaultEnabled: boolean): boolean {
+  return isIntentModeEnabledForPath(path, defaultEnabled);
+}
+
+function updateIntentToolbarChrome(enabled: boolean): void {
+  applyIntentToolbarChrome(editorIntentToggleEl ?? getIntentToggleButton(), enabled);
+}
+
+function getSecondaryIntentToggleButton(): HTMLButtonElement | null {
+  return document.getElementById('btnFileViewerIntentSecondary') as HTMLButtonElement | null;
+}
+
+function getSecondarySaveButton(): HTMLButtonElement | null {
+  return document.getElementById('btnFileViewerSaveSecondary') as HTMLButtonElement | null;
+}
+
+function applyIntentToolbarChrome(toggle: HTMLButtonElement | null, enabled: boolean): void {
+  if (!toggle) return;
+  toggle.classList.toggle('is-active', enabled);
+  toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  if (!enabled) toggle.classList.remove('is-busy');
+}
+
+/** Spinner on the toggle while an intent proposal is being generated. */
+function applyIntentBusyChrome(toggle: HTMLButtonElement | null, busy: boolean): void {
+  if (!toggle) return;
+  toggle.classList.toggle('is-busy', busy);
+  toggle.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+
+/** Intent chrome for the secondary editor group header. */
+export function syncSecondaryIntentToolbarChrome(enabled: boolean): void {
+  applyIntentToolbarChrome(getSecondaryIntentToggleButton(), enabled);
+}
+
+/** Intent busy chrome for the secondary editor group header. */
+export function syncSecondaryIntentBusyChrome(busy: boolean): void {
+  applyIntentBusyChrome(getSecondaryIntentToggleButton(), busy);
+}
+
+function syncSecondaryIntentToolbarAvailability(tab: ViewerTabState | null): void {
+  const toggle = getSecondaryIntentToggleButton();
+  if (!toggle) return;
+  void import('./file-viewer-secondary-slot').then((m) => {
+    const secondaryView = m.getSecondaryViewerEditorView();
+    const available =
+      Boolean(tab) &&
+      tab!.viewMode === 'editor' &&
+      !tab!.readOnlyExcerpt &&
+      getLocalServerAvailable() &&
+      Boolean(secondaryView);
+    toggle.disabled = !available;
+  });
+}
+
+/** Secondary pane header (save + intent) — mirrors primary chrome for the secondary tab. */
+export function updateSecondaryViewerChrome(): void {
+  const path = secondarySlotViewerPath();
+  const tab = path ? (getViewerTab(path) ?? null) : null;
+  const saveBtn = getSecondarySaveButton();
+  if (saveBtn) {
+    void import('./file-viewer-secondary-slot').then((m) => {
+      const secondaryView = m.getSecondaryViewerEditorView();
+      const canSave = Boolean(
+        tab &&
+          secondaryView &&
+          tab.isDirty &&
+          !tab.readOnlyExcerpt &&
+          tab.viewMode === 'editor' &&
+          !isSaving,
+      );
+      saveBtn.disabled = !canSave;
+      saveBtn.classList.toggle('file-viewer-save--active', canSave);
+      saveBtn.setAttribute('aria-busy', isSaving ? 'true' : 'false');
+    });
   }
-  if (!status) return;
-  if (!enabled) {
-    status.hidden = true;
-    status.textContent = '';
-    status.className = 'file-viewer-intent-status';
-    return;
-  }
-  status.hidden = false;
-  if (staleCount > 0) {
-    status.textContent = `${staleCount} stale`;
-    status.className = 'file-viewer-intent-status file-viewer-intent-status--stale';
+  syncSecondaryIntentToolbarAvailability(tab);
+  if (tab && tab.viewMode === 'editor') {
+    void import('./file-viewer-secondary-slot').then((m) => {
+      const secondaryView = m.getSecondaryViewerEditorView();
+      if (!secondaryView) return;
+      syncSecondaryIntentToolbarChrome(isIntentEnabled(secondaryView.state));
+    });
   } else {
-    status.textContent = 'in sync';
-    status.className = 'file-viewer-intent-status file-viewer-intent-status--ok';
+    syncSecondaryIntentToolbarChrome(false);
   }
 }
 
@@ -236,7 +403,8 @@ function getReadOnlyBanner(): HTMLElement | null {
 }
 
 function activeTabContent(tab: ViewerTabState): string {
-  if (editorView && getActiveViewerTabPath() === tab.path) {
+  // Bind to the view that actually holds this tab, not to the focused slot.
+  if (editorView && editorViewPath === tab.path) {
     return editorView.state.doc.toString();
   }
   return tab.cachedEditorContent ?? tab.originalContent;
@@ -276,8 +444,20 @@ async function isLspEnabledForViewer(): Promise<boolean> {
   return cfg?.enabled === true;
 }
 
-/** Persist the live editor buffer into the tab that owns `editorView`. */
+/**
+ * Snapshot hook published by the secondary slot editor.
+ * Registered rather than imported so the unsaved-changes guard stays synchronous.
+ */
+let snapshotSecondaryEditor: (() => void) | null = null;
+
+/** Let the secondary slot editor take part in the unsaved-changes guard. */
+export function registerSecondaryEditorSnapshot(fn: (() => void) | null): void {
+  snapshotSecondaryEditor = fn;
+}
+
+/** Persist the live editor buffers of both slots into the tabs that own them. */
 function snapshotOutgoingEditorTab(): void {
+  snapshotSecondaryEditor?.();
   if (!editorView || !editorViewPath) return;
   const tab = getViewerTab(editorViewPath);
   if (!tab || tab.viewMode === 'image') return;
@@ -350,7 +530,8 @@ function updateDiagnosticsChrome(counts: {
 }
 
 function updateViewerChrome(): void {
-  const tab = getActiveViewerTab();
+  // The header lives inside the primary pane, so it reflects the primary tab.
+  const tab = primarySlotViewerTab();
   const saveBtn = getSaveButton();
   if (saveBtn) {
     const canSave = Boolean(
@@ -375,6 +556,7 @@ function updateViewerChrome(): void {
   }
   refreshFileViewerTabs();
   syncIntentToolbarAvailability(tab);
+  updateSecondaryViewerChrome();
 }
 
 function mountMarkdownPreview(tab: ViewerTabState, content: string): void {
@@ -427,6 +609,7 @@ function mountEditor(tab: ViewerTabState, content: string): void {
   editorAiStatusEl = aiStatus;
 
   const path = tab.path;
+  pendingMountPath = path;
 
   void (async () => {
     const [langExts, useLsp, editorAiConfig, editorSettings, intentConfig] = await Promise.all([
@@ -443,10 +626,12 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     const useEditorAi =
       editorAiConfig.enabled && !tab.readOnlyExcerpt && getLocalServerAvailable();
     const canMountEditorAi = !tab.readOnlyExcerpt && getLocalServerAvailable();
+    const intentInitialEnabled = isIntentModeEnabledForPath(path, intentConfig.enabledByDefault);
     editorAiOpts = canMountEditorAi
       ? {
           filePath: path,
           getConfig: getEditorAiCompletionConfigSync,
+          getIntentConfig: getEditorIntentModeConfigSync,
           canRequest: () => getLocalServerAvailable(),
           onStatus: (message) => {
             if (!editorAiStatusEl) return;
@@ -457,17 +642,21 @@ function mountEditor(tab: ViewerTabState, content: string): void {
               editorAiStatusEl.hidden = true;
             }
           },
+          onIntentEnabledChange: (enabled) => {
+            setIntentModeEnabledForPath(path, enabled);
+          },
+          onIntentBusyChange: (busy) => {
+            applyIntentBusyChrome(editorIntentToggleEl ?? getIntentToggleButton(), busy);
+          },
         }
       : null;
-    const aiExts = canMountEditorAi
-      ? [
-          editorAiCompletionCompartmentExtension(
-            useEditorAi && editorAiOpts
-              ? editorAiCompletionExtensions(editorAiOpts)
-              : [],
-          ),
-        ]
-      : [];
+    const aiExts =
+      canMountEditorAi && editorAiOpts
+        ? [
+            ...editorSuggestionBaseExtensions(),
+            editorSuggestionCompartmentExtension(editorSuggestionExtensions(editorAiOpts)),
+          ]
+        : [];
     if (useEditorAi) attachEditorAiModelSelectListener();
     const quickEditExts =
       !tab.readOnlyExcerpt && getLocalServerAvailable()
@@ -476,33 +665,6 @@ function mountEditor(tab: ViewerTabState, content: string): void {
             canRequest: () => getLocalServerAvailable(),
           })
         : [];
-    const intentInitialEnabled = isIntentModeEnabledForPath(path, intentConfig.enabledByDefault);
-    const intentExts =
-      !tab.readOnlyExcerpt && getLocalServerAvailable()
-        ? editorIntentModeExtensions({
-            filePath: path,
-            config: intentConfig,
-            canRequest: () => getLocalServerAvailable(),
-            initialEnabled: intentInitialEnabled,
-            onEnabledChange: (enabled) => {
-              setIntentModeEnabledForPath(path, enabled);
-            },
-            onStaleCount: (count) => {
-              if (!editorView) return;
-              updateIntentToolbarChrome(isIntentModeEnabled(editorView.state), count);
-            },
-            onStatus: (message) => {
-              if (!editorAiStatusEl) return;
-              if (message) {
-                editorAiStatusEl.textContent = message;
-                editorAiStatusEl.hidden = false;
-              } else if (!editorAiConfig.enabled) {
-                editorAiStatusEl.hidden = true;
-              }
-            },
-          })
-        : [];
-
     const state = EditorState.create({
       doc: content,
       extensions: [
@@ -531,7 +693,6 @@ function mountEditor(tab: ViewerTabState, content: string): void {
         ...fileEditorKeymapExtensions(),
         ...aiExts,
         ...quickEditExts,
-        ...intentExts,
         keymap.of([
           {
             key: 'Mod-s',
@@ -548,10 +709,15 @@ function mountEditor(tab: ViewerTabState, content: string): void {
         }),
         ...minnowEditorExtensions(),
         ...langExts,
+        ...(tab.readOnlyExcerpt ? [] : [codeSelectionDragExtension(path)]),
       ],
     });
     if (generation !== mountGeneration) return;
-    if (getActiveViewerTabPath() !== path || !editorMount.isConnected) return;
+    if (pendingMountPath === path) pendingMountPath = null;
+    if (primarySlotViewerPath() !== path || !editorMount.isConnected) {
+      primaryRenderKey = null;
+      return;
+    }
     editorView = new EditorView({ state, parent: editorMount });
     editorViewPath = path;
     // Adopt CM's exact buffer as the clean baseline (avoids EOL / load mismatches).
@@ -559,9 +725,9 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     if (liveTab && !liveTab.readOnlyExcerpt && !liveTab.isDirty) {
       rebaselineViewerTabFromEditor(path, editorView.state.doc.toString());
     }
-    if (intentExts.length > 0) {
-      mountIntentModeEditor(editorView, intentInitialEnabled);
-      updateIntentToolbarChrome(intentInitialEnabled, 0);
+    if (aiExts.length > 0) {
+      mountEditorSuggestions(editorView, intentInitialEnabled);
+      updateIntentToolbarChrome(intentInitialEnabled);
     }
     syncIntentToolbarAvailability(tab);
 
@@ -592,6 +758,7 @@ function mountEditor(tab: ViewerTabState, content: string): void {
       });
       editorView.focus();
     } else if (getActiveViewerTabPath() === path) {
+      // Only steal focus when this tab is also the globally focused one (split-aware).
       editorView.focus();
     }
 
@@ -694,12 +861,13 @@ async function mountPdfPreview(tab: ViewerTabState, src: string): Promise<void> 
     updateViewerChrome();
   } catch {
     setViewerError(
-      'Could not load PDF preview. Is the tool server running (npm start)?',
+      'Could not load PDF preview. Is Minnow running locally?',
     );
   }
 }
 
 export function setViewerLoading(_path: string): void {
+  primaryRenderKey = null;
   const host = getViewerHost();
   if (host) {
     destroyEditor();
@@ -710,6 +878,7 @@ export function setViewerLoading(_path: string): void {
 }
 
 export function setViewerError(message: string): void {
+  primaryRenderKey = null;
   const host = getViewerHost();
   if (host) {
     destroyEditor();
@@ -770,18 +939,24 @@ async function loadFileContent(path: string): Promise<LoadedFileContent> {
   return { content, readOnlyExcerpt: false };
 }
 
-/** Load workspace file content for the active tab when needed. */
-async function ensureActiveTabLoaded(): Promise<void> {
-  const tab = getActiveViewerTab();
+/**
+ * Load workspace file content for a tab, whichever pane is showing it.
+ *
+ * Path-keyed rather than "active tab"-keyed: with the split open the secondary group
+ * opens files too, and its tabs would otherwise sit on "Loading…" forever.
+ */
+export async function ensureViewerTabLoaded(path: string): Promise<void> {
+  const tab = getViewerTab(path);
   if (!tab || tab.loadStatus !== 'loading' || tab.kind === 'attachment') return;
-  // Capture path up front — the user may switch tabs while this await is in flight.
-  const path = tab.path;
+  // Both panes can ask for the same tab in one paint; one fetch is enough.
+  if (loadsInFlight.has(path)) return;
+  loadsInFlight.add(path);
 
-  setViewerLoading(path);
+  if (primarySlotViewerPath() === path) setViewerLoading(path);
   try {
     if (isImageFilePath(path)) {
       setViewerTabLoadState(path, 'ready', { viewMode: 'image' });
-      if (getActiveViewerTabPath() === path) renderActiveViewerTab();
+      renderViewerSlotsForPath(path);
       return;
     }
     const documentKind = getDocumentPreviewKind(path);
@@ -792,7 +967,7 @@ async function ensureActiveTabLoaded(): Promise<void> {
         readOnlyBannerText:
           'Document preview (read-only). Use create_pdf, create_spreadsheet, or create_word_document to generate files.',
       });
-      if (getActiveViewerTabPath() === path) renderActiveViewerTab();
+      renderViewerSlotsForPath(path);
       return;
     }
     const loaded = await loadFileContent(path);
@@ -805,20 +980,25 @@ async function ensureActiveTabLoaded(): Promise<void> {
       readOnlyExcerpt: loaded.readOnlyExcerpt,
       viewMode,
     });
-    if (getActiveViewerTabPath() === path) renderActiveViewerTab();
+    renderViewerSlotsForPath(path);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const still = getViewerTab(path);
     if (!still || still.loadStatus !== 'loading') return;
     setViewerTabLoadState(path, 'error', { error: message });
-    if (getActiveViewerTabPath() === path) {
+    if (primarySlotViewerPath() === path) {
       setViewerError(message || 'Could not open file');
+    } else {
+      renderViewerSlotsForPath(path);
     }
+  } finally {
+    loadsInFlight.delete(path);
   }
 }
 
 /** Paint the recent-files empty state when the viewer has no open tabs. */
 export function renderViewerEmptyState(): void {
+  primaryRenderKey = null;
   const host = getViewerHost();
   if (!host) return;
   destroyEditor();
@@ -834,22 +1014,28 @@ function noteRecentViewerOpen(path: string): void {
   });
 }
 
-/** Mount the active tab in #fileViewerHost (editor, preview, image, loading, error). */
+/** Mount the primary slot's tab in #fileViewerHost (editor, preview, image, loading, error). */
 export function renderActiveViewerTab(): void {
-  const tab = getActiveViewerTab();
+  // While split, a primary group showing a browser tab keeps its editor pane hidden —
+  // repainting it would churn CodeMirror behind the preview for nothing.
+  if (splitLayoutEnabled() && primarySlotShowsPreview()) return;
+
+  const tab = primarySlotViewerTab();
   const host = getViewerHost();
   if (!tab || !host) {
-    if (host) renderViewerEmptyState();
-    else {
+    if (!host) {
       destroyEditor();
       updateViewerChrome();
+      return;
     }
+    // A primary pane showing a browser tab must not be repainted as an empty editor.
+    if (!primarySlotShowsPreview()) renderViewerEmptyState();
     return;
   }
 
   if (tab.loadStatus === 'loading') {
     setViewerLoading(tab.path);
-    void ensureActiveTabLoaded();
+    void ensureViewerTabLoaded(tab.path);
     return;
   }
 
@@ -857,6 +1043,14 @@ export function renderActiveViewerTab(): void {
     setViewerError(tab.loadError ?? 'Could not open file');
     return;
   }
+
+  // Layout passes (resize, split reflow, focus change) re-enter here constantly; remounting
+  // would throw away CodeMirror state and restart PDF/document iframes every time.
+  if (primaryRenderIsCurrent(tab)) {
+    updateViewerChrome();
+    return;
+  }
+  primaryRenderKey = primaryRenderKeyFor(tab);
 
   const content = activeTabContent(tab);
 
@@ -871,7 +1065,7 @@ export function renderActiveViewerTab(): void {
       );
       mountImagePreview(tab, src, () => {
         setViewerError(
-          'Could not load image preview. Is the tool server running (npm start)?',
+          'Could not load image preview. Is Minnow running locally?',
         );
       });
     }
@@ -897,7 +1091,7 @@ export function renderActiveViewerTab(): void {
     const label = tab.viewMode === 'spreadsheet' ? 'Spreadsheet preview' : 'Word document preview';
     mountDocumentHtmlPreview(tab, src, label, () => {
       setViewerError(
-        'Could not load document preview. Is the tool server running (npm start)?',
+        'Could not load document preview. Is Minnow running locally?',
       );
     });
     return;
@@ -922,36 +1116,44 @@ export async function confirmLeaveDirtyActiveTab(): Promise<boolean> {
   );
   if (choice === 'cancel') return false;
   if (choice === 'discard') return true;
-  return saveCurrentFile();
+  return saveViewerTabByPath(tab.path);
 }
 
 /** Confirm closing a dirty tab (may be inactive). */
 async function confirmCloseDirtyTab(tab: ViewerTabState): Promise<boolean> {
-  // Active tab: recompute from the editor so a false ● does not block close.
-  if (editorView && editorViewPath === tab.path) {
-    snapshotOutgoingEditorTab();
-  }
+  // Refresh dirty from whichever slot holds this tab so a false ● does not block close.
+  snapshotOutgoingEditorTab();
   if (!tab.isDirty) return true;
   const choice = await showViewerUnsavedDialog(
     `You have unsaved changes in "${tab.displayName}".`,
   );
   if (choice === 'cancel') return false;
   if (choice === 'discard') return true;
-  if (tab.path === getActiveViewerTabPath()) {
-    return saveCurrentFile();
-  }
-  return false;
+  return saveViewerTabByPath(tab.path);
 }
 
+/**
+ * Activate a tab inside the slot that owns it.
+ * Focus follows the tab so the pane the user clicked becomes the command target.
+ */
 async function activateTabAndRender(path: string, options?: { skipUnsavedGuard?: boolean }): Promise<boolean> {
+  const slotTabs = await import('./right-pane-slot-tabs');
+  const split = await import('./right-pane-split');
+  const targetSlot = slotTabs.targetSlotForViewerPath(path);
+
   const ok = await activateViewerTab(path, {
     skipUnsavedGuard: options?.skipUnsavedGuard,
     confirmUnsaved: confirmLeaveDirtyActiveTab,
     beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!ok) return false;
+
+  if (split.isRightPaneSplitLayoutEnabled()) {
+    slotTabs.registerViewerTabOpened(path, targetSlot);
+    split.focusPaneSlot(targetSlot);
+  }
   showViewerSplit();
-  renderActiveViewerTab();
+  renderViewerSlots();
   renderFileTreeViaBridge();
   return true;
 }
@@ -963,11 +1165,12 @@ export async function closeViewerTab(path: string): Promise<void> {
 
   if (!(await confirmCloseDirtyTab(tab))) return;
 
-  const wasActive = path === getActiveViewerTabPath();
-  if (wasActive) {
-    destroyEditor();
-  }
+  if (editorViewPath === path) destroyEditor();
   removeViewerTab(path);
+  const slotTabs = await import('./right-pane-slot-tabs');
+  slotTabs.unregisterViewerTab(path);
+  const split = await import('./right-pane-split');
+  split.collapseEmptySlots();
 
   if (listViewerTabs().length === 0) {
     patchFilePanelState({ openViewerTabs: [], activeViewerTab: null, selectedPath: null });
@@ -983,45 +1186,74 @@ export async function closeViewerTab(path: string): Promise<void> {
     } else {
       hideViewerSplit();
     }
-  } else if (wasActive) {
-    renderActiveViewerTab();
+  } else {
+    // The surviving tab of the closing pane becomes that pane's active tab.
+    if (split.isRightPaneSplitLayoutEnabled()) {
+      const focusPath = slotTabs.activeViewerPathForSlot(split.getFocusedPaneSlot());
+      if (focusPath) adoptActiveViewerTabPath(focusPath);
+    }
+    renderViewerSlots();
   }
+  refreshRightTabs();
   renderFileTreeViaBridge();
 }
 
-/** Close every tab except the given path. */
-export async function closeOtherViewerTabsUi(keepPath: string): Promise<void> {
-  const toClose = listViewerTabs().filter((t) => t.path !== keepPath);
-  for (const tab of toClose) {
-    if (!(await confirmCloseDirtyTab(tab))) return;
+function refreshRightTabs(): void {
+  void import('./unified-right-tabs').then((m) => m.refreshUnifiedRightTabs());
+}
+
+/**
+ * Tabs in the same editor group as `path`, in strip order.
+ * "Close others" / "close to the right" must not reach across the split.
+ */
+async function groupTabPathsFor(path: string): Promise<string[]> {
+  const split = await import('./right-pane-split');
+  const ordered = listViewerTabs().map((t) => t.path);
+  if (!split.isRightPaneSplitLayoutEnabled()) return ordered;
+  const slotTabs = await import('./right-pane-slot-tabs');
+  const slot = slotTabs.slotOwningViewerPath(path);
+  if (!slot) return [path];
+  const owned = new Set(slotTabs.viewerPathsForSlot(slot));
+  return ordered.filter((p) => owned.has(p));
+}
+
+/** Close a set of tabs with a per-tab dirty guard; aborts entirely on cancel. */
+async function closeViewerTabPaths(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  for (const p of paths) {
+    const tab = getViewerTab(p);
+    if (tab && !(await confirmCloseDirtyTab(tab))) return;
   }
-  const wasActiveDirty = getActiveViewerTabPath() !== keepPath;
-  if (wasActiveDirty) destroyEditor();
-  closeOtherViewerTabs(keepPath);
-  if (getActiveViewerTabPath() === keepPath) {
-    renderActiveViewerTab();
+  const slotTabs = await import('./right-pane-slot-tabs');
+  for (const p of paths) {
+    if (editorViewPath === p) destroyEditor();
+    removeViewerTab(p);
+    slotTabs.unregisterViewerTab(p);
   }
-  if (listViewerTabs().length === 0) {
+  const split = await import('./right-pane-split');
+  split.collapseEmptySlots();
+
+  if (listViewerTabs().length === 0 && listPreviewTabs().length === 0) {
     hideViewerSplit();
   }
+  invalidatePrimaryViewerRender();
+  renderViewerSlots();
+  refreshRightTabs();
   renderFileTreeViaBridge();
 }
 
-/** Close tabs to the right of the given path. */
+/** Close every tab in the same group except the given path. */
+export async function closeOtherViewerTabsUi(keepPath: string): Promise<void> {
+  const group = await groupTabPathsFor(keepPath);
+  await closeViewerTabPaths(group.filter((p) => p !== keepPath));
+}
+
+/** Close tabs to the right of the given path within its group. */
 export async function closeViewerTabsToRightUi(path: string): Promise<void> {
-  const idx = listViewerTabs().findIndex((t) => t.path === path);
+  const group = await groupTabPathsFor(path);
+  const idx = group.indexOf(path);
   if (idx < 0) return;
-  const toClose = listViewerTabs().slice(idx + 1);
-  for (const tab of toClose) {
-    if (!(await confirmCloseDirtyTab(tab))) return;
-  }
-  const activePath = getActiveViewerTabPath();
-  if (activePath && toClose.some((t) => t.path === activePath)) {
-    destroyEditor();
-  }
-  closeViewerTabsToRight(path);
-  renderActiveViewerTab();
-  renderFileTreeViaBridge();
+  await closeViewerTabPaths(group.slice(idx + 1));
 }
 
 /** Close all open tabs (with per-tab dirty guard). */
@@ -1032,26 +1264,33 @@ export async function closeAllViewerTabsUi(): Promise<void> {
   resetAllViewerTabs();
 }
 
-/** Cycle to the next or previous tab in the strip. */
+/** Cycle to the next or previous tab within the focused group. */
 export async function cycleViewerTab(direction: 'next' | 'prev'): Promise<void> {
-  const tabs = listViewerTabs();
-  if (tabs.length < 2) return;
   const activePath = getActiveViewerTabPath();
-  const idx = tabs.findIndex((t) => t.path === activePath);
+  if (!activePath) return;
+  const group = await groupTabPathsFor(activePath);
+  if (group.length < 2) return;
+  const idx = group.indexOf(activePath);
   if (idx < 0) return;
   const nextIdx =
-    direction === 'next' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
-  await activateTabAndRender(tabs[nextIdx]!.path);
+    direction === 'next' ? (idx + 1) % group.length : (idx - 1 + group.length) % group.length;
+  await activateTabAndRender(group[nextIdx]!);
 }
 
-/** Persist the open file via save_file. */
-export async function saveCurrentFile(): Promise<boolean> {
-  const tab = getActiveViewerTab();
-  if (!tab || !editorView || tab.readOnlyExcerpt || !tab.isDirty || isSaving) {
-    return false;
-  }
+/**
+ * Persist one tab via save_file, from whichever pane holds its live buffer.
+ *
+ * Path-addressed on purpose: the split has two editors, and the old "active tab +
+ * primary EditorView" pairing could write the left pane's text to the right pane's file.
+ */
+export async function saveViewerTabByPath(path: string): Promise<boolean> {
+  // Pull the freshest text out of both editors before reading the cached buffer.
+  snapshotOutgoingEditorTab();
+  const tab = getViewerTab(path);
+  if (!tab || tab.readOnlyExcerpt || isSaving) return false;
+  if (!tab.isDirty) return true;
 
-  const content = editorView.state.doc.toString();
+  const content = tab.cachedEditorContent ?? tab.originalContent;
   isSaving = true;
   updateViewerChrome();
 
@@ -1063,7 +1302,7 @@ export async function saveCurrentFile(): Promise<boolean> {
     if (raw.startsWith('Error:')) {
       throw new Error(raw.replace(/^Error:\s*/i, '').trim());
     }
-    markActiveTabSaved(content);
+    markViewerTabSaved(tab.path, content);
     if (lspSyncedPath === tab.path) {
       void notifyLspDocument(tab.path, 'change', content);
     }
@@ -1077,12 +1316,27 @@ export async function saveCurrentFile(): Promise<boolean> {
   } finally {
     isSaving = false;
     updateViewerChrome();
+    refreshRightTabs();
   }
+}
+
+/** Save the primary pane's file (header Save button and its Ctrl+S). */
+export async function saveCurrentFile(): Promise<boolean> {
+  const path = editorViewPath ?? primarySlotViewerPath();
+  if (!path) return false;
+  return saveViewerTabByPath(path);
+}
+
+/** Save the file in the focused pane (global Ctrl+S). */
+export async function saveFocusedViewerTab(): Promise<boolean> {
+  const path = getActiveViewerTabPath() ?? primarySlotViewerPath();
+  if (!path) return false;
+  return saveViewerTabByPath(path);
 }
 
 /** Switch the open markdown file from preview to the editable code editor. */
 export function switchMarkdownViewerToCode(): void {
-  const tab = getActiveViewerTab();
+  const tab = primarySlotViewerTab();
   if (!tab || !isMarkdownFilePath(tab.path) || tab.viewMode !== 'markdown-preview') return;
   tab.viewMode = 'editor';
   tab.cachedEditorContent = tab.originalContent;
@@ -1091,7 +1345,7 @@ export function switchMarkdownViewerToCode(): void {
 
 /** Switch the open markdown file from the code editor to GFM preview. */
 export async function switchMarkdownViewerToPreview(): Promise<void> {
-  const tab = getActiveViewerTab();
+  const tab = primarySlotViewerTab();
   if (!tab || !isMarkdownFilePath(tab.path) || !editorView) return;
   if (tab.isDirty) {
     const choice = await showViewerUnsavedDialog(
@@ -1099,7 +1353,7 @@ export async function switchMarkdownViewerToPreview(): Promise<void> {
     );
     if (choice === 'cancel') return;
     if (choice === 'save') {
-      const saved = await saveCurrentFile();
+      const saved = await saveViewerTabByPath(tab.path);
       if (!saved) return;
     }
   }
@@ -1148,12 +1402,32 @@ export function bindFileViewerControls(): void {
     });
   }
 
+  const secondarySaveBtn = getSecondarySaveButton();
+  if (secondarySaveBtn) {
+    secondarySaveBtn.addEventListener('click', () => {
+      const path = secondarySlotViewerPath();
+      if (path) void saveViewerTabByPath(path);
+    });
+  }
+
   editorIntentToggleEl = getIntentToggleButton();
-  editorIntentStatusEl = getIntentStatusElement();
   if (editorIntentToggleEl) {
     editorIntentToggleEl.addEventListener('click', () => {
       if (!editorView || !getLocalServerAvailable()) return;
       toggleIntentMode(editorView);
+    });
+  }
+
+  const secondaryIntentBtn = getSecondaryIntentToggleButton();
+  if (secondaryIntentBtn) {
+    secondaryIntentBtn.addEventListener('click', () => {
+      if (!getLocalServerAvailable()) return;
+      void import('./file-viewer-secondary-slot').then((m) => {
+        const view = m.getSecondaryViewerEditorView();
+        if (!view) return;
+        toggleIntentMode(view);
+        syncSecondaryIntentToolbarChrome(isIntentEnabled(view.state));
+      });
     });
   }
 
@@ -1166,10 +1440,11 @@ export function bindFileViewerControls(): void {
   window.addEventListener(EDITOR_AI_CONFIG_CHANGED_EVENT, () => {
     void (async () => {
       await loadEditorAiCompletionConfig();
-      const tab = getActiveViewerTab();
+      const tab = primarySlotViewerTab();
       if (!tab || tab.viewMode !== 'editor' || tab.loadStatus !== 'ready') return;
       if (!editorView || !editorAiOpts) return;
-      reconfigureEditorAiCompletion(editorView, editorAiOpts);
+      // intentEnabledField sits outside the compartment, so the toggle survives.
+      reconfigureEditorSuggestions(editorView, editorAiOpts);
       const config = getEditorAiCompletionConfigSync();
       if (config.enabled && getLocalServerAvailable()) {
         attachEditorAiModelSelectListener();
@@ -1188,7 +1463,7 @@ export function bindFileViewerContextMenu(): void {
   viewerContextMenuBound = true;
 
   host.addEventListener('contextmenu', (e) => {
-    const tab = getActiveViewerTab();
+    const tab = primarySlotViewerTab();
     if (!tab) return;
 
     const hasEditorSelection = Boolean(
@@ -1300,14 +1575,26 @@ export async function openAttachmentSnapshotInViewer(displayName: string, conten
   });
   if (!result) return;
 
+  await adoptOpenedViewerTab(path);
   showViewerSplit();
-  renderActiveViewerTab();
+  renderViewerSlots();
   renderFileTreeViaBridge();
+}
+
+/**
+ * Route a freshly opened tab into one pane: the pane that already owns it, else the
+ * focused one. Without this a new file paints into both panes and belongs to neither.
+ */
+async function adoptOpenedViewerTab(path: string): Promise<void> {
+  const split = await import('./right-pane-split');
+  if (!split.isRightPaneSplitLayoutEnabled()) return;
+  const slotTabs = await import('./right-pane-slot-tabs');
+  const slot = slotTabs.registerViewerTabOpened(path);
+  split.focusPaneSlot(slot);
 }
 
 /** Open a workspace image via the preview file API (binary-safe). */
 export async function openWorkspaceImageInViewer(relativePath: string): Promise<void> {
-  const displayName = relativePath.split(/[/\\]/).pop() ?? relativePath;
   const result = await openViewerTab(relativePath, {
     viewMode: 'image',
     readOnlyExcerpt: true,
@@ -1318,8 +1605,9 @@ export async function openWorkspaceImageInViewer(relativePath: string): Promise<
   });
   if (!result) return;
   noteRecentViewerOpen(relativePath);
+  await adoptOpenedViewerTab(relativePath);
   showViewerSplit();
-  renderActiveViewerTab();
+  renderViewerSlots();
   renderFileTreeViaBridge();
 }
 
@@ -1339,8 +1627,9 @@ export async function openImageDataUrlInViewer(displayName: string, dataUrl: str
     beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!result) return;
+  await adoptOpenedViewerTab(path);
   showViewerSplit();
-  renderActiveViewerTab();
+  renderViewerSlots();
   renderFileTreeViaBridge();
 }
 
@@ -1375,6 +1664,7 @@ export async function openFileInViewer(
     }
 
     noteRecentViewerOpen(relativePath);
+    await adoptOpenedViewerTab(relativePath);
     showViewerSplit();
 
     const mounts = await import('../os/desktop-workspace-mounts');
@@ -1385,7 +1675,7 @@ export async function openFileInViewer(
 
     renderFileTreeViaBridge();
     result.tab.loadStatus = 'loading';
-    renderActiveViewerTab();
+    renderViewerSlots();
     return;
   }
 
@@ -1409,6 +1699,7 @@ export async function openFileInViewer(
   }
 
   noteRecentViewerOpen(relativePath);
+  await adoptOpenedViewerTab(relativePath);
   showViewerSplit();
 
   const mounts = await import('../os/desktop-workspace-mounts');
@@ -1420,12 +1711,12 @@ export async function openFileInViewer(
   renderFileTreeViaBridge();
 
   if (result.focusedExisting && result.tab.loadStatus === 'ready') {
-    renderActiveViewerTab();
+    renderViewerSlots();
     return;
   }
 
   result.tab.loadStatus = 'loading';
-  renderActiveViewerTab();
+  renderViewerSlots();
 }
 
 /** Restore persisted workspace tabs after boot (active tab loads first). */
@@ -1435,9 +1726,12 @@ export async function restoreViewerTabsFromPrefs(
 ): Promise<void> {
   if (paths.length === 0) return;
   restoreWorkspaceViewerTabs(paths, activePath);
+  // Persisted slot lists predate this restore — re-home any tab they no longer cover.
+  const split = await import('./right-pane-split');
+  split.reconcileRightPaneSlots();
   showViewerSplit();
   renderFileTreeViaBridge();
-  renderActiveViewerTab();
+  renderViewerSlots();
 }
 
 function resetAllViewerTabs(options?: { closeSplit?: boolean }): void {
@@ -1454,9 +1748,9 @@ function resetAllViewerTabs(options?: { closeSplit?: boolean }): void {
   renderFileTreeViaBridge();
 }
 
-/** Close active tab; hide split when no tabs remain. */
+/** Close the primary pane's tab (its header close button); hide split when none remain. */
 export function closeFileViewer(): void {
-  const path = getActiveViewerTabPath();
+  const path = primarySlotViewerPath();
   if (!path) return;
   void closeViewerTab(path);
 }
@@ -1479,7 +1773,11 @@ export function retargetOpenViewerPath(newPath: string): void {
   const active = getActiveViewerTabPath();
   if (!active) return;
   retargetViewerTab(active, newPath);
-  renderActiveViewerTab();
+  void import('./right-pane-slot-tabs').then((m) => {
+    m.retargetSlotViewerPath(active, newPath);
+    invalidatePrimaryViewerRender();
+    renderViewerSlots();
+  });
   renderFileTreeViaBridge();
 }
 

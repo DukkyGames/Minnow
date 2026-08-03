@@ -3,7 +3,7 @@
  */
 
 import path from 'node:path';
-import { FAKE_PROVIDER_ID } from '../../../scripts/fake-model-server.mjs';
+import { FAKE_PROVIDER_ID } from '../board-testing/fake-model-ids.js';
 import { listProviders } from '../../providers/store.js';
 import { patchSessionState, readWholeSessionState } from '../../config/sessions-repo.js';
 import { getWorkspaceRoot } from '../../workspace/root.js';
@@ -21,6 +21,7 @@ import { tailBoardLog } from './board-log-tail.js';
 import { defaultScenarioRunManager } from './scenario-runner.js';
 import { importTsModule } from './ts-import.js';
 import { TEST_BOARD_GROUP_ID, TEST_BOARD_PLANNER_ID } from './constants.js';
+import { isBoardTestingApiEnabled } from '../../config/dev-surfaces.js';
 
 const API_PREFIX = '/api/orchestrate/board-testing';
 
@@ -115,6 +116,11 @@ async function listBoardScenarios() {
 export async function handleBoardTestingRequest(req, res, pathname, options = {}) {
   if (!pathname.startsWith(API_PREFIX)) {
     return false;
+  }
+
+  if (!isBoardTestingApiEnabled()) {
+    sendJson(res, 404, { ok: false, error: 'Not found' });
+    return true;
   }
 
   if (pathname === `${API_PREFIX}/status` && req.method === 'GET') {

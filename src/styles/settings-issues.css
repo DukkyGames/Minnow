@@ -1,0 +1,201 @@
+/**
+ * Settings → Issues — taxonomy tables inside emphasis panels.
+ */
+
+.settings-issues.settings-general {
+  max-width: min(52rem, 100%);
+}
+
+.settings-general .settings-group--emphasis .settings-issues-table-wrap {
+  margin: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  overflow-x: auto;
+  background: var(--mn-bg);
+}
+
+.settings-issues-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.settings-issues-table th,
+.settings-issues-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.settings-issues-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  background: color-mix(in srgb, var(--mn-fg) 4%, var(--mn-bg));
+  white-space: nowrap;
+}
+
+.settings-issues-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.settings-issues-table .settings-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.settings-issues-table .settings-issues-role {
+  min-width: 9rem;
+}
+
+.settings-issues-id {
+  display: inline-block;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  word-break: break-all;
+}
+
+.settings-issues-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+}
+
+.settings-issues-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.settings-issues-order {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-issues-order-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+.settings-issues-order-btn__icon {
+  --mn-icon-size: 16px;
+  color: var(--mn-fg);
+}
+
+.settings-issues-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.settings-issues-table col.settings-issues-col-label {
+  width: 28%;
+}
+
+.settings-issues-table col.settings-issues-col-id {
+  width: 14%;
+}
+
+.settings-issues-table col.settings-issues-col-role {
+  width: 18%;
+}
+
+.settings-issues-table col.settings-issues-col-options {
+  width: 22%;
+}
+
+.settings-issues-table col.settings-issues-col-order {
+  width: 6rem;
+}
+
+.settings-issues-table col.settings-issues-col-actions {
+  width: 5.5rem;
+}
+
+.settings-general .settings-group--emphasis .settings-issues-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-issues-empty td {
+  padding: 14px 12px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-general .settings-group--emphasis.settings-issues-danger-zone {
+  margin-top: 4px;
+}
+
+.settings-issues-danger-zone .settings-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-issues-danger-zone .settings-group__lead {
+  margin-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .settings-issues-table thead {
+    display: none;
+  }
+
+  .settings-issues-table,
+  .settings-issues-table tbody,
+  .settings-issues-table tr,
+  .settings-issues-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .settings-issues-table tr {
+    padding: 12px;
+    border-bottom: 1px solid var(--mn-border);
+  }
+
+  .settings-issues-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .settings-issues-table td {
+    padding: 6px 0;
+    border: none;
+  }
+
+  .settings-issues-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mn-fg-muted);
+  }
+
+  .settings-issues-actions {
+    text-align: left;
+  }
+
+  .settings-issues-empty td::before {
+    display: none;
+  }
+}

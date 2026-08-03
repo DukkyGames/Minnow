@@ -71,32 +71,36 @@ function formatSourceKey(key: string): string {
   return key;
 }
 
-/** Instrument-style metric strip for ledger totals. */
+/** Flat instrument row for ledger totals (stats-strip vocabulary, no nested cards). */
 function appendUsageMetrics(mount: HTMLElement, totals: TokenLedgerTotals): void {
-  const list = el('ul', 'usage-metrics');
-  list.setAttribute('role', 'list');
+  const panel = el('div', 'usage-instrument');
+  panel.setAttribute('role', 'group');
+  panel.setAttribute('aria-label', 'Usage totals');
 
-  const metrics: { label: string; value: string; valueClass?: string }[] = [
+  const metrics: { label: string; value: string; tone?: 'muted' | 'cost' }[] = [
     { label: 'Completions', value: String(totals.completionCount) },
     { label: 'Total tokens', value: formatTokens(totals.totalTokens) },
     {
       label: 'Estimated cost',
       value: formatUsd(totals.costUsd > 0 ? totals.costUsd : null),
-      valueClass: totals.costUsd > 0 ? 'usage-metric__value--cost' : 'usage-metric__value--muted',
+      tone: totals.costUsd > 0 ? 'cost' : 'muted',
     },
   ];
 
   for (const metric of metrics) {
-    const item = el('li', 'usage-metric');
-    item.setAttribute('role', 'listitem');
-    item.append(
-      el('span', 'usage-metric__label', metric.label),
-      el('span', `usage-metric__value${metric.valueClass ? ` ${metric.valueClass}` : ''}`, metric.value),
+    const cell = el('div', 'usage-instrument__cell');
+    cell.append(
+      el('span', 'usage-instrument__label', metric.label),
+      el(
+        'span',
+        `usage-instrument__value${metric.tone ? ` usage-instrument__value--${metric.tone}` : ''}`,
+        metric.value,
+      ),
     );
-    list.appendChild(item);
+    panel.appendChild(cell);
   }
 
-  mount.appendChild(list);
+  mount.appendChild(panel);
 }
 
 /** Prompt vs completion token split bar (stats-strip colors). */
@@ -121,7 +125,9 @@ function appendTokenSplit(mount: HTMLElement, totals: TokenLedgerTotals): void {
   track.append(promptFill, completionFill);
 
   const legend = el('p', 'usage-token-split__legend');
-  legend.innerHTML = `<strong>${formatTokens(prompt)}</strong> prompt · <strong>${formatTokens(completion)}</strong> completion`;
+  const promptStrong = el('strong', undefined, formatTokens(prompt));
+  const completionStrong = el('strong', undefined, formatTokens(completion));
+  legend.append(promptStrong, ' prompt · ', completionStrong, ' completion');
   wrap.append(track, legend);
   mount.appendChild(wrap);
 }
@@ -141,23 +147,36 @@ function appendUsageRollup(
     const subsection = el('div', 'usage-subsection');
     subsection.appendChild(el('h4', 'usage-subsection__title', 'By source'));
 
-    const list = el('ul', 'usage-breakdown');
+    const ledger = el('div', 'usage-ledger');
+    ledger.setAttribute('role', 'table');
+    ledger.setAttribute('aria-label', 'Usage by source');
+
+    const head = el('div', 'usage-ledger__row usage-ledger__row--head');
+    head.setAttribute('role', 'row');
+    for (const heading of ['Source', 'Completions', 'Tokens', 'Cost']) {
+      const cell = el('span', 'usage-ledger__cell usage-ledger__cell--head', heading);
+      cell.setAttribute('role', 'columnheader');
+      head.appendChild(cell);
+    }
+    ledger.appendChild(head);
+
     for (const key of sourceKeys) {
       const row = bySource[key]!;
-      const item = el('li', 'usage-breakdown__row');
+      const item = el('div', 'usage-ledger__row');
+      item.setAttribute('role', 'row');
       item.append(
-        el('span', 'usage-breakdown__source', formatSourceKey(key)),
-        el('span', 'usage-breakdown__stat', `${row.completionCount} completions`),
-        el('span', 'usage-breakdown__stat usage-breakdown__stat--mono', formatTokens(row.totalTokens)),
+        el('span', 'usage-ledger__cell usage-ledger__cell--source', formatSourceKey(key)),
+        el('span', 'usage-ledger__cell', `${row.completionCount}`),
+        el('span', 'usage-ledger__cell usage-ledger__cell--mono', formatTokens(row.totalTokens)),
         el(
           'span',
-          'usage-breakdown__stat usage-breakdown__stat--mono',
+          'usage-ledger__cell usage-ledger__cell--mono usage-ledger__cell--end',
           formatUsd(row.costUsd > 0 ? row.costUsd : null),
         ),
       );
-      list.appendChild(item);
+      ledger.appendChild(item);
     }
-    subsection.appendChild(list);
+    subsection.appendChild(ledger);
     mount.appendChild(subsection);
   }
 
@@ -223,28 +242,25 @@ export async function renderUsageSettingsSection(): Promise<void> {
   if (!isServerStorageMode() || !serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'Start with <code>npm start</code> to edit provider pricing on the server. Session ledger data below is still available in this browser.',
+      'Open Minnow to edit provider pricing on this device. Session ledger data below is still available in this browser.',
       { id: 'settingsUsageOffline', searchKey: 'models.usage' },
     );
   }
 
-  const content = el('div', 'settings-general__content');
+  const content = el('div', 'settings-general__content settings-usage__content');
   shell.appendChild(content);
 
-  const pricing = appendSettingsGroup(
-    content,
-    'Model pricing',
-    'USD per 1M tokens on each provider profile drives the cost estimates below.',
-    'models.usage.pricing',
-    { emphasis: true },
-  );
-  const pricingHint = el('p', 'usage-pricing-hint');
-  pricingHint.append(
-    'Set rates under ',
+  const pricingNote = el('div', 'usage-pricing-note');
+  pricingNote.dataset.settingsSearchKey = 'models.usage.pricing';
+  const pricingTitle = el('p', 'usage-pricing-note__title', 'Model pricing');
+  const pricingBody = el('p', 'usage-pricing-note__body');
+  pricingBody.append(
+    'Cost estimates use USD per 1M tokens from each ',
     linkToSettingsSection('Providers', 'providers'),
-    ' (optional “Model pricing” on each provider). Local providers can leave zeros.',
+    ' profile (optional “Model pricing”). Local providers can leave zeros.',
   );
-  pricing.appendChild(pricingHint);
+  pricingNote.append(pricingTitle, pricingBody);
+  content.appendChild(pricingNote);
 
   const activeChat = getActiveChat();
   const activeLedger = activeChat.tokenLedger;

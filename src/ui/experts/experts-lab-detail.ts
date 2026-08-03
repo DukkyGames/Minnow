@@ -1169,7 +1169,7 @@ function renderMemoryProposalCard(
 
       if (!ok) {
 
-        setStatus('err', 'Could not accept memory proposal. Is npm start running?');
+        setStatus('err', 'Could not accept memory proposal. Is Minnow running?');
 
         return;
 
@@ -1362,7 +1362,7 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
 
     offline.className = 'experts-chat-empty';
 
-    offline.textContent = 'Start with npm start to review expert memory.';
+    offline.textContent = 'Open Minnow to review expert memory.';
 
     panel.appendChild(offline);
 

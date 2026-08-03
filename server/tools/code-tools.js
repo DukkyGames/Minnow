@@ -4,15 +4,14 @@
 
 import {
   callsOf,
+  ensureWarmCodeIndex,
   explainSymbol,
   findSymbol,
   loadBrainCodeConfig,
-  queryCodeStatus,
   readSymbol,
   repoMap,
   whoCalls,
 } from '../brain/code/query.js';
-import { runCascade } from '../brain/code/cascade.js';
 
 async function ensureCodeEnabled() {
   const code = await loadBrainCodeConfig();
@@ -30,12 +29,9 @@ export async function toolRepoMap(args) {
   const disabled = await ensureCodeEnabled();
   if (disabled) return disabled;
 
-  const status = await queryCodeStatus();
-  if (!status.symbolCount) {
-    const reindex = await runCascade({ trigger: 'manual', force: true });
-    if (!reindex.indexedFiles && !reindex.skipped) {
-      return 'Code index is cold. Reindex failed or workspace has no indexable files. Use `grep` as fallback.';
-    }
+  const warm = await ensureWarmCodeIndex();
+  if (!warm.symbolCount) {
+    return 'Code index is cold. Reindex failed or workspace has no indexable files. Use `grep` as fallback.';
   }
 
   const map = await repoMap({

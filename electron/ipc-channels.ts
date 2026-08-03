@@ -83,6 +83,13 @@ export const DIAGNOSTICS_OOM_PAUSE = 'minnow:diagnostics:oom-pause';
 /** Renderer → main: clear OOM pause marker after user resumes the board. */
 export const DIAGNOSTICS_CLEAR_OOM_PAUSE = 'minnow:diagnostics:clear-oom-pause';
 
+/** Renderer → main: keep the app awake while AFK orchestrate boards are running. */
+export const POWER_SET_AFK_GUARD = 'minnow:power:set-afk-guard';
+/** Main → renderer: macOS screen unlocked / system resumed from sleep. */
+export const POWER_SCREEN_UNLOCKED = 'minnow:power:screen-unlocked';
+/** Main → renderer: pause auto-running boards before app quit. */
+export const BOARD_PAUSE_FOR_SHUTDOWN = 'minnow:board:pause-for-shutdown';
+
 /** Renderer → main: current auto-update status snapshot (MIN-384). */
 export const UPDATER_GET_STATUS = 'minnow:updater:get-status';
 /** Renderer → main: user-initiated update check (failures surface inline). */
@@ -120,3 +127,9 @@ export const TRAY_SET_LOGIN_ITEM = 'minnow:tray:set-login-item';
 export const TRAY_COMMAND = 'minnow:tray:command';
 /** Main → renderer: close-to-tray preference changed. */
 export const TRAY_CLOSE_TO_TRAY_CHANGED = 'minnow:tray:close-to-tray-changed';
+/** Renderer → main: read persisted shell zoom percent. */
+export const SHELL_GET_ZOOM_PERCENT = 'minnow:shell:get-zoom-percent';
+/** Renderer → main: persist and apply shell zoom percent. */
+export const SHELL_SET_ZOOM_PERCENT = 'minnow:shell:set-zoom-percent';
+/** Main → renderer: shell zoom percent changed (settings or keyboard shortcuts). */
+export const SHELL_ZOOM_PERCENT_CHANGED = 'minnow:shell:zoom-percent-changed';

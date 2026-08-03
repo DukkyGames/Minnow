@@ -32,10 +32,24 @@ export interface LlmSummarizeResult {
   usedLlm: boolean;
 }
 
+type CompletionMessageLike = {
+  content?: unknown;
+  reasoning?: string;
+  reasoning_content?: string;
+  thinking?: string;
+};
+
+function asCompletionMessage(message: unknown): CompletionMessageLike | null | undefined {
+  if (message === null || message === undefined) return message;
+  if (typeof message !== 'object') return undefined;
+  return message as CompletionMessageLike;
+}
+
 function extractCompletionText(message: unknown): string {
-  const content = extractMessageText(message).trim();
+  const msg = asCompletionMessage(message);
+  const content = extractMessageText(msg).trim();
   if (!content) return '';
-  const reasoning = extractReasoningMessage(message).trim();
+  const reasoning = extractReasoningMessage(msg).trim();
   if (reasoning && content === reasoning) return '';
   return content;
 }

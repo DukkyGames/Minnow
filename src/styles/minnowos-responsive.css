@@ -1,0 +1,81 @@
+/**
+ * Minnow OS — cross-viewport adaptations (phone / tablet / large desktop).
+ * Layout flags come from ui/mobile-layout.ts (`html.mn-phone`, `html.mn-tablet`).
+ */
+
+/* Flex children need min-width: 0 or long placeholders collapse to one character per line. */
+.mn-os-concierge-mount,
+.mn-os-concierge,
+.mn-os-cc-input,
+.mn-os-cc-field {
+  min-width: 0;
+}
+
+.mn-os-cc-field {
+  width: 100%;
+}
+
+.mn-os-desktop-composer,
+.mn-os-desktop-input-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ---------- tablet: touch + mid-width (see TABLET_MQ in mobile-layout.ts) ---------- */
+
+html.mn-tablet #osDesktopLayer {
+  --os-chat-shell-max: min(1040px, calc(100vw - 11rem));
+  --os-chat-column-max: min(960px, calc(100vw - 11rem));
+}
+
+html.mn-tablet #osDesktopLayer:not(.is-chat-active) .mn-os-desk-stage {
+  padding-inline: max(4.5rem, env(safe-area-inset-left, 0px))
+    max(4.5rem, env(safe-area-inset-right, 0px));
+}
+
+html.mn-tablet .mn-os-composer-dock {
+  width: min(
+    var(--os-chat-column-max),
+    calc(100% - 9rem - var(--os-workspace-drawer-inset, 0px))
+  );
+}
+
+html.mn-tablet .mn-os-greet {
+  font-size: clamp(28px, 5vw, 48px);
+}
+
+/* ---------- phone home (concierge): hide workspace edge tabs until chat is active ---------- */
+
+html.mn-phone #osDesktopLayer:not(.is-chat-active) .mn-os-workspace-rail-tabs {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html.mn-phone .mn-os-concierge-mount {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* ---------- large desktop: keep hero, dock, and composer from stretching edge-to-edge ---------- */
+
+@media (min-width: 1440px) {
+  .mn-os-dock-panel {
+    max-width: min(56rem, 58vw);
+  }
+
+  .mn-os-dock {
+    justify-content: center;
+  }
+
+  #osDesktopLayer {
+    --os-chat-shell-max: min(1040px, 68vw);
+    --os-chat-column-max: min(960px, 64vw);
+  }
+}
+
+@media (min-width: 1920px) {
+  .mn-os-desk-hero,
+  .mn-os-concierge-mount {
+    max-width: min(760px, 42vw);
+  }
+}

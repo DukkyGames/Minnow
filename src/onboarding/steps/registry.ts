@@ -18,7 +18,6 @@ import { emailStep } from './email';
 import { calendarStep } from './calendar';
 import { apiKeysStep } from './api-keys';
 import { context7Step } from './context7';
-import { guideStep } from './guide';
 import { permissionsStep, memoryStep, doneStep } from './remaining';
 
 /** Full wizard step order; controller filters with isApplicable. */
@@ -38,7 +37,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   calendarStep,
   apiKeysStep,
   context7Step,
-  guideStep,
   doneStep,
 ];
 

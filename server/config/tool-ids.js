@@ -32,6 +32,13 @@ export const BRAIN_FULL_PERMISSION_TOOL_IDS = [
 /** Destructive Brain tool — defaults to permission `ask`. */
 export const BRAIN_DESTRUCTIVE_TOOL_IDS = ['manage_brain'];
 
+/** Official read-only product documentation tools. */
+export const MINNOW_DOCS_TOOL_IDS = [
+  'minnow_docs_search',
+  'minnow_docs_read',
+  'minnow_docs_list',
+];
+
 export const BRAIN_WIKI_TOOL_ID_SET = new Set(BRAIN_WIKI_TOOL_IDS);
 export const BRAIN_CODE_TOOL_ID_SET = new Set(BRAIN_CODE_TOOL_IDS);
 export const BRAIN_FULL_PERMISSION_TOOL_ID_SET = new Set(BRAIN_FULL_PERMISSION_TOOL_IDS);
@@ -115,6 +122,7 @@ export const ALL_TOOL_IDS = [
   'brain_search',
   'brain_read_page',
   'brain_list',
+  ...MINNOW_DOCS_TOOL_IDS,
   'brain_write_page',
   'brain_append_log',
   'brain_ingest_source',

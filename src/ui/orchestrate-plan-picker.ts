@@ -16,7 +16,7 @@ import { isBoardViewActive } from './view-mode-toggle';
 
 /** UI copy for stable discoverOrchestratePlans error codes. */
 export const PLAN_LIST_HINTS: Record<string, string> = {
-  server_off: 'Start npm start to list plans.',
+  server_off: 'Open Minnow to list plans.',
   no_plans_dir: 'No documentation/plans folder in this workspace.',
 };
 

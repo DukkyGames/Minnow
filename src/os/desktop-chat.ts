@@ -6,7 +6,10 @@ import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-dis
 import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-resume';
 import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
+import { copyChatModelBinding } from '../lib/model-select-key';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { normalizeModeId } from '../chat/modes/types';
+import { isAssistantChat } from '../state/session-workspace-scope';
 import {
   DESKTOP_APP_ID,
   createDesktopChat,
@@ -26,6 +29,7 @@ import {
   rememberWorkspaceActiveChat,
   scheduleSaveSessions,
   sessionState,
+  touchChat,
 } from '../state/sessions';
 import { refreshChatJumpChipVisibility } from '../ui/chat-scroll';
 import { syncChatItemDotsInDom } from '../ui/chat-item-dot';
@@ -40,6 +44,7 @@ import { iconHtml } from '../ui/icon';
 import { initComposerDraftListener, switchComposerDraft } from '../ui/composer-draft';
 import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
+import { syncComposerBrainNotesFromActiveChat } from '../ui/composer-brain-notes';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from '../ui/git-panel';
 import { seedNewChatComposerRunTarget } from '../ui/new-chat-run-target-seed';
 import { renderChatFromHistory } from '../ui/messages';
@@ -114,18 +119,38 @@ async function ensureDesktopWorkspaceReady(): Promise<boolean> {
 
 async function ensureReadyForSend(): Promise<boolean> {
   try {
-    const chat = getActiveChat();
-    // Only bootstrap a sandbox chat when nothing is active yet — do not replace a
-    // branched (or other in-progress) project chat after branch switching.
-    if (!isExpertChat(chat) && isEphemeralEmptyChat(chat)) {
-      await ensureActiveDesktopAssistantChat();
-    }
     if (!desktopWorkspacePath) {
       desktopWorkspacePath = await getDesktopWorkspacePath();
     }
+    const chat = getActiveChat();
+    const desktopPath = desktopWorkspacePath?.trim() ?? '';
+    const onDesktopThread =
+      Boolean(desktopPath) &&
+      !isExpertChat(chat) &&
+      normalizeModeId(chat.modeId) === 'desktop' &&
+      isAssistantChat(chat, desktopPath);
+    // Only bootstrap when the active row is not already a desktop sandbox thread (avoids
+    // resolveActiveAssistantChatId jumping back to a remembered listed chat).
+    if (!isExpertChat(chat) && isEphemeralEmptyChat(chat) && !onDesktopThread) {
+      const composerModelBinding = { modelId: chat.modelId, providerId: chat.providerId };
+      await ensureActiveDesktopAssistantChat();
+      const desktopChat = getActiveChat();
+      copyChatModelBinding(composerModelBinding, desktopChat);
+      if (composerModelBinding.modelId?.trim()) {
+        touchChat(desktopChat);
+        scheduleSaveSessions();
+      }
+      const { syncActiveChatModelUi } = await import('../ui/chat-model-ui');
+      syncActiveChatModelUi();
+      desktopWorkspacePath = await getDesktopWorkspacePath();
+    }
+    if (!desktopWorkspacePath) {
+      setStatus('err', 'Desktop workspace unavailable — open Minnow');
+      return false;
+    }
     return true;
   } catch {
-    setStatus('err', 'Desktop workspace unavailable — run npm start');
+    setStatus('err', 'Desktop workspace unavailable — open Minnow');
     return false;
   }
 }
@@ -183,6 +208,7 @@ export async function startNewDesktopGeneralChat(): Promise<void> {
   renderDesktopChatMessages();
   syncDesktopComposerSendState();
   refreshContextUsageRing();
+  void syncComposerBrainNotesFromActiveChat();
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   input?.focus();
 }
@@ -192,7 +218,14 @@ function createFreshAssistantChat(
   workspacePath: string,
   state: NonNullable<typeof sessionState>,
 ): void {
+  const previous =
+    state.activeId != null
+      ? state.chats.find((c) => c.id === state.activeId) ?? null
+      : null;
   const chat = createDesktopChat(workspacePath, newChatId());
+  if (previous) {
+    copyChatModelBinding(previous, chat);
+  }
   seedNewChatComposerRunTarget(chat);
   state.chats.unshift(chat);
   state.activeId = chat.id;
@@ -200,6 +233,7 @@ function createFreshAssistantChat(
   syncPanelFromActiveChat({ forceFileTree: true });
   rememberActiveChatForApp(DESKTOP_APP_ID, chat.id);
   scheduleSaveSessions();
+  void import('../ui/chat-model-ui').then((m) => m.syncActiveChatModelUi());
 }
 
 /**
@@ -231,6 +265,7 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
     syncChatItemDotsInDom();
     syncDesktopComposerSendState();
     refreshContextUsageRing();
+    void syncComposerBrainNotesFromActiveChat();
     void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
     return;
   }
@@ -249,6 +284,7 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
   syncChatItemDotsInDom();
   syncDesktopComposerSendState();
   refreshContextUsageRing();
+  void syncComposerBrainNotesFromActiveChat();
   void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
 }
 
@@ -317,6 +353,7 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
     syncChatItemDotsInDom();
   }
   refreshContextUsageRing();
+  void syncComposerBrainNotesFromActiveChat();
 
   await applyDesktopSeed(options?.seed);
 
@@ -352,7 +389,11 @@ export function wireDesktopComposerControls(inputEl?: HTMLTextAreaElement | null
   });
 
   void import('../ui/context-usage-ring').then((m) => m.bindContextUsageRings());
-  void import('../ui/composer-voice').then((m) => m.initComposerVoice());
+  // Expand mounts after the mic so it lands last in the button row.
+  void import('../ui/composer-voice')
+    .then((m) => m.initComposerVoice())
+    .then(() => import('../ui/composer-expand'))
+    .then((m) => m.initComposerExpand());
 }
 
 /** Scroll transcript container when jump chip is used. */

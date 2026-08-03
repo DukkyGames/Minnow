@@ -24,8 +24,13 @@ async function syncCodeFileTreeChrome(): Promise<void> {
 
 /** Re-render the Code transcript and sync chrome for the active workspace chat. */
 async function refreshCodeChatSurface(): Promise<void> {
-  const { ensureSessionsReady, getActiveChat } = await import('../state/sessions');
+  const { ensureSessionsReady, ensureChatHistoryLoaded, getActiveChat } = await import(
+    '../state/sessions'
+  );
   await ensureSessionsReady();
+  const chat = getActiveChat();
+  // Lazy-boot chats ship with empty history until the history GET lands.
+  await ensureChatHistoryLoaded(chat.id);
   const { renderChatFromHistory, renderStatsForChat } = await import('../ui/messages');
   const { renderSidebar } = await import('../ui/sidebar');
   const { syncModeSelectorFromActiveChat } = await import('../ui/mode-selector');
@@ -33,7 +38,6 @@ async function refreshCodeChatSurface(): Promise<void> {
   const { syncViewModeToggleFromActiveChat } = await import('../ui/view-mode-toggle');
   const { refreshChatJumpChipVisibility } = await import('../ui/chat-scroll');
 
-  const chat = getActiveChat();
   renderChatFromHistory(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
@@ -43,6 +47,8 @@ async function refreshCodeChatSurface(): Promise<void> {
   renderSidebar();
   refreshChatJumpChipVisibility();
   await syncCodeFileTreeChrome();
+  const { refreshContextUsageRing } = await import('../ui/context-usage-ring');
+  refreshContextUsageRing();
   void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
 }
 
@@ -88,13 +94,13 @@ export async function restoreCodeSessionOnForeground(): Promise<void> {
   const { switchChat } = await import('../ui/sidebar');
 
   if (targetId !== sessionState.activeId) {
-    switchChat(targetId);
+    await switchChat(targetId);
     await syncCodeFileTreeChrome();
     return;
   }
 
   if (activeIsAssistant) {
-    switchChat(targetId);
+    await switchChat(targetId);
     await syncCodeFileTreeChrome();
     return;
   }

@@ -92,6 +92,7 @@ import { setStatus } from './status';
 import { appConfirm } from './app-dialog';
 import { iconHtml } from './icon';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import { isAppAvailable } from '../os/app-preferences';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 
@@ -2100,6 +2101,9 @@ function syncBenchmarkPageOnOpen(): void {
 }
 
 export function openBenchmark(): void {
+  if (!isAppAvailable('bench')) {
+    return;
+  }
   const root = getBenchmarkRoot();
   const shell = getChatShell();
   if (!root || !shell) return;

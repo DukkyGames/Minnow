@@ -11,6 +11,8 @@ import {
 } from '../../server/orchestrate/board-testing/scenario-runner.js';
 import { httpRequest, rmTestHome, setTestHome } from '../config/test-helpers.js';
 
+process.env.MINNOW_TEST = '1';
+
 async function waitForTerminal(manager, runId, timeoutMs = 2_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {

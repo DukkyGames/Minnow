@@ -28,6 +28,8 @@ export const PART_ORDER: PromptPartId[] = [
   'info',
   'skill',
   'memory',
+  'code-map',
+  'context-documents',
 ];
 
 const PART_SEPARATOR = '\n\n---\n\n';
@@ -84,6 +86,21 @@ function isMemoryPartEnabled(ctx: ComposeContext): boolean {
   return ctx.memoryEnabled === true && contextHasBrainWriteTools(ctx);
 }
 
+/** True when the outbound prompt will include the code-map part (injection on + non-empty map). */
+export function isCodeMapPartEnabled(ctx: ComposeContext): boolean {
+  return (
+    ctx.codeMapInjectionEnabled === true && Boolean(ctx.codeMapBlock?.trim())
+  );
+}
+
+/** True when workspace context documents are injected with non-empty body. */
+export function isContextDocumentsPartEnabled(ctx: ComposeContext): boolean {
+  return (
+    ctx.contextDocumentsInjectionEnabled === true &&
+    Boolean(ctx.contextDocumentsBlock?.trim())
+  );
+}
+
 /** Default lite part gating (memory uses shorter retrieve cap when enabled). */
 const LITE_DISABLED_PARTS = new Set<PromptPartId>(['info']);
 
@@ -129,6 +146,12 @@ function isPartEnabled(
   }
   if (partId === 'memory') {
     return isMemoryPartEnabled(ctx);
+  }
+  if (partId === 'code-map') {
+    return isCodeMapPartEnabled(ctx);
+  }
+  if (partId === 'context-documents') {
+    return isContextDocumentsPartEnabled(ctx);
   }
   if (partId === 'mode') {
     if (!ctx.modeId) return false;
@@ -195,6 +218,22 @@ function resolvePartBody(
       return loaded.body.trim();
     }
     return ctx.memoryBlock?.trim() ?? '';
+  }
+  if (partId === 'code-map' && isCodeMapPartEnabled(ctx)) {
+    const loadProfile = profile === 'lite' ? 'lite' : 'full';
+    const loaded = loadPromptById('info', 'code-map', loadProfile);
+    if (loaded?.body?.trim()) {
+      return loaded.body.trim();
+    }
+    return ctx.codeMapBlock?.trim() ?? '';
+  }
+  if (partId === 'context-documents' && isContextDocumentsPartEnabled(ctx)) {
+    const loadProfile = profile === 'lite' ? 'lite' : 'full';
+    const loaded = loadPromptById('info', 'context-documents', loadProfile);
+    if (loaded?.body?.trim()) {
+      return loaded.body.trim();
+    }
+    return ctx.contextDocumentsBlock?.trim() ?? '';
   }
 
   const kind = kindForPart(partId);
@@ -373,6 +412,8 @@ function buildInterpolationVars(ctx: ComposeContext): InterpolationVars {
     memory:
       ctx.memoryBlock?.trim() ||
       '(no wiki notes matched this message — the wiki may still be empty)',
+    code_map: ctx.codeMapBlock?.trim() ?? '',
+    context_documents: ctx.contextDocumentsBlock?.trim() ?? '',
     user_message: ctx.userMessagePreview ?? '',
     work_agent: ctx.workAgentId ?? '',
     work_agent_label: ctx.workAgentLabel?.trim() || ctx.workAgentId || '',

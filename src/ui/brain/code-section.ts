@@ -27,12 +27,7 @@ import { buildCallGraph } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import { renderSymbolInspector } from './inspector';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
-import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
-import { setWorkspacePath } from '../../config/workspace-api';
-import { confirmAndStopBoardsForWorkspaceSwitch } from '../workspace-switch-guard';
-import { setWorkspaceFromServer } from '../../state/workspace';
-import { refreshFileTreeViaBridge } from '../file-tree-refresh-bridge';
-
+import { openCodeRefInViewer } from '../code-ref-link';
 let bindingsDone = false;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
@@ -99,6 +94,31 @@ function renderRepoMapEntry(entry: BrainCodeRepoMapEntry): HTMLElement {
   return line;
 }
 
+/** Open the symbol definition in the Code file viewer with the line range selected. */
+function openSymbolInEditor(sym: BrainCodeSymbolMatch): void {
+  openCodeRefInViewer({
+    workspacePath: sym.file.replace(/\\/g, '/'),
+    startLine: sym.line_start,
+    endLine: sym.line_end,
+  });
+}
+
+/** Primary action to jump from Brain code search into the workspace editor. */
+function buildOpenInEditorButton(sym: BrainCodeSymbolMatch): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'brain-action-btn is-ghost brain-code-detail-open';
+  btn.textContent = 'Open in editor';
+  const range =
+    sym.line_start === sym.line_end
+      ? `line ${sym.line_start}`
+      : `lines ${sym.line_start}–${sym.line_end}`;
+  btn.title = `Open ${sym.file} (${range}) in the file viewer`;
+  btn.setAttribute('aria-label', `Open ${sym.file} in editor, ${range}`);
+  btn.addEventListener('click', () => openSymbolInEditor(sym));
+  return btn;
+}
+
 /** Mark the active symbol row in the repo map. */
 function highlightRepoMapSymbol(symbolId: string): void {
   const mapEl = document.getElementById('brainCodeMap');
@@ -124,7 +144,7 @@ async function refreshRepoMap(): Promise<void> {
 
   if (!map) {
     mapEl.replaceChildren();
-    mapEl.textContent = 'Repo map unavailable. Start npm start and reindex.';
+    mapEl.textContent = 'Repo map unavailable. Open Minnow and reindex.';
     if (budgetEl) budgetEl.textContent = '';
     return;
   }
@@ -148,7 +168,7 @@ async function refreshCodeStatus(): Promise<void> {
   if (!line) return;
 
   if (!status) {
-    line.textContent = 'Offline — start npm start.';
+    line.textContent = 'Offline — open Minnow.';
     return;
   }
 
@@ -236,19 +256,22 @@ async function selectSymbol(symbolId: string): Promise<void> {
 
   const head = document.createElement('div');
   head.className = 'brain-code-detail-head';
+  const headText = document.createElement('div');
+  headText.className = 'brain-code-detail-head__text';
   const title = document.createElement('h3');
   title.className = 'brain-code-detail-title';
   title.textContent = sym.name;
   const meta = document.createElement('p');
   meta.className = 'brain-code-detail-meta';
   meta.textContent = `${sym.kind} · ${sym.file}:${sym.line_start}-${sym.line_end}`;
-  head.append(title, meta);
+  headText.append(title, meta);
   if (sym.signature) {
     const sig = document.createElement('p');
     sig.className = 'brain-code-detail-signature';
     sig.textContent = sym.signature;
-    head.append(sig);
+    headText.append(sig);
   }
+  head.append(headText, buildOpenInEditorButton(sym));
   detail.append(head);
 
   if (def?.text) {
@@ -348,7 +371,7 @@ async function refreshExplainPanel(symbolId: string): Promise<void> {
   emptyEl.replaceChildren();
 
   if (!result) {
-    showExplainEmpty('Explain unavailable. Start npm start.', { icon: 'offline' });
+    showExplainEmpty('Explain unavailable. Open Minnow.', { icon: 'offline' });
     return;
   }
 
@@ -474,7 +497,7 @@ async function runSymbolSearch(query: string): Promise<void> {
   const result = await findBrainCodeSymbol(trimmed, 25);
   if (!result) {
     renderSearchResults([]);
-    setActionStatus('err', 'Search failed. Is npm start running?');
+    setActionStatus('err', 'Search failed. Is Minnow running?');
     return;
   }
 
@@ -508,28 +531,6 @@ async function runReindex(): Promise<void> {
   await refreshRepoMap();
 }
 
-/** Switch workspace folder for code index (remap repo). */
-async function remapCodeRepo(): Promise<void> {
-  const result = await openWorkspaceFolderPicker();
-  if (result.cancelled || !result.path) return;
-  const allowed = await confirmAndStopBoardsForWorkspaceSwitch(result.path);
-  if (!allowed) {
-    setActionStatus('ok', 'Workspace unchanged');
-    return;
-  }
-  setActionStatus('spin', 'Switching workspace…');
-  const info = await setWorkspacePath(result.path);
-  if (!info) {
-    setActionStatus('err', 'Could not switch workspace.');
-    return;
-  }
-  setWorkspaceFromServer(info);
-  refreshFileTreeViaBridge();
-  setActionStatus('ok', `Workspace: ${info.label || info.path}`);
-  await refreshCodeStatus();
-  await refreshRepoMap();
-}
-
 /** Drop the SQLite code index for the active workspace. */
 async function runResetIndex(): Promise<void> {
   const btn = document.getElementById('brainCodeResetIndex') as HTMLButtonElement | null;
@@ -558,10 +559,6 @@ function bindCodeSection(): void {
 
   document.getElementById('brainCodeResetIndex')?.addEventListener('click', () => {
     void runResetIndex();
-  });
-
-  document.getElementById('brainCodeRemapRepo')?.addEventListener('click', () => {
-    void remapCodeRepo();
   });
 
   const searchEl = document.getElementById('brainCodeSearch') as HTMLInputElement | null;

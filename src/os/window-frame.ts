@@ -1,4 +1,5 @@
 import { getStageRect } from './stage-metrics';
+import { isPhoneLayout } from '../ui/mobile-layout';
 import {
   createWindowControlButton,
   type WindowControlKind,
@@ -137,6 +138,7 @@ export class WindowFrame {
     this.wireInteractions(titlebar, grips);
     this.applyBoundsToDom();
     this.applyMinimizedState();
+    this.resetRootScroll();
   }
 
   getBounds(): WindowBounds {
@@ -228,11 +230,22 @@ export class WindowFrame {
   }
 
   private applyBoundsToDom(): void {
-    const { x, y, width, height } = this.bounds;
-    this.root.style.left = `${x}px`;
-    this.root.style.top = `${y}px`;
-    this.root.style.width = `${width}px`;
-    this.root.style.height = `${height}px`;
+    const phone = isPhoneLayout();
+    this.root.classList.toggle('is-phone-sheet', phone);
+    if (phone) {
+      // Phones have no window management: the frame is a full-stage app sheet and
+      // CSS owns its geometry. Inline offsets would fight the stylesheet.
+      this.root.style.removeProperty('left');
+      this.root.style.removeProperty('top');
+      this.root.style.removeProperty('width');
+      this.root.style.removeProperty('height');
+    } else {
+      const { x, y, width, height } = this.bounds;
+      this.root.style.left = `${x}px`;
+      this.root.style.top = `${y}px`;
+      this.root.style.width = `${width}px`;
+      this.root.style.height = `${height}px`;
+    }
     this.root.classList.toggle('is-maximized', this.maximized);
     this.root.classList.toggle('is-snapped', Boolean(this.snapMode));
     this.root.dataset.snap = this.snapMode ?? '';
@@ -240,6 +253,11 @@ export class WindowFrame {
 
   private applyMinimizedState(): void {
     this.root.classList.toggle('is-minimized', this.minimized);
+  }
+
+  /** OS windows are not scroll containers; keep titlebar aligned with the frame. */
+  private resetRootScroll(): void {
+    this.root.scrollTop = 0;
   }
 
   private emitBoundsChange(): void {
@@ -312,12 +330,15 @@ export class WindowFrame {
   private wireInteractions(titlebar: HTMLElement, grips: HTMLElement): void {
     this.root.addEventListener('mousedown', () => this.onFocus?.());
     this.root.addEventListener('focusin', () => {
+      this.resetRootScroll();
       if (this.root.classList.contains('is-focused')) return;
       this.onFocus?.();
     });
 
     titlebar.addEventListener('mousedown', (ev) => {
       if (ev.button !== 0) return;
+      // Phone sheets fill the stage; dragging one would only expose the wallpaper.
+      if (isPhoneLayout()) return;
       const target = ev.target as HTMLElement;
       if (target.closest('button')) return;
       ev.preventDefault();
@@ -394,6 +415,7 @@ export class WindowFrame {
     });
 
     grips.addEventListener('mousedown', (ev) => {
+      if (isPhoneLayout()) return;
       const grip = (ev.target as HTMLElement).closest('.mn-os-window-grip') as HTMLElement | null;
       if (!grip || ev.button !== 0) return;
       ev.preventDefault();

@@ -10,7 +10,7 @@ const fixtures = JSON.parse(
   readFileSync(join(__dirname, '../fixtures/step01/stream-labels.json'), 'utf8'),
 );
 
-const { attachStreamStatus, STREAM_LABEL_GENERATING, STREAM_LABEL_THINKING } =
+const { attachStreamStatus, STREAM_LABEL_GENERATING, STREAM_LABEL_LOADING_MODEL, STREAM_LABEL_THINKING } =
   await import('../../src/ui/stream-status.ts');
 
 function setupDom() {
@@ -41,6 +41,20 @@ test('attachStreamStatus starts in generating', () => {
   assert.equal(labelEl?.textContent, fixtures.generating);
   assert.equal(labelEl?.textContent, STREAM_LABEL_GENERATING);
   assert.equal(status?.getAttribute('aria-busy'), 'true');
+  handle.dispose();
+});
+
+test("setPhase('loading_model') updates label", () => {
+  setupDom();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div class="msg-label"></div><div class="msg-bubble"></div>';
+  const handle = attachStreamStatus(wrap);
+
+  handle.setPhase('loading_model');
+  const labelEl = wrap.querySelector('.stream-status__label');
+  assert.equal(labelEl?.textContent, STREAM_LABEL_LOADING_MODEL);
+  assert.ok(wrap.querySelector('.stream-status--loading-model'));
+
   handle.dispose();
 });
 

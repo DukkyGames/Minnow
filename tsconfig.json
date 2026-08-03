@@ -12,7 +12,7 @@
     "moduleDetection": "force",
     "resolveJsonModule": true,
     "noEmit": true,
-    "strict": false
+    "strict": true
   },
   "include": ["src"]
 }

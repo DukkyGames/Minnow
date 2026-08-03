@@ -50,7 +50,6 @@ import {
 import { buildSamplerFieldInputs } from './settings-sampler-fields';
 import {
   appendSettingsOfflineHint,
-  createSettingsActionsRow,
   createSettingsInputRow,
   createSettingsSelectRow,
 } from './settings-controls';
@@ -66,9 +65,14 @@ const GROUP_LABELS: Record<ModelRoutingGroup, string> = {
 
 const GROUP_HINTS: Partial<Record<ModelRoutingGroup, string>> = {
   'main-chat':
-    'Matches the top-bar picker for the active chat. Sampler fields here also update global defaults on save.',
+    'Matches the top-bar picker for the active chat. Sampler fields here also update global defaults when changed.',
   background:
     'Rename jobs, goal checks, and skill runtimes that run outside the composer.',
+};
+
+type RoutingPersistOptions = {
+  /** Re-render the section after persist (default true). */
+  refresh?: boolean;
 };
 
 /** Routing groups shown on Models → Routing (agent roles live in Agents center). */
@@ -91,6 +95,8 @@ interface FallbackRowEditor {
   rowId: string;
   list: HTMLElement;
   candidates: FallbackChainCandidate[];
+  /** Persist fallback chain edits without a Save button. */
+  onCandidatesChange?: () => void;
 }
 
 let mountedRows: RowControls[] = [];
@@ -99,6 +105,7 @@ let loadedFallbackConfig: FallbackChainsConfig | null = null;
 let globalFallbackEnabledInput: HTMLInputElement | null = null;
 let globalFallbackCooldownInput: HTMLInputElement | null = null;
 let globalFallbackEditor: FallbackRowEditor | null = null;
+let globalFallbackHealthHost: HTMLElement | null = null;
 
 function supportsAdvancedPanel(row: ModelRoutingRow): boolean {
   return (
@@ -120,7 +127,11 @@ function buildThinkingSelect(initial: ThinkingTriState): HTMLSelectElement {
   return select;
 }
 
-async function saveAdvanced(controls: RowControls): Promise<void> {
+async function saveAdvanced(
+  controls: RowControls,
+  options?: RoutingPersistOptions,
+): Promise<void> {
+  const refresh = options?.refresh !== false;
   const { row, samplerFields, thinkingSelect, thinkingBudgetFields } = controls;
   if (!samplerFields || !thinkingSelect) return;
 
@@ -134,8 +145,8 @@ async function saveAdvanced(controls: RowControls): Promise<void> {
       else chat.thinkingMode = mode;
       touchChat(chat);
       scheduleSaveSessions();
-      setStatus('ok', 'Main chat sampler and thinking saved');
-      void refreshModelRoutingSectionMount();
+      setStatus('ok', 'Main chat sampler and thinking updated');
+      if (refresh) void refreshModelRoutingSectionMount();
       break;
     }
     case 'work-agent': {
@@ -152,9 +163,9 @@ async function saveAdvanced(controls: RowControls): Promise<void> {
       });
       setStatus(
         agent ? 'ok' : 'err',
-        agent ? `${row.label} advanced settings saved` : 'Save failed',
+        agent ? `${row.label} advanced settings updated` : 'Save failed',
       );
-      if (agent) void refreshModelRoutingSectionMount();
+      if (agent && refresh) void refreshModelRoutingSectionMount();
       break;
     }
     case 'sub-agent': {
@@ -164,11 +175,12 @@ async function saveAdvanced(controls: RowControls): Promise<void> {
         setStatus('err', 'Unknown sub-agent type');
         return;
       }
+      const samplerPatch = samplerFields.readPatch();
       const ok = await saveSubAgentConfigToServer({
         types: {
           [row.id]: {
             ...existing,
-            sampler: samplerFields.readPatch(),
+            ...(samplerPatch != null ? { sampler: samplerPatch } : {}),
             thinkingMode: thinkingSelect.value as ThinkingTriState,
             ...(thinkingBudgetFields
               ? {
@@ -181,8 +193,8 @@ async function saveAdvanced(controls: RowControls): Promise<void> {
           },
         },
       });
-      setStatus(ok ? 'ok' : 'err', ok ? `${row.label} advanced settings saved` : 'Save failed');
-      if (ok) void refreshModelRoutingSectionMount();
+      setStatus(ok ? 'ok' : 'err', ok ? `${row.label} advanced settings updated` : 'Save failed');
+      if (ok && refresh) void refreshModelRoutingSectionMount();
       break;
     }
     default:
@@ -216,6 +228,52 @@ function setEffectiveText(controls: RowControls): void {
   controls.effectiveEl.textContent = formatEffective(controls.row);
 }
 
+function syncRowBindingFromControls(controls: RowControls): void {
+  controls.row.providerId = controls.providerSelect.value.trim();
+  controls.row.modelId = controls.modelSelect.value.trim();
+  if (controls.fallbackCb) {
+    controls.row.fallbackToChatModel = controls.fallbackCb.checked;
+  }
+  if (controls.enabledCb) {
+    controls.row.titlesEnabled = controls.enabledCb.checked;
+  }
+  setEffectiveText(controls);
+}
+
+/** Apply routing edits on change instead of explicit Save rows. */
+function wireRoutingRowAutoSave(controls: RowControls): void {
+  let hydrating = true;
+
+  const flushBinding = (): void => {
+    if (hydrating) return;
+    void saveRow(controls, { refresh: false });
+  };
+
+  const flushAdvanced = (): void => {
+    if (hydrating) return;
+    void saveAdvanced(controls, { refresh: false });
+  };
+
+  controls.modelSelect.addEventListener('change', flushBinding);
+  controls.fallbackCb?.addEventListener('change', flushBinding);
+  controls.enabledCb?.addEventListener('change', flushBinding);
+  controls.thinkingSelect?.addEventListener('change', flushAdvanced);
+  controls.samplerFields?.root.addEventListener('change', flushAdvanced);
+  controls.thinkingBudgetFields?.root.addEventListener('change', flushAdvanced);
+
+  if (controls.fallbackEditor) {
+    controls.fallbackEditor.onCandidatesChange = () => {
+      if (hydrating) return;
+      void saveRowFallbackChain(controls.fallbackEditor!);
+      setStatus('ok', 'Fallback chain updated');
+    };
+  }
+
+  queueMicrotask(() => {
+    hydrating = false;
+  });
+}
+
 async function wireProviderModelSelects(
   controls: RowControls,
   includeEmptyProvider: boolean,
@@ -247,7 +305,8 @@ async function saveRowFallbackChain(editor: FallbackRowEditor): Promise<void> {
   });
 }
 
-async function saveRow(controls: RowControls): Promise<void> {
+async function saveRow(controls: RowControls, options?: RoutingPersistOptions): Promise<void> {
+  const refresh = options?.refresh !== false;
   const { row, providerSelect, modelSelect, fallbackCb, enabledCb, fallbackEditor } = controls;
   const providerId = providerSelect.value.trim();
   const modelId = modelSelect.value.trim();
@@ -266,8 +325,9 @@ async function saveRow(controls: RowControls): Promise<void> {
         setStatus('err', 'Could not save work agent binding');
         return;
       }
-      setStatus('ok', `${row.label} binding saved`);
-      void refreshModelRoutingSectionMount();
+      setStatus('ok', `${row.label} binding updated`);
+      if (refresh) void refreshModelRoutingSectionMount();
+      else syncRowBindingFromControls(controls);
       break;
     }
     case 'sub-agent': {
@@ -286,8 +346,11 @@ async function saveRow(controls: RowControls): Promise<void> {
           },
         },
       });
-      setStatus(ok ? 'ok' : 'err', ok ? `${row.label} binding saved` : 'Save failed');
-      if (ok) void refreshModelRoutingSectionMount();
+      setStatus(ok ? 'ok' : 'err', ok ? `${row.label} binding updated` : 'Save failed');
+      if (ok) {
+        if (refresh) void refreshModelRoutingSectionMount();
+        else syncRowBindingFromControls(controls);
+      }
       break;
     }
     case 'ui-designer': {
@@ -296,8 +359,9 @@ async function saveRow(controls: RowControls): Promise<void> {
         modelId,
         fallbackToChatModel: fallbackCb?.checked !== false,
       });
-      setStatus('ok', 'UI Designer binding saved');
-      void refreshModelRoutingSectionMount();
+      setStatus('ok', 'UI Designer binding updated');
+      if (refresh) void refreshModelRoutingSectionMount();
+      else syncRowBindingFromControls(controls);
       break;
     }
     case 'titles': {
@@ -306,8 +370,9 @@ async function saveRow(controls: RowControls): Promise<void> {
         modelId,
         enabled: enabledCb?.checked !== false,
       });
-      setStatus('ok', 'Title job binding saved');
-      void refreshModelRoutingSectionMount();
+      setStatus('ok', 'Title job binding updated');
+      if (refresh) void refreshModelRoutingSectionMount();
+      else syncRowBindingFromControls(controls);
       break;
     }
     case 'goal-eval': {
@@ -315,8 +380,9 @@ async function saveRow(controls: RowControls): Promise<void> {
         providerId,
         modelId,
       });
-      setStatus('ok', 'Goal evaluator binding saved');
-      void refreshModelRoutingSectionMount();
+      setStatus('ok', 'Goal evaluator binding updated');
+      if (refresh) void refreshModelRoutingSectionMount();
+      else syncRowBindingFromControls(controls);
       break;
     }
     case 'main-chat': {
@@ -325,8 +391,9 @@ async function saveRow(controls: RowControls): Promise<void> {
       chat.modelId = modelId || chat.modelId;
       touchChat(chat);
       scheduleSaveSessions();
-      setStatus('ok', 'Main chat model saved for active session');
-      void refreshModelRoutingSectionMount();
+      setStatus('ok', 'Main chat model updated for active session');
+      if (refresh) void refreshModelRoutingSectionMount();
+      else syncRowBindingFromControls(controls);
       break;
     }
     default:
@@ -423,16 +490,6 @@ function appendRoutingRole(
       panel.appendChild(budgetFields.root);
     }
 
-    panel.appendChild(
-      createSettingsActionsRow([
-        {
-          label: 'Save advanced',
-          onClick: () => {
-            void saveAdvanced(controls);
-          },
-        },
-      ]),
-    );
     advanced.appendChild(panel);
     fields.appendChild(advanced);
   }
@@ -441,20 +498,7 @@ function appendRoutingRole(
     appendRowFallbackEditor(fields, controls, loadedFallbackConfig);
   }
 
-  fields.appendChild(
-    createSettingsActionsRow(
-      [
-        {
-          label: 'Save binding',
-          variant: 'primary',
-          onClick: () => {
-            void saveRow(controls);
-          },
-        },
-      ],
-      { searchKey: `models.routing.${row.id}.save` },
-    ),
-  );
+  wireRoutingRowAutoSave(controls);
   role.appendChild(fields);
   groupBody.appendChild(role);
 }
@@ -502,6 +546,29 @@ function appendRowFallbackEditor(
   bindingCell.appendChild(details);
 }
 
+async function saveGlobalFallbackSettings(): Promise<void> {
+  if (!loadedFallbackConfig) return;
+  const config = loadedFallbackConfig;
+  const rolesPatch: Record<string, FallbackChainCandidate[]> = {};
+  if (globalFallbackEditor) {
+    rolesPatch[GLOBAL_FALLBACK_CHAIN_KEY] = globalFallbackEditor.candidates
+      .map((row) => ({
+        providerId: row.providerId.trim(),
+        modelId: row.modelId.trim(),
+      }))
+      .filter((row) => row.providerId);
+  }
+  await saveFallbackChainsConfig({
+    enabled: globalFallbackEnabledInput?.checked === true,
+    cooldownSeconds: Number(globalFallbackCooldownInput?.value ?? config.cooldownSeconds),
+    roles: rolesPatch,
+  });
+  setStatus('ok', 'Fallback settings updated');
+  if (globalFallbackHealthHost) {
+    void refreshHostHealthPanel(globalFallbackHealthHost);
+  }
+}
+
 async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   const config = await loadFallbackChainsConfig();
   loadedFallbackConfig = config;
@@ -517,7 +584,12 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
 
   const { row: enabledRow, input: enabledInput } = createSettingsToggleRow(
     'Enable fallback chains',
-    { checked: config.enabled },
+    {
+      checked: config.enabled,
+      onChange: () => {
+        void saveGlobalFallbackSettings();
+      },
+    },
   );
   enabledRow.classList.add('settings-toggle-row--compact');
   globalFallbackEnabledInput = enabledInput;
@@ -536,6 +608,9 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
     },
   );
   globalFallbackCooldownInput = cooldownInput;
+  cooldownInput.addEventListener('change', () => {
+    void saveGlobalFallbackSettings();
+  });
   body.appendChild(cooldownSettingsRow);
 
   const globalChainSection = el('div', 'settings-fallback-global-chain');
@@ -556,6 +631,9 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
     candidates: getGlobalFallbackCandidates(config).map((candidate) => ({ ...candidate })),
   };
   globalFallbackEditor = editor;
+  editor.onCandidatesChange = () => {
+    void saveGlobalFallbackSettings();
+  };
   globalChainSection.appendChild(globalList);
   renderFallbackCandidateRows(editor);
   const addGlobalBtn = el('button', 'settings-action-btn', 'Add global fallback');
@@ -568,39 +646,9 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   body.appendChild(globalChainSection);
 
   const healthHost = el('div', 'settings-fallback-health');
+  globalFallbackHealthHost = healthHost;
   body.appendChild(healthHost);
   void refreshHostHealthPanel(healthHost);
-
-  body.appendChild(
-    createSettingsActionsRow([
-      {
-        label: 'Save fallback settings',
-        variant: 'primary',
-        onClick: () => {
-          void (async () => {
-            const rolesPatch: Record<string, FallbackChainCandidate[]> = {};
-            if (globalFallbackEditor) {
-              rolesPatch[GLOBAL_FALLBACK_CHAIN_KEY] = globalFallbackEditor.candidates
-                .map((row) => ({
-                  providerId: row.providerId.trim(),
-                  modelId: row.modelId.trim(),
-                }))
-                .filter((row) => row.providerId);
-            }
-            await saveFallbackChainsConfig({
-              enabled: globalFallbackEnabledInput?.checked === true,
-              cooldownSeconds: Number(
-                globalFallbackCooldownInput?.value ?? config.cooldownSeconds,
-              ),
-              roles: rolesPatch,
-            });
-            setStatus('ok', 'Fallback settings saved');
-            void refreshHostHealthPanel(healthHost);
-          })();
-        },
-      },
-    ]),
-  );
 }
 
 function renderFallbackCandidateRows(editor: FallbackRowEditor): void {
@@ -627,6 +675,7 @@ function renderFallbackCandidateRows(editor: FallbackRowEditor): void {
     });
     modelSelect.addEventListener('change', () => {
       candidate.modelId = modelSelect.value;
+      editor.onCandidatesChange?.();
     });
     providerSelect.value = candidate.providerId;
     candidate.providerId = providerSelect.value;
@@ -637,6 +686,7 @@ function renderFallbackCandidateRows(editor: FallbackRowEditor): void {
     removeBtn.addEventListener('click', () => {
       editor.candidates.splice(index, 1);
       renderFallbackCandidateRows(editor);
+      editor.onCandidatesChange?.();
     });
 
     row.appendChild(bindingHost);
@@ -739,7 +789,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
   if (!isConfigServerMode(storageMode)) {
     appendSettingsOfflineHint(
       shell,
-      'Model routing needs <code>npm start</code>. Values below are read-only until the server is running.',
+      'Model routing needs Minnow running locally. Values below are read-only until then.',
       { searchKey: 'models.routing' },
     );
   }
@@ -762,7 +812,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     if (catalog.offline) {
       appendSettingsOfflineHint(
         shell,
-        'Run <code>npm start</code> to load bindings from <code>~/.minnow</code>.',
+        'Open Minnow to load bindings from <code>~/.minnow</code>.',
         { searchKey: 'models.routing' },
       );
       return;
@@ -799,7 +849,7 @@ export async function mountStandaloneRoutingEditor(
   if (!isConfigServerMode(storageMode)) {
     appendSettingsOfflineHint(
       panel,
-      'Model binding requires <code>npm start</code>.',
+      'Model binding requires Minnow running locally.',
     );
     return false;
   }
@@ -879,22 +929,11 @@ export async function mountStandaloneRoutingEditor(
 
   appendRowFallbackEditor(panel, controls, fallbackConfig);
 
-  panel.appendChild(
-    createSettingsActionsRow([
-      {
-        label: 'Save model binding',
-        variant: 'primary',
-        onClick: () => {
-          void saveRow(controls);
-        },
-      },
-    ]),
-  );
-
   await wireProviderModelSelects(
     controls,
     row.persistKind === 'work-agent' || row.persistKind === 'sub-agent',
   );
+  wireRoutingRowAutoSave(controls);
   setEffectiveText(controls);
   return true;
 }

@@ -158,6 +158,7 @@ const DEFAULT_META = {
   },
   desktopShell: {
     closeToTray: true,
+    zoomPercent: 80,
   },
   selfHealing: {
     enabled: false,
@@ -295,11 +296,11 @@ const DEFAULT_META = {
   },
   editorIntentMode: {
     enabledByDefault: false,
-    autoRecheckDefault: false,
-    debounceMs: 450,
-    contextWindow: 5,
-    recheckDelayMs: 600,
-    maxRecheckPasses: 8,
+    debounceMs: 400,
+    sigil: '',
+    providerId: '',
+    modelId: '',
+    maxTokens: 768,
   },
   editorSettings: {
     fontSize: 13,

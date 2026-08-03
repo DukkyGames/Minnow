@@ -82,8 +82,9 @@ export function applyComposerDraftForChat(chat: Chat): void {
 
 /** Track draft edits on the active chat and refresh sidebar when visibility changes. */
 export function handleComposerDraftInput(): void {
-  if (draftRestoreSuspended || !sessionState?.activeId) return;
-  const chat = sessionState.chats.find((c) => c.id === sessionState.activeId);
+  const active = sessionState;
+  if (draftRestoreSuspended || !active?.activeId) return;
+  const chat = active.chats.find((c) => c.id === active.activeId);
   if (!chat) return;
 
   const text = getActiveComposerSurface().inputEl?.value ?? '';

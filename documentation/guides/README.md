@@ -1,17 +1,23 @@
 # Minnow guides
 
-Task-oriented documentation. Product overview: [`README.md`](../../README.md). Full documentation index: [`documentation/`](../README.md). The exhaustive technical reference is [`context.md`](../context.md).
+Stable paths for the **GitHub Wiki** and repository links. End users should open the in-app **?** wiki, which mirrors **`documentation/manual/`**.
 
-| Guide | What it covers |
-|-------|----------------|
-| [setup.md](setup.md) | Install, prerequisites, LM Studio + providers, first run, optional models & voice. |
-| [commands.md](commands.md) | Every npm script, the headless CLI, smoke scripts, test suites, and environment variables. |
-| [apps.md](apps.md) | A tour of the Minnow apps that ship (Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings) — plus what is held behind the release gate. |
-| [architecture.md](architecture.md) | High-level system map: SPA, tool server, Electron shell, agent layer, storage. |
-| [configuration.md](configuration.md) | `~/.minnow` layout, `config.json`, providers, encrypted secrets, env vars. |
-| [troubleshooting.md](troubleshooting.md) | Common problems and fixes. |
-| [orchestrate-board-testing.md](orchestrate-board-testing.md) | Orchestrate Kanban tests: `test:board`, fake model, seed board, log invariants. |
+| Topic | User manual (in-app) | Developer detail (GitHub only) |
+|-------|----------------------|--------------------------------|
+| Orientation | [manual/concepts/how-minnow-works.md](../manual/concepts/how-minnow-works.md) | [contributor/architecture.md](../contributor/architecture.md) |
+| Apps | [manual/apps/](../manual/apps/overview.md) | [contributor/apps-and-routes.md](../contributor/apps-and-routes.md) |
+| Modes and tools | [manual/concepts/modes.md](../manual/concepts/modes.md), [manual/concepts/tools-and-permissions.md](../manual/concepts/tools-and-permissions.md) | [context.md](../context.md) |
+| Orchestrate | [manual/orchestrate/boards.md](../manual/orchestrate/boards.md) | [contributor/orchestrate-board-testing.md](../contributor/orchestrate-board-testing.md) |
+| Configuration | [manual/reference/configuration.md](../manual/reference/configuration.md) | [maintainer/settings-reference.md](../maintainer/settings-reference.md) |
+| Security | [manual/reference/privacy-and-security.md](../manual/reference/privacy-and-security.md) | [context.md](../context.md) |
+| LAN companion | [manual/extend/companion.md](../manual/extend/companion.md) | [contributor/lan-companion.md](../contributor/lan-companion.md) |
+| Troubleshooting | [manual/reference/troubleshooting.md](../manual/reference/troubleshooting.md) | — |
+| Wiki vs Brain | [manual/reference/wiki-and-brain.md](../manual/reference/wiki-and-brain.md) | [wiki.md](wiki.md) (stub) |
+| Shortcuts | [manual/reference/keyboard-shortcuts.md](../manual/reference/keyboard-shortcuts.md) | — |
 
-New to the project? Start with **setup.md**, then skim **apps.md**.
+**Building from source:** [contributor/](../contributor/). **Repo index:** [documentation/README.md](../README.md). **Architecture:** [context.md](../context.md).
 
-Maintainer material — cutting releases, macOS signing, the exhaustive settings inventory — lives in [`../maintainer/`](../maintainer/).
+## Redirect stubs in this folder
+
+- [apps.md](apps.md), [configuration.md](configuration.md), [troubleshooting.md](troubleshooting.md), [wiki.md](wiki.md), [keyboard-shortcuts.md](keyboard-shortcuts.md)
+- [setup.md](setup.md), [commands.md](commands.md), [architecture.md](architecture.md), [orchestrate-board-testing.md](orchestrate-board-testing.md), [accessibility-audit.md](accessibility-audit.md), [lan-companion.md](lan-companion.md) → **contributor/**

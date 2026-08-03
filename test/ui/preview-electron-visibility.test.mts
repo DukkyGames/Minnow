@@ -20,6 +20,7 @@ import {
   resetDesignModeIframeGuestForTests,
   setDesignModeUsingIframeGuest,
 } from '../../src/ui/preview-design-mode-guest.ts';
+import { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from '../../src/ui/preview-design-mode-mount.ts';
 
 describe('preview-electron-visibility', () => {
   const originalDocument = globalThis.document;
@@ -234,7 +235,7 @@ describe('preview-electron-visibility', () => {
     enableCodeForeground();
     assert.equal(shouldShowElectronPreviewHost(), true);
 
-    setDesignModeUsingIframeGuest(true);
+    setDesignModeUsingIframeGuest(WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID, true);
     assert.equal(shouldShowElectronPreviewHost(), false);
   });
 

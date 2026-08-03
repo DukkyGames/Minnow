@@ -5,6 +5,7 @@ import {
   assignCommitVisuals,
   buildMainlineSet,
   computeCollapsedRows,
+  computeCollapsedMainlineLayout,
   computeGraphLayout,
   computeSquashLinks,
   detectTrunkBranch,
@@ -337,6 +338,28 @@ describe('computeCollapsedRows', () => {
     assert.equal(rows[0].visual.commit.hash, B);
     assert.equal(rows[0].clusters.length, 3);
     assert.equal(rows[0].extraCount, 1);
+  });
+});
+
+describe('computeCollapsedMainlineLayout', () => {
+  it('uses a single lane with no merge curves', () => {
+    const main = assignCommitVisuals(
+      [
+        commit(C, [B], { refs: ['HEAD -> main'] }),
+        commit(B, [A]),
+        commit(A, []),
+      ],
+      'main',
+    ).filter((v) => v.isMain);
+
+    const laidOut = computeCollapsedMainlineLayout(main);
+
+    assert.equal(laidOut.length, 3);
+    assert.ok(laidOut.every((v) => v.lane === 0 && v.curves.length === 0));
+    assert.deepEqual(
+      laidOut.map((v) => v.rails.map((r) => r.kind)),
+      [['down'], ['through'], ['up']],
+    );
   });
 });
 

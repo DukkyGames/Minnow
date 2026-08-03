@@ -591,7 +591,7 @@ export function setToolsEnabled(
   refreshAllToolListUis(root);
 
   if (enabled && skipped > 0) {
-    setStatus('err', 'Start with npm start to use file/git tools.');
+    setStatus('err', 'Open Minnow to use file and git tools.');
   }
 
   return { applied, skipped };
@@ -699,7 +699,7 @@ export function setToolPermission(
   }
 
   if (mode !== 'off' && tool.serverRequired && !localServerAvailable) {
-    setStatus('err', 'Start with npm start to use file/git tools.');
+    setStatus('err', 'Open Minnow to use file and git tools.');
     refreshAllToolListUis(root);
     return;
   }
@@ -828,7 +828,7 @@ export function refreshServerToolDisabledState(): void {
       if (serverUnavailable) {
         select.setAttribute(
           'title',
-          'Requires npm start — local tool server is not running',
+          'Requires Minnow running locally — open or restart the app',
         );
       } else {
         select.removeAttribute('title');
@@ -838,7 +838,7 @@ export function refreshServerToolDisabledState(): void {
       syncToolRowSegmentAvailability(
         row,
         true,
-        'Requires npm start — local tool server is not running',
+        'Requires Minnow running locally — open or restart the app',
       );
     }
   }
@@ -855,7 +855,7 @@ export function refreshServerToolDisabledState(): void {
         select.disabled = true;
         select.setAttribute(
           'title',
-          'Requires the Minnow desktop app window — open via npm start, not a separate browser tab',
+          'Requires the Minnow desktop app window, not a separate browser tab',
         );
       } else if (!row.hasAttribute('data-server-required') || !serverUnavailable) {
         select.disabled = false;
@@ -866,7 +866,7 @@ export function refreshServerToolDisabledState(): void {
       syncToolRowSegmentAvailability(
         row,
         true,
-        'Requires the Minnow desktop app window — open via npm start, not a separate browser tab',
+        'Requires the Minnow desktop app window, not a separate browser tab',
       );
     } else if (!row.hasAttribute('data-server-required') || !serverUnavailable) {
       syncToolRowSegmentAvailability(row, false, '');

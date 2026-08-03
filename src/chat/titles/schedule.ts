@@ -9,9 +9,11 @@ import { recordChatCompletionUsage } from '../../usage/record-chat-usage';
 import {
   applyGeneratedChatTitle,
   findChatById,
+  getChatMessageCount,
   scheduleSaveSessions,
   touchChat,
 } from '../../state/sessions';
+import type { Chat } from '../../types';
 import { renderSidebar } from '../../ui/sidebar';
 import { generateChatTitle } from './generate';
 import { fallbackTitleFromSeed } from './sanitize';
@@ -42,8 +44,14 @@ export function setGenerateChatTitleForTests(
   titleGenerateImpl = impl ?? generateChatTitle;
 }
 
-/** True when this chat has no user messages yet (call before pushing the first user row). */
-export function isFirstUserMessagePending(chat: { history: { role: string }[] }): boolean {
+/**
+ * True when this chat has no user messages yet (call before pushing the first user row).
+ * Lazy-unloaded chats keep `history: []` until hydrate — use denormalized `messageCount`.
+ */
+export function isFirstUserMessagePending(chat: Chat): boolean {
+  if (chat.historyLoaded === false) {
+    return getChatMessageCount(chat) === 0;
+  }
   return !chat.history.some((m) => m.role === 'user');
 }
 

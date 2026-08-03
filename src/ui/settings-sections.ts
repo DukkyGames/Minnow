@@ -105,6 +105,7 @@ import {
 import { msToSeconds, secondsToMs } from './settings-duration';
 import { renderAboutSettingsSection } from './settings-about';
 import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
+import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 import { renderBoardTestingSettingsSection } from './settings-board-testing';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAppsSettingsSection } from './settings-apps';
@@ -168,6 +169,8 @@ const PART_LABELS: Record<PromptPartId, string> = {
   'tool-usage': 'Tool usage',
   info: 'Info',
   memory: 'Memory',
+  'code-map': 'Code map',
+  'context-documents': 'Context documents',
   'work-agent': 'Work agent',
   skill: 'Skill',
 };
@@ -437,7 +440,7 @@ async function renderGeneralSection(): Promise<void> {
   if (!serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'File-backed settings require <code>npm start</code>. Values below use browser storage until then.',
+      'Open Minnow to save file-backed settings. Values below use browser storage until then.',
     );
   }
 
@@ -487,7 +490,7 @@ async function renderGeneralSection(): Promise<void> {
   const network = appendSettingsGroup(
     shell,
     'Network access',
-    'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs npm start.',
+    'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs the app.',
     'general.network',
     { emphasis: true },
   );
@@ -1036,7 +1039,7 @@ async function renderWorkAgentsSection(): Promise<void> {
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       mount,
-      'Work agent editing requires <code>npm start</code>.',
+      'Work agent editing requires Minnow running locally.',
     );
     return;
   }
@@ -1107,7 +1110,7 @@ async function renderSubAgentsSection(): Promise<void> {
   ): Promise<void> => {
     const fresh = await loadSubAgentConfig();
     const ok = await saveSubAgentConfigToServer({ ...fresh, ...patch });
-    setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Save failed — use npm start');
+    setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Could not save. Open or restart Minnow and try again.');
   };
 
   const { root: enabledSwitch, input: enabledCb } = createSettingsSwitch({
@@ -1198,7 +1201,9 @@ async function renderSubAgentsSection(): Promise<void> {
 
   const saveTypePatch = async (
     typeId: string,
-    patch: Partial<SubAgentTypeConfig & { contextEnforcementPolicy: ContextEnforcementPolicy | null }>,
+    patch: Omit<Partial<SubAgentTypeConfig>, 'contextEnforcementPolicy'> & {
+      contextEnforcementPolicy?: ContextEnforcementPolicy | null;
+    },
   ): Promise<boolean> => {
     const userOverrides = getSubAgentUserOverridesSync() ?? {};
     const typeUser = { ...(userOverrides.types?.[typeId] ?? {}) };
@@ -1416,13 +1421,13 @@ async function renderToolsSection(): Promise<void> {
   );
   shell.appendChild(lead);
 
-  appendSettingsOfflineHint(shell, 'Server tools need <code>npm start</code> (not npm run dev).', {
+  appendSettingsOfflineHint(shell, 'Some tools need Minnow running locally. Open or restart the app.', {
     id: 'settingsToolsServerBanner',
     hidden: true,
   });
   appendSettingsOfflineHint(
     shell,
-    'Browser tools only work in the Minnow desktop app window (from npm start), not in a separate browser tab.',
+    'Browser tools only work in the Minnow desktop app window, not in a separate browser tab.',
     { id: 'settingsToolsPreviewBanner', hidden: true },
   );
 
@@ -1471,7 +1476,7 @@ async function renderToolsSection(): Promise<void> {
   const catalog = appendSettingsGroup(
     content,
     'Tool catalog',
-    'Each tool can be off, ask before run, or full permission. File and git tools need npm start. Plugin tools appear at the bottom when the server is running.',
+    'Each tool can be off, ask before run, or full permission. File and git tools need Minnow running locally. Plugin tools appear at the bottom when Minnow is running.',
     'integrations.tools',
     { emphasis: true },
   );
@@ -1497,7 +1502,7 @@ async function renderToolsSection(): Promise<void> {
                 await setAllBuiltInToolPermissions('full', list);
                 setStatus('ok', 'All tools set to full permission');
               } catch {
-                setStatus('err', 'Could not save — use npm start');
+                setStatus('err', 'Could not save. Open or restart Minnow and try again.');
               }
             })();
           },
@@ -1515,7 +1520,7 @@ async function renderToolsSection(): Promise<void> {
                 await resetBuiltInToolPermissionsToDefaults(list);
                 setStatus('ok', 'Tool permissions reset to defaults');
               } catch {
-                setStatus('err', 'Could not save — use npm start');
+                setStatus('err', 'Could not save. Open or restart Minnow and try again.');
               }
             })();
           },
@@ -1885,7 +1890,7 @@ function ensureMcpSettingsShell(mount: HTMLElement): {
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'External tool servers connect over stdio and register as ',
+    'External MCP integrations connect over stdio and register as ',
     el('code', undefined, 'mcp__server__tool'),
     '. Language-server diagnostics live under ',
     linkToSettingsSection('Language servers', 'lsp'),
@@ -1897,7 +1902,7 @@ function ensureMcpSettingsShell(mount: HTMLElement): {
 
   const offlineEl = appendSettingsOfflineHint(
     shell,
-    'Start with <code>npm start</code> to load, toggle, and add MCP servers.',
+    'Open Minnow to load, toggle, and add MCP integrations.',
     { id: 'settingsMcpOffline', searchKey: 'integrations.mcp', hidden: true },
   );
   offlineEl.classList.add('settings-mcp-offline');
@@ -2089,7 +2094,7 @@ async function renderMcpSection(): Promise<void> {
         return;
       }
       target.checked = !target.checked;
-      setStatus('err', 'MCP toggle failed — use npm start');
+      setStatus('err', 'Could not update MCP integration. Open or restart Minnow.');
     });
 
     listEl.addEventListener('click', (event) => {
@@ -2164,7 +2169,7 @@ async function renderSkillsSection(): Promise<void> {
   const catalog = appendSettingsGroup(
     content,
     'Skills catalog',
-    'Built-in skills ship with Minnow. Custom skills live under ~/.minnow/skills/ when npm start is running.',
+    'Built-in skills ship with Minnow. Custom skills live under ~/.minnow/skills/ when Minnow is running locally.',
     'integrations.skills',
     { emphasis: true },
   );
@@ -2295,6 +2300,9 @@ export async function refreshSettingsSection(
       await renderDiagnosticsSettingsSection();
       break;
     case 'board-testing':
+      if (!isBoardTestingSettingsVisible()) {
+        break;
+      }
       await renderBoardTestingSettingsSection();
       break;
     case 'providers':

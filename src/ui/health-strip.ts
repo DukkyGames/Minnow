@@ -84,7 +84,7 @@ export function healthRowsFromPayload(payload: DiagnosticsHealthPayload | null):
 
   if (c.electron?.available) {
     rows.push({
-      ok: c.electron.ok,
+      ok: c.electron.ok ?? null,
       label: 'Electron',
       detail: 'Desktop shell',
     });

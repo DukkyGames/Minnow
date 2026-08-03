@@ -55,7 +55,7 @@ export function serializeChatForCapture(
 
 async function capturePost<T>(path: string, body: unknown): Promise<CapturePostResult<T>> {
   if (!isLocalServerAvailable()) {
-    return { ok: false, error: 'Local server unavailable — run npm start' };
+    return { ok: false, error: 'Minnow is not running locally — open or restart the app' };
   }
   try {
     const res = await fetch(`${API_BASE}${path}`, {

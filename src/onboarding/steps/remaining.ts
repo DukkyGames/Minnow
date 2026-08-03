@@ -154,7 +154,7 @@ export const memoryStep: OnboardingStep = {
 
     if (!ctx.configServerAvailable) {
       container.appendChild(
-        el('p', 'mn-onboarding-notice', 'Full memory features need npm start.'),
+        el('p', 'mn-onboarding-notice', 'Full memory features need Minnow running locally.'),
       );
     } else {
       void (async () => {
@@ -223,12 +223,11 @@ export const doneStep: OnboardingStep = {
       ['Tool permissions', Boolean(ctx.state.steps.permissions?.done)],
       ['Memory and Brain', Boolean(ctx.state.steps.memory?.done)],
       ['Context7 library docs', Boolean(ctx.state.steps.context7?.done)],
-      ['Guided tour chat', Boolean(ctx.state.steps.explainer?.done)],
     ];
     rows.forEach(([label, ok]) => {
       const li = el('li', 'mn-onboarding-checklist__row');
       li.appendChild(el('span', ok ? 'is-ok' : 'is-muted', ok ? '✓' : '–'));
-      li.appendChild(el('span', null, label));
+      li.appendChild(el('span', undefined, label));
       checklist.appendChild(li);
     });
     container.appendChild(checklist);

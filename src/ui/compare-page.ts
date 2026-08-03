@@ -7,6 +7,7 @@ import '../styles/settings-controls.css';
 
 import { humanizeModelSlug, slugFromModelId } from '../lib/format-model-label';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import { isAppAvailable } from '../os/app-preferences';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 import { BenchmarkStreamTextAccumulator } from '../benchmark/stream-text';
@@ -836,6 +837,9 @@ export function initComparePage(): void {
 }
 
 export function openCompare(): void {
+  if (!isAppAvailable('compare')) {
+    return;
+  }
   const root = getRoot();
   const shell = getShell();
   if (!root || !shell) return;

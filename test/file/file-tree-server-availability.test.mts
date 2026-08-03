@@ -42,7 +42,7 @@ describe('file tree server availability', { concurrency: false }, () => {
 
     assert.equal(isFileTreeServerAvailable(), false);
     const host = document.getElementById('fileTreeHost');
-    assert.match(host?.textContent ?? '', /npm start/i);
+    assert.match(host?.textContent ?? '', /open minnow/i);
   });
 
   test('renderFileTree reflects latest server flag', () => {
@@ -56,6 +56,9 @@ describe('file tree server availability', { concurrency: false }, () => {
 
     setFileTreeServerAvailable(false);
     renderFileTree();
-    assert.match(document.getElementById('fileTreeHost')?.textContent ?? '', /npm start/i);
+    assert.match(
+      document.getElementById('fileTreeHost')?.textContent ?? '',
+      /open minnow/i,
+    );
   });
 });

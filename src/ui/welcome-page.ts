@@ -57,6 +57,17 @@ export function isWelcomeDismissedForSession(): boolean {
   return welcomeDismissedForSession;
 }
 
+/** Whether welcome should open when foregrounding the Code app (Minnow Shell). */
+export function shouldPromptCodeWorkspaceWelcome(launchWorkspacePath?: string): boolean {
+  if (isWelcomeDismissedForSession()) {
+    return false;
+  }
+  if (launchWorkspacePath?.trim()) {
+    return false;
+  }
+  return isDefaultWorkspace();
+}
+
 /** Whether welcome should open after init when workspace sync completes. */
 export function shouldShowWelcomeOnBoot(): boolean {
   if (isOsShellEnabled()) return false;
@@ -275,7 +286,7 @@ async function renderRecentsList(): Promise<void> {
 
 async function activateRecentWorkspace(absPath: string): Promise<void> {
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Workspace requires npm start (local server)');
+    setStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
   setStatus('spin', 'Switching workspace…');
@@ -294,7 +305,7 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
 
 async function onOpenProject(): Promise<void> {
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Workspace requires npm start (local server)');
+    setStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
 
@@ -336,7 +347,7 @@ async function onChangeWizardParent(): Promise<void> {
 
 async function onCreateProjectSubmit(): Promise<void> {
   if (!getLocalServerAvailable()) {
-    setStatus('err', 'Workspace requires npm start (local server)');
+    setStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
 

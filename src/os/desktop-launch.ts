@@ -39,8 +39,6 @@ async function refreshDesktopChatSurface(): Promise<void> {
  * not the Code project chat left active by orchestrator/board work.
  */
 export async function restoreDesktopSessionOnForeground(): Promise<void> {
-  if (!isDesktopChatActive()) return;
-
   const { getForegroundAppId, getOsView } = await import('./instances');
   // Stale desktop restore must not repoint the file tree while Code is foreground.
   if (getOsView() === 'app' && getForegroundAppId() === 'code') return;
@@ -58,6 +56,18 @@ export async function restoreDesktopSessionOnForeground(): Promise<void> {
 
   const desktopPath = await getDesktopWorkspacePath();
   if (!desktopPath) return;
+
+  if (!isDesktopChatActive()) {
+    const active = getActiveChat();
+    const activeIsDesktop = isDesktopWorkspacePath(active.workspacePath ?? '', desktopPath);
+    if (!activeIsDesktop && active.kind !== 'expert') {
+      rememberWorkspaceActiveChat(getWorkspacePath());
+      activateDesktopAssistantChatForApp(desktopPath);
+    }
+    const { refreshContextUsageRing } = await import('../ui/context-usage-ring');
+    refreshContextUsageRing();
+    return;
+  }
 
   const active = getActiveChat();
   const activeIsDesktop = isDesktopWorkspacePath(active.workspacePath ?? '', desktopPath);

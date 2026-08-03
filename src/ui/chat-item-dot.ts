@@ -1,6 +1,6 @@
 /**
- * Sidebar per-chat status dot: hidden when idle; green unread, yellow needs-input,
- * red turn error. See resolveChatItemDotState for priority.
+ * Sidebar per-chat status: colored dots for unread / needs-input / error;
+ * accent spinner (expanded) or mode-glyph ring (collapsed rail) while streaming.
  */
 
 import { streamingChatIds } from '../app-state';
@@ -12,17 +12,17 @@ import type { Chat } from '../types';
 const chatLastOpenedAt = new Map<string, number>();
 
 /** Per-chat stream phase for sidebar thinking dots (concurrent streams). */
-const streamPhaseByChatId = new Map<string, 'generating' | 'thinking'>();
+const streamPhaseByChatId = new Map<string, 'loading_model' | 'generating' | 'thinking'>();
 
 /** Active chat id while tool approval or ask_question UI is open. */
 let inputPendingChatId: string | null = null;
 
-export type ChatItemDotState = 'idle' | 'unread' | 'needs-input' | 'error' | 'thinking';
+export type ChatItemDotState = 'idle' | 'unread' | 'needs-input' | 'error' | 'working';
 
 export interface ChatItemDotContext {
   activeChatId: string | null;
   streamingChatIds: ReadonlySet<string>;
-  streamPhaseByChatId: ReadonlyMap<string, 'generating' | 'thinking'>;
+  streamPhaseByChatId: ReadonlyMap<string, 'loading_model' | 'generating' | 'thinking'>;
   inputPendingChatId: string | null;
 }
 
@@ -36,9 +36,28 @@ export function getChatItemDotContext(activeChatId: string | null): ChatItemDotC
   };
 }
 
+/** True when this chat has an in-flight model turn (any stream phase). */
+function isChatStreamWorking(chat: Chat, ctx: ChatItemDotContext): boolean {
+  const phase = ctx.streamPhaseByChatId.get(chat.id);
+  const streamingThisChat = ctx.streamingChatIds.has(chat.id);
+  if (streamingThisChat) {
+    return (
+      phase == null ||
+      phase === 'loading_model' ||
+      phase === 'generating' ||
+      phase === 'thinking'
+    );
+  }
+  if (chat.id !== ctx.activeChatId) return false;
+  if (!chat.currentGenerationId?.trim()) return false;
+  return (
+    phase === 'loading_model' || phase === 'generating' || phase === 'thinking'
+  );
+}
+
 /**
- * One resolved visual state per chat. Priority: needs-input > error > unread > idle.
- * Thinking is resolved internally but hidden in the sidebar (no dot).
+ * One resolved visual state per chat. Priority: needs-input > error > working > unread > idle.
+ * Working uses a spinner / rail ring (not the actionable colored dot).
  */
 export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): ChatItemDotState {
   if (ctx.inputPendingChatId != null && chat.id === ctx.inputPendingChatId) {
@@ -50,15 +69,8 @@ export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): Ch
   if (chat.id !== ctx.activeChatId && chat.turnError === true) {
     return 'error';
   }
-  const streamingThisChat = ctx.streamingChatIds.has(chat.id);
-  const phase = ctx.streamPhaseByChatId.get(chat.id);
-  const inThinkingStream = streamingThisChat && phase === 'thinking';
-  const generationThinkingReload =
-    chat.id === ctx.activeChatId &&
-    Boolean(chat.currentGenerationId?.trim()) &&
-    phase === 'thinking';
-  if (inThinkingStream || generationThinkingReload) {
-    return 'thinking';
+  if (isChatStreamWorking(chat, ctx)) {
+    return 'working';
   }
   if (chat.id !== ctx.activeChatId && chat.unread === true) {
     return 'unread';
@@ -66,7 +78,7 @@ export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): Ch
   return 'idle';
 }
 
-/** True when the sidebar should render a colored status dot (not idle/thinking). */
+/** True when the sidebar should render a colored status dot (not idle/working). */
 export function isChatItemDotVisible(state: ChatItemDotState): boolean {
   return state === 'unread' || state === 'needs-input' || state === 'error';
 }
@@ -99,10 +111,22 @@ export function applyChatItemDotClasses(
   rowEl?: HTMLElement | null,
 ): void {
   dotEl.dataset.dotState = state;
-  dotEl.hidden = !isChatItemDotVisible(state);
-  if (rowEl) rowEl.dataset.dotState = state;
+  dotEl.hidden = state === 'idle';
+  if (rowEl) {
+    if (state === 'idle') {
+      delete rowEl.dataset.dotState;
+      rowEl.removeAttribute('aria-busy');
+    } else {
+      rowEl.dataset.dotState = state;
+      if (state === 'working') {
+        rowEl.setAttribute('aria-busy', 'true');
+      } else {
+        rowEl.removeAttribute('aria-busy');
+      }
+    }
+  }
   const existing = dotEl.querySelector('.chat-item-dot__spinner');
-  if (state === 'thinking') {
+  if (state === 'working') {
     if (!existing) {
       const sp = document.createElement('span');
       sp.className = 'chat-item-dot__spinner';
@@ -156,10 +180,16 @@ export function syncChatItemDotsInDom(): void {
     const dot = row.querySelector('.chat-item-dot');
     if (inGroup) {
       dot?.remove();
-      if (isChatItemDotVisible(dotState)) {
+      if (isChatItemDotVisible(dotState) || dotState === 'working') {
         row.dataset.dotState = dotState;
+        if (dotState === 'working') {
+          row.setAttribute('aria-busy', 'true');
+        } else {
+          row.removeAttribute('aria-busy');
+        }
       } else {
         delete row.dataset.dotState;
+        row.removeAttribute('aria-busy');
       }
       continue;
     }
@@ -180,13 +210,13 @@ export const refreshSidebarChatDots = syncChatItemDotsInDom;
 /** Read the last-known stream phase for sidebar dots / stream DOM remount. */
 export function getSidebarStreamPhase(
   chatId: string,
-): 'generating' | 'thinking' | null {
+): 'loading_model' | 'generating' | 'thinking' | null {
   return streamPhaseByChatId.get(chatId) ?? null;
 }
 
 /** Called when the model enters or leaves the reasoning SSE phase for a chat. */
 export function setSidebarStreamPhase(
-  phase: 'generating' | 'thinking' | null,
+  phase: 'loading_model' | 'generating' | 'thinking' | null,
   chatId?: string,
 ): void {
   const id = chatId?.trim() || getActiveChat().id;

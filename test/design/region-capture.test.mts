@@ -77,7 +77,7 @@ describe('region-capture captureRegion', () => {
         },
       },
     });
-    setDesignModeUsingIframeGuest(true);
+    setDesignModeUsingIframeGuest('workspace-preview', true);
 
     const captured = await captureRegion(ctx);
     assert.equal(captured.cropped, false);

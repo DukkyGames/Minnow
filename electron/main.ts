@@ -10,6 +10,7 @@ import {
   crashReporter,
   dialog,
   ipcMain,
+  powerMonitor,
   session,
   shell,
 } from 'electron';
@@ -27,8 +28,11 @@ import { resolveMinnowPort } from './minnow-port.js';
 import { disposeUpdater, initUpdater } from './updater.js';
 import {
   readCloseToTrayPreference,
+  readShellZoomPercent,
   writeCloseToTrayPreference,
+  writeShellZoomPercent,
 } from './desktop-shell-config.js';
+import { applyShellZoom, DEFAULT_SHELL_ZOOM_PERCENT, shellZoomFactorFromPercent, wireShellZoom } from './shell-zoom.js';
 import { readLoginItemSnapshot, writeLoginItemOpenAtLogin } from './login-item.js';
 import { createTrayManager, type TrayManager } from './tray.js';
 import {
@@ -36,6 +40,7 @@ import {
   resolveTrayIconPath,
 } from './tray-icon.js';
 import { shouldQuitOnWindowAllClosed } from './tray-close.js';
+import { setAfkBoardPowerGuardActive } from './afk-power-guard.js';
 import {
   EMPTY_TRAY_STATUS,
   type TrayRendererCommand,
@@ -77,6 +82,10 @@ function trayIconFallbackPath(): string {
 }
 
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
+// Vite HMR needs eval in dev; packaged builds do not. Suppress Electron's expected dev-only CSP warning.
+if (isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
 const devUrl = (
   process.env.MINNOW_DEV_URL?.trim() || `http://localhost:${resolveMinnowPort()}/`
 ).replace(/\/?$/, '/');
@@ -85,6 +94,7 @@ let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
 let quitInProgress = false;
 let closeToTrayEnabled = true;
+let shellZoomPercent = DEFAULT_SHELL_ZOOM_PERCENT;
 let trayManager: TrayManager | null = null;
 let bootstrapPromise: Promise<void> | null = null;
 const queuedTrayCommands: TrayRendererCommand[] = [];
@@ -135,6 +145,17 @@ function recoverRenderer(win: BrowserWindow): void {
   win.webContents.reload();
 }
 
+/** Notify the renderer when the display wakes so AFK boards can reconcile stalled finalizers. */
+function wirePowerWakeNotifications(): void {
+  const notify = (): void => {
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send(channels.POWER_SCREEN_UNLOCKED);
+  };
+  powerMonitor.on('resume', notify);
+  powerMonitor.on('unlock-screen', notify);
+}
+
 /** Register app + preview IPC handlers. */
 function registerIpcHandlers(): void {
   registerPreviewHostIpc();
@@ -163,6 +184,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(channels.DIAGNOSTICS_CLEAR_OOM_PAUSE, () => {
     crashLog.clearOomPauseMarker();
+  });
+
+  ipcMain.handle(channels.POWER_SET_AFK_GUARD, (_event, active: unknown) => {
+    setAfkBoardPowerGuardActive(active === true);
   });
 
   ipcMain.handle(channels.WINDOW_MINIMIZE, (event) => {
@@ -232,6 +257,19 @@ function registerIpcHandlers(): void {
     trayManager?.rebuildMenu();
     return next;
   });
+
+  ipcMain.handle(channels.SHELL_GET_ZOOM_PERCENT, () => shellZoomPercent);
+
+  ipcMain.handle(channels.SHELL_SET_ZOOM_PERCENT, async (_event, percent: unknown) => {
+    if (typeof percent !== 'number' || !Number.isFinite(percent)) return shellZoomPercent;
+    shellZoomPercent = await writeShellZoomPercent(percent);
+    const win = mainWindow;
+    if (win && !win.isDestroyed()) {
+      applyShellZoom(win.webContents, shellZoomPercent);
+      win.webContents.send(channels.SHELL_ZOOM_PERCENT_CHANGED, shellZoomPercent);
+    }
+    return shellZoomPercent;
+  });
 }
 
 /** Push shell maximize state to the renderer for menubar control icons. */
@@ -248,8 +286,25 @@ function wireShellWindowState(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', emit);
 }
 
+/** Ask the renderer to system-pause running boards before tearing down the server. */
+async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<void> {
+  if (win.isDestroyed()) return;
+  try {
+    win.webContents.send(channels.BOARD_PAUSE_FOR_SHUTDOWN);
+    await win.webContents.executeJavaScript(
+      'typeof globalThis.__minnowPauseBoardsForShutdown==="function"&&globalThis.__minnowPauseBoardsForShutdown()',
+      true,
+    );
+  } catch {
+    /* renderer already gone */
+  }
+}
+
 /** Tear down PTY sessions, generations, and in-process HTTP server. */
 async function shutdownRuntime(): Promise<void> {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await pauseOrchestrateBoardsInRenderer(mainWindow);
+  }
   destroyAllPreviewHosts();
   const [ptyHost, generationsStore] = await Promise.all([
     importServerModule<{ destroyAllPtySessions: () => void }>('terminal/pty-host.js'),
@@ -371,8 +426,21 @@ async function createMainWindow(): Promise<BrowserWindow> {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: false,
+      zoomFactor: shellZoomFactorFromPercent(shellZoomPercent),
       // Keep AFK board/chat timers + SSE delivery alive when the display sleeps.
       backgroundThrottling: false,
+    },
+  });
+
+  wireShellZoom(win, {
+    readPercent: async () => shellZoomPercent,
+    writePercent: async (percent) => {
+      shellZoomPercent = await writeShellZoomPercent(percent);
+      return shellZoomPercent;
+    },
+    notifyPercentChanged: (percent) => {
+      if (win.isDestroyed()) return;
+      win.webContents.send(channels.SHELL_ZOOM_PERCENT_CHANGED, percent);
     },
   });
 
@@ -507,9 +575,11 @@ async function bootstrapInner(): Promise<void> {
   }
   configurePreviewSession(session.fromPartition('persist:minnow-preview'));
   registerIpcHandlers();
+  wirePowerWakeNotifications();
   initUpdater({ prepareQuitForUpdate });
 
   closeToTrayEnabled = await readCloseToTrayPreference();
+  shellZoomPercent = await readShellZoomPercent();
   const tray = ensureTrayManager();
   tray.ensureTray();
   tray.updateStatus({ ...EMPTY_TRAY_STATUS });

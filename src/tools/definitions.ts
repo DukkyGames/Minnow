@@ -146,12 +146,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'fetch_web_content',
     label: 'Fetch page',
     description:
-      'Fetches a URL and returns stripped plain text (about 8KB max). Uses server HTTP fetch when `npm start` is running; browser path is CORS-limited.',
+      'Fetches a URL and returns stripped plain text (about 8KB max). Uses in-app HTTP fetch when Minnow is running locally; browser path is CORS-limited.',
     category: 'web',
     serverRequired: false,
     definition: toolSchema(
       'fetch_web_content',
-      'Fetch a web page URL and return its main text content (HTML stripped, up to ~24KB). Prefer npm start for reliable fetch without browser CORS limits.',
+      'Fetch a web page URL and return its main text content (HTML stripped, up to ~24KB). Prefer running Minnow locally for reliable fetch without browser CORS limits.',
       {
         url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },
       },
@@ -1749,7 +1749,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'brain_search',
     label: 'Brain search',
     description:
-      'Semantic/hybrid search over the Brain wiki (workspace-scoped). Requires npm start.',
+      'Semantic/hybrid search over the Brain wiki (workspace-scoped). Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1776,7 +1776,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'brain_read_page',
     label: 'Brain read page',
-    description: 'Read a Brain wiki page by relative path. Requires npm start.',
+    description: 'Read a Brain wiki page by relative path. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1795,7 +1795,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'brain_list',
     label: 'Brain list pages',
-    description: 'List the Brain wiki page tree. Requires npm start.',
+    description: 'List the Brain wiki page tree. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1805,9 +1805,70 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'minnow_docs_search',
+    label: 'Minnow docs search',
+    description: 'Search the official shipped Minnow user manual. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_search',
+      'Search official Minnow user manual pages (`documentation/manual/`). Use for Minnow setup, apps, modes, tools, settings, and troubleshooting — not repo architecture (`context.md`). Results include source paths for citations.',
+      {
+        query: {
+          type: 'string',
+          description: 'Natural-language documentation query',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum results to return (default 8, max 20)',
+        },
+        section: {
+          type: 'string',
+          description: 'Optional exact catalog section such as Get started or Apps',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'minnow_docs_read',
+    label: 'Minnow docs read',
+    description: 'Read a user manual page from the shipped Minnow wiki. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_read',
+      'Read one user manual page from a path returned by minnow_docs_search or minnow_docs_list. Cite the returned Source path when answering.',
+      {
+        path: {
+          type: 'string',
+          description: 'Allowlisted path such as documentation/manual/get-started/install.md',
+        },
+      },
+      ['path'],
+    ),
+  },
+  {
+    id: 'minnow_docs_list',
+    label: 'Minnow docs list',
+    description: 'List the shipped Minnow user manual catalog. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'minnow_docs_list',
+      'List user manual metadata (`documentation/manual/`), optionally restricted to a path prefix.',
+      {
+        prefix: {
+          type: 'string',
+          description: 'Optional path prefix such as documentation/manual/get-started/',
+        },
+      },
+    ),
+  },
+  {
     id: 'brain_write_page',
     label: 'Brain write page',
-    description: 'Create or update a Brain wiki page. Requires npm start.',
+    description: 'Create or update a Brain wiki page. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1842,7 +1903,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'brain_append_log',
     label: 'Brain append log',
-    description: 'Append a changelog entry to brain log.md. Requires npm start.',
+    description: 'Append a changelog entry to brain log.md. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1860,7 +1921,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'brain_ingest_source',
     label: 'Brain ingest source',
-    description: 'Ingest a non-code source into the Brain wiki. Requires npm start.',
+    description: 'Ingest a non-code source into the Brain wiki. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1887,7 +1948,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'manage_brain',
     label: 'Manage brain',
     description:
-      'Delete or clear Brain wiki data (pages, archives, proposals, code index, sources). Requires npm start.',
+      'Delete or clear Brain wiki data (pages, archives, proposals, code index, sources). Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -2125,7 +2186,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'upload_appearance_asset',
     label: 'Upload appearance asset',
     description:
-      'Import a workspace font or wallpaper image into browser appearance storage. Requires npm start.',
+      'Import a workspace font or wallpaper image into browser appearance storage. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -2144,7 +2205,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'save_memory',
     label: 'Save memory',
     description:
-      'Persist a discrete fact to pages/facts/ (alias for brain_write_page). Requires npm start.',
+      'Persist a discrete fact to pages/facts/ (alias for brain_write_page). Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -2172,7 +2233,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'repo_map',
     label: 'Repo map',
     description:
-      'Token-budgeted signature map of the indexed workspace codebase. Requires npm start.',
+      'Token-budgeted signature map of the indexed workspace codebase. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -2198,7 +2259,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'find_symbol',
     label: 'Find symbol',
-    description: 'Search the code index for a symbol definition. Requires npm start.',
+    description: 'Search the code index for a symbol definition. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -2220,7 +2281,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'who_calls',
     label: 'Who calls',
-    description: 'List incoming call edges for a symbol. Requires npm start.',
+    description: 'List incoming call edges for a symbol. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -2238,7 +2299,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'read_symbol',
     label: 'Read symbol',
-    description: 'Read the current source span for a symbol. Requires npm start.',
+    description: 'Read the current source span for a symbol. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -2256,7 +2317,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'explain_symbol',
     label: 'Explain symbol',
-    description: 'Find wiki pages anchored to a code symbol. Requires npm start.',
+    description: 'Find wiki pages anchored to a code symbol. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -2275,7 +2336,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'manage_calendar',
     label: 'Manage calendar',
     description:
-      'List, create, update, or delete local calendar events. Requires npm start.',
+      'List, create, update, or delete local calendar events. Requires Minnow running locally.',
     category: 'utility',
     appId: 'calendar',
     serverRequired: true,
@@ -2451,7 +2512,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'get_lsp_diagnostics',
-      'Returns LSP diagnostics for a relative file path (requires npm start).',
+      'Returns LSP diagnostics for a relative file path (requires Minnow running locally).',
       {
         path: {
           type: 'string',

@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../lib/ripgrep-path.js';
 import { resolveSafePath } from '../runtime/path-access.js';
 import { wrapUntrusted } from '../security/untrusted.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -17,6 +17,8 @@ import { EXTRACTOR_PROMPT, formatPrompt } from './prompts.js';
 import { isLowQuality } from './strip-thinking.js';
 
 const execFileAsync = promisify(execFile);
+
+const rgExecutable = getRipgrepPath();
 
 /** Ripgrep skip globs (match brain indexer / grep tool). */
 const RG_SKIP_GLOBS = ['!**/node_modules/**', '!**/.git/**', '!**/dist/**', '!**/build/**'];
@@ -137,7 +139,7 @@ async function defaultRgSearch(root, pattern) {
     root,
   ];
   try {
-    const { stdout } = await execFileAsync(rgPath, args, {
+    const { stdout } = await execFileAsync(rgExecutable, args, {
       cwd: root,
       maxBuffer: 4 * 1024 * 1024,
       windowsHide: true,
@@ -171,7 +173,7 @@ async function defaultRgListFiles(root, globFragment) {
     root,
   ];
   try {
-    const { stdout } = await execFileAsync(rgPath, args, {
+    const { stdout } = await execFileAsync(rgExecutable, args, {
       cwd: root,
       maxBuffer: 4 * 1024 * 1024,
       windowsHide: true,

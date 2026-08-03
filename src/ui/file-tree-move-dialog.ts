@@ -105,6 +105,9 @@ export function showMoveConfirmDialog(
   bodyEl.innerHTML = `Move <strong>${basename(opts.source)}</strong> into <strong>${destDisplay}</strong>?`;
   pathsEl.textContent = `${opts.source} → ${destination}`;
 
+  const confirmButton = confirmBtn;
+  const cancelButton = cancelBtn;
+
   return new Promise((resolve) => {
     let settled = false;
 
@@ -113,8 +116,8 @@ export function showMoveConfirmDialog(
       settled = true;
       hideBanner();
       document.removeEventListener('keydown', onKeyDown);
-      cancelBtn?.removeEventListener('click', onCancel);
-      confirmBtn?.removeEventListener('click', onConfirm);
+      cancelButton.removeEventListener('click', onCancel);
+      confirmButton.removeEventListener('click', onConfirm);
       resolve(confirmed);
     };
 
@@ -128,12 +131,12 @@ export function showMoveConfirmDialog(
       }
     };
 
-    cancelBtn.addEventListener('click', onCancel);
-    confirmBtn.addEventListener('click', onConfirm);
+    cancelButton.addEventListener('click', onCancel);
+    confirmButton.addEventListener('click', onConfirm);
     document.addEventListener('keydown', onKeyDown);
 
     showBanner();
-    confirmBtn.focus();
+    confirmButton.focus();
   });
 }
 

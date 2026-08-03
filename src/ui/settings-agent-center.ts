@@ -64,7 +64,9 @@ export interface AgentCenterCard {
 
 async function saveSubAgentTypePatch(
   typeId: string,
-  patch: Partial<SubAgentTypeConfig & { contextEnforcementPolicy: import('../chat/context-budget').ContextEnforcementPolicy | null }>,
+  patch: Omit<Partial<SubAgentTypeConfig>, 'contextEnforcementPolicy'> & {
+    contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy | null;
+  },
 ): Promise<boolean> {
   const userOverrides = getSubAgentUserOverridesSync() ?? {};
   const typeUser = { ...(userOverrides.types?.[typeId] ?? {}) };
@@ -426,7 +428,7 @@ async function mountGlobalContextPolicy(mount: HTMLElement): Promise<void> {
       });
       setStatus(
         ok ? 'ok' : 'err',
-        ok ? 'Global context policy updated' : 'Save failed — use npm start',
+        ok ? 'Global context policy updated' : 'Could not save. Open or restart Minnow and try again.',
       );
     })();
   });
@@ -457,7 +459,7 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   ): Promise<void> => {
     const fresh = await loadSubAgentConfig();
     const ok = await saveSubAgentConfigToServer({ ...fresh, ...patch });
-    setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Save failed — use npm start');
+    setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Could not save. Open or restart Minnow and try again.');
   };
 
   const { root: enabledSwitch, input: enabledCb } = createSettingsSwitch({
@@ -586,7 +588,7 @@ export async function renderAgentCenterPanel(
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       shell,
-      'Agent editing requires <code>npm start</code>. Cards are read-only until the server is running.',
+      'Agent editing requires Minnow running locally. Cards are read-only until then.',
     );
   }
 

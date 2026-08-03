@@ -13,7 +13,7 @@ import { getAtPath } from './paths.js';
 async function readFieldValue(field) {
   if (field.storage === 'section' || field.storage === 'browser') {
     return {
-      error: `Field "${field.key}" is ${field.storage}-only and cannot be read from the server. Open Settings or use the Minnow UI.`,
+      error: `Field "${field.key}" is ${field.storage}-only and cannot be read while Minnow is offline. Open Settings or use the Minnow UI.`,
     };
   }
 

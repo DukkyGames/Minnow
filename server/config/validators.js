@@ -3,7 +3,7 @@
  */
 
 
-import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
+import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET, MINNOW_DOCS_TOOL_IDS } from './tool-ids.js';
 import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
@@ -556,7 +556,12 @@ export function normalizeArchiveConfig(raw) {
 }
 
 function defaultPermissionForTool(id, enabled) {
-  if (id === 'search_settings' || id === 'get_settings' || id === 'get_appearance') {
+  if (
+    id === 'search_settings'
+    || id === 'get_settings'
+    || id === 'get_appearance'
+    || MINNOW_DOCS_TOOL_IDS.includes(id)
+  ) {
     return enabled ? 'full' : 'off';
   }
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
@@ -576,6 +581,7 @@ export function normalizeToolConfig(raw) {
     'brain_search',
     'brain_read_page',
     'brain_list',
+    ...MINNOW_DOCS_TOOL_IDS,
     'brain_write_page',
     'brain_append_log',
     'brain_ingest_source',
@@ -1430,6 +1436,9 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof w.path === 'string' && w.path.trim()) {
       existingWorkspace.path = w.path.trim();
     }
+    if (typeof w.userChosen === 'boolean') {
+      existingWorkspace.userChosen = w.userChosen;
+    }
     if (Array.isArray(w.recentPaths)) {
       const trimmed = w.recentPaths
         .filter((p) => typeof p === 'string')
@@ -1695,28 +1704,22 @@ export function mergeConfigMeta(existing, patch) {
         ? { .../** @type {Record<string, unknown>} */ (base.editorIntentMode) }
         : {
             enabledByDefault: false,
-            autoRecheckDefault: false,
-            debounceMs: 450,
-            contextWindow: 5,
-            recheckDelayMs: 600,
-            maxRecheckPasses: 8,
+            debounceMs: 400,
+            sigil: '',
+            providerId: '',
+            modelId: '',
+            maxTokens: 768,
           };
     const e = /** @type {Record<string, unknown>} */ (p.editorIntentMode);
     if (typeof e.enabledByDefault === 'boolean') existing.enabledByDefault = e.enabledByDefault;
-    if (typeof e.autoRecheckDefault === 'boolean') {
-      existing.autoRecheckDefault = e.autoRecheckDefault;
-    }
     if (typeof e.debounceMs === 'number' && Number.isFinite(e.debounceMs)) {
-      existing.debounceMs = Math.min(2000, Math.max(200, Math.round(e.debounceMs)));
+      existing.debounceMs = Math.min(2000, Math.max(100, Math.round(e.debounceMs)));
     }
-    if (typeof e.contextWindow === 'number' && Number.isFinite(e.contextWindow)) {
-      existing.contextWindow = Math.min(20, Math.max(1, Math.round(e.contextWindow)));
-    }
-    if (typeof e.recheckDelayMs === 'number' && Number.isFinite(e.recheckDelayMs)) {
-      existing.recheckDelayMs = Math.min(5000, Math.max(200, Math.round(e.recheckDelayMs)));
-    }
-    if (typeof e.maxRecheckPasses === 'number' && Number.isFinite(e.maxRecheckPasses)) {
-      existing.maxRecheckPasses = Math.min(32, Math.max(1, Math.round(e.maxRecheckPasses)));
+    if (typeof e.sigil === 'string') existing.sigil = e.sigil.trim();
+    if (typeof e.providerId === 'string') existing.providerId = e.providerId.trim();
+    if (typeof e.modelId === 'string') existing.modelId = e.modelId.trim();
+    if (typeof e.maxTokens === 'number' && Number.isFinite(e.maxTokens)) {
+      existing.maxTokens = Math.min(4096, Math.max(128, Math.round(e.maxTokens)));
     }
     base.editorIntentMode = existing;
   }
@@ -1764,10 +1767,16 @@ export function mergeConfigMeta(existing, patch) {
     const existingShell =
       base.desktopShell && typeof base.desktopShell === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.desktopShell) }
-        : { closeToTray: true };
+        : { closeToTray: true, zoomPercent: 80 };
     const ds = /** @type {Record<string, unknown>} */ (p.desktopShell);
     if (typeof ds.closeToTray === 'boolean') {
       existingShell.closeToTray = ds.closeToTray;
+    }
+    if (typeof ds.zoomPercent === 'number' && Number.isFinite(ds.zoomPercent)) {
+      const rounded = Math.round(ds.zoomPercent);
+      if (rounded >= 50 && rounded <= 300) {
+        existingShell.zoomPercent = rounded;
+      }
     }
     base.desktopShell = existingShell;
   }

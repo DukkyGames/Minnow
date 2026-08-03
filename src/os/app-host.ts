@@ -20,6 +20,7 @@ import { windowManager } from './window-manager';
 import { syncSchedulerSidePanel } from './scheduler-side-panel';
 import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
 import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
+import { isPhoneLayout } from '../ui/mobile-layout';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
@@ -254,8 +255,12 @@ async function openAppPage(
       break;
     }
     case 'models': {
-      const { openModels } = await import('../ui/models-page');
-      openModels((route.modelsSection ?? options?.modelsSection ?? 'recommend') as import('../ui/models-page').ModelsSectionId);
+      const { openModels, DEFAULT_MODELS_SECTION } = await import('../ui/models-page');
+      openModels(
+        (route.modelsSection ??
+          options?.modelsSection ??
+          DEFAULT_MODELS_SECTION) as import('../ui/models-page').ModelsSectionId,
+      );
       break;
     }
     case 'brain': {
@@ -311,15 +316,13 @@ async function openAppPage(
       const { ensureCodeWorkspaceModules } = await import('../boot/code-workspace-modules');
       await ensureCodeWorkspaceModules();
       const welcome = await import('../ui/welcome-page');
-      const { isDefaultWorkspace } = await import('../state/workspace');
+      const launchWorkspacePath = options?.workspacePath?.trim();
+      if (welcome.shouldPromptCodeWorkspaceWelcome(launchWorkspacePath)) {
+        welcome.openWelcome({ skipHash: true });
+        break;
+      }
       if (welcome.isWelcomePageOpen()) {
         welcome.closeWelcome({ skipHash: true });
-      } else if (
-        isDefaultWorkspace() &&
-        !welcome.isWelcomeDismissedForSession() &&
-        !options?.workspacePath?.trim()
-      ) {
-        welcome.openWelcome({ skipHash: true });
       }
       const route = getCurrentRoute();
       const wantsChat =
@@ -410,6 +413,9 @@ function shouldBlurDesktop(snapshot: InstanceSnapshot): boolean {
 function stashWindowContent(appId: AppId): void {
   const el = layerForApp(appId);
   if (!el) return;
+  if (appId === 'settings') {
+    el.classList.remove('settings-page--in-os-window');
+  }
   const appsLayer = getAppsLayer();
   if (appsLayer && el.parentElement !== appsLayer) {
     appsLayer.appendChild(el);
@@ -440,6 +446,9 @@ async function ensureWindowSurface(
   const content = layerForApp(appId);
   if (body && content && content.parentElement !== body) {
     body.appendChild(content);
+  }
+  if (appId === 'settings' && content) {
+    content.classList.add('settings-page--in-os-window');
   }
   mountedWindowInstances.add(instanceId);
 
@@ -490,9 +499,16 @@ function syncWindowSurfaces(snapshot: InstanceSnapshot, generation: number): voi
     const options =
       inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
     void ensureWindowSurface(inst.id, inst.appId, options, generation);
+    const win = windowManager.findWindowByInstance(inst.id);
+    if (!win) continue;
     if (inst.id === snapshot.foregroundId) {
-      const win = windowManager.findWindowByInstance(inst.id);
-      if (win) windowManager.focus(win.id);
+      // Restoring a minimized window is launchInstance's job — doing it here
+      // would undo an explicit minimize on the next sync.
+      windowManager.focus(win.id);
+    } else if (snapshot.view === 'desktop' && isPhoneLayout() && !win.minimized) {
+      // Phone windows fill the stage, so an open one hides the desktop entirely.
+      // Going home parks them instead of forcing the user to close the app.
+      windowManager.minimize(win.id, true);
     }
   }
 
@@ -531,11 +547,9 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
       );
     if (hadFullscreenForeground) closeAllAppPages();
     lastForegroundApp = null;
-    void import('./desktop-state').then(async (m) => {
-      if (m.isDesktopChatActive()) {
-        const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
-        await restoreDesktopSessionOnForeground();
-      }
+    void import('./desktop-state').then(async () => {
+      const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
+      await restoreDesktopSessionOnForeground();
     });
     return;
   }

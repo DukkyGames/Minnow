@@ -1,10 +1,14 @@
 {
   "name": "minnow",
   "private": true,
-  "version": "1.0.2",
+  "version": "0.0.1",
   "description": "Local-first AI chat client for LM Studio and OpenAI-compatible providers",
   "author": "Grim Media",
   "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henrigrimm/minnow.git"
+  },
   "type": "module",
   "main": "electron/dist/main.js",
   "bin": {
@@ -12,10 +16,11 @@
   },
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-skills-manifest.mjs && tsx scripts/generate-skills-library-index.mjs && tsx scripts/generate-settings-registry.mjs && node scripts/sync-material-file-icons.mjs && node scripts/check-icons.mjs",
+    "prebuild": "node scripts/generate-skills-manifest.mjs && tsx scripts/generate-skills-library-index.mjs && tsx scripts/generate-settings-registry.mjs && node scripts/generate-product-wiki-catalog.mjs && node scripts/sync-material-file-icons.mjs && node scripts/check-icons.mjs",
     "check:icons": "node scripts/check-icons.mjs",
     "report:bundle-size": "node scripts/report-bundle-size.mjs",
-    "report:bundle-size:ci": "node scripts/report-bundle-size.mjs --fail-over-kb 1500",
+    "report:bundle-size:ci": "node scripts/check-performance-budgets.mjs",
+    "check:performance-budgets": "node scripts/check-performance-budgets.mjs",
     "build": "tsc && vite build",
     "postinstall": "node scripts/sync-impeccable-skill.mjs && node scripts/sync-material-file-icons.mjs && node scripts/ensure-electron.mjs",
     "app-icon:sync": "node scripts/sync-app-icon.mjs && node scripts/brand-electron-win.mjs",
@@ -27,6 +32,9 @@
     "matt-pocock-skills:sync": "node scripts/sync-matt-pocock-skills.mjs",
     "skills-library:index": "tsx scripts/generate-skills-library-index.mjs",
     "settings-registry:generate": "tsx scripts/generate-settings-registry.mjs",
+    "wiki:generate": "node scripts/generate-product-wiki-catalog.mjs",
+    "wiki:stage": "node scripts/publish-github-wiki.mjs",
+    "wiki:publish": "node scripts/push-github-wiki.mjs",
     "matt-pocock-skills:update": "node scripts/sync-matt-pocock-skills.mjs",
     "test": "node test/run-all.mjs",
     "test:check-coverage": "node test/check-test-coverage.mjs",
@@ -55,6 +63,8 @@
     "package:dir": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --dir",
     "package:win": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
     "package:mac": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --mac",
+    "package:linux": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
+    "package:linux:docker": "node scripts/package-linux-docker.mjs",
     "signing:check": "node scripts/check-macos-signing.mjs",
     "signing:setup": "node scripts/check-macos-signing.mjs --setup",
     "start": "node server.js",
@@ -209,8 +219,8 @@
     "productName": "Minnow",
     "publish": {
       "provider": "github",
-      "owner": "DukkyGames",
-      "repo": "Minnow"
+      "owner": "henrigrimm",
+      "repo": "minnow"
     },
     "directories": {
       "output": "release/pkg"
@@ -225,6 +235,7 @@
       "src/lib/**",
       "src/attachments/document-extensions.mjs",
       "src/state/session-schema.mjs",
+      "src/product-wiki/path-filter.mjs",
       "src/evals/packs/**",
       "build/icon.ico",
       "build/tray/**",
@@ -232,6 +243,7 @@
       "scripts/generate-skills-manifest.mjs",
       "scripts/generate-skills-library-index.mjs",
       "scripts/skills-library-index-lib.mjs",
+      "scripts/fake-model-server.mjs",
       "scripts/matt-pocock-preserves/**",
       "package.json",
       "skills-lock.json",
@@ -241,21 +253,18 @@
       "!src/**/*.css"
     ],
     "asarUnpack": [
-      "node_modules/@lydell/node-pty/**"
+      "node_modules/@lydell/node-pty/**",
+      "node_modules/@vscode/ripgrep/**",
+      "node_modules/@vscode/ripgrep-*/**"
     ],
     "extraResources": [
       {
         "from": "documentation",
         "to": "documentation",
         "filter": [
-          "**/*",
-          "!maintainer/**",
-          "!plans/**",
-          "!memory/**",
-          "!archive/**",
-          "!images/**",
-          "!MEMORY.md",
-          "!To-do-list"
+          "manual/**",
+          "ROADMAP.md",
+          "THIRD_PARTY_NOTICES.md"
         ]
       }
     ],
@@ -283,6 +292,16 @@
       "artifactName": "${productName}-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/logos/minnow-logo/minnow/png/minnow-1024.png",
+      "category": "Development",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "synopsis": "Local-first AI workspace",
+      "description": "Minnow — local-first AI workspace for chat, code, research, and orchestration."
     }
   }
 }

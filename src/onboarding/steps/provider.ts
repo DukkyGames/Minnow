@@ -83,7 +83,7 @@ export const providerChoiceStep: OnboardingStep = {
     grid.appendChild(
       createChoiceCard({
         title: 'Let Minnow run models for me',
-        description: 'Hardware-aware download and serve (requires npm start).',
+        description: 'Hardware-aware download and serve (requires Minnow running locally).',
         recommended: !ctx.serverAvailable,
         selected: selectedPath === 'managed',
         onSelect: () => {

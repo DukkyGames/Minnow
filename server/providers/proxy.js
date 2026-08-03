@@ -2,7 +2,7 @@
  * Proxy upstream models (and load/unload) with server-side auth injection.
  */
 
-import { FAKE_PROVIDER_ID } from '../../scripts/fake-model-server.mjs';
+import { FAKE_PROVIDER_ID } from '../orchestrate/board-testing/fake-model-ids.js';
 import { getFakeModelStatus } from '../orchestrate/board-testing/fake-model-host.js';
 import { getProviderRuntime } from './store.js';
 import { normalizeModelsResponse, enrichLmStudioModelsWithV1Reasoning } from './paths.js';

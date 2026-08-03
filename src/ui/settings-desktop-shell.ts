@@ -1,21 +1,14 @@
 /**
- * Settings → General: Desktop app (close-to-tray, launch at startup).
+ * Settings → General: Desktop app (close-to-tray, launch at startup, interface zoom).
  */
 
 import { detectConfigServer } from '../config/storage-mode';
 import { setStatus } from './status';
-import { appendSettingsOfflineHint } from './settings-controls';
+import { appendSettingsOfflineHint, createSettingsSelectRow } from './settings-controls';
+import { createSettingsToggleRow } from './settings-switch';
 
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-}
+/** Match electron/shell-zoom.ts presets (renderer cannot import the main process module). */
+const SHELL_ZOOM_PRESET_PERCENTS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 200] as const;
 
 function isElectronShell(): boolean {
   return window.minnow?.app?.isElectron === true;
@@ -27,9 +20,6 @@ function trayApi(): NonNullable<typeof window.minnow>['tray'] | null {
 
 /** Render Desktop app controls into the General settings mount. */
 export async function renderDesktopShellSettings(mount: HTMLElement): Promise<void> {
-  const section = el('section', 'settings-desktop-shell');
-  section.dataset.settingsSearchKey = 'general.desktop';
-
   if (!isElectronShell()) {
     appendSettingsOfflineHint(
       mount,
@@ -48,50 +38,79 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
   if (serverUp !== 'server') {
     appendSettingsOfflineHint(
       mount,
-      'Close-to-tray requires <code>npm start</code> so preferences can be saved to config.json.',
+      'Close-to-tray requires Minnow running locally so preferences can be saved to config.json.',
     );
   }
 
-  const [closeToTray, loginItem] = await Promise.all([
+  const [closeToTray, loginItem, zoomPercent] = await Promise.all([
     api.getCloseToTray(),
     api.getLoginItem(),
+    api.getZoomPercent(),
   ]);
 
-  const closeRow = el('label', 'settings-toggle-row');
-  const closeInput = document.createElement('input');
-  closeInput.type = 'checkbox';
-  closeInput.checked = closeToTray;
-  closeInput.disabled = serverUp !== 'server';
-  closeRow.append(
-    closeInput,
-    el(
-      'span',
-      'settings-toggle-label',
-      'Keep Minnow running after closing the window',
-    ),
-  );
-  closeRow.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'When enabled, closing the window hides Minnow in the system tray so chats and agents keep running.',
-    ),
-  );
-
-  const loginRow = el('label', 'settings-toggle-row');
-  const loginInput = document.createElement('input');
-  loginInput.type = 'checkbox';
-  loginInput.checked = loginItem.openAtLogin;
-  loginInput.disabled = !loginItem.supported;
-  loginRow.append(loginInput, el('span', 'settings-toggle-label', 'Launch Minnow at startup'));
-  if (!loginItem.supported) {
-    loginRow.appendChild(
-      el('p', 'settings-field-hint', 'Launch at startup is not supported on this platform.'),
-    );
+  const zoomOptions = SHELL_ZOOM_PRESET_PERCENTS.map((value) => ({
+    value: String(value),
+    label: `${value}%`,
+  }));
+  const zoomKey = String(zoomPercent);
+  if (!zoomOptions.some((opt) => opt.value === zoomKey)) {
+    zoomOptions.push({ value: zoomKey, label: `${zoomPercent}%` });
   }
 
-  section.append(closeRow, loginRow);
-  mount.appendChild(section);
+  const { row: zoomRow, select: zoomSelect } = createSettingsSelectRow('Interface zoom', {
+    searchKey: 'general.desktop.zoom',
+    description:
+      'Scale the Minnow desktop window. Ctrl/Cmd + and − adjust zoom; the value here updates to match.',
+    options: zoomOptions,
+    value: zoomKey,
+    disabled: serverUp !== 'server',
+  });
+
+  const { row: closeRow, input: closeInput } = createSettingsToggleRow(
+    'Keep Minnow running after closing the window',
+    {
+      searchKey: 'general.desktop.closeToTray',
+      checked: closeToTray,
+      disabled: serverUp !== 'server',
+      description:
+        'When enabled, closing the window hides Minnow in the system tray so chats and agents keep running.',
+    },
+  );
+
+  const loginDescription = loginItem.supported
+    ? 'Register Minnow as a login item so it opens when you sign in to this computer.'
+    : 'Launch at startup is not supported on this platform.';
+
+  const { row: loginRow, input: loginInput } = createSettingsToggleRow(
+    'Launch Minnow at startup',
+    {
+      searchKey: 'general.desktop.launchAtStartup',
+      checked: loginItem.openAtLogin,
+      disabled: !loginItem.supported,
+      description: loginDescription,
+    },
+  );
+
+  mount.append(zoomRow, closeRow, loginRow);
+
+  zoomSelect.addEventListener('change', () => {
+    void (async () => {
+      const raw = Number.parseInt(zoomSelect.value, 10);
+      if (!Number.isFinite(raw)) return;
+      try {
+        const next = await api.setZoomPercent(raw);
+        zoomSelect.value = String(next);
+        setStatus('ok', `Interface zoom set to ${next}%`);
+      } catch {
+        zoomSelect.value = String(await api.getZoomPercent());
+        setStatus('err', 'Could not save zoom preference');
+      }
+    })();
+  });
+
+  api.onZoomPercentChanged((percent) => {
+    zoomSelect.value = String(percent);
+  });
 
   closeInput.addEventListener('change', () => {
     void (async () => {

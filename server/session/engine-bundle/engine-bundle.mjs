@@ -120732,7 +120732,7 @@ function renderVoice() {
   letter.appendChild(el47("p", void 0, "Thanks for giving it a shot."));
   voice.appendChild(letter);
   const sign = el47("div", "mn-onboarding-welcome__sign");
-  sign.appendChild(el47("span", "mn-onboarding-welcome__sign-name", "Dukkus"));
+  sign.appendChild(el47("span", "mn-onboarding-welcome__sign-name", "Henri Grimm"));
   sign.appendChild(el47("span", "mn-onboarding-welcome__sign-role", "Creator of Minnow"));
   voice.appendChild(sign);
   return voice;

@@ -199,6 +199,21 @@
 }
 
 /* Expanded rail: full session rows (matches Code sidebar) */
+.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-dot[data-dot-state='working'] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.chat-app-rail-list .chat-item-row[data-dot-state='working'] .chat-item-icon {
+  position: relative;
+}
+
+.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-row[data-dot-state='working'] .chat-item-icon::after {
+  display: none;
+}
+
 .chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-row {
   width: 100%;
   min-width: 0;

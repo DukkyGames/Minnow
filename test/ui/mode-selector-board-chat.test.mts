@@ -21,7 +21,7 @@ const {
 
 let windowInstance: Window | null = null;
 
-function setupModeSelectorDom(): HTMLElement {
+function setupModeSelectorDom(options?: { hubComposer?: boolean }): HTMLElement {
   windowInstance = new Window();
   installHappyDomGlobals(windowInstance);
 
@@ -29,8 +29,18 @@ function setupModeSelectorDom(): HTMLElement {
   composerControls.id = 'composerControls';
   const modeSelector = document.createElement('div');
   modeSelector.id = 'modeSelector';
+  modeSelector.className = 'mode-segmented';
   composerControls.appendChild(modeSelector);
-  document.body.appendChild(composerControls);
+
+  if (options?.hubComposer) {
+    const bar = document.createElement('div');
+    bar.className = 'input-bar input-bar--hub';
+    bar.appendChild(composerControls);
+    document.body.appendChild(bar);
+  } else {
+    document.body.appendChild(composerControls);
+  }
+
   return modeSelector;
 }
 
@@ -98,6 +108,26 @@ describe('mode selector for orchestrator board chats', () => {
     syncModeSelectorFromActiveChat();
 
     assert.equal(modeSelector.hidden, false);
+  });
+
+  test('hub composer keeps mode labels (never icon-only compact)', () => {
+    const modeSelector = setupModeSelectorDom({ hubComposer: true });
+    const chat = createEmptyChatObject('');
+    chat.id = REGULAR_CHAT_ID;
+    chat.modeId = 'build';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    initModeSelector();
+    modeSelector.classList.add('mode-segmented--compact');
+    syncModeSelectorFromActiveChat();
+
+    assert.equal(modeSelector.classList.contains('mode-segmented--compact'), false);
+    assert.ok(modeSelector.querySelector('.mode-segment__label'));
   });
 
   test('keeps the hidden selector out of layout despite its inline-flex styling', () => {

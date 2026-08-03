@@ -54,7 +54,7 @@ export function modelHasReasoningEffortLevels(
 export function modelUsesComposerReasoningDropdown(
   caps?: ModelCapabilities | null,
 ): boolean {
-  return modelHasReasoningEffortLevels(caps);
+  return modelUsesComposerReasoningLevelDropdown(caps);
 }
 
 /** Composer shows the brain on/off toggle when model offers off/on without level options. */
@@ -79,6 +79,31 @@ export function getComposerReasoningLevelOptions(
   allowed: ReasoningEffortOption[],
 ): ReasoningEffortOption[] {
   return allowed.filter((o) => o === 'low' || o === 'medium' || o === 'high');
+}
+
+/** Off/on options for models that use thinking.type instead of reasoning_effort levels. */
+export function getComposerReasoningBinaryOptions(
+  allowed: ReasoningEffortOption[],
+): ReasoningEffortOption[] {
+  const normalized = normalizeReasoningAllowedOptions(allowed);
+  const options: ReasoningEffortOption[] = [];
+  if (normalized.includes('off')) options.push('off');
+  if (normalized.includes('on')) options.push('on');
+  return options;
+}
+
+/** Composer shows low/medium/high select beside the brain toggle. */
+export function modelUsesComposerReasoningLevelDropdown(
+  caps?: ModelCapabilities | null,
+): boolean {
+  return modelHasReasoningEffortLevels(caps);
+}
+
+/** Binary off/on models use the brain tri-state toggle only (no separate Off/On select). */
+export function modelUsesComposerReasoningBinaryDropdown(
+  _caps?: ModelCapabilities | null,
+): boolean {
+  return false;
 }
 
 /** Default level when turning reasoning back on from the composer brain toggle. */

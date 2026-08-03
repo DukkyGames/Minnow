@@ -1,5 +1,8 @@
 /**
- * Models — confirm llama.cpp runtime install before serving a GGUF.
+ * Models — confirm the llama.cpp runtime install before loading a GGUF.
+ *
+ * A modal is right here: this downloads a binary, so it needs an explicit yes
+ * before anything happens.
  */
 
 import {
@@ -8,25 +11,14 @@ import {
   subscribeLlamaInstallProgress,
   type LlamaRuntimeStatus,
 } from '../../models/api-client';
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
+import { el, textButton } from './dom';
 
 function renderProgressBar(percent: number | null): HTMLElement {
-  const wrap = el('div', 'models-download-progress');
-  const bar = el('div', 'models-download-progress__bar');
+  const wrap = el('div', 'models-progress');
+  const bar = el('div', 'models-progress__fill');
   if (percent != null && percent > 0) {
     bar.style.width = `${Math.min(100, percent)}%`;
   } else {
-    bar.style.width = '30%';
     bar.classList.add('is-indeterminate');
   }
   wrap.appendChild(bar);
@@ -34,7 +26,8 @@ function renderProgressBar(percent: number | null): HTMLElement {
 }
 
 /**
- * Returns true when llama-server is installed (or install succeeded), false when cancelled or failed.
+ * Resolves true when llama-server is available (already installed, or the user
+ * approved and the install succeeded), false when cancelled or failed.
  */
 export async function ensureLlamaRuntimeInstalled(): Promise<boolean> {
   const runtime = await fetchLlamaRuntime();
@@ -42,52 +35,53 @@ export async function ensureLlamaRuntimeInstalled(): Promise<boolean> {
   return promptLlamaInstall(runtime);
 }
 
-/**
- * Modal prompt — install bundled llama.cpp or show manual-install guidance.
- */
+/** Ask before downloading the llama.cpp server binary. */
 export function promptLlamaInstall(runtime: LlamaRuntimeStatus): Promise<boolean> {
   return new Promise((resolve) => {
-    const backdrop = el('div', 'models-serve-dialog__backdrop');
-    const dialog = el('div', 'models-serve-dialog models-llama-install-dialog');
+    const backdrop = el('div', 'models-dialog__backdrop');
+    const dialog = el('div', 'models-dialog');
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
     dialog.setAttribute('aria-labelledby', 'modelsLlamaInstallTitle');
 
-    const title = el('h2', 'models-serve-dialog__title', 'llama.cpp runtime required');
+    const title = el('h2', 'models-dialog__title', 'llama.cpp runtime required');
     title.id = 'modelsLlamaInstallTitle';
     dialog.appendChild(title);
 
-    const body = el('div', 'models-llama-install-body');
+    const body = el('div', 'models-dialog__body');
     dialog.appendChild(body);
 
-    const progressWrap = el('div', 'models-llama-install-progress hidden');
-    const progressBarHost = el('div', 'models-llama-install-progress__bar');
-    const progressLabel = el('p', 'models-muted models-llama-install-progress__label', '');
+    const progressWrap = el('div', 'models-dialog__progress hidden');
+    const progressBarHost = el('div');
+    const progressLabel = el('p', 'models-dialog__progress-label', '');
     progressWrap.append(progressBarHost, progressLabel);
     dialog.appendChild(progressWrap);
-
-    const actions = el('div', 'models-serve-dialog__actions');
-    const cancelBtn = el('button', 'models-inline-btn', 'Cancel');
-    cancelBtn.type = 'button';
-    const primaryBtn = el('button', 'models-inline-btn is-primary', 'Install');
-    primaryBtn.type = 'button';
-    actions.append(cancelBtn, primaryBtn);
-    dialog.appendChild(actions);
-
-    backdrop.appendChild(dialog);
-    document.body.appendChild(backdrop);
 
     let settled = false;
     const finish = (ok: boolean) => {
       if (settled) return;
       settled = true;
       backdrop.remove();
+      document.removeEventListener('keydown', onKey);
       resolve(ok);
     };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !primaryBtn.disabled) finish(false);
+    };
 
-    cancelBtn.addEventListener('click', () => finish(false));
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop && !primaryBtn.disabled) finish(false);
+    const actions = el('div', 'models-dialog__actions');
+    const cancelBtn = textButton('Cancel', () => finish(false));
+    const primaryBtn = textButton('Install', () => {}, 'primary');
+    actions.append(cancelBtn, primaryBtn);
+    dialog.appendChild(actions);
+
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+    document.addEventListener('keydown', onKey);
+    primaryBtn.focus();
+
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop && !primaryBtn.disabled) finish(false);
     });
 
     if (!runtime.installable) {
@@ -95,12 +89,12 @@ export function promptLlamaInstall(runtime: LlamaRuntimeStatus): Promise<boolean
         el(
           'p',
           'models-muted',
-          'llama-server was not found on this system and Minnow cannot auto-install a prebuilt binary for your platform.',
+          'llama-server was not found, and Minnow has no prebuilt binary for this platform.',
         ),
         el(
           'p',
           'models-muted',
-          'Install llama.cpp server binaries manually and add llama-server to your PATH, or use Ollama / LM Studio instead.',
+          'Build or install llama.cpp yourself and put llama-server on your PATH, or run the model through Ollama or LM Studio instead.',
         ),
       );
       primaryBtn.textContent = 'Open Settings → Servers';
@@ -118,12 +112,13 @@ export function promptLlamaInstall(runtime: LlamaRuntimeStatus): Promise<boolean
       el(
         'p',
         'models-muted',
-        `Serving with llama.cpp requires the llama-server binary (~20 MB, ${variant} build).`,
+        `Loading GGUF weights needs the llama-server binary — about 20 MB, ${variant} build.`,
       ),
-      el('p', 'models-muted', 'Install now before configuring serve options?'),
+      el('p', 'models-muted', 'Download it now?'),
     );
 
     primaryBtn.addEventListener('click', () => {
+      if (primaryBtn.disabled) return;
       primaryBtn.disabled = true;
       cancelBtn.disabled = true;
       progressWrap.classList.remove('hidden');
@@ -139,13 +134,7 @@ export function promptLlamaInstall(runtime: LlamaRuntimeStatus): Promise<boolean
       });
 
       void installLlamaRuntime({ variant })
-        .then((result) => {
-          if (result.path) {
-            finish(true);
-            return;
-          }
-          finish(false);
-        })
+        .then((result) => finish(Boolean(result.path)))
         .catch((err) => {
           progressLabel.textContent =
             err instanceof Error ? err.message : 'llama.cpp install failed';

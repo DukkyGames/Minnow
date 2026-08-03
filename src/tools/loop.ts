@@ -3,7 +3,7 @@
  * and persists assistant / tool messages in session history.
  */
 
-import { getChatAbort, setChatAbort, setChatStopReason, setStreaming, takeChatStopReason } from '../app-state';
+import { getChatAbort, setChatAbort, setChatStopReason, setStreaming, takeChatStopReason, modelCache } from '../app-state';
 import {
   beginChatTurnSetup,
   endChatTurnSetup,
@@ -73,6 +73,17 @@ import {
 } from '../api/inline-thinking';
 import { extractReasoningDelta, extractReasoningMessage, extractReasoningSignatureDelta, outboundReasoningReplayFields } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
+import {
+  chatTurnNeedsModelLoad,
+  ensureChatModelLoadedForTurn,
+} from '../api/ensure-chat-model-loaded';
+import { fetchCachedModels, listModelServes } from '../models/api-client';
+import { buildLibrary, loadableLibrary } from '../models/library';
+import {
+  isLibraryModelBinding,
+  libraryModelNeedsLoad,
+  resolveServedBindingForLibraryId,
+} from '../models/model-select-library';
 import {
   cancelAssistantBubbleRenderDebounce,
   scheduleAssistantBubbleRender,
@@ -177,6 +188,7 @@ import { setBugBoardExecutorContext } from './bug-board-tools';
 import {
   appendBubble,
   anchorPersistedThoughtsOnRow,
+  appendInjectionNoticesDom,
   appendStats,
   appendStreamingAssistantRow,
   assistantProseHasVisibleContent,
@@ -222,7 +234,10 @@ import {
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { applyModelSelectValueToChat } from '../lib/model-select-key';
-import { resolveEffectiveChatModelBinding } from '../ui/default-model';
+import {
+  resolveEffectiveChatModelBinding,
+  syncPerChatModelBindingFromCatalog,
+} from '../ui/default-model';
 import { getActiveProvider } from '../providers/store';
 import { isVisionModel } from '../providers/vision-model.ts';
 import {
@@ -245,6 +260,10 @@ import {
 } from '../chat/context-budget';
 import { applyContextPolicy } from '../chat/context/apply-policy';
 import { appendContextNoticeIfNeeded } from '../chat/context/context-notice';
+import {
+  appendInjectionNoticesForTurn,
+  isUiOnlyTranscriptMessage,
+} from '../chat/context/injection-notice';
 import { handleCompressCommand } from '../chat/context/compress-command';
 import { resolveWorkAgentContextPolicy } from '../chat/resolve-context-policy';
 import {
@@ -285,9 +304,9 @@ import {
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort';
 import { resolveSamplerPreset } from '../agents/resolve-sampler';
+import { mergeGlobalSamplerWithLibraryModel } from '../config/library-inference-meta';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';
 import { applySamplerToBody } from '../agents/sampler-types';
-import { modelCache } from '../app-state';
 import { encodeModelSelectKey } from '../lib/model-select-key';
 import { resolveSendCapabilities } from '../providers/model-capabilities';
 import {
@@ -614,6 +633,8 @@ export interface RunChatTurnOptions {
   shouldScheduleTitle?: boolean;
   /** Run title job after the first turn completes (avoids competing with main chat for TTFT). */
   deferTitleUntilTurnEnd?: boolean;
+  /** First user message in chat (capture before history.push). */
+  firstUserSend?: boolean;
   /** Pre-resolved skill body when skillId is set (composer path). */
   skillBody?: string | null;
   /** Re-subscribe to an existing backend generation (boot resume); skips POST. */
@@ -669,7 +690,7 @@ export function buildApiMessages(
 
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
-    if (m.role === 'context') continue;
+    if (isUiOnlyTranscriptMessage(m)) continue;
     if (m.role === 'user') {
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
@@ -1128,6 +1149,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     titleSeed = userText || rawText,
     shouldScheduleTitle = false,
     deferTitleUntilTurnEnd = false,
+    firstUserSend: firstUserSendOption,
     skillBody: presetSkillBody = null,
     resumeGenerationId,
     ownsGlobalStreaming = true,
@@ -1173,20 +1195,30 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     // Replay must use the provider/model frozen in the turn snapshot, not the top-bar picker.
     chat.providerId = replaySnapshot.providerId;
     chat.modelId = replaySnapshot.modelId;
-  } else if (!chat.modelId?.trim()) {
+  } else if (chat.modelId?.trim()) {
+    syncPerChatModelBindingFromCatalog(chat);
+  } else {
     const binding = resolveEffectiveChatModelBinding(chat);
     if (binding.selectValue) {
       applyModelSelectValueToChat(chat, binding.selectValue);
+    } else if (binding.modelId) {
+      chat.modelId = binding.modelId;
+      if (binding.providerId) {
+        chat.providerId = binding.providerId;
+      }
     }
   }
   const modelId = replaySnapshot?.modelId ?? chat.modelId?.trim() ?? '';
-  const globalSampler = readGlobalSamplerForSend(
-    replaySnapshot
-      ? {
-          temperature: replaySnapshot.temperature,
-          maxTokens: replaySnapshot.maxTokens,
-        }
-      : undefined,
+  const globalSampler = mergeGlobalSamplerWithLibraryModel(
+    readGlobalSamplerForSend(
+      replaySnapshot
+        ? {
+            temperature: replaySnapshot.temperature,
+            maxTokens: replaySnapshot.maxTokens,
+          }
+        : undefined,
+    ),
+    modelId,
   );
   const legacySysPrompt = (
     document.getElementById('systemPrompt') as HTMLTextAreaElement
@@ -1216,6 +1248,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 
   chat.modelId = modelId || chat.modelId;
+
+  const firstUserSendForInjections = pushUser
+    ? (firstUserSendOption ?? isFirstUserMessagePending(chat))
+    : false;
 
   if (pushUser) {
     if (clearPostToolTailBeforeSend(chat)) {
@@ -1346,7 +1382,26 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = sendModelId;
   chat.providerId = sendProviderId;
 
+  if (isLibraryModelBinding(sendProviderId, sendModelId)) {
+    const cached = await fetchCachedModels();
+    const library = loadableLibrary(buildLibrary(cached));
+    const serves = await listModelServes().catch(() => []);
+    const served = resolveServedBindingForLibraryId(sendModelId, library, serves);
+    if (served) {
+      sendProviderId = served.providerId;
+      sendModelId = served.modelId;
+      chat.providerId = served.providerId;
+      chat.modelId = served.modelId;
+    } else {
+      sendProviderId = LLAMA_CPP_LOCAL_PROVIDER_ID;
+    }
+  }
+
   const sendProvider = await getActiveProvider(sendProviderId);
+  const libraryBinding = isLibraryModelBinding(chat.providerId, sendModelId);
+  const pendingModelLoad = libraryBinding
+    ? libraryModelNeedsLoad(sendModelId, modelCache)
+    : chatTurnNeedsModelLoad(sendProvider, sendModelId);
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =
     replaySnapshot?.reasoningEffort ??
@@ -1360,7 +1415,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const turnStartedAtMs = Date.now();
   emitMainTurnActivity({
     chatId: chat.id,
-    phase: 'generating',
+    phase: pendingModelLoad ? 'loading_model' : 'generating',
     currentTool: null,
     workAgentLabel: mainTurnLabel,
     modelId: sendModelId,
@@ -1441,14 +1496,24 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   if (isStreamDomVisible(chat.id)) {
     setStatus(
       'spin',
-      uiDesignerCtx.active
-        ? `${uiDesignerCtx.statusHint}…`
-        : `Generating reply${agentStatusSuffix}…`,
+      pendingModelLoad
+        ? 'Loading model…'
+        : uiDesignerCtx.active
+          ? `${uiDesignerCtx.statusHint}…`
+          : `Generating reply${agentStatusSuffix}…`,
     );
   }
 
   let streamRow = appendStreamingAssistantRow(chat.id);
   let { wrap, bubble, cursor, streamStatus } = streamRow;
+  if (pendingModelLoad) {
+    if (isStreamDomVisible(chat.id)) {
+      streamStatus.setPhase('loading_model');
+    }
+    setSidebarStreamPhase('loading_model', chat.id);
+  } else {
+    setSidebarStreamPhase('generating', chat.id);
+  }
   const streamCtx = { wrap, streamStatus };
   // Track prose-awaiting without DOM class — stub rows in board view omit msg--awaiting-prose.
   let awaitingProse = true;
@@ -1547,6 +1612,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: userText || rawText,
     routeUserText: userText || rawText,
+    attachmentWorkspacePaths: validAttachments
+      .map((a) => a.workspacePath?.trim())
+      .filter((p): p is string => Boolean(p)),
+    firstUserSend: firstUserSendForInjections,
     overrides: { skillBody },
   });
   const sysPrompt =
@@ -1554,6 +1623,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     replaySnapshot?.composedSystemPrompt ??
     outbound.composed;
   const userRulesContent = replaySnapshot?.userRulesContent ?? outbound.userRules;
+
+  if (pushUser) {
+    const injectionAdded = appendInjectionNoticesForTurn(
+      chat,
+      outbound.injectionBlocks,
+    );
+    if (injectionAdded.length > 0) {
+      scheduleSaveSessions();
+      if (isStreamDomVisible(chat.id)) {
+        appendInjectionNoticesDom(
+          injectionAdded,
+          chat.history.length - injectionAdded.length,
+          { chatId: chat.id },
+        );
+      }
+    }
+  }
 
   if (!resumeGenerationId) {
     const forkHistoryIndex = resolveForkHistoryIndex(chat, pushUser);
@@ -1658,9 +1744,27 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
     };
 
+    let modelLoadDone = !pendingModelLoad;
+
     for (let turn = 0; ; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
+      }
+
+      if (!modelLoadDone) {
+        await ensureChatModelLoadedForTurn(sendProviderId, sendModelId, chatSignal);
+        modelLoadDone = true;
+        patchMainTurnActivity(chat.id, { phase: 'generating' });
+        if (isStreamDomVisible(chat.id)) {
+          streamStatus.setPhase('generating');
+          setStatus(
+            'spin',
+            uiDesignerCtx.active
+              ? `${uiDesignerCtx.statusHint}…`
+              : `Generating reply${agentStatusSuffix}…`,
+          );
+        }
+        setSidebarStreamPhase('generating', chat.id);
       }
 
       const steerConsumed = consumePendingSteer(chat);
@@ -2536,7 +2640,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (normalizeModeId(chat.modeId) === 'orchestrate') {
       const board = getBoardGroupForChat(chat)?.orchestrateBoard;
       if (board?.activeParentTurnId) {
-        board.activeParentTurnId = null;
+        delete board.activeParentTurnId;
         touchChat(chat);
         scheduleSaveSessions();
       }
@@ -2645,8 +2749,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         burstPartyConfetti();
       }
       if (turnRunId) {
+        const endedRunId = turnRunId;
         void import('../notifications/chat-turn.js').then((mod) => {
-          mod.notifyChatTurnEnded(chat.id, turnRunId);
+          mod.notifyChatTurnEnded(chat.id, endedRunId);
         });
       }
     }
@@ -2762,13 +2867,23 @@ export async function sendProgrammaticChatText(
   if (!rawText.trim() && validAttachments.length === 0 && !slashInput.trim()) return;
   if (!skillId && !hasUserText && validAttachments.length === 0) return;
 
-  const binding = resolveEffectiveChatModelBinding(chat);
-  const modelId = binding.modelId;
-  if (binding.selectValue && !chat.modelId?.trim()) {
-    applyModelSelectValueToChat(chat, binding.selectValue);
+  if (chat.modelId?.trim()) {
+    syncPerChatModelBindingFromCatalog(chat);
     touchChat(chat);
+  } else {
+    const binding = resolveEffectiveChatModelBinding(chat);
+    if (binding.selectValue) {
+      applyModelSelectValueToChat(chat, binding.selectValue);
+      touchChat(chat);
+    } else if (binding.modelId) {
+      chat.modelId = binding.modelId;
+      if (binding.providerId) {
+        chat.providerId = binding.providerId;
+      }
+      touchChat(chat);
+    }
   }
-  if (!modelId && !chat.modelId?.trim()) {
+  if (!chat.modelId?.trim()) {
     report('err', 'Select a model first');
     return;
   }
@@ -2827,6 +2942,7 @@ export async function sendProgrammaticChatText(
     (userText || rawText || validAttachments[0]?.name || 'Attachment');
   const deferTitleUntilTurnEnd =
     options.deferTitleUntilTurnEnd ?? isFirstUserMessagePending(chat);
+  const firstUserSend = deferTitleUntilTurnEnd;
 
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
@@ -2846,6 +2962,7 @@ export async function sendProgrammaticChatText(
     validAttachments,
     titleSeed,
     deferTitleUntilTurnEnd,
+    firstUserSend,
     skillBody,
     composerSurface: options.composerSurface,
     goalDriven: options.goalDriven ?? false,

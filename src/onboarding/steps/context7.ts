@@ -52,7 +52,7 @@ export const context7Step: OnboardingStep = {
     const form = el('div', 'mn-onboarding-form-grid');
     const wrap = el('label', 'mn-onboarding-field-label');
     wrap.htmlFor = 'onbContext7Key';
-    wrap.appendChild(el('span', null, 'Context7 API key'));
+    wrap.appendChild(el('span', undefined, 'Context7 API key'));
     const input = el('input', 'mn-onboarding-field') as HTMLInputElement;
     input.id = 'onbContext7Key';
     input.type = 'password';

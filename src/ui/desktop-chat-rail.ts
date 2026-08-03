@@ -32,17 +32,16 @@ import {
 import { appendChatRow } from './sidebar';
 import { syncChatItemDotsInDom } from './chat-item-dot';
 import { syncChatItemLoopIconsInDom } from './chat-item-loop-icon';
+import { syncActiveChatModelUi } from './chat-model-ui';
+import { isPhoneLayout, PHONE_MQ } from './mobile-layout';
 import type { Chat } from '../types';
 
-const MOBILE_DESKTOP_MQ = '(max-width: 640px)';
+/** Toggled on `<html>` while the desktop session rail drawer is open on phone layout. */
+export const OS_MOBILE_DESKTOP_CHAT_RAIL_CLASS = 'mn-os-mobile-desktop-chat-rail';
 
 let railExpanded = false;
 let mobileMq: MediaQueryList | null = null;
 let mobileMqListener: ((event: MediaQueryListEvent) => void) | null = null;
-
-function isMobileDesktopLayout(): boolean {
-  return window.matchMedia(MOBILE_DESKTOP_MQ).matches;
-}
 
 function getRailBackdrop(): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>('.mn-os-chat-rail-backdrop');
@@ -51,10 +50,16 @@ function getRailBackdrop(): HTMLButtonElement | null {
 function syncRailBackdrop(): void {
   const backdrop = getRailBackdrop();
   if (!backdrop) return;
-  const show = isMobileDesktopLayout() && railExpanded;
+  const show = isPhoneLayout() && railExpanded;
   backdrop.classList.toggle('is-open', show);
   backdrop.setAttribute('aria-hidden', show ? 'false' : 'true');
   backdrop.tabIndex = show ? 0 : -1;
+}
+
+/** Lift desktop layer above dock + enable stage overflow for the fixed drawer. */
+function syncRailPhoneDrawerShell(): void {
+  const open = isPhoneLayout() && railExpanded;
+  document.documentElement.classList.toggle(OS_MOBILE_DESKTOP_CHAT_RAIL_CLASS, open);
 }
 
 function syncRailClasses(): void {
@@ -70,6 +75,7 @@ function syncRailClasses(): void {
   }
 
   syncRailBackdrop();
+  syncRailPhoneDrawerShell();
 }
 
 /** Expand the session rail (left-edge tab). */
@@ -88,7 +94,7 @@ export function collapseDesktopChatRail(): void {
 }
 
 function maybeCollapseRailOnMobile(): void {
-  if (isMobileDesktopLayout()) {
+  if (isPhoneLayout()) {
     collapseDesktopChatRail();
   }
 }
@@ -188,6 +194,7 @@ export async function createNewDesktopChat(): Promise<void> {
       const desktopChat = await import('../os/desktop-chat');
       desktopChat.activateDesktopChatSession(active.id);
       renderDesktopChatRail(path);
+      syncActiveChatModelUi();
       return;
     }
   } catch {
@@ -213,6 +220,7 @@ export async function createNewDesktopChat(): Promise<void> {
   desktopChat.activateDesktopChatSession(chat.id);
   resetComposerForEphemeralReuse();
   renderDesktopChatRail(path);
+  syncActiveChatModelUi();
 
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   input?.focus();
@@ -304,13 +312,17 @@ export function wireDesktopChatRail(): void {
   }
 
   if (!mobileMq && typeof window.matchMedia === 'function') {
-    mobileMq = window.matchMedia(MOBILE_DESKTOP_MQ);
+    mobileMq = window.matchMedia(PHONE_MQ);
     mobileMqListener = () => {
-      if (!isMobileDesktopLayout()) {
+      if (!isPhoneLayout()) {
         syncRailBackdrop();
+        syncRailPhoneDrawerShell();
         return;
       }
-      if (railExpanded) syncRailBackdrop();
+      if (railExpanded) {
+        syncRailBackdrop();
+        syncRailPhoneDrawerShell();
+      }
     };
     mobileMq.addEventListener('change', mobileMqListener);
   }
@@ -344,6 +356,7 @@ export async function refreshDesktopChatRail(): Promise<void> {
 export function resetDesktopChatRailForTests(): void {
   railExpanded = false;
   mountExpertScopeInRail(false);
+  document.documentElement.classList.remove(OS_MOBILE_DESKTOP_CHAT_RAIL_CLASS);
   syncRailClasses();
   if (mobileMq && mobileMqListener) {
     mobileMq.removeEventListener('change', mobileMqListener);

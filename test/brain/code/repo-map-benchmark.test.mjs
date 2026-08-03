@@ -9,6 +9,10 @@ import {
   renderRepoMap,
   scoreRepoMapHits,
 } from '../../../server/brain/code/repo-map.js';
+import {
+  prepareRepoMapSymbols,
+  prepareRepoMapSymbolsForInjection,
+} from '../../../server/brain/code/repo-map-symbols.js';
 
 /** Synthetic symbols: high PageRank lives in late-alphabet files (z.ts). */
 function buildNavigationFixture() {
@@ -96,5 +100,89 @@ describe('MIN-B11 repo-map benchmark', () => {
     assert.ok(tunedHits > baselineHits);
     assert.equal(tunedHits, targets.length);
     assert.ok(baselineHits < targets.length);
+  });
+});
+
+/** Noise-heavy fixture: nested constants, callbacks, vitest — injection profile should win. */
+function buildInjectionNoiseFixture() {
+  const noise = [
+    {
+      id: 'ws:BaseAgent.decide.system',
+      file: 'server/agents/base.ts',
+      kind: 'constant',
+      signature: 'constant system',
+      pagerank: 0.99,
+      line_start: 40,
+    },
+    {
+      id: 'ws:BaseAgent.decide.map() callback',
+      file: 'server/agents/base.ts',
+      kind: 'function',
+      signature: 'function map() callback',
+      pagerank: 0.98,
+      line_start: 50,
+    },
+    {
+      id: 'ws:vitest.value',
+      file: 'vitest.setup.ts',
+      kind: 'method',
+      signature: 'method value()',
+      pagerank: 0.97,
+      line_start: 1,
+    },
+    ...Array.from({ length: 25 }, (_, i) => ({
+      id: `ws:cardBase${i}`,
+      file: `src/components/Panel${i}.tsx`,
+      kind: 'constant',
+      signature: `constant cardBase${i}`,
+      pagerank: 0.85 - i * 0.01,
+      line_start: i + 1,
+    })),
+  ];
+  const needles = [
+    {
+      id: 'ws:executeDay',
+      file: 'server/simulation/tick.ts',
+      kind: 'function',
+      signature: 'function executeDay(): Promise<void>',
+      pagerank: 0.88,
+      line_start: 88,
+    },
+    {
+      id: 'ws:getOrCreateOrchestrator',
+      file: 'server/index.ts',
+      kind: 'function',
+      signature: 'function getOrCreateOrchestrator(): SimulationOrchestrator',
+      pagerank: 0.86,
+      line_start: 120,
+    },
+    {
+      id: 'ws:LlmClient',
+      file: 'server/llm/client.ts',
+      kind: 'class',
+      signature: 'class LlmClient',
+      pagerank: 0.84,
+      line_start: 200,
+    },
+  ];
+  return [...noise, ...needles].sort((a, b) => (b.pagerank ?? 0) - (a.pagerank ?? 0));
+}
+
+describe('injection repo-map profile', () => {
+  const symbols = buildInjectionNoiseFixture();
+  const budget = 220;
+  const targets = ['executeDay', 'getOrCreateOrchestrator', 'LlmClient'];
+
+  it('injection filtering surfaces navigation needles within budget', () => {
+    const wide = prepareRepoMapSymbols(symbols);
+    const injection = prepareRepoMapSymbolsForInjection(symbols);
+    const wideMap = renderRepoMap(wide, budget);
+    const injectionMap = renderRepoMap(injection, budget, { profile: 'injection' });
+    const wideHits = scoreRepoMapHits(wideMap.text, targets);
+    const injectionHits = scoreRepoMapHits(injectionMap.text, targets);
+    assert.ok(injectionHits >= wideHits);
+    assert.equal(injectionHits, targets.length);
+    assert.ok(!injectionMap.text.includes('## '));
+    assert.match(injectionMap.text, /server\/simulation\/tick\.ts:88/);
   });
 });

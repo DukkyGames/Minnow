@@ -35,7 +35,8 @@ html.is-scheduler-side-panel-open .mn-os-side-panels-layer {
   box-shadow:
     0 18px 48px color-mix(in srgb, var(--os-bg) 55%, transparent),
     0 0 0 1px color-mix(in srgb, var(--os-border) 40%, transparent);
-  overflow: hidden;
+  /* clip: window must not scroll — settings scrollIntoView used to shift titlebar controls. */
+  overflow: clip;
   pointer-events: auto;
   transition:
     box-shadow 0.2s var(--os-ease-out),
@@ -281,7 +282,7 @@ html.minnow-os-enabled .mn-os-window-body .brain-page.is-open {
   width: 100%;
 }
 
-.mn-os-window-body > .settings-page .settings-page-header,
+.mn-os-window-body > .settings-page:not(.settings-page--in-os-window) .settings-page-header,
 .mn-os-window-body > .models-page .models-page-header {
   min-height: 44px;
 }

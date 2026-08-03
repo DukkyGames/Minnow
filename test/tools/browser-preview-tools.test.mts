@@ -130,7 +130,7 @@ describe('browser-preview-tools', () => {
     const result = await mod.executeBrowserPreviewTool('browser_list', {});
     assert.match(
       result.content,
-      /Error: Browser automation runs in the Minnow desktop shell/,
+      /Error: Browser automation runs in the Minnow desktop app/,
     );
   });
 

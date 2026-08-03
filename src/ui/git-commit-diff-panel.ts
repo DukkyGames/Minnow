@@ -136,14 +136,15 @@ function selectFile(index: number): void {
 }
 
 function buildFileTabs(): void {
-  if (!fileTabsEl) return;
-  fileTabsEl.replaceChildren();
+  const tabs = fileTabsEl;
+  if (!tabs) return;
+  tabs.replaceChildren();
 
   if (fileEntries.length === 0) {
     const empty = document.createElement('span');
     empty.className = 'git-commit-diff__no-files';
     empty.textContent = 'No files changed';
-    fileTabsEl.appendChild(empty);
+    tabs.appendChild(empty);
     return;
   }
 
@@ -161,7 +162,7 @@ function buildFileTabs(): void {
     tab.append(name);
     appendFileTabStats(tab, entry);
     tab.addEventListener('click', () => selectFile(index));
-    fileTabsEl.appendChild(tab);
+    tabs.appendChild(tab);
   });
 }
 

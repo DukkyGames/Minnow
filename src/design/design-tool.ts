@@ -20,8 +20,9 @@ import { resolveElementSourceMapping } from './source-map';
 import { addElementRefToComposer } from '../attachments/element-ref';
 import { addDesignRefToComposer } from '../attachments/design-ref';
 import { updateAttachmentSourceMapping } from '../attachments/store';
-import { getFilePanelState } from '../state/file-panel';
-import { showToast } from '../ui/toast';
+import { previewSourceForDesignInstance } from '../ui/preview-design-source';
+import { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from '../ui/preview-design-mode-mount';
+import { clearDesignModeNotice, setDesignModeNotice } from './design-notice';
 import {
   boundingRectOfShape,
   newPinId,
@@ -117,8 +118,10 @@ export function resetDesignToolRegistryForTests(): void {
  * (MIN-368) so the annotations panel / preview-panel.ts toolbar can key annotation-store
  * lookups off the same page identity Draw/Comment tools already persist under.
  */
-export function currentPreviewPageRef(): string {
-  const source = getFilePanelState().previewSource;
+export function currentPreviewPageRef(
+  designInstanceId: string = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
+): string {
+  const source = previewSourceForDesignInstance(designInstanceId);
   if (!source) return '';
   return source.kind === 'workspace' ? source.path : source.url;
 }
@@ -163,15 +166,16 @@ export function createSelectDesignTool(): SelectDesignTool {
     await teardownPicker();
     if (!ctx || generation !== bindGeneration) return;
 
-    const armedTransport = createPickerTransport();
+    const armedTransport = createPickerTransport(ctx.instanceId);
     const nextPicker = createBestElementPicker({
+      designInstanceId: ctx.instanceId,
       onPick: (picked) => void handlePick(picked),
       onError: (message) => {
         if (generation !== bindGeneration) return;
         const friendly = /cross-origin/i.test(message)
           ? 'Element selection is unavailable on a cross-origin preview. Use Draw or Comment to mark a region instead.'
           : `Element picker unavailable: ${message}`;
-        showToast(friendly, 'error');
+        setDesignModeNotice(ctx?.host, friendly, 'error');
       },
     });
     try {
@@ -190,6 +194,9 @@ export function createSelectDesignTool(): SelectDesignTool {
     }
     transport = armedTransport;
     picker = nextPicker;
+    if (nextPicker.isEnabled()) {
+      clearDesignModeNotice(ctx.host);
+    }
   }
 
   async function handlePick(picked: PickedElement): Promise<void> {
@@ -207,7 +214,7 @@ export function createSelectDesignTool(): SelectDesignTool {
     const attachment = addElementRefToComposer({
       selector,
       uid: picked.uid,
-      pageUrl: currentPreviewPageRef(),
+      pageUrl: currentPreviewPageRef(ctx.instanceId),
       tagName: picked.tagName,
       classList: picked.classList,
       outerHtmlPreview: picked.outerHTMLPreview,
@@ -236,7 +243,7 @@ export function createSelectDesignTool(): SelectDesignTool {
     void resolveElementSourceMapping(
       {
         selector,
-        pageUrl: currentPreviewPageRef(),
+        pageUrl: currentPreviewPageRef(ctx.instanceId),
         tagName: picked.tagName,
         classList: picked.classList,
         outerHtmlPreview: picked.outerHTMLPreview,
@@ -261,6 +268,7 @@ export function createSelectDesignTool(): SelectDesignTool {
     },
     disarm() {
       bindGeneration += 1;
+      clearDesignModeNotice(ctx?.host);
       void teardownPicker();
       resetSelection();
       ctx = null;
@@ -294,11 +302,13 @@ function getPreviewFrame(): HTMLIFrameElement | null {
  * (MIN-368) so annotation-nav.ts's transcript → page re-highlight can reuse the same live-guest
  * read instead of re-implementing it.
  */
-export async function gatherAnchorCandidates(): Promise<AnchorCandidate[]> {
-  const transport = createPickerTransport();
+export async function gatherAnchorCandidates(
+  designInstanceId: string = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
+): Promise<AnchorCandidate[]> {
+  const transport = createPickerTransport(designInstanceId);
   try {
     if (transport.mode === 'iframe') {
-      const doc = getPreviewFrame()?.contentDocument;
+      const doc = getPreviewGuestFrame(designInstanceId)?.contentDocument;
       if (!doc) return [];
       return Array.from(doc.querySelectorAll('[data-mn-uid]')).map((el) => {
         const uid = Number(el.getAttribute('data-mn-uid'));
@@ -475,7 +485,7 @@ export function createDrawDesignTool(): DrawDesignTool {
       shapes = [];
       dragStart = null;
       penPoints = [];
-      pageKey = currentPreviewPageRef();
+      pageKey = currentPreviewPageRef(context.instanceId);
       void loadPageAnnotations(pageKey).then((data) => {
         if (ctx !== context) return;
         shapes = data.shapes;
@@ -752,7 +762,7 @@ export function createCommentDesignTool(): CommentDesignTool {
     arm(context) {
       ctx = context;
       pins = [];
-      pageKey = currentPreviewPageRef();
+      pageKey = currentPreviewPageRef(context.instanceId);
       void loadPageAnnotations(pageKey).then((data) => {
         if (ctx !== context) return;
         pins = data.pins;
@@ -852,7 +862,7 @@ function getSelectTool(): SelectDesignTool | null {
  * active so the user can keep working after clearing.
  */
 export async function clearAllDesignModeMarks(ctx: DesignToolContext): Promise<void> {
-  const pageKey = currentPreviewPageRef();
+  const pageKey = currentPreviewPageRef(ctx.instanceId);
 
   getSelectTool()?.clearAll();
   getDrawTool()?.clearAll();

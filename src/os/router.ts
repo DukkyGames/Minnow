@@ -18,6 +18,7 @@ import {
 } from './desktop-state';
 import { getAppById, isAppId } from './app-registry';
 import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
+import { DEFAULT_MODELS_SECTION } from '../ui/models-section-ids';
 import {
   getForegroundAppId,
   getInstanceSnapshot,
@@ -25,6 +26,8 @@ import {
   launchInstance,
   showDesktop,
 } from './instances';
+import { isPhoneLayout } from '../ui/mobile-layout';
+import { windowManager } from './window-manager';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
 import { APP_SWITCHER_DESKTOP_ID } from './surface-id';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
@@ -38,6 +41,17 @@ function notifyAppUnavailable(appId: AppId): void {
   void import('../ui/toast').then((m) => {
     m.showToast(`${name} is turned off. Restore it in Settings → Apps.`, 'error');
   });
+}
+
+/**
+ * Minimize open window sheets so the phone desktop is actually visible. The app
+ * instance stays alive; relaunching it from the dock restores the sheet.
+ */
+function parkPhoneWindowSheets(): void {
+  if (!isPhoneLayout()) return;
+  for (const win of windowManager.getWindows()) {
+    if (!win.minimized) windowManager.minimize(win.id, true);
+  }
 }
 
 /** Block unavailable apps: toast (when user-disabled) and return to desktop. */
@@ -121,7 +135,7 @@ export function resolveLegacyHash(hash: string): {
   }
   if (trimmed === '#/models' || trimmed.startsWith('#/models/')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^models(?:\/([\w-]+))?/);
-    const section = match?.[1] ?? 'recommend';
+    const section = match?.[1] ?? DEFAULT_MODELS_SECTION;
     return { hash: `#/app/models/${section}`, modelsSection: section };
   }
   if (trimmed === '#/brain' || trimmed.startsWith('#/brain/')) {
@@ -160,7 +174,7 @@ export function parseOsHash(hash: string): OsRoute {
       route.settingsSection = pendingSettingsSection;
     }
     if (route.appId === 'models') {
-      route.modelsSection = appMatch[2] ?? pendingModelsSection ?? 'recommend';
+      route.modelsSection = appMatch[2] ?? pendingModelsSection ?? DEFAULT_MODELS_SECTION;
     }
     if (route.appId === 'brain') {
       route.brainSection = appMatch[2] ?? pendingBrainSection ?? 'graph';
@@ -232,6 +246,9 @@ function syncForegroundLifecycle(nextApp: AppId | null): void {
 function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'desktop') {
     syncForegroundLifecycle(null);
+    // Windowed apps live in the desktop view, so showDesktop() alone leaves a
+    // phone's full-stage window sheet covering the home surface.
+    parkPhoneWindowSheets();
     const comingFromFullscreenApp = getOsView() === 'app';
     const pendingResearch = consumePendingDesktopResearchActivation();
     const pendingExperts = consumePendingDesktopExpertsActivation();
@@ -240,7 +257,7 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     if (comingFromFullscreenApp) {
       if (pendingResearch !== null) {
         prepareDesktopResearchSurface();
-      } else if (pendingExperts !== null) {
+      } else if (pendingExperts !== null && isAppAvailable('experts')) {
         prepareDesktopExpertsSurface();
       } else if (pendingChat !== null) {
         prepareDesktopChatSurface();
@@ -252,18 +269,17 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
       return;
     }
     if (pendingExperts !== null) {
-      void activateDesktopExperts(pendingExperts);
+      if (isAppAvailable('experts')) {
+        void activateDesktopExperts(pendingExperts);
+      } else {
+        void import('./desktop-launch').then((m) => m.restoreDesktopSessionOnForeground());
+      }
       return;
     }
     if (pendingChat !== null) {
       void activateDesktopChat(pendingChat);
     } else {
-      void import('./desktop-state').then(async (m) => {
-        if (m.isDesktopChatActive()) {
-          const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
-          await restoreDesktopSessionOnForeground();
-        }
-      });
+      void import('./desktop-launch').then((m) => m.restoreDesktopSessionOnForeground());
     }
     return;
   }
@@ -313,6 +329,10 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
 
 function applyRouteFromHash(): void {
   if (applyingRoute) return;
+  if (window.location.hash === '#/wiki' || window.location.hash.startsWith('#/wiki/')) {
+    void import('../ui/product-wiki').then((module) => module.initProductWiki());
+    return;
+  }
   applyingRoute = true;
   try {
     const raw = window.location.hash;
@@ -327,7 +347,7 @@ function applyRouteFromHash(): void {
       if (legacy.desktopResearch) {
         queueDesktopResearchActivation(pendingLaunchOptions);
       }
-      if (legacy.desktopExperts) {
+      if (legacy.desktopExperts && isAppAvailable('experts')) {
         queueDesktopExpertsActivation(pendingLaunchOptions);
       }
       window.location.hash = legacy.hash;

@@ -29,12 +29,12 @@ describe('serve profiles', () => {
     );
   });
 
-  test('balanced profile fits on 12 GB GPU budget', () => {
+  test('balanced profile targets default context length', () => {
     const profiles = computeServeProfiles(system, model);
     const balanced = profiles.find((p) => p.key === 'balanced');
     assert.ok(balanced);
-    assert.equal(balanced.fits, true);
-    assert.ok(balanced.ctx >= 2048);
+    assert.equal(balanced.ctx, 125_000);
+    assert.equal(balanced.cache_type, 'f16');
   });
 
   test('profileToLlamaArgs includes context and ngl', () => {

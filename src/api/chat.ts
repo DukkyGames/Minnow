@@ -47,6 +47,7 @@ import {
 } from '../ui/composer-send';
 import {
   appendBubble,
+  appendInjectionNoticesDom,
   appendStats,
   appendStreamingAssistantRow,
   revealAssistantProseBubble,
@@ -63,6 +64,10 @@ import {
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
+import {
+  appendInjectionNoticesForTurn,
+  isUiOnlyTranscriptMessage,
+} from '../chat/context/injection-notice';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import {
   recordAssistantReplyOnChat,
@@ -447,6 +452,7 @@ export async function sendMessage(): Promise<void> {
   // C.1: defensive hydrate before first history mutation (no-op when lazy flag is off).
   await ensureChatHistoryLoaded(chat.id);
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
+  const firstUserSend = shouldScheduleTitle;
   chat.history.push({ role: 'user', content: text });
   clearComposerAfterSend(chat, input);
   recordChatMessage(chat);
@@ -457,7 +463,21 @@ export async function sendMessage(): Promise<void> {
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: text,
     routeUserText: text,
+    firstUserSend,
   });
+
+  const injectionAdded = appendInjectionNoticesForTurn(
+    chat,
+    outbound.injectionBlocks,
+  );
+  if (injectionAdded.length > 0) {
+    scheduleSaveSessions();
+    appendInjectionNoticesDom(
+      injectionAdded,
+      chat.history.length - injectionAdded.length,
+      { chatId: chat.id },
+    );
+  }
 
   const messages: ApiMessage[] = [];
   if (outbound.composed) {
@@ -467,7 +487,7 @@ export async function sendMessage(): Promise<void> {
     messages.push({ role: 'system', content: outbound.userRules });
   }
   for (const m of chat.history) {
-    if (m.role === 'context') continue;
+    if (isUiOnlyTranscriptMessage(m)) continue;
     if (m.role === 'tool') {
       messages.push({
         role: 'tool',

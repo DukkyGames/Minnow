@@ -173,7 +173,7 @@ export function createProductBoardScenarioDriver(): BoardScenarioClientDriver {
       context.onPhase?.('loading seeded board');
       await sessions.loadSessionsFromStorage({ force: true });
       throwIfAborted(signal);
-      const group = sessions.sessionState?.groups.find((candidate) => candidate.id === seeded.groupId);
+      const group = sessions.sessionState?.groups?.find((candidate) => candidate.id === seeded.groupId);
       const planner = sessions.sessionState?.chats.find(
         (candidate) => candidate.id === seeded.plannerId,
       );

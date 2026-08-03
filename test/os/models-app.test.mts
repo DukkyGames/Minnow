@@ -7,6 +7,11 @@ import fs from 'node:fs';
 import { describe, test } from 'node:test';
 import { APPS, getAppById, isAppId } from '../../src/os/app-registry.ts';
 import { resolveLegacyHash, parseOsHash } from '../../src/os/router.ts';
+import {
+  DEFAULT_MODELS_SECTION,
+  MODELS_SECTIONS,
+  WORKBENCH_SECTIONS,
+} from '../../src/ui/models-section-ids.ts';
 
 describe('models app registry', () => {
   test('models is a registered launcher app', () => {
@@ -47,11 +52,37 @@ describe('models router', () => {
     assert.equal(route.appId, 'models');
     assert.equal(route.modelsSection, 'voice');
   });
+
+  test('bare #/models lands on the local library, not the catalog', () => {
+    assert.equal(resolveLegacyHash('#/models').modelsSection, DEFAULT_MODELS_SECTION);
+    assert.equal(parseOsHash('#/app/models').modelsSection, DEFAULT_MODELS_SECTION);
+  });
+
+  test('local server is a routable section', () => {
+    const route = parseOsHash('#/app/models/server');
+    assert.equal(route.appId, 'models');
+    assert.equal(route.modelsSection, 'server');
+  });
+});
+
+describe('models sections', () => {
+  test('workbench sections are a subset of all sections', () => {
+    for (const id of WORKBENCH_SECTIONS) {
+      assert.ok(MODELS_SECTIONS.includes(id), `${id} must be a known section`);
+    }
+  });
+
+  test('inference settings sections survive the redesign', () => {
+    for (const id of ['providers', 'routing', 'sampler', 'thinking', 'voice', 'usage'] as const) {
+      assert.ok(MODELS_SECTIONS.includes(id), `${id} must stay reachable`);
+    }
+  });
 });
 
 describe('models markup contract', () => {
+  const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+
   test('index.html defines modelsView shell', () => {
-    const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="modelsView"/);
     assert.match(html, /id="modelsSection-recommend"/);
     assert.match(html, /id="modelsRecommendBody"/);
@@ -61,5 +92,28 @@ describe('models markup contract', () => {
     assert.match(html, /data-models-nav="voice"/);
     assert.match(html, /id="modelsSection-voice"/);
     assert.match(html, /id="modelsVoiceBody"/);
+  });
+
+  test('index.html defines the workbench surfaces', () => {
+    assert.match(html, /id="modelsSection-installed"/);
+    assert.match(html, /id="modelsInstalledBody"/);
+    assert.match(html, /id="modelsSection-server"/);
+    assert.match(html, /id="modelsServerBody"/);
+    assert.match(html, /data-models-nav="installed"/);
+    assert.match(html, /data-models-nav="server"/);
+  });
+
+  test('index.html defines the inspector column and its toggle', () => {
+    assert.match(html, /id="modelsInspector"/);
+    assert.match(html, /id="btnModelsInspector"/);
+    assert.match(html, /aria-controls="modelsInspector"/);
+    assert.match(html, /id="modelsHeaderStatus"/);
+  });
+
+  test('every section id has a panel and a nav button', () => {
+    for (const id of MODELS_SECTIONS) {
+      assert.match(html, new RegExp(`id="modelsSection-${id}"`), `panel for ${id}`);
+      assert.match(html, new RegExp(`data-models-nav="${id}"`), `nav button for ${id}`);
+    }
   });
 });

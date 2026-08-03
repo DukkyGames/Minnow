@@ -117,7 +117,7 @@ export async function installManagedServer(
       job: body.job ?? null,
     };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -134,7 +134,7 @@ export async function startManagedServer(
     }
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -151,7 +151,7 @@ export async function stopManagedServer(
     }
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -168,7 +168,7 @@ export async function restartManagedServer(
     }
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }
 
@@ -247,6 +247,6 @@ export async function setManagedServerPort(
     }
     return { ok: true, port: body.server?.port ?? port };
   } catch {
-    return { ok: false, error: 'Network error — use npm start' };
+    return { ok: false, error: 'Network error. Open or restart Minnow and try again.' };
   }
 }

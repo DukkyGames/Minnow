@@ -331,13 +331,20 @@ export function onModelSelectChange(): void {
   updateModelLoadUnloadButtons();
   syncModelSelectPicker();
   showCachedModelInfo();
-  void import('./composer-model-trigger').then((m) => m.syncComposerModelTriggers());
+  const active = getActiveChat();
+  if (isEphemeralEmptyChat(active)) {
+    applyDefaultModelToChat(active);
+    touchChat(active);
+    scheduleSaveSessions();
+  }
+  syncActiveChatModelUi();
 }
 
 /** Refresh main column after workspace folder changes. */
 export async function applyWorkspaceScopedSession(
   newPath: string,
   previousPath?: string,
+  options?: { skipFileTreeSync?: boolean },
 ): Promise<void> {
   clearChatSelection();
   // Workspace switch may enter/leave a git repo — recheck Undo visibility.
@@ -356,8 +363,10 @@ export async function applyWorkspaceScopedSession(
     syncComposerRunTargetFromActiveChat();
     syncComposerUndoFromActiveChat();
     syncViewModeToggleFromActiveChat();
-    clearPanelCwdUserOverride();
-    syncPanelFromActiveChat({ forceFileTree: true });
+    if (!options?.skipFileTreeSync) {
+      clearPanelCwdUserOverride();
+      syncPanelFromActiveChat({ forceFileTree: true });
+    }
     syncWorkAgentDevFromActiveChat();
     onModelRoutingActiveChatChanged(activeChat.id);
     void import('./terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
@@ -713,6 +722,7 @@ function showGroupContextMenu(
         if (sessionState?.activeBoardGroupId === groupId) {
           exitBoardViewForNavigation();
         }
+        if (!group) return;
         for (const chatId of listBoardGroupChatIds(group, sessionState?.chats ?? [])) {
           if (isChatStreaming(chatId)) {
             stopGeneration(chatId, 'system');

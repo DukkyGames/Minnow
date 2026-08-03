@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../../lib/ripgrep-path.js';
 import {
   getLspCallHierarchy,
   getLspDocumentSymbols,
@@ -34,6 +34,8 @@ import { runGrepSearch } from '../../tools/grep.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
 const execFileAsync = promisify(execFile);
+
+const rgExecutable = getRipgrepPath();
 
 /** LSP SymbolKind → short string for storage. */
 const KIND_NAMES = {
@@ -197,7 +199,7 @@ export async function listIndexableFiles(root, includeGlobs, excludeGlobs) {
   args.push(root);
   let stdout = '';
   try {
-    const result = await execFileAsync(rgPath, args, {
+    const result = await execFileAsync(rgExecutable, args, {
       cwd: root,
       maxBuffer: 32 * 1024 * 1024,
       windowsHide: true,

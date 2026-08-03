@@ -32,7 +32,7 @@ export function isAssistantChatWorkspace(
 export async function ensureActiveAssistantChat(): Promise<Chat> {
   const chatsWorkspacePath = await getChatsWorkspacePath();
   if (!chatsWorkspacePath) {
-    throw new Error('Chats workspace is unavailable (start the tool server with npm start)');
+    throw new Error('Chats workspace is unavailable (open or restart Minnow)');
   }
   const { activateAssistantChatForApp } = await import('./sessions');
   return activateAssistantChatForApp(chatsWorkspacePath);

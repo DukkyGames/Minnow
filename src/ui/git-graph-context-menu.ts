@@ -278,7 +278,9 @@ async function runCherryPick(ctx: GitGraphContextMenuCtx, sha: string): Promise<
   const advancedCtx = {
     cwd: ctx.cwd,
     onSuccess: () => void ctx.onRefresh(),
-    onConflict: (message: string, kind: 'cherry-pick') => ctx.onConflict?.(message, kind),
+    onConflict: (message: string, kind: 'merge' | 'rebase' | 'cherry-pick' | 'stash') => {
+      if (kind === 'cherry-pick') ctx.onConflict?.(message, kind);
+    },
   };
 
   if (ctx.conflictHost) {

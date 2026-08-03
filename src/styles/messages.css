@@ -142,7 +142,13 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.msg.user { align-self: flex-end; align-items: flex-end; }
+.msg.user {
+  align-self: flex-end;
+  align-items: flex-end;
+  /* Shrink-wrap so short text is not squeezed by the full-width flex row (overflow-wrap: anywhere on bubbles). */
+  width: fit-content;
+  max-width: 100%;
+}
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
 
 .msg.assistant.msg--stopped .msg-stopped-chip {
@@ -290,6 +296,9 @@
   border: none;
   color: var(--mn-fg);
   border-bottom-right-radius: var(--radius-sm);
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .msg-bubble.msg-bubble--user-parts {
@@ -645,45 +654,57 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
 .stat-chip.y { color: var(--mn-warning); border-color: color-mix(in srgb, var(--mn-warning) 35%, transparent); }
 .stat-chip.r { color: var(--mn-danger); border-color: color-mix(in srgb, var(--mn-danger) 35%, transparent); }
 
-/* Tool call / result bubbles (SA-8) — narrower than prose messages */
+/* ── Tool call rows ────────────────────────────────────────────────────────
+   A transcript can hold hundreds of these, so a settled call is one quiet line:
+   glyph · action · target · outcome. Colour is reserved for failure. */
+
 .tool-call-msg {
   align-self: flex-start;
-  max-width: min(var(--chat-tool-call-max), 100%);
+  /* Fixed, not shrink-to-fit: consecutive calls must line up as a column. */
+  width: min(var(--chat-tool-call-max), 100%);
   animation: fadeUp 0.22s var(--ease-out);
 }
 
 .tool-call-details {
-  border-radius: var(--radius-md);
-  border: 1px dashed var(--mn-border-strong);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--mn-border) 80%, transparent);
   background: var(--mn-surface-1);
   font-size: 13px;
   color: var(--mn-fg);
+}
+
+.tool-call-details[open] {
+  border-color: var(--mn-border);
 }
 
 .tool-call-summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  min-height: 32px;
+  padding: 5px 8px 5px 9px;
+  border-radius: inherit;
   cursor: pointer;
   list-style: none;
   user-select: none;
+  transition: background-color 0.15s var(--ease-out);
 }
 
-.tool-call-summary::-webkit-details-marker {
-  display: none;
-}
+.tool-call-summary::-webkit-details-marker { display: none; }
+.tool-call-summary::marker { content: ''; }
 
-.tool-call-summary::marker {
-  content: '';
+@media (hover: hover) and (pointer: fine) {
+  .tool-call-summary:hover {
+    background: color-mix(in srgb, var(--mn-fg) 5%, transparent);
+  }
 }
 
 .tool-call-summary:focus-visible {
   outline: 2px solid var(--mn-accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-md);
+  outline-offset: 1px;
 }
 
+/* Glyph slot: spinner while running, the tool's own icon once settled. */
 .tool-call-status {
   display: flex;
   align-items: center;
@@ -693,65 +714,123 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   height: 16px;
 }
 
-.tool-call-title {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--mn-syntax-name);
-  word-break: break-word;
+.tool-call-icon {
+  color: var(--mn-fg-muted);
 }
 
-.tool-call-title--file-link {
+.tool-call-status--fail .tool-call-icon {
+  color: var(--mn-danger);
+}
+
+.tool-call-action {
+  flex-shrink: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--mn-fg);
+  white-space: nowrap;
+}
+
+.tool-call-target {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-call-target--code,
+.tool-call-target--path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Paths ellipsize in the middle so the file name always survives. */
+.tool-call-target--path {
+  display: flex;
+  align-items: baseline;
+}
+
+.tool-call-target__dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mn-fg-muted);
+}
+
+/* The basename is what people scan for, so it is the brightest part of the path. */
+.tool-call-target__base {
+  flex-shrink: 0;
+  color: var(--mn-fg);
+}
+
+.tool-call-target--file-link {
   pointer-events: auto;
   cursor: pointer;
   border: none;
   background: transparent;
   padding: 0;
   text-align: left;
-  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mn-fg);
 }
 
-.tool-call-title--file-link:hover {
-  color: var(--mn-accent, var(--mn-fg));
+.tool-call-target--file-link:hover {
+  color: var(--mn-accent);
   text-decoration: underline;
 }
 
-.tool-call-status-label {
+.tool-call-target--file-link:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Outcome: the measurement this tool produced. Reads as a bench gauge. */
+.tool-call-outcome {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--mn-border);
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  /* Measurement, not decoration: stays above the AA floor in every palette. */
   color: var(--mn-fg-muted);
-  background: var(--mn-surface-1);
+  white-space: nowrap;
 }
 
-.tool-call-status-label--pending {
-  color: var(--mn-fg-muted);
-  border-color: var(--mn-border);
+.tool-call-outcome--danger {
+  color: var(--mn-danger-ink, var(--mn-danger));
 }
 
-.tool-call-status-label--ok {
-  color: var(--mn-success);
-  border-color: var(--mn-success-border);
-  background: var(--mn-success-soft);
+.tool-call-chevron {
+  flex-shrink: 0;
+  color: var(--mn-fg-subtle);
+  opacity: 0.7;
+  transition: transform 0.18s var(--ease-out);
 }
 
-.tool-call-status-label--fail {
-  color: var(--mn-danger);
-  border-color: var(--mn-danger-border);
-  background: var(--mn-danger-soft);
+.tool-call-details[open] .tool-call-chevron {
+  transform: rotate(180deg);
+}
+
+/* File-mutation cards stay open, so the disclosure arrow would lie. */
+.tool-call-details--file .tool-call-chevron {
+  display: none;
 }
 
 .tool-call-kill {
   flex-shrink: 0;
-  margin-left: auto;
   padding: 2px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-danger-border);
@@ -771,9 +850,7 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   cursor: not-allowed;
 }
 
-.tool-call-kill.hidden {
-  display: none;
-}
+.tool-call-kill.hidden { display: none; }
 
 .tool-call-kill:focus-visible {
   outline: 2px solid var(--mn-danger);
@@ -782,8 +859,8 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
 
 .tool-call-spinner {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border: 2px solid var(--mn-border);
   border-top-color: var(--mn-accent);
   border-radius: 50%;
@@ -802,7 +879,7 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   }
 }
 
-/* Mid-stream tool-call hint (before finalized tool-call bubbles) */
+/* Mid-stream tool-call hint (before finalized tool-call rows) */
 .tool-start-indicator {
   display: inline-flex;
   align-items: center;
@@ -816,26 +893,14 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   letter-spacing: 0.01em;
 }
 
-.tool-call-glyph {
-  font-size: 14px;
-  line-height: 1;
-  font-weight: 700;
-}
-
-.tool-call-glyph--ok {
-  color: var(--mn-success);
-}
-
-.tool-call-glyph--fail {
-  color: var(--mn-danger);
-}
+/* ── Expanded body ──────────────────────────────────────────────────────── */
 
 .tool-call-body {
   display: none;
   flex-direction: column;
-  gap: 6px;
-  padding: 0 14px 12px;
-  border-top: 1px solid var(--mn-border);
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--mn-border) 70%, transparent);
 }
 
 .tool-call-details[open] .tool-call-body {
@@ -843,19 +908,29 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
 }
 
 .tool-call-section-label {
-  font-size: 11px;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mn-fg-muted);
-  margin-top: 8px;
 }
 
-.tool-call-section-label:first-child {
-  margin-top: 10px;
+.tool-call-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink, var(--mn-danger));
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
-.tool-call-details[open] .tool-call-pre {
+.tool-call-pre {
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
@@ -866,34 +941,235 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  overflow-x: auto;
-  max-height: 240px;
-  overflow-y: auto;
+  overflow: auto;
+  max-height: 260px;
+}
+
+.tool-call-more {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+/* Row lists: directory entries, found paths, commits, git status */
+.tool-call-entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.tool-call-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--mn-border) 55%, transparent);
+}
+
+.tool-call-entry:last-child {
+  border-bottom: none;
+}
+
+.tool-call-entry__icon {
+  flex-shrink: 0;
+  color: var(--mn-fg-subtle);
+}
+
+.tool-call-entry--dir .tool-call-entry__name {
+  font-weight: 500;
+}
+
+.tool-call-entry__name {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.tool-call-commits {
+  counter-reset: none;
+}
+
+.tool-call-commit__sha {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mn-accent);
+}
+
+.tool-call-status-code {
+  flex-shrink: 0;
+  width: 2ch;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mn-warning);
+}
+
+/* grep / search results, grouped by file */
+.tool-call-match + .tool-call-match {
+  margin-top: 8px;
+}
+
+.tool-call-match__path {
+  margin-bottom: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  word-break: break-all;
+}
+
+.tool-call-match__lines {
+  max-height: 180px;
+}
+
+/* ask_question: the prompts the model put to the user */
+.tool-call-questions {
+  margin: 0;
+  padding-left: 1.3em;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.tool-call-questions > li + li {
+  margin-top: 8px;
+}
+
+.tool-call-question__prompt {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.tool-call-question__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-call-question__option {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mn-border);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+/* The option the user actually chose. */
+.tool-call-question__option--picked {
+  border-color: var(--mn-accent-border);
+  background: var(--mn-accent-soft);
+  color: var(--mn-fg);
+  font-weight: 500;
 }
 
 .tool-call-answer-list {
-  margin: 4px 0 0;
-  padding-left: 1.35em;
+  margin: 0;
+  padding-left: 1.3em;
   font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.tool-call-answer-list li + li {
+  margin-top: 6px;
+}
+
+/* Arguments the row did not already show, as readable pairs rather than JSON */
+.tool-call-fields {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 5px 12px;
+  margin: 0;
+  align-items: baseline;
+}
+
+.tool-call-fields__key {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.tool-call-fields__key--block {
+  grid-column: 1 / -1;
+}
+
+.tool-call-fields__value {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
   color: var(--mn-fg);
+  word-break: break-word;
 }
 
-.tool-call-answer-list li {
-  margin-bottom: 6px;
+.tool-call-fields__value--block {
+  grid-column: 1 / -1;
 }
 
-.tool-call-answer-list li:last-child {
-  margin-bottom: 0;
+.tool-call-friendly {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tool-call-friendly__empty {
+  margin: 0;
+  color: var(--mn-fg-muted);
 }
 
 .tool-call-screenshot {
   display: block;
   max-width: 100%;
   max-height: min(480px, 70vh);
-  margin-top: 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-border);
   object-fit: contain;
+}
+
+/* One disclosure for verbatim input and output, always last. */
+.tool-call-raw-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-call-raw-details__summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  user-select: none;
+  list-style: none;
+}
+
+.tool-call-raw-details__summary:hover {
+  color: var(--mn-fg);
+}
+
+.tool-call-raw-details__summary::-webkit-details-marker { display: none; }
+.tool-call-raw-details__summary::marker { content: ''; }
+
+.tool-call-raw-details__summary::before {
+  content: '▸ ';
+  color: var(--mn-fg-subtle);
+}
+
+.tool-call-raw-details[open] .tool-call-raw-details__summary::before {
+  content: '▾ ';
+}
+
+.tool-call-raw-details__summary:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }

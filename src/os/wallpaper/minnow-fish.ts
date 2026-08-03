@@ -44,10 +44,11 @@ export function mountMinnowFishWallpaper(container: HTMLElement): MinnowFishWall
   canvas.className = 'mn-os-wall-minnow-canvas';
   container.appendChild(canvas);
 
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
+  const ctxOrNull = canvas.getContext('2d');
+  if (!ctxOrNull) {
     return { destroy: () => canvas.remove() };
   }
+  const ctx: CanvasRenderingContext2D = ctxOrNull;
 
   const reduced = prefersReducedMotion();
   let width = 0;

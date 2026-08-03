@@ -6,6 +6,7 @@ import DEFAULT_SUB_AGENTS from '../agents/defaults/sub-agents.json';
 import { listWorkAgents } from '../agents/work-agent-registry';
 import { listExperts } from '../chat/experts/registry';
 import { listModes } from '../chat/modes/registry';
+import { isDeveloperReleased } from '../os/app-registry';
 import {
   BUILT_IN_TOOLS,
   type ToolCategory,
@@ -132,6 +133,24 @@ const BRAIN_MEMORY_SEARCH: SettingsSearchEntry[] = [
   },
 ];
 
+const BRAIN_CODE_SEARCH: SettingsSearchEntry[] = [
+  {
+    id: 'brain:code-map-injection-default',
+    label: 'Inject code map by default',
+    sectionId: 'prompting',
+    kind: 'brain-section',
+    brainSection: 'settings',
+    searchKey: 'knowledge.code.injectionDefault',
+    keywords: [
+      'code map injection',
+      'repo map injection',
+      'code map default',
+      'codeMapInjectionDefault',
+    ],
+    hint: 'Brain app',
+  },
+];
+
 function sectionEntry(sectionId: SettingsSectionId): SettingsSearchEntry {
   const label = SETTINGS_SECTION_LABELS[sectionId];
   return {
@@ -210,6 +229,9 @@ function modeEntries(): SettingsSearchEntry[] {
 }
 
 function expertEntries(): SettingsSearchEntry[] {
+  if (!isDeveloperReleased('experts')) {
+    return [];
+  }
   return listExperts().map((expert) => ({
     id: `expert:${expert.meta.id}`,
     label: expert.meta.label,
@@ -289,6 +311,7 @@ export function buildSettingsSearchIndex(): SettingsSearchEntry[] {
     ...categoryEntries(),
     MODELS_VOICE_SEARCH,
     ...BRAIN_MEMORY_SEARCH,
+    ...BRAIN_CODE_SEARCH,
     ...navGroupEntries(),
     ...catalogFieldEntries(),
     ...toolCategoryEntries(),

@@ -1,0 +1,9 @@
+{
+  "generatedAt": "2026-08-01T08:01:06.948Z",
+  "metrics": {
+    "entryJsKb": 295.8,
+    "entryCssKb": 884,
+    "largestLazyJsKb": 2987.9,
+    "totalAssetsKb": 8967.8
+  }
+}

@@ -66,11 +66,36 @@ function runDir(id) {
   return path.join(runsRoot(), assertRunId(id));
 }
 
+/**
+ * Windows runners can briefly lock the destination during rename (AV/indexers).
+ * @param {string} src
+ * @param {string} dest
+ */
+async function renameAtomicWithRetry(src, dest) {
+  const maxAttempts = 6;
+  const baseDelayMs = 25;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await fs.rename(src, dest);
+      return;
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+      const retryable = code === 'EPERM' || code === 'EBUSY' || code === 'EACCES';
+      if (retryable && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 /** @param {string} filePath @param {unknown} value */
 async function writeJsonAtomic(filePath, value) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
   const temporary = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  await fs.rename(temporary, filePath);
+  await renameAtomicWithRetry(temporary, filePath);
 }
 
 /** @param {string} filePath @param {unknown} value */

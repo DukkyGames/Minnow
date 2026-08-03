@@ -3,7 +3,9 @@
  * Feeds search index, live in-page filter, and chat deep-links.
  */
 
+import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 import type { SettingsSectionId } from './settings-page-types';
+import { filterSettingsCatalogEntries } from './settings-catalog-filter';
 
 /** Top-level sidebar categories. */
 export type SettingsCategoryId =
@@ -85,8 +87,17 @@ export const SETTINGS_CATEGORIES: SettingsCategoryId[] = [
   'advanced',
 ];
 
+/** Areas reparented into Models without appearing in Settings sub-nav. */
+const SETTINGS_AREA_CATEGORY_OVERRIDES: Partial<
+  Record<SettingsSectionId, SettingsCategoryId>
+> = {
+  voice: 'models',
+};
+
 /** Map legacy area slug → parent category. */
 export function categoryForArea(area: SettingsSectionId): SettingsCategoryId {
+  const override = SETTINGS_AREA_CATEGORY_OVERRIDES[area];
+  if (override) return override;
   for (const category of SETTINGS_CATEGORIES) {
     if (SETTINGS_CATEGORY_AREAS[category].includes(area)) {
       return category;
@@ -124,8 +135,8 @@ function field(
   return { key, label, category, area, ...extras };
 }
 
-/** Static field catalog — union with dynamic registry entries in search index. */
-export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
+/** Static field catalog source — filtered for release gates in SETTINGS_FIELD_CATALOG. */
+const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   // —— General ——
   field('general.updates', 'App updates', 'general', 'general', {
     keywords: ['update', 'version', 'upgrade', 'beta', 'release', 'restart', 'auto-update'],
@@ -141,6 +152,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('general.desktop.closeToTray', 'Keep Minnow running after closing the window', 'general', 'general', {
     keywords: ['tray', 'background', 'close', 'hide'],
+  }),
+  field('general.desktop.zoom', 'Interface zoom', 'general', 'general', {
+    keywords: ['zoom', 'scale', 'size', 'magnify', 'desktop', 'ui'],
+    description: 'Scale the Minnow desktop window (Electron shell only).',
   }),
   field('general.desktop.launchAtStartup', 'Launch Minnow at startup', 'general', 'general', {
     keywords: ['login', 'boot', 'startup', 'open at login'],
@@ -163,7 +178,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   field('general.notifications.soundOnActiveChat', 'Sounds in active chat', 'general', 'notifications'),
   field('general.network', 'Network access', 'general', 'general', {
     keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
-    description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',
+    description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs the app.',
   }),
   field('general.filesystem', 'Filesystem access', 'general', 'general', {
     keywords: ['workspace', 'full disk', 'path', 'sandbox', 'file tools', 'git', 'TOOLS_ALLOW_ALL_PATHS'],
@@ -370,6 +385,12 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['cursor rules', 'instructions', 'groups'],
   }),
   field('agents.rules.addGroup', 'Add rule group', 'agents', 'rules'),
+  field('agents.rules.contextDocuments', 'Workspace context documents', 'agents', 'rules', {
+    keywords: ['agents.md', 'context.md', 'cursor rules', 'injection', 'workspace'],
+  }),
+  field('agents.rules.contextDocuments.default', 'Inject context documents by default', 'agents', 'rules'),
+  field('agents.rules.contextDocuments.presets', 'Context document presets', 'agents', 'rules'),
+  field('agents.rules.contextDocuments.custom', 'Custom context document paths', 'agents', 'rules'),
 
   // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {
@@ -467,3 +488,8 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('about.version', 'App version', 'general', 'about'),
 ];
+
+/** Searchable catalog rows (release-gated optional apps, dev-only board testing). */
+export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = filterSettingsCatalogEntries(
+  SETTINGS_FIELD_CATALOG_ALL,
+);

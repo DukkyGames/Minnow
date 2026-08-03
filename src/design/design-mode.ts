@@ -28,6 +28,7 @@ import {
   type DrawDesignTool,
   type SelectDesignTool,
 } from './design-tool';
+import { clearDesignModeNotice } from './design-notice';
 import { createPickerTransport } from './element-picker';
 import type { ShapeKind } from './shape-model';
 import {
@@ -209,10 +210,10 @@ const STRIP_ICON_NAMES: Record<string, IconName> = {
   select: 'designMode',
   draw: 'edit',
   comment: 'appChat',
-  mobile: 'dock',
-  tablet: 'dock',
-  desktop: 'browser',
-  dark: 'globe',
+  mobile: 'deviceMobile',
+  tablet: 'deviceTablet',
+  desktop: 'deviceDesktop',
+  dark: 'moon',
   exit: 'close',
   undo: 'undo',
   clear: 'clear',
@@ -507,7 +508,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     // Best-effort real emulation: flip the guest document's color-scheme so pages that
     // honor `color-scheme` / `prefers-color-scheme`-driven variables actually re-render.
     try {
-      const transport = createPickerTransport();
+      const transport = createPickerTransport(instanceId);
       void transport
         .eval(
           `(() => { document.documentElement.style.colorScheme = ${on ? "'dark'" : "''"}; return true; })()`,
@@ -536,6 +537,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   document.addEventListener('keydown', keyHandler);
 
   session.destroy = (): void => {
+    clearDesignModeNotice(host);
     session.disarmTool();
     document.removeEventListener('keydown', keyHandler);
     session.captureLayer.remove();

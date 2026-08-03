@@ -51,6 +51,7 @@ import {
   isDesktopExpertsHubActive,
 } from '../../os/desktop-state';
 import { launchApp, navigateToDesktop } from '../../os/router';
+import { isAppAvailable } from '../../os/app-preferences';
 
 export { openExpertChatInShell } from './experts-scope';
 
@@ -478,7 +479,7 @@ async function openEditExpertStep(expertId: string): Promise<void> {
     setStep('edit');
     setFormError(
       'expertsEditError',
-      'Could not load this expert. Run npm start if the tool server is offline.',
+      'Could not load this expert. Open Minnow if the app is not running locally.',
     );
     return;
   }
@@ -699,6 +700,9 @@ export interface OpenExpertsOptions {
 
 /** Open Experts' Lab (`#/experts` / `#/app/experts`). */
 export function openExperts(options?: OpenExpertsOptions): void {
+  if (!isAppAvailable('experts')) {
+    return;
+  }
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) return;

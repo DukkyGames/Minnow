@@ -4,7 +4,8 @@
 
 import { stopGeneration } from '../chat/stop-generation.ts';
 import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
-import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
+import { isOrchestratePlanComplete, hasIncompleteOrchestrateWork } from '../chat/orchestrate/plan-complete.ts';
+import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import {
   isOomPauseActive,
@@ -17,7 +18,7 @@ import {
   subscribeChatStreamActivity,
   subscribeChatStreamEnd,
 } from '../chat/streaming-state.ts';
-import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
+import { isChatTurnSetupPending, endChatTurnSetup } from '../chat/chat-turn-guard.ts';
 import {
   getAutopilotMetaSync,
   resolveAutoProvisionInfra,
@@ -45,12 +46,18 @@ import {
   createRunSupervision,
   getProgressAgeMs,
   getRunSupervision,
+  isSupervisionPageHidden,
   setHeartbeatConfig,
   startHeartbeat,
   stopHeartbeat,
 } from '../agents/controller/wrapper.ts';
+import {
+  onBoardAutoRunStarted,
+  onBoardAutoRunStopped,
+} from '../chat/orchestrate/board-afk-power.ts';
 import { runChatTurn } from '../tools/loop.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
+import { setStreaming } from '../app-state.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
@@ -73,7 +80,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents, type OrchestrateBoardTimerContext } from './orchestrate-board-store.ts';
 import {
   acquirePipelineHold,
   heldTaskIdsForOccupancy,
@@ -1099,7 +1106,6 @@ export function finalizeBoardTaskOnStreamEnd(
     );
     teardownBoardTaskChatResources(chat, sessionState?.groups);
     logBuildVerdict(group, task.id, 'pass');
-    moveTaskStatus(group, task.id, 'testing', plannerChat);
 
     const builderChat = findChatById(chatId);
     if (builderChat) {
@@ -1120,6 +1126,18 @@ export function finalizeBoardTaskOnStreamEnd(
         modelId: modelId || undefined,
       });
     }
+
+    const boardAfterPass = group.orchestrateBoard;
+    if (boardAfterPass && boardSkipsPerTaskTesting(boardAfterPass)) {
+      if (isBoardRunning(group)) {
+        void completeTaskAfterVerificationPass(group, freshTask, plannerChat).catch((err) =>
+          reportBackgroundError('skip-per-task-merge', err),
+        );
+      }
+      return;
+    }
+
+    moveTaskStatus(group, task.id, 'testing', plannerChat);
 
     if (isBoardRunning(group)) {
       void startTaskTesting(group, task.id, plannerChat).catch((err) =>
@@ -1235,6 +1253,7 @@ function startTaskChatSupervision(chatId: string): void {
     // it needs stall supervision just as much as afk/auto. Only manual opts out.
     if (mode === 'manual') return;
     if (!isBoardRunning(group)) return;
+    if (isSupervisionPageHidden()) return;
 
     const sup = getRunSupervision(runId);
     if (!sup) return;
@@ -1611,7 +1630,7 @@ function listChatRunningBoardTaskSlots(
       });
     }
     const testId = task.testChatId?.trim();
-    if (testId) {
+    if (testId && !(boardSkipsPerTaskTesting(board) && task.status !== 'testing')) {
       push(testId, {
         taskId: task.id,
         title: task.title,
@@ -1864,6 +1883,15 @@ async function resumeBoardTask(
   const board = group.orchestrateBoard;
   const task = board?.tasks.find((t) => t.id === taskId);
   if (!task) return;
+  if (
+    task.status === 'in_progress' &&
+    board &&
+    boardSkipsPerTaskTesting(board) &&
+    resolveBoardReport(task)?.outcome === 'pass'
+  ) {
+    await completeTaskAfterVerificationPass(group, task, plannerChat);
+    return;
+  }
   if (task.status === 'testing') {
     await startTaskTesting(group, taskId, plannerChat, {
       allowPreReservedTestChat: true,
@@ -3279,30 +3307,37 @@ async function finalizeEnvFixerOnStreamEnd(
           await startTask(group, fresh.id, plannerChat);
         }
       } else {
-        moveTaskStatus(group, fresh.id, 'testing', plannerChat);
         updateTask(
           group,
           fresh.id,
           { fixerChatId: undefined, fixerKind: undefined, envFixPhase: undefined },
           plannerChat,
         );
-        if (isBoardRunning(group)) {
-          const testChat = getOrCreateBoardChat({
-            group,
-            plannerChat,
-            existingId: fresh.testChatId?.trim(),
-            role: 'tester',
-            name: `Test ${fresh.id}: ${fresh.title}`,
-            taskId: fresh.id,
-            taskChatField: 'testChatId',
-          });
-          reserveLaunchSlot(testChat.id, group, 'test', fresh.id);
-          await startTaskTesting(group, fresh.id, plannerChat, {
-            enqueueAtFront: true,
-            allowPreReservedTestChat: true,
-          });
+        const boardAfterFix = group.orchestrateBoard;
+        if (boardAfterFix && boardSkipsPerTaskTesting(boardAfterFix)) {
+          if (isBoardRunning(group)) {
+            await completeTaskAfterVerificationPass(group, fresh, plannerChat);
+          }
+        } else {
+          moveTaskStatus(group, fresh.id, 'testing', plannerChat);
+          if (isBoardRunning(group)) {
+            const testChat = getOrCreateBoardChat({
+              group,
+              plannerChat,
+              existingId: fresh.testChatId?.trim(),
+              role: 'tester',
+              name: `Test ${fresh.id}: ${fresh.title}`,
+              taskId: fresh.id,
+              taskChatField: 'testChatId',
+            });
+            reserveLaunchSlot(testChat.id, group, 'test', fresh.id);
+            await startTaskTesting(group, fresh.id, plannerChat, {
+              enqueueAtFront: true,
+              allowPreReservedTestChat: true,
+            });
+          }
+          // Paused: the resume sweep routes `testing` → startTaskTesting.
         }
-        // Paused: the resume sweep routes `testing` → startTaskTesting.
       }
       return;
     }
@@ -3746,6 +3781,104 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
   return null;
 }
 
+/** True when the board header skip-per-task-tests option is enabled. */
+export function boardSkipsPerTaskTesting(board: OrchestrateBoardState): boolean {
+  return board.skipPerTaskTesting === true;
+}
+
+/** Skip toggle is frozen after Start or once any task leaves planned/blocked. */
+export function isBoardSkipPerTaskTestingLocked(board: OrchestrateBoardState): boolean {
+  if (board.autoRunning === true) return true;
+  return board.tasks.some((t) => t.status !== 'planned' && t.status !== 'blocked');
+}
+
+/** Persist skip-per-task-tests (header only, before first run). */
+export function setBoardSkipPerTaskTesting(
+  group: ChatGroup,
+  value: boolean,
+  _plannerChat: Chat,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board || isBoardSkipPerTaskTestingLocked(board)) return;
+  const next = value === true;
+  if (boardSkipsPerTaskTesting(board) === next) return;
+  if (next) {
+    board.skipPerTaskTesting = true;
+  } else {
+    delete board.skipPerTaskTesting;
+  }
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
+/** Merge + complete after build or tester verification passes (shared path). */
+export async function completeTaskAfterVerificationPass(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
+  const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+  updateTask(group, fresh.id, { error: undefined }, plannerChat);
+  const hold = acquireBoardPipelineHold(group, fresh.id, 'merge');
+  try {
+    const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
+    if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
+      moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+    } else if (mergeResult.outcome === 'conflict') {
+      updateTask(
+        group,
+        fresh.id,
+        {
+          error: `Integration merge conflict on ${fresh.worktreeBranch ?? fresh.id}`,
+        },
+        plannerChat,
+      );
+      await startMergeConflictFixer(
+        group,
+        fresh,
+        plannerChat,
+        mergeResult.conflictedFiles,
+        mergeResult.integrationSha,
+      );
+    } else {
+      const mergeSummary = mergeResult.message || 'Integration merge failed';
+      updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
+      void runSelfHeal(
+        group,
+        fresh,
+        plannerChat,
+        { phase: 'merge', category: 'merge', summary: mergeSummary },
+        makeSelfHealDeps(),
+      ).catch((err) => reportBackgroundError('self-heal-merge', err));
+      return;
+    }
+
+    const testChatIdAfterMerge = fresh.testChatId?.trim();
+    const testChat = testChatIdAfterMerge ? findChatById(testChatIdAfterMerge) : null;
+    if (testChat) {
+      const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+      const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
+      const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
+        ? lastAssistant.content
+        : '';
+      schedulePostTurnSynthesis({
+        chatId: testChat.id,
+        messages: buildSynthesisMessages(testChat),
+        roundCount: testChat.history.filter((m) => m.role === 'assistant').length,
+        toolCount: 0,
+        sourceExcerpt: buildSynthesisExcerpt(testChat),
+        assistantText,
+        force: true,
+        providerId: providerId || undefined,
+        modelId: modelId || undefined,
+      });
+    }
+  } finally {
+    releasePipelineHold(hold);
+  }
+}
+
 /** Route per-task Tester verdict after its chat stream ends. */
 export async function finalizeTaskTestingOnStreamEnd(
   group: ChatGroup,
@@ -3871,65 +4004,7 @@ async function finalizeTaskTestingOnStreamEndImpl(
   );
 
   if (outcome === 'pass') {
-    updateTask(group, fresh.id, { error: undefined }, plannerChat);
-    const hold = acquireBoardPipelineHold(group, fresh.id, 'merge');
-    try {
-      const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
-      if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
-        moveTaskStatus(group, fresh.id, 'complete', plannerChat);
-      } else if (mergeResult.outcome === 'conflict') {
-        updateTask(
-          group,
-          fresh.id,
-          {
-            error: `Integration merge conflict on ${fresh.worktreeBranch ?? fresh.id}`,
-          },
-          plannerChat,
-        );
-        await startMergeConflictFixer(
-          group,
-          fresh,
-          plannerChat,
-          mergeResult.conflictedFiles,
-          mergeResult.integrationSha,
-        );
-      } else {
-        // Merge-failed (non-conflict error) → self-heal merge path.
-        const mergeSummary = mergeResult.message || 'Integration merge failed';
-        updateTask(group, fresh.id, { error: mergeSummary }, plannerChat);
-        void runSelfHeal(
-          group,
-          fresh,
-          plannerChat,
-          { phase: 'merge', category: 'merge', summary: mergeSummary },
-          makeSelfHealDeps(),
-        ).catch((err) => reportBackgroundError('self-heal-merge', err));
-        return;
-      }
-
-      const testChatIdAfterMerge = fresh.testChatId?.trim();
-      const testChat = testChatIdAfterMerge ? findChatById(testChatIdAfterMerge) : null;
-      if (testChat) {
-        const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
-        const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
-        const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
-          ? lastAssistant.content
-          : '';
-        schedulePostTurnSynthesis({
-          chatId: testChat.id,
-          messages: buildSynthesisMessages(testChat),
-          roundCount: testChat.history.filter((m) => m.role === 'assistant').length,
-          toolCount: 0,
-          sourceExcerpt: buildSynthesisExcerpt(testChat),
-          assistantText,
-          force: true,
-          providerId: providerId || undefined,
-          modelId: modelId || undefined,
-        });
-      }
-    } finally {
-      releasePipelineHold(hold);
-    }
+    await completeTaskAfterVerificationPass(group, fresh, plannerChat);
     return;
   }
 
@@ -4705,6 +4780,7 @@ export async function recoverInterruptedMergesAfterReload(
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
+  const wasRunning = board.autoRunning === true;
   void clearOomPauseFromElectron();
   board.autoRunning = true;
   // Clear any prior Stop or system pause so the timer resumes and badges clear.
@@ -4714,6 +4790,7 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   logAutoStart(group);
   scheduleSaveSessions();
   emitBoardChange(group.id);
+  if (!wasRunning) onBoardAutoRunStarted();
   void autoDelegateNext(group, plannerChat).catch((err) =>
     reportBackgroundError('auto-delegate-next', err),
   );
@@ -4732,6 +4809,7 @@ export function stopBoardAutoRun(
 ): void {
   const board = group.orchestrateBoard;
   if (!board) return;
+  const wasRunning = board.autoRunning === true;
   const reason = options.reason ?? 'user';
   board.autoRunning = false;
   if (reason === 'system') {
@@ -4784,6 +4862,7 @@ export function stopBoardAutoRun(
   // Flush stop state immediately so reload cannot resurrect auto execution.
   saveSessionsNow(group);
   emitBoardChange(group.id);
+  if (wasRunning) onBoardAutoRunStopped();
 }
 
 /** Pause every auto/sequential board on window close (mirrors pressing Stop). */
@@ -4800,10 +4879,20 @@ export function pauseAllRunningBoardsForShutdown(): void {
   }
 }
 
+export type AutoDelegateNextOptions = {
+  /**
+   * When false, only launch newly-ready planned tasks (and drain the queue).
+   * Wake reconcile sets this false so a fresh launch reservation is not mistaken
+   * for a leaked slot before streaming/turn-setup begins.
+   */
+  allowStalledRestart?: boolean;
+};
+
 /** Start all ready planned tasks up to the concurrency cap (auto-pilot / sequential). */
 export async function autoDelegateNext(
   group: ChatGroup,
   plannerChat: Chat,
+  options: AutoDelegateNextOptions = {},
 ): Promise<void> {
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
@@ -4811,12 +4900,14 @@ export async function autoDelegateNext(
   const board = group.orchestrateBoard;
   if (!board || !isBoardRunning(group)) return;
 
+  const allowStalledRestart = options.allowStalledRestart !== false;
   const waveOrder = new Map(board.waves.map((w, i) => [String(w.id), i]));
   const ready = board.tasks
     .filter(
       (t) =>
         isTaskReadyForAuto(board, t) ||
-        isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck),
+        (allowStalledRestart &&
+          isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck)),
     )
     .sort((a, b) => {
       const wa = waveOrder.get(String(a.wave)) ?? 999;
@@ -4832,6 +4923,138 @@ export async function autoDelegateNext(
     await resumeBoardTask(group, task.id, plannerChat);
   }
   await drainTaskQueue(group, plannerChat);
+}
+
+function isBoardCandidateForWakeReconcile(group: ChatGroup): boolean {
+  const board = group.orchestrateBoard;
+  if (!board || !isBoardAutoMode(group)) return false;
+  if (isBoardRunning(group)) return true;
+  return (
+    board.systemPaused === true &&
+    board.userStopped !== true &&
+    hasIncompleteOrchestrateWork(board)
+  );
+}
+
+/** Restore auto-run after sleep/lock system pause (not user Stop). */
+function resumeSystemPausedBoardAfterWake(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board?.systemPaused || board.userStopped === true) return;
+  if (!hasIncompleteOrchestrateWork(board)) return;
+  if (isUserStoppedChat(plannerChat)) return;
+  const wasRunning = board.autoRunning === true;
+  board.autoRunning = true;
+  board.systemPaused = false;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  if (!wasRunning) onBoardAutoRunStarted();
+}
+
+/**
+ * Clear leaked streaming / launch flags when the task chat transcript already ended
+ * (common after macOS display sleep throttling).
+ */
+function reconcileStaleBoardTaskChatActivity(chatId: string): boolean {
+  const trimmed = chatId.trim();
+  if (!trimmed) return false;
+  const chat = findChatById(trimmed);
+
+  if (isTaskChatActiveForStallCheck(trimmed)) {
+    if (!chat) return false;
+    const outcome = resolveTaskChatStreamOutcome(chat);
+    if (outcome !== 'completed' && outcome !== 'stopped') return false;
+    if (
+      isLaunchReserved(trimmed) &&
+      !isChatStreaming(trimmed) &&
+      !isChatTurnSetupPending(trimmed)
+    ) {
+      releaseLaunchSlot(trimmed);
+    }
+    if (isChatTurnSetupPending(trimmed)) {
+      endChatTurnSetup(trimmed);
+    }
+    if (isChatStreaming(trimmed)) {
+      // Do not notifyChatStreamEnded here — wake finalizers replay once below.
+      // Stream-end subscribers also drain the queue and can race autoDelegateNext.
+      setStreaming(false, trimmed);
+    }
+  }
+
+  return !isTaskChatActiveForStallCheck(trimmed);
+}
+
+function boardTimerContextForWake(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+  plannerChat: Chat,
+): OrchestrateBoardTimerContext {
+  return {
+    isStreaming: isChatStreaming(plannerChat.id),
+    activeRunCount: 0,
+    userStopped: board.userStopped === true,
+  };
+}
+
+async function reconcileBoardTasksAfterWake(group: ChatGroup, planner: Chat): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+
+  for (const task of board.tasks) {
+    if (task.status === 'in_progress') {
+      const chatId = task.chatId?.trim();
+      if (chatId && reconcileStaleBoardTaskChatActivity(chatId)) {
+        finalizeBoardTaskOnStreamEnd(group, task, planner);
+      }
+      continue;
+    }
+    if (task.status === 'testing') {
+      const testId = task.testChatId?.trim();
+      if (testId && reconcileStaleBoardTaskChatActivity(testId)) {
+        await finalizeTaskTestingOnStreamEnd(group, task, planner).catch((err) =>
+          reportBackgroundError('wake-finalize-task-testing', err),
+        );
+      }
+    }
+  }
+
+  const finalChatId = board.finalTest?.chatId?.trim();
+  if (board.finalTest?.status === 'in_progress' && finalChatId) {
+    if (reconcileStaleBoardTaskChatActivity(finalChatId)) {
+      finalizeFinalTestOnStreamEnd(group, planner);
+    }
+  }
+}
+
+/**
+ * After display wake / tab focus, replay stream-end finalizers for task chats that
+ * finished while the renderer was throttled (macOS display sleep).
+ */
+export type DisplayWakeReconcileOptions = {
+  allowStalledRestart?: boolean;
+};
+
+export async function reconcileRunningBoardsAfterDisplayWake(
+  options: DisplayWakeReconcileOptions = {},
+): Promise<void> {
+  if (!sessionState?.groups?.length) return;
+  ensureStreamEndSubscription();
+  const allowStalledRestart = options.allowStalledRestart === true;
+  for (const group of sessionState.groups) {
+    if (!isBoardCandidateForWakeReconcile(group)) continue;
+    const planner = getPlannerChatForGroup(group);
+    if (!planner) continue;
+
+    resumeSystemPausedBoardAfterWake(group, planner);
+    await reconcileBoardTasksAfterWake(group, planner);
+
+    await reconcileMergingTasks(group, planner, {
+      isFixerChatActive: isTaskChatActiveForStallCheck,
+    });
+    if (isBoardRunning(group)) {
+      await autoDelegateNext(group, planner, { allowStalledRestart });
+    }
+    syncOrchestrateBoardTimer(group, planner, boardTimerContextForWake(group.orchestrateBoard!, planner));
+    emitBoardChange(group.id);
+  }
 }
 
 function ensureAutoDriveSubscription(): void {

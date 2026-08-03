@@ -3,7 +3,8 @@
  */
 
 import { extractInlineThinkingFromContent } from '../api/inline-thinking';
-import type { AssistantMessage, Chat, Message } from '../types';
+import { isUiOnlyTranscriptMessage } from '../chat/context/injection-notice';
+import type { Chat } from '../types';
 
 /** Max user/assistant pairs to include in synthesis context. */
 const MAX_MESSAGES = 12;
@@ -40,7 +41,7 @@ export function stripThinkingForExcerpt(text: string): string {
 }
 
 /** User-visible assistant prose — never fall back to thinking-only content. */
-function assistantVisibleText(msg: AssistantMessage): string {
+function assistantVisibleText(msg: { content?: string | null }): string {
   return stripThinkingForExcerpt(messageText(msg.content));
 }
 
@@ -50,7 +51,7 @@ function assistantVisibleText(msg: AssistantMessage): string {
 export function buildSynthesisMessages(chat: Chat): Array<{ role: string; content: string }> {
   const rows: Array<{ role: string; content: string }> = [];
   for (const msg of chat.history) {
-    if (msg.role === 'context') continue;
+    if (isUiOnlyTranscriptMessage(msg)) continue;
     if (msg.role === 'user') {
       const text = messageText(msg.content);
       if (text) rows.push({ role: 'user', content: text });
@@ -72,7 +73,7 @@ export function buildSynthesisExcerpt(chat: Chat): string {
   let lastUserIdx = -1;
   for (let i = chat.history.length - 1; i >= 0; i -= 1) {
     const msg = chat.history[i];
-    if (msg?.role === 'context') continue;
+    if (msg && isUiOnlyTranscriptMessage(msg)) continue;
     if (msg?.role === 'user' && messageText(msg.content)) {
       lastUserIdx = i;
       break;

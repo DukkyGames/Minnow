@@ -217,6 +217,29 @@ describe('syncDesktopWorkspaceMounts listing root', () => {
     assert.equal(filesView.classList.contains('hidden'), false);
   });
 
+  test('desktop hosting closes active right pane split before reparent', async () => {
+    const { patchFilePanelState, getFilePanelState } = await import('../../src/state/file-panel.ts');
+    patchFilePanelState({
+      rightPaneMode: 'split',
+      viewerOpen: true,
+      rightPaneSplit: {
+        enabled: true,
+        ratio: 0.5,
+        focusedSlot: 'primary',
+        primary: { kind: 'viewer', tabPath: 'src/a.ts' },
+        secondary: { kind: 'viewer', tabPath: 'src/b.ts' },
+      },
+    });
+
+    openDesktopWorkspaceTab('viewer');
+    await syncDesktopWorkspaceMounts();
+
+    const state = getFilePanelState();
+    assert.equal(state.rightPaneSplit.enabled, false);
+    assert.equal(state.rightPaneMode, 'viewer');
+    assert.equal(document.getElementById('fileViewerPane')?.parentElement?.id, 'desktopFileViewerMount');
+  });
+
   test('desktop hosting keeps sandbox listing root scoped on sync', async () => {
     openDesktopWorkspaceTab('files');
     await syncDesktopWorkspaceMounts();

@@ -218,7 +218,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
     'Manual orchestrate board workflow: fake model, seed a test board, validate diagnostic logs. For the full automated suite, see ',
   );
   const guideLink = el('a', 'settings-inline-link');
-  guideLink.href = 'documentation/guides/orchestrate-board-testing.md';
+  guideLink.href = 'documentation/contributor/orchestrate-board-testing.md';
   guideLink.textContent = 'orchestrate-board-testing.md';
   guideLink.title = 'Open testing guide';
   lead.append(guideLink, '. Planner chat must use the fake board model under ', linkToSettingsSection('Providers', 'providers'), '.');
@@ -228,7 +228,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   if (!serverUp) {
     appendSettingsOfflineHint(
       shell,
-      'Board testing requires <code>npm start</code>. CLI commands remain available for CI.',
+      'Board testing requires Minnow running locally. CLI commands remain available for CI.',
     );
   }
 
@@ -263,7 +263,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   const fakeGroup = appendSettingsGroup(
     content,
     'Fake model',
-    'In-process OpenAI-v1 stub on the tool server. Start registers provider fake-board.',
+    'In-process OpenAI-v1 stub in Minnow. Start registers provider fake-board.',
     'advanced.boardTesting.fakeModel',
     { emphasis: true },
   );

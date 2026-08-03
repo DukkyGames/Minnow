@@ -1,5 +1,5 @@
 /**
- * File-tree context menu includes “Open in System Explorer”.
+ * File-tree context menu includes Copy path and Open in System Explorer.
  */
 
 import assert from 'node:assert/strict';
@@ -40,6 +40,28 @@ describe('file-tree Open in System Explorer', () => {
     const reveal = items.find((item) => item.label === 'Open in System Explorer');
     assert.ok(reveal);
     assert.equal(reveal.disabled, true);
-    assert.match(reveal.title ?? '', /npm start/);
+    assert.match(reveal.title ?? '', /Open Minnow/i);
+  });
+});
+
+describe('file-tree Copy path', () => {
+  afterEach(() => {
+    setFileTreeServerAvailable(true);
+  });
+
+  test('file menu includes Copy path', () => {
+    const items = buildFileMenuItems(buildMenuContext('src/main.ts', 'file'));
+    const copyPath = items.find((item) => item.label === 'Copy path');
+    assert.ok(copyPath);
+    assert.equal(copyPath.disabled ?? false, false);
+    assert.equal(typeof copyPath.action, 'function');
+  });
+
+  test('folder menu includes Copy path', () => {
+    const items = buildFolderMenuItems(buildMenuContext('src', 'dir'));
+    const copyPath = items.find((item) => item.label === 'Copy path');
+    assert.ok(copyPath);
+    assert.equal(copyPath.disabled ?? false, false);
+    assert.equal(typeof copyPath.action, 'function');
   });
 });

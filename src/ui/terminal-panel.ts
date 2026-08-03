@@ -43,6 +43,7 @@ import {
   initTerminalXterm,
   isTerminalXtermReady,
 } from './terminal-xterm';
+import { initTerminalWorkspaceDrop } from './terminal-workspace-drop';
 import { appendConsoleOutputWithLinks } from './terminal-console-links';
 import {
   shouldShowAgentTabActivityBadge,
@@ -961,6 +962,7 @@ export async function initTerminalPanel(): Promise<void> {
 
   if (xtermHostEl) {
     initTerminalXterm(xtermHostEl);
+    initTerminalWorkspaceDrop(xtermHostEl);
   }
 
   // PTY tabs attach only when the panel is opened (avoids orphan sessions on reload).
@@ -995,6 +997,7 @@ export function onTerminalServerAvailabilityChanged(): void {
   getElements();
   if (xtermHostEl && !isTerminalXtermReady()) {
     initTerminalXterm(xtermHostEl);
+    initTerminalWorkspaceDrop(xtermHostEl);
   }
   if (isTerminalPanelOpen()) {
     void ensureTerminalTabsWhenOpen();

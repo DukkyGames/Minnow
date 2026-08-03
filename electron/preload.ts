@@ -403,6 +403,31 @@ const minnowBridge = {
       ipcRenderer.on(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
       return () => ipcRenderer.removeListener(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
     },
+    getZoomPercent: (): Promise<number> => ipcRenderer.invoke(channels.SHELL_GET_ZOOM_PERCENT),
+    setZoomPercent: (percent: number): Promise<number> =>
+      ipcRenderer.invoke(channels.SHELL_SET_ZOOM_PERCENT, percent),
+    onZoomPercentChanged: (callback: (percent: number) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, percent: number) => callback(percent);
+      ipcRenderer.on(channels.SHELL_ZOOM_PERCENT_CHANGED, handler);
+      return () => ipcRenderer.removeListener(channels.SHELL_ZOOM_PERCENT_CHANGED, handler);
+    },
+  },
+  power: {
+    setAfkBoardGuard: (active: boolean): void => {
+      void ipcRenderer.invoke(channels.POWER_SET_AFK_GUARD, active);
+    },
+    onScreenUnlocked: (callback: () => void): (() => void) => {
+      const handler = () => callback();
+      ipcRenderer.on(channels.POWER_SCREEN_UNLOCKED, handler);
+      return () => ipcRenderer.removeListener(channels.POWER_SCREEN_UNLOCKED, handler);
+    },
+  },
+  board: {
+    onPauseForShutdown: (callback: () => void): (() => void) => {
+      const handler = () => callback();
+      ipcRenderer.on(channels.BOARD_PAUSE_FOR_SHUTDOWN, handler);
+      return () => ipcRenderer.removeListener(channels.BOARD_PAUSE_FOR_SHUTDOWN, handler);
+    },
   },
 };
 

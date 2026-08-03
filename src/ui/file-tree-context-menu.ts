@@ -57,12 +57,20 @@ export interface FilePanelContextMenuItem {
 
 type MenuItemDef = FilePanelContextMenuItem;
 
+/** Copy workspace-relative path to the system clipboard (files and folders). */
+function buildCopyPathItem(path: string): MenuItemDef {
+  return {
+    label: 'Copy path',
+    action: () => void fileTreeOps.copyWorkspacePathStringToClipboard(path),
+  };
+}
+
 /** Shared “open in OS explorer” item for file and folder rows. */
 function buildOpenInSystemExplorerItem(path: string, offline: boolean): MenuItemDef {
   return {
     label: 'Open in System Explorer',
     disabled: offline,
-    title: offline ? 'Start with npm start to use this action' : undefined,
+    title: offline ? 'Open Minnow to use this action' : undefined,
     action: () => void revealPathInSystemExplorer(path),
   };
 }
@@ -175,6 +183,7 @@ export function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
     ...previewItem,
     ...orchestrateItem,
     buildOpenInSystemExplorerItem(ctx.path, offline),
+    buildCopyPathItem(ctx.path),
     {
       label: 'Cut',
       disabled,
@@ -223,6 +232,7 @@ export function buildFolderMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
       action: () => fileTreeOps.createFolderInDir(ctx.targetDir),
     },
     buildOpenInSystemExplorerItem(ctx.path, offline),
+    buildCopyPathItem(ctx.path),
     {
       label: 'Cut',
       disabled,

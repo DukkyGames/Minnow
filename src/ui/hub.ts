@@ -9,7 +9,7 @@ import { modelCache } from '../api/models';
 import { isLocalServerAvailable } from '../tools/config';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { getChatsForWorkspace, getChatLastMessageAt } from '../state/session-workspace-scope';
-import { sessionState } from '../state/sessions';
+import { getChatMessageCount, sessionState } from '../state/sessions';
 import type { LastStats } from '../types';
 import type { Chat } from '../types';
 import type { ModeId } from '../chat/modes/types';
@@ -94,6 +94,8 @@ function restoreComposer(): void {
   if (input) {
     input.placeholder = 'Type a message…';
   }
+  composerRestoreParent = null;
+  composerRestoreNext = null;
 }
 
 function formatCompactCount(n: number): string {
@@ -229,7 +231,7 @@ async function fetchHubServerMetrics(): Promise<void> {
 function getRecentChats(workspacePath: string, activeChat: Chat): Chat[] {
   if (!sessionState) return [];
   return getChatsForWorkspace(workspacePath, sessionState)
-    .filter((c) => c.history.length > 0 && c.id !== activeChat.id)
+    .filter((c) => getChatMessageCount(c) > 0 && c.id !== activeChat.id)
     .slice(0, HUB_RECENT_CHAT_LIMIT);
 }
 
@@ -249,7 +251,8 @@ function renderRecentTiles(container: HTMLElement, activeChat: Chat): void {
   const recent = getRecentChats(workspacePath, activeChat);
   const countEl = document.querySelector('.hub-recent-count');
   const total = sessionState
-    ? getChatsForWorkspace(workspacePath, sessionState).filter((c) => c.history.length > 0).length
+    ? getChatsForWorkspace(workspacePath, sessionState).filter((c) => getChatMessageCount(c) > 0)
+        .length
     : 0;
   if (countEl) countEl.textContent = `${total} chat${total === 1 ? '' : 's'}`;
 

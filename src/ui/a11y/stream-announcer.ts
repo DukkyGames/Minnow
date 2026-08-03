@@ -63,6 +63,7 @@ export function announceStreamingProse(markdown: string): void {
 
 /** Final announcement when the stream row is finalized. */
 export function completeStreamAnnouncer(markdown?: string | null): void {
+  const wrapDoc = activeWrap?.ownerDocument;
   if (activeWrap) {
     activeWrap.removeAttribute('aria-busy');
     activeWrap = null;
@@ -70,7 +71,7 @@ export function completeStreamAnnouncer(markdown?: string | null): void {
   const snippet = summarizeProse(markdown ?? lastSnippet);
   lastSnippet = '';
   lastAnnouncedAt = 0;
-  const doc = announcerDoc ?? activeWrap?.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+  const doc = announcerDoc ?? wrapDoc ?? (typeof document !== 'undefined' ? document : null);
   if (!doc) return;
   const announcer = announcerEl?.isConnected ? announcerEl : ensureAnnouncer(doc);
   if (!snippet) {

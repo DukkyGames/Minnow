@@ -3,7 +3,9 @@
  */
 
 import '../styles/dev-server-screen.css';
-import { spawnSubAgent } from '../agents/orchestrator';
+import { cancelSubAgent, getSubAgentRun, spawnSubAgent } from '../agents/orchestrator';
+import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
+import type { SubAgentRun } from '../agents/types';
 import { appAlert, appConfirm } from './app-dialog';
 import {
   createDevServerApi,
@@ -33,25 +35,28 @@ import {
   teardownDevServerLogView,
 } from './dev-server-log-view';
 import {
+  cyclePortsListSort,
+  DEFAULT_PORTS_LIST_SORT,
   deriveDevServerRowView,
+  filterListeningPorts,
   labelPortAttribution,
+  portsListSortAriaSort,
+  sortListeningPorts,
+  type PortsListSort,
+  type PortsScopeFilter,
+  type PortsSortKey,
 } from './dev-server-screen-view';
+import { subAgentLiveStatusLine } from './sub-agent-live-status';
 import { stripMainColumnOverlayClasses } from './main-column-overlay';
 import { formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
 import { listWorktrees } from '../state/worktree-service';
 import { getWorkspacePath } from '../state/workspace';
 import type { ParsedWorktree } from '../lib/worktree-list-parse';
-import { iconHtml } from './icon';
-
 const ROOT_ID = 'devServerScreenRoot';
 const CHAT_AREA_CLASS = 'chat-area--dev-server';
 const MAIN_COLUMN_CLASS = 'main-column--dev-server';
 const POLL_FAST_MS = 2000;
 const POLL_SLOW_MS = 10000;
-
-const ICON_REFRESH = iconHtml('refresh', { className: 'dev-server-screen__icon-svg' });
-
-const ICON_AUTO = iconHtml('loop', { className: 'dev-server-screen__icon-svg' });
 
 const SETUP_TASK = `Register the workspace dev server using manage_dev_servers (action=create) or by creating startup.md at the workspace root.
 
@@ -79,12 +84,105 @@ let selectedId: string | null = null;
 let editingId: string | null = null;
 let showAddForm = false;
 let portsAuto = true;
+let portsFilterQuery = '';
+let portsScopeFilter: PortsScopeFilter = 'all';
+let portsSort: PortsListSort = { ...DEFAULT_PORTS_LIST_SORT };
 let logsCollapsed = false;
 let portsCollapsed = false;
 /** Git worktrees available for dev-server spawn (refreshed on screen open). */
 let knownWorktrees: ParsedWorktree[] = [];
 /** Per-server worktree pick when starting (falls back to def.worktreeRoot). */
 const pendingWorktreeById = new Map<string, string>();
+/** Sub-agent run spawned by Detect servers (toolbar). */
+let detectAgentRunId: string | null = null;
+let detectAgentPending = false;
+let detectRunListenerBound = false;
+
+function detectRunDetailLine(run: SubAgentRun | undefined): string {
+  if (!run) return 'Starting background agent…';
+  const live = run.status === 'running' || run.status === 'queued';
+  if (live) {
+    return (
+      subAgentLiveStatusLine(run, true) ||
+      'Scanning package.json, README, and startup files for dev servers…'
+    );
+  }
+  if (run.status === 'completed') {
+    return 'Finished. New servers should appear in the list below.';
+  }
+  if (run.status === 'failed') {
+    return run.error?.trim() || 'Detection failed. Check the parent chat for details.';
+  }
+  if (run.status === 'cancelled') return 'Detection stopped.';
+  return 'Looking for dev servers…';
+}
+
+function detectRunTitle(run: SubAgentRun | undefined): string {
+  if (!run) return 'Detecting dev servers';
+  if (run.status === 'completed') return 'Detection complete';
+  if (run.status === 'failed') return 'Detection failed';
+  if (run.status === 'cancelled') return 'Detection stopped';
+  return 'Detecting dev servers';
+}
+
+function syncDetectBanner(): void {
+  const banner = document.querySelector<HTMLElement>('[data-role="detect-banner"]');
+  const titleEl = document.querySelector<HTMLElement>('[data-role="detect-title"]');
+  const detailEl = document.querySelector<HTMLElement>('[data-role="detect-detail"]');
+  const liveDots = document.querySelector<HTMLElement>('[data-role="detect-live-dots"]');
+  const stopBtn = document.querySelector<HTMLButtonElement>('[data-action="detect-stop"]');
+  const detectBtn = document.querySelector<HTMLButtonElement>('[data-action="detect"]');
+  if (!banner || !titleEl || !detailEl) return;
+
+  if (!detectAgentRunId && !detectAgentPending) {
+    banner.classList.add('hidden');
+    banner.classList.remove('is-active', 'is-done', 'is-error');
+    detectBtn?.removeAttribute('disabled');
+    liveDots?.classList.add('hidden');
+    stopBtn?.classList.add('hidden');
+    return;
+  }
+
+  const run = detectAgentRunId ? getSubAgentRun(detectAgentRunId) : undefined;
+  const live =
+    detectAgentPending || !run || run.status === 'running' || run.status === 'queued';
+
+  banner.classList.remove('hidden');
+  banner.classList.toggle('is-active', live);
+  banner.classList.toggle('is-done', run?.status === 'completed');
+  banner.classList.toggle(
+    'is-error',
+    run?.status === 'failed' || run?.status === 'cancelled',
+  );
+  liveDots?.classList.toggle('hidden', !live);
+
+  const canStop = Boolean(
+    detectAgentRunId && run && (run.status === 'running' || run.status === 'queued'),
+  );
+  stopBtn?.classList.toggle('hidden', !canStop);
+
+  titleEl.textContent = detectRunTitle(run);
+  detailEl.textContent = detectRunDetailLine(run);
+  if (live) detectBtn?.setAttribute('disabled', 'true');
+  else detectBtn?.removeAttribute('disabled');
+}
+
+function bindDetectRunListener(): void {
+  if (detectRunListenerBound) return;
+  detectRunListenerBound = true;
+  subscribeSubAgentRuns((run) => {
+    if (!detectAgentRunId || run.runId !== detectAgentRunId) return;
+    syncDetectBanner();
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+      void refreshAll();
+    }
+  });
+}
+
+function clearDetectAgentState(): void {
+  detectAgentRunId = null;
+  detectAgentPending = false;
+}
 
 export function isDevServerScreenOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
@@ -140,6 +238,36 @@ function buildShell(): HTMLElement {
         <button type="button" class="dev-server-screen__btn dev-server-screen__btn--primary" data-action="add">+ Add server</button>
       </div>
     </div>
+    <div
+      class="dev-server-screen__detect-banner hidden"
+      data-role="detect-banner"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div class="dev-server-screen__detect-copy">
+        <div
+          class="stream-status stream-status--generating dev-server-screen__detect-live hidden"
+          data-role="detect-live-dots"
+          aria-hidden="true"
+        >
+          <span class="stream-status__dots">
+            <span class="stream-status__dot"></span>
+            <span class="stream-status__dot"></span>
+            <span class="stream-status__dot"></span>
+          </span>
+        </div>
+        <div class="dev-server-screen__detect-title" data-role="detect-title">Detecting dev servers</div>
+        <div class="dev-server-screen__detect-detail" data-role="detect-detail"></div>
+      </div>
+      <button
+        type="button"
+        class="dev-server-screen__btn dev-server-screen__detect-stop hidden"
+        data-action="detect-stop"
+      >
+        Stop
+      </button>
+    </div>
     <div class="dev-server-screen__body">
       <section class="dev-server-screen__section dev-server-screen__section--servers" aria-label="Server list">
         <div class="dev-server-screen__section-head">
@@ -173,12 +301,36 @@ function buildShell(): HTMLElement {
             <span class="dev-server-screen__chevron" aria-hidden="true">▾</span>
             <span class="dev-server-screen__section-title">Ports (listening)</span>
           </button>
-          <div class="dev-server-screen__row-actions">
-            <button type="button" class="dev-server-screen__icon-btn" data-action="ports-refresh" aria-label="Refresh ports" title="Refresh ports">
-              ${ICON_REFRESH}
+          <div class="dev-server-ports__toolbar">
+            <input
+              type="search"
+              class="dev-server-log__filter dev-server-ports__filter"
+              data-role="ports-filter"
+              placeholder="Search…"
+              aria-label="Search listening ports"
+            />
+            <select class="dev-server-ports__scope" data-role="ports-scope" aria-label="Filter ports by source">
+              <option value="all">All</option>
+              <option value="linked">Dev servers</option>
+              <option value="protected">Protected</option>
+              <option value="other">Other</option>
+            </select>
+            <button
+              type="button"
+              class="dev-server-screen__btn dev-server-screen__btn--compact"
+              data-action="ports-refresh"
+              aria-label="Refresh port list"
+            >
+              Refresh
             </button>
-            <button type="button" class="dev-server-screen__icon-btn" data-action="ports-auto" aria-pressed="true" aria-label="Auto-refresh ports" title="Auto-refresh ports">
-              ${ICON_AUTO}
+            <button
+              type="button"
+              class="dev-server-screen__btn dev-server-screen__btn--compact"
+              data-action="ports-auto"
+              aria-pressed="true"
+              aria-label="Live port updates"
+            >
+              Live
             </button>
           </div>
         </div>
@@ -271,7 +423,7 @@ function renderServerList(): void {
     empty.className = 'dev-server-screen__empty';
     empty.textContent = online
       ? 'No servers yet. Add one, or Detect servers to write startup.md.'
-      : 'Local server offline — start Minnow with npm start.';
+      : 'Minnow is not running locally. Open or restart the app.';
     list.appendChild(empty);
     return;
   }
@@ -430,6 +582,18 @@ function escapeAttr(value: string): string {
     .replace(/</g, '&lt;');
 }
 
+function portsSortHeaderCell(label: string, key: PortsSortKey): string {
+  const ariaSort = portsListSortAriaSort(portsSort, key);
+  const active = portsSort.key === key;
+  const dirHint = active ? `, ${portsSort.direction === 'asc' ? 'ascending' : 'descending'}` : '';
+  return `<th scope="col" aria-sort="${ariaSort}">
+    <button type="button" class="dev-server-ports__sort${active ? ' is-active' : ''}" data-ports-sort="${key}" aria-label="Sort by ${label}${dirHint}">
+      <span class="dev-server-ports__sort-label">${label}</span>
+      <span class="dev-server-ports__sort-indicator" aria-hidden="true">${active ? (portsSort.direction === 'asc' ? '↑' : '↓') : ''}</span>
+    </button>
+  </th>`;
+}
+
 function renderPorts(): void {
   const host = document.querySelector<HTMLElement>('[data-role="ports-table"]');
   if (!host) return;
@@ -437,14 +601,23 @@ function renderPorts(): void {
     host.innerHTML = `<div class="dev-server-screen__empty">No listening ports reported.</div>`;
     return;
   }
-  const rows = ports
+  const visible = filterListeningPorts(ports, servers, {
+    query: portsFilterQuery,
+    scope: portsScopeFilter,
+  });
+  if (!visible.length) {
+    host.innerHTML = `<div class="dev-server-screen__empty">No ports match your search or filter.</div>`;
+    return;
+  }
+  const sorted = sortListeningPorts(visible, servers, portsSort);
+  const rows = sorted
     .map((p) => {
-      const attr = labelPortAttribution(p, servers);
       const attrLabel = p.protected
         ? 'Minnow (protected)'
-        : attr
-          ? `← ${attr}`
-          : '';
+        : (() => {
+            const attr = labelPortAttribution(p, servers);
+            return attr ? `← ${attr}` : '';
+          })();
       const killDisabled = p.protected ? 'disabled' : '';
       return `<tr>
         <td>${p.port}</td>
@@ -456,7 +629,13 @@ function renderPorts(): void {
     })
     .join('');
   host.innerHTML = `<table>
-    <thead><tr><th>Port</th><th>Process</th><th>PID</th><th></th><th></th></tr></thead>
+    <thead><tr>
+      ${portsSortHeaderCell('Port', 'port')}
+      ${portsSortHeaderCell('Process', 'process')}
+      ${portsSortHeaderCell('PID', 'pid')}
+      ${portsSortHeaderCell('Source', 'source')}
+      <th scope="col" class="dev-server-ports__actions-head"><span class="visually-hidden">Actions</span></th>
+    </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
   host.querySelectorAll<HTMLButtonElement>('[data-kill-pid]').forEach((btn) => {
@@ -486,7 +665,7 @@ function syncPortsAutoButton(): void {
   const btn = document.querySelector<HTMLButtonElement>('[data-action="ports-auto"]');
   if (!btn) return;
   btn.setAttribute('aria-pressed', portsAuto ? 'true' : 'false');
-  btn.title = portsAuto ? 'Auto-refresh on (click to pause)' : 'Auto-refresh off (click to enable)';
+  btn.title = portsAuto ? 'Live updates on (click to pause)' : 'Live updates off (click to enable)';
 }
 
 function syncSectionCollapse(): void {
@@ -595,19 +774,39 @@ async function onKill(pid: number, port: number): Promise<void> {
   await refreshAll();
 }
 
+async function onDetectStop(): Promise<void> {
+  if (!detectAgentRunId) return;
+  cancelSubAgent(detectAgentRunId, 'user_cancel');
+  syncDetectBanner();
+}
+
 async function onDetect(): Promise<void> {
   const chat = getActiveChat();
   if (!chat) {
     await appAlert('Open a chat first so Detect can spawn a setup agent.');
     return;
   }
-  await spawnSubAgent({
-    type: 'generalPurpose',
-    task: SETUP_TASK,
-    wait: false,
-    parentChatId: chat.id,
-    modeId: 'build',
-  });
+  bindDetectRunListener();
+  detectAgentPending = true;
+  detectAgentRunId = null;
+  syncDetectBanner();
+  try {
+    const result = await spawnSubAgent({
+      type: 'generalPurpose',
+      task: SETUP_TASK,
+      wait: false,
+      parentChatId: chat.id,
+      modeId: 'build',
+    });
+    if ('runId' in result) {
+      detectAgentRunId = result.runId;
+    }
+  } catch (err) {
+    await appAlert(err instanceof Error ? err.message : String(err));
+  } finally {
+    detectAgentPending = false;
+    syncDetectBanner();
+  }
 }
 
 async function onSaveEdit(): Promise<void> {
@@ -675,12 +874,19 @@ async function onSaveEdit(): Promise<void> {
 
 function wireShellEvents(root: HTMLElement): void {
   root.addEventListener('click', (ev) => {
+    const sortBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-ports-sort]');
+    if (sortBtn?.dataset.portsSort) {
+      portsSort = cyclePortsListSort(portsSort, sortBtn.dataset.portsSort as PortsSortKey);
+      renderPorts();
+      return;
+    }
     const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-action]');
     if (!target) return;
     const action = target.dataset.action;
     if (action === 'refresh') void refreshAll();
     if (action === 'add') openEditForm('new');
     if (action === 'detect') void onDetect();
+    if (action === 'detect-stop') void onDetectStop();
     if (action === 'log-clear') clearActiveLog();
     if (action === 'log-wrap') {
       const pressed = target.getAttribute('aria-pressed') !== 'true';
@@ -716,6 +922,17 @@ function wireShellEvents(root: HTMLElement): void {
 
   const filter = root.querySelector<HTMLInputElement>('[data-role="log-filter"]');
   filter?.addEventListener('input', () => setLogFilter(filter.value));
+
+  const portsFilter = root.querySelector<HTMLInputElement>('[data-role="ports-filter"]');
+  portsFilter?.addEventListener('input', () => {
+    portsFilterQuery = portsFilter.value;
+    renderPorts();
+  });
+  const portsScope = root.querySelector<HTMLSelectElement>('[data-role="ports-scope"]');
+  portsScope?.addEventListener('change', () => {
+    portsScopeFilter = (portsScope.value as PortsScopeFilter) || 'all';
+    renderPorts();
+  });
 }
 
 function syncRailButton(): void {
@@ -780,8 +997,12 @@ export function closeDevServerScreen(options?: {
   logsCollapsed = false;
   portsCollapsed = false;
   portsAuto = true;
+  portsFilterQuery = '';
+  portsScopeFilter = 'all';
+  portsSort = { ...DEFAULT_PORTS_LIST_SORT };
   knownWorktrees = [];
   pendingWorktreeById.clear();
+  clearDetectAgentState();
   syncRailButton();
 
   if (!options?.skipNavigate) {

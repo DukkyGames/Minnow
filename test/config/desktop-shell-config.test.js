@@ -21,4 +21,16 @@ describe('desktopShell config', () => {
     });
     assert.equal(merged.desktopShell.closeToTray, true);
   });
+
+  test('persists shell zoom percent within bounds', () => {
+    const merged = mergeConfigMeta({}, { desktopShell: { zoomPercent: 80 } });
+    assert.equal(merged.desktopShell.zoomPercent, 80);
+  });
+
+  test('rejects out-of-range shell zoom percent', () => {
+    const merged = mergeConfigMeta({ desktopShell: { zoomPercent: 80 } }, {
+      desktopShell: { zoomPercent: 25 },
+    });
+    assert.equal(merged.desktopShell.zoomPercent, 80);
+  });
 });

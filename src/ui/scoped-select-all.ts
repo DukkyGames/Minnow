@@ -7,7 +7,6 @@
 export const SELECTION_SCOPE_SELECTOR = [
   '#chatArea',
   '#chatAppArea',
-  '#onboardingChatCol',
   '#fileViewerHost',
   '.file-viewer-body',
   '#previewBody',

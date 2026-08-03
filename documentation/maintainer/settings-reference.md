@@ -2,7 +2,7 @@
 
 Complete inventory of Minnow settings: where they appear in the UI, what they control, and where they are persisted.
 
-For storage layout and `config.json` overview, see [configuration.md](../guides/configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts).
+For storage layout and `config.json` overview, see [Where your data lives](../manual/reference/configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts).
 
 **Last updated:** 2026-07-25
 
@@ -53,6 +53,7 @@ Open via **Settings** (`#/settings/<category>`) or legacy `#/settings/<area>`.
 |---------|-------------|-------|
 | App updates | Electron main (`~/.minnow/updater.json`) | Channel, check now, restart to install |
 | Desktop app → Keep running after close | `config.desktopShell.closeToTray` | Default **on**; Electron tray lifecycle |
+| Desktop app → Interface zoom | `config.desktopShell.zoomPercent` | Default **80**; Electron main applies on load; Ctrl/Cmd +/− syncs to config |
 | Desktop app → Launch at startup | OS login item (`app.setLoginItemSettings`) | Windows/macOS only; not stored in config.json |
 | Filesystem access | `config.toolSecurity.filesystemAccess` | `workspace` (project folder only) vs `full` (entire disk). Override: `TOOLS_ALLOW_ALL_PATHS=1` |
 | Network access | `config.server.networkAccess` | `local` (loopback) vs `lan` (Wi‑Fi). Override: `MINNOW_NETWORK` |
@@ -145,7 +146,7 @@ Also: `config.activeProviderId`.
 
 #### One-click provider presets
 
-Catalog: [`src/providers/presets.ts`](../../src/providers/presets.ts). Presets appear as chips in **onboarding → Cloud API** (a green check on a chip means that preset already has a saved API key) and as a preset grid in **Settings → Models → Providers → Add provider** (choose a preset or **Add custom provider** for the full form).
+Catalog: [`src/providers/presets.ts`](../../src/providers/presets.ts). Presets appear as chips in **onboarding → Cloud API** (a green check on a chip means that preset already has a saved API key) and as a preset grid in **Models → Providers → Add provider** (choose a preset or **Add custom provider** for the full form).
 
 | Preset | Base URL | API kind | Auth | Notes |
 |--------|----------|----------|------|-------|
@@ -402,7 +403,7 @@ Per bundled LSP: install/uninstall, enable/disable. See Settings → Language bu
 
 **Code editing** (`config.editorSettings`): word wrap, show whitespace, font size, tab size.
 
-**Intent mode** (`config.editorIntentMode`, limited UI): enabled by default, auto-recheck, debounce, context window, recheck delay, max recheck passes.
+**Intent mode** (`config.editorIntentMode`): enabled by default, idle debounce, trigger prefix (sigil), max tokens, and an optional provider/model pin (empty = follow the ghost-text binding).
 
 ### Webhooks (`webhooks.json`)
 
@@ -508,7 +509,7 @@ Not all exposed in Settings UI:
 | `MINNOW_ELECTRON` | Internal Electron flag |
 | `MINNOW_TEST` | Test mode |
 
-Full table: [commands.md](../guides/commands.md#environment-variables).
+Full table: [commands.md](../contributor/commands.md#environment-variables).
 
 ---
 

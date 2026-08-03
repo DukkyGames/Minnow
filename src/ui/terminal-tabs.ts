@@ -325,7 +325,7 @@ export async function closeTab(tabId: string): Promise<void> {
     return;
   }
 
-  renderTabBar(nextActive);
+  renderTabBar(nextActive ?? null);
   if (nextActive) {
     await switchTab(nextActive);
   } else {

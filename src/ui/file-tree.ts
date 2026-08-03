@@ -523,7 +523,7 @@ function renderOfflineEmpty(host: HTMLElement): void {
   host.innerHTML = '';
   const msg = document.createElement('p');
   msg.className = 'file-tree-empty';
-  msg.textContent = 'Start with npm start to browse project files.';
+  msg.textContent = 'Open Minnow to browse project files.';
   host.appendChild(msg);
 }
 
@@ -850,10 +850,19 @@ export async function refreshFileTree(): Promise<void> {
   }
 
   const expanded = [...getFilePanelState().expandedDirs];
-  for (const dir of expanded) {
-    loadingDirs.add(dir);
-    await fetchListing(dir);
-    loadingDirs.delete(dir);
+  if (expanded.length > 0) {
+    for (const dir of expanded) {
+      loadingDirs.add(dir);
+    }
+    await Promise.all(
+      expanded.map(async (dir) => {
+        try {
+          await fetchListing(dir);
+        } finally {
+          loadingDirs.delete(dir);
+        }
+      }),
+    );
   }
 
   renderFileTree();

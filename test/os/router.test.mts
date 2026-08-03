@@ -180,6 +180,18 @@ describe('os router navigation', () => {
     assert.equal(isAppEnabled('research'), true);
   });
 
+  test('legacy #/experts does not activate desktop experts when app is hidden', async () => {
+    const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
+      '../../src/os/desktop-state.ts'
+    );
+    resetDesktopStateForTests();
+    window.location.hash = '#/experts/gallery';
+    syncOsRouteFromHashForTests();
+    assert.equal(window.location.hash, '#/desktop');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(isDesktopExpertsActive(), false);
+  });
+
   test('hash route for a developer-hidden app falls back to desktop', () => {
     window.location.hash = '#/app/email';
     syncOsRouteFromHashForTests();

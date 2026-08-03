@@ -276,10 +276,23 @@ export async function executeProposeModeSwitch(
   const content = await enqueueAskQuestion(parsed.args, {
     subAgentType: context.subAgentType,
   });
+  const parsedAnswer = parseAskQuestionToolContent(content);
   applyPlanCompleteOrchestrateHandoff(
     situationRaw as HandoffSituation,
     planPath,
     content,
   );
+  if (
+    situationRaw === 'plan_complete' &&
+    parsedAnswer?.status === 'answered' &&
+    isPlanCompleteOrchestrateNewChoice(parsedAnswer.answers)
+  ) {
+    return JSON.stringify({
+      ...parsedAnswer,
+      boardLaunched: true,
+      handoffNote:
+        'The orchestrator board is already open for this plan. Do not call create_chat_with_mode.',
+    });
+  }
   return content;
 }

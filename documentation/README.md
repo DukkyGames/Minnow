@@ -1,42 +1,50 @@
 # Minnow documentation
 
-Everything written down about Minnow, in one index. New here? Read [Setup](guides/setup.md), then [Apps](guides/apps.md).
+Everything written down about Minnow, in one index.
 
 ## Using Minnow
 
-| Guide | What's in it |
-|-------|--------------|
-| [Setup](guides/setup.md) | Prerequisites, install, providers, first run, optional extras. |
-| [Apps](guides/apps.md) | The eight apps, the composer modes, and what's behind the release gate. |
-| [Commands](guides/commands.md) | Every npm script, the headless CLI, test suites, environment variables. |
-| [Keyboard shortcuts](guides/keyboard-shortcuts.md) | Composer, editor, file tree, terminal, mail, and global key bindings. |
-| [Orchestrate board testing](guides/orchestrate-board-testing.md) | `test:board`, fake model, seed board, log invariants. |
-| [Configuration](guides/configuration.md) | The `~/.minnow` folder, `config.json`, providers, encrypted secrets. |
-| [Troubleshooting](guides/troubleshooting.md) | When it won't start, won't connect, or a tool won't run. |
-
-## Building on Minnow
+In-app help: menubar **?** → `#/wiki` ( **`documentation/manual/`** plus roadmap). GitHub Wiki: full tree including **contributor/**, **context.md**, and maintainer runbooks.
 
 | Doc | What's in it |
 |-----|--------------|
-| [Architecture](guides/architecture.md) | The three processes, the SPA, the tool server, the agent layer. Start here. |
-| [context.md](context.md) | The complete technical reference: every subsystem, API, and store. Dense, kept current. |
-| [Tool authoring](plugins/tool-authoring.md) | Write a local tool plugin for `~/.minnow/tools/`, no MCP needed. |
+| [Minnow manual](manual/README.md) | Install, chat, apps, shortcuts, data, troubleshooting (canonical for users). |
+| [Roadmap](ROADMAP.md) | Shipped capabilities, active direction, release-gated areas (also in-app). |
+| [Guides index](guides/README.md) | Redirect stubs for stable GitHub links → manual or contributor. |
+
+## Building & contributing
+
+| Doc | What's in it |
+|-----|--------------|
+| [Contributor index](contributor/README.md) | Setup from source, commands, architecture, board testing, a11y, LAN. |
+| [Setup from source](contributor/setup-from-source.md) | Clone, install, providers, `npm start`, dev variants. |
+| [Commands](contributor/commands.md) | Every npm script, headless CLI, test suites, environment variables. |
+| [Architecture](contributor/architecture.md) | The three processes, SPA, tool server, agent layer. |
+| [context.md](context.md) | Complete technical reference: every subsystem, API, and store. |
+| [Tool authoring](plugins/tool-authoring.md) | Local tool plugins for `~/.minnow/tools/`. |
 | [Agent packs](agent-packs/README.md) | Bundle prompts and agents for sharing. |
-| [Design system](design-system/README.md) | The extracted `--mn-*` token inventory, primitives, and themes. |
-| [../DESIGN.md](../DESIGN.md) | Palette families, typography, elevation, component rules. |
-| [../PRODUCT.md](../PRODUCT.md) | Who it's for, what it is and isn't, design principles. |
-| [../AGENTS.md](../AGENTS.md) | Orientation for AI coding agents working in this repo. |
+| [Design system](design-system/README.md) | `--mn-*` tokens, primitives, themes. |
+| [DESIGN.md](../DESIGN.md) | Palette, typography, elevation, component rules. |
+| [PRODUCT.md](../PRODUCT.md) | Who it's for, design principles. |
+| [AGENTS.md](../AGENTS.md) | Orientation for AI coding agents in this repo. |
 
 ## Maintaining Minnow
 
-Release and internal-inventory docs live in [`maintainer/`](maintainer/) — [releasing](maintainer/releasing.md), [macOS signing](maintainer/macos-signing.md), the full [settings reference](maintainer/settings-reference.md), and the [prompt ownership matrix](maintainer/prompt-ownership-matrix.md).
+| Doc | What's in it |
+|-----|--------------|
+| [Maintainer index](maintainer/) | Release, signing, wiki publishing, settings inventory. |
+| [Releasing](maintainer/releasing.md) | Versioning, packaging, auto-update feed. |
+| [macOS signing](maintainer/macos-signing.md) | Notarization and entitlements. |
+| [Wiki publishing](maintainer/wiki-publishing.md) | GitHub Wiki staging from `documentation/`. |
+| [Settings reference](maintainer/settings-reference.md) | Exhaustive settings and env inventory. |
+| [Prompt ownership matrix](maintainer/prompt-ownership-matrix.md) | Who owns which prompts. |
 
 ## Working folders
 
-These are inputs to the tools, not prose to read:
+Inputs to tools and agents — not primary reading:
 
-- [`plans/`](plans/) — feature plans. Plan mode and the orchestrator write here in *your* workspace too; that path is a convention Minnow depends on.
-- [`schemas/`](schemas/), [`templates/`](templates/), [`specs/`](specs/) — JSON schemas and scaffolding used by the app.
-- [`memory/`](memory/), [`MEMORY.md`](MEMORY.md) — curated notes for agents working on Minnow itself.
-- [`extracts/`](extracts/), [`archive/`](archive/) — portable code extracts and one-time migration snapshots.
-- [`images/`](images/) — screenshots used by the README.
+- [`plans/`](plans/) — feature plans (Plan mode writes under `documentation/plans/` in your workspace too).
+- [`schemas/`](schemas/), [`templates/`](templates/), [`specs/`](specs/) — JSON schemas and scaffolding.
+- [`memory/`](memory/), [`MEMORY.md`](MEMORY.md) — curated notes for agents on Minnow itself.
+- [`extracts/`](extracts/), [`archive/`](archive/) — portable extracts and migration snapshots.
+- [`images/`](images/) — README screenshots.

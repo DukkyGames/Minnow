@@ -125,7 +125,7 @@ export async function renderPromptsHubPanel(mount: HTMLElement): Promise<void> {
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       groupBody,
-      'Role prompt editing requires <code>npm start</code>.',
+      'Role prompt editing requires Minnow running locally.',
     );
     return;
   }

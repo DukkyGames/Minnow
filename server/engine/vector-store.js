@@ -65,6 +65,8 @@ export function cosineSimilarity(a, b) {
  */
 export function createVectorStore(getPaths, opts = {}) {
   const validateEntryId = opts.isValidEntryId ?? isValidEntryId;
+  /** Serialize writes so concurrent sync jobs do not clobber the same .tmp file. */
+  let saveChain = Promise.resolve();
 
   /** Resolve vectors.json path from injected paths. */
   function getVectorStorePath() {
@@ -94,18 +96,22 @@ export function createVectorStore(getPaths, opts = {}) {
 
   /** Atomic write of the full vector store. */
   async function saveVectorStore(store) {
-    const storePath = getVectorStorePath();
-    const tmp = `${storePath}.tmp`;
-    const payload = {
-      version: STORE_VERSION,
-      model: store.model ?? '',
-      backend: store.backend ?? '',
-      dim: store.dim ?? 0,
-      vectors: store.vectors ?? {},
+    const run = async () => {
+      const storePath = getVectorStorePath();
+      const tmp = `${storePath}.${process.pid}.${Date.now()}.tmp`;
+      const payload = {
+        version: STORE_VERSION,
+        model: store.model ?? '',
+        backend: store.backend ?? '',
+        dim: store.dim ?? 0,
+        vectors: store.vectors ?? {},
+      };
+      await fs.mkdir(path.dirname(storePath), { recursive: true });
+      await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+      await fs.rename(tmp, storePath);
     };
-    await fs.mkdir(path.dirname(storePath), { recursive: true });
-    await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-    await fs.rename(tmp, storePath);
+    saveChain = saveChain.then(run, run);
+    return saveChain;
   }
 
   /**

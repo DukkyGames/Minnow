@@ -7,27 +7,30 @@ import { detectConfigServer } from './storage-mode';
 export interface EditorIntentModeConfig {
   /** Default Intent mode on when opening a file in the editor. */
   enabledByDefault: boolean;
-  /** Auto-recheck stale resolved lines after neighbor edits (default off). */
-  autoRecheckDefault: boolean;
-  /** Debounce before resolving a line after leaving it. */
+  /** Idle pause on an intent line before a proposal is requested. */
   debounceMs: number;
-  /** Lines of resolved context above/below the intent line. */
-  contextWindow: number;
-  /** Delay before auto-recheck re-resolves a stale region. */
-  recheckDelayMs: number;
-  /** Max auto-recheck passes per user-edit burst. */
-  maxRecheckPasses: number;
+  /**
+   * Optional explicit prefix. When set, only lines starting with it are treated
+   * as intent — the prose heuristic is bypassed entirely.
+   */
+  sigil: string;
+  /** Optional provider pin; empty falls back to the inline-completion binding. */
+  providerId: string;
+  /** Optional model pin; empty falls back to the inline-completion binding. */
+  modelId: string;
+  /** Token budget for the replacement block (floored at 768 by the resolver). */
+  maxTokens: number;
 }
 
 const STORAGE_KEY = 'minnow.editorIntentMode';
 
 export const DEFAULT_EDITOR_INTENT_MODE: EditorIntentModeConfig = {
   enabledByDefault: false,
-  autoRecheckDefault: false,
-  debounceMs: 450,
-  contextWindow: 5,
-  recheckDelayMs: 600,
-  maxRecheckPasses: 8,
+  debounceMs: 400,
+  sigil: '',
+  providerId: '',
+  modelId: '',
+  maxTokens: 768,
 };
 
 let cached: EditorIntentModeConfig | null = null;
@@ -38,6 +41,10 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
+function readString(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
 /** Parse a partial meta block into a full Intent mode config object. */
 export function parseEditorIntentModeBlock(raw: unknown): EditorIntentModeConfig {
   if (!raw || typeof raw !== 'object') {
@@ -46,21 +53,11 @@ export function parseEditorIntentModeBlock(raw: unknown): EditorIntentModeConfig
   const block = raw as Record<string, unknown>;
   return {
     enabledByDefault: block.enabledByDefault === true,
-    autoRecheckDefault: block.autoRecheckDefault === true,
-    debounceMs: clampInt(block.debounceMs, 200, 2000, DEFAULT_EDITOR_INTENT_MODE.debounceMs),
-    contextWindow: clampInt(block.contextWindow, 1, 20, DEFAULT_EDITOR_INTENT_MODE.contextWindow),
-    recheckDelayMs: clampInt(
-      block.recheckDelayMs,
-      200,
-      5000,
-      DEFAULT_EDITOR_INTENT_MODE.recheckDelayMs,
-    ),
-    maxRecheckPasses: clampInt(
-      block.maxRecheckPasses,
-      1,
-      32,
-      DEFAULT_EDITOR_INTENT_MODE.maxRecheckPasses,
-    ),
+    debounceMs: clampInt(block.debounceMs, 100, 2000, DEFAULT_EDITOR_INTENT_MODE.debounceMs),
+    sigil: readString(block.sigil, DEFAULT_EDITOR_INTENT_MODE.sigil),
+    providerId: readString(block.providerId, DEFAULT_EDITOR_INTENT_MODE.providerId),
+    modelId: readString(block.modelId, DEFAULT_EDITOR_INTENT_MODE.modelId),
+    maxTokens: clampInt(block.maxTokens, 128, 4096, DEFAULT_EDITOR_INTENT_MODE.maxTokens),
   };
 }
 
@@ -119,26 +116,18 @@ export async function saveEditorIntentModeConfig(
       patch.enabledByDefault !== undefined
         ? patch.enabledByDefault
         : current.enabledByDefault,
-    autoRecheckDefault:
-      patch.autoRecheckDefault !== undefined
-        ? patch.autoRecheckDefault
-        : current.autoRecheckDefault,
     debounceMs:
       patch.debounceMs !== undefined
-        ? clampInt(patch.debounceMs, 200, 2000, current.debounceMs)
+        ? clampInt(patch.debounceMs, 100, 2000, current.debounceMs)
         : current.debounceMs,
-    contextWindow:
-      patch.contextWindow !== undefined
-        ? clampInt(patch.contextWindow, 1, 20, current.contextWindow)
-        : current.contextWindow,
-    recheckDelayMs:
-      patch.recheckDelayMs !== undefined
-        ? clampInt(patch.recheckDelayMs, 200, 5000, current.recheckDelayMs)
-        : current.recheckDelayMs,
-    maxRecheckPasses:
-      patch.maxRecheckPasses !== undefined
-        ? clampInt(patch.maxRecheckPasses, 1, 32, current.maxRecheckPasses)
-        : current.maxRecheckPasses,
+    sigil: patch.sigil !== undefined ? patch.sigil.trim() : current.sigil,
+    providerId:
+      patch.providerId !== undefined ? patch.providerId.trim() : current.providerId,
+    modelId: patch.modelId !== undefined ? patch.modelId.trim() : current.modelId,
+    maxTokens:
+      patch.maxTokens !== undefined
+        ? clampInt(patch.maxTokens, 128, 4096, current.maxTokens)
+        : current.maxTokens,
   };
   cached = next;
   writeLocal(next);

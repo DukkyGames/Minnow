@@ -888,7 +888,7 @@ async function executeBoardReport(
     return `Error: unknown board task "${taskId}"`;
   }
   const planner = getPlannerChatForGroup(group) ?? undefined;
-  const mirrorRole = resolveBoardReportMirrorRole(callerChat, task, false);
+  const mirrorRole = resolveBoardReportMirrorRole(callerChat ?? null, task, false);
   const patch: Record<string, unknown> = { boardReport };
 
   if (mirrorRole === 'test') {

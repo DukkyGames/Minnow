@@ -2,9 +2,19 @@
  * Detect OS file drags (Windows Explorer, Finder, etc.) vs internal workspace drags.
  */
 
+import { hasCodeSelectionDrag } from './code-selection-drag';
 import { WORKSPACE_FILE_MIME } from './workspace-ref';
 
-export type DragKind = 'external' | 'workspace';
+export type DragKind = 'external' | 'workspace' | 'codeSelection';
+
+/** Heuristic: plain-text fallback for file-tree drags must not match code lines like `x = 1`. */
+export function looksLikeWorkspaceRelativePath(plain: string): boolean {
+  const trimmed = plain.trim();
+  if (!trimmed || trimmed.includes('\n') || trimmed.length > 512) return false;
+  if (/[=;{}()]/.test(trimmed)) return false;
+  if (trimmed.includes('/') || trimmed.includes('\\')) return true;
+  return /\.[a-zA-Z0-9]{1,12}$/.test(trimmed);
+}
 
 /** True when the drag carries native OS files (Explorer, Finder, desktop). */
 export function hasExternalFileDrag(dataTransfer: DataTransfer | null): boolean {
@@ -17,10 +27,10 @@ export function hasExternalFileDrag(dataTransfer: DataTransfer | null): boolean 
 /** True when the drag originated from the Minnow file tree (workspace-relative path). */
 export function hasWorkspaceFileDrag(dataTransfer: DataTransfer | null): boolean {
   if (!dataTransfer) return false;
+  if (hasCodeSelectionDrag(dataTransfer)) return false;
   if (dataTransfer.types.includes(WORKSPACE_FILE_MIME)) return true;
   const plain = dataTransfer.getData('text/plain').trim();
-  if (plain && !plain.includes('\n') && plain.length <= 512) return true;
-  return false;
+  return looksLikeWorkspaceRelativePath(plain);
 }
 
 /**
@@ -29,6 +39,7 @@ export function hasWorkspaceFileDrag(dataTransfer: DataTransfer | null): boolean
  */
 export function classifyFileDrag(dataTransfer: DataTransfer | null): DragKind | null {
   if (!dataTransfer) return null;
+  if (hasCodeSelectionDrag(dataTransfer)) return 'codeSelection';
   if (hasExternalFileDrag(dataTransfer) && !dataTransfer.types.includes(WORKSPACE_FILE_MIME)) {
     return 'external';
   }

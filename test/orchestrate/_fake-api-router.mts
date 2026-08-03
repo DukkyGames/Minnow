@@ -186,8 +186,38 @@ export function installFakeApiRouter(
       });
     }
 
+    if (url.includes('/api/models/cached') && method === 'GET') {
+      return Response.json({ models: [] });
+    }
+    if (url.includes('/api/models/serve') && method === 'GET') {
+      return Response.json({ serves: [] });
+    }
+
     if (url.includes('/api/workspace/dev-server') || url.includes('/api/terminal/')) {
       return Response.json({ ok: true });
+    }
+
+    if (url.includes('/api/desktop-workspace')) {
+      if (url.includes('/api/desktop-workspace/list')) {
+        return Response.json({ entries: [] });
+      }
+      if (url.includes('/api/desktop-workspace/download')) {
+        return new Response('', { status: 200 });
+      }
+      if (method === 'PUT') {
+        return Response.json({
+          ok: true,
+          path: '/tmp/minnow-desktop-workspace',
+          label: 'workspace',
+          fileCount: 0,
+        });
+      }
+      return Response.json({
+        ok: true,
+        path: '/tmp/minnow-desktop-workspace',
+        label: 'workspace',
+        fileCount: 0,
+      });
     }
 
     if (url.includes('/api/orchestrate/board-log')) {
@@ -256,6 +286,13 @@ export function installFakeApiRouter(
       const op = typeof body?.op === 'string' ? body.op : '';
       const payload = worktreeResponse(op, script, worktreeOverrides);
       return Response.json(payload);
+    }
+
+    if (url.includes('/api/preview/file/') && method === 'GET') {
+      return new Response('# stub\n', {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
     }
 
     unroutedRequests.push({ method, url });
