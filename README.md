@@ -54,7 +54,7 @@ All of it is built in and always on.
 | **Local model hosting** | Hardware-fit scoring, Hugging Face downloads, and serving models yourself. |
 | **Issue tracker** | A list and board the agent can file to, triage, and work through itself. |
 | **Dev server management** | Register, start, stop, and watch the servers a project needs. |
-| **Git & GitHub** | Status, stage, diff, commit, branch, pull, push, merge-to-main, and PRs through your own `gh`. |
+| **Git & GitHub** | A full-column Source Control Center: changes, history, branches, stashes, worktrees, pull requests, and CI. |
 | **Multi-model routing** | Bind different models to different jobs — chat, titles, research, review, each agent role. |
 | **Brain & code map** | A markdown knowledge wiki with semantic recall, plus a symbol and call-graph index of your repos. |
 
@@ -76,9 +76,17 @@ Three processes: the Electron shell, the SPA it loads, and a Node server that ru
 
 File tree, CodeMirror with language-server intelligence and inline completion, terminal tabs, source control, dev servers, and a real Chromium preview. **Ctrl+K** turns a description into a diff on your selection. **Intent mode** turns a line of plain English into code you accept with Tab. Chat sits beside the project rather than in another window, driving the same files, git, and terminals you are.
 
-The source-control panel does status, stage, diff, commit, branch, pull, push, and merge-to-main, and it can write the commit message from your staged diff. Issues and boards open pull requests through your own `gh` CLI — Minnow never holds a GitHub token. The dev-server screen registers the servers a project needs (command, cwd, port, auto-start, which worktree) and the model drives the same controls, so "start the dev server and check the console" is one instruction. **Code map** indexes symbols and call relationships across the repo, for you and for the agent.
+The sidebar source-control panel handles the everyday loop — stage, diff, commit, push — and can write the commit message from your staged diff. The dev-server screen registers the servers a project needs (command, cwd, port, auto-start, which worktree) and the model drives the same controls, so "start the dev server and check the console" is one instruction. **Code map** indexes symbols and call relationships across the repo, for you and for the agent.
 
 ![Minnow Code app](documentation/images/app-code.png)
+
+### Source Control Center — the full git surface
+
+Opens over the Code column from the source-control panel. A left rail routes between seven sections in two groups — **Changes**, **History**, **Branches**, **Stashes** and **Worktrees** for the working tree, then **Pull requests** and **Checks** for the remote. **Ctrl+1**–**7** jumps between them, **Esc** closes.
+
+The header keeps repo identity and the three sync actions (fetch, pull, push). Everything else — rebase, cherry-pick, tag, stash, merge to trunk, worktree add, open a PR — lives behind **Ctrl+K**, so the chrome never turns into a row of equally-weighted buttons you have to read every time.
+
+Pull requests and CI run through your own `gh` CLI. Minnow stores no GitHub token: if `gh` isn't installed or authed, or the remote isn't GitHub, those two sections say so instead of showing an empty list. With it working, you get PR list and detail, create, checkout, merge, close and mark-ready; workflow runs down to jobs and steps, with the failed step's log one click away, and rerun (all or failed-only) or cancel on the run itself.
 
 ### Orchestrator boards — parallel agents in isolated worktrees
 
