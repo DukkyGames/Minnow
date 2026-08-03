@@ -41,11 +41,21 @@ function findExistingButton(): HTMLButtonElement | null {
   return null;
 }
 
+/** Static markup may ship a placeholder span; inject the Uicons glyph if missing. */
+function ensureUndoIcon(btn: HTMLButtonElement): void {
+  if (btn.querySelector('.code-change-strip__undo-icon.fi')) return;
+  const placeholder = btn.querySelector('.code-change-strip__undo-icon');
+  const icon = createIcon('undo', { className: 'code-change-strip__undo-icon', size: 14 });
+  if (placeholder) placeholder.replaceWith(icon);
+  else btn.appendChild(icon);
+}
+
 /** Ensure the undo control exists beside the code-change strip (idempotent). */
 function ensureButton(): HTMLButtonElement | null {
   if (btnEl?.isConnected) return btnEl;
   const existing = findExistingButton();
   if (existing) {
+    ensureUndoIcon(existing);
     btnEl = existing;
     return btnEl;
   }

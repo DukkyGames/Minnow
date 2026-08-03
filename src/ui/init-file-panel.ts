@@ -50,7 +50,7 @@ import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selec
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { initGitPanel, syncPanelFromActiveChat } from './git-panel';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
-import { initGitCenterLightbox } from './git-center-lightbox';
+import { initSourceControlCenter } from './source-control-center-entry';
 import { initGitHelpLightbox } from './git-help-lightbox';
 import { startFileTreeGitStatusPoll } from './file-tree';
 import {
@@ -228,7 +228,7 @@ export async function initFilePanel(): Promise<void> {
   initFileTreeSearch();
 
   initGitPanel();
-  initGitCenterLightbox();
+  initSourceControlCenter();
   initGitHelpLightbox();
   if (getLocalServerAvailable()) {
     startFileTreeGitStatusPoll();

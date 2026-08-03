@@ -26,6 +26,12 @@
       "source": "builtin"
     },
     {
+      "id": "create-pr",
+      "label": "Create Pr",
+      "description": "Push the current branch and open a GitHub pull request with gh. Use when the user asks to create or open a PR from the code-change strip or /create-pr.",
+      "source": "builtin"
+    },
+    {
       "id": "debug-error",
       "label": "Debug Error",
       "description": "Trace tool failures and Error messages systematically. Use when tools fail or the user pastes a stack trace.",

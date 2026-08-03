@@ -2228,6 +2228,26 @@
           <span class="code-change-strip__label">Code changes</span>
           <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
         </button>
+        <div id="codeChangeStripActions" class="code-change-strip__actions" hidden>
+          <button
+            type="button"
+            id="btnCodeChangeCommit"
+            class="code-change-strip__action"
+            title="Stage and commit files changed in this chat"
+            hidden
+          >
+            Commit
+          </button>
+          <button
+            type="button"
+            id="btnCodeChangeCreatePr"
+            class="code-change-strip__action"
+            title="Push and open a pull request for this branch"
+            hidden
+          >
+            Create PR
+          </button>
+        </div>
         <!-- Undo last agent turn — lives with code-change chrome (MIN-409); Uicons undo glyph.
              Hidden unless git + the undo target turn mutated files. -->
         <button
@@ -2240,7 +2260,11 @@
           disabled
           hidden
         >
-          <span class="code-change-strip__undo-icon" aria-hidden="true"></span>
+          <i
+            class="fi fi-rr-undo-alt icon-svg code-change-strip__undo-icon"
+            aria-hidden="true"
+            style="--mn-icon-size: 14px"
+          ></i>
         </button>
       </div>
     </div>

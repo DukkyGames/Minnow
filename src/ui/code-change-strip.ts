@@ -53,23 +53,44 @@ export function appendCodeChangeTotalsSpans(
   parent.appendChild(delSpan);
 }
 
-/** Build the strip stats row: file count plus +/− totals. */
-function renderStripStats(
-  statsEl: HTMLElement,
-  fileCount: number,
+/** File count plus +/− totals (composer strip and chat sidebar). */
+export function appendChatItemCodeChangeStats(
+  parent: Node,
+  chat: Chat,
   totals: ChatCodeChangeTotals,
 ): void {
-  const frag = document.createDocumentFragment();
-
+  const fileCount = getPerFileChangeSummary(chat).length;
   if (fileCount > 0) {
     const filesSpan = document.createElement('span');
     filesSpan.className = 'code-change-strip__files';
     filesSpan.textContent = `${fileCount} file${fileCount === 1 ? '' : 's'}`;
-    frag.appendChild(filesSpan);
-    frag.appendChild(document.createTextNode(' '));
+    parent.appendChild(filesSpan);
+    parent.appendChild(document.createTextNode(' · '));
   }
+  appendCodeChangeTotalsSpans(parent, totals);
+}
 
-  appendCodeChangeTotalsSpans(frag, totals);
+/** Screen-reader label for session row code-change stats. */
+export function formatChatItemCodeChangeAria(chat: Chat): string {
+  const totals = chat.codeChangeTotals;
+  if (!hasCodeChangeTotals(totals) || !totals) return '';
+  const fileCount = getPerFileChangeSummary(chat).length;
+  const parts: string[] = [];
+  if (fileCount > 0) {
+    parts.push(`${fileCount} file${fileCount === 1 ? '' : 's'}`);
+  }
+  parts.push(formatCodeChangeTotalsText(totals));
+  return parts.join(', ');
+}
+
+/** Build the strip stats row: file count plus +/− totals. */
+function renderStripStats(
+  statsEl: HTMLElement,
+  chat: Chat,
+  totals: ChatCodeChangeTotals,
+): void {
+  const frag = document.createDocumentFragment();
+  appendChatItemCodeChangeStats(frag, chat, totals);
   statsEl.replaceChildren(frag);
 }
 
@@ -255,14 +276,20 @@ export function updateCodeChangeStrip(chat?: Chat | null): void {
     strip.classList.add('hidden');
     statsEl.textContent = '';
     strip.setAttribute('aria-label', 'Code changes in this chat');
+    void import('./code-change-strip-actions').then((m) =>
+      m.syncCodeChangeStripActionsVisibility(null),
+    );
     return;
   }
 
-  const fileCount = getPerFileChangeSummary(chat).length;
   strip.classList.remove('hidden');
-  renderStripStats(statsEl, fileCount, totals);
+  renderStripStats(statsEl, chat, totals);
   strip.setAttribute(
     'aria-label',
-    `Code changes in this chat: ${fileCount} file${fileCount === 1 ? '' : 's'}, ${formatCodeChangeTotalsText(totals)}`,
+    `Code changes in this chat: ${formatChatItemCodeChangeAria(chat)}`,
+  );
+
+  void import('./code-change-strip-actions').then((m) =>
+    m.syncCodeChangeStripActionsVisibility(chat),
   );
 }
