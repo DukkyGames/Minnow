@@ -96,13 +96,13 @@ Turn a plan into waves of tasks, hand them to Builder and Tester agents in isola
 
 Interview, spec, research, draft, review, polish, final. Super Plan walks an idea all the way to a reviewed plan in `documentation/plans/` without writing a line of code along the way.
 
-### Brain — knowledge that survives the session
+### Brain — Deep knowledge trees with Semantic recall
 
 A markdown wiki in your Minnow home: graph view, page editing, an append-only log, AI proposals awaiting review, memories, ingest, lint, and a code-symbol index of your repositories. The assistant reads and writes it with tools.
 
 ![Brain knowledge graph](documentation/images/app-brain.png)
 
-### Models — run what your hardware can actually run
+### Models — Llama.cpp hosting built in
 
 Hardware-fit scoring, Hugging Face downloads, local serving, providers, per-role routing, sampler and thinking defaults, and token usage with cost. Routing is the one worth setting up: a 3B model is fine at naming a chat, and you don't want it judging whether your `/goal` is met.
 
