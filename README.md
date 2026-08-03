@@ -1,13 +1,17 @@
 # Minnow
 
-**A free and open source AI workspace. Chat, code, plan, orchestrate, and remember — in one place, on your own machine.**
+**A free, open source AI harness and workspace that runs on any model and any provider. Local or cloud.**
 
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/HenriGrimm/Minnow?include_prereleases)](https://github.com/HenriGrimm/Minnow/releases)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2)](https://discord.gg/U4FPzv9K4X)
 [![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-db61a2)](https://github.com/sponsors/HenriGrimm)
 
-Minnow runs on the models you already have: [LM Studio](https://lmstudio.ai/), Ollama, llama.cpp, or any OpenAI-compatible endpoint. Your keys, chats, files, and models stay on your disk. Nothing is sent anywhere you did not configure yourself.
+I've been working on this for a few months now. It started as a little chat app and kind of spiraled into a lot more.
+
+Minnow runs on the models you already have — [LM Studio](https://lmstudio.ai/), Ollama, llama.cpp, or any OpenAI-compatible endpoint — and it can host models itself. Your keys, chats, files, and models stay on your disk. Nothing goes anywhere you didn't configure yourself.
+
+It's still a work in progress and some parts are rough. Feedback is genuinely appreciated — [issues](https://github.com/HenriGrimm/Minnow/issues) or [Discord](https://discord.gg/U4FPzv9K4X).
 
 > **The mission:** put a complete AI workspace in the hands of everyone who builds, as free and open source software.
 >
@@ -32,15 +36,43 @@ Prefer an installer? Packaged builds for Windows, macOS, and Linux are on [Relea
 
 ---
 
-## Why Minnow
+## What's in it
 
-Most local-AI tools give you a chat box next to a model. Minnow gives you the whole loop — think it through, build it, delegate it, and keep what you learned — on one desktop, sharing one chat engine, one tool set, one session store, and one workspace.
+Everything below is built in and always on. No app store, no tiers, nothing to unlock.
 
-- **It is a workspace, not a chat window.** Eight apps on one shell: Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings. All finished, all always on, no app store and nothing to unlock.
-- **It builds, not just suggests.** 114 built-in tools — files, git, LSP, terminal, web, browser automation, sub-agents — with per-tool permissions you set to Full, Ask, or Off.
-- **It delegates.** Orchestrator boards run a plan as a kanban delivery line with Builder and Tester agents in isolated git worktrees.
-- **It remembers.** Brain is a markdown wiki your agents read and write, with semantic recall and a code index — not a context window that forgets you tomorrow.
-- **It is yours.** Every prompt is an editable markdown file, every skill is a `SKILL.md`, every theme is a token set, and the whole thing is AGPL.
+| | |
+|---|---|
+| **Chat** | The desktop surface. Sessions, modes, attachments, voice, notifications. |
+| **Deep research** | Multi-round searching, reading, and synthesis into a saved report. |
+| **A full coding workspace** | Editor, terminal, git, dev servers, real Chromium preview, chat beside it all. |
+| **Planning** | Super Plan takes an idea to a reviewed, buildable spec without writing code. |
+| **Task orchestration** | Boards that run a plan as waves of Builder and Tester agents in git worktrees. |
+| **Scheduled tasks** | Recurring agent jobs on an interval or cron, with run history. |
+| **Prompt improvement** | Write a rough draft, hit Expand, get the prompt you meant to write. |
+| **Intent-based coding** | Type what a line should do in plain English; Tab turns it into code. |
+| **Autocomplete** | Inline ghost text with real language-server intelligence behind it. |
+| **Loops** | `/loop` re-runs a prompt on a schedule inside the same chat. |
+| **Goals** | `/goal` keeps the chat working until a condition is actually true, judged by a separate evaluator. |
+| **Local model hosting** | Hardware-fit scoring, Hugging Face downloads, and serving models yourself. |
+| **Issue tracker** | A list and board the agent can file to, triage, and work through itself. |
+| **Dev server management** | Register, start, stop, and watch the servers a project needs. |
+| **Git & GitHub** | Status, stage, diff, commit, branch, pull, push, merge-to-main, and PRs through your own `gh`. |
+| **Multi-model routing** | Bind different models to different jobs — chat, titles, research, review, each agent role. |
+| **Brain & code map** | A markdown knowledge wiki with semantic recall, plus a symbol and call-graph index of your repos. |
+
+And **114 built-in tools** behind it — files, git, LSP, terminal, web, browser automation, sub-agents — each one set to Full, Ask, or Off by you.
+
+---
+
+## Why it's shaped this way
+
+Most local-AI tools give you a chat box next to a model. I wanted the whole loop — think it through, build it, delegate it, and keep what you learned — on one desktop, sharing one chat engine, one tool set, one session store, and one workspace.
+
+- **It's a workspace, not a chat window.** Eight apps on one shell: Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings.
+- **It builds, it doesn't just suggest.** The tools are real and the permissions are yours.
+- **It delegates.** Boards run agents in parallel in isolated worktrees and merge at the end.
+- **It remembers.** Brain is a markdown wiki your agents read and write — not a context window that forgets you tomorrow.
+- **It's yours.** Every prompt is an editable markdown file, every skill is a `SKILL.md`, every theme is a token set, and the whole thing is AGPL.
 
 ---
 
@@ -48,7 +80,9 @@ Most local-AI tools give you a chat box next to a model. Minnow gives you the wh
 
 ### Code — the build workspace
 
-File tree, CodeMirror with LSP and inline completion, terminal tabs, source control, dev servers, and browser preview — with chat sitting beside your project instead of in another window.
+File tree, CodeMirror with language-server intelligence and inline completion, terminal tabs, source control, dev servers, and a real Chromium preview. Two things the usual editor doesn't have: **Ctrl+K** turns a description into a diff on your selection, and **Intent mode** turns a line of plain English into code you accept with Tab. Chat sits beside the project instead of in another window, driving the same files, git, and terminals you are.
+
+The source-control panel does status, stage, diff, commit, branch, pull, push, and merge-to-main, and it can write the commit message from your staged diff. Issues and boards open pull requests through your own `gh` CLI — Minnow never holds a GitHub token. The dev-server screen registers the servers a project needs (command, cwd, port, auto-start, which worktree) and the model drives the same controls, so "start the dev server and check the console" is one instruction. **Code map** indexes symbols and call relationships across the repo, for you and for the agent.
 
 ![Minnow Code app](documentation/images/app-code.png)
 
@@ -62,8 +96,6 @@ Turn a plan into waves of tasks, hand them to Builder and Tester agents in isola
 
 Interview, spec, research, draft, review, polish, final. Super Plan walks an idea all the way to a reviewed plan in `documentation/plans/` without writing a line of code along the way.
 
-![Super Plan pipeline](documentation/images/app-super-plan.png)
-
 ### Brain — knowledge that survives the session
 
 A markdown wiki in your Minnow home: graph view, page editing, an append-only log, AI proposals awaiting review, memories, ingest, lint, and a code-symbol index of your repositories. The assistant reads and writes it with tools.
@@ -72,7 +104,7 @@ A markdown wiki in your Minnow home: graph view, page editing, an append-only lo
 
 ### Models — run what your hardware can actually run
 
-Hardware-fit scoring, Hugging Face downloads, local serving, providers, per-role routing, sampler and thinking defaults, and token usage with cost.
+Hardware-fit scoring, Hugging Face downloads, local serving, providers, per-role routing, sampler and thinking defaults, and token usage with cost. Routing is the one worth setting up: a 3B model is fine at naming a chat, and you don't want it judging whether your `/goal` is met.
 
 ![Models app](documentation/images/app-models.png)
 
@@ -101,7 +133,7 @@ Multi-round searching, reading, and synthesis behind a progress stepper, scoped 
 </tr>
 </table>
 
-Full tour: **[Apps guide](documentation/guides/apps.md)**.
+Full tour: **[Apps guide](documentation/manual/apps/overview.md)**.
 
 ---
 
@@ -130,15 +162,15 @@ Minnow is meant to be taken apart. Everything the app does, you can extend witho
 
 ---
 
-## Contributing
+## Feedback and contributing
 
-Minnow is built in the open by a small community and one maintainer. Issues, pull requests, docs fixes, skills, and themes are all welcome — a first-time contribution is as good as a feature.
+This is a work in progress built by one maintainer and a small community, and some parts are rough. If something is broken, confusing, or missing, I want to hear it — that's most of what shapes what gets built next.
 
 - 💬 [Discord](https://discord.gg/U4FPzv9K4X)
 - 🐛 [Issues](https://github.com/HenriGrimm/Minnow/issues)
 - ❤️ [Sponsor](https://github.com/sponsors/HenriGrimm) — development is funded by the people who use it, which is what keeps it free for everyone else.
 
-Working in the codebase? Start with [AGENTS.md](AGENTS.md) and [documentation/context.md](documentation/context.md).
+Pull requests, docs fixes, skills, and themes are all welcome, and a first-time contribution is as good as a feature. Working in the codebase? Start with [AGENTS.md](AGENTS.md) and [documentation/context.md](documentation/context.md).
 
 ---
 
@@ -147,11 +179,12 @@ Working in the codebase? Start with [AGENTS.md](AGENTS.md) and [documentation/co
 | Doc | What's in it |
 |-----|--------------|
 | [Setup from source](documentation/contributor/setup-from-source.md) | Clone, install, providers, first run |
-| [Apps](documentation/guides/apps.md) | Tour of the eight apps and the modes |
+| [Apps](documentation/manual/apps/overview.md) | Tour of the eight apps and the modes |
+| [Skills and commands](documentation/manual/chat/skills-and-commands.md) | `/` skills, the Skills Library, `/goal`, `/loop` |
 | [Commands](documentation/contributor/commands.md) | Every script, flag, and environment variable |
-| [Configuration](documentation/guides/configuration.md) | `~/.minnow`, providers, secrets |
+| [Configuration](documentation/manual/reference/configuration.md) | `~/.minnow`, providers, secrets |
 | [Architecture](documentation/contributor/architecture.md) | How the three processes fit together |
-| [Troubleshooting](documentation/guides/troubleshooting.md) | When something won't start |
+| [Troubleshooting](documentation/manual/reference/troubleshooting.md) | When something won't start |
 
 Full index: [documentation/](documentation/README.md).
 
