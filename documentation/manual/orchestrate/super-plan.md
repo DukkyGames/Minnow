@@ -44,6 +44,7 @@ Answering "you decide" to everything produces a plan where the model decided eve
 | Setting | Default | What it does |
 |---------|---------|--------------|
 | **Review rounds** | 2 | 0 skips review entirely; 1 gives one critique and one rewrite; up to 4 |
+| **Review timeout** | 20 min | How long one review pass may run before the stage gives up (5–120). Raise it for slow reviewer models or large plans |
 | **Interview** | On | Turn off to skip straight to the spec |
 | **Question budget** | ~20 | Between 5 and 40 |
 | **Research** | On | Turn off when you already know the domain |
@@ -55,6 +56,8 @@ Answering "you decide" to everything produces a plan where the model decided eve
 **Stage models are the highest-leverage setting here.** The reviewer is doing the hardest thinking in the pipeline — finding what a plan is missing. Binding a strong model to the reviewer and a cheaper one to the drafting turns often gives better plans than running everything on one mid-tier model.
 
 **Plan granularity** — large, medium or small — lives in the same section and controls how finely the resulting plan is split into tasks. That directly shapes the board you get next.
+
+If a review pass keeps getting cut short, the review timeout is only half the story: the watchdog also stops a reviewer that goes quiet for too long. See [Settings → Agents → Watchdog](../apps/settings.md) → Agent supervision for the stall timeout and repeated-tool limit.
 
 ## What you end up with
 

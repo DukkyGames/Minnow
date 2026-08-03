@@ -57,6 +57,7 @@ import { renderFilesystemAccessSettings } from './settings-filesystem';
 import { renderAppUpdatesSettings } from './settings-updates';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderAutopilotSettingsSection } from './settings-autopilot';
+import { renderAgentSupervisionSection } from './settings-watchdog';
 import { renderSkillsSettingsSection } from './settings-skills';
 import { renderSkillsLibrarySettingsSection } from './settings-skills-library';
 import {
@@ -1366,6 +1367,7 @@ async function appendGenerationTimeoutsSection(
 }
 
 async function renderWatchdogSection(): Promise<void> {
+  const generation = beginAsyncSectionRender('watchdog');
   const mount = clearMount('settingsWatchdogBody');
   if (!mount) return;
 
@@ -1374,13 +1376,15 @@ async function renderWatchdogSection(): Promise<void> {
 
   const lead = el('p', 'settings-section-lead');
   lead.textContent =
-    'Server-side limits while models and agents stream. Applies to the next generation; no restart needed.';
+    'Limits that stop a run when it hangs: how long the model may stream without output, and how long an agent may go without visible progress before the watchdog recovers or blocks it. Applies to the next run; no restart needed.';
   shell.appendChild(lead);
 
   const content = el('div', 'settings-general__content');
   shell.appendChild(content);
 
   await appendGenerationTimeoutsSection(content, { emphasis: true });
+  if (isAsyncSectionRenderStale('watchdog', generation)) return;
+  await renderAgentSupervisionSection(content, { emphasis: true });
 }
 
 let toolsSectionInitialized = false;

@@ -344,12 +344,31 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),
   field('agents.watchdog', 'Watchdog', 'agents', 'watchdog', {
     keywords: ['timeout', 'stall', 'generation', 'streaming', 'heartbeat', 'recovery'],
-    description: 'Server-side generation limits while models and agents stream.',
+    description:
+      'Limits that stop a hung run: generation timeouts plus agent stall and loop detection.',
   }),
   field('agents.watchdog.generation', 'Generation timeouts', 'agents', 'watchdog', {
     keywords: ['idle timeout', 'max duration', 'streaming', 'upstream'],
     description:
       'Idle and max-duration limits while streaming from the model. Idle timeout resets when new tokens arrive.',
+  }),
+  field('agents.watchdog.supervision', 'Agent supervision', 'agents', 'watchdog', {
+    keywords: [
+      'stall',
+      'progress stall',
+      'heartbeat',
+      'heartbeat dead',
+      'unresponsive',
+      'duplicate tool',
+      'repeated tool',
+      'loop',
+      'repetition',
+      'recovery',
+      'sub-agent',
+      'plan review',
+    ],
+    description:
+      'Stall timeout, heartbeat liveness, and repeated-tool loop detection for sub-agents and orchestrate task chats.',
   }),
   field('agents.autopilot.selfHeal', 'Self-heal & provisioning', 'agents', 'autopilot', {
     keywords: ['self-heal', 'provision', 'quarantine', 'infra', 'worktree', 'stall'],

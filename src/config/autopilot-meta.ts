@@ -28,8 +28,11 @@ export interface AutopilotMeta {
   maxFinalTestAttempts: number;
   /** When Continue should auto-route to a fresh summarized chat instead of nudging. */
   continueSmartRoute: AutopilotContinueSmartRoute;
+  /** @deprecated Read-only legacy fallback — see config/supervision-thresholds. */
   heartbeatIntervalMs: number;
+  /** @deprecated Read-only legacy fallback — see config/supervision-thresholds. */
   progressStallMs: number;
+  /** @deprecated Read-only legacy fallback — see config/supervision-thresholds. */
   heartbeatDeadMs: number;
   plannerProviderId: string;
   plannerModelId: string;

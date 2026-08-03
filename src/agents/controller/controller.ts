@@ -7,6 +7,7 @@ import { normalizeModeId } from '../../chat/modes/types';
 import { getBoardGroupForChat } from '../../state/chat-groups';
 import { appendTaskRunHistory, getBoardExecutionMode, isBoardRunning, updateTask } from '../../state/orchestrate-board-store';
 import { resolveSelfHealMaxRounds } from '../../config/autopilot-meta';
+import { resolveSupervisionThresholds } from '../../config/supervision-thresholds';
 import { findChatById } from '../../state/sessions';
 import { executeTool, getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { loadSubAgentConfig } from '../sub-agent-config';
@@ -478,11 +479,9 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     const timeoutMs = internals.spawnTimeoutMs ?? typeConfig.timeoutMs ?? config.defaultTimeoutMs;
     const checkInMs = config.checkInNudgeMs ?? 0;
     armRunTimers(internals, timeoutMs, checkInMs, runTimerHandlers);
-    setHeartbeatConfig({
-      heartbeatIntervalMs: config.heartbeatIntervalMs,
-      progressStallMs: config.progressStallMs,
-      heartbeatDeadMs: config.heartbeatDeadMs,
-    });
+    // Resolved centrally so a board dispatch and a sub-agent dispatch cannot write
+    // different values into the shared heartbeat singleton.
+    setHeartbeatConfig(resolveSupervisionThresholds());
     setRepetitionThresholds({
       duplicateToolCallThreshold: config.duplicateToolCallThreshold,
     });
@@ -1149,11 +1148,15 @@ async function tier1RestartSubAgent(runId: string, reason: string): Promise<void
     category,
     idempotencyKey,
     attempt,
+    providerId,
+    modelId,
   } = old;
 
   const note = `Watchdog tier-1 recovery (${reason})`;
   const nextTask = `${note}\n\n${task}`;
 
+  // Carry the spawn-site model and timeout: without them the recovery run silently
+  // falls back to the type/parent binding and the caller's own deadline.
   const result = await spawnSubAgentInternal({
     type,
     task: nextTask,
@@ -1164,6 +1167,11 @@ async function tier1RestartSubAgent(runId: string, reason: string): Promise<void
     boardTaskId: boardTaskId ?? undefined,
     category,
     modeId: internals.spawnModeId,
+    ...(providerId ? { providerId } : {}),
+    ...(modelId ? { modelId } : {}),
+    ...(internals.spawnTimeoutMs !== undefined
+      ? { timeoutMs: internals.spawnTimeoutMs }
+      : {}),
   });
 
   internals.run.supersededByRunId = result.runId;
@@ -1219,6 +1227,8 @@ async function tier2AutoRecover(runId: string, reason: string): Promise<void> {
     category,
     idempotencyKey,
     attempt,
+    providerId,
+    modelId,
   } = old;
 
   const cap = resolveSelfHealMaxRounds();
@@ -1240,6 +1250,11 @@ async function tier2AutoRecover(runId: string, reason: string): Promise<void> {
     boardTaskId: boardTaskId ?? undefined,
     category,
     modeId: internals.spawnModeId,
+    ...(providerId ? { providerId } : {}),
+    ...(modelId ? { modelId } : {}),
+    ...(internals.spawnTimeoutMs !== undefined
+      ? { timeoutMs: internals.spawnTimeoutMs }
+      : {}),
   });
 
   internals.run.supersededByRunId = result.runId;
@@ -1415,6 +1430,7 @@ function registerControllerWatchdogHandlers(): void {
     tier2Surface: tier2SurfaceSubAgent,
     tier2AutoRecover,
     isRunAfkSupervised,
+    resolveMaxRecoveryAttempts: resolveSelfHealMaxRounds,
     finalizeDoneUnacked: finalizeDoneUnackedSubAgent,
     onLifecycleChange: (run) => {
       mirrorRegistryEntry(run);

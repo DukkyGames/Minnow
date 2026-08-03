@@ -232,6 +232,7 @@ export async function saveSubAgentConfigToServer(
   writeLocalSubAgents(overrides);
   runtimeUserOverrides = overrides;
   cachedMerged = null;
+  cachedUserOverrides = undefined;
   return true;
 }
 

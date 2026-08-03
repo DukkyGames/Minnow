@@ -86,6 +86,7 @@
   {
     "key": "general.desktop.zoom",
     "label": "Interface zoom",
+    "description": "Scale the Minnow desktop window (Electron shell only).",
     "keywords": [
       "zoom",
       "scale",
@@ -1313,7 +1314,7 @@
   {
     "key": "agents.watchdog",
     "label": "Watchdog",
-    "description": "Server-side generation limits while models and agents stream.",
+    "description": "Limits that stop a hung run: generation timeouts plus agent stall and loop detection.",
     "keywords": [
       "timeout",
       "stall",
@@ -1349,6 +1350,34 @@
     "type": "number",
     "sensitivity": "normal",
     "writable": true,
+    "refreshAreas": [
+      "watchdog"
+    ]
+  },
+  {
+    "key": "agents.watchdog.supervision",
+    "label": "Agent supervision",
+    "description": "Stall timeout, heartbeat liveness, and repeated-tool loop detection for sub-agents and orchestrate task chats.",
+    "keywords": [
+      "stall",
+      "progress stall",
+      "heartbeat",
+      "heartbeat dead",
+      "unresponsive",
+      "duplicate tool",
+      "repeated tool",
+      "loop",
+      "repetition",
+      "recovery",
+      "sub-agent",
+      "plan review"
+    ],
+    "category": "agents",
+    "area": "watchdog",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
     "refreshAreas": [
       "watchdog"
     ]

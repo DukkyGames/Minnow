@@ -30,6 +30,7 @@ import {
   resolveSelfHealMaxRounds,
   resolveMaxEnvFixAttempts,
 } from '../config/autopilot-meta.ts';
+import { resolveSupervisionThresholds } from '../config/supervision-thresholds.ts';
 import {
   classifyTaskFailure,
   extractChatFailureText,
@@ -655,12 +656,8 @@ function recordFixerStallStopForTests(taskId: string, chatId: string): void {
 const fixerFinalizeInFlight = new Set<string>();
 
 function refreshHeartbeatThresholds(): void {
-  const meta = getAutopilotMetaSync();
-  setHeartbeatConfig({
-    heartbeatIntervalMs: meta.heartbeatIntervalMs,
-    progressStallMs: meta.progressStallMs,
-    heartbeatDeadMs: meta.heartbeatDeadMs,
-  });
+  // Shared singleton with the sub-agent watchdog — both sides must resolve identically.
+  setHeartbeatConfig(resolveSupervisionThresholds());
 }
 
 /** How a linked task chat ended its latest assistant turn. */
@@ -1257,7 +1254,7 @@ function startTaskChatSupervision(chatId: string): void {
 
     const sup = getRunSupervision(runId);
     if (!sup) return;
-    const meta = getAutopilotMetaSync();
+    const thresholds = resolveSupervisionThresholds();
     const progressAge = getProgressAgeMs(runId);
     if (progressAge == null) return;
 
@@ -1269,7 +1266,7 @@ function startTaskChatSupervision(chatId: string): void {
 
     const stallTask = group.orchestrateBoard.tasks.find((t) => t.id === taskId);
 
-    const stallMs = meta.progressStallMs * TASK_CHAT_STALL_MULTIPLIER;
+    const stallMs = thresholds.progressStallMs * TASK_CHAT_STALL_MULTIPLIER;
     if (progressAge < stallMs) return;
 
     const restarts = taskChatStallRestarts.get(chatId) ?? 0;

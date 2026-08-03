@@ -5,6 +5,7 @@
 import type { AggregateResult } from '../../agents/types';
 import { spawnSubAgent, waitForSubAgent } from '../../agents/orchestrator';
 import {
+  DEFAULT_SUPER_PLAN_CONFIG,
   getSuperPlanConfigSync,
   loadSuperPlanConfig,
   resolveSuperPlanResearchMaxRounds,
@@ -147,7 +148,6 @@ async function readFileOrEmpty(path: string | undefined): Promise<string> {
 const RESEARCH_POLL_INTERVAL_MS = 3000;
 const RESEARCH_TIMEOUT_MS = 30 * 60 * 1000;
 const RESEARCH_MAX_CONSECUTIVE_POLL_FAILURES = 5;
-const REVIEW_SUB_AGENT_TIMEOUT_MS = 20 * 60 * 1000;
 
 type ResearchWaitResult = { kind: 'done'; report: string } | { kind: 'paused' };
 
@@ -214,10 +214,10 @@ function isAggregateResult(value: unknown): value is AggregateResult {
 }
 
 /** Friendly message shared by both timeout detection paths (abort + type-level timer). */
-function reviewTimeoutError(pass: number): Error {
+function reviewTimeoutError(pass: number, timeoutMs: number): Error {
   return new Error(
-    `Plan review (pass ${pass}) timed out after ${REVIEW_SUB_AGENT_TIMEOUT_MS / 60000} minutes — ` +
-      'retry the stage, or lower review rounds in Super Plan settings.',
+    `Plan review (pass ${pass}) timed out after ${Math.round(timeoutMs / 60000)} minutes — ` +
+      'retry the stage, or raise the review timeout in Super Plan settings.',
   );
 }
 
@@ -225,6 +225,7 @@ function reviewTimeoutError(pass: number): Error {
 export function assertPlanReviewerAggregate(
   result: unknown,
   pass: number,
+  timeoutMs: number = DEFAULT_SUPER_PLAN_CONFIG.reviewTimeoutMs,
 ): AggregateResult {
   if (!isAggregateResult(result)) {
     throw new Error(`Plan review (pass ${pass}) did not return a sub-agent result.`);
@@ -232,7 +233,7 @@ export function assertPlanReviewerAggregate(
   if (result.status === 'cancelled' && result.error === 'timeout') {
     // The sub-agent type's own wall-clock timer fired (possibly racing the
     // stage's AbortSignal.timeout below) — report it the same way either way.
-    throw reviewTimeoutError(pass);
+    throw reviewTimeoutError(pass, timeoutMs);
   }
   const summary = (result.outcome?.summary ?? result.summary ?? '').trim();
   const placeholder = 'Sub-agent completed with no text output.';
@@ -389,13 +390,14 @@ async function runReviewStage(
     priorCritique: pass === 2 ? state.review1Critique : undefined,
   });
 
+  const reviewTimeoutMs = config.reviewTimeoutMs;
   const spawned = await spawnSubAgent({
     type: 'plan-reviewer',
     task,
     wait: false,
     parentChatId: chat.id,
     modeId: 'super-plan',
-    timeoutMs: REVIEW_SUB_AGENT_TIMEOUT_MS,
+    timeoutMs: reviewTimeoutMs,
     ...(config.reviewerModel.providerId?.trim()
       ? { providerId: config.reviewerModel.providerId.trim() }
       : {}),
@@ -412,11 +414,11 @@ async function runReviewStage(
   try {
     result = await waitForSubAgent(
       spawned.runId,
-      AbortSignal.timeout(REVIEW_SUB_AGENT_TIMEOUT_MS),
+      AbortSignal.timeout(reviewTimeoutMs),
     );
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      throw reviewTimeoutError(pass);
+      throw reviewTimeoutError(pass, reviewTimeoutMs);
     }
     throw err;
   } finally {
@@ -432,7 +434,7 @@ async function runReviewStage(
     return { kind: 'paused' };
   }
 
-  const aggregate = assertPlanReviewerAggregate(result, pass);
+  const aggregate = assertPlanReviewerAggregate(result, pass, reviewTimeoutMs);
   const critique = formatReviewCritiqueForPass2(
     aggregate.outcome?.summary ?? aggregate.summary,
     JSON.stringify(aggregate.outcome?.findings ?? [], null, 2),

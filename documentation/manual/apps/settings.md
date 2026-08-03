@@ -45,10 +45,25 @@ Theme family and mode — 16 themes in total, eight families each with a dark an
 | **Agents** | Prompt profiles (Full / Lite / custom) with a live token estimate, composer modes, Super Plan pipeline settings, plan granularity, work agents, sub-agent types, context policy, setup profile export and import |
 | **Rules** | Standing instructions injected into every prompt, organised into groups |
 | **Agent packs** | Download a template or the built-in pack, upload a zip, manage installed packs |
-| **Autopilot** | Defaults for orchestrate boards: execution mode, isolation, concurrency, planner model, retries, heartbeat, self-heal, infra provisioning |
-| **Watchdog** | Generation limits while streaming — idle timeout and maximum duration |
+| **Autopilot** | Defaults for orchestrate boards: execution mode, isolation, concurrency, planner model, retries, self-heal, infra provisioning |
+| **Watchdog** | Generation limits while streaming, plus agent stall, heartbeat, and loop detection |
 
-**Watchdog** is the setting to reach for when a model hangs mid-stream and the run sits there forever. The idle timeout resets whenever new tokens arrive, so it catches a genuinely stalled stream without cutting off a slow one.
+**Watchdog** is the setting to reach for when a run hangs and sits there forever. It has two halves.
+
+**Generation timeouts** cover the model stream itself. The idle timeout resets whenever new tokens arrive, so it catches a genuinely stalled stream without cutting off a slow one.
+
+**Agent supervision** covers agents — both sub-agents and orchestrate task chats:
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| **Stall timeout** | 90 sec | How long an agent may go without producing anything visible — streamed text, reasoning, or a tool call — before it counts as stuck |
+| **Unresponsive after** | 30 sec | How long without any heartbeat before the run is treated as dead. Liveness only, not model output |
+| **Heartbeat interval** | 7 sec | How often a running agent reports in |
+| **Repeated tool limit** | 5 | How many identical tool calls (same name and arguments) may occur close together before the run counts as looping. `0` turns it off |
+
+When a run trips one of these, read-only agents are restarted from scratch, bounded by **Max self-heal rounds** under Autopilot. Agents that can write files are not auto-restarted — the task is marked blocked instead.
+
+The stall timeout is the usual culprit behind a long plan review or research pass getting cut short: a model that reasons for two minutes in one non-streaming completion produces nothing observable for that whole time. Raise it before reaching for anything else. Repeats spread across a long run no longer count as a loop — only bunched-up identical calls do — so the repeated tool limit rarely needs changing.
 
 ### Integrations
 

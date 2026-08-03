@@ -284,9 +284,10 @@ Drop-in work agent bundles under `~/.minnow/agent-packs/<pack-id>/` (`manifest.j
 |---------|-------------|
 | Enabled | Master toggle |
 | Max concurrent | Global cap |
-| Default timeout | ms |
+| Default timeout | ms; a caller-supplied `timeoutMs` on the spawn wins over this and over the per-type value |
 | Check-in nudge | ms (0 = off) |
-| Duplicate tool limit | Identical tool+args calls before watchdog repetition recovery (`0` = off, max 256; default 5) |
+
+Stall, heartbeat, and loop detection are **not** here — see [Watchdog](#watchdog-configjson--chat-sub-agentsjson).
 
 **Types (8):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `plan-reviewer`
 
@@ -298,13 +299,17 @@ Per type: enabled, max concurrent, timeout, max input tokens, context policy, su
 |-------|----------|
 | Board defaults | Execution mode (`manual`/`sequential`/`auto`/`afk`), isolation (`auto`/`off`/`per-task`/`per-wave`), max concurrent tasks |
 | Test & build retries | Per-task test/build attempts, final test attempts, continue smart-route (`off`/`conservative`/`aggressive`) |
-| Heartbeat & stall | Heartbeat interval, progress stall, heartbeat dead (ms) |
+| Heartbeat & stall | Moved to **Watchdog → Agent supervision** (the legacy `autopilot.heartbeatIntervalMs` / `progressStallMs` / `heartbeatDeadMs` keys are still read as a fallback, never written) |
 | Planner model fallback | Provider + model |
 | Self-heal & provisioning | Max self-heal rounds, infra provision timeout, auto-provision infra, auto-restart stalled tasks, guard `cd` outside worktree |
 
-### Watchdog (`config.json` → `chat`)
+`selfHealMaxRounds` doubles as the watchdog recovery-attempt cap: it bounds total dispatches per logical task across the tier-1/tier-2 restart chain.
 
-Settings → **Agents → Watchdog** — server-side limits while streaming from the model.
+### Watchdog (`config.json` → `chat`, `sub-agents.json`)
+
+Settings → **Agents → Watchdog**.
+
+**Generation timeouts** — server-side limits while streaming from the model:
 
 | Setting | Key |
 |---------|-----|
@@ -312,6 +317,19 @@ Settings → **Agents → Watchdog** — server-side limits while streaming from
 | Max duration (minutes) | `chat.generationMaxDurationMs` |
 
 Idle timeout resets when new tokens arrive; applies to the next generation without restart.
+
+**Agent supervision** (`sub-agents.json`) — one policy covering sub-agents *and* orchestrate task chats. Both write the same `heartbeatConfig` singleton in `agents/controller/wrapper`, so they must resolve from one store; `config/supervision-thresholds.ts` is that resolver.
+
+| Setting | Key | Range | Default |
+|---------|-----|-------|---------|
+| Stall timeout | `progressStallMs` | 10 s – 30 min | 90 s |
+| Unresponsive after | `heartbeatDeadMs` | 5 s – 5 min | 30 s |
+| Heartbeat interval | `heartbeatIntervalMs` | 1 s – 60 s | 7 s |
+| Repeated tool limit | `duplicateToolCallThreshold` | 0 – 256 (`0` = off) | 5 |
+
+Progress is bumped by streamed messages, live activity, and tool calls — a model that reasons for longer than the stall timeout in one non-streaming completion trips it. Repeated-tool detection uses a sliding window (`4x` the threshold, min 12 recent calls), so identical calls spread across a long run are ignored.
+
+On a trip: read-only agent types are restarted from scratch (tier 1) until `autopilot.selfHealMaxRounds` dispatches are used; write-capable types go straight to blocked (tier 2), except on running AFK/auto boards where they are re-dispatched under the same cap.
 
 ---
 

@@ -37,6 +37,8 @@ export interface SuperPlanConfig {
   reviewerModel: SuperPlanStageModelBinding;
   /** Optional model override for planner draft/finalize chat turns. */
   plannerModel: SuperPlanStageModelBinding;
+  /** Wall-clock budget for one plan-review pass (spawn timeout + stage wait). */
+  reviewTimeoutMs: number;
 }
 
 const SUPER_PLAN_META_STORAGE_KEY = 'minnow.superPlanMeta';
@@ -53,7 +55,15 @@ export const DEFAULT_SUPER_PLAN_CONFIG: SuperPlanConfig = {
   researchModel: { providerId: '', modelId: '' },
   reviewerModel: { providerId: '', modelId: '' },
   plannerModel: { providerId: '', modelId: '' },
+  reviewTimeoutMs: 20 * 60 * 1000,
 };
+
+/** Coerce the review budget to [5 min, 120 min]. */
+export function clampReviewTimeoutMs(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_SUPER_PLAN_CONFIG.reviewTimeoutMs;
+  return Math.min(7_200_000, Math.max(300_000, Math.round(n)));
+}
 
 let cachedSuperPlan: SuperPlanConfig | null = null;
 
@@ -122,6 +132,7 @@ function parseSuperPlanBlock(raw: unknown): SuperPlanConfig {
     researchModel: parseStageModelBinding(models.research ?? block.researchModel),
     reviewerModel: parseStageModelBinding(models.reviewer ?? block.reviewerModel),
     plannerModel: parseStageModelBinding(models.planner ?? block.plannerModel),
+    reviewTimeoutMs: clampReviewTimeoutMs(block.reviewTimeoutMs),
   };
 }
 
@@ -210,6 +221,7 @@ function serializeSuperPlanForMeta(config: SuperPlanConfig): Record<string, unkn
     researchScope: config.researchScope,
     researchMaxRounds: config.researchMaxRounds,
     researchDepth: config.researchDepth,
+    reviewTimeoutMs: config.reviewTimeoutMs,
     models: {
       research: config.researchModel,
       reviewer: config.reviewerModel,
@@ -263,6 +275,10 @@ export async function saveSuperPlanConfig(
       patch.plannerModel !== undefined
         ? parseStageModelBinding(patch.plannerModel)
         : current.plannerModel,
+    reviewTimeoutMs:
+      patch.reviewTimeoutMs !== undefined
+        ? clampReviewTimeoutMs(patch.reviewTimeoutMs)
+        : current.reviewTimeoutMs,
   };
   cachedSuperPlan = next;
   writeLocalSuperPlanConfig(next);
