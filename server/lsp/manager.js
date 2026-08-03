@@ -15,6 +15,7 @@ import {
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
 import { resolveLspSpawnArgv, tryResolveBundledTsserverPath } from './resolve-command.js';
 import { buildLspProcessEnv } from './paths.js';
+import { applyNodeRuntimeEnv } from './node-runtime.js';
 import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import {
   matchServersForPath,
@@ -450,12 +451,17 @@ function spawnLspChild(argv, workspaceRoot = lspWorkspaceRoot()) {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
-      env: buildLspProcessEnv(
-        {
-          ...process.env,
-          MINNOW_APP_ROOT: APP_ROOT,
-        },
-        workspaceRoot,
+      // ELECTRON_RUN_AS_NODE when bin is the Electron binary — node servers ship
+      // inside app.asar and only Electron's Node can read them (see node-runtime.js).
+      env: applyNodeRuntimeEnv(
+        buildLspProcessEnv(
+          {
+            ...process.env,
+            MINNOW_APP_ROOT: APP_ROOT,
+          },
+          workspaceRoot,
+        ),
+        bin,
       ),
     });
     /** @type {string[]} */
