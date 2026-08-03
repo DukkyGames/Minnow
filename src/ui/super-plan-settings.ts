@@ -175,6 +175,15 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
     4,
   );
 
+  const reviewTimeoutInput = appendNumberField(
+    wrap,
+    'Review timeout (minutes)',
+    'superPlanReviewTimeout',
+    'How long one review pass may run before the stage gives up (5–120; default 20). Raise this for slow reviewer models or large plans.',
+    5,
+    120,
+  );
+
   const grillBudgetInput = appendNumberField(
     wrap,
     'Grill question budget',
@@ -282,6 +291,7 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
   const persist = async (): Promise<void> => {
     await saveSuperPlanConfig({
       reviewRounds: Number(reviewRoundsInput.value),
+      reviewTimeoutMs: Number(reviewTimeoutInput.value) * 60_000,
       grillEnabled: grillEnabledInput.checked,
       researchEnabled: researchEnabledInput.checked,
       grillQuestionBudget: Number(grillBudgetInput.value),
@@ -307,6 +317,7 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
   grillEnabledInput.addEventListener('change', () => void persist());
   researchEnabledInput.addEventListener('change', () => void persist());
   reviewRoundsInput.addEventListener('change', () => void persist());
+  reviewTimeoutInput.addEventListener('change', () => void persist());
   grillBudgetInput.addEventListener('change', () => void persist());
   impeccableSelect.addEventListener('change', () => void persist());
   researchScopeSelect.addEventListener('change', () => void persist());
@@ -335,6 +346,7 @@ export function mountSuperPlanSettings(container: HTMLElement): void {
     grillEnabledInput.checked = config.grillEnabled;
     researchEnabledInput.checked = config.researchEnabled;
     reviewRoundsInput.value = String(config.reviewRounds);
+    reviewTimeoutInput.value = String(Math.round(config.reviewTimeoutMs / 60_000));
     grillBudgetInput.value = String(config.grillQuestionBudget);
     impeccableSelect.value = config.impeccable;
     researchScopeSelect.value = config.researchScope;

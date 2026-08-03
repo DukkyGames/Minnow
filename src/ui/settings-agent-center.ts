@@ -9,7 +9,6 @@ import '../styles/settings-agent-center.css';
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import type { WorkAgentDefinition } from '../agents/work-agent-types';
 import {
-  clampDuplicateToolCallThreshold,
   getSubAgentUserOverridesSync,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
@@ -440,7 +439,7 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   const groupBody = appendSettingsGroup(
     mount,
     'Sub-agent limits',
-    'Global concurrency, timeouts, check-in nudges, and watchdog repetition limits for all sub-agent types.',
+    'Concurrency, wall-clock timeout, and parent check-in nudges for every sub-agent type.',
     'agents.subAgents.limits',
     { emphasis: true },
   );
@@ -453,7 +452,6 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
         | 'globalMaxConcurrent'
         | 'defaultTimeoutMs'
         | 'checkInNudgeMs'
-        | 'duplicateToolCallThreshold'
       >
     >,
   ): Promise<void> => {
@@ -501,21 +499,6 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
   nudgeWrap.appendChild(nudgeInput);
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'sec'));
 
-  const duplicateToolInput = document.createElement('input');
-  duplicateToolInput.type = 'number';
-  duplicateToolInput.className = 'settings-select settings-kv-input';
-  duplicateToolInput.min = '0';
-  duplicateToolInput.max = '256';
-  duplicateToolInput.step = '1';
-  duplicateToolInput.value = String(
-    config.duplicateToolCallThreshold ??
-      clampDuplicateToolCallThreshold(undefined),
-  );
-  duplicateToolInput.setAttribute(
-    'aria-label',
-    'Identical tool calls before watchdog flags repetition (0 disables)',
-  );
-
   groupBody.appendChild(
     createSettingsKvList(
       [
@@ -523,11 +506,18 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
         { term: 'Max concurrent', value: maxInput },
         { term: 'Default timeout', value: timeoutWrap },
         { term: 'Check-in nudge', value: nudgeWrap },
-        { term: 'Duplicate tool limit', value: duplicateToolInput },
       ],
       { className: 'settings-kv settings-kv--row' },
     ),
   );
+
+  const limitsHint = el('p', 'settings-field-hint');
+  limitsHint.append(
+    'Default timeout is the wall-clock budget for one sub-agent run; a caller that passes its own timeout wins. Check-in nudge reminds the parent agent once while a sub-agent runs (Build, General, and Research only; 0 turns it off). Neither affects stall detection — that lives under ',
+    linkToSettingsSection('Watchdog', 'watchdog'),
+    ' → Agent supervision.',
+  );
+  groupBody.appendChild(limitsHint);
 
   enabledCb.addEventListener('change', () => {
     void persistGlobal({ enabled: enabledCb.checked });
@@ -548,13 +538,6 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
       rawSec <= 0 ? 0 : Math.min(1_800, Math.max(10, rawSec));
     nudgeInput.value = String(seconds);
     void persistGlobal({ checkInNudgeMs: secondsToMs(seconds) });
-  });
-  duplicateToolInput.addEventListener('change', () => {
-    const value = clampDuplicateToolCallThreshold(
-      Number(duplicateToolInput.value),
-    );
-    duplicateToolInput.value = String(value);
-    void persistGlobal({ duplicateToolCallThreshold: value });
   });
 }
 

@@ -37,6 +37,9 @@ const runState = new Map<string, WatchdogRunState>();
 
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 
+/** Recovery attempts allowed when the controller has not supplied a cap. */
+export const DEFAULT_MAX_RECOVERY_ATTEMPTS = 4;
+
 export interface WatchdogHandlers {
   tier1Restart: (runId: string, reason: string) => Promise<void>;
   tier2Surface: (runId: string, reason: string) => void;
@@ -44,6 +47,8 @@ export interface WatchdogHandlers {
   isRunAfkSupervised: (run: SubAgentRun) => boolean;
   finalizeDoneUnacked: (runId: string) => void;
   onLifecycleChange: (run: SubAgentRun) => void;
+  /** Total dispatches allowed per logical task, across the supersession chain. */
+  resolveMaxRecoveryAttempts: () => number;
 }
 
 const noopHandlers: WatchdogHandlers = {
@@ -53,6 +58,7 @@ const noopHandlers: WatchdogHandlers = {
   isRunAfkSupervised: () => false,
   finalizeDoneUnacked: () => {},
   onLifecycleChange: () => {},
+  resolveMaxRecoveryAttempts: () => DEFAULT_MAX_RECOVERY_ATTEMPTS,
 };
 
 let handlers: WatchdogHandlers = { ...noopHandlers };
@@ -186,8 +192,13 @@ async function enterSuspect(run: SubAgentRun, reason: string): Promise<void> {
   try {
     setRunLifecycle(run, 'suspect');
 
+    // `tier1Attempted` only guards this run id, and a tier-1 restart mints a new one,
+    // so it alone would let a structurally-stalled task restart forever. `run.attempt`
+    // carries across the supersession chain and is the real cap.
     const canTier1 =
-      isNonMutatingSubAgentRun(run) && !state.tier1Attempted;
+      isNonMutatingSubAgentRun(run) &&
+      !state.tier1Attempted &&
+      (run.attempt ?? 1) < handlers.resolveMaxRecoveryAttempts();
 
     if (canTier1) {
       state.tier1Attempted = true;

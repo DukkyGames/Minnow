@@ -258,6 +258,62 @@ describe('controller watchdog', () => {
     assert.equal(active[0]?.lifecycle, 'dispatching');
   });
 
+  test('tier-1 restarts stop at the recovery attempt cap', async () => {
+    setSubAgentRunnerFactory(() => hangingRunner());
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'Repeated stall',
+      wait: false,
+      parentChatId: PARENT_CHAT,
+      parentTurnId: 'turn-watchdog-cap',
+      category: 'research',
+    });
+
+    const dispatched: string[] = [];
+    let currentId = FIXED_RUN_ID;
+    let surfaced = false;
+
+    for (let i = 0; i < 12 && !surfaced; i += 1) {
+      await waitForRunActive(currentId);
+      dispatched.push(currentId);
+
+      // executeRun resets the shared thresholds from config on every dispatch.
+      setHeartbeatConfig({
+        heartbeatIntervalMs: 100,
+        progressStallMs: 1_000,
+        heartbeatDeadMs: 10_000,
+      });
+
+      now += 2_000;
+      recordHeartbeat(currentId);
+      tickWatchdog();
+      await flushAsync();
+
+      const settled = getSubAgentRun(currentId);
+      assert.equal(settled?.status, 'cancelled');
+
+      if (settled?.error?.startsWith('watchdog_tier2:')) {
+        surfaced = true;
+        break;
+      }
+
+      assert.equal(settled?.error, 'watchdog_tier1_restart');
+      const next = settled?.supersededByRunId;
+      assert.ok(next, 'tier-1 restart must record a successor run');
+      currentId = next;
+    }
+
+    // selfHealMaxRounds defaults to 4: attempts 1-3 restart, attempt 4 surfaces.
+    assert.equal(surfaced, true, 'watchdog must stop restarting and surface');
+    assert.equal(dispatched.length, 4);
+    assert.equal(new Set(dispatched).size, 4);
+    assert.equal(
+      listActiveSubAgentRuns().filter((r) => r.status === 'running').length,
+      0,
+    );
+  });
+
   test('progress stall on shell triggers tier-2 surface', async () => {
     setSubAgentRunnerFactory(() => hangingRunner());
 

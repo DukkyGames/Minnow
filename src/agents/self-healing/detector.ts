@@ -22,6 +22,32 @@ export interface DetectionResult {
 export interface DetectorThresholds {
   duplicateToolCallThreshold: number;
   sameErrorThreshold: number;
+  /**
+   * How many of the most recent calls to consider. Defaults to 4x the duplicate
+   * threshold (floor {@link MIN_REPETITION_WINDOW}).
+   */
+  windowSize?: number;
+}
+
+/**
+ * Smallest sliding window, so a low duplicate threshold still needs the repeats
+ * to be genuinely close together.
+ */
+export const MIN_REPETITION_WINDOW = 12;
+
+/** Sliding-window size for duplicate detection. */
+export function resolveRepetitionWindow(
+  duplicateToolCallThreshold: number,
+  windowSize?: number,
+): number {
+  if (
+    typeof windowSize === 'number' &&
+    Number.isFinite(windowSize) &&
+    windowSize > 0
+  ) {
+    return Math.max(duplicateToolCallThreshold, Math.round(windowSize));
+  }
+  return Math.max(MIN_REPETITION_WINDOW, duplicateToolCallThreshold * 4);
 }
 
 function stableHash(input: string): string {
@@ -52,7 +78,14 @@ function normalizeArgsJson(argsJson: string): string {
   }
 }
 
-/** Detect duplicate tool calls with identical normalized args. */
+/**
+ * Detect duplicate tool calls with identical normalized args.
+ *
+ * Only the most recent {@link resolveRepetitionWindow} calls are considered. Counting
+ * over the whole run instead flags ordinary work — a reviewer that re-reads the same
+ * plan file five times across a long run is not looping, but five identical calls
+ * bunched together is.
+ */
 export function detectRepetition(
   log: ToolCallLogEntry[],
   thresholds: DetectorThresholds,
@@ -65,8 +98,14 @@ export function detectRepetition(
     return null;
   }
 
+  const windowSize = resolveRepetitionWindow(
+    thresholds.duplicateToolCallThreshold,
+    thresholds.windowSize,
+  );
+  const recent = log.length > windowSize ? log.slice(-windowSize) : log;
+
   const counts = new Map<string, number>();
-  for (const entry of log) {
+  for (const entry of recent) {
     const key = `${entry.name}::${normalizeArgsJson(entry.argsJson)}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
     if ((counts.get(key) ?? 0) >= thresholds.duplicateToolCallThreshold) {

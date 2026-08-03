@@ -5,11 +5,6 @@
 import '../styles/settings-general.css';
 
 import {
-  clampHeartbeatDeadMs,
-  clampHeartbeatIntervalMs,
-  clampProgressStallMs,
-} from '../agents/sub-agent-config';
-import {
   loadAutopilotMeta,
   saveAutopilotMeta,
   type AutopilotContinueSmartRoute,
@@ -102,7 +97,9 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Global defaults for orchestrate boards: execution mode, concurrency, isolation, test retries, heartbeat thresholds, and planner model fallback. Per-board overrides stay on the board header. Work agents live under ',
+    'Global defaults for orchestrate boards: execution mode, concurrency, isolation, test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
+    linkToSettingsSection('Watchdog', 'watchdog'),
+    '; work agents under ',
     linkToSettingsSection('Agents', 'agent-center'),
     '; provider models under ',
     linkToSettingsSection('Providers', 'providers'),
@@ -256,44 +253,12 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
   const heartbeatBody = appendSettingsGroup(
     content,
     'Heartbeat & stall',
-    'Supervision thresholds for orchestrate task chats (build, test, fix, final).',
+    'Stall and heartbeat thresholds now live on the Watchdog page — they apply to sub-agents and task chats alike.',
     'agents.autopilot.heartbeat',
-    { emphasis: true },
   );
-
-  const heartbeat = createKvSecondsInput(meta.heartbeatIntervalMs, {
-    minSeconds: 1,
-    maxSeconds: 60,
-    ariaLabel: 'Heartbeat interval in seconds',
-  });
-  const stall = createKvSecondsInput(meta.progressStallMs, {
-    minSeconds: 10,
-    maxSeconds: 1800,
-    ariaLabel: 'Progress stall in seconds',
-  });
-  const dead = createKvSecondsInput(meta.heartbeatDeadMs, {
-    minSeconds: 5,
-    maxSeconds: 300,
-    ariaLabel: 'Heartbeat dead threshold in seconds',
-  });
-
-  heartbeatBody.appendChild(
-    createSettingsKvList(
-      [
-        { term: 'Heartbeat interval', value: heartbeat.wrap },
-        { term: 'Progress stall', value: stall.wrap },
-        { term: 'Heartbeat dead', value: dead.wrap },
-      ],
-      { className: 'settings-kv settings-kv--row' },
-    ),
-  );
-  heartbeatBody.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Progress stall marks a task as stalled when no progress arrives for that duration. Heartbeat dead treats the supervisor as unresponsive after prolonged silence.',
-    ),
-  );
+  const heartbeatMoved = el('p', 'settings-field-hint');
+  heartbeatMoved.append('Open ', linkToSettingsSection('Watchdog', 'watchdog'), ' → Agent supervision.');
+  heartbeatBody.appendChild(heartbeatMoved);
 
   const plannerBody = appendSettingsGroup(
     content,
@@ -433,24 +398,6 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
     void persist({
       continueSmartRoute: smartRouteSelect.value as AutopilotContinueSmartRoute,
     });
-  });
-  heartbeat.input.addEventListener('change', () => {
-    const ms = clampHeartbeatIntervalMs(
-      secondsToMs(Number(heartbeat.input.value)),
-      meta.heartbeatIntervalMs,
-    );
-    heartbeat.input.value = String(msToSeconds(ms));
-    void persist({ heartbeatIntervalMs: ms });
-  });
-  stall.input.addEventListener('change', () => {
-    const ms = clampProgressStallMs(secondsToMs(Number(stall.input.value)), meta.progressStallMs);
-    stall.input.value = String(msToSeconds(ms));
-    void persist({ progressStallMs: ms });
-  });
-  dead.input.addEventListener('change', () => {
-    const ms = clampHeartbeatDeadMs(secondsToMs(Number(dead.input.value)), meta.heartbeatDeadMs);
-    dead.input.value = String(msToSeconds(ms));
-    void persist({ heartbeatDeadMs: ms });
   });
   providerSelect.addEventListener('change', async () => {
     await fillModelSelect(modelSelect, providerSelect.value, modelSelect.value);
