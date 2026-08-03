@@ -64,6 +64,7 @@
     "package:win": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
     "package:mac": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --mac",
     "package:linux": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
+    "package:linux:docker": "node scripts/package-linux-docker.mjs",
     "signing:check": "node scripts/check-macos-signing.mjs",
     "signing:setup": "node scripts/check-macos-signing.mjs --setup",
     "start": "node server.js",
@@ -294,8 +295,7 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "tar.gz"
+        "AppImage"
       ],
       "icon": "public/logos/minnow-logo/minnow/png/minnow-1024.png",
       "category": "Development",
