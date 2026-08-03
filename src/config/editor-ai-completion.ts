@@ -32,6 +32,8 @@ export interface EditorAiCompletionConfig {
   useNativeFim: boolean;
   /** Cache completions by provider/model/prompt/settings/path/context hash. */
   enableCompletionCache: boolean;
+  /** Auto-indent multi-line ghosts on Tab accept (Layer B). */
+  reindentOnAccept: boolean;
 }
 
 const STORAGE_KEY = 'minnow.editorAiCompletion';
@@ -57,6 +59,7 @@ export const DEFAULT_EDITOR_AI_COMPLETION: EditorAiCompletionConfig = {
   contextBudgetChars: 4000,
   useNativeFim: true,
   enableCompletionCache: true,
+  reindentOnAccept: true,
 };
 
 let cached: EditorAiCompletionConfig | null = null;
@@ -127,6 +130,7 @@ export function parseEditorAiCompletionBlock(raw: unknown): EditorAiCompletionCo
     ),
     useNativeFim: block.useNativeFim !== false,
     enableCompletionCache: block.enableCompletionCache !== false,
+    reindentOnAccept: block.reindentOnAccept !== false,
   };
 }
 
@@ -241,6 +245,8 @@ export async function saveEditorAiCompletionConfig(
       patch.enableCompletionCache !== undefined
         ? patch.enableCompletionCache
         : current.enableCompletionCache,
+    reindentOnAccept:
+      patch.reindentOnAccept !== undefined ? patch.reindentOnAccept : current.reindentOnAccept,
   };
   cached = next;
   writeLocal(next);

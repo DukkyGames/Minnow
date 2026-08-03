@@ -6,14 +6,23 @@
 import { Compartment, Prec, type Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin, keymap } from '@codemirror/view';
 import { getEditorAiCompletionConfigSync } from '../../config/editor-ai-completion';
+import { getEditorIntentModeConfigSync } from '../../config/editor-intent-mode';
 import { SuggestionEnginePlugin, type EditorSuggestionOptions } from './engine';
 import { editorSuggestionKeymapBindings } from './keymap';
+import { intentLineDecorationPlugin } from './intent-line-decorations';
+import { acceptedIntentStalenessPlugin } from './intent-staleness';
+import {
+  acceptedIntentContextWindowFacet,
+  acceptedIntentRegionsField,
+} from './intent-regions';
 import {
   dismissSuggestion,
   hasSuggestion,
   intentEnabledField,
   setIntentEnabled,
   suggestionField,
+  completionAcceptContextFacet,
+  completionAcceptContextField,
 } from './state';
 
 /** Compartment for hot-reloading suggestions without remounting the editor. */
@@ -24,13 +33,30 @@ export const editorSuggestionCompartment = new Compartment();
  * toggle would otherwise reset whenever Settings are saved).
  */
 export function editorSuggestionBaseExtensions(): Extension[] {
-  return [intentEnabledField];
+  return [intentEnabledField, acceptedIntentRegionsField];
 }
 
 /** Suggestion field, engine plugin, and the single Tab/Esc keymap. */
 export function editorSuggestionExtensions(opts: EditorSuggestionOptions): Extension[] {
+  const acceptContext = {
+    filePath: opts.filePath,
+    getConfig:
+      opts.getConfig ??
+      (() => opts.config ?? getEditorAiCompletionConfigSync()),
+  };
   return [
+    completionAcceptContextFacet.of(acceptContext),
+    acceptedIntentContextWindowFacet.of(
+      opts.getIntentConfig?.().contextWindow ??
+        getEditorIntentModeConfigSync().contextWindow,
+    ),
+    Prec.high(completionAcceptContextField),
     Prec.high(suggestionField),
+    intentLineDecorationPlugin({
+      filePath: opts.filePath,
+      getIntentConfig: opts.getIntentConfig ?? getEditorIntentModeConfigSync,
+    }),
+    acceptedIntentStalenessPlugin(),
     ViewPlugin.define((view) => new SuggestionEnginePlugin(view, opts)),
     Prec.highest(keymap.of(editorSuggestionKeymapBindings)),
   ];
@@ -80,6 +106,7 @@ export {
   acceptCompletionGhost,
   acceptIntentProposal,
   acceptPartialCompletionGhost,
+  createCompletionSuggestion,
   dismissSuggestion,
   getCompletionSuggestion,
   getIntentSuggestion,
@@ -97,7 +124,13 @@ export {
   suggestionField,
   toggleIntentMode,
 } from './state';
-export type { CompletionSuggestion, IntentSuggestion, Suggestion } from './state';
+export type {
+  AiGhostValue,
+  CompletionSuggestion,
+  CompletionSuggestionOrigin,
+  IntentSuggestion,
+  Suggestion,
+} from './state';
 export {
   classifyIntentLine,
   intentInstructionFromLine,

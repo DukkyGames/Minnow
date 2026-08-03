@@ -4,9 +4,30 @@
 
 import { completionStatus, pickedCompletion } from '@codemirror/autocomplete';
 import type { EditorState, Transaction } from '@codemirror/state';
+import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 
 /** Default pause after accepting an LSP/snippet item before AI may schedule. */
 export const COMPLETION_ACCEPT_COOLDOWN_MS = 300;
+
+/** Inline completion shape: single-line vs multi-line continuation. */
+export type CompletionMode = 'single' | 'multi';
+
+/** Cache transport label (legacy native-FIM flag — retained for cache key stability only). */
+export function completionCacheTransportMode(config: EditorAiCompletionConfig): string {
+  // `useNativeFim` is deprecated and ignored; always chat/FIM messages (see editor-ai-completion config).
+  return config.useNativeFim ? 'native-fim' : 'chat';
+}
+
+/**
+ * Whether the cursor sits on a blank tail of the line (multi-line completions)
+ * or mid-line (single-line insert only).
+ */
+export function completionModeAt(state: EditorState, pos: number): CompletionMode {
+  const clamped = Math.max(0, Math.min(pos, state.doc.length));
+  const line = state.doc.lineAt(clamped);
+  const rest = state.doc.sliceString(clamped, line.to);
+  return /^\s*$/.test(rest) ? 'multi' : 'single';
+}
 
 /** View-update slice passed into {@link shouldScheduleAi}. */
 export interface ShouldScheduleAiUpdate {

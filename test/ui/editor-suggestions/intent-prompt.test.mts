@@ -172,7 +172,7 @@ describe('resolveIntentSuggestion', () => {
     );
   });
 
-  test('passes fallbackRole utility so intent routes to the utility chain', async () => {
+  test('passes fallbackRole editor-completion so intent routes to the editor chain', async () => {
     let seenOptions: Record<string, unknown> | undefined;
     await resolveIntentSuggestion(
       baseInput({
@@ -196,11 +196,11 @@ describe('resolveIntentSuggestion', () => {
         },
       },
     );
-    assert.equal(seenOptions?.fallbackRole, 'utility');
+    assert.equal(seenOptions?.fallbackRole, 'editor-completion');
     assert.equal(seenOptions?.persist, false);
   });
 
-  test('raises max_tokens to the multi-line floor', async () => {
+  test('raises max_tokens to the intent default cap', async () => {
     let seenBody: Record<string, unknown> | undefined;
     await resolveIntentSuggestion(
       baseInput({
@@ -211,7 +211,7 @@ describe('resolveIntentSuggestion', () => {
           providerId: 'provider-1',
           modelId: 'model-1',
         },
-        intentConfig: { ...DEFAULT_EDITOR_INTENT_MODE, maxTokens: 128 },
+        intentConfig: { ...DEFAULT_EDITOR_INTENT_MODE, maxTokens: 800 },
       }),
       {
         createGeneration: async (_providerId, body) => {
@@ -225,7 +225,9 @@ describe('resolveIntentSuggestion', () => {
         },
       },
     );
-    assert.equal(seenBody?.max_tokens, 768);
+    assert.equal(seenBody?.max_tokens, 400);
+    assert.deepEqual(seenBody?.stop, ['```', '\n\n\n']);
+    assert.equal(seenBody?.temperature, 0.1);
   });
 
   test('uses the intent model pin when both provider and model are set', async () => {
@@ -345,10 +347,11 @@ describe('buildIntentMessages', () => {
     });
     assert.equal(messages.length, 2);
     const user = String(messages[1].content);
-    assert.match(user, /--- code before ---/);
+    assert.match(user, /--- resolved context above ---/);
     assert.match(user, /--- intent line to replace ---/);
     assert.match(user, /fetch users and sort by name/);
-    assert.match(user, /--- code after ---\n\(none\)/);
+    assert.match(user, /--- resolved context below ---\n\(none\)/);
+    assert.match(user, /--- code before \(full prefix\) ---/);
     assert.doesNotMatch(user, /recently edited lines/);
   });
 

@@ -4,10 +4,7 @@
 
 import { extractMessageText } from '../api/chat';
 import {
-  cancelGeneration,
-  createGeneration,
   formatGenerationErrorMessage,
-  subscribeToGeneration,
   type GenerationEndEvent,
 } from '../api/generations';
 import { modelCache } from '../app-state';
@@ -17,12 +14,14 @@ import {
   resolveEditorCompletionText,
 } from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
+import type { EditorState } from '@codemirror/state';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { getActiveChat } from '../state/sessions';
 import { resolveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../types';
+import { indentUnitStrFromState } from './editor-completion-accept';
 import {
   buildCompletionCacheKey,
   editorAiCompletionCache,
@@ -32,9 +31,21 @@ import {
   alignAndValidateCompletionText,
   buildEditorAiCompletionMessages,
   buildEditorAiCompletionMessagesAsync,
+  DEFAULT_MAX_INSERT_CHARS,
+  extractPrefixSuffix,
+  fenceLangFromPath,
+  type AlignCompletionResult,
   type EditorAiPromptInput,
 } from './editor-ai-completion-prompt';
+import { completionModeAt } from './editor-completion-policy';
 import { stripEditorModelOutput, extractEditorCodeFromReasoning } from './editor-model-output';
+import { recordCompletionEvent } from './editor-ai-telemetry';
+import {
+  editorCompletionMaxTokens,
+  editorCompletionStopSequences,
+  streamEditorGeneration,
+  type EditorAiStreamDeps,
+} from './editor-ai-stream';
 
 export interface EditorAiBinding {
   providerId: string;
@@ -53,6 +64,18 @@ export const EDITOR_AI_REQUEST_FAILED_MESSAGE =
 export const EDITOR_AI_EMPTY_COMPLETION_MESSAGE =
   'Model returned no completion text. Try a coder model or disable thinking in your provider.';
 
+export const EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE =
+  'Completion too long for inline insert — lower max tokens or edit a smaller region.';
+
+export const EDITOR_AI_COMPLETION_PROSE_MESSAGE =
+  'Model returned explanation instead of code — try a coder model.';
+
+export const EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE =
+  'Model repeated existing text — no suggestion shown.';
+
+export const EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE =
+  'Completion would replace most of the file — rejected.';
+
 export interface EditorAiCompletionResult {
   text: string | null;
   error?: string;
@@ -63,10 +86,7 @@ export type EditorAiBindingValidation =
   | { ok: false; message: string };
 
 /** Injectable seams for deterministic tests. */
-export interface EditorAiCompletionDeps {
-  createGeneration?: typeof createGeneration;
-  subscribeToGeneration?: typeof subscribeToGeneration;
-  cancelGeneration?: typeof cancelGeneration;
+export interface EditorAiCompletionDeps extends EditorAiStreamDeps {
   resolveProvider?: typeof resolveProvider;
   buildMessagesAsync?: typeof buildEditorAiCompletionMessagesAsync;
   cache?: typeof editorAiCompletionCache;
@@ -131,7 +151,7 @@ export interface FetchEditorAiCompletionInput extends EditorAiPromptInput {
   binding: EditorAiBinding;
   signal: AbortSignal;
   /** Called as streamed text arrives (already sanitized). */
-  onPartial?: (text: string) => void;
+  onPartial?: (text: string, options?: { fromCache?: boolean }) => void;
   deps?: EditorAiCompletionDeps;
 }
 
@@ -211,6 +231,31 @@ function createGenerationErrorMessage(err: unknown): string {
   return EDITOR_AI_REQUEST_FAILED_MESSAGE;
 }
 
+/** Map alignment rejection codes to status-bar copy. */
+export function editorAiCompletionRejectionMessage(reason: string | undefined): string {
+  switch (reason) {
+    case 'oversized':
+      return EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE;
+    case 'prose':
+      return EDITOR_AI_COMPLETION_PROSE_MESSAGE;
+    case 'prefix_echo':
+      return EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE;
+    case 'full_rewrite':
+      return EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE;
+    case 'unbalanced':
+      return EDITOR_AI_EMPTY_COMPLETION_MESSAGE;
+    case 'empty':
+    case 'empty_after_trim':
+      return EDITOR_AI_EMPTY_COMPLETION_MESSAGE;
+    default:
+      return EDITOR_AI_EMPTY_COMPLETION_MESSAGE;
+  }
+}
+
+function maxInsertCharsForConfig(config: EditorAiCompletionConfig): number {
+  return Math.min(DEFAULT_MAX_INSERT_CHARS, config.maxTokens * 4);
+}
+
 /** Merge streamed chunks into displayable completion text (content channel only). */
 export function resolveEditorCompletionRawText(
   contentAcc: StreamingContentAccumulator,
@@ -228,8 +273,28 @@ export function alignCompletionForInsert(
   raw: string,
   prefix: string,
   suffix: string,
-): string {
-  return alignAndValidateCompletionText({ raw, prefix, suffix }).text;
+  options?: {
+    maxInsertChars?: number;
+    state?: EditorState;
+    cursorPos?: number;
+    filePath?: string;
+  },
+): AlignCompletionResult {
+  const indentUnitStr = options?.state != null ? indentUnitStrFromState(options.state) : '  ';
+  const completionMode =
+    options?.state != null && options.cursorPos != null
+      ? completionModeAt(options.state, options.cursorPos)
+      : undefined;
+  const fenceLang = options?.filePath ? fenceLangFromPath(options.filePath) : '';
+  return alignAndValidateCompletionText({
+    raw,
+    prefix,
+    suffix,
+    maxInsertChars: options?.maxInsertChars,
+    indentUnitStr,
+    completionMode,
+    fenceLang,
+  });
 }
 
 /** Stream a single inline completion via /api/generations (parsed SSE chunks). */
@@ -237,19 +302,17 @@ export async function fetchEditorAiCompletion(
   input: FetchEditorAiCompletionInput,
 ): Promise<EditorAiCompletionResult> {
   const deps = input.deps ?? {};
-  const createGen = deps.createGeneration ?? createGeneration;
-  const subscribeGen = deps.subscribeToGeneration ?? subscribeToGeneration;
-  const cancelGen = deps.cancelGeneration ?? cancelGeneration;
   const resolveProv = deps.resolveProvider ?? resolveProvider;
   const buildMessages = deps.buildMessagesAsync ?? buildEditorAiCompletionMessagesAsync;
   const cache = deps.cache ?? editorAiCompletionCache;
 
   const modelId = input.binding.modelId.trim();
-  const promptResult = await buildMessages({
-    ...input,
-    modelId,
-  });
-  const { prefix, suffix, messages } = promptResult;
+  const cursorPos = input.cursorPos;
+  const completionMode = completionModeAt(input.state, cursorPos);
+  const { prefix, suffix } = extractPrefixSuffix(input.state.doc, cursorPos, input.config);
+  const maxInsertChars = maxInsertCharsForConfig(input.config);
+
+  recordCompletionEvent({ type: 'request' });
 
   if (input.config.enableCompletionCache !== false) {
     const cached = getCachedEditorAiCompletion(
@@ -261,18 +324,27 @@ export async function fetchEditorAiCompletion(
       cache,
     );
     if (cached !== undefined) {
-      if (cached) input.onPartial?.(cached);
-      return cached.length > 0
-        ? { text: cached }
-        : { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE };
+      recordCompletionEvent({ type: 'cache_hit' });
+      if (cached) input.onPartial?.(cached, { fromCache: true });
+      if (cached.length > 0) {
+        return { text: cached };
+      }
+      return { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE };
     }
   }
+
+  const promptResult = await buildMessages({
+    ...input,
+    modelId,
+  });
+  const { messages } = promptResult;
 
   const provider = await resolveProv(input.binding.providerId);
   const body: Record<string, unknown> = {
     model: modelId || undefined,
     temperature: input.config.temperature,
-    max_tokens: input.config.maxTokens,
+    max_tokens: editorCompletionMaxTokens(input.config.maxTokens, completionMode),
+    stop: editorCompletionStopSequences(completionMode),
     stream: true,
     messages,
   };
@@ -291,30 +363,53 @@ export async function fetchEditorAiCompletion(
   );
   Object.assign(body, thinkingPatch);
 
-  let generationId: string;
-  try {
-    ({ generationId } = await createGen(provider.id, body, { persist: false }));
-  } catch (err) {
-    return { text: null, error: createGenerationErrorMessage(err) };
-  }
-
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
+  const requestStartedAt = performance.now();
+  let firstTokenRecorded = false;
 
-  const emitFromAccumulators = (reasoningFallback = false): string => {
+  const alignForInsert = (raw: string): AlignCompletionResult =>
+    alignCompletionForInsert(raw, prefix, suffix, {
+      maxInsertChars,
+      state: input.state,
+      cursorPos,
+      filePath: input.filePath,
+    });
+
+  const emitFromAccumulators = (reasoningFallback = false): AlignCompletionResult => {
     const raw = resolveEditorCompletionDisplayText(
       contentAcc.getText(),
       reasoningAcc.getText(),
       { reasoningFallback },
     );
-    return alignCompletionForInsert(raw, prefix, suffix);
+    return alignForInsert(raw);
+  };
+
+  const finishAligned = (aligned: AlignCompletionResult): EditorAiCompletionResult => {
+    if (aligned.rejected) {
+      const reason = aligned.reason ?? 'empty';
+      recordCompletionEvent({ type: 'reject', reason });
+      return { text: null, error: editorAiCompletionRejectionMessage(reason) };
+    }
+    if (!aligned.text.trim()) {
+      recordCompletionEvent({ type: 'reject', reason: 'empty' });
+      return { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE };
+    }
+    return { text: aligned.text };
   };
 
   return new Promise<EditorAiCompletionResult>((resolve) => {
     let settled = false;
+    let firstTokenMs = 0;
     const finish = (result: EditorAiCompletionResult): void => {
       if (settled) return;
       settled = true;
+      const totalMs = performance.now() - requestStartedAt;
+      recordCompletionEvent({
+        type: 'timing',
+        firstTokenMs: firstTokenRecorded ? firstTokenMs : totalMs,
+        totalMs,
+      });
       if (result.text && input.config.enableCompletionCache !== false) {
         setCachedEditorAiCompletion(
           input.binding,
@@ -329,45 +424,54 @@ export async function fetchEditorAiCompletion(
       resolve(result);
     };
 
-    let unsubscribe: (() => void) | null = null;
-    unsubscribe = subscribeGen(generationId, {
-      signal: input.signal,
-      onChunk: (chunk) => {
-        contentAcc.ingestChoice(chunk.choices?.[0]);
-        reasoningAcc.ingestChunk(chunk);
-        const cleaned = emitFromAccumulators(false);
-        if (cleaned) input.onPartial?.(cleaned);
-      },
-      onEnd: (event?: GenerationEndEvent) => {
-        unsubscribe?.();
-        if (event?.status === 'error') {
-          finish({ text: null, error: generationEndErrorMessage(event) });
-          return;
-        }
-        const cleaned = emitFromAccumulators(true);
-        finish(
-          cleaned.length > 0
-            ? { text: cleaned }
-            : { text: null, error: EDITOR_AI_EMPTY_COMPLETION_MESSAGE },
-        );
-      },
-      onTransportError: (err) => {
-        unsubscribe?.();
-        finish({ text: null, error: createGenerationErrorMessage(err) });
-      },
-    });
+    let lastEmittedLen = 0;
+    let lastEmittedLines = 1;
 
-    input.signal.addEventListener(
-      'abort',
-      () => {
-        unsubscribe?.();
-        void cancelGen(generationId).catch(() => {
-          /* best-effort */
-        });
-        finish({ text: null });
+    void streamEditorGeneration(
+      provider.id,
+      body,
+      input.signal,
+      {
+        onChunk: (chunk) => {
+          contentAcc.ingestChoice(chunk.choices?.[0]);
+          reasoningAcc.ingestChunk(chunk);
+          const aligned = emitFromAccumulators(false);
+          if (!aligned.rejected && aligned.text) {
+            const len = aligned.text.length;
+            const lines = aligned.text.split('\n').length;
+            const grewEnough = len - lastEmittedLen >= 8;
+            const gainedNewline = lines > lastEmittedLines;
+            if (lastEmittedLen > 0 && !grewEnough && !gainedNewline) {
+              return;
+            }
+            lastEmittedLen = len;
+            lastEmittedLines = lines;
+            if (!firstTokenRecorded) {
+              firstTokenRecorded = true;
+              firstTokenMs = performance.now() - requestStartedAt;
+            }
+            input.onPartial?.(aligned.text);
+          }
+        },
+        onEnd: (event?: GenerationEndEvent) => {
+          if (event?.status === 'error') {
+            finish({ text: null, error: generationEndErrorMessage(event) });
+            return;
+          }
+          const aligned = emitFromAccumulators(true);
+          finish(finishAligned(aligned));
+        },
+        onTransportError: (err) => {
+          finish({ text: null, error: createGenerationErrorMessage(err) });
+        },
+        onAbort: () => {
+          finish({ text: null });
+        },
       },
-      { once: true },
-    );
+      deps,
+    ).catch((err) => {
+      finish({ text: null, error: createGenerationErrorMessage(err) });
+    });
   });
 }
 

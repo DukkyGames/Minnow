@@ -3,17 +3,31 @@
  * Phase 6: structured context, LSP signals, cursor-aware alignment.
  */
 
-import type { EditorState } from '@codemirror/state';
+import type { EditorState, Transaction } from '@codemirror/state';
 import type { ApiMessage } from '../types';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
+import { alignCompletionBrackets } from './editor-completion-brackets';
+import type { CompletionMode } from './editor-completion-policy';
 import { stripEditorModelOutput } from './editor-model-output';
 
 /** Bump when prompt layout or validation rules change (cache invalidation). */
-export const PROMPT_VERSION = '6';
+export const PROMPT_VERSION = '7';
+
+/** Per-section character caps for optional context blocks (v7 prompt). */
+export const PROMPT_SECTION_CAPS = {
+  symbols: 200,
+  diagnostics: 400,
+  hover: 400,
+  imports: 600,
+  recentEdits: 400,
+} as const;
+
+export const EDITOR_AI_FIM_MARKER = '<|fim|>';
 
 export const EDITOR_AI_COMPLETION_SYSTEM =
-  'You are a code completion engine. Output only the text that should appear at the cursor. ' +
-  'No explanations, markdown fences, thinking tags, or comments unless they belong at the insertion point. ' +
+  'You are a code completion engine. The user message contains a <file> block with a ' +
+  `${EDITOR_AI_FIM_MARKER} marker. Output only the text that should replace ${EDITOR_AI_FIM_MARKER} — ` +
+  'no explanations, markdown fences, thinking tags, or comments unless they belong at the insertion point. ' +
   'Never wrap output in reasoning or thinking markup.';
 
 /** Default total character budget for optional prompt context blocks. */
@@ -72,6 +86,31 @@ export class EditorRecentEditsRing {
       if (before === after) continue;
       this.push({ lineNumber: i + 1, before, after });
     }
+  }
+
+  /** Record line-level edits from one CodeMirror transaction. */
+  recordTransaction(tr: Transaction): void {
+    if (!tr.docChanged) return;
+    const oldDoc = tr.startState.doc;
+    const newDoc = tr.state.doc;
+    tr.changes.iterChanges((fromA, toA, fromB, toB) => {
+      const startOld = oldDoc.lineAt(fromA).number;
+      const endOld = oldDoc.lineAt(Math.max(fromA, toA)).number;
+      const newAnchor = Math.min(fromB, newDoc.length);
+      const newEnd = Math.min(toB, newDoc.length);
+      const startNew = newDoc.lineAt(newAnchor).number;
+      const endNewLine = newDoc.lineAt(Math.max(newAnchor, newEnd > newAnchor ? newEnd - 1 : newEnd)).number;
+      const lineCount = Math.max(endOld - startOld + 1, endNewLine - startNew + 1);
+      for (let i = 0; i < lineCount; i += 1) {
+        const oldNum = startOld + i;
+        const before = oldNum <= oldDoc.lines ? oldDoc.line(oldNum).text : '';
+        const newNum = startNew + i;
+        const after = newNum <= newDoc.lines ? newDoc.line(newNum).text : '';
+        if (before !== after) {
+          this.push({ lineNumber: newNum, before, after });
+        }
+      }
+    });
   }
 
   private push(entry: RecentEditLine): void {
@@ -215,11 +254,21 @@ export function cursorIndentAt(prefix: string): string {
   return match ? match[0] : '';
 }
 
-/** Longest suffix of `a` that equals a prefix of `b`. */
+/** Minimum overlap length before trimming document boundaries. */
+const MEANINGFUL_OVERLAP_MIN_LEN = 3;
+
+/** Overlap must be long enough and include a boundary (not a 1–2 char identifier clash). */
+export function isMeaningfulDocumentOverlap(slice: string): boolean {
+  if (slice.length < MEANINGFUL_OVERLAP_MIN_LEN) return false;
+  return /[^\w]/.test(slice) || slice.includes('\n');
+}
+
+/** Longest suffix of `a` that equals a prefix of `b` (meaningful overlaps only). */
 export function longestOverlapSuffixPrefix(a: string, b: string): number {
   const max = Math.min(a.length, b.length);
   for (let len = max; len > 0; len -= 1) {
-    if (a.slice(-len) === b.slice(0, len)) return len;
+    const sliceA = a.slice(-len);
+    if (sliceA === b.slice(0, len) && isMeaningfulDocumentOverlap(sliceA)) return len;
   }
   return 0;
 }
@@ -251,14 +300,22 @@ export function applyContextBudget(
   return kept;
 }
 
+function capPromptSection(text: string, maxChars: number): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  if (trimmed.length <= maxChars) return trimmed;
+  return trimmed.slice(0, maxChars);
+}
+
 function formatRecentEdits(edits: RecentEditLine[]): string {
   if (!edits.length) return '';
-  return edits
+  const body = edits
     .map(
       (e) =>
         `L${e.lineNumber} before: ${e.before}\nL${e.lineNumber} after: ${e.after}`,
     )
     .join('\n');
+  return capPromptSection(body, PROMPT_SECTION_CAPS.recentEdits);
 }
 
 /** Build chat messages for a fill-in-the-middle completion request. */
@@ -289,16 +346,14 @@ export function buildEditorAiCompletionMessages(
         ? `Recent edits:\n${formatRecentEdits(input.recentEdits)}`
         : '',
     },
-    {
-      key: 'suffix',
-      priority: 3,
-      text: suffix.trim() ? `Text after cursor:\n${suffix}` : '',
-    },
   ];
 
   if (input.config.includeImportContext !== false) {
-    const imports = extractImportSymbols(input.state.doc.toString());
-    if (imports.trim()) {
+    const imports = capPromptSection(
+      extractImportSymbols(input.state.doc.toString()),
+      PROMPT_SECTION_CAPS.imports,
+    );
+    if (imports) {
       contextSections.push({
         key: 'imports',
         priority: 4,
@@ -307,43 +362,53 @@ export function buildEditorAiCompletionMessages(
     }
   }
 
-  const lspParts: string[] = [];
   if (input.lspSymbols?.trim()) {
-    lspParts.push(`Enclosing symbols:\n${input.lspSymbols.trim()}`);
+    const symbols = capPromptSection(input.lspSymbols.trim(), PROMPT_SECTION_CAPS.symbols);
+    if (symbols) {
+      contextSections.push({
+        key: 'symbols',
+        priority: 5,
+        text: `Enclosing symbols:\n${symbols}`,
+      });
+    }
   }
   if (input.lspDiagnostics?.trim()) {
-    lspParts.push(`Nearby diagnostics:\n${input.lspDiagnostics.trim()}`);
+    const diagnostics = capPromptSection(
+      input.lspDiagnostics.trim(),
+      PROMPT_SECTION_CAPS.diagnostics,
+    );
+    if (diagnostics) {
+      contextSections.push({
+        key: 'diagnostics',
+        priority: 5,
+        text: `Nearby diagnostics:\n${diagnostics}`,
+      });
+    }
   }
   if (input.lspHover?.trim()) {
-    lspParts.push(`Symbol at cursor:\n${input.lspHover.trim()}`);
+    const hover = capPromptSection(input.lspHover.trim(), PROMPT_SECTION_CAPS.hover);
+    if (hover) {
+      contextSections.push({
+        key: 'hover',
+        priority: 5,
+        text: `Symbol at cursor:\n${hover}`,
+      });
+    }
   }
-  if (lspParts.length > 0) {
-    contextSections.push({
-      key: 'lsp',
-      priority: 5,
-      text: lspParts.join('\n\n'),
-    });
-  }
-
-  contextSections.push({
-    key: 'broader',
-    priority: 6,
-    text: prefix.length > currentLineBefore.length
-      ? `Broader context before cursor:\n${prefix.slice(0, -currentLineBefore.length)}`
-      : '',
-  });
 
   const budget = input.config.contextBudgetChars ?? DEFAULT_CONTEXT_BUDGET_CHARS;
   const contextBlocks = applyContextBudget(contextSections, budget);
 
   const constraints = [
     'Insertion constraints:',
-    '- Output only text to insert at <CURSOR>; no surrounding code already in the file.',
+    `- Output only the text that replaces ${EDITOR_AI_FIM_MARKER} in the <file> block.`,
     '- Preserve required leading newlines and match indentation when continuing a block.',
     indent ? `- Cursor indentation: ${JSON.stringify(indent)}` : '- Cursor indentation: (none)',
-    '- Do not repeat text already before or after the cursor.',
+    '- Do not repeat surrounding code from the <file> block.',
     '- No explanations, markdown fences, or full-file rewrites.',
   ].join('\n');
+
+  const fileBlock = `<file>\n${prefix}${EDITOR_AI_FIM_MARKER}${suffix}\n</file>`;
 
   const userBody = [
     `File: ${pathLine}`,
@@ -351,11 +416,7 @@ export function buildEditorAiCompletionMessages(
     '---',
     constraints,
     ...(contextBlocks.length > 0 ? ['---', ...contextBlocks, '---'] : ['---']),
-    'Before cursor:',
-    prefix,
-    '<CURSOR>',
-    'After cursor:',
-    suffix,
+    fileBlock,
   ].join('\n');
 
   const messages: ApiMessage[] = [
@@ -544,6 +605,9 @@ export interface AlignCompletionInput {
   prefix: string;
   suffix: string;
   maxInsertChars?: number;
+  indentUnitStr?: string;
+  completionMode?: CompletionMode;
+  fenceLang?: string;
 }
 
 export interface AlignCompletionResult {
@@ -560,9 +624,14 @@ export function isUnchangedPrefixEcho(text: string, prefix: string): boolean {
   const trimmed = text.trimEnd();
   if (!trimmed) return true;
   const prefixTail = prefix.trimEnd();
-  return prefixTail.endsWith(trimmed) || trimmed === prefixTail;
+  if (trimmed === prefixTail) return true;
+  if (!prefixTail.endsWith(trimmed)) return false;
+  if (trimmed.length >= 3) return true;
+  const lineStart = prefix.lastIndexOf('\n') + 1;
+  const lastLine = prefixTail.slice(lineStart);
+  if (!lastLine.length) return false;
+  return trimmed.length / lastLine.length >= 0.8;
 }
-  /^(?:here(?:'s| is)|the following|this (?:code|snippet|completion)|sure[,!]?|certainly)/i;
 
 /** True when output looks like explanatory prose rather than insertable code. */
 export function looksLikeProse(text: string): boolean {
@@ -572,22 +641,65 @@ export function looksLikeProse(text: string): boolean {
   return false;
 }
 
-/** Normalize model indentation to match the cursor line without stripping required newlines. */
-export function normalizeCompletionIndentation(text: string, prefix: string): string {
+function tabWidthFromIndentUnit(indentUnitStr: string): number {
+  return indentUnitStr.length > 0 ? indentUnitStr.length : 2;
+}
+
+function expandIndentToColumns(indent: string, tabWidth: number): number {
+  let col = 0;
+  for (const ch of indent) {
+    if (ch === '\t') {
+      col += tabWidth - (col % tabWidth);
+    } else if (ch === ' ') {
+      col += 1;
+    }
+  }
+  return col;
+}
+
+function columnsToIndentUnitStr(col: number, indentUnitStr: string): string {
+  const unit = indentUnitStr.length > 0 ? indentUnitStr : '  ';
+  const units = Math.floor(col / unit.length);
+  return unit.repeat(units);
+}
+
+/**
+ * Re-indent model completion text: preserve leading newlines, strip leading ws on
+ * line 0, anchor continuation lines to the cursor indent, normalize tabs/spaces.
+ */
+export function reindentCompletionText(
+  text: string,
+  prefix: string,
+  indentUnitStr: string,
+): string {
   if (!text) return '';
   const leadingNewlines = text.match(/^\n+/)?.[0] ?? '';
   const body = text.slice(leadingNewlines.length);
   if (!body) return leadingNewlines;
 
+  const unit = indentUnitStr.length > 0 ? indentUnitStr : '  ';
+  const tabWidth = tabWidthFromIndentUnit(unit);
   const cursorIndent = cursorIndentAt(prefix);
-  const bodyLeading = body.match(/^[\t ]*/)?.[0] ?? '';
-  const bodyRest = body.slice(bodyLeading.length);
+  const cursorCols = expandIndentToColumns(cursorIndent, tabWidth);
 
-  if (!cursorIndent) return leadingNewlines + body;
-  if (!bodyLeading && bodyRest) {
-    return leadingNewlines + cursorIndent + bodyRest;
+  const lines = body.split('\n');
+  const firstLeading = lines[0]?.match(/^[\t ]*/)?.[0] ?? '';
+  if (leadingNewlines.length > 0) {
+    lines[0] = columnsToIndentUnitStr(cursorCols, unit) + lines[0]!.slice(firstLeading.length);
+  } else {
+    lines[0] = lines[0]!.slice(firstLeading.length);
   }
-  return leadingNewlines + body;
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    if (!line.trim()) {
+      lines[i] = '';
+      continue;
+    }
+    lines[i] = columnsToIndentUnitStr(cursorCols, unit) + line.trimStart();
+  }
+
+  return leadingNewlines + lines.join('\n');
 }
 
 /** Remove longest overlaps with document prefix and suffix. */
@@ -638,7 +750,11 @@ export function alignAndValidateCompletionText(
   }
 
   text = text.replace(/\r\n/g, '\n');
-  text = normalizeCompletionIndentation(text, input.prefix);
+  text = reindentCompletionText(
+    text,
+    input.prefix,
+    input.indentUnitStr ?? '  ',
+  );
 
   if (input.prefix && text.startsWith(input.prefix)) {
     const stripped = text.slice(input.prefix.length);
@@ -656,6 +772,20 @@ export function alignAndValidateCompletionText(
   }
 
   text = trimOverlapWithDocument(text, input.prefix, input.suffix);
+
+  const fenceLang = input.fenceLang ?? '';
+  const bracketed = alignCompletionBrackets(text, input.prefix, input.suffix, fenceLang);
+  if (bracketed.rejected) {
+    return { text: '', rejected: true, reason: 'unbalanced' };
+  }
+  text = bracketed.text;
+
+  if (input.completionMode === 'single') {
+    const newlineIdx = text.indexOf('\n');
+    if (newlineIdx >= 0) {
+      text = text.slice(0, newlineIdx);
+    }
+  }
 
   if (!text.trim()) {
     return { text: '', rejected: true, reason: 'empty_after_trim' };

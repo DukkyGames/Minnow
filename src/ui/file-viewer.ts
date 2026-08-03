@@ -438,7 +438,8 @@ function scheduleLspChangeNotify(path: string, text: string): void {
   }, LSP_CHANGE_DEBOUNCE_MS);
 }
 
-async function isLspEnabledForViewer(): Promise<boolean> {
+/** Whether the file viewer should sync documents to LSP (config + local server). */
+export async function isLspEnabledForViewer(): Promise<boolean> {
   if (!getLocalServerAvailable()) return false;
   const cfg = await fetchLspConfig();
   return cfg?.enabled === true;
@@ -1291,20 +1292,37 @@ export async function saveViewerTabByPath(path: string): Promise<boolean> {
   if (!tab.isDirty) return true;
 
   const content = tab.cachedEditorContent ?? tab.originalContent;
+  let contentToSave = content;
+  try {
+    const { fetchLspConfig } = await import('../lsp/config-client');
+    const { languageIdForPath } = await import('../lsp/language-id');
+    const { formatTextForSave } = await import('./lsp-editor/format-document');
+    const lspCfg = await fetchLspConfig();
+    if (lspCfg) {
+      contentToSave = await formatTextForSave(
+        tab.path,
+        content,
+        lspCfg.formatOnSaveLanguageIds ?? [],
+        languageIdForPath(tab.path),
+      );
+    }
+  } catch {
+    /* format-on-save is best-effort */
+  }
   isSaving = true;
   updateViewerChrome();
 
   try {
     const { buildFileTreeToolContext } = await import('./file-tree-listing-root');
     const raw = (
-      await executeTool('save_file', { path: tab.path, content }, buildFileTreeToolContext())
+      await executeTool('save_file', { path: tab.path, content: contentToSave }, buildFileTreeToolContext())
     ).content;
     if (raw.startsWith('Error:')) {
       throw new Error(raw.replace(/^Error:\s*/i, '').trim());
     }
-    markViewerTabSaved(tab.path, content);
+    markViewerTabSaved(tab.path, contentToSave);
     if (lspSyncedPath === tab.path) {
-      void notifyLspDocument(tab.path, 'change', content);
+      void notifyLspDocument(tab.path, 'change', contentToSave);
     }
     const { emitFileSaved } = await import('../state/preview-events');
     emitFileSaved(tab.path);
@@ -1441,10 +1459,13 @@ export function bindFileViewerControls(): void {
     void (async () => {
       await loadEditorAiCompletionConfig();
       const tab = primarySlotViewerTab();
-      if (!tab || tab.viewMode !== 'editor' || tab.loadStatus !== 'ready') return;
-      if (!editorView || !editorAiOpts) return;
-      // intentEnabledField sits outside the compartment, so the toggle survives.
-      reconfigureEditorSuggestions(editorView, editorAiOpts);
+      if (tab?.viewMode === 'editor' && tab.loadStatus === 'ready' && editorView && editorAiOpts) {
+        // intentEnabledField sits outside the compartment, so the toggle survives.
+        reconfigureEditorSuggestions(editorView, editorAiOpts);
+      }
+      void import('./file-viewer-secondary-slot').then((m) => {
+        m.reconfigureSecondaryEditorSuggestions();
+      });
       const config = getEditorAiCompletionConfigSync();
       if (config.enabled && getLocalServerAvailable()) {
         attachEditorAiModelSelectListener();

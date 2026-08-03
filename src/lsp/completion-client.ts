@@ -82,18 +82,62 @@ export interface LspSignatureHelp {
   activeParameter?: number;
 }
 
-async function postLspJson<T>(pathname: string, body: Record<string, unknown>): Promise<T | null> {
-  if (!isLocalServerAvailable()) return null;
+export type LspClientPostErrorKind = 'offline' | 'http' | 'server';
+
+export type LspClientPostResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; kind: LspClientPostErrorKind; status?: number; error?: string };
+
+/** Last LSP bridge failure from the browser client (for UI hints). */
+let lastLspClientPostError: LspClientPostResult<never> | null = null;
+
+export function getLastLspClientPostError(): LspClientPostResult<never> | null {
+  return lastLspClientPostError;
+}
+
+async function postLspJson<T>(
+  pathname: string,
+  body: Record<string, unknown>,
+): Promise<LspClientPostResult<T>> {
+  if (!isLocalServerAvailable()) {
+    const result = { ok: false as const, kind: 'offline' as const };
+    lastLspClientPostError = result;
+    return result;
+  }
   try {
     const res = await fetch(pathname, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
+    let json: Record<string, unknown> = {};
+    try {
+      json = (await res.json()) as Record<string, unknown>;
+    } catch {
+      json = {};
+    }
+    if (!res.ok) {
+      const result = {
+        ok: false as const,
+        kind: 'http' as const,
+        status: res.status,
+        error: typeof json.error === 'string' ? json.error : res.statusText,
+      };
+      lastLspClientPostError = result;
+      return result;
+    }
+    if (typeof json.error === 'string' && json.error) {
+      const result = { ok: false as const, kind: 'server' as const, error: json.error };
+      lastLspClientPostError = result;
+      return result;
+    }
+    lastLspClientPostError = null;
+    return { ok: true, data: json as T };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const result = { ok: false as const, kind: 'offline' as const, error: message };
+    lastLspClientPostError = result;
+    return result;
   }
 }
 
@@ -139,11 +183,15 @@ export async function fetchCompletions(
     isIncomplete?: boolean;
     triggerCharacters?: string[];
   }>('/api/lsp/completion', body);
+  if (!data.ok) {
+    return { items: [], isIncomplete: false };
+  }
+  const payload = data.data;
   return {
-    items: Array.isArray(data?.items) ? data.items : [],
-    isIncomplete: data?.isIncomplete === true,
-    triggerCharacters: Array.isArray(data?.triggerCharacters)
-      ? data.triggerCharacters.map(String)
+    items: Array.isArray(payload?.items) ? payload.items : [],
+    isIncomplete: payload?.isIncomplete === true,
+    triggerCharacters: Array.isArray(payload?.triggerCharacters)
+      ? payload.triggerCharacters.map(String)
       : undefined,
   };
 }
@@ -157,7 +205,7 @@ export async function resolveLspCompletion(
     path,
     item,
   });
-  return data?.item ?? null;
+  return data.ok ? (data.data.item ?? null) : null;
 }
 
 /** Hover at a 0-based LSP position. */
@@ -171,7 +219,7 @@ export async function fetchLspHover(
     line,
     character,
   });
-  return data?.hover ?? null;
+  return data.ok ? (data.data.hover ?? null) : null;
 }
 
 /** Definition / declaration targets at a 0-based LSP position. */
@@ -184,7 +232,7 @@ export async function fetchLspDefinition(
     '/api/lsp/definition',
     { path, line, character },
   );
-  return data?.locations ?? null;
+  return data.ok ? (data.data.locations ?? null) : null;
 }
 
 /** Signature help at a 0-based LSP position. */
@@ -197,7 +245,7 @@ export async function fetchLspSignature(
     '/api/lsp/signature',
     { path, line, character },
   );
-  return data?.signatureHelp ?? null;
+  return data.ok ? (data.data.signatureHelp ?? null) : null;
 }
 
 /** Structured diagnostics for squiggles (not LLM-formatted text). */
@@ -213,7 +261,7 @@ export async function fetchLspDiagnostics(
     '/api/lsp/diagnostics-structured',
     body,
   );
-  return Array.isArray(data?.diagnostics) ? data.diagnostics : [];
+  return data.ok && Array.isArray(data.data.diagnostics) ? data.data.diagnostics : [];
 }
 
 /** Document symbol tree node from POST /api/lsp/document-symbols. */
@@ -234,6 +282,33 @@ export async function fetchLspDocumentSymbols(
     { path },
   );
   return {
-    symbols: Array.isArray(data?.symbols) ? data.symbols : [],
+    symbols: data.ok && Array.isArray(data.data.symbols) ? data.data.symbols : [],
+  };
+}
+
+export interface LspFormatResponse {
+  edits: LspTextEdit[];
+  serverId?: string;
+  error?: string;
+}
+
+/** Whole-document format via POST /api/lsp/format. */
+export async function fetchLspDocumentFormat(
+  path: string,
+  options?: { text?: string; tabSize?: number; insertSpaces?: boolean },
+): Promise<LspFormatResponse> {
+  const body: Record<string, unknown> = { path };
+  if (options?.text !== undefined) body.text = options.text;
+  if (options?.tabSize !== undefined) body.tabSize = options.tabSize;
+  if (options?.insertSpaces !== undefined) body.insertSpaces = options.insertSpaces;
+  const data = await postLspJson<LspFormatResponse>('/api/lsp/format', body);
+  if (!data.ok) {
+    return { edits: [], error: data.error };
+  }
+  const payload = data.data;
+  return {
+    edits: Array.isArray(payload.edits) ? payload.edits : [],
+    serverId: payload.serverId,
+    error: payload.error,
   };
 }

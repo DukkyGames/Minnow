@@ -3,6 +3,8 @@ import { describe, test } from 'node:test';
 import { EditorState } from '@codemirror/state';
 import {
   PROMPT_VERSION,
+  EDITOR_AI_FIM_MARKER,
+  PROMPT_SECTION_CAPS,
   alignAndValidateCompletionText,
   applyContextBudget,
   buildEditorAiCompletionMessages,
@@ -13,11 +15,13 @@ import {
   formatNearbyDiagnostics,
   languageHintFromPath,
   longestOverlapSuffixPrefix,
-  normalizeCompletionIndentation,
+  reindentCompletionText,
   sanitizeCompletionText,
   shouldReplaceGhostPartial,
   symbolsEnclosingLine,
   trimOverlapWithDocument,
+  isUnchangedPrefixEcho,
+  isMeaningfulDocumentOverlap,
 } from '../../src/ui/editor-ai-completion-prompt.ts';
 import { DEFAULT_EDITOR_AI_COMPLETION } from '../../src/config/editor-ai-completion.ts';
 
@@ -65,13 +69,56 @@ describe('editor AI completion prompt', () => {
     assert.match(content, /File: src\/demo\.ts/);
     assert.match(content, /Language: TypeScript/);
     assert.match(content, /Insertion constraints:/);
-    assert.match(content, /Before cursor:/);
-    assert.match(content, /<CURSOR>/);
-    assert.match(content, /After cursor:/);
+    assert.match(content, /<file>/);
+    assert.match(content, new RegExp(EDITOR_AI_FIM_MARKER.replace(/\|/g, '\\|')));
+    assert.doesNotMatch(content, /Before cursor:/);
+    assert.doesNotMatch(content, /After cursor:/);
+    assert.doesNotMatch(content, /Broader context before cursor:/);
+    assert.doesNotMatch(content, /Text after cursor:/);
   });
 
   test('PROMPT_VERSION is exported for cache invalidation', () => {
-    assert.equal(PROMPT_VERSION, '6');
+    assert.equal(PROMPT_VERSION, '7');
+  });
+
+  test('buildEditorAiCompletionMessages includes prefix and suffix once in file block', () => {
+    const doc = 'alpha\nconst x = 1;\nomega\n';
+    const state = EditorState.create({ doc });
+    const pos = doc.indexOf('1;');
+    const { messages } = buildEditorAiCompletionMessages({
+      state,
+      cursorPos: pos,
+      filePath: 'src/demo.ts',
+      config: TEST_CONFIG,
+    });
+    const content = String(messages[1].content);
+    const marker = EDITOR_AI_FIM_MARKER;
+    const fileMatch = content.match(/<file>\n([\s\S]*?)\n<\/file>/);
+    assert.ok(fileMatch, 'expected <file> block');
+    const fileInner = fileMatch[1]!;
+    assert.equal(fileInner.split(marker).length - 1, 1);
+    assert.match(fileInner, /^alpha\nconst x = /);
+    assert.match(fileInner, /<|fim|>1;\nomega\n$/);
+  });
+
+  test('buildEditorAiCompletionMessages caps optional context sections', () => {
+    const doc = 'const a = 1;\n';
+    const state = EditorState.create({ doc });
+    const longSymbols = 'x'.repeat(PROMPT_SECTION_CAPS.symbols + 50);
+    const longDiag = 'd'.repeat(PROMPT_SECTION_CAPS.diagnostics + 50);
+    const { messages } = buildEditorAiCompletionMessages({
+      state,
+      cursorPos: doc.length,
+      filePath: 'src/demo.ts',
+      config: TEST_CONFIG,
+      lspSymbols: longSymbols,
+      lspDiagnostics: longDiag,
+    });
+    const content = String(messages[1].content);
+    const symbolsSection = content.match(/Enclosing symbols:\n([^\n]+)/)?.[1] ?? '';
+    const diagSection = content.match(/Nearby diagnostics:\n([^\n]+)/)?.[1] ?? '';
+    assert.equal(symbolsSection.length, PROMPT_SECTION_CAPS.symbols);
+    assert.equal(diagSection.length, PROMPT_SECTION_CAPS.diagnostics);
   });
 
   test('buildEditorAiCompletionMessages includes import and LSP context', () => {
@@ -119,6 +166,21 @@ describe('editor AI completion prompt', () => {
     assert.equal(snap[0].after, 'line TWO');
   });
 
+  test('EditorRecentEditsRing recordTransaction uses line-level diffs', () => {
+    const ring = new EditorRecentEditsRing(4);
+    const state = EditorState.create({ doc: 'line one\nline two' });
+    const tr = state.update({
+      changes: { from: 14, to: 17, insert: 'TWO' },
+      selection: { anchor: 17, head: 17 },
+    });
+    ring.recordTransaction(tr);
+    const snap = ring.snapshot();
+    assert.equal(snap.length, 1);
+    assert.equal(snap[0].lineNumber, 2);
+    assert.equal(snap[0].before, 'line two');
+    assert.equal(snap[0].after, 'line TWO');
+  });
+
   test('symbolsEnclosingLine finds nested symbols', () => {
     const names = symbolsEnclosingLine(
       [
@@ -145,10 +207,10 @@ describe('editor AI completion prompt', () => {
     assert.doesNotMatch(text, /far/);
   });
 
-  test('normalizeCompletionIndentation preserves leading newlines', () => {
+  test('reindentCompletionText preserves leading newlines', () => {
     const prefix = 'function fn() {\n  ';
     assert.equal(
-      normalizeCompletionIndentation('\nreturn 1;', prefix),
+      reindentCompletionText('\nreturn 1;', prefix, '  '),
       '\n  return 1;',
     );
   });
@@ -158,15 +220,28 @@ describe('editor AI completion prompt', () => {
   });
 
   test('longestOverlapSuffixPrefix finds shared boundary', () => {
-    assert.equal(longestOverlapSuffixPrefix('abc', 'bcd'), 2);
+    assert.equal(longestOverlapSuffixPrefix('abc', 'bcd'), 0);
     assert.equal(longestOverlapSuffixPrefix('foo', 'bar'), 0);
+    assert.equal(longestOverlapSuffixPrefix('ab(((', '(((x'), 3);
   });
 
-  test('trimOverlapWithDocument removes prefix overlap', () => {
-    assert.equal(
-      trimOverlapWithDocument('world', 'hello ', ' !'),
-      'world',
-    );
+  test('isMeaningfulDocumentOverlap ignores short identifier clashes', () => {
+    assert.equal(isMeaningfulDocumentOverlap('bc'), false);
+    assert.equal(isMeaningfulDocumentOverlap(' );'), true);
+  });
+
+  test('trimOverlapWithDocument removes meaningful prefix overlap', () => {
+    assert.equal(trimOverlapWithDocument('world', 'hello ', ' !'), 'world');
+    assert.equal(trimOverlapWithDocument('); next', 'if (x', ' next'), ');');
+  });
+
+  test('isUnchangedPrefixEcho allows short non-echo inserts', () => {
+    assert.equal(isUnchangedPrefixEcho(');', 'return arr'), false);
+    assert.equal(isUnchangedPrefixEcho(';', 'const x = 1'), false);
+  });
+
+  test('isUnchangedPrefixEcho rejects long prefix repeats', () => {
+    assert.equal(isUnchangedPrefixEcho('const x = ', 'const x = '), true);
   });
 
   test('alignAndValidateCompletionText rejects prose', () => {
@@ -189,11 +264,21 @@ describe('editor AI completion prompt', () => {
     assert.equal(result.reason, 'prefix_echo');
   });
 
+  test('alignAndValidateCompletionText allows single-character closers', () => {
+    const result = alignAndValidateCompletionText({
+      raw: ');',
+      prefix: 'return arr',
+      suffix: '',
+    });
+    assert.equal(result.rejected, false);
+    assert.equal(result.text, ');');
+  });
+
   test('alignAndValidateCompletionText trims suffix overlap', () => {
     const result = alignAndValidateCompletionText({
-      raw: '42;}\n',
+      raw: '42;}}}\n',
       prefix: 'const x = ',
-      suffix: '}\n',
+      suffix: '}}}\n',
     });
     assert.equal(result.text, '42;');
   });
@@ -207,6 +292,29 @@ describe('editor AI completion prompt', () => {
     });
     assert.equal(result.rejected, true);
     assert.equal(result.reason, 'oversized');
+  });
+
+  test('alignAndValidateCompletionText rejects unbalanced bracket inserts', () => {
+    const result = alignAndValidateCompletionText({
+      raw: '((((',
+      prefix: 'x',
+      suffix: '',
+      fenceLang: 'typescript',
+    });
+    assert.equal(result.rejected, true);
+    assert.equal(result.reason, 'unbalanced');
+  });
+
+  test('alignAndValidateCompletionText truncates at newline in single mode', () => {
+    const result = alignAndValidateCompletionText({
+      raw: 'foo\nbar',
+      prefix: 'const x = ',
+      suffix: 'rest',
+      completionMode: 'single',
+      fenceLang: 'typescript',
+    });
+    assert.equal(result.rejected, false);
+    assert.equal(result.text, 'foo');
   });
 
   test('sanitizeCompletionText strips markdown fences', () => {

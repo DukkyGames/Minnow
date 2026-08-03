@@ -3,13 +3,7 @@
  */
 
 
-import {
-  cancelGeneration,
-  createGeneration,
-  formatGenerationErrorMessage,
-  subscribeToGeneration,
-  type GenerationEndEvent,
-} from '../../api/generations';
+import { formatGenerationErrorMessage, type GenerationEndEvent } from '../../api/generations';
 import { modelCache } from '../../app-state';
 import { thinkingToCompletionBody } from '../../agents/thinking-to-body';
 import { BenchmarkStreamReasoningAccumulator } from '../../benchmark/stream-text';
@@ -26,6 +20,7 @@ import {
   resolveEditorAiBinding,
   validateEditorAiBinding,
 } from '../editor-ai-completion-client';
+import { streamEditorGeneration } from '../editor-ai-stream';
 import { sanitizeQuickEditText } from './diff-apply';
 
 export interface QuickEditRequestInput {
@@ -57,15 +52,6 @@ function buildQuickEditMessages(input: QuickEditRequestInput): ApiMessage[] {
     { role: 'system', content: QUICK_EDIT_SYSTEM },
     { role: 'user', content: userBody },
   ];
-}
-
-function ingestChunk(
-  contentAcc: StreamingContentAccumulator,
-  reasoningAcc: BenchmarkStreamReasoningAccumulator,
-  chunk: ChatCompletionChunk,
-): void {
-  contentAcc.ingestChoice(chunk.choices?.[0]);
-  reasoningAcc.ingestChunk(chunk);
 }
 
 function generationEndErrorMessage(event?: GenerationEndEvent): string {
@@ -121,13 +107,6 @@ export async function fetchQuickEditReplacement(
   );
   Object.assign(body, thinkingPatch);
 
-  let generationId: string;
-  try {
-    ({ generationId } = await createGeneration(provider.id, body, { persist: false }));
-  } catch (err) {
-    return { text: null, error: createGenerationErrorMessage(err) };
-  }
-
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
@@ -149,15 +128,14 @@ export async function fetchQuickEditReplacement(
       resolve(error ? { text: null, error } : { text });
     };
 
-    const unsubscribe = subscribeToGeneration(generationId, {
-      signal: input.signal,
-      onChunk: (chunk) => {
-        ingestChunk(contentAcc, reasoningAcc, chunk);
+    void streamEditorGeneration(provider.id, body, input.signal, {
+      onChunk: (chunk: ChatCompletionChunk) => {
+        contentAcc.ingestChoice(chunk.choices?.[0]);
+        reasoningAcc.ingestChunk(chunk);
         const cleaned = emit(false);
         if (cleaned) input.onPartial?.(cleaned);
       },
       onEnd: (event?: GenerationEndEvent) => {
-        unsubscribe();
         if (event?.status === 'error') {
           finish(null, generationEndErrorMessage(event));
           return;
@@ -169,21 +147,13 @@ export async function fetchQuickEditReplacement(
         );
       },
       onTransportError: (err) => {
-        unsubscribe();
         finish(null, createGenerationErrorMessage(err));
       },
-    });
-
-    input.signal.addEventListener(
-      'abort',
-      () => {
-        unsubscribe();
-        void cancelGeneration(generationId).catch(() => {
-          /* best-effort */
-        });
+      onAbort: () => {
         finish(null);
       },
-      { once: true },
-    );
+    }).catch((err) => {
+      finish(null, createGenerationErrorMessage(err));
+    });
   });
 }

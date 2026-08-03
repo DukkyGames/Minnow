@@ -68,6 +68,8 @@ import {
 
 } from './lsp-editor/lsp-positions';
 
+import { formatDocumentInView } from './lsp-editor/format-document';
+
 
 
 /** LSP InsertTextFormat — snippet placeholders use $0, $1, … */
@@ -355,6 +357,21 @@ export function lspEditorExtensions(filePath: string): Extension[] {
     Prec.low(triggerInputHandler),
 
     Prec.highest(keymap.of(lspCompletionKeymapBindings)),
+
+    Prec.high(
+      keymap.of([
+        {
+          key: 'Shift-Alt-f',
+          run: (view) => {
+            void formatDocumentInView(view, {
+              path: filePath,
+              tabSize: view.state.tabSize,
+            });
+            return true;
+          },
+        },
+      ]),
+    ),
 
   ];
 

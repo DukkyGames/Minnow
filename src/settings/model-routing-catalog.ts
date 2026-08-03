@@ -17,11 +17,13 @@ import {
   computeEffectiveGoalEvalBinding,
   computeEffectiveTitleBinding,
   computeEffectiveWorkAgentBinding,
+  computeEffectiveEditorCompletionBinding,
   resolveSubAgentModelBinding,
   resolveUiDesignerModel,
 } from './model-routing-effective';
 import { loadTitlesConfig } from '../config/titles-meta';
 import { loadGoalEvalConfig } from '../config/goal-eval-meta';
+import { loadEditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { loadSamplerMeta } from '../config/sampler-meta';
 import { detectConfigServer, isConfigServerMode } from '../config/storage-mode';
 import WORK_AGENT_THINKING_DEFAULTS from '../agents/defaults/work-agent-thinking.json';
@@ -45,7 +47,8 @@ export type ModelRoutingPersistKind =
   | 'sub-agent'
   | 'ui-designer'
   | 'titles'
-  | 'goal-eval';
+  | 'goal-eval'
+  | 'editor-completion';
 
 /**
  * One editable routing row in Settings → Model routing.
@@ -92,6 +95,7 @@ export type { ChatBindingContext } from './model-routing-effective';
 export {
   computeEffectiveTitleBinding,
   computeEffectiveWorkAgentBinding,
+  computeEffectiveEditorCompletionBinding,
 } from './model-routing-effective';
 
 function rowFromWorkAgent(
@@ -140,7 +144,7 @@ export async function loadModelRoutingCatalog(
     return { rows: [], offline: true, activeChat, activeChatName };
   }
 
-  const [workAgentsRes, subAgentConfig, titlesConfig, goalEvalConfig, uiDesignerConfig, samplerMeta] =
+  const [workAgentsRes, subAgentConfig, titlesConfig, goalEvalConfig, uiDesignerConfig, samplerMeta, editorAiConfig] =
     await Promise.all([
       fetchWorkAgentsList(),
       loadSubAgentConfig(),
@@ -148,6 +152,7 @@ export async function loadModelRoutingCatalog(
       loadGoalEvalConfig(),
       loadUiDesignerConfig(),
       loadSamplerMeta(),
+      loadEditorAiCompletionConfig(),
     ]);
 
   const rows: ModelRoutingRow[] = [];
@@ -252,6 +257,22 @@ export async function loadModelRoutingCatalog(
     advancedSettingsHash: '#/settings/model-routing',
     effectiveProviderId: goalEvalEffective.providerId,
     effectiveModelId: goalEvalEffective.modelId,
+  });
+
+  const editorEffective = computeEffectiveEditorCompletionBinding(editorAiConfig, chatCtx);
+  rows.push({
+    id: 'editor-completion',
+    group: 'background',
+    label: 'Editor inline completion',
+    description:
+      'Ghost text / fill-in-the-middle in the code editor (inline completion, intent, quick edit).',
+    providerId: editorAiConfig.useChatModel ? '' : editorAiConfig.providerId,
+    modelId: editorAiConfig.useChatModel ? '' : editorAiConfig.modelId,
+    usesChatDefault: editorAiConfig.useChatModel,
+    persistKind: 'editor-completion',
+    advancedSettingsHash: '#/settings/editor',
+    effectiveProviderId: editorEffective.providerId,
+    effectiveModelId: editorEffective.modelId,
   });
 
   return { rows, offline: false, activeChat, activeChatName };

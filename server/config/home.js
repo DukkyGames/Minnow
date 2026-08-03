@@ -297,10 +297,12 @@ const DEFAULT_META = {
   editorIntentMode: {
     enabledByDefault: false,
     debounceMs: 400,
+    contextWindow: 5,
+    autoResolveOnLineLeave: false,
     sigil: '',
     providerId: '',
     modelId: '',
-    maxTokens: 768,
+    maxTokens: 400,
   },
   editorSettings: {
     fontSize: 13,

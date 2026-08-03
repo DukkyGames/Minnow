@@ -10,14 +10,20 @@ describe('editor Intent mode meta', () => {
     assert.equal(DEFAULT_META.editorIntentMode?.sigil, '');
     assert.equal(DEFAULT_META.editorIntentMode?.providerId, '');
     assert.equal(DEFAULT_META.editorIntentMode?.modelId, '');
-    assert.equal(DEFAULT_META.editorIntentMode?.maxTokens, 768);
+    assert.equal(DEFAULT_META.editorIntentMode?.maxTokens, 400);
+    assert.equal(DEFAULT_META.editorIntentMode?.contextWindow, 5);
+    assert.equal(DEFAULT_META.editorIntentMode?.autoResolveOnLineLeave, false);
   });
 
-  test('DEFAULT_META no longer carries the removed recheck keys', () => {
+  test('DEFAULT_META no longer carries removed recheck keys', () => {
     assert.equal('autoRecheckDefault' in (DEFAULT_META.editorIntentMode ?? {}), false);
     assert.equal('recheckDelayMs' in (DEFAULT_META.editorIntentMode ?? {}), false);
     assert.equal('maxRecheckPasses' in (DEFAULT_META.editorIntentMode ?? {}), false);
-    assert.equal('contextWindow' in (DEFAULT_META.editorIntentMode ?? {}), false);
+  });
+
+  test('DEFAULT_META includes Track C context fields', () => {
+    assert.equal(DEFAULT_META.editorIntentMode?.contextWindow, 5);
+    assert.equal(DEFAULT_META.editorIntentMode?.autoResolveOnLineLeave, false);
   });
 });
 
@@ -37,6 +43,8 @@ describe('editorIntentMode meta patch', () => {
     assert.deepEqual(merged.editorIntentMode, {
       enabledByDefault: true,
       debounceMs: 2000,
+      contextWindow: 5,
+      autoResolveOnLineLeave: false,
       sigil: '??',
       providerId: 'lmstudio',
       modelId: 'qwen',

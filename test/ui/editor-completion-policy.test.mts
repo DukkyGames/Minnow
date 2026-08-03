@@ -25,6 +25,7 @@ import {
   shouldLspTabTakePrecedence,
   suggestionTabTarget,
   shouldScheduleAi,
+  completionModeAt,
 } from '../../src/ui/editor-completion-policy.ts';
 import {
   fileEditorKeymapExtensions,
@@ -301,6 +302,19 @@ describe('editor completion policy', () => {
       }),
       false,
     );
+  });
+
+  test('completionModeAt is multi on blank line tail', () => {
+    const state = EditorState.create({ doc: 'const x = 1;\n  ' });
+    const line = state.doc.line(2);
+    const pos = line.to;
+    assert.equal(completionModeAt(state, pos), 'multi');
+  });
+
+  test('completionModeAt is single when cursor is mid-line', () => {
+    const state = EditorState.create({ doc: 'const value = 1;' });
+    const pos = state.doc.line(1).from + 'const '.length;
+    assert.equal(completionModeAt(state, pos), 'single');
   });
 });
 

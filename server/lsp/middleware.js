@@ -15,14 +15,17 @@ import {
   getLspCompletions,
   getLspDefinition,
   getLspDiagnostics,
+  getLspDocumentFormatting,
   getLspDocumentSymbols,
   getLspHover,
+  getLspRangeFormatting,
   getLspSignatureHelp,
   getLspStructuredDiagnostics,
   getLspWorkspaceSymbols,
   listLspServers,
   notifyLspDocument,
   resolveLspCompletion,
+  shutdownAllLsp,
 } from './manager.js';
 import {
   getBundleJob,
@@ -58,6 +61,32 @@ function validateLspPosition(body) {
     return { ok: false, status: 400, error: 'Invalid position' };
   }
   return { ok: true, line, character };
+}
+
+function validateLspRange(body) {
+  const startLine = Number(body.startLine);
+  const startCharacter = Number(body.startCharacter);
+  const endLine = Number(body.endLine);
+  const endCharacter = Number(body.endCharacter);
+  if (
+    !Number.isInteger(startLine) ||
+    !Number.isInteger(startCharacter) ||
+    !Number.isInteger(endLine) ||
+    !Number.isInteger(endCharacter) ||
+    startLine < 0 ||
+    startCharacter < 0 ||
+    endLine < 0 ||
+    endCharacter < 0
+  ) {
+    return { ok: false, status: 400, error: 'Invalid range' };
+  }
+  return {
+    ok: true,
+    range: {
+      start: { line: startLine, character: startCharacter },
+      end: { line: endLine, character: endCharacter },
+    },
+  };
 }
 
 function readJsonBody(req) {
@@ -247,6 +276,53 @@ export function createLspMiddleware(resolveProjectRoot) {
         return;
       }
 
+      if (url === '/api/lsp/format' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const pathCheck = validateProjectRelativePath(body, projectRoot);
+        if (!pathCheck.ok) {
+          sendJson(res, pathCheck.status, { error: pathCheck.error });
+          return;
+        }
+        const editorText = typeof body.text === 'string' ? body.text : undefined;
+        const tabSize = Number(body.tabSize);
+        const insertSpaces = body.insertSpaces !== false;
+        const { edits, error, serverId } = await getLspDocumentFormatting(pathCheck.rel, {
+          editorText,
+          ...(Number.isFinite(tabSize) ? { tabSize } : {}),
+          insertSpaces,
+        });
+        sendJson(res, 200, { edits, ...(serverId ? { serverId } : {}), ...(error ? { error } : {}) });
+        return;
+      }
+
+      if (url === '/api/lsp/format-range' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const pathCheck = validateProjectRelativePath(body, projectRoot);
+        if (!pathCheck.ok) {
+          sendJson(res, pathCheck.status, { error: pathCheck.error });
+          return;
+        }
+        const rangeCheck = validateLspRange(body);
+        if (!rangeCheck.ok) {
+          sendJson(res, rangeCheck.status, { error: rangeCheck.error });
+          return;
+        }
+        const editorText = typeof body.text === 'string' ? body.text : undefined;
+        const tabSize = Number(body.tabSize);
+        const insertSpaces = body.insertSpaces !== false;
+        const { edits, error, serverId } = await getLspRangeFormatting(
+          pathCheck.rel,
+          rangeCheck.range,
+          {
+            editorText,
+            ...(Number.isFinite(tabSize) ? { tabSize } : {}),
+            insertSpaces,
+          },
+        );
+        sendJson(res, 200, { edits, ...(serverId ? { serverId } : {}), ...(error ? { error } : {}) });
+        return;
+      }
+
       if (url === '/api/lsp/diagnostics-structured' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const pathCheck = validateProjectRelativePath(body, projectRoot);
@@ -348,6 +424,9 @@ export function createLspMiddleware(resolveProjectRoot) {
         const servers = await listLspServers();
         sendJson(res, 200, {
           enabled: merged.enabled !== false,
+          formatOnSaveLanguageIds: Array.isArray(merged.formatOnSaveLanguageIds)
+            ? merged.formatOnSaveLanguageIds
+            : [],
           lsp: merged.lsp,
           servers,
         });
@@ -425,6 +504,7 @@ export function createLspMiddleware(resolveProjectRoot) {
         }
         await fs.writeFile(filePath, `${JSON.stringify(nextCfg, null, 2)}\n`, 'utf8');
         invalidateLspConfigCache();
+        shutdownAllLsp();
         sendJson(res, 200, { ok: true });
         return;
       }

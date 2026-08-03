@@ -15,6 +15,11 @@ import {
   resolveEditorAiBinding,
   setCachedEditorAiCompletion,
   EDITOR_AI_NO_MODEL_MESSAGE,
+  EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE,
+  EDITOR_AI_COMPLETION_PROSE_MESSAGE,
+  EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE,
+  EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE,
+  editorAiCompletionRejectionMessage,
   fetchEditorAiCompletion,
   buildMessagesForEditorAiCompletion,
 } from '../../src/ui/editor-ai-completion-client.ts';
@@ -40,6 +45,7 @@ import {
   resetEditorAiCompletionCache,
 } from '../../src/ui/editor-ai-completion-cache.ts';
 import { PROMPT_VERSION } from '../../src/ui/editor-ai-completion-prompt.ts';
+import { EDITOR_AI_GENERATION_FALLBACK_ROLE } from '../../src/ui/editor-ai-stream.ts';
 
 let domWindow: Window | null = null;
 
@@ -143,7 +149,7 @@ describe('editor AI completion cache (Phase 6)', () => {
     });
     assert.notEqual(keyA, keyB);
     assert.match(keyA, /^[a-z0-9]+$/);
-    assert.equal(PROMPT_VERSION, '6');
+    assert.equal(PROMPT_VERSION, '7');
   });
 
   test('LRU cache evicts oldest entry at capacity', () => {
@@ -175,19 +181,61 @@ describe('editor AI completion cache (Phase 6)', () => {
       undefined,
     );
   });
-});
 
-describe('fetchEditorAiCompletion transport', () => {
-  test('sends structured chat messages, not raw prompt', async () => {
+  test('cache hit skips network and async prompt build', async () => {
+    resetEditorAiCompletionCache();
     const doc = 'const x = ';
     const state = EditorState.create({ doc });
-    let capturedBody: Record<string, unknown> | null = null;
+    const binding = { providerId: 'test-provider', modelId: 'coder-1' };
+    const config = { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: true };
+    setCachedEditorAiCompletion(binding, config, 'demo.ts', 'const x = ', '', 'cached;');
+
+    let createCalled = false;
+    let buildCalled = false;
 
     const result = await fetchEditorAiCompletion({
       state,
       cursorPos: doc.length,
       filePath: 'demo.ts',
-      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false },
+      config,
+      binding,
+      signal: new AbortController().signal,
+      deps: {
+        resolveProvider: async () => ({
+          id: 'test-provider',
+          apiKind: 'openai-v1',
+        }),
+        buildMessagesAsync: async () => {
+          buildCalled = true;
+          return { messages: [], prefix: 'const x = ', suffix: '' };
+        },
+        createGeneration: async () => {
+          createCalled = true;
+          return { generationId: 'gen-cache' };
+        },
+        subscribeToGeneration: () => () => {},
+        cancelGeneration: async () => {},
+      },
+    });
+
+    assert.equal(result.text, 'cached;');
+    assert.equal(createCalled, false);
+    assert.equal(buildCalled, false);
+  });
+});
+
+describe('fetchEditorAiCompletion transport', () => {
+  test('sends structured chat messages, stop sequences, capped max_tokens, and fallback role', async () => {
+    const doc = 'const x = ';
+    const state = EditorState.create({ doc });
+    let capturedBody: Record<string, unknown> | null = null;
+    let capturedOptions: Record<string, unknown> | undefined;
+
+    const result = await fetchEditorAiCompletion({
+      state,
+      cursorPos: doc.length,
+      filePath: 'demo.ts',
+      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false, maxTokens: 256 },
       binding: { providerId: 'test-provider', modelId: 'coder-1' },
       signal: new AbortController().signal,
       deps: {
@@ -200,8 +248,9 @@ describe('fetchEditorAiCompletion transport', () => {
           prefix: 'const x = ',
           suffix: '',
         }),
-        createGeneration: async (_providerId, body) => {
-          capturedBody = body;
+        createGeneration: async (_providerId, body, options) => {
+          capturedBody = body as Record<string, unknown>;
+          capturedOptions = options as Record<string, unknown>;
           return { generationId: 'gen-1' };
         },
         subscribeToGeneration: (_id, handlers) => {
@@ -219,20 +268,83 @@ describe('fetchEditorAiCompletion transport', () => {
     assert.ok(capturedBody);
     assert.ok(Array.isArray(capturedBody.messages));
     assert.equal('prompt' in capturedBody, false);
+    assert.deepEqual(capturedBody.stop, ['\n\n\n', '```', '<|fim|>', '\n</file>']);
+    assert.equal(capturedBody.max_tokens, 192);
+    assert.equal(capturedOptions?.fallbackRole, EDITOR_AI_GENERATION_FALLBACK_ROLE);
+    assert.notEqual(capturedOptions?.persist, true);
     const messages = capturedBody.messages as Array<{ role: string; content: string }>;
     assert.equal(messages.length, 2);
-    assert.equal(messages[0].role, 'system');
-    assert.equal(messages[1].role, 'user');
-    assert.match(messages[1].content, /<CURSOR>/);
+    assert.match(messages[1].content, /<\|fim\|>/);
   });
 });
 
 describe('alignCompletionForInsert', () => {
   test('aligns streamed text against prefix and suffix', () => {
-    assert.equal(
-      alignCompletionForInsert('42;}', 'const x = ', '}'),
-      '42;',
+    const result = alignCompletionForInsert('42;}}}', 'const x = ', '}}}');
+    assert.equal(result.rejected, false);
+    assert.equal(result.text, '42;');
+  });
+
+  test('returns rejection metadata for prose', () => {
+    const result = alignCompletionForInsert(
+      "Here's the answer:\nfoo",
+      'const x = ',
+      '',
     );
+    assert.equal(result.rejected, true);
+    assert.equal(result.reason, 'prose');
+  });
+});
+
+describe('editorAiCompletionRejectionMessage', () => {
+  test('maps alignment reasons to user-facing copy', () => {
+    assert.equal(editorAiCompletionRejectionMessage('oversized'), EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE);
+    assert.equal(editorAiCompletionRejectionMessage('prose'), EDITOR_AI_COMPLETION_PROSE_MESSAGE);
+    assert.equal(
+      editorAiCompletionRejectionMessage('prefix_echo'),
+      EDITOR_AI_COMPLETION_PREFIX_ECHO_MESSAGE,
+    );
+    assert.equal(
+      editorAiCompletionRejectionMessage('full_rewrite'),
+      EDITOR_AI_COMPLETION_FULL_REWRITE_MESSAGE,
+    );
+  });
+});
+
+describe('fetchEditorAiCompletion rejection', () => {
+  test('returns prose message when alignment rejects streamed output', async () => {
+    const doc = 'const x = ';
+    const state = EditorState.create({ doc });
+    const result = await fetchEditorAiCompletion({
+      state,
+      cursorPos: doc.length,
+      filePath: 'demo.ts',
+      config: { ...DEFAULT_EDITOR_AI_COMPLETION, enableCompletionCache: false },
+      binding: { providerId: 'test-provider', modelId: 'coder-1' },
+      signal: new AbortController().signal,
+      deps: {
+        resolveProvider: async () => ({
+          id: 'test-provider',
+          apiKind: 'openai-v1',
+        }),
+        buildMessagesAsync: async (input) => ({
+          messages: buildMessagesForEditorAiCompletion(input),
+          prefix: 'const x = ',
+          suffix: '',
+        }),
+        createGeneration: async () => ({ generationId: 'gen-prose' }),
+        subscribeToGeneration: (_id, handlers) => {
+          handlers.onChunk?.({
+            choices: [{ delta: { content: "Here's the completion:\n42;" } }],
+          });
+          handlers.onEnd?.({ status: 'complete' });
+          return () => {};
+        },
+        cancelGeneration: async () => {},
+      },
+    });
+    assert.equal(result.text, null);
+    assert.equal(result.error, EDITOR_AI_COMPLETION_PROSE_MESSAGE);
   });
 });
 

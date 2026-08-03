@@ -24,6 +24,10 @@ import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 import { getActiveModelIdFromDom } from './editor-ai-completion-client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
+import {
+  getEditorAiMetrics,
+  isEditorAiMetricsDebugEnabled,
+} from './editor-ai-telemetry';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -444,6 +448,41 @@ function renderEditorSettingsBody(
     });
   });
   advanced.append(tokensKv);
+
+  if (isEditorAiMetricsDebugEnabled()) {
+    const metrics = getEditorAiMetrics();
+    const diag = appendSettingsGroup(
+      content,
+      'Completion diagnostics',
+      'Session counters for inline completion (dev / MINNOW_DEBUG only).',
+      'integrations.editor',
+      { emphasis: true },
+    );
+    const acceptRate =
+      metrics.acceptRate != null ? `${(metrics.acceptRate * 100).toFixed(1)}%` : '—';
+    appendSummaryKv(diag, [
+      { term: 'Requests', value: String(metrics.requests) },
+      { term: 'Cache hits', value: String(metrics.cacheHits) },
+      { term: 'Shown', value: String(metrics.shown) },
+      { term: 'Accepted', value: String(metrics.accepted) },
+      { term: 'Accept rate', value: acceptRate },
+      {
+        term: 'Reject reasons',
+        value:
+          Object.keys(metrics.rejectByReason).length > 0
+            ? JSON.stringify(metrics.rejectByReason)
+            : '—',
+      },
+      {
+        term: 'First token (p50 / p95)',
+        value: `${metrics.firstTokenMs.p50 ?? '—'} / ${metrics.firstTokenMs.p95 ?? '—'} ms`,
+      },
+      {
+        term: 'Total (p50 / p95)',
+        value: `${metrics.totalMs.p50 ?? '—'} / ${metrics.totalMs.p95 ?? '—'} ms`,
+      },
+    ]);
+  }
 
   const modelGroup = appendSettingsGroup(
     content,

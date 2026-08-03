@@ -19,10 +19,37 @@ export function mergeLspConfig(defaults, user) {
     };
   }
 
+  const formatOnSaveLanguageIds = Array.isArray(user?.formatOnSaveLanguageIds)
+    ? user.formatOnSaveLanguageIds.map((id) => String(id))
+    : [];
+
   return {
     enabled: user?.enabled !== false,
+    formatOnSaveLanguageIds,
     lsp: merged,
   };
+}
+
+/**
+ * Whether the connected server advertises whole-document formatting.
+ * @param {Record<string, unknown> | undefined} serverCapabilities
+ */
+export function serverSupportsDocumentFormatting(serverCapabilities) {
+  const provider = serverCapabilities?.documentFormattingProvider;
+  if (provider === true) return true;
+  if (provider && typeof provider === 'object') return true;
+  return false;
+}
+
+/**
+ * Whether the connected server advertises range formatting.
+ * @param {Record<string, unknown> | undefined} serverCapabilities
+ */
+export function serverSupportsRangeFormatting(serverCapabilities) {
+  const provider = serverCapabilities?.documentRangeFormattingProvider;
+  if (provider === true) return true;
+  if (provider && typeof provider === 'object') return true;
+  return false;
 }
 
 /** Built-in servers known to implement workspace/symbol when init capabilities are unavailable. */

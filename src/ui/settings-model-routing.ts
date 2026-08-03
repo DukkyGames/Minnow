@@ -385,6 +385,19 @@ async function saveRow(controls: RowControls, options?: RoutingPersistOptions): 
       else syncRowBindingFromControls(controls);
       break;
     }
+    case 'editor-completion': {
+      const followChat = !providerId.trim() && !modelId.trim();
+      const { saveEditorAiCompletionConfig } = await import('../config/editor-ai-completion');
+      await saveEditorAiCompletionConfig(
+        followChat
+          ? { useChatModel: true, providerId: '', modelId: '' }
+          : { useChatModel: false, providerId, modelId },
+      );
+      setStatus('ok', 'Editor completion binding updated');
+      if (refresh) void refreshModelRoutingSectionMount();
+      else syncRowBindingFromControls(controls);
+      break;
+    }
     case 'main-chat': {
       const chat = getActiveChat();
       chat.providerId = providerId || chat.providerId;
@@ -755,6 +768,7 @@ function renderGroup(
       controls,
       row.persistKind === 'titles' ||
         row.persistKind === 'goal-eval' ||
+        row.persistKind === 'editor-completion' ||
         row.persistKind === 'main-chat' ||
         row.persistKind === 'work-agent' ||
         row.persistKind === 'sub-agent',

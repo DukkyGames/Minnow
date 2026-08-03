@@ -5,21 +5,48 @@
 
 import {
   EditorSelection,
+  Facet,
   StateEffect,
   StateField,
   type EditorState,
   type Transaction,
 } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
+import { randomUUID } from '../../lib/random-id';
+import {
+  getEditorAiCompletionConfigSync,
+  type EditorAiCompletionConfig,
+} from '../../config/editor-ai-completion';
 import { nextPartialGhostChunk } from '../editor-ai-completion-prompt';
+import { completionInsertChangeSpecs } from '../editor-completion-accept';
+import { recordCompletionEvent } from '../editor-ai-telemetry';
 import { buildSuggestionDecorations } from './decorations';
+import { intentReplaceChangeSpecs } from './intent-accept';
+import {
+  addAcceptedIntentRegion,
+  getAcceptedIntentRegions,
+  intentSystemTransaction,
+} from './intent-regions';
+import { contextHashForRegion } from './intent-context';
+import { getEditorIntentModeConfigSync } from '../../config/editor-intent-mode';
+
+/** Where a completion ghost was sourced from. */
+export type CompletionSuggestionOrigin = 'stream' | 'cache' | 'test';
 
 /** Inline completion ghost text inserted at {@link CompletionSuggestion.pos}. */
 export interface CompletionSuggestion {
   kind: 'completion';
   text: string;
   pos: number;
+  id: string;
+  shownAt: number;
+  origin: CompletionSuggestionOrigin;
+  /** Prefix of the model completion already typed through or partial-accepted. */
+  consumed: string;
 }
+
+/** @deprecated Use {@link CompletionSuggestion}. */
+export type AiGhostValue = CompletionSuggestion;
 
 /**
  * Proposed replacement for the document range `[from, to)`. `intentText` is the
@@ -35,10 +62,64 @@ export interface IntentSuggestion {
   streaming: boolean;
 }
 
+/** Build a completion ghost value for display at the cursor. */
+export function createCompletionSuggestion(
+  text: string,
+  pos: number,
+  origin: CompletionSuggestionOrigin,
+  previous?: CompletionSuggestion | null,
+): CompletionSuggestion {
+  if (
+    previous &&
+    previous.pos === pos &&
+    text.startsWith(previous.text) &&
+    previous.text.length > 0
+  ) {
+    return { ...previous, text, origin };
+  }
+  return {
+    kind: 'completion',
+    text,
+    pos,
+    id: randomUUID(),
+    shownAt: Date.now(),
+    origin,
+    consumed: '',
+  };
+}
+
 export type Suggestion = CompletionSuggestion | IntentSuggestion;
 
 /** Set or clear the visible suggestion. An explicit effect always wins. */
 export const setSuggestion = StateEffect.define<Suggestion | null>();
+
+/** File path + config for completion accept (indentRange Layer B). */
+export interface CompletionAcceptContext {
+  filePath: string;
+  getConfig?: () => EditorAiCompletionConfig;
+}
+
+export const setCompletionAcceptContext = StateEffect.define<CompletionAcceptContext>();
+
+/** Initial accept context supplied when suggestion extensions are mounted. */
+export const completionAcceptContextFacet = Facet.define<
+  CompletionAcceptContext,
+  CompletionAcceptContext | null
+>({
+  combine: (values) => values[0] ?? null,
+});
+
+export const completionAcceptContextField = StateField.define<CompletionAcceptContext | null>({
+  create(state) {
+    return state.facet(completionAcceptContextFacet);
+  },
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setCompletionAcceptContext)) return effect.value;
+    }
+    return value;
+  },
+});
 
 /** Toggle Intent mode for one editor. */
 export const setIntentEnabled = StateEffect.define<boolean>();
@@ -112,12 +193,92 @@ export function resolveSuggestionAfterTransaction(
   if (!suggestion) return null;
 
   if (suggestion.kind === 'completion') {
-    if (tr.docChanged) return null;
-    if (!tr.state.selection.eq(tr.startState.selection)) return null;
-    return suggestion;
+    return mapCompletionSuggestion(suggestion, tr);
   }
 
   return mapIntentSuggestion(suggestion, tr);
+}
+
+const CLOSE_BRACKET_PAIRS: Record<string, string> = {
+  '(': ')',
+  '[': ']',
+  '{': '}',
+  '"': '"',
+  "'": "'",
+};
+
+/** Split a single-key closeBrackets insert into typed vs auto-closed suffix. */
+export function splitCloseBracketInsert(inserted: string): {
+  typed: string;
+  autoClosed: string;
+} {
+  if (inserted.length < 2) {
+    return { typed: inserted, autoClosed: '' };
+  }
+  const open = inserted[0]!;
+  const expectedClose = CLOSE_BRACKET_PAIRS[open];
+  if (!expectedClose || inserted[1] !== expectedClose) {
+    return { typed: inserted, autoClosed: '' };
+  }
+  if (inserted.length === 2) {
+    return { typed: open, autoClosed: expectedClose };
+  }
+  return { typed: inserted, autoClosed: '' };
+}
+
+/**
+ * Map a completion ghost through a document change (type-through) or keep it on
+ * selection-only updates when the cursor stays at the anchor.
+ */
+export function mapCompletionSuggestion(
+  suggestion: CompletionSuggestion,
+  tr: Transaction,
+): CompletionSuggestion | null {
+  const mappedPos = tr.changes.mapPos(suggestion.pos, 1);
+
+  if (!tr.docChanged) {
+    const head = tr.state.selection.main.head;
+    if (head === mappedPos) {
+      return suggestion.pos === mappedPos ? suggestion : { ...suggestion, pos: mappedPos };
+    }
+    return null;
+  }
+
+  let changeCount = 0;
+  let insertFrom = 0;
+  let insertTo = 0;
+  let inserted = '';
+  tr.changes.iterChanges((fromA, toA, fromB, toB, insert) => {
+    changeCount += 1;
+    insertFrom = fromB;
+    insertTo = toB;
+    inserted = insert.toString();
+  });
+  if (changeCount !== 1) return null;
+  if (insertTo !== insertFrom + inserted.length) return null;
+  if (insertFrom !== tr.changes.mapPos(suggestion.pos, -1)) return null;
+
+  const selection = tr.state.selection.main;
+  if (!selection.empty || selection.head !== insertTo) return null;
+
+  const { typed, autoClosed } = splitCloseBracketInsert(inserted);
+  if (!typed) return null;
+  if (!suggestion.text.startsWith(typed)) return null;
+
+  let remainder = suggestion.text.slice(typed.length);
+  if (autoClosed && remainder.startsWith(autoClosed)) {
+    remainder = remainder.slice(autoClosed.length);
+  }
+
+  const consumed = suggestion.consumed + typed;
+  if (!remainder) return null;
+
+  return {
+    ...suggestion,
+    pos: insertTo,
+    text: remainder,
+    consumed,
+  };
 }
 
 interface SuggestionFieldValue {
@@ -178,10 +339,22 @@ export function acceptCompletionGhost(view: EditorView): boolean {
   const ghost = getCompletionSuggestion(view.state);
   if (!ghost) return false;
   const insertPos = ghost.pos;
+  const ctx = view.state.field(completionAcceptContextField, false);
+  const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
+  const filePath = ctx?.filePath ?? '';
+  recordCompletionEvent({ type: 'accepted' });
+  const changes = completionInsertChangeSpecs(
+    view.state,
+    insertPos,
+    ghost.text,
+    filePath,
+    config,
+  );
+  const mappedEnd = view.state.changes(changes).mapPos(insertPos + ghost.text.length, 1);
   view.dispatch({
-    changes: { from: insertPos, insert: ghost.text },
+    changes,
     effects: setSuggestion.of(null),
-    selection: EditorSelection.cursor(insertPos + ghost.text.length),
+    selection: EditorSelection.cursor(mappedEnd),
   });
   return true;
 }
@@ -194,12 +367,24 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
   if (!chunk) return false;
   const insertPos = ghost.pos;
   const remainder = ghost.text.slice(chunk.length);
+  const ctx = view.state.field(completionAcceptContextField, false);
+  const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
+  const filePath = ctx?.filePath ?? '';
+  const changes = completionInsertChangeSpecs(view.state, insertPos, chunk, filePath, config);
+  const mappedEnd = view.state.changes(changes).mapPos(insertPos + chunk.length, 1);
   view.dispatch({
-    changes: { from: insertPos, insert: chunk },
+    changes,
     effects: setSuggestion.of(
-      remainder ? { kind: 'completion', text: remainder, pos: insertPos + chunk.length } : null,
+      remainder
+        ? {
+            ...ghost,
+            consumed: ghost.consumed + chunk,
+            text: remainder,
+            pos: mappedEnd,
+          }
+        : null,
     ),
-    selection: EditorSelection.cursor(insertPos + chunk.length),
+    selection: EditorSelection.cursor(mappedEnd),
   });
   return true;
 }
@@ -217,10 +402,40 @@ export function acceptIntentProposal(view: EditorView): boolean {
     view.dispatch({ effects: setSuggestion.of(null) });
     return false;
   }
+  const ctx = view.state.field(completionAcceptContextField, false);
+  const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
+  const filePath = ctx?.filePath ?? '';
+  const intentConfig = getEditorIntentModeConfigSync();
+  const regions = getAcceptedIntentRegions(view.state);
+  const draftRegion = {
+    from,
+    to: from + text.length,
+    intentText: proposal.intentText,
+    ctxHash: '',
+    stale: false,
+  };
+  const ctxHash = contextHashForRegion(
+    view.state.doc,
+    [...regions, draftRegion],
+    draftRegion,
+    intentConfig.contextWindow,
+  );
+  const changes = intentReplaceChangeSpecs(view.state, from, to, text, filePath, config);
+  const mappedEnd = view.state.changes(changes).mapPos(from + text.length, 1);
   view.dispatch({
-    changes: { from, to, insert: text },
-    selection: EditorSelection.cursor(from + text.length),
-    effects: setSuggestion.of(null),
+    annotations: intentSystemTransaction.of(true),
+    changes,
+    selection: EditorSelection.cursor(mappedEnd),
+    effects: [
+      setSuggestion.of(null),
+      addAcceptedIntentRegion.of({
+        from,
+        to: from + text.length,
+        intentText: proposal.intentText,
+        ctxHash,
+        stale: false,
+      }),
+    ],
     userEvent: 'input.complete',
   });
   return true;
@@ -229,6 +444,9 @@ export function acceptIntentProposal(view: EditorView): boolean {
 /** Clear any visible suggestion without touching the document. */
 export function dismissSuggestion(view: EditorView): boolean {
   if (!hasSuggestion(view.state)) return false;
+  if (hasCompletionSuggestion(view.state)) {
+    recordCompletionEvent({ type: 'dismissed' });
+  }
   view.dispatch({ effects: setSuggestion.of(null) });
   return true;
 }
@@ -239,7 +457,9 @@ export function setCompletionSuggestionForTest(
   text: string,
   pos: number,
 ): void {
-  view.dispatch({ effects: setSuggestion.of({ kind: 'completion', text, pos }) });
+  view.dispatch({
+    effects: setSuggestion.of(createCompletionSuggestion(text, pos, 'test')),
+  });
 }
 
 /** Test helper: show an intent proposal over the given range. */

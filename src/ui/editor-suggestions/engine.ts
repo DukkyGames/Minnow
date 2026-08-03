@@ -1,8 +1,8 @@
 /**
  * The single suggestion engine: one debounce timer, one AbortController, and
  * one place that decides whether the cursor wants a completion or an intent
- * resolve. There is exactly one trigger path — no blur flush, no line-leave
- * flush, no recheck cascade.
+ * resolve. Mod+Enter is the primary intent trigger; optional line-leave resolve
+ * is gated by `autoResolveOnLineLeave` (default off).
  */
 
 import type { EditorState, Transaction } from '@codemirror/state';
@@ -42,14 +42,30 @@ import {
 } from './intent-heuristic';
 import { resolveIntentSuggestion, type ResolveIntentInput } from './intent-prompt';
 import {
+  neighborLinesForPrompt,
+} from './intent-context';
+import { intentLineDecorationPlugin } from './intent-line-decorations';
+import {
+  mapPendingThroughTransactions,
+  pendingToAnchor,
+  type PendingIntentResolve,
+} from './intent-pending';
+import { acceptedIntentStalenessPlugin } from './intent-staleness';
+import {
+  acceptedIntentContextWindowFacet,
+  acceptedIntentRegionsField,
+} from './intent-regions';
+import {
   getCompletionSuggestion,
   getIntentSuggestion,
   hasSuggestion,
   isIntentEnabled,
   setIntentEnabled,
   setSuggestion,
+  createCompletionSuggestion,
   type IntentSuggestion,
 } from './state';
+import { recordCompletionEvent } from '../editor-ai-telemetry';
 
 /** Shown once an intent proposal is painted. */
 export const INTENT_READY_MESSAGE = 'Intent proposal ready — Tab to accept, Esc to dismiss';
@@ -107,6 +123,12 @@ export class SuggestionEnginePlugin {
   private lastPartial = '';
   private intentBusy = false;
   private readonly languageName: string | null;
+  /** 1-based line the cursor was on before the latest selection move. */
+  private lastLineNumber = 1;
+  private lineLeaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private blurTimer: ReturnType<typeof setTimeout> | null = null;
+  /** In-flight resolve anchor mapped through document edits while awaiting the model. */
+  private pendingResolve: PendingIntentResolve | null = null;
 
   constructor(
     private readonly view: EditorView,
@@ -114,11 +136,26 @@ export class SuggestionEnginePlugin {
   ) {
     this.languageName = resolveLanguageDescription(opts.filePath)?.name ?? null;
     enginesByView.set(view, this);
+    this.lastLineNumber = view.state.doc.lineAt(view.state.selection.main.head).number;
+    this.view.dom.addEventListener('blur', this.onBlur, true);
   }
+
+  private onBlur = (): void => {
+    if (!this.resolveIntentConfig().autoResolveOnLineLeave) return;
+    if (this.blurTimer) clearTimeout(this.blurTimer);
+    this.blurTimer = setTimeout(() => {
+      this.blurTimer = null;
+      if (!isIntentEnabled(this.view.state)) return;
+      this.scheduleLineLeaveResolve(this.lastLineNumber);
+    }, this.resolveIntentConfig().debounceMs);
+  };
 
   destroy(): void {
     this.cancelInFlight(false);
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.lineLeaveTimer) clearTimeout(this.lineLeaveTimer);
+    if (this.blurTimer) clearTimeout(this.blurTimer);
+    this.view.dom.removeEventListener('blur', this.onBlur, true);
     enginesByView.delete(this.view);
   }
 
@@ -126,7 +163,7 @@ export class SuggestionEnginePlugin {
     const { state } = update;
 
     if (isLspBusy(state)) {
-      this.cancelInFlight(true, update.transactions[0]);
+      this.cancelInFlight(false, update.transactions[0]);
       return;
     }
 
@@ -135,11 +172,45 @@ export class SuggestionEnginePlugin {
         this.completionAcceptedAt = Date.now();
       }
       if (tr.docChanged) {
-        this.recentEdits.recordDocChange(
-          tr.startState.doc.toString(),
-          tr.state.doc.toString(),
-        );
+        this.recentEdits.recordTransaction(tr);
       }
+    }
+
+    if (this.pendingResolve && (update.docChanged || update.selectionSet)) {
+      const mapped = mapPendingThroughTransactions(this.pendingResolve, update.transactions);
+      if (!mapped) {
+        this.pendingResolve = null;
+        if (this.abortController) this.abortController.abort();
+      } else {
+        this.pendingResolve = mapped;
+      }
+    }
+
+    if (isIntentEnabled(state)) {
+      const head = state.selection.main.head;
+      const lineNumber = state.doc.lineAt(head).number;
+      if (update.selectionSet && lineNumber !== this.lastLineNumber) {
+        if (this.resolveIntentConfig().autoResolveOnLineLeave) {
+          this.scheduleLineLeaveResolve(this.lastLineNumber);
+        }
+        this.lastLineNumber = lineNumber;
+      }
+      if (update.docChanged) {
+        const prevHead = update.startState.selection.main.head;
+        const prevLine = update.startState.doc.lineAt(prevHead).number;
+        if (
+          this.resolveIntentConfig().autoResolveOnLineLeave &&
+          prevLine !== lineNumber
+        ) {
+          this.scheduleLineLeaveResolve(prevLine);
+        }
+        this.lastLineNumber = lineNumber;
+      }
+    }
+
+    if (update.selectionSet && !update.docChanged) {
+      const ghostSurvived = getCompletionSuggestion(state) !== null;
+      this.cancelInFlight(!ghostSurvived);
     }
 
     const intentToggled = update.transactions.some((tr) =>
@@ -167,11 +238,8 @@ export class SuggestionEnginePlugin {
     }
 
     if (update.docChanged) {
-      // Abort in-flight work, but leave any painted suggestion to the field's
-      // own rules: a completion clears on every doc change, while an intent
-      // proposal maps through the transaction and survives edits that do not
-      // touch the text it was generated from.
-      this.cancelInFlight(false);
+      const ghostSurvived = getCompletionSuggestion(state) !== null;
+      this.cancelInFlight(!ghostSurvived);
     }
 
     if (state.readOnly) return;
@@ -181,7 +249,8 @@ export class SuggestionEnginePlugin {
     }
     this.opts.onStatus?.(null);
 
-    if (this.wantsIntent(state)) {
+    const intentConfig = this.resolveIntentConfig();
+    if (intentConfig.autoResolveOnLineLeave && this.wantsIntent(state)) {
       this.scheduleIntent(this.anchorAtCursor(state), false);
       return;
     }
@@ -271,16 +340,37 @@ export class SuggestionEnginePlugin {
     }, delay);
   }
 
+  private scheduleLineLeaveResolve(lineNumber: number): void {
+    if (this.lineLeaveTimer) clearTimeout(this.lineLeaveTimer);
+    const delay = this.resolveIntentConfig().debounceMs;
+    this.lineLeaveTimer = setTimeout(() => {
+      this.lineLeaveTimer = null;
+      const state = this.view.state;
+      if (!isIntentEnabled(state)) return;
+      if (lineNumber < 1 || lineNumber > state.doc.lines) return;
+      const line = state.doc.line(lineNumber);
+      const anchor: IntentAnchor = { from: line.from, to: line.to, intentText: line.text };
+      if (!anchor.intentText.trim()) return;
+      if (classifyIntentLine(line.text, this.classifyOptions()) !== 'intent') return;
+      void this.requestIntent(anchor, false);
+    }, delay);
+  }
+
   /** Abort in-flight work; optionally clear the visible suggestion. */
   private cancelInFlight(clear: boolean, tr?: Transaction): void {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
+    if (this.lineLeaveTimer) {
+      clearTimeout(this.lineLeaveTimer);
+      this.lineLeaveTimer = null;
+    }
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
     }
+    this.pendingResolve = null;
     this.setIntentBusy(false);
     const explicitSet = tr?.effects.some((effect) => effect.is(setSuggestion)) ?? false;
     if (clear && !explicitSet && hasSuggestion(this.view.state)) {
@@ -377,11 +467,22 @@ export class SuggestionEnginePlugin {
     const controller = new AbortController();
     this.abortController = controller;
     this.lastPartial = '';
+    this.pendingResolve = {
+      from: anchor.from,
+      to: anchor.to,
+      intentText: anchor.intentText,
+    };
     this.setIntentBusy(true);
 
     const config = this.resolveConfig();
     const intentConfig = this.resolveIntentConfig();
     const classify = this.classifyOptions();
+    const lineNumber = state.doc.lineAt(anchor.from).number;
+    const { above, below } = neighborLinesForPrompt(
+      state.doc,
+      lineNumber,
+      intentConfig.contextWindow,
+    );
     // Anchor prefix at the line start and suffix at the line end so the intent
     // text is not duplicated into both halves of the context.
     const { prefix } = extractPrefixSuffix(state.doc, anchor.from, config);
@@ -395,6 +496,8 @@ export class SuggestionEnginePlugin {
         instruction: intentInstructionFromLine(anchor.intentText, classify),
         prefix,
         suffix,
+        above,
+        below,
         baseIndent: leadingWhitespace(anchor.intentText),
         recentEdits: this.recentEdits.snapshot(),
         config,
@@ -402,17 +505,24 @@ export class SuggestionEnginePlugin {
         signal: controller.signal,
         onPartial: (partial) => {
           if (controller.signal.aborted) return;
+          const pending = this.pendingResolve;
+          if (!pending) return;
+          const liveAnchor = pendingToAnchor(pending);
           if (!this.shouldPaintPartial(partial)) return;
-          this.showIntent(anchor, partial, true);
+          this.showIntent(liveAnchor, partial, true);
         },
       });
 
       if (controller.signal.aborted) return;
+      const pending = this.pendingResolve;
+      this.pendingResolve = null;
+      if (!pending) return;
+      const liveAnchor = pendingToAnchor(pending);
       if (!result.text) {
         if (result.error) this.opts.onStatus?.(result.error);
         return;
       }
-      if (this.showIntent(anchor, result.text, false)) {
+      if (this.showIntent(liveAnchor, result.text, false)) {
         this.opts.onStatus?.(INTENT_READY_MESSAGE);
       }
     } catch (err) {
@@ -423,6 +533,7 @@ export class SuggestionEnginePlugin {
     } finally {
       if (this.abortController === controller) {
         this.abortController = null;
+        this.pendingResolve = null;
         this.setIntentBusy(false);
       }
     }
@@ -460,21 +571,27 @@ export class SuggestionEnginePlugin {
         binding,
         signal: controller.signal,
         recentEdits: this.recentEdits.snapshot(),
-        onPartial: (partial) => {
+        onPartial: (partial, options) => {
           if (controller.signal.aborted) return;
-          if (isLspBusy(this.view.state)) return;
           if (this.requestPos !== pos) return;
-          this.paintCompletion(pos, partial);
+          const liveGhost = getCompletionSuggestion(this.view.state);
+          if (liveGhost?.consumed) {
+            if (!partial.startsWith(liveGhost.consumed)) {
+              controller.abort();
+              this.view.dispatch({ effects: setSuggestion.of(null) });
+              return;
+            }
+          }
+          this.paintCompletion(pos, partial, options?.fromCache ? 'cache' : 'stream');
         },
       });
 
       if (controller.signal.aborted) return;
-      if (isLspBusy(this.view.state)) return;
       if (this.view.state.selection.main.head !== pos) return;
       if (this.requestPos !== pos) return;
 
-      this.paintCompletion(pos, result.text ?? '');
       if (result.text) {
+        this.paintCompletion(pos, result.text, 'stream');
         this.opts.onStatus?.('AI suggestion ready — Tab to accept, Esc to dismiss');
       } else if (!controller.signal.aborted && result.error) {
         this.opts.onStatus?.(result.error);
@@ -492,17 +609,36 @@ export class SuggestionEnginePlugin {
     }
   }
 
-  private paintCompletion(pos: number, text: string): void {
-    if (isLspBusy(this.view.state)) return;
+  private paintCompletion(
+    pos: number,
+    text: string,
+    origin: 'stream' | 'cache',
+  ): void {
     if (!text) {
       if (hasSuggestion(this.view.state)) {
         this.view.dispatch({ effects: setSuggestion.of(null) });
       }
       return;
     }
-    if (this.view.state.selection.main.head !== pos) return;
 
-    const currentText = getCompletionSuggestion(this.view.state)?.text ?? '';
+    const current = getCompletionSuggestion(this.view.state);
+    const anchorPos = current?.pos ?? pos;
+    if (this.view.state.selection.main.head !== anchorPos) return;
+
+    const consumedPrefix = current?.consumed ?? '';
+    if (consumedPrefix && !text.startsWith(consumedPrefix)) {
+      this.view.dispatch({ effects: setSuggestion.of(null) });
+      return;
+    }
+    const remainder = consumedPrefix ? text.slice(consumedPrefix.length) : text;
+    if (!remainder) {
+      if (hasSuggestion(this.view.state)) {
+        this.view.dispatch({ effects: setSuggestion.of(null) });
+      }
+      return;
+    }
+
+    const currentText = current?.text ?? '';
     if (
       currentText &&
       !shouldReplaceGhostPartial(currentText, text, this.requestPrefix, this.requestSuffix)
@@ -510,8 +646,13 @@ export class SuggestionEnginePlugin {
       return;
     }
 
+    const next = createCompletionSuggestion(remainder, anchorPos, origin, current);
+    if (!current || current.id !== next.id) {
+      recordCompletionEvent({ type: 'shown' });
+    }
+
     this.view.dispatch({
-      effects: setSuggestion.of({ kind: 'completion', text, pos }),
+      effects: setSuggestion.of(next),
     });
   }
 }

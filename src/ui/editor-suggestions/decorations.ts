@@ -101,7 +101,6 @@ export function buildSuggestionDecorations(
   const line = state.doc.lineAt(anchor);
   return Decoration.set(
     [
-      Decoration.line({ class: 'cm-intent-source' }).range(line.from),
       Decoration.widget({
         widget: new IntentProposalWidget(suggestion.text, suggestion.streaming),
         side: 1,
