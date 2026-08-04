@@ -8,6 +8,10 @@
 
 import { selectProviderModel } from '../../api/models';
 import {
+  isLibraryModelProviderId,
+  LIBRARY_MODEL_PROVIDER_ID,
+} from '../../models/model-select-library';
+import {
   getLibrarySamplerForId,
   saveLibraryInferenceSampler,
 } from '../../config/library-inference-meta';
@@ -254,7 +258,11 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
         stopTracking(serve.id);
         if (next.status === 'running') {
           state.loads = state.loads.filter((l) => l.serveId !== serve.id);
-          await selectProviderModel(next.providerId, next.modelLabel).catch(() => false);
+          if (isLibraryModelProviderId(next.providerId) && modelId?.trim()) {
+            await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, modelId).catch(() => false);
+          } else {
+            await selectProviderModel(next.providerId, next.modelLabel).catch(() => false);
+          }
         } else {
           updateLoad(serve.id, { error: next.error ?? 'Model failed to load' });
         }

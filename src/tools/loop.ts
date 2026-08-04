@@ -1390,17 +1390,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (served) {
       sendProviderId = served.providerId;
       sendModelId = served.modelId;
-      chat.providerId = served.providerId;
-      chat.modelId = served.modelId;
     } else {
       sendProviderId = LLAMA_CPP_LOCAL_PROVIDER_ID;
     }
   }
 
   const sendProvider = await getActiveProvider(sendProviderId);
-  const libraryBinding = isLibraryModelBinding(chat.providerId, sendModelId);
+  const libraryBinding = isLibraryModelBinding(chat.providerId, chat.modelId);
   const pendingModelLoad = libraryBinding
-    ? libraryModelNeedsLoad(sendModelId, modelCache)
+    ? libraryModelNeedsLoad(chat.modelId, modelCache)
     : chatTurnNeedsModelLoad(sendProvider, sendModelId);
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =

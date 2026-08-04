@@ -12,6 +12,7 @@ import {
   ensureProviderRegistry,
   listProviders,
   LLAMA_CPP_LOCAL_ID,
+  MINNOW_LIBRARY_PROVIDER_ID,
   migrateLegacyModelServeProviders,
 } from '../../server/providers/store.js';
 import {
@@ -102,7 +103,7 @@ describe('llama-cpp single provider', () => {
       runtime: 'llama-cpp',
       modelLabel: 'test-model.gguf',
     });
-    assert.equal(serveA.providerId, LLAMA_CPP_LOCAL_ID);
+    assert.equal(serveA.providerId, MINNOW_LIBRARY_PROVIDER_ID);
 
     let { providers } = await listProviders();
     const llamaProv = providers.find((p) => p.id === LLAMA_CPP_LOCAL_ID);

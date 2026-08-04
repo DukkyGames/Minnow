@@ -4,6 +4,7 @@
 
 import { listProviders } from '../providers/store';
 import type { ProviderPublic } from '../providers/types';
+import { resolveUpstreamProviderId } from '../models/model-select-library';
 import type { Chat } from '../types';
 import type {
   WorkAgentBinding,
@@ -57,7 +58,10 @@ export async function resolveWorkAgentBinding(
 
   const providers =
     options?.providers ?? (await listProviders()).providers;
-  const provider = providers.find((p) => p.id === providerId && p.enabled !== false);
+  const registryProviderId = resolveUpstreamProviderId(providerId, modelId);
+  const provider = providers.find(
+    (p) => p.id === registryProviderId && p.enabled !== false,
+  );
 
   if (!provider) {
     throw new WorkAgentConfigError(`Unknown provider id: ${providerId}`);
