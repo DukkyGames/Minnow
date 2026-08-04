@@ -1,5 +1,0 @@
-{"ts":"2026-08-04T03:23:40.803Z","pid":1736,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
-{"ts":"2026-08-04T03:23:41.529Z","pid":1736,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
-{"ts":"2026-08-04T03:23:41.941Z","pid":1736,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
-{"ts":"2026-08-04T03:23:42.214Z","pid":1736,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-08-04T03:23:42.217Z","pid":1736,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"agent"}}
