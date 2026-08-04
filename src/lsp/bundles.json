@@ -81,17 +81,13 @@
         {
           "id": "gopls",
           "label": "gopls",
-          "description": "Official Go language server",
-          "kind": "binary",
+          "description": "Official Go language server (installs via go; Go must be on PATH)",
+          "kind": "go",
+          "goModule": "golang.org/x/tools/gopls",
+          "version": "v0.23.0",
           "binaryName": "gopls",
           "lspIds": ["gopls"],
-          "sizeEstimateMb": 35,
-          "github": {
-            "owner": "golang",
-            "repo": "tools",
-            "version": "v0.30.0",
-            "assetSubpath": "gopls"
-          }
+          "sizeEstimateMb": 35
         },
         {
           "id": "clangd",
@@ -170,7 +166,7 @@
         {
           "id": "bash-language-server",
           "label": "Bash",
-          "description": "Shell script intelligence",
+          "description": "Shell script intelligence (ShellCheck on PATH required for diagnostics)",
           "kind": "npm",
           "npmPackage": "bash-language-server",
           "npmVersion": "5.4.2",

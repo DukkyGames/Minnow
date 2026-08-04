@@ -12,6 +12,7 @@ import {
   getLspSearchPaths,
   getManagedLspNpmRoot,
 } from './paths.js';
+import { getLspNodeExecutable, isNodeCommandToken } from './node-runtime.js';
 
 /** @typedef {{ argv: string[], displayBin: string }} ResolvedLspSpawn */
 
@@ -155,7 +156,7 @@ function stripLegacyTsserverCliFlags(extraArgs) {
 
 function buildNodeCliArgv(cliPath, displayBin, extraArgs = []) {
   return {
-    argv: ['node', cliPath, ...extraArgs],
+    argv: [getLspNodeExecutable(), cliPath, ...extraArgs],
     displayBin,
   };
 }
@@ -163,7 +164,12 @@ function buildNodeCliArgv(cliPath, displayBin, extraArgs = []) {
 function buildTypeScriptLanguageServerArgv(extraArgs = []) {
   const cli = resolveFromAppRoot('typescript-language-server/lib/cli.mjs');
   return {
-    argv: ['node', cli, '--stdio', ...stripLegacyTsserverCliFlags(extraArgs)],
+    argv: [
+      getLspNodeExecutable(),
+      cli,
+      '--stdio',
+      ...stripLegacyTsserverCliFlags(extraArgs),
+    ],
     displayBin: 'typescript-language-server',
   };
 }
@@ -196,7 +202,8 @@ const MINNOW_NODE_SERVERS = {
   },
   'graphql-lsp': {
     spec: 'graphql-language-service-cli/bin/graphql.js',
-    args: ['server', '--method=stdio'],
+    // graphql-language-service-cli accepts stream | node | socket (not "stdio").
+    args: ['server', '-m', 'stream'],
     display: 'graphql-lsp',
   },
   'vscode-html-language-server': {
@@ -239,10 +246,14 @@ function resolveMinnowToken(minnowId, tail) {
 
 /**
  * Resolve the first token of a plain command through LSP search paths.
+ * A bare "node" always means the runtime Minnow itself runs on — never a PATH lookup.
  * @param {string} bin
  * @returns {string}
  */
 export function resolveLspExecutable(bin) {
+  if (isNodeCommandToken(bin)) {
+    return getLspNodeExecutable();
+  }
   if (!bin || bin.includes(path.sep) || bin.startsWith('.')) {
     return bin;
   }
@@ -287,7 +298,9 @@ export function resolveLspSpawnArgv(command) {
     return part;
   });
 
-  return { argv: mapped, displayBin: mapped[0] ?? '' };
+  // Keep "node" in errors rather than the full Electron/Node executable path.
+  const displayBin = isNodeCommandToken(head) ? head : (mapped[0] ?? '');
+  return { argv: mapped, displayBin };
 }
 
 /** Exposed for tests — managed LSP npm prefix used in resolution order. */

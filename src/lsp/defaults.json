@@ -54,7 +54,8 @@
       "extensions": [".sh", ".bash", ".zsh", ".ksh"],
       "workspaceSymbols": false,
       "defaultEnabled": true,
-      "label": "Bash"
+      "label": "Bash",
+      "requirements": { "binary": "shellcheck" }
     },
     "dockerfile": {
       "disabled": false,
