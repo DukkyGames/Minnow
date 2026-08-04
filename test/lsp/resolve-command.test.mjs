@@ -128,6 +128,25 @@ describe('resolveLspSpawnArgv managed dir', () => {
     assert.equal(css.argv[1], cssMain);
     assert.ok(css.argv.includes('--stdio'));
   });
+
+  it('resolves $minnow:graphql-lsp with stream IPC (not stdio)', () => {
+    const gqlCli = path.join(
+      APP_ROOT,
+      'node_modules',
+      'graphql-language-service-cli',
+      'bin',
+      'graphql.js',
+    );
+    if (!fs.existsSync(gqlCli)) {
+      console.log('skip: graphql-language-service-cli not installed');
+      return;
+    }
+    const { argv, displayBin } = resolveLspSpawnArgv(['$minnow:graphql-lsp']);
+    assert.equal(argv[0], process.execPath);
+    assert.equal(argv[1], gqlCli);
+    assert.deepEqual(argv.slice(2), ['server', '-m', 'stream']);
+    assert.equal(displayBin, 'graphql-lsp');
+  });
 });
 
 describe('node runtime for bundled language servers', () => {

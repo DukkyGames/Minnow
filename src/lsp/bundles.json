@@ -170,7 +170,7 @@
         {
           "id": "bash-language-server",
           "label": "Bash",
-          "description": "Shell script intelligence",
+          "description": "Shell script intelligence (ShellCheck on PATH required for diagnostics)",
           "kind": "npm",
           "npmPackage": "bash-language-server",
           "npmVersion": "5.4.2",

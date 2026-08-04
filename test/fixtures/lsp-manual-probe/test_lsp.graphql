@@ -1,7 +1,0 @@
-type Query {
-  brokenField: String
-}
-
-query Bad {
-  unknownField
-}
