@@ -1,0 +1,4 @@
+{"ts":"2026-08-04T02:32:46.712Z","pid":20248,"source":"server","kind":"lsp-exit","message":"LSP server html exited on signal SIGTERM","extra":{"serverId":"html","signal":"SIGTERM","scope":"agent"}}
+{"ts":"2026-08-04T02:32:48.060Z","pid":20248,"source":"server","kind":"lsp-exit","message":"LSP server bash exited on signal SIGTERM","extra":{"serverId":"bash","signal":"SIGTERM","scope":"agent"}}
+{"ts":"2026-08-04T02:35:39.066Z","pid":34880,"source":"server","kind":"lsp-exit","message":"LSP server html exited on signal SIGTERM","extra":{"serverId":"html","signal":"SIGTERM","scope":"agent"}}
+{"ts":"2026-08-04T02:35:40.399Z","pid":34880,"source":"server","kind":"lsp-exit","message":"LSP server bash exited on signal SIGTERM","extra":{"serverId":"bash","signal":"SIGTERM","scope":"agent"}}

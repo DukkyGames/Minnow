@@ -202,7 +202,8 @@ const MINNOW_NODE_SERVERS = {
   },
   'graphql-lsp': {
     spec: 'graphql-language-service-cli/bin/graphql.js',
-    args: ['server', '--method=stdio'],
+    // graphql-language-service-cli accepts stream | node | socket (not "stdio").
+    args: ['server', '-m', 'stream'],
     display: 'graphql-lsp',
   },
   'vscode-html-language-server': {
