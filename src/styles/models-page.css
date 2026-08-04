@@ -1058,6 +1058,47 @@
   border-color: var(--mn-accent-border);
 }
 
+/*
+ * Segmented groups inside the toolbar. `nowrap` keeps a pair together when the
+ * bar wraps — a "Catalog" on one line and "Hugging Face" on the next stops
+ * reading as one control.
+ */
+.models-source,
+.models-hub-format {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  align-items: center;
+}
+
+/* Extra breathing room so the source picker reads as its own decision, not as
+   the first of the filters that follow it. */
+.models-source {
+  margin-right: 4px;
+}
+
+/*
+ * Refetching over results already on screen. Dimming beats swapping in
+ * skeletons: the list keeps its height and the rows stay readable instead of
+ * collapsing and re-expanding on every keystroke.
+ */
+.models-card-list.is-stale {
+  opacity: 0.55;
+  transition: opacity 180ms var(--ease-out);
+}
+
+/* Announces the result count without adding a visible line above the list. */
+.models-hub-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .models-card-list {
   display: flex;
   flex-direction: column;
@@ -1924,6 +1965,23 @@
     min-width: 40px;
   }
 
+  .models-segment {
+    min-height: 40px;
+    padding: 4px 12px;
+  }
+
+  /* The source pair leads its own line once the search field takes the full
+     width, so it needs the toolbar gap rather than its own nudge. */
+  .models-source {
+    margin-right: 0;
+  }
+
+  /* Download counts are the first fact worth losing when the row runs out of
+     width — params, quant, and size all bear on whether the model will run. */
+  .models-chip--optional {
+    display: none;
+  }
+
   .models-card__actions {
     flex-wrap: wrap;
   }
@@ -1940,6 +1998,11 @@
   .models-progress__fill.is-indeterminate {
     width: 100%;
     opacity: 0.4;
+  }
+
+  /* The dim still conveys "refetching" — only the fade to it is dropped. */
+  .models-card-list.is-stale {
+    transition: none;
   }
 }
 

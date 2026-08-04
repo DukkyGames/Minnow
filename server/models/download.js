@@ -8,9 +8,12 @@ import path from 'node:path';
 import { getModelsConfig } from './models-config.js';
 import {
   downloadHfFile,
+  downloadHfSnapshot,
   fetchRemoteSize,
+  MLX_SNAPSHOT_EXCLUDE,
   resolveGgufFilename,
 } from './hf-client.js';
+import { isMlxSupported, MLX_UNSUPPORTED_MESSAGE } from '../servers/mlx-lm.js';
 import { getDownloadsIndexPath, repoDownloadDir } from './paths.js';
 import { validateJobId, validateRepoId } from './validate.js';
 
@@ -23,12 +26,20 @@ const INTERRUPTED_DOWNLOAD_ERROR = 'Download interrupted (server restarted)';
 /** @typedef {'queued' | 'running' | 'completed' | 'failed' | 'cancelled'} DownloadStatus */
 
 /**
+ * `gguf` fetches one file to `destPath`; `mlx` fetches a whole repo snapshot
+ * into `destPath` as a directory. Jobs persisted before MLX support have no
+ * `format` field, so everything treats a missing value as `gguf`.
+ * @typedef {'gguf' | 'mlx'} DownloadFormat
+ */
+
+/**
  * @typedef {object} DownloadJob
  * @property {string} id
  * @property {string} repoId
  * @property {string} filename
  * @property {string} repoFilePath
  * @property {string} quant
+ * @property {DownloadFormat} [format]
  * @property {DownloadStatus} status
  * @property {number} bytesReceived
  * @property {number | null} totalBytes
@@ -75,6 +86,26 @@ async function loadJobs() {
 }
 
 /**
+ * Remove whatever a failed, cancelled, or interrupted job left on disk.
+ *
+ * The format check is load-bearing. An MLX job's `destPath` is a *directory*,
+ * and `fsp.rm` without `recursive: true` silently no-ops on one — leaving a
+ * half-downloaded repo that the library scanner then lists as servable and that
+ * fails at load time. Partials live inside the directory for MLX, so removing
+ * the directory takes them with it and there is no `.partial` sibling.
+ * @param {DownloadJob} job
+ */
+async function cleanupJobArtifacts(job) {
+  if (!job.destPath) return;
+  if (job.format === 'mlx') {
+    await fsp.rm(job.destPath, { recursive: true, force: true }).catch(() => {});
+    return;
+  }
+  await fsp.rm(job.destPath, { force: true }).catch(() => {});
+  await fsp.rm(`${job.destPath}.partial`, { force: true }).catch(() => {});
+}
+
+/**
  * Mark queued/running jobs from a previous server process as failed.
  */
 async function reconcileInterruptedJobs() {
@@ -84,8 +115,7 @@ async function reconcileInterruptedJobs() {
     job.status = 'failed';
     job.error = INTERRUPTED_DOWNLOAD_ERROR;
     job.finishedAt = Date.now();
-    await fsp.rm(job.destPath, { force: true }).catch(() => {});
-    await fsp.rm(`${job.destPath}.partial`, { force: true }).catch(() => {});
+    await cleanupJobArtifacts(job);
     changed = true;
   }
   if (changed) await saveJobs();
@@ -157,23 +187,38 @@ async function runDownloadJob(job) {
     totalBytes: job.totalBytes,
   });
 
-  try {
-    const result = await downloadHfFile({
-      repoId: job.repoId,
-      filename: job.repoFilePath || job.filename,
-      destPath: job.destPath,
-      signal: controller.signal,
-      onProgress: (bytes, total) => {
-        job.bytesReceived = bytes;
-        if (total != null) job.totalBytes = total;
-        emit(job.id, {
-          jobId: job.id,
-          status: job.status,
-          bytesReceived: job.bytesReceived,
-          totalBytes: job.totalBytes,
-        });
-      },
+  // Identical shape for both formats, so the SSE payload and subscribeDownload
+  // need no MLX-specific handling.
+  const onProgress = (bytes, total) => {
+    job.bytesReceived = bytes;
+    if (total != null) job.totalBytes = total;
+    emit(job.id, {
+      jobId: job.id,
+      status: job.status,
+      bytesReceived: job.bytesReceived,
+      totalBytes: job.totalBytes,
     });
+  };
+
+  try {
+    const result =
+      job.format === 'mlx'
+        ? await downloadHfSnapshot({
+            repoId: job.repoId,
+            destDir: job.destPath,
+            signal: controller.signal,
+            // MLX repos routinely ship the original fp16 weights beside the
+            // quantized ones; fetching both would roughly double the transfer.
+            exclude: MLX_SNAPSHOT_EXCLUDE,
+            onProgress,
+          })
+        : await downloadHfFile({
+            repoId: job.repoId,
+            filename: job.repoFilePath || job.filename,
+            destPath: job.destPath,
+            signal: controller.signal,
+            onProgress,
+          });
     job.bytesReceived = result.bytesReceived;
     job.totalBytes = result.totalBytes;
     job.status = 'completed';
@@ -189,8 +234,7 @@ async function runDownloadJob(job) {
     job.status = cancelled ? 'cancelled' : 'failed';
     job.error = err instanceof Error ? err.message : String(err);
     job.finishedAt = Date.now();
-    await fsp.rm(job.destPath, { force: true }).catch(() => {});
-    await fsp.rm(`${job.destPath}.partial`, { force: true }).catch(() => {});
+    await cleanupJobArtifacts(job);
     emit(job.id, {
       jobId: job.id,
       status: job.status,
@@ -205,11 +249,49 @@ async function runDownloadJob(job) {
 }
 
 /**
- * @param {{ repoId: string, filename?: string, quant?: string, catalogName?: string }} body
+ * Queue a download.
+ *
+ * `sizeBytes` lets the caller pass the repo size the Hub already reported
+ * (`safetensors.total` from search), so the MLX path can precheck disk space
+ * without a per-file HEAD sweep.
+ * @param {{ repoId: string, filename?: string, quant?: string, catalogName?: string, format?: string, sizeBytes?: number }} body
  */
 export async function startDownload(body) {
   await loadJobs();
   const repoId = validateRepoId(body.repoId);
+
+  if (body.format === 'mlx') {
+    if (!isMlxSupported()) {
+      throw new Error(MLX_UNSUPPORTED_MESSAGE);
+    }
+    const destPath = repoDownloadDir(repoId);
+    const declared = Number(body.sizeBytes);
+    const totalBytes = Number.isFinite(declared) && declared > 0 ? declared : null;
+    await assertDiskSpace(totalBytes != null ? totalBytes + MIN_FREE_BYTES : MIN_FREE_BYTES);
+
+    const job = /** @type {DownloadJob} */ ({
+      id: crypto.randomUUID(),
+      repoId,
+      // The repo is the artifact; there is no single file to name.
+      filename: '',
+      repoFilePath: '',
+      quant: typeof body.quant === 'string' ? body.quant.trim() : '',
+      format: 'mlx',
+      status: 'queued',
+      bytesReceived: 0,
+      totalBytes,
+      destPath,
+      createdAt: Date.now(),
+    });
+
+    jobsCache.unshift(job);
+    if (jobsCache.length > 100) jobsCache.length = 100;
+    await saveJobs();
+
+    void runDownloadJob(job);
+    return publicJob(job);
+  }
+
   const quant = typeof body.quant === 'string' && body.quant.trim() ? body.quant.trim() : 'Q4_K_M';
   const filename =
     typeof body.filename === 'string' && body.filename.trim()
@@ -240,6 +322,7 @@ export async function startDownload(body) {
     filename: localFilename,
     repoFilePath,
     quant,
+    format: 'gguf',
     status: 'queued',
     bytesReceived: 0,
     totalBytes,
@@ -264,6 +347,7 @@ function publicJob(job) {
     repoId: job.repoId,
     filename: job.filename,
     quant: job.quant,
+    format: job.format ?? 'gguf',
     status: job.status,
     bytesReceived: job.bytesReceived,
     totalBytes: job.totalBytes,
@@ -300,8 +384,7 @@ export async function cancelDownload(jobId) {
   job.status = 'cancelled';
   job.finishedAt = Date.now();
   await saveJobs();
-  await fsp.rm(job.destPath, { force: true }).catch(() => {});
-  await fsp.rm(`${job.destPath}.partial`, { force: true }).catch(() => {});
+  await cleanupJobArtifacts(job);
   emit(jobId, {
     jobId: job.id,
     status: job.status,

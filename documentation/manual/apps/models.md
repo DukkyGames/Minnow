@@ -22,11 +22,31 @@ The last five also appear under **Models** in the Settings sidebar — same pane
 
 Minnow probes your actual hardware — CPU, RAM, GPU, VRAM — and scores models by how well they will fit. Start here if you do not already know what your machine can handle; the alternative is downloading 40 GB to discover it swaps.
 
+A **Catalog / Hugging Face** toggle sits at the left of the filter bar. Catalog is the curated list, ranked against your machine, with a fit level and a rough tokens-per-second estimate on every row. Hugging Face searches the Hub live and shows the most downloaded repos before you type anything.
+
+The Hub cannot tell Minnow how a model will perform on your hardware, so those rows carry no fit level. What they do carry is the publisher, parameter count, download size, quantization, and whether the repo is gated. Gated repos need a Hugging Face token; the row offers to take you to Storage to add one rather than starting a download that can only fail.
+
+The filter bar changes with the source, because target context, "Only what fits", use case, and quantization have no meaning for a Hub search.
+
 ## Library and Installed
 
 **Library** searches Hugging Face and downloads weights into your Minnow home. **Serve** starts the bundled `llama-server` against a downloaded model and registers it as a provider automatically, so it shows up in the model picker with nothing else to configure.
 
 **Installed** lists what is on disk so you can reclaim space later. Model files are large; they are deliberately kept out of the small-backup path described in [Where your data lives](../reference/configuration.md).
+
+## MLX on Apple Silicon
+
+On an Apple Silicon Mac, Minnow can also run **MLX** weights — Apple's Metal-native format. For the same quantization these are generally faster than GGUF on Metal, and the `mlx-community` and `lmstudio-community` accounts publish thousands of them.
+
+MLX is Apple Silicon only. On Windows and Linux the option is not shown at all, and an MLX download is refused with an explanation rather than failing part way through.
+
+**Getting set up.** The first MLX model you load asks to install the runtime. Minnow downloads a private Python environment and the `mlx-lm` packages — a few hundred megabytes, noticeably slower than the 20 MB llama.cpp install. The Python runtime is shared with Minnow's other managed servers, so it is only fetched once. You can also install it ahead of time from **Settings → Servers → MLX**.
+
+**Downloading.** Search Hugging Face from Discover with the format set to MLX. An MLX model is a whole repository rather than a single file, so Minnow downloads the directory, skipping the original unquantized weights that many of these repos keep alongside the quantized ones.
+
+**Loading.** MLX models appear in My Models with format `MLX` and a quant like `mlx-4bit`, and load the same way as GGUF. One difference is worth knowing: MLX runs as a single server that holds whichever model you asked for, so switching between two MLX models is a request rather than a process restart. The server keeps a model resident in memory after use; stop it from **Settings → Servers** when you want the RAM back.
+
+Vision models are filtered out of MLX search. They need a different runtime that Minnow does not ship yet, and downloading 20 GB to hit a load error is not a useful way to find that out.
 
 ## Providers
 

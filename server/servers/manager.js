@@ -541,6 +541,32 @@ export async function getManagedSearxngUrl() {
 }
 
 /**
+ * Configured port for a managed server, falling back to its catalog default.
+ * @param {string} serverId
+ * @returns {Promise<number | null>}
+ */
+export async function getManagedServerPort(serverId) {
+  const def = getServerDef(serverId);
+  if (!def) return null;
+  const config = await readResource('servers');
+  const port = config[serverId]?.port;
+  return typeof port === 'number' ? port : def.defaultPort;
+}
+
+/**
+ * True when the managed process is up and passing health checks.
+ *
+ * Deliberately does not consult the `enabled` flag: mlx-lm is started on demand
+ * by a model load rather than by the Settings toggle, so "enabled" and "running"
+ * are independent for it.
+ * @param {string} serverId
+ */
+export function isManagedServerRunning(serverId) {
+  const state = processes.get(serverId);
+  return state?.phase === 'running' && state?.healthy === true;
+}
+
+/**
  * @param {string} serverId
  * @param {boolean} enabled
  */

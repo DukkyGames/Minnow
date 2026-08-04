@@ -1,9 +1,24 @@
 /**
- * Models → Discover — the catalog, ranked against the hardware Minnow measured,
- * plus the download queue.
+ * Models → Discover — two sources behind one toggle.
+ *
+ * **Catalog** ranks the bundled catalog against the hardware Minnow measured.
+ * **Hugging Face** searches the Hub live. They are separated rather than merged
+ * because only catalog rows can carry a fit level and a tok/s estimate; putting
+ * both in one ranked list would mean inventing those numbers for Hub rows.
+ *
+ * The two sources also differ in how they repaint. Catalog filtering is
+ * synchronous, so it rebuilds the panel. Hub search is not: results arrive after
+ * the keystroke that asked for them, so they replace only the result list. A
+ * full rebuild on every resolve would fight the user's typing for focus.
  */
 
-import { resolveDownloadRepo, type DownloadJob } from '../../models/api-client';
+import {
+  resolveDownloadRepo,
+  searchHubModels,
+  type DownloadJob,
+  type HubSearchResult,
+  type ModelDownloadFormat,
+} from '../../models/api-client';
 import { getModels } from '../../models/catalog';
 import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
 import {
@@ -20,6 +35,8 @@ import {
   el,
   emptyState,
   formatBytes,
+  formatCount,
+  formatParams,
   icon,
   iconButton,
   isModelsSearchInputFocused,
@@ -39,6 +56,11 @@ import {
 } from './store';
 
 type SortKey = 'score' | 'speed' | 'quality' | 'size';
+type ModelSource = 'catalog' | 'hub';
+type HubSort = 'downloads' | 'likes' | 'lastModified';
+
+/** Long enough that a typed word is one request, short enough to feel live. */
+const HUB_DEBOUNCE_MS = 350;
 
 const FIT_VARIANT: Record<string, string> = {
   perfect: 'fit-perfect',
@@ -65,7 +87,14 @@ const USE_CASE_LABELS: Record<string, string> = {
   stt: 'Speech to text',
 };
 
+const HUB_SORT_LABELS: Array<{ value: HubSort; label: string }> = [
+  { value: 'downloads', label: 'Most downloaded' },
+  { value: 'likes', label: 'Most liked' },
+  { value: 'lastModified', label: 'Recently updated' },
+];
+
 interface DiscoverFilters {
+  source: ModelSource;
   search: string;
   useCase: string;
   quant: string;
@@ -75,6 +104,7 @@ interface DiscoverFilters {
 }
 
 const filters: DiscoverFilters = {
+  source: 'catalog',
   search: '',
   useCase: '',
   quant: '',
@@ -83,8 +113,49 @@ const filters: DiscoverFilters = {
   fitOnly: true,
 };
 
+interface HubState {
+  results: HubSearchResult[];
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  /** Refetching over results already on screen — dim them, don't clear them. */
+  stale: boolean;
+  error: string | null;
+  /** Server-supplied explanation for a deliberately empty result set. */
+  reason: string | null;
+  hasToken: boolean;
+  format: ModelDownloadFormat;
+  sort: HubSort;
+  /** The query the on-screen results actually answer. */
+  query: string;
+}
+
+const hub: HubState = {
+  results: [],
+  status: 'idle',
+  stale: false,
+  error: null,
+  reason: null,
+  hasToken: false,
+  format: 'gguf',
+  sort: 'downloads',
+  query: '',
+};
+
 let gpuGroupIndex: number | null = null;
 let bound = false;
+let formatDefaulted = false;
+
+/** The node Hub results paint into, so a resolve never rebuilds the toolbar. */
+let hubListHost: HTMLElement | null = null;
+/**
+ * Persistent live region. It has to outlive the paints it describes: a
+ * role="status" node inserted together with its own text is unreliable to
+ * announce, because assistive tech watches existing regions for changes.
+ */
+let hubStatusNode: HTMLElement | null = null;
+let hubDebounce: number | null = null;
+let hubAbort: AbortController | null = null;
+/** Guards against a slow earlier request overwriting a newer one. */
+let hubRequestSeq = 0;
 
 function mount(): HTMLElement | null {
   return document.getElementById('modelsRecommendBody');
@@ -92,6 +163,11 @@ function mount(): HTMLElement | null {
 
 function isActive(): boolean {
   return Boolean(document.getElementById('modelsSection-recommend')?.classList.contains('is-active'));
+}
+
+/** MLX only exists as an option on Metal hardware. */
+function supportsMlx(hw: HardwareSnapshot | null): boolean {
+  return hw?.backend === 'metal';
 }
 
 function useCaseOptions(): Array<{ value: string; label: string }> {
@@ -161,47 +237,109 @@ function renderHardwareStrip(hw: HardwareSnapshot): HTMLElement {
   return strip;
 }
 
-function renderFilters(): HTMLElement {
-  const bar = el('div', 'models-toolbar');
+/**
+ * A segmented pair, focus restored to the button the user pressed because
+ * choosing a source rebuilds the toolbar underneath it.
+ */
+function segmentedControl<T extends string>(
+  ariaLabel: string,
+  options: Array<{ value: T; label: string }>,
+  active: T,
+  onSelect: (value: T) => void,
+  className: string,
+): HTMLElement {
+  const group = el('div', className);
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', ariaLabel);
+
+  options.forEach((option, index) => {
+    const btn = el('button', 'models-segment', option.label) as HTMLButtonElement;
+    btn.type = 'button';
+    btn.dataset.value = option.value;
+    const isActive = option.value === active;
+    btn.setAttribute('aria-pressed', String(isActive));
+    if (isActive) btn.classList.add('is-active');
+    btn.addEventListener('click', () => onSelect(option.value));
+    btn.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      const step = event.key === 'ArrowRight' ? 1 : -1;
+      const next = options[(index + step + options.length) % options.length];
+      if (next) onSelect(next.value);
+    });
+    group.appendChild(btn);
+  });
+
+  return group;
+}
+
+/** Re-focus a segment after the rebuild that its own click triggered. */
+function refocusSegment(hostSelector: string, value: string): void {
+  const host = mount();
+  const btn = host?.querySelector<HTMLButtonElement>(
+    `${hostSelector} .models-segment[data-value="${value}"]`,
+  );
+  btn?.focus();
+}
+
+function switchSource(next: ModelSource): void {
+  if (filters.source === next) return;
+  filters.source = next;
+  render();
+  refocusSegment('.models-source', next);
+  if (next === 'hub') void runHubSearch({ immediate: true });
+}
+
+function renderSearchField(): HTMLElement {
+  const isHub = filters.source === 'hub';
+  const label = isHub ? 'Search Hugging Face' : 'Search the catalog';
 
   const searchWrap = el('div', 'models-search');
   searchWrap.appendChild(icon('search', 'models-search__icon'));
   const search = el('input', 'models-search__input') as HTMLInputElement;
   search.type = 'search';
-  search.placeholder = 'Search the catalog';
+  search.placeholder = label;
   search.value = filters.search;
-  search.setAttribute('aria-label', 'Search the catalog');
+  search.setAttribute('aria-label', label);
   search.addEventListener('input', () => {
     filters.search = search.value;
+    if (isHub) {
+      // No re-render: only the result list changes, and it repaints in place
+      // when the request resolves. Rebuilding here would drop the caret.
+      void runHubSearch({});
+      return;
+    }
     render();
   });
   searchWrap.appendChild(search);
-  bar.appendChild(searchWrap);
+  return searchWrap;
+}
 
-  const select = (
-    ariaLabel: string,
-    options: Array<{ value: string; label: string }>,
-    value: string,
-    onChange: (next: string) => void,
-  ) => {
-    const node = el('select', 'models-select') as HTMLSelectElement;
-    node.setAttribute('aria-label', ariaLabel);
-    for (const opt of options) {
-      const option = el('option', undefined, opt.label) as HTMLOptionElement;
-      option.value = opt.value;
-      if (opt.value === value) option.selected = true;
-      node.appendChild(option);
-    }
-    node.addEventListener('change', () => onChange(node.value));
-    return node;
-  };
+function selectControl(
+  ariaLabel: string,
+  options: Array<{ value: string; label: string }>,
+  value: string,
+  onChange: (next: string) => void,
+): HTMLSelectElement {
+  const node = el('select', 'models-select') as HTMLSelectElement;
+  node.setAttribute('aria-label', ariaLabel);
+  for (const opt of options) {
+    const option = el('option', undefined, opt.label) as HTMLOptionElement;
+    option.value = opt.value;
+    if (opt.value === value) option.selected = true;
+    node.appendChild(option);
+  }
+  node.addEventListener('change', () => onChange(node.value));
+  return node;
+}
 
+function renderCatalogControls(bar: HTMLElement): void {
   bar.append(
-    select('Filter by use case', useCaseOptions(), filters.useCase, (next) => {
+    selectControl('Filter by use case', useCaseOptions(), filters.useCase, (next) => {
       filters.useCase = next;
       render();
     }),
-    select(
+    selectControl(
       'Filter by quantization',
       ['', 'Q8_0', 'Q6_K', 'Q5_K_M', 'Q4_K_M', 'Q3_K_M', 'Q2_K'].map((q) => ({
         value: q,
@@ -213,7 +351,7 @@ function renderFilters(): HTMLElement {
         render();
       },
     ),
-    select(
+    selectControl(
       'Sort results',
       [
         { value: 'score', label: 'Best fit' },
@@ -257,6 +395,63 @@ function renderFilters(): HTMLElement {
   });
   fitWrap.append(fit, el('span', undefined, 'Only what fits'));
   bar.appendChild(fitWrap);
+}
+
+function renderHubControls(bar: HTMLElement, hw: HardwareSnapshot | null): void {
+  // Off Apple Silicon there is only one format worth offering, so the control
+  // is omitted rather than shown with a permanently unusable option.
+  if (supportsMlx(hw)) {
+    bar.appendChild(
+      segmentedControl<ModelDownloadFormat>(
+        'Weights format',
+        [
+          { value: 'mlx', label: 'MLX' },
+          { value: 'gguf', label: 'GGUF' },
+        ],
+        hub.format,
+        (next) => {
+          if (hub.format === next) return;
+          hub.format = next;
+          render();
+          refocusSegment('.models-hub-format', next);
+          void runHubSearch({ immediate: true });
+        },
+        'models-hub-format',
+      ),
+    );
+  }
+
+  bar.appendChild(
+    selectControl(
+      'Sort Hugging Face results',
+      HUB_SORT_LABELS.map((option) => ({ value: option.value, label: option.label })),
+      hub.sort,
+      (next) => {
+        hub.sort = next as HubSort;
+        void runHubSearch({ immediate: true });
+      },
+    ),
+  );
+}
+
+function renderToolbar(hw: HardwareSnapshot | null): HTMLElement {
+  const bar = el('div', 'models-toolbar');
+  bar.appendChild(
+    segmentedControl<ModelSource>(
+      'Result source',
+      [
+        { value: 'catalog', label: 'Catalog' },
+        { value: 'hub', label: 'Hugging Face' },
+      ],
+      filters.source,
+      switchSource,
+      'models-source',
+    ),
+  );
+  bar.appendChild(renderSearchField());
+
+  if (filters.source === 'catalog') renderCatalogControls(bar);
+  else renderHubControls(bar, hw);
 
   return bar;
 }
@@ -277,7 +472,12 @@ function downloadCard(job: DownloadJob): HTMLElement {
     state.textContent = pct != null ? `${pct.toFixed(1)}%` : 'Downloading';
     state.appendChild(el('span', 'models-spinner'));
   }
-  head.append(state, el('span', 'models-loaded__name', `${job.repoId} · ${job.filename}`));
+  // MLX jobs fetch a whole repo, so they carry no filename to print.
+  const artifact = job.format === 'mlx' ? 'MLX repo' : job.filename;
+  head.append(
+    state,
+    el('span', 'models-loaded__name', artifact ? `${job.repoId} · ${artifact}` : job.repoId),
+  );
 
   if (job.status === 'queued' || job.status === 'running') {
     const actions = el('div', 'models-loaded__actions');
@@ -312,6 +512,16 @@ function downloadCard(job: DownloadJob): HTMLElement {
   return card;
 }
 
+function openMyModels(): void {
+  void import('../models-page').then((m) => m.openModels('installed'));
+}
+
+function onDiskBadge(): HTMLElement {
+  const badge = el('span', 'models-card__on-disk', 'On disk');
+  badge.prepend(icon('check'));
+  return badge;
+}
+
 function catalogRow(row: ModelFitResult, onDisk: Set<string>): HTMLElement {
   const entry = getModels().find((m) => m.name === row.name) ?? null;
   const repoId = entry ? resolveDownloadRepo(entry) : row.name.includes('/') ? row.name : null;
@@ -342,14 +552,7 @@ function catalogRow(row: ModelFitResult, onDisk: Set<string>): HTMLElement {
 
   const actions = el('div', 'models-card__actions');
   if (downloaded) {
-    const badge = el('span', 'models-card__on-disk', 'On disk');
-    badge.prepend(icon('check'));
-    actions.append(
-      badge,
-      textButton('Open in My Models', () => {
-        void import('../models-page').then((m) => m.openModels('installed'));
-      }),
-    );
+    actions.append(onDiskBadge(), textButton('Open in My Models', openMyModels));
   } else if (repoId) {
     const btn = textButton(
       'Download',
@@ -374,6 +577,196 @@ function catalogRow(row: ModelFitResult, onDisk: Set<string>): HTMLElement {
   return item;
 }
 
+function hubRow(row: HubSearchResult, onDisk: Set<string>): HTMLElement {
+  const tail = row.repoId.split('/').pop() ?? row.repoId;
+  const owner = row.repoId.includes('/') ? row.repoId.split('/')[0] : '';
+  const downloaded = onDisk.has(row.repoId) || onDisk.has(tail);
+
+  const item = el('article', 'models-card');
+
+  const head = el('div', 'models-card__head');
+  const name = el('div', 'models-card__name-line');
+  name.appendChild(el('span', 'models-card__name', tail));
+  if (owner) name.appendChild(el('span', 'models-card__owner', owner));
+  head.appendChild(name);
+  // Occupies the slot a catalog row gives its fit chip — same place, and the
+  // one fact that actually distinguishes these rows from each other.
+  head.appendChild(chip(row.format === 'mlx' ? 'MLX' : 'GGUF'));
+  item.appendChild(head);
+
+  const facts = el('div', 'models-card__facts');
+  if (row.paramsB) facts.appendChild(chip(formatParams(row.paramsB)));
+  if (row.quant) facts.appendChild(chip(row.quant));
+  if (row.sizeBytes) facts.appendChild(chip(formatBytes(row.sizeBytes)));
+  // Only shown when the Hub actually returned a chat template to read, so its
+  // absence never claims a model lacks tool support.
+  if (row.toolCapable) facts.appendChild(chip('Tools'));
+  const downloadsChip = chip(`${formatCount(row.downloads)} downloads`);
+  downloadsChip.classList.add('models-chip--optional');
+  facts.appendChild(downloadsChip);
+  if (row.gated) {
+    const gatedChip = chip('Gated');
+    gatedChip.prepend(icon('lock'));
+    facts.appendChild(gatedChip);
+  }
+  item.appendChild(facts);
+
+  const actions = el('div', 'models-card__actions');
+  if (downloaded) {
+    actions.append(onDiskBadge(), textButton('Open in My Models', openMyModels));
+  } else if (row.gated && !hub.hasToken) {
+    // Sending them at a download that can only 401 would be the worse option.
+    actions.appendChild(
+      textButton('Add a Hugging Face token', () => {
+        void import('../models-page').then((m) => m.openModels('settings'));
+      }),
+    );
+  } else {
+    const btn = textButton(
+      'Download',
+      () => {
+        btn.disabled = true;
+        btn.textContent = 'Queued…';
+        void downloadModel(row.repoId, row.quant || undefined, {
+          format: row.format,
+          sizeBytes: row.sizeBytes ?? undefined,
+        })
+          .then(() => setStatus('ok', `Downloading ${row.repoId}`))
+          .catch((err: unknown) => {
+            btn.disabled = false;
+            btn.textContent = 'Download';
+            setStatus('err', err instanceof Error ? err.message : 'Download failed');
+          });
+      },
+      'primary',
+    );
+    actions.appendChild(btn);
+  }
+  item.appendChild(actions);
+  return item;
+}
+
+/** The Hub result area for the current state. */
+function hubBody(): Node {
+  if (hub.status === 'loading') return skeletonRows(6);
+
+  if (hub.status === 'error') {
+    return emptyState({
+      glyph: 'triangle-warning',
+      title: 'Could not reach Hugging Face',
+      body: hub.error ?? 'The search request failed. Check your connection and try again.',
+      action: { label: 'Try again', onClick: () => void runHubSearch({ immediate: true }) },
+    });
+  }
+
+  if (hub.reason) {
+    return emptyState({
+      glyph: 'triangle-warning',
+      title: 'MLX needs Apple Silicon',
+      body: hub.reason,
+    });
+  }
+
+  if (!hub.results.length) {
+    const formatLabel = hub.format === 'mlx' ? 'MLX' : 'GGUF';
+    return emptyState({
+      glyph: 'search',
+      title: 'Nothing on the Hub matches',
+      body: hub.query
+        ? `No ${formatLabel} repo matches “${hub.query}”. Try a shorter or different term.`
+        : `No ${formatLabel} repos came back from the Hub.`,
+      action: hub.query
+        ? {
+            label: 'Clear the search',
+            onClick: () => {
+              filters.search = '';
+              render();
+              void runHubSearch({ immediate: true });
+            },
+          }
+        : undefined,
+    });
+  }
+
+  const list = el('div', 'models-card-list');
+  // Dimmed rather than replaced by skeletons: the previous results stay readable
+  // and the list does not collapse and re-expand on every keystroke.
+  if (hub.stale) list.classList.add('is-stale');
+  const onDisk = downloadedRepos();
+  for (const row of hub.results) list.appendChild(hubRow(row, onDisk));
+  return list;
+}
+
+/** One line describing the current state, for the persistent live region. */
+function hubStatusText(): string {
+  if (hub.status === 'loading') return 'Searching Hugging Face';
+  if (hub.status === 'error') return 'Hugging Face search failed';
+  if (hub.reason) return 'No results available on this hardware';
+  if (!hub.results.length) return 'No results from Hugging Face';
+  const noun = hub.results.length === 1 ? 'result' : 'results';
+  return `${hub.results.length} ${noun} from Hugging Face`;
+}
+
+/** Repaint only the Hub result list, leaving the toolbar and caret alone. */
+function paintHubResults(): void {
+  if (!hubListHost?.isConnected) return;
+  hubListHost.replaceChildren(hubBody());
+  hubListHost.setAttribute('aria-busy', String(hub.stale || hub.status === 'loading'));
+  // Text change on a region that was already in the DOM, not a fresh insertion.
+  if (hubStatusNode) hubStatusNode.textContent = hubStatusText();
+}
+
+async function runHubSearch(options: { immediate?: boolean }): Promise<void> {
+  if (hubDebounce != null) {
+    window.clearTimeout(hubDebounce);
+    hubDebounce = null;
+  }
+
+  if (!options.immediate) {
+    hubDebounce = window.setTimeout(() => {
+      hubDebounce = null;
+      void runHubSearch({ immediate: true });
+    }, HUB_DEBOUNCE_MS);
+    return;
+  }
+
+  hubAbort?.abort();
+  const controller = new AbortController();
+  hubAbort = controller;
+  const seq = ++hubRequestSeq;
+
+  const query = filters.search.trim();
+  hub.stale = hub.results.length > 0;
+  hub.status = hub.results.length > 0 ? 'ready' : 'loading';
+  hub.error = null;
+  paintHubResults();
+
+  try {
+    const response = await searchHubModels({
+      query,
+      format: hub.format,
+      sort: hub.sort,
+      signal: controller.signal,
+    });
+    // A slower earlier request must not overwrite a newer one's results.
+    if (seq !== hubRequestSeq) return;
+    hub.results = response.results;
+    hub.reason = response.reason;
+    hub.hasToken = response.hasToken;
+    hub.status = 'ready';
+    hub.query = query;
+  } catch (err) {
+    if (controller.signal.aborted || seq !== hubRequestSeq) return;
+    hub.status = 'error';
+    hub.error = err instanceof Error ? err.message : 'Hugging Face search failed';
+  } finally {
+    if (seq === hubRequestSeq) {
+      hub.stale = false;
+      paintHubResults();
+    }
+  }
+}
+
 /** Redraw Discover from store state. */
 export function render(): void {
   const host = mount();
@@ -383,23 +776,20 @@ export function render(): void {
   const hw = state.hardware;
 
   if (!hw) {
+    hubListHost = null;
+    hubStatusNode = null;
     host.replaceChildren(el('p', 'models-muted', 'Measuring this machine…'), skeletonRows(5));
     return;
   }
 
+  // Apple Silicon opens Hub search on MLX, which is the whole point of it there.
+  if (!formatDefaulted) {
+    formatDefaulted = true;
+    hub.format = supportsMlx(hw) ? 'mlx' : 'gguf';
+  }
+
   if (gpuGroupIndex == null) gpuGroupIndex = defaultGpuGroupIndex(hw);
   else gpuGroupIndex = resolveGpuGroupIndexAfterRescan(hw, gpuGroupIndex);
-
-  const budgeted = hardwareForGpuBudget(hw, gpuGroupIndex);
-  const rows = rankModels(budgeted, {
-    limit: 60,
-    fitOnly: filters.fitOnly,
-    search: filters.search || null,
-    useCase: filters.useCase || null,
-    quant: filters.quant || null,
-    targetContext: filters.targetContext,
-    sort: filters.sort,
-  });
 
   const fragment = document.createDocumentFragment();
   fragment.appendChild(renderHardwareStrip(hw));
@@ -414,36 +804,61 @@ export function render(): void {
     fragment.appendChild(block);
   }
 
-  fragment.appendChild(renderFilters());
+  fragment.appendChild(renderToolbar(hw));
 
-  if (!rows.length) {
-    fragment.appendChild(
-      emptyState({
-        glyph: 'search',
-        title: 'Nothing matches',
-        body: filters.fitOnly
-          ? 'No catalog model fits this budget with these filters. Turn off "Only what fits" to see the rest.'
-          : 'No catalog model matches these filters.',
-        action: filters.fitOnly
-          ? {
-              label: 'Show models that do not fit',
-              onClick: () => {
-                filters.fitOnly = false;
-                render();
-              },
-            }
-          : undefined,
-      }),
-    );
+  if (filters.source === 'hub') {
+    hubStatusNode = el('p', 'models-hub-status');
+    hubStatusNode.setAttribute('role', 'status');
+    hubStatusNode.setAttribute('aria-live', 'polite');
+    hubListHost = el('div', 'models-hub-results');
+    fragment.append(hubStatusNode, hubListHost);
   } else {
-    const onDisk = downloadedRepos();
-    const list = el('div', 'models-card-list');
-    for (const row of rows) list.appendChild(catalogRow(row, onDisk));
-    fragment.appendChild(list);
+    hubListHost = null;
+    hubStatusNode = null;
+    const budgeted = hardwareForGpuBudget(hw, gpuGroupIndex);
+    const rows = rankModels(budgeted, {
+      limit: 60,
+      fitOnly: filters.fitOnly,
+      search: filters.search || null,
+      useCase: filters.useCase || null,
+      quant: filters.quant || null,
+      targetContext: filters.targetContext,
+      sort: filters.sort,
+    });
+
+    if (!rows.length) {
+      fragment.appendChild(
+        emptyState({
+          glyph: 'search',
+          title: 'Nothing matches',
+          body: filters.fitOnly
+            ? 'No catalog model fits this budget with these filters. Turn off "Only what fits" to see the rest.'
+            : 'No catalog model matches these filters.',
+          action: filters.fitOnly
+            ? {
+                label: 'Show models that do not fit',
+                onClick: () => {
+                  filters.fitOnly = false;
+                  render();
+                },
+              }
+            : {
+                label: 'Search Hugging Face instead',
+                onClick: () => switchSource('hub'),
+              },
+        }),
+      );
+    } else {
+      const onDisk = downloadedRepos();
+      const list = el('div', 'models-card-list');
+      for (const row of rows) list.appendChild(catalogRow(row, onDisk));
+      fragment.appendChild(list);
+    }
   }
 
   const refocusSearch = isModelsSearchInputFocused();
   host.replaceChildren(fragment);
+  if (filters.source === 'hub') paintHubResults();
   if (refocusSearch) restoreModelsSearchInputFocus(host);
 }
 

@@ -1,7 +1,9 @@
 /**
- * Detect local inference runtimes (llama.cpp, Ollama, LM Studio).
+ * Detect local inference runtimes (llama.cpp, mlx-lm, Ollama, LM Studio).
  */
 
+import { getManagedServerPort, isManagedServerRunning } from '../servers/manager.js';
+import { getInstallStatus as getMlxInstallStatus, isMlxSupported } from '../servers/mlx-lm.js';
 import { runProcess } from '../process-runner.js';
 import { isLlamaRuntimeInstallable, resolveLlamaServer, getInstalledLlamaVariant } from './llama-runtime.js';
 import { isGpuCapableVariant } from './llama-variant.js';
@@ -37,19 +39,31 @@ async function probeHttp(url) {
 }
 
 /**
- * @returns {Promise<{ llamaCpp: { available: boolean, path: string | null, bundled: boolean, installable: boolean }, ollama: { available: boolean, path: string | null, serving: boolean }, lmStudio: { available: boolean, baseUrl: string | null } }>}
+ * @returns {Promise<{ llamaCpp: { available: boolean, path: string | null, bundled: boolean, installable: boolean }, mlxLm: { available: boolean, installed: boolean, installable: boolean, running: boolean, port: number | null }, ollama: { available: boolean, path: string | null, serving: boolean }, lmStudio: { available: boolean, baseUrl: string | null } }>}
  */
 export async function detectRuntimes() {
-  const [llamaResolved, ollamaPath, lmOk, ollamaOk] = await Promise.all([
+  const [llamaResolved, ollamaPath, lmOk, ollamaOk, mlxStatus, mlxPort] = await Promise.all([
     resolveLlamaServer(),
     which('ollama'),
     probeHttp('http://127.0.0.1:1234/v1/models'),
     probeHttp('http://127.0.0.1:11434/api/tags'),
+    getMlxInstallStatus().catch(() => ({ installed: false })),
+    getManagedServerPort('mlx-lm').catch(() => null),
   ]);
   const installable = isLlamaRuntimeInstallable();
   const variant = await getInstalledLlamaVariant();
+  const mlxSupported = isMlxSupported();
 
   return {
+    mlxLm: {
+      // "available" means this machine could run MLX at all, installed or not —
+      // the Load button drives the install prompt from there.
+      available: mlxSupported,
+      installed: mlxStatus.installed === true,
+      installable: mlxSupported,
+      running: isManagedServerRunning('mlx-lm'),
+      port: mlxPort,
+    },
     llamaCpp: {
       available: Boolean(llamaResolved.path) || installable,
       path: llamaResolved.path,

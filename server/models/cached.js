@@ -39,8 +39,89 @@ const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
  * @property {boolean} [is_diffusion]
  * @property {string} [backend]
  * @property {CachedGgufFile[]} [gguf_files]
+ * @property {string} [mlx_root]
+ * @property {string} [mlx_quant]
  * @property {string} [status]
  */
+
+/**
+ * Decide whether a directory holds MLX-quantized weights, and at what width.
+ *
+ * The signal that matters is the `quantization` block `mlx_lm.convert` writes
+ * into config.json. `config.json` + `*.safetensors` on its own describes *every*
+ * transformers repo, so keying off those would list a cached fp16 Llama as a
+ * servable MLX model that then fails at load.
+ *
+ * `quantization_config` is checked separately and only when `quant_method` says
+ * mlx — GPTQ, AWQ, and bitsandbytes all write that same key with a `bits` field.
+ *
+ * Deliberately *not* mlx_lm.server's own heuristic (config.json +
+ * model.safetensors.index.json + tokenizer_config.json): the index file only
+ * exists for sharded models, so every single-shard small model is invisible to
+ * it. For the same reason /v1/models is not the library source of truth.
+ *
+ * @param {string} dir
+ * @param {string} repoId
+ * @returns {Promise<{ root: string, quant: string } | null>}
+ */
+async function detectMlxRepo(dir, repoId) {
+  let hasSafetensors = false;
+  try {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    hasSafetensors = entries.some(
+      (e) => e.isFile() && e.name.toLowerCase().endsWith('.safetensors'),
+    );
+  } catch {
+    return null;
+  }
+  if (!hasSafetensors) return null;
+
+  /** @type {Record<string, unknown> | null} */
+  let config = null;
+  try {
+    config = JSON.parse(await fsp.readFile(path.join(dir, 'config.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+  if (!config || typeof config !== 'object') return null;
+
+  const quantization = /** @type {Record<string, unknown> | undefined} */ (config.quantization);
+  const quantConfig = /** @type {Record<string, unknown> | undefined} */ (
+    config.quantization_config
+  );
+
+  let bits = NaN;
+  // mlx_lm.convert writes {group_size, bits} — both keys together are its signature.
+  if (
+    quantization &&
+    typeof quantization === 'object' &&
+    Number.isFinite(Number(quantization.bits)) &&
+    Number.isFinite(Number(quantization.group_size))
+  ) {
+    bits = Number(quantization.bits);
+  } else if (quantConfig && typeof quantConfig === 'object') {
+    // GPTQ, AWQ, and bitsandbytes all set `quant_method` here so transformers
+    // knows which quantizer to dispatch to; MLX repos carry a bare `bits`. So a
+    // bits field with no quant_method is the MLX case, and a foreign
+    // quant_method is a definite no.
+    const method = String(quantConfig.quant_method ?? '').toLowerCase();
+    if (!method || method === 'mlx') {
+      bits = Number(quantConfig.bits);
+    }
+  }
+  if (Number.isFinite(bits) && bits > 0) {
+    return { root: dir, quant: `mlx-${bits}bit` };
+  }
+
+  // Fallback: an mlx-named repo whose config carries no quantization block, i.e.
+  // an unquantized MLX conversion. Take the width from the name when it says so.
+  if (/(^|[-_/])mlx([-_/]|$)/i.test(repoId)) {
+    const named = /(\d+)\s*bit/i.exec(repoId);
+    return { root: dir, quant: named ? `mlx-${named[1]}bit` : 'mlx' };
+  }
+
+  return null;
+}
 
 /**
  * @param {string} p
@@ -254,6 +335,8 @@ async function scanHfCache(cache, seen) {
     }
 
     let isDiffusion = false;
+    /** @type {{ root: string, quant: string } | null} */
+    let mlx = null;
     /** @type {CachedGgufFile[]} */
     const ggufFiles = [];
     let snapDirs;
@@ -271,6 +354,7 @@ async function scanHfCache(cache, seen) {
       } catch {
         /* not diffusion */
       }
+      if (!mlx) mlx = await detectMlxRepo(sf, repoId);
       const found = await collectGgufs(sf);
       for (const f of found) {
         ggufFiles.push({ ...f, rel_path: `${sd.name}/${f.rel_path}` });
@@ -286,6 +370,7 @@ async function scanHfCache(cache, seen) {
       is_diffusion: isDiffusion,
       is_gguf: ggufFiles.length > 0,
       gguf_files: ggufFiles,
+      ...(mlx ? { mlx_root: mlx.root, mlx_quant: mlx.quant } : {}),
       status: hasIncomplete ? 'incomplete' : 'cached',
     });
   }
@@ -384,6 +469,7 @@ async function scanCustomDir(dirPath, seen) {
       } catch {
         /* not diffusion */
       }
+      const mlx = await detectMlxRepo(modelRoot, repoId);
 
       seen.add(repoId);
       out.push({
@@ -396,6 +482,7 @@ async function scanCustomDir(dirPath, seen) {
         is_diffusion: isDiffusion,
         is_gguf: ggufFiles.length > 0,
         gguf_files: ggufFiles,
+        ...(mlx ? { mlx_root: mlx.root, mlx_quant: mlx.quant } : {}),
         status: 'local',
       });
     }
@@ -505,6 +592,73 @@ async function scanMinnowArtifacts(seen) {
 }
 
 /**
+ * Find MLX repos under ~/.minnow/models/artifacts.
+ *
+ * Separate from scanMinnowArtifacts because that path builds on
+ * scanInstalledArtifacts, which is a per-*file* view that hard-filters `.gguf`.
+ * An MLX repo is a directory, so forcing it through that shape would mean
+ * inventing a filename and changing what /api/models/installed returns.
+ *
+ * Rows already produced for a repo get annotated in place, so a directory
+ * holding both GGUF and MLX weights keeps its gguf_files and gains mlx_root.
+ *
+ * @param {Set<string>} seen
+ * @param {CachedModelRow[]} existing rows from the artifact scan, annotated in place
+ * @returns {Promise<CachedModelRow[]>} rows for MLX-only repos
+ */
+async function scanMlxArtifacts(seen, existing) {
+  const root = path.join(getModelsRoot(), 'artifacts');
+  const out = [];
+  let entries;
+  try {
+    entries = await fsp.readdir(root, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+
+  const byRepo = new Map(existing.map((row) => [row.repo_id, row]));
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const repoId = entry.name.replace(/--/g, '/');
+    const dir = path.join(root, entry.name);
+    const mlx = await detectMlxRepo(dir, repoId);
+    if (!mlx) continue;
+
+    const already = byRepo.get(repoId);
+    if (already) {
+      already.mlx_root = mlx.root;
+      already.mlx_quant = mlx.quant;
+      continue;
+    }
+    if (seen.has(repoId)) continue;
+
+    let sizeBytes = 0;
+    let nbFiles = 0;
+    await walkCount(dir, (sz) => {
+      nbFiles += 1;
+      sizeBytes += sz;
+    });
+
+    seen.add(repoId);
+    out.push({
+      repo_id: repoId,
+      size_bytes: sizeBytes,
+      nb_files: nbFiles,
+      has_incomplete: false,
+      path: dir,
+      is_gguf: false,
+      gguf_files: [],
+      mlx_root: mlx.root,
+      mlx_quant: mlx.quant,
+      status: 'downloaded',
+    });
+  }
+
+  return out;
+}
+
+/**
  * Full cached model scan (local machine).
  * @returns {Promise<{ models: CachedModelRow[] }>}
  */
@@ -516,7 +670,9 @@ export async function listCachedModels() {
     models.push(...(await scanHfCache(cache, seen)));
   }
 
-  models.push(...(await scanMinnowArtifacts(seen)));
+  const artifactRows = await scanMinnowArtifacts(seen);
+  models.push(...artifactRows);
+  models.push(...(await scanMlxArtifacts(seen, artifactRows)));
 
   const config = await getModelsConfig();
   const dirs = Array.isArray(config.modelDirs)

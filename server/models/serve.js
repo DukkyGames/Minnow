@@ -16,9 +16,16 @@ import {
   createProvider,
   LLAMA_CPP_LOCAL_ID,
   listProviders,
+  MLX_LM_LOCAL_ID,
   setActiveProviderId,
   updateProvider,
 } from '../providers/store.js';
+import { getManagedServerPort, startServer } from '../servers/manager.js';
+import {
+  getInstallStatus as getMlxInstallStatus,
+  isMlxSupported,
+  MLX_UNSUPPORTED_MESSAGE,
+} from '../servers/mlx-lm.js';
 import { detectHardware } from '../system/hardware.js';
 import { detectRuntimes } from './runtime-detect.js';
 import {
@@ -264,6 +271,100 @@ export async function upsertLlamaCppProvider(opts) {
 }
 
 /**
+ * Upsert the stable mlx-lm-local provider shared by every MLX serve.
+ *
+ * One provider for N models: `mlx_lm.server` hosts whichever model each request
+ * names, so switching models is a `selectProviderModel` call rather than a new
+ * provider row.
+ * @param {{ baseUrl: string, enabled: boolean }} opts
+ */
+export async function upsertMlxLmProvider(opts) {
+  const existing = await listProviders();
+  const found = existing.providers.find((p) => p.id === MLX_LM_LOCAL_ID);
+  if (found) {
+    await updateProvider(MLX_LM_LOCAL_ID, {
+      baseUrl: opts.baseUrl,
+      enabled: opts.enabled,
+    });
+  } else {
+    await createProvider({
+      id: MLX_LM_LOCAL_ID,
+      label: 'MLX (local)',
+      baseUrl: opts.baseUrl,
+      apiKind: 'openai-v1',
+      enabled: opts.enabled,
+      modelsPath: '/v1/models',
+      chatCompletionsPath: '/v1/chat/completions',
+      supportsModelLoadUnload: false,
+    });
+  }
+  if (opts.enabled) {
+    await setActiveProviderId(MLX_LM_LOCAL_ID);
+  }
+  return MLX_LM_LOCAL_ID;
+}
+
+/**
+ * Bring the shared mlx-lm process up if it is not already serving.
+ * `startServer` is idempotent — it returns `{ alreadyRunning: true }` when the
+ * process is healthy, so a second model load costs a request, not a restart.
+ * @returns {Promise<number>} the port it is listening on
+ */
+async function ensureMlxLmServerRunning() {
+  if (!isMlxSupported()) {
+    throw new Error(MLX_UNSUPPORTED_MESSAGE);
+  }
+  const status = await getMlxInstallStatus();
+  if (!status.installed) {
+    throw new Error(
+      'The MLX runtime is not installed — install it from Models or Settings → Servers before loading MLX weights',
+    );
+  }
+  await startServer('mlx-lm');
+  const port = await getManagedServerPort('mlx-lm');
+  if (!port) {
+    throw new Error('mlx-lm has no configured port');
+  }
+  return port;
+}
+
+/**
+ * Resolve and check the serve target for a runtime.
+ *
+ * Split out of startServe because the checks are runtime-specific: llama.cpp
+ * serves a single `.gguf` *file*, while mlx-lm serves a whole snapshot
+ * *directory*. Running the file/suffix checks over every runtime rejected every
+ * MLX load before it reached its branch.
+ * @param {string} runtime
+ * @param {unknown} rawModelPath
+ * @returns {Promise<string>} the resolved absolute path
+ */
+async function validateServeModelTarget(runtime, rawModelPath) {
+  const modelPath = path.resolve(String(rawModelPath || ''));
+
+  if (runtime === 'mlx-lm') {
+    try {
+      const stat = await fsp.stat(modelPath);
+      if (!stat.isDirectory()) throw new Error('not a directory');
+    } catch {
+      throw new Error('MLX model directory not found');
+    }
+    return modelPath;
+  }
+
+  try {
+    const stat = await fsp.stat(modelPath);
+    if (!stat.isFile()) throw new Error('Model path is not a file');
+  } catch {
+    throw new Error('Model file not found');
+  }
+  if (!modelPath.toLowerCase().endsWith('.gguf')) {
+    throw new Error('Only local .gguf files can be served in v1');
+  }
+  return modelPath;
+}
+
+/**
  * @param {{ serveId: string, baseUrl: string, modelLabel: string, apiKind: string, providerId?: string }} opts
  */
 async function registerServeProvider(opts) {
@@ -292,16 +393,7 @@ async function registerServeProvider(opts) {
 export async function startServe(body) {
   await loadServes();
   const runtime = validateRuntime(body.runtime || 'llama-cpp');
-  const modelPath = path.resolve(String(body.modelPath || ''));
-  try {
-    const stat = await fsp.stat(modelPath);
-    if (!stat.isFile()) throw new Error('Model path is not a file');
-  } catch {
-    throw new Error('Model file not found');
-  }
-  if (!modelPath.toLowerCase().endsWith('.gguf')) {
-    throw new Error('Only local .gguf files can be served in v1');
-  }
+  const modelPath = await validateServeModelTarget(runtime, body.modelPath);
 
   const runtimes = await detectRuntimes();
   let llamaServerPath = null;
@@ -328,6 +420,29 @@ export async function startServe(body) {
     typeof body.modelLabel === 'string' && body.modelLabel.trim()
       ? body.modelLabel.trim()
       : labelFromPath(modelPath);
+
+  if (runtime === 'mlx-lm') {
+    const port = await ensureMlxLmServerRunning();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const providerId = await upsertMlxLmProvider({ baseUrl, enabled: true });
+
+    // No spawn, no health wait, no port picking — the managed process is
+    // already up and `modelLabel` selects which weights it loads.
+    const row = /** @type {ServeRecord} */ ({
+      id: serveId,
+      runtime,
+      modelPath,
+      modelLabel,
+      port,
+      baseUrl,
+      providerId,
+      status: 'running',
+      startedAt: Date.now(),
+    });
+    servesCache.unshift(row);
+    await saveServes();
+    return publicServe(row);
+  }
 
   if (runtime === 'ollama' || runtime === 'lm-studio') {
     const baseUrl =
@@ -480,17 +595,22 @@ export async function stopServe(serveId) {
   row.stoppedAt = Date.now();
   await saveServes();
 
-  // Disable llama-cpp-local when no active llama-cpp serves remain.
-  if (row.runtime === 'llama-cpp') {
+  // llama-cpp and mlx-lm share one provider row across every serve, so it only
+  // gets disabled once the last serve for that runtime is gone. The managed
+  // mlx-lm *process* is left running on purpose: it costs little when idle, and
+  // stopping it would throw away the resident model and prompt cache that make
+  // the next load fast. Settings → Servers has the stop button when it matters.
+  if (row.runtime === 'llama-cpp' || row.runtime === 'mlx-lm') {
+    const sharedProviderId = row.runtime === 'llama-cpp' ? LLAMA_CPP_LOCAL_ID : MLX_LM_LOCAL_ID;
     const stillRunning = servesCache.some(
       (s) =>
-        s.runtime === 'llama-cpp' &&
+        s.runtime === row.runtime &&
         s.id !== serveId &&
         (s.status === 'running' || s.status === 'starting'),
     );
     if (!stillRunning) {
       try {
-        await updateProvider(LLAMA_CPP_LOCAL_ID, { enabled: false });
+        await updateProvider(sharedProviderId, { enabled: false });
       } catch {
         /* provider may have been removed manually */
       }
@@ -532,10 +652,12 @@ export async function shutdownAllModelServes() {
     }
   }
   await saveServes();
-  try {
-    await updateProvider(LLAMA_CPP_LOCAL_ID, { enabled: false });
-  } catch {
-    /* ignore */
+  for (const providerId of [LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID]) {
+    try {
+      await updateProvider(providerId, { enabled: false });
+    } catch {
+      /* never seeded, or removed manually */
+    }
   }
 }
 

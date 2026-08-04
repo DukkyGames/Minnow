@@ -37,7 +37,7 @@ import {
   textButton,
 } from './dom';
 import { showModelInInspector } from './inspector';
-import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
+import { ensureRuntimeForModel } from './runtime-install-prompt';
 import {
   getModelsState,
   loadForModel,
@@ -243,7 +243,7 @@ function startLoad(model: LibraryModel, trigger: HTMLButtonElement): void {
   trigger.disabled = true;
   void (async () => {
     try {
-      if (model.source !== 'ollama' && !(await ensureLlamaRuntimeInstalled())) {
+      if (!(await ensureRuntimeForModel(model))) {
         trigger.disabled = false;
         return;
       }
@@ -472,15 +472,21 @@ export function render(): void {
     return;
   }
 
-  const installable = loadableLibrary(state.library);
+  const installable = loadableLibrary(state.library, { backend: state.hardware?.backend });
 
   if (!installable.length) {
+    // MLX only appears in this list on Metal hardware, so the explanation of
+    // what is hidden has to match the machine it is being read on.
+    const hiddenFormatsBody =
+      state.hardware?.backend === 'metal'
+        ? 'This list shows GGUF weights Minnow can serve with llama-server, plus MLX repos it can serve with mlx-lm. Plain SafeTensors, Ollama-managed models, and other formats are hidden.'
+        : 'This list only shows GGUF weights Minnow can serve with llama-server. SafeTensors, MLX, Ollama-managed models, and other formats are hidden.';
     host.replaceChildren(
       emptyState({
         glyph: state.library.length ? 'triangle-warning' : 'folder-open',
         title: state.library.length ? 'No loadable models here' : 'No local models yet',
         body: state.library.length
-          ? 'This list only shows GGUF weights Minnow can serve with llama-server. SafeTensors, Ollama-managed models, and other formats are hidden.'
+          ? hiddenFormatsBody
           : 'Minnow scans the Hugging Face cache, ~/.minnow/models, and any folders you add under Storage.',
         action: {
           label: 'Browse models to download',

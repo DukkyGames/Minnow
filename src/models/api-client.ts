@@ -4,11 +4,17 @@
 
 import { withSessionToken } from '../api/session-token.ts';
 
+/** GGUF fetches one file; MLX fetches a whole repo snapshot into a directory. */
+export type ModelDownloadFormat = 'gguf' | 'mlx';
+
 export interface DownloadJob {
   id: string;
   repoId: string;
+  /** Empty for MLX jobs — the whole repo is the artifact, not one file. */
   filename: string;
   quant: string;
+  /** Absent on jobs persisted before MLX support; treat as 'gguf'. */
+  format?: ModelDownloadFormat;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   bytesReceived: number;
   totalBytes: number | null;
@@ -70,6 +76,10 @@ export interface CachedModelRow {
   is_ollama?: boolean;
   is_local_dir?: boolean;
   is_diffusion?: boolean;
+  /** Absolute snapshot directory when this repo holds MLX-quantized weights. */
+  mlx_root?: string;
+  /** e.g. `mlx-4bit`, matching the labels quant.ts already scores. */
+  mlx_quant?: string;
   status?: string;
   gguf_files?: Array<{
     name: string;
@@ -129,8 +139,40 @@ export interface RuntimeDetection {
     variant?: string | null;
     gpuCapable?: boolean;
   };
+  mlxLm: {
+    /** True on Apple Silicon whether or not the runtime is installed yet. */
+    available: boolean;
+    installed: boolean;
+    installable: boolean;
+    running: boolean;
+    port: number | null;
+  };
   ollama: { available: boolean; path: string | null; serving: boolean; baseUrl: string | null };
   lmStudio: { available: boolean; baseUrl: string | null };
+}
+
+/** One row from `GET /api/models/hf/search`. */
+export interface HubSearchResult {
+  repoId: string;
+  format: ModelDownloadFormat;
+  /** `mlx-4bit`, `Q4_K_M`, or '' when the Hub did not expose it. */
+  quant: string;
+  arch: string;
+  paramsB: number | null;
+  sizeBytes: number | null;
+  downloads: number;
+  likes: number;
+  gated: boolean;
+  toolCapable: boolean;
+  pipelineTag: string;
+}
+
+export interface HubSearchResponse {
+  results: HubSearchResult[];
+  /** Set when results were withheld (e.g. MLX asked for off Apple Silicon). */
+  reason: string | null;
+  /** Whether a Hugging Face token is configured, for gated-repo affordances. */
+  hasToken: boolean;
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -146,10 +188,30 @@ export async function fetchModelsPing(): Promise<boolean> {
   return res.ok;
 }
 
+/** Search the Hugging Face Hub for downloadable weights. */
+export async function searchHubModels(payload: {
+  query: string;
+  format: ModelDownloadFormat;
+  limit?: number;
+  sort?: 'downloads' | 'likes' | 'lastModified';
+  signal?: AbortSignal;
+}): Promise<HubSearchResponse> {
+  const params = new URLSearchParams({ q: payload.query, format: payload.format });
+  if (payload.limit) params.set('limit', String(payload.limit));
+  if (payload.sort) params.set('sort', payload.sort);
+  const res = await fetch(`/api/models/hf/search?${params.toString()}`, {
+    signal: payload.signal,
+  });
+  return parseJson<HubSearchResponse>(res);
+}
+
 export async function startModelDownload(payload: {
   repoId: string;
   quant?: string;
   filename?: string;
+  format?: ModelDownloadFormat;
+  /** Repo size the Hub already reported, so MLX can precheck disk without HEADs. */
+  sizeBytes?: number;
 }): Promise<DownloadJob> {
   const res = await fetch('/api/models/download', {
     method: 'POST',
@@ -299,7 +361,7 @@ export function subscribeLlamaInstallProgress(
 
 export async function startModelServe(payload: {
   modelPath: string;
-  runtime?: 'llama-cpp' | 'ollama' | 'lm-studio';
+  runtime?: 'llama-cpp' | 'mlx-lm' | 'ollama' | 'lm-studio';
   modelLabel?: string;
   profile?: string;
   hardware?: Record<string, unknown>;

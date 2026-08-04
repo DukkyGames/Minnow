@@ -28,7 +28,7 @@ import {
   textButton,
 } from './dom';
 import { setModelsInspectorOpen } from './inspector-visibility';
-import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
+import { ensureRuntimeForModel } from './runtime-install-prompt';
 import {
   getModelsState,
   getSelectedModel,
@@ -545,7 +545,7 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
       loadBtn.textContent = 'Starting…';
       void (async () => {
         try {
-          if (model.source !== 'ollama' && !(await ensureLlamaRuntimeInstalled())) {
+          if (!(await ensureRuntimeForModel(model))) {
             loadBtn.disabled = false;
             loadBtn.textContent = 'Load model';
             return;
