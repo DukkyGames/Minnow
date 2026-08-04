@@ -52,14 +52,14 @@ export function resolveRepoKey(repoParam) {
 export async function ensureWarmCodeIndex(repo) {
   const key = resolveRepoKey(repo);
   const db = getCodeDb(key);
-  let stats = getIndexStats(db);
+  let stats = getIndexStats(db, key);
   if (!stats.symbolCount && key === activeRepoKey()) {
     const reindex = await runCascade({ trigger: 'manual', force: true });
     if (!reindex.indexedFiles && !reindex.skipped) {
-      stats = getIndexStats(db);
+      stats = getIndexStats(db, key);
       return { repo: key, symbolCount: stats.symbolCount ?? 0 };
     }
-    stats = getIndexStats(db);
+    stats = getIndexStats(db, key);
   }
   return { repo: key, symbolCount: stats.symbolCount ?? 0 };
 }
@@ -71,7 +71,7 @@ export async function queryCodeStatus() {
   const code = await loadBrainCodeConfig();
   const repo = activeRepoKey();
   const db = getCodeDb(repo);
-  const stats = getIndexStats(db);
+  const stats = getIndexStats(db, repo);
   return {
     enabled: code.enabled,
     repo,
@@ -190,7 +190,7 @@ export async function findSymbol(query, limit = 20) {
   const repo = activeRepoKey();
   const db = getCodeDb(repo);
   const max = Math.min(50, Math.max(1, Math.floor(limit)));
-  const { symbolCount } = getIndexStats(db);
+  const { symbolCount } = getIndexStats(db, repo);
   const indexCold = symbolCount === 0;
 
   const tokens = tokenizeSymbolQuery(q);
@@ -365,19 +365,35 @@ export async function repoMap(opts = {}) {
           opts.tokenBudget ?? code.repoMapInjectionTokenBudget,
         )
       : clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
-  const rows = db
-    .prepare(
-      `SELECT id, file, signature, kind, pagerank, usage_count, line_start
+  const rows =
+    db
+      .prepare(
+        `SELECT id, file, signature, kind, pagerank, usage_count, line_start
        FROM symbols
        WHERE repo = ?
        ORDER BY pagerank DESC, usage_count DESC, file, line_start`,
-    )
-    .all(repo);
+      )
+      .all(repo) ?? [];
+
+  /** @type {typeof rows} */
+  let symbolRows = rows;
+  if (symbolRows.length === 0) {
+    const total = db.prepare('SELECT COUNT(*) AS n FROM symbols').get()?.n ?? 0;
+    if (total > 0) {
+      symbolRows = db
+        .prepare(
+          `SELECT id, file, signature, kind, pagerank, usage_count, line_start
+         FROM symbols
+         ORDER BY pagerank DESC, usage_count DESC, file, line_start`,
+        )
+        .all();
+    }
+  }
 
   const symbols =
     profile === 'injection'
-      ? prepareRepoMapSymbolsForInjection(rows)
-      : prepareRepoMapSymbols(rows);
+      ? prepareRepoMapSymbolsForInjection(symbolRows)
+      : prepareRepoMapSymbols(symbolRows);
   return renderRepoMap(symbols, budget, { focus: opts.focus, profile });
 }
 

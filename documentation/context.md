@@ -307,6 +307,8 @@ The in-app reader is a responsive overlay at `#/wiki/<encoded-documentation-path
 | `/api/memory/*` | Legacy CRUD + retrieve (delegates to brain) |
 | `/api/brain/*` | Wiki pages, tree, ingest, retrieve, code index, proposals |
 
+**Brain code index API** (`/api/brain/code/*`): status, reindex, repo-map, and symbol queries accept optional `workspaceRoot` (query param or JSON body), validated like tool `workspaceRoot` overrides. The Code app Brain/code-map UI passes the active Code workspace path so indexing and maps target the same tree as the file viewer (worktrees included).
+
 UI: **Brain** app `#/app/brain/<section>`. Settings for embeddings/synthesis live in Brain → Settings.
 
 Tools: `brain_search`, `brain_read_page`, `brain_write_page`, `save_memory`, `repo_map`, `find_symbol`, …

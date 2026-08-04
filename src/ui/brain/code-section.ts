@@ -28,6 +28,8 @@ import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import { renderSymbolInspector } from './inspector';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { openCodeRefInViewer } from '../code-ref-link';
+import { brainWorkspaceKeyFromPath } from '../../lib/brain-workspace-key';
+import { getWorkspacePath } from '../../state/workspace';
 let bindingsDone = false;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,6 +45,14 @@ const setActionStatus: ActionStatusFn = (kind, message) => {
   el.textContent = message;
   el.dataset.kind = kind;
 };
+
+/** Resolve the Code app workspace for brain code API calls (matches tool workspace). */
+function codeIndexRequestContext(): { workspaceRoot?: string; repo?: string } {
+  const workspaceRoot = getWorkspacePath().trim();
+  if (!workspaceRoot) return {};
+  const repo = brainWorkspaceKeyFromPath(workspaceRoot) || undefined;
+  return { workspaceRoot, repo };
+}
 
 /** Format index stats for the toolbar line. */
 function formatStatusLine(status: BrainCodeStatus): string {
@@ -61,7 +71,13 @@ function renderRepoMapPanel(map: BrainCodeRepoMap): void {
 
   const entries = map.entries;
   if (!entries?.length) {
-    mapEl.textContent = map.text;
+    mapEl.replaceChildren();
+    for (const line of map.text.split(/\r?\n/)) {
+      const row = document.createElement('div');
+      row.className = 'brain-code-map-line';
+      row.textContent = line;
+      mapEl.append(row);
+    }
     return;
   }
 
@@ -137,9 +153,12 @@ async function refreshRepoMap(): Promise<void> {
   if (!mapEl) return;
 
   const focus = focusEl?.value.trim() ?? '';
+  const ctx = codeIndexRequestContext();
   const map = await fetchBrainCodeRepoMap({
+    ...ctx,
     focus: focus || undefined,
     tokenBudget: lastStatus?.repoMapTokenBudget,
+    ensureIndexed: true,
   });
 
   if (!map) {
@@ -161,7 +180,7 @@ async function refreshRepoMap(): Promise<void> {
 async function refreshCodeStatus(): Promise<void> {
   const line = document.getElementById('brainCodeStatusLine');
   const offlineEl = document.getElementById('brainCodeOffline');
-  const status = await fetchBrainCodeStatus();
+  const status = await fetchBrainCodeStatus(codeIndexRequestContext());
   lastStatus = status;
 
   offlineEl?.classList.toggle('hidden', status !== null);
@@ -237,10 +256,12 @@ async function selectSymbol(symbolId: string): Promise<void> {
   detail.replaceChildren();
   renderBrainLoading(detail, 'Loading symbol…');
 
+  const ctx = codeIndexRequestContext();
+
   const [def, callers, callees] = await Promise.all([
-    fetchBrainCodeReadSymbol(symbolId),
-    fetchBrainCodeWhoCalls(symbolId),
-    fetchBrainCodeCallsOf(symbolId),
+    fetchBrainCodeReadSymbol(symbolId, ctx),
+    fetchBrainCodeWhoCalls(symbolId, ctx),
+    fetchBrainCodeCallsOf(symbolId, ctx),
   ]);
 
   detail.replaceChildren();
@@ -366,7 +387,7 @@ async function refreshExplainPanel(symbolId: string): Promise<void> {
   emptyEl.replaceChildren();
   renderBrainLoading(emptyEl, 'Loading anchored pages…');
 
-  const result = await fetchBrainCodeExplain(symbolId);
+  const result = await fetchBrainCodeExplain(symbolId, codeIndexRequestContext());
   listEl.replaceChildren();
   emptyEl.replaceChildren();
 
@@ -494,7 +515,7 @@ async function runSymbolSearch(query: string): Promise<void> {
     return;
   }
 
-  const result = await findBrainCodeSymbol(trimmed, 25);
+  const result = await findBrainCodeSymbol(trimmed, 25, codeIndexRequestContext());
   if (!result) {
     renderSearchResults([]);
     setActionStatus('err', 'Search failed. Is Minnow running?');
@@ -513,7 +534,7 @@ async function runReindex(): Promise<void> {
   if (btn) btn.disabled = true;
   setActionStatus('spin', 'Reindexing workspace…');
 
-  const result = await reindexBrainCode();
+  const result = await reindexBrainCode(codeIndexRequestContext());
   if (btn) btn.disabled = false;
 
   if (!result?.ok) {
@@ -538,7 +559,7 @@ async function runResetIndex(): Promise<void> {
   if (!ok) return;
   if (btn) btn.disabled = true;
   setActionStatus('spin', 'Resetting code index…');
-  const result = await clearBrainCodeIndex();
+  const result = await clearBrainCodeIndex(codeIndexRequestContext());
   if (btn) btn.disabled = false;
   if (!result.ok) {
     setActionStatus('err', result.error ?? 'Reset failed');
