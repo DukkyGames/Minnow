@@ -118,7 +118,7 @@ describe('MLX serve', () => {
 
   test('registers the shared mlx-lm-local provider and enables it', async () => {
     const serve = await startServe({ modelPath: mlxDir, runtime: 'mlx-lm', modelLabel: mlxDir });
-    assert.equal(serve.providerId, 'mlx-lm-local');
+    assert.equal(serve.providerId, 'minnow-library');
 
     const { providers } = await listProviders();
     const provider = providers.find((p) => p.id === 'mlx-lm-local');

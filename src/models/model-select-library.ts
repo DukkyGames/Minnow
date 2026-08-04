@@ -6,14 +6,16 @@
 import { isServerStorageMode } from '../config/storage-mode';
 import { buildTopBarModelOptionHtml } from '../lib/format-model-label';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
-import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../providers/types';
+import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from '../providers/types';
 import type { ProviderModelsResult } from '../providers/fetch-all-models';
 import type { LmModelRecord } from '../types';
 import {
   fetchCachedModels,
   listModelServes,
+  type CachedModelRow,
   type ServeRecord,
 } from './api-client';
+import { fetchHardware } from './hardware-client';
 import {
   activeServeFor,
   buildLibrary,
@@ -36,7 +38,45 @@ export function isLibraryModelBinding(providerId: string | undefined, modelId: s
   const pid = providerId?.trim();
   const mid = modelId?.trim();
   if (!pid || !mid) return false;
-  return isLibraryModelProviderId(pid) && mid.startsWith('gguf:');
+  return (
+    isLibraryModelProviderId(pid) &&
+    (mid.startsWith('gguf:') || mid.startsWith('mlx:'))
+  );
+}
+
+/** My Models rows eligible for the picker (MLX gated on Metal when hardware is known). */
+export async function loadableLibraryFromCached(
+  cached: CachedModelRow[],
+): Promise<LibraryModel[]> {
+  let backend: string | null | undefined = undefined;
+  try {
+    const hw = await fetchHardware();
+    backend = hw.backend ?? null;
+  } catch {
+    /* Tool server down or probe failed — MLX stays hidden until backend is known. */
+  }
+  return loadableLibrary(buildLibrary(cached), { backend });
+}
+
+/**
+ * Map synthetic My Models provider id to the ~/.minnow provider used for upstream HTTP.
+ */
+export function resolveUpstreamProviderId(
+  providerId: string | undefined,
+  modelId: string | undefined,
+): string {
+  const pid = providerId?.trim() ?? '';
+  if (!isLibraryModelBinding(pid, modelId)) return pid;
+  const mid = modelId?.trim() ?? '';
+  if (mid.startsWith('mlx:')) return MLX_LM_LOCAL_PROVIDER_ID;
+  return LLAMA_CPP_LOCAL_PROVIDER_ID;
+}
+
+function upstreamProviderForLibraryModel(model: LibraryModel | undefined): string {
+  if (model?.format === 'MLX' || model?.id.startsWith('mlx:')) {
+    return MLX_LM_LOCAL_PROVIDER_ID;
+  }
+  return LLAMA_CPP_LOCAL_PROVIDER_ID;
 }
 
 export function encodeLibraryModelSelectKey(libraryId: string): string {
@@ -82,7 +122,7 @@ export function activeServeForLibraryId(
   return activeServeFor(model, serves);
 }
 
-/** Provider + upstream model id once a library row is served on llama-cpp-local. */
+/** Provider + upstream model id once a library row is served locally. */
 export function resolveServedBindingForLibraryId(
   libraryId: string,
   library: LibraryModel[],
@@ -96,18 +136,33 @@ export function resolveServedBindingForLibraryId(
   const label = serve.modelLabel?.trim() || model?.name?.trim() || '';
   if (!label) return null;
 
-  const llama =
-    providerModels?.find((r) => r.provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID) ?? null;
-  if (llama) {
-    const hit = llama.models.find(
-      (m) => m.id === label || m.id.toLowerCase() === label.toLowerCase(),
-    );
-    if (hit) {
-      return { providerId: LLAMA_CPP_LOCAL_PROVIDER_ID, modelId: hit.id };
+  const upstreamId = upstreamProviderForLibraryModel(model);
+
+  if (upstreamId === LLAMA_CPP_LOCAL_PROVIDER_ID) {
+    const llama =
+      providerModels?.find((r) => r.provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID) ?? null;
+    if (llama) {
+      const hit = llama.models.find(
+        (m) => m.id === label || m.id.toLowerCase() === label.toLowerCase(),
+      );
+      if (hit) {
+        return { providerId: LLAMA_CPP_LOCAL_PROVIDER_ID, modelId: hit.id };
+      }
+    }
+  } else {
+    const mlx =
+      providerModels?.find((r) => r.provider.id === MLX_LM_LOCAL_PROVIDER_ID) ?? null;
+    if (mlx) {
+      const hit = mlx.models.find(
+        (m) => m.id === label || m.id.toLowerCase() === label.toLowerCase(),
+      );
+      if (hit) {
+        return { providerId: MLX_LM_LOCAL_PROVIDER_ID, modelId: hit.id };
+      }
     }
   }
 
-  return { providerId: serve.providerId || LLAMA_CPP_LOCAL_PROVIDER_ID, modelId: label };
+  return { providerId: upstreamId, modelId: label };
 }
 
 /** True when a My Models row is not loaded in a Minnow serve yet. */
@@ -163,7 +218,7 @@ export async function fetchLibraryModelSelectMerge(
     listModelServes().catch(() => [] as ServeRecord[]),
   ]);
 
-  const library = loadableLibrary(buildLibrary(cached));
+  const library = await loadableLibraryFromCached(cached);
   if (library.length === 0) return null;
 
   const cacheEntries: Array<{ key: string; row: LmModelRecord }> = [];
@@ -209,7 +264,7 @@ function sleep(ms: number): Promise<void> {
 
 async function findLibraryModel(libraryId: string): Promise<LibraryModel | null> {
   const cached = await fetchCachedModels();
-  const library = loadableLibrary(buildLibrary(cached));
+  const library = await loadableLibraryFromCached(cached);
   return library.find((m) => m.id === libraryId.trim()) ?? null;
 }
 

@@ -78,11 +78,12 @@ import {
   ensureChatModelLoadedForTurn,
 } from '../api/ensure-chat-model-loaded';
 import { fetchCachedModels, listModelServes } from '../models/api-client';
-import { buildLibrary, loadableLibrary } from '../models/library';
 import {
   isLibraryModelBinding,
   libraryModelNeedsLoad,
+  loadableLibraryFromCached,
   resolveServedBindingForLibraryId,
+  resolveUpstreamProviderId,
 } from '../models/model-select-library';
 import {
   cancelAssistantBubbleRenderDebounce,
@@ -1384,23 +1385,21 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   if (isLibraryModelBinding(sendProviderId, sendModelId)) {
     const cached = await fetchCachedModels();
-    const library = loadableLibrary(buildLibrary(cached));
+    const library = await loadableLibraryFromCached(cached);
     const serves = await listModelServes().catch(() => []);
     const served = resolveServedBindingForLibraryId(sendModelId, library, serves);
     if (served) {
       sendProviderId = served.providerId;
       sendModelId = served.modelId;
-      chat.providerId = served.providerId;
-      chat.modelId = served.modelId;
     } else {
-      sendProviderId = LLAMA_CPP_LOCAL_PROVIDER_ID;
+      sendProviderId = resolveUpstreamProviderId(sendProviderId, sendModelId);
     }
   }
 
   const sendProvider = await getActiveProvider(sendProviderId);
-  const libraryBinding = isLibraryModelBinding(chat.providerId, sendModelId);
+  const libraryBinding = isLibraryModelBinding(chat.providerId, chat.modelId);
   const pendingModelLoad = libraryBinding
-    ? libraryModelNeedsLoad(sendModelId, modelCache)
+    ? libraryModelNeedsLoad(chat.modelId, modelCache)
     : chatTurnNeedsModelLoad(sendProvider, sendModelId);
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =

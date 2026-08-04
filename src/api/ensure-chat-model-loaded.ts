@@ -10,10 +10,7 @@ import { providerSupportsModelLoadUnload } from '../providers/capabilities';
 import {
   isLibraryModelBinding,
   loadLibraryModelFromPicker,
-  resolveServedBindingForLibraryId,
 } from '../models/model-select-library';
-import { fetchCachedModels, listModelServes } from '../models/api-client';
-import { buildLibrary, loadableLibrary } from '../models/library';
 import { listProviders } from '../providers/store';
 import type { ProviderPublic } from '../providers/types';
 import {
@@ -136,17 +133,6 @@ export async function ensureChatModelLoadedForTurn(
       syncModelSelectPicker();
     }
 
-    const cached = await fetchCachedModels();
-    const library = loadableLibrary(buildLibrary(cached));
-    const serves = await listModelServes().catch(() => []);
-    const served = resolveServedBindingForLibraryId(mid, library, serves);
-    if (served) {
-      const chat = (await import('../state/sessions')).getActiveChat();
-      chat.providerId = served.providerId;
-      chat.modelId = served.modelId;
-      (await import('../state/sessions')).touchChat(chat);
-      (await import('../state/sessions')).scheduleSaveSessions();
-    }
     return;
   }
 

@@ -31,6 +31,10 @@ import {
 } from '../../models/api-client';
 import { fetchHardware } from '../../models/hardware-client';
 import { activeServeFor, buildLibrary, type LibraryModel } from '../../models/library';
+import {
+  isLibraryModelProviderId,
+  LIBRARY_MODEL_PROVIDER_ID,
+} from '../../models/model-select-library';
 import { describeLoadPhase, parseLoadProgress } from '../../models/serve-log';
 import type { HardwareSnapshot } from '../../models/types';
 
@@ -255,7 +259,11 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
         stopTracking(serve.id);
         if (next.status === 'running') {
           state.loads = state.loads.filter((l) => l.serveId !== serve.id);
-          await selectProviderModel(next.providerId, next.modelLabel).catch(() => false);
+          if (isLibraryModelProviderId(next.providerId) && modelId?.trim()) {
+            await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, modelId).catch(() => false);
+          } else {
+            await selectProviderModel(next.providerId, next.modelLabel).catch(() => false);
+          }
         } else {
           updateLoad(serve.id, { error: next.error ?? 'Model failed to load' });
         }
@@ -322,7 +330,7 @@ export async function loadModel(
     state.serves.unshift(serve);
     // Deliberately no trackLoad. There is no spawn, no runId, and the serve comes
     // back already running — the log-stream poller would just 404 against it.
-    await selectProviderModel(serve.providerId, serve.modelLabel).catch(() => false);
+    await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, model.id).catch(() => false);
     const mlxSampler = getLibrarySamplerForId(model.id);
     if (mlxSampler) {
       void saveLibraryInferenceSampler({

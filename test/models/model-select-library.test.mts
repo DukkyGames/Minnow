@@ -8,11 +8,12 @@ import {
   dedupLlamaCppModelsAgainstLibrary,
   encodeLibraryModelSelectKey,
   isLibraryModelBinding,
+  resolveUpstreamProviderId,
   LIBRARY_MODEL_PROVIDER_ID,
   libraryModelNeedsLoad,
 } from '../../src/models/model-select-library.ts';
 import type { LibraryModel } from '../../src/models/library.ts';
-import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../../src/providers/types.ts';
+import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from '../../src/providers/types.ts';
 
 describe('model-select-library', () => {
   test('encodeLibraryModelSelectKey uses synthetic provider id', () => {
@@ -20,6 +21,22 @@ describe('model-select-library', () => {
     const decoded = encodeModelSelectKey(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf');
     assert.equal(key, decoded);
     assert.equal(isLibraryModelBinding(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf'), true);
+    assert.equal(
+      isLibraryModelBinding(LIBRARY_MODEL_PROVIDER_ID, 'mlx:org/repo'),
+      true,
+    );
+  });
+
+  test('resolveUpstreamProviderId maps minnow-library to local runtimes', () => {
+    assert.equal(
+      resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf'),
+      LLAMA_CPP_LOCAL_PROVIDER_ID,
+    );
+    assert.equal(
+      resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, 'mlx:org/repo'),
+      MLX_LM_LOCAL_PROVIDER_ID,
+    );
+    assert.equal(resolveUpstreamProviderId('openai', 'gpt-4o'), 'openai');
   });
 
   test('dedupLlamaCppModelsAgainstLibrary removes duplicate served labels', () => {
