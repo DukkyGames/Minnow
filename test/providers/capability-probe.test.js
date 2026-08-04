@@ -99,15 +99,13 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
-  if (typeof mockServer.closeAllConnections === 'function') mockServer.closeAllConnections();
-  await new Promise((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
-  await new Promise((resolve, reject) => {
-    mockServer.close((err) => (err ? reject(err) : resolve()));
-  });
+  // closeAllConnections + close in the same tick can trip UV_HANDLE_CLOSING on Windows CI.
+  if (server) {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  if (mockServer) {
+    await new Promise((resolve) => mockServer.close(resolve));
+  }
   await rmTestHome(homeDir);
 });
 

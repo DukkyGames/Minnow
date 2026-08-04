@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { after, before, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import {
   GREP_DEFAULT_HEAD_LIMIT,
   GREP_MAX_HEAD_LIMIT,
@@ -18,7 +18,6 @@ import {
   truncateRipgrepOutput,
 } from '../../server/tools/grep.js';
 import { pathAccessStore, resolveSafePath } from '../../server/runtime/path-access.js';
-import { initWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 
 const fixtureRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -31,27 +30,33 @@ function toRelativePath(absPath) {
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
 }
 
+/** Run grep against the fixture tree without relying on global workspace root (parallel-safe). */
 function grepInFixture(args) {
-  return pathAccessStore.run({ allowOutsideWorkspace: false }, () =>
-    runGrepSearch(args, {
-      resolveSafePath,
-      toRelativePath,
-      getWorkspaceRoot: () => fixtureRoot,
-    }),
-  );
-}
-
-function findFilesInFixture(args, options) {
-  return pathAccessStore.run({ allowOutsideWorkspace: false }, () =>
-    runFindFilesSearch(
-      args,
-      {
+  return pathAccessStore.run(
+    { allowOutsideWorkspace: false, workspaceRootOverride: fixtureRoot },
+    () =>
+      runGrepSearch(args, {
         resolveSafePath,
         toRelativePath,
         getWorkspaceRoot: () => fixtureRoot,
-      },
-      options,
-    ),
+      }),
+  );
+}
+
+/** Run find-files against the fixture tree without relying on global workspace root. */
+function findFilesInFixture(args, options) {
+  return pathAccessStore.run(
+    { allowOutsideWorkspace: false, workspaceRootOverride: fixtureRoot },
+    () =>
+      runFindFilesSearch(
+        args,
+        {
+          resolveSafePath,
+          toRelativePath,
+          getWorkspaceRoot: () => fixtureRoot,
+        },
+        options,
+      ),
   );
 }
 
@@ -137,14 +142,6 @@ describe('grep constants (MIN-196)', () => {
 });
 
 describe('runGrepSearch fixture workspace', () => {
-  before(async () => {
-    await setWorkspaceRoot(fixtureRoot);
-  });
-
-  after(async () => {
-    await initWorkspaceRoot();
-  });
-
   it('finds matches under src/', async () => {
     const out = await grepInFixture({
       pattern: 'grep-fixture-visible',
@@ -251,7 +248,7 @@ describe('runGrepSearch fixture workspace', () => {
     });
     const pageLines = page.split('\n').filter((l) => l && !l.startsWith('(truncated'));
     assert.equal(pageLines.length, 1);
-    assert.notEqual(pageLines[0], lines[0]);
+    assert.equal(pageLines[0], lines[1]);
   });
 
   it('rejects paths outside workspace', async () => {
@@ -267,14 +264,6 @@ describe('runGrepSearch fixture workspace', () => {
 });
 
 describe('runFindFilesSearch fixture workspace', () => {
-  before(async () => {
-    await setWorkspaceRoot(fixtureRoot);
-  });
-
-  after(async () => {
-    await initWorkspaceRoot();
-  });
-
   it('finds .ts files with forward-slash relative paths', async () => {
     const out = await findFilesInFixture({ pattern: '**/*.ts' });
     assert.match(out, /^src\/visible\.ts$/m);
