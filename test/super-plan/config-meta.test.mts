@@ -32,6 +32,7 @@ describe('DEFAULT_SUPER_PLAN_CONFIG', () => {
       researchModel: { providerId: '', modelId: '' },
       reviewerModel: { providerId: '', modelId: '' },
       plannerModel: { providerId: '', modelId: '' },
+      reviewTimeoutMs: 20 * 60 * 1000,
     });
   });
 });

@@ -83,7 +83,7 @@ describe('resolveLegacyHash', () => {
   });
 
   test('redirects legacy full-page routes to OS apps', () => {
-    assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/app/bench' });
+    assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/desktop' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {
       hash: '#/desktop',
       desktopResearch: true,

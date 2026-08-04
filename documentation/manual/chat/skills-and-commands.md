@@ -11,7 +11,7 @@ Navigate with **↑ ↓**, choose with **Enter** or **Tab**, dismiss with **Esca
 
 A skill is a `SKILL.md` file: a short front matter block and a body of instructions. Invoking one prepends those instructions to your request. That is the whole mechanism — which is why writing your own is easy.
 
-Fifteen ship built in and all are enabled by default.
+Sixteen ship built in and all are enabled by default.
 
 | Skill | What it does |
 |-------|--------------|
@@ -19,6 +19,7 @@ Fifteen ship built in and all are enabled by default.
 | `/browser-automation` | Drives Minnow's built-in browser for login flows, SPAs and screenshots |
 | `/caveman` | Ultra-compressed replies — cuts token use sharply while keeping technical accuracy |
 | `/code-review` | Security, correctness and style pass over a diff |
+| `/create-pr` | Push the current branch and open a GitHub pull request with `gh` |
 | `/debug-error` | Systematic trace of a tool failure or stack trace |
 | `/docs-update` | Brings README and project docs back in line with the code |
 | `/explain-code` | Teaches the code instead of changing it |

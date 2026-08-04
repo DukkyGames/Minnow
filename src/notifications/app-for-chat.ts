@@ -11,6 +11,7 @@ import {
   isDesktopWorkspacePath,
 } from '../lib/desktop-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { isDeveloperReleased } from '../os/app-registry';
 import type { AppId } from '../os/types';
 import type { Chat } from '../types';
 
@@ -33,7 +34,7 @@ function isDesktopSandboxPath(workspacePath: string): boolean {
  * Chat app when scoped to ~/.minnow/chats, else Code.
  */
 export function appIdForChat(chat: Chat): AppId {
-  if (chat.appScope === 'email') {
+  if (chat.appScope === 'email' && isDeveloperReleased('email')) {
     return 'email';
   }
   const workspacePath = chat.workspacePath ?? '';

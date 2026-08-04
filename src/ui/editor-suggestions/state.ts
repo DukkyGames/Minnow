@@ -18,7 +18,11 @@ import {
   type EditorAiCompletionConfig,
 } from '../../config/editor-ai-completion';
 import { nextPartialGhostChunk } from '../editor-ai-completion-prompt';
-import { completionInsertChangeSpecs } from '../editor-completion-accept';
+import {
+  completionInsertChangeSpecs,
+  dispatchReindentAfterAccept,
+  mappedEndAfterInsert,
+} from '../editor-completion-accept';
 import { recordCompletionEvent } from '../editor-ai-telemetry';
 import { buildSuggestionDecorations } from './decorations';
 import { intentReplaceChangeSpecs } from './intent-accept';
@@ -343,6 +347,7 @@ export function acceptCompletionGhost(view: EditorView): boolean {
   const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
   const filePath = ctx?.filePath ?? '';
   recordCompletionEvent({ type: 'accepted' });
+  const stateBefore = view.state;
   const changes = completionInsertChangeSpecs(
     view.state,
     insertPos,
@@ -350,12 +355,21 @@ export function acceptCompletionGhost(view: EditorView): boolean {
     filePath,
     config,
   );
-  const mappedEnd = view.state.changes(changes).mapPos(insertPos + ghost.text.length, 1);
+  const afterInsertEnd = stateBefore.update({ changes }).state.doc.length;
   view.dispatch({
     changes,
     effects: setSuggestion.of(null),
-    selection: EditorSelection.cursor(mappedEnd),
   });
+  dispatchReindentAfterAccept(
+    view,
+    insertPos,
+    afterInsertEnd,
+    filePath,
+    config,
+    ghost.text,
+  );
+  const mappedEnd = mappedEndAfterInsert(stateBefore, insertPos, view.state);
+  view.dispatch({ selection: EditorSelection.cursor(mappedEnd) });
   return true;
 }
 
@@ -370,8 +384,9 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
   const ctx = view.state.field(completionAcceptContextField, false);
   const config = ctx?.getConfig?.() ?? getEditorAiCompletionConfigSync();
   const filePath = ctx?.filePath ?? '';
+  const stateBefore = view.state;
   const changes = completionInsertChangeSpecs(view.state, insertPos, chunk, filePath, config);
-  const mappedEnd = view.state.changes(changes).mapPos(insertPos + chunk.length, 1);
+  const afterInsertEnd = stateBefore.update({ changes }).state.doc.length;
   view.dispatch({
     changes,
     effects: setSuggestion.of(
@@ -380,12 +395,33 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
             ...ghost,
             consumed: ghost.consumed + chunk,
             text: remainder,
-            pos: mappedEnd,
+            pos: afterInsertEnd,
           }
         : null,
     ),
-    selection: EditorSelection.cursor(mappedEnd),
   });
+  dispatchReindentAfterAccept(
+    view,
+    insertPos,
+    afterInsertEnd,
+    filePath,
+    config,
+    chunk,
+  );
+  const mappedEnd = mappedEndAfterInsert(stateBefore, insertPos, view.state);
+  if (remainder) {
+    view.dispatch({
+      effects: setSuggestion.of({
+        ...ghost,
+        consumed: ghost.consumed + chunk,
+        text: remainder,
+        pos: mappedEnd,
+      }),
+      selection: EditorSelection.cursor(mappedEnd),
+    });
+  } else {
+    view.dispatch({ selection: EditorSelection.cursor(mappedEnd) });
+  }
   return true;
 }
 
@@ -421,11 +457,11 @@ export function acceptIntentProposal(view: EditorView): boolean {
     intentConfig.contextWindow,
   );
   const changes = intentReplaceChangeSpecs(view.state, from, to, text, filePath, config);
-  const mappedEnd = view.state.changes(changes).mapPos(from + text.length, 1);
+  const stateBefore = view.state;
+  const afterReplaceEnd = stateBefore.update({ changes }).state.doc.length;
   view.dispatch({
     annotations: intentSystemTransaction.of(true),
     changes,
-    selection: EditorSelection.cursor(mappedEnd),
     effects: [
       setSuggestion.of(null),
       addAcceptedIntentRegion.of({
@@ -438,6 +474,9 @@ export function acceptIntentProposal(view: EditorView): boolean {
     ],
     userEvent: 'input.complete',
   });
+  dispatchReindentAfterAccept(view, from, afterReplaceEnd, filePath, config, text);
+  const mappedEnd = view.state.doc.length;
+  view.dispatch({ selection: EditorSelection.cursor(mappedEnd) });
   return true;
 }
 

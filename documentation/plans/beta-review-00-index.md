@@ -14,6 +14,7 @@
 | Defect scan (branch) | [Bugbot branch code review](34fc8a89-fea3-45f2-b903-0a948313a02b) | [beta-review-05-bugbot.md](./beta-review-05-bugbot.md) (supplement; agent skipped — empty branch diff) |
 | Copy & prompts | [Copy & prompts beta audit](b4d49c65-932b-4913-a6ef-c874e0995775) | [beta-review-06-copy-prompts.md](./beta-review-06-copy-prompts.md) |
 | Browser UI (live) | [Browser UI beta walkthrough](813886c1-2148-4833-a84f-7f0e59008d56) + coordinator pass | [beta-review-07-browser-ui.md](./beta-review-07-browser-ui.md) |
+| **Remediation (fix pass)** | Four parallel fix agents + coordinator | [beta-review-08-remediation-report.md](./beta-review-08-remediation-report.md) |
 
 ## Model note (agent testing)
 

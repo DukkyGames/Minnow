@@ -63,7 +63,7 @@ This is how you try "do it with X" and "do it with Y" without two chats and manu
 - **Groups** organise related chats; orchestrate boards appear as folders with their member chats nested.
 - Chats belong to a workspace folder, so the rail shows what is relevant to where you are.
 
-Minnow keeps the 50 most recent chats. Deleting is immediate and confirmed in-app.
+There is no fixed limit on how many chats you can keep. Deleting a chat is immediate and confirmed in-app.
 
 Chats with an active `/loop` show a rotating icon in the rail — spinning while a loop is live, still when every loop on that chat is paused.
 

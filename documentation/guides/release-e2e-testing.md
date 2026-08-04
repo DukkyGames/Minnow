@@ -1,5 +1,7 @@
 # Release E2E testing guide
 
+**Maintainers only** — pre-release QA checklist for people shipping Minnow. It is not part of the in-app manual (`minnow_docs_*`) or the end-user wiki path; beta users should follow the [user manual](../manual/).
+
 Manual end-to-end checklist for validating Minnow before a release. Use it after automated CI passes (`npm test`, `npx tsc --noEmit`) and alongside the focused guides linked below.
 
 | Companion doc | When to use it |

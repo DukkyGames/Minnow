@@ -15,10 +15,14 @@ When another Minnow app clearly fits the user's goal better than staying in Chat
 |-------------|----------|-------------------|
 | Edit repo, run commands, open workspace files | `code` | Workspace path or task summary |
 | Deep multi-step research report | `research` | Research query or topic |
-| Run model benchmarks | `bench` | — |
+| Issues tracker, triage, fix workflows | `issues` | — |
+| Models, providers, downloads | `models` | — |
+| Brain wiki, memory | `brain` | — |
+| Scheduled jobs | `scheduler` | — |
 | Change providers, tools, or preferences | `settings` | — |
-| Experts lab / persona work | `experts` | — |
 | Fresh general chat (not mode handoff) | `chat` | Optional first message |
+
+Optional apps (`bench`, `experts`, `compare`, `calendar`, `email`) are **off by default** — only offer them if the user has enabled the app in **Settings → Apps** (otherwise the tool errors).
 
 ### Rules
 

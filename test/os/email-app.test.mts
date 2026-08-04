@@ -22,9 +22,9 @@ describe('email app registry', () => {
 });
 
 describe('email router', () => {
-  test('legacy #/email redirects to #/app/email', () => {
+  test('legacy #/email redirects to desktop while Email app is release-hidden', () => {
     const legacy = resolveLegacyHash('#/email');
-    assert.equal(legacy.hash, '#/app/email');
+    assert.equal(legacy.hash, '#/desktop');
   });
 
   test('parseOsHash resolves email app route', () => {

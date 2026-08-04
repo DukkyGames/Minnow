@@ -75,4 +75,10 @@ describe('settings-search-index', () => {
     assert.ok(models);
     assert.equal(models.kind, 'category');
   });
+
+  test('omits email mode when Email app is release-hidden', () => {
+    const index = buildSettingsSearchIndex();
+    assert.equal(index.some((e) => e.id === 'mode:email'), false);
+    assert.ok(index.some((e) => e.id === 'mode:general'));
+  });
 });

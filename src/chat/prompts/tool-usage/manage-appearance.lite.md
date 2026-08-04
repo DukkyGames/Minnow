@@ -12,4 +12,4 @@ description: Lite desktop appearance tool guidance.
 Use **`get_appearance`**, **`update_appearance`**, **`upload_appearance_asset`** for theme, custom colors, fonts, and wallpaper (desktop only — not `update_settings`).
 
 - `get_appearance` first; upload workspace assets when needed; then `update_appearance` with a `patch` object.
-- Summarize changes before writes; uploads need `npm start`.
+- Summarize changes before writes; uploads need the local Minnow app running.

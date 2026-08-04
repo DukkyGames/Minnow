@@ -57,7 +57,11 @@ An attempt to read outside the boundary fails. That is a feature, and it is the 
 
 A mode is not a personality setting. It swaps the system prompt *and* the tool list.
 
-Plan mode does not merely ask the model to avoid editing your files; the editing tools are not in the payload. Debug mode is the only composer mode that can read local diagnostics. General mode is the only composer mode that can read this manual. Choosing a mode is choosing what is possible for that turn.
+Plan mode does not merely ask the model to avoid editing your files; the editing tools are not in the payload. Debug mode is the only composer-strip mode that can read local diagnostics.
+
+The shipped **manual** (`minnow_docs_search`, `minnow_docs_read`, `minnow_docs_list`) is available in composer **General** and in the first-run **onboarding** tour. **Desktop** chat on the main surface uses **Desktop** mode (not the four composer-strip modes): it includes every built-in tool group, including the manual tools. **Build**, **Plan**, and **Debug** do not get `minnow_docs_*`; they rely on your repo and Brain instead.
+
+Choosing a mode is choosing what is possible for that turn.
 
 See [Modes](modes.md).
 

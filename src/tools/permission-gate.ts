@@ -95,7 +95,7 @@ function companionRequiresApproval(toolId: string): boolean {
 
 /** Matches server `resolveSafePath` rejection copy (`server/runtime/path-access.js`). */
 export function outsideWorkspaceBlockMessage(userPath: string): string {
-  return `Error: Path "${userPath}" resolves outside the workspace directory. Enable full disk access in Settings → General → Filesystem access (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.`;
+  return `Error: Path "${userPath}" resolves outside the workspace directory. Enable full disk access in Settings → General → Filesystem access (dangerous) to allow paths outside the workspace.`;
 }
 
 function isPathInAllowedRoots(

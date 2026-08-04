@@ -1,5 +1,6 @@
 ---
 name: create-pr
+label: Create PR
 description: >-
   Push the current branch and open a GitHub pull request with gh. Use when the
   user asks to create or open a PR from the code-change strip or /create-pr.

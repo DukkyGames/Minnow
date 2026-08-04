@@ -4,6 +4,8 @@
 
 import { listExperts } from '../chat/experts/registry';
 import { listModes } from '../chat/modes/registry';
+import { isModeVisibleInSettingsSearch } from '../chat/modes/settings-visibility';
+import { isDeveloperReleased } from '../os/app-registry';
 import { loadSubAgentConfig } from '../agents/sub-agent-config';
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import { isServerStorageMode } from '../config/storage-mode';
@@ -45,6 +47,7 @@ export async function loadPromptHubRows(): Promise<PromptHubRow[]> {
   const rows: PromptHubRow[] = [];
 
   for (const mode of listModes()) {
+    if (!isModeVisibleInSettingsSearch(mode.id)) continue;
     rows.push({
       id: `mode:${mode.id}`,
       label: mode.label,
@@ -57,17 +60,19 @@ export async function loadPromptHubRows(): Promise<PromptHubRow[]> {
     });
   }
 
-  for (const expert of listExperts()) {
-    rows.push({
-      id: `expert:${expert.meta.id}`,
-      label: expert.meta.label,
-      hint: expert.meta.description ?? '',
-      badge: 'Expert',
-      filter: 'experts',
-      renderBody: (body) => {
-        mountPromptFileEditor(body, { family: 'experts', entityId: expert.meta.id });
-      },
-    });
+  if (isDeveloperReleased('experts')) {
+    for (const expert of listExperts()) {
+      rows.push({
+        id: `expert:${expert.meta.id}`,
+        label: expert.meta.label,
+        hint: expert.meta.description ?? '',
+        badge: 'Expert',
+        filter: 'experts',
+        renderBody: (body) => {
+          mountPromptFileEditor(body, { family: 'experts', entityId: expert.meta.id });
+        },
+      });
+    }
   }
 
   const remote = await fetchWorkAgentsList();
@@ -146,7 +151,9 @@ export async function renderPromptsHubPanel(mount: HTMLElement): Promise<void> {
   const filterDefs: { id: PromptHubFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'modes', label: 'Modes' },
-    { id: 'experts', label: 'Experts' },
+    ...(isDeveloperReleased('experts')
+      ? [{ id: 'experts' as const, label: 'Experts' }]
+      : []),
     { id: 'work-agents', label: 'Work agents' },
     { id: 'sub-agents', label: 'Sub-agents' },
     { id: 'rules', label: 'Rules' },

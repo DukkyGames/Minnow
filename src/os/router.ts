@@ -33,6 +33,12 @@ import { APP_SWITCHER_DESKTOP_ID } from './surface-id';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
 import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
 
+/** Legacy `#/app/…` target, or desktop when that app is unavailable. */
+function legacyHashForApp(appId: AppId): string {
+  if (!isAppAvailable(appId)) return '#/desktop';
+  return `#/app/${appId}`;
+}
+
 /** Explain blocked deep links for user-disabled apps; stay quiet for developer-hidden. */
 function notifyAppUnavailable(appId: AppId): void {
   const reason = getAppUnavailableReason(appId);
@@ -116,19 +122,19 @@ export function resolveLegacyHash(hash: string): {
     };
   }
   if (trimmed === '#/benchmark' || trimmed.startsWith('#/benchmark/')) {
-    return { hash: '#/app/bench' };
+    return { hash: legacyHashForApp('bench') };
   }
   if (trimmed === '#/compare' || trimmed.startsWith('#/compare/')) {
-    return { hash: '#/app/compare' };
+    return { hash: legacyHashForApp('compare') };
   }
   if (trimmed === '#/scheduler' || trimmed.startsWith('#/scheduler/')) {
     return { hash: '#/app/scheduler' };
   }
   if (trimmed === '#/calendar' || trimmed.startsWith('#/calendar/')) {
-    return { hash: '#/app/calendar' };
+    return { hash: legacyHashForApp('calendar') };
   }
   if (trimmed === '#/email' || trimmed.startsWith('#/email/')) {
-    return { hash: '#/app/email' };
+    return { hash: legacyHashForApp('email') };
   }
   if (trimmed === '#/bugs' || trimmed.startsWith('#/bugs/')) {
     return { hash: '#/app/issues' };

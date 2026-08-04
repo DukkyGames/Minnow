@@ -66,7 +66,7 @@ function formatSourceKey(key: string): string {
   if (key.startsWith('sub-agent:')) return `Sub-agent (${key.slice(10)})`;
   if (key.startsWith('work-agent:')) return `Work agent (${key.slice(11)})`;
   if (key === 'title') return 'Chat title';
-  if (key === 'reef-widget') return 'Reef widget';
+  if (key === 'reef-widget') return 'Legacy widget (Reef)';
   if (key === 'orchestrate-board') return 'Orchestrate board';
   return key;
 }

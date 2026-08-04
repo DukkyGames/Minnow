@@ -98,7 +98,7 @@ export const APPS: readonly AppDefinition[] = [
     name: 'Brain',
     icon: 'brain',
     tag: 'Wiki, memory & knowledge graph',
-    description: 'Browse and maintain the CORTEX wiki',
+    description: 'Browse and maintain your local Brain wiki',
     presentationMode: 'window',
     availability: 'core',
     releaseState: 'released',
