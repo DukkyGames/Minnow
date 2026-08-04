@@ -136,9 +136,9 @@ describe('issue-tools', () => {
     assert.match(bulk, /"deleted": 1/);
 
     const state = await executeIssueTool('issue_get_state', { workspace_scope: 'all' });
-    assert.match(state, /ISS-1/);
-    assert.doesNotMatch(state, /ISS-2/);
-    assert.doesNotMatch(state, /ISS-3/);
+    const parsedState = JSON.parse(state) as { issues?: Array<{ id?: string }> };
+    const remainingIds = parsedState.issues?.map((row) => row.id) ?? [];
+    assert.deepEqual(remainingIds, ['ISS-1']);
   });
 
   test('bug_* aliases work without All bugs screen', async () => {
