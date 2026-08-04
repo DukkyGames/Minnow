@@ -19,7 +19,7 @@ describe('appIdForChat', () => {
     );
   });
 
-  test('returns email for Email-scoped chats in the shared chats workspace', async () => {
+  test('returns chat for Email-scoped chats when Email app is release-hidden', async () => {
     const { appIdForChat } = await import('../../src/notifications/app-for-chat.ts');
     assert.equal(
       appIdForChat({
@@ -34,7 +34,7 @@ describe('appIdForChat', () => {
         modelInfo: {},
         updatedAt: 1,
       }),
-      'email',
+      'chat',
     );
   });
 

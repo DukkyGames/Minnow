@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-03T03:24:48.363Z",
+  "generatedAt": "2026-08-03T16:41:24.354Z",
   "skills": [
     {
       "id": "ask-user",
@@ -27,7 +27,7 @@
     },
     {
       "id": "create-pr",
-      "label": "Create Pr",
+      "label": "Create PR",
       "description": "Push the current branch and open a GitHub pull request with gh. Use when the user asks to create or open a PR from the code-change strip or /create-pr.",
       "source": "builtin"
     },

@@ -81,9 +81,9 @@ describe('calendar app registry', () => {
 });
 
 describe('calendar router', () => {
-  test('legacy #/calendar redirects to #/app/calendar', () => {
+  test('legacy #/calendar redirects to desktop while Calendar app is release-hidden', () => {
     const legacy = resolveLegacyHash('#/calendar');
-    assert.equal(legacy.hash, '#/app/calendar');
+    assert.equal(legacy.hash, '#/desktop');
   });
 
   test('parseOsHash resolves calendar app route', () => {

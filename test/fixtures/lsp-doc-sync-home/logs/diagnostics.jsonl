@@ -1,2 +1,2 @@
-{"ts":"2026-08-03T16:24:37.278Z","pid":23872,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}
-{"ts":"2026-08-03T16:24:37.355Z","pid":23872,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}
+{"ts":"2026-08-03T17:10:16.913Z","pid":20632,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}
+{"ts":"2026-08-03T17:10:17.005Z","pid":20632,"source":"server","kind":"lsp-exit","message":"LSP server fake exited on signal SIGTERM","extra":{"serverId":"fake","signal":"SIGTERM","scope":"editor"}}

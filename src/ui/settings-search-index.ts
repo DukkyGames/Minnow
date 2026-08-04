@@ -6,6 +6,7 @@ import DEFAULT_SUB_AGENTS from '../agents/defaults/sub-agents.json';
 import { listWorkAgents } from '../agents/work-agent-registry';
 import { listExperts } from '../chat/experts/registry';
 import { listModes } from '../chat/modes/registry';
+import { isModeVisibleInSettingsSearch } from '../chat/modes/settings-visibility';
 import { isDeveloperReleased } from '../os/app-registry';
 import {
   BUILT_IN_TOOLS,
@@ -217,7 +218,9 @@ function toolEntries(): SettingsSearchEntry[] {
 }
 
 function modeEntries(): SettingsSearchEntry[] {
-  return listModes().map((mode) => ({
+  return listModes()
+    .filter((mode) => isModeVisibleInSettingsSearch(mode.id))
+    .map((mode) => ({
     id: `mode:${mode.id}`,
     label: mode.label,
     sectionId: 'agent-center' as const,

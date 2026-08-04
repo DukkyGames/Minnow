@@ -286,12 +286,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'launch_minnow_app',
     label: 'Launch Minnow app',
     description:
-      'Open or foreground a Minnow app (Code, Chat, Research, Experts, Bench, Settings) from the assistant.',
+      'Open or foreground a Minnow app (Code, Chat, Research, Issues, Models, Brain, Scheduler, Settings).',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
       'launch_minnow_app',
-      'Launch or foreground a Minnow app. Use when the user wants repo work (code), deep research (research), benchmarks (bench), settings, experts lab, or a fresh chat (chat). Pass seed to prefill concierge or research input.',
+      'Launch or foreground a Minnow app. Use for repo work (code), research (research), issues (issues), models, brain, scheduler, settings, or chat. Pass seed to prefill input. Bench/experts only when enabled in Settings → Apps.',
       {
         app_id: {
           type: 'string',
@@ -1807,7 +1807,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'minnow_docs_search',
     label: 'Minnow docs search',
-    description: 'Search the official shipped Minnow user manual. Requires npm start.',
+    description: 'Search the official shipped Minnow user manual. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1833,7 +1833,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'minnow_docs_read',
     label: 'Minnow docs read',
-    description: 'Read a user manual page from the shipped Minnow wiki. Requires npm start.',
+    description: 'Read a user manual page from the shipped Minnow wiki. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
@@ -1851,7 +1851,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'minnow_docs_list',
     label: 'Minnow docs list',
-    description: 'List the shipped Minnow user manual catalog. Requires npm start.',
+    description: 'List the shipped Minnow user manual catalog. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(

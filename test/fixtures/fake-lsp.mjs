@@ -198,6 +198,7 @@ function handleMessage(msg) {
           documentSymbolProvider: true,
           workspaceSymbolProvider: true,
           callHierarchyProvider: true,
+          documentFormattingProvider: true,
         },
       },
     });
@@ -388,6 +389,23 @@ function handleMessage(msg) {
         ],
       },
     });
+    return;
+  }
+
+  if (msg.method === 'textDocument/formatting') {
+    const uri = msg.params?.textDocument?.uri ?? '';
+    const result = isFakeUri(uri)
+      ? [
+          {
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 0 },
+            },
+            newText: 'formatted',
+          },
+        ]
+      : [];
+    send({ jsonrpc: '2.0', id: msg.id, result });
     return;
   }
 

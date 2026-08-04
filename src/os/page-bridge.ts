@@ -7,6 +7,7 @@ import {
 } from './desktop-state';
 import type { AppId } from './types';
 import { isAppAvailable } from './app-preferences';
+import { isDeveloperReleased } from './app-registry';
 
 /** Feature flag — always on until a gradual rollout toggle exists. */
 export function isOsShellEnabled(): boolean {
@@ -54,7 +55,9 @@ export function syncLegacyChromeVisibility(): void {
 
   document.getElementById('btnBenchmark')?.toggleAttribute('hidden', !isAppAvailable('bench'));
   document.getElementById('btnExpertLab')?.toggleAttribute('hidden', !isAppAvailable('experts'));
-  document.getElementById('expertsSection')?.toggleAttribute('hidden', !isAppAvailable('experts'));
+  document
+    .getElementById('expertsSection')
+    ?.toggleAttribute('hidden', !isDeveloperReleased('experts'));
 
   const view = getOsView();
   const codeForeground = isCodeForeground();

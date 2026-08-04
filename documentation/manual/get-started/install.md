@@ -12,7 +12,7 @@ Get the installer from [Minnow Releases](https://github.com/HenriGrimm/Minnow/re
 |----------|-------------------|
 | Windows | NSIS installer (`.exe`) |
 | macOS | `.dmg`, or `.zip` if you prefer to unzip into Applications yourself |
-| Linux | No packaged build. Run from source — see the [GitHub Wiki](https://github.com/HenriGrimm/Minnow/wiki). |
+| Linux | **AppImage** (`Minnow-x.x.x-x86_64.AppImage`) from the same releases page. Make it executable (`chmod +x …`) and run it — no system package manager required. Tray integration may need AppIndicator or StatusNotifier (common on KDE; GNOME may need an extension). Or [build from source](https://github.com/HenriGrimm/Minnow/wiki/Setup-from-source) via the wiki. |
 
 ### If Windows blocks the installer
 

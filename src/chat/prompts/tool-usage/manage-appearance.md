@@ -14,7 +14,7 @@ Appearance is **browser-local** (not server settings). Do **not** use `update_se
 ## Workflow
 
 1. **`get_appearance`** — read current theme, custom colors, fonts, and wallpaper.
-2. **`upload_appearance_asset`** — when a custom font or wallpaper image lives in the workspace (`kind`: `font` | `wallpaper`, `path`: relative path). Requires `npm start`.
+2. **`upload_appearance_asset`** — when a custom font or wallpaper image lives in the workspace (`kind`: `font` | `wallpaper`, `path`: relative path). Requires Minnow running locally (not Vite-only dev).
 3. **`update_appearance`** — batch patch any subset of `theme`, `customColors`, `fonts`, `wallpaper`.
 
 ## Examples

@@ -2,10 +2,25 @@
  * Open a notification target: foreground app + optional chat deep-link.
  */
 
+import { getAppById } from '../os/app-registry';
+import { getAppUnavailableReason, isAppAvailable } from '../os/app-preferences';
 import { launchApp } from '../os/router';
+import type { AppId } from '../os/types';
 import { acknowledgeChatViewed } from './acknowledge';
 import { markNotificationRead } from './store';
 import type { NotificationRecord } from './types';
+
+async function toastUnavailableApp(appId: AppId): Promise<void> {
+  const reason = getAppUnavailableReason(appId);
+  if (!reason) return;
+  const name = getAppById(appId)?.name ?? 'That app';
+  const message =
+    reason === 'user-disabled'
+      ? `${name} is turned off. Restore it in Settings → Apps.`
+      : `${name} is not available in this build.`;
+  const { showToast } = await import('../ui/toast');
+  showToast(message, 'error');
+}
 
 /** Launch the owning app and switch to the linked chat when present. */
 export async function openNotificationTarget(record: NotificationRecord): Promise<void> {
@@ -28,6 +43,11 @@ export async function openNotificationTarget(record: NotificationRecord): Promis
 
   if (record.kind === 'synthesis') {
     launchApp('brain', { brainSection: 'proposals' });
+    return;
+  }
+
+  if (!isAppAvailable(record.appId)) {
+    await toastUnavailableApp(record.appId);
     return;
   }
 

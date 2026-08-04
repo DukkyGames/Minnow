@@ -143,7 +143,7 @@ Full tour: **[Apps guide](documentation/manual/apps/overview.md)**.
 
 ## Extending it
 
-- **Skills** — drop a `SKILL.md` into `~/.minnow/skills/` and call it with `/` in the composer. Fifteen ship built in; install more from the Skills Library, or write your own.
+- **Skills** — drop a `SKILL.md` into `~/.minnow/skills/` and call it with `/` in the composer. Sixteen ship built in; install more from the Skills Library, or write your own.
 - **Tools** — add local tools under `~/.minnow/tools/` with no MCP server required ([tool authoring](documentation/plugins/tool-authoring.md)), or connect any MCP server you like.
 - **Agents** — define sub-agents and work agents with their own prompts, models, samplers, and context budgets.
 - **Prompts and modes** — every system prompt in the app is a markdown file in the repo. Edit them.

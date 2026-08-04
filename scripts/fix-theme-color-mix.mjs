@@ -4,10 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const roots = [
-  path.join('src', 'styles'),
-  path.join('src', 'chat', 'reef', 'widgets'),
-];
+const roots = [path.join('src', 'styles')];
 
 let n = 0;
 for (const root of roots) {

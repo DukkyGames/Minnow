@@ -194,7 +194,7 @@ export const SCOPED_SUITES = {
     patterns: ['test/memory/**/*.test.mjs'],
   },
   brain: {
-    patterns: ['test/brain/**/*.test.mjs'],
+    patterns: ['test/brain/**/*.test.mjs', 'test/brain/**/*.test.mts'],
   },
   settings: {
     patterns: ['test/settings/**/*.test.mjs', 'test/settings/**/*.test.mts'],
@@ -276,6 +276,28 @@ export const SCOPED_SUITES = {
   },
   'board-gates': {
     patterns: ['test/scripts/*.test.mjs'],
+  },
+  onboarding: {
+    patterns: ['test/onboarding/**/*.test.mjs', 'test/onboarding/**/*.test.mts'],
+  },
+  issues: {
+    patterns: [
+      'test/issues/**/*.test.mts',
+      'test/ui/issues-*.test.mts',
+      'test/state/issues-store.test.mts',
+      'test/tools/issue-tools.test.mts',
+      'test/os/issues-app.test.mts',
+    ],
+  },
+  scheduler: {
+    patterns: [
+      'test/scheduler/**/*.test.mjs',
+      'test/scheduler/**/*.test.mts',
+      'test/os/scheduler-app.test.mts',
+    ],
+  },
+  voice: {
+    patterns: ['test/voice/**/*.test.mjs', 'test/voice/**/*.test.mts'],
   },
 };
 

@@ -184,9 +184,9 @@ Wire format may use multimodal `ContentPart[]` for VLMs; built in [`src/tools/lo
 
 ### Multi-chat
 
-- Persisted in `sessions/state.json` (schema version in [`src/types.ts`](../src/types.ts)).
+- Persisted in `sessions/sessions.db` (SQLite); legacy `sessions/state.json` is imported once on upgrade (see canonical session store above). Schema version in [`src/types.ts`](../src/types.ts).
 - Each chat has `workspacePath`; sidebar lists current workspace (+ Unassigned legacy).
-- Max **50** chats; newest `lastMessageAt` first.
+- No `MAX_CHATS` hard trim on save; sidebar order uses `lastMessageAt` (newest first). `pruneEphemeralEmptyChats` drops unused empty chats when switching away (board-linked and planner chats are protected).
 - **Desktop chat** uses a configurable workspace folder (default `~/.minnow/workspace`); change it from the desktop **Files** drawer (MRU select or folder picker). Persisted in `config.json` as `desktopWorkspace.path`. The file tree reloads on switch; `list_directory` tool-cache scopes include `workspaceRoot` so listings from one desktop folder are not reused for another. Legacy Chat app uses `~/.minnow/chats`.
 - **Code workspace** (`GET/PUT /api/workspace`, [`server/workspace/root.js`](../server/workspace/root.js)): defaults to the Minnow install root until the user opens/creates a project. `isDefault` stays true for placeholder roots (install dir, `app.asar`) and until `workspace.userChosen` is set by an explicit pick. Minnow Shell foregrounds Code with the welcome screen ([`src/ui/welcome-page.ts`](../src/ui/welcome-page.ts)) while `isDefault` is true instead of loading the file tree against the bundle.
 - **Email assistant chats** reuse the chats workspace for normal file permissions but persist with `Chat.appScope === 'email'`, `modeId === 'email'`, and `lastActiveChatIdByApp.email`, so they stay out of Code, Desktop, and Chat app rails.
@@ -559,7 +559,7 @@ Config: `config.editorIntentMode` (`enabledByDefault`, `debounceMs`, `contextWin
 - **`npx tsc --noEmit`** — typecheck for `src/` with **`strict: true`** in root [`tsconfig.json`](../tsconfig.json) (no ESLint config); CI enforces the same command on Windows and Ubuntu.
 - **CI:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Windows + Ubuntu.
 
-Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:engine`, `test:a11y`, …).
+Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:onboarding`, `test:issues`, `test:scheduler`, `test:voice`, `test:engine`, `test:a11y`, …).
 
 **Accessibility:** [contributor/accessibility-audit.md](contributor/accessibility-audit.md) — per-app keyboard checklist, NVDA smoke notes, contrast tokens. Regression: `npm run test:a11y` (`test/a11y/`, `test/theme-contrast.test.mts`). Global shortcuts overlay: **`?`** ([`src/ui/shell-keyboard-help.ts`](../src/ui/shell-keyboard-help.ts)) — mounts inside the foreground app layer (or `#osStage` on desktop) with scoped absolute positioning; grouped sections, key chips, scrollable body. Rows tagged with `appId` are omitted when the app is not developer-released (`releaseState: 'hidden'`). Per-chat model picker: **Mod+M** ([`src/ui/composer-model-trigger.ts`](../src/ui/composer-model-trigger.ts)). Streaming SR throttling: [`src/ui/a11y/stream-announcer.ts`](../src/ui/a11y/stream-announcer.ts). App surface cycle: Ctrl+Tab / Ctrl+Shift+Tab ([`src/os/app-focus-cycle.ts`](../src/os/app-focus-cycle.ts)). Window focus cycle: Alt+` ([`src/os/window-focus-cycle.ts`](../src/os/window-focus-cycle.ts)).
 
