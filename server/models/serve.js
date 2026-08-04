@@ -15,6 +15,7 @@ import {
 import {
   createProvider,
   LLAMA_CPP_LOCAL_ID,
+  MINNOW_LIBRARY_PROVIDER_ID,
   listProviders,
   setActiveProviderId,
   updateProvider,
@@ -356,7 +357,8 @@ export async function startServe(body) {
 
   const port = body.port ? validatePort(body.port) : await pickFreePort(8085);
   const baseUrl = `http://127.0.0.1:${port}`;
-  const providerId = LLAMA_CPP_LOCAL_ID;
+  // Picker + chat binding use minnow-library; llama-cpp-local is upserted for upstream HTTP.
+  const providerId = MINNOW_LIBRARY_PROVIDER_ID;
 
   const profileKey =
     typeof body.profile === 'string' && body.profile.trim() ? body.profile.trim() : 'balanced';

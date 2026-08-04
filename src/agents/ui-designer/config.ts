@@ -4,6 +4,7 @@
 
 import { listProviders } from '../../providers/store';
 import type { ProviderPublic } from '../../providers/types';
+import { resolveUpstreamProviderId } from '../../models/model-select-library';
 import type { Chat } from '../../types';
 import type { WorkAgentBinding } from '../work-agent-types';
 import { WorkAgentConfigError } from '../work-agent-types';
@@ -77,8 +78,12 @@ export async function resolveUiDesignerBinding(
 
   const providers =
     options?.providers ?? (await listProviders()).providers;
+  const registryProviderId = resolveUpstreamProviderId(
+    resolved.providerId,
+    resolved.modelId,
+  );
   const provider = providers.find(
-    (p) => p.id === resolved.providerId && p.enabled !== false,
+    (p) => p.id === registryProviderId && p.enabled !== false,
   );
 
   if (!provider) {

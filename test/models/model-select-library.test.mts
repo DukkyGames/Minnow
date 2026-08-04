@@ -8,6 +8,7 @@ import {
   dedupLlamaCppModelsAgainstLibrary,
   encodeLibraryModelSelectKey,
   isLibraryModelBinding,
+  resolveUpstreamProviderId,
   LIBRARY_MODEL_PROVIDER_ID,
   libraryModelNeedsLoad,
 } from '../../src/models/model-select-library.ts';
@@ -20,6 +21,14 @@ describe('model-select-library', () => {
     const decoded = encodeModelSelectKey(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf');
     assert.equal(key, decoded);
     assert.equal(isLibraryModelBinding(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf'), true);
+  });
+
+  test('resolveUpstreamProviderId maps minnow-library to llama-cpp-local', () => {
+    assert.equal(
+      resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf'),
+      LLAMA_CPP_LOCAL_PROVIDER_ID,
+    );
+    assert.equal(resolveUpstreamProviderId('openai', 'gpt-4o'), 'openai');
   });
 
   test('dedupLlamaCppModelsAgainstLibrary removes duplicate served labels', () => {
