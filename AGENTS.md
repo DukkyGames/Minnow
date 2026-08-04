@@ -63,3 +63,14 @@ Perf regressions fail CI the same way as `impeccable:detect` — loudly and with
 - Match the surrounding code's style, naming, and comment density.
 - Application CSS uses `--mn-*` tokens; hex/rgba literals live only in [`src/styles/tokens.css`](src/styles/tokens.css). See [`DESIGN.md`](DESIGN.md).
 - Keep [`documentation/context.md`](documentation/context.md) updated when you ship a feature that changes architecture, APIs, or storage.
+
+## Cursor Cloud specific instructions
+
+Dependencies are already installed by the startup update script (`npm install`). Notes below are non-obvious caveats for running/testing in the headless cloud VM; standard commands live in [setup-from-source.md](documentation/contributor/setup-from-source.md) and [commands.md](documentation/contributor/commands.md).
+
+- **Headless startup:** the VM has no display/Electron GUI. Start the stack with `MINNOW_HEADLESS=1 BROWSER=none npm start` and open the SPA at `http://localhost:9473` in the in-VM browser. Plain `npm start` tries to launch the Electron desktop shell.
+- **API auth gate:** every `/api/*` call needs the per-boot token — `curl -H "X-Minnow-Token: $(cat ~/.minnow/session-token)" http://localhost:9473/api/tools/ping`. A tokenless request returns `401` (the gate working), not a broken server.
+- **Chatting without LM Studio:** run `node scripts/fake-model-server.mjs --port 18765` for an OpenAI-v1 stub. The reserved `fake-board` provider id is intentionally inert in the UI — `proxyModels` in [`server/providers/proxy.js`](server/providers/proxy.js) returns an empty model list for it unless the in-server board-testing fake host is running (needs `MINNOW_DEBUG=1`). To get a UI-selectable model, register the stub under a **different** provider id and set it active: `POST /api/providers` with `{"id":"local-fake","label":"Local Fake (dev)","baseUrl":"http://127.0.0.1:18765","apiKind":"openai-v1"}`, then `POST /api/providers/local-fake/set-active`. A general-mode chat then streams the stub's default reply (`Done.`).
+- **Benign startup noise:** `[servers] auto-provision searxng failed: tar: This does not look like a tar archive` is expected in the network-restricted VM and does not block the server.
+- **Test suite reality:** `npm test` runs end to end, but a small number of tests currently fail on `main` for reasons unrelated to environment setup (in-code default/fixture spec drift — e.g. `test/config/editor-ai-completion-meta.test.js`, the fake LSP formatting fixture). Don't assume a fully green suite; scope expectations to the area you touch.
+- **Fixture side effects:** running the suite writes to git-tracked fixtures under `test/fixtures/**` (SQLite DBs, diagnostics logs). Reset before committing with `git checkout -- test/fixtures/ && git clean -fd test/fixtures/`.
