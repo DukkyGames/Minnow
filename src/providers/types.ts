@@ -11,6 +11,9 @@ export type ProviderId = string;
 /** Stable id for llama.cpp local serve (must match server/providers/store.js). */
 export const LLAMA_CPP_LOCAL_PROVIDER_ID = 'llama-cpp-local';
 
+/** Stable id for mlx-lm local serve (must match server/providers/store.js). */
+export const MLX_LM_LOCAL_PROVIDER_ID = 'mlx-lm-local';
+
 /** Provider metadata returned by GET /api/providers (secrets redacted). */
 export interface ProviderPublic {
   id: ProviderId;

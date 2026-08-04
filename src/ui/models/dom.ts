@@ -61,6 +61,14 @@ export function formatParams(paramsB: number | null | undefined): string {
   return paramsB >= 1 ? `${Number(paramsB.toFixed(1))}B` : `${Math.round(paramsB * 1000)}M`;
 }
 
+/** Compact counts for Hub stats: 1240000 -> 1.2M. */
+export function formatCount(value: number | null | undefined): string {
+  if (!value || !Number.isFinite(value) || value <= 0) return '0';
+  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`;
+  if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}K`;
+  return String(Math.round(value));
+}
+
 /** Elapsed seconds since a timestamp, as `1m 04s`. */
 export function formatElapsed(sinceMs: number): string {
   const total = Math.max(0, Math.round((Date.now() - sinceMs) / 1000));

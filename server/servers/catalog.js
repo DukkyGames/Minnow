@@ -4,6 +4,7 @@
 
 import * as searxngProvisioner from './searxng.js';
 import * as llamaCppProvisioner from './llama-cpp.js';
+import * as mlxLmProvisioner from './mlx-lm.js';
 
 /** @typedef {'python-venv' | 'native-binary'} ManagedServerKind */
 
@@ -42,6 +43,19 @@ export const BUILTIN_SERVERS = {
     defaultAutoStart: false,
     healthPath: '/health',
     provisioner: llamaCppProvisioner,
+  },
+  'mlx-lm': {
+    id: 'mlx-lm',
+    label: 'MLX',
+    description: 'Metal-native inference for MLX weights on Apple Silicon (mlx-lm).',
+    // 'native-binary' would make startServer() refuse to spawn it.
+    kind: 'python-venv',
+    defaultPort: 8087,
+    // Off by default: one process holds a whole model resident in RAM, so it
+    // starts when a model is loaded and stays up for fast switching after that.
+    defaultAutoStart: false,
+    healthPath: '/v1/models',
+    provisioner: mlxLmProvisioner,
   },
 };
 

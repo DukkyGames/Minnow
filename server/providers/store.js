@@ -29,6 +29,7 @@ export const LLAMA_CPP_LOCAL_ID = 'llama-cpp-local';
 /** Synthetic id on serve records / model picker for Minnow-hosted My Models (not a registry row). */
 export const MINNOW_LIBRARY_PROVIDER_ID = 'minnow-library';
 const DEFAULT_LLAMA_CPP_URL = 'http://127.0.0.1:8085';
+export const MLX_LM_LOCAL_ID = 'mlx-lm-local';
 
 /** Best-effort restrictive permissions on secrets files (Unix). */
 async function chmodSecrets(filePath) {
@@ -315,7 +316,7 @@ export async function seedLlamaCppLocal() {
 export async function migrateLegacyModelServeProviders() {
   const ids = await listProviderIds();
   for (const id of ids) {
-    if (id === LLAMA_CPP_LOCAL_ID || id === LM_STUDIO_LOCAL_ID) continue;
+    if (id === LLAMA_CPP_LOCAL_ID || id === LM_STUDIO_LOCAL_ID || id === MLX_LM_LOCAL_ID) continue;
 
     let profile;
     try {

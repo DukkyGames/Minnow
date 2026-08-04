@@ -306,16 +306,87 @@ export async function downloadHfRepoFile({ repoId, filename, destPath, signal, o
 }
 
 /**
- * Download all files in a HF repo snapshot to a directory.
- * @param {{ repoId: string, destDir: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void }} opts
+ * Glob → RegExp for snapshot filters. Supports `**` (any depth), `*` and `?`
+ * (within one segment). Matching is case-insensitive so `.GGUF` is caught too.
+ * @param {string} pattern
  */
-export async function downloadHfSnapshot({ repoId, destDir, signal, onProgress }) {
+function globToRegExp(pattern) {
+  let out = '';
+  for (let i = 0; i < pattern.length; i += 1) {
+    const ch = pattern[i];
+    if (ch === '*') {
+      if (pattern[i + 1] === '*') {
+        // `**/` swallows zero or more leading segments; a trailing `**` takes the rest.
+        if (pattern[i + 2] === '/') {
+          out += '(?:.*/)?';
+          i += 2;
+        } else {
+          out += '.*';
+          i += 1;
+        }
+      } else {
+        out += '[^/]*';
+      }
+      continue;
+    }
+    if (ch === '?') {
+      out += '[^/]';
+      continue;
+    }
+    out += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${out}$`, 'i');
+}
+
+/**
+ * @param {string} filePath
+ * @param {string[]} patterns
+ */
+function matchesAnyGlob(filePath, patterns) {
+  return patterns.some((pattern) => globToRegExp(pattern).test(filePath));
+}
+
+/**
+ * Sibling weights an MLX repo carries that mlx-lm never reads. Skipping these
+ * routinely halves the transfer: `mlx-community` repos often keep the original
+ * fp16 `.safetensors` under `original/` alongside the quantized copy.
+ *
+ * Opt-in, not a default — voice snapshots (Kokoro and friends) ship their real
+ * weights as `.pth`/`.bin`, so excluding those globally would break TTS.
+ */
+export const MLX_SNAPSHOT_EXCLUDE = ['**/*.gguf', 'original/**', '**/*.pth', '**/*.bin'];
+
+/**
+ * Download all files in a HF repo snapshot to a directory.
+ *
+ * `include`/`exclude` take glob patterns matched against repo-relative paths.
+ * `exclude` wins over `include`. Both default to unfiltered.
+ * @param {{ repoId: string, destDir: string, signal?: AbortSignal, include?: string[], exclude?: string[], onProgress?: (bytes: number, total: number | null) => void }} opts
+ */
+export async function downloadHfSnapshot({
+  repoId,
+  destDir,
+  signal,
+  include,
+  exclude,
+  onProgress,
+}) {
   validateRepoId(repoId);
-  const files = await listRepoFilesRecursive(repoId);
-  if (!files.length) {
+  const listed = await listRepoFilesRecursive(repoId);
+  if (!listed.length) {
     throw new Error(`No files found in ${repoId}`);
   }
 
+  const files = listed.filter((file) => {
+    if (include?.length && !matchesAnyGlob(file.path, include)) return false;
+    if (exclude?.length && matchesAnyGlob(file.path, exclude)) return false;
+    return true;
+  });
+  if (!files.length) {
+    throw new Error(`No files in ${repoId} matched the download filter`);
+  }
+
+  // Sized off the filtered set, or progress would never reach its own total.
   const totalBytes = files.reduce((sum, f) => sum + (f.size ?? 0), 0) || null;
   let completedBytes = 0;
 

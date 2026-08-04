@@ -29,6 +29,7 @@ import {
   subscribeServeLog,
   type DownloadJob,
   type LlamaServeSettings,
+  type ModelDownloadFormat,
   type RuntimeDetection,
   type ServeRecord,
 } from '../../models/api-client';
@@ -315,6 +316,35 @@ export async function loadModel(
     return serve;
   }
 
+  if (model.format === 'MLX') {
+    if (!model.path) throw new Error('No MLX snapshot directory resolved for this model.');
+    const serve = await startModelServe({
+      modelPath: model.path,
+      runtime: 'mlx-lm',
+      // This becomes mlx_lm.server's `model` key, so it has to be the directory,
+      // not the repo id: Minnow keeps MLX repos under ~/.minnow/models/artifacts,
+      // which is not an HF cache layout, and a repo id would send the server to
+      // the Hub instead of the copy already on disk.
+      modelLabel: model.path,
+    });
+    state.serves.unshift(serve);
+    // Deliberately no trackLoad. There is no spawn, no runId, and the serve comes
+    // back already running — the log-stream poller would just 404 against it.
+    await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, model.id).catch(() => false);
+    const mlxSampler = getLibrarySamplerForId(model.id);
+    if (mlxSampler) {
+      void saveLibraryInferenceSampler({
+        libraryId: model.id,
+        sampler: mlxSampler,
+        aliases: [model.repoId, model.name].filter((value): value is string =>
+          Boolean(value?.trim()),
+        ),
+      }).catch(() => undefined);
+    }
+    emit();
+    return serve;
+  }
+
   if (!model.path) throw new Error('No weights file resolved for this model.');
 
   const serve = await startModelServe({
@@ -402,8 +432,17 @@ function trackDownload(job: DownloadJob): void {
 }
 
 /** Queue a Hugging Face download and follow its progress. */
-export async function downloadModel(repoId: string, quant?: string): Promise<DownloadJob> {
-  const job = await startModelDownload({ repoId, quant });
+export async function downloadModel(
+  repoId: string,
+  quant?: string,
+  options?: { format?: ModelDownloadFormat; sizeBytes?: number },
+): Promise<DownloadJob> {
+  const job = await startModelDownload({
+    repoId,
+    quant,
+    format: options?.format,
+    sizeBytes: options?.sizeBytes,
+  });
   const existing = state.downloads.findIndex((j) => j.id === job.id);
   if (existing >= 0) state.downloads[existing] = job;
   else state.downloads.unshift(job);

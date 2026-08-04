@@ -3,6 +3,7 @@
  */
 
 import { cancelDownload, listDownloads, startDownload, subscribeDownload } from './download.js';
+import { searchHubModels } from './hf-search.js';
 import { listCachedModels } from './cached.js';
 import { listInstalled } from './installed.js';
 import { getModelsConfig, patchModelsConfig } from './models-config.js';
@@ -64,6 +65,22 @@ export async function handleModelsRequest(req, res, pathname) {
   if (pathname === '/api/models/downloads' && req.method === 'GET') {
     const jobs = await listDownloads();
     sendJson(res, 200, { jobs });
+    return true;
+  }
+
+  if (pathname === '/api/models/hf/search' && req.method === 'GET') {
+    try {
+      const params = new URL(req.url ?? '', 'http://localhost').searchParams;
+      const payload = await searchHubModels({
+        query: params.get('q') ?? '',
+        format: params.get('format') ?? 'gguf',
+        limit: Number(params.get('limit')) || undefined,
+        sort: params.get('sort') ?? undefined,
+      });
+      sendJson(res, 200, payload);
+    } catch (err) {
+      sendJson(res, 502, { error: err instanceof Error ? err.message : String(err) });
+    }
     return true;
   }
 

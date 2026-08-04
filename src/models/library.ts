@@ -231,10 +231,15 @@ export function matchCatalogEntry(repoId: string, fileName?: string | null): Cat
   return null;
 }
 
-/** Format classification for a repo that holds no GGUF. */
+/**
+ * Format classification for a repo that holds no GGUF.
+ *
+ * MLX comes from the scanner's `mlx_root` signal, not the repo name: the name
+ * says nothing about whether the weights on disk are actually MLX-quantized.
+ */
 function nonGgufFormat(row: CachedModelRow): LibraryFormat {
   if (row.is_diffusion) return 'Diffusion';
-  if (/mlx/i.test(row.repo_id)) return 'MLX';
+  if (row.mlx_root) return 'MLX';
   return 'SafeTensors';
 }
 
@@ -267,8 +272,12 @@ export function buildLibrary(cached: CachedModelRow[]): LibraryModel[] {
       const entry = matchCatalogEntry(row.repo_id);
       const displayName = row.repo_id.split('/').pop() || row.repo_id;
       const producer = libraryProducer(entry, row.repo_id, displayName);
+      // An MLX repo is servable as a whole directory — mlx-lm loads the snapshot,
+      // not one weights file — so it gets a real path where other non-GGUF
+      // formats get null.
+      const isMlx = Boolean(row.mlx_root) && !row.is_ollama;
       out.push({
-        id: `repo:${row.repo_id}`,
+        id: isMlx ? `mlx:${row.repo_id}` : `repo:${row.repo_id}`,
         name: displayName,
         repoId: row.repo_id,
         publisher,
@@ -277,19 +286,20 @@ export function buildLibrary(cached: CachedModelRow[]): LibraryModel[] {
         producerLogoId: producer.logoId,
         format: row.is_ollama ? 'Ollama' : nonGgufFormat(row),
         // No weights file on disk, so any catalog quant would describe a build
-        // that is not actually here.
-        quant: '',
+        // that is not actually here. MLX is the exception: the scanner read the
+        // bit width straight out of config.json.
+        quant: isMlx ? (row.mlx_quant ?? '') : '',
         arch: entry?.architecture ?? inferArchFromName(row.repo_id),
         domain: entry ? inferUseCase(entry) : inferUseCase({ name: row.repo_id } as CatalogModel),
         paramsB: entry ? catalogParamsB(entry) || null : inferParamsFromName(row.repo_id),
         contextLength: entry?.context_length ?? null,
         capabilities: entry?.capabilities ?? [],
         sizeBytes: row.size_bytes,
-        path: null,
+        path: isMlx ? (row.mlx_root ?? null) : null,
         fileName: null,
         source,
         // Ollama-managed tags are not shown in My Models (use the Ollama provider instead).
-        servable: false,
+        servable: isMlx,
         incomplete: row.has_incomplete,
         isMoe: entry?.is_moe ?? false,
       });
@@ -348,9 +358,30 @@ export function activeServeFor(
 /** Toolbar preset ids for My Models sort (maps to {@link LibraryListSort}). */
 export type LibrarySortKey = LibrarySortPreset;
 
-/** Rows the My Models table lists (GGUF with a resolved path). */
-export function loadableLibrary(models: LibraryModel[]): LibraryModel[] {
-  return models.filter((m) => m.servable && m.source !== 'ollama');
+/**
+ * Rows the My Models table lists: GGUF with a resolved path, plus MLX repos on
+ * hardware that can actually run them.
+ *
+ * The MLX gate reads `hardware.backend`, not the mlx-lm runtime probe. Hardware
+ * is already in store state when the table first paints, while the runtime probe
+ * resolves a beat later — gating on it would make rows appear and the list
+ * visibly reorder. Whether the runtime is *installed* is the Load button's
+ * problem, and it drives the install prompt from there.
+ *
+ * `backend` omitted means "not measured yet", and MLX rows stay hidden until it
+ * is, so a Windows machine with an mlx-community repo in its HF cache never
+ * shows a row it cannot serve.
+ */
+export function loadableLibrary(
+  models: LibraryModel[],
+  options?: { backend?: string | null },
+): LibraryModel[] {
+  const metal = options?.backend === 'metal';
+  return models.filter((m) => {
+    if (!m.servable || m.source === 'ollama') return false;
+    if (m.format === 'MLX' && !metal) return false;
+    return true;
+  });
 }
 
 export interface LibraryFilter {

@@ -258,6 +258,7 @@
       "headings": [
         "Recommendations",
         "Library and Installed",
+        "MLX on Apple Silicon",
         "Providers",
         "Routing",
         "Sampler",
@@ -269,7 +270,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "0fa8f5bfea5998be3c5e8eadf05b3af16e3350f8f9b32eb2836ba08c85dce0ce"
+      "hash": "8d1ba7dc090a6bab048339c0f4001141d442bb31ea7ae81dce4af5e59c0faec5"
     },
     {
       "path": "documentation/manual/apps/issues.md",
