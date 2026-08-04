@@ -280,8 +280,7 @@
       "path",
       "sandbox",
       "file tools",
-      "git",
-      "TOOLS_ALLOW_ALL_PATHS"
+      "git"
     ],
     "category": "general",
     "area": "general",

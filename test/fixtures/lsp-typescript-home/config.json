@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-08-04T02:46:19.757Z",
+  "createdAt": "2026-08-04T03:23:40.638Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -197,7 +197,8 @@
     "includeLspContext": true,
     "contextBudgetChars": 4000,
     "useNativeFim": true,
-    "enableCompletionCache": true
+    "enableCompletionCache": true,
+    "reindentOnAccept": true
   },
   "gitCommitMessage": {
     "useGitmoji": true
@@ -240,10 +241,10 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-Ro1Oil",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-x3cSH5",
     "userChosen": true,
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-Ro1Oil"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-x3cSH5"
     ]
   }
 }
