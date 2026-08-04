@@ -35,10 +35,10 @@ Set the composer to **Debug** when you want the model working this way. Debug is
 
 ## Git conventions
 
-Issues have IDs like `ISS-12` and Minnow uses them consistently:
+Issues have workspace-specific ids like `MIN-12` (configure the prefix under **Settings → Apps → Issues → Issue IDs**). Legacy `ISS-*` ids still work. Minnow uses the id on each card consistently:
 
-- Branch: `issue/iss-12-<slug>`
-- Commits are found by searching for `[ISS-12]`
+- Branch: `issue/<id>-<slug>` (slug derived from title)
+- Commits are found by searching for `[MIN-12]` (or your key)
 - Plans live at `documentation/plans/issues/<id>.md`
 - Pull requests go through the `gh` CLI when it is installed, with GitHub links appearing on the issue
 
@@ -46,7 +46,7 @@ When a board finishes work on an issue, the issue moves to **review** rather tha
 
 ## Taxonomy
 
-**Settings → Apps → Issues** defines your types, statuses and priorities.
+**Settings → Apps → Issues** defines your **project key** (new auto-ids) and your types, statuses and priorities.
 
 Statuses carry semantic roles and flags — which lanes appear on the board, which count as closed — so workflows can resolve "the triage status" without hard-coding your names. You can delete an entry only when nothing references it.
 

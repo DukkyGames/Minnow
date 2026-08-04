@@ -1290,7 +1290,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
         issue_id: {
           type: 'string',
-          description: 'Optional stable id such as ISS-12 (auto-generated if omitted)',
+          description: 'Optional stable id such as MIN-12 (auto-generated if omitted)',
         },
       },
       ['title'],
@@ -1306,7 +1306,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       'issue_update',
       'Patch one issue by issue_id.',
       {
-        issue_id: { type: 'string', description: 'Issue id (ISS-n) or legacy bug id' },
+        issue_id: { type: 'string', description: 'Issue id (KEY-n) or legacy bug id' },
         title: { type: 'string' },
         description: { type: 'string' },
         type: {
@@ -1361,7 +1361,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       'issue_link',
       'Append links to an issue: code_refs (file/line), git_links, and/or chat_id.',
       {
-        issue_id: { type: 'string', description: 'Issue id (ISS-n) or legacy bug id' },
+        issue_id: { type: 'string', description: 'Issue id (KEY-n) or legacy bug id' },
         code_refs: {
           type: 'array',
           description: 'File/line links to append',
@@ -1405,11 +1405,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_delete',
-      'Delete issue(s) by issue_id (ISS-n or legacy bug id). Supports bulk delete via issue_ids.',
+      'Delete issue(s) by issue_id (KEY-n or legacy bug id). Supports bulk delete via issue_ids.',
       {
         issue_id: {
           type: 'string',
-          description: 'Single issue id to delete (ISS-n or legacy bug id)',
+          description: 'Single issue id to delete (KEY-n or legacy bug id)',
         },
         issue_ids: {
           type: 'array',

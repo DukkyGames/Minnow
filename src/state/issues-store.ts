@@ -4,6 +4,12 @@
  */
 
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
+import {
+  normalizeProjectKeyInput,
+  parseKeyedIssueId,
+  suggestProjectKey,
+  validateProjectKey,
+} from '../issues/project-key.ts';
 import { isServerStorageMode } from '../config/storage-mode.ts';
 import { getBugs, getIssues, putIssues } from '../config/api-client.ts';
 import {
@@ -21,7 +27,7 @@ import {
 } from '../issues/taxonomy.ts';
 import { emitIssuesChange } from './issues-events.ts';
 import { getIssuesTaxonomySync } from './issues-taxonomy-store.ts';
-import { getWorkspacePath } from './workspace.ts';
+import { getWorkspaceLabel, getWorkspacePath } from './workspace.ts';
 import type {
   BugCard,
   BugColumn,
@@ -34,6 +40,7 @@ import type {
   IssueStatus,
   IssueType,
   IssuesState,
+  IssuesWorkspaceIdConfig,
 } from '../types.ts';
 
 const ISSUES_STORAGE_KEY = 'minnow-issues-v1';
@@ -114,7 +121,109 @@ export function defaultIssuePlanPath(issueId: string): string {
 }
 
 function defaultIssuesState(): IssuesState {
-  return { version: 1, nextId: 1, issues: [] };
+  return { version: 2, nextId: 1, issues: [], workspaces: {} };
+}
+
+function workspaceBasenameFromPath(workspacePath: string): string {
+  const normalized = workspacePath.replace(/\\/g, '/').replace(/\/+$/, '');
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? '';
+}
+
+/** Label shown in Settings (basename or synced workspace label). */
+function labelForWorkspacePath(workspacePath: string): string {
+  const key = normalizeWorkspacePath(workspacePath);
+  if (key && key === normalizeWorkspacePath(getWorkspacePath())) {
+    const label = getWorkspaceLabel().trim();
+    if (label) return label;
+  }
+  return workspaceBasenameFromPath(workspacePath);
+}
+
+function ensureWorkspacesMap(state: IssuesState): Record<string, IssuesWorkspaceIdConfig> {
+  if (!state.workspaces) state.workspaces = {};
+  return state.workspaces;
+}
+
+function maxIssueNumberForKey(
+  issues: IssueCard[],
+  workspaceKey: string,
+  projectKey: string,
+): number {
+  const prefix = projectKey.toUpperCase();
+  let max = 0;
+  for (const issue of issues) {
+    if (normalizeWorkspacePath(issue.workspacePath) !== workspaceKey) continue;
+    const parsed = parseKeyedIssueId(issue.id);
+    if (parsed && parsed.prefix === prefix) {
+      max = Math.max(max, parsed.number);
+    }
+  }
+  return max;
+}
+
+function reconcileGlobalIssNextId(issues: IssueCard[], floor: number): number {
+  let nextId = floor;
+  for (const issue of issues) {
+    const match = /^ISS-(\d+)$/i.exec(issue.id);
+    if (match) nextId = Math.max(nextId, Number(match[1]) + 1);
+  }
+  return nextId;
+}
+
+function parseWorkspaceIdConfig(raw: unknown): IssuesWorkspaceIdConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Partial<IssuesWorkspaceIdConfig>;
+  const projectKey = normalizeProjectKeyInput(
+    typeof row.projectKey === 'string' ? row.projectKey : '',
+  );
+  if (validateProjectKey(projectKey)) return null;
+  const nextId =
+    typeof row.nextId === 'number' && Number.isFinite(row.nextId) && row.nextId >= 1
+      ? Math.floor(row.nextId)
+      : 1;
+  return { projectKey, nextId };
+}
+
+function getOrInitWorkspaceIdConfig(workspacePath: string): IssuesWorkspaceIdConfig {
+  const state = requireIssuesState();
+  const wsKey = normalizeWorkspacePath(workspacePath);
+  const map = ensureWorkspacesMap(state);
+  const existing = map[wsKey];
+  if (existing) return existing;
+
+  const projectKey = suggestProjectKey(labelForWorkspacePath(workspacePath));
+  const nextId = maxIssueNumberForKey(state.issues, wsKey, projectKey) + 1;
+  const cfg: IssuesWorkspaceIdConfig = { projectKey, nextId };
+  map[wsKey] = cfg;
+  touchIssuesStore();
+  return cfg;
+}
+
+function bumpCountersForExplicitIssueId(id: string, workspacePath: string): void {
+  const state = requireIssuesState();
+  const iss = /^ISS-(\d+)$/i.exec(id);
+  if (iss) {
+    state.nextId = Math.max(state.nextId, Number(iss[1]) + 1);
+    return;
+  }
+  const parsed = parseKeyedIssueId(id);
+  if (!parsed) return;
+
+  const wsKey = normalizeWorkspacePath(workspacePath);
+  const map = ensureWorkspacesMap(state);
+  const saved = map[wsKey];
+  const activeKey = (
+    saved?.projectKey ?? suggestProjectKey(labelForWorkspacePath(workspacePath))
+  ).toUpperCase();
+  if (parsed.prefix !== activeKey) return;
+
+  if (!saved) {
+    map[wsKey] = { projectKey: activeKey, nextId: parsed.number + 1 };
+    touchIssuesStore();
+    return;
+  }
+  saved.nextId = Math.max(saved.nextId, parsed.number + 1);
 }
 
 function requireIssuesState(): IssuesState {
@@ -264,21 +373,42 @@ function ensureIssueCardShape(raw: unknown): IssueCard | null {
 
 function parseIssuesState(raw: unknown): IssuesState {
   if (!raw || typeof raw !== 'object') return defaultIssuesState();
-  const row = raw as Partial<IssuesState>;
-  if (row.version !== 1 || !Array.isArray(row.issues)) return defaultIssuesState();
+  const row = raw as {
+    version?: number;
+    nextId?: number;
+    issues?: unknown;
+    workspaces?: unknown;
+  };
+  const version = row.version;
+  if ((version !== 1 && version !== 2) || !Array.isArray(row.issues)) {
+    return defaultIssuesState();
+  }
   const issues: IssueCard[] = [];
   for (const item of row.issues) {
     const card = ensureIssueCardShape(item);
     if (card) issues.push(card);
   }
-  const nextId =
+  const floor =
     typeof row.nextId === 'number' && Number.isFinite(row.nextId) && row.nextId >= 1
       ? Math.floor(row.nextId)
-      : Math.max(1, ...issues.map((i) => {
-          const m = /^ISS-(\d+)$/.exec(i.id);
-          return m ? Number(m[1]) + 1 : 1;
-        }));
-  return { version: 1, nextId, issues };
+      : 1;
+  const nextId = reconcileGlobalIssNextId(issues, floor);
+
+  const workspaces: Record<string, IssuesWorkspaceIdConfig> = {};
+  if (row.workspaces && typeof row.workspaces === 'object') {
+    for (const [pathKey, cfgRaw] of Object.entries(row.workspaces)) {
+      const cfg = parseWorkspaceIdConfig(cfgRaw);
+      if (!cfg) continue;
+      const wsKey = normalizeWorkspacePath(pathKey);
+      const reconciledNext = Math.max(
+        cfg.nextId,
+        maxIssueNumberForKey(issues, wsKey, cfg.projectKey) + 1,
+      );
+      workspaces[wsKey] = { projectKey: cfg.projectKey, nextId: reconciledNext };
+    }
+  }
+
+  return { version: 2, nextId, issues, workspaces };
 }
 
 /** Convert one BugCard into an IssueCard with sequential ISS-n id. */
@@ -377,7 +507,7 @@ export function migrateBugsToIssuesState(bugs: BugCard[]): IssuesState {
     nextId += 1;
     issues.push(migrateBugCardToIssue(bug, id));
   }
-  return { version: 1, nextId, issues };
+  return { version: 2, nextId, issues, workspaces: {} };
 }
 
 async function loadBugsForMigration(): Promise<BugCard[]> {
@@ -462,7 +592,9 @@ export async function migrateLegacyBugBoardsFromChats(chats: Chat[]): Promise<bo
       }
       if (!shaped.chatId) shaped.chatId = chat.id;
       if (findIssueById(shaped.id)) continue;
-      const id = allocateIssueId();
+      const id = allocateIssueId(
+        shaped.workspacePath?.trim() ? shaped.workspacePath : getWorkspacePath(),
+      );
       state.issues.push(migrateBugCardToIssue(shaped, id));
       changed = true;
     }
@@ -523,11 +655,12 @@ export async function loadIssuesFromStorage(): Promise<void> {
   }
 }
 
-/** Allocate next sequential ISS-n id and bump counter. */
-function allocateIssueId(): string {
-  const state = requireIssuesState();
-  const id = `ISS-${state.nextId}`;
-  state.nextId += 1;
+/** Allocate next KEY-n id for a workspace and bump its counter. */
+function allocateIssueId(workspacePath: string): string {
+  const wsKey = normalizeWorkspacePath(workspacePath.trim() || getWorkspacePath());
+  const cfg = getOrInitWorkspaceIdConfig(wsKey);
+  const id = `${cfg.projectKey}-${cfg.nextId}`;
+  cfg.nextId += 1;
   return id;
 }
 
@@ -563,13 +696,8 @@ export function addIssue(input: AddIssueInput, issueId?: string): IssueCard {
   const workspacePath = normalizeWorkspacePath(
     input.workspacePath?.trim() || getWorkspacePath(),
   );
-  const id = issueId?.trim() || allocateIssueId();
-  // Keep nextId ahead of any explicit ISS-n so later auto-ids never collide.
-  const seq = /^ISS-(\d+)$/.exec(id);
-  if (seq) {
-    const state = requireIssuesState();
-    state.nextId = Math.max(state.nextId, Number(seq[1]) + 1);
-  }
+  const id = issueId?.trim() || allocateIssueId(workspacePath);
+  bumpCountersForExplicitIssueId(id, workspacePath);
   const taxonomy = getIssuesTaxonomySync();
   const card: IssueCard = {
     id,
@@ -816,11 +944,72 @@ export function deleteIssues(issueIds: string[]): number {
 /** Serialize all issues for tools and UI. */
 export function getIssuesSnapshot(): IssuesState {
   const state = requireIssuesState();
+  const workspaces = state.workspaces
+    ? Object.fromEntries(
+        Object.entries(state.workspaces).map(([key, cfg]) => [
+          key,
+          { projectKey: cfg.projectKey, nextId: cfg.nextId },
+        ]),
+      )
+    : {};
   return {
-    version: 1,
+    version: 2,
     nextId: state.nextId,
     issues: state.issues.map((i) => ({ ...i, labels: [...i.labels] })),
+    workspaces,
   };
+}
+
+/** Saved workspace id config, if any. */
+export function getWorkspaceIdConfig(
+  workspacePath?: string,
+): IssuesWorkspaceIdConfig | undefined {
+  const wsKey = normalizeWorkspacePath(workspacePath?.trim() || getWorkspacePath());
+  return requireIssuesState().workspaces?.[wsKey];
+}
+
+/** Effective project key (saved or suggested from folder name). */
+export function getWorkspaceProjectKey(workspacePath?: string): string {
+  const wsKey = normalizeWorkspacePath(workspacePath?.trim() || getWorkspacePath());
+  const saved = getWorkspaceIdConfig(wsKey);
+  if (saved) return saved.projectKey;
+  return suggestProjectKey(labelForWorkspacePath(wsKey));
+}
+
+/** Preview the next auto-allocated id for a workspace. */
+export function getNextIssueIdPreview(workspacePath?: string): string {
+  const wsKey = normalizeWorkspacePath(workspacePath?.trim() || getWorkspacePath());
+  const key = getWorkspaceProjectKey(wsKey);
+  const state = requireIssuesState();
+  const saved = state.workspaces?.[wsKey];
+  const nextNum =
+    saved?.nextId ?? maxIssueNumberForKey(state.issues, wsKey, key) + 1;
+  return `${key}-${nextNum}`;
+}
+
+/** Count issues stored for one workspace path. */
+export function countIssuesInWorkspace(workspacePath: string): number {
+  const wsKey = normalizeWorkspacePath(workspacePath);
+  return requireIssuesState().issues.filter(
+    (issue) => normalizeWorkspacePath(issue.workspacePath) === wsKey,
+  ).length;
+}
+
+/** Persist a new project key for one workspace (reconciles nextId from existing cards). */
+export function setWorkspaceProjectKey(
+  workspacePath: string,
+  rawKey: string,
+): { ok: true } | { ok: false; error: string } {
+  const validationError = validateProjectKey(rawKey);
+  if (validationError) return { ok: false, error: validationError };
+  const projectKey = normalizeProjectKeyInput(rawKey);
+  const wsKey = normalizeWorkspacePath(workspacePath);
+  const state = requireIssuesState();
+  const map = ensureWorkspacesMap(state);
+  const nextId = maxIssueNumberForKey(state.issues, wsKey, projectKey) + 1;
+  map[wsKey] = { projectKey, nextId };
+  touchIssuesStore();
+  return { ok: true };
 }
 
 export type CollectIssuesOptions = {

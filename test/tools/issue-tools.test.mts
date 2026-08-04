@@ -38,7 +38,7 @@ function makeChat(): Chat {
 
 describe('issue-tools', () => {
   beforeEach(() => {
-    setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
     setSessionStateForTests({
       version: 2,
       activeId: CHAT_ID,

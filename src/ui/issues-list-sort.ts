@@ -4,6 +4,7 @@
  */
 
 import type { IssueCard, IssuePriority, IssueStatus, IssueType } from '../types';
+import { issueIdKeyPrefix, issueIdNumericSuffix } from '../issues/project-key';
 
 /** Columns that can be sorted from the list header. */
 export type IssuesSortKey =
@@ -79,11 +80,9 @@ export function cycleIssuesListSort(
   return { key: nextKey, direction: defaultDirectionForSortKey(nextKey) };
 }
 
-/** Parse numeric suffix from ISS-n (fallback 0 when missing). */
+/** Parse numeric suffix from KEY-n (fallback 0 when missing). */
 function issueIdNumber(id: string): number {
-  const match = /^ISS-(\d+)$/i.exec(id.trim());
-  if (!match) return 0;
-  return Number.parseInt(match[1], 10) || 0;
+  return issueIdNumericSuffix(id);
 }
 
 /** Stable string for labels column (joined, case-insensitive). */
@@ -99,7 +98,11 @@ function compareStrings(a: string, b: string): number {
 export function compareIssuesBySortKey(a: IssueCard, b: IssueCard, key: IssuesSortKey): number {
   switch (key) {
     case 'id':
-      return issueIdNumber(a.id) - issueIdNumber(b.id) || compareStrings(a.id, b.id);
+      return (
+        compareStrings(issueIdKeyPrefix(a.id), issueIdKeyPrefix(b.id)) ||
+        issueIdNumber(a.id) - issueIdNumber(b.id) ||
+        compareStrings(a.id, b.id)
+      );
     case 'type':
       return TYPE_RANK[a.type] - TYPE_RANK[b.type] || compareStrings(a.type, b.type);
     case 'title':
@@ -126,7 +129,11 @@ export function sortIssuesForList(issues: IssueCard[], sort: IssuesListSort): Is
   return [...issues].sort((a, b) => {
     const primary = compareIssuesBySortKey(a, b, sort.key) * directionFactor;
     if (primary !== 0) return primary;
-    return issueIdNumber(a.id) - issueIdNumber(b.id) || compareStrings(a.id, b.id);
+    return (
+      compareStrings(issueIdKeyPrefix(a.id), issueIdKeyPrefix(b.id)) ||
+      issueIdNumber(a.id) - issueIdNumber(b.id) ||
+      compareStrings(a.id, b.id)
+    );
   });
 }
 

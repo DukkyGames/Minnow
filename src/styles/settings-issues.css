@@ -199,3 +199,12 @@
     display: none;
   }
 }
+
+.settings-issues-id-preview {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-field-hint--danger {
+  color: var(--mn-danger);
+}

@@ -19,15 +19,28 @@ import {
   type StatusItem,
   type TaxonomyItem,
 } from '../issues/taxonomy';
-import { getIssuesSnapshot } from '../state/issues-store';
+import {
+  countIssuesInWorkspace,
+  getIssuesSnapshot,
+  getNextIssueIdPreview,
+  getWorkspaceIdConfig,
+  getWorkspaceProjectKey,
+  saveIssuesNow,
+  setWorkspaceProjectKey,
+} from '../state/issues-store';
 import {
   getIssuesTaxonomySync,
   saveIssuesTaxonomyNow,
   setIssuesTaxonomy,
 } from '../state/issues-taxonomy-store';
+import {
+  normalizeProjectKeyInput,
+  PROJECT_KEY_VALIDATION_MESSAGE,
+} from '../issues/project-key';
 import { appendSettingsGroup } from './settings-layout';
-import { appendSettingsOfflineHint } from './settings-controls';
+import { appendSettingsOfflineHint, createSettingsInputRow, createSettingsKvList } from './settings-controls';
 import { createIcon } from './icon';
+import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { setStatus } from './status';
 
 type TaxonomyKind = 'types' | 'statuses' | 'priorities';
@@ -415,7 +428,7 @@ function appendIssuesIntro(mount: HTMLElement): void {
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
       mount,
-      'Issues taxonomy is saved in this browser. Open Minnow to persist under <code>~/.minnow/issues/taxonomy.json</code>.',
+      'Issues settings are saved in this browser. Open Minnow to persist under <code>~/.minnow/issues/</code>.',
     );
     return;
   }
@@ -426,6 +439,126 @@ function appendIssuesIntro(mount: HTMLElement): void {
       'Types, statuses, and priorities for the Issues app. Status roles and board options drive agent workflows and kanban columns.',
     ),
   );
+}
+
+function renderIssueIdsPanel(mount: HTMLElement, onChange: () => void): void {
+  const workspacePath = getWorkspacePath();
+  const savedKey = getWorkspaceIdConfig(workspacePath)?.projectKey ?? '';
+  const body = appendSettingsGroup(
+    mount,
+    'Issue IDs',
+    'New issues in this workspace use your project key (for example MIN-12). Git branches and commit search use the id on each card.',
+    'apps.issues.projectKey',
+    { emphasis: true },
+  );
+
+  const workspaceLabel = getWorkspaceLabel().trim() || workspacePath || '—';
+  body.appendChild(
+    createSettingsKvList(
+      [{ term: 'Workspace', value: el('span', undefined, workspaceLabel) }],
+      { searchKey: 'apps.issues.workspace', className: 'settings-kv settings-kv--row' },
+    ),
+  );
+
+  const errorNode = el('p', 'settings-field-hint settings-field-hint--danger');
+  errorNode.hidden = true;
+
+  const previewNode = el('span', 'settings-issues-id-preview');
+  previewNode.textContent = getNextIssueIdPreview(workspacePath);
+
+  const keyInput = document.createElement('input');
+  keyInput.type = 'text';
+  keyInput.className = 'settings-input settings-input--mono';
+  keyInput.value = savedKey || getWorkspaceProjectKey(workspacePath);
+  keyInput.autocomplete = 'off';
+  keyInput.spellcheck = false;
+  keyInput.setAttribute('aria-describedby', 'settingsIssuesProjectKeyError');
+
+  const { row: keyRow } = createSettingsInputRow('Project key', {
+    input: keyInput,
+    searchKey: 'apps.issues.projectKey.input',
+  });
+  body.appendChild(keyRow);
+
+  body.appendChild(
+    createSettingsKvList(
+      [{ term: 'Next issue', value: previewNode }],
+      { searchKey: 'apps.issues.projectKey.preview', className: 'settings-kv settings-kv--row' },
+    ),
+  );
+
+  errorNode.id = 'settingsIssuesProjectKeyError';
+  body.appendChild(errorNode);
+
+  body.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Applies to this workspace only. Existing issue ids are not changed.',
+    ),
+  );
+
+  const saveBtn = el('button', 'settings-inline-btn', 'Save project key');
+  saveBtn.type = 'button';
+
+  const refreshPreviewFromStore = (): void => {
+    previewNode.textContent = getNextIssueIdPreview(workspacePath);
+    keyInput.value = getWorkspaceIdConfig(workspacePath)?.projectKey ?? getWorkspaceProjectKey(workspacePath);
+  };
+
+  keyInput.addEventListener('input', () => {
+    const normalized = normalizeProjectKeyInput(keyInput.value);
+    keyInput.value = normalized;
+    errorNode.hidden = true;
+    const draft = normalized;
+    if (draft.length >= 2) {
+      const basePreview = getNextIssueIdPreview(workspacePath);
+      const suffix = basePreview.includes('-') ? basePreview.split('-').slice(1).join('-') : '1';
+      previewNode.textContent = `${draft}-${suffix}`;
+    } else {
+      previewNode.textContent = getNextIssueIdPreview(workspacePath);
+    }
+  });
+
+  saveBtn.addEventListener('click', () => {
+    void (async () => {
+      const draft = normalizeProjectKeyInput(keyInput.value);
+      const previous = getWorkspaceIdConfig(workspacePath)?.projectKey;
+      if (draft.length < 2 || draft.length > 10) {
+        errorNode.textContent = PROJECT_KEY_VALIDATION_MESSAGE;
+        errorNode.hidden = false;
+        return;
+      }
+      if (previous && draft !== previous && countIssuesInWorkspace(workspacePath) > 0) {
+        const ok = await appConfirm(
+          `New issues will use ${draft}-n. Existing ids stay the same.`,
+          { confirmLabel: 'Save', title: 'Change project key?' },
+        );
+        if (!ok) return;
+      }
+      const result = setWorkspaceProjectKey(workspacePath, draft);
+      if (!result.ok) {
+        errorNode.textContent = result.error;
+        errorNode.hidden = false;
+        return;
+      }
+      try {
+        await saveIssuesNow();
+        const mode = await detectConfigServer();
+        setStatus(
+          'ok',
+          mode === 'server'
+            ? 'Issue ID settings saved'
+            : 'Saved locally — open Minnow to persist to ~/.minnow',
+        );
+        refreshPreviewFromStore();
+        onChange();
+      } catch {
+        setStatus('err', 'Could not save issue ID settings');
+      }
+    })();
+  });
+  body.appendChild(saveBtn);
 }
 
 function renderIssuesTaxonomyPanels(content: HTMLElement, onChange: () => void): void {
@@ -492,6 +625,7 @@ export function renderIssuesSettingsSection(mount: HTMLElement): void {
     shell.appendChild(content);
 
     appendIssuesIntro(content);
+    renderIssueIdsPanel(content, refresh);
     renderIssuesTaxonomyPanels(content, refresh);
   };
 

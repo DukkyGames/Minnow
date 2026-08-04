@@ -2,7 +2,13 @@
  * Editor selection → IssueCodeRef via context menu "Link to issue…" (MIN-261).
  */
 
-import { appendIssueLinks, collectIssues, findIssueById } from '../state/issues-store';
+import {
+  appendIssueLinks,
+  collectIssues,
+  findIssueById,
+  getNextIssueIdPreview,
+  getWorkspaceProjectKey,
+} from '../state/issues-store';
 import { getWorkspacePath } from '../state/workspace';
 import type { IssueCodeRef } from '../types';
 import { appPrompt } from './app-dialog';
@@ -26,12 +32,13 @@ export async function linkSelectionToIssue(input: {
     hideDone: true,
   }).slice(0, 12);
 
+  const projectKey = getWorkspaceProjectKey(getWorkspacePath());
   const hint =
     openIssues.length > 0
       ? `Recent: ${openIssues.map((i) => `${i.id} ${i.title.slice(0, 28)}`).join(' | ')}`
-      : 'Enter an issue id such as ISS-1';
+      : `Enter an issue id such as ${getNextIssueIdPreview()}`;
 
-  const raw = await appPrompt(`Link selection to issue\n${hint}`, openIssues[0]?.id ?? 'ISS-');
+  const raw = await appPrompt(`Link selection to issue\n${hint}`, openIssues[0]?.id ?? `${projectKey}-`);
   if (raw == null) return false;
   const issueId = raw.trim();
   if (!issueId) return false;
