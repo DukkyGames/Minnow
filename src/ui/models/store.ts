@@ -35,10 +35,6 @@ import {
 } from '../../models/api-client';
 import { fetchHardware } from '../../models/hardware-client';
 import { activeServeFor, buildLibrary, type LibraryModel } from '../../models/library';
-import {
-  isLibraryModelProviderId,
-  LIBRARY_MODEL_PROVIDER_ID,
-} from '../../models/model-select-library';
 import { describeLoadPhase, parseLoadProgress } from '../../models/serve-log';
 import type { HardwareSnapshot } from '../../models/types';
 
