@@ -321,7 +321,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "ce253c42bc0658b28348bfee3710724e8afa525a07251d4b0ee4b926072f547d"
+      "hash": "2bbad2830d3a272533fe90dd6af8ad6557abe38a216afee44be20cfe6a22111a"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",
@@ -358,7 +358,7 @@
         "Related"
       ],
       "section": "Orchestrate",
-      "hash": "25c42a58ef556e6d3a477a5ea12a61f1a333579a32e03f3abe37d806afa8b981"
+      "hash": "668c0e4458a7537fbe1006ddf09f26a3850239c8c7882b202a8c741d7ec14314"
     },
     {
       "path": "documentation/manual/orchestrate/agents.md",
