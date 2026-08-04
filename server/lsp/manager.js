@@ -39,7 +39,8 @@ const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
 const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = 15_000;
 /** Default timeout for indexing/search LSP requests (workspace/symbol, documentSymbol). */
 const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 6000;
-const LSP_COMPLETION_TIMEOUT_MS = 1500;
+/** Cold CI runners can be slow to answer the first completion request. */
+const LSP_COMPLETION_TIMEOUT_MS = 4000;
 const LSP_HOVER_TIMEOUT_MS = 1000;
 const LSP_SIGNATURE_TIMEOUT_MS = 1000;
 const LSP_DEFINITION_TIMEOUT_MS = 3000;
