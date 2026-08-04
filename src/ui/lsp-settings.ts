@@ -361,19 +361,19 @@ function createLspSettingsRow(
 
 
 
+  let installBtn: HTMLButtonElement | null = null;
+  let removeBtn: HTMLButtonElement | null = null;
+
   if (bundle) {
-    const installLocked = bundle.prebundled === true && bundle.installed;
-    const { cell: installCell, input: installInput } = createLspMiniToggle('Installed', {
-      checked: bundle.installed,
-      disabled: installLocked,
-      ariaLabel: installLocked
-        ? `${bundle.label} ships with Minnow`
-        : bundle.installed
-          ? `Uninstall ${bundle.label}`
-          : `Install ${bundle.label}`,
-    });
-
-
+    if (!bundle.installed) {
+      installBtn = el('button', 'settings-action-btn settings-lsp-install-btn', 'Install');
+      installBtn.type = 'button';
+      installBtn.setAttribute('aria-label', `Install ${bundle.label}`);
+    } else if (!bundle.prebundled) {
+      removeBtn = el('button', 'settings-inline-btn settings-lsp-remove', 'Remove');
+      removeBtn.type = 'button';
+      removeBtn.setAttribute('aria-label', `Remove ${bundle.label}`);
+    }
 
     bundleProgress = el('div', 'settings-lsp-bundle-progress');
     bundleProgress.hidden = true;
@@ -383,18 +383,14 @@ function createLspSettingsRow(
     const progressText = el('span', 'settings-lsp-bundle-progress-text');
     bundleProgress.append(progressBar, progressText);
 
-
-
-    bindBundleInstallToggle(
-      installInput,
+    bindBundleInstallActions(
+      installBtn,
+      removeBtn,
       bundle,
       bundleProgress,
       progressFill,
       progressText,
-      onChanged,
     );
-
-
 
     const canEnable = bundle.installed;
     const enableToggle = createLspMiniToggle('Enabled', {
@@ -404,7 +400,7 @@ function createLspSettingsRow(
       onChange: (enabled) => onToggle(server.id, enabled),
     });
     enableInput = enableToggle.input;
-    toggles.append(installCell, enableToggle.cell);
+    toggles.append(enableToggle.cell);
   } else {
     const enableToggle = createLspMiniToggle('Enabled', {
       checked: !server.disabled,
@@ -434,6 +430,12 @@ function createLspSettingsRow(
 
 
   const headMeta = el('div', 'settings-lsp-row-head-meta');
+  if (bundle && (installBtn || removeBtn)) {
+    const actions = el('div', 'settings-lsp-row-actions');
+    if (installBtn) actions.append(installBtn);
+    if (removeBtn) actions.append(removeBtn);
+    headMeta.append(actions);
+  }
   if (bundle?.installed) {
     const status = el(
       'span',
@@ -467,7 +469,7 @@ function createLspSettingsRow(
     }
     if (bundle.prebundled) {
       headMeta.append(el('span', 'settings-lsp-badge settings-lsp-badge--builtin', 'Bundled'));
-    } else if (bundle.kind === 'binary') {
+    } else if (bundle.kind === 'binary' || bundle.kind === 'go') {
       headMeta.append(el('span', 'settings-lsp-bundle-tag settings-lsp-bundle-tag--muted', 'Binary'));
     }
   } else if (server.builtin) {
@@ -552,7 +554,6 @@ function appendCategorizedServerCatalog(
   handlers: {
     onToggle: (id: string, enabled: boolean) => void;
     onDelete: (id: string) => void;
-    onChanged: () => void;
   },
 ): void {
   const serverById = new Map(servers.map((s) => [s.id, s]));
@@ -570,7 +571,7 @@ function appendCategorizedServerCatalog(
         if (!server) continue;
         consumed.add(lspId);
         rows.push(
-          createLspSettingsRow(server, bundle, handlers.onToggle, handlers.onDelete, handlers.onChanged),
+          createLspSettingsRow(server, bundle, handlers.onToggle, handlers.onDelete),
         );
       }
       appendServerCategory(mount, category.label, rows);
@@ -586,14 +587,14 @@ function appendCategorizedServerCatalog(
 
 
   const coreRows = core.map((server) =>
-    createLspSettingsRow(server, null, handlers.onToggle, handlers.onDelete, handlers.onChanged),
+    createLspSettingsRow(server, null, handlers.onToggle, handlers.onDelete),
   );
   appendServerCategory(mount, 'Core', coreRows);
 
 
 
   const customRows = custom.map((server) =>
-    createLspSettingsRow(server, null, handlers.onToggle, handlers.onDelete, handlers.onChanged),
+    createLspSettingsRow(server, null, handlers.onToggle, handlers.onDelete),
   );
   appendServerCategory(mount, 'Custom', customRows);
 
@@ -750,6 +751,7 @@ function appendCustomServerPanel(mount: HTMLElement, onAdded: () => void): void 
 
 /** Render the full Language servers settings section into #settingsLspBody. */
 export async function renderLspSection(): Promise<void> {
+  if (lspBundleUiOperations > 0) return;
   const mount = document.getElementById('settingsLspBody');
   if (!mount) return;
   mount.replaceChildren();
@@ -867,7 +869,7 @@ export async function renderLspSection(): Promise<void> {
   const catalog = appendSettingsGroup(
     content,
     'Language servers',
-    'Installed toggles download optional binaries to ~/.minnow/lsp-servers. Enabled toggles start analyzers when Minnow is running locally.',
+    'Install downloads optional binaries to ~/.minnow/lsp-servers. Enabled starts analyzers when Minnow is running locally.',
     'integrations.lsp',
     { emphasis: true },
   );
@@ -881,7 +883,6 @@ export async function renderLspSection(): Promise<void> {
     onDelete: (id) => {
       void removeCustomServer(id);
     },
-    onChanged: refresh,
   });
 
 

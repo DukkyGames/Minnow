@@ -73,6 +73,53 @@ describe('bundle-installer', () => {
     assert.equal(status.installed, false);
   });
 
+  it('reports gopls as go bundle (not GitHub binary)', async () => {
+    const status = await getBundleInstallStatus('gopls');
+    assert.equal(status.found, true);
+    assert.equal(status.kind, 'go');
+    assert.equal(status.installed, false);
+  });
+
+  it('installs go bundle with mocked go install', async () => {
+    setLspBundleSpawnForTests((command, args, opts) => {
+      assert.equal(command, 'go');
+      assert.deepEqual(args.slice(0, 2), ['install', 'golang.org/x/tools/gopls@v0.23.0']);
+      assert.ok(opts?.env?.GOBIN);
+      const child = {
+        stderr: { on: () => {} },
+        stdout: { on: () => {} },
+        on(event, cb) {
+          if (event === 'spawn') queueMicrotask(() => cb());
+          if (event === 'close') {
+            queueMicrotask(async () => {
+              const gobin = opts.env.GOBIN;
+              const name = process.platform === 'win32' ? 'gopls.exe' : 'gopls';
+              await fsp.mkdir(gobin, { recursive: true });
+              await fsp.writeFile(path.join(gobin, name), 'mock-gopls', 'utf8');
+              cb(0);
+            });
+          }
+        },
+      };
+      return child;
+    });
+
+    const first = await installBundle('gopls');
+    assert.equal(first.ok, true);
+    assert.equal(first.alreadyInstalled, false);
+    assert.equal(first.version, 'v0.23.0');
+
+    const status = await getBundleInstallStatus('gopls');
+    assert.equal(status.installed, true);
+
+    const second = await installBundle('gopls');
+    assert.equal(second.ok, true);
+    assert.equal(second.alreadyInstalled, true);
+
+    await uninstallBundle('gopls');
+    resetLspBundleSpawnOverride();
+  });
+
   it('enables shell for npm spawn on Windows', () => {
     if (process.platform !== 'win32') return;
     assert.equal(npmSpawnOptions().shell, true);
