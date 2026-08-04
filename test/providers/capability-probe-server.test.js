@@ -413,3 +413,89 @@ describe('probe-capabilities route', () => {
     }
   });
 });
+
+describe('openai-v1 capabilities/probe route', () => {
+  it('writes capabilities.json with tool probe results', async () => {
+    const openaiMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            data: [
+              { id: 'model-z', object: 'model' },
+              { id: 'model-a', object: 'model' },
+            ],
+          }),
+        );
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let body = '';
+        req.on('data', (c) => {
+          body += c;
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          const hasTools = Array.isArray(parsed.tools) && parsed.tools.length > 0;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              choices: [
+                {
+                  message: hasTools
+                    ? {
+                        tool_calls: [
+                          {
+                            id: 'c1',
+                            type: 'function',
+                            function: { name: 'probe_noop', arguments: '{}' },
+                          },
+                        ],
+                      }
+                    : { content: 'pong' },
+                  finish_reason: hasTools ? 'tool_calls' : 'stop',
+                },
+              ],
+            }),
+          );
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => openaiMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (openaiMock.address()).port;
+    const openaiBaseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-openai',
+        label: 'Probe OpenAI',
+        baseUrl: openaiBaseUrl,
+        apiKind: 'openai-v1',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-openai/capabilities/probe',
+        { modelIds: ['model-a'] },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(res.json.schemaVersion, 1);
+      assert.equal(res.json.models['model-a'].tools, true);
+      assert.equal(res.json.models['model-a'].streaming, true);
+
+      const get = await httpRequest(
+        baseUrl,
+        'GET',
+        '/api/providers/probe-openai/capabilities',
+      );
+      assert.equal(get.status, 200);
+      assert.equal(get.json.models['model-a'].tools, true);
+    } finally {
+      await new Promise((resolve) => openaiMock.close(resolve));
+    }
+  });
+});
