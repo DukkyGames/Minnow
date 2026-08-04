@@ -355,7 +355,8 @@ export function acceptCompletionGhost(view: EditorView): boolean {
     filePath,
     config,
   );
-  const afterInsertEnd = stateBefore.update({ changes }).state.doc.length;
+  // Reindent the inserted text only — never from the anchor to end of document.
+  const insertedEnd = insertPos + ghost.text.length;
   view.dispatch({
     changes,
     effects: setSuggestion.of(null),
@@ -363,7 +364,7 @@ export function acceptCompletionGhost(view: EditorView): boolean {
   dispatchReindentAfterAccept(
     view,
     insertPos,
-    afterInsertEnd,
+    insertedEnd,
     filePath,
     config,
     ghost.text,
@@ -386,7 +387,7 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
   const filePath = ctx?.filePath ?? '';
   const stateBefore = view.state;
   const changes = completionInsertChangeSpecs(view.state, insertPos, chunk, filePath, config);
-  const afterInsertEnd = stateBefore.update({ changes }).state.doc.length;
+  const insertedEnd = insertPos + chunk.length;
   view.dispatch({
     changes,
     effects: setSuggestion.of(
@@ -395,7 +396,7 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
             ...ghost,
             consumed: ghost.consumed + chunk,
             text: remainder,
-            pos: afterInsertEnd,
+            pos: insertedEnd,
           }
         : null,
     ),
@@ -403,7 +404,7 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
   dispatchReindentAfterAccept(
     view,
     insertPos,
-    afterInsertEnd,
+    insertedEnd,
     filePath,
     config,
     chunk,
@@ -457,8 +458,6 @@ export function acceptIntentProposal(view: EditorView): boolean {
     intentConfig.contextWindow,
   );
   const changes = intentReplaceChangeSpecs(view.state, from, to, text, filePath, config);
-  const stateBefore = view.state;
-  const afterReplaceEnd = stateBefore.update({ changes }).state.doc.length;
   view.dispatch({
     annotations: intentSystemTransaction.of(true),
     changes,
@@ -474,8 +473,12 @@ export function acceptIntentProposal(view: EditorView): boolean {
     ],
     userEvent: 'input.complete',
   });
-  dispatchReindentAfterAccept(view, from, afterReplaceEnd, filePath, config, text);
-  const mappedEnd = view.state.doc.length;
+  // Reindent only the block just written, then land the cursor at its end —
+  // measuring the reindent's own growth, which all falls inside that block.
+  const replacedEnd = from + text.length;
+  const lengthAfterReplace = view.state.doc.length;
+  dispatchReindentAfterAccept(view, from, replacedEnd, filePath, config, text);
+  const mappedEnd = replacedEnd + (view.state.doc.length - lengthAfterReplace);
   view.dispatch({ selection: EditorSelection.cursor(mappedEnd) });
   return true;
 }

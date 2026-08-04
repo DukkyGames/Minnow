@@ -22,6 +22,15 @@ const MOCK_PROVIDERS = [
     hasApiKey: false,
     hasBearer: false,
   },
+  {
+    id: 'llama-cpp-local',
+    label: 'llama.cpp (local)',
+    baseUrl: 'http://127.0.0.1:8085',
+    apiKind: 'openai-v1',
+    enabled: true,
+    hasApiKey: false,
+    hasBearer: false,
+  },
 ];
 
 const CHAT_BASE = {
@@ -142,5 +151,21 @@ describe('resolveWorkAgentBinding', () => {
     assert.equal(binding.agentId, 'default');
     assert.equal(binding.modelId, 'local-model');
     assert.equal(binding.providerId, 'lm-studio-local');
+  });
+
+  test('minnow-library chat binding resolves via llama-cpp-local registry row', async () => {
+    const chat = {
+      ...CHAT_BASE,
+      providerId: 'minnow-library',
+      modelId: 'gguf:org/repo:weights.gguf',
+    };
+    const binding = await resolveWorkAgentBinding(
+      null,
+      chat,
+      { providerId: 'lm-studio-local', modelId: 'fallback-model' },
+      { providers: MOCK_PROVIDERS },
+    );
+    assert.equal(binding.providerId, 'minnow-library');
+    assert.equal(binding.modelId, 'gguf:org/repo:weights.gguf');
   });
 });

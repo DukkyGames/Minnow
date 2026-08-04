@@ -79,6 +79,20 @@ function upstreamProviderForLibraryModel(model: LibraryModel | undefined): strin
   return LLAMA_CPP_LOCAL_PROVIDER_ID;
 }
 
+/**
+ * Map synthetic My Models provider id to the ~/.minnow provider used for upstream HTTP.
+ */
+export function resolveUpstreamProviderId(
+  providerId: string | undefined,
+  modelId: string | undefined,
+): string {
+  const pid = providerId?.trim() ?? '';
+  if (isLibraryModelBinding(pid, modelId)) {
+    return LLAMA_CPP_LOCAL_PROVIDER_ID;
+  }
+  return pid;
+}
+
 export function encodeLibraryModelSelectKey(libraryId: string): string {
   return encodeModelSelectKey(LIBRARY_MODEL_PROVIDER_ID, libraryId.trim());
 }

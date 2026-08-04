@@ -39,6 +39,14 @@ describe('model-select-library', () => {
     assert.equal(resolveUpstreamProviderId('openai', 'gpt-4o'), 'openai');
   });
 
+  test('resolveUpstreamProviderId maps minnow-library to llama-cpp-local', () => {
+    assert.equal(
+      resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf'),
+      LLAMA_CPP_LOCAL_PROVIDER_ID,
+    );
+    assert.equal(resolveUpstreamProviderId('openai', 'gpt-4o'), 'openai');
+  });
+
   test('dedupLlamaCppModelsAgainstLibrary removes duplicate served labels', () => {
     const library: LibraryModel[] = [
       {

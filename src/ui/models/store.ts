@@ -8,6 +8,10 @@
 
 import { selectProviderModel } from '../../api/models';
 import {
+  isLibraryModelProviderId,
+  LIBRARY_MODEL_PROVIDER_ID,
+} from '../../models/model-select-library';
+import {
   getLibrarySamplerForId,
   saveLibraryInferenceSampler,
 } from '../../config/library-inference-meta';
