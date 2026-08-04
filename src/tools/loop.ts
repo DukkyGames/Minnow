@@ -891,7 +891,7 @@ async function streamCompletionTurn(
       t0,
       tFirst,
       partialText: fullText,
-      partialThinking: thoughtController?.getSegments().join('\n\n') ?? '',
+      partialThinking: thoughtController?.getJoinedDisplayText() ?? '',
     });
   }
 
@@ -1088,7 +1088,7 @@ function syncTurnContextUsage(
   pendingToolCallsJson?: string,
 ): void {
   const partial = livePartialText.trim();
-  const thinkingText = thoughtController?.getSegments().join('\n\n').trim() ?? '';
+  const thinkingText = thoughtController?.getJoinedDisplayText().trim() ?? '';
   const hasOverlay = Boolean(partial || thinkingText || pendingToolCallsJson);
   setContextInFlightOverlay(
     hasOverlay
@@ -1100,7 +1100,7 @@ function syncTurnContextUsage(
         }
       : null,
   );
-  scheduleContextUsageRefresh();
+  scheduleContextUsageRefresh({ duringStream: true });
 }
 
 interface FinalizedThinkingRound {

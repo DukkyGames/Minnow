@@ -42,7 +42,7 @@ import {
   getEditorIntentModeConfigSync,
   loadEditorIntentModeConfig,
 } from '../config/editor-intent-mode';
-import { EDITOR_AI_NO_MODEL_MESSAGE } from './editor-ai-completion-client';
+import { EDITOR_AI_NO_MODEL_MESSAGE } from './editor-ai-binding';
 import { loadEditorSettings } from '../config/editor-settings';
 import { minnowEditorExtensions } from './codemirror-theme';
 import { editorCoreExtensions } from './editor-core-extensions';

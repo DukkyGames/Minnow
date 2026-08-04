@@ -605,10 +605,10 @@ export interface RankModelsOptions {
   fitOnly?: boolean;
 }
 
-export function rankModels(
+export async function rankModels(
   system: HardwareSnapshot,
   options: RankModelsOptions = {},
-): ModelFitResult[] {
+): Promise<ModelFitResult[]> {
   const {
     useCase = null,
     limit = 50,
@@ -619,7 +619,7 @@ export function rankModels(
     fitOnly = false,
   } = options;
 
-  const models = getModels();
+  const models = await getModels();
   const results: ModelFitResult[] = [];
 
   const filterNative =

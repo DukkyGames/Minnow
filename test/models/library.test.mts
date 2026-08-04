@@ -3,7 +3,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { describe, test, before } from 'node:test';
 import type { CachedModelRow, ServeRecord } from '../../src/models/api-client.ts';
 import {
   activeServeFor,
@@ -12,6 +12,7 @@ import {
   inferArchFromName,
   inferParamsFromName,
   loadableLibrary,
+  type LibraryModel,
 } from '../../src/models/library.ts';
 
 function ggufRow(overrides: Partial<CachedModelRow> = {}): CachedModelRow {
@@ -44,8 +45,8 @@ function ggufRow(overrides: Partial<CachedModelRow> = {}): CachedModelRow {
 }
 
 describe('buildLibrary', () => {
-  test('emits one row per model GGUF and skips projectors', () => {
-    const rows = buildLibrary([ggufRow()]);
+  test('emits one row per model GGUF and skips projectors', async () => {
+    const rows = await buildLibrary([ggufRow()]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].format, 'GGUF');
     assert.equal(rows[0].quant, 'Q4_K_M');
@@ -56,14 +57,14 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].servable, true);
   });
 
-  test('lists every quant in a repo separately', () => {
+  test('lists every quant in a repo separately', async () => {
     const row = ggufRow({
       gguf_files: [
         { name: 'a-Q4_K_M.gguf', rel_path: 'a-Q4_K_M.gguf', size_bytes: 1, role: 'model', quant: 'Q4_K_M' },
         { name: 'a-Q8_0.gguf', rel_path: 'a-Q8_0.gguf', size_bytes: 2, role: 'model', quant: 'Q8_0' },
       ],
     });
-    const rows = buildLibrary([row]);
+    const rows = await buildLibrary([row]);
     assert.equal(rows.length, 2);
     assert.deepEqual(
       rows.map((r) => r.quant).sort(),
@@ -72,16 +73,16 @@ describe('buildLibrary', () => {
     assert.equal(new Set(rows.map((r) => r.id)).size, 2, 'row ids must be unique');
   });
 
-  test('joins a direct path for downloaded and local-dir sources', () => {
-    const rows = buildLibrary([ggufRow()]);
+  test('joins a direct path for downloaded and local-dir sources', async () => {
+    const rows = await buildLibrary([ggufRow()]);
     assert.equal(
       rows[0].path,
       '/home/u/.minnow/models/artifacts/qwen--Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf',
     );
   });
 
-  test('reconstructs the hub cache layout for HF-cached weights', () => {
-    const rows = buildLibrary([
+  test('reconstructs the hub cache layout for HF-cached weights', async () => {
+    const rows = await buildLibrary([
       ggufRow({
         status: 'cached',
         path: '/home/u/.cache/huggingface/hub',
@@ -103,8 +104,8 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].source, 'hf-cache');
   });
 
-  test('keeps Windows paths on one separator', () => {
-    const rows = buildLibrary([
+  test('keeps Windows paths on one separator', async () => {
+    const rows = await buildLibrary([
       ggufRow({
         status: 'cached',
         path: 'C:\\Users\\u\\.cache\\huggingface\\hub',
@@ -120,8 +121,8 @@ describe('buildLibrary', () => {
     assert.ok(!rows[0].path!.includes('/'), 'no mixed separators');
   });
 
-  test('keeps non-GGUF repos visible but not servable', () => {
-    const rows = buildLibrary([
+  test('keeps non-GGUF repos visible but not servable', async () => {
+    const rows = await buildLibrary([
       {
         repo_id: 'meta-llama/Llama-3-8B',
         size_bytes: 16_000_000_000,
@@ -137,8 +138,8 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].path, null);
   });
 
-  test('does not claim a quant for a repo with no weights file on disk', () => {
-    const rows = buildLibrary([
+  test('does not claim a quant for a repo with no weights file on disk', async () => {
+    const rows = await buildLibrary([
       { ...ggufRow(), is_gguf: false, gguf_files: [] },
     ]);
     assert.equal(rows.length, 1);
@@ -146,8 +147,8 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].servable, false);
   });
 
-  test('Ollama tags are not listed as loadable My Models rows', () => {
-    const rows = buildLibrary([
+  test('Ollama tags are not listed as loadable My Models rows', async () => {
+    const rows = await buildLibrary([
       {
         repo_id: 'llama3:8b',
         size_bytes: 4_700_000_000,
@@ -164,13 +165,13 @@ describe('buildLibrary', () => {
     assert.equal(loadableLibrary(rows).length, 0);
   });
 
-  test('flags incomplete downloads', () => {
-    const rows = buildLibrary([ggufRow({ has_incomplete: true })]);
+  test('flags incomplete downloads', async () => {
+    const rows = await buildLibrary([ggufRow({ has_incomplete: true })]);
     assert.equal(rows[0].incomplete, true);
   });
 
-  test('resolves maker from the weight name when the repo publisher is a quantizer', () => {
-    const rows = buildLibrary([
+  test('resolves maker from the weight name when the repo publisher is a quantizer', async () => {
+    const rows = await buildLibrary([
       ggufRow({
         repo_id: 'lmstudio-community/Qwen3.5-9B-GGUF',
         path: '/models/lms',
@@ -192,8 +193,8 @@ describe('buildLibrary', () => {
 });
 
 describe('loadableLibrary', () => {
-  test('drops non-servable scan rows', () => {
-    const all = buildLibrary([
+  test('drops non-servable scan rows', async () => {
+    const all = await buildLibrary([
       ggufRow(),
       {
         repo_id: 'meta-llama/Llama-3-8B',
@@ -211,18 +212,21 @@ describe('loadableLibrary', () => {
 });
 
 describe('filterLibrary', () => {
-  const models = buildLibrary([
-    ggufRow(),
-    ggufRow({
-      repo_id: 'google/gemma-3-27b-GGUF',
-      path: '/models/gemma',
-      is_local_dir: true,
-      status: 'local',
-      gguf_files: [
-        { name: 'gemma-3-27b-Q8_0.gguf', rel_path: 'gemma-3-27b-Q8_0.gguf', size_bytes: 29e9, role: 'model', quant: 'Q8_0' },
-      ],
-    }),
-  ]);
+  let models: LibraryModel[];
+  before(async () => {
+    models = await buildLibrary([
+      ggufRow(),
+      ggufRow({
+        repo_id: 'google/gemma-3-27b-GGUF',
+        path: '/models/gemma',
+        is_local_dir: true,
+        status: 'local',
+        gguf_files: [
+          { name: 'gemma-3-27b-Q8_0.gguf', rel_path: 'gemma-3-27b-Q8_0.gguf', size_bytes: 29e9, role: 'model', quant: 'Q8_0' },
+        ],
+      }),
+    ]);
+  });
 
   test('matches name, repo, quant, and arch', () => {
     assert.equal(filterLibrary(models, { search: 'gemma' }).length, 1);
@@ -249,7 +253,10 @@ describe('filterLibrary', () => {
 });
 
 describe('activeServeFor', () => {
-  const model = buildLibrary([ggufRow()])[0];
+  let model: LibraryModel;
+  before(async () => {
+    model = (await buildLibrary([ggufRow()]))[0];
+  });
 
   function serve(overrides: Partial<ServeRecord> = {}): ServeRecord {
     return {

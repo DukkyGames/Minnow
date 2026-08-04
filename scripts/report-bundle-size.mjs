@@ -38,6 +38,7 @@ const report = {
       }
     : null,
   largestLazyJs: analysis.largestLazyJs,
+  eagerJs: analysis.eagerJs,
   totals: analysis.totals,
   totalAssetsKb: analysis.totalAssetsKb,
   dataPackJsChunks: analysis.dataPackJsChunks,
@@ -70,6 +71,12 @@ if (asJson) {
       analysis.largestLazyJs.kb <= budgets.bundle.largestLazyJsMaxKb ? 'OK' : 'OVER';
     console.log(
       `Largest lazy JS: ${analysis.largestLazyJs.name} — ${formatKb(analysis.largestLazyJs.bytes)} [${ok} ≤ ${budgets.bundle.largestLazyJsMaxKb} KB]`,
+    );
+  }
+  if (analysis.eagerJs && typeof budgets.bundle.eagerJsMaxKb === 'number') {
+    const ok = analysis.eagerJs.kb <= budgets.bundle.eagerJsMaxKb ? 'OK' : 'OVER';
+    console.log(
+      `Eager JS (entry + modulepreload): ${analysis.eagerJs.name} — ${formatKb(analysis.eagerJs.bytes)} [${ok} ≤ ${budgets.bundle.eagerJsMaxKb} KB]`,
     );
   }
   const totalOk = analysis.totalAssetsKb <= budgets.bundle.totalAssetsMaxKb ? 'OK' : 'OVER';

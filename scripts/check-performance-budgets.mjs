@@ -26,6 +26,7 @@ const metrics = {
   entryJsKb: analysis.entryJs?.kb ?? 0,
   entryCssKb: analysis.entryCss?.kb ?? 0,
   largestLazyJsKb: analysis.largestLazyJs?.kb ?? 0,
+  eagerJsKb: analysis.eagerJs?.kb ?? 0,
   totalAssetsKb: analysis.totalAssetsKb,
 };
 
@@ -45,6 +46,7 @@ for (const [label, key, row] of [
   ['Entry JS', 'entryJsKb', analysis.entryJs],
   ['Entry CSS', 'entryCssKb', analysis.entryCss],
   ['Largest lazy JS', 'largestLazyJsKb', analysis.largestLazyJs],
+  ['Eager JS (entry + modulepreload)', 'eagerJsKb', analysis.eagerJs],
   [
     'Total assets',
     'totalAssetsKb',
@@ -75,9 +77,11 @@ for (const breach of breaches) {
         ? 'entryCssKb'
         : breach.metric === 'largestLazyJs'
           ? 'largestLazyJsKb'
-          : breach.metric === 'totalAssets'
-            ? 'totalAssetsKb'
-            : null,
+          : breach.metric === 'eagerJs'
+            ? 'eagerJsKb'
+            : breach.metric === 'totalAssets'
+              ? 'totalAssetsKb'
+              : null,
     breach.actualKb,
     baseline,
   );

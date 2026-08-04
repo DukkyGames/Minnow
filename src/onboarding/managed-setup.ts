@@ -134,9 +134,9 @@ async function ensureModelDownloaded(
   onProgress: (progress: ManagedSetupProgress) => void,
 ): Promise<void> {
   const cached = await fetchCachedModels();
-  if (artifactPathForFitRow(row, cached)) return;
+  if (await artifactPathForFitRow(row, cached)) return;
 
-  const entry = getModels().find((m) => m.name === row.name);
+  const entry = (await getModels()).find((m) => m.name === row.name);
   const repoId = entry ? resolveDownloadRepo(entry) : null;
   if (!repoId) {
     throw new Error(`No download source found for ${row.name}.`);
@@ -156,7 +156,7 @@ async function startRecommendedServe(
   onProgress({ phase: 'serving', percent: 85, message: 'Starting model server…' });
 
   const cached = await fetchCachedModels();
-  const modelPath = artifactPathForFitRow(row, cached);
+  const modelPath = await artifactPathForFitRow(row, cached);
   if (!modelPath) {
     throw new Error('GGUF file not found after download.');
   }
@@ -210,7 +210,7 @@ export async function runManagedModelSetup(
   try {
     onProgress({ phase: 'probing', percent: 2, message: 'Scanning hardware…' });
     const hw = await fetchHardware({ fresh: true });
-    const row = options.model ?? pickRecommendedModel(hw);
+    const row = options.model ?? (await pickRecommendedModel(hw));
     if (!row) {
       throw new Error('No catalog model fits this hardware. Try a local or cloud provider instead.');
     }

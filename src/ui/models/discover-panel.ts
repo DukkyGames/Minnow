@@ -20,6 +20,7 @@ import {
   type ModelDownloadFormat,
 } from '../../models/api-client';
 import { getModels } from '../../models/catalog';
+import type { CatalogModel } from '../../models/types';
 import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
 import {
   defaultGpuGroupIndex,
@@ -156,6 +157,8 @@ let hubDebounce: number | null = null;
 let hubAbort: AbortController | null = null;
 /** Guards against a slow earlier request overwriting a newer one. */
 let hubRequestSeq = 0;
+/** Bundled catalog rows — loaded on first Discover catalog paint (keeps JSON off boot). */
+let bundledCatalog: CatalogModel[] | null = null;
 
 function mount(): HTMLElement | null {
   return document.getElementById('modelsRecommendBody');
@@ -172,7 +175,7 @@ function supportsMlx(hw: HardwareSnapshot | null): boolean {
 
 function useCaseOptions(): Array<{ value: string; label: string }> {
   const cases = new Set<string>();
-  for (const model of getModels()) cases.add(inferUseCase(model));
+  for (const model of bundledCatalog ?? []) cases.add(inferUseCase(model));
   return [
     { value: '', label: 'Any use case' },
     ...[...cases].sort().map((value) => ({ value, label: USE_CASE_LABELS[value] ?? value })),
@@ -523,7 +526,7 @@ function onDiskBadge(): HTMLElement {
 }
 
 function catalogRow(row: ModelFitResult, onDisk: Set<string>): HTMLElement {
-  const entry = getModels().find((m) => m.name === row.name) ?? null;
+  const entry = (bundledCatalog ?? []).find((m) => m.name === row.name) ?? null;
   const repoId = entry ? resolveDownloadRepo(entry) : row.name.includes('/') ? row.name : null;
   const tail = repoId?.split('/').pop() ?? '';
   const downloaded = Boolean(repoId && (onDisk.has(repoId) || (tail && onDisk.has(tail))));
@@ -815,45 +818,59 @@ export function render(): void {
   } else {
     hubListHost = null;
     hubStatusNode = null;
-    const budgeted = hardwareForGpuBudget(hw, gpuGroupIndex);
-    const rows = rankModels(budgeted, {
-      limit: 60,
-      fitOnly: filters.fitOnly,
-      search: filters.search || null,
-      useCase: filters.useCase || null,
-      quant: filters.quant || null,
-      targetContext: filters.targetContext,
-      sort: filters.sort,
-    });
+    const catalogHost = el('div', 'models-catalog-results');
+    catalogHost.appendChild(skeletonRows(5));
+    fragment.appendChild(catalogHost);
 
-    if (!rows.length) {
-      fragment.appendChild(
-        emptyState({
-          glyph: 'search',
-          title: 'Nothing matches',
-          body: filters.fitOnly
-            ? 'No catalog model fits this budget with these filters. Turn off "Only what fits" to see the rest.'
-            : 'No catalog model matches these filters.',
-          action: filters.fitOnly
-            ? {
-                label: 'Show models that do not fit',
-                onClick: () => {
-                  filters.fitOnly = false;
-                  render();
+    const refocusSearch = isModelsSearchInputFocused();
+    host.replaceChildren(fragment);
+    if (refocusSearch) restoreModelsSearchInputFocus(host);
+
+    void (async () => {
+      bundledCatalog = bundledCatalog ?? (await getModels());
+      const budgeted = hardwareForGpuBudget(hw, gpuGroupIndex);
+      const rows = await rankModels(budgeted, {
+        limit: 60,
+        fitOnly: filters.fitOnly,
+        search: filters.search || null,
+        useCase: filters.useCase || null,
+        quant: filters.quant || null,
+        targetContext: filters.targetContext,
+        sort: filters.sort,
+      });
+
+      catalogHost.replaceChildren();
+      if (!rows.length) {
+        catalogHost.appendChild(
+          emptyState({
+            glyph: 'search',
+            title: 'Nothing matches',
+            body: filters.fitOnly
+              ? 'No catalog model fits this budget with these filters. Turn off "Only what fits" to see the rest.'
+              : 'No catalog model matches these filters.',
+            action: filters.fitOnly
+              ? {
+                  label: 'Show models that do not fit',
+                  onClick: () => {
+                    filters.fitOnly = false;
+                    render();
+                  },
+                }
+              : {
+                  label: 'Search Hugging Face instead',
+                  onClick: () => switchSource('hub'),
                 },
-              }
-            : {
-                label: 'Search Hugging Face instead',
-                onClick: () => switchSource('hub'),
-              },
-        }),
-      );
-    } else {
-      const onDisk = downloadedRepos();
-      const list = el('div', 'models-card-list');
-      for (const row of rows) list.appendChild(catalogRow(row, onDisk));
-      fragment.appendChild(list);
-    }
+          }),
+        );
+      } else {
+        const onDisk = downloadedRepos();
+        const list = el('div', 'models-card-list');
+        for (const row of rows) list.appendChild(catalogRow(row, onDisk));
+        catalogHost.appendChild(list);
+      }
+      if (refocusSearch) restoreModelsSearchInputFocus(host);
+    })();
+    return;
   }
 
   const refocusSearch = isModelsSearchInputFocused();

@@ -29,7 +29,7 @@ import {
   resolveEditorAiBinding,
   validateEditorAiBinding,
   type EditorAiBinding,
-} from './editor-ai-completion-client';
+} from './editor-ai-binding';
 
 const COMMIT_TYPES = 'feat|fix|docs|style|refactor|test|chore|perf|build|ci';
 const COMMIT_TYPE = `(?:${COMMIT_TYPES})`;

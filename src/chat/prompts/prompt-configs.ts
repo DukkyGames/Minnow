@@ -2,6 +2,7 @@
  * Client API for ~/.minnow/prompt-configs (npm start) with in-memory fallback.
  */
 
+import { bumpPromptConfigEpoch } from '../outbound-estimate-epochs';
 import type { PromptConfig, PromptConfigListItem } from './types';
 
 const memoryStore = new Map<string, PromptConfig>();
@@ -68,9 +69,11 @@ export async function savePromptConfig(config: PromptConfig): Promise<PromptConf
     const body = (await res.json()) as { config?: PromptConfig };
     const saved = body.config ?? config;
     memoryStore.set(saved.id, saved);
+    bumpPromptConfigEpoch();
     return saved;
   } catch (err) {
     memoryStore.set(config.id, config);
+    bumpPromptConfigEpoch();
     const message = err instanceof Error ? err.message : String(err);
     return new Error(`Error: ${message}`);
   }

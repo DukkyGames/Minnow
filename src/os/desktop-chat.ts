@@ -47,7 +47,7 @@ import { refreshContextUsageRing } from '../ui/context-usage-ring';
 import { syncComposerBrainNotesFromActiveChat } from '../ui/composer-brain-notes';
 import { clearPanelCwdUserOverride, syncPanelFromActiveChat } from '../ui/git-panel';
 import { seedNewChatComposerRunTarget } from '../ui/new-chat-run-target-seed';
-import { renderChatFromHistory } from '../ui/messages';
+import { paintChatHistoryPendingInForegroundShell, renderChatFromHistory } from '../ui/messages';
 import { syncAskQuestionModalOnChatSwitch } from '../ui/question-cards-modal';
 import { setStatus } from '../ui/status';
 import type { Chat } from '../types';
@@ -256,9 +256,12 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   if (chatId === prevId) {
-    // Re-hydrate in case this chat was never loaded after a lazy boot.
-    await ensureChatHistoryLoaded(chatId);
-    if (!sessionState || sessionState.activeId !== chatId) return;
+    // Fast path when history is already resident; otherwise await hydrate then paint.
+    if (chat.historyLoaded === false) {
+      paintChatHistoryPendingInForegroundShell();
+      await ensureChatHistoryLoaded(chatId);
+      if (!sessionState || sessionState.activeId !== chatId) return;
+    }
     acknowledgeChatViewed(chatId);
     renderDesktopChatRail(desktopWorkspacePath);
     renderDesktopChatMessages();
@@ -271,9 +274,12 @@ export async function activateDesktopChatSession(chatId: string): Promise<void> 
   }
   sessionState.activeId = chatId;
   markSessionScalarsDirty();
-  // Lazy history: wait before paint so restart+switch does not show empty state.
-  await ensureChatHistoryLoaded(chatId);
-  if (!sessionState || sessionState.activeId !== chatId) return;
+  // Same switch contract as sidebar switchChat: wipe stale transcript before the GET.
+  if (chat.historyLoaded === false) {
+    paintChatHistoryPendingInForegroundShell();
+    await ensureChatHistoryLoaded(chatId);
+    if (!sessionState || sessionState.activeId !== chatId) return;
+  }
   syncDesktopChatSessionSwitch(prevId, chat);
   clearPanelCwdUserOverride();
   syncPanelFromActiveChat({ forceFileTree: true });

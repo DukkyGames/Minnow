@@ -2,6 +2,10 @@
  * Browser resolver for outbound prompt token estimate (Feature 25).
  */
 
+import {
+  getPromptConfigEpoch,
+  getToolConfigEpoch,
+} from '../outbound-estimate-epochs';
 import { resolveActiveWorkAgent, resolveActiveWorkAgentId } from '../../agents/resolve-work-agent';
 import {
   applyUiDesignerToolFilter,
@@ -33,6 +37,7 @@ import { composeSystemPrompt, isCodeMapPartEnabled, isContextDocumentsPartEnable
 import type { ComposeContext } from './types';
 import {
   computeOutboundPromptEstimateFromParts,
+  estimateHistoryTokens,
   estimateTokensFromText,
   formatTokenEstimateLabel,
   historyToApiMessagesForEstimate,
@@ -221,10 +226,42 @@ async function resolveOutboundComposeForEstimate(
   return { composed: composedTrimmed, userRules, ctx, legacyFallback };
 }
 
-export async function resolveOutboundPromptEstimate(
-  options?: ResolveOutboundPromptEstimateOptions,
-): Promise<OutboundPromptEstimate> {
-  const chat = options?.chat ?? getActiveChat();
+interface CachedOutboundStaticEstimate {
+  composed: string;
+  userRules: string | null;
+  legacyFallback: boolean;
+  ctx: ComposeContext | null;
+  composedSystem: number;
+  userRulesTokens: number;
+  tools: number;
+  codeMapSystem?: number;
+  codeMapInjectionEnabled?: boolean;
+  contextDocumentsSystem?: number;
+  contextDocumentsInjectionEnabled?: boolean;
+}
+
+let cachedStaticEstimateKey = '';
+let cachedStaticEstimate: CachedOutboundStaticEstimate | null = null;
+
+function outboundStaticEstimateCacheKey(chatId: string, modelId: string): string {
+  return `${chatId}\0${modelId}\0${getToolConfigEpoch()}\0${getPromptConfigEpoch()}`;
+}
+
+/** Clear composed-system + tools memo (unit tests). */
+export function resetOutboundPromptEstimateCacheForTests(): void {
+  cachedStaticEstimateKey = '';
+  cachedStaticEstimate = null;
+}
+
+async function resolveCachedStaticOutboundEstimate(
+  chat: Chat,
+  options: ResolveOutboundPromptEstimateOptions | undefined,
+): Promise<CachedOutboundStaticEstimate> {
+  const modelId = options?.modelId?.trim() ?? '';
+  const cacheKey = outboundStaticEstimateCacheKey(chat.id, modelId);
+  if (cacheKey === cachedStaticEstimateKey && cachedStaticEstimate) {
+    return cachedStaticEstimate;
+  }
 
   let composed = '';
   let userRules: string | null = null;
@@ -241,34 +278,75 @@ export async function resolveOutboundPromptEstimate(
     legacyFallback = !!composed.trim();
   }
 
-  const estimate = computeOutboundPromptEstimateFromParts({
+  const tools = resolveEnabledToolsForEstimate(chat);
+  const partial = computeOutboundPromptEstimateFromParts({
     systemText: composed,
-    history: chat.history,
-    tools: resolveEnabledToolsForEstimate(chat),
+    history: [],
+    tools,
     userRulesText: userRules ?? '',
     legacyFallback,
   });
 
+  const entry: CachedOutboundStaticEstimate = {
+    composed,
+    userRules,
+    legacyFallback,
+    ctx,
+    composedSystem: partial.composedSystem,
+    userRulesTokens: partial.userRules,
+    tools: partial.tools,
+  };
+
   if (ctx) {
     if (ctx.codeMapInjectionEnabled === true) {
-      estimate.codeMapInjectionEnabled = true;
+      entry.codeMapInjectionEnabled = true;
     }
     if (isCodeMapPartEnabled(ctx) && ctx.codeMapBlock?.trim()) {
-      estimate.codeMapSystem = estimateTokensFromText(ctx.codeMapBlock);
+      entry.codeMapSystem = estimateTokensFromText(ctx.codeMapBlock);
     }
     if (ctx.contextDocumentsInjectionEnabled === true) {
-      estimate.contextDocumentsInjectionEnabled = true;
+      entry.contextDocumentsInjectionEnabled = true;
     }
     if (isContextDocumentsPartEnabled(ctx) && ctx.contextDocumentsBlock?.trim()) {
-      estimate.contextDocumentsSystem = estimateTokensFromText(ctx.contextDocumentsBlock);
+      entry.contextDocumentsSystem = estimateTokensFromText(ctx.contextDocumentsBlock);
     }
   }
+
+  cachedStaticEstimateKey = cacheKey;
+  cachedStaticEstimate = entry;
+  return entry;
+}
+
+export async function resolveOutboundPromptEstimate(
+  options?: ResolveOutboundPromptEstimateOptions,
+): Promise<OutboundPromptEstimate> {
+  const chat = options?.chat ?? getActiveChat();
+
+  const staticPart = await resolveCachedStaticOutboundEstimate(chat, options);
+  const historyTokens = estimateHistoryTokens(chat.history);
+
+  const estimate: OutboundPromptEstimate = {
+    total:
+      staticPart.composedSystem +
+      staticPart.userRulesTokens +
+      historyTokens +
+      staticPart.tools,
+    composedSystem: staticPart.composedSystem,
+    userRules: staticPart.userRulesTokens,
+    history: historyTokens,
+    tools: staticPart.tools,
+    legacyFallback: staticPart.legacyFallback,
+    codeMapSystem: staticPart.codeMapSystem,
+    codeMapInjectionEnabled: staticPart.codeMapInjectionEnabled,
+    contextDocumentsSystem: staticPart.contextDocumentsSystem,
+    contextDocumentsInjectionEnabled: staticPart.contextDocumentsInjectionEnabled,
+  };
 
   const trimResult = applyBudgetTrimToHistoryTokens(
     chat,
     options?.modelId,
-    composed,
-    userRules ?? '',
+    staticPart.composed,
+    staticPart.userRules ?? '',
     estimate.history,
   );
 
@@ -277,14 +355,14 @@ export async function resolveOutboundPromptEstimate(
   }
 
   const compressedExtra = trimResult.compressedEstimate;
-  const historyTokens = trimResult.history;
+  const trimmedHistoryTokens = trimResult.history;
 
   return {
     ...estimate,
-    history: historyTokens,
+    history: trimmedHistoryTokens,
     historyCompressed: trimResult.wouldCompress,
     compressedContextEstimate: compressedExtra > 0 ? compressedExtra : undefined,
     total:
-      estimate.composedSystem + estimate.userRules + historyTokens + estimate.tools,
+      estimate.composedSystem + estimate.userRules + trimmedHistoryTokens + estimate.tools,
   };
 }

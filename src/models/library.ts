@@ -184,31 +184,42 @@ export function inferArchFromName(name: string): string {
 }
 
 let catalogIndex: Map<string, CatalogModel> | null = null;
+let catalogIndexLoad: Promise<Map<string, CatalogModel>> | null = null;
 
 /** Lower-cased lookup over catalog names, repo tails, and GGUF source repos. */
-function getCatalogIndex(): Map<string, CatalogModel> {
+async function ensureCatalogIndex(): Promise<Map<string, CatalogModel>> {
   if (catalogIndex) return catalogIndex;
-  const index = new Map<string, CatalogModel>();
-  const put = (key: string | undefined, model: CatalogModel) => {
-    if (!key) return;
-    const k = key.toLowerCase();
-    if (!index.has(k)) index.set(k, model);
-  };
-  for (const model of getModels()) {
-    put(model.name, model);
-    put(model.name.split('/').pop(), model);
-    for (const src of model.gguf_sources ?? []) {
-      put(src.repo, model);
-      put(src.repo.split('/').pop(), model);
-    }
+  if (!catalogIndexLoad) {
+    catalogIndexLoad = (async () => {
+      const index = new Map<string, CatalogModel>();
+      const put = (key: string | undefined, model: CatalogModel) => {
+        if (!key) return;
+        const k = key.toLowerCase();
+        if (!index.has(k)) index.set(k, model);
+      };
+      for (const model of await getModels()) {
+        put(model.name, model);
+        put(model.name.split('/').pop(), model);
+        for (const src of model.gguf_sources ?? []) {
+          put(src.repo, model);
+          put(src.repo.split('/').pop(), model);
+        }
+      }
+      catalogIndex = index;
+      return index;
+    })();
   }
-  catalogIndex = index;
-  return index;
+  return catalogIndexLoad;
+}
+
+function getCatalogIndex(): Map<string, CatalogModel> {
+  return catalogIndex ?? new Map();
 }
 
 /** Test helper — drop the memoised catalog index. */
 export function clearCatalogIndexForTests(): void {
   catalogIndex = null;
+  catalogIndexLoad = null;
 }
 
 /** Best catalog match for a repo id / file name pair. */
@@ -260,7 +271,8 @@ function ggufPath(row: CachedModelRow, relPath: string, source: LibrarySource): 
 /**
  * Flatten cached repo rows into one library row per loadable weight file.
  */
-export function buildLibrary(cached: CachedModelRow[]): LibraryModel[] {
+export async function buildLibrary(cached: CachedModelRow[]): Promise<LibraryModel[]> {
+  await ensureCatalogIndex();
   const out: LibraryModel[] = [];
 
   for (const row of cached) {

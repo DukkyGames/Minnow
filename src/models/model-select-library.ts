@@ -55,7 +55,7 @@ export async function loadableLibraryFromCached(
   } catch {
     /* Tool server down or probe failed — MLX stays hidden until backend is known. */
   }
-  return loadableLibrary(buildLibrary(cached), { backend });
+  return loadableLibrary(await buildLibrary(cached), { backend });
 }
 
 /**

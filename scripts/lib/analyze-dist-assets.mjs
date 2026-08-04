@@ -10,11 +10,12 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.join(__dirname, '../..');
 export const DIST_ASSETS = path.join(REPO_ROOT, 'dist/assets');
+export const DIST_INDEX_HTML = path.join(REPO_ROOT, 'dist/index.html');
 export const BUDGETS_PATH = path.join(REPO_ROOT, 'budgets.json');
 export const BASELINE_PATH = path.join(REPO_ROOT, 'scripts/bundle-size-baseline.json');
 
 /** @typedef {{ name: string, bytes: number, kb: number }} AssetRow */
-/** @typedef {{ entryJs: AssetRow | null, entryCss: AssetRow | null, largestLazyJs: AssetRow | null, totalAssetsBytes: number, dataPackJsChunks: AssetRow[], allFiles: AssetRow[] }} DistAnalysis */
+/** @typedef {{ entryJs: AssetRow | null, entryCss: AssetRow | null, largestLazyJs: AssetRow | null, eagerJs: AssetRow | null, totalAssetsBytes: number, dataPackJsChunks: AssetRow[], allFiles: AssetRow[] }} DistAnalysis */
 
 export function formatKb(bytes) {
   return `${(bytes / 1024).toFixed(1)} KB`;
@@ -38,6 +39,78 @@ export function isVendorJs(name) {
 
 export function isDataPackChunk(name) {
   return /(mmlu|gsm8k|arc-challenge|truthfulqa|humaneval)-mini-[^/]+\.js$/.test(name);
+}
+
+/**
+ * Resolve a dist/index.html script or modulepreload href to a basename under dist/assets.
+ * @param {string} href
+ */
+export function assetBasenameFromHref(href) {
+  if (!href || typeof href !== 'string') return null;
+  const cleaned = href.split('?')[0].split('#')[0];
+  const parts = cleaned.replace(/\\/g, '/').split('/');
+  const name = parts[parts.length - 1];
+  if (!name || !name.endsWith('.js')) return null;
+  return name;
+}
+
+/**
+ * Parse dist/index.html for the entry module script + every rel=modulepreload href.
+ * Those are the bytes the browser fetches before first interaction on a cold boot.
+ * @param {string} indexHtmlPath
+ * @returns {string[]} unique asset basenames
+ */
+export function parseEagerJsHrefsFromIndexHtml(indexHtmlPath = DIST_INDEX_HTML) {
+  const html = readFileSync(indexHtmlPath, 'utf8');
+  /** @type {Set<string>} */
+  const names = new Set();
+
+  // Entry: <script type="module" … src="…">
+  for (const match of html.matchAll(
+    /<script\b[^>]*\btype\s*=\s*["']module["'][^>]*>/gi,
+  )) {
+    const tag = match[0];
+    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
+    const name = assetBasenameFromHref(src?.[1] ?? '');
+    if (name) names.add(name);
+  }
+
+  // Vite also emits <link rel="modulepreload" href="…">
+  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
+    const tag = match[0];
+    if (!/\brel\s*=\s*["'][^"']*modulepreload[^"']*["']/i.test(tag)) continue;
+    const href = tag.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+    const name = assetBasenameFromHref(href?.[1] ?? '');
+    if (name) names.add(name);
+  }
+
+  return [...names];
+}
+
+/**
+ * Sum byte sizes for the eager JS set declared by dist/index.html.
+ * @param {AssetRow[]} jsFiles
+ * @param {string[]} eagerNames
+ * @returns {AssetRow | null}
+ */
+export function sumEagerJs(jsFiles, eagerNames) {
+  if (!eagerNames.length) return null;
+  const byName = new Map(jsFiles.map((f) => [f.name, f]));
+  let bytes = 0;
+  /** @type {string[]} */
+  const found = [];
+  for (const name of eagerNames) {
+    const row = byName.get(name);
+    if (!row) continue;
+    bytes += row.bytes;
+    found.push(name);
+  }
+  if (found.length === 0) return null;
+  return {
+    name: `eager(${found.length} chunks)`,
+    bytes,
+    kb: kbFromBytes(bytes),
+  };
 }
 
 /** List hashed JS/CSS assets under dist/assets. */
@@ -75,10 +148,20 @@ export function analyzeDistAssets(distAssets = DIST_ASSETS) {
   const dataPackBytes = dataPackJsChunks.reduce((sum, f) => sum + f.bytes, 0);
   const totalAssetsBytes = totalJs + totalCss - dataPackBytes;
 
+  // Eager JS = entry module + every modulepreload in dist/index.html (cold-boot cost).
+  let eagerJs = null;
+  try {
+    const eagerNames = parseEagerJsHrefsFromIndexHtml(DIST_INDEX_HTML);
+    eagerJs = sumEagerJs(jsFiles, eagerNames);
+  } catch {
+    eagerJs = null;
+  }
+
   return {
     entryJs,
     entryCss,
     largestLazyJs,
+    eagerJs,
     totalAssetsBytes,
     totalAssetsKb: kbFromBytes(totalAssetsBytes),
     dataPackJsChunks,
@@ -133,6 +216,12 @@ export function evaluateBundleBudgets(analysis, budgets) {
       limitKb: budgets.bundle.largestLazyJsMaxKb,
     },
     {
+      metric: 'eagerJs',
+      label: 'Eager JS (entry + modulepreload)',
+      row: analysis.eagerJs,
+      limitKb: budgets.bundle.eagerJsMaxKb,
+    },
+    {
       metric: 'totalAssets',
       label: 'Total dist/assets (excl. data packs)',
       row: { kb: analysis.totalAssetsKb, name: 'dist/assets' },
@@ -141,6 +230,8 @@ export function evaluateBundleBudgets(analysis, budgets) {
   ];
 
   for (const check of checks) {
+    // eagerJsMaxKb is optional until budgets.json is updated; skip if unset.
+    if (check.metric === 'eagerJs' && typeof check.limitKb !== 'number') continue;
     if (!check.row) {
       breaches.push({
         metric: check.metric,

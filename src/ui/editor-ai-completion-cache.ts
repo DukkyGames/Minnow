@@ -3,7 +3,7 @@
  */
 
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
-import { completionCacheTransportMode } from './editor-completion-policy';
+import { completionCacheTransportMode } from './editor-completion-transport';
 import { PROMPT_VERSION } from './editor-ai-completion-prompt';
 
 /** Default time-to-live for cached completions (5 minutes). */
