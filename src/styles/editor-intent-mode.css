@@ -1,5 +1,25 @@
 /* Editor Intent mode — proposal preview and toolbar toggle (MIN-131) */
 
+/* Cursor line recognised as intent — the only signal that Intent mode is live. */
+.cm-intent-line--pending {
+  font-style: italic;
+  color: var(--mn-fg-muted);
+}
+
+/* A line whose intent was accepted, and the same line once its context drifts. */
+.cm-intent-line--resolved {
+  border-left: 2px solid var(--mn-accent);
+  padding-left: 4px;
+  margin-left: -6px;
+}
+
+.cm-intent-line--stale {
+  border-left: 2px solid var(--mn-warning);
+  padding-left: 4px;
+  margin-left: -6px;
+  background: var(--mn-warning-soft);
+}
+
 /* The line about to be replaced, dimmed while a proposal is on screen. */
 .cm-intent-source {
   opacity: 0.6;

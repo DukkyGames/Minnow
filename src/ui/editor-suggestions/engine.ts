@@ -1,8 +1,8 @@
 /**
  * The single suggestion engine: one debounce timer, one AbortController, and
  * one place that decides whether the cursor wants a completion or an intent
- * resolve. Mod+Enter is the primary intent trigger; optional line-leave resolve
- * is gated by `autoResolveOnLineLeave` (default off).
+ * resolve. Idling on an intent line proposes for it and Mod+Enter forces one;
+ * the extra line-leave/blur resolve is gated by `autoResolveOnLineLeave`.
  */
 
 import type { EditorState, Transaction } from '@codemirror/state';
@@ -186,28 +186,6 @@ export class SuggestionEnginePlugin {
       }
     }
 
-    if (isIntentEnabled(state)) {
-      const head = state.selection.main.head;
-      const lineNumber = state.doc.lineAt(head).number;
-      if (update.selectionSet && lineNumber !== this.lastLineNumber) {
-        if (this.resolveIntentConfig().autoResolveOnLineLeave) {
-          this.scheduleLineLeaveResolve(this.lastLineNumber);
-        }
-        this.lastLineNumber = lineNumber;
-      }
-      if (update.docChanged) {
-        const prevHead = update.startState.selection.main.head;
-        const prevLine = update.startState.doc.lineAt(prevHead).number;
-        if (
-          this.resolveIntentConfig().autoResolveOnLineLeave &&
-          prevLine !== lineNumber
-        ) {
-          this.scheduleLineLeaveResolve(prevLine);
-        }
-        this.lastLineNumber = lineNumber;
-      }
-    }
-
     if (update.selectionSet && !update.docChanged) {
       const ghostSurvived = getCompletionSuggestion(state) !== null;
       this.cancelInFlight(!ghostSurvived);
@@ -249,8 +227,13 @@ export class SuggestionEnginePlugin {
     }
     this.opts.onStatus?.(null);
 
-    const intentConfig = this.resolveIntentConfig();
-    if (intentConfig.autoResolveOnLineLeave && this.wantsIntent(state)) {
+    // Scheduled after the cancellations above, which would otherwise clear the
+    // line-leave timer in the very update that set it.
+    this.trackIntentLineLeave(update);
+
+    // Idling on an intent line proposes for that line — the behaviour Settings
+    // describes. `autoResolveOnLineLeave` gates only the leave/blur resolves.
+    if (this.wantsIntent(state)) {
       this.scheduleIntent(this.anchorAtCursor(state), false);
       return;
     }
@@ -277,6 +260,32 @@ export class SuggestionEnginePlugin {
     }
 
     this.scheduleCompletion(state.selection.main.head);
+  }
+
+  /**
+   * Track the line the cursor sits on and, when `autoResolveOnLineLeave` is set,
+   * queue a resolve for the line it just left.
+   */
+  private trackIntentLineLeave(update: ViewUpdate): void {
+    const { state } = update;
+    if (!isIntentEnabled(state)) return;
+    const lineNumber = state.doc.lineAt(state.selection.main.head).number;
+    const autoResolve = this.resolveIntentConfig().autoResolveOnLineLeave;
+
+    if (update.docChanged) {
+      const prevHead = update.startState.selection.main.head;
+      const prevLine = update.startState.doc.lineAt(prevHead).number;
+      if (autoResolve && prevLine !== lineNumber) {
+        this.scheduleLineLeaveResolve(prevLine);
+      }
+      this.lastLineNumber = lineNumber;
+      return;
+    }
+
+    if (update.selectionSet && lineNumber !== this.lastLineNumber) {
+      if (autoResolve) this.scheduleLineLeaveResolve(this.lastLineNumber);
+      this.lastLineNumber = lineNumber;
+    }
   }
 
   /** Mod-Enter: resolve the current line as intent regardless of the heuristic. */
@@ -352,7 +361,7 @@ export class SuggestionEnginePlugin {
       const anchor: IntentAnchor = { from: line.from, to: line.to, intentText: line.text };
       if (!anchor.intentText.trim()) return;
       if (classifyIntentLine(line.text, this.classifyOptions()) !== 'intent') return;
-      void this.requestIntent(anchor, false);
+      void this.requestIntent(anchor, false, false);
     }, delay);
   }
 
@@ -400,11 +409,19 @@ export class SuggestionEnginePlugin {
     return head >= anchor.from && head <= anchor.to;
   }
 
-  /** Paint an intent proposal after re-checking every guard. */
-  private showIntent(anchor: IntentAnchor, text: string, streaming: boolean): boolean {
+  /**
+   * Paint an intent proposal after re-checking every guard. A line-leave resolve
+   * is for the line the cursor just left, so it does not require the cursor.
+   */
+  private showIntent(
+    anchor: IntentAnchor,
+    text: string,
+    streaming: boolean,
+    requireCursorInside = true,
+  ): boolean {
     if (isLspBusy(this.view.state)) return false;
     if (!this.anchorStillValid(anchor)) return false;
-    if (!this.cursorInsideAnchor(anchor)) return false;
+    if (requireCursorInside && !this.cursorInsideAnchor(anchor)) return false;
 
     const cleaned = text.replace(/\s+$/, '');
     if (!cleaned.trim()) return false;
@@ -441,13 +458,17 @@ export class SuggestionEnginePlugin {
     return true;
   }
 
-  private async requestIntent(anchor: IntentAnchor, force: boolean): Promise<void> {
+  private async requestIntent(
+    anchor: IntentAnchor,
+    force: boolean,
+    requireCursorInside = true,
+  ): Promise<void> {
     const state = this.view.state;
     if (state.readOnly) return;
     if (!force && !isIntentEnabled(state)) return;
     if (!this.opts.canRequest()) return;
     if (!this.anchorStillValid(anchor)) return;
-    if (!this.cursorInsideAnchor(anchor)) return;
+    if (requireCursorInside && !this.cursorInsideAnchor(anchor)) return;
     if (!anchor.intentText.trim()) return;
 
     // A settled proposal for this exact anchor is already on screen.
@@ -509,7 +530,7 @@ export class SuggestionEnginePlugin {
           if (!pending) return;
           const liveAnchor = pendingToAnchor(pending);
           if (!this.shouldPaintPartial(partial)) return;
-          this.showIntent(liveAnchor, partial, true);
+          this.showIntent(liveAnchor, partial, true, requireCursorInside);
         },
       });
 
@@ -522,7 +543,7 @@ export class SuggestionEnginePlugin {
         if (result.error) this.opts.onStatus?.(result.error);
         return;
       }
-      if (this.showIntent(liveAnchor, result.text, false)) {
+      if (this.showIntent(liveAnchor, result.text, false, requireCursorInside)) {
         this.opts.onStatus?.(INTENT_READY_MESSAGE);
       }
     } catch (err) {
