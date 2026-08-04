@@ -113,7 +113,7 @@ export interface LspBundleStatus {
   id: string;
   label: string;
   description?: string;
-  kind: 'npm' | 'binary';
+  kind: 'npm' | 'binary' | 'go';
   categoryId?: string;
   categoryLabel?: string;
   /** LSP server ids in defaults.json tied to this bundle (from bundles.json). */

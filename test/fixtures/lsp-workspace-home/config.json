@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-08-03T17:10:16.608Z",
+  "createdAt": "2026-08-04T02:46:19.797Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -197,8 +197,7 @@
     "includeLspContext": true,
     "contextBudgetChars": 4000,
     "useNativeFim": true,
-    "enableCompletionCache": true,
-    "reindentOnAccept": true
+    "enableCompletionCache": true
   },
   "gitCommitMessage": {
     "useGitmoji": true
@@ -241,10 +240,10 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-k08jmz",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-YB71af",
     "userChosen": true,
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-k08jmz"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-YB71af"
     ]
   }
 }

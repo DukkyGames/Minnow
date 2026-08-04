@@ -334,8 +334,33 @@ export function writePageRanks(db, scores) {
   tx(Object.entries(scores));
 }
 
-/** Aggregate index stats for status endpoints. */
-export function getIndexStats(db) {
+/** Aggregate index stats for status endpoints (scoped to one repo key when provided). */
+export function getIndexStats(db, repo) {
+  const repoKey = typeof repo === 'string' ? repo.trim() : '';
+  if (repoKey) {
+    const symbols =
+      db.prepare('SELECT COUNT(*) AS n FROM symbols WHERE repo = ?').get(repoKey)?.n ?? 0;
+    const files =
+      db.prepare('SELECT COUNT(*) AS n FROM file_hashes WHERE repo = ?').get(repoKey)?.n ?? 0;
+    const lastMtime = db
+      .prepare('SELECT MAX(mtime_ms) AS m FROM file_hashes WHERE repo = ?')
+      .get(repoKey)?.m;
+    const edges =
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM edges e
+           WHERE EXISTS (SELECT 1 FROM symbols s WHERE s.id = e.src_symbol AND s.repo = ?)
+              OR EXISTS (SELECT 1 FROM symbols s WHERE s.id = e.dst_symbol AND s.repo = ?)`,
+        )
+        .get(repoKey, repoKey)?.n ?? 0;
+    return {
+      symbolCount: symbols,
+      edgeCount: edges,
+      fileCount: files,
+      lastIndexedAt: lastMtime ? new Date(lastMtime).toISOString() : null,
+    };
+  }
+
   const symbols = db.prepare('SELECT COUNT(*) AS n FROM symbols').get()?.n ?? 0;
   const edges = db.prepare('SELECT COUNT(*) AS n FROM edges').get()?.n ?? 0;
   const files = db.prepare('SELECT COUNT(*) AS n FROM file_hashes').get()?.n ?? 0;

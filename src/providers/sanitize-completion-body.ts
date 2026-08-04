@@ -117,5 +117,16 @@ export function sanitizeCompletionBodyForProvider(
     next.temperature = 1;
   }
 
+  if (/kimi|moonshot/i.test(modelId) && Array.isArray(next.messages)) {
+    next.messages = next.messages.map((raw) => {
+      if (!raw || typeof raw !== 'object') return raw;
+      const msg = { ...(raw as Record<string, unknown>) };
+      delete msg.reasoning;
+      delete msg.reasoning_content;
+      delete msg.reasoning_signature;
+      return msg;
+    });
+  }
+
   return next;
 }

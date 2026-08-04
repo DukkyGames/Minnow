@@ -75,6 +75,17 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     next.temperature = 1;
   }
 
+  if (/kimi|moonshot/i.test(modelId) && Array.isArray(next.messages)) {
+    next.messages = next.messages.map((raw) => {
+      if (!raw || typeof raw !== 'object') return raw;
+      const msg = { ...raw };
+      delete msg.reasoning;
+      delete msg.reasoning_content;
+      delete msg.reasoning_signature;
+      return msg;
+    });
+  }
+
   if (modelRejectsTemperature(modelId)) {
     delete next.temperature;
     delete next.top_p;

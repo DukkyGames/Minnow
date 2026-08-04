@@ -245,6 +245,11 @@ function binaryFileName(name) {
   return process.platform === 'win32' ? `${name}.exe` : name;
 }
 
+/** Binary and go bundles install a managed executable under ~/.minnow/lsp-servers/bin. */
+function isManagedBinaryBundleKind(kind) {
+  return kind === 'binary' || kind === 'go';
+}
+
 /** @param {string} bundleId */
 export async function getBundleInstallStatus(bundleId) {
   const bundle = await findBundleDefinition(bundleId);
@@ -255,7 +260,9 @@ export async function getBundleInstallStatus(bundleId) {
   const status =
     bundle.kind === 'npm'
       ? await getInstalledNpmStatus(bundleId, bundle)
-      : await getInstalledBinaryStatus(bundleId, bundle);
+      : isManagedBinaryBundleKind(bundle.kind)
+        ? await getInstalledBinaryStatus(bundleId, bundle)
+        : { installed: false, version: null, sizeBytes: 0, location: null };
   return {
     bundleId,
     found: true,
@@ -323,6 +330,52 @@ async function installNpmBundle(bundleId, bundle) {
   return status;
 }
 
+/**
+ * Install a Go module binary into ~/.minnow/lsp-servers/bin via `go install` (gopls).
+ * @param {string} bundleId
+ * @param {object} bundle
+ */
+async function installGoBundle(bundleId, bundle) {
+  const mod = bundle.goModule;
+  const version = bundle.version;
+  if (!mod || !version) {
+    throw new Error(`Go bundle "${bundleId}" is missing goModule or version`);
+  }
+  const binDir = getManagedLspBinDir();
+  await fsp.mkdir(binDir, { recursive: true });
+  const spec = `${mod}@${version}`;
+  updateJob(bundleId, {
+    phase: 'installing',
+    percent: 25,
+    message: `go install ${spec}`,
+  });
+  await runProcess('go', ['install', spec], {
+    env: { ...process.env, GOBIN: binDir },
+    cwd: os.tmpdir(),
+  });
+  const dest = path.join(binDir, binaryFileName(bundle.binaryName));
+  if (!fs.existsSync(dest)) {
+    throw new Error(
+      `go install succeeded but ${bundle.binaryName} was not found in ${binDir}. Is Go on PATH?`,
+    );
+  }
+  const st = await fsp.stat(dest);
+  await writeMeta(bundleId, {
+    kind: 'go',
+    goModule: mod,
+    binaryName: bundle.binaryName,
+    version,
+    sizeBytes: st.size,
+    installedAt: new Date().toISOString(),
+  });
+  return {
+    installed: true,
+    version,
+    sizeBytes: st.size,
+    location: dest,
+  };
+}
+
 function rustAnalyzerTargetTriple() {
   const { platform, arch } = process;
   if (platform === 'win32') {
@@ -367,9 +420,6 @@ function pickGithubAssetName(github, bundleId) {
     const ver = String(github?.version ?? '').replace(/^v/, '');
     return `lua-language-server-${ver}-${osName}-${archName}.zip`;
   }
-  if (bundleId === 'gopls') {
-    return '';
-  }
   return `${bundleId}-${target}.zip`;
 }
 
@@ -398,7 +448,6 @@ function assetMatchesPlatform(name) {
 
 const BUNDLE_ASSET_HINTS = {
   'rust-analyzer': [/rust-analyzer/i],
-  gopls: [/gopls/i],
   clangd: [/clangd/i],
   'lua-language-server': [/lua-language-server/i],
   zls: [/\bzls\b/i],
@@ -644,7 +693,9 @@ export async function installBundle(bundleId) {
   const existing =
     bundle.kind === 'npm'
       ? await getInstalledNpmStatus(bundleId, bundle)
-      : await getInstalledBinaryStatus(bundleId, bundle);
+      : isManagedBinaryBundleKind(bundle.kind)
+        ? await getInstalledBinaryStatus(bundleId, bundle)
+        : { installed: false };
   if (existing.installed) {
     updateJob(bundleId, {
       phase: 'done',
@@ -660,7 +711,9 @@ export async function installBundle(bundleId) {
     const result =
       bundle.kind === 'npm'
         ? await installNpmBundle(bundleId, bundle)
-        : await installBinaryBundle(bundleId, bundle);
+        : bundle.kind === 'go'
+          ? await installGoBundle(bundleId, bundle)
+          : await installBinaryBundle(bundleId, bundle);
     updateJob(bundleId, { phase: 'done', percent: 100, message: 'Installed' });
     return { ok: true, alreadyInstalled: false, ...result };
   } catch (err) {
@@ -686,7 +739,7 @@ export async function uninstallBundle(bundleId) {
         npmSpawnOptions({ cwd: prefix }),
       );
     }
-  } else if (bundle.kind === 'binary') {
+  } else if (isManagedBinaryBundleKind(bundle.kind)) {
     const dest = path.join(getManagedLspBinDir(), binaryFileName(bundle.binaryName));
     try {
       await fsp.unlink(dest);
