@@ -193,6 +193,29 @@ export function installFakeApiRouter(
       return Response.json({ serves: [] });
     }
 
+    // Model picker / library paths probe hardware when merging My Models rows.
+    if (url.includes('/api/system/hardware') && method === 'GET') {
+      return Response.json({
+        os: 'linux',
+        platform: 'linux',
+        arch: 'x64',
+        cpuName: 'CI',
+        cpuCores: 4,
+        totalRamGb: 16,
+        availableRamGb: 8,
+        hasGpu: false,
+        gpuName: null,
+        gpuVramGb: null,
+        gpuCount: 0,
+        gpus: [],
+        gpuGroups: [],
+        homogeneous: true,
+        backend: 'cpu',
+        unifiedMemory: false,
+        detectedAt: 1,
+      });
+    }
+
     if (url.includes('/api/workspace/dev-server') || url.includes('/api/terminal/')) {
       return Response.json({ ok: true });
     }
