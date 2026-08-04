@@ -84,8 +84,6 @@ The sidebar source-control panel handles the everyday loop — stage, diff, comm
 
 Opens over the Code column from the source-control panel. A left rail routes between seven sections in two groups — **Changes**, **History**, **Branches**, **Stashes** and **Worktrees** for the working tree, then **Pull requests** and **Checks** for the remote — each carrying its own count, and a status dot on Checks when CI is red. **Ctrl+1**–**7** jumps between them, **Esc** closes.
 
-The header keeps repo identity and the three sync actions (fetch, pull, push). Everything else — rebase, cherry-pick, tag, stash, merge to trunk, worktree add, open a PR — lives in the **Commands** palette on **Ctrl+K**, so the chrome never turns into a row of equally-weighted buttons you have to read every time.
-
 Pull requests and CI run through your own `gh` CLI. Minnow stores no GitHub token: if `gh` isn't installed or authed, or the remote isn't GitHub, those two sections say so instead of showing an empty list. With it working, you get PR list and detail, create, checkout, merge, close and mark-ready; workflow runs down to jobs and steps, with the failed step's log one click away, and rerun (all or failed-only) or cancel on the run itself.
 
 ![Source Control Center](documentation/images/app-source-control.png)
