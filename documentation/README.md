@@ -34,6 +34,7 @@ In-app help: menubar **?** → `#/wiki` ( **`documentation/manual/`** plus roadm
 |-----|--------------|
 | [Maintainer index](maintainer/) | Release, signing, wiki publishing, settings inventory. |
 | [Releasing](maintainer/releasing.md) | Versioning, packaging, auto-update feed. |
+| [Release notes](releases/) | Per-version notes for GitHub (`v0.0.1.md`, `v0.0.2.md`, …). |
 | [macOS signing](maintainer/macos-signing.md) | Notarization and entitlements. |
 | [Wiki publishing](maintainer/wiki-publishing.md) | GitHub Wiki staging from `documentation/`. |
 | [Settings reference](maintainer/settings-reference.md) | Exhaustive settings and env inventory. |

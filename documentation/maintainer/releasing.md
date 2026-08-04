@@ -44,17 +44,21 @@ This runs `build → electron:build → electron-builder` and writes to `release
 
 | File | Role |
 |------|------|
-| `Minnow-Setup-<version>.exe` | The NSIS installer users download. |
-| `latest.yml` | **The update feed.** Version + SHA512 hashes; `electron-updater` fetches this to detect a new build. |
+| `Minnow-Setup-<version>.exe` | The NSIS installer users download (Windows). |
+| `latest.yml` | **Windows update feed.** Version + SHA512 hashes; `electron-updater` fetches this to detect a new build. |
 | `Minnow-Setup-<version>.exe.blockmap` | Enables smaller delta downloads between versions. |
+| `Minnow-<version>-x86_64.AppImage` | Linux portable install (`npm run package:linux` or `package:linux:docker` on Windows/macOS). |
+| `latest-linux.yml` | **Linux update feed** — attach alongside the AppImage. |
 
 ### 3. Create the GitHub release
 
 On <https://github.com/henrigrimm/minnow/releases> → **Draft a new release**:
 
 - **Tag:** `v<version>` (e.g. `v1.0.1`), created against the commit you packaged from.
-- **Attach all three files** from `release/pkg/`. `latest.yml` is the one that matters —
-  without it, installed apps never see the release. Include the `.exe` and `.blockmap` too.
+- **Attach platform artifacts** from `release/pkg/` (Windows) and `release/pkg-linux/` when you
+  built Linux via Docker. At minimum per platform: installer/binary + matching feed (`latest.yml`
+  on Windows, `latest-linux.yml` on Linux) + `.blockmap` where electron-builder emits one.
+  Without the feed file, installed apps never see the release.
 - **Publish the release** (do not leave it as a **draft**). Draft releases are invisible to
   `electron-updater`; Settings will show **Could not check for updates** until the release is
   published.
@@ -77,9 +81,10 @@ beta feed to maintain.
 
 ```
 [ ] Bumped version in package.json (and committed)
-[ ] npm run package succeeded → release/pkg/ has .exe + latest.yml + .blockmap
+[ ] npm run package:win (and package:linux or package:linux:docker) succeeded
+[ ] release/pkg/ has .exe + latest.yml + .blockmap; Linux AppImage + latest-linux.yml if shipping Linux
 [ ] GitHub release tagged v<version>
-[ ] All three files attached
+[ ] All platform feed files and installers attached
 [ ] Release notes written for users
 [ ] Pre-release flag set correctly (unchecked = Stable, checked = Beta)
 ```
