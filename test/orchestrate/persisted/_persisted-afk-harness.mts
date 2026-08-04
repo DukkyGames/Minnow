@@ -137,7 +137,7 @@ export class PersistedAfkHarness {
     pathname: string,
     body?: unknown,
   ): Promise<ApiResult<T>> {
-    const response = await fetch(`${this.baseUrl}${pathname}`, {
+    const response = await fetchWithRetry(`${this.baseUrl}${pathname}`, {
       method,
       headers: {
         'X-Minnow-Token': this.authToken,
@@ -275,6 +275,35 @@ export function installPersistedClientDom(): () => void {
 
 export async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True when a failed fetch is likely transient (CI load, half-open sockets, IPv6 quirks). */
+function isTransientFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message.includes('fetch failed')) return true;
+  const cause = error.cause;
+  if (!cause || typeof cause !== 'object') return false;
+  const code = 'code' in cause ? String((cause as { code?: unknown }).code) : '';
+  return code === 'UND_ERR_SOCKET' || code === 'ECONNRESET' || code === 'ECONNREFUSED';
+}
+
+/** Retry harness API calls so long AFK runs survive brief connection drops under CI load. */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  attempts = 5,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientFetchError(error) || attempt === attempts - 1) throw error;
+      await delay(50 * (attempt + 1));
+    }
+  }
+  throw lastError;
 }
 
 async function reservePort(): Promise<number> {
