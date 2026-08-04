@@ -19,7 +19,7 @@ Minnow has a **large, well-wired automated suite**: **1,058** `test/**/*.test.{j
 | **Gate job timeout (20 min)** | **Medium** | ~1,056 files, 4× `tsx-mocks-loader` batches (300 files each), long orchestrate cases (e.g. persisted AFK ~40s+). Windows matrix can be slower than Ubuntu. |
 | **No Electron / packaged smoke on PR** | **High for release** | `board:electron-smoke` only in `board-release.yml` (release published / manual). PR CI does not package or run AFK Electron smoke. |
 | **Board reliability** | **Medium** | `board-nightly.yml` (3 AM cron, 180 min) runs persisted/restart/soak with `continue-on-error` per step but **fails the job** if any gate fails—not on every PR. |
-| **Headless CLI** | **Low–Medium** | `minnow-headless.yml` path-filtered; **Node 20** vs CI **Node 24**; live LM Studio smoke **commented out**. |
+| **Headless CLI** | **Low** | Unit tests in `test/headless/` covered by main `npm test` / `ci.yml`. Separate `minnow-headless.yml` removed (was redundant; live smoke never enabled). |
 | **Conditional skips** | **Low** | Only `test/benchmark/harnesses/humaneval-integration.test.mts` uses `t.skip` when tool server is down (counts as **skipped**, not fail). |
 | **Excluded integration tests** | **Low** | PTY live-server scripts excluded from `npm test` and orphan check—**not in CI** unless someone adds a job. |
 | **Dirty-tree / manifest drift** | **High until fixed** | Failures observed: `editor-ai-completion-meta`, `skills-probes` (bundled skill list vs `create-pr`), `fake-lsp.integration` formatting. |
@@ -167,13 +167,13 @@ Doc is **accurate** as a manual layer; automation does **not** replace Standard 
 | CI-5 | **P2** | `test:brain` scoped suite incomplete (no `.mts`) | Extend `SCOPED_SUITES.brain` patterns or add `test:brain` glob for `**/*.test.mts` |
 | CI-6 | **P2** | No `test:onboarding` / `test:issues` / `test:scheduler` / `test:voice` | Add scoped suites for beta workflows; fix AGENTS.md vs `package.json` for `test:voice` |
 | CI-7 | **P2** | Issues lacks OS-level app test (peer: `scheduler-app`, `brain-app`) | Add `test/os/issues-app.test.mts` for registry, routes, `#/app/issues/ISS-n` |
-| CI-8 | **P3** | Headless workflow Node 20 vs CI Node 24 | Align `minnow-headless.yml` to Node 24 |
+| CI-8 | **P3** | ~~Headless workflow Node 20 vs CI Node 24~~ | Done (Node 24), then workflow removed as redundant with `npm test` |
 | CI-9 | **P3** | PTY integration excluded from CI | Document as manual pre-beta or add optional job |
 | CI-10 | **P3** | `humaneval-integration` skips without server | Expected; do not rely on it in CI signal |
 
 ---
 
 **Files reviewed (absolute paths):**  
-`c:\Users\dukky\Documents\Development\Minnow\test\run-all.mjs`, `test\check-test-coverage.mjs`, `test\test-config.mjs`, `test\test-discovery.mjs`, `.github\workflows\ci.yml`, `board-nightly.yml`, `board-release.yml`, `minnow-headless.yml`, `budgets.json`, `documentation\guides\release-e2e-testing.md`, `package.json`, representative tests under `test\onboarding`, `test\issues`, `test\scheduler`, `test\brain`, `test\orchestrate`, `test\os`.
+`c:\Users\dukky\Documents\Development\Minnow\test\run-all.mjs`, `test\check-test-coverage.mjs`, `test\test-config.mjs`, `test\test-discovery.mjs`, `.github\workflows\ci.yml`, `board-nightly.yml`, `board-release.yml`, `budgets.json`, `documentation\guides\release-e2e-testing.md`, `package.json`, representative tests under `test\onboarding`, `test\issues`, `test\scheduler`, `test\brain`, `test\orchestrate`, `test\os`.
 
 [REDACTED]

@@ -58,7 +58,7 @@
 - **CI-1:** `server/config/home.js`, `skill-probes.ts`, `test/fixtures/fake-lsp.mjs`.
 - **CI-5/6:** `test:brain` includes `.mts`; added `test:onboarding`, `test:issues`, `test:scheduler`, `test:voice`; `AGENTS.md` / `context.md` updated.
 - **CI-7:** `test/os/issues-app.test.mts`.
-- **CI-8:** `minnow-headless.yml` Node 24.
+- **CI-8:** `minnow-headless.yml` Node 24 (later removed — headless unit tests already covered by `npm test` / `ci.yml`).
 - **Coordinator:** Updated `calendar-app`, `compare-app`, `email-app` legacy-hash expectations; `super-plan/config-meta.test.mts` (`reviewTimeoutMs`); `prompt-overlap-collapse` (trimmed `mode-handoff.md`); `tool-policy` (shorter `launch_minnow_app` copy).
 - **Editor:** Fixed multi-line accept + `indentRange` (separate dispatch); `editor-completion-accept.ts`, `state.ts`.
 
@@ -94,7 +94,7 @@
 **Editor:** `src/ui/editor-completion-accept.ts`, `editor-suggestions/state.ts`, `intent-accept.ts`  
 **Server / config:** `server/config/home.js`, `src/benchmark/suites/skill-probes.ts`  
 **Docs:** `documentation/manual/**`, `context.md`, `maintainer/settings-reference.md`, `THIRD_PARTY_NOTICES.md`, `guides/release-e2e-testing.md`  
-**Tests / CI:** `test/os/*`, `test/super-plan/config-meta.test.mts`, `test/fixtures/fake-lsp.mjs`, `package.json`, `test/test-config.mjs`, `.github/workflows/minnow-headless.yml`  
+**Tests / CI:** `test/os/*`, `test/super-plan/config-meta.test.mts`, `test/fixtures/fake-lsp.mjs`, `package.json`, `test/test-config.mjs`  
 **Generated:** `server/product-wiki/catalog.json` (regenerated after manual edits)
 
 ---

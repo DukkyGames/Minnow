@@ -569,7 +569,8 @@ Config: `config.editorIntentMode` (`enabledByDefault`, `debounceMs`, `contextWin
 
 - **`npm test`** — discovers `test/**/*.test.{js,mjs,mts,ts}` via [`test/run-all.mjs`](../test/run-all.mjs).
 - **`npx tsc --noEmit`** — typecheck for `src/` with **`strict: true`** in root [`tsconfig.json`](../tsconfig.json) (no ESLint config); CI enforces the same command on Windows and Ubuntu.
-- **CI:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Windows + Ubuntu.
+- **CI:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Windows + Ubuntu. Headless CLI unit tests (`test/headless/`) run in that suite via `npm test`; there is no separate headless workflow.
+- **Other workflows:** [`board-nightly.yml`](../.github/workflows/board-nightly.yml), [`board-release.yml`](../.github/workflows/board-release.yml), [`wiki-sync.yml`](../.github/workflows/wiki-sync.yml).
 
 Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:onboarding`, `test:issues`, `test:scheduler`, `test:voice`, `test:engine`, `test:a11y`, …).
 
