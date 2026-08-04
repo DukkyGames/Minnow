@@ -66,6 +66,11 @@ export function modelRequiresReasoningContentReplay(modelId: string): boolean {
   return /deepseek/i.test(modelId.trim());
 }
 
+/** Kimi / Moonshot APIs reject `reasoning` (and related) fields on chat message objects. */
+export function modelRejectsMessageReasoningReplay(modelId: string): boolean {
+  return /kimi|moonshot/i.test(modelId.trim());
+}
+
 export interface OutboundReasoningReplayOptions {
   /** DeepSeek tool-loop rows must always include `reasoning_content` (may be empty). */
   toolCallTurn?: boolean;
@@ -83,6 +88,10 @@ export function outboundReasoningReplayFields(
     ApiAssistantMessage,
     'reasoning' | 'reasoning_content' | 'reasoning_signature'
   > = {};
+  if (modelRejectsMessageReasoningReplay(modelId)) {
+    return out;
+  }
+
   const deepSeekToolLoop =
     options?.toolCallTurn === true && modelRequiresReasoningContentReplay(modelId);
 
