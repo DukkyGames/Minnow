@@ -22,6 +22,9 @@ import {
   runCascade,
   uninstallGitHook,
 } from './cascade.js';
+import { runWithToolContext } from '../../runtime/path-access.js';
+import { validateAllowedWorkspaceRoot } from '../../chats-workspace/paths.js';
+import { brainWorkspaceKeyFromPath } from '../paths.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -43,6 +46,30 @@ function readJsonBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+/** Optional workspace root from query string or JSON body (matches tool workspace overrides). */
+function workspaceRootParam(url, body) {
+  const raw = body?.workspaceRoot ?? url.searchParams.get('workspaceRoot') ?? '';
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  return trimmed || null;
+}
+
+/**
+ * Run a code-index handler under an optional validated workspace root override.
+ * @template T
+ * @param {import('node:http').IncomingMessage} req
+ * @param {Record<string, unknown>} body
+ * @param {() => Promise<T>} fn
+ */
+async function withCodeWorkspace(req, body, fn) {
+  const url = new URL(req.url ?? '', 'http://localhost');
+  const rootParam = workspaceRootParam(url, body);
+  if (!rootParam) {
+    return fn();
+  }
+  const resolved = await validateAllowedWorkspaceRoot(rootParam);
+  return runWithToolContext(fn, { workspaceRoot: resolved });
 }
 
 /**
@@ -68,7 +95,8 @@ export async function handleCodeIndexRequest(req, res, pathname) {
     }
 
     if (pathname === '/api/brain/code/status' && req.method === 'GET') {
-      sendJson(res, 200, await queryCodeStatus());
+      const payload = await withCodeWorkspace(req, {}, () => queryCodeStatus());
+      sendJson(res, 200, payload);
       return true;
     }
 
@@ -90,12 +118,14 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const files = Array.isArray(body.files)
         ? body.files.map((f) => String(f))
         : undefined;
-      const result = await runCascade({
-        trigger: 'manual',
-        files,
-        codeConfig: code,
-        force: true,
-      });
+      const result = await withCodeWorkspace(req, body, () =>
+        runCascade({
+          trigger: 'manual',
+          files,
+          codeConfig: code,
+          force: true,
+        }),
+      );
       sendJson(res, 200, { ok: true, ...result });
       return true;
     }
@@ -107,7 +137,12 @@ export async function handleCodeIndexRequest(req, res, pathname) {
         return true;
       }
       const result = clearCodeIndex({
-        workspaceKey: body.workspaceKey !== undefined ? String(body.workspaceKey) : undefined,
+        workspaceKey:
+          body.workspaceKey !== undefined
+            ? String(body.workspaceKey)
+            : body.workspaceRoot
+              ? brainWorkspaceKeyFromPath(String(body.workspaceRoot))
+              : undefined,
         all: body.all === true,
       });
       sendJson(res, 200, result);
@@ -125,12 +160,14 @@ export async function handleCodeIndexRequest(req, res, pathname) {
         body.trigger === 'lazy-query'
           ? body.trigger
           : 'manual';
-      const result = await runCascade({
-        trigger,
-        files,
-        codeConfig: code,
-        force: body.force === true,
-      });
+      const result = await withCodeWorkspace(req, body, () =>
+        runCascade({
+          trigger,
+          files,
+          codeConfig: code,
+          force: body.force === true,
+        }),
+      );
       sendJson(res, 200, { ok: true, ...result });
       return true;
     }
@@ -157,7 +194,10 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const url = new URL(req.url ?? '', 'http://localhost');
       const query = url.searchParams.get('query') ?? body.query ?? '';
       const limit = Number(url.searchParams.get('limit') ?? body.limit ?? 20);
-      sendJson(res, 200, await findSymbol(String(query), limit));
+      const payload = await withCodeWorkspace(req, body, () =>
+        findSymbol(String(query), limit),
+      );
+      sendJson(res, 200, payload);
       return true;
     }
 
@@ -174,19 +214,21 @@ export async function handleCodeIndexRequest(req, res, pathname) {
         body.ensureIndexed === true ||
         url.searchParams.get('ensureIndexed') === 'true' ||
         url.searchParams.get('ensureIndexed') === '1';
-      if (ensureIndexed) {
-        await ensureWarmCodeIndex(repo);
-      }
-      const profile =
-        body.profile === 'injection' || url.searchParams.get('profile') === 'injection'
-          ? 'injection'
-          : 'default';
-      const map = await repoMap({
-        repo,
-        focus: focus ? String(focus) : undefined,
-        tokenBudget: tokenBudget > 0 ? tokenBudget : undefined,
-        focusFiles: Array.isArray(body.focusFiles) ? body.focusFiles.map(String) : undefined,
-        profile,
+      const map = await withCodeWorkspace(req, body, async () => {
+        if (ensureIndexed) {
+          await ensureWarmCodeIndex(repo);
+        }
+        const profile =
+          body.profile === 'injection' || url.searchParams.get('profile') === 'injection'
+            ? 'injection'
+            : 'default';
+        return repoMap({
+          repo,
+          focus: focus ? String(focus) : undefined,
+          tokenBudget: tokenBudget > 0 ? tokenBudget : undefined,
+          focusFiles: Array.isArray(body.focusFiles) ? body.focusFiles.map(String) : undefined,
+          profile,
+        });
       });
       sendJson(res, 200, map);
       return true;
@@ -196,7 +238,8 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const body = req.method === 'POST' ? await readJsonBody(req) : {};
       const url = new URL(req.url ?? '', 'http://localhost');
       const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
-      sendJson(res, 200, await whoCalls(String(symbol)));
+      const payload = await withCodeWorkspace(req, body, () => whoCalls(String(symbol)));
+      sendJson(res, 200, payload);
       return true;
     }
 
@@ -204,7 +247,8 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const body = req.method === 'POST' ? await readJsonBody(req) : {};
       const url = new URL(req.url ?? '', 'http://localhost');
       const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
-      sendJson(res, 200, await callsOf(String(symbol)));
+      const payload = await withCodeWorkspace(req, body, () => callsOf(String(symbol)));
+      sendJson(res, 200, payload);
       return true;
     }
 
@@ -212,7 +256,8 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const body = req.method === 'POST' ? await readJsonBody(req) : {};
       const url = new URL(req.url ?? '', 'http://localhost');
       const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
-      sendJson(res, 200, await readSymbol(String(symbol)));
+      const payload = await withCodeWorkspace(req, body, () => readSymbol(String(symbol)));
+      sendJson(res, 200, payload);
       return true;
     }
 
@@ -220,7 +265,8 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const body = req.method === 'POST' ? await readJsonBody(req) : {};
       const url = new URL(req.url ?? '', 'http://localhost');
       const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
-      sendJson(res, 200, await explainSymbol(String(symbol)));
+      const payload = await withCodeWorkspace(req, body, () => explainSymbol(String(symbol)));
+      sendJson(res, 200, payload);
       return true;
     }
 

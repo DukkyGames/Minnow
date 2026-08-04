@@ -181,7 +181,7 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs the app.',
   }),
   field('general.filesystem', 'Filesystem access', 'general', 'general', {
-    keywords: ['workspace', 'full disk', 'path', 'sandbox', 'file tools', 'git', 'TOOLS_ALLOW_ALL_PATHS'],
+    keywords: ['workspace', 'full disk', 'path', 'sandbox', 'file tools', 'git'],
     description: 'Limit file and git tools to the open project folder, or allow paths anywhere on this computer.',
   }),
   field('general.onboarding', 'Run setup again', 'general', 'general', {

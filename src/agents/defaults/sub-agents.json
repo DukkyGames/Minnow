@@ -234,7 +234,7 @@
       }
     },
     "bug-planner": {
-      "label": "Bug planner",
+      "label": "Issue planner",
       "enabled": true,
       "providerId": "",
       "modelId": "",

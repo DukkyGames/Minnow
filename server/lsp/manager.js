@@ -15,6 +15,7 @@ import {
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
 import { resolveLspSpawnArgv, tryResolveBundledTsserverPath } from './resolve-command.js';
 import { buildLspProcessEnv } from './paths.js';
+import { applyNodeRuntimeEnv } from './node-runtime.js';
 import { logChildProcessDiagnostic } from '../diagnostics/process-handlers.js';
 import {
   matchServersForPath,
@@ -38,7 +39,8 @@ const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
 const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = 15_000;
 /** Default timeout for indexing/search LSP requests (workspace/symbol, documentSymbol). */
 const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 6000;
-const LSP_COMPLETION_TIMEOUT_MS = 1500;
+/** Cold CI runners can be slow to answer the first completion request. */
+const LSP_COMPLETION_TIMEOUT_MS = 4000;
 const LSP_HOVER_TIMEOUT_MS = 1000;
 const LSP_SIGNATURE_TIMEOUT_MS = 1000;
 const LSP_DEFINITION_TIMEOUT_MS = 3000;
@@ -450,12 +452,17 @@ function spawnLspChild(argv, workspaceRoot = lspWorkspaceRoot()) {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
-      env: buildLspProcessEnv(
-        {
-          ...process.env,
-          MINNOW_APP_ROOT: APP_ROOT,
-        },
-        workspaceRoot,
+      // ELECTRON_RUN_AS_NODE when bin is the Electron binary — node servers ship
+      // inside app.asar and only Electron's Node can read them (see node-runtime.js).
+      env: applyNodeRuntimeEnv(
+        buildLspProcessEnv(
+          {
+            ...process.env,
+            MINNOW_APP_ROOT: APP_ROOT,
+          },
+          workspaceRoot,
+        ),
+        bin,
       ),
     });
     /** @type {string[]} */
@@ -641,11 +648,52 @@ function trimDiagnosticSnapshotsLru(store) {
   }
 }
 
+/** Default workspace/configuration sections when lsp.json has no overrides. */
+const DEFAULT_LSP_WORKSPACE_SECTIONS = {
+  bashIde: {
+    enableSourceErrorDiagnostics: true,
+    shellcheckPath: 'shellcheck',
+  },
+  html: {
+    validate: {
+      scripts: true,
+      styles: true,
+    },
+  },
+  css: {
+    validate: true,
+  },
+};
+
+/**
+ * Resolve one workspace/configuration item for an LSP server entry.
+ * @param {Record<string, unknown>} settings
+ * @param {string | undefined} section
+ */
+function resolveWorkspaceConfigurationSection(settings, section) {
+  if (section && settings[section] != null && typeof settings[section] === 'object') {
+    return settings[section];
+  }
+  if (section && DEFAULT_LSP_WORKSPACE_SECTIONS[section]) {
+    return DEFAULT_LSP_WORKSPACE_SECTIONS[section];
+  }
+  if (!section && Object.keys(settings).length > 0) {
+    return settings;
+  }
+  return {};
+}
+
 function bindLspClientHandlers(connection, serverId, config) {
-  connection.onRequest('workspace/configuration', () => {
+  connection.onRequest('workspace/configuration', (params) => {
     const settings =
       config?.settings && typeof config.settings === 'object' ? config.settings : {};
-    return [settings];
+    const items = Array.isArray(params?.items) ? params.items : [];
+    if (items.length === 0) {
+      return [resolveWorkspaceConfigurationSection(settings, undefined)];
+    }
+    return items.map((item) =>
+      resolveWorkspaceConfigurationSection(settings, item?.section),
+    );
   });
   connection.onRequest('client/registerCapability', () => null);
   connection.onRequest('client/unregisterCapability', () => null);

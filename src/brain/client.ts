@@ -163,8 +163,15 @@ export async function fetchBrainUsage(): Promise<BrainUsageReport | null> {
 }
 
 /** Code index status for the active workspace. */
-export async function fetchBrainCodeStatus(): Promise<BrainCodeStatus | null> {
-  return brainFetch<BrainCodeStatus>('/api/brain/code/status');
+export async function fetchBrainCodeStatus(options?: {
+  workspaceRoot?: string;
+}): Promise<BrainCodeStatus | null> {
+  const qs = new URLSearchParams();
+  if (options?.workspaceRoot?.trim()) {
+    qs.set('workspaceRoot', options.workspaceRoot.trim());
+  }
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return brainFetch<BrainCodeStatus>(`/api/brain/code/status${suffix}`);
 }
 
 /** Load config.brain.code settings. */
@@ -193,10 +200,16 @@ export async function saveBrainCodeConfig(
 }
 
 /** Reindex the workspace code graph through the cascade engine. */
-export async function reindexBrainCode(): Promise<BrainCodeReindexResult | null> {
+export async function reindexBrainCode(options?: {
+  workspaceRoot?: string;
+}): Promise<BrainCodeReindexResult | null> {
   return brainFetch<BrainCodeReindexResult>('/api/brain/code/reindex', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({
+      ...(options?.workspaceRoot?.trim()
+        ? { workspaceRoot: options.workspaceRoot.trim() }
+        : {}),
+    }),
   });
 }
 
@@ -240,13 +253,15 @@ export async function fetchBrainCodeRepoMap(options?: {
   tokenBudget?: number;
   ensureIndexed?: boolean;
   profile?: 'default' | 'injection';
+  workspaceRoot?: string;
 }): Promise<BrainCodeRepoMap | null> {
   const postBody =
     options &&
     (options.repo?.trim() ||
       options.ensureIndexed === true ||
       options.profile === 'injection' ||
-      (options.focusFiles?.length ?? 0) > 0);
+      (options.focusFiles?.length ?? 0) > 0 ||
+      options.workspaceRoot?.trim());
   if (postBody) {
     const opts = options;
     return brainFetch<BrainCodeRepoMap>('/api/brain/code/repo-map', {
@@ -260,6 +275,9 @@ export async function fetchBrainCodeRepoMap(options?: {
           : {}),
         ...(opts.ensureIndexed === true ? { ensureIndexed: true } : {}),
         ...(opts.profile === 'injection' ? { profile: 'injection' } : {}),
+        ...(opts.workspaceRoot?.trim()
+          ? { workspaceRoot: opts.workspaceRoot.trim() }
+          : {}),
       }),
     });
   }
@@ -267,6 +285,9 @@ export async function fetchBrainCodeRepoMap(options?: {
   if (options?.focus?.trim()) qs.set('focus', options.focus.trim());
   if (options?.tokenBudget && options.tokenBudget > 0) {
     qs.set('tokenBudget', String(options.tokenBudget));
+  }
+  if (options?.workspaceRoot?.trim()) {
+    qs.set('workspaceRoot', options.workspaceRoot.trim());
   }
   const suffix = qs.toString() ? `?${qs}` : '';
   return brainFetch<BrainCodeRepoMap>(`/api/brain/code/repo-map${suffix}`);
@@ -276,43 +297,63 @@ export async function fetchBrainCodeRepoMap(options?: {
 export async function findBrainCodeSymbol(
   query: string,
   limit = 20,
+  options?: { workspaceRoot?: string },
 ): Promise<BrainCodeFindResult | null> {
   const qs = new URLSearchParams({
     query: query.trim(),
     limit: String(limit),
   });
+  if (options?.workspaceRoot?.trim()) {
+    qs.set('workspaceRoot', options.workspaceRoot.trim());
+  }
   return brainFetch<BrainCodeFindResult>(`/api/brain/code/find-symbol?${qs}`);
 }
 
 /** Incoming call edges for a symbol. */
 export async function fetchBrainCodeWhoCalls(
   symbol: string,
+  options?: { workspaceRoot?: string },
 ): Promise<BrainCodeWhoCallsResult | null> {
   const qs = new URLSearchParams({ symbol });
+  if (options?.workspaceRoot?.trim()) {
+    qs.set('workspaceRoot', options.workspaceRoot.trim());
+  }
   return brainFetch<BrainCodeWhoCallsResult>(`/api/brain/code/who-calls?${qs}`);
 }
 
 /** Outgoing call edges for a symbol. */
 export async function fetchBrainCodeCallsOf(
   symbol: string,
+  options?: { workspaceRoot?: string },
 ): Promise<BrainCodeCallsOfResult | null> {
   const qs = new URLSearchParams({ symbol });
+  if (options?.workspaceRoot?.trim()) {
+    qs.set('workspaceRoot', options.workspaceRoot.trim());
+  }
   return brainFetch<BrainCodeCallsOfResult>(`/api/brain/code/calls-of?${qs}`);
 }
 
 /** Read the live source span for a symbol. */
 export async function fetchBrainCodeReadSymbol(
   symbol: string,
+  options?: { workspaceRoot?: string },
 ): Promise<BrainCodeReadSymbolResult | null> {
   const qs = new URLSearchParams({ symbol });
+  if (options?.workspaceRoot?.trim()) {
+    qs.set('workspaceRoot', options.workspaceRoot.trim());
+  }
   return brainFetch<BrainCodeReadSymbolResult>(`/api/brain/code/read-symbol?${qs}`);
 }
 
 /** Wiki pages that anchor a symbol (code → meaning). */
 export async function fetchBrainCodeExplain(
   symbol: string,
+  options?: { workspaceRoot?: string },
 ): Promise<BrainCodeExplainResult | null> {
   const qs = new URLSearchParams({ symbol });
+  if (options?.workspaceRoot?.trim()) {
+    qs.set('workspaceRoot', options.workspaceRoot.trim());
+  }
   return brainFetch<BrainCodeExplainResult>(`/api/brain/code/explain?${qs}`);
 }
 
@@ -418,10 +459,12 @@ export async function clearBrainProposals(
 /** Reset the code index for the current workspace or all workspaces. */
 export async function clearBrainCodeIndex(opts?: {
   all?: boolean;
+  workspaceRoot?: string;
 }): Promise<BrainMutationResult> {
   return brainMutate('/api/brain/code/clear', {
     all: opts?.all === true,
     confirmed: true,
+    ...(opts?.workspaceRoot?.trim() ? { workspaceRoot: opts.workspaceRoot.trim() } : {}),
   });
 }
 

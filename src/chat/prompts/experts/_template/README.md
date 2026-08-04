@@ -16,7 +16,7 @@ Each expert folder needs:
 
 ## Summoning
 
-Open **Experts** (`#/experts`, top bar flask icon), pick a specialist, and run a brief. Disable the feature in Settings → Experts with **Enable experts**.
+Experts is a **hidden optional app** in default builds — not part of the eight released core apps. When enabled: open **Experts** (`#/experts`, top bar flask icon), pick a specialist, and run a brief. Disable the feature in Settings → Experts with **Enable experts**.
 
 ## Front matter
 

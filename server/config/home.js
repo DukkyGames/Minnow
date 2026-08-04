@@ -290,6 +290,7 @@ const DEFAULT_META = {
     contextBudgetChars: 4000,
     useNativeFim: true,
     enableCompletionCache: true,
+    reindentOnAccept: true,
   },
   gitCommitMessage: {
     useGitmoji: true,

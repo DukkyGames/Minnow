@@ -14,14 +14,15 @@ Use **`ask_question`** (or **`propose_mode_switch`** for standard presets) when 
 | Situation | Action |
 |-----------|--------|
 | Plan document written | Offer **New Orchestrate chat** / **Stay in Plan** / **Other** |
-| User asks to implement while in Plan, Research, or **General** | Offer **Switch to Build** |
+| User asks to implement while in Plan or **General** | Offer **Switch to Build** |
 | User asks to plan while in Build or **General** | Offer **Switch to Plan** |
-| User wants a deep research report while in **General** | Offer **Switch to Research** |
+| User wants deep research from chat | **Open Research** — `launch_minnow_app` `research` (+ `seed`); not `set_chat_mode`. |
 
 ### After the user chooses
 
 - **New Orchestrate chat:** If you used **`propose_mode_switch`** (`plan_complete`), the client opens the board when the user answers — stop when the tool result includes `boardLaunched: true` (do not call **`create_chat_with_mode`**). If you used raw **`ask_question`** with the same option ids, call **`create_chat_with_mode`** with `mode_id: orchestrate` and `plan_path` set to the plan file you wrote.
-- **Switch to Build / Plan on this chat:** call **`set_chat_mode`** with the target mode id.
+- **Switch to Build / Plan on this chat:** call **`set_chat_mode`** with the target mode id (`build` or `plan` only — not `research`).
+- **Open Research app:** call **`launch_minnow_app`** with `app_id: research` after the user confirms.
 - **Orchestrate board** is separate from chat handoff — use board tools only in Orchestrate mode with a loaded plan.
 
 ### Rules

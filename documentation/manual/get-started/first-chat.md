@@ -48,7 +48,7 @@ Four modes sit under the composer. They change the system prompt *and* which too
 
 | Mode | Use it for |
 |------|------------|
-| **General** | Everyday questions and mixed tasks. The only composer mode that can read this manual. |
+| **General** | Everyday questions and mixed tasks. The only composer-strip mode that can read this manual (`minnow_docs_*`). |
 | **Build** | Writing code. Files, git, terminal, code intelligence. |
 | **Plan** | Designing and analysing. Reads anything; cannot edit your files except plan documents. |
 | **Debug** | Investigating failures, with access to diagnostics and the Issues tracker. |
@@ -73,7 +73,7 @@ Drag files onto the composer, or use the attachment button. Up to 10 MB per file
 
 ## Slash skills
 
-Type **/** at the start of an empty composer to open the picker. Skills are packaged instructions the model follows — code review, commit-message writing, a security pass, a UI critique. Fifteen ship built in and are on by default.
+Type **/** at the start of an empty composer to open the picker. Skills are packaged instructions the model follows — code review, commit-message writing, a security pass, a UI critique. Sixteen ship built in and are on by default.
 
 The same picker holds `/goal` and `/loop`, which are not skills but chat controls: one keeps working until a condition is met, the other re-runs a prompt on a schedule.
 
@@ -87,7 +87,7 @@ The assistant can also open apps itself when it decides that is what you want �
 
 ## Where your conversations go
 
-Chats are stored in a SQLite database in your Minnow home and are grouped by workspace folder, so the rail shows the threads that belong to where you are working. Minnow keeps the 50 most recent, newest first.
+Chats are stored in SQLite in your Minnow home and grouped by workspace folder, so the rail shows the threads that belong to where you are working. There is no fixed cap on how many conversations you can keep; the rail sorts by recent activity. Empty chats you never used are pruned when you switch away (board-linked and planner chats are kept).
 
 ## Next steps
 

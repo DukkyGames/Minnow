@@ -4,6 +4,7 @@
 
 import type { EditorState } from '@codemirror/state';
 import type { ChangeSpec } from '@codemirror/state';
+import type { EditorView } from '@codemirror/view';
 import { getIndentUnit, indentRange, indentUnit } from '@codemirror/language';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { fenceLangFromPath } from './editor-ai-completion-prompt';
@@ -14,25 +15,55 @@ export function isWhitespaceSignificantFenceLang(fenceLang: string): boolean {
   return lang === 'python' || lang === 'yaml' || lang === 'markdown';
 }
 
-/** Build document change specs for accepting a completion ghost (with optional reindent). */
-export function completionInsertChangeSpecs(
-  state: EditorState,
-  insertPos: number,
+export function shouldReindentOnAccept(
   text: string,
   filePath: string,
   config: EditorAiCompletionConfig,
-): ChangeSpec | readonly ChangeSpec[] {
-  const insertChange: ChangeSpec = { from: insertPos, insert: text };
-  if (!text.includes('\n')) return insertChange;
-  if (config.reindentOnAccept === false) return insertChange;
-
+): boolean {
+  if (!text.includes('\n')) return false;
+  if (config.reindentOnAccept === false) return false;
+  if (!filePath.trim()) return false;
   const fenceLang = fenceLangFromPath(filePath);
-  if (isWhitespaceSignificantFenceLang(fenceLang)) return insertChange;
+  return !isWhitespaceSignificantFenceLang(fenceLang);
+}
 
-  const insertedState = state.update({ changes: insertChange }).state;
-  const end = insertPos + text.length;
-  const indentChanges = indentRange(insertedState, insertPos, end);
-  return [insertChange, indentChanges];
+/** Build document change specs for accepting a completion ghost (insert only). */
+export function completionInsertChangeSpecs(
+  _state: EditorState,
+  insertPos: number,
+  text: string,
+  _filePath: string,
+  _config: EditorAiCompletionConfig,
+): ChangeSpec {
+  return { from: insertPos, insert: text };
+}
+
+/**
+ * Apply optional indentRange after an insert/replace dispatch.
+ * indentRange returns a ChangeSet, so it must be its own dispatch (not batched with ChangeSpecs).
+ */
+export function dispatchReindentAfterAccept(
+  view: EditorView,
+  rangeFrom: number,
+  rangeTo: number,
+  filePath: string,
+  config: EditorAiCompletionConfig,
+  insertedText: string,
+): void {
+  if (!shouldReindentOnAccept(insertedText, filePath, config)) return;
+  const indentChanges = indentRange(view.state, rangeFrom, rangeTo);
+  if (indentChanges) view.dispatch({ changes: indentChanges });
+}
+
+/** Cursor position after insert (+ optional reindent) relative to the pre-accept document. */
+export function mappedEndAfterInsert(
+  stateBefore: EditorState,
+  insertPos: number,
+  stateAfter: EditorState,
+): number {
+  if (insertPos === stateBefore.doc.length) return stateAfter.doc.length;
+  const growth = stateAfter.doc.length - stateBefore.doc.length;
+  return insertPos + growth;
 }
 
 /** Indent unit string for alignment when state is available. */

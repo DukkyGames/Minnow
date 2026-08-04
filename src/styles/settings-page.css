@@ -1353,6 +1353,19 @@ label.settings-action-btn {
   flex-shrink: 0;
 }
 
+.settings-lsp-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-lsp-install-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
 .settings-lsp-toggle {
   display: flex;
   align-items: center;

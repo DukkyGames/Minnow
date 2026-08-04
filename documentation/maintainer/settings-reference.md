@@ -4,7 +4,7 @@ Complete inventory of Minnow settings: where they appear in the UI, what they co
 
 For storage layout and `config.json` overview, see [Where your data lives](../manual/reference/configuration.md). For the Settings page IA and search catalog, see [`src/ui/settings-catalog.ts`](../../src/ui/settings-catalog.ts).
 
-**Last updated:** 2026-07-25
+**Last updated:** 2026-08-03
 
 ---
 
@@ -15,8 +15,8 @@ For storage layout and `config.json` overview, see [Where your data lives](../ma
 | Settings sidebar categories | 7 |
 | Settings sections (areas) | 33 |
 | Cataloged searchable fields | ~100 |
-| Built-in tools (catalog) | 111 |
-| Built-in tools shown in a default build | 103 |
+| Built-in tools (catalog) | 114 |
+| Built-in tools shown in a default build | 106 |
 | Composer modes | 4 |
 | Built-in experts | 6 |
 | Built-in work agents | 7 |
@@ -368,7 +368,7 @@ Managed **SearXNG** install/start/stop (`~/.minnow/servers/`).
 | Constrained tool calls | `toolCalls.useConstrainedDecoding` |
 | Tool result cache | Session-scoped |
 
-**Per-tool permissions:** each of **89 built-in tools** is `off` / `ask` / `full`, plus any `mcp__…` tools from MCP servers.
+**Per-tool permissions:** each of **106 built-in tools** exposed in a default build (`off` / `ask` / `full`); the full catalog is **114** (eight calendar/email tools are hidden while those apps are release-gated). MCP servers add additional `mcp__…` tools with the same permission model.
 
 ### Browser (`config.json` → `browser`)
 
@@ -381,7 +381,7 @@ Managed **SearXNG** install/start/stop (`~/.minnow/servers/`).
 
 Preview panel automation for `browser_*` tools (Electron desktop shell only).
 
-#### Built-in tools (88)
+#### Built-in tools (catalog)
 
 | Category | Tools |
 |----------|-------|
@@ -397,11 +397,11 @@ Preview panel automation for `browser_*` tools (Electron desktop shell only).
 | **Skills** | Load Impeccable context, Run Impeccable |
 | **Calendar/Email** *(hidden)* | Manage calendar, List mail, Search mail, Get thread, Draft reply, Summarize inbox, Generate reply variants, Email action |
 
-> Catalog entries carrying an `appId` are filtered out of both the model's tool list and this page while that app is release-gated or user-disabled (MIN-472). The eight calendar/email tools are hidden in a default build.
+> Catalog entries carrying an `appId` are filtered out of both the model's tool list and this page while that app is release-gated or user-disabled (MIN-472). The eight calendar/email tools are hidden in a default build (114 total, 106 exposed).
 
 ### Skills (`skills.json`)
 
-Per skill: enabled/disabled. Custom SKILL.md authoring. **Caveman** skill has intensity setting. 15 skills are bundled; everything else installs from **Skills Library**.
+Per skill: enabled/disabled. Custom SKILL.md authoring. **Caveman** skill has intensity setting. **16** skills are bundled; everything else installs from **Skills Library**.
 
 ### Skills Library (`skills-library`)
 

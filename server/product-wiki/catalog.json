@@ -34,7 +34,7 @@
         "Next"
       ],
       "section": "Get started",
-      "hash": "ebcbc3502ae614934403cbe05b42397fe43cbcb02ddd2d6904917644049bafa7"
+      "hash": "4f21dd8f8d362053dad4040ab43757a7475b6a15fe57874cd46dcc6016a87166"
     },
     {
       "path": "documentation/manual/get-started/connect-a-model.md",
@@ -73,7 +73,7 @@
         "Next steps"
       ],
       "section": "Get started",
-      "hash": "d0a67ad1a289186e7fac7367fb0eba4d2e79b2716efdcf4737f47d56c47441e1"
+      "hash": "4b10f8f32be210ebb2527f223231cd68dcf98ed019b3370f8b31410798ddded1"
     },
     {
       "path": "documentation/manual/concepts/how-minnow-works.md",
@@ -90,7 +90,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "47cfef9a565108a3fe8f5ca9768008f8fe9221e515848e36c44ec7f88f34f3aa"
+      "hash": "a125086391529adda363812203acc282e0d10791e1a18e113c5a64f84731958a"
     },
     {
       "path": "documentation/manual/concepts/modes.md",
@@ -161,7 +161,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "0a80d78db4e4a922067a3e8af02d5bb22d15668b3c14bd08c221fec4231e0a21"
+      "hash": "31185998633239930463c63c3f17c48ab4daa3b1470509c1f63fa9f093e12ad0"
     },
     {
       "path": "documentation/manual/chat/skills-and-commands.md",
@@ -176,7 +176,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "f6f196239dfa66c8f7cb1dd39406241f866832397cff89be38f98dfafe3c3aba"
+      "hash": "ec6085d3333ab6196d85dea8dc93bc85675a1127f30b15be7e4062c34786a687"
     },
     {
       "path": "documentation/manual/apps/overview.md",
@@ -210,13 +210,14 @@
         "The file tree",
         "Terminal",
         "Git",
+        "Source Control Center",
         "Dev servers",
         "Browser preview",
         "Working with the assistant here",
         "Related"
       ],
       "section": "Apps",
-      "hash": "2597606164d88da77aaaf9332e4120885f4990d9492abfa2d16b849f18d04c2e"
+      "hash": "cdad4997edf5b59a70f87f82e94d2b84c276e19fa62ea61397c108645cda79b6"
     },
     {
       "path": "documentation/manual/apps/research.md",
@@ -321,7 +322,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "ce253c42bc0658b28348bfee3710724e8afa525a07251d4b0ee4b926072f547d"
+      "hash": "2bbad2830d3a272533fe90dd6af8ad6557abe38a216afee44be20cfe6a22111a"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",
@@ -358,7 +359,7 @@
         "Related"
       ],
       "section": "Orchestrate",
-      "hash": "25c42a58ef556e6d3a477a5ea12a61f1a333579a32e03f3abe37d806afa8b981"
+      "hash": "668c0e4458a7537fbe1006ddf09f26a3850239c8c7882b202a8c741d7ec14314"
     },
     {
       "path": "documentation/manual/orchestrate/agents.md",
@@ -554,13 +555,14 @@
     {
       "path": "documentation/THIRD_PARTY_NOTICES.md",
       "title": "Third-party notices",
-      "summary": "Material Icon Theme Minnow uses Material Icon Theme (PKief / Material Extensions) for file and folder icons in the Code file tree and editor tabs. Package: https://www.npmjs.com/package/material icon theme Repository: https://github.com/material extensions/vscode material icon th",
+      "summary": "Minnow is distributed under the GNU Affero General Public License v3 (AGPL 3.0). The packaged desktop app bundles Node.js dependencies from this repository's package.json (plus Electron/Chromium for the shell). This file lists representative major components and UI asset licenses",
       "headings": [
+        "Application runtime (representative)",
         "Material Icon Theme",
         "Uicons (Flaticon)"
       ],
       "section": "Legal",
-      "hash": "0ea20d06dae95b7a5bd813656406d7684bb77c463895df0b9368d6f4353a61f0"
+      "hash": "b3904244f9aafa62a23c743d21b9ed03adc50dcdf864c50b4e564317e620b63d"
     }
   ]
 }

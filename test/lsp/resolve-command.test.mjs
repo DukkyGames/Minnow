@@ -12,8 +12,10 @@ import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { setAppRoot } from '../../server/workspace/root.js';
 import {
   getManagedLspServersDir,
+  resolveLspExecutable,
   resolveLspSpawnArgv,
 } from '../../server/lsp/resolve-command.js';
+import { applyNodeRuntimeEnv } from '../../server/lsp/node-runtime.js';
 
 const APP_ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -62,7 +64,7 @@ describe('resolveLspSpawnArgv managed dir', () => {
       return;
     }
     const { argv, displayBin } = resolveLspSpawnArgv(['$minnow:pyright-langserver']);
-    assert.equal(argv[0], 'node');
+    assert.equal(argv[0], process.execPath);
     assert.match(argv[1], /langserver\.index\.js$/);
     assert.ok(argv.includes('--stdio'));
     assert.equal(displayBin, 'pyright-langserver');
@@ -88,7 +90,7 @@ describe('resolveLspSpawnArgv managed dir', () => {
     const { argv, displayBin } = resolveLspSpawnArgv([
       '$minnow:typescript-language-server',
     ]);
-    assert.equal(argv[0], 'node');
+    assert.equal(argv[0], process.execPath);
     assert.match(argv[1], /cli\.mjs$/);
     assert.equal(displayBin, 'typescript-language-server');
   });
@@ -117,13 +119,65 @@ describe('resolveLspSpawnArgv managed dir', () => {
       return;
     }
     const html = resolveLspSpawnArgv(['$minnow:vscode-html-language-server']);
-    assert.equal(html.argv[0], 'node');
+    assert.equal(html.argv[0], process.execPath);
     assert.equal(html.argv[1], htmlMain);
     assert.ok(html.argv.includes('--stdio'));
 
     const css = resolveLspSpawnArgv(['$minnow:vscode-css-language-server']);
-    assert.equal(css.argv[0], 'node');
+    assert.equal(css.argv[0], process.execPath);
     assert.equal(css.argv[1], cssMain);
     assert.ok(css.argv.includes('--stdio'));
+  });
+
+  it('resolves $minnow:graphql-lsp with stream IPC (not stdio)', () => {
+    const gqlCli = path.join(
+      APP_ROOT,
+      'node_modules',
+      'graphql-language-service-cli',
+      'bin',
+      'graphql.js',
+    );
+    if (!fs.existsSync(gqlCli)) {
+      console.log('skip: graphql-language-service-cli not installed');
+      return;
+    }
+    const { argv, displayBin } = resolveLspSpawnArgv(['$minnow:graphql-lsp']);
+    assert.equal(argv[0], process.execPath);
+    assert.equal(argv[1], gqlCli);
+    assert.deepEqual(argv.slice(2), ['server', '-m', 'stream']);
+    assert.equal(displayBin, 'graphql-lsp');
+  });
+});
+
+describe('node runtime for bundled language servers', () => {
+  it('maps a bare node command to the runtime Minnow itself runs on', () => {
+    assert.equal(resolveLspExecutable('node'), process.execPath);
+    assert.equal(resolveLspExecutable('node.exe'), process.execPath);
+  });
+
+  it('rewrites custom ["node", script] commands to the runtime executable', () => {
+    const { argv, displayBin } = resolveLspSpawnArgv(['node', 'server.js', '--stdio']);
+    assert.deepEqual(argv, [process.execPath, 'server.js', '--stdio']);
+    assert.equal(displayBin, 'node');
+  });
+
+  it('leaves the spawn env alone when the server process is plain node', () => {
+    const env = applyNodeRuntimeEnv({ PATH: '/usr/bin' }, process.execPath);
+    assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
+  });
+
+  it('sets ELECTRON_RUN_AS_NODE only for the Electron binary', () => {
+    const hadElectron = 'electron' in process.versions;
+    process.versions.electron = '43.0.0-test';
+    try {
+      const asNode = applyNodeRuntimeEnv({ PATH: '/usr/bin' }, process.execPath);
+      assert.equal(asNode.ELECTRON_RUN_AS_NODE, '1');
+      assert.equal(asNode.PATH, '/usr/bin');
+
+      const nativeServer = applyNodeRuntimeEnv({ PATH: '/usr/bin' }, 'rust-analyzer');
+      assert.equal(nativeServer.ELECTRON_RUN_AS_NODE, undefined);
+    } finally {
+      if (!hadElectron) delete process.versions.electron;
+    }
   });
 });

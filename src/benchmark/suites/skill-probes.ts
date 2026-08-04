@@ -124,6 +124,13 @@ export function divide(a: number, b: number) {
     toolIds: ['git_status', 'git_diff'],
     pattern: /^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?:\s+\S+/im,
   },
+  'create-pr': {
+    skillId: 'create-pr',
+    prompt:
+      'The branch is pushed and ready. What git/gh steps do you run to open a GitHub pull request with a clear title and body?',
+    passKind: 'regex',
+    pattern: /git push|gh pr create|pull request|origin|upstream/i,
+  },
   'refactor-safe': {
     skillId: 'refactor-safe',
     prompt:

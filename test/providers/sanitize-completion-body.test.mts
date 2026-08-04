@@ -150,6 +150,28 @@ describe('sanitizeCompletionBodyForProvider', () => {
     assert.equal(out.temperature, 1);
   });
 
+  test('strips message-level reasoning fields for Kimi models', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'kimi-k2.7-code',
+        messages: [
+          { role: 'user', content: 'hi' },
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: 'c1', type: 'function', function: { name: 'x', arguments: '{}' } }],
+            reasoning: 'must not be sent upstream',
+            reasoning_signature: 'sig',
+          },
+        ],
+      },
+      OPENAI,
+    );
+    const assistant = (out.messages as Record<string, unknown>[])[1];
+    assert.equal(assistant.reasoning, undefined);
+    assert.equal(assistant.reasoning_signature, undefined);
+  });
+
   test('keeps thinking_budget_tokens only for llama-cpp-local', () => {
     const llama = { ...OPENAI, id: 'llama-cpp-local' };
     const withBudget = sanitizeCompletionBodyForProvider(

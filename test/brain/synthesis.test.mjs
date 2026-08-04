@@ -28,6 +28,8 @@ before(async () => {
 });
 
 after(async () => {
+  // Let background brain vector/anchor work finish before closing SQLite and removing MINNOW_HOME.
+  await new Promise((resolve) => setTimeout(resolve, 250));
   closeCodeDbForTests();
   delete process.env.MINNOW_HOME;
   resetMinnowHomeCache();

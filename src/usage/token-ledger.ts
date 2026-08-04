@@ -68,7 +68,7 @@ export function formatSourceLabel(source: TokenLedgerSource): string {
     case 'title':
       return 'Chat title';
     case 'reef-widget':
-      return 'Reef widget';
+      return 'Legacy widget (Reef)';
     case 'orchestrate-board':
       return 'Orchestrate board';
     case 'work-agent':

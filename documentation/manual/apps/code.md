@@ -96,6 +96,10 @@ The source-control panel does status, stage, diff, commit, branch, pull and push
 - **Merge to main** appears when you are on a feature branch: it checks out the trunk in the main workspace, merges your branch, and switches you back — warning you first if the tree is dirty and surfacing merge failures with an option to send them to chat.
 - Agents use the same git operations through tools, so you and the model are never looking at different states.
 
+## Source Control Center
+
+The sidebar panel covers the everyday loop. For the full surface — **Changes**, **History**, **Branches**, **Stashes**, **Worktrees**, **Pull requests**, and **Checks** — open the **Source Control Center** from that panel (it overlays the Code column). **Ctrl+1**–**7** jump between sections; **Ctrl+K** opens the **Commands** palette (rebase, cherry-pick, stash, worktree, open PR, and similar). Pull requests and CI use your local `gh` CLI (Minnow stores no GitHub token). Screenshots and a longer walkthrough: [Source Control Center in the project README](https://github.com/HenriGrimm/Minnow#source-control-center--the-full-git-surface).
+
 ## Dev servers
 
 A first-class screen rather than a terminal tab you have to remember. Register the servers a project needs — command, working directory, port, auto-start, and which git worktree to run in — then start, stop and restart them from one place, with logs and a listening-ports view.
