@@ -1,6 +1,7 @@
 import { STATS_STRIP_OPEN_KEY } from '../constants';
 import { getArchiveDisabledReason } from '../chat/archive/index';
 import { getActiveChat } from '../state/sessions';
+import { formatStatCount } from '../usage/format-stat-count';
 import { formatUsd } from '../usage/token-ledger';
 import type { LastStats, ModelInfo, Stats, Usage } from '../types';
 
@@ -135,11 +136,21 @@ export function updateStrip(
   const u = usage || {};
   const m = modelInfo || {};
 
-  function set(id: string, html: string, blank: boolean): void {
+  function set(id: string, html: string, blank: boolean, title?: string): void {
     const el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = html;
     el.classList.toggle('blank', blank);
+    // Native tooltip carries the precise count when the label is compacted.
+    if (title) el.setAttribute('title', title);
+    else el.removeAttribute('title');
+  }
+
+  /** Apply compact M/B (or comma) formatting with a full-number hover title. */
+  function setCount(id: string, value: number | null | undefined): void {
+    const formatted = formatStatCount(value);
+    const blank = formatted.display === '—';
+    set(id, formatted.display, blank, blank ? undefined : formatted.full);
   }
 
   set(
@@ -164,7 +175,7 @@ export function updateStrip(
     s.generation_time == null
   );
 
-  set('stripTotal', u.total_tokens != null ? String(u.total_tokens) : '—', u.total_tokens == null);
+  setCount('stripTotal', u.total_tokens);
 
   let costLabel = '—';
   if (options?.costUsd != null && options.costUsd > 0) {
@@ -188,8 +199,15 @@ export function updateStrip(
   if (barPrompt && barCompletion && cntPrompt && cntCompletion) {
     barPrompt.style.setProperty('--fill-scale', String(p / t || 0));
     barCompletion.style.setProperty('--fill-scale', String(c / t || 0));
-    cntPrompt.textContent = p ? String(p) : '—';
-    cntCompletion.textContent = c ? String(c) : '—';
+    // Match Total Tokens: commas under 1M, M/B above, full count on hover.
+    const promptFmt = formatStatCount(p || null);
+    const completionFmt = formatStatCount(c || null);
+    cntPrompt.textContent = p ? promptFmt.display : '—';
+    cntCompletion.textContent = c ? completionFmt.display : '—';
+    if (p) cntPrompt.setAttribute('title', promptFmt.full);
+    else cntPrompt.removeAttribute('title');
+    if (c) cntCompletion.setAttribute('title', completionFmt.full);
+    else cntCompletion.removeAttribute('title');
   }
 
   const archEl = document.getElementById('iArch');
