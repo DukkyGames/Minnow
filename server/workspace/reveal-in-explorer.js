@@ -10,8 +10,28 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * @typedef {{ command: string, args: string[], detached?: boolean }} RevealCommand
+ * @typedef {{
+ *   command: string,
+ *   args: string[],
+ *   detached?: boolean,
+ *   windowsVerbatimArguments?: boolean,
+ * }} RevealCommand
  */
+
+/**
+ * explorer.exe treats `/segment` in arguments as switches. Paths must use `\` and
+ * file reveal uses a single `/select,"path"` token (spaces require quoting).
+ *
+ * @param {string} absolutePath
+ * @returns {string}
+ */
+export function formatPathForWindowsExplorer(absolutePath) {
+  const normalized = path.win32.normalize(String(absolutePath).trim().replace(/\//g, '\\'));
+  if (path.win32.isAbsolute(normalized)) {
+    return normalized;
+  }
+  return path.win32.resolve(normalized);
+}
 
 /**
  * Build the platform-specific command used to open/reveal a path.
@@ -23,15 +43,26 @@ import path from 'node:path';
  * @returns {RevealCommand}
  */
 export function buildRevealCommand(platform, absolutePath, isDirectory) {
-  const resolved = path.resolve(absolutePath);
-
   if (platform === 'win32') {
+    const explorerPath = formatPathForWindowsExplorer(absolutePath);
     // explorer.exe often exits non-zero even on success — spawn detached and ignore exit.
     if (isDirectory) {
-      return { command: 'explorer.exe', args: [resolved], detached: true };
+      return {
+        command: 'explorer.exe',
+        args: [explorerPath],
+        detached: true,
+        windowsVerbatimArguments: true,
+      };
     }
-    return { command: 'explorer.exe', args: [`/select,${resolved}`], detached: true };
+    return {
+      command: 'explorer.exe',
+      args: [`/select,"${explorerPath}"`],
+      detached: true,
+      windowsVerbatimArguments: true,
+    };
   }
+
+  const resolved = path.resolve(absolutePath);
 
   if (platform === 'darwin') {
     if (isDirectory) {
@@ -59,6 +90,7 @@ export function runRevealCommand(cmd, deps = {}) {
       detached: Boolean(cmd.detached),
       stdio: 'ignore',
       windowsHide: true,
+      ...(cmd.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
     });
     child.on('error', reject);
     if (cmd.detached) {
