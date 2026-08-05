@@ -212,25 +212,37 @@ async function main() {
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   startCalendarReminderLoop();
   startEmailPollLoop();
-  const onShutdown = () => {
+  const onShutdown = async () => {
     clearDevHostState();
     stopSchedulerTickLoop();
     stopCalendarReminderLoop();
     stopEmailPollLoop();
     shutdownSchedulerRuns();
     shutdownAllServers();
-    shutdownAllModelServes();
+    await shutdownAllModelServes();
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
   };
-  process.on('exit', onShutdown);
+  process.on('exit', () => {
+    /* sync-only: async teardown runs on SIGINT/SIGTERM below */
+    clearDevHostState();
+    stopSchedulerTickLoop();
+    stopCalendarReminderLoop();
+    stopEmailPollLoop();
+    shutdownSchedulerRuns();
+    shutdownAllServers();
+    destroyAllPtySessions();
+    deleteGenerationsForProviderShutdown();
+  });
   process.on('SIGINT', () => {
-    onShutdown();
-    process.exit(0);
+    void onShutdown()
+      .catch((err) => console.error('[shutdown]', err))
+      .finally(() => process.exit(0));
   });
   process.on('SIGTERM', () => {
-    onShutdown();
-    process.exit(0);
+    void onShutdown()
+      .catch((err) => console.error('[shutdown]', err))
+      .finally(() => process.exit(0));
   });
   // Skip auto-open for CI / headless CLI / when Electron is already the host.
   if (process.env.MINNOW_HEADLESS === '1') {
