@@ -9,6 +9,7 @@ import {
   encodeLibraryModelSelectKey,
   isLibraryModelBinding,
   libraryBindingNeedsServeLoad,
+  resolveLibraryModelIdForChatBinding,
   resolveLibrarySendBinding,
   resolveServedBindingForLibraryId,
   resolveUpstreamProviderId,
@@ -164,6 +165,33 @@ describe('model-select-library', () => {
     assert.equal(
       libraryBindingNeedsServeLoad(model.id, library, [sampleServe({ status: 'running' })], cache),
       false,
+    );
+  });
+
+  test('resolveLibraryModelIdForChatBinding maps synthetic and remapped upstream ids', () => {
+    const model = sampleLibraryModel();
+    const library = [model];
+
+    assert.equal(
+      resolveLibraryModelIdForChatBinding(LIBRARY_MODEL_PROVIDER_ID, model.id, library),
+      model.id,
+    );
+    assert.equal(
+      resolveLibraryModelIdForChatBinding(
+        LLAMA_CPP_LOCAL_PROVIDER_ID,
+        model.name,
+        library,
+      ),
+      model.id,
+      'persisted llama-cpp-local binding after a served turn must map back to the library row',
+    );
+    assert.equal(
+      resolveLibraryModelIdForChatBinding(LLAMA_CPP_LOCAL_PROVIDER_ID, 'unknown-model', library),
+      null,
+    );
+    assert.equal(
+      resolveLibraryModelIdForChatBinding('lmstudio', model.name, library),
+      null,
     );
   });
 

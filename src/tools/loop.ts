@@ -79,9 +79,10 @@ import {
 } from '../api/ensure-chat-model-loaded';
 import { fetchCachedModels, listModelServes } from '../models/api-client';
 import {
-  isLibraryModelBinding,
+  LIBRARY_MODEL_PROVIDER_ID,
   libraryBindingNeedsServeLoad,
   loadableLibraryFromCached,
+  resolveLibraryModelIdForChatBinding,
   resolveLibrarySendBinding,
   resolveUpstreamProviderId,
 } from '../models/model-select-library';
@@ -1384,19 +1385,21 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.providerId = sendProviderId;
 
   // My Models: keep minnow-library + gguf:/mlx: for ensure; remap to llama/mlx only after a live serve.
-  const libraryBinding = isLibraryModelBinding(chat.providerId, chat.modelId);
+  const cached = await fetchCachedModels();
+  const library = await loadableLibraryFromCached(cached);
+  const serves = await listModelServes().catch(() => []);
+  const libraryModelId = resolveLibraryModelIdForChatBinding(
+    chat.providerId,
+    chat.modelId,
+    library,
+  );
+  const libraryChatTurn = libraryModelId != null;
   /** Library ids passed to ensure — must not be remapped before load. */
   let libraryEnsure: { providerId: string; modelId: string } | null = null;
   let pendingModelLoad: boolean;
 
-  if (libraryBinding) {
-    // libraryBinding guarantees non-empty providerId + modelId.
-    const libraryProviderId = chat.providerId!.trim();
-    const libraryModelId = chat.modelId.trim();
-    libraryEnsure = { providerId: libraryProviderId, modelId: libraryModelId };
-    const cached = await fetchCachedModels();
-    const library = await loadableLibraryFromCached(cached);
-    const serves = await listModelServes().catch(() => []);
+  if (libraryChatTurn) {
+    libraryEnsure = { providerId: LIBRARY_MODEL_PROVIDER_ID, modelId: libraryModelId };
     // Live serve status — modelCache alone is stale after eject.
     pendingModelLoad = libraryBindingNeedsServeLoad(
       libraryModelId,
@@ -1410,14 +1413,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       sendModelId = served.modelId;
     } else {
       // Upstream provider for getActiveProvider / caps; completions remap after ensure.
-      sendProviderId = resolveUpstreamProviderId(libraryProviderId, libraryModelId);
+      sendProviderId = resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, libraryModelId);
     }
   } else {
     pendingModelLoad = false;
   }
 
   const sendProvider = await getActiveProvider(sendProviderId);
-  if (!libraryBinding) {
+  if (!libraryChatTurn) {
     pendingModelLoad = chatTurnNeedsModelLoad(sendProvider, sendModelId);
   }
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);

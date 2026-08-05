@@ -38,7 +38,8 @@ Selecting an unloaded **My Models** row and sending a chat turn could hit an imm
 Client-side in the tool / chat send loop (no server protocol change):
 
 1. Decide **pending load** from **live serve status**, not picker `modelCache` alone.
-2. Run ensure via [`loadLibraryModelFromPicker`](../../src/models/model-select-library.ts) with synthetic **`minnow-library`** + **`gguf:`** / **`mlx:`** ids.
+2. Resolve the library row from `minnow-library` bindings **or** persisted `llama-cpp-local` / `mlx-lm-local` ids after a prior served turn (`resolveLibraryModelIdForChatBinding`).
+3. Run ensure via [`loadLibraryModelFromPicker`](../../src/models/model-select-library.ts) with synthetic **`minnow-library`** + library ids.
 3. After load, re-resolve the send binding with [`resolveServedBindingForLibraryId`](../../src/models/model-select-library.ts) / [`resolveLibrarySendBinding`](../../src/models/model-select-library.ts) before generations.
 4. On Models-app eject, [`unloadServe`](../../src/ui/models/store.ts) calls `fetchModels()` so the picker cache (dots / Load-Unload) stays honest.
 

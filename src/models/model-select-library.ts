@@ -206,6 +206,54 @@ export function resolveLibrarySendBinding(
   return resolveServedBindingForLibraryId(libraryId, library, serves, providerModels);
 }
 
+function normalizeBindingToken(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? '';
+}
+
+/**
+ * Resolve the My Models library id for a chat binding.
+ * After a served turn, chats often persist llama-cpp-local / mlx-lm-local + upstream
+ * model ids — those must still auto-load when the serve is gone.
+ */
+export function resolveLibraryModelIdForChatBinding(
+  providerId: string | undefined,
+  modelId: string | undefined,
+  library: LibraryModel[],
+): string | null {
+  const pid = providerId?.trim();
+  const mid = modelId?.trim();
+  if (!pid || !mid) return null;
+
+  if (isLibraryModelBinding(pid, mid)) return mid;
+
+  if (pid === LLAMA_CPP_LOCAL_PROVIDER_ID) {
+    const want = normalizeBindingToken(mid);
+    const hit = library.find((model) => {
+      if (model.format === 'MLX' || model.id.startsWith('mlx:')) return false;
+      const name = normalizeBindingToken(model.name);
+      const file = normalizeBindingToken(model.fileName);
+      const repo = normalizeBindingToken(model.repoId);
+      return want === name || (file && want === file) || (repo && want === repo);
+    });
+    return hit?.id ?? null;
+  }
+
+  if (pid === MLX_LM_LOCAL_PROVIDER_ID) {
+    const want = mid.trim();
+    const wantLower = want.toLowerCase();
+    const hit = library.find((model) => {
+      if (model.format !== 'MLX' && !model.id.startsWith('mlx:')) return false;
+      const path = model.path?.trim();
+      if (path && (path === want || path.endsWith(want))) return true;
+      const name = normalizeBindingToken(model.name);
+      return wantLower === name;
+    });
+    return hit?.id ?? null;
+  }
+
+  return null;
+}
+
 /**
  * Drop llama-cpp-local catalog rows that duplicate a My Models row already listed
  * under the library optgroup (same served label / display name).
