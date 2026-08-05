@@ -80,9 +80,9 @@ import {
 import { fetchCachedModels, listModelServes } from '../models/api-client';
 import {
   isLibraryModelBinding,
-  libraryModelNeedsLoad,
+  libraryBindingNeedsServeLoad,
   loadableLibraryFromCached,
-  resolveServedBindingForLibraryId,
+  resolveLibrarySendBinding,
   resolveUpstreamProviderId,
 } from '../models/model-select-library';
 import {
@@ -1383,24 +1383,43 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = sendModelId;
   chat.providerId = sendProviderId;
 
-  if (isLibraryModelBinding(sendProviderId, sendModelId)) {
+  // My Models: keep minnow-library + gguf:/mlx: for ensure; remap to llama/mlx only after a live serve.
+  const libraryBinding = isLibraryModelBinding(chat.providerId, chat.modelId);
+  /** Library ids passed to ensure — must not be remapped before load. */
+  let libraryEnsure: { providerId: string; modelId: string } | null = null;
+  let pendingModelLoad: boolean;
+
+  if (libraryBinding) {
+    // libraryBinding guarantees non-empty providerId + modelId.
+    const libraryProviderId = chat.providerId!.trim();
+    const libraryModelId = chat.modelId.trim();
+    libraryEnsure = { providerId: libraryProviderId, modelId: libraryModelId };
     const cached = await fetchCachedModels();
     const library = await loadableLibraryFromCached(cached);
     const serves = await listModelServes().catch(() => []);
-    const served = resolveServedBindingForLibraryId(sendModelId, library, serves);
+    // Live serve status — modelCache alone is stale after eject.
+    pendingModelLoad = libraryBindingNeedsServeLoad(
+      libraryModelId,
+      library,
+      serves,
+      modelCache,
+    );
+    const served = resolveLibrarySendBinding(libraryModelId, library, serves);
     if (served) {
       sendProviderId = served.providerId;
       sendModelId = served.modelId;
     } else {
-      sendProviderId = resolveUpstreamProviderId(sendProviderId, sendModelId);
+      // Upstream provider for getActiveProvider / caps; completions remap after ensure.
+      sendProviderId = resolveUpstreamProviderId(libraryProviderId, libraryModelId);
     }
+  } else {
+    pendingModelLoad = false;
   }
 
   const sendProvider = await getActiveProvider(sendProviderId);
-  const libraryBinding = isLibraryModelBinding(chat.providerId, chat.modelId);
-  const pendingModelLoad = libraryBinding
-    ? libraryModelNeedsLoad(chat.modelId, modelCache)
-    : chatTurnNeedsModelLoad(sendProvider, sendModelId);
+  if (!libraryBinding) {
+    pendingModelLoad = chatTurnNeedsModelLoad(sendProvider, sendModelId);
+  }
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =
     replaySnapshot?.reasoningEffort ??
@@ -1751,7 +1770,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       if (!modelLoadDone) {
-        await ensureChatModelLoadedForTurn(sendProviderId, sendModelId, chatSignal);
+        // Ensure with library ids so loadLibraryModelFromPicker runs (not remapped llama/mlx).
+        const ensureProviderId = libraryEnsure?.providerId ?? sendProviderId;
+        const ensureModelId = libraryEnsure?.modelId ?? sendModelId;
+        await ensureChatModelLoadedForTurn(ensureProviderId, ensureModelId, chatSignal);
+
+        if (libraryEnsure) {
+          const cached = await fetchCachedModels();
+          const library = await loadableLibraryFromCached(cached);
+          const serves = await listModelServes().catch(() => []);
+          const served = resolveLibrarySendBinding(libraryEnsure.modelId, library, serves);
+          if (!served) {
+            throw new Error(
+              'Failed to load My Models model — no running serve after load',
+            );
+          }
+          sendProviderId = served.providerId;
+          sendModelId = served.modelId;
+        }
+
         modelLoadDone = true;
         patchMainTurnActivity(chat.id, { phase: 'generating' });
         if (isStreamDomVisible(chat.id)) {

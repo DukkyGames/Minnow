@@ -8,12 +8,60 @@ import {
   dedupLlamaCppModelsAgainstLibrary,
   encodeLibraryModelSelectKey,
   isLibraryModelBinding,
+  libraryBindingNeedsServeLoad,
+  resolveLibrarySendBinding,
+  resolveServedBindingForLibraryId,
   resolveUpstreamProviderId,
   LIBRARY_MODEL_PROVIDER_ID,
   libraryModelNeedsLoad,
 } from '../../src/models/model-select-library.ts';
 import type { LibraryModel } from '../../src/models/library.ts';
+import type { ServeRecord } from '../../src/models/api-client.ts';
 import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from '../../src/providers/types.ts';
+
+/** Fixed serve fixture — override status / id per case. */
+const sampleServe = (overrides: Partial<ServeRecord> = {}): ServeRecord => ({
+  id: 'serve-1',
+  runtime: 'llama-cpp',
+  modelPath: '/tmp/file.gguf',
+  modelLabel: 'Qwen3-8B',
+  port: 8085,
+  baseUrl: 'http://127.0.0.1:8085',
+  providerId: LLAMA_CPP_LOCAL_PROVIDER_ID,
+  status: 'running',
+  runId: null,
+  pid: 1,
+  error: null,
+  startedAt: 1,
+  stoppedAt: null,
+  ...overrides,
+});
+
+
+const sampleLibraryModel = (overrides: Partial<LibraryModel> = {}): LibraryModel => ({
+  id: 'gguf:qwen/qwen3:file.gguf',
+  name: 'Qwen3-8B',
+  repoId: 'qwen/qwen3',
+  publisher: 'qwen',
+  producerSlug: 'qwen',
+  producerName: 'Qwen',
+  producerLogoId: 'Qwen3-8B',
+  format: 'GGUF',
+  quant: 'Q4',
+  arch: 'qwen',
+  domain: 'chat',
+  paramsB: 8,
+  contextLength: 32768,
+  capabilities: [],
+  sizeBytes: 1000,
+  path: '/tmp/file.gguf',
+  fileName: 'file.gguf',
+  source: 'hf-cache',
+  servable: true,
+  incomplete: false,
+  isMoe: false,
+  ...overrides,
+});
 
 describe('model-select-library', () => {
   test('encodeLibraryModelSelectKey uses synthetic provider id', () => {
@@ -48,31 +96,7 @@ describe('model-select-library', () => {
   });
 
   test('dedupLlamaCppModelsAgainstLibrary removes duplicate served labels', () => {
-    const library: LibraryModel[] = [
-      {
-        id: 'gguf:qwen/qwen3:file.gguf',
-        name: 'Qwen3-8B',
-        repoId: 'qwen/qwen3',
-        publisher: 'qwen',
-        producerSlug: 'qwen',
-        producerName: 'Qwen',
-        producerLogoId: 'Qwen3-8B',
-        format: 'GGUF',
-        quant: 'Q4',
-        arch: 'qwen',
-        domain: 'chat',
-        paramsB: 8,
-        contextLength: 32768,
-        capabilities: [],
-        sizeBytes: 1000,
-        path: '/tmp/file.gguf',
-        fileName: 'file.gguf',
-        source: 'hf-cache',
-        servable: true,
-        incomplete: false,
-        isMoe: false,
-      },
-    ];
+    const library: LibraryModel[] = [sampleLibraryModel()];
     const results = [
       {
         provider: {
@@ -117,5 +141,68 @@ describe('model-select-library', () => {
     assert.equal(libraryModelNeedsLoad(libraryId, cache), true);
     cache.set(key, { id: libraryId, type: 'llm', state: 'loaded' });
     assert.equal(libraryModelNeedsLoad(libraryId, cache), false);
+  });
+
+  test('libraryBindingNeedsServeLoad: no serve → true; running → false; stale cache ignored', () => {
+    const model = sampleLibraryModel();
+    const library = [model];
+    const key = encodeLibraryModelSelectKey(model.id);
+    const cache = new Map<string, { id: string; type: string; state?: string }>([
+      [key, { id: model.id, type: 'llm', state: 'loaded' }],
+    ]);
+
+    // No live serve at all → must load.
+    assert.equal(libraryBindingNeedsServeLoad(model.id, library, []), true);
+    // Cache says loaded but no serve → still needs load (eject / stale cache).
+    assert.equal(libraryBindingNeedsServeLoad(model.id, library, [], cache), true);
+    // Starting is not ready for completions.
+    assert.equal(
+      libraryBindingNeedsServeLoad(model.id, library, [sampleServe({ status: 'starting' })]),
+      true,
+    );
+    // Only a running serve skips the load path.
+    assert.equal(
+      libraryBindingNeedsServeLoad(model.id, library, [sampleServe({ status: 'running' })], cache),
+      false,
+    );
+  });
+
+  test('resolveServedBindingForLibraryId / resolveLibrarySendBinding need a running serve', () => {
+    const model = sampleLibraryModel();
+    const library = [model];
+
+    assert.equal(resolveServedBindingForLibraryId(model.id, library, []), null);
+    assert.equal(resolveLibrarySendBinding(model.id, library, []), null);
+
+    // Stopped serves are ignored by activeServeFor → null.
+    assert.equal(
+      resolveServedBindingForLibraryId(model.id, library, [sampleServe({ status: 'stopped' })]),
+      null,
+    );
+    // Starting is not ready for send binding.
+    assert.equal(
+      resolveLibrarySendBinding(model.id, library, [sampleServe({ status: 'starting' })]),
+      null,
+    );
+    // Unknown library id → null.
+    assert.equal(
+      resolveLibrarySendBinding('gguf:missing/repo:missing.gguf', library, [
+        sampleServe({ status: 'running' }),
+      ]),
+      null,
+    );
+
+    const expected = {
+      providerId: LLAMA_CPP_LOCAL_PROVIDER_ID,
+      modelId: 'Qwen3-8B',
+    };
+    assert.deepEqual(
+      resolveServedBindingForLibraryId(model.id, library, [sampleServe({ status: 'running' })]),
+      expected,
+    );
+    assert.deepEqual(
+      resolveLibrarySendBinding(model.id, library, [sampleServe({ status: 'running' })]),
+      expected,
+    );
   });
 });

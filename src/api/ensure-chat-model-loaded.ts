@@ -112,11 +112,11 @@ export async function ensureChatModelLoadedForTurn(
 
   if (isLibraryModelBinding(pid, mid)) {
     const selectValue = encodeModelSelectKey(pid, mid);
-    if (modelRowIsLoaded(pid, mid)) return;
 
+    // Do not early-return on modelCache — it can stay "loaded" after eject.
+    // loadLibraryModelFromPicker checks live serves and no-ops when already running.
     if (isModelLoadUnloadBusy()) {
       await waitForModelLoadUnloadIdle(signal);
-      if (modelRowIsLoaded(pid, mid)) return;
     }
 
     beginModelLoadUnload('load');

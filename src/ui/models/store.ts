@@ -384,6 +384,13 @@ export async function unloadServe(serveId: string): Promise<void> {
   const index = state.serves.findIndex((s) => s.id === next.id);
   if (index >= 0) state.serves[index] = next;
   emit();
+  // Picker cache must not stay 'loaded' after eject — refresh so chat ensure sees unload.
+  try {
+    const { fetchModels } = await import('../../api/models');
+    await fetchModels();
+  } catch {
+    // non-fatal: serve already stopped
+  }
 }
 
 /** Active downloads, newest first. */

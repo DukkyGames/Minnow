@@ -178,6 +178,35 @@ export function libraryModelNeedsLoad(
 }
 
 /**
+ * Whether a My Models chat turn should run the load path before completions.
+ * Live serve status wins: no running serve always needs load (picker cache can
+ * stay "loaded" after Models eject). Optional cache kept for call-site symmetry.
+ */
+export function libraryBindingNeedsServeLoad(
+  libraryId: string,
+  library: LibraryModel[],
+  serves: ServeRecord[],
+  _cache?: ReadonlyMap<string, LmModelRecord>,
+): boolean {
+  const serve = activeServeForLibraryId(libraryId, library, serves);
+  if (serve?.status === 'running') return false;
+  return true;
+}
+
+/**
+ * Completions provider/model for a My Models row once a serve is running.
+ * Returns null when there is no running serve (caller must ensure-load first).
+ */
+export function resolveLibrarySendBinding(
+  libraryId: string,
+  library: LibraryModel[],
+  serves: ServeRecord[],
+  providerModels?: ProviderModelsResult[],
+): { providerId: string; modelId: string } | null {
+  return resolveServedBindingForLibraryId(libraryId, library, serves, providerModels);
+}
+
+/**
  * Drop llama-cpp-local catalog rows that duplicate a My Models row already listed
  * under the library optgroup (same served label / display name).
  */
