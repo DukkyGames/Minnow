@@ -11,9 +11,14 @@ import {
   loadLibraryInferencePrefs,
   saveLibraryInferenceSampler,
 } from '../../config/library-inference-meta';
-import { fetchServeProfiles, type LlamaServeSettings, type ServeProfile } from '../../models/api-client';
+import type { LlamaServeSettings } from '../../models/api-client';
 import { buildSamplerFieldInputs } from '../settings-sampler-fields';
 import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
+import {
+  estimateServeMemory,
+  estimateTransformerLayerCount,
+  formatServeMemoryEstimate,
+} from '../../models/serve-memory-estimate';
 import { capabilityLabel, type LibraryModel } from '../../models/library';
 import { setStatus } from '../status';
 import {
@@ -55,12 +60,6 @@ let activeTab: InspectorTab = 'info';
 let bound = false;
 /** Per-model launch settings, kept while the app is open. */
 const draftSettings = new Map<string, LlamaServeSettings>();
-const profileCache = new Map<string, ServeProfile[]>();
-/** Preset key backing the current draft, or 'custom' once a field is edited. */
-const draftProfileKey = new Map<string, string>();
-/** Models whose draft the hardware presets have already seeded. */
-const profileSeeded = new Set<string>();
-let profileRequest: string | null = null;
 
 function root(): HTMLElement | null {
   return document.getElementById('modelsInspector');
@@ -209,38 +208,88 @@ function selectField(
   return wrap;
 }
 
-/**
- * Launch settings for a model. Starts on conservative defaults and is reseeded
- * from the balanced hardware preset as soon as sizing comes back.
- */
+/** Launch settings for a model (defaults: full GPU offload, f16 KV cache). */
 function settingsFor(model: LibraryModel): LlamaServeSettings {
   let draft = draftSettings.get(model.id);
   if (!draft) {
     draft = { ctx: DEFAULT_CONTEXT_TOKENS, n_gpu_layers: 999, cache_type: 'f16' };
     draftSettings.set(model.id, draft);
   }
+  if (!draft.cache_type) draft.cache_type = 'f16';
   return draft;
 }
 
-/** Note that the user edited a field, so presets stop overwriting the draft. */
-function markCustom(model: LibraryModel): void {
-  profileSeeded.add(model.id);
-  draftProfileKey.set(model.id, 'custom');
+function gpuOffloadSelectValue(nGpuLayers: number | undefined): string {
+  if (nGpuLayers === 0) return '0';
+  if (nGpuLayers === 999) return '999';
+  return 'custom';
 }
 
-function applyProfile(
+/** Pick a sane starting layer count when the user switches to Custom from a preset value. */
+function defaultCustomGpuLayers(model: LibraryModel): number {
+  const max = estimateTransformerLayerCount(model.paramsB);
+  return Math.min(max, Math.max(1, Math.round(max / 2)));
+}
+
+function gpuLayersSlider(
   model: LibraryModel,
-  profile: ServeProfile,
-  options?: { contextTokens?: number },
-): void {
-  const draft = settingsFor(model);
-  draft.ctx = options?.contextTokens ?? profile.ctx;
-  draft.n_gpu_layers = profile.n_gpu_layers;
-  draft.cache_type = profile.cache_type;
-  if (profile.n_cpu_moe) draft.n_cpu_moe = profile.n_cpu_moe;
-  draftProfileKey.set(model.id, profile.key);
-  profileSeeded.add(model.id);
-  render();
+  value: number,
+  onChange: (value: number) => void,
+): HTMLElement {
+  const maxLayers = estimateTransformerLayerCount(model.paramsB);
+  const layers = Math.min(maxLayers, Math.max(1, value));
+  const wrap = el('label', 'models-field');
+  const head = el('div', 'models-field__range-head');
+  head.append(el('span', 'models-field__label', 'Layers on GPU'));
+  const valueEl = el('span', 'models-field__range-value', String(layers));
+  head.appendChild(valueEl);
+  wrap.appendChild(head);
+
+  const range = el('input', 'models-field__range') as HTMLInputElement;
+  range.type = 'range';
+  range.min = '1';
+  range.max = String(maxLayers);
+  range.step = '1';
+  range.value = String(layers);
+  range.setAttribute('aria-valuemin', range.min);
+  range.setAttribute('aria-valuemax', range.max);
+  range.setAttribute('aria-valuenow', range.value);
+  range.setAttribute('aria-label', 'Transformer layers to offload to the GPU');
+  range.addEventListener('input', () => {
+    const next = Number(range.value);
+    valueEl.textContent = String(next);
+    range.setAttribute('aria-valuenow', String(next));
+    onChange(next);
+  });
+  wrap.appendChild(range);
+  return wrap;
+}
+
+function launchMemoryHint(model: LibraryModel, settings: LlamaServeSettings): HTMLElement {
+  const weightsGb = model.sizeBytes > 0 ? model.sizeBytes / 1024 ** 3 : 0;
+  const estimate = estimateServeMemory({
+    weightsGb,
+    paramsB: model.paramsB,
+    ctx: settings.ctx ?? DEFAULT_CONTEXT_TOKENS,
+    cacheType: settings.cache_type ?? 'f16',
+    nGpuLayers: settings.n_gpu_layers,
+  });
+  const line = formatServeMemoryEstimate(estimate);
+  const hw = getModelsState().hardware;
+  const budgetVram = hw?.gpuVramGb ?? 0;
+  const budgetRam = hw?.availableRamGb ?? hw?.totalRamGb ?? 0;
+  const tight =
+    (estimate.vramGb > 0 && budgetVram > 0 && estimate.vramGb > budgetVram * 0.92) ||
+    (estimate.ramGb > 0 && budgetRam > 0 && estimate.ramGb > budgetRam * 0.55);
+  const hint = el(
+    'p',
+    tight ? 'models-hint models-hint--warn' : 'models-hint',
+    `Estimated memory at launch: ${line}`,
+  );
+  if (tight) {
+    hint.title = 'This configuration may exceed the memory Minnow measured on this machine.';
+  }
+  return hint;
 }
 
 function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
@@ -269,42 +318,26 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   }
 
   const settings = settingsFor(model);
-  const profiles = profileCache.get(model.id);
-
-  const presetBlock = el('section', 'models-inspector__block');
-  presetBlock.appendChild(el('h3', 'models-block__label', 'Preset'));
-  if (profiles?.length) {
-    const activeKey = draftProfileKey.get(model.id);
-    const row = el('div', 'models-preset-row');
-    for (const profile of profiles) {
-      const btn = el('button', 'models-preset', profile.label);
-      btn.type = 'button';
-      btn.title = profile.note;
-      btn.setAttribute('aria-pressed', String(activeKey === profile.key));
-      if (activeKey === profile.key) btn.classList.add('is-active');
-      if (!profile.fits) btn.classList.add('is-tight');
-      btn.addEventListener('click', () => applyProfile(model, profile));
-      row.appendChild(btn);
-    }
-    presetBlock.appendChild(row);
-    const tight = profiles.find((p) => !p.fits);
-    if (tight) {
-      presetBlock.appendChild(
-        el('p', 'models-hint', 'Dimmed presets exceed the memory Minnow measured on this machine.'),
-      );
-    }
-  } else {
-    presetBlock.appendChild(el('p', 'models-muted', 'Sizing this model for your hardware…'));
-    void ensureProfiles(model);
-  }
-  body.appendChild(presetBlock);
 
   const configBlock = el('section', 'models-inspector__block');
   configBlock.appendChild(el('h3', 'models-block__label', 'Launch'));
+
+  const memoryHint = launchMemoryHint(model, settings);
+  memoryHint.classList.add('models-launch-memory-hint');
+
+  const refreshMemoryHint = (): void => {
+    const next = launchMemoryHint(model, settings);
+    memoryHint.textContent = next.textContent;
+    memoryHint.className = next.className;
+    if (next.title) memoryHint.title = next.title;
+    else memoryHint.removeAttribute('title');
+  };
+
   configBlock.append(
+    memoryHint,
     contextLengthField(settings.ctx, (v) => {
       settings.ctx = v;
-      markCustom(model);
+      refreshMemoryHint();
     }),
     selectField(
       'GPU offload',
@@ -313,36 +346,29 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
         { value: '0', label: 'CPU only' },
         { value: 'custom', label: 'Custom…' },
       ],
-      settings.n_gpu_layers === 0 ? '0' : settings.n_gpu_layers === 999 ? '999' : 'custom',
+      gpuOffloadSelectValue(settings.n_gpu_layers),
       (v) => {
-        settings.n_gpu_layers = v === 'custom' ? (settings.n_gpu_layers ?? 32) : Number(v);
-        markCustom(model);
+        if (v === 'custom') {
+          const current = settings.n_gpu_layers;
+          settings.n_gpu_layers =
+            current === 0 || current === 999 ? defaultCustomGpuLayers(model) : current;
+        } else {
+          settings.n_gpu_layers = Number(v);
+        }
         render();
       },
     ),
   );
-  if (settings.n_gpu_layers !== 0 && settings.n_gpu_layers !== 999) {
+  if (gpuOffloadSelectValue(settings.n_gpu_layers) === 'custom') {
     configBlock.appendChild(
-      numberField('Layers on GPU', settings.n_gpu_layers, '32', (v) => {
-        settings.n_gpu_layers = v ?? 32;
-        markCustom(model);
+      gpuLayersSlider(model, settings.n_gpu_layers ?? defaultCustomGpuLayers(model), (v) => {
+        settings.n_gpu_layers = v;
+        refreshMemoryHint();
       }),
     );
   }
   configBlock.appendChild(
-    selectField(
-      'KV cache',
-      [
-        { value: 'q8_0', label: 'q8_0 — balanced' },
-        { value: 'q4_0', label: 'q4_0 — smaller' },
-        { value: 'f16', label: 'f16 — full precision' },
-      ],
-      settings.cache_type ?? 'f16',
-      (v) => {
-        settings.cache_type = v;
-        markCustom(model);
-      },
-    ),
+    el('p', 'models-muted', 'KV cache uses full-precision f16 for key/value tensors.'),
   );
   body.appendChild(configBlock);
 
@@ -351,15 +377,12 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   advanced.append(
     numberField('Batch size', settings.batch_size, 'auto', (v) => {
       settings.batch_size = v;
-      markCustom(model);
     }),
     numberField('Micro-batch', settings.ubatch_size, 'auto', (v) => {
       settings.ubatch_size = v;
-      markCustom(model);
     }),
     numberField('Parallel slots', settings.parallel, '1', (v) => {
       settings.parallel = v;
-      markCustom(model);
     }),
   );
   const extraWrap = el('label', 'models-field');
@@ -370,7 +393,6 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   extraInput.addEventListener('change', () => {
     const raw = extraInput.value.trim();
     settings.extra_args = raw ? raw.split(/\s+/) : undefined;
-    markCustom(model);
   });
   extraWrap.appendChild(extraInput);
   advanced.appendChild(extraWrap);
@@ -381,7 +403,6 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   unified.checked = Boolean(settings.env?.GGML_CUDA_ENABLE_UNIFIED_MEMORY);
   unified.addEventListener('change', () => {
     settings.env = unified.checked ? { GGML_CUDA_ENABLE_UNIFIED_MEMORY: '1' } : undefined;
-    markCustom(model);
   });
   unifiedWrap.append(unified, el('span', undefined, 'CUDA unified memory'));
   advanced.appendChild(unifiedWrap);
@@ -476,36 +497,6 @@ function openSection(section: string): void {
   });
 }
 
-/** Fetch and cache hardware-sized presets for a model. */
-async function ensureProfiles(model: LibraryModel): Promise<void> {
-  if (profileCache.has(model.id) || profileRequest === model.id) return;
-  profileRequest = model.id;
-  try {
-    const { profiles } = await fetchServeProfiles({
-      model: model.name,
-      quant: model.quant || undefined,
-      params_b: model.paramsB ?? undefined,
-      weights_gb: model.sizeBytes / 1024 ** 3,
-      is_moe: model.isMoe,
-    });
-    profileCache.set(model.id, profiles);
-    const balanced =
-      profiles.find((p) => p.key === 'balanced' && p.fits) ??
-      profiles.find((p) => p.fits) ??
-      profiles[0];
-    // Seed once; a user who already touched a field keeps their values.
-    // Context defaults to product standard — presets mainly size quant, cache, and GPU offload.
-    if (balanced && !profileSeeded.has(model.id)) {
-      applyProfile(model, balanced, { contextTokens: DEFAULT_CONTEXT_TOKENS });
-    } else render();
-  } catch {
-    profileCache.set(model.id, []);
-    render();
-  } finally {
-    profileRequest = null;
-  }
-}
-
 function renderFooter(model: LibraryModel, footer: HTMLElement): void {
   const serve = serveForModel(model);
   const state = getModelsState();
@@ -550,10 +541,7 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
             loadBtn.textContent = 'Load model';
             return;
           }
-          const key = draftProfileKey.get(model.id);
-          await loadModel(model, model.source === 'ollama' ? undefined : settingsFor(model), {
-            profile: key && key !== 'custom' ? key : undefined,
-          });
+          await loadModel(model, model.source === 'ollama' ? undefined : settingsFor(model));
         } catch (err) {
           setStatus('err', err instanceof Error ? err.message : 'Load failed');
           loadBtn.disabled = false;
