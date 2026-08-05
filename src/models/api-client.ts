@@ -80,6 +80,8 @@ export interface CachedModelRow {
   mlx_root?: string;
   /** e.g. `mlx-4bit`, matching the labels quant.ts already scores. */
   mlx_quant?: string;
+  /** Context window from config.json when the MLX repo was scanned. */
+  mlx_context_length?: number;
   status?: string;
   gguf_files?: Array<{
     name: string;
