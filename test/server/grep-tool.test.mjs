@@ -232,23 +232,35 @@ describe('runGrepSearch fixture workspace', () => {
   });
 
   it('supports offset pagination', async () => {
+    // Path-sorted rg output must stay stable across invocations so offset pages
+    // line up with a prior full result (see --sort path in buildRipgrepArgs).
     const full = await grepInFixture({
       pattern: 'export',
       path: 'src',
       head_limit: 10,
     });
     const lines = full.split('\n').filter((l) => l && !l.startsWith('(truncated'));
-    if (lines.length < 2) return;
+    assert.ok(lines.length >= 2, 'fixture should yield at least two export matches');
 
+    const first = await grepInFixture({
+      pattern: 'export',
+      path: 'src',
+      head_limit: 1,
+      offset: 0,
+    });
     const page = await grepInFixture({
       pattern: 'export',
       path: 'src',
       head_limit: 1,
       offset: 1,
     });
+    const firstLines = first.split('\n').filter((l) => l && !l.startsWith('(truncated'));
     const pageLines = page.split('\n').filter((l) => l && !l.startsWith('(truncated'));
+    assert.equal(firstLines.length, 1);
     assert.equal(pageLines.length, 1);
+    assert.equal(firstLines[0], lines[0]);
     assert.equal(pageLines[0], lines[1]);
+    assert.notEqual(pageLines[0], firstLines[0]);
   });
 
   it('rejects paths outside workspace', async () => {

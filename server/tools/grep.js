@@ -206,7 +206,16 @@ export function formatGroupedGrepOutput(cappedText) {
 function buildRipgrepArgs(opts) {
   // --path-separator / forces forward slashes in output on Windows so match paths match
   // the workspace-relative style used everywhere else.
-  const rgArgs = ['--max-filesize', GREP_MAX_FILE_BYTES, '--path-separator', '/'];
+  // --sort path disables parallel search so match order is stable across invocations —
+  // required for offset pagination (head_limit + offset) to be deterministic.
+  const rgArgs = [
+    '--max-filesize',
+    GREP_MAX_FILE_BYTES,
+    '--path-separator',
+    '/',
+    '--sort',
+    'path',
+  ];
 
   if (opts.outputMode === 'content') {
     rgArgs.push('-n', '--no-heading');
