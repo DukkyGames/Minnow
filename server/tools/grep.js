@@ -206,8 +206,9 @@ export function formatGroupedGrepOutput(cappedText) {
 function buildRipgrepArgs(opts) {
   // --path-separator / forces forward slashes in output on Windows so match paths match
   // the workspace-relative style used everywhere else.
-  // --sort path disables parallel search so match order is stable across invocations —
-  // required for offset pagination (head_limit + offset) to be deterministic.
+  // --sort path makes output ordering deterministic across runs (and pages). ripgrep's
+  // default traversal order is filesystem-dependent, so without it offset pagination can
+  // skip or duplicate matches between pages (flaky on Windows CI).
   const rgArgs = [
     '--max-filesize',
     GREP_MAX_FILE_BYTES,

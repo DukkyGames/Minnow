@@ -83,7 +83,21 @@ describe('issues-list-sort', () => {
     );
   });
 
-  test('sortIssuesForList sorts numeric issue ids', () => {
+  test('sortIssuesForList sorts numeric issue ids across prefixes', () => {
+    const issues = [
+      makeIssue({ id: 'MIN-10', title: 'ten' }),
+      makeIssue({ id: 'MIN-2', title: 'two' }),
+      makeIssue({ id: 'MIN-1', title: 'one' }),
+      makeIssue({ id: 'ISS-9', title: 'legacy' }),
+    ];
+    const sorted = sortIssuesForList(issues, { key: 'id', direction: 'asc' });
+    assert.deepEqual(
+      sorted.map((row) => row.id),
+      ['ISS-9', 'MIN-1', 'MIN-2', 'MIN-10'],
+    );
+  });
+
+  test('sortIssuesForList sorts numeric issue ids (ISS)', () => {
     const issues = [
       makeIssue({ id: 'ISS-10', title: 'ten' }),
       makeIssue({ id: 'ISS-2', title: 'two' }),

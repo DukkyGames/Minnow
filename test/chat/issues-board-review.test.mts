@@ -18,7 +18,7 @@ const FIXED_NOW = 1710000003000;
 describe('markIssuesReviewForBoardComplete', () => {
   beforeEach(() => {
     setIssuesNowForTests(() => FIXED_NOW);
-    setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
   });
 
   test('matches by boardChatId and moves to review', () => {

@@ -60,7 +60,7 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
   const { row: zoomRow, select: zoomSelect } = createSettingsSelectRow('Interface zoom', {
     searchKey: 'general.desktop.zoom',
     description:
-      'Scale the Minnow desktop window. Ctrl/Cmd + and − adjust zoom; the value here updates to match.',
+      'Scale the Minnow desktop window. Ctrl/Cmd + and − adjust zoom; Ctrl + scroll wheel zooms in and out; the value here updates to match.',
     options: zoomOptions,
     value: zoomKey,
     disabled: serverUp !== 'server',

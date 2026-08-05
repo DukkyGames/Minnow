@@ -35,6 +35,18 @@ export function shellZoomPercentFromFactor(factor: number): number {
   return clampShellZoomPercent(Math.round(factor * 100));
 }
 
+/**
+ * Next zoom percent for a wheel/pinch `zoom-changed` request. Snaps to the
+ * neighboring preset so Settings' dropdown always has a matching option.
+ */
+export function nextShellZoomPercent(current: number, direction: 'in' | 'out'): number {
+  const clamped = clampShellZoomPercent(current);
+  if (direction === 'in') {
+    return SHELL_ZOOM_PRESET_PERCENTS.find((p) => p > clamped) ?? MAX_SHELL_ZOOM_PERCENT;
+  }
+  return [...SHELL_ZOOM_PRESET_PERCENTS].reverse().find((p) => p < clamped) ?? MIN_SHELL_ZOOM_PERCENT;
+}
+
 export function isApplyingShellZoom(): boolean {
   return applyingShellZoom;
 }
@@ -72,10 +84,14 @@ export function wireShellZoom(win: BrowserWindow, deps: ShellZoomWireDeps): void
   applyConfigured();
   contents.on('did-finish-load', applyConfigured);
 
-  contents.on('zoom-changed', () => {
+  contents.on('zoom-changed', (_event, zoomDirection) => {
     if (applyingShellZoom || contents.isDestroyed()) return;
-    const percent = shellZoomPercentFromFactor(contents.getZoomFactor());
-    void deps.writePercent(percent).then((saved) => {
+    if (zoomDirection !== 'in' && zoomDirection !== 'out') return;
+    const current = shellZoomPercentFromFactor(contents.getZoomFactor());
+    const next = nextShellZoomPercent(current, zoomDirection);
+    if (next === current) return;
+    applyShellZoom(contents, next);
+    void deps.writePercent(next).then((saved) => {
       deps.notifyPercentChanged(saved);
     });
   });

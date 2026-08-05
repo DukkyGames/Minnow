@@ -9,7 +9,7 @@
 
 I've been working on this for a few months now. It started as a little chat app and kind of spiraled into a lot more.
 
-It runs on the models you already have — [LM Studio](https://lmstudio.ai/), Ollama, llama.cpp, or any OpenAI-compatible endpoint — and can host models itself. Keys, chats, files, and models stay on your disk, and it only talks to the providers you configure.
+It runs on the models you already have — Any standard provider or local endpoint. It also can host models itself via llama.cpp & . Keys, chats, files, and models all stay on your disk.
 
 It's still a work in progress and some parts are rough. Feedback goes in [issues](https://github.com/HenriGrimm/Minnow/issues) or [Discord](https://discord.gg/U4FPzv9K4X).
 
@@ -27,9 +27,6 @@ cd Minnow
 npm install
 npm start
 ```
-
-Load a model in LM Studio (or point Minnow at your provider), and the desktop window opens on `http://localhost:9473`. Full walkthrough: **[Setup from source](documentation/contributor/setup-from-source.md)**.
-
 Prefer an installer? Packaged builds for Windows, macOS, and Linux are on [Releases](https://github.com/HenriGrimm/Minnow/releases), and they update themselves.
 
 ---
@@ -64,7 +61,7 @@ Behind it, **114 built-in tools** — files, git, LSP, terminal, web, browser au
 
 ## How it fits together
 
-Eight apps on one desktop shell — Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings — sharing one chat engine, one tool set, one session store, and one workspace. Opening Code doesn't start a different assistant; it gives the same one an editor, a terminal, and a git panel to work beside.
+Eight apps on one UI shell — Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings — sharing one chat engine, one tool set, one session store, and one workspace.
 
 Three processes: the Electron shell, the SPA it loads, and a Node server that runs the tools and owns everything persisted under `~/.minnow`. Details in [Architecture](documentation/contributor/architecture.md).
 

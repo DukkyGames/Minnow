@@ -53,6 +53,34 @@ function withTokenHeader(init: RequestInit | undefined, token: string): RequestI
   return { ...init, headers };
 }
 
+function isTransientFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message.includes('fetch failed')) return true;
+  const cause = error.cause;
+  if (!cause || typeof cause !== 'object') return false;
+  const code = 'code' in cause ? String((cause as { code?: unknown }).code) : '';
+  return code === 'UND_ERR_SOCKET' || code === 'ECONNRESET' || code === 'ECONNREFUSED';
+}
+
+async function fetchWithTransientRetry(
+  fetchImpl: typeof fetch,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const maxAttempts = process.env.MINNOW_TEST === '1' ? 5 : 1;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await fetchImpl(input, init);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientFetchError(error) || attempt === maxAttempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 /** Patch global fetch so `/api/...` hits the dev server (returns restore fn). */
 export function installHeadlessFetch(baseUrl: string, token = ''): () => void {
   if (restoreFetch) {
@@ -63,12 +91,16 @@ export function installHeadlessFetch(baseUrl: string, token = ''): () => void {
   const nativeFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input === 'string' && input.startsWith('/api/')) {
-      return nativeFetch(headlessApiUrl(input), withTokenHeader(init, token));
+      return fetchWithTransientRetry(nativeFetch, headlessApiUrl(input), withTokenHeader(init, token));
     }
     if (input instanceof Request) {
       const url = input.url;
       if (url.startsWith('/api/')) {
-        return nativeFetch(headlessApiUrl(url), withTokenHeader(init, token));
+        return fetchWithTransientRetry(
+          nativeFetch,
+          headlessApiUrl(url),
+          withTokenHeader(init, token),
+        );
       }
     }
     return nativeFetch(input, init);

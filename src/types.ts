@@ -836,11 +836,20 @@ export interface IssueCard {
   severity?: BugSeverity;
 }
 
+/** Per-workspace project key + counter for KEY-n allocation. */
+export interface IssuesWorkspaceIdConfig {
+  projectKey: string;
+  nextId: number;
+}
+
 /** Persisted Issues app state under ~/.minnow/issues/state.json. */
 export interface IssuesState {
-  version: 1;
+  version: 2;
+  /** Legacy global counter for ISS-n (diagnostics / migration). */
   nextId: number;
   issues: IssueCard[];
+  /** Key: normalizeWorkspacePath(absolute path). */
+  workspaces?: Record<string, IssuesWorkspaceIdConfig>;
 }
 
 /** Stable id for one execution from a fork point (branch). */

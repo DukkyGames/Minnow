@@ -86,7 +86,7 @@ function setupDom(): void {
 
 afterEach(() => {
   teardownIssuesEmbedBeforeChatPaint();
-  setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
+  setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
   setSessionStateForTests(null);
   resetInstancesForTests();
   domWindow?.close();
@@ -96,7 +96,7 @@ afterEach(() => {
 describe('issues embed in Code', () => {
   test('openIssuesEmbeddedInCode reparents #issuesView into #chatArea', async () => {
     setupDom();
-    setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
     const chat = createEmptyChatObject('test-model');
     setSessionStateForTests({
       version: 3,
@@ -126,7 +126,7 @@ describe('issues embed in Code', () => {
 
   test('closeIssuesEmbeddedInCode restores #issuesView to the apps layer', async () => {
     setupDom();
-    setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
     const chat = createEmptyChatObject('test-model');
     setSessionStateForTests({
       version: 3,
@@ -160,7 +160,7 @@ describe('issues embed in Code', () => {
 
   test('setIssuesRouteHash is a no-op while Issues is embedded in Code', async () => {
     setupDom();
-    setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
     const chat = createEmptyChatObject('test-model');
     setSessionStateForTests({
       version: 3,
