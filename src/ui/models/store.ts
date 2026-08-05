@@ -328,8 +328,8 @@ export async function loadModel(
       modelLabel: model.path,
     });
     state.serves.unshift(serve);
-    // Deliberately no trackLoad. There is no spawn, no runId, and the serve comes
-    // back already running — the log-stream poller would just 404 against it.
+    // No trackLoad: MLX serves return already running (no spawn progress). Runtime
+    // output lives on the shared mlx-lm managed server log, exposed via serve log routes.
     await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, model.id).catch(() => false);
     const mlxSampler = getLibrarySamplerForId(model.id);
     if (mlxSampler) {
