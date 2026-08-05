@@ -19,6 +19,7 @@ export interface ShortcutDoc {
 const SHELL_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Shell', keys: '?', label: 'Open this keyboard shortcuts list' },
   { section: 'Shell', keys: 'Escape', label: 'Close overlays, popovers, and side panels' },
+  { section: 'Shell', keys: 'Ctrl + Scroll wheel', label: 'Zoom the interface in / out' },
   { section: 'Shell', keys: 'Alt + `', label: 'Cycle focus among open floating windows' },
   {
     section: 'Shell',
