@@ -131,6 +131,13 @@ export function divide(a: number, b: number) {
     passKind: 'regex',
     pattern: /git push|gh pr create|pull request|origin|upstream/i,
   },
+  'fix-ci': {
+    skillId: 'fix-ci',
+    prompt:
+      'GitHub Actions failed on my feature branch after the last push. What is your first step to investigate and green CI?',
+    passKind: 'regex',
+    pattern: /gh run|workflow|log-failed|git branch|commit|tsc|npm test|check-coverage|repro/i,
+  },
   'refactor-safe': {
     skillId: 'refactor-safe',
     prompt:
