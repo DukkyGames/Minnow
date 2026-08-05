@@ -368,7 +368,19 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     );
   }
   configBlock.appendChild(
-    el('p', 'models-muted', 'KV cache uses full-precision f16 for key/value tensors.'),
+    selectField(
+      'KV cache',
+      [
+        { value: 'f16', label: 'f16 — full precision' },
+        { value: 'q8_0', label: 'q8_0 — balanced' },
+        { value: 'q4_0', label: 'q4_0 — smaller' },
+      ],
+      settings.cache_type ?? 'f16',
+      (v) => {
+        settings.cache_type = v;
+        refreshMemoryHint();
+      },
+    ),
   );
   body.appendChild(configBlock);
 

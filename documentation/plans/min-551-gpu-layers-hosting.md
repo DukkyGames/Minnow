@@ -10,7 +10,7 @@
 - [x] Fix Custom mode by seeding a partial layer count when switching from All/CPU.
 - [x] Replace the number input with a range slider (max from parameter-size heuristic).
 - [x] Show live estimated VRAM/RAM usage on the Load tab.
-- [x] Remove hardware presets from the inspector; keep f16 KV as the default (no quant dropdown).
+- [x] Remove hardware presets from the inspector; KV cache dropdown remains with **f16** as the default.
 
 ## Todos
 
