@@ -7,24 +7,42 @@ import path from 'node:path';
 import { describe, test } from 'node:test';
 import {
   buildRevealCommand,
+  formatPathForWindowsExplorer,
   revealInSystemExplorer,
 } from '../../server/workspace/reveal-in-explorer.js';
 
+describe('formatPathForWindowsExplorer', () => {
+  test('converts forward slashes to backslashes', () => {
+    assert.equal(
+      formatPathForWindowsExplorer('C:/Users/me/project/readme.md'),
+      'C:\\Users\\me\\project\\readme.md',
+    );
+  });
+});
+
 describe('buildRevealCommand', () => {
-  test('Windows file uses explorer /select', () => {
-    const filePath = path.join('C:', 'proj', 'readme.md');
+  test('Windows file uses explorer /select with quoted backslash path', () => {
+    const filePath = 'C:/proj/readme.md';
     const cmd = buildRevealCommand('win32', filePath, false);
     assert.equal(cmd.command, 'explorer.exe');
-    assert.deepEqual(cmd.args, [`/select,${path.resolve(filePath)}`]);
+    assert.deepEqual(cmd.args, ['/select,"C:\\proj\\readme.md"']);
     assert.equal(cmd.detached, true);
+    assert.equal(cmd.windowsVerbatimArguments, true);
   });
 
-  test('Windows folder opens the folder itself', () => {
-    const dirPath = path.join('C:', 'proj', 'src');
+  test('Windows folder opens the folder itself with native separators', () => {
+    const dirPath = 'C:/proj/src';
     const cmd = buildRevealCommand('win32', dirPath, true);
     assert.equal(cmd.command, 'explorer.exe');
-    assert.deepEqual(cmd.args, [path.resolve(dirPath)]);
+    assert.deepEqual(cmd.args, ['C:\\proj\\src']);
     assert.equal(cmd.detached, true);
+    assert.equal(cmd.windowsVerbatimArguments, true);
+  });
+
+  test('Windows file with spaces quotes the path for /select', () => {
+    const filePath = 'C:/proj/my folder/readme.md';
+    const cmd = buildRevealCommand('win32', filePath, false);
+    assert.deepEqual(cmd.args, ['/select,"C:\\proj\\my folder\\readme.md"']);
   });
 
   test('macOS file uses open -R', () => {
@@ -76,6 +94,27 @@ describe('revealInSystemExplorer', () => {
         }),
       /Path does not exist/,
     );
+  });
+
+  test('skips spawn when skipSpawn is set', async () => {
+    /** @type {{ command: string, args: string[] }[]} */
+    const calls = [];
+    const result = await revealInSystemExplorer('/tmp/file.txt', {
+      platform: 'linux',
+      skipSpawn: true,
+      statImpl: async () => ({
+        isDirectory: () => false,
+      }),
+      spawnImpl: (command, args) => {
+        calls.push({ command, args });
+        return {
+          on() {},
+          unref() {},
+        };
+      },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 0);
   });
 
   test('spawns reveal command for a file', async () => {
