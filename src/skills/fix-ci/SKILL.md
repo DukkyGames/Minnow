@@ -111,7 +111,7 @@ Prefer fixing directly when the failure is a single assertion, typo, or missing 
 ## Step 4: Apply fixes
 
 - Minimal diff — fix the failure, not drive-by refactors.
-- If CI failed on **both** Windows and Ubuntu, ensure the fix is cross-platform (line endings, path separators, timing).
+- If CI failed on **Windows, Ubuntu, and macOS**, ensure the fix is cross-platform (line endings, path separators, timing).
 - Update `documentation/context.md` only when the fix changes architecture, APIs, or documented behavior.
 - Do not commit fixture churn (e.g. regenerated `.db` WAL files) unless the test intentionally requires it.
 
@@ -202,7 +202,7 @@ Workflow: `.github/workflows/ci.yml`
 
 ### CI job: `typecheck + tests`
 
-Matrix: `windows-latest`, `ubuntu-latest` (Node 24).
+Matrix: `windows-latest`, `ubuntu-latest`, `macos-latest` (Node 24).
 
 | Step | Command | Local repro |
 |------|---------|-------------|

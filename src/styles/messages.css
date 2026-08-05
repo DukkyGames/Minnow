@@ -857,6 +857,30 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   color: var(--mn-danger-ink, var(--mn-danger));
 }
 
+.tool-call-sandbox-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-2, var(--mn-surface));
+}
+
+.tool-call-sandbox-badge--ok {
+  color: var(--mn-success-ink, var(--mn-fg-muted));
+  border-color: var(--mn-success, var(--mn-border));
+}
+
+.tool-call-sandbox-badge--warn {
+  color: var(--mn-warning-ink, var(--mn-danger-ink, var(--mn-fg)));
+  border-color: var(--mn-warning, var(--mn-danger, var(--mn-border)));
+  font-weight: 600;
+}
+
 .tool-call-chevron {
   flex-shrink: 0;
   color: var(--mn-fg-subtle);

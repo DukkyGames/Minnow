@@ -727,6 +727,7 @@ async function executeStreamingCodeTool(
       workspaceRoot,
       cwd: relativeCwd || undefined,
       timeoutMs: rawTimeoutMs,
+      allowUnsandboxed: args.allow_unsandboxed === true,
       abortSignal: context.chatId
         ? getChatAbort(context.chatId)?.signal
         : undefined,

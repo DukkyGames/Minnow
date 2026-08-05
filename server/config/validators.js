@@ -1190,6 +1190,7 @@ export function mergeConfigMeta(existing, patch) {
   if (p.autopilot !== undefined) {
     const AUTOPILOT_EXECUTION_MODES = new Set(['manual', 'sequential', 'auto', 'afk']);
     const AUTOPILOT_ISOLATION_MODES = new Set(['auto', 'off', 'per-task', 'per-wave']);
+    const AUTOPILOT_SHELL_SANDBOX_MODES = new Set(['off', 'prefer', 'require']);
     const clampAutopilotConcurrency = (value, fallback) => {
       if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
       return Math.min(20, Math.max(1, Math.round(value)));
@@ -1228,6 +1229,7 @@ export function mergeConfigMeta(existing, patch) {
       defaultExecutionMode: 'manual',
       maxConcurrentTasks: 3,
       isolationMode: 'auto',
+      shellSandbox: 'require',
       maxTestAttempts: 3,
       maxBuildAttempts: 2,
       maxFinalTestAttempts: 3,
@@ -1268,6 +1270,12 @@ export function mergeConfigMeta(existing, patch) {
         const iso = a.isolationMode.trim();
         if (AUTOPILOT_ISOLATION_MODES.has(iso)) {
           existingAutopilot.isolationMode = iso;
+        }
+      }
+      if (typeof a.shellSandbox === 'string') {
+        const ss = a.shellSandbox.trim();
+        if (AUTOPILOT_SHELL_SANDBOX_MODES.has(ss)) {
+          existingAutopilot.shellSandbox = ss;
         }
       }
       if (a.maxTestAttempts !== undefined) {
@@ -1656,10 +1664,16 @@ export function mergeConfigMeta(existing, patch) {
     const existingTs =
       base.toolSecurity && typeof base.toolSecurity === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.toolSecurity) }
-        : { filesystemAccess: 'workspace' };
+        : { filesystemAccess: 'workspace', shellSandbox: 'off', allowUnsandboxedShell: false };
     const ts = /** @type {Record<string, unknown>} */ (p.toolSecurity);
     if (ts.filesystemAccess === 'full' || ts.filesystemAccess === 'workspace') {
       existingTs.filesystemAccess = ts.filesystemAccess;
+    }
+    if (ts.shellSandbox === 'off' || ts.shellSandbox === 'prefer' || ts.shellSandbox === 'require') {
+      existingTs.shellSandbox = ts.shellSandbox;
+    }
+    if (typeof ts.allowUnsandboxedShell === 'boolean') {
+      existingTs.allowUnsandboxedShell = ts.allowUnsandboxedShell;
     }
     base.toolSecurity = existingTs;
   }

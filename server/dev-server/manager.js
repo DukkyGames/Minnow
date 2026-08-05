@@ -568,6 +568,8 @@ export async function startDevServerById(
           cwd,
           shell: process.platform === 'win32',
           source: 'agent',
+          // Dev servers must bind ports / serve — excluded from agent shell sandbox (MIN-553).
+          sandbox: false,
           logSubdir: 'dev-server',
           env: buildDevServerSpawnEnv(effective.port, effective.network, {
             splitStack: effective.splitStack,
@@ -759,6 +761,8 @@ export async function toolStartBackgroundCommand(args) {
       shell: process.platform === 'win32' && !usesWsl,
       source: 'agent',
       chatId,
+      // Dev servers must bind ports / serve — excluded from agent shell sandbox (MIN-553).
+      sandbox: false,
       logSubdir: 'dev-server',
       shellProfile,
       ...(spawnEnv ? { env: spawnEnv } : {}),

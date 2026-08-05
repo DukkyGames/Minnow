@@ -63,10 +63,11 @@
     "package:dir": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --dir",
     "package:win": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
     "package:mac": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --mac",
-    "package:linux": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
+    "package:linux": "npm run sandbox:build-helper && npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
     "package:linux:docker": "node scripts/package-linux-docker.mjs",
     "signing:check": "node scripts/check-macos-signing.mjs",
     "signing:setup": "node scripts/check-macos-signing.mjs --setup",
+    "sandbox:build-helper": "bash native/minnow-sandbox/build.sh",
     "start": "node server.js",
     "minnow:run": "node bin/minnow.mjs run",
     "test:notifications": "node test/run-all.mjs --suite notifications",
@@ -305,7 +306,13 @@
       "category": "Development",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "synopsis": "Local-first AI workspace",
-      "description": "Minnow — local-first AI workspace for chat, code, research, and orchestration."
+      "description": "Minnow — local-first AI workspace for chat, code, research, and orchestration.",
+      "extraResources": [
+        {
+          "from": "native/minnow-sandbox/minnow-sandbox",
+          "to": "minnow-sandbox"
+        }
+      ]
     }
   }
 }

@@ -173,6 +173,11 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     allowedValues: ['auto', 'off', 'per-task', 'per-wave'],
     refreshAreas: ['autopilot'],
   }),
+  'agents.autopilot.shellSandbox': meta('autopilot.shellSandbox', 'enum', {
+    allowedValues: ['off', 'prefer', 'require'],
+    sensitivity: 'dangerous',
+    refreshAreas: ['autopilot'],
+  }),
   'agents.autopilot.concurrency': meta('autopilot.maxConcurrentTasks', 'number', {
     refreshAreas: ['autopilot'],
   }),
@@ -216,6 +221,11 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'integrations.tools': section(['tools']),
   'general.filesystem': meta('toolSecurity.filesystemAccess', 'enum', {
     allowedValues: ['workspace', 'full'],
+    sensitivity: 'dangerous',
+    refreshAreas: ['general'],
+  }),
+  'general.shellSandbox': meta('toolSecurity.shellSandbox', 'enum', {
+    allowedValues: ['off', 'prefer', 'require'],
     sensitivity: 'dangerous',
     refreshAreas: ['general'],
   }),

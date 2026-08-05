@@ -123,6 +123,7 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/pty-protocol.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/terminal/sandbox/*.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/settings/**', runner: 'node-tsx' },
   { pattern: 'test/os/email-app.test.mts', runner: 'node-tsx' },
 ];
@@ -298,6 +299,9 @@ export const SCOPED_SUITES = {
   },
   voice: {
     patterns: ['test/voice/**/*.test.mjs', 'test/voice/**/*.test.mts'],
+  },
+  sandbox: {
+    patterns: ['test/terminal/sandbox/**/*.test.mjs'],
   },
 };
 

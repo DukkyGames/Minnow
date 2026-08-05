@@ -4,7 +4,7 @@ Workflow: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 
 ## CI job: `typecheck + tests`
 
-Matrix: `windows-latest`, `ubuntu-latest` (Node 24).
+Matrix: `windows-latest`, `ubuntu-latest`, `macos-latest` (Node 24).
 
 | Step | Command | Local repro |
 |------|---------|-------------|

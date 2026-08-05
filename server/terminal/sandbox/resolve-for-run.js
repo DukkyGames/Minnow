@@ -1,0 +1,95 @@
+/**
+ * Resolve effective shell-sandbox mode for a chat (global vs board/autopilot).
+ */
+
+import {
+  getAllowUnsandboxedShellFromConfig,
+  getAutopilotShellSandboxFromConfig,
+  getShellSandboxFromConfig,
+} from '../../config/tool-security.js';
+import {
+  resolveChatWorktreeContext,
+  useJsonSessionsStore,
+} from '../../config/sessions-repo.js';
+import { readConfigJson } from '../../config/store.js';
+import { validateSessionState } from '../../config/validators.js';
+import { resolveEffectiveShellSandboxMode } from './mode.js';
+
+/**
+ * @param {string} chatId
+ * @returns {Promise<{ onBoard: boolean, boardMode: string | undefined, groupId?: string }>}
+ */
+async function resolveBoardSandboxContext(chatId) {
+  const trimmedId = typeof chatId === 'string' ? chatId.trim() : '';
+  if (!trimmedId) return { onBoard: false, boardMode: undefined };
+
+  try {
+    if (!useJsonSessionsStore()) {
+      const ctx = await resolveChatWorktreeContext(trimmedId);
+      if (!ctx.groupId) return { onBoard: false, boardMode: undefined };
+      // Indexed path may not carry board.shellSandbox yet — treat as on-board inherit.
+      return { onBoard: true, boardMode: undefined, groupId: ctx.groupId };
+    }
+
+    const raw = (await readConfigJson('sessions/state.json')) ?? {
+      version: 5,
+      chats: [],
+    };
+    const state = validateSessionState(raw);
+    const chat = state.chats.find((c) => c.id === trimmedId);
+    if (!chat?.boardGroupId?.trim()) {
+      return { onBoard: false, boardMode: undefined };
+    }
+    const groupId = chat.boardGroupId.trim();
+    const group = state.groups?.find((g) => g.id === groupId);
+    const boardMode = group?.orchestrateBoard?.shellSandboxMode;
+    return {
+      onBoard: true,
+      boardMode: typeof boardMode === 'string' ? boardMode : undefined,
+      groupId,
+    };
+  } catch {
+    return { onBoard: false, boardMode: undefined };
+  }
+}
+
+/**
+ * Full effective mode + allow-unsandboxed flag for createRun / tools.
+ * @param {object} [params]
+ * @param {string} [params.chatId]
+ * @param {'off'|'prefer'|'require'} [params.modeOverride] explicit caller override
+ * @param {boolean} [params.allowUnsandboxed]
+ * @param {NodeJS.ProcessEnv} [params.env]
+ * @returns {Promise<{ mode: 'off'|'prefer'|'require', allowUnsandboxed: boolean, onBoard: boolean, groupId?: string }>}
+ */
+export async function resolveShellSandboxForRun({
+  chatId,
+  modeOverride,
+  allowUnsandboxed,
+  env = process.env,
+} = {}) {
+  const board = await resolveBoardSandboxContext(chatId ?? '');
+  const [globalMode, autopilotDefault, alwaysAllow] = await Promise.all([
+    getShellSandboxFromConfig(),
+    getAutopilotShellSandboxFromConfig(),
+    getAllowUnsandboxedShellFromConfig(),
+  ]);
+
+  const mode =
+    modeOverride != null
+      ? modeOverride
+      : resolveEffectiveShellSandboxMode({
+          globalMode,
+          boardMode: board.boardMode,
+          autopilotBoardDefault: autopilotDefault,
+          onBoard: board.onBoard,
+          env,
+        });
+
+  return {
+    mode,
+    allowUnsandboxed: allowUnsandboxed === true || alwaysAllow === true,
+    onBoard: board.onBoard,
+    ...(board.groupId ? { groupId: board.groupId } : {}),
+  };
+}

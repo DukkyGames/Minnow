@@ -298,6 +298,35 @@
     ]
   },
   {
+    "key": "general.shellSandbox",
+    "label": "Agent shell sandbox",
+    "description": "Contain agent one-shot shells (execute_command / run_javascript / run_python) with OS filesystem sandboxing. Off by default. Prefer sandboxes when available and asks before unsandboxed fallback; Require fails closed when the sandbox is unavailable.",
+    "keywords": [
+      "sandbox",
+      "shell",
+      "seatbelt",
+      "landlock",
+      "execute_command",
+      "containment",
+      "host"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "toolSecurity.shellSandbox",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "prefer",
+      "require"
+    ],
+    "sensitivity": "dangerous",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.onboarding",
     "label": "Run setup again",
     "description": "Re-open the first-run setup wizard.",
@@ -1266,6 +1295,7 @@
   {
     "key": "agents.autopilot.isolation",
     "label": "Default isolation mode",
+    "description": "Git worktree isolation for parallel board tasks — not OS host containment.",
     "category": "agents",
     "area": "autopilot",
     "storage": "meta",
@@ -1278,6 +1308,26 @@
       "per-wave"
     ],
     "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "autopilot"
+    ]
+  },
+  {
+    "key": "agents.autopilot.shellSandbox",
+    "label": "Default board shell sandbox",
+    "description": "Host containment for agent shells on orchestrate boards. Defaults to Require (fail closed when the OS sandbox is unavailable). Overridable per board. Complementary to worktree isolation.",
+    "category": "agents",
+    "area": "autopilot",
+    "storage": "meta",
+    "path": "autopilot.shellSandbox",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "prefer",
+      "require"
+    ],
+    "sensitivity": "dangerous",
     "writable": true,
     "refreshAreas": [
       "autopilot"

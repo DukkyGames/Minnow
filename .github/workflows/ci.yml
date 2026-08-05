@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -70,6 +70,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build minnow-sandbox helper (Linux Landlock)
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run sandbox:build-helper
 
       - name: Verify test discovery coverage
         run: npm run test:check-coverage

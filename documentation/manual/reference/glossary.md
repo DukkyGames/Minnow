@@ -54,7 +54,7 @@ Terms Minnow uses, in the sense Minnow means them.
 
 **Workspace root** — The folder file and git tools are confined to. Set by the project you open in Code, or by the desktop workspace folder.
 
-**Worktree** — A separate git checkout of the same repository. Board isolation uses one per task.
+**Worktree** — A separate git checkout of the same repository. Board isolation uses one per task so agents do not collide on a single working tree. That is git isolation, not OS host containment — see the agent shell sandbox under [Privacy and security](privacy-and-security.md).
 
 ## Related
 

@@ -59,6 +59,37 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
     return true;
   }
 
+  if (pathname === '/api/terminal/sandbox-status' && req.method === 'GET') {
+    try {
+      const { probeSandbox, resolveSandbox } = await import('./sandbox/index.js');
+      const {
+        getShellSandboxFromConfig,
+        getAllowUnsandboxedShellFromConfig,
+        getAutopilotShellSandboxFromConfig,
+      } = await import('../config/tool-security.js');
+      const [probe, mode, allowUnsandboxed, autopilotMode] = await Promise.all([
+        probeSandbox(),
+        getShellSandboxFromConfig(),
+        getAllowUnsandboxedShellFromConfig(),
+        getAutopilotShellSandboxFromConfig(),
+      ]);
+      const adapter = resolveSandbox();
+      sendJson(res, 200, {
+        available: probe.ok === true,
+        kind: adapter.kind,
+        reason: probe.reason ?? null,
+        detail: probe.detail ?? null,
+        mode,
+        allowUnsandboxed,
+        autopilotMode,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, 500, { error: message });
+    }
+    return true;
+  }
+
   if (pathname === '/api/terminal/run' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
@@ -115,6 +146,11 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         chatId,
         toolCallId,
         timeoutMs,
+        allowUnsandboxed: body?.allowUnsandboxed === true,
+        worktreeRoot:
+          typeof body?.worktreeRoot === 'string' && body.worktreeRoot.trim()
+            ? body.worktreeRoot.trim()
+            : undefined,
       });
 
       sendJson(res, 200, { runId: started.runId, startedAt: started.startedAt });

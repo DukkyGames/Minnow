@@ -590,6 +590,24 @@ export function logBoardTerminalRun(
       chatId,
     },
   });
+
+  // Surface sandbox trailers as a dedicated board-log event (MIN-553).
+  const sandboxed = resultPreview.match(/\[sandboxed:\s*([^\]]+)\]/i);
+  const notSandboxed = resultPreview.match(/\[NOT sandboxed:\s*([^\]]+)\]/i);
+  if (sandboxed || notSandboxed) {
+    appendBoardLog(group, {
+      type: 'sandbox',
+      level: notSandboxed ? 'warn' : 'info',
+      taskId,
+      message: sandboxed
+        ? `${taskId}: sandboxed (${sandboxed[1]!.trim()})`
+        : `${taskId}: NOT sandboxed (${notSandboxed?.[1]?.trim() ?? ''})`,
+      detail: {
+        chatId,
+        command: truncateBoardLogPreview(command, 120),
+      },
+    });
+  }
 }
 
 export type OrchestrateBoardTimerContext = {

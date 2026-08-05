@@ -63,7 +63,7 @@ Sequential pins concurrency to one task. Auto and AFK use your concurrency setti
 
 ## Worktree isolation
 
-Parallel agents editing one checkout is a recipe for a mess. Isolation gives each task its own **git worktree**.
+Parallel agents editing one checkout is a recipe for a mess. Isolation gives each task its own **git worktree** — a separate checkout and branch so merges stay orderly. That is **git isolation**, not OS host containment: a shell on Full can still reach paths outside the worktree unless the agent shell sandbox is enabled.
 
 | Setting | Behaviour |
 |---------|-----------|
@@ -74,7 +74,7 @@ Parallel agents editing one checkout is a recipe for a mess. Isolation gives eac
 
 With isolation on, Minnow mints an **integration branch** and merges task branches into it as they complete. While board view is active, the file explorer, terminal and source-control panel follow the **integration** worktree, not any one task's — so you are looking at the assembled result. Open a task chat and you see its own checkout.
 
-Leave this on Auto unless you have a reason. Running Auto mode without isolation means several agents writing to the same files at once.
+Leave this on Auto unless you have a reason. Running Auto mode without isolation means several agents writing to the same files at once. For unattended AFK runs, worktree isolation and the shell sandbox (when available) solve different problems — use both when you care about both.
 
 ## Model and concurrency
 
@@ -106,7 +106,7 @@ Toggle back to the kanban at any time from the header.
 
 ## Global defaults
 
-**Settings → Agents → Autopilot** sets the defaults every new board starts with: execution mode, isolation, maximum concurrency, planner model, retries, heartbeat, self-heal rounds, infrastructure provisioning, auto-restart of stalled tasks, and a guard against agents changing directory outside their worktree.
+**Settings → Agents → Autopilot** sets the defaults every new board starts with: execution mode, isolation, maximum concurrency, planner model, retries, heartbeat, self-heal rounds, infrastructure provisioning, auto-restart of stalled tasks, and a guard against agents changing directory outside their worktree. Isolation means git worktrees for parallel tasks — not OS host containment.
 
 **Settings → Agents → Watchdog** sets the streaming limits — idle timeout and maximum duration — that stop a hung model from stalling a board indefinitely.
 

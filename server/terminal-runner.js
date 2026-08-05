@@ -22,12 +22,20 @@ import {
 } from './process-runner.js';
 import { resolveOneShotSpawn } from './terminal/one-shot-spawn.js';
 import {
+  applyAgentShellSandbox,
+  formatPreferEscalationError,
+  formatRequireSandboxError,
+} from './terminal/sandbox/index.js';
+import { resolveShellSandboxForRun } from './terminal/sandbox/resolve-for-run.js';
+import { appendSandboxTrailer } from './terminal/sandbox/signals.js';
+import {
   isPidAlive,
   listOrphanedRuns,
   readRunIndexEntry,
   recordRunStart,
   updateRunIndexEntry,
 } from './terminal/run-index.js';
+import { getWorkspaceRoot } from './workspace/root.js';
 
 /** Max in-memory bytes per run before UI/log truncation marker. */
 export const MAX_TERMINAL_BUFFER_BYTES = 2 * 1024 * 1024;
@@ -78,6 +86,7 @@ const RUN_EVICTION_MS = 60_000;
  * @property {Set<(event: object) => void>} listeners
  * @property {Promise<string>} completion
  * @property {(value: string) => void} resolveCompletion
+ * @property {import('./terminal/sandbox/index.js').SandboxMeta | null | undefined} [sandbox]
  */
 
 /** @type {Map<string, RunState>} */
@@ -208,6 +217,10 @@ async function persistTerminalHistory(chatId, record) {
  * @param {number} [params.timeoutMs] custom timeout in ms (clamped 1000–600000; default COMMAND_TIMEOUT_MS)
  * @param {Record<string, string>} [params.env] merged over process.env for the child
  * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
+ * @param {boolean} [params.sandbox] explicit sandbox override (`false` skips; `true` forces attempt)
+ * @param {'off'|'prefer'|'require'} [params.shellSandboxMode] skip config resolve when set
+ * @param {boolean} [params.allowUnsandboxed] prefer-mode Ask approval for this call
+ * @param {string} [params.worktreeRoot] active board worktree for policy allow rules
  * @returns {Promise<{ runId: string, startedAt: number }>}
  */
 export async function createRun({
@@ -221,6 +234,10 @@ export async function createRun({
   timeoutMs,
   env: envOverrides,
   shellProfile = null,
+  sandbox,
+  shellSandboxMode,
+  allowUnsandboxed,
+  worktreeRoot,
 }) {
   const runId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -262,6 +279,7 @@ export async function createRun({
     listeners: new Set(),
     completion,
     resolveCompletion,
+    sandbox: null,
   };
 
   activeRuns.set(runId, state);
@@ -284,13 +302,56 @@ export async function createRun({
 
   const runChild = async () => {
     try {
-      const spawnTarget = resolveOneShotSpawn({
+      const resolvedMode = await resolveShellSandboxForRun({
+        chatId,
+        modeOverride: shellSandboxMode,
+        allowUnsandboxed,
+      });
+
+      // Order: shell/WSL resolution first, then optional Seatbelt/Landlock argv wrap
+      // (MIN-553). sandbox-exec stays the tracked parent so killProcessTree still works.
+      const resolved = resolveOneShotSpawn({
         command,
         args,
         shell,
         shellProfile,
         cwd,
       });
+      const spawnTarget = applyAgentShellSandbox(resolved, {
+        source,
+        sandbox,
+        mode: resolvedMode.mode,
+        allowUnsandboxed: resolvedMode.allowUnsandboxed,
+        cwd,
+        workspaceRoot: getWorkspaceRoot(),
+        worktreeRoot,
+      });
+      state.sandbox = spawnTarget.sandbox ?? null;
+      emit(state, {
+        type: 'meta',
+        runId,
+        command,
+        cwd,
+        sandbox: state.sandbox,
+      });
+
+      if (spawnTarget.sandbox?.blocked) {
+        const message = formatRequireSandboxError(spawnTarget.sandbox.detail);
+        state.exitCode = 1;
+        state._sandboxBlockMessage = message;
+        emit(state, { type: 'error', message });
+        await appendLogFile(logPath, `\n${message}\n`);
+        return;
+      }
+
+      if (spawnTarget.sandbox?.needsEscalation) {
+        const message = formatPreferEscalationError(spawnTarget.sandbox.detail);
+        state.exitCode = 1;
+        state._sandboxBlockMessage = message;
+        emit(state, { type: 'error', message });
+        await appendLogFile(logPath, `\n${message}\n`);
+        return;
+      }
 
       const result = await runProcess(spawnTarget.command, spawnTarget.args, {
         cwd: spawnTarget.cwd ?? cwd,
@@ -352,6 +413,10 @@ export async function createRun({
  * @param {string} [params.logSubdir] logs subdirectory under ~/.minnow/logs/
  * @param {Record<string, string>} [params.env] merged over process.env for the child
  * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
+ * @param {boolean} [params.sandbox] explicit sandbox override (`false` skips; `true` forces attempt)
+ * @param {'off'|'prefer'|'require'} [params.shellSandboxMode]
+ * @param {boolean} [params.allowUnsandboxed]
+ * @param {string} [params.worktreeRoot]
  * @returns {Promise<{ runId: string, startedAt: number, logPath: string, pid: number | null }>}
  */
 export async function createBackgroundRun({
@@ -365,6 +430,10 @@ export async function createBackgroundRun({
   logSubdir = 'terminal',
   env: envOverrides,
   shellProfile = null,
+  sandbox,
+  shellSandboxMode,
+  allowUnsandboxed,
+  worktreeRoot,
 }) {
   const runId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -402,19 +471,50 @@ export async function createBackgroundRun({
     listeners: new Set(),
     completion,
     resolveCompletion,
+    sandbox: null,
   };
 
   activeRuns.set(runId, state);
   await ensureLogFile(logPath);
-  emit(state, { type: 'meta', runId, command, cwd });
 
-  const spawnTarget = resolveOneShotSpawn({
+  const resolvedMode = await resolveShellSandboxForRun({
+    chatId,
+    modeOverride: shellSandboxMode,
+    allowUnsandboxed,
+  });
+
+  // Same composition order as createRun: resolveOneShotSpawn → applyAgentShellSandbox.
+  const resolved = resolveOneShotSpawn({
     command,
     args,
     shell,
     shellProfile,
     cwd,
   });
+  const spawnTarget = applyAgentShellSandbox(resolved, {
+    source,
+    sandbox,
+    mode: resolvedMode.mode,
+    allowUnsandboxed: resolvedMode.allowUnsandboxed,
+    cwd,
+    workspaceRoot: getWorkspaceRoot(),
+    worktreeRoot,
+  });
+  state.sandbox = spawnTarget.sandbox ?? null;
+  emit(state, { type: 'meta', runId, command, cwd, sandbox: state.sandbox });
+
+  if (spawnTarget.sandbox?.blocked || spawnTarget.sandbox?.needsEscalation) {
+    const message = spawnTarget.sandbox.blocked
+      ? formatRequireSandboxError(spawnTarget.sandbox.detail)
+      : formatPreferEscalationError(spawnTarget.sandbox.detail);
+    state.exitCode = 1;
+    state._sandboxBlockMessage = message;
+    emit(state, { type: 'error', message });
+    await appendLogFile(logPath, `\n${message}\n`);
+    await finishRun(runId);
+    return { runId, startedAt, logPath: relLog, pid: null };
+  }
+
   const execCommand = spawnTarget.command;
   const execArgs = spawnTarget.args;
   const useShell = spawnTarget.shell;
@@ -510,14 +610,19 @@ export async function finishRun(runId) {
     stopped: state.stoppedByUser,
   });
 
-  const formatted = formatProcessOutput(state.command, {
-    code: state.exitCode ?? 1,
-    stdout: state.stdout,
-    stderr: state.stderr,
-    timedOut: state.timedOut,
-    stopped: state.stoppedByUser,
-    timeoutSecs: state.timeoutMs ? state.timeoutMs / 1000 : undefined,
-  });
+  const formatted = state._sandboxBlockMessage
+    ? String(state._sandboxBlockMessage)
+    : appendSandboxTrailer(
+        formatProcessOutput(state.command, {
+          code: state.exitCode ?? 1,
+          stdout: state.stdout,
+          stderr: state.stderr,
+          timedOut: state.timedOut,
+          stopped: state.stoppedByUser,
+          timeoutSecs: state.timeoutMs ? state.timeoutMs / 1000 : undefined,
+        }),
+        state.sandbox,
+      );
   state.resolveCompletion(formatted);
 
   const record = {
@@ -1046,6 +1151,8 @@ async function readLogTailAt(logPath, maxBytes) {
  * @param {number} [params.timeoutMs]
  * @param {Record<string, string>} [params.env] merged over process.env for the child
  * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
+ * @param {boolean} [params.allowUnsandboxed]
+ * @param {string} [params.worktreeRoot]
  */
 export async function executeCommandBlocking({
   command,
@@ -1057,6 +1164,10 @@ export async function executeCommandBlocking({
   timeoutMs,
   env,
   shellProfile = null,
+  allowUnsandboxed,
+  worktreeRoot,
+  sandbox,
+  shellSandboxMode,
 }) {
   const { runId } = await createRun({
     command,
@@ -1069,6 +1180,10 @@ export async function executeCommandBlocking({
     timeoutMs,
     env,
     shellProfile,
+    allowUnsandboxed,
+    worktreeRoot,
+    sandbox,
+    shellSandboxMode,
   });
   return waitForRun(runId);
 }

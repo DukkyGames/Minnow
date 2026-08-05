@@ -344,6 +344,11 @@ function contextHasExecuteCommandTool(ctx: ComposeContext): boolean {
   return (ctx.enabledToolIds ?? []).includes('execute_command');
 }
 
+function contextHasShellSandbox(ctx: ComposeContext): boolean {
+  const mode = ctx.shellSandboxMode;
+  return mode === 'prefer' || mode === 'require';
+}
+
 /** GitHub forge operations via local `gh` auth (MIN-558). */
 function resolveGithubCliBody(ctx: ComposeContext, profile: PromptProfile): string {
   if (!contextHasExecuteCommandTool(ctx)) {
@@ -351,6 +356,16 @@ function resolveGithubCliBody(ctx: ComposeContext, profile: PromptProfile): stri
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';
   const loaded = loadPromptById('tool-usage', 'github-cli', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
+/** Host shell sandbox note when prefer/require is on (MIN-553). */
+function resolveShellSandboxBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (!contextHasExecuteCommandTool(ctx) || !contextHasShellSandbox(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'shell-sandbox', loadProfile);
   return loaded?.body?.trim() ?? '';
 }
 
@@ -541,6 +556,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const githubInterpolated = interpolatePromptBody(githubCliRaw, vars);
         if (githubInterpolated.trim()) {
           sections.push(githubInterpolated.trim());
+        }
+      }
+      const shellSandboxRaw = resolveShellSandboxBody(ctx, profileKey);
+      if (shellSandboxRaw.trim()) {
+        const sandboxInterpolated = interpolatePromptBody(shellSandboxRaw, vars);
+        if (sandboxInterpolated.trim()) {
+          sections.push(sandboxInterpolated.trim());
         }
       }
     }
