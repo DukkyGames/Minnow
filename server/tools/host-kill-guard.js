@@ -52,8 +52,9 @@ function protectedPids() {
 
 /** True when a PID-targeted kill names one of the host's own PIDs. */
 function targetsHostPid(command, pids) {
+  // Allow up to 10 digits so Windows DWORD PIDs (often 8+) still match.
   const matches = command.matchAll(
-    /(?:\/pid\s+|-id\s+|\bkill(?:\s+-\w+)*\s+)(\d{2,7})/gi,
+    /(?:\/pid\s+|-id\s+|\bkill(?:\s+-\w+)*\s+)(\d{2,10})/gi,
   );
   for (const m of matches) {
     if (pids.has(m[1])) return true;
