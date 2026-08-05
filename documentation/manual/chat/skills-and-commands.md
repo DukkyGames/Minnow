@@ -11,7 +11,7 @@ Navigate with **↑ ↓**, choose with **Enter** or **Tab**, dismiss with **Esca
 
 A skill is a `SKILL.md` file: a short front matter block and a body of instructions. Invoking one prepends those instructions to your request. That is the whole mechanism — which is why writing your own is easy.
 
-Sixteen ship built in and all are enabled by default.
+Seventeen ship built in and all are enabled by default.
 
 | Skill | What it does |
 |-------|--------------|
@@ -23,6 +23,7 @@ Sixteen ship built in and all are enabled by default.
 | `/debug-error` | Systematic trace of a tool failure or stack trace |
 | `/docs-update` | Brings README and project docs back in line with the code |
 | `/explain-code` | Teaches the code instead of changing it |
+| `/fix-ci` | Investigates GitHub Actions failures, fixes scoped issues, and re-runs local CI gates |
 | `/git-setup` | Initializes git in the workspace and connects a GitHub remote |
 | `/git-commit` | Writes a conventional commit message from the staged diff |
 | `/impeccable` | Design, critique and refine UI against the project's design system |

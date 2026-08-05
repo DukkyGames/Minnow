@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T07:11:31.375Z",
+  "generatedAt": "2026-08-05T04:33:00.566Z",
   "skills": [
     {
       "id": "ask-user",
@@ -47,6 +47,12 @@
       "id": "explain-code",
       "label": "Explain Code",
       "description": "Teach and walk through code clearly. Use when the user wants understanding, not changes.",
+      "source": "builtin"
+    },
+    {
+      "id": "fix-ci",
+      "label": "Fix CI",
+      "description": "Investigates GitHub Actions CI failures for the latest commit on the current branch, fixes scoped issues using subagents, re-runs failing tests locally, and commits fixes. Use when CI is red, checks failed, GitHub Actions failed, or the user asks to fix CI, fix the build, or green the branch.",
       "source": "builtin"
     },
     {

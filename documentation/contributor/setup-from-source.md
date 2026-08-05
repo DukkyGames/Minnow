@@ -115,7 +115,7 @@ A bare request without the header returns `401 Unauthorized` — that is the gat
 - **Voice** — Models → Voice: local Whisper / Qwen3-TTS or provider APIs.
 - **Memory & Brain** — the **Brain** app owns memory settings and embeddings.
 - **MCP** — Settings → Tools & integrations → **MCP servers**: Context7 built in; add custom servers.
-- **Skills** — Settings → Tools & integrations → **Skills** / **Skills Library**: 15 built-in skills ship in-tree, plus third-party `SKILL.md` packs.
+- **Skills** — Settings → Tools & integrations → **Skills** / **Skills Library**: 17 built-in skills ship in-tree, plus third-party `SKILL.md` packs.
 - **Webhooks** — Settings → Tools & integrations → **Webhooks**: HMAC-signed outbound deliveries.
 
 > **Compare, Benchmarking, Experts, Calendar, and Email** are release-gated off in this build — see [apps-and-routes.md](apps-and-routes.md).

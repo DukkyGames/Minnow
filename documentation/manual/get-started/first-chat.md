@@ -73,7 +73,7 @@ Drag files onto the composer, or use the attachment button. Up to 10 MB per file
 
 ## Slash skills
 
-Type **/** at the start of an empty composer to open the picker. Skills are packaged instructions the model follows — code review, commit-message writing, a security pass, a UI critique. Sixteen ship built in and are on by default.
+Type **/** at the start of an empty composer to open the picker. Skills are packaged instructions the model follows — code review, commit-message writing, a security pass, a UI critique. Seventeen ship built in and are on by default.
 
 The same picker holds `/goal` and `/loop`, which are not skills but chat controls: one keeps working until a condition is met, the other re-runs a prompt on a schedule.
 
