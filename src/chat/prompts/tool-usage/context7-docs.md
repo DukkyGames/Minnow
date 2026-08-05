@@ -18,6 +18,6 @@ When the task involves a third-party library, framework, or SDK, prefer Context7
 
 ### When to use web instead
 
-Use `web_search` / `fetch_web_content` / `rag_web_content` for release news, GitHub issues, repo-specific discussions, or facts Context7 does not cover.
+Use `web_search` / `fetch_web_content` / `rag_web_content` for release news, third-party repo discussions, or facts Context7 does not cover. For **this workspace's** GitHub PRs, issues, and CI, use **`gh` via `execute_command`** (see **GitHub — use `gh`**), not the web tools.
 
 Requires Context7 enabled in **Settings → MCP** (API key optional; improves rate limits).

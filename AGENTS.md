@@ -57,6 +57,7 @@ Perf regressions fail CI the same way as `impeccable:detect` — loudly and with
 - **LAN access** is opt-in (`Settings → General → Network access` or `MINNOW_NETWORK=lan`); default is loopback-only — restart after toggling.
 - **Release gating:** an app is only reachable when `releaseState: 'released'` in [`src/os/app-registry.ts`](src/os/app-registry.ts). Tests and code for hidden apps (Compare, Bench, Experts, Calendar, Email) still run — don't delete them — but nothing user-facing may assume they are visible. New or unfinished apps ship `hidden` first.
 - **Plan mode** denies mutating file edits and git writes; allows `save_file`/`make_directory` under `documentation/plans/` only (see `tool-groups.ts` + `plan-write-guard.ts`). Shell/code-exec is allowed per the mode matrix (MIN-332).
+- **GitHub in agent chats:** when tools include `execute_command`, the composed system prompt appends **`github-cli`** guidance — use the local **`gh`** CLI for this repo's PRs, issues, and CI; do not scrape github.com via browser or web-fetch tools (MIN-558).
 
 ## Conventions
 

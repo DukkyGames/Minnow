@@ -340,6 +340,20 @@ function contextHasAskQuestionTool(ctx: ComposeContext): boolean {
   return (ctx.enabledToolIds ?? []).includes('ask_question');
 }
 
+function contextHasExecuteCommandTool(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('execute_command');
+}
+
+/** GitHub forge operations via local `gh` auth (MIN-558). */
+function resolveGithubCliBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (!contextHasExecuteCommandTool(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'github-cli', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** Mandatory ask_question usage when the tool is enabled for this chat. */
 function resolveAskQuestionEnforcementBody(ctx: ComposeContext, profile: PromptProfile): string {
   if (!contextHasAskQuestionTool(ctx)) {
@@ -520,6 +534,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const appearanceInterpolated = interpolatePromptBody(manageAppearanceRaw, vars);
         if (appearanceInterpolated.trim()) {
           sections.push(appearanceInterpolated.trim());
+        }
+      }
+      const githubCliRaw = resolveGithubCliBody(ctx, profileKey);
+      if (githubCliRaw.trim()) {
+        const githubInterpolated = interpolatePromptBody(githubCliRaw, vars);
+        if (githubInterpolated.trim()) {
+          sections.push(githubInterpolated.trim());
         }
       }
     }

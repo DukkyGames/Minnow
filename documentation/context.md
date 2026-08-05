@@ -258,7 +258,7 @@ Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings â†
 
 Shipped under [`src/chat/prompts/`](../src/chat/prompts/): `base/`, `modes/`, `tool-usage/`, `work-agents/`, `experts/`, `titles/`. User overrides: `~/.minnow/prompts/`.
 
-Composer: [`src/chat/prompts/prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts). Custom profiles: `~/.minnow/prompt-configs/`, portable bundles `~/.minnow/profiles/`. Composer **reasoning** UI ([`src/ui/composer-thinking.ts`](../src/ui/composer-thinking.ts), [`src/ui/composer-reasoning-effort.ts`](../src/ui/composer-reasoning-effort.ts)): models with **low/medium/high** show the brain toggle plus an effort dropdown when reasoning is on; models with only **off/on** use the brain tri-state toggle alone (no redundant Off/On select).
+Composer: [`src/chat/prompts/prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts). Custom profiles: `~/.minnow/prompt-configs/`, portable bundles `~/.minnow/profiles/`. When `execute_command` is enabled, the **`github-cli`** tool-usage appendix ([`tool-usage/github-cli.md`](../src/chat/prompts/tool-usage/github-cli.md), MIN-558) tells agents to use the local **`gh`** CLI for this repo's PRs/issues/CI instead of browser or web fetch to github.com. Composer **reasoning** UI ([`src/ui/composer-thinking.ts`](../src/ui/composer-thinking.ts), [`src/ui/composer-reasoning-effort.ts`](../src/ui/composer-reasoning-effort.ts)): models with **low/medium/high** show the brain toggle plus an effort dropdown when reasoning is on; models with only **off/on** use the brain tri-state toggle alone (no redundant Off/On select).
 
 API: `GET/PUT /api/prompts/...` when server running.
 
