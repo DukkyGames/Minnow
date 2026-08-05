@@ -219,47 +219,57 @@ function settingsFor(model: LibraryModel): LlamaServeSettings {
   return draft;
 }
 
-function gpuOffloadSelectValue(nGpuLayers: number | undefined): string {
-  if (nGpuLayers === 0) return '0';
-  if (nGpuLayers === 999) return '999';
-  return 'custom';
+function sliderValueFromNGpu(nGpuLayers: number | undefined, maxLayers: number): number {
+  if (nGpuLayers === 0) return 0;
+  if (nGpuLayers === 999 || nGpuLayers == null) return maxLayers;
+  return Math.min(maxLayers, Math.max(0, nGpuLayers));
 }
 
-/** Pick a sane starting layer count when the user switches to Custom from a preset value. */
-function defaultCustomGpuLayers(model: LibraryModel): number {
-  const max = estimateTransformerLayerCount(model.paramsB);
-  return Math.min(max, Math.max(1, Math.round(max / 2)));
+function nGpuLayersFromSlider(sliderValue: number, maxLayers: number): number {
+  if (sliderValue <= 0) return 0;
+  if (sliderValue >= maxLayers) return 999;
+  return sliderValue;
+}
+
+function formatGpuLayersSliderLabel(sliderValue: number, maxLayers: number): string {
+  if (sliderValue <= 0) return 'CPU only';
+  if (sliderValue >= maxLayers) return `All (${maxLayers})`;
+  return String(sliderValue);
 }
 
 function gpuLayersSlider(
   model: LibraryModel,
-  value: number,
-  onChange: (value: number) => void,
+  nGpuLayers: number | undefined,
+  onChange: (nGpuLayers: number) => void,
 ): HTMLElement {
   const maxLayers = estimateTransformerLayerCount(model.paramsB);
-  const layers = Math.min(maxLayers, Math.max(1, value));
+  const sliderValue = sliderValueFromNGpu(nGpuLayers, maxLayers);
   const wrap = el('label', 'models-field');
   const head = el('div', 'models-field__range-head');
-  head.append(el('span', 'models-field__label', 'Layers on GPU'));
-  const valueEl = el('span', 'models-field__range-value', String(layers));
+  head.append(el('span', 'models-field__label', 'GPU layers'));
+  const valueEl = el(
+    'span',
+    'models-field__range-value',
+    formatGpuLayersSliderLabel(sliderValue, maxLayers),
+  );
   head.appendChild(valueEl);
   wrap.appendChild(head);
 
   const range = el('input', 'models-field__range') as HTMLInputElement;
   range.type = 'range';
-  range.min = '1';
+  range.min = '0';
   range.max = String(maxLayers);
   range.step = '1';
-  range.value = String(layers);
+  range.value = String(sliderValue);
   range.setAttribute('aria-valuemin', range.min);
   range.setAttribute('aria-valuemax', range.max);
   range.setAttribute('aria-valuenow', range.value);
   range.setAttribute('aria-label', 'Transformer layers to offload to the GPU');
   range.addEventListener('input', () => {
-    const next = Number(range.value);
-    valueEl.textContent = String(next);
-    range.setAttribute('aria-valuenow', String(next));
-    onChange(next);
+    const nextSlider = Number(range.value);
+    valueEl.textContent = formatGpuLayersSliderLabel(nextSlider, maxLayers);
+    range.setAttribute('aria-valuenow', String(nextSlider));
+    onChange(nGpuLayersFromSlider(nextSlider, maxLayers));
   });
   wrap.appendChild(range);
   return wrap;
@@ -339,34 +349,11 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
       settings.ctx = v;
       refreshMemoryHint();
     }),
-    selectField(
-      'GPU offload',
-      [
-        { value: '999', label: 'All layers' },
-        { value: '0', label: 'CPU only' },
-        { value: 'custom', label: 'Custom…' },
-      ],
-      gpuOffloadSelectValue(settings.n_gpu_layers),
-      (v) => {
-        if (v === 'custom') {
-          const current = settings.n_gpu_layers;
-          settings.n_gpu_layers =
-            current === 0 || current === 999 ? defaultCustomGpuLayers(model) : current;
-        } else {
-          settings.n_gpu_layers = Number(v);
-        }
-        render();
-      },
-    ),
+    gpuLayersSlider(model, settings.n_gpu_layers, (v) => {
+      settings.n_gpu_layers = v;
+      refreshMemoryHint();
+    }),
   );
-  if (gpuOffloadSelectValue(settings.n_gpu_layers) === 'custom') {
-    configBlock.appendChild(
-      gpuLayersSlider(model, settings.n_gpu_layers ?? defaultCustomGpuLayers(model), (v) => {
-        settings.n_gpu_layers = v;
-        refreshMemoryHint();
-      }),
-    );
-  }
   configBlock.appendChild(
     selectField(
       'KV cache',
