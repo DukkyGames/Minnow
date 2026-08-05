@@ -45,12 +45,14 @@ export function beginStreamAnnouncer(wrap: HTMLElement): void {
 /** Throttled prose update while tokens stream (call from markdown debounce path). */
 export function announceStreamingProse(markdown: string): void {
   if (!activeWrap) return;
-  const snippet = summarizeProse(markdown);
-  if (!snippet) return;
 
+  // Rate-limit BEFORE summarizeProse — summarizing the whole reply every tick was O(n²).
   const now = Date.now();
   const isFirst = lastSnippet.length === 0;
   if (!isFirst && now - lastAnnouncedAt < ANNOUNCE_INTERVAL_MS) return;
+
+  const snippet = summarizeProse(markdown);
+  if (!snippet) return;
   if (!isFirst && snippet === lastSnippet) return;
 
   lastAnnouncedAt = now;

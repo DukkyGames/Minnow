@@ -3,6 +3,7 @@
  * else localStorage (`minnow.tools`). Settings drawer uses `data-tool-id`.
  */
 
+import { bumpToolConfigEpoch } from '../chat/outbound-estimate-epochs';
 import { getTools, putTools } from '../config/api-client';
 import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults';
 import {
@@ -387,6 +388,7 @@ export function saveToolConfig(config: ToolConfig): void {
 export async function saveToolConfigAsync(config: ToolConfig): Promise<void> {
   syncEnabledFromPermissions(config);
   cachedConfig = config;
+  bumpToolConfigEpoch();
 
   if (isServerStorageMode()) {
     try {

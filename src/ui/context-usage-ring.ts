@@ -28,6 +28,9 @@ import {
   type ContextUsageSurface,
 } from './context-usage-surface';
 
+const COMPOSER_REFRESH_DEBOUNCE_MS = 200;
+const STREAMING_CONTEXT_REFRESH_DEBOUNCE_MS = 1000;
+
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> | null = null;
 let lastBudget: ContextBudget | null = null;
@@ -140,12 +143,15 @@ export function refreshContextUsageRing(): void {
 }
 
 /** Debounced refresh (composer typing, tool toggles). */
-export function scheduleContextUsageRefresh(): void {
+export function scheduleContextUsageRefresh(options?: { duringStream?: boolean }): void {
   if (debounceTimer) clearTimeout(debounceTimer);
+  const delay = options?.duringStream
+    ? STREAMING_CONTEXT_REFRESH_DEBOUNCE_MS
+    : COMPOSER_REFRESH_DEBOUNCE_MS;
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
     refreshContextUsageRing();
-  }, 200);
+  }, delay);
 }
 
 function bindRingButton(surface: ContextUsageSurface): void {

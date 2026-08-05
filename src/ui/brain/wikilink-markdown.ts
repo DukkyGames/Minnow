@@ -3,8 +3,8 @@
  */
 
 import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
 import { marked } from 'marked';
+import { highlightCodeElement } from '../../markdown/highlighter';
 
 let markedConfigured = false;
 
@@ -63,12 +63,8 @@ export function renderBrainMarkdown(
   container.innerHTML = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 
   container.querySelectorAll('pre code').forEach((block) => {
-    try {
-      if (!block.classList.contains('hljs')) {
-        hljs.highlightElement(block as HTMLElement);
-      }
-    } catch {
-      /* unknown language */
+    if (!block.classList.contains('hljs')) {
+      void highlightCodeElement(block as HTMLElement);
     }
   });
 

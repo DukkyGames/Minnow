@@ -81,6 +81,11 @@ import './styles/mobile.css';
 import 'highlight.js/styles/github.min.css';
 
 import { installFetchAuth } from './api/install-fetch-auth';
+import {
+  logBootPhaseTableIfDebug,
+  markBootPhase,
+  measureBootPhase,
+} from './boot/boot-metrics';
 import { initTheme } from './ui/theme';
 import { initMobileLayout } from './ui/mobile-layout';
 import { initAttachments } from './attachments/store';
@@ -239,6 +244,8 @@ function registerServiceWorker(): void {
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
+  // Boot phase marks surface in DevTools when MINNOW_DEBUG=1 (see boot-metrics.ts).
+  markBootPhase('ui-init');
   installAppDialogs();
   bindAskQuestionPlanScreenHooks({
     resolveQuestionHost: (chatId) =>
@@ -346,6 +353,8 @@ export async function initApp(): Promise<void> {
   const { ensureCodeWorkspaceModulesForBoot } = await import('./boot/code-workspace-modules');
   await ensureCodeWorkspaceModulesForBoot();
   initAppSidebarResizers();
+  // Config cluster — seven independent loads; mark the span for cold-boot traces.
+  markBootPhase('config');
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
   await loadBrowserMeta().catch(() => undefined);
@@ -356,6 +365,17 @@ export async function initApp(): Promise<void> {
   await loadLibraryInferencePrefs().catch(() => undefined);
   await loadAutopilotMeta().catch(() => undefined);
   await loadThinkingMeta().catch(() => undefined);
+  // End mark is not a BootPhase — only used to bound the config-cluster measure.
+  try {
+    performance.mark('minnow:boot:config-done');
+    performance.measure(
+      'minnow:phase:config-cluster',
+      'minnow:boot:config',
+      'minnow:boot:config-done',
+    );
+  } catch {
+    /* missing marks */
+  }
   initStatsStrip();
   initChatScroll();
   initMinnowBrowserLinkRouting();
@@ -375,6 +395,8 @@ export async function initApp(): Promise<void> {
   syncComposerModelTriggers();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
+  markBootPhase('first-paint');
+  measureBootPhase('minnow:phase:to-first-paint', 'ui-init', 'first-paint');
   const { applyComposerDraftForChat } = await import('./ui/composer-draft');
   applyComposerDraftForChat(getActiveChat());
   if (sessionState) {
@@ -427,6 +449,10 @@ export async function initApp(): Promise<void> {
   if (sidebarBackdrop) sidebarBackdrop.tabIndex = -1;
   if (fileSidebarBackdrop) fileSidebarBackdrop.tabIndex = -1;
   updateStatsExpandPreview();
+  // interactiveMs — time until initApp has finished (the number we previously lacked).
+  markBootPhase('interactive');
+  measureBootPhase('minnow:phase:init-app', 'ui-init', 'interactive');
+  logBootPhaseTableIfDebug();
 }
 
 /** Start init once the document is ready (module scripts often run after `load`). */
@@ -451,6 +477,7 @@ async function startApp(): Promise<void> {
   await detectConfigServer();
   // Probe the tool server in parallel with session hydrate — Code boot reads this flag (MIN-436).
   await Promise.all([loadSessionsFromStorage(), detectLocalServer()]);
+  markBootPhase('sessions');
   if (isOsShellEnabled()) {
     initOsRouter();
   }

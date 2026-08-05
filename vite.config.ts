@@ -108,6 +108,11 @@ const EDITOR_WARMUP_FILES = [
 
 /** Rollup manual chunk groups for heavy vendor libraries. */
 function manualChunkForNodeModule(id: string): string | undefined {
+  // Keep Vite's dynamic-import preload helper out of vendor-* chunks. If it lands
+  // inside vendor-codemirror, every `import()` in the app eagerly pulls ~1.6 MB of CM.
+  if (id.includes('\0vite/preload-helper') || id.includes('vite/preload-helper')) {
+    return 'vite-preload';
+  }
   if (!id.includes('node_modules')) return undefined;
   if (id.includes('@codemirror') || id.includes('/codemirror/')) {
     return 'vendor-codemirror';
@@ -119,6 +124,12 @@ function manualChunkForNodeModule(id: string): string | undefined {
     return 'vendor-charts';
   }
   if (id.includes('highlight.js')) {
+    const normalized = id.replace(/\\/g, '/');
+    // Core + per-language grammars stay with their importers (small eager path).
+    // Only the full package entry is forced into vendor-highlight so the exotic-language
+    // fallback remains a single lazy chunk (not merged into the eager core build).
+    if (normalized.includes('highlight.js/lib/')) return undefined;
+    if (normalized.includes('highlight.js/styles/')) return undefined;
     return 'vendor-highlight';
   }
   return undefined;
@@ -143,6 +154,20 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 1500,
+    modulePreload: {
+      // Belt-and-suspenders: even if a shared helper still points at these vendor
+      // chunks, do not modulepreload them for non-editor/non-fallback hosts.
+      resolveDependencies(filename, deps) {
+        const isEditorHost =
+          /file-viewer|editor-|lsp-editor|codemirror|git-commit/i.test(filename);
+        return deps.filter((dep) => {
+          if (/vendor-codemirror/i.test(dep) && !isEditorHost) return false;
+          // Full highlight.js bundle is an exotic-language fallback only — never preload.
+          if (/vendor-highlight/i.test(dep)) return false;
+          return true;
+        });
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {

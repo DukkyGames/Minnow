@@ -19,6 +19,7 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { paintChatHistoryPendingInForegroundShell } from '../ui/messages';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
@@ -966,7 +967,10 @@ export async function activateChatById(id: string): Promise<void> {
   markSessionScalarsDirty();
   maybeRememberActiveChatForForegroundApp(state, chat);
   scheduleSaveSessions();
-  await ensureChatHistoryLoaded(id);
+  if (chat.historyLoaded === false) {
+    paintChatHistoryPendingInForegroundShell();
+    await ensureChatHistoryLoaded(id);
+  }
 }
 
 /** Read legacy expert selection when still present on disk (pre-v6). */

@@ -12,10 +12,10 @@ import {
 import type { HardwareSnapshot, ModelFitResult } from '../models/types';
 
 /** Rank catalog rows for this machine (hardware-aware budget). */
-export function listModelsForHardware(
+export async function listModelsForHardware(
   hw: HardwareSnapshot,
   options: { limit?: number; fitOnly?: boolean; search?: string } = {},
-): ModelFitResult[] {
+): Promise<ModelFitResult[]> {
   const gpuIndex = defaultGpuGroupIndex(hw);
   const budgetHw = hardwareForGpuBudget(hw, gpuIndex);
   return rankModels(budgetHw, {
@@ -27,17 +27,19 @@ export function listModelsForHardware(
 }
 
 /** Pick the best-fitting catalog row for this machine. */
-export function pickRecommendedModel(hw: HardwareSnapshot): ModelFitResult | null {
-  const rows = listModelsForHardware(hw, { limit: 8, fitOnly: true });
+export async function pickRecommendedModel(
+  hw: HardwareSnapshot,
+): Promise<ModelFitResult | null> {
+  const rows = await listModelsForHardware(hw, { limit: 8, fitOnly: true });
   return rows.find((row) => row.fit_level !== 'too_tight') ?? rows[0] ?? null;
 }
 
 /** Resolve on-disk GGUF path for a ranked catalog row. */
-export function artifactPathForFitRow(
+export async function artifactPathForFitRow(
   row: ModelFitResult,
   cached: CachedModelRow[],
-): string | null {
-  const entry = getModels().find((m) => m.name === row.name) ?? null;
+): Promise<string | null> {
+  const entry = (await getModels()).find((m) => m.name === row.name) ?? null;
   const repoId = entry ? resolveDownloadRepo(entry) : row.name.includes('/') ? row.name : null;
   if (!repoId) return null;
   const match = cached.find((c) => c.repo_id === repoId);

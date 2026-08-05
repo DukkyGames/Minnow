@@ -22,7 +22,7 @@ import { encodeModelSelectKey, decodeModelSelectKey } from '../lib/model-select-
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { resolveProvider } from '../providers/store';
 import { getActiveChat } from '../state/sessions';
-import { getActiveModelIdFromDom } from './editor-ai-completion-client';
+import { getActiveModelIdFromDom } from './editor-ai-binding';
 import type { Attachment } from '../attachments/types';
 
 /** Room for a paragraph or a short bullet list — not an essay. */

@@ -2,8 +2,8 @@
  * Appearance: applies palette themes, hljs, CodeMirror, and xterm sync.
  */
 
-import hljs from 'highlight.js';
 import hljsDarkStylesheetUrl from 'highlight.js/styles/github-dark.min.css?url';
+import { refreshHljsInDocument } from '../markdown/highlighter';
 import {
   applyTheme as applyThemeId,
   getFollowSystem,
@@ -61,22 +61,6 @@ function syncHljsDarkStylesheet(effective: ThemeMode): void {
   } else if (existing) {
     existing.remove();
   }
-}
-
-/** Re-run highlight.js on fenced blocks so class-based colors match the active stylesheet. */
-export function refreshHljsInDocument(): void {
-  document.querySelectorAll('pre code.hljs').forEach((block) => {
-    const el = block as HTMLElement;
-    const plain = el.textContent ?? '';
-    el.removeAttribute('data-highlighted');
-    el.classList.remove('hljs');
-    el.textContent = plain;
-    try {
-      hljs.highlightElement(el);
-    } catch {
-      /* partial fence or unknown grammar */
-    }
-  });
 }
 
 /** Apply effective theme to DOM and dependent surfaces. */

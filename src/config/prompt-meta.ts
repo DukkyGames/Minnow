@@ -3,6 +3,7 @@
  */
 
 import { detectConfigServer } from './storage-mode';
+import { bumpPromptConfigEpoch } from '../chat/outbound-estimate-epochs';
 
 export type PromptProfileName = 'full' | 'lite' | 'custom';
 
@@ -109,6 +110,7 @@ export async function savePromptMetaSettings(
   const next: PromptMetaSettings = { ...current, ...partial };
   cachedMeta = next;
   writeLocalPromptMeta(next);
+  bumpPromptConfigEpoch();
 
   const serverUp = await detectConfigServer();
   if (serverUp) {

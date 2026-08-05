@@ -50,32 +50,32 @@ describe('models quant', () => {
 });
 
 describe('models catalog', () => {
-  test('bundled catalog loads', () => {
-    assert.ok(getModels().length > 100);
+  test('bundled catalog loads', async () => {
+    assert.ok((await getModels()).length > 100);
   });
 });
 
 describe('rankModels', () => {
-  test('returns scored rows for fixed hardware', () => {
-    const rows = rankModels(RTX_4090_BOX, { limit: 5 });
+  test('returns scored rows for fixed hardware', async () => {
+    const rows = await rankModels(RTX_4090_BOX, { limit: 5 });
     assert.equal(rows.length, 5);
     assert.ok(rows[0].score >= rows[1].score);
     assert.ok(rows.every((r) => r.name.length > 0));
     assert.ok(rows.every((r) => r.size_gb > 0));
   });
 
-  test('GPU budget RAM-only disables GPU for ranking', () => {
+  test('GPU budget RAM-only disables GPU for ranking', async () => {
     const ramOnly = hardwareForGpuBudget(RTX_4090_BOX, 0);
     assert.equal(ramOnly.hasGpu, false);
     assert.equal(ramOnly.gpuVramGb, 0);
     assert.equal(ramOnly.gpuCount, 0);
     assert.equal(ramOnly.gpu_only, false);
 
-    const gpuRows = rankModels(hardwareForGpuBudget(RTX_4090_BOX, 1), {
+    const gpuRows = await rankModels(hardwareForGpuBudget(RTX_4090_BOX, 1), {
       limit: 20,
       fitOnly: true,
     });
-    const ramRows = rankModels(ramOnly, { limit: 20, fitOnly: true });
+    const ramRows = await rankModels(ramOnly, { limit: 20, fitOnly: true });
     assert.notDeepEqual(
       gpuRows.map((r) => r.name),
       ramRows.map((r) => r.name),
@@ -96,9 +96,9 @@ describe('rankModels', () => {
     assert.equal(resolveGpuGroupIndexAfterRescan(RTX_4090_BOX, 99), 1);
   });
 
-  test('fitOnly false reserves too_tight rows inside the limit', () => {
-    const withFit = rankModels(RTX_4090_BOX, { limit: 60, fitOnly: true });
-    const withoutFit = rankModels(RTX_4090_BOX, { limit: 60, fitOnly: false });
+  test('fitOnly false reserves too_tight rows inside the limit', async () => {
+    const withFit = await rankModels(RTX_4090_BOX, { limit: 60, fitOnly: true });
+    const withoutFit = await rankModels(RTX_4090_BOX, { limit: 60, fitOnly: false });
     const tightInWithout = withoutFit.filter((r) => r.fit_level === 'too_tight');
 
     assert.ok(withFit.every((r) => r.fit_level !== 'too_tight'));
@@ -110,21 +110,21 @@ describe('rankModels', () => {
     );
   });
 
-  test('useCase filter matches inferUseCase keys not catalog labels', () => {
-    const reasoningModel = getModels().find((m) => inferUseCase(m) === 'reasoning');
+  test('useCase filter matches inferUseCase keys not catalog labels', async () => {
+    const reasoningModel = (await getModels()).find((m) => inferUseCase(m) === 'reasoning');
     assert.ok(reasoningModel, 'catalog should include a reasoning model');
 
     const catalogLabel = reasoningModel.use_case ?? '';
     assert.notEqual(catalogLabel, 'reasoning', 'catalog labels are human-readable strings');
 
-    const byKey = rankModels(RTX_4090_BOX, {
+    const byKey = await rankModels(RTX_4090_BOX, {
       limit: 200,
       fitOnly: false,
       useCase: 'reasoning',
     });
     assert.ok(byKey.some((r) => r.name === reasoningModel.name));
 
-    const byCatalogLabel = rankModels(RTX_4090_BOX, {
+    const byCatalogLabel = await rankModels(RTX_4090_BOX, {
       limit: 200,
       fitOnly: false,
       useCase: catalogLabel,

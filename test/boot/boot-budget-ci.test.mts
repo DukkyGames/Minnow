@@ -1,5 +1,7 @@
 /**
  * CI boot budget — happy-dom harness for scheduleMarkAppReady (loader dismiss path).
+ * CSS sentinel is applied AFTER the timer starts so the harness actually waits for
+ * whenAppShellStyled (pre-applying it made the gate resolve in ~20 ms unfalsifiably).
  */
 
 import assert from 'node:assert/strict';
@@ -49,10 +51,11 @@ describe('boot budget (CI harness)', () => {
     win = new Window();
     installWindow(win);
     win.window.__MINNOW_BOOT_ORIGIN_MS = win.performance.now();
-    applyAppCss(win);
 
     const started = win.performance.now();
     scheduleMarkAppReady();
+    // Apply CSS after the timer starts — mirrors real boot where stylesheet arrives async.
+    win.setTimeout(() => applyAppCss(win), 12);
 
     await new Promise<void>((resolve) => {
       const deadline = started + budgets.startup.appReadyHarnessMaxMs;
@@ -78,6 +81,11 @@ describe('boot budget (CI harness)', () => {
     assert.ok(
       elapsed <= budgets.startup.appReadyHarnessMaxMs,
       `boot harness took ${elapsed.toFixed(1)} ms (limit ${budgets.startup.appReadyHarnessMaxMs} ms)`,
+    );
+    // Gate must not resolve before CSS is applied (previously ~20 ms with pre-seeded sentinel).
+    assert.ok(
+      elapsed >= 12,
+      `boot harness resolved too fast (${elapsed.toFixed(1)} ms) — CSS sentinel may have been pre-applied`,
     );
 
     const metrics = win.window.__MINNOW_BOOT_METRICS__;

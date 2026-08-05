@@ -2,6 +2,7 @@
  * Global user rules persisted in ~/.minnow/rules.json (Settings → Rules).
  */
 
+import { bumpPromptConfigEpoch } from '../chat/outbound-estimate-epochs';
 import { detectConfigServer } from './storage-mode';
 import { getRules, putRules } from './api-client';
 import { defaultUserRulesSettings } from './defaults';
@@ -240,6 +241,7 @@ export async function saveUserRules(settings: UserRulesSettings): Promise<void> 
 
   writeLocalUserRules(normalized);
   cachedRules = normalized;
+  bumpPromptConfigEpoch();
 
   const serverUp = await detectConfigServer();
   if (!serverUp) return;

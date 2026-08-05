@@ -2,6 +2,8 @@
  * Client API for mode/expert/sub-agent prompt bodies (built-in + ~/.minnow overrides).
  */
 
+import { bumpPromptConfigEpoch } from '../outbound-estimate-epochs';
+
 export type PromptFileFamily = 'modes' | 'experts' | 'sub-agents';
 export type PromptFileProfile = 'full' | 'lite';
 
@@ -61,6 +63,7 @@ export async function savePromptFileOverride(
       },
     );
     if (!res.ok) return null;
+    bumpPromptConfigEpoch();
     return (await res.json()) as PromptFileResponse;
   } catch {
     return null;
@@ -78,6 +81,7 @@ export async function resetPromptFileOverride(
       { method: 'DELETE' },
     );
     if (!res.ok) return null;
+    bumpPromptConfigEpoch();
     return (await res.json()) as PromptFileResponse;
   } catch {
     return null;

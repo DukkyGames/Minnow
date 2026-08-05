@@ -22,7 +22,7 @@ import { appendEditorFundamentalsSettings } from './editor-fundamentals-settings
 import { appendEditorIntentSettings } from './editor-intent-settings';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
-import { getActiveModelIdFromDom } from './editor-ai-completion-client';
+import { getActiveModelIdFromDom } from './editor-ai-binding';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   getEditorAiMetrics,

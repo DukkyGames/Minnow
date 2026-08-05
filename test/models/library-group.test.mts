@@ -48,8 +48,8 @@ describe('library variant groups', () => {
     assert.equal(stripQuantFromStem('gemma-3-27b-Q8_0'), 'gemma-3-27b');
   });
 
-  test('groupLibraryVariants merges quants in the same repo', () => {
-    const variants = buildLibrary([multiQuantRow()]);
+  test('groupLibraryVariants merges quants in the same repo', async () => {
+    const variants = await buildLibrary([multiQuantRow()]);
     assert.equal(variants.length, 2);
     const groups = groupLibraryVariants(variants);
     assert.equal(groups.length, 1);
@@ -61,8 +61,8 @@ describe('library variant groups', () => {
     assert.equal(variantGroupKey(variants[0]), variantGroupKey(variants[1]));
   });
 
-  test('prepareLibraryGroups keeps separate repos separate', () => {
-    const rows = buildLibrary([
+  test('prepareLibraryGroups keeps separate repos separate', async () => {
+    const rows = await buildLibrary([
       multiQuantRow(),
       {
         ...multiQuantRow(),
@@ -83,8 +83,8 @@ describe('library variant groups', () => {
     assert.equal(groups.length, 2);
   });
 
-  test('resolveActiveVariant prefers explicit selection', () => {
-    const variants = buildLibrary([multiQuantRow()]);
+  test('resolveActiveVariant prefers explicit selection', async () => {
+    const variants = await buildLibrary([multiQuantRow()]);
     const groups = groupLibraryVariants(variants);
     const q8 = variants.find((v) => v.quant === 'Q8_0')!;
     const active = resolveActiveVariant(groups[0], q8.id, [], null);

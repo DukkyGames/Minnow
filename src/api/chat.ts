@@ -643,7 +643,7 @@ export async function sendMessage(): Promise<void> {
         t0,
         tFirst,
         partialText: fullText,
-        partialThinking: thoughtController.getSegments().join('\n\n'),
+        partialThinking: thoughtController.getJoinedDisplayText(),
         modelId,
         modelInfo: chat.modelInfo ?? undefined,
       });

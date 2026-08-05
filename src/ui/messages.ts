@@ -71,6 +71,8 @@ import {
   runWithChatMount,
   shouldPaintDesktopChatSurface,
 } from './chat-mount';
+import { dismissCodeOverviewForNavigation } from './code-overview';
+import { dismissDevServerScreenForNavigation } from './dev-server-screen';
 import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { appConfirm } from './app-dialog';
@@ -150,10 +152,71 @@ let suppressBubbleScroll = false;
 function clearTranscriptEmptyState(mount: HTMLElement): void {
   document.getElementById('emptyState')?.remove();
   for (const el of mount.querySelectorAll(
-    '.mn-os-chat-empty, .chat-app-empty',
+    '.mn-os-chat-empty, .chat-app-empty, .chat-history-pending',
   )) {
     el.remove();
   }
+}
+
+/** Lightweight skeleton rows while lazy history is still in flight on chat switch. */
+function buildChatHistoryPendingMarker(): HTMLElement {
+  const root = document.createElement('div');
+  root.className = 'chat-history-pending';
+  root.setAttribute('aria-busy', 'true');
+  root.setAttribute('aria-label', 'Loading chat messages');
+  for (let i = 0; i < 3; i++) {
+    const row = document.createElement('div');
+    row.className = 'chat-history-pending__row';
+    row.style.setProperty('--chat-history-pending-w', `${76 - i * 10}%`);
+    root.appendChild(row);
+  }
+  return root;
+}
+
+/**
+ * Clear the transcript mount and show a pending marker synchronously so a switch
+ * never leaves another chat's bubbles visible during the history GET.
+ */
+export function paintChatTranscriptHistoryPending(mount?: string | HTMLElement): void {
+  const area = resolveChatMount(mount);
+  const codeMount = isCodeChatMount(mount);
+
+  // Full-column overlays own #chatArea — same guard as renderChatFromHistory.
+  if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
+    return;
+  }
+
+  const boardGroup = codeMount ? getActiveBoardGroup() : null;
+  if (boardGroup?.viewMode === 'board') {
+    return;
+  }
+
+  runWithChatMount(area, () => {
+    clearSubAgentCardDomRegistry();
+    clearTranscriptEmptyState(area);
+    area.classList.remove('chat-area--hub');
+    area.replaceChildren(buildChatHistoryPendingMarker());
+  });
+}
+
+/** Route pending transcript paint to the active foreground shell (Code / Chat app / desktop). */
+export function paintChatHistoryPendingInForegroundShell(): void {
+  if (shouldPaintDesktopChatSurface()) {
+    paintChatTranscriptHistoryPending('#desktopChatCol');
+    return;
+  }
+  if (isChatAppForeground()) {
+    paintChatTranscriptHistoryPending('#chatAppMessageCol');
+    return;
+  }
+  if (
+    dismissCodeOverviewForNavigation() ||
+    dismissDevServerScreenForNavigation()
+  ) {
+    paintChatTranscriptHistoryPending();
+    return;
+  }
+  paintChatTranscriptHistoryPending();
 }
 
 export function renderStatsForChat(chat: Chat): void {

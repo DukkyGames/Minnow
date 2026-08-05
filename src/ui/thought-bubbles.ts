@@ -58,6 +58,9 @@ export class ThoughtBubbleController {
   /** Anthropic thinking signature for the current reasoning block (tool-loop replay). */
   private anthropicThinkingSignature: string | null = null;
 
+  /** Cached joined segment text; cleared when reasoning text changes. */
+  private joinedDisplayCache: string | null = null;
+
   constructor(assistantWrap: HTMLElement, phaseCallbacks: ThoughtPhaseCallbacks = {}) {
     this.assistantWrap = assistantWrap;
     this.phaseCallbacks = phaseCallbacks;
@@ -93,6 +96,7 @@ export class ThoughtBubbleController {
    */
   ingestCompletedReasoning(text: string): void {
     if (this.disposed || !text.trim()) return;
+    this.invalidateJoinedDisplayCache();
     const segs = splitThinkingSegments(text);
     if (segs.length > 0) {
       this.finalizedSegments.push(...segs);
@@ -104,6 +108,7 @@ export class ThoughtBubbleController {
   /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts. */
   appendReasoningDelta(delta: string): void {
     if (this.disposed || !delta) return;
+    this.invalidateJoinedDisplayCache();
     if (!this.thinkingStartNotified) {
       this.thinkingStartNotified = true;
       this.phaseCallbacks.onThinkingStart?.();
@@ -151,6 +156,7 @@ export class ThoughtBubbleController {
     if (tail) {
       this.finalizedSegments.push(tail);
     }
+    this.invalidateJoinedDisplayCache();
     this.teardownStage();
     this.phaseCallbacks.onReasoningEnded?.();
   }
@@ -159,6 +165,15 @@ export class ThoughtBubbleController {
   abort(): void {
     this.disposed = true;
     this.teardownStage();
+  }
+
+  /** Ordered segments joined for streaming overlays and context usage (cached). */
+  getJoinedDisplayText(): string {
+    if (this.joinedDisplayCache !== null) {
+      return this.joinedDisplayCache;
+    }
+    this.joinedDisplayCache = this.getSegments().join('\n\n');
+    return this.joinedDisplayCache;
   }
 
   /** Ordered segments for persistence (flushes open buffer first). */
@@ -171,7 +186,7 @@ export class ThoughtBubbleController {
 
   /** Merge `getSegments()` into normalized paragraph segments for storage. */
   getSegmentsNormalized(): string[] {
-    const raw = this.getSegments().join('\n\n');
+    const raw = this.getJoinedDisplayText();
     return splitThinkingSegments(raw);
   }
 
@@ -183,6 +198,7 @@ export class ThoughtBubbleController {
     const segments = this.getSegmentsNormalized();
     this.finalizedSegments = [];
     this.openBuffer = '';
+    this.invalidateJoinedDisplayCache();
     this.teardownStage();
     this.thinkingStartNotified = false;
     this.reasoningPhaseEnded = false;
@@ -196,8 +212,12 @@ export class ThoughtBubbleController {
     return Promise.resolve();
   }
 
+  private invalidateJoinedDisplayCache(): void {
+    this.joinedDisplayCache = null;
+  }
+
   private getDisplayText(): string {
-    return this.getSegments().join('\n\n');
+    return this.getJoinedDisplayText();
   }
 
   private ensureThinkingPanel(): void {

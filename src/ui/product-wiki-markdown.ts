@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
 import { marked } from 'marked';
+import { highlightCodeElement } from '../markdown/highlighter';
 
 const REPOSITORY_BASE = 'https://github.com/HenriGrimm/Minnow/blob/main/';
 let markedConfigured = false;
@@ -51,11 +51,7 @@ export function renderProductWikiMarkdown(
   });
 
   container.querySelectorAll('pre code').forEach((block) => {
-    try {
-      hljs.highlightElement(block as HTMLElement);
-    } catch {
-      // Unknown languages remain readable as plain code.
-    }
+    void highlightCodeElement(block as HTMLElement);
   });
 
   container.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {

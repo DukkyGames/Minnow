@@ -389,11 +389,11 @@ export const providerManagedStep: OnboardingStep = {
 
 
 
-    const refreshPicker = (filter = '') => {
+    const refreshPicker = async (filter = '') => {
 
       if (!hardware) return;
 
-      availableModels = listModelsForHardware(hardware, {
+      availableModels = await listModelsForHardware(hardware, {
 
         limit: 50,
 
@@ -473,7 +473,7 @@ export const providerManagedStep: OnboardingStep = {
 
 
 
-    search.addEventListener('input', () => refreshPicker(search.value));
+    search.addEventListener('input', () => void refreshPicker(search.value));
 
 
 
@@ -483,11 +483,11 @@ export const providerManagedStep: OnboardingStep = {
 
         hardware = await fetchHardware({ fresh: true });
 
-        recommended = pickRecommendedModel(hardware);
+        recommended = await pickRecommendedModel(hardware);
 
         selectedModel = recommended;
 
-        availableModels = listModelsForHardware(hardware, { limit: 50, fitOnly: false });
+        availableModels = await listModelsForHardware(hardware, { limit: 50, fitOnly: false });
 
         if (!recommended && availableModels.length === 0) {
 

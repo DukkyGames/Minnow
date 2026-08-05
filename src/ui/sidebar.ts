@@ -67,6 +67,7 @@ import { resumeIncompleteToolBatchOnChatSwitch } from '../chat/incomplete-tool-r
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { syncAskQuestionModalOnChatSwitch } from './question-cards-modal';
 import {
+  paintChatHistoryPendingInForegroundShell,
   renderChatFromHistory,
   renderStatsForChat,
   showCachedModelInfo,
@@ -465,6 +466,13 @@ export function appendChatRow(
   row.setAttribute('aria-label', rowLabel);
   row.title = [displayName, modelLabel, codeChangeAria].filter(Boolean).join('\n');
   row.tabIndex = 0;
+  const prefetchHistoryOnIntent = () => {
+    if (chat.historyLoaded === false) {
+      void ensureChatHistoryLoaded(chat.id);
+    }
+  };
+  row.addEventListener('pointerenter', prefetchHistoryOnIntent);
+  row.addEventListener('focus', prefetchHistoryOnIntent);
   if (options?.draggable !== false) {
     row.draggable = true;
     row.classList.add('chat-item-row--draggable');
@@ -1275,9 +1283,13 @@ export async function switchChat(id: string): Promise<void> {
   if (!chat) return;
   sessionState.activeId = id;
   markSessionScalarsDirty();
-  // Lazy history: wait before paint so restart+switch does not show an empty transcript.
-  await ensureChatHistoryLoaded(id);
-  if (!sessionState || sessionState.activeId !== id) return;
+  const historyPending = chat.historyLoaded === false;
+  if (historyPending) {
+    // Synchronous wipe so the previous chat's transcript never lingers during the GET.
+    paintChatHistoryPendingInForegroundShell();
+    await ensureChatHistoryLoaded(id);
+    if (!sessionState || sessionState.activeId !== id) return;
+  }
   syncAskQuestionModalOnChatSwitch(prevActiveId, id);
   notifyAskQuestionDisplayContextChanged();
   acknowledgeChatViewed(id);

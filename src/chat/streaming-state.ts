@@ -26,9 +26,58 @@ export function subscribeChatStreamEnd(listener: ChatStreamEndListener): () => v
   };
 }
 
+/** Pending activity chat ids coalesced into one listener pass per animation frame. */
+const pendingStreamActivityChatIds = new Set<string>();
+let streamActivityFlushHandle: number | null = null;
+
+function dispatchStreamActivity(chatId: string): void {
+  for (const fn of streamActivityListeners) {
+    try {
+      fn(chatId);
+    } catch (err) {
+      reportBackgroundError('stream-activity-listener', err);
+    }
+  }
+}
+
+function runStreamActivityFlush(): void {
+  streamActivityFlushHandle = null;
+  const chatIds = [...pendingStreamActivityChatIds];
+  pendingStreamActivityChatIds.clear();
+  for (const id of chatIds) {
+    dispatchStreamActivity(id);
+  }
+}
+
+function scheduleStreamActivityFlush(): void {
+  if (streamActivityFlushHandle != null) return;
+  if (typeof requestAnimationFrame === 'function') {
+    streamActivityFlushHandle = requestAnimationFrame(runStreamActivityFlush);
+    return;
+  }
+  streamActivityFlushHandle = -1;
+  queueMicrotask(() => {
+    streamActivityFlushHandle = null;
+    runStreamActivityFlush();
+  });
+}
+
+/** Flush coalesced activity immediately (must run before stream-end notifications). */
+function flushPendingStreamActivity(): void {
+  if (streamActivityFlushHandle != null) {
+    if (streamActivityFlushHandle >= 0 && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(streamActivityFlushHandle);
+    }
+    streamActivityFlushHandle = null;
+  }
+  if (pendingStreamActivityChatIds.size === 0) return;
+  runStreamActivityFlush();
+}
+
 /** Notify subscribers that a chat finished streaming (call before clearing streaming flags). */
 export function notifyChatStreamEnded(chatId: string): void {
   if (!chatId) return;
+  flushPendingStreamActivity();
   for (const fn of streamEndListeners) {
     try {
       fn(chatId);
@@ -54,13 +103,19 @@ export function subscribeChatStreamActivity(
 /** Notify subscribers that a chat received stream/progress activity. */
 export function notifyChatStreamActivity(chatId: string): void {
   if (!chatId) return;
-  for (const fn of streamActivityListeners) {
-    try {
-      fn(chatId);
-    } catch (err) {
-      reportBackgroundError('stream-activity-listener', err);
+  pendingStreamActivityChatIds.add(chatId);
+  scheduleStreamActivityFlush();
+}
+
+/** Reset coalescing state between unit tests. */
+export function resetStreamActivityCoalesceForTests(): void {
+  if (streamActivityFlushHandle != null && streamActivityFlushHandle >= 0) {
+    if (typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(streamActivityFlushHandle);
     }
   }
+  streamActivityFlushHandle = null;
+  pendingStreamActivityChatIds.clear();
 }
 
 /**

@@ -141,7 +141,7 @@ export function refreshModels(options?: { hardware?: boolean; fresh?: boolean })
         fetchRuntimes().catch(() => null),
       ]);
 
-      state.library = buildLibrary(cached);
+      state.library = await buildLibrary(cached);
       state.downloads = installed.downloads;
       state.serves = serves;
       state.runtimes = runtimes;
