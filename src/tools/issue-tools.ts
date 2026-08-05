@@ -10,6 +10,8 @@ import {
   deleteIssue,
   deleteIssues,
   getIssuesSnapshot,
+  getNextIssueIdPreview,
+  getWorkspaceProjectKey,
   isIssuePriority,
   isIssueStatus,
   isIssueType,
@@ -349,10 +351,13 @@ export async function executeIssueTool(
       hideDone: false,
     });
     const snap = getIssuesSnapshot();
+    const workspacePath = getWorkspacePath();
     return JSON.stringify(
       {
         version: snap.version,
         nextId: snap.nextId,
+        workspaceProjectKey: getWorkspaceProjectKey(workspacePath),
+        nextIssuePreview: getNextIssueIdPreview(workspacePath),
         scope,
         status,
         issues,

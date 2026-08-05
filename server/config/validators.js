@@ -356,11 +356,11 @@ function ensureIssueCard(raw) {
 /** Validate ~/.minnow/issues/state.json */
 export function validateIssuesState(raw) {
   if (!raw || typeof raw !== 'object') {
-    return { version: 1, nextId: 1, issues: [] };
+    return { version: 2, nextId: 1, issues: [], workspaces: {} };
   }
   const row = /** @type {Record<string, unknown>} */ (raw);
-  if (row.version !== 1 || !Array.isArray(row.issues)) {
-    return { version: 1, nextId: 1, issues: [] };
+  if ((row.version !== 1 && row.version !== 2) || !Array.isArray(row.issues)) {
+    return { version: 2, nextId: 1, issues: [], workspaces: {} };
   }
   const issues = [];
   for (const item of row.issues) {
@@ -372,10 +372,42 @@ export function validateIssuesState(raw) {
       ? Math.floor(row.nextId)
       : 1;
   for (const issue of issues) {
-    const m = /^ISS-(\d+)$/.exec(issue.id);
+    const m = /^ISS-(\d+)$/i.exec(issue.id);
     if (m) nextId = Math.max(nextId, Number(m[1]) + 1);
   }
-  return { version: 1, nextId, issues };
+
+  const workspaces = {};
+  if (row.workspaces && typeof row.workspaces === 'object') {
+    for (const [pathKey, cfgRaw] of Object.entries(
+      /** @type {Record<string, unknown>} */ (row.workspaces),
+    )) {
+      if (!cfgRaw || typeof cfgRaw !== 'object') continue;
+      const cfg = /** @type {Record<string, unknown>} */ (cfgRaw);
+      const projectKey =
+        typeof cfg.projectKey === 'string'
+          ? cfg.projectKey.toUpperCase().replace(/[^A-Z0-9]/g, '')
+          : '';
+      if (!/^[A-Z0-9]{2,10}$/.test(projectKey)) continue;
+      let wsNext =
+        typeof cfg.nextId === 'number' && Number.isFinite(cfg.nextId) && cfg.nextId >= 1
+          ? Math.floor(cfg.nextId)
+          : 1;
+      const wsKey = String(pathKey).replace(/\\/g, '/').replace(/\/+$/, '') || pathKey;
+      for (const issue of issues) {
+        const issueWs = String(issue.workspacePath ?? '')
+          .replace(/\\/g, '/')
+          .replace(/\/+$/, '');
+        if (issueWs !== wsKey) continue;
+        const keyed = /^([A-Z0-9]+)-(\d+)$/i.exec(issue.id);
+        if (keyed && keyed[1].toUpperCase() === projectKey) {
+          wsNext = Math.max(wsNext, Number(keyed[2]) + 1);
+        }
+      }
+      workspaces[wsKey] = { projectKey, nextId: wsNext };
+    }
+  }
+
+  return { version: 2, nextId, issues, workspaces };
 }
 
 export function validateSessionState(raw) {

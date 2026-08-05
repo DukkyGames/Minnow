@@ -18,6 +18,8 @@ import {
   migrateBugsToIssuesState,
   migrateLegacyBugBoardsFromChats,
   normalizeIssueLabel,
+  getNextIssueIdPreview,
+  setWorkspaceProjectKey,
   setIssuesNowForTests,
   setIssuesStateForTests,
   updateIssue,
@@ -29,10 +31,50 @@ const FIXED_NOW = 1710000002000;
 describe('issues-store', () => {
   beforeEach(() => {
     setIssuesNowForTests(() => FIXED_NOW);
-    setIssuesStateForTests({ version: 1, nextId: 1, issues: [] });
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
   });
 
-  test('addIssue allocates sequential ISS-n ids', () => {
+  test('addIssue allocates workspace project key ids', () => {
+    const a = addIssue({ title: 'First', workspacePath: '/proj/Minnow' });
+    const b = addIssue({ title: 'Second', workspacePath: '/proj/Minnow' });
+    assert.equal(a.id, 'MIN-1');
+    assert.equal(b.id, 'MIN-2');
+    assert.equal(a.status, 'triage');
+    assert.equal(a.type, 'task');
+  });
+
+  test('legacy ISS cards coexist with new MIN ids in same workspace', () => {
+    setIssuesStateForTests({
+      version: 2,
+      nextId: 3,
+      workspaces: {},
+      issues: [
+        {
+          id: 'ISS-1',
+          type: 'bug',
+          title: 'Old',
+          description: '',
+          status: 'triage',
+          priority: 'none',
+          labels: [],
+          workspacePath: '/proj/Minnow',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    const next = addIssue({ title: 'New', workspacePath: '/proj/Minnow' });
+    assert.equal(next.id, 'MIN-1');
+    assert.equal(findIssueById('ISS-1')?.title, 'Old');
+  });
+
+  test('setWorkspaceProjectKey reconciles next id from existing cards', () => {
+    setWorkspaceProjectKey('/proj/Minnow', 'ABC');
+    addIssue({ title: 'One', workspacePath: '/proj/Minnow' }, 'ABC-5');
+    assert.equal(getNextIssueIdPreview('/proj/Minnow'), 'ABC-6');
+  });
+
+  test('addIssue allocates sequential ISS-n ids when key falls back to ISS', () => {
     const a = addIssue({ title: 'First', workspacePath: '/w' });
     const b = addIssue({ title: 'Second', workspacePath: '/w' });
     assert.equal(a.id, 'ISS-1');
