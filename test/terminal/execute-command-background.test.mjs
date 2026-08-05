@@ -63,7 +63,7 @@ describe('execute_command background lifecycle', () => {
     const snapshot = await readCommandLogSnapshot(started.runId);
     assert.equal(snapshot.finished, false);
 
-    const stopped = stopActiveRun(started.runId);
+    const stopped = await stopActiveRun(started.runId);
     assert.equal(stopped.ok, true);
 
     await new Promise((r) => setTimeout(r, 500));

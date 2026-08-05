@@ -14,6 +14,7 @@ import {
   killProcessTree,
   stopActiveRun,
 } from '../terminal-runner.js';
+import { isPidAlive, readRunIndexEntry } from '../terminal/run-index.js';
 import { resolveSafePath, runWithToolContext } from '../runtime/path-access.js';
 import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
@@ -44,6 +45,7 @@ import { probePort } from './ports.js';
  * @property {string} [worktreeRoot]
  * @property {string} [error]
  * @property {number} [startedAt]
+ * @property {boolean} [orphaned] child survived the host process that spawned it
  */
 
 /** @type {Map<string, Map<string, ManagedDevServer>>} */
@@ -135,6 +137,7 @@ async function saveState(row) {
       worktreeRoot: r.worktreeRoot ?? null,
       error: r.error ?? null,
       startedAt: r.startedAt ?? null,
+      orphaned: r.orphaned ?? false,
     };
   }
   await persistServers(row.workspaceKey, servers);
@@ -172,6 +175,7 @@ async function getOrInitRow(root, serverId = PRIMARY_DEV_SERVER_ID) {
       typeof persisted?.worktreeRoot === 'string' ? persisted.worktreeRoot : undefined,
     error: typeof persisted?.error === 'string' ? persisted.error : undefined,
     startedAt: typeof persisted?.startedAt === 'number' ? persisted.startedAt : undefined,
+    orphaned: persisted?.orphaned === true,
   };
 
   if (persisted?.status === 'running' || persisted?.status === 'starting') {
@@ -211,9 +215,21 @@ async function reconcileRow(row) {
     if (row.startedAt && Date.now() - row.startedAt < 2_000) {
       return row;
     }
+    // A restarted host has an empty in-memory registry while the detached dev
+    // server keeps holding its port. Calling that "stopped" orphans the process
+    // and invites a second one on the same port, so trust the durable index.
+    const indexed = await readRunIndexEntry(row.runId);
+    if (indexed && !indexed.finished && isPidAlive(indexed.pid)) {
+      row.status = 'running';
+      row.pid = indexed.pid ?? row.pid ?? null;
+      row.orphaned = true;
+      await saveState(row);
+      return row;
+    }
     row.status = 'stopped';
     row.runId = undefined;
     row.pid = null;
+    row.orphaned = false;
     await saveState(row);
   }
 
@@ -255,6 +271,7 @@ async function applyStartedRun(row, started, guide) {
   row.healthUrl = guide.healthUrl;
   row.port = guide.port;
   row.error = undefined;
+  row.orphaned = false;
 
   if (guide.healthUrl) {
     const ok = await probeHealth(guide.healthUrl);
@@ -519,8 +536,17 @@ export async function startDevServerById(
   let row = await getOrInitRow(registryRoot, serverId);
   row = await reconcileRow(row);
 
-  if (row.status === 'running' && row.runId && getRun(row.runId) && !getRun(row.runId)?.finished) {
-    return { ok: true, status: row.status, runId: row.runId, alreadyRunning: true };
+  // reconcileRow leaves row.status === 'running' with row.orphaned set when the
+  // child outlived its host process; starting a second one would fight for the port.
+  const liveInThisHost = Boolean(row.runId && getRun(row.runId) && !getRun(row.runId)?.finished);
+  if (row.status === 'running' && row.runId && (liveInThisHost || row.orphaned)) {
+    return {
+      ok: true,
+      status: row.status,
+      runId: row.runId,
+      alreadyRunning: true,
+      ...(row.orphaned && !liveInThisHost ? { orphaned: true, pid: row.pid ?? null } : {}),
+    };
   }
 
   const cwdRel = effective.cwd ?? '.';
@@ -676,6 +702,7 @@ async function clearRowForRunId(runId) {
         row.status = 'stopped';
         row.runId = undefined;
         row.pid = null;
+        row.orphaned = false;
         await saveState(row);
         return;
       }
@@ -777,7 +804,7 @@ export async function toolStopBackgroundCommand(args) {
   const runId = typeof args?.run_id === 'string' ? args.run_id.trim() : '';
   if (!runId) return 'Error: run_id is required';
 
-  const stopped = stopActiveRun(runId);
+  const stopped = await stopActiveRun(runId);
   if (!stopped.ok) {
     return `Error: ${stopped.error}`;
   }
@@ -796,7 +823,7 @@ export async function toolStopCommand(args) {
   const runId = typeof args?.run_id === 'string' ? args.run_id.trim() : '';
   if (!runId) return 'Error: run_id is required';
 
-  const stopped = stopActiveRun(runId);
+  const stopped = await stopActiveRun(runId);
   if (!stopped.ok) {
     return `Error: ${stopped.error}`;
   }
