@@ -320,6 +320,13 @@ const preview = {
 
 const minnowBridge = {
   preview,
+  shell: {
+    revealInExplorer: (
+      absolutePath: string,
+      kind: 'file' | 'dir',
+    ): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke(channels.SHELL_REVEAL_IN_EXPLORER, absolutePath, kind),
+  },
   app: {
     platform: process.platform,
     isElectron: true as const,

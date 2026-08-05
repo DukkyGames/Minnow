@@ -96,6 +96,27 @@ describe('revealInSystemExplorer', () => {
     );
   });
 
+  test('skips spawn when skipSpawn is set', async () => {
+    /** @type {{ command: string, args: string[] }[]} */
+    const calls = [];
+    const result = await revealInSystemExplorer('/tmp/file.txt', {
+      platform: 'linux',
+      skipSpawn: true,
+      statImpl: async () => ({
+        isDirectory: () => false,
+      }),
+      spawnImpl: (command, args) => {
+        calls.push({ command, args });
+        return {
+          on() {},
+          unref() {},
+        };
+      },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 0);
+  });
+
   test('spawns reveal command for a file', async () => {
     /** @type {{ command: string, args: string[] }[]} */
     const calls = [];

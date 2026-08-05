@@ -5,9 +5,12 @@
  * Folders: open that folder itself.
  */
 
-import { spawn } from 'node:child_process';
+import { exec, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 
 /**
  * @typedef {{
@@ -78,12 +81,34 @@ export function buildRevealCommand(platform, absolutePath, isDirectory) {
 }
 
 /**
+ * Run explorer via the shell on Windows — more reliable than raw spawn for /select.
+ * @param {string} explorerPath
+ * @param {boolean} isDirectory
+ */
+async function runWindowsExplorerReveal(explorerPath, isDirectory) {
+  const escaped = explorerPath.replace(/"/g, '""');
+  const command = isDirectory
+    ? `explorer.exe "${escaped}"`
+    : `explorer.exe /select,"${escaped}"`;
+  await execAsync(command, { windowsHide: true });
+}
+
+/**
  * Spawn a reveal command. Detached processes resolve once spawned (explorer exit codes are noisy).
  * @param {RevealCommand} cmd
- * @param {{ spawnImpl?: typeof spawn }} [deps]
+ * @param {{ spawnImpl?: typeof spawn, platform?: NodeJS.Platform, isDirectory?: boolean }} [deps]
  * @returns {Promise<void>}
  */
 export function runRevealCommand(cmd, deps = {}) {
+  const platform = deps.platform ?? process.platform;
+  if (platform === 'win32' && cmd.command === 'explorer.exe') {
+    const explorerPath = cmd.args.length === 1 && cmd.args[0].startsWith('/select,')
+      ? cmd.args[0].slice('/select,'.length).replace(/^"|"$/g, '')
+      : cmd.args[0];
+    const isDirectory = deps.isDirectory ?? !cmd.args[0]?.startsWith('/select,');
+    return runWindowsExplorerReveal(explorerPath, isDirectory);
+  }
+
   const spawnImpl = deps.spawnImpl ?? spawn;
   return new Promise((resolve, reject) => {
     const child = spawnImpl(cmd.command, cmd.args, {
@@ -112,7 +137,7 @@ export function runRevealCommand(cmd, deps = {}) {
 /**
  * Resolve existence + kind, then open/reveal in the system explorer.
  * @param {string} absolutePath
- * @param {{ platform?: NodeJS.Platform, spawnImpl?: typeof spawn, statImpl?: typeof fs.stat }} [deps]
+ * @param {{ platform?: NodeJS.Platform, spawnImpl?: typeof spawn, statImpl?: typeof fs.stat, skipSpawn?: boolean }} [deps]
  * @returns {Promise<{ ok: true, path: string, kind: 'file' | 'dir' }>}
  */
 export async function revealInSystemExplorer(absolutePath, deps = {}) {
@@ -133,7 +158,13 @@ export async function revealInSystemExplorer(absolutePath, deps = {}) {
   const kind = isDirectory ? 'dir' : 'file';
   const platform = deps.platform ?? process.platform;
   const cmd = buildRevealCommand(platform, resolved, isDirectory);
-  await runRevealCommand(cmd, { spawnImpl: deps.spawnImpl });
+  if (!deps.skipSpawn) {
+    await runRevealCommand(cmd, {
+      spawnImpl: deps.spawnImpl,
+      platform,
+      isDirectory,
+    });
+  }
 
   return { ok: true, path: resolved, kind };
 }

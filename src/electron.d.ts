@@ -266,6 +266,14 @@ export interface MinnowAppApi {
   openExternal(url: string): Promise<void>;
 }
 
+/** OS file manager integration (Explorer / Finder). */
+export interface MinnowShellApi {
+  revealInExplorer(
+    absolutePath: string,
+    kind: 'file' | 'dir',
+  ): Promise<{ ok: true } | { ok: false; error: string }>;
+}
+
 export interface MinnowWindowApi {
   minimize(): Promise<void>;
   maximize(): Promise<void>;
@@ -372,6 +380,8 @@ export interface MinnowBoardApi {
 
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
+  /** Optional: shells built before MIN-543 lack host reveal. */
+  shell?: MinnowShellApi;
   app: MinnowAppApi;
   window?: MinnowWindowApi;
   diagnostics?: MinnowDiagnosticsApi;
