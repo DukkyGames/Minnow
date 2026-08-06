@@ -1260,6 +1260,10 @@ export async function getLspDiagnostics(relativePath) {
   try {
     diskText = await fs.readFile(abs, 'utf8');
   } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+    if (code === 'ENOENT') {
+      return `Error: File not found: ${relativePath}`;
+    }
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
   }

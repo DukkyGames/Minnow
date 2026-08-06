@@ -74,6 +74,16 @@ describe('agent LSP diagnostics', () => {
     assert.equal(policy.ttlMs, 0);
   });
 
+  test('missing file returns friendly message without ENOENT stack', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') return;
+
+    shutdownAllLsp();
+    const rel = 'test/fixtures/agent-diag-missing-file.fake';
+    const result = await getLspDiagnostics(rel);
+    assert.match(result, /Error: File not found: test\/fixtures\/agent-diag-missing-file\.fake/);
+    assert.doesNotMatch(result, /ENOENT/);
+  });
+
   test('waits for delayed empty then error publications (>200ms)', async () => {
     if (process.env.MINNOW_LSP_ENABLED === 'false') return;
 

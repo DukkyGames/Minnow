@@ -113,6 +113,24 @@ describe('invalidation', () => {
     assert.equal(getCachedResult(scope, key), undefined);
   });
 
+  test('save_file busts cached git_status', () => {
+    const policy = getCachePolicyForTool('git_status');
+    const gitKey = buildCacheKey('git_status', normalizeToolArgs('git_status', {}));
+
+    const scope = testScope();
+    setCachedResult(scope, gitKey, { content: 'stale porcelain' }, policy);
+    assert.equal(getCachedResult(scope, gitKey)?.content, 'stale porcelain');
+
+    invalidateAfterTool(
+      scope,
+      'save_file',
+      { path: 'new-untracked.ts' },
+      { content: 'saved' },
+    );
+
+    assert.equal(getCachedResult(scope, gitKey), undefined);
+  });
+
   test('move_file busts list_directory for parent folders', () => {
     const policy = getCachePolicyForTool('list_directory');
     const srcListingKey = buildCacheKey(
