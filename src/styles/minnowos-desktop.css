@@ -728,8 +728,30 @@
   max-width: min(var(--os-chat-column-max), var(--chat-msg-md-ch), 100%);
 }
 
+/*
+ * User bubbles: keep the row full-column width (definite %), paint the bubble as
+ * inline-block so it shrink-wraps text. Avoid width:max-content/fit-content on the
+ * row+bubble — with overflow wrapping those collapse to ~1ch in Chromium and
+ * mid-word-wrap short text (hello → hel / lo). Cap uses the row's definite width.
+ */
+.mn-os-chat-transcript .msg.user {
+  width: 100%;
+  max-width: 100%;
+  align-items: flex-end;
+}
+
 .mn-os-chat-transcript .msg.user .msg-bubble {
+  display: inline-block;
+  width: auto;
   max-width: min(85%, var(--os-chat-column-max), 42rem);
+  vertical-align: top;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.mn-os-chat-transcript .msg.user .user-msg-text {
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .mn-os-chat-transcript .thought-stage,
