@@ -326,7 +326,7 @@ async function stopExistingLlamaCppServes() {
       row.runtime === 'llama-cpp' &&
       (row.status === 'running' || row.status === 'starting')
     ) {
-      if (row.runId) stopActiveRun(row.runId);
+      if (row.runId) await stopActiveRun(row.runId);
       row.status = 'stopped';
       row.stoppedAt = Date.now();
     }
@@ -683,7 +683,7 @@ export async function stopServe(serveId) {
   if (!row) throw new Error('Serve session not found');
 
   if (row.runId) {
-    stopActiveRun(row.runId);
+    await stopActiveRun(row.runId);
   }
 
   row.status = 'stopped';
@@ -741,7 +741,7 @@ export async function shutdownAllModelServes() {
   await loadServes();
   for (const row of servesCache) {
     if (row.status === 'running' || row.status === 'starting') {
-      if (row.runId) stopActiveRun(row.runId);
+      if (row.runId) await stopActiveRun(row.runId);
       row.status = 'stopped';
       row.stoppedAt = Date.now();
     }

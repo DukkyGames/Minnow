@@ -86,6 +86,7 @@ const SCAFFOLD_DIRS = [
   'evals',
   'evals/packs',
   'evals/runs',
+  'runs/shell',
   'scheduler-runs',
   'calendar',
   'brain',

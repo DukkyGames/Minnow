@@ -17,7 +17,7 @@ import { truncateGitDiff } from '../tools/git-diff-truncate.js';
 import {
   createBackgroundRun,
   executeCommandBlocking,
-  listActiveRuns,
+  listKnownActiveRuns,
   readCommandLogSnapshot,
   stopActiveRunsForChat,
   waitForRunOutput,
@@ -1050,7 +1050,10 @@ async function toolListRunningCommands(args) {
     typeof args?.chat_id === 'string' && args.chat_id.trim()
       ? args.chat_id.trim()
       : undefined;
-  const runs = listActiveRuns({ source: 'agent', ...(chatId ? { chatId } : {}) });
+  const runs = await listKnownActiveRuns({
+    source: 'agent',
+    ...(chatId ? { chatId } : {}),
+  });
   return JSON.stringify({ ok: true, runs }, null, 2);
 }
 

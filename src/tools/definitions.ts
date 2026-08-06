@@ -892,7 +892,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_command_log',
-      'Read the log tail for a command run started with execute_command (background: true) or start_background_command.',
+      'Read the log tail for a command run started with execute_command (background: true) or start_background_command. found:false = unknown run_id (not finished).',
       {
         run_id: { type: 'string', description: 'runId from the start response' },
         max_bytes: {
@@ -911,7 +911,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'list_running_commands',
-      'List non-finished agent command runs (use when run_id was lost). Optional chat_id filters to one chat.',
+      'List non-finished agent command runs (use when run_id was lost). Optional chat_id filters to one chat. orphaned:true = prior server process (readable, not stoppable).',
       {
         chat_id: {
           type: 'string',

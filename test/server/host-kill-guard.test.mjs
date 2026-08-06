@@ -39,6 +39,19 @@ test('blocks killing the host node PID', () => {
   assert.ok(result);
 });
 
+// Windows runners often assign 8-digit PIDs; the guard must not truncate them.
+test('blocks killing an 8-digit host PID form', () => {
+  const longPid = '12345678';
+  const originalPid = process.pid;
+  Object.defineProperty(process, 'pid', { value: Number(longPid), configurable: true });
+  try {
+    const result = assessHostKillCommand(`taskkill /F /PID ${longPid}`);
+    assert.ok(result, 'expected block for 8-digit host PID');
+  } finally {
+    Object.defineProperty(process, 'pid', { value: originalPid, configurable: true });
+  }
+});
+
 test('allows legitimate commands', () => {
   for (const cmd of [
     'npm run electron:dev',

@@ -227,6 +227,10 @@
   color: var(--mn-fg-muted);
 }
 
+.models-hint--warn {
+  color: var(--mn-danger);
+}
+
 /* ------------------------------------------------------------- inspector */
 
 .models-inspector {

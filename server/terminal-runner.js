@@ -21,6 +21,13 @@ import {
   runProcess,
 } from './process-runner.js';
 import { resolveOneShotSpawn } from './terminal/one-shot-spawn.js';
+import {
+  isPidAlive,
+  listOrphanedRuns,
+  readRunIndexEntry,
+  recordRunStart,
+  updateRunIndexEntry,
+} from './terminal/run-index.js';
 
 /** Max in-memory bytes per run before UI/log truncation marker. */
 export const MAX_TERMINAL_BUFFER_BYTES = 2 * 1024 * 1024;
@@ -67,6 +74,7 @@ const RUN_EVICTION_MS = 60_000;
  * @property {number | null} exitCode
  * @property {boolean} finished
  * @property {string} logPath
+ * @property {string} logRelPath path relative to ~/.minnow (honours logSubdir)
  * @property {Set<(event: object) => void>} listeners
  * @property {Promise<string>} completion
  * @property {(value: string) => void} resolveCompletion
@@ -130,6 +138,20 @@ async function appendLogFile(logPath, text) {
   });
   logWriteQueues.set(logPath, next);
   return next;
+}
+
+/**
+ * Create the log file up front so the logPath handed back by execute_command always
+ * resolves, even for a command that never writes a byte. Best-effort.
+ * @param {string} logPath
+ */
+async function ensureLogFile(logPath) {
+  try {
+    await fs.mkdir(path.dirname(logPath), { recursive: true });
+    await fs.appendFile(logPath, '', 'utf8');
+  } catch {
+    /* the run still proceeds without a log file */
+  }
 }
 
 /**
@@ -236,12 +258,27 @@ export async function createRun({
     exitCode: null,
     finished: false,
     logPath,
+    logRelPath: relLog,
     listeners: new Set(),
     completion,
     resolveCompletion,
   };
 
   activeRuns.set(runId, state);
+
+  await ensureLogFile(logPath);
+  await recordRunStart({
+    runId,
+    command,
+    cwd,
+    source,
+    ...(chatId ? { chatId } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
+    background: false,
+    logPath,
+    logRelPath: relLog,
+    startedAt,
+  });
 
   emit(state, { type: 'meta', runId, command, cwd });
 
@@ -266,6 +303,7 @@ export async function createRun({
             : undefined,
         onSpawn: (child) => {
           state.child = child;
+          if (child.pid) void updateRunIndexEntry(runId, { pid: child.pid });
         },
         onStdout: (text) => {
           appendBuffer(state, 'stdout', text);
@@ -360,12 +398,14 @@ export async function createBackgroundRun({
     exitCode: null,
     finished: false,
     logPath,
+    logRelPath: relLog,
     listeners: new Set(),
     completion,
     resolveCompletion,
   };
 
   activeRuns.set(runId, state);
+  await ensureLogFile(logPath);
   emit(state, { type: 'meta', runId, command, cwd });
 
   const spawnTarget = resolveOneShotSpawn({
@@ -397,6 +437,23 @@ export async function createBackgroundRun({
 
   state.child = child;
   child.unref();
+
+  // Queued synchronously so the start write always lands before finishRun's patch,
+  // and awaited only after the listeners below are attached — a spawn 'error' with
+  // no listener yet would take down the host process.
+  const indexed = recordRunStart({
+    runId,
+    command,
+    cwd,
+    source,
+    ...(chatId ? { chatId } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
+    pid: child.pid ?? null,
+    background: true,
+    logPath,
+    logRelPath: relLog,
+    startedAt,
+  });
 
   child.stdout?.on('data', (chunk) => {
     const text = chunk.toString();
@@ -430,6 +487,8 @@ export async function createBackgroundRun({
     state.exitCode = code;
     void finishRun(runId);
   });
+
+  await indexed;
 
   return { runId, startedAt, logPath: relLog, pid: child.pid ?? null };
 }
@@ -471,8 +530,19 @@ export async function finishRun(runId) {
     finishedAt,
     exitCode: state.exitCode,
     timedOut: state.timedOut,
-    logPath: relativeLogPath(runId),
+    logPath: state.logRelPath ?? relativeLogPath(runId),
   };
+
+  // Durable first: the in-memory state is evicted below, and after that this file
+  // is the only place the exit code and log location still exist.
+  await updateRunIndexEntry(runId, {
+    finished: true,
+    finishedAt,
+    exitCode: state.exitCode,
+    timedOut: state.timedOut,
+    stopped: state.stoppedByUser,
+    truncated: state.truncated,
+  });
 
   if (state.chatId) {
     await persistTerminalHistory(state.chatId, record);
@@ -489,6 +559,14 @@ export async function finishRun(runId) {
  */
 export function getRun(runId) {
   return activeRuns.get(runId);
+}
+
+/**
+ * Tests only: run the eviction that normally happens RUN_EVICTION_MS after finish.
+ * @param {string} runId
+ */
+export function __evictForTests(runId) {
+  return activeRuns.delete(runId);
 }
 
 /**
@@ -556,24 +634,51 @@ export function cancelRun(runId) {
 
 /**
  * Stop an active run by runId (background or foreground agent runs).
+ *
+ * Runs known only to the on-disk index belong to an earlier server process. Pids
+ * are recycled, so killing one on the strength of a stale record could take out an
+ * unrelated process — those are reported back with the pid instead.
  * @param {string} runId
- * @returns {{ ok: boolean, runId: string, alreadyStopped?: boolean, error?: string }}
+ * @returns {Promise<{ ok: boolean, runId: string, alreadyStopped?: boolean, orphaned?: boolean, pid?: number | null, error?: string }>}
  */
-export function stopActiveRun(runId) {
+export async function stopActiveRun(runId) {
   const state = activeRuns.get(runId);
   if (!state) {
+    const indexed = await readRunIndexEntry(runId);
+    if (indexed && !indexed.finished && isPidAlive(indexed.pid)) {
+      return {
+        ok: false,
+        runId,
+        orphaned: true,
+        pid: indexed.pid,
+        error:
+          `run ${runId} was started by a previous server process (pid ${indexed.pid}); ` +
+          'it is still alive but cannot be stopped from here — stop it by pid',
+      };
+    }
+    if (indexed?.finished) {
+      return { ok: true, runId, alreadyStopped: true };
+    }
     return { ok: false, runId, error: `unknown run_id ${runId}` };
   }
   if (state.finished) {
     return { ok: true, runId, alreadyStopped: true };
   }
+  killLiveRun(state);
+  return { ok: true, runId };
+}
+
+/**
+ * Terminate a run we still hold in memory.
+ * @param {RunState} state
+ */
+function killLiveRun(state) {
   state.stoppedByUser = true;
   if (state.child) {
     killProcessTree(state.child);
   } else {
-    cancelRun(runId);
+    cancelRun(state.runId);
   }
-  return { ok: true, runId };
 }
 
 /**
@@ -587,7 +692,7 @@ export function stopActiveRunsForChat(chatId) {
   let stopped = 0;
   for (const state of activeRuns.values()) {
     if (state.finished || state.chatId !== trimmed) continue;
-    stopActiveRun(state.runId);
+    killLiveRun(state);
     stopped += 1;
   }
   return { ok: true, stopped };
@@ -612,6 +717,42 @@ export function listActiveRuns(filter = {}) {
       startedAt: state.startedAt,
       source: state.source,
       ...(state.chatId ? { chatId: state.chatId } : {}),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Active runs including ones started by an earlier server process whose detached
+ * child is still alive — those are invisible to the in-memory map, which is the
+ * "empty run registry" the agent hits after a host restart.
+ * @param {{ source?: TerminalSource, chatId?: string }} [filter]
+ */
+export async function listKnownActiveRuns(filter = {}) {
+  const rows = listActiveRuns(filter);
+  const seen = new Set(rows.map((r) => r.runId));
+
+  let entries = [];
+  try {
+    entries = await listOrphanedRuns();
+  } catch {
+    return rows;
+  }
+
+  for (const entry of entries) {
+    if (seen.has(entry.runId)) continue;
+    if (filter.source && entry.source !== filter.source) continue;
+    if (filter.chatId && entry.chatId !== filter.chatId) continue;
+    rows.push({
+      runId: entry.runId,
+      command: entry.command,
+      cwd: entry.cwd,
+      pid: entry.pid ?? null,
+      startedAt: entry.startedAt,
+      source: entry.source,
+      ...(entry.chatId ? { chatId: entry.chatId } : {}),
+      // Started before this server process; we can report it but not stop or stream it.
+      orphaned: true,
     });
   }
   return rows;
@@ -672,16 +813,45 @@ export function waitForRunOutput(runId, maxMs) {
  */
 export async function readCommandLogSnapshot(runId, maxBytes = 64 * 1024) {
   const state = activeRuns.get(runId);
-  const fileTail = await readRunLogTail(runId, maxBytes);
+  const indexed = state ? null : await readRunIndexEntry(runId);
+  const logPath =
+    state?.logPath ?? indexed?.logPath ?? path.join(terminalLogDir(), `${runId}.log`);
+  const fileTail = await readLogTailAt(logPath, maxBytes);
   const memory = state ? formatRunOutputTail(state) : '';
   const output = memory.length >= (fileTail?.length ?? 0) ? memory : (fileTail ?? memory);
+
+  // An unknown runId used to be indistinguishable from a finished one: both
+  // reported finished:true, exitCode:null, output:''. Say which it is.
+  if (!state && !indexed) {
+    return {
+      runId,
+      found: false,
+      output: output ?? '',
+      finished: true,
+      exitCode: null,
+      timedOut: false,
+      truncated: false,
+      error: `unknown run_id ${runId} — it was never started here, or its record aged out`,
+    };
+  }
+
+  const source = state ?? indexed;
+  const running = state ? !state.finished : !indexed.finished;
   return {
     runId,
+    found: true,
     output: output ?? '',
-    finished: state?.finished ?? true,
-    exitCode: state?.exitCode ?? null,
-    timedOut: state?.timedOut ?? false,
-    truncated: state?.truncated ?? false,
+    command: source.command,
+    cwd: source.cwd,
+    startedAt: source.startedAt,
+    finished: !running,
+    exitCode: source.exitCode ?? null,
+    timedOut: source.timedOut ?? false,
+    truncated: state?.truncated ?? indexed?.truncated ?? false,
+    logPath: state?.logRelPath ?? indexed?.logRelPath ?? relativeLogPath(runId),
+    ...(indexed?.finishedAt ? { finishedAt: indexed.finishedAt } : {}),
+    ...(indexed?.orphaned ? { orphaned: true, pid: indexed.pid } : {}),
+    ...(indexed?.endedReason ? { endedReason: indexed.endedReason } : {}),
   };
 }
 
@@ -836,7 +1006,20 @@ export async function getTerminalHistoryForChat(chatId) {
  */
 export async function readRunLogTail(runId, maxBytes = 64 * 1024) {
   const state = activeRuns.get(runId);
-  const logPath = state?.logPath ?? path.join(terminalLogDir(), `${runId}.log`);
+  // Once the state is evicted the log location is only known to the index —
+  // guessing logs/terminal/ here silently lost dev-server and model-serve logs.
+  const indexed = state ? null : await readRunIndexEntry(runId);
+  const logPath =
+    state?.logPath ?? indexed?.logPath ?? path.join(terminalLogDir(), `${runId}.log`);
+  return readLogTailAt(logPath, maxBytes);
+}
+
+/**
+ * @param {string} logPath
+ * @param {number} maxBytes
+ * @returns {Promise<string | null>}
+ */
+async function readLogTailAt(logPath, maxBytes) {
   try {
     const stat = await fs.stat(logPath);
     const start = Math.max(0, stat.size - maxBytes);

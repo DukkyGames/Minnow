@@ -40,6 +40,7 @@ import {
   resolveTrayIconPath,
 } from './tray-icon.js';
 import { shouldQuitOnWindowAllClosed } from './tray-close.js';
+import { revealAbsolutePathInExplorer } from './shell-reveal.js';
 import { setAfkBoardPowerGuardActive } from './afk-power-guard.js';
 import {
   EMPTY_TRAY_STATUS,
@@ -164,6 +165,19 @@ function registerIpcHandlers(): void {
       await shell.openExternal(url);
     }
   });
+
+  ipcMain.handle(
+    channels.SHELL_REVEAL_IN_EXPLORER,
+    async (_event, absolutePath: unknown, kind: unknown) => {
+      if (typeof absolutePath !== 'string' || !absolutePath.trim()) {
+        return { ok: false, error: 'path is required' };
+      }
+      if (kind !== 'file' && kind !== 'dir') {
+        return { ok: false, error: 'kind must be file or dir' };
+      }
+      return revealAbsolutePathInExplorer(absolutePath.trim(), kind);
+    },
+  );
 
   ipcMain.on(channels.DIAGNOSTICS_REPORT_ERROR, (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') return;

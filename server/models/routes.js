@@ -11,7 +11,10 @@ import { getInferencePrefs, setLibraryInferenceSampler } from './inference-prefs
 import { computeServeProfiles } from './profiles.js';
 import { detectRuntimes } from './runtime-detect.js';
 import { getServe, listServes, startServe, stopServe } from './serve.js';
-import { readServeLogTail, subscribeServeLog } from './serve-logs.js';
+import {
+  readServeLogTailForServe,
+  subscribeServeLogForServe,
+} from './serve-logs.js';
 import { validateJobId, validateServeId } from './validate.js';
 import { detectHardware } from '../system/hardware.js';
 import {
@@ -349,8 +352,8 @@ export async function handleModelsRequest(req, res, pathname) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
       return true;
     }
-    if (!serve?.runId) {
-      sendJson(res, 404, { error: 'No log for this serve' });
+    if (!serve) {
+      sendJson(res, 404, { error: 'Serve session not found' });
       return true;
     }
     res.writeHead(200, {
@@ -358,7 +361,7 @@ export async function handleModelsRequest(req, res, pathname) {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     });
-    const unsubscribe = subscribeServeLog(serve.runId, (event) => {
+    const unsubscribe = subscribeServeLogForServe(serve, (event) => {
       try {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       } catch {
@@ -379,9 +382,10 @@ export async function handleModelsRequest(req, res, pathname) {
       }
       const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
       const bytes = Number(parsed.searchParams.get('bytes'));
-      const tail = serve.runId
-        ? await readServeLogTail(serve.runId, Number.isFinite(bytes) ? bytes : undefined)
-        : null;
+      const tail = await readServeLogTailForServe(
+        serve,
+        Number.isFinite(bytes) ? bytes : undefined,
+      );
       sendJson(res, 200, { text: tail?.text ?? '', offset: tail?.size ?? 0 });
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });

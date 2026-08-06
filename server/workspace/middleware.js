@@ -154,6 +154,7 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
         typeof body?.workspaceRoot === 'string' && body.workspaceRoot.trim()
           ? body.workspaceRoot.trim()
           : undefined;
+      const openViaHostShell = body?.openViaHostShell === true;
 
       const absolutePath = workspaceRootOverride
         ? await runWithToolContext(
@@ -162,7 +163,9 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
           )
         : await runWithPathAccess(async () => resolveSafePath(userPath.trim()));
 
-      const result = await revealInSystemExplorer(absolutePath);
+      const result = await revealInSystemExplorer(absolutePath, {
+        skipSpawn: openViaHostShell,
+      });
       sendJson(res, 200, result);
       return true;
     }
