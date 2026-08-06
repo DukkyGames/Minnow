@@ -1723,9 +1723,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let synthesisToolCount = 0;
 
   try {
-    const provider = await getActiveProvider(sendProviderId);
+    let provider = await getActiveProvider(sendProviderId);
     await loadToolCallsMeta();
-    const providerCapabilities = await readProviderCapabilities(provider.id);
+    let providerCapabilities = await readProviderCapabilities(provider.id);
     const toolCallsMeta = getToolCallsMetaSync();
     const constrainedUserEnabled = isConstrainedDecodingEnabledForProvider(
       provider,
@@ -1795,6 +1795,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           sendProviderId = served.providerId;
           sendModelId = served.modelId;
         }
+
+        // Provider row may not exist until serve (e.g. mlx-lm-local); re-resolve after load.
+        provider = await getActiveProvider(sendProviderId);
+        providerCapabilities = await readProviderCapabilities(provider.id);
 
         modelLoadDone = true;
         patchMainTurnActivity(chat.id, { phase: 'generating' });

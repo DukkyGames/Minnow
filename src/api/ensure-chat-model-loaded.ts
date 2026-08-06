@@ -11,7 +11,7 @@ import {
   isLibraryModelBinding,
   loadLibraryModelFromPicker,
 } from '../models/model-select-library';
-import { listProviders } from '../providers/store';
+import { invalidateProviderCache, listProviders } from '../providers/store';
 import type { ProviderPublic } from '../providers/types';
 import {
   beginModelLoadUnload,
@@ -125,6 +125,8 @@ export async function ensureChatModelLoadedForTurn(
     syncModelSelectPicker();
     try {
       await loadLibraryModelFromPicker(mid);
+      // Serve registers mlx-lm-local / llama-cpp-local; drop stale provider list cache.
+      invalidateProviderCache();
       await fetchModels();
     } finally {
       endModelLoadUnload();
