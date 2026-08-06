@@ -335,18 +335,30 @@ export function installHelperIntoWsl(hostHelperPath, opts = {}) {
   const destDir = dest.replace(/\/[^/]+$/, '');
   const cacheKey = distroCacheKey(opts.distro);
 
-  // Paths via env vars — never interpolate into bash -lc (avoids $(…) / backtick injection).
-  const installEnv = {
-    ...(opts.env ?? process.env),
-    MN_SANDBOX_SRC: srcWsl,
-    MN_SANDBOX_DEST: dest,
-    MN_SANDBOX_DEST_DIR: destDir,
+  // Argv-only wsl.exe calls — do NOT rely on Windows→Linux env passthrough
+  // (WSL drops env vars unless listed in WSLENV; empty $MN_* made install silently fail).
+  /** @param {string[]} linuxArgv */
+  const buildWslArgs = (linuxArgv) => {
+    /** @type {string[]} */
+    const wslArgs = [];
+    if (opts.distro) wslArgs.push('-d', opts.distro);
+    wslArgs.push('--', ...linuxArgv);
+    return wslArgs;
   };
-  const script =
-    'mkdir -p "$MN_SANDBOX_DEST_DIR" && cp -f "$MN_SANDBOX_SRC" "$MN_SANDBOX_DEST" && chmod +x "$MN_SANDBOX_DEST" && test -x "$MN_SANDBOX_DEST"';
 
   if (typeof opts.copyFn === 'function') {
-    const copied = opts.copyFn({ hostHelperPath, srcWsl, dest, script, env: installEnv });
+    const copied = opts.copyFn({
+      hostHelperPath,
+      srcWsl,
+      dest,
+      destDir,
+      steps: [
+        ['mkdir', '-p', destDir],
+        ['cp', '-f', srcWsl, dest],
+        ['chmod', '+x', dest],
+        ['test', '-x', dest],
+      ],
+    });
     if (!copied?.ok) {
       return {
         ok: false,
@@ -359,37 +371,43 @@ export function installHelperIntoWsl(hostHelperPath, opts = {}) {
   }
 
   const spawnFn = opts.spawnSyncFn ?? spawnSync;
-  /** @type {string[]} */
-  const wslArgs = [];
-  if (opts.distro) wslArgs.push('-d', opts.distro);
-  wslArgs.push('--', 'bash', '-lc', script);
+  const steps = [
+    ['mkdir', '-p', destDir],
+    ['cp', '-f', srcWsl, dest],
+    ['chmod', '+x', dest],
+    ['test', '-x', dest],
+  ];
 
-  const result = spawnFn('wsl.exe', wslArgs, {
-    encoding: 'utf8',
-    timeout: 30_000,
-    env: installEnv,
-    windowsHide: true,
-  });
+  for (const linuxArgv of steps) {
+    const result = spawnFn('wsl.exe', buildWslArgs(linuxArgv), {
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: opts.env ?? process.env,
+      windowsHide: true,
+    });
 
-  if (result.error) {
-    const msg = result.error.message || String(result.error);
-    const isWslMissing = result.error.code === 'ENOENT' || /wsl\.exe/i.test(msg);
-    return {
-      ok: false,
-      reason: isWslMissing
-        ? SANDBOX_UNAVAILABLE_REASON.WSL_UNAVAILABLE
-        : SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
-      detail: msg,
-    };
-  }
+    if (result.error) {
+      const msg = result.error.message || String(result.error);
+      const isWslMissing = result.error.code === 'ENOENT' || /wsl\.exe/i.test(msg);
+      return {
+        ok: false,
+        reason: isWslMissing
+          ? SANDBOX_UNAVAILABLE_REASON.WSL_UNAVAILABLE
+          : SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+        detail: msg,
+      };
+    }
 
-  if (result.status !== 0) {
-    const stderr = String(result.stderr || '').trim();
-    return {
-      ok: false,
-      reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
-      detail: stderr || `WSL helper install exited ${result.status}`,
-    };
+    if (result.status !== 0) {
+      const stderr = String(result.stderr || '').trim();
+      return {
+        ok: false,
+        reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+        detail:
+          stderr ||
+          `WSL helper install step failed (${linuxArgv.join(' ')}) exit ${result.status}`,
+      };
+    }
   }
 
   wslInstalledHelperByDistro.set(cacheKey, dest);
@@ -425,22 +443,18 @@ export function probeInstalledWslHelper(opts = {}) {
   /** @type {string[]} */
   const wslArgs = [];
   if (opts.distro) wslArgs.push('-d', opts.distro);
-  // Fixed script + env — do not embed paths into bash -lc.
-  wslArgs.push('--', 'bash', '-lc', 'test -x "$MN_SANDBOX_DEST" && printf %s "$MN_SANDBOX_DEST"');
+  // Argv-only — paths as args, not bash -lc / env (WSL drops Windows env by default).
+  wslArgs.push('--', 'test', '-x', dest);
 
   const result = spawnFn('wsl.exe', wslArgs, {
     encoding: 'utf8',
     timeout: 10_000,
-    env: { ...(opts.env ?? process.env), MN_SANDBOX_DEST: dest },
+    env: opts.env ?? process.env,
     windowsHide: true,
   });
   if (result.error || result.status !== 0) return null;
-  const found = String(result.stdout || '').trim();
-  if (found === dest) {
-    wslInstalledHelperByDistro.set(cacheKey, dest);
-    return dest;
-  }
-  return null;
+  wslInstalledHelperByDistro.set(cacheKey, dest);
+  return dest;
 }
 
 /**

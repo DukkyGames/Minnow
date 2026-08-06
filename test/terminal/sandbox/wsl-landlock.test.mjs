@@ -407,7 +407,8 @@ describe('planWslHelperProvision / installHelperIntoWsl', () => {
     assert.ok(saw);
     assert.equal(saw.srcWsl, FAKE_HELPER_WSL);
     assert.equal(saw.dest, dest);
-    assert.match(saw.script, /chmod \+x/);
+    assert.ok(Array.isArray(saw.steps));
+    assert.ok(saw.steps.some((s) => s[0] === 'chmod' && s.includes('+x')));
   });
 
   it('installHelperIntoWsl maps copy failure to helper_missing (never applied)', () => {

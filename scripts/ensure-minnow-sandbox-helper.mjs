@@ -88,20 +88,36 @@ function buildViaWsl() {
   }
 
   const buildShPosix = BUILD_SH_REL.replace(/\\/g, '/');
-  // Paths via env — never interpolate into bash -lc (injection / quoting).
-  const remote =
-    'cd "$MN_SANDBOX_ROOT" && sed -i \'s/\\r$//\' "$MN_SANDBOX_BUILD_SH" && /bin/bash "$MN_SANDBOX_BUILD_SH"';
-  log(`building via WSL under ${wslRoot}`);
-  const result = spawnSync('wsl.exe', ['--', '/bin/bash', '-lc', remote], {
-    cwd: PROJECT_ROOT,
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      MN_SANDBOX_ROOT: wslRoot,
-      MN_SANDBOX_BUILD_SH: buildShPosix,
+  // Use wsl --cd so the build runs in the repo without relying on Windows→Linux env
+  // passthrough (WSL drops env vars unless listed in WSLENV).
+  log(`building via WSL --cd ${wslRoot}`);
+  const sedResult = spawnSync(
+    'wsl.exe',
+    ['--cd', wslRoot, '--', 'sed', '-i', 's/\\r$//', buildShPosix],
+    {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+      env: process.env,
+      windowsHide: true,
     },
-    windowsHide: true,
-  });
+  );
+  if (sedResult.error) {
+    fail(
+      `WSL build failed to start (${sedResult.error.message}). ` +
+        'Install WSL2 with a distro, or place a prebuilt Linux ELF at ' +
+        HELPER_REL,
+    );
+  }
+  const result = spawnSync(
+    'wsl.exe',
+    ['--cd', wslRoot, '--', '/bin/bash', buildShPosix],
+    {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+      env: process.env,
+      windowsHide: true,
+    },
+  );
 
   if (result.error) {
     fail(
