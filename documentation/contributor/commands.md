@@ -17,7 +17,7 @@ For UI key bindings (composer, editor, file tree, terminal), see [Keyboard short
 | `npm run build` | `tsc && vite build` → `dist/`. `prebuild` regenerates `src/skills/builtin-manifest.json`. |
 | `npm run preview` | `vite preview` of the production build (no tool API). |
 | `npm run package` | Build + Electron build + **electron-builder** installer → `release/pkg` (Windows NSIS, macOS dmg/zip, plus `latest.yml` auto-update feed metadata; never uploads — see [releasing](../maintainer/releasing.md)). |
-| `npm run package:win` / `package:mac` / `package:linux` | Package a single platform. On Windows/macOS, **AppImage** needs Docker — use `npm run package:linux:docker`. |
+| `npm run package:win` / `package:mac` / `package:linux` | Package a single platform. On Windows/macOS, **AppImage** needs Docker — use `npm run package:linux:docker`. `package:win` / `package:linux` run `sandbox:ensure-helper` first (Linux ELF for Landlock; WSL build on Windows). |
 | `npm run package:dir` | Same, unpacked directory (`--dir`). |
 | `npm run package:clean` | Clean the `release/` output. |
 | `npx tsc --noEmit` | Typecheck only. |

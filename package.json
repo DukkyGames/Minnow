@@ -61,13 +61,14 @@
     "prepackage:dir": "node scripts/clean-release.mjs && node scripts/validate-packaged-runtime-files.mjs",
     "package": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs",
     "package:dir": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --dir",
-    "package:win": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
+    "package:win": "node scripts/ensure-minnow-sandbox-helper.mjs && npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --win",
     "package:mac": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --mac",
-    "package:linux": "npm run sandbox:build-helper && npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
+    "package:linux": "node scripts/ensure-minnow-sandbox-helper.mjs && npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
     "package:linux:docker": "node scripts/package-linux-docker.mjs",
     "signing:check": "node scripts/check-macos-signing.mjs",
     "signing:setup": "node scripts/check-macos-signing.mjs --setup",
     "sandbox:build-helper": "bash native/minnow-sandbox/build.sh",
+    "sandbox:ensure-helper": "node scripts/ensure-minnow-sandbox-helper.mjs",
     "start": "node server.js",
     "minnow:run": "node bin/minnow.mjs run",
     "test:notifications": "node test/run-all.mjs --suite notifications",
@@ -275,7 +276,13 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "extraResources": [
+        {
+          "from": "native/minnow-sandbox/minnow-sandbox",
+          "to": "minnow-sandbox"
+        }
+      ]
     },
     "mac": {
       "target": [

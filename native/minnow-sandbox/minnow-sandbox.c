@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -115,6 +116,16 @@ static const __u64 FS_WRITE =
 	LANDLOCK_ACCESS_FS_MAKE_SOCK | LANDLOCK_ACCESS_FS_MAKE_FIFO |
 	LANDLOCK_ACCESS_FS_MAKE_BLOCK | LANDLOCK_ACCESS_FS_MAKE_SYM;
 
+/*
+ * Rights that may apply to a non-directory inode. Kernel rejects directory-only
+ * bits (READ_DIR, REMOVE_*, MAKE_*, REFER, …) on files with EINVAL — that was
+ * breaking CI canaries when --read pointed at ~/.bashrc (MIN-553).
+ */
+static const __u64 ACCESS_FILE_MASK =
+	LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_WRITE_FILE |
+	LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_TRUNCATE |
+	LANDLOCK_ACCESS_FS_IOCTL_DEV;
+
 static int ll_create_ruleset(struct landlock_ruleset_attr *attr, size_t size,
 			     __u32 flags)
 {
@@ -163,10 +174,16 @@ static __u64 handled_access_for_abi(int abi)
 	return access;
 }
 
+/**
+ * Add a path_beneath rule. Missing optional paths and wrong file types are
+ * skipped (return 0) so shell rc files / absent caches never fail the wrap.
+ */
 static int add_path_beneath(int ruleset_fd, const char *path, __u64 access)
 {
 	int fd;
 	struct landlock_path_beneath_attr attr;
+	struct stat st;
+	__u64 allowed;
 
 	fd = open(path, O_PATH | O_CLOEXEC);
 	if (fd < 0) {
@@ -179,10 +196,39 @@ static int add_path_beneath(int ruleset_fd, const char *path, __u64 access)
 		return -1;
 	}
 
+	if (fstat(fd, &st) < 0) {
+		fprintf(stderr, "minnow-sandbox: fstat(%s): %s\n", path,
+			strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	allowed = access;
+	if (!S_ISDIR(st.st_mode)) {
+		allowed &= ACCESS_FILE_MASK;
+		if (allowed == 0) {
+			/* Nothing applicable to this inode type — skip quietly. */
+			close(fd);
+			return 0;
+		}
+	}
+
 	memset(&attr, 0, sizeof(attr));
-	attr.allowed_access = access;
+	attr.allowed_access = allowed;
 	attr.parent_fd = fd;
 	if (ll_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &attr, 0) < 0) {
+		/*
+		 * EINVAL: incompatible rights vs file type (race / exotic node).
+		 * ENOENT: path disappeared between open and add_rule.
+		 * Skip rather than fail the whole sandbox apply.
+		 */
+		if (errno == EINVAL || errno == ENOENT) {
+			fprintf(stderr,
+				"minnow-sandbox: warning: skip rule for %s: %s\n",
+				path, strerror(errno));
+			close(fd);
+			return 0;
+		}
 		fprintf(stderr, "minnow-sandbox: landlock_add_rule(%s): %s\n",
 			path, strerror(errno));
 		close(fd);

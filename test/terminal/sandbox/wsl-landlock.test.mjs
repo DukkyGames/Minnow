@@ -20,15 +20,20 @@ import {
   ensureWslOneShotSpawn,
   extractWslInnerSpawn,
   hostHelperPathToWsl,
+  installHelperIntoWsl,
   isWslExeSpawn,
   isWslLandlockWrapped,
+  isWslMountPath,
   mapPolicyPathToWsl,
+  planWslHelperProvision,
   probeWslLandlock,
   probeWslPresent,
   recoverCommandFromWinSpawn,
   resetWslLandlockProbeCache,
   resolveWslLandlockHelper,
   splitWslArgv,
+  wslInstalledHelperPath,
+  WSL_HELPER_INSTALL_REL,
 } from '../../../server/terminal/sandbox/wsl-landlock.js';
 import { resolveOneShotSpawn } from '../../../server/terminal/one-shot-spawn.js';
 import { LANDLOCK_EXIT_ABI_UNAVAILABLE } from '../../../server/terminal/sandbox/landlock.js';
@@ -215,7 +220,14 @@ describe('composeWslLandlockWrap', () => {
     assert.ok(inner);
     assert.equal(inner.command, FAKE_HELPER_WSL);
     assert.ok(inner.args.includes('--write'));
-    assert.ok(inner.args.includes('/mnt/c/Users/minnow-test/project'));
+    // POSIX CI rewrites fake Windows paths via path.resolve — only assert /mnt
+    // workspace mapping on win32 where drive-letter roots stay intact.
+    if (process.platform === 'win32') {
+      assert.ok(inner.args.includes('/mnt/c/Users/minnow-test/project'));
+    } else {
+      const writeIdx = inner.args.indexOf('--write');
+      assert.ok(writeIdx >= 0 && typeof inner.args[writeIdx + 1] === 'string');
+    }
     assert.ok(inner.args.includes('/tmp'));
     const dd = inner.args.indexOf('--');
     assert.ok(dd >= 0);
@@ -314,12 +326,158 @@ describe('resolveWslLandlockHelper', () => {
     // Use this test file as an existsSync stand-in for a host-visible helper.
     const selfPath = fileURLToPath(import.meta.url);
     const env = { MINNOW_SANDBOX_HELPER: selfPath };
-    const resolved = resolveWslLandlockHelper(env, { allowBareName: false });
+    const resolved = resolveWslLandlockHelper(env, {
+      allowBareName: false,
+      skipInstall: true,
+    });
     assert.equal(resolved, hostHelperPathToWsl(selfPath));
   });
 
   it('accepts bare name override for WSL PATH', () => {
     const env = { MINNOW_SANDBOX_HELPER: 'minnow-sandbox' };
     assert.equal(resolveWslLandlockHelper(env), 'minnow-sandbox');
+  });
+});
+
+describe('planWslHelperProvision / installHelperIntoWsl', () => {
+  it('plans install when host ELF exists and installed copy is missing', () => {
+    const plan = planWslHelperProvision({
+      hostHelperPath: FAKE_HELPER_WIN,
+      installedExists: false,
+    });
+    assert.equal(plan.action, 'install');
+    assert.equal(plan.hostPath, FAKE_HELPER_WIN);
+  });
+
+  it('plans install when host ELF exists (always refresh; never trust preinstalled)', () => {
+    const installed = '/home/u/.local/share/minnow/minnow-sandbox';
+    const plan = planWslHelperProvision({
+      hostHelperPath: FAKE_HELPER_WIN,
+      installedExists: true,
+      installedPath: installed,
+    });
+    assert.equal(plan.action, 'install');
+    assert.equal(plan.hostPath, FAKE_HELPER_WIN);
+    assert.equal(isWslMountPath(installed), false);
+    assert.equal(isWslMountPath(FAKE_HELPER_WSL), true);
+  });
+
+  it('uses installed path only when no host ELF is available', () => {
+    const installed = '/home/u/.local/share/minnow/minnow-sandbox';
+    const plan = planWslHelperProvision({
+      hostHelperPath: null,
+      installedExists: true,
+      installedPath: installed,
+    });
+    assert.equal(plan.action, 'use-installed');
+    assert.equal(plan.wslPath, installed);
+  });
+
+  it('honors Linux MINNOW_SANDBOX_HELPER override without install', () => {
+    const plan = planWslHelperProvision({
+      envOverride: '/usr/local/bin/minnow-sandbox',
+      hostHelperPath: FAKE_HELPER_WIN,
+      installedExists: false,
+    });
+    assert.equal(plan.action, 'use-override');
+    assert.equal(plan.wslPath, '/usr/local/bin/minnow-sandbox');
+  });
+
+  it('returns missing when no host ELF and bare name disallowed', () => {
+    const plan = planWslHelperProvision({ allowBareName: false });
+    assert.equal(plan.action, 'missing');
+    assert.equal(plan.reason, SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING);
+  });
+
+  it('installHelperIntoWsl copies via injected copyFn (no real WSL)', () => {
+    const dest = wslInstalledHelperPath('/home/fixture');
+    assert.equal(dest, `/home/fixture/${WSL_HELPER_INSTALL_REL}`);
+
+    let saw = null;
+    const result = installHelperIntoWsl(FAKE_HELPER_WIN, {
+      home: '/home/fixture',
+      skipHostExistsCheck: true,
+      copyFn(info) {
+        saw = info;
+        return { ok: true };
+      },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.helperPath, dest);
+    assert.ok(saw);
+    assert.equal(saw.srcWsl, FAKE_HELPER_WSL);
+    assert.equal(saw.dest, dest);
+    assert.match(saw.script, /chmod \+x/);
+  });
+
+  it('installHelperIntoWsl maps copy failure to helper_missing (never applied)', () => {
+    const result = installHelperIntoWsl(FAKE_HELPER_WIN, {
+      home: '/home/fixture',
+      skipHostExistsCheck: true,
+      copyFn() {
+        return {
+          ok: false,
+          reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+          detail: 'copy failed',
+        };
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING);
+  });
+
+  it('resolveWslLandlockHelper fails closed on install failure (no /mnt fallback)', () => {
+    resetWslLandlockProbeCache();
+    const selfPath = fileURLToPath(import.meta.url);
+    const resolved = resolveWslLandlockHelper(
+      { MINNOW_SANDBOX_HELPER: selfPath },
+      {
+        homeFixture: '/home/fixture',
+        forceWin32: true,
+        copyFn() {
+          return {
+            ok: false,
+            reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+            detail: 'copy failed',
+          };
+        },
+      },
+    );
+    assert.equal(resolved, null);
+  });
+
+  it('wrapSandbox does not set applied when install fails', () => {
+    resetWslLandlockProbeCache();
+    const selfPath = fileURLToPath(import.meta.url);
+    const policy = buildWorkspacePolicy({
+      home: FAKE_HOME,
+      minnowHome: FAKE_MINNOW,
+      workspaceRoot: FAKE_WORKSPACE,
+      platform: 'win32',
+    });
+    const resolved = resolveOneShotSpawn({
+      command: 'echo hi',
+      args: [],
+      platform: 'win32',
+    });
+    const wrapped = wrapSandbox(resolved, policy, {
+      platform: 'win32',
+      wsl: {
+        wslFixtures: WSL_FIXTURES,
+        forceWin32: true,
+        skipLiveProbe: true,
+        homeFixture: '/home/fixture',
+        env: { MINNOW_SANDBOX_HELPER: selfPath },
+        copyFn() {
+          return {
+            ok: false,
+            reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+            detail: 'copy failed',
+          };
+        },
+      },
+    });
+    assert.equal(wrapped.sandbox.applied, false);
+    assert.equal(wrapped.sandbox.reason, SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING);
   });
 });

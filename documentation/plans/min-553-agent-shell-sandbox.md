@@ -1,7 +1,7 @@
 # MIN-553 — Agent shell sandbox / host containment
 
 **Linear:** [MIN-553](https://linear.app/minnowai/issue/MIN-553/agent-shell-sandbox-host-containment-not-just-worktrees)
-**Status:** In progress — Phases 0–2 / 5–6 landed on this branch (Seatbelt + Landlock helper + WSL2 routing + side-door wrap); Phase 3 settings UI may still be in flight; Phase 4 docs in flight
+**Status:** In progress — Phases 0–2 / 5–6 landed; Windows packaging + WSL auto-install + Landlock path harden landed on this pass; Phase 3 settings UI done; Phase 4 docs updated
 **Related:** MIN-275 worktree isolation (complementary, different problem)
 **Locked plan:** Cursor plan `agent_shell_sandbox_fbb89f8d` (decisions below supersede earlier “Windows unsandboxed forever” spike notes)
 
@@ -30,7 +30,7 @@
 | phase-3-setting-signals | Three-state setting, board `require` default, Ask escalation, UI/trailer/board-log signals | **Done** — `toolSecurity.shellSandbox` + `getShellSandboxFromConfig`; autopilot/board defaults; Ask strip; trailers/badge/board-log |
 | phase-4-docs | Privacy / tools / context / Autopilot copy + refresh this plan | **In progress** (this pass) |
 | phase-5-linux | Ship `minnow-sandbox` Landlock+seccomp helper; ubuntu canaries + packaging | **Done (code)** — [`landlock.js`](../../server/terminal/sandbox/landlock.js) + [`native/minnow-sandbox/`](../../native/minnow-sandbox/); `npm run sandbox:build-helper`; Linux `extraResources`; canaries in [`landlock-canary.test.mjs`](../../test/terminal/sandbox/landlock-canary.test.mjs) (skip-clean when helper/ABI absent) |
-| phase-6-windows-wsl | Windows: WSL2 + Landlock when available; honest unavailable otherwise | **Done (code)** — [`wsl-landlock.js`](../../server/terminal/sandbox/wsl-landlock.js); probe maps `wsl_unavailable` / Landlock reasons; wrap = `ensureWslOneShotSpawn` + Phase 5 `wrapWithLandlock` inside WSL; tests in [`wsl-landlock.test.mjs`](../../test/terminal/sandbox/wsl-landlock.test.mjs) |
+| phase-6-windows-wsl | Windows: WSL2 + Landlock when available; honest unavailable otherwise | **Done (code + packaging)** — [`wsl-landlock.js`](../../server/terminal/sandbox/wsl-landlock.js) auto-installs helper into `~/.local/share/minnow/`; `package:win` ensure + `win.extraResources`; canary [`wsl-landlock-canary.test.mjs`](../../test/terminal/sandbox/wsl-landlock-canary.test.mjs) |
 
 ---
 
@@ -115,7 +115,7 @@ Cursor’s model: same Linux sandbox **inside WSL2**, not a native Win sandbox.
 
 A default WSL2 distro mounts every host drive read-write at `/mnt/c`. `wsl.exe -- bash -c 'cat /mnt/c/Users/…/.minnow/.key'` succeeds. Routing through [`buildWslOneShotSpawn`](../../server/terminal/wsl.js) alone buys **zero** containment.
 
-**Locked approach (implemented):** when sandbox is on and WSL2 + Landlock helper are available, route agent one-shots through WSL and apply [`wrapWithLandlock`](../../server/terminal/sandbox/landlock.js) inside that tree ([`wsl-landlock.js`](../../server/terminal/sandbox/wsl-landlock.js)). Probe: WSL present + helper runnable inside WSL + Landlock ABI usable. Reason codes: `wsl_unavailable`, `landlock_helper_missing`, `landlock_abi_unavailable`, `landlock_unavailable`. Helper resolution: Linux ELF on WSL PATH, or host path translated to `/mnt/…` (`MINNOW_SANDBOX_HELPER` / resources / repo build). If WSL or Landlock is missing, treat as sandbox unavailable (`prefer` → Ask; `require` → error). Dedicated Minnow distro with automount disabled is **out of scope** for v1. **Native Win sandbox remains future work.**
+**Locked approach (implemented):** when sandbox is on and WSL2 + Landlock helper are available, route agent one-shots through WSL and apply [`wrapWithLandlock`](../../server/terminal/sandbox/landlock.js) inside that tree ([`wsl-landlock.js`](../../server/terminal/sandbox/wsl-landlock.js)). Probe: WSL present + helper runnable inside WSL + Landlock ABI usable. Reason codes: `wsl_unavailable`, `landlock_helper_missing`, `landlock_abi_unavailable`, `landlock_unavailable`. Helper resolution: `MINNOW_SANDBOX_HELPER` override, else auto-install host ELF (packaged `resources/minnow-sandbox` or repo build) into `~/.local/share/minnow/minnow-sandbox` inside the distro (preferred over `/mnt/…` for `noexec`), else `/mnt/…` fallback. Packaging: [`scripts/ensure-minnow-sandbox-helper.mjs`](../../scripts/ensure-minnow-sandbox-helper.mjs) + `build.win.extraResources` (mirrors Linux). If WSL or Landlock is missing, treat as sandbox unavailable (`prefer` → Ask; `require` → error). Dedicated Minnow distro with automount disabled is **out of scope** for v1. **Native Win sandbox remains future work.**
 
 Bare WSL without Landlock is **never** reported as `applied: true`.
 
@@ -234,12 +234,16 @@ Each phase is independently shippable and independently revertible.
 - [x] Platform-gated canaries (skip-clean when helper or ABI absent).
 - **Exit (remaining):** green `ubuntu-latest` canary run with helper+Landlock asserting `cat ~/.minnow/.key` fails; AppImage finds helper at `resources/minnow-sandbox`.
 
-### Phase 6 — Windows via WSL2 (Cursor-shaped) — **code landed**
+### Phase 6 — Windows via WSL2 (Cursor-shaped) — **code landed + packaging**
 - [x] When sandbox on: agent one-shot through WSL, then **same** `wrapWithLandlock` / `buildLandlockArgv` / `minnow-sandbox` inside that tree ([`wsl-landlock.js`](../../server/terminal/sandbox/wsl-landlock.js)).
 - [x] Probe: WSL present + helper runnable + Landlock ABI usable (`wsl_unavailable` / Landlock reason codes).
 - [x] Unavailable leaves the original spawn untouched (no bare-WSL rewrite) → prefer/require paths.
 - [x] Document that Windows sandbox **requires WSL2 + Landlock**; native Win remains future work.
-- **Exit (remaining):** live Windows canary with WSL2 + Linux ELF asserting `cat` of host `~/.minnow/.key` fails; ship Linux helper in Windows package resources (or document `MINNOW_SANDBOX_HELPER` / WSL PATH setup).
+- [x] `package:win` runs [`scripts/ensure-minnow-sandbox-helper.mjs`](../../scripts/ensure-minnow-sandbox-helper.mjs) (WSL build on Windows hosts) and ships ELF via `build.win.extraResources`.
+- [x] On first use, copy host ELF into the distro at `~/.local/share/minnow/minnow-sandbox` (prefer over `/mnt/…` noexec); `MINNOW_SANDBOX_HELPER` override kept.
+- [x] Helper skips missing paths / strips directory-only rights on files (fixes `.bashrc` EINVAL).
+- [x] Live Windows canary [`wsl-landlock-canary.test.mjs`](../../test/terminal/sandbox/wsl-landlock-canary.test.mjs) (win32-gated, skip-clean when WSL/Landlock absent).
+- **Exit (remaining):** green Windows canary on a machine with WSL2 + Landlock; confirm NSIS finds helper at `resources/minnow-sandbox`.
 
 ### Later (not v1)
 `strict` profile in the UI · network proxy allowlist · per-board override UI · optional PTY sandbox (explicitly rejected for now) · dedicated Minnow WSL distro.

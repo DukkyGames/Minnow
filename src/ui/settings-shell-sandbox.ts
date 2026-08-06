@@ -89,12 +89,12 @@ export async function renderShellSandboxSettings(mount: HTMLElement): Promise<vo
   const hintPrefer = el(
     'p',
     'settings-field-hint settings-filesystem-hint',
-    'Sandbox when the OS backend is available (macOS Seatbelt; Linux Landlock helper). If unavailable, Ask before running unsandboxed.',
+    'Sandbox when the OS backend is available (macOS Seatbelt; Linux Landlock helper; Windows requires WSL2 + Landlock). If unavailable, Ask before running unsandboxed.',
   );
   const hintRequire = el(
     'p',
     'settings-field-hint settings-filesystem-hint',
-    'Fail closed when the sandbox cannot apply — no silent unsandboxed fallback. Boards default to Require under Autopilot.',
+    'Fail closed when the sandbox cannot apply — no silent unsandboxed fallback. Boards default to Require under Autopilot. On Windows, install WSL2 with a Landlock-capable distro (Minnow ships the Linux helper and installs it into the distro on first use).',
   );
 
   function refreshHints(mode: ShellSandboxMode): void {

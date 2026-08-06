@@ -130,7 +130,9 @@ export function defaultSystemReadRoots() {
 /**
  * Shell / toolchain files under $HOME that must stay readable without granting
  * the entire home (which would also allow ~/.minnow / ~/.ssh via Landlock
- * parent→child inheritance).
+ * parent→child inheritance). Only emit paths that exist as regular files —
+ * Landlock rejects directory-only rights on files (EINVAL); the helper also
+ * skips, but omitting missing rc files keeps argv lean.
  * @param {string} home
  * @returns {string[]}
  */
@@ -147,7 +149,19 @@ export function homeShellReadPaths(home) {
     '.inputrc',
     '.dircolors',
   ];
-  return names.map((n) => path.join(home, n));
+  /** @type {string[]} */
+  const out = [];
+  for (const n of names) {
+    const abs = path.join(home, n);
+    try {
+      if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+        out.push(abs);
+      }
+    } catch {
+      /* skip unreadable */
+    }
+  }
+  return out;
 }
 
 /**
@@ -218,8 +232,8 @@ export function buildLandlockPathLists(policy) {
   // Always allow the workspace root for read even if somehow omitted from writes.
   if (policy.workspaceRoot) readSet.add(policy.workspaceRoot);
   return {
-    writePaths,
-    readPaths: [...readSet],
+    writePaths: writePaths.filter((p) => typeof p === 'string' && p.length > 0),
+    readPaths: [...readSet].filter((p) => typeof p === 'string' && p.length > 0),
   };
 }
 

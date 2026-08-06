@@ -76,19 +76,23 @@ describe('Phase 3: shell sandbox mode resolution', () => {
 });
 
 describe('Phase 3: unavailable escalation paths', () => {
+  // Use an explicitly unsupported platform so these stay deterministic even when
+  // the host has WSL2 + Landlock (win32 would otherwise apply successfully).
+  const unsupported = 'aix';
+
   it('require on unsupported platform sets blocked', () => {
     const resolved = resolveOneShotSpawn({
       command: 'echo',
       args: ['hi'],
       shell: false,
-      platform: 'win32',
+      platform: unsupported,
     });
     const wrapped = applyAgentShellSandbox(resolved, {
       source: 'agent',
       mode: 'require',
       cwd: FAKE_WORKSPACE,
       workspaceRoot: FAKE_WORKSPACE,
-      platform: 'win32',
+      platform: unsupported,
     });
     assert.equal(wrapped.sandbox.applied, false);
     assert.equal(wrapped.sandbox.blocked, true);
@@ -101,7 +105,7 @@ describe('Phase 3: unavailable escalation paths', () => {
       command: 'echo',
       args: ['hi'],
       shell: false,
-      platform: 'win32',
+      platform: unsupported,
     });
     const wrapped = applyAgentShellSandbox(resolved, {
       source: 'agent',
@@ -109,7 +113,7 @@ describe('Phase 3: unavailable escalation paths', () => {
       allowUnsandboxed: false,
       cwd: FAKE_WORKSPACE,
       workspaceRoot: FAKE_WORKSPACE,
-      platform: 'win32',
+      platform: unsupported,
     });
     assert.equal(wrapped.sandbox.needsEscalation, true);
     assert.equal(wrapped.sandbox.blocked, undefined);
@@ -121,7 +125,7 @@ describe('Phase 3: unavailable escalation paths', () => {
       command: 'echo',
       args: ['hi'],
       shell: false,
-      platform: 'win32',
+      platform: unsupported,
     });
     const wrapped = applyAgentShellSandbox(resolved, {
       source: 'agent',
@@ -129,7 +133,7 @@ describe('Phase 3: unavailable escalation paths', () => {
       allowUnsandboxed: true,
       cwd: FAKE_WORKSPACE,
       workspaceRoot: FAKE_WORKSPACE,
-      platform: 'win32',
+      platform: unsupported,
     });
     assert.equal(wrapped.sandbox.applied, false);
     assert.equal(wrapped.sandbox.fallbackUnsandboxed, true);

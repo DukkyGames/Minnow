@@ -46,7 +46,7 @@ export function describeSandboxUnavailable(reason) {
     case SANDBOX_UNAVAILABLE_REASON.LANDLOCK_NOT_IMPLEMENTED:
       return 'Linux Landlock sandbox helper is not implemented yet (Phase 5)';
     case SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING:
-      return 'minnow-sandbox helper binary not found (build native/minnow-sandbox or set MINNOW_SANDBOX_HELPER; on Windows the Linux ELF must be on WSL PATH or under a /mnt/… path)';
+      return 'minnow-sandbox helper binary not found (build native/minnow-sandbox or set MINNOW_SANDBOX_HELPER; on Windows, package:win ships the Linux ELF and Minnow auto-installs it into WSL at ~/.local/share/minnow/minnow-sandbox)';
     case SANDBOX_UNAVAILABLE_REASON.LANDLOCK_ABI_UNAVAILABLE:
       return 'Kernel Landlock ABI unavailable (need Linux 5.13+ with Landlock enabled; on Windows this is checked inside WSL2)';
     case SANDBOX_UNAVAILABLE_REASON.LANDLOCK_UNAVAILABLE:

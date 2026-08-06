@@ -27,14 +27,33 @@ import {
 
 const HELPER_BASENAME = 'minnow-sandbox';
 
+/** Relative path under $HOME inside the distro (avoid /mnt/… noexec). */
+export const WSL_HELPER_INSTALL_REL = '.local/share/minnow/minnow-sandbox';
+
 /** @type {{ result: { ok: boolean, reason?: string, detail?: string, helperPath?: string, abi?: number } } | null} */
 let wslLandlockProbeCache = null;
+
+/**
+ * Cached absolute path of the helper installed inside a WSL distro.
+ * Keyed by distro id (`""` for default) so switching distros cannot reuse a stale path.
+ * @type {Map<string, string>}
+ */
+const wslInstalledHelperByDistro = new Map();
+
+/**
+ * @param {string | null | undefined} distro
+ * @returns {string}
+ */
+function distroCacheKey(distro) {
+  return distro && String(distro).trim() ? String(distro).trim() : '';
+}
 
 /**
  * Reset Phase-6 probe cache (tests only).
  */
 export function resetWslLandlockProbeCache() {
   wslLandlockProbeCache = null;
+  wslInstalledHelperByDistro.clear();
 }
 
 /**
@@ -157,64 +176,395 @@ export function hostHelperPathToWsl(helperPath) {
 }
 
 /**
+ * True when a WSL-side path is under /mnt/… (NTFS bind — often noexec).
+ * @param {string} wslPath
+ * @returns {boolean}
+ */
+export function isWslMountPath(wslPath) {
+  return typeof wslPath === 'string' && /^\/mnt\/[a-zA-Z](\/|$)/.test(wslPath);
+}
+
+/**
+ * Pure decision for where the Landlock helper should run inside WSL.
+ *
+ * When a host/Electron ELF is available, always (re)install into the distro FS —
+ * never trust a pre-existing `~/.local/share/minnow/minnow-sandbox` (stale or planted
+ * binary that is `exec "$@"` would still look "wrapped"). `/mnt/…` is never a success
+ * path here (noexec); install failure must fail closed at the caller.
+ *
+ * @param {object} input
+ * @param {string | null | undefined} [input.envOverride] MINNOW_SANDBOX_HELPER
+ * @param {string | null | undefined} [input.hostHelperPath] Windows-visible ELF
+ * @param {boolean} [input.installedExists] whether ~/.local/share/minnow/minnow-sandbox exists
+ * @param {string | null | undefined} [input.installedPath] absolute path inside the distro
+ * @param {boolean} [input.allowBareName]
+ * @returns {{
+ *   action: 'use-override' | 'use-installed' | 'install' | 'use-bare' | 'missing',
+ *   wslPath?: string,
+ *   hostPath?: string,
+ *   reason?: string,
+ * }}
+ */
+export function planWslHelperProvision({
+  envOverride = null,
+  hostHelperPath = null,
+  installedExists = false,
+  installedPath = null,
+  allowBareName = false,
+} = {}) {
+  const override = typeof envOverride === 'string' ? envOverride.trim() : '';
+  if (override) {
+    // Bare name or already-Linux path — honor without copying.
+    if (override.startsWith('/') || (!override.includes('\\') && !/^[a-zA-Z]:/.test(override))) {
+      return { action: 'use-override', wslPath: override };
+    }
+    // Windows path override → always reinstall from that host ELF (authenticity).
+    return { action: 'install', hostPath: override };
+  }
+
+  // Host/Electron ELF present → always refresh the distro copy (upgrade + authenticity).
+  if (hostHelperPath) {
+    return { action: 'install', hostPath: hostHelperPath };
+  }
+
+  // No packaged ELF — reuse an already-installed copy if present (dev / PATH setup).
+  if (installedExists && installedPath) {
+    return { action: 'use-installed', wslPath: installedPath };
+  }
+
+  if (allowBareName) {
+    return { action: 'use-bare', wslPath: HELPER_BASENAME };
+  }
+
+  return {
+    action: 'missing',
+    reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+  };
+}
+
+/**
+ * Resolve $HOME inside a WSL distro (absolute path, no tilde).
+ * @param {object} [opts]
+ * @param {string | null} [opts.distro]
+ * @param {typeof spawnSync} [opts.spawnSyncFn]
+ * @param {NodeJS.ProcessEnv} [opts.env]
+ * @param {string} [opts.homeFixture] test inject
+ * @returns {string | null}
+ */
+export function resolveWslHome(opts = {}) {
+  if (typeof opts.homeFixture === 'string' && opts.homeFixture) {
+    return opts.homeFixture;
+  }
+  const spawnFn = opts.spawnSyncFn ?? spawnSync;
+  /** @type {string[]} */
+  const wslArgs = [];
+  if (opts.distro) wslArgs.push('-d', opts.distro);
+  wslArgs.push('--', 'bash', '-lc', 'printf %s "$HOME"');
+  const result = spawnFn('wsl.exe', wslArgs, {
+    encoding: 'utf8',
+    timeout: 10_000,
+    env: opts.env ?? process.env,
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) return null;
+  const home = String(result.stdout || '').trim();
+  return home.startsWith('/') ? home : null;
+}
+
+/**
+ * Absolute install path for the helper inside WSL (`$HOME/.local/share/minnow/…`).
+ * @param {string} home
+ * @returns {string}
+ */
+export function wslInstalledHelperPath(home) {
+  const base = String(home || '').replace(/\/+$/, '');
+  return `${base}/${WSL_HELPER_INSTALL_REL}`;
+}
+
+/**
+ * Copy the host-visible Linux ELF into the distro Linux FS and chmod +x.
+ * Prefers that path for probe/wrap over `/mnt/c/…` (noexec).
+ *
+ * @param {string} hostHelperPath Windows path to the ELF
+ * @param {object} [opts]
+ * @returns {{ ok: true, helperPath: string } | { ok: false, reason: string, detail: string }}
+ */
+export function installHelperIntoWsl(hostHelperPath, opts = {}) {
+  if (!hostHelperPath) {
+    return {
+      ok: false,
+      reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+      detail: describeSandboxUnavailable(SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING),
+    };
+  }
+
+  try {
+    if (!opts.skipHostExistsCheck && !fs.existsSync(hostHelperPath)) {
+      return {
+        ok: false,
+        reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+        detail: `Host Landlock helper missing: ${hostHelperPath}`,
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const home =
+    opts.home ??
+    resolveWslHome({
+      distro: opts.distro ?? null,
+      spawnSyncFn: opts.spawnSyncFn,
+      env: opts.env,
+      homeFixture: opts.homeFixture,
+    });
+  if (!home) {
+    return {
+      ok: false,
+      reason: SANDBOX_UNAVAILABLE_REASON.WSL_UNAVAILABLE,
+      detail: 'Could not resolve $HOME inside WSL for minnow-sandbox install',
+    };
+  }
+
+  const dest = opts.destPath ?? wslInstalledHelperPath(home);
+  const srcWsl = hostHelperPathToWsl(hostHelperPath);
+  const destDir = dest.replace(/\/[^/]+$/, '');
+  const cacheKey = distroCacheKey(opts.distro);
+
+  // Paths via env vars — never interpolate into bash -lc (avoids $(…) / backtick injection).
+  const installEnv = {
+    ...(opts.env ?? process.env),
+    MN_SANDBOX_SRC: srcWsl,
+    MN_SANDBOX_DEST: dest,
+    MN_SANDBOX_DEST_DIR: destDir,
+  };
+  const script =
+    'mkdir -p "$MN_SANDBOX_DEST_DIR" && cp -f "$MN_SANDBOX_SRC" "$MN_SANDBOX_DEST" && chmod +x "$MN_SANDBOX_DEST" && test -x "$MN_SANDBOX_DEST"';
+
+  if (typeof opts.copyFn === 'function') {
+    const copied = opts.copyFn({ hostHelperPath, srcWsl, dest, script, env: installEnv });
+    if (!copied?.ok) {
+      return {
+        ok: false,
+        reason: copied?.reason ?? SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+        detail: copied?.detail ?? 'WSL helper install copyFn failed',
+      };
+    }
+    wslInstalledHelperByDistro.set(cacheKey, dest);
+    return { ok: true, helperPath: dest };
+  }
+
+  const spawnFn = opts.spawnSyncFn ?? spawnSync;
+  /** @type {string[]} */
+  const wslArgs = [];
+  if (opts.distro) wslArgs.push('-d', opts.distro);
+  wslArgs.push('--', 'bash', '-lc', script);
+
+  const result = spawnFn('wsl.exe', wslArgs, {
+    encoding: 'utf8',
+    timeout: 30_000,
+    env: installEnv,
+    windowsHide: true,
+  });
+
+  if (result.error) {
+    const msg = result.error.message || String(result.error);
+    const isWslMissing = result.error.code === 'ENOENT' || /wsl\.exe/i.test(msg);
+    return {
+      ok: false,
+      reason: isWslMissing
+        ? SANDBOX_UNAVAILABLE_REASON.WSL_UNAVAILABLE
+        : SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+      detail: msg,
+    };
+  }
+
+  if (result.status !== 0) {
+    const stderr = String(result.stderr || '').trim();
+    return {
+      ok: false,
+      reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+      detail: stderr || `WSL helper install exited ${result.status}`,
+    };
+  }
+
+  wslInstalledHelperByDistro.set(cacheKey, dest);
+  return { ok: true, helperPath: dest };
+}
+
+/**
+ * Probe whether the installed helper already exists inside WSL (executable).
+ * @param {object} [opts]
+ * @returns {string | null} absolute WSL path or null
+ */
+export function probeInstalledWslHelper(opts = {}) {
+  if (opts.installedPathFixture != null) {
+    return opts.installedPathFixture || null;
+  }
+  const cacheKey = distroCacheKey(opts.distro);
+  if (wslInstalledHelperByDistro.has(cacheKey)) {
+    return wslInstalledHelperByDistro.get(cacheKey) ?? null;
+  }
+
+  const home =
+    opts.home ??
+    resolveWslHome({
+      distro: opts.distro ?? null,
+      spawnSyncFn: opts.spawnSyncFn,
+      env: opts.env,
+      homeFixture: opts.homeFixture,
+    });
+  if (!home) return null;
+
+  const dest = wslInstalledHelperPath(home);
+  const spawnFn = opts.spawnSyncFn ?? spawnSync;
+  /** @type {string[]} */
+  const wslArgs = [];
+  if (opts.distro) wslArgs.push('-d', opts.distro);
+  // Fixed script + env — do not embed paths into bash -lc.
+  wslArgs.push('--', 'bash', '-lc', 'test -x "$MN_SANDBOX_DEST" && printf %s "$MN_SANDBOX_DEST"');
+
+  const result = spawnFn('wsl.exe', wslArgs, {
+    encoding: 'utf8',
+    timeout: 10_000,
+    env: { ...(opts.env ?? process.env), MN_SANDBOX_DEST: dest },
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) return null;
+  const found = String(result.stdout || '').trim();
+  if (found === dest) {
+    wslInstalledHelperByDistro.set(cacheKey, dest);
+    return dest;
+  }
+  return null;
+}
+
+/**
  * Resolve a Landlock helper path usable *inside* WSL.
- * Prefers a host-visible Linux ELF (translated to /mnt/…); optional bare PATH name
- * when `allowBareName` is true (probe verifies it via wsl.exe).
+ * Prefers `~/.local/share/minnow/minnow-sandbox` (auto-install from host ELF) over
+ * `/mnt/…` mounts. `MINNOW_SANDBOX_HELPER` override still wins for Linux paths /
+ * bare names; Windows-path overrides are treated as the host ELF source.
  *
  * @param {NodeJS.ProcessEnv} [env]
- * @param {{ resourcesPath?: string, moduleDir?: string, allowBareName?: boolean, hostHelperPath?: string | null }} [opts]
+ * @param {{
+ *   resourcesPath?: string,
+ *   moduleDir?: string,
+ *   allowBareName?: boolean,
+ *   hostHelperPath?: string | null,
+ *   skipInstall?: boolean,
+ *   distro?: string | null,
+ *   installedPathFixture?: string | null,
+ *   homeFixture?: string,
+ *   spawnSyncFn?: typeof spawnSync,
+ *   copyFn?: Function,
+ * }} [opts]
  * @returns {string | null} WSL-side path or basename, or null
  */
 export function resolveWslLandlockHelper(env = process.env, opts = {}) {
-  // Explicit inject for tests
+  // Explicit inject for unit tests — bypass install / host discovery.
   if (opts.hostHelperPath != null) {
     if (!opts.hostHelperPath) return opts.allowBareName ? HELPER_BASENAME : null;
     return hostHelperPathToWsl(opts.hostHelperPath);
   }
 
-  const override = env.MINNOW_SANDBOX_HELPER?.trim();
+  const override = env.MINNOW_SANDBOX_HELPER?.trim() || '';
+
+  // Linux-side / bare override: use as-is (no copy).
+  if (
+    override &&
+    (override.startsWith('/') || (!override.includes('\\') && !/^[a-zA-Z]:/.test(override)))
+  ) {
+    return override;
+  }
+
+  /** @type {string | null} */
+  let hostResolved = null;
   if (override) {
-    // Already a Linux path or bare name — use as-is for WSL exec.
-    if (override.startsWith('/') || (!override.includes('\\') && !/^[a-zA-Z]:/.test(override))) {
-      // Windows-hosted override that is a POSIX string: still require host file if absolute under /mnt
-      if (override.startsWith('/mnt/')) {
-        // Best-effort: confirm the Windows side of the mount exists when mappable
-        return override;
-      }
-      if (override.startsWith('/')) {
-        return override;
-      }
-      // Bare name on WSL PATH
-      return override;
-    }
     try {
-      if (fs.existsSync(override)) return hostHelperPathToWsl(override);
+      if (fs.existsSync(override)) hostResolved = override;
     } catch {
-      /* ignore */
+      return null;
     }
+    if (!hostResolved) return null;
+  } else {
+    hostResolved = resolveMinnowSandboxHelper(env, opts);
+    if (!hostResolved) {
+      for (const candidate of listMinnowSandboxHelperCandidates(env, opts)) {
+        try {
+          if (candidate && fs.existsSync(candidate)) {
+            hostResolved = candidate;
+            break;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  if (opts.skipInstall) {
+    if (hostResolved) return hostHelperPathToWsl(hostResolved);
+    return opts.allowBareName ? HELPER_BASENAME : null;
+  }
+
+  // Host ELF always reinstalls — skip the WSL `test -x` probe (slow + unused).
+  const installed = hostResolved
+    ? null
+    : opts.installedPathFixture !== undefined
+      ? opts.installedPathFixture || null
+      : probeInstalledWslHelper({ ...opts, env });
+
+  const plan = planWslHelperProvision({
+    envOverride: null, // Linux overrides already returned above
+    hostHelperPath: hostResolved,
+    installedExists: Boolean(installed),
+    installedPath: installed,
+    allowBareName: opts.allowBareName === true,
+  });
+
+  if (plan.action === 'use-installed' || plan.action === 'use-bare') {
+    return plan.wslPath ?? null;
+  }
+
+  if (plan.action === 'install' && plan.hostPath) {
+    const installedResult = installHelperIntoWsl(plan.hostPath, { ...opts, env });
+    if (installedResult.ok) return installedResult.helperPath;
+    // Fail closed: do NOT fall back to /mnt/… (often noexec; would claim applied without running).
     return null;
   }
 
-  // Host-visible candidates (Electron resources / repo build) → /mnt/c/…
-  const hostResolved = resolveMinnowSandboxHelper(env, opts);
-  if (hostResolved) {
-    return hostHelperPathToWsl(hostResolved);
-  }
+  return opts.allowBareName ? HELPER_BASENAME : null;
+}
 
-  for (const candidate of listMinnowSandboxHelperCandidates(env, opts)) {
-    try {
-      if (candidate && fs.existsSync(candidate)) {
-        return hostHelperPathToWsl(candidate);
-      }
-    } catch {
-      /* ignore */
-    }
+/**
+ * Ensure a usable WSL-side helper path (install when needed). Soft-fails with reason.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {object} [opts]
+ * @returns {{ ok: true, helperPath: string } | { ok: false, reason: string, detail: string }}
+ */
+export function ensureWslLandlockHelper(env = process.env, opts = {}) {
+  const pathOrNull = resolveWslLandlockHelper(env, { ...opts, allowBareName: false });
+  if (!pathOrNull) {
+    return {
+      ok: false,
+      reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+      detail: describeSandboxUnavailable(SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING),
+    };
   }
-
-  if (opts.allowBareName) {
-    return HELPER_BASENAME;
+  // Never claim success with bare wsl.exe as the "helper".
+  if (pathOrNull === 'wsl.exe' || pathOrNull === 'wsl') {
+    return {
+      ok: false,
+      reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
+      detail: describeSandboxUnavailable(SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING),
+    };
   }
-  return null;
+  return { ok: true, helperPath: pathOrNull };
 }
 
 /**
@@ -410,7 +760,7 @@ export function composeWslLandlockWrap(spawnTarget, policy, opts = {}) {
     };
   }
 
-  // Prefer a host-visible ELF; fall back to a successful probe's helper (PATH inside WSL).
+  // Prefer a host-visible ELF (auto-install into ~/.local/share/minnow when possible).
   let helperPath = resolveWslLandlockHelper(opts.env ?? process.env, {
     ...opts,
     allowBareName: false,
@@ -436,13 +786,33 @@ export function composeWslLandlockWrap(spawnTarget, policy, opts = {}) {
     };
   }
 
-  // Refuse to claim success if helper path is somehow empty after checks.
+  // Refuse to claim success if helper path is somehow empty / is wsl.exe itself.
   if (helperPath === 'wsl.exe' || helperPath === 'wsl') {
     return {
       ok: false,
       reason: SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING,
       detail: describeSandboxUnavailable(SANDBOX_UNAVAILABLE_REASON.LANDLOCK_HELPER_MISSING),
     };
+  }
+
+  // Live --probe before applied:true (catch noexec / broken install / planted non-helper).
+  // Unit tests that only check argv shape may set skipLiveProbe: true.
+  if (opts.skipLiveProbe !== true) {
+    const live = probeWslLandlock(opts.env ?? process.env, {
+      ...opts,
+      helperPath,
+      useCache: false,
+      allowBareName: false,
+    });
+    if (!live.ok) {
+      return {
+        ok: false,
+        reason: live.reason ?? SANDBOX_UNAVAILABLE_REASON.LANDLOCK_UNAVAILABLE,
+        detail:
+          live.detail ??
+          describeSandboxUnavailable(live.reason ?? SANDBOX_UNAVAILABLE_REASON.LANDLOCK_UNAVAILABLE),
+      };
+    }
   }
 
   const distro = opts.distro ?? wsl.defaultDistro ?? null;
