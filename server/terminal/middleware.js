@@ -7,7 +7,7 @@ import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail, stopActiveRunsForChat } from '../terminal-runner.js';
 import { resolveChatCwd } from '../workspace/chat-cwd.js';
 import { resolvePtySessionCwd } from './session-cwd.js';
-import { listShellProfilesForApi } from './shell-config.js';
+import { listShellProfilesForApi, resolveExecuteShellProfile } from './shell-config.js';
 import {
   createPtySession,
   destroyPtySession,
@@ -131,6 +131,8 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         : [];
       const shell = body?.shell === true;
 
+      const shellProfile = await resolveExecuteShellProfile(base);
+
       const rawTimeout = body?.timeoutMs;
       const timeoutMs =
         typeof rawTimeout === 'number' && isFinite(rawTimeout)
@@ -146,6 +148,7 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         chatId,
         toolCallId,
         timeoutMs,
+        shellProfile,
         allowUnsandboxed: body?.allowUnsandboxed === true,
         worktreeRoot:
           typeof body?.worktreeRoot === 'string' && body.worktreeRoot.trim()

@@ -928,7 +928,7 @@ async function toolExecuteCommand(args) {
       const started = await createBackgroundRun({
         command,
         cwd,
-        shell: process.platform === 'win32' && !usesWsl,
+        shell: false,
         source: 'agent',
         chatId,
         toolCallId,
@@ -1014,7 +1014,7 @@ async function toolExecuteCommand(args) {
     const output = await executeCommandBlocking({
       command,
       cwd,
-      shell: process.platform === 'win32' && !usesWsl,
+      shell: false,
       chatId,
       toolCallId,
       timeoutMs: typeof args?.timeout_ms === 'number' ? args.timeout_ms : undefined,

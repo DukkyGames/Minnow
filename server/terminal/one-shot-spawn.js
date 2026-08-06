@@ -38,6 +38,57 @@ export function resolveUnixLoginShell(platform) {
 }
 
 /**
+ * Parse the script payload after `node -e` / `python -c` in a one-shot string.
+ * @param {string} rest — text after the `-e` / `-c` flag
+ * @returns {string | null}
+ */
+function parseInlineScriptPayload(rest) {
+  const trimmed = rest.trim();
+  if (!trimmed) return null;
+  const quote = trimmed[0];
+  if (quote === '"' || quote === "'") {
+    let out = '';
+    for (let i = 1; i < trimmed.length; i += 1) {
+      const ch = trimmed[i];
+      if (ch === '\\' && i + 1 < trimmed.length) {
+        out += trimmed[i + 1];
+        i += 1;
+        continue;
+      }
+      if (ch === quote) {
+        return out;
+      }
+      out += ch;
+    }
+    return null;
+  }
+  return trimmed;
+}
+
+/**
+ * Rewrite `node -e <script>` / `python -c <script>` one-liners to argv spawn (shell:false).
+ * @param {string} command
+ * @returns {{ command: string, args: string[] } | null}
+ */
+export function tryRewriteInlineInterpreterCommand(command) {
+  if (typeof command !== 'string') return null;
+  const trimmed = command.trim();
+  const node = trimmed.match(/^node(?:\.exe)?\s+-e\s+([\s\S]+)$/i);
+  if (node) {
+    const script = parseInlineScriptPayload(node[1]);
+    if (script == null) return null;
+    return { command: 'node', args: ['-e', script] };
+  }
+  const python = trimmed.match(/^(py|python3?)\s+-c\s+([\s\S]+)$/i);
+  if (python) {
+    const script = parseInlineScriptPayload(python[2]);
+    if (script == null) return null;
+    return { command: python[1].toLowerCase(), args: ['-c', script] };
+  }
+  return null;
+}
+
+/**
  * Map a command + args pair to the executable Node should spawn.
  * One-shot strings (no argv) run through the platform shell so pipes, redirects,
  * and `||` behave like an interactive terminal.
@@ -63,6 +114,17 @@ export function resolveOneShotSpawn({
   const winOneShot = oneShot && platform === 'win32';
   const unixOneShot = oneShot && platform !== 'win32';
   const { runtime, distro } = describeShellProfileRuntime(shellProfile);
+
+  if (oneShot) {
+    const rewritten = tryRewriteInlineInterpreterCommand(command);
+    if (rewritten) {
+      return {
+        command: rewritten.command,
+        args: rewritten.args,
+        shell: false,
+      };
+    }
+  }
 
   if (runtime === 'wsl' && platform === 'win32') {
     return buildWslOneShotSpawn({

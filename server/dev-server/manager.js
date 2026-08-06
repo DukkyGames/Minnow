@@ -44,6 +44,7 @@ import { probePort } from './ports.js';
  * @property {number} [port]
  * @property {string} [worktreeRoot]
  * @property {string} [error]
+ * @property {string} [lastError]
  * @property {number} [startedAt]
  * @property {boolean} [orphaned] child survived the host process that spawned it
  */
@@ -136,6 +137,7 @@ async function saveState(row) {
       port: r.port ?? null,
       worktreeRoot: r.worktreeRoot ?? null,
       error: r.error ?? null,
+      lastError: r.lastError ?? null,
       startedAt: r.startedAt ?? null,
       orphaned: r.orphaned ?? false,
     };
@@ -174,12 +176,15 @@ async function getOrInitRow(root, serverId = PRIMARY_DEV_SERVER_ID) {
     worktreeRoot:
       typeof persisted?.worktreeRoot === 'string' ? persisted.worktreeRoot : undefined,
     error: typeof persisted?.error === 'string' ? persisted.error : undefined,
+    lastError: typeof persisted?.lastError === 'string' ? persisted.lastError : undefined,
     startedAt: typeof persisted?.startedAt === 'number' ? persisted.startedAt : undefined,
     orphaned: persisted?.orphaned === true,
   };
 
   if (persisted?.status === 'running' || persisted?.status === 'starting') {
     row.status = /** @type {DevServerStatus} */ (persisted.status);
+  } else if (persisted?.status === 'error') {
+    row.status = 'error';
   }
 
   wsMap.set(serverId, row);
@@ -193,6 +198,11 @@ async function getOrInitRow(root, serverId = PRIMARY_DEV_SERVER_ID) {
 async function reconcileRow(row) {
   if (!row.runId) {
     if (row.status === 'running' || row.status === 'starting') {
+      row.status = 'stopped';
+      row.error = undefined;
+      await saveState(row);
+    } else if (row.status === 'error') {
+      if (row.error) row.lastError = row.error;
       row.status = 'stopped';
       row.error = undefined;
       await saveState(row);
@@ -393,14 +403,26 @@ export async function getDevServerStatusById(
   const runRoot = row.worktreeRoot ?? def?.worktreeRoot ?? root;
   const effective = effectiveFromDefinition(def, startup.guide, settings, runRoot);
 
-  const healthUrl = row.healthUrl ?? effective?.healthUrl ?? def?.healthUrl ?? startup.guide?.healthUrl;
+  const live = row.status === 'running' || row.status === 'starting';
+  const healthUrl = live
+    ? (row.healthUrl ?? effective?.healthUrl ?? def?.healthUrl ?? startup.guide?.healthUrl)
+    : (effective?.healthUrl ?? def?.healthUrl ?? startup.guide?.healthUrl ?? row.healthUrl);
   const healthOk = await reconcileHealth(row, healthUrl);
 
   const hasGuide = Boolean(def?.command || (serverId === PRIMARY_DEV_SERVER_ID && startup.guide));
+  const displayPort = live
+    ? (row.port ?? effective?.port ?? def?.port ?? startup.guide?.port ?? null)
+    : (effective?.port ?? def?.port ?? startup.guide?.port ?? row.port ?? null);
   const portInUse =
-    (row.port ?? effective?.port) != null
-      ? (await probePort(row.port ?? effective?.port ?? 0)) === 'in-use'
-      : false;
+    displayPort != null ? (await probePort(displayPort)) === 'in-use' : false;
+
+  const displayCommand = live
+    ? (row.command ?? effective?.command ?? def?.command ?? startup.guide?.command ?? null)
+    : (effective?.command ?? def?.command ?? startup.guide?.command ?? row.command ?? null);
+
+  const listError = live
+    ? (row.error ?? startup.parseError ?? null)
+    : (startup.parseError ?? null);
 
   return {
     id: serverId,
@@ -415,13 +437,14 @@ export async function getDevServerStatusById(
     status: hasGuide ? row.status : 'no_guide',
     runId: row.runId ?? null,
     pid: row.pid ?? null,
-    port: row.port ?? effective?.port ?? def?.port ?? startup.guide?.port ?? null,
+    port: displayPort,
     network: effective?.network ?? def?.network ?? settings.network ?? null,
     healthUrl: healthUrl ?? null,
     healthOk,
     portInUse,
-    error: row.error ?? startup.parseError ?? null,
-    command: row.command ?? effective?.command ?? def?.command ?? startup.guide?.command ?? null,
+    error: listError,
+    lastError: row.lastError ?? null,
+    command: displayCommand,
     startedAt: row.startedAt ?? null,
   };
 }
@@ -566,7 +589,7 @@ export async function startDevServerById(
         return createBackgroundRun({
           command: effective.command,
           cwd,
-          shell: process.platform === 'win32',
+          shell: false,
           source: 'agent',
           // Dev servers must bind ports / serve — excluded from agent shell sandbox (MIN-553).
           sandbox: false,
@@ -749,16 +772,11 @@ export async function toolStartBackgroundCommand(args) {
     const shellProfile = await (
       await import('../terminal/shell-config.js')
     ).resolveExecuteShellProfile(getWorkspaceRoot());
-    const usesWsl =
-      process.platform === 'win32' &&
-      (await import('../terminal/shell-profiles.js')).describeShellProfileRuntime(
-        shellProfile,
-      ).runtime === 'wsl';
 
     const started = await createBackgroundRun({
       command,
       cwd,
-      shell: process.platform === 'win32' && !usesWsl,
+      shell: false,
       source: 'agent',
       chatId,
       // Dev servers must bind ports / serve — excluded from agent shell sandbox (MIN-553).

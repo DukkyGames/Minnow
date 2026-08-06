@@ -664,12 +664,9 @@ function mapCodeToolToCommand(
     if (typeof command !== 'string' || !command.trim()) {
       return null;
     }
-    const isWin =
-      typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent);
     return {
       command: command.trim(),
       argv: [],
-      shell: isWin,
       label: command.trim(),
     };
   }

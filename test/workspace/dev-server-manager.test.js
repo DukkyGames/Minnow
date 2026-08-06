@@ -179,4 +179,45 @@ describe('dev-server manager tools', () => {
     assert.ok(row.servers && typeof row.servers === 'object');
     assert.ok(row.servers.primary);
   });
+
+  test('persisted error with no runId lists as stopped; command from startup.md when idle', async () => {
+    await clearPersistedDevServerState();
+    const guideCmd = LONG_RUNNING_CMD;
+    const staleCmd = 'npm run stale-dev-server';
+    await fs.writeFile(
+      path.join(workspaceDir, 'startup.md'),
+      `---\ncommand: ${guideCmd}\ncwd: .\n---\n`,
+      'utf8',
+    );
+    const key = normalizeWorkspacePathKey(path.resolve(workspaceDir));
+    const meta = (await readConfigJson('config.json')) ?? {};
+    const workspace =
+      meta.workspace && typeof meta.workspace === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (meta.workspace) }
+        : {};
+    workspace.devServerByPath = {
+      [key]: {
+        servers: {
+          primary: {
+            status: 'error',
+            runId: null,
+            pid: null,
+            command: staleCmd,
+            healthUrl: null,
+            port: 9999,
+            error: 'Health check timed out',
+            startedAt: null,
+          },
+        },
+      },
+    };
+    await writeConfigJson('config.json', mergeConfigMeta(meta, { workspace }));
+    resetDevServerManagerForTests();
+
+    const status = await getDevServerStatusById(workspaceDir, PRIMARY_DEV_SERVER_ID);
+    assert.equal(status.status, 'stopped');
+    assert.equal(status.command, guideCmd);
+    assert.equal(status.error, null);
+    assert.equal(status.lastError, 'Health check timed out');
+  });
 });
