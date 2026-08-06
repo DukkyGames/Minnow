@@ -4,7 +4,7 @@
 
 import { FAKE_PROVIDER_ID } from '../orchestrate/board-testing/fake-model-ids.js';
 import { getFakeModelStatus } from '../orchestrate/board-testing/fake-model-host.js';
-import { getProviderRuntime } from './store.js';
+import { getProviderRuntime, MLX_LM_LOCAL_ID } from './store.js';
 import { normalizeModelsResponse, enrichLmStudioModelsWithV1Reasoning } from './paths.js';
 import {
   enrichOpenCodeModelsFromModelsDev,
@@ -13,6 +13,7 @@ import {
 import { normalizeOpenCodeZenRelativePath } from './opencode-zen.js';
 import { validateProviderId } from './validate.js';
 import { resolveModelApi } from '../generations/resolve-model-api.js';
+import { enrichMlxLmModelsWithCachedContext } from '../models/mlx-context-length.js';
 
 const MODELS_TIMEOUT_MS = 15_000;
 const MODEL_LOAD_TIMEOUT_MS = 120_000;
@@ -57,6 +58,9 @@ export async function proxyModels(id) {
     }
     if (isOpenCodeProviderBaseUrl(profile.baseUrl)) {
       normalized = await enrichOpenCodeModelsFromModelsDev(normalized);
+    }
+    if (id === MLX_LM_LOCAL_ID) {
+      normalized = await enrichMlxLmModelsWithCachedContext(normalized);
     }
     normalized = {
       data: normalized.data.map((row) => ({
