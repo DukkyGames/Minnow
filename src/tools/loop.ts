@@ -1385,7 +1385,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.providerId = sendProviderId;
 
   // My Models: keep minnow-library + gguf:/mlx: for ensure; remap to llama/mlx only after a live serve.
-  const cached = await fetchCachedModels();
+  // Soft-fail cached/serves so resume and offline turns still run when the models API is down.
+  const cached = await fetchCachedModels().catch(() => []);
   const library = await loadableLibraryFromCached(cached);
   const serves = await listModelServes().catch(() => []);
   const libraryModelId = resolveLibraryModelIdForChatBinding(
@@ -1783,7 +1784,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         await ensureChatModelLoadedForTurn(ensureProviderId, ensureModelId, chatSignal);
 
         if (libraryEnsure) {
-          const cached = await fetchCachedModels();
+          const cached = await fetchCachedModels().catch(() => []);
           const library = await loadableLibraryFromCached(cached);
           const serves = await listModelServes().catch(() => []);
           const served = resolveLibrarySendBinding(libraryEnsure.modelId, library, serves);
