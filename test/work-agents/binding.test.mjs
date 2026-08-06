@@ -168,4 +168,23 @@ describe('resolveWorkAgentBinding', () => {
     assert.equal(binding.providerId, 'minnow-library');
     assert.equal(binding.modelId, 'gguf:org/repo:weights.gguf');
   });
+
+  test('minnow-library binding works when llama-cpp-local is disabled (pre-serve seed)', async () => {
+    const providers = MOCK_PROVIDERS.map((p) =>
+      p.id === 'llama-cpp-local' ? { ...p, enabled: false } : p,
+    );
+    const chat = {
+      ...CHAT_BASE,
+      providerId: 'minnow-library',
+      modelId: 'gguf:org/repo:weights.gguf',
+    };
+    const binding = await resolveWorkAgentBinding(
+      null,
+      chat,
+      { providerId: 'lm-studio-local', modelId: 'fallback-model' },
+      { providers },
+    );
+    assert.equal(binding.providerId, 'minnow-library');
+    assert.equal(binding.modelId, 'gguf:org/repo:weights.gguf');
+  });
 });
