@@ -1414,6 +1414,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     } else {
       // Upstream provider for getActiveProvider / caps; completions remap after ensure.
       sendProviderId = resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, libraryModelId);
+      const libRow = library.find((m) => m.id === libraryModelId);
+      if (libRow?.format === 'MLX' && libRow.path?.trim() && sendModelId.trim().startsWith('mlx:')) {
+        sendModelId = libRow.path.trim();
+      }
     }
   } else {
     pendingModelLoad = false;

@@ -233,4 +233,34 @@ describe('model-select-library', () => {
       expected,
     );
   });
+
+  test('resolveLibrarySendBinding for MLX uses serve directory path for completions', () => {
+    const mlxPath = '/Users/me/.minnow/models/artifacts/mlx-community--Qwen-8B-4bit';
+    const model = sampleLibraryModel({
+      id: 'mlx:mlx-community/Qwen-8B-4bit',
+      name: 'Qwen-8B-4bit',
+      repoId: 'mlx-community/Qwen-8B-4bit',
+      format: 'MLX',
+      quant: 'mlx-4bit',
+      path: mlxPath,
+      fileName: null,
+    });
+    const library = [model];
+    const serve = sampleServe({
+      runtime: 'mlx-lm',
+      modelPath: mlxPath,
+      modelLabel: mlxPath,
+      providerId: LIBRARY_MODEL_PROVIDER_ID,
+      port: 8087,
+      baseUrl: 'http://127.0.0.1:8087',
+    });
+    const expected = {
+      providerId: MLX_LM_LOCAL_PROVIDER_ID,
+      modelId: mlxPath,
+    };
+    assert.deepEqual(resolveServedBindingForLibraryId(model.id, library, [serve]), expected);
+    assert.deepEqual(resolveLibrarySendBinding(model.id, library, [serve]), expected);
+    // Must not send synthetic picker ids upstream.
+    assert.notEqual(expected.modelId, model.id);
+  });
 });

@@ -133,10 +133,22 @@ export function resolveServedBindingForLibraryId(
   if (!serve || serve.status !== 'running') return null;
 
   const model = library.find((m) => m.id === libraryId.trim());
+  const upstreamId = upstreamProviderForLibraryModel(model);
+
+  // mlx_lm.server keys requests by absolute snapshot directory, not picker ids or
+  // short labels from /v1/models.
+  if (upstreamId === MLX_LM_LOCAL_PROVIDER_ID || serve.runtime === 'mlx-lm') {
+    const mlxModelId =
+      serve.modelPath?.trim() ||
+      model?.path?.trim() ||
+      serve.modelLabel?.trim() ||
+      '';
+    if (!mlxModelId) return null;
+    return { providerId: MLX_LM_LOCAL_PROVIDER_ID, modelId: mlxModelId };
+  }
+
   const label = serve.modelLabel?.trim() || model?.name?.trim() || '';
   if (!label) return null;
-
-  const upstreamId = upstreamProviderForLibraryModel(model);
 
   if (upstreamId === LLAMA_CPP_LOCAL_PROVIDER_ID) {
     const llama =
@@ -147,17 +159,6 @@ export function resolveServedBindingForLibraryId(
       );
       if (hit) {
         return { providerId: LLAMA_CPP_LOCAL_PROVIDER_ID, modelId: hit.id };
-      }
-    }
-  } else {
-    const mlx =
-      providerModels?.find((r) => r.provider.id === MLX_LM_LOCAL_PROVIDER_ID) ?? null;
-    if (mlx) {
-      const hit = mlx.models.find(
-        (m) => m.id === label || m.id.toLowerCase() === label.toLowerCase(),
-      );
-      if (hit) {
-        return { providerId: MLX_LM_LOCAL_PROVIDER_ID, modelId: hit.id };
       }
     }
   }
