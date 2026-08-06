@@ -207,7 +207,7 @@ export function resolveLibrarySendBinding(
   return resolveServedBindingForLibraryId(libraryId, library, serves, providerModels);
 }
 
-function normalizeBindingToken(value: string | undefined): string {
+function normalizeBindingToken(value: string | null | undefined): string {
   return value?.trim().toLowerCase() ?? '';
 }
 
