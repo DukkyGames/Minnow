@@ -2,16 +2,26 @@
  * run_impeccable harness vs CLI routing.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { listAcceptedRunImpeccableCommands } from '../../server/impeccable/command-routing.js';
-import { toolRunImpeccable } from '../../server/impeccable/run-impeccable.js';
+import {
+  resolveBundledImpeccableCliPath,
+  toolRunImpeccable,
+} from '../../server/impeccable/run-impeccable.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 describe('toolRunImpeccable', () => {
+  it('resolveBundledImpeccableCliPath uses appRoot node_modules', () => {
+    const cliPath = resolveBundledImpeccableCliPath(PROJECT_ROOT);
+    assert.match(cliPath, /node_modules[\\/]impeccable[\\/]cli[\\/]bin[\\/]cli\.js$/);
+    assert.ok(fs.existsSync(cliPath), 'bundled impeccable CLI should exist in dev install');
+  });
+
   it('accepts only detect and live for spawnable commands', () => {
     assert.deepEqual(listAcceptedRunImpeccableCommands(), ['detect', 'live']);
   });

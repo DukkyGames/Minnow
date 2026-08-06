@@ -250,6 +250,8 @@ Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts). Config UI: Settings ? 
 
 `mcp__*` and `plugin__*` tools bypass mode matrix; gated by Settings permissions only.
 
+**Tool audit fixes (2026-08):** Session tool result cache ([`src/tools/result-cache.ts`](../src/tools/result-cache.ts)) invalidates `git_status`, `git_diff`, and `git_log` when file-mutating tools succeed (`save_file`, `delete_path`, `move_file`, `copy_file`, etc.) so porcelain status stays fresh without a manual cache bypass. Windows one-shot `execute_command` uses [`resolveOneShotSpawn`](../server/terminal/one-shot-spawn.js) without redundant `shell: true` and rewrites `node -e` / `python -c` to argv spawns when possible; prefer `run_javascript` for complex inline Node on Windows. Browser allowlist checks (`GET /api/browser/allowlist/check`) require an authenticated same-origin API (`installFetchAuth`); client errors distinguish auth (401/403), network, invalid URL (400), and other HTTP failures ([`src/config/browser-meta.ts`](../src/config/browser-meta.ts), [`src/tools/browser-navigation-gate.ts`](../src/tools/browser-navigation-gate.ts)). `browser_screenshot` preflights the preview guest and returns friendly copy when capture is empty instead of leaking server validation errors. Optional Brain git `post-commit` hook ([`scripts/brain-git-post-commit.mjs`](../scripts/brain-git-post-commit.mjs)) resolves `~/.minnow/run/dev-host.json` + session token, treats connection/auth failure as best-effort (exit 0; logs when `MINNOW_DEBUG=1`). `run_impeccable detect` invokes the bundled `node_modules/impeccable/cli/bin/cli.js` from the Minnow app root ([`server/impeccable/run-impeccable.js`](../server/impeccable/run-impeccable.js)), not `npx` from the user workspace.
+
 ---
 
 ## Prompts and skills
@@ -302,7 +304,7 @@ The in-app reader is a responsive overlay at `#/wiki/<encoded-documentation-path
 
 **Injection transcript rows** (UI-only): after each user send, when Brain retrieve, code-map, or context-documents injection produced a **non-empty** raw block for that compose pass, the chat transcript gets **user-turn-aligned** **tool-call-style** disclosure rows (glyph � action � line-count outcome � chevron), same chrome as [`tool-call-msg`](../src/styles/messages.css) ([`src/styles/context-notice.css`](../src/styles/context-notice.css), [`src/ui/messages.ts`](../src/ui/messages.ts)). They render immediately after the user bubble (including in the tool loop, inserted before the in-flight streaming assistant row). Expand shows the retrieved payload (`memoryBlock` / `codeMapBlock` / context document body), not the full prompt markdown templates. Rows use `role: 'injection'` ([`src/chat/context/injection-notice.ts`](../src/chat/context/injection-notice.ts)); they are omitted from API history, token estimate, synthesis, compress, and orchestrate failure classification (same rule as `role: 'context'`). Wired from [`resolveOutboundSystemMessages`](src/chat/prompts/compose-context.ts) in the tool loop and plain streaming chat path. Send path passes `firstUserSend` (captured before `history.push`) so injection matches the first message even when compose runs after the user row exists.
 
-**Brain** (`~/.minnow/brain/`): nested markdown pages, `catalog.json` cache, hybrid keyword + vector retrieve, code index per workspace (`code/<workspace-key>.db`), synthesis proposals. **Web RAG** (`rag_web_content`) fetches up to **~24KB** per page and returns up to **16** query-ranked sentences/paragraphs.
+**Brain** (`~/.minnow/brain/`): nested markdown pages, `catalog.json` cache, hybrid keyword + vector retrieve, code index per workspace (`code/<workspace-key>.db`), synthesis proposals. Optional user-installed git `post-commit` hook ([`scripts/brain-git-post-commit.mjs`](../scripts/brain-git-post-commit.mjs)) POSTs changed paths to `/api/brain/code/cascade`; it is best-effort when Minnow is down or unauthenticated (does not fail commits). **Web RAG** (`rag_web_content`) fetches up to **~24KB** per page and returns up to **16** query-ranked sentences/paragraphs.
 
 | API prefix | Purpose |
 |------------|---------|
@@ -515,7 +517,7 @@ Multi-provider registry: `~/.minnow/providers/`. UI: Models app ? Providers. Cha
 | Encrypted secrets | [`server/security/secret-box.js`](../server/security/secret-box.js) |
 | Untrusted content fencing | [`src/lib/untrusted.mjs`](../src/lib/untrusted.mjs), [`server/security/untrusted.js`](../server/security/untrusted.js) |
 | Webhook/CalDAV SSRF | [`server/webhooks/ssrf.js`](../server/webhooks/ssrf.js), calendar CalDAV guards |
-| Browser origin allowlist | `config.json` ? `browser.allowedOriginPatterns`, `/api/browser/allowlist/*` |
+| Browser origin allowlist | `config.json` → `browser.allowedOriginPatterns`, `/api/browser/allowlist/*` (invalid URLs → 400; SPA checks need session token) |
 | Host kill / port bind guards | Agent shell commands cannot kill Minnow or bind its port |
 
 ---

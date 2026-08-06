@@ -243,17 +243,17 @@ After implementation, update `documentation/context.md`:
 
 ## Todos
 
-- [ ] **P0-1** Extend `result-cache.ts` file mutations to invalidate `git_status` / `git_diff` / `git_log`; add tests
-- [ ] **P0-2a** Remove redundant Windows `shell: true` on one-shot spawn call sites
-- [ ] **P0-2b** Add `node -e` argv rewrite or document + Windows quote integration test
-- [ ] **P0-2c** Pass `shellProfile` in terminal middleware for streaming `execute_command`
-- [ ] **P1-3a** Structured allowlist errors in `browser-meta.ts` + gate
-- [ ] **P1-3b** Screenshot preflight and friendly empty-capture message
-- [ ] **P1-4** Fix `toolBrainIngestSource` to use `result.pages` + test
-- [ ] **P1-7a** Idle dev-server `error` → `stopped` reconciliation
-- [ ] **P1-7b** List API prefers effective guide when not running
-- [ ] **P2-6** Brain post-commit hook: token + dev-host + best-effort exit
-- [ ] **P2-8** Bundled impeccable CLI from `appRoot` instead of `npx`
-- [ ] **P2-10** Friendly ENOENT in `getLspDiagnostics`
-- [ ] **P2-11** MCP fence label via `parseNamespacedName`
-- [ ] **Docs** Refresh `documentation/context.md` for cache, shell, browser, hook behavior
+- [x] **P0-1** Extend `result-cache.ts` file mutations to invalidate `git_status` / `git_diff` / `git_log`; add tests
+- [x] **P0-2a** Remove redundant Windows `shell: true` on one-shot spawn call sites
+- [x] **P0-2b** Add `node -e` argv rewrite or document + Windows quote integration test
+- [x] **P0-2c** Pass `shellProfile` in terminal middleware for streaming `execute_command`
+- [x] **P1-3a** Structured allowlist errors in `browser-meta.ts` + gate
+- [x] **P1-3b** Screenshot preflight and friendly empty-capture message
+- [x] **P1-4** Fix `toolBrainIngestSource` to use `result.pages` + test
+- [x] **P1-7a** Idle dev-server `error` → `stopped` reconciliation
+- [x] **P1-7b** List API prefers effective guide when not running
+- [x] **P2-6** Brain post-commit hook: token + dev-host + best-effort exit
+- [x] **P2-8** Bundled impeccable CLI from `appRoot` instead of `npx`
+- [x] **P2-10** Friendly ENOENT in `getLspDiagnostics`
+- [x] **P2-11** MCP fence label via `parseNamespacedName`
+- [x] **Docs** Refresh `documentation/context.md` for cache, shell, browser, hook behavior

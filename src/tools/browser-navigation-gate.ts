@@ -7,6 +7,7 @@ import {
   approveBrowserNavigation,
   checkBrowserNavigationAllowed,
   loadBrowserMeta,
+  type BrowserAllowlistCheckResult,
 } from '../config/browser-meta';
 import { isNavigationAllowed } from './browser-allowlist-match';
 import { enqueueAskQuestion } from './ask-question-queue';
@@ -21,6 +22,32 @@ import type { ToolExecutionResult } from '../types';
 import { blockAfkInteractionAttempt } from './permission-gate';
 
 export const ALLOWLIST_QUESTION_ID = 'browser_allow_origin';
+
+/** Map allowlist API failures to actionable tool errors (auth vs network vs bad URL). */
+export function formatBrowserAllowlistCheckFailure(
+  check: Extract<BrowserAllowlistCheckResult, { success: false }>,
+): string {
+  switch (check.reason) {
+    case 'auth':
+      return (
+        'Error: Browser allowlist check was rejected (missing or invalid session). ' +
+        'Restart the Minnow app so API requests include the session token, then retry browser_navigate.'
+      );
+    case 'network':
+      return (
+        'Error: Could not reach the Minnow tool server for browser allowlist checks. ' +
+        'Ensure Minnow is running locally, then retry browser_navigate.'
+      );
+    case 'invalid':
+      return 'Error: Invalid URL for browser navigation. Use a full http(s) URL.';
+    case 'http':
+      return check.status
+        ? `Error: Browser allowlist check failed (HTTP ${check.status}). Retry after Minnow finishes starting.`
+        : 'Error: Browser allowlist check failed. Retry after Minnow finishes starting.';
+    default:
+      return 'Error: Browser allowlist check failed.';
+  }
+}
 
 /** Option ids must match src/chat/prompts/tool-usage/browser-allowlist.md */
 const DECISION_ONCE = 'once';
@@ -138,11 +165,8 @@ export async function maybeBlockBrowserNavigation(
   }
 
   const check = await checkBrowserNavigationAllowed(url);
-  if (!check) {
-    return {
-      content:
-        'Error: Could not verify browser allowlist (is Minnow running locally?). Retry browser_navigate after the app is running.',
-    };
+  if (!check.success) {
+    return { content: formatBrowserAllowlistCheckFailure(check) };
   }
   if (check.allowed) {
     return null;
@@ -220,7 +244,10 @@ export async function maybeBlockBrowserNavigation(
   }
 
   const recheck = await checkBrowserNavigationAllowed(url);
-  if (!recheck?.allowed) {
+  if (!recheck.success) {
+    return { content: formatBrowserAllowlistCheckFailure(recheck) };
+  }
+  if (!recheck.allowed) {
     return {
       content: 'Error: Could not update browser allowlist (is Minnow running locally?)',
     };
@@ -237,8 +264,11 @@ export async function applyBrowserOriginDecision(
   decision: 'once' | 'persist',
 ): Promise<ToolExecutionResult | null> {
   const check = await checkBrowserNavigationAllowed(url);
-  if (check?.allowed) {
+  if (check.success && check.allowed) {
     return null;
+  }
+  if (!check.success) {
+    return { content: formatBrowserAllowlistCheckFailure(check) };
   }
 
   const ok = await approveBrowserNavigation(url, decision);

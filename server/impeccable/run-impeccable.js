@@ -19,6 +19,14 @@ const IMPECCABLE_TIMEOUT_MS = 60_000;
 const MAX_STDOUT_CHARS = 32_000;
 
 /**
+ * @param {string} appRoot Minnow install root (bundled impeccable package)
+ * @returns {string}
+ */
+export function resolveBundledImpeccableCliPath(appRoot) {
+  return path.join(appRoot, 'node_modules', 'impeccable', 'cli', 'bin', 'cli.js');
+}
+
+/**
  * @param {object} args
  * @param {string} args.command
  * @param {string} [args.target]
@@ -50,7 +58,7 @@ export function toolRunImpeccable(args, appRoot, projectRoot) {
   const target = typeof args?.target === 'string' ? args.target.trim() : '';
 
   if (isCliCommand(command)) {
-    return runNpxImpeccable(command, target, projectRoot);
+    return runBundledImpeccableCli(command, target, appRoot, projectRoot);
   }
 
   if (isScriptCommand(command)) {
@@ -65,23 +73,30 @@ export function toolRunImpeccable(args, appRoot, projectRoot) {
 /**
  * @param {string} command
  * @param {string} target
+ * @param {string} appRoot
  * @param {string} projectRoot
  */
-function runNpxImpeccable(command, target, projectRoot) {
-  const cliArgs = [command];
+function runBundledImpeccableCli(command, target, appRoot, projectRoot) {
+  const cliPath = resolveBundledImpeccableCliPath(appRoot);
+  if (!fs.existsSync(cliPath)) {
+    return Promise.resolve({
+      result: `Error: missing Impeccable CLI at ${cliPath}. Re-run npm install in the Minnow app directory.`,
+    });
+  }
+
+  const cliArgs = [cliPath, command];
   if (target) cliArgs.push(target);
 
   return spawnWithCapture(
-    process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['impeccable', ...cliArgs],
+    process.execPath,
+    cliArgs,
     {
       cwd: projectRoot,
       env: { ...process.env, IMPECCABLE_CONTEXT_DIR: projectRoot },
-      shell: process.platform === 'win32',
     },
     command,
     projectRoot,
-    `npx impeccable`,
+    'impeccable cli',
   );
 }
 
