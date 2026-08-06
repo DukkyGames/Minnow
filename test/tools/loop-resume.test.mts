@@ -158,6 +158,13 @@ describe('runChatTurn boot resume tool loop (MIN-187)', () => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
+      // runChatTurn remaps My Models via cached/serves before the resume subscribe.
+      if (url.includes('/api/models/cached')) {
+        return Response.json({ models: [] });
+      }
+      if (url.includes('/api/models/serve')) {
+        return Response.json({ serves: [] });
+      }
       if (url.includes('/api/memory/')) {
         return Response.json({ enabled: false });
       }

@@ -4,7 +4,10 @@
 
 import { listProviders } from '../../providers/store';
 import type { ProviderPublic } from '../../providers/types';
-import { resolveUpstreamProviderId } from '../../models/model-select-library';
+import {
+  isLibraryModelBinding,
+  resolveUpstreamProviderId,
+} from '../../models/model-select-library';
 import type { Chat } from '../../types';
 import type { WorkAgentBinding } from '../work-agent-types';
 import { WorkAgentConfigError } from '../work-agent-types';
@@ -74,6 +77,16 @@ export async function resolveUiDesignerBinding(
 
   if ('error' in resolved) {
     throw new WorkAgentConfigError(resolved.error);
+  }
+
+  if (isLibraryModelBinding(resolved.providerId, resolved.modelId)) {
+    return {
+      agentId: 'ui-designer',
+      providerId: resolved.providerId,
+      modelId: resolved.modelId,
+      baseUrl: '',
+      headers: {},
+    };
   }
 
   const providers =

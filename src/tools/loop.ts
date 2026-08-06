@@ -79,10 +79,11 @@ import {
 } from '../api/ensure-chat-model-loaded';
 import { fetchCachedModels, listModelServes } from '../models/api-client';
 import {
-  isLibraryModelBinding,
-  libraryModelNeedsLoad,
+  LIBRARY_MODEL_PROVIDER_ID,
+  libraryBindingNeedsServeLoad,
   loadableLibraryFromCached,
-  resolveServedBindingForLibraryId,
+  resolveLibraryModelIdForChatBinding,
+  resolveLibrarySendBinding,
   resolveUpstreamProviderId,
 } from '../models/model-select-library';
 import {
@@ -1383,24 +1384,50 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = sendModelId;
   chat.providerId = sendProviderId;
 
-  if (isLibraryModelBinding(sendProviderId, sendModelId)) {
-    const cached = await fetchCachedModels();
-    const library = await loadableLibraryFromCached(cached);
-    const serves = await listModelServes().catch(() => []);
-    const served = resolveServedBindingForLibraryId(sendModelId, library, serves);
+  // My Models: keep minnow-library + gguf:/mlx: for ensure; remap to llama/mlx only after a live serve.
+  // Soft-fail cached/serves so resume and offline turns still run when the models API is down.
+  const cached = await fetchCachedModels().catch(() => []);
+  const library = await loadableLibraryFromCached(cached);
+  const serves = await listModelServes().catch(() => []);
+  const libraryModelId = resolveLibraryModelIdForChatBinding(
+    chat.providerId,
+    chat.modelId,
+    library,
+  );
+  const libraryChatTurn = libraryModelId != null;
+  /** Library ids passed to ensure — must not be remapped before load. */
+  let libraryEnsure: { providerId: string; modelId: string } | null = null;
+  let pendingModelLoad: boolean;
+
+  if (libraryChatTurn) {
+    libraryEnsure = { providerId: LIBRARY_MODEL_PROVIDER_ID, modelId: libraryModelId };
+    // Live serve status — modelCache alone is stale after eject.
+    pendingModelLoad = libraryBindingNeedsServeLoad(
+      libraryModelId,
+      library,
+      serves,
+      modelCache,
+    );
+    const served = resolveLibrarySendBinding(libraryModelId, library, serves);
     if (served) {
       sendProviderId = served.providerId;
       sendModelId = served.modelId;
     } else {
-      sendProviderId = resolveUpstreamProviderId(sendProviderId, sendModelId);
+      // Upstream provider for getActiveProvider / caps; completions remap after ensure.
+      sendProviderId = resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, libraryModelId);
+      const libRow = library.find((m) => m.id === libraryModelId);
+      if (libRow?.format === 'MLX' && libRow.path?.trim() && sendModelId.trim().startsWith('mlx:')) {
+        sendModelId = libRow.path.trim();
+      }
     }
+  } else {
+    pendingModelLoad = false;
   }
 
   const sendProvider = await getActiveProvider(sendProviderId);
-  const libraryBinding = isLibraryModelBinding(chat.providerId, chat.modelId);
-  const pendingModelLoad = libraryBinding
-    ? libraryModelNeedsLoad(chat.modelId, modelCache)
-    : chatTurnNeedsModelLoad(sendProvider, sendModelId);
+  if (!libraryChatTurn) {
+    pendingModelLoad = chatTurnNeedsModelLoad(sendProvider, sendModelId);
+  }
   const sendCaps = resolveSendCapabilities(sendProviderId, sendModelId, sendProvider.apiKind);
   const turnReasoningEffort =
     replaySnapshot?.reasoningEffort ??
@@ -1697,9 +1724,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let synthesisToolCount = 0;
 
   try {
-    const provider = await getActiveProvider(sendProviderId);
+    let provider = await getActiveProvider(sendProviderId);
     await loadToolCallsMeta();
-    const providerCapabilities = await readProviderCapabilities(provider.id);
+    let providerCapabilities = await readProviderCapabilities(provider.id);
     const toolCallsMeta = getToolCallsMetaSync();
     const constrainedUserEnabled = isConstrainedDecodingEnabledForProvider(
       provider,
@@ -1751,7 +1778,29 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       if (!modelLoadDone) {
-        await ensureChatModelLoadedForTurn(sendProviderId, sendModelId, chatSignal);
+        // Ensure with library ids so loadLibraryModelFromPicker runs (not remapped llama/mlx).
+        const ensureProviderId = libraryEnsure?.providerId ?? sendProviderId;
+        const ensureModelId = libraryEnsure?.modelId ?? sendModelId;
+        await ensureChatModelLoadedForTurn(ensureProviderId, ensureModelId, chatSignal);
+
+        if (libraryEnsure) {
+          const cached = await fetchCachedModels().catch(() => []);
+          const library = await loadableLibraryFromCached(cached);
+          const serves = await listModelServes().catch(() => []);
+          const served = resolveLibrarySendBinding(libraryEnsure.modelId, library, serves);
+          if (!served) {
+            throw new Error(
+              'Failed to load My Models model — no running serve after load',
+            );
+          }
+          sendProviderId = served.providerId;
+          sendModelId = served.modelId;
+        }
+
+        // Provider row may not exist until serve (e.g. mlx-lm-local); re-resolve after load.
+        provider = await getActiveProvider(sendProviderId);
+        providerCapabilities = await readProviderCapabilities(provider.id);
+
         modelLoadDone = true;
         patchMainTurnActivity(chat.id, { phase: 'generating' });
         if (isStreamDomVisible(chat.id)) {
