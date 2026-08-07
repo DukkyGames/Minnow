@@ -76,4 +76,11 @@ describe('code app sidebar DOM', () => {
     assert.equal(chat?.parentElement, appBody);
     assert.equal(file?.parentElement, appBody);
   });
+
+  test('keeps the left app rail visible while Code is foreground', () => {
+    const rail = document.getElementById('osAppRail');
+    assert.ok(rail);
+    assert.equal(rail.hidden, false);
+    assert.ok(rail.querySelectorAll('.mn-os-app-rail__btn').length > 0);
+  });
 });
