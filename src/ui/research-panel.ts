@@ -75,6 +75,11 @@ export function isResearchPanelOpen(): boolean {
   return area.contains(root) && area.classList.contains(CHAT_AREA_CLASS);
 }
 
+/** Whether a research embed open is queued (Code foreground handler). */
+export function hasPendingResearchPanelOpen(): boolean {
+  return pendingOpenQueued;
+}
+
 /** Queue panel open for the next Code route apply (launchApp research / legacy hash). */
 export function queueResearchPanelOpen(options?: ResearchPanelOpenOptions): void {
   pendingOpenQueued = true;

@@ -307,9 +307,7 @@ function applyRouteFromHash(): void {
       if (legacy.modelsSection) pendingModelsSection = legacy.modelsSection;
       if (legacy.brainSection) pendingBrainSection = legacy.brainSection;
       if (legacy.codeResearch) {
-        void import('../ui/research-panel').then((m) => {
-          m.queueResearchPanelOpen(pendingLaunchOptions);
-        });
+        queueResearchPanelOpen(pendingLaunchOptions);
       }
       window.location.hash = legacy.hash;
       return;
