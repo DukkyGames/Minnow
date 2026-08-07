@@ -54,8 +54,10 @@ function buildResearchPageHtml(): string {
                   <button type="button" id="chipResearchEngine" aria-expanded="false"></button>
                   <div class="rs-pop" id="popResearchEngine" hidden>
                     <select id="researchSearchProvider"><option value=""></option><option value="brave">Brave</option></select>
-                    <select id="researchProviderOverride"><option value=""></option></select>
-                    <input id="researchModelOverride" />
+                    <div id="researchComposerModelAnchor" class="rs-model-anchor"></div>
+                    <button type="button" id="btnResearchClearModel" hidden>Use default</button>
+                    <input type="hidden" id="researchProviderOverride" value="" />
+                    <input type="hidden" id="researchModelOverride" value="" />
                   </div>
                 </div>
                 <span id="researchEngineDot" hidden></span>

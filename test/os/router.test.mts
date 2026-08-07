@@ -138,6 +138,7 @@ describe('os router navigation', () => {
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
+    resetAppHostForTests();
     initOsPageBridge();
     initAppHost();
     initOsRouter();
@@ -147,6 +148,7 @@ describe('os router navigation', () => {
     resetOsRouterForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
+    resetAppHostForTests();
     resetAppPreferencesForTests();
   });
 
@@ -250,8 +252,9 @@ describe('os router navigation', () => {
           <select id="researchMaxRounds"><option value="auto">Auto</option></select>
           <select id="researchCategory"><option value=""></option></select>
           <select id="researchSearchProvider"><option value=""></option></select>
-          <select id="researchProviderOverride"><option value=""></option></select>
-          <input id="researchModelOverride" />
+          <div id="researchComposerModelAnchor"></div>
+          <input type="hidden" id="researchProviderOverride" value="" />
+          <input type="hidden" id="researchModelOverride" value="" />
           <button id="btnResearchStart"></button><button id="btnResearchCancel" hidden></button>
         </div>
         <div id="researchRunPane" hidden>
@@ -259,6 +262,8 @@ describe('os router navigation', () => {
         </div>
       </main>`,
     );
+    // Remount app layers after injecting Research DOM (beforeEach init ran without researchView).
+    resetAppHostForTests();
     initAppHost();
     launchApp('research', { seed: 'Apple stock', autoRun: false });
     assert.equal(window.location.hash, '#/app/research');

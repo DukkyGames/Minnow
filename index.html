@@ -1020,23 +1020,23 @@
                         </select>
                       </div>
                     </label>
-                    <label class="rs-field">
-                      <span class="rs-field__label">Provider</span>
-                      <div class="rs-select">
-                        <select id="researchProviderOverride">
-                          <option value="">From settings</option>
-                        </select>
-                      </div>
-                    </label>
-                    <label class="rs-field">
+                    <div class="rs-field">
                       <span class="rs-field__label">Model</span>
-                      <input
-                        type="text"
-                        id="researchModelOverride"
-                        class="rs-input"
-                        placeholder="From settings"
-                      />
-                    </label>
+                      <div id="researchComposerModelAnchor" class="rs-model-anchor"></div>
+                      <button
+                        type="button"
+                        class="rs-field__btn rs-field__btn--ghost"
+                        id="btnResearchClearModel"
+                        hidden
+                      >
+                        Use default
+                      </button>
+                      <p class="rs-field__hint">
+                        Override for this run only. Otherwise Settings or your active chat model applies.
+                      </p>
+                      <input type="hidden" id="researchProviderOverride" value="" />
+                      <input type="hidden" id="researchModelOverride" value="" />
+                    </div>
                   </div>
                 </div>
               </div>

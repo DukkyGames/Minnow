@@ -10,6 +10,7 @@
 import '../styles/research-page.css';
 
 import { wrapUntrusted } from '../lib/untrusted.mjs';
+import { loadResearchConfig } from '../config/research-config';
 import { resolveResearchModelBinding } from './resolve-binding';
 import { pushNotification } from '../notifications/push';
 import {
@@ -48,6 +49,11 @@ import { renderChatFromHistory } from '../ui/messages';
 import { closeSettings } from '../ui/settings-page';
 import { renderSidebar } from '../ui/sidebar';
 import { setStatus } from '../ui/status';
+import {
+  clearResearchModelOverride,
+  mountResearchComposerModelTrigger,
+  syncComposerModelTriggers,
+} from '../ui/composer-model-trigger';
 import { createAndActivateChat, scheduleSaveSessions } from '../state/sessions';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
@@ -396,7 +402,7 @@ function renderResearchStartButton(): void {
 // ── Options ─────────────────────────────────────────────────────────────────
 
 async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
-  const overrideProvider = el<HTMLSelectElement>('researchProviderOverride')?.value?.trim();
+  const overrideProvider = el<HTMLInputElement>('researchProviderOverride')?.value?.trim();
   const overrideModel = el<HTMLInputElement>('researchModelOverride')?.value?.trim();
   return resolveResearchModelBinding({ overrideProvider, overrideModel });
 }
@@ -994,6 +1000,11 @@ function bindStaticControls(): void {
     void import('../ui/settings-page').then((m) => m.openSettings('deep-research'));
   });
 
+  el('btnResearchClearModel')?.addEventListener('click', () => {
+    clearResearchModelOverride();
+    syncComposerModelTriggers();
+  });
+
   const scopeSelect = el<HTMLSelectElement>('researchScope');
   const workspaceSelect = el<HTMLSelectElement>('researchWorkspace');
   const workspaceField = el('researchWorkspaceField');
@@ -1011,6 +1022,8 @@ function bindStaticControls(): void {
 /** Wire hash routing and controls (call once from main). */
 export function initResearchPage(): void {
   bindStaticControls();
+  mountResearchComposerModelTrigger();
+  void loadResearchConfig().then(() => syncComposerModelTriggers());
   initResearchOptionChips();
   renderResearchStartButton();
   setRunView(runView);

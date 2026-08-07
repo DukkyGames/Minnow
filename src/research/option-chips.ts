@@ -53,7 +53,7 @@ function scopeLabel(): string {
 function engineOverridden(): boolean {
   return Boolean(
     el<HTMLSelectElement>('researchSearchProvider')?.value?.trim() ||
-      el<HTMLSelectElement>('researchProviderOverride')?.value?.trim() ||
+      el<HTMLInputElement>('researchProviderOverride')?.value?.trim() ||
       el<HTMLInputElement>('researchModelOverride')?.value?.trim(),
   );
 }

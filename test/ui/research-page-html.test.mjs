@@ -28,6 +28,8 @@ const RESEARCH_IDS = [
   'btnResearchWorkspaceBrowse',
   'researchCategory',
   'researchSearchProvider',
+  'researchComposerModelAnchor',
+  'btnResearchClearModel',
   'researchProviderOverride',
   'researchModelOverride',
   // Chips

@@ -614,6 +614,41 @@
   cursor: pointer;
 }
 
+.rs-field__btn--ghost {
+  align-self: flex-start;
+  margin-top: 2px;
+  height: 26px;
+}
+
+.rs-model-anchor {
+  display: block;
+  width: 100%;
+}
+
+.rs-model-anchor .composer-model-trigger-wrap {
+  display: block;
+  width: 100%;
+  max-width: none;
+}
+
+.rs-model-anchor .composer-model-trigger {
+  width: 100%;
+  max-width: none;
+  justify-content: flex-start;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  font-size: 13px;
+}
+
+.rs-model-anchor .composer-model-trigger__label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
 .rs-select {
   position: relative;
   display: flex;
