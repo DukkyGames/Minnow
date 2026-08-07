@@ -16,10 +16,12 @@ import {
   installServer,
   listServers,
   resetInstallProvisionOverrideForTests,
+  resetKillTreeWaitOverrideForTests,
   resetManagerFetchOverrideForTests,
   resetManagerSpawnOverrideForTests,
   resetManagerStateForTests,
   setInstallProvisionOverrideForTests,
+  setKillTreeWaitOverrideForTests,
   setManagerFetchOverrideForTests,
   setManagerSpawnOverrideForTests,
   startServer,
@@ -28,13 +30,14 @@ import {
 import {
   getServerDir,
   getServerMetaPath,
+  getServerRunPath,
   getServerVenvDir,
 } from '../../server/servers/paths.js';
 import { writeSearxngSettings } from '../../server/servers/searxng.js';
 import { createVenv } from '../../server/servers/provisioner.js';
 
-const FIXED_PORT = 8899;
-const FIXED_HEALTH_PORT = 7788;
+const FIXED_PORT = 17899;
+const FIXED_HEALTH_PORT = 17788;
 
 /** Mark SearXNG as installed without downloading bundles. */
 async function seedSearxngInstalled() {
@@ -63,20 +66,46 @@ async function seedSearxngInstalled() {
 /** @returns {import('node:child_process').ChildProcess} */
 function createMockChild() {
   const listeners = /** @type {Record<string, Array<(...args: unknown[]) => void>>} */ ({});
-  return {
+  const child = {
     pid: 42424,
+    exitCode: null,
+    signalCode: null,
     stdout: { on: () => {} },
     stderr: { on: () => {} },
     on(event, cb) {
       listeners[event] = listeners[event] ?? [];
       listeners[event].push(cb);
     },
-    kill() {
+    once(event, cb) {
+      this.on(event, cb);
+    },
+    removeListener(event, cb) {
+      const list = listeners[event];
+      if (!list) return;
+      const i = list.indexOf(cb);
+      if (i >= 0) list.splice(i, 1);
+    },
+    kill(signal) {
+      child.exitCode = 0;
+      child.signalCode = signal ?? 'SIGTERM';
       for (const cb of listeners.exit ?? []) {
-        cb(0);
+        cb(0, signal);
+      }
+      for (const cb of listeners.close ?? []) {
+        cb();
+      }
+    },
+    emitExit(code = 1) {
+      child.exitCode = code;
+      for (const cb of listeners.exit ?? []) {
+        cb(code);
+      }
+      for (const cb of listeners.close ?? []) {
+        cb();
       }
     },
   };
+  return child;
 }
 
 describe('server manager', () => {
@@ -106,6 +135,7 @@ describe('server manager', () => {
     resetManagerSpawnOverrideForTests();
     resetManagerFetchOverrideForTests();
     resetInstallProvisionOverrideForTests();
+    resetKillTreeWaitOverrideForTests();
   });
 
   it('install job completes when provision override seeds install', async () => {
@@ -156,6 +186,9 @@ describe('server manager', () => {
       assert.equal(u, `http://127.0.0.1:${FIXED_HEALTH_PORT}/healthz`);
       return { status: 200 };
     });
+    setKillTreeWaitOverrideForTests(async (child) => {
+      child.kill();
+    });
 
     const start = await startServer('searxng');
     assert.equal(start.ok, true);
@@ -172,6 +205,76 @@ describe('server manager', () => {
     const afterStop = await listServers();
     assert.equal(afterStop.find((s) => s.id === 'searxng')?.running, false);
     assert.equal(afterStop.find((s) => s.id === 'searxng')?.phase, 'stopped');
+  });
+
+  it('writes run.json on start and removes it on stop', async () => {
+    await seedSearxngInstalled();
+    await writeSearxngSettings(FIXED_HEALTH_PORT);
+
+    const config = await readResource('servers');
+    config.searxng.port = FIXED_HEALTH_PORT;
+    await writeResource('servers', config);
+
+    setManagerSpawnOverrideForTests(() => createMockChild());
+    setManagerFetchOverrideForTests(async () => ({ status: 200 }));
+    setKillTreeWaitOverrideForTests(async (child) => {
+      child.kill();
+    });
+
+    await startServer('searxng');
+    const runRaw = await fsp.readFile(getServerRunPath('searxng'), 'utf8');
+    const run = JSON.parse(runRaw);
+    assert.equal(run.pid, 42424);
+    assert.equal(run.port, FIXED_HEALTH_PORT);
+
+    await stopServer('searxng');
+    await assert.rejects(() => fsp.readFile(getServerRunPath('searxng')), /ENOENT/);
+  });
+
+  it('stopServer waits for child exit via kill override', async () => {
+    await seedSearxngInstalled();
+    await writeSearxngSettings(FIXED_HEALTH_PORT);
+    const config = await readResource('servers');
+    config.searxng.port = FIXED_HEALTH_PORT;
+    await writeResource('servers', config);
+
+    const child = createMockChild();
+    let killCalls = 0;
+    setManagerSpawnOverrideForTests(() => child);
+    setManagerFetchOverrideForTests(async () => ({ status: 200 }));
+    setKillTreeWaitOverrideForTests(async (c) => {
+      killCalls += 1;
+      await new Promise((r) => setTimeout(r, 20));
+      c.kill('SIGKILL');
+    });
+
+    await startServer('searxng');
+    await stopServer('searxng');
+    assert.equal(killCalls, 1);
+    assert.equal(child.exitCode, 0);
+  });
+
+  it('startServer throws when child exits during health wait despite fetch 200', async () => {
+    await seedSearxngInstalled();
+    await writeSearxngSettings(FIXED_HEALTH_PORT);
+    const config = await readResource('servers');
+    config.searxng.port = FIXED_HEALTH_PORT;
+    await writeResource('servers', config);
+
+    const child = createMockChild();
+    setManagerSpawnOverrideForTests(() => {
+      setImmediate(() => child.emitExit(1));
+      return child;
+    });
+    setManagerFetchOverrideForTests(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+      return { status: 200 };
+    });
+    setKillTreeWaitOverrideForTests(async (c) => {
+      c.kill();
+    });
+
+    await assert.rejects(() => startServer('searxng'), /exited during startup/);
   });
 
   it('autoStartEnabledServers starts only enabled+autoStart+installed', async () => {

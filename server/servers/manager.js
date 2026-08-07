@@ -2,12 +2,19 @@
  * Managed local server process manager (install, spawn, health, logs).
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
+import net from 'node:net';
 import path from 'node:path';
+import { killProcessTree, killProcessTreeAndWait } from '../terminal-runner.js';
 import { readResource, writeResource } from '../config/store.js';
 import { getServerDef, listServerDefs } from './catalog.js';
-import { getServerLogPath, getServersRoot } from './paths.js';
+import {
+  getServerLogPath,
+  getServerRunPath,
+  getServerVenvDir,
+  getServersRoot,
+} from './paths.js';
 
 /** @typedef {'pending'|'installing'|'starting'|'running'|'stopped'|'error'} ServerRuntimePhase */
 
@@ -59,6 +66,25 @@ let fetchOverrideForTests = null;
  */
 let installProvisionOverrideForTests = null;
 
+/** Replace killProcessTreeAndWait in unit tests (Windows taskkill cannot mock children). */
+/** @type {typeof killProcessTreeAndWait | null} */
+let killTreeWaitOverrideForTests = null;
+
+export function setKillTreeWaitOverrideForTests(fn) {
+  killTreeWaitOverrideForTests = fn;
+}
+
+export function resetKillTreeWaitOverrideForTests() {
+  killTreeWaitOverrideForTests = null;
+}
+
+async function killManagedChildAndWait(child, opts) {
+  if (killTreeWaitOverrideForTests) {
+    return killTreeWaitOverrideForTests(child, opts);
+  }
+  return killProcessTreeAndWait(child, opts);
+}
+
 /** Replace child_process.spawn for unit tests. */
 export function setManagerSpawnOverrideForTests(fn) {
   spawnOverrideForTests = fn;
@@ -89,7 +115,7 @@ export function resetInstallProvisionOverrideForTests() {
 /** Clear runtime maps and stop mocked children between tests. */
 export function resetManagerStateForTests() {
   for (const [, state] of processes) {
-    killServerChild(state.child);
+    killProcessTree(state.child);
   }
   processes.clear();
   jobs.clear();
@@ -176,6 +202,208 @@ async function waitForHealth(serverId, port, healthPath) {
   }
 
   throw new Error(`Health check timed out for ${serverId} (${url})`);
+}
+
+/**
+ * @param {number} port
+ */
+function isLocalPortFree(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+/**
+ * @param {string} serverId
+ * @param {{ pid: number, port: number, startedAt: number, command: string }} record
+ */
+async function writeServerRunRecord(serverId, record) {
+  const runPath = getServerRunPath(serverId);
+  await fsp.mkdir(path.dirname(runPath), { recursive: true });
+  await fsp.writeFile(runPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+}
+
+/** Remove persisted spawn record when the child is gone or ownership is lost. */
+async function deleteServerRunRecord(serverId) {
+  try {
+    await fsp.rm(getServerRunPath(serverId), { force: true });
+  } catch {
+    /* already absent */
+  }
+}
+
+/**
+ * @param {number} pid
+ */
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {number} pid
+ */
+function readProcessCommandLine(pid) {
+  if (!isPidAlive(pid)) return null;
+  if (process.platform === 'win32') {
+    try {
+      const out = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
+        ],
+        { encoding: 'utf8', windowsHide: true, timeout: 5000 },
+      );
+      const line = (out.stdout ?? '').trim();
+      return line || null;
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const out = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    const line = (out.stdout ?? '').trim();
+    return line || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} serverId
+ * @param {string} recordedCommand
+ */
+function processCommandMatchesServer(serverId, recordedCommand, liveCommand) {
+  if (!liveCommand) return false;
+  const venvDir = getServerVenvDir(serverId);
+  const normalizedVenv = path.normalize(venvDir);
+  const normalizedLive = path.normalize(liveCommand);
+  if (normalizedLive.includes(normalizedVenv)) return true;
+  if (recordedCommand && liveCommand.includes(recordedCommand.trim().slice(0, 48))) return true;
+  return false;
+}
+
+/**
+ * Kill a PID tree without a ChildProcess handle (orphan reaper).
+ * @param {number} pid
+ * @param {{ graceMs?: number }} [opts]
+ */
+async function killPidTreeAndWait(pid, opts = {}) {
+  const graceMs = opts.graceMs ?? 3000;
+  if (!isPidAlive(pid)) return;
+
+  if (process.platform === 'win32') {
+    try {
+      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.on('error', () => {});
+      killer.unref();
+    } catch {
+      /* best effort */
+    }
+    await new Promise((r) => setTimeout(r, graceMs));
+    return;
+  }
+
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      return;
+    }
+  }
+  const deadline = Date.now() + graceMs;
+  while (Date.now() < deadline && isPidAlive(pid)) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  if (!isPidAlive(pid)) return;
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* gone */
+    }
+  }
+  await new Promise((r) => setTimeout(r, 500));
+}
+
+/**
+ * Reap a leftover managed-server process recorded in run.json from a prior boot.
+ * @param {string} serverId
+ */
+async function reapOrphanedServerRun(serverId) {
+  const def = getServerDef(serverId);
+  if (!def || def.kind === 'native-binary') return;
+
+  let raw;
+  try {
+    raw = await fsp.readFile(getServerRunPath(serverId), 'utf8');
+  } catch {
+    return;
+  }
+
+  /** @type {{ pid?: number, command?: string }} */
+  let record;
+  try {
+    record = JSON.parse(raw);
+  } catch {
+    await deleteServerRunRecord(serverId);
+    return;
+  }
+
+  const pid = Number(record.pid);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    await deleteServerRunRecord(serverId);
+    return;
+  }
+
+  if (!isPidAlive(pid)) {
+    await deleteServerRunRecord(serverId);
+    return;
+  }
+
+  const liveCommand = readProcessCommandLine(pid);
+  const recordedCommand = typeof record.command === 'string' ? record.command : '';
+  if (!processCommandMatchesServer(serverId, recordedCommand, liveCommand ?? '')) {
+    await deleteServerRunRecord(serverId);
+    return;
+  }
+
+  await killPidTreeAndWait(pid);
+  await deleteServerRunRecord(serverId);
+}
+
+/** Reap orphaned managed-server processes before auto-start on boot. */
+export async function reapOrphanedServers() {
+  for (const def of listServerDefs()) {
+    try {
+      await reapOrphanedServerRun(def.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[servers] reap orphan ${def.id} failed: ${message}`);
+    }
+  }
 }
 
 /**
@@ -363,6 +591,13 @@ export async function startServer(serverId) {
 
   const config = await readResource('servers');
   const port = config[serverId]?.port ?? def.defaultPort;
+
+  if (!processes.has(serverId) && !(await isLocalPortFree(port))) {
+    throw new Error(
+      `Port ${port} is in use by another process — choose a different port in Settings → Servers or stop the conflicting process`,
+    );
+  }
+
   const spec = await def.provisioner.getSpawnSpec(port);
 
   const child = spawnManaged(spec.command, spec.args, {
@@ -387,10 +622,26 @@ export async function startServer(serverId) {
     void appendServerLog(serverId, chunk.toString());
   });
 
+  const commandLine = [spec.command, ...(spec.args ?? [])].join(' ');
+
+  /** Reject health success when the child exits during startup (e.g. EADDRINUSE). */
+  const exitDuringStartup = new Promise((_, reject) => {
+    const onExit = (code) => {
+      reject(
+        new Error(
+          `${serverId} exited during startup (code=${code ?? 'null'}) — see ${getServerLogPath(serverId)}`,
+        ),
+      );
+    };
+    child.once('exit', onExit);
+    child.once('error', () => onExit(1));
+  });
+
   child.on('exit', (code) => {
     const state = processes.get(serverId);
     if (state?.child === child) {
       processes.delete(serverId);
+      void deleteServerRunRecord(serverId);
       void appendServerLog(serverId, `\n[exit] code=${code ?? 'null'}\n`);
     }
   });
@@ -399,13 +650,35 @@ export async function startServer(serverId) {
     const message = err instanceof Error ? err.message : String(err);
     void appendServerLog(serverId, `\n[spawn error] ${message}\n`);
     processes.delete(serverId);
+    void deleteServerRunRecord(serverId);
   });
 
-  await waitForHealth(serverId, port, def.healthPath);
+  try {
+    await Promise.race([waitForHealth(serverId, port, def.healthPath), exitDuringStartup]);
+  } catch (err) {
+    await killManagedChildAndWait(child);
+    processes.delete(serverId);
+    await deleteServerRunRecord(serverId);
+    throw err;
+  }
+
   const state = processes.get(serverId);
-  if (state) {
-    state.healthy = true;
-    state.phase = 'running';
+  if (!state || state.child !== child) {
+    throw new Error(
+      `${serverId} process map lost during startup — see ${getServerLogPath(serverId)}`,
+    );
+  }
+
+  state.healthy = true;
+  state.phase = 'running';
+
+  if (child.pid) {
+    await writeServerRunRecord(serverId, {
+      pid: child.pid,
+      port,
+      startedAt: Date.now(),
+      command: commandLine,
+    });
   }
 
   return { ok: true, port };
@@ -417,35 +690,38 @@ export async function startServer(serverId) {
 export async function stopServer(serverId) {
   const state = processes.get(serverId);
   if (!state?.child) {
+    await deleteServerRunRecord(serverId);
     return { ok: true, wasRunning: false };
   }
 
-  killServerChild(state.child);
+  await killManagedChildAndWait(state.child);
   processes.delete(serverId);
+  await deleteServerRunRecord(serverId);
   return { ok: true, wasRunning: true };
 }
 
 /**
+ * Best-effort synchronous kill for process.on('exit') where await is impossible.
  * @param {import('node:child_process').ChildProcess} child
  */
-function killServerChild(child) {
-  if (!child?.pid) return;
-  if (process.platform === 'win32') {
-    try {
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-      }).unref();
-    } catch {
-      child.kill();
-    }
-    return;
+function killServerChildNow(child) {
+  killProcessTree(child);
+}
+
+/** Stop every managed server process (server shutdown). */
+export async function shutdownAllServers() {
+  const ids = [...processes.keys()];
+  await Promise.all(ids.map((id) => stopServer(id)));
+}
+
+/** Sync teardown for process exit handlers that cannot await. */
+export function shutdownAllServersNow() {
+  for (const [, state] of processes) {
+    killServerChildNow(state.child);
   }
-  try {
-    process.kill(-child.pid, 'SIGTERM');
-  } catch {
-    child.kill('SIGTERM');
+  processes.clear();
+  for (const def of listServerDefs()) {
+    void deleteServerRunRecord(def.id);
   }
 }
 
@@ -506,14 +782,6 @@ export async function autoProvisionEnabledServers() {
       }
     })();
   }
-}
-
-/** Stop every managed server process (server shutdown). */
-export function shutdownAllServers() {
-  for (const [, state] of processes) {
-    killServerChild(state.child);
-  }
-  processes.clear();
 }
 
 /**
