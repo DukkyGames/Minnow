@@ -57,9 +57,9 @@ Renderer crash diagnostics can file Issues cards (type `bug`) when **Settings ? 
 
 ### Scale
 
-- **114 built-in tools** (106 exposed in a default build; 8 are gated to the hidden Calendar/Email apps) � [`src/tools/definitions.ts`](../src/tools/definitions.ts)
-- **17 bundled slash skills** � [`src/skills/`](../src/skills/), manifest via `npm run prebuild`; everything else installs from **Skills Library**
-- **8 released apps**, all core � no optional-app picker in this build
+- **114 built-in tools** (106 exposed in a default build; 8 are gated to the hidden Calendar/Email apps) — [`src/tools/definitions.ts`](../src/tools/definitions.ts)
+- **19 bundled slash skills** — [`src/skills/`](../src/skills/), manifest via `npm run prebuild`; everything else installs from **Skills Library**
+- **8 released apps**, all core — no optional-app picker in this build
 - **Nine modes** + work agents, sub-agents, orchestrator boards, Brain wiki
 
 ---
@@ -266,7 +266,7 @@ API: `GET/PUT /api/prompts/...` when server running.
 
 Cursor-style **SKILL.md** (YAML front matter + body). Built-in: `src/skills/<id>/`; user: `~/.minnow/skills/<id>/` (user wins on name clash).
 
-Invoke via **`/`** slash picker ([`src/ui/skill-picker.ts`](../src/ui/skill-picker.ts)). Built-ins include `git-commit`, `code-review`, `fix-ci`, `impeccable` (default-on), `ui-designer`, `caveman`, and `partymode`. Only installed skills appear in the picker � remote library packs are absent until installed.
+Invoke via **`/`** slash picker ([`src/ui/skill-picker.ts`](../src/ui/skill-picker.ts)). Built-ins include `git-commit`, `code-review`, `fix-ci`, `plan-work`, `orchestrate-plan`, `impeccable` (default-on), `ui-designer`, `caveman`, and `partymode`. **`plan-work`** writes phased plans under `documentation/plans/` via discovery sub-agents; **`orchestrate-plan`** executes those plans with implement → verify sub-agent gates (lead agent does not ship product code). Only installed skills appear in the picker — remote library packs are absent until installed.
 
 **Matt Pocock pack (MIN-476):** No longer bundled. Install from **Settings ? Skills Library** (`matt-pocock` pack, 19 skills: `ask-minnow`, `triage`, `implement`, `handoff`, �). Post-install hook [`server/skills/library/post-install.js`](../server/skills/library/post-install.js) runs [`scripts/matt-pocock-preserves/apply-minnow-patches.mjs`](../scripts/matt-pocock-preserves/apply-minnow-patches.mjs) to apply Minnow renames (`ask-matt` ? `ask-minnow`, `/review` ? `/code-review`, `/compact` guidance, etc.). Lock file: `skills-lock.json` (`matt-pocock-skills` section). Maintainer sync (hashes only, not bundled): `npm run matt-pocock-skills:sync`.
 
