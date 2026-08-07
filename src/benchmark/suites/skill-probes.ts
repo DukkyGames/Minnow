@@ -138,6 +138,20 @@ export function divide(a: number, b: number) {
     passKind: 'regex',
     pattern: /gh run|workflow|log-failed|git branch|commit|tsc|npm test|check-coverage|repro/i,
   },
+  'plan-work': {
+    skillId: 'plan-work',
+    prompt:
+      'I want an implementation plan for adding keyboard shortcut docs for a new feature. What do you do first before writing documentation/plans/?',
+    passKind: 'regex',
+    pattern: /documentation\/plans|ask_question|ask-user|interview|scope|phase|spawn_sub_agent|explore|context\.md/i,
+  },
+  'orchestrate-plan': {
+    skillId: 'orchestrate-plan',
+    prompt:
+      'Execute documentation/plans/example.md phase by phase using sub-agents only. What is your role and what must happen after each implement phase?',
+    passKind: 'regex',
+    pattern: /spawn_sub_agent|wait:\s*true|verif|delegate|documentation\/plans|do not implement|sub-agent/i,
+  },
   'refactor-safe': {
     skillId: 'refactor-safe',
     prompt:
