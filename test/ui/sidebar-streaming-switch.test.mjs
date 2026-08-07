@@ -11,7 +11,7 @@ const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
   '../../src/state/sessions.ts'
 );
-const { resetDesktopStateForTests } = await import('../../src/os/desktop-state.ts');
+const { resetDesktopStateForTests } = await import('../helpers/legacy-desktop-state.ts');
 const { switchChat } = await import('../../src/ui/sidebar.ts');
 
 /** @type {import('happy-dom').Window | undefined} */

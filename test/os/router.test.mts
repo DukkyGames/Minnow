@@ -12,10 +12,6 @@ import {
   getInstanceSnapshot,
   resetInstancesForTests,
 } from '../../src/os/instances.ts';
-import {
-  isDesktopChatActive,
-  resetDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   getCurrentRoute,
@@ -138,7 +134,6 @@ describe('os router navigation', () => {
     win.location.hash = '#/workspaces';
     resetAppPreferencesForTests();
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
     initOsRouter();
@@ -147,7 +142,6 @@ describe('os router navigation', () => {
   afterEach(() => {
     resetOsRouterForTests();
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     resetAppPreferencesForTests();
   });
@@ -183,15 +177,12 @@ describe('os router navigation', () => {
     assert.equal(isAppEnabled('research'), true);
   });
 
-  test('legacy #/experts does not activate desktop experts when app is hidden', async () => {
-    const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
-    );
-    resetDesktopStateForTests();
+  test('legacy #/experts falls back to workspaces when Experts is hidden', async () => {
     window.location.hash = '#/experts/gallery';
     syncOsRouteFromHashForTests();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.equal(isDesktopExpertsActive(), false);
+    assert.equal(window.location.hash, '#/workspaces');
+    assert.equal(getInstanceSnapshot().view, 'workspaces');
   });
 
   test('hash route for a developer-hidden app falls back to workspaces', () => {
@@ -274,18 +265,13 @@ describe('os router navigation', () => {
     assert.equal(isResearchPanelOpen(), true);
   });
 
-  test('launchApp(experts) blocks hidden app and returns to desktop', async () => {
-    const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
-    );
-    resetDesktopStateForTests();
+  test('launchApp(experts) blocks hidden app and returns to workspaces', async () => {
     launchApp('experts');
     assert.equal(window.location.hash, '#/workspaces');
     await new Promise((resolve) => setTimeout(resolve, 50));
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.view, 'workspaces');
     assert.equal(snap.instances.find((i) => i.appId === 'experts'), undefined);
-    assert.equal(isDesktopExpertsActive(), false);
   });
 
   test('navigateToDesktop returns to workspaces view', () => {

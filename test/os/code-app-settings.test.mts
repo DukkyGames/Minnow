@@ -33,8 +33,6 @@ describe('code app settings (MIN-417)', () => {
   let getInstanceSnapshot: typeof import('../../src/os/instances.ts').getInstanceSnapshot;
   let getOsView: typeof import('../../src/os/instances.ts').getOsView;
   let resetInstancesForTests: typeof import('../../src/os/instances.ts').resetInstancesForTests;
-  let resetWindowManagerForTests: typeof import('../../src/os/window-manager.ts').resetWindowManagerForTests;
-  let windowManager: typeof import('../../src/os/window-manager.ts').windowManager;
   let initSettingsPage: typeof import('../../src/ui/settings-page.ts').initSettingsPage;
   let resetSettingsPageForTests: typeof import('../../src/ui/settings-page.ts').resetSettingsPageForTests;
   let openSettingsFromTopbar: typeof import('../../src/ui/settings-page.ts').openSettingsFromTopbar;
@@ -78,10 +76,6 @@ describe('code app settings (MIN-417)', () => {
       getOsView,
       resetInstancesForTests,
     } = await import('../../src/os/instances.ts'));
-    ({
-      resetWindowManagerForTests,
-      windowManager,
-    } = await import('../../src/os/window-manager.ts'));
     ({ resetAppModulesForTests } = await import('../../src/os/app-modules.ts'));
     ({
       initSettingsPage,
@@ -90,7 +84,6 @@ describe('code app settings (MIN-417)', () => {
       closeSettings,
     } = await import('../../src/ui/settings-page.ts'));
 
-    resetWindowManagerForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -108,14 +101,12 @@ describe('code app settings (MIN-417)', () => {
   });
 
   afterEach(async () => {
-    const { resetWindowManagerForTests } = await import('../../src/os/window-manager.ts');
     const { resetInstancesForTests } = await import('../../src/os/instances.ts');
     const { resetOsRouterForTests } = await import('../../src/os/router.ts');
     const { resetOsPageBridgeForTests } = await import('../../src/os/page-bridge.ts');
     const { resetAppHostForTests } = await import('../../src/os/app-host.ts');
     const { resetAppModulesForTests } = await import('../../src/os/app-modules.ts');
     const { resetSettingsPageForTests } = await import('../../src/ui/settings-page.ts');
-    resetWindowManagerForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -141,7 +132,7 @@ describe('code app settings (MIN-417)', () => {
     assert.equal(settingsInst.launchOptions?.returnToApp, 'code');
     assert.equal(getOsView(), 'app');
     assert.equal(getForegroundAppId(), 'settings');
-    assert.equal(windowManager.getWindows().length, 0);
+    assert.equal(document.getElementById('settingsView')?.classList.contains('is-open'), true);
   });
 
   test('closing settings returns to the Code app', async () => {
@@ -210,7 +201,6 @@ describe('code app settings (MIN-417)', () => {
 
     assert.equal(getForegroundAppId(), 'settings');
     assert.equal(getOsView(), 'app');
-    assert.equal(windowManager.getWindows().length, 0);
   });
 
   test('reopens settings when stale openAppPage left the layer without content', async () => {

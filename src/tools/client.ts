@@ -62,7 +62,6 @@ import {
 } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { resolveChatToolWorkspaceRoot } from '../state/worktree-isolation';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
@@ -749,7 +748,7 @@ async function resolveToolWorkspaceRoot(
       if (scoped) return scoped;
     }
   }
-  if (isDesktopChatActive()) {
+  if (false) {
     const path = await getDesktopWorkspacePath();
     return path ?? undefined;
   }

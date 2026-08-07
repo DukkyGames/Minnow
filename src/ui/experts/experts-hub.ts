@@ -45,12 +45,7 @@ import {
 } from './experts-scope';
 import { renderExpertDetailTabbed } from './experts-lab-detail';
 import { isOsAppHash, isOsEmbedded } from '../../os/page-bridge';
-import {
-  isDesktopChatActive,
-  isDesktopExpertsActive,
-  isDesktopExpertsHubActive,
-} from '../../os/desktop-state';
-import { launchApp, navigateToDesktop } from '../../os/router';
+import { launchApp, navigateToWorkspaces } from '../../os/router';
 import { isAppAvailable } from '../../os/app-preferences';
 
 export { openExpertChatInShell } from './experts-scope';
@@ -403,16 +398,7 @@ export function returnToExpertsHub(): void {
   const expertId = selectedExpertId;
   teardownExpertScopeShell();
   if (isOsEmbedded()) {
-    void import('../../os/experts-desktop').then(async (desktop) => {
-      if (isDesktopExpertsHubActive()) {
-        desktop.closeDesktopExpertsLab();
-      }
-      if (!isDesktopExpertsActive()) {
-        launchApp('experts', expertId ? { expertId } : undefined);
-        return;
-      }
-      desktop.renderDesktopExpertsHero(expertId);
-    });
+    launchApp('experts', expertId ? { expertId } : undefined);
     return;
   }
   if (expertId) {
@@ -646,20 +632,14 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    if (isDesktopExpertsActive()) {
-      void import('../../os/desktop-state').then((m) => m.deactivateDesktopExperts());
-    } else {
-      navigateToDesktop();
-    }
+    navigateToWorkspaces();
   }
   void import('../preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
 
   const activeChat = sessionState ? getActiveChat() : null;
-  const preserveActiveExpertChat =
-    activeChat?.kind === 'expert' ||
-    (isOsEmbedded() && isDesktopChatActive());
+  const preserveActiveExpertChat = activeChat?.kind === 'expert';
 
   if (isExpertScopeActive() && !preserveActiveExpertChat) {
     teardownExpertScopeShell();

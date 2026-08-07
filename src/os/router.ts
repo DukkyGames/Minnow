@@ -1,14 +1,3 @@
-import {
-  activateDesktopChat,
-  activateDesktopExperts,
-  consumePendingDesktopChatActivation,
-  consumePendingDesktopExpertsActivation,
-  deactivateDesktopExperts,
-  prepareDesktopChatSurface,
-  prepareDesktopExpertsSurface,
-  queueDesktopChatActivation,
-  queueDesktopExpertsActivation,
-} from './desktop-state';
 import { getAppById, isAppId } from './app-registry';
 import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
 import { DEFAULT_MODELS_SECTION } from '../ui/models-section-ids';
@@ -19,8 +8,6 @@ import {
   launchInstance,
   showWorkspaces,
 } from './instances';
-import { isPhoneLayout } from '../ui/mobile-layout';
-import { windowManager } from './window-manager';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
 import { APP_SWITCHER_DESKTOP_ID } from './surface-id';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
@@ -43,14 +30,10 @@ function notifyAppUnavailable(appId: AppId): void {
 }
 
 /**
- * Minimize open window sheets so the phone desktop is actually visible. The app
- * instance stays alive; relaunching it from the dock restores the sheet.
+ * @deprecated Legacy no-op — window sheets were removed with the window manager.
  */
 function parkPhoneWindowSheets(): void {
-  if (!isPhoneLayout()) return;
-  for (const win of windowManager.getWindows()) {
-    if (!win.minimized) windowManager.minimize(win.id, true);
-  }
+  /* no-op */
 }
 
 /** Block unavailable apps: toast (when user-disabled) and return to desktop. */
@@ -255,32 +238,8 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'workspaces') {
     syncForegroundLifecycle(null);
     parkPhoneWindowSheets();
-    const comingFromFullscreenApp = getOsView() === 'app';
-    const pendingExperts = consumePendingDesktopExpertsActivation();
-    const pendingChat = consumePendingDesktopChatActivation();
-    // Apply desktop surface classes before instance emit so app-host never paints idle hero.
-    if (comingFromFullscreenApp) {
-      if (pendingExperts !== null && isAppAvailable('experts')) {
-        prepareDesktopExpertsSurface();
-      } else if (pendingChat !== null) {
-        prepareDesktopChatSurface();
-      }
-    }
     showWorkspaces();
     void import('./workspace-gate').then((m) => m.syncWorkspaceGateFromRoute());
-    if (pendingExperts !== null) {
-      if (isAppAvailable('experts')) {
-        void activateDesktopExperts(pendingExperts);
-      } else {
-        void import('./desktop-launch').then((m) => m.restoreDesktopSessionOnForeground());
-      }
-      return;
-    }
-    if (pendingChat !== null) {
-      void activateDesktopChat(pendingChat);
-    } else {
-      void import('./desktop-launch').then((m) => m.restoreDesktopSessionOnForeground());
-    }
     return;
   }
 
@@ -341,16 +300,10 @@ function applyRouteFromHash(): void {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;
       if (legacy.modelsSection) pendingModelsSection = legacy.modelsSection;
       if (legacy.brainSection) pendingBrainSection = legacy.brainSection;
-      if (legacy.desktopChat) {
-        queueDesktopChatActivation(pendingLaunchOptions);
-      }
       if (legacy.codeResearch) {
         void import('../ui/research-panel').then((m) => {
           m.queueResearchPanelOpen(pendingLaunchOptions);
         });
-      }
-      if (legacy.desktopExperts && isAppAvailable('experts')) {
-        queueDesktopExpertsActivation(pendingLaunchOptions);
       }
       window.location.hash = legacy.hash;
       return;

@@ -21,7 +21,7 @@ import {
 import { appConfirm } from './app-dialog';
 import { createBoardCategoryIcon } from './board-category-icons';
 import { createIcon } from './icon';
-import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
+import { isChatAppForeground } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import { syncGoalActiveHint } from './goal-active-hint';
 import { syncLoopActiveHint } from './loop-active-hint';
@@ -1133,10 +1133,9 @@ function beginRenameChat(chatId: string, nameSpan: HTMLSpanElement): void {
   inp.addEventListener('blur', finish, { once: true });
 }
 
-/** Refresh every session list surface (Code sidebar, desktop rail, Chat app rail). */
+/** Refresh every session list surface (Code sidebar, Chat app rail). */
 function refreshSessionListUIs(): void {
   renderSidebar();
-  void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
 }
 
@@ -1148,11 +1147,7 @@ function onChatRemoved(result: RemoveChatResult): void {
     recordChatOpened(active.id);
     syncModelSelectForActiveChat();
     renderStatsForChat(active);
-    if (shouldPaintDesktopChatSurface()) {
-      void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(active.id));
-    } else {
-      renderChatFromHistory(active);
-    }
+    renderChatFromHistory(active);
   }
   refreshSessionListUIs();
   if (isOrchestrateHubMounted()) {
@@ -1163,12 +1158,8 @@ function onChatRemoved(result: RemoveChatResult): void {
   closeMobileSidebar();
 }
 
-/** Render the active chat into the correct foreground shell (desktop / chat app / code). */
+/** Render the active chat into the correct foreground shell (Chat app / Code). */
 function paintActiveChatInForegroundShell(chat: Chat): void {
-  if (shouldPaintDesktopChatSurface()) {
-    void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(chat.id));
-    return;
-  }
   if (isChatAppForeground()) {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;

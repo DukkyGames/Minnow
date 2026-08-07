@@ -17,7 +17,7 @@ import {
   type CalendarRow,
 } from '../../calendar/client';
 import { getMaxInlineEvents, loadCalendarPrefs, type CalendarPrefs } from '../../calendar/prefs';
-import { openEventEditorWindow } from './event-editor-window';
+import { openEventEditorWindow } from './event-editor-overlay';
 import { openCalendarSettings } from './calendar-settings';
 export interface CalendarPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;

@@ -2,7 +2,6 @@
  * Context usage ring + breakdown DOM targets for Code vs Chat vs desktop composers.
  */
 
-import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isChatAppForeground } from './chat-mount';
 
@@ -30,7 +29,7 @@ function resolveSurfaceKey(): keyof typeof SURFACES {
   const foregroundAppId = getForegroundAppId();
   // Code keeps desktop chat state for return navigation, but Code owns the composer.
   if (foregroundAppId === 'code') return 'code';
-  if (isDesktopChatActive()) return 'desktop';
+  if (false) return 'desktop';
   if (isChatAppForeground()) return 'chat';
   if (getOsView() === 'workspaces' && document.getElementById('desktopContextRing')) return 'desktop';
   return 'code';

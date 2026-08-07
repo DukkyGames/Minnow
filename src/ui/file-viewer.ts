@@ -1688,12 +1688,6 @@ export async function openFileInViewer(
     await adoptOpenedViewerTab(relativePath);
     showViewerSplit();
 
-    const mounts = await import('../os/desktop-workspace-mounts');
-    if (mounts.isDesktopWorkspaceHostingActive()) {
-      mounts.openDesktopWorkspaceTab('viewer');
-      await mounts.syncDesktopWorkspaceMounts();
-    }
-
     renderFileTreeViaBridge();
     result.tab.loadStatus = 'loading';
     renderViewerSlots();
@@ -1722,12 +1716,6 @@ export async function openFileInViewer(
   noteRecentViewerOpen(relativePath);
   await adoptOpenedViewerTab(relativePath);
   showViewerSplit();
-
-  const mounts = await import('../os/desktop-workspace-mounts');
-  if (mounts.isDesktopWorkspaceHostingActive()) {
-    mounts.openDesktopWorkspaceTab('viewer');
-    await mounts.syncDesktopWorkspaceMounts();
-  }
 
   renderFileTreeViaBridge();
 

@@ -1,5 +1,4 @@
 import type { AppId, AppInstance, LaunchOptions, OsView } from './types';
-import { windowManager } from './window-manager';
 
 export interface InstanceSnapshot {
   view: OsView;
@@ -145,8 +144,6 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
     foregroundId = existing.id;
     existing.unread = 0;
     view = 'app';
-    const win = windowManager.findWindowByInstance(existing.id);
-    if (win?.minimized) windowManager.minimize(win.id, false);
     emit();
     return existing.id;
   }

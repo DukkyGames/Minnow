@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { resetInstancesForTests } from '../../src/os/instances.ts';
-import {
-  resetDesktopStateForTests,
-  setDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
+import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/sessions.ts';
 
-describe('isStreamDomVisible desktop surface', () => {
+describe('isStreamDomVisible without desktop surface', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
@@ -22,24 +18,21 @@ describe('isStreamDomVisible desktop surface', () => {
     win.document.body.innerHTML = `
       <main id="chatArea" class="main-column--board-view"></main>
       <div id="orchestrateHub"></div>
-      <div id="desktopChatCol"></div>
     `;
     resetInstancesForTests();
-    resetDesktopStateForTests();
-    setDesktopStateForTests('chatActive');
     setSessionStateForTests({
       version: 5,
-      activeId: 'desktop-chat',
+      activeId: 'code-chat',
       sidebarCollapsed: false,
       lastActiveChatIdByWorkspace: {},
       lastActiveChatIdByApp: {},
       chats: [
         {
           ...createEmptyChatObject('model-a'),
-          id: 'desktop-chat',
-          name: 'Desktop',
+          id: 'code-chat',
+          name: 'Code chat',
           workspacePath: '/home/user/.minnow/workspace',
-          modeId: 'desktop',
+          modeId: 'general',
         },
       ],
     });
@@ -47,12 +40,13 @@ describe('isStreamDomVisible desktop surface', () => {
 
   afterEach(() => {
     setSessionStateForTests(null);
-    resetDesktopStateForTests();
     resetInstancesForTests();
   });
 
-  test('stream DOM stays visible on desktop even when Code board chrome is mounted', async () => {
+  test('board chrome suppresses stream DOM until Code is foreground', async () => {
     const { isStreamDomVisible } = await import('../../src/chat/streaming-state.ts');
-    assert.equal(isStreamDomVisible('desktop-chat'), true);
+    assert.equal(isStreamDomVisible('code-chat'), false);
+    launchInstance('code');
+    assert.equal(isStreamDomVisible('code-chat'), false);
   });
 });

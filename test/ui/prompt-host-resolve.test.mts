@@ -8,7 +8,7 @@ import { launchInstance, resetInstancesForTests } from '../../src/os/instances.t
 import {
   resetDesktopStateForTests,
   setDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
+} from '../helpers/legacy-desktop-state.ts';
 import {
   initOsPageBridge,
   resetOsPageBridgeForTests,

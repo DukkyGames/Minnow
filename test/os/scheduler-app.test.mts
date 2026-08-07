@@ -21,25 +21,16 @@ import {
   resolveLegacyHash,
   syncOsRouteFromHashForTests,
 } from '../../src/os/router.ts';
-import { SCHEDULER_EDITOR_INSTANCE_ID } from '../../src/os/scheduler-constants.ts';
 import {
-  initSchedulerSidePanel,
-  isSchedulerSidePanelOpen,
-  resetSchedulerSidePanelForTests,
-} from '../../src/os/scheduler-side-panel.ts';
-import {
-  resetWindowManagerForTests,
-  windowManager,
-} from '../../src/os/window-manager.ts';
+  openJobEditorWindow,
+  resetJobEditorWindowForTests,
+} from '../../src/ui/scheduler/job-editor-overlay.ts';
 import { teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 function setupSchedulerDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
     <div id="osStage" class="mn-os-stage" style="width:1200px;height:800px;position:relative">
       <div id="osAppsLayer" class="mn-os-apps-layer"></div>
-      <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
-      <div id="osWindowsLayer" class="mn-os-windows-layer"></div>
-      <div id="osSidePanelsLayer" class="mn-os-side-panels-layer"></div>
     </div>
     <main id="schedulerView" class="scheduler-page">
       <div id="schedulerPanelMount"></div>
@@ -101,15 +92,13 @@ describe('scheduler workspace shell', () => {
     g.localStorage = win.localStorage;
     win.localStorage.clear();
     setupSchedulerDom(win);
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
     resetInstancesForTests();
     resetOsRouterForTests();
     resetAppHostForTests();
-    resetWindowManagerForTests();
     resetOsPageBridgeForTests();
-    resetSchedulerSidePanelForTests();
+    resetJobEditorWindowForTests();
     initOsRouter();
-    initSchedulerSidePanel();
     fetchMock = globalThis.fetch;
     globalThis.fetch = async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -128,11 +117,10 @@ describe('scheduler workspace shell', () => {
 
   afterEach(async () => {
     globalThis.fetch = fetchMock;
-    resetSchedulerSidePanelForTests();
+    resetJobEditorWindowForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetAppHostForTests();
-    resetWindowManagerForTests();
     resetOsPageBridgeForTests();
     if (happyDomWindow) {
       await teardownHappyDomAsync(happyDomWindow);
@@ -145,7 +133,6 @@ describe('scheduler workspace shell', () => {
     syncOsRouteFromHashForTests();
     assert.equal(getForegroundAppId(), 'scheduler');
     assert.equal(getOsView(), 'app');
-    assert.equal(isSchedulerSidePanelOpen(), false);
   });
 
   test('hash route #/app/scheduler foregrounds scheduler in app view', () => {
@@ -155,24 +142,11 @@ describe('scheduler workspace shell', () => {
     assert.equal(getOsView(), 'app');
   });
 
-  test('scheduler job editor opens as auxiliary window', () => {
-    windowManager.ensureLayer();
-    const windowId = windowManager.open('scheduler', {
-      instanceId: SCHEDULER_EDITOR_INSTANCE_ID,
-      title: 'Add scheduled job',
-      bounds: { x: 100, y: 80, width: 480, height: 560 },
-      persistBounds: false,
-      manageInstance: false,
-    });
-    assert.ok(windowId);
-    const record = windowManager.getWindows().find((w) => w.id === windowId);
-    assert.ok(record);
-    assert.equal(record?.instanceId, SCHEDULER_EDITOR_INSTANCE_ID);
-    assert.equal(record?.manageInstance, false);
-    assert.equal(record?.persistBounds, false);
-    assert.equal(record?.bounds.width, 480);
-    assert.equal(record?.bounds.height, 560);
-    windowManager.close(windowId);
-    assert.equal(getForegroundAppId(), null);
+  test('scheduler job editor opens as an in-app overlay', () => {
+    openJobEditorWindow({ title: 'Add scheduled job' });
+    const overlay = document.querySelector('.scheduler-editor-overlay');
+    assert.ok(overlay);
+    resetJobEditorWindowForTests();
+    assert.equal(document.querySelector('.scheduler-editor-overlay'), null);
   });
 });

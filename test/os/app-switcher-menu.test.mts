@@ -1,15 +1,12 @@
 /**
- * Menubar app switcher catalog: Desktop first, then the same apps as the dock.
+ * Menubar app switcher catalog mirrors the left app rail.
  */
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import { listAppSwitcherItems } from '../../src/os/app-switcher-menu.ts';
 import {
-  APP_SWITCHER_DESKTOP_ID,
-  listAppSwitcherItems,
-} from '../../src/os/app-switcher-menu.ts';
-import {
-  listDockApps,
+  listRailApps,
   resetAppPreferencesForTests,
 } from '../../src/os/app-preferences.ts';
 
@@ -33,22 +30,19 @@ describe('app switcher menu items', () => {
     resetAppPreferencesForTests();
   });
 
-  test('leads with Desktop, then mirrors listDockApps order', () => {
+  test('lists the same apps as listRailApps in order', () => {
     const items = listAppSwitcherItems({
       osView: 'app',
       foregroundAppId: 'code',
     });
-    const dockIds = listDockApps().map((app) => app.id);
+    const railIds = listRailApps().map((app) => app.id);
 
-    assert.equal(items[0]?.id, APP_SWITCHER_DESKTOP_ID);
-    assert.equal(items[0]?.name, 'Desktop');
-    assert.equal(items[0]?.icon, 'minnow-glyph');
     assert.deepEqual(
-      items.slice(1).map((item) => item.id),
-      dockIds,
+      items.map((item) => item.id),
+      railIds,
     );
-    // Chat lives on the desktop surface, not in the dock or switcher grid.
     assert.equal(items.some((item) => item.id === 'chat'), false);
+    assert.equal(items.some((item) => item.id === 'desktop'), false);
   });
 
   test('marks the foreground app active while in an app view', () => {
@@ -57,21 +51,20 @@ describe('app switcher menu items', () => {
       foregroundAppId: 'brain',
     });
     const brain = items.find((item) => item.id === 'brain');
-    const desktop = items.find((item) => item.id === APP_SWITCHER_DESKTOP_ID);
+    const code = items.find((item) => item.id === 'code');
 
     assert.equal(brain?.active, true);
-    assert.equal(desktop?.active, false);
+    assert.equal(code?.active, false);
   });
 
-  test('marks Desktop active on the desktop view', () => {
+  test('marks no rail app active on the workspaces view', () => {
     const items = listAppSwitcherItems({
-      osView: 'desktop',
+      osView: 'workspaces',
       foregroundAppId: 'code',
     });
 
-    assert.equal(items[0]?.active, true);
     assert.equal(
-      items.slice(1).every((item) => item.active === false),
+      items.every((item) => item.active === false),
       true,
     );
   });

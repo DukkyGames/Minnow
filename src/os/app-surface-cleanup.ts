@@ -3,23 +3,18 @@
  */
 
 import {
-  deactivateDesktopExperts,
-  deactivateDesktopResearch,
-  isDesktopExpertsActive,
-  isDesktopResearchActive,
-} from './desktop-state';
-import {
   closeInstance,
   getForegroundAppId,
   getInstanceSnapshot,
-  showDesktop,
+  showWorkspaces,
 } from './instances';
 import { isAppAvailable } from './app-preferences';
 import type { AppId } from './types';
+import { closeResearchPanel, isResearchPanelOpen } from '../ui/research-panel';
 
 /**
- * Close instances / desktop overlays for unavailable apps.
- * If the foreground surface was closed, return to the desktop.
+ * Close instances / overlays for unavailable apps.
+ * If the foreground surface was closed, return to the workspace gate.
  */
 export function closeUnavailableAppSurfaces(): void {
   const snap = getInstanceSnapshot();
@@ -32,21 +27,16 @@ export function closeUnavailableAppSurfaces(): void {
     closeInstance(inst.id);
   }
 
-  if (isDesktopResearchActive() && !isAppAvailable('research')) {
-    deactivateDesktopResearch();
-    closedForeground = true;
-  }
-
-  if (isDesktopExpertsActive() && !isAppAvailable('experts')) {
-    deactivateDesktopExperts();
+  if (isResearchPanelOpen() && !isAppAvailable('research')) {
+    closeResearchPanel();
     closedForeground = true;
   }
 
   if (!closedForeground) return;
 
-  showDesktop();
-  if (typeof window !== 'undefined' && window.location.hash !== '#/desktop') {
-    window.location.hash = '#/desktop';
+  showWorkspaces();
+  if (typeof window !== 'undefined' && window.location.hash !== '#/workspaces') {
+    window.location.hash = '#/workspaces';
   }
 }
 

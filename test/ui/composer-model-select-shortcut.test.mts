@@ -11,7 +11,7 @@ import {
 import {
   resetDesktopStateForTests,
   setDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
+} from '../helpers/legacy-desktop-state.ts';
 
 describe('composer model select shortcut', () => {
   test('Mod+M opens the per-chat model picker on the active composer', async () => {

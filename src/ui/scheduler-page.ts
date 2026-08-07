@@ -10,7 +10,7 @@ import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 import { renderSchedulerPanel } from './scheduler/scheduler-panel';
-import { openJobEditorWindow } from './scheduler/job-editor-window';
+import { openJobEditorWindow } from './scheduler/job-editor-overlay';
 import type { ScheduledJob } from '../scheduler/client';
 
 let initialized = false;

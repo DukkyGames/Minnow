@@ -13,7 +13,6 @@ import {
   type PaneSlotId,
   type SlotContent,
 } from '../state/file-panel';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isMobileLayout } from './file-layout';
 import {
@@ -37,7 +36,7 @@ import { activatePreviewTab } from './preview-tab-store';
 function isDesktopWorkspaceHostingSurface(): boolean {
   const codeForeground = getOsView() === 'app' && getForegroundAppId() === 'code';
   if (codeForeground) return false;
-  return isDesktopChatActive() || getOsView() === 'workspaces';
+  return false || getOsView() === 'workspaces';
 }
 
 export const WORKSPACE_PREVIEW_SECONDARY_INSTANCE = 'workspace-preview-secondary';

@@ -8,7 +8,6 @@ import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-bindin
 import { setBoardModel } from '../state/orchestrate-board-actions.ts';
 import { getModelRowForSelectOrCanonicalId, updateModelLoadUnloadButtons } from '../api/models';
 import { modelCache } from '../app-state';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { modelProducerLogoSvg } from '../providers/model-producer';
 import { isModelLoadUnloadBusy } from './model-load-unload-button';
@@ -89,7 +88,7 @@ function isElementVisible(el: HTMLElement): boolean {
 function resolveChatModelTriggerVariant(): ComposerModelSurfaceVariant | null {
   const foregroundAppId = getForegroundAppId();
   if (foregroundAppId === 'code') return 'code';
-  if (isDesktopChatActive()) return 'desktop';
+  if (false) return 'desktop';
   if (isChatAppForeground()) return 'chat';
 
   const desktopInput = document.getElementById('desktopInput');

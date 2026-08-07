@@ -10,7 +10,6 @@ import {
   getAppById,
   isAppId,
 } from '../../src/os/app-registry.ts';
-import { CALENDAR_EVENT_EDITOR_INSTANCE_ID } from '../../src/os/calendar-constants.ts';
 import {
   initAppHost,
   resetAppHostForTests,
@@ -30,13 +29,9 @@ import {
   resolveLegacyHash,
 } from '../../src/os/router.ts';
 import {
-  resetWindowManagerForTests,
-  windowManager,
-} from '../../src/os/window-manager.ts';
-import {
   openEventEditorWindow,
   resetEventEditorWindowForTests,
-} from '../../src/ui/calendar/event-editor-window.ts';
+} from '../../src/ui/calendar/event-editor-overlay.ts';
 
 function setupCalendarDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
@@ -76,9 +71,9 @@ describe('calendar app registry', () => {
 });
 
 describe('calendar router', () => {
-  test('legacy #/calendar redirects to desktop while Calendar app is release-hidden', () => {
+  test('legacy #/calendar redirects to workspaces while Calendar app is release-hidden', () => {
     const legacy = resolveLegacyHash('#/calendar');
-    assert.equal(legacy.hash, '#/desktop');
+    assert.equal(legacy.hash, '#/workspaces');
   });
 
   test('parseOsHash resolves calendar app route', () => {
@@ -123,9 +118,8 @@ describe('calendar window shell', () => {
     g.HTMLElement = win.HTMLElement;
     g.localStorage = win.localStorage;
     win.localStorage.clear();
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
     setupCalendarDom(win);
-    resetWindowManagerForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -136,7 +130,6 @@ describe('calendar window shell', () => {
   });
 
   afterEach(() => {
-    resetWindowManagerForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -155,8 +148,6 @@ describe('calendar window shell', () => {
     assert.ok(snap.foregroundId);
     assert.equal(snap.instances.some((i) => i.appId === 'calendar'), true);
 
-    assert.equal(windowManager.getWindows().length, 0);
-
     const stage = document.getElementById('osStage');
     assert.equal(stage?.classList.contains('is-in-app-fullscreen'), true);
 
@@ -165,24 +156,22 @@ describe('calendar window shell', () => {
     assert.equal(content?.parentElement?.id, 'osAppsLayer');
   });
 
-  test('launchApp(calendar) blocks hidden app and returns to desktop', async () => {
+  test('launchApp(calendar) blocks hidden app and returns to workspaces', async () => {
     initOsRouter();
     markCalendarOpen();
     launchInstance('calendar');
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    assert.equal(windowManager.getWindows().length, 0);
-
     launchApp('calendar');
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    assert.equal(window.location.hash, '#/desktop');
-    assert.equal(getInstanceSnapshot().view, 'desktop');
+    assert.equal(window.location.hash, '#/workspaces');
+    assert.equal(getInstanceSnapshot().view, 'workspaces');
   });
 
-  test('openEventEditorWindow opens a child editor window', async () => {
+  test('openEventEditorWindow opens an in-app overlay', async () => {
     markCalendarOpen();
     launchInstance('calendar');
     syncAppHostForTests();
@@ -191,11 +180,7 @@ describe('calendar window shell', () => {
     openEventEditorWindow({ event: null, calendars: [] });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const windows = windowManager.getWindows();
-    assert.equal(windows.length, 2);
-    const editor = windows.find((w) => w.instanceId === CALENDAR_EVENT_EDITOR_INSTANCE_ID);
-    assert.ok(editor);
-    assert.equal(editor.manageInstance, false);
-    assert.equal(editor.title, 'New event');
+    const overlay = document.querySelector('.calendar-event-editor-overlay');
+    assert.ok(overlay);
   });
 });

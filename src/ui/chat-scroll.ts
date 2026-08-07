@@ -6,7 +6,6 @@ import {
   isChatAppForeground,
   isEmailAssistantForeground,
 } from './chat-mount';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 
 /** Distance from bottom that still counts as "pinned" (larger than terminal — more padding in .chat-area). */
@@ -39,7 +38,7 @@ export function getChatScrollRoot(): HTMLElement | null {
   if (isEmailAssistantForeground()) {
     return document.querySelector<HTMLElement>('.email-assistant-scroll');
   }
-  if (isDesktopChatActive() && getForegroundAppId() !== 'code') {
+  if (false && getForegroundAppId() !== 'code') {
     return document.querySelector('.mn-os-chat-transcript') ?? chatAreaEl;
   }
   if (isChatAppForeground()) {

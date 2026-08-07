@@ -313,21 +313,13 @@ async function ensureAskQuestionSurfaceForChat(chat: Chat): Promise<void> {
   }
 
   if (chat.modeId !== 'desktop') {
-
     return;
-
   }
 
-  const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
-
-  if (isDesktopChatActive()) {
-
-    return;
-
-  }
-
-  await activateDesktopChat({ chatId: chat.id });
-
+  const { launchApp } = await import('../os/router');
+  launchApp('code', { chatId: chat.id });
+  const { renderChatFromHistory } = await import('../ui/messages');
+  renderChatFromHistory(chat);
 }
 
 

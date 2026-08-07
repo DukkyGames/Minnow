@@ -18,7 +18,6 @@ import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
 import { isPhoneWindowSheetOpen } from './shell-chrome';
-import { windowManager } from './window-manager';
 import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
 import { openProductWiki } from '../ui/product-wiki';
@@ -265,8 +264,6 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   syncMenubar();
   const unsub = subscribeInstances(syncMenubar);
-  // Opening/closing a window does not emit an instance change on its own.
-  const unsubWindows = windowManager.subscribe(syncMenubar);
   const unsubInbox = subscribeNotifications(syncMenubar);
   const unsubPrefs = subscribeAppPreferences(syncMenubar);
   const unsubNotif = onNewNotification((record) => {
@@ -278,7 +275,6 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   return () => {
     unsub();
-    unsubWindows();
     unsubInbox();
     unsubPrefs();
     unsubNotif();

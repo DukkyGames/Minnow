@@ -6,7 +6,7 @@ const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts'
 );
 const { setDesktopStateForTests, resetDesktopStateForTests } = await import(
-  '../../src/os/desktop-state.ts'
+  '../helpers/legacy-desktop-state.ts'
 );
 const { resetInstancesForTests } = await import('../../src/os/instances.ts');
 const { renderChatFromHistory } = await import('../../src/ui/messages.ts');

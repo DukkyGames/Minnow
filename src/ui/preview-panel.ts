@@ -386,10 +386,9 @@ async function syncDesignModeElectronGuest(): Promise<void> {
 /** Primary workspace preview — exported for secondary design guest sync. */
 export const syncPrimaryDesignModeElectronGuest = syncDesignModeElectronGuest;
 
-/** Design Mode is a Code-workspace tool — hidden and disabled on the Minnow desktop browser drawer. */
+/** Design Mode is a Code-workspace tool. */
 export async function isPreviewDesignModeAvailable(): Promise<boolean> {
-  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
-  return !isDesktopWorkspaceHostingActive();
+  return true;
 }
 
 /**
@@ -1177,12 +1176,8 @@ export async function revealPreviewPanelForAgentNavigation(url: string): Promise
   const trimmed = url.trim();
   if (!trimmed) return;
 
-  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
-  const desktopHosted = isDesktopWorkspaceHostingActive();
-  if (desktopHosted) {
-    const mounts = await import('../os/desktop-workspace-mounts');
-    await mounts.revealDesktopBrowserPanel();
-  } else if (!(await dismissFileViewerForPreview())) {
+  const desktopHosted = false;
+  if (!(await dismissFileViewerForPreview())) {
     return;
   }
 
@@ -1224,10 +1219,6 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed || !HTTP_URL_RE.test(trimmed)) return;
   if (!(await dismissFileViewerForPreview())) return;
-
-  const { isDesktopWorkspaceHostingActive } = await import('../os/desktop-workspace-mounts');
-  const desktopHosted = isDesktopWorkspaceHostingActive();
-  if (!desktopHosted && !(await dismissFileViewerForPreview())) return;
 
   const api = getPreviewApi();
   if (!api) {

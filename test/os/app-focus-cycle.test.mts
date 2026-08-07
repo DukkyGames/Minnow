@@ -24,7 +24,6 @@ import {
   resetInstancesForTests,
   showDesktop,
 } from '../../src/os/instances.ts';
-import { resetDesktopStateForTests } from '../../src/os/desktop-state.ts';
 import { resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   initOsRouter,
@@ -56,7 +55,6 @@ describe('app focus cycle', () => {
     win.location.hash = '#/desktop';
     resetAppPreferencesForTests();
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     resetOsRouterForTests();
     resetAppFocusCycleForTests();
@@ -68,7 +66,6 @@ describe('app focus cycle', () => {
     resetAppFocusCycleForTests();
     resetOsRouterForTests();
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     resetAppPreferencesForTests();
   });
@@ -89,10 +86,10 @@ describe('app focus cycle', () => {
     assert.deepEqual(listCycleableAppSurfaces(), ['code', APP_SWITCHER_DESKTOP_ID]);
   });
 
-  test('getCurrentAppSurfaceId uses foreground window apps on the desktop view', () => {
+  test('getCurrentAppSurfaceId uses the foreground app when an app is open', () => {
     launchInstance('settings');
 
-    assert.equal(getOsView(), 'desktop');
+    assert.equal(getOsView(), 'app');
     assert.equal(getCurrentAppSurfaceId(), 'settings');
   });
 
@@ -117,7 +114,7 @@ describe('app focus cycle', () => {
     cycleAppSurfaces('backward');
     syncOsRouteFromHashForTests();
 
-    assert.equal(getOsView(), 'desktop');
+    assert.equal(getOsView(), 'workspaces');
     assert.equal(getForegroundAppId(), null);
   });
 });

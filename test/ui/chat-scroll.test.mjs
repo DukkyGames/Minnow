@@ -174,7 +174,7 @@ describe('chat-scroll', () => {
 
   test('wheel up on desktop transcript unpins before stream follow', async () => {
     const { setDesktopStateForTests, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
+      '../helpers/legacy-desktop-state.ts'
     );
     const { resetInstancesForTests } = await import('../../src/os/instances.ts');
 
@@ -228,7 +228,7 @@ describe('chat-scroll', () => {
 
   test('desktop transcript scroll updates pin state', async () => {
     const { setDesktopStateForTests, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
+      '../helpers/legacy-desktop-state.ts'
     );
     const { resetInstancesForTests } = await import('../../src/os/instances.ts');
 

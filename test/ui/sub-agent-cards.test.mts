@@ -6,7 +6,7 @@ import {
   resetDesktopStateForTests,
   setDesktopStateForTests,
   isDesktopChatActive,
-} from '../../src/os/desktop-state.ts';
+} from '../helpers/legacy-desktop-state.ts';
 import {
   initOsPageBridge,
   resetOsPageBridgeForTests,

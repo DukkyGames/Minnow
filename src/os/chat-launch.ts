@@ -78,19 +78,7 @@ export async function switchToCodeChat(chatId: string): Promise<void> {
 
 /** Activate an assistant thread after desktop chat is active (notification deep-link). */
 export async function switchToDesktopChatThread(chatId: string): Promise<void> {
-  const trimmed = chatId.trim();
-  if (!trimmed) return;
-
-  const { activateDesktopChatSession } = await import('./desktop-chat');
-  const trySwitch = (attempt = 0): void => {
-    const col = document.getElementById('desktopChatCol');
-    if (col || attempt >= 20) {
-      activateDesktopChatSession(trimmed);
-      return;
-    }
-    window.setTimeout(() => trySwitch(attempt + 1), 50);
-  };
-  trySwitch();
+  await switchToCodeChat(chatId);
 }
 
 /** @deprecated Legacy Chat app thread switch — routes to desktop chat. */

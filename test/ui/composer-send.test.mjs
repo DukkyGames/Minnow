@@ -6,7 +6,7 @@ const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts'
 );
-const { setDesktopStateForTests } = await import('../../src/os/desktop-state.ts');
+const { setDesktopStateForTests } = await import('../helpers/legacy-desktop-state.ts');
 const {
   setComposerStreamingMode,
   shouldAllowComposerPrimaryAction,

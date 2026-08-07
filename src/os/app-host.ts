@@ -10,7 +10,6 @@ import { getCurrentRoute } from './router';
 import type { AppId, LaunchOptions } from './types';
 import type { SettingsSectionId } from '../ui/settings-page-types';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
-import { syncSchedulerSidePanel } from './scheduler-side-panel';
 import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
@@ -383,8 +382,6 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
 
   const generation = ++syncGeneration;
 
-  syncSchedulerSidePanel();
-
   const blur = shouldBlurDesktop(snapshot);
   const immersive = shouldSuppressDesktopChrome();
   stage.classList.toggle('is-in-app', blur);
@@ -395,10 +392,6 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
     hideAllLayers();
     if (lastForegroundApp !== null) closeAllAppPages();
     lastForegroundApp = null;
-    void import('./desktop-state').then(async () => {
-      const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
-      await restoreDesktopSessionOnForeground();
-    });
     return;
   }
 

@@ -116,7 +116,6 @@ export function buildOnboardingContext(
     modelId: (modelStep.modelId as string) ?? null,
     themeMode: (themeStep.mode as OnboardingContext['themeMode']) ?? null,
     themeFamily: (themeStep.family as OnboardingContext['themeFamily']) ?? null,
-    wallpaper: (themeStep.wallpaper as OnboardingContext['wallpaper']) ?? null,
     searxngSkipped: Boolean(state.steps.extras?.data?.searxngSkipped),
     serverAvailable: options.serverAvailable,
     configServerAvailable: options.configServerAvailable,

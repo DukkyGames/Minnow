@@ -6,26 +6,18 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  resetDesktopStateForTests,
-  setDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
-import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
 } from '../../src/os/page-bridge.ts';
-import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/sessions.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
 
 function setupDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
-    <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
     <main id="chatView" class="chat-app-page is-open"></main>
-    <div id="desktopChatCol"></div>
     <textarea id="msgInput"></textarea>
     <textarea id="chatAppInput"></textarea>
-    <textarea id="desktopInput"></textarea>
     <button id="sendBtn"></button>
     <button id="chatAppSendBtn"></button>
-    <button id="desktopSendBtn"></button>
     <aside class="email-assistant-dock is-open" aria-hidden="false">
       <div id="emailAssistantMessageCol"></div>
       <div class="email-assistant-scroll"></div>
@@ -49,14 +41,12 @@ describe('chat-mount foreground', () => {
     g.HTMLElement = win.HTMLElement;
     setupDom(win);
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     initOsPageBridge();
   });
 
   afterEach(() => {
     setSessionStateForTests(null);
-    resetDesktopStateForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
   });
@@ -73,41 +63,10 @@ describe('chat-mount foreground', () => {
     assert.equal(getActiveComposerSurface().inputEl?.id, 'msgInput');
   });
 
-  test('composer uses Code input when Code is foreground while desktop chat stays active', async () => {
-    setSessionStateForTests({
-      version: 5,
-      activeId: 'assistant-chat',
-      sidebarCollapsed: false,
-      lastActiveChatIdByWorkspace: {},
-      lastActiveChatIdByApp: { chat: 'assistant-chat' },
-      chats: [
-        {
-          ...createEmptyChatObject('model-a'),
-          id: 'assistant-chat',
-          name: 'Desktop hello',
-          workspacePath: '/home/user/.minnow/workspace',
-          modeId: 'desktop',
-        },
-      ],
-    });
-
-    setDesktopStateForTests('chatActive');
-    const { isChatAppForeground } = await import('../../src/ui/chat-mount.ts');
-    const { getActiveComposerSurface } = await import('../../src/ui/composer-surface.ts');
-    assert.equal(isChatAppForeground(), true);
-    assert.equal(getActiveComposerSurface().inputEl?.id, 'desktopInput');
-
-    launchInstance('code');
-    assert.equal(isChatAppForeground(), false);
-    assert.equal(getActiveComposerSurface().inputEl?.id, 'msgInput');
-  });
-
-  test('shouldPaintDesktopChatSurface is false when Code is foreground', async () => {
+  test('shouldPaintDesktopChatSurface is always false after Phase 5', async () => {
     const { shouldPaintDesktopChatSurface } = await import('../../src/ui/chat-mount.ts');
 
-    setDesktopStateForTests('chatActive');
-    assert.equal(shouldPaintDesktopChatSurface(), true);
-
+    assert.equal(shouldPaintDesktopChatSurface(), false);
     launchInstance('code');
     assert.equal(shouldPaintDesktopChatSurface(), false);
   });

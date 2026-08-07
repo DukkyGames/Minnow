@@ -13,10 +13,6 @@ import {
 import {
   CALENDAR_EVENT_EDITOR_INSTANCE_ID,
 } from '../../os/calendar-constants';
-import { windowManager, type WindowBounds } from '../../os/window-manager';
-
-const DEFAULT_EDITOR_BOUNDS: WindowBounds = { x: 140, y: 88, width: 440, height: 520 };
-
 export interface EventEditorWindowOptions {
   /** Existing event when editing; omit for create. */
   event?: CalendarEvent | null;
@@ -25,50 +21,41 @@ export interface EventEditorWindowOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
 }
 
-let openWindowId: string | null = null;
+let overlayRoot: HTMLDivElement | null = null;
 
-/** Whether the calendar event editor child window is open. */
-export function isEventEditorWindowOpen(): boolean {
-  return openWindowId !== null && Boolean(windowManager.getFrame(openWindowId));
+/** Whether the calendar event editor overlay is open. */
+export function isEventEditorWindowOpen() {
+  return Boolean(overlayRoot?.isConnected);
 }
 
-/** Close the calendar event editor window if open. */
-export function closeEventEditorWindow(): void {
-  if (!openWindowId) return;
-  windowManager.close(openWindowId);
-  openWindowId = null;
+/** Close the calendar event editor overlay if open. */
+export function closeEventEditorWindow() {
+  overlayRoot?.remove();
+  overlayRoot = null;
 }
 
-/** Open (or foreground) the event editor in a floating child window. */
-export function openEventEditorWindow(options: EventEditorWindowOptions): void {
+/** Open the event editor as a centered overlay on the calendar app. */
+export function openEventEditorWindow(options: EventEditorWindowOptions) {
+  closeEventEditorWindow();
   const event = options.event ?? null;
-  const title = event ? 'Edit event' : 'New event';
-
-  windowManager.ensureLayer();
-  const windowId = windowManager.open('calendar', {
-    instanceId: CALENDAR_EVENT_EDITOR_INSTANCE_ID,
-    title,
-    bounds: { ...DEFAULT_EDITOR_BOUNDS },
-    persistBounds: false,
-    manageInstance: false,
-  });
-  openWindowId = windowId;
-
-  const clearIfClosed = (): void => {
-    if (!windowManager.getWindows().some((w) => w.id === windowId)) {
-      openWindowId = null;
-      unsub();
-    }
-  };
-  const unsub = windowManager.subscribe(() => {
-    clearIfClosed();
-  });
-
-  const body = windowManager.getFrame(windowId)?.body;
-  if (!body) return;
-
-  body.classList.add('calendar-event-editor-window-body');
-  mountEditor(body, { ...options, event });
+  overlayRoot = document.createElement('div');
+  overlayRoot.className = 'calendar-event-editor-overlay';
+  const backdrop = document.createElement('button');
+  backdrop.type = 'button';
+  backdrop.className = 'calendar-event-editor-overlay__backdrop';
+  backdrop.setAttribute('aria-label', 'Close event editor');
+  backdrop.addEventListener('click', () => closeEventEditorWindow());
+  const dialog = document.createElement('div');
+  dialog.className = 'calendar-event-editor-overlay__dialog calendar-event-editor-window-body';
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  overlayRoot.append(backdrop, dialog);
+  const host =
+    document.getElementById('calendarView') ??
+    document.getElementById('osAppsLayer') ??
+    document.body;
+  host.appendChild(overlayRoot);
+  mountEditor(dialog, { ...options, event });
 }
 
 function mountEditor(mount: HTMLElement, options: EventEditorWindowOptions & { event: CalendarEvent | null }): void {
@@ -222,5 +209,5 @@ function fromLocalInput(value: string): string {
 
 /** Reset module state (tests). */
 export function resetEventEditorWindowForTests(): void {
-  openWindowId = null;
+  overlayRoot = null;
 }

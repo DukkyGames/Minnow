@@ -21,12 +21,9 @@ import {
 import { createSettingsToggleRow } from '../settings-switch';
 import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
 import { mountScheduleField } from './schedule-field';
-import { windowManager, type WindowBounds } from '../../os/window-manager';
 import { SCHEDULER_EDITOR_INSTANCE_ID } from '../../os/scheduler-constants';
 
 export { SCHEDULER_EDITOR_INSTANCE_ID };
-
-const DEFAULT_EDITOR_BOUNDS: WindowBounds = { x: 120, y: 72, width: 480, height: 560 };
 
 const EMPTY_FORM: Omit<ScheduledJob, 'id' | 'createdAt' | 'updatedAt' | 'running'> = {
   label: '',
@@ -90,50 +87,41 @@ function formatJobModelLabel(
   return providerLabel ? `${optionText} — ${providerLabel}` : optionText;
 }
 
-let openWindowId: string | null = null;
+let overlayRoot: HTMLDivElement | null = null;
 
-/** Whether the scheduler job editor window is open. */
-export function isJobEditorWindowOpen(): boolean {
-  return openWindowId !== null && Boolean(windowManager.getFrame(openWindowId));
+/** Whether the scheduler job editor overlay is open. */
+export function isJobEditorWindowOpen() {
+  return Boolean(overlayRoot?.isConnected);
 }
 
-/** Close the scheduler job editor window if open. */
-export function closeJobEditorWindow(): void {
-  if (!openWindowId) return;
-  windowManager.close(openWindowId);
-  openWindowId = null;
+/** Close the scheduler job editor overlay if open. */
+export function closeJobEditorWindow() {
+  overlayRoot?.remove();
+  overlayRoot = null;
 }
 
-/** Open (or foreground) the scheduler job editor in a floating window. */
-export function openJobEditorWindow(options: JobEditorWindowOptions = {}): void {
+/** Open the scheduler job editor as a centered overlay on the scheduler app. */
+export function openJobEditorWindow(options: JobEditorWindowOptions = {}) {
+  closeJobEditorWindow();
   const editingId = options.jobId ?? null;
-  const title = editingId ? 'Edit scheduled job' : 'Add scheduled job';
-
-  windowManager.ensureLayer();
-  const windowId = windowManager.open('scheduler', {
-    instanceId: SCHEDULER_EDITOR_INSTANCE_ID,
-    title,
-    bounds: { ...DEFAULT_EDITOR_BOUNDS },
-    persistBounds: false,
-    manageInstance: false,
-  });
-  openWindowId = windowId;
-
-  const clearIfClosed = (): void => {
-    if (!windowManager.getWindows().some((w) => w.id === windowId)) {
-      openWindowId = null;
-      unsub();
-    }
-  };
-  const unsub = windowManager.subscribe(() => {
-    clearIfClosed();
-  });
-
-  const body = windowManager.getFrame(windowId)?.body;
-  if (!body) return;
-
-  body.classList.add('scheduler-editor-window-body');
-  void mountEditor(body, { ...options, jobId: editingId ?? undefined });
+  overlayRoot = document.createElement('div');
+  overlayRoot.className = 'scheduler-editor-overlay';
+  const backdrop = document.createElement('button');
+  backdrop.type = 'button';
+  backdrop.className = 'scheduler-editor-overlay__backdrop';
+  backdrop.setAttribute('aria-label', 'Close job editor');
+  backdrop.addEventListener('click', () => closeJobEditorWindow());
+  const dialog = document.createElement('div');
+  dialog.className = 'scheduler-editor-overlay__dialog scheduler-editor-window-body';
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  overlayRoot.append(backdrop, dialog);
+  const host =
+    document.getElementById('schedulerView') ??
+    document.getElementById('osAppsLayer') ??
+    document.body;
+  host.appendChild(overlayRoot);
+  void mountEditor(dialog, { ...options, jobId: editingId ?? undefined });
 }
 
 async function mountEditor(
@@ -396,5 +384,5 @@ async function mountEditor(
 
 /** Reset module state (tests). */
 export function resetJobEditorWindowForTests(): void {
-  openWindowId = null;
+  overlayRoot = null;
 }

@@ -1,12 +1,12 @@
 /**
- * Menubar app switcher — icon trigger opens a compact grid of dock apps plus Desktop.
+ * Menubar app switcher — compact grid of rail apps.
  */
 
-import { listDockApps, subscribeAppPreferences } from './app-preferences';
+import { listRailApps, subscribeAppPreferences } from './app-preferences';
 import { getForegroundAppId, getOsView } from './instances';
 import { createAppIcon } from './icons';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
-import { launchApp, navigateToDesktop } from './router';
+import { launchApp } from './router';
 import { closeComposerModelMenu } from '../ui/composer-model-trigger';
 import {
   registerChromePopover,
@@ -32,28 +32,20 @@ export interface AppSwitcherItem {
  * Pure helper for tests and for rebuilding the open popover.
  */
 export function listAppSwitcherItems(options?: {
-  osView?: 'desktop' | 'app';
+  osView?: 'workspaces' | 'app';
   foregroundAppId?: AppId | null;
 }): AppSwitcherItem[] {
   const osView = options?.osView ?? getOsView();
   const foreground = options?.foregroundAppId ?? getForegroundAppId();
-  const onDesktop = osView === 'desktop';
 
-  const items: AppSwitcherItem[] = [
-    {
-      id: APP_SWITCHER_DESKTOP_ID,
-      name: 'Desktop',
-      icon: 'minnow-glyph',
-      active: onDesktop,
-    },
-  ];
+  const items: AppSwitcherItem[] = [];
 
-  for (const app of listDockApps()) {
+  for (const app of listRailApps()) {
     items.push({
       id: app.id,
       name: app.name,
       icon: app.icon,
-      active: !onDesktop && foreground === app.id,
+      active: osView === 'app' && foreground === app.id,
     });
   }
 
@@ -106,10 +98,7 @@ function positionPanel(btn: HTMLButtonElement, panel: HTMLElement): void {
 /** Launch Desktop or an app, then dismiss the popover. */
 function activateItem(id: AppSwitcherItemId): void {
   closeAppSwitcherMenu();
-  if (id === APP_SWITCHER_DESKTOP_ID) {
-    navigateToDesktop();
-    return;
-  }
+  if (id === APP_SWITCHER_DESKTOP_ID) return;
   launchApp(id);
 }
 

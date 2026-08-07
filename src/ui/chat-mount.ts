@@ -2,14 +2,12 @@
  * Chat transcript mount resolution for Code (#chatArea) vs Chat app vs desktop chat.
  */
 
-import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 import { getOrchestrateChatMountElement } from './orchestrate-board-init-split';
 
-/** True when chat transcript/actions should target the desktop shell, not Code. */
+/** Desktop chat surface was removed with the workspace-first shell. */
 export function shouldPaintDesktopChatSurface(): boolean {
-  if (getForegroundAppId() === 'code') return false;
-  return isDesktopChatActive();
+  return false;
 }
 
 /** True when desktop chat or the legacy Chat app is the active UI. */
@@ -17,7 +15,6 @@ export function isChatAppForeground(): boolean {
   const foregroundAppId = getForegroundAppId();
   // Code fullscreen keeps desktop chat state for return navigation, but Code owns the UI.
   if (foregroundAppId === 'code') return false;
-  if (isDesktopChatActive()) return true;
   if (foregroundAppId != null) return false;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
 }
@@ -93,10 +90,6 @@ export function getActiveChatMountElement(): HTMLElement {
   if (isEmailAssistantForeground()) {
     const emailCol = document.getElementById('emailAssistantMessageCol');
     if (emailCol) return emailCol;
-  }
-  if (!codeForeground && isDesktopChatActive()) {
-    const desktopCol = document.getElementById('desktopChatCol');
-    if (desktopCol) return desktopCol;
   }
   if (isChatAppForeground()) {
     const col = getChatAppMessageCol();
