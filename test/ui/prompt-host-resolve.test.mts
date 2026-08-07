@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
   resetDesktopStateForTests,
+  setDesktopStateForTests,
 } from '../helpers/legacy-desktop-state.ts';
 import {
   initOsPageBridge,

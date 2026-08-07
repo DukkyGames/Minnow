@@ -15,6 +15,9 @@ describe('menubar model chip', () => {
     const win = new Window();
     const doc = win.document;
     doc.body.innerHTML = `
+      <style>
+        .mn-os-mb-model-chip.is-expanded .mn-os-mb-model-static-role { visibility: hidden; }
+      </style>
       <select id="modelSelect">
         <option value="lmstudio\u001fqwen2.5-7b">Qwen 2.5 7B — LM Studio</option>
       </select>
@@ -24,8 +27,10 @@ describe('menubar model chip', () => {
 
     const prevDocument = globalThis.document;
     const prevWindow = globalThis.window;
+    const prevGetComputedStyle = globalThis.getComputedStyle;
     (globalThis as { document: Document }).document = doc as unknown as Document;
     (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+    globalThis.getComputedStyle = win.getComputedStyle.bind(win);
 
     const chat = createEmptyChatObject('lmstudio\u001fqwen2.5-7b');
     setSessionStateForTests({ chats: [chat], activeId: chat.id });
@@ -63,6 +68,7 @@ describe('menubar model chip', () => {
       setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;
+      globalThis.getComputedStyle = prevGetComputedStyle;
     }
   });
 
