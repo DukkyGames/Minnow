@@ -21,7 +21,7 @@ import {
   setActiveProviderId,
   updateProvider,
 } from '../providers/store.js';
-import { getManagedServerPort, startServer } from '../servers/manager.js';
+import { getManagedServerPort, isManagedServerRunning, startServer, stopServer } from '../servers/manager.js';
 import {
   getInstallStatus as getMlxInstallStatus,
   isMlxSupported,
@@ -131,6 +131,9 @@ async function isServeEndpointReachable(baseUrl) {
  * @param {ServeRecord} row
  */
 async function isServeStillLive(row) {
+  if (row.runtime === 'mlx-lm') {
+    return isManagedServerRunning('mlx-lm');
+  }
   if (row.runtime === 'llama-cpp' && row.runId) {
     const run = getRun(row.runId);
     if (run && !run.finished) return true;
@@ -335,6 +338,23 @@ async function stopExistingLlamaCppServes() {
 }
 
 /**
+ * Stop other MLX serve rows before loading a new model (single weights resident).
+ */
+async function stopExistingMlxServes() {
+  await loadServes();
+  for (const row of servesCache) {
+    if (
+      row.runtime === 'mlx-lm' &&
+      (row.status === 'running' || row.status === 'starting')
+    ) {
+      row.status = 'stopped';
+      row.stoppedAt = Date.now();
+    }
+  }
+  await saveServes();
+}
+
+/**
  * Upsert the stable llama-cpp-local provider for all llama.cpp serves.
  * @param {{ baseUrl: string, enabled: boolean }} opts
  */
@@ -516,6 +536,7 @@ export async function startServe(body) {
       : labelFromPath(modelPath);
 
   if (runtime === 'mlx-lm') {
+    await stopExistingMlxServes();
     const port = await ensureMlxLmServerRunning();
     const baseUrl = `http://127.0.0.1:${port}`;
     await upsertMlxLmProvider({ baseUrl, enabled: true });
@@ -693,10 +714,9 @@ export async function stopServe(serveId) {
   await saveServes();
 
   // llama-cpp and mlx-lm share one provider row across every serve, so it only
-  // gets disabled once the last serve for that runtime is gone. The managed
-  // mlx-lm *process* is left running on purpose: it costs little when idle, and
-  // stopping it would throw away the resident model and prompt cache that make
-  // the next load fast. Settings → Servers has the stop button when it matters.
+  // gets disabled once the last serve for that runtime is gone. mlx_lm.server has
+  // no unload endpoint — stopping the managed process is the only way to free
+  // weights from RAM when the last MLX model is ejected.
   if (row.runtime === 'llama-cpp' || row.runtime === 'mlx-lm') {
     const sharedProviderId = row.runtime === 'llama-cpp' ? LLAMA_CPP_LOCAL_ID : MLX_LM_LOCAL_ID;
     const stillRunning = servesCache.some(
@@ -710,6 +730,13 @@ export async function stopServe(serveId) {
         await updateProvider(sharedProviderId, { enabled: false });
       } catch {
         /* provider may have been removed manually */
+      }
+      if (row.runtime === 'mlx-lm') {
+        try {
+          await stopServer('mlx-lm');
+        } catch {
+          /* process may already be gone */
+        }
       }
     }
   } else if (row.providerId) {
@@ -754,6 +781,16 @@ export async function shutdownAllModelServes() {
       await updateProvider(providerId, { enabled: false });
     } catch {
       /* never seeded, or removed manually */
+    }
+  }
+  const mlxStillActive = servesCache.some(
+    (s) => s.runtime === 'mlx-lm' && (s.status === 'running' || s.status === 'starting'),
+  );
+  if (!mlxStillActive) {
+    try {
+      await stopServer('mlx-lm');
+    } catch {
+      /* already stopped */
     }
   }
 }

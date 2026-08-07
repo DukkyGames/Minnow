@@ -25,6 +25,11 @@ export function getServerMetaPath(id) {
   return path.join(getServerDir(id), 'meta.json');
 }
 
+/** Last successful spawn record for orphan reaping (~/.minnow/servers/<id>/run.json). */
+export function getServerRunPath(id) {
+  return path.join(getServerDir(id), 'run.json');
+}
+
 /** Generated SearXNG settings file path. */
 export function getServerSettingsPath(id) {
   return path.join(getServerDir(id), 'settings.yml');

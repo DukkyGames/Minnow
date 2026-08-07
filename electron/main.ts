@@ -320,20 +320,25 @@ async function shutdownRuntime(): Promise<void> {
     await pauseOrchestrateBoardsInRenderer(mainWindow);
   }
   destroyAllPreviewHosts();
-  const [ptyHost, generationsStore, modelsIndex] = await Promise.all([
+  const [ptyHost, generationsStore, modelsIndex, serversIndex] = await Promise.all([
     importServerModule<{ destroyAllPtySessions: () => void }>('terminal/pty-host.js'),
     importServerModule<{ deleteGenerationsForProviderShutdown: () => void }>(
       'generations/store.js',
     ),
     importServerModule<{ shutdownAllModelServes: () => Promise<void> }>('models/index.js'),
+    importServerModule<{ shutdownAllServers: () => Promise<void> }>('servers/index.js'),
   ]);
   const { destroyAllPtySessions } = ptyHost;
   const { deleteGenerationsForProviderShutdown } = generationsStore;
   const { shutdownAllModelServes } = modelsIndex;
+  const { shutdownAllServers } = serversIndex;
   destroyAllPtySessions();
   deleteGenerationsForProviderShutdown();
   await shutdownAllModelServes().catch((err) => {
-    console.error('[electron] model serve shutdown failed:', err);
+    console.error('[electron] shutdown model serves failed:', err);
+  });
+  await shutdownAllServers().catch((err) => {
+    console.error('[electron] shutdown managed servers failed:', err);
   });
   if (inProcessServer) {
     const close = inProcessServer.close;
