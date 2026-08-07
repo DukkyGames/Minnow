@@ -1,5 +1,5 @@
 /**
- * Left app rail (workspace-first shell) — 56px launcher column.
+ * Left app rail (workspace-first shell) — matches --sidebar-rail (48px) chrome.
  */
 
 .mn-os-workspace {
@@ -11,12 +11,12 @@
 
 #osAppRail {
   flex: none;
-  width: 56px;
+  width: var(--sidebar-rail, 48px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 0;
-  gap: 4px;
+  padding: 6px 0;
+  gap: 2px;
   background: var(--mn-surface-1);
   border-right: 1px solid var(--mn-border);
   z-index: 30;
@@ -31,26 +31,28 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   width: 100%;
+  padding: 0 4px;
+  box-sizing: border-box;
 }
 
 .mn-os-app-rail__divider {
-  width: 28px;
+  width: 24px;
   height: 1px;
-  margin: 6px 0;
+  margin: 4px 0;
   background: var(--mn-border);
   flex: none;
 }
 
 .mn-os-app-rail__btn {
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   display: grid;
   place-items: center;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--mn-fg-muted);
   cursor: pointer;
@@ -61,7 +63,7 @@
 }
 
 .mn-os-app-rail__btn .icon-svg {
-  --mn-icon-size: 22px;
+  --mn-icon-size: 16px;
 }
 
 .mn-os-app-rail__btn.is-hosting {
@@ -70,9 +72,8 @@
 }
 
 .mn-os-app-rail__btn.is-active {
-  background: var(--mn-surface-elevated);
   color: var(--mn-accent);
-  box-shadow: inset 3px 0 0 var(--mn-accent);
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
 }
 
 .mn-os-app-rail__btn:focus-visible {
@@ -87,7 +88,7 @@
   }
 
   .mn-os-app-rail__btn.is-active:hover {
-    background: var(--mn-surface-elevated);
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
     color: var(--mn-accent);
   }
 }
@@ -103,7 +104,7 @@
   color: var(--mn-fg);
   background: var(--mn-surface-elevated);
   border: 1px solid var(--mn-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--mn-shadow-popover, 0 8px 24px rgba(0, 0, 0, 0.18));
   white-space: nowrap;
 }
@@ -127,10 +128,10 @@ html.mn-narrow.minnow-os-enabled #osAppRail {
   order: 2;
   width: 100%;
   height: auto;
-  min-height: calc(52px + env(safe-area-inset-bottom, 0px));
+  min-height: calc(48px + env(safe-area-inset-bottom, 0px));
   flex-direction: row;
   align-items: stretch;
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
   border-right: none;
   border-top: 1px solid var(--mn-border);
   z-index: 35;
@@ -140,21 +141,18 @@ html.mn-narrow.minnow-os-enabled .mn-os-app-rail__nav {
   flex-direction: row;
   justify-content: space-around;
   gap: 2px;
+  padding: 0 4px;
 }
 
 html.mn-narrow.minnow-os-enabled .mn-os-app-rail__divider {
   width: 1px;
-  height: 28px;
-  margin: 0 4px;
-}
-
-html.mn-narrow.minnow-os-enabled .mn-os-app-rail__btn.is-active {
-  box-shadow: inset 0 3px 0 var(--mn-accent);
+  height: 24px;
+  margin: 0 2px;
 }
 
 html.mn-narrow.minnow-os-enabled .mn-os-app-rail__btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex: 0 1 auto;
 }
 

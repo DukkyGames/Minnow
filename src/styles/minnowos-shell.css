@@ -722,6 +722,41 @@ html.is-electron-shell[data-platform='darwin'] .mn-os-mb-window-controls {
   margin-left: 6px;
 }
 
+/* Frameless Electron titlebar — shared with legacy floating windows (styles live here after Phase 5). */
+.mn-os-window-btn {
+  width: var(--os-window-btn-size);
+  height: var(--os-window-btn-size);
+  min-width: var(--os-window-btn-size);
+  min-height: var(--os-window-btn-size);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--os-text-dim);
+  cursor: pointer;
+  transition: 0.14s var(--os-ease);
+}
+
+.mn-os-window-btn .icon-svg {
+  --mn-icon-size: var(--os-window-btn-icon-size);
+  display: block;
+  flex-shrink: 0;
+}
+
+.mn-os-window-btn:hover {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  border-color: var(--os-border);
+}
+
+.mn-os-window-btn--close:hover {
+  background: color-mix(in srgb, #e5484d 18%, var(--os-surface-2));
+  color: #ffb4b4;
+  border-color: color-mix(in srgb, #e5484d 35%, var(--os-border));
+}
+
 .mn-os-ws-dot {
   width: 7px;
   height: 7px;

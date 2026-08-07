@@ -305,7 +305,7 @@ function syncRailVisibility(root: HTMLElement): void {
 
 /**
 
- * Mount the 56px app rail inside `#osAppRail`.
+ * Mount the left app rail (`--sidebar-rail`) inside `#osAppRail`.
 
  * Returns cleanup for shell teardown.
 
