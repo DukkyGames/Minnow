@@ -38,7 +38,7 @@ export function updateWorkspaceButtonLabel(label: string, fullPath: string): voi
   btn.setAttribute('aria-haspopup', 'menu');
 
   const pathLabel = getWorkspacePathLabel();
-  const control = pathLabel?.closest('.workspace-control') ?? null;
+  const control = (pathLabel?.closest('.workspace-control') as HTMLElement | null) ?? null;
   if (!pathLabel) return;
   if (path) {
     pathLabel.textContent = short;

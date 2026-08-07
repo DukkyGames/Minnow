@@ -10,7 +10,17 @@ import {
 } from './instances';
 import { isAppAvailable } from './app-preferences';
 import type { AppId } from './types';
-import { isResearchPageOpen } from '../research/panel';
+
+/** DOM-only check so app-preferences does not import the research panel bundle (CSS). */
+function isResearchPageOpenForCleanup(): boolean {
+  if (typeof document === 'undefined') return false;
+  const root = document.getElementById('researchView');
+  const area = document.getElementById('chatArea');
+  if (area?.classList.contains('chat-area--research') && root && area.contains(root)) {
+    return true;
+  }
+  return root?.classList.contains('is-open') ?? false;
+}
 
 /**
  * Close instances / overlays for unavailable apps.
@@ -27,7 +37,7 @@ export function closeUnavailableAppSurfaces(): void {
     closeInstance(inst.id);
   }
 
-  if (isResearchPageOpen() && !isAppAvailable('research')) {
+  if (isResearchPageOpenForCleanup() && !isAppAvailable('research')) {
     void import('../research/panel').then((m) => m.closeResearch({ skipNavigate: true }));
     closedForeground = true;
   }

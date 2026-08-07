@@ -24,7 +24,7 @@ describe('compare app registry', () => {
 describe('compare router', () => {
   test('legacy #/compare redirects to desktop while Compare app is release-hidden', () => {
     const legacy = resolveLegacyHash('#/compare');
-    assert.equal(legacy.hash, '#/desktop');
+    assert.equal(legacy.hash, '#/workspaces');
   });
 
   test('parseOsHash resolves compare app route', () => {

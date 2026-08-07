@@ -24,7 +24,7 @@ describe('email app registry', () => {
 describe('email router', () => {
   test('legacy #/email redirects to desktop while Email app is release-hidden', () => {
     const legacy = resolveLegacyHash('#/email');
-    assert.equal(legacy.hash, '#/desktop');
+    assert.equal(legacy.hash, '#/workspaces');
   });
 
   test('parseOsHash resolves email app route', () => {

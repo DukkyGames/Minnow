@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { describe, test } from 'node:test';
 import { APPS, getAppById, isAppId } from '../../src/os/app-registry.ts';
 import { resolveLegacyHash, parseOsHash } from '../../src/os/router.ts';
-import { WINDOW_MOUNTED_APPS } from '../../src/os/window-mounted-apps.ts';
+import { isWindowMountedApp } from '../../src/os/window-mounted-apps.ts';
 
 describe('brain app registry', () => {
   test('brain is a registered launcher app', () => {
@@ -22,8 +22,8 @@ describe('brain app registry', () => {
     assert.equal(isAppId('brain'), true);
   });
 
-  test('WINDOW_MOUNTED_APPS includes brain', () => {
-    assert.equal(WINDOW_MOUNTED_APPS.has('brain'), true);
+  test('brain is not window-mounted in workspace-first shell', () => {
+    assert.equal(isWindowMountedApp('brain'), false);
   });
 });
 
