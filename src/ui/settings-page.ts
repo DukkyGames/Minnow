@@ -52,6 +52,7 @@ import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-moun
 import { fieldByKey } from './settings-catalog';
 import { resolveBrainMemoryRoute } from './brain-memory-routing';
 import { getCurrentRoute, launchApp, navigateToDesktop } from '../os/router';
+import type { LaunchOptions } from '../os/types';
 
 export type { SettingsSectionId, SettingsCategoryId } from './settings-page-types';
 export { categoryForArea } from './settings-page-types';
@@ -347,22 +348,46 @@ function getForegroundSettingsInstance() {
   return inst?.appId === 'settings' ? inst : null;
 }
 
-/** Close fullscreen Settings opened from Code and restore the Code workspace. */
-function closeSettingsAndReturnToCode(): boolean {
+/** Close fullscreen Settings opened from another app and restore that surface. */
+function closeSettingsAndReturnToCaller(): boolean {
   const settingsInst = getForegroundSettingsInstance();
-  if (settingsInst?.launchOptions?.returnToApp !== 'code') return false;
+  const returnApp = settingsInst?.launchOptions?.returnToApp;
+  if (!settingsInst || !returnApp) return false;
 
   const root = getSettingsRoot();
   root?.classList.remove('is-open');
   clearSettingsPageFilter();
 
-  const codeSection = settingsInst.launchOptions?.codeSection ?? getCurrentRoute().codeSection;
+  const launchOpts: LaunchOptions = {};
+  if (returnApp === 'code') {
+    launchOpts.codeSection =
+      settingsInst.launchOptions?.codeSection ?? getCurrentRoute().codeSection ?? 'chat';
+  }
+
   closeInstance(settingsInst.id);
-  launchApp('code', { codeSection: codeSection ?? 'chat' });
+  launchApp(returnApp, launchOpts);
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
   return true;
+}
+
+function osEmbeddedSettingsLaunchOptions(
+  section?: SettingsSectionId,
+  options?: { searchKey?: string },
+): LaunchOptions {
+  const launchOptions: LaunchOptions = {
+    settingsSection: section,
+    settingsSearchKey: options?.searchKey,
+  };
+  const foreground = getForegroundAppId();
+  if (foreground === 'code') {
+    launchOptions.returnToApp = 'code';
+    launchOptions.codeSection = getCurrentRoute().codeSection ?? 'chat';
+  } else if (foreground && foreground !== 'settings') {
+    launchOptions.returnToApp = foreground;
+  }
+  return launchOptions;
 }
 
 /** Open settings; optional legacy area slug or field search key for deep link. */
@@ -370,14 +395,13 @@ export function openSettings(
   section?: SettingsSectionId,
   options?: { searchKey?: string },
 ): void {
-  if (isOsEmbedded() && getForegroundAppId() === 'code') {
-    launchApp('settings', {
-      settingsSection: section,
-      settingsSearchKey: options?.searchKey,
-      returnToApp: 'code',
-      codeSection: getCurrentRoute().codeSection ?? 'chat',
-    });
-    return;
+  if (isOsEmbedded()) {
+    const foreground = getForegroundAppId();
+    // App-host calls openSettings after foregrounding Settings — apply section in-place.
+    if (foreground !== 'settings') {
+      launchApp('settings', osEmbeddedSettingsLaunchOptions(section, options));
+      return;
+    }
   }
 
   const root = getSettingsRoot();
@@ -448,7 +472,7 @@ export function openSettings(
 
 /** Close settings and return to Code, the window stack, or desktop. */
 export function closeSettings(options?: { skipNavigate?: boolean }): void {
-  if (!options?.skipNavigate && isOsEmbedded() && closeSettingsAndReturnToCode()) {
+  if (!options?.skipNavigate && isOsEmbedded() && closeSettingsAndReturnToCaller()) {
     return;
   }
 

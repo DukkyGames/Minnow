@@ -1,21 +1,3 @@
-import {
-  activateDesktopChat,
-  activateDesktopExperts,
-  activateDesktopResearch,
-  consumePendingDesktopChatActivation,
-  consumePendingDesktopExpertsActivation,
-  consumePendingDesktopResearchActivation,
-  deactivateDesktopExperts,
-  deactivateDesktopResearch,
-  isDesktopExpertsActive,
-  isDesktopResearchActive,
-  prepareDesktopChatSurface,
-  prepareDesktopExpertsSurface,
-  prepareDesktopResearchSurface,
-  queueDesktopChatActivation,
-  queueDesktopExpertsActivation,
-  queueDesktopResearchActivation,
-} from './desktop-state';
 import { getAppById, isAppId } from './app-registry';
 import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
 import { DEFAULT_MODELS_SECTION } from '../ui/models-section-ids';
@@ -24,18 +6,15 @@ import {
   getInstanceSnapshot,
   getOsView,
   launchInstance,
-  showDesktop,
+  showWorkspaces,
 } from './instances';
-import { isPhoneLayout } from '../ui/mobile-layout';
-import { windowManager } from './window-manager';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
-import { APP_SWITCHER_DESKTOP_ID } from './surface-id';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
 import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
 
-/** Legacy `#/app/…` target, or desktop when that app is unavailable. */
+/** Legacy `#/app/…` target, or workspace gate when that app is unavailable. */
 function legacyHashForApp(appId: AppId): string {
-  if (!isAppAvailable(appId)) return '#/desktop';
+  if (!isAppAvailable(appId)) return '#/workspaces';
   return `#/app/${appId}`;
 }
 
@@ -50,14 +29,10 @@ function notifyAppUnavailable(appId: AppId): void {
 }
 
 /**
- * Minimize open window sheets so the phone desktop is actually visible. The app
- * instance stays alive; relaunching it from the dock restores the sheet.
+ * @deprecated Legacy no-op — window sheets were removed with the window manager.
  */
 function parkPhoneWindowSheets(): void {
-  if (!isPhoneLayout()) return;
-  for (const win of windowManager.getWindows()) {
-    if (!win.minimized) windowManager.minimize(win.id, true);
-  }
+  /* no-op */
 }
 
 /** Block unavailable apps: toast (when user-disabled) and return to desktop. */
@@ -71,7 +46,7 @@ function rejectUnavailableApp(appId: AppId): boolean {
 let initialized = false;
 let applyingRoute = false;
 let lastForegroundApp: AppId | null = null;
-let lastRecordedSurface: typeof APP_SWITCHER_DESKTOP_ID | AppId | null = null;
+let lastRecordedSurface: AppId | null = null;
 let pendingSettingsSection: string | undefined;
 let pendingModelsSection: string | undefined;
 let pendingBrainSection: string | undefined;
@@ -96,10 +71,12 @@ export function resolveLegacyHash(hash: string): {
   modelsSection?: string;
   brainSection?: string;
   desktopChat?: boolean;
-  desktopResearch?: boolean;
   desktopExperts?: boolean;
 } {
   const trimmed = hash || '#/';
+  if (trimmed === '#/desktop' || trimmed === '#/' || trimmed === '#' || trimmed === '#/workspaces') {
+    return { hash: '#/workspaces' };
+  }
   if (trimmed.startsWith('#/settings')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^settings(?:\/([\w-]+))?/);
     const slug = match?.[1] ?? 'general';
@@ -150,19 +127,19 @@ export function resolveLegacyHash(hash: string): {
     return { hash: `#/app/brain/${section}`, brainSection: section };
   }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
-    return { hash: '#/desktop', desktopResearch: true };
+    return { hash: '#/app/research' };
   }
   if (trimmed === '#/app/research' || trimmed.startsWith('#/app/research/')) {
-    return { hash: '#/desktop', desktopResearch: true };
+    return { hash: trimmed };
   }
   if (trimmed === '#/experts' || trimmed.startsWith('#/experts/')) {
-    return { hash: '#/desktop', desktopExperts: true };
+    return { hash: legacyHashForApp('experts') };
   }
   if (trimmed === '#/app/experts' || trimmed.startsWith('#/app/experts/')) {
-    return { hash: '#/desktop', desktopExperts: true };
+    return { hash: trimmed };
   }
   if (trimmed === '#/app/chat' || trimmed.startsWith('#/app/chat/')) {
-    return { hash: '#/desktop', desktopChat: true };
+    return { hash: '#/app/code/chat' };
   }
   return { hash: trimmed };
 }
@@ -170,8 +147,13 @@ export function resolveLegacyHash(hash: string): {
 /** Parse a normalized hash into an OS route. */
 export function parseOsHash(hash: string): OsRoute {
   const normalized = hash || '#/';
-  if (normalized === '#/' || normalized === '#' || normalized === '#/desktop') {
-    return { view: 'desktop' };
+  if (
+    normalized === '#/' ||
+    normalized === '#' ||
+    normalized === '#/workspaces' ||
+    normalized === '#/desktop'
+  ) {
+    return { view: 'workspaces' };
   }
   const appMatch = normalized.match(/^#\/app\/([\w-]+)(?:\/([\w-]+))?/);
   if (appMatch && isAppId(appMatch[1])) {
@@ -200,7 +182,7 @@ export function parseOsHash(hash: string): OsRoute {
     }
     return route;
   }
-  return { view: 'desktop' };
+  return { view: 'workspaces' };
 }
 
 /** Current route derived from location hash + pending redirect state. */
@@ -213,7 +195,7 @@ export function getCurrentRoute(): OsRoute {
 }
 
 function hashForRoute(route: OsRoute): string {
-  if (route.view === 'desktop') return '#/desktop';
+  if (route.view === 'workspaces') return '#/workspaces';
   if (route.appId === 'models' && route.modelsSection) {
     return `#/app/models/${route.modelsSection}`;
   }
@@ -230,7 +212,7 @@ function hashForRoute(route: OsRoute): string {
     return `#/app/issues/${route.issueId}`;
   }
   if (route.appId) return `#/app/${route.appId}`;
-  return '#/desktop';
+  return '#/workspaces';
 }
 
 function syncForegroundLifecycle(nextApp: AppId | null): void {
@@ -242,66 +224,36 @@ function syncForegroundLifecycle(nextApp: AppId | null): void {
   }
   lastForegroundApp = nextApp;
 
-  const surfaceId = nextApp ?? APP_SWITCHER_DESKTOP_ID;
-  if (surfaceId !== lastRecordedSurface) {
+  const surfaceId = nextApp;
+  if (surfaceId && surfaceId !== lastRecordedSurface) {
     recordAppSurfaceFocus(surfaceId);
     lastRecordedSurface = surfaceId;
+  } else if (!surfaceId) {
+    lastRecordedSurface = null;
   }
 }
 
 function applyRoute(route: OsRoute, options?: LaunchOptions): void {
-  if (route.view === 'desktop') {
+  if (route.view === 'workspaces') {
     syncForegroundLifecycle(null);
-    // Windowed apps live in the desktop view, so showDesktop() alone leaves a
-    // phone's full-stage window sheet covering the home surface.
     parkPhoneWindowSheets();
-    const comingFromFullscreenApp = getOsView() === 'app';
-    const pendingResearch = consumePendingDesktopResearchActivation();
-    const pendingExperts = consumePendingDesktopExpertsActivation();
-    const pendingChat = consumePendingDesktopChatActivation();
-    // Apply desktop surface classes before instance emit so app-host never paints idle hero.
-    if (comingFromFullscreenApp) {
-      if (pendingResearch !== null) {
-        prepareDesktopResearchSurface();
-      } else if (pendingExperts !== null && isAppAvailable('experts')) {
-        prepareDesktopExpertsSurface();
-      } else if (pendingChat !== null) {
-        prepareDesktopChatSurface();
-      }
-    }
-    showDesktop();
-    if (pendingResearch !== null) {
-      void activateDesktopResearch(pendingResearch);
-      return;
-    }
-    if (pendingExperts !== null) {
-      if (isAppAvailable('experts')) {
-        void activateDesktopExperts(pendingExperts);
-      } else {
-        void import('./desktop-launch').then((m) => m.restoreDesktopSessionOnForeground());
-      }
-      return;
-    }
-    if (pendingChat !== null) {
-      void activateDesktopChat(pendingChat);
-    } else {
-      void import('./desktop-launch').then((m) => m.restoreDesktopSessionOnForeground());
-    }
+    showWorkspaces();
+    void import('./workspace-gate').then((m) => m.syncWorkspaceGateFromRoute());
     return;
   }
 
   if (!route.appId) {
     syncForegroundLifecycle(null);
-    showDesktop();
+    showWorkspaces();
     return;
   }
 
   if (!isAppAvailable(route.appId)) {
     notifyAppUnavailable(route.appId);
     syncForegroundLifecycle(null);
-    showDesktop();
-    if (typeof window !== 'undefined' && window.location.hash !== '#/desktop') {
-      window.location.hash = '#/desktop';
+    showWorkspaces();
+    if (typeof window !== 'undefined' && window.location.hash !== '#/workspaces') {
+      window.location.hash = '#/workspaces';
     }
     return;
   }
@@ -347,15 +299,6 @@ function applyRouteFromHash(): void {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;
       if (legacy.modelsSection) pendingModelsSection = legacy.modelsSection;
       if (legacy.brainSection) pendingBrainSection = legacy.brainSection;
-      if (legacy.desktopChat) {
-        queueDesktopChatActivation(pendingLaunchOptions);
-      }
-      if (legacy.desktopResearch) {
-        queueDesktopResearchActivation(pendingLaunchOptions);
-      }
-      if (legacy.desktopExperts && isAppAvailable('experts')) {
-        queueDesktopExpertsActivation(pendingLaunchOptions);
-      }
       window.location.hash = legacy.hash;
       return;
     }
@@ -374,47 +317,29 @@ function onHashChange(): void {
   applyRouteFromHash();
 }
 
-/** Navigate to the desktop launcher. */
-export function navigateToDesktop(): void {
-  const next = '#/desktop';
+/** Navigate to the workspace gate. */
+export function navigateToWorkspaces(): void {
+  const next = '#/workspaces';
   if (window.location.hash !== next) {
     window.location.hash = next;
     return;
   }
-  applyRoute({ view: 'desktop' });
+  applyRoute({ view: 'workspaces' });
+}
+
+/** @deprecated Phase 5 — use navigateToWorkspaces */
+export function navigateToDesktop(): void {
+  navigateToWorkspaces();
 }
 
 /** Launch or foreground an app and update the hash. */
 export function launchApp(appId: AppId, options?: LaunchOptions): void {
+  if ((appId as string) === 'chat') {
+    launchApp('code', { ...options, codeSection: 'chat' });
+    return;
+  }
   if (rejectUnavailableApp(appId)) return;
 
-  if (appId === 'chat') {
-    queueDesktopChatActivation(options);
-    navigateToDesktop();
-    return;
-  }
-  if (appId === 'research') {
-    if (getOsView() === 'desktop' && isDesktopResearchActive()) {
-      deactivateDesktopResearch();
-      return;
-    }
-    queueDesktopResearchActivation(options);
-    navigateToDesktop();
-    return;
-  }
-  if (appId === 'experts') {
-    if (getOsView() === 'desktop' && isDesktopExpertsActive()) {
-      deactivateDesktopExperts();
-      return;
-    }
-    queueDesktopExpertsActivation(options);
-    navigateToDesktop();
-    return;
-  }
-  if (appId === 'scheduler') {
-    void import('./scheduler-side-panel').then((m) => m.toggleSchedulerOverlay());
-    return;
-  }
   if (options?.settingsSection) {
     pendingSettingsSection = options.settingsSection;
   }

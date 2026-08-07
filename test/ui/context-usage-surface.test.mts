@@ -8,7 +8,7 @@ import { resetInstancesForTests } from '../../src/os/instances.ts';
 import {
   resetDesktopStateForTests,
   setDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
+} from '../helpers/legacy-desktop-state.ts';
 
 function setupDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `

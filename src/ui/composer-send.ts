@@ -9,7 +9,6 @@ import { stopGeneration } from '../chat/stop-generation';
 import { getActiveChat } from '../state/sessions';
 import { clearComposerAfterSend } from './composer-draft';
 import { getActiveComposerSurface } from './composer-surface';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { setStatus } from './status';
@@ -89,7 +88,7 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   if (!sendBtn) return;
 
   const isStreaming = mode === 'streaming';
-  const chatApp = isChatAppForeground() && !isDesktopChatActive();
+  const chatApp = isChatAppForeground() && !false;
   const emailAssistant = getForegroundAppId() === 'email';
 
   if (chatApp || emailAssistant) {

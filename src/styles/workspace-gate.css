@@ -1,0 +1,50 @@
+/**
+ * Full-stage workspace picker (#osWorkspaceGate) — workspace-first shell.
+ */
+
+#osWorkspaceGate {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--mn-bg);
+  overflow: auto;
+}
+
+#osWorkspaceGate[hidden] {
+  display: none;
+}
+
+#osWorkspaceGate .welcome-page {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+#osWorkspaceGate .welcome-page.is-open {
+  display: flex;
+}
+
+html.os-workspaces #osAppRail {
+  display: none;
+}
+
+html.os-workspaces .mn-os-stage.is-in-app #osWorkspaceGate {
+  display: none;
+}
+
+#osWorkspaceGate.workspace-gate--opening {
+  pointer-events: none;
+}
+
+#osWorkspaceGate.workspace-gate--opening .welcome-page__tile,
+#osWorkspaceGate.workspace-gate--opening .welcome-page__recents-row,
+#osWorkspaceGate.workspace-gate--opening .welcome-page__continue {
+  opacity: 0.65;
+}

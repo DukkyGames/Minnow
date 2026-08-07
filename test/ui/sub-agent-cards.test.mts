@@ -4,9 +4,7 @@ import { Window } from 'happy-dom';
 import { resetInstancesForTests } from '../../src/os/instances.ts';
 import {
   resetDesktopStateForTests,
-  setDesktopStateForTests,
-  isDesktopChatActive,
-} from '../../src/os/desktop-state.ts';
+} from '../helpers/legacy-desktop-state.ts';
 import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
@@ -14,9 +12,6 @@ import {
 
 const { upsertSubAgentCardForRun, clearSubAgentCardDomRegistry } = await import(
   '../../src/ui/sub-agent-cards.ts',
-);
-const { openSubAgentDrawer, closeSubAgentDrawer } = await import(
-  '../../src/ui/sub-agent-drawer.ts',
 );
 const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
   '../../src/state/sessions.ts',
@@ -39,30 +34,6 @@ function setupCodeDom() {
     </div>
   `;
   return window;
-}
-
-function setupDesktopDom(win: Window) {
-  const polyfillRaf = ((cb: FrameRequestCallback) => {
-    cb(0);
-    return 0;
-  }) as typeof requestAnimationFrame;
-  globalThis.requestAnimationFrame = polyfillRaf;
-  const g = win as unknown as Window & typeof globalThis;
-  g.requestAnimationFrame = polyfillRaf;
-  win.document.body.innerHTML = `
-    <div id="osDesktopLayer" class="mn-os-desktop-layer is-chat-active">
-      <div class="mn-os-desktop-chat">
-        <div class="mn-os-chat-transcript">
-          <div id="desktopChatCol" class="mn-os-chat-col"></div>
-        </div>
-      </div>
-    </div>
-    <main id="chatView" class="chat-app-page is-open"></main>
-    <textarea id="msgInput"></textarea>
-    <textarea id="desktopInput"></textarea>
-    <button id="sendBtn"></button>
-    <button id="desktopSendBtn"></button>
-  `;
 }
 
 const sampleRun = (chatId: string) => ({
@@ -156,135 +127,6 @@ describe('sub-agent cards', { concurrency: false }, () => {
     assert.equal(el, null);
     assert.equal(document.getElementById('chatArea')?.querySelector('.sub-agent-card'), null);
 
-    clearSubAgentCardDomRegistry();
-  });
-
-  test('upsertSubAgentCardForRun mounts into #desktopChatCol when desktop chat is active', () => {
-    const win = new Window();
-    const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
-      Node: typeof Node;
-      fetch: typeof fetch;
-    };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
-    g.Node = win.Node;
-    setupDesktopDom(win);
-    resetInstancesForTests();
-    resetDesktopStateForTests();
-    resetOsPageBridgeForTests();
-    initOsPageBridge();
-
-    g.fetch = (async (input: string | URL) => {
-      const url = String(input);
-      if (url.includes('/api/chats-workspace')) {
-        return {
-          ok: true,
-          json: async () => ({ ok: true, path: '/home/user/.minnow/chats', fileCount: 0 }),
-        } as Response;
-      }
-      return { ok: false, status: 404, json: async () => ({}) } as Response;
-    }) as typeof fetch;
-
-    const chat = createEmptyChatObject('model-a');
-    chat.id = 'chat-desktop-sub';
-    setSessionStateForTests({
-      version: 5,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      lastActiveChatIdByWorkspace: {},
-      lastActiveChatIdByApp: { chat: chat.id },
-      chats: [chat],
-    });
-
-    setDesktopStateForTests('chatActive');
-
-    assert.equal(isDesktopChatActive(), true);
-    const activeId = getActiveChat().id;
-
-    const el = upsertSubAgentCardForRun(sampleRun(activeId), activeId);
-    assert.ok(el);
-    const desktopCol = document.getElementById('desktopChatCol');
-    assert.ok(desktopCol);
-    assert.equal(desktopCol.querySelector('.sub-agent-card'), el);
-    assert.equal(document.getElementById('chatArea'), null);
-
-    clearSubAgentCardDomRegistry();
-  });
-
-  test('openSubAgentDrawer mounts overlay on desktop chat shell, not #mainColumn', () => {
-    const win = new Window();
-    const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
-      Node: typeof Node;
-      fetch: typeof fetch;
-    };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
-    g.Node = win.Node;
-    setupDesktopDom(win);
-    resetInstancesForTests();
-    resetDesktopStateForTests();
-    resetOsPageBridgeForTests();
-    initOsPageBridge();
-
-    g.fetch = (async (input: string | URL) => {
-      const url = String(input);
-      if (url.includes('/api/chats-workspace')) {
-        return {
-          ok: true,
-          json: async () => ({ ok: true, path: '/home/user/.minnow/chats', fileCount: 0 }),
-        } as Response;
-      }
-      return { ok: false, status: 404, json: async () => ({}) } as Response;
-    }) as typeof fetch;
-
-    const chat = createEmptyChatObject('model-a');
-    chat.id = 'chat-desktop-drawer';
-    const run = sampleRun(chat.id);
-    chat.subAgentRuns = [
-      {
-        runId: run.runId,
-        type: run.type,
-        task: run.task,
-        status: 'completed',
-        parentChatId: chat.id,
-        parentToolCallId: null,
-        parentTurnId: run.parentTurnId,
-        summary: 'Found 12 files under src/.',
-        error: null,
-        startedAt: run.startedAt,
-        endedAt: '2026-05-20T12:05:00.000Z',
-        toolTurns: 2,
-        cancelled: false,
-        messages: [],
-      },
-    ];
-    setSessionStateForTests({
-      version: 5,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      lastActiveChatIdByWorkspace: {},
-      lastActiveChatIdByApp: { chat: chat.id },
-      chats: [chat],
-    });
-
-    setDesktopStateForTests('chatActive');
-
-    openSubAgentDrawer(run.runId, chat.id);
-
-    const desktopShell = document.querySelector('.mn-os-desktop-chat');
-    assert.ok(desktopShell);
-    assert.ok(desktopShell?.querySelector('.sub-agent-overlay'));
-    assert.equal(document.getElementById('mainColumn'), null);
-
-    closeSubAgentDrawer();
     clearSubAgentCardDomRegistry();
   });
 });

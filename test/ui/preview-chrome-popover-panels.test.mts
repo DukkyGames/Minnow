@@ -59,10 +59,6 @@ describe('preview chrome popover panels (MIN-457)', () => {
   });
 
   test('agent activity panel registers chrome popover while open', async () => {
-    win.document.body.innerHTML = `
-      <div id="agentActivityPanel" hidden></div>
-      <button id="btnAgentActivity" type="button"></button>
-    `;
     const { setAgentActivityPanelOpen } = await import('../../src/ui/agent-activity-panel.ts');
 
     assert.equal(isChromePopoverOpen(), false);

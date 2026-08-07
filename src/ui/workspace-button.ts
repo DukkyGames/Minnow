@@ -1,7 +1,4 @@
-/**
- * Top bar workspace folder button — recent workspaces menu + in-app folder picker.
- */
-
+import { isOsShellEnabled } from '../os/page-bridge';
 import type { WorkspaceInfo } from '../config/workspace-api';
 import { executeWorkspaceSwitch, dismissBoardViewOutsideWorkspace } from './workspace-switch-guard';
 import {
@@ -29,28 +26,32 @@ function getWorkspacePathLabel(): HTMLElement | null {
   return document.getElementById('workspacePathLabel');
 }
 
-/** Reflect current workspace on the top bar button and path label. */
+/** Reflect current workspace on the top bar button and folder name label. */
 export function updateWorkspaceButtonLabel(label: string, fullPath: string): void {
   const btn = getWorkspaceButton();
   if (!btn) return;
   const short = label.trim() || 'Workspace';
   const path = fullPath.trim();
-  btn.title = path ? `Workspace: ${path}` : 'Choose workspace folder';
+  const pathTooltip = path || 'Choose workspace folder';
+  btn.title = pathTooltip;
   btn.setAttribute('aria-label', `Workspace: ${short}. Click to open recent workspaces.`);
   btn.setAttribute('aria-haspopup', 'menu');
 
   const pathLabel = getWorkspacePathLabel();
+  const control = (pathLabel?.closest('.workspace-control') as HTMLElement | null) ?? null;
   if (!pathLabel) return;
   if (path) {
-    pathLabel.textContent = path;
+    pathLabel.textContent = short;
     pathLabel.title = path;
     pathLabel.hidden = false;
     btn.setAttribute('aria-describedby', 'workspacePathLabel');
+    if (control) control.title = path;
   } else {
     pathLabel.textContent = '';
     pathLabel.removeAttribute('title');
     pathLabel.hidden = true;
     btn.removeAttribute('aria-describedby');
+    if (control) control.removeAttribute('title');
   }
 }
 
@@ -63,6 +64,16 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   clearCachesForWorkspace(previousPath);
   setWorkspaceFromServer(info);
   updateWorkspaceButtonLabel(info.label, info.path);
+  const { persistFilePanelForWorkspace, reloadFilePanelForWorkspace } = await import(
+    '../state/file-panel'
+  );
+  const { persistTerminalForWorkspace, reloadTerminalForWorkspace } = await import(
+    '../config/terminal-meta'
+  );
+  await persistFilePanelForWorkspace(previousPath);
+  await persistTerminalForWorkspace(previousPath);
+  await reloadFilePanelForWorkspace(info.path);
+  await reloadTerminalForWorkspace(info.path);
   const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
   const closedCodeMap = teardownCodeBrainMapBeforeChatPaint();
   const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
@@ -147,6 +158,10 @@ export function initWorkspaceButton(): void {
   });
 
   btn.addEventListener('click', () => {
+    if (isOsShellEnabled()) {
+      void import('../os/workspace-gate').then((m) => m.openWorkspaceGate({ switch: true }));
+      return;
+    }
     void toggleWorkspaceMenu(btn);
   });
 

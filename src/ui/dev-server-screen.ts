@@ -976,6 +976,9 @@ export async function openDevServerScreen(): Promise<void> {
   await refreshWorktreeOptions();
   await refreshAll();
   notifyAskQuestionDisplayContextChanged();
+  void import('./preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
 }
 
 export function closeDevServerScreen(options?: {
@@ -1011,6 +1014,9 @@ export function closeDevServerScreen(options?: {
 
   if (options?.restoreChat === false) {
     notifyAskQuestionDisplayContextChanged();
+    void import('./preview-electron-visibility').then((m) =>
+      m.scheduleElectronPreviewHostVisibilitySync(),
+    );
     return;
   }
 
@@ -1026,6 +1032,9 @@ export function closeDevServerScreen(options?: {
     area.replaceChildren();
   }
   notifyAskQuestionDisplayContextChanged();
+  void import('./preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
 }
 
 function onHashChange(): void {

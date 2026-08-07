@@ -1,23 +1,22 @@
 import { getForegroundAppId, getOsView, subscribeInstances } from './instances';
-import { shouldSuppressDesktopChrome } from './shell-chrome';
-import {
-  isDesktopChatActive,
-  isDesktopExpertsActive,
-  isDesktopResearchActive,
-} from './desktop-state';
+import { isResearchPanelOpen, subscribeResearchPanel } from '../ui/research-panel';
 import type { AppId } from './types';
 import { isAppAvailable } from './app-preferences';
 import { isDeveloperReleased } from './app-registry';
 
-/** Feature flag — always on until a gradual rollout toggle exists. */
+function gateOpenClass(): boolean {
+  return document.documentElement.classList.contains('os-workspace-gate-open');
+}
+
+/** Feature flag — OS shell is always enabled in workspace-first builds. */
 export function isOsShellEnabled(): boolean {
   return true;
 }
 
-/** Whether the hash belongs to the Minnow Shell (desktop or foreground app). */
+/** Whether the hash belongs to the Minnow Shell (workspace gate or foreground app). */
 export function isOsAppHash(hash?: string): boolean {
   const h = hash ?? window.location.hash;
-  return h === '#/desktop' || h.startsWith('#/app/');
+  return h === '#/workspaces' || h === '#/desktop' || h.startsWith('#/app/');
 }
 
 /** Settings embedded in the OS apps layer (not legacy full-page swap). */
@@ -25,20 +24,18 @@ export function isOsEmbedded(): boolean {
   return isOsShellEnabled();
 }
 
-/** True when Code is the active fullscreen app (desktop modes may still be queued). */
+/** True when Code is the active fullscreen app. */
 function isCodeForeground(): boolean {
-  return getOsView() === 'app' && getForegroundAppId() === 'code';
+  return getForegroundAppId() === 'code';
 }
 
 /** True when the legacy chat workspace (`#appBody`) should be hidden. */
 export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;
-  // Code reparents #appBody into the fullscreen layer — never hide it while Code is foreground.
   if (isCodeForeground()) return false;
-  if (isDesktopChatActive()) return true;
-  if (isDesktopResearchActive()) return true;
-  if (isDesktopExpertsActive()) return true;
-  if (getOsView() === 'desktop') return true;
+  // Legacy Code embed — keep appBody visible until the view is reparented back.
+  if (isResearchPanelOpen()) return false;
+  if (getOsView() === 'workspaces') return true;
   return getForegroundAppId() !== 'code';
 }
 
@@ -60,32 +57,13 @@ export function syncLegacyChromeVisibility(): void {
     ?.toggleAttribute('hidden', !isDeveloperReleased('experts'));
 
   const view = getOsView();
-  const codeForeground = isCodeForeground();
-  document.documentElement.classList.toggle('os-desktop', view === 'desktop');
+  const onWorkspaces = view === 'workspaces';
+  document.documentElement.classList.toggle('os-workspaces', onWorkspaces);
   document.documentElement.classList.toggle('os-in-app', view === 'app');
-  document.documentElement.classList.toggle(
-    'os-desktop-chat',
-    !codeForeground && isDesktopChatActive(),
-  );
-  document.documentElement.classList.toggle(
-    'os-desktop-research',
-    !codeForeground && isDesktopResearchActive(),
-  );
-  document.documentElement.classList.toggle(
-    'os-desktop-experts',
-    !codeForeground && isDesktopExpertsActive(),
-  );
+  document.documentElement.classList.toggle('os-workspace-gate', onWorkspaces && gateOpenClass());
 
   const fg = getForegroundAppId();
-  if (codeForeground) {
-    document.documentElement.dataset.osApp = 'code';
-  } else if (isDesktopChatActive()) {
-    document.documentElement.dataset.osApp = 'chat';
-  } else if (isDesktopResearchActive()) {
-    document.documentElement.dataset.osApp = 'research';
-  } else if (isDesktopExpertsActive()) {
-    document.documentElement.dataset.osApp = 'experts';
-  } else if (fg) {
+  if (fg) {
     document.documentElement.dataset.osApp = fg;
   } else {
     delete document.documentElement.dataset.osApp;
@@ -97,20 +75,9 @@ export function syncLegacyChromeVisibility(): void {
 
   void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 
-  void import('./desktop-workspace-mounts').then((m) => m.syncDesktopWorkspaceMounts());
-
   void import('../ui/loop-active-hint').then(({ syncLoopActiveHint }) => {
     syncLoopActiveHint();
   });
-
-  syncDesktopLayerSuppression();
-}
-
-/** Hide desktop chat/research/experts chrome during immersive fullscreen apps. */
-function syncDesktopLayerSuppression(): void {
-  document
-    .getElementById('osDesktopLayer')
-    ?.classList.toggle('is-suppressed-by-fullscreen-app', shouldSuppressDesktopChrome());
 }
 
 /** Called when an app becomes foreground — sync DOM + dataset for page modules. */
@@ -121,12 +88,11 @@ export function osOnAppOpen(appId: AppId): void {
     void import('../ui/preview-panel').then((preview) => {
       preview.collapsePreviewPanelKeepingSource();
     });
-    void import('./desktop-workspace-mounts').then((m) => m.syncDesktopWorkspaceMounts());
   }
   syncLegacyChromeVisibility();
 }
 
-/** Called when a foreground app is replaced or the shell returns to desktop. */
+/** Called when a foreground app is replaced or the shell returns to the workspace gate. */
 export function osOnAppClose(appId: AppId): void {
   if (!isOsShellEnabled()) return;
   if (appId === 'code') {
@@ -153,12 +119,7 @@ export function initOsPageBridge(): void {
   subscribeInstances(() => {
     syncLegacyChromeVisibility();
   });
-  void import('./desktop-state').then(({ subscribeDesktopState }) => {
-    subscribeDesktopState(() => syncLegacyChromeVisibility());
-  });
-  void import('./window-manager').then(({ windowManager }) => {
-    windowManager.subscribe(() => syncLegacyChromeVisibility());
-  });
+  subscribeResearchPanel(() => syncLegacyChromeVisibility());
   syncLegacyChromeVisibility();
 }
 
@@ -167,11 +128,9 @@ export function resetOsPageBridgeForTests(): void {
   visibilityBound = false;
   delete document.documentElement.dataset.osApp;
   document.documentElement.classList.remove(
-    'os-desktop',
+    'os-workspaces',
     'os-in-app',
-    'os-desktop-chat',
-    'os-desktop-research',
-    'os-desktop-experts',
+    'os-workspace-gate',
+    'os-workspace-gate-open',
   );
-  document.getElementById('osDesktopLayer')?.classList.remove('is-suppressed-by-fullscreen-app');
 }

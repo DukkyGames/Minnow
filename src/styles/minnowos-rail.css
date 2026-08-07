@@ -1,0 +1,211 @@
+/**
+ * Left app rail (workspace-first shell) — matches --sidebar-rail (48px) chrome.
+ */
+
+.mn-os-workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+#osAppRail {
+  flex: none;
+  width: var(--sidebar-rail, 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 2px;
+  background: var(--mn-surface-1);
+  border-right: 1px solid var(--mn-border);
+  z-index: 30;
+  position: relative;
+  overflow: visible;
+}
+
+#osAppRail[hidden] {
+  display: none;
+}
+
+.mn-os-app-rail__nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
+.mn-os-app-rail__btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  flex: none;
+  transition:
+    background 0.16s var(--os-ease, ease),
+    color 0.16s var(--os-ease, ease);
+}
+
+.mn-os-app-rail__btn .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+.mn-os-app-rail__btn.is-hosting {
+  color: var(--mn-fg);
+  background: transparent;
+}
+
+/*
+ * Two independent channels, so one tile carries two facts without a side stripe:
+ *   icon colour  → which app is foreground
+ *   tile fill    → accent tint when nothing is tucked away, neutral when the
+ *                  foreground app's session panel is collapsed.
+ */
+.mn-os-app-rail__btn.is-active {
+  color: var(--mn-accent);
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+}
+
+.mn-os-app-rail__btn.is-active.is-panel-closed {
+  background: var(--mn-surface-elevated);
+}
+
+.mn-os-app-rail__btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-os-app-rail__btn:not(.is-active):hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+  }
+
+  .mn-os-app-rail__btn.is-active:hover {
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+    color: var(--mn-accent);
+  }
+
+  /* Hovering a collapsed panel's tile previews the accent fill it returns to. */
+  .mn-os-app-rail__btn.is-active.is-panel-closed:hover {
+    background: color-mix(in srgb, var(--mn-accent) 8%, var(--mn-surface-elevated));
+  }
+}
+
+.mn-os-app-rail__tooltip {
+  position: fixed;
+  /* Above #minnowOsRoot (20) and chat context menus (100020) when portaled to body */
+  z-index: 100021;
+  pointer-events: none;
+  max-width: 200px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--mn-fg);
+  /* Solid popover surface (not --mn-surface-elevated veil) so labels stay readable over stage UI */
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  white-space: nowrap;
+}
+
+.mn-os-app-rail__tooltip[hidden] {
+  display: none;
+}
+
+/*
+ * Arrow ties the label to its tile. Without it a fixed-position box reads as a
+ * stray toast floating over whatever panel happens to be underneath.
+ */
+.mn-os-app-rail__tooltip::before,
+.mn-os-app-rail__tooltip::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+}
+
+.mn-os-app-rail__tooltip[data-side='right']::before,
+.mn-os-app-rail__tooltip[data-side='right']::after {
+  top: var(--rail-tooltip-arrow-y, 50%);
+  translate: 0 -50%;
+}
+
+/* Border layer sits one pixel further out than the fill layer. */
+.mn-os-app-rail__tooltip[data-side='right']::before {
+  right: 100%;
+  border-right-color: var(--mn-border);
+}
+
+.mn-os-app-rail__tooltip[data-side='right']::after {
+  right: calc(100% - 1px);
+  border-right-color: var(--mn-bg);
+}
+
+.mn-os-app-rail__tooltip[data-side='top']::before,
+.mn-os-app-rail__tooltip[data-side='top']::after {
+  left: 50%;
+  translate: -50% 0;
+}
+
+.mn-os-app-rail__tooltip[data-side='top']::before {
+  top: 100%;
+  border-top-color: var(--mn-border);
+}
+
+.mn-os-app-rail__tooltip[data-side='top']::after {
+  top: calc(100% - 1px);
+  border-top-color: var(--mn-bg);
+}
+
+/* Narrow layout: bottom tab bar (see NARROW_MQ in mobile-layout.ts). */
+html.mn-narrow.minnow-os-enabled .mn-os-workspace {
+  flex-direction: column;
+}
+
+html.mn-narrow.minnow-os-enabled #osStage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+html.mn-narrow.minnow-os-enabled #osAppRail {
+  order: 2;
+  width: 100%;
+  height: auto;
+  min-height: calc(48px + env(safe-area-inset-bottom, 0px));
+  flex-direction: row;
+  align-items: stretch;
+  padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
+  border-right: none;
+  border-top: 1px solid var(--mn-border);
+  z-index: 35;
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__nav {
+  flex-direction: row;
+  justify-content: space-around;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__btn {
+  width: 36px;
+  height: 36px;
+  flex: 0 1 auto;
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__tooltip {
+  display: none !important;
+}

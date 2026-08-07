@@ -53,9 +53,9 @@ describe('launch_minnow_app', () => {
     ]);
   });
 
-  test('supports chat app_id with seed', () => {
-    const calls: Array<{ appId: AppId; options?: { seed?: string } }> = [];
-    const launchApp = (appId: AppId, options?: { seed?: string }) => {
+  test('supports legacy chat app_id with seed (routes to Code)', () => {
+    const calls: Array<{ appId: AppId; options?: LaunchOptions }> = [];
+    const launchApp = (appId: AppId, options?: LaunchOptions) => {
       calls.push({ appId, options });
     };
 
@@ -63,9 +63,14 @@ describe('launch_minnow_app', () => {
     const parsed = JSON.parse(raw) as { ok: boolean; appId: string; hash: string };
 
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.appId, 'chat');
-    assert.equal(parsed.hash, '#/app/chat');
-    assert.deepEqual(calls, [{ appId: 'chat', options: { seed: 'explain recursion' } }]);
+    assert.equal(parsed.appId, 'code');
+    assert.equal(parsed.hash, '#/app/code/chat');
+    assert.deepEqual(calls, [
+      {
+        appId: 'code',
+        options: { seed: 'explain recursion', codeSection: 'chat' },
+      },
+    ]);
   });
 
   test('rejects invalid app_id', () => {
@@ -159,7 +164,6 @@ describe('executeBrowserTool launch_minnow_app', () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.appId, 'scheduler');
     assert.equal(parsed.hash, '#/app/scheduler');
-    // Scheduler opens as an overlay; hash stays on the current route.
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(window.location.hash, '#/app/scheduler');
   });
 });

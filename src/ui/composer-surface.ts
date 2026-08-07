@@ -1,10 +1,8 @@
 /**
- * Resolves the active composer input + send button for Code vs Chat vs desktop.
+ * Resolves the active composer input + send button for Code vs legacy Chat app.
  */
 
-import { isDesktopChatActive } from '../os/desktop-state';
-import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
-import { getForegroundAppId, getOsView } from '../os/instances';
+import { getForegroundAppId } from '../os/instances';
 import type { AppId } from '../os/types';
 import { isChatAppForeground } from './chat-mount';
 
@@ -17,16 +15,12 @@ export interface ComposerSurface {
 const DEFAULT_IDS: Record<string, { inputId: string; sendBtnId: string }> = {
   code: { inputId: 'msgInput', sendBtnId: 'sendBtn' },
   chat: { inputId: 'chatAppInput', sendBtnId: 'chatAppSendBtn' },
-  desktop: { inputId: 'desktopInput', sendBtnId: 'desktopSendBtn' },
 };
 
-const registry = new Map<AppId | 'desktop', ComposerSurface>();
+const registry = new Map<AppId, ComposerSurface>();
 
 /** Override composer elements for an app (e.g. tests or embedded hosts). */
-export function registerComposerSurface(
-  appId: AppId | 'desktop',
-  surface: ComposerSurface,
-): void {
+export function registerComposerSurface(appId: AppId, surface: ComposerSurface): void {
   registry.set(appId, surface);
 }
 
@@ -37,18 +31,17 @@ function resolveByIds(inputId: string, sendBtnId: string): ComposerSurface {
   };
 }
 
-function resolveComposerKey(): AppId | 'desktop' {
+function resolveComposerKey(): AppId {
   const foregroundAppId = getForegroundAppId();
-  // Code keeps desktop chat state for return navigation, but Code owns the composer.
   if (foregroundAppId === 'code') return 'code';
-  if (isDesktopChatActive()) return 'desktop';
-  if (isChatAppForeground()) return 'chat';
-  if (getOsView() === 'desktop' && document.getElementById('desktopInput')) return 'desktop';
   return foregroundAppId ?? 'code';
 }
 
-/** Composer for the foreground Minnow app; Code app when shell is on desktop idle. */
+/** Composer for the foreground Minnow app. */
 export function getActiveComposerSurface(): ComposerSurface {
+  if (isChatAppForeground()) {
+    return resolveByIds(DEFAULT_IDS.chat!.inputId, DEFAULT_IDS.chat!.sendBtnId);
+  }
   const key = resolveComposerKey();
   const registered = registry.get(key);
   if (registered) return registered;
@@ -73,9 +66,5 @@ export function clearComposerInput(input: HTMLTextAreaElement | null | undefined
   input.value = '';
   input.style.height = '0px';
   input.style.overflowY = 'hidden';
-  input.classList.remove('mn-os-desktop-field--scrollable');
-  if (input.id === 'desktopInput') {
-    autoResizeDesktopComposer(input);
-  }
   void import('./composer-prompt-history').then((m) => m.resetComposerPromptHistory());
 }

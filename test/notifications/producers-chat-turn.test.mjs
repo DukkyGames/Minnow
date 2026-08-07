@@ -266,6 +266,6 @@ describe('chat turn notification producer', () => {
     chatTurn.notifyChatTurnEnded('chat-c', 'run-3');
 
     const row = store.getNotifications().find((r) => r.kind === 'chat_turn_complete');
-    assert.equal(row?.appId, 'chat');
+    assert.equal(row?.appId, 'code');
   });
 });

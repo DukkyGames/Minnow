@@ -126,6 +126,10 @@ describe('searxng provisioner', () => {
     assert.match(yaml, /secret_key: "[0-9a-f]{64}"/);
     assert.match(yaml, /formats:\s*\n\s*- html\s*\n\s*- json/);
     assert.match(yaml, /limiter: false/);
+    assert.match(yaml, /name: bing\s*\n\s*disabled: false/);
+    assert.match(yaml, /name: brave\s*\n\s*disabled: true/);
+    assert.ok(yaml.includes('name: duckduckgo'));
+    assert.ok(yaml.includes('name: startpage'));
   });
 
   it('getSpawnSpec returns venv python, searx module, settings env, and cwd', async () => {

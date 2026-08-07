@@ -118,6 +118,10 @@ export function updateStatsExpandPreview(): void {
   const archiveDisabled = getArchiveDisabledReason();
   const disabledChip = archiveDisabled ? ` · archive: disabled — ${archiveDisabled}` : '';
   preview.textContent = `${tps} t/s · ${total} tokens${archiveChip}${disabledChip}`;
+
+  // Status bar carries the short form; the strip itself keeps the detail.
+  const barPreview = document.getElementById('statusMetricPreview');
+  if (barPreview) barPreview.textContent = `${tps || '—'} t/s`;
 }
 
 export interface UpdateStripOptions {

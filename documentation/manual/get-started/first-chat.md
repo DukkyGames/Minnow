@@ -8,8 +8,8 @@ This page walks through one real turn: send a message, watch it stream, approve 
 
 | Area | What it is |
 |------|------------|
-| **Dock** (top) | Launch Code, Research, Models, Brain, Issues, Scheduler, Settings, or return to Chat |
-| **Menubar** (top right) | Model chip, Scheduler, notification bell, update pill, Settings, help (**?**), clock |
+| **Dock** (top) | Launch Code, Research, Models, Brain, Issues, Scheduler, or return to Chat |
+| **Menubar** (top right) | Model chip, notification bell, update pill, Settings, help (**?**) |
 | **Chat rail** (left edge) | Your conversations. Hover or click the tab to open it; search and start new chats from here. |
 | **Composer** (centre) | Where you type. Mode strip, attachments, tools, microphone, model, send. |
 | **Workspace panel** (right edge) | Files, Browser, and File preview for the desktop's working folder |

@@ -3,23 +3,28 @@
  */
 
 import {
-  deactivateDesktopExperts,
-  deactivateDesktopResearch,
-  isDesktopExpertsActive,
-  isDesktopResearchActive,
-} from './desktop-state';
-import {
   closeInstance,
   getForegroundAppId,
   getInstanceSnapshot,
-  showDesktop,
+  showWorkspaces,
 } from './instances';
 import { isAppAvailable } from './app-preferences';
 import type { AppId } from './types';
 
+/** DOM-only check so app-preferences does not import the research panel bundle (CSS). */
+function isResearchPageOpenForCleanup(): boolean {
+  if (typeof document === 'undefined') return false;
+  const root = document.getElementById('researchView');
+  const area = document.getElementById('chatArea');
+  if (area?.classList.contains('chat-area--research') && root && area.contains(root)) {
+    return true;
+  }
+  return root?.classList.contains('is-open') ?? false;
+}
+
 /**
- * Close instances / desktop overlays for unavailable apps.
- * If the foreground surface was closed, return to the desktop.
+ * Close instances / overlays for unavailable apps.
+ * If the foreground surface was closed, return to the workspace gate.
  */
 export function closeUnavailableAppSurfaces(): void {
   const snap = getInstanceSnapshot();
@@ -32,21 +37,16 @@ export function closeUnavailableAppSurfaces(): void {
     closeInstance(inst.id);
   }
 
-  if (isDesktopResearchActive() && !isAppAvailable('research')) {
-    deactivateDesktopResearch();
-    closedForeground = true;
-  }
-
-  if (isDesktopExpertsActive() && !isAppAvailable('experts')) {
-    deactivateDesktopExperts();
+  if (isResearchPageOpenForCleanup() && !isAppAvailable('research')) {
+    void import('../research/panel').then((m) => m.closeResearch({ skipNavigate: true }));
     closedForeground = true;
   }
 
   if (!closedForeground) return;
 
-  showDesktop();
-  if (typeof window !== 'undefined' && window.location.hash !== '#/desktop') {
-    window.location.hash = '#/desktop';
+  showWorkspaces();
+  if (typeof window !== 'undefined' && window.location.hash !== '#/workspaces') {
+    window.location.hash = '#/workspaces';
   }
 }
 

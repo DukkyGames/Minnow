@@ -385,8 +385,7 @@
 .main-column.main-column--terminal-maximized .tool-approval-host,
 .main-column.main-column--terminal-maximized .question-host,
 .main-column.main-column--terminal-maximized .code-change-strip-wrap,
-.main-column.main-column--terminal-maximized .stats-strip,
-.main-column.main-column--terminal-maximized .agent-activity-panel {
+.main-column.main-column--terminal-maximized .stats-strip {
   display: none;
 }
 

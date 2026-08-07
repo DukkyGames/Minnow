@@ -134,11 +134,9 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
   syncComposerFromStreamingState();
 
   if (isOsShellEnabled()) {
-    const { activateDesktopChat } = await import('../../os/desktop-state');
-    await activateDesktopChat({ chatId: chat.id });
-    renderChatFromHistory(chat, '#desktopChatCol');
-    const { refreshDesktopChatRail } = await import('../desktop-chat-rail');
-    await refreshDesktopChatRail();
+    const { launchApp } = await import('../../os/router');
+    launchApp('code', { chatId: chat.id });
+    renderChatFromHistory(chat);
   } else {
     setExpertScopeId(expertId);
     syncExpertScopeChromeDataset();

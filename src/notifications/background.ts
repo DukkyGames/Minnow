@@ -15,10 +15,10 @@ export function shouldNotifyForChatTurn(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return true;
 
-  if (getOsView() === 'desktop') return true;
+  if (getOsView() === 'workspaces') return true;
 
   const fgApp = getForegroundAppId();
-  if (getOsView() === 'app' && fgApp && fgApp !== 'code' && fgApp !== 'chat') {
+  if (getOsView() === 'app' && fgApp && fgApp !== 'code') {
     return true;
   }
 

@@ -5,9 +5,24 @@
 import type { ResearchSource } from './types';
 import { inferSourceType } from './progress-panel';
 
+/**
+ * A finding body keeps its shape. Engines write subheadings, lists and several
+ * paragraphs under one finding; flattening that into a single string is what
+ * made reports render as a wall of text with stray `####` in the middle of it.
+ * Block text keeps its inline markdown so the view can turn links and citation
+ * markers into real controls.
+ */
+export type ParsedFindingBlock =
+  | { kind: 'para'; text: string }
+  | { kind: 'sub'; text: string }
+  | { kind: 'list'; items: string[] };
+
 export interface ParsedFinding {
   heading: string;
+  /** Flat, markdown-stripped text. Kept for previews and search. */
   body: string;
+  /** Structured body. Absent only for briefs built by older callers. */
+  blocks?: ParsedFindingBlock[];
   cites: number[];
 }
 
@@ -16,7 +31,8 @@ export interface ParsedBriefSource {
   title: string;
   host: string;
   type: string;
-  confidence: 'high' | 'med';
+  /** Excerpt the engine captured, when it captured one. */
+  snippet: string;
 }
 
 export interface ParsedBrief {
@@ -37,6 +53,7 @@ function hostFromUrl(url: string): string {
 
 function stripMarkdownInline(text: string): string {
   return text
+    .replace(/^#{1,6}\s+/gm, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/\[(\d+)\]/g, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
@@ -63,6 +80,69 @@ function sectionBody(lines: string[], start: number, end: number): string {
     .slice(start, end)
     .join('\n')
     .trim();
+}
+
+/** Group a finding's raw lines into paragraphs, subheadings and lists. */
+function buildBlocks(rawLines: string[]): ParsedFindingBlock[] {
+  const blocks: ParsedFindingBlock[] = [];
+  let para: string[] = [];
+  let items: string[] = [];
+
+  const flushPara = (): void => {
+    if (para.length) {
+      blocks.push({ kind: 'para', text: para.join(' ') });
+      para = [];
+    }
+  };
+  const flushList = (): void => {
+    if (items.length) {
+      blocks.push({ kind: 'list', items });
+      items = [];
+    }
+  };
+
+  for (const raw of rawLines) {
+    const line = raw.trim();
+    if (!line) {
+      flushPara();
+      flushList();
+      continue;
+    }
+    const sub = line.match(/^#{4,6}\s+(.+)/);
+    if (sub) {
+      flushPara();
+      flushList();
+      blocks.push({ kind: 'sub', text: sub[1].trim().replace(/[:*]+$/, '') });
+      continue;
+    }
+    const item = line.match(/^(?:[-*+]|\d+\.)\s+(.+)/);
+    if (item) {
+      flushPara();
+      items.push(item[1].trim());
+      continue;
+    }
+    flushList();
+    para.push(line);
+  }
+
+  flushPara();
+  flushList();
+  return blocks;
+}
+
+function makeFinding(heading: string, rawLines: string[]): ParsedFinding {
+  const joined = rawLines.join('\n');
+  return {
+    heading,
+    body: stripMarkdownInline(
+      rawLines
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .join(' '),
+    ),
+    blocks: buildBlocks(rawLines),
+    cites: extractCites(joined),
+  };
 }
 
 function findSectionIndex(lines: string[], patterns: RegExp[]): number {
@@ -125,25 +205,28 @@ export function parseResearchBrief(
         .filter((n) => n > findingsIdx)
         .sort((a, b) => a - b)[0] ?? lines.length;
     const block = lines.slice(findingsIdx + 1, end);
-    let current: ParsedFinding | null = null;
+    let heading: string | null = null;
+    let raw: string[] = [];
+
+    const commit = (): void => {
+      if (heading !== null) {
+        findings.push(makeFinding(heading, raw));
+      }
+    };
+
     for (const line of block) {
       const h3 = line.match(/^###\s+(.+)/);
       if (h3) {
-        if (current) {
-          findings.push(current);
-        }
-        current = { heading: stripMarkdownInline(h3[1]), body: '', cites: [] };
+        commit();
+        heading = stripMarkdownInline(h3[1]);
+        raw = [];
         continue;
       }
-      if (current && line.trim()) {
-        current.body += (current.body ? ' ' : '') + line.trim();
+      if (heading !== null) {
+        raw.push(line);
       }
     }
-    if (current) {
-      current.cites = extractCites(current.body);
-      current.body = stripMarkdownInline(current.body);
-      findings.push(current);
-    }
+    commit();
   }
 
   if (!findings.length) {
@@ -162,13 +245,11 @@ export function parseResearchBrief(
         if (/^##\s+/.test(lines[j])) {
           break;
         }
-        if (lines[j].trim()) {
-          bodyLines.push(lines[j].trim());
-        }
+        bodyLines.push(lines[j]);
       }
-      const body = stripMarkdownInline(bodyLines.join(' '));
-      if (body) {
-        h2Sections.push({ heading, body, cites: extractCites(body) });
+      const finding = makeFinding(heading, bodyLines);
+      if (finding.body) {
+        h2Sections.push(finding);
       }
     }
     findings.push(...h2Sections.slice(0, 6));
@@ -199,7 +280,7 @@ export function parseResearchBrief(
       title: titleText,
       host: hostFromUrl(url),
       type: inferSourceType(url),
-      confidence: snippet.length > 80 || i < 3 ? 'high' : 'med',
+      snippet,
     };
   });
 

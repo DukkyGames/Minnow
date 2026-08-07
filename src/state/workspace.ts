@@ -31,6 +31,11 @@ function applyWorkspaceInfo(info: WorkspaceInfo): void {
   if (Array.isArray(info.recent)) {
     workspaceRecent = info.recent;
   }
+  if (info.scratchPath?.trim()) {
+    void import('../state/sessions').then((m) =>
+      m.migrateScratchWorkspacePathsForLoadedSession(info.scratchPath!.trim()),
+    );
+  }
 }
 
 /** MRU rows last seen from GET/PUT workspace (instant workspace menu paint). */

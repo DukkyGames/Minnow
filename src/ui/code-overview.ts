@@ -548,9 +548,8 @@ async function drillToRun(record: PersistedRunRecord): Promise<void> {
   if (record.parentChatId) {
     switchChat(record.parentChatId);
   }
-  const { toggleAgentActivityPanel } = await import('./agent-activity-panel');
-  const panel = document.getElementById('agentActivityPanel');
-  if (panel && !panel.classList.contains('is-open')) toggleAgentActivityPanel();
+  const { toggleAgentActivityPanel, isAgentActivityPanelOpen } = await import('./agent-activity-panel');
+  if (!isAgentActivityPanelOpen()) toggleAgentActivityPanel();
 }
 
 async function enterCodeChat(): Promise<void> {
@@ -1034,6 +1033,9 @@ export async function openCodeOverview(): Promise<void> {
   startPolling();
   await refreshAllPanels();
   notifyAskQuestionDisplayContextChanged();
+  void import('./preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
 }
 
 /** Tear down overview and optionally restore chat view. */
@@ -1068,6 +1070,9 @@ export function closeCodeOverview(options?: {
     area.replaceChildren();
   }
   notifyAskQuestionDisplayContextChanged();
+  void import('./preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
 }
 
 const PHONE_LAYOUT_MQ = '(max-width: 600px)';

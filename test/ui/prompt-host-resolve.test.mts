@@ -8,7 +8,7 @@ import { launchInstance, resetInstancesForTests } from '../../src/os/instances.t
 import {
   resetDesktopStateForTests,
   setDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
+} from '../helpers/legacy-desktop-state.ts';
 import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
@@ -63,14 +63,6 @@ describe('prompt-host-resolve', () => {
     resetDesktopStateForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
-  });
-
-  test('desktop chat routes ask_question to desktop host even when hidden', async () => {
-    setDesktopStateForTests('chatActive');
-    const { resolveQuestionHost } = await import('../../src/ui/prompt-host-resolve.ts');
-
-    const host = resolveQuestionHost();
-    assert.equal(host?.id, 'desktopQuestionHost');
   });
 
   test('Code foreground routes ask_question to main column host', async () => {

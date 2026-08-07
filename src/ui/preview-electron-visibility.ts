@@ -8,6 +8,7 @@ import type { MinnowPreviewBounds } from '../electron';
 import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
 import { isRightPaneSplitActive } from './right-pane-split';
+import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 
 const FULLSCREEN_OVERLAY_IDS = [
   'issuesView',
@@ -115,6 +116,8 @@ export function shouldShowElectronPreviewHost(): boolean {
   if (isDesignModeUsingIframeGuest()) return false;
   if (!isPreviewSurfaceActive()) return false;
   if (!isPreviewPaneDomVisible()) return false;
+  // Native guest is a window-level overlay — hide when Code main-column overlays cover the workspace.
+  if (isMainColumnOverlaySuppressingChatDom()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
   if (isChromePopoverOpen()) return false;
   const body = document.getElementById('previewBody');

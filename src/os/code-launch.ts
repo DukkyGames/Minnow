@@ -118,7 +118,7 @@ export async function applyCodeLaunchOptions(
   const seed = options.seed?.trim();
   const shouldSend = options.autoRun === true && Boolean(seed);
 
-  if (!shouldSend && !options.modeId && !options.workspacePath?.trim()) return {};
+  if (!shouldSend && !options.modeId && !options.workspacePath?.trim() && !seed) return {};
 
   const welcome = await import('../ui/welcome-page');
   if (welcome.isWelcomePageOpen()) {
@@ -134,7 +134,17 @@ export async function applyCodeLaunchOptions(
     }
   }
 
-  if (!shouldSend) return {};
+  if (!shouldSend) {
+    if (seed) {
+      const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+      if (input && !input.value.trim()) {
+        input.value = seed;
+        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        syncComposerFromStreamingState();
+      }
+    }
+    return {};
+  }
 
   const modeId = normalizeModeId(options.modeId ?? DEFAULT_MODE_ID);
   const created = createChatWithMode({ modeId });

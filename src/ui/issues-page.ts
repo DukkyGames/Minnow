@@ -365,6 +365,8 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   }
   const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
   teardownCodeBrainMapBeforeChatPaint();
+  const { teardownResearchPanelBeforeChatPaint } = await import('./research-panel');
+  teardownResearchPanelBeforeChatPaint();
   const { teardownHub } = await import('./hub');
   teardownHub();
 }
@@ -1339,10 +1341,6 @@ function bindStaticControls(): void {
     renderIssuesPanel();
   });
 
-  // Sidebar: Issues embeds in Code; desktop/dock still launch the fullscreen app.
-  document.getElementById('btnAllBugs')?.addEventListener('click', () => {
-    openIssuesFromSidebar();
-  });
 }
 
 /** Open Issues from the chat sidebar footer button. */

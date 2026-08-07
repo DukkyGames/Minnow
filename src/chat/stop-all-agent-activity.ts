@@ -19,9 +19,9 @@ import { countRunningTaskChats, stopBoardAutoRun } from '../state/orchestrate-bo
 import { isBoardRunning } from '../state/orchestrate-board-store';
 import { findChatById, scheduleSaveSessions, sessionState, touchChat } from '../state/sessions';
 import {
-  cancelDesktopResearchRun,
-  isDesktopResearchRunning,
-} from '../os/research-desktop';
+  cancelResearchRunForShell,
+  isResearchRunningForShell,
+} from '../research/panel';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 
 function hasRunningBoardWork(): boolean {
@@ -61,7 +61,7 @@ function hasAgentActivityPanelRows(): boolean {
 
 /** True when global stop-all would affect any in-flight agent work. */
 export function hasStopAllAgentActivityTargets(): boolean {
-  if (isDesktopResearchRunning()) return true;
+  if (isResearchRunningForShell()) return true;
   if (!sessionState) return false;
   if (hasAgentActivityPanelRows()) return true;
   if (hasRunningBoardWork()) return true;
@@ -165,7 +165,7 @@ export function stopAllAgentActivity(): void {
     abortChatTitleGeneration(chatId);
   }
 
-  void cancelDesktopResearchRun();
+  void cancelResearchRunForShell();
 
   flushStoppedAgentPresentation(handledChatIds);
 }

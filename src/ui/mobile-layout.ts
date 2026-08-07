@@ -28,6 +28,11 @@ export const TABLET_MQ =
   '(min-width: 641px) and (max-width: 1024px) and (min-height: 541px) and (pointer: coarse)';
 /** Touch-first input; true on tablets and touchscreen laptops as well as phones. */
 export const COARSE_POINTER_MQ = '(pointer: coarse)';
+/**
+ * Narrow shell layout: bottom app rail + overlay side drawers (below 768px width).
+ * Keep in sync with `html.mn-narrow` rules in styles/minnowos-rail.css and drawer CSS.
+ */
+export const NARROW_MQ = '(max-width: 767px)';
 
 type Listener = (phone: boolean) => void;
 
@@ -35,6 +40,7 @@ const listeners = new Set<Listener>();
 let phoneMq: MediaQueryList | null = null;
 let tabletMq: MediaQueryList | null = null;
 let coarseMq: MediaQueryList | null = null;
+let narrowMq: MediaQueryList | null = null;
 let installed = false;
 
 function query(mq: string): MediaQueryList | null {
@@ -68,6 +74,11 @@ export function isCoarsePointer(): boolean {
   return (coarseMq ?? query(COARSE_POINTER_MQ))?.matches ?? false;
 }
 
+/** True when the workspace rail should dock to the bottom and sidebars use overlays. */
+export function isNarrowLayout(): boolean {
+  return (narrowMq ?? query(NARROW_MQ))?.matches ?? false;
+}
+
 /** Subscribe to phone-layout changes. Returns an unsubscribe function. */
 export function onPhoneLayoutChange(listener: Listener): () => void {
   listeners.add(listener);
@@ -79,6 +90,7 @@ function syncFlags(): void {
   root.classList.toggle('mn-phone', isPhoneLayout());
   root.classList.toggle('mn-tablet', isTabletLayout());
   root.classList.toggle('mn-touch', isCoarsePointer());
+  root.classList.toggle('mn-narrow', isNarrowLayout());
 }
 
 /**
@@ -89,6 +101,7 @@ export function initMobileLayout(): void {
   phoneMq = query(PHONE_MQ);
   tabletMq = query(TABLET_MQ);
   coarseMq = query(COARSE_POINTER_MQ);
+  narrowMq = query(NARROW_MQ);
   syncFlags();
 
   if (installed) return;
@@ -105,6 +118,7 @@ export function initMobileLayout(): void {
   bindMqChange(phoneMq, onChange);
   bindMqChange(tabletMq, onChange);
   bindMqChange(coarseMq, onChange);
+  bindMqChange(narrowMq, onChange);
 
   if (typeof window === 'undefined') return;
 
@@ -120,5 +134,6 @@ export function resetMobileLayoutForTests(): void {
   phoneMq = null;
   tabletMq = null;
   coarseMq = null;
+  narrowMq = null;
   listeners.clear();
 }

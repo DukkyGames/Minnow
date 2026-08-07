@@ -1,6 +1,6 @@
 # Minnow apps
 
-Minnow's desktop shell ("Minnow") presents focused apps on a desktop with a **dock** launcher and a **menubar** (model chip, notifications bell, clock). The desktop itself is the **chat** surface; other apps open as fullscreen surfaces, floating windows, or side panels. Routes use hashes like `#/desktop` and `#/app/<id>`.
+Minnow's desktop shell ("Minnow") presents focused apps on a desktop with a **dock** launcher and a **menubar** (model chip, notifications bell). The desktop itself is the **chat** surface; other apps open as fullscreen surfaces, floating windows, or side panels. Routes use hashes like `#/desktop` and `#/app/<id>`.
 
 Official product help opens as a focused overlay from the menubar **?** button. It ships the user manual, not this developer page. See [Wiki and Brain](../manual/reference/wiki-and-brain.md).
 

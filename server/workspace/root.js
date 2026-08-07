@@ -8,7 +8,14 @@ import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
 import { maybeAutoApplyWorkspaceProfile } from '../profiles/handlers.js';
+import {
+  ensureDesktopWorkspace,
+  getDefaultDesktopSandboxPath,
+} from '../desktop-workspace/paths.js';
 import { realpathForBoundaryCheck } from './safe-path.js';
+
+/** UI label for the Minnow-owned scratch sandbox (~/.minnow/workspace). */
+export const SCRATCH_WORKSPACE_LABEL = 'Scratch';
 
 /** Directory where `npm start` was launched (Minnow install); overridable for packaged Electron. */
 let APP_ROOT = path.resolve(process.cwd());
@@ -62,8 +69,23 @@ export function isPlaceholderWorkspacePath(absPath) {
   return false;
 }
 
-/** Short label for UI (folder basename). */
+/** Absolute path to the Scratch sandbox (~/.minnow/workspace). */
+export function getScratchWorkspacePath() {
+  return getDefaultDesktopSandboxPath();
+}
+
+/** True when absPath is the registered Scratch workspace root. */
+export function isScratchWorkspacePath(absPath) {
+  const resolved = path.resolve(String(absPath).trim());
+  const scratch = path.resolve(getScratchWorkspacePath());
+  return normalizeWorkspacePathKey(resolved) === normalizeWorkspacePathKey(scratch);
+}
+
+/** Short label for UI (folder basename, or Scratch for the sandbox). */
 export function workspaceLabel(absPath) {
+  if (isScratchWorkspacePath(absPath)) {
+    return SCRATCH_WORKSPACE_LABEL;
+  }
   const base = path.basename(absPath);
   return base || absPath;
 }
@@ -242,9 +264,37 @@ function resolveWorkspaceUserChosenFromMeta(meta, savedPath) {
 }
 
 /**
+ * Ensure Scratch exists, is registered in config, and appears in workspace MRU.
+ * @returns {Promise<string>} absolute Scratch path
+ */
+export async function ensureScratchWorkspaceRegistered() {
+  const scratchPath = await ensureDesktopWorkspace();
+  const meta = (await readConfigJson('config.json')) ?? {};
+  const scratchKey = normalizeWorkspacePathKey(scratchPath);
+  const existingScratch =
+    meta.workspace &&
+    typeof meta.workspace === 'object' &&
+    typeof meta.workspace.scratchPath === 'string'
+      ? meta.workspace.scratchPath.trim()
+      : '';
+  if (
+    !existingScratch ||
+    normalizeWorkspacePathKey(existingScratch) !== scratchKey
+  ) {
+    const merged = mergeConfigMeta(meta, {
+      workspace: { scratchPath: scratchPath },
+    });
+    await writeConfigJson('config.json', merged);
+  }
+  await touchRecentWorkspacePath(scratchPath);
+  return scratchPath;
+}
+
+/**
  * Load persisted workspace from ~/.minnow/config.json (falls back to app root).
  */
 export async function initWorkspaceRoot() {
+  await ensureScratchWorkspaceRegistered();
   const meta = (await readConfigJson('config.json')) ?? {};
   const saved =
     meta.workspace &&
@@ -319,5 +369,6 @@ export function getWorkspaceInfo() {
     label: workspaceLabel(workspaceRoot),
     isDefault: !workspaceUserChosen || placeholder,
     userChosen: workspaceUserChosen,
+    scratchPath: getScratchWorkspacePath(),
   };
 }

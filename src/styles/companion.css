@@ -125,10 +125,9 @@ html.minnow-companion-access body > :not(#companionAccess):not(#companionReconne
 }
 
 html.minnow-companion #osDockLayer,
-html.minnow-companion .mn-os-mb-apps,
 html.minnow-companion .mn-os-mb-model-slot,
 html.minnow-companion .mn-os-mb-workspace-slot,
-html.minnow-companion .mn-os-mb-right > .mn-os-mb-icon:not(.mn-os-mb-scheduler),
+html.minnow-companion .mn-os-mb-right > .mn-os-mb-icon,
 html.minnow-companion .mn-os-workspace-rail,
 html.minnow-companion .chat-app-outputs,
 html.minnow-companion .chat-app-tools-anchor,
@@ -136,10 +135,6 @@ html.minnow-companion .mn-os-desktop-tools-anchor,
 html.minnow-companion .mn-os-desktop-context,
 html.minnow-companion #btnChatAppAttach {
   display: none !important;
-}
-
-html.minnow-companion .mn-os-mb-scheduler {
-  display: grid !important;
 }
 
 html.minnow-companion .chat-app-workspace,

@@ -96,8 +96,8 @@ export async function continueCompareInChat(input: CompareHandoffInput): Promise
   scheduleSaveSessions();
 
   if (isOsShellEnabled()) {
-    const { activateDesktopChat } = await import('../os/desktop-state');
-    await activateDesktopChat({ chatId: chat.id });
+    const { launchApp } = await import('../os/router');
+    launchApp('code', { chatId: chat.id });
     const { closeCompare } = await import('../ui/compare-page');
     closeCompare();
   } else {

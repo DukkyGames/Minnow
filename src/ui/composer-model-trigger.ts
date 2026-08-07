@@ -8,7 +8,6 @@ import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-bindin
 import { setBoardModel } from '../state/orchestrate-board-actions.ts';
 import { getModelRowForSelectOrCanonicalId, updateModelLoadUnloadButtons } from '../api/models';
 import { modelCache } from '../app-state';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { modelProducerLogoSvg } from '../providers/model-producer';
 import { isModelLoadUnloadBusy } from './model-load-unload-button';
@@ -31,6 +30,8 @@ import {
   unregisterChromePopover,
 } from './preview-electron-visibility';
 
+import { syncResearchOptionChips } from '../research/option-chips';
+import { resolveResearchModelBindingSync } from '../research/resolve-binding';
 import type { Chat, ChatGroup } from '../types';
 import { iconHtml } from './icon';
 
@@ -38,7 +39,7 @@ const CHEVRON_SVG = iconHtml('chevronDown', { size: 10 });
 
 const MODEL_FALLBACK_ICON_SVG = iconHtml('appModels', { className: 'mn-os-mb-model-fallback-icon' });
 
-type ComposerModelVariant = 'desktop' | 'code' | 'chat' | 'menubar' | 'board';
+type ComposerModelVariant = 'desktop' | 'code' | 'chat' | 'menubar' | 'board' | 'research';
 
 type ComposerModelSurfaceVariant = Exclude<ComposerModelVariant, 'menubar' | 'board'>;
 
@@ -89,7 +90,7 @@ function isElementVisible(el: HTMLElement): boolean {
 function resolveChatModelTriggerVariant(): ComposerModelSurfaceVariant | null {
   const foregroundAppId = getForegroundAppId();
   if (foregroundAppId === 'code') return 'code';
-  if (isDesktopChatActive()) return 'desktop';
+  if (false) return 'desktop';
   if (isChatAppForeground()) return 'chat';
 
   const desktopInput = document.getElementById('desktopInput');
@@ -101,7 +102,7 @@ function resolveChatModelTriggerVariant(): ComposerModelSurfaceVariant | null {
   const chatAnchor = document.getElementById('chatAppComposerModelAnchor');
   if (chatAnchor && isElementVisible(chatAnchor)) return 'chat';
 
-  if (getOsView() === 'desktop' && desktopInput) return 'desktop';
+  if (getOsView() === 'workspaces' && desktopInput) return 'desktop';
   return null;
 }
 
@@ -113,6 +114,46 @@ function findChatModelTrigger(
 
 function findBoardModelTrigger(): ComposerModelTrigger | undefined {
   return triggers.find((trigger) => trigger.variant === 'board');
+}
+
+function findResearchModelTrigger(): ComposerModelTrigger | undefined {
+  return triggers.find((trigger) => trigger.variant === 'research');
+}
+
+function readResearchOverrideFields(): { providerId: string; modelId: string } {
+  const providerId =
+    (document.getElementById('researchProviderOverride') as HTMLInputElement | null)?.value?.trim() ??
+    '';
+  const modelId =
+    (document.getElementById('researchModelOverride') as HTMLInputElement | null)?.value?.trim() ??
+    '';
+  return { providerId, modelId };
+}
+
+function writeResearchOverrideFields(providerId: string, modelId: string): void {
+  const providerEl = document.getElementById('researchProviderOverride') as HTMLInputElement | null;
+  const modelEl = document.getElementById('researchModelOverride') as HTMLInputElement | null;
+  if (providerEl) {
+    providerEl.value = providerId;
+  }
+  if (modelEl) {
+    modelEl.value = modelId;
+  }
+  const clearBtn = document.getElementById('btnResearchClearModel');
+  const hasOverride = Boolean(providerId.trim() && modelId.trim());
+  if (clearBtn) {
+    clearBtn.hidden = !hasOverride;
+  }
+}
+
+/** Clear per-run model override (Research composer engine popover). */
+export function clearResearchModelOverride(): void {
+  writeResearchOverrideFields('', '');
+  const researchTrigger = findResearchModelTrigger();
+  if (researchTrigger) {
+    syncTrigger(researchTrigger);
+  }
+  syncResearchOptionChips();
 }
 
 function isMenubarStyleVariant(variant: ComposerModelVariant): variant is MenubarStyleVariant {
@@ -165,6 +206,18 @@ function resolveTriggerSelectValue(trigger: ComposerModelTrigger): string {
       boardModelTriggerContext.board,
     );
     return resolveModelSelectValueForChat(binding, values);
+  }
+  if (trigger.variant === 'research') {
+    const values = [...sel.options].map((o) => o.value);
+    const override = readResearchOverrideFields();
+    if (override.providerId && override.modelId) {
+      return resolveModelSelectValueForChat(override, values);
+    }
+    const effective = resolveResearchModelBindingSync();
+    return resolveModelSelectValueForChat(
+      { providerId: effective.providerId, modelId: effective.model },
+      values,
+    );
   }
   const values = [...sel.options].map((o) => o.value);
   return resolveModelSelectValueForChat(getActiveChat(), values);
@@ -293,6 +346,16 @@ function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string)
     );
     boardModelTriggerContext.onChanged();
     syncTrigger(trigger);
+    return;
+  }
+  if (trigger.variant === 'research') {
+    const decoded = decodeModelSelectKey(modelId);
+    const canonicalModelId = decoded?.modelId ?? modelId.trim();
+    const providerId = decoded?.providerId?.trim() ?? '';
+    if (!canonicalModelId || !providerId) return;
+    writeResearchOverrideFields(providerId, canonicalModelId);
+    syncTrigger(trigger);
+    syncResearchOptionChips();
     return;
   }
   onActiveChatModelChange(modelId);
@@ -581,6 +644,11 @@ function ensureGlobals(): void {
   }
 }
 
+function resolveResearchLoadUnloadValue(): string {
+  const trigger = findResearchModelTrigger();
+  return trigger ? resolveTriggerSelectValue(trigger) : '';
+}
+
 function resolveComposerLoadUnloadValue(): string {
   const sel = getModelSelect();
   if (!sel) return '';
@@ -649,7 +717,14 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   providerEl.className = 'mn-os-mb-model-provider';
   providerEl.hidden = true;
 
-  expandInner.append(labelEl, providerEl);
+  if (variant === 'menubar') {
+    const expandRoleEl = document.createElement('span');
+    expandRoleEl.className = 'mn-os-mb-model-expand-role';
+    expandRoleEl.textContent = 'Default model';
+    expandInner.append(expandRoleEl, labelEl, providerEl);
+  } else {
+    expandInner.append(labelEl, providerEl);
+  }
   expandEl.appendChild(expandInner);
 
   const triggerBtn = document.createElement('button');
@@ -673,8 +748,15 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   fallbackWrap.setAttribute('aria-hidden', 'true');
 
   triggerBtn.append(dotEl, iconLogoEl, fallbackWrap);
-  // Icon stays in the menubar flow; label is portaled to body as a fixed overlay.
-  root.appendChild(triggerBtn);
+  if (variant === 'menubar') {
+    const staticRole = document.createElement('span');
+    staticRole.className = 'mn-os-mb-model-static-role';
+    staticRole.textContent = 'Default model';
+    staticRole.setAttribute('aria-hidden', 'true');
+    root.append(staticRole, triggerBtn);
+  } else {
+    root.appendChild(triggerBtn);
+  }
   document.body.appendChild(expandEl);
 
   const resolveLoadUnload =
@@ -702,6 +784,14 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   return entry;
 }
 
+function resolveLoadUnloadForVariant(variant: ComposerModelVariant): () => string {
+  if (variant === 'research') return resolveResearchLoadUnloadValue;
+  if (isMenubarStyleVariant(variant)) {
+    return variant === 'board' ? resolveBoardLoadUnloadValue : resolveMenubarLoadUnloadValue;
+  }
+  return resolveComposerLoadUnloadValue;
+}
+
 function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
   if (isMenubarStyleVariant(variant)) {
     return buildMenubarStyleTrigger(variant);
@@ -715,7 +805,10 @@ function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
   triggerBtn.className = 'composer-model-trigger';
   triggerBtn.setAttribute('aria-haspopup', 'listbox');
   triggerBtn.setAttribute('aria-expanded', 'false');
-  triggerBtn.setAttribute('aria-label', 'Active model');
+  triggerBtn.setAttribute(
+    'aria-label',
+    variant === 'research' ? 'Research run model' : 'Active model',
+  );
 
   const logoEl = document.createElement('span');
   logoEl.className = 'composer-model-trigger__logo hidden';
@@ -733,7 +826,7 @@ function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
   triggerBtn.append(logoEl, labelEl, chevronEl);
   root.appendChild(triggerBtn);
 
-  const { panel, menu } = createModelMenuPanel(resolveComposerLoadUnloadValue);
+  const { panel, menu } = createModelMenuPanel(resolveLoadUnloadForVariant(variant));
 
   const entry: ComposerModelTrigger = {
     variant,
@@ -804,6 +897,17 @@ function mountChatAppComposerModelTrigger(): void {
   chatAnchor.className = 'composer-model-trigger-anchor';
   chatInputRow.insertBefore(chatAnchor, chatToolsAnchor);
   mountComposerModelTrigger(chatAnchor, 'chat');
+}
+
+/** Mount the Research engine popover model picker (canonical #modelSelect menu). */
+export function mountResearchComposerModelTrigger(): void {
+  ensureGlobals();
+  const anchor = document.getElementById('researchComposerModelAnchor');
+  if (!anchor || anchor.querySelector('.composer-model-trigger-wrap')) {
+    return;
+  }
+  const entry = buildTrigger('research');
+  anchor.appendChild(entry.root);
 }
 
 /** Wire desktop + Code + Chat composer model triggers (idempotent). */

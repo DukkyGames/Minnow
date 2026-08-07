@@ -1,11 +1,11 @@
 /**
- * Minnow Scheduler app registration, routing, and side-panel shell.
+ * Minnow Scheduler app registration, routing, and workspace shell.
  */
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { APPS, getAppById, getPresentationMode, isAppId } from '../../src/os/app-registry.ts';
+import { APPS, getAppById, isAppId } from '../../src/os/app-registry.ts';
 import { resetAppHostForTests } from '../../src/os/app-host.ts';
 import {
   getForegroundAppId,
@@ -21,25 +21,16 @@ import {
   resolveLegacyHash,
   syncOsRouteFromHashForTests,
 } from '../../src/os/router.ts';
-import { SCHEDULER_EDITOR_INSTANCE_ID } from '../../src/os/scheduler-constants.ts';
 import {
-  initSchedulerSidePanel,
-  isSchedulerSidePanelOpen,
-  resetSchedulerSidePanelForTests,
-  toggleSchedulerOverlay,
-} from '../../src/os/scheduler-side-panel.ts';
-import {
-  resetWindowManagerForTests,
-  windowManager,
-} from '../../src/os/window-manager.ts';
+  openJobEditorWindow,
+  resetJobEditorWindowForTests,
+} from '../../src/ui/scheduler/job-editor-overlay.ts';
 import { teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 function setupSchedulerDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
     <div id="osStage" class="mn-os-stage" style="width:1200px;height:800px;position:relative">
-      <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
-      <div id="osWindowsLayer" class="mn-os-windows-layer"></div>
-      <div id="osSidePanelsLayer" class="mn-os-side-panels-layer"></div>
+      <div id="osAppsLayer" class="mn-os-apps-layer"></div>
     </div>
     <main id="schedulerView" class="scheduler-page">
       <div id="schedulerPanelMount"></div>
@@ -55,10 +46,6 @@ describe('scheduler app registry', () => {
     assert.match(scheduler.tag, /recurring/i);
   });
 
-  test('scheduler uses sidePanel presentation mode', () => {
-    assert.equal(getPresentationMode('scheduler'), 'sidePanel');
-  });
-
   test('isAppId accepts scheduler', () => {
     assert.equal(isAppId('scheduler'), true);
   });
@@ -67,11 +54,6 @@ describe('scheduler app registry', () => {
 describe('scheduler router', () => {
   test('legacy #/scheduler redirects to #/app/scheduler', () => {
     const legacy = resolveLegacyHash('#/scheduler');
-    assert.equal(legacy.hash, '#/app/scheduler');
-  });
-
-  test('legacy #/settings/scheduler redirects to scheduler app', () => {
-    const legacy = resolveLegacyHash('#/settings/scheduler');
     assert.equal(legacy.hash, '#/app/scheduler');
   });
 
@@ -87,16 +69,12 @@ describe('scheduler markup contract', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="schedulerView"/);
     assert.match(html, /id="schedulerPanelMount"/);
-    assert.match(html, /id="schedulerStatus"/);
-    assert.match(html, /id="osSidePanelsLayer"/);
-    assert.doesNotMatch(html, /id="settingsSection-scheduler"/);
   });
 });
 
-describe('scheduler side panel shell', () => {
-  let fetchMock: typeof fetch;
-  /** @type {import('happy-dom').Window | undefined} */
+describe('scheduler workspace shell', () => {
   let happyDomWindow: import('happy-dom').Window | undefined;
+  let fetchMock: typeof globalThis.fetch;
 
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
@@ -114,15 +92,13 @@ describe('scheduler side panel shell', () => {
     g.localStorage = win.localStorage;
     win.localStorage.clear();
     setupSchedulerDom(win);
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
     resetInstancesForTests();
     resetOsRouterForTests();
     resetAppHostForTests();
-    resetWindowManagerForTests();
     resetOsPageBridgeForTests();
-    resetSchedulerSidePanelForTests();
+    resetJobEditorWindowForTests();
     initOsRouter();
-    initSchedulerSidePanel();
     fetchMock = globalThis.fetch;
     globalThis.fetch = async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -141,11 +117,10 @@ describe('scheduler side panel shell', () => {
 
   afterEach(async () => {
     globalThis.fetch = fetchMock;
-    resetSchedulerSidePanelForTests();
+    resetJobEditorWindowForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetAppHostForTests();
-    resetWindowManagerForTests();
     resetOsPageBridgeForTests();
     if (happyDomWindow) {
       await teardownHappyDomAsync(happyDomWindow);
@@ -153,85 +128,25 @@ describe('scheduler side panel shell', () => {
     }
   });
 
-  test('launchApp(scheduler) opens side panel on desktop without leaving desktop view', async () => {
-    await toggleSchedulerOverlay();
-    assert.equal(getOsView(), 'desktop');
-    assert.equal(isSchedulerSidePanelOpen(), true);
-    assert.equal(getPresentationMode('scheduler'), 'sidePanel');
+  test('launchApp(scheduler) foregrounds scheduler in app view', () => {
+    launchApp('scheduler');
+    syncOsRouteFromHashForTests();
+    assert.equal(getForegroundAppId(), 'scheduler');
+    assert.equal(getOsView(), 'app');
   });
 
-  test('launchApp(scheduler) toggles closed when side panel is already open', async () => {
-    await toggleSchedulerOverlay();
-    assert.equal(isSchedulerSidePanelOpen(), true);
-    await toggleSchedulerOverlay();
-    assert.equal(isSchedulerSidePanelOpen(), false);
-    assert.equal(getOsView(), 'desktop');
-  });
-
-  test('scheduler job editor opens as auxiliary window', () => {
-    windowManager.ensureLayer();
-    const windowId = windowManager.open('scheduler', {
-      instanceId: SCHEDULER_EDITOR_INSTANCE_ID,
-      title: 'Add scheduled job',
-      bounds: { x: 100, y: 80, width: 480, height: 560 },
-      persistBounds: false,
-      manageInstance: false,
-    });
-    assert.ok(windowId);
-    const record = windowManager.getWindows().find((w) => w.id === windowId);
-    assert.ok(record);
-    assert.equal(record?.instanceId, SCHEDULER_EDITOR_INSTANCE_ID);
-    assert.equal(record?.manageInstance, false);
-    assert.equal(record?.persistBounds, false);
-    assert.equal(record?.bounds.width, 480);
-    assert.equal(record?.bounds.height, 560);
-    windowManager.close(windowId);
-    assert.equal(getForegroundAppId(), null);
-  });
-
-  test('hash route #/app/scheduler foregrounds scheduler on desktop', () => {
+  test('hash route #/app/scheduler foregrounds scheduler in app view', () => {
     window.location.hash = '#/app/scheduler';
     syncOsRouteFromHashForTests();
     assert.equal(getForegroundAppId(), 'scheduler');
-    assert.equal(getOsView(), 'desktop');
-  });
-
-  test('launchApp(scheduler) from another app keeps that app foreground', async () => {
-    launchApp('settings');
-    syncOsRouteFromHashForTests();
-    assert.equal(getForegroundAppId(), 'settings');
-
-    await toggleSchedulerOverlay();
-    assert.equal(getForegroundAppId(), 'settings');
-    assert.equal(isSchedulerSidePanelOpen(), true);
-  });
-
-  test('scheduler side panel stays open when opening a window app', async () => {
-    await toggleSchedulerOverlay();
-    assert.equal(isSchedulerSidePanelOpen(), true);
-
-    launchApp('settings');
-    syncOsRouteFromHashForTests();
-    assert.equal(getForegroundAppId(), 'settings');
-    assert.equal(isSchedulerSidePanelOpen(), true);
-  });
-
-  test('scheduler side panel stays open when Code is foreground', async () => {
-    await toggleSchedulerOverlay();
-    assert.equal(isSchedulerSidePanelOpen(), true);
-
-    launchApp('code');
-    syncOsRouteFromHashForTests();
-    assert.equal(getForegroundAppId(), 'code');
     assert.equal(getOsView(), 'app');
-    assert.equal(isSchedulerSidePanelOpen(), true);
   });
 
-  test('scheduler side panel closes when scheduler instance is dismissed', async () => {
-    await toggleSchedulerOverlay();
-    assert.equal(isSchedulerSidePanelOpen(), true);
-
-    await toggleSchedulerOverlay();
-    assert.equal(isSchedulerSidePanelOpen(), false);
+  test('scheduler job editor opens as an in-app overlay', () => {
+    openJobEditorWindow({ title: 'Add scheduled job' });
+    const overlay = document.querySelector('.scheduler-editor-overlay');
+    assert.ok(overlay);
+    resetJobEditorWindowForTests();
+    assert.equal(document.querySelector('.scheduler-editor-overlay'), null);
   });
 });

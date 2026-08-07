@@ -1479,6 +1479,9 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof w.userChosen === 'boolean') {
       existingWorkspace.userChosen = w.userChosen;
     }
+    if (typeof w.scratchPath === 'string' && w.scratchPath.trim()) {
+      existingWorkspace.scratchPath = w.scratchPath.trim();
+    }
     if (Array.isArray(w.recentPaths)) {
       const trimmed = w.recentPaths
         .filter((p) => typeof p === 'string')
@@ -1516,6 +1519,35 @@ export function mergeConfigMeta(existing, patch) {
         ...prev,
         .../** @type {Record<string, unknown>} */ (w.devServersByPath),
       };
+    }
+    if (w.filePanelByPath && typeof w.filePanelByPath === 'object') {
+      const prev =
+        existingWorkspace.filePanelByPath &&
+        typeof existingWorkspace.filePanelByPath === 'object'
+          ? /** @type {Record<string, unknown>} */ (existingWorkspace.filePanelByPath)
+          : {};
+      const patch = /** @type {Record<string, unknown>} */ (w.filePanelByPath);
+      const next = { ...prev };
+      for (const [key, value] of Object.entries(patch)) {
+        if (typeof key !== 'string' || !key.trim()) continue;
+        if (!value || typeof value !== 'object') continue;
+        next[normalizeWorkspacePathKey(key.trim())] = value;
+      }
+      existingWorkspace.filePanelByPath = next;
+    }
+    if (w.terminalByPath && typeof w.terminalByPath === 'object') {
+      const prev =
+        existingWorkspace.terminalByPath && typeof existingWorkspace.terminalByPath === 'object'
+          ? /** @type {Record<string, unknown>} */ (existingWorkspace.terminalByPath)
+          : {};
+      const patch = /** @type {Record<string, unknown>} */ (w.terminalByPath);
+      const next = { ...prev };
+      for (const [key, value] of Object.entries(patch)) {
+        if (typeof key !== 'string' || !key.trim()) continue;
+        if (!value || typeof value !== 'object') continue;
+        next[normalizeWorkspacePathKey(key.trim())] = value;
+      }
+      existingWorkspace.terminalByPath = next;
     }
     base.workspace = existingWorkspace;
   }

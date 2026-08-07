@@ -1,304 +1,376 @@
-import { appAlert, appConfirm, appPrompt } from '../ui/app-dialog';
 /**
- * Deep Research library — card grid with compact toolbar and overflow menus.
+ * Research rail — every run, grouped by recency, as rows rather than cards.
+ *
+ * Rows carry their own state word (running / failed / stopped) so the reader
+ * can tell what happened without opening anything. A run that is still in
+ * flight lives only in the server's memory until it finishes, so the caller
+ * passes it in as `liveRuns` and it is merged ahead of the persisted list.
  */
 
-import {
-  archiveResearch,
-  deleteResearch,
-  fetchResearchLibrary,
-} from './client';
-import { researchCategoryLabel } from './categories';
-import type { ResearchLibraryItem, ResearchLibrarySort } from './types';
+import { appConfirm } from '../ui/app-dialog';
+import { archiveResearch, deleteResearch, fetchResearchLibrary } from './client';
+import { formatRunDuration } from './run-summary';
+import { iconHtml } from '../ui/icon';
+import type { ResearchLibraryItem } from './types';
 
-export interface ResearchLibraryMountOptions {
-  mount: HTMLElement;
-  onOpenDetail: (id: string) => void;
+export interface ResearchRailHandlers {
+  onSelect: (id: string) => void;
   onOpenReport: (id: string) => void;
   onDiscuss: (id: string) => void;
   onRefine: (id: string, query: string) => void;
-  onNewResearch?: () => void;
+  /** Archive / delete changed the list — refetch. */
+  onChanged: () => void;
 }
 
-let searchValue = '';
-let sortValue: ResearchLibrarySort = 'newest';
-let showArchived = false;
-let openMenuId: string | null = null;
-let lastLibraryItems: ResearchLibraryItem[] = [];
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+export interface ResearchRailOptions extends ResearchRailHandlers {
+  mount: HTMLElement;
+  search?: string;
+  archived?: boolean;
+  activeId?: string | null;
+  liveRuns?: ResearchLibraryItem[];
 }
 
-function formatWhen(iso?: string): string {
-  if (!iso) {
-    return '—';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function itemTime(item: ResearchLibraryItem): number {
+  const raw = item.completedAt || item.startedAt;
+  if (!raw) {
+    return 0;
   }
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) {
-    return '—';
+  const t = new Date(raw).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/** Recency bucket label for a run. Running work always sorts first. */
+export function researchRunGroup(item: ResearchLibraryItem, now = Date.now()): string {
+  if (item.status === 'running') {
+    return 'Running';
   }
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) {
-    return `Today, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  const t = itemTime(item);
+  if (!t) {
+    return 'Undated';
   }
-  if (diffDays === 1) {
+  const startOfToday = new Date(now).setHours(0, 0, 0, 0);
+  if (t >= startOfToday) {
+    return 'Today';
+  }
+  if (t >= startOfToday - DAY_MS) {
     return 'Yesterday';
   }
-  if (diffDays < 7) {
-    return `${diffDays} days ago`;
+  if (t >= startOfToday - 7 * DAY_MS) {
+    return 'This week';
   }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (t >= startOfToday - 30 * DAY_MS) {
+    return 'This month';
+  }
+  return 'Earlier';
 }
 
-function closeOpenMenu(): void {
-  openMenuId = null;
-  document.querySelectorAll('.dr-lib-menu').forEach((el) => el.remove());
-  document.querySelectorAll('.dr-lib-card.is-menu-open').forEach((el) => {
-    el.classList.remove('is-menu-open');
+const GROUP_ORDER = [
+  'Running',
+  'Today',
+  'Yesterday',
+  'This week',
+  'This month',
+  'Earlier',
+  'Undated',
+];
+
+/** Merge in-flight runs ahead of the persisted list, newest first, no duplicates. */
+export function mergeResearchRuns(
+  persisted: ResearchLibraryItem[],
+  live: ResearchLibraryItem[] = [],
+): ResearchLibraryItem[] {
+  const seen = new Set<string>();
+  const out: ResearchLibraryItem[] = [];
+  for (const item of [...live, ...persisted]) {
+    if (!item.id || seen.has(item.id)) {
+      continue;
+    }
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out.sort((a, b) => {
+    const aRunning = a.status === 'running' ? 1 : 0;
+    const bRunning = b.status === 'running' ? 1 : 0;
+    if (aRunning !== bRunning) {
+      return bRunning - aRunning;
+    }
+    return itemTime(b) - itemTime(a);
   });
 }
 
-function renderLibraryCard(item: ResearchLibraryItem): string {
-  const title = escapeHtml(item.query || '(untitled)');
-  const tag = escapeHtml(researchCategoryLabel(item.category));
-  const rounds = item.rounds != null && item.rounds !== '' ? String(item.rounds) : '—';
-  const sources = item.sourceCount != null ? String(item.sourceCount) : '—';
-  const dur = item.duration?.trim() || '—';
-  const when = formatWhen(item.completedAt || item.startedAt);
-  return `
-    <div class="dr-lib-card" data-research-id="${escapeHtml(item.id)}">
-      <button type="button" class="dr-lib-menu-btn" data-action="menu" data-research-id="${escapeHtml(item.id)}" aria-label="More actions">⋯</button>
-      <button type="button" class="dr-lib-card-body" data-action="open" data-research-id="${escapeHtml(item.id)}">
-        <div class="dr-lib-tag research-mono">${tag}</div>
-        <div class="dr-lib-title">${title}</div>
-        <div class="dr-lib-meta research-mono">${escapeHtml(rounds)} rounds · ${escapeHtml(sources)} sources · ${escapeHtml(dur)}</div>
-        <div class="dr-lib-when research-mono"><span aria-hidden="true">🕐</span> ${escapeHtml(when)}</div>
-      </button>
-    </div>
-  `;
+/** Compact run summary: `31 sources · 4 rounds · 6:12`. */
+export function researchRunMeta(item: ResearchLibraryItem): string {
+  const parts: string[] = [];
+  if (item.sourceCount) {
+    parts.push(`${item.sourceCount} source${item.sourceCount === 1 ? '' : 's'}`);
+  }
+  const rounds = item.rounds != null && item.rounds !== '' ? Number(item.rounds) : NaN;
+  if (Number.isFinite(rounds) && rounds > 0) {
+    parts.push(`${rounds} round${rounds === 1 ? '' : 's'}`);
+  }
+  const duration = formatRunDuration(item.duration ?? '');
+  if (duration) {
+    parts.push(duration);
+  }
+  if (!parts.length) {
+    const t = itemTime(item);
+    if (t) {
+      return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+  }
+  return parts.join(' · ');
 }
 
-function showCardMenu(
-  card: HTMLElement,
+function stateWord(status: ResearchLibraryItem['status']): string {
+  if (status === 'running') return 'running';
+  if (status === 'error') return 'failed';
+  if (status === 'cancelled') return 'stopped';
+  return '';
+}
+
+function closeRowMenu(): void {
+  document.querySelector('.rs-menu')?.remove();
+  document
+    .querySelectorAll('.rs-row.is-menu-open')
+    .forEach((el) => el.classList.remove('is-menu-open'));
+}
+
+function buildRow(
   item: ResearchLibraryItem,
-  handlers: Pick<
-    ResearchLibraryMountOptions,
-    'onOpenDetail' | 'onOpenReport' | 'onDiscuss' | 'onRefine'
-  >,
-  reload: () => Promise<void>,
-): void {
-  closeOpenMenu();
-  openMenuId = item.id;
-  card.classList.add('is-menu-open');
-  const menu = document.createElement('div');
-  menu.className = 'dr-lib-menu';
-  menu.innerHTML = `
-    <button type="button" data-action="open">Open</button>
-    <button type="button" data-action="report">Report</button>
-    <button type="button" data-action="discuss">Discuss</button>
-    <button type="button" data-action="refine">Refine</button>
-    <button type="button" data-action="archive">${item.archived ? 'Unarchive' : 'Archive'}</button>
-    <button type="button" data-action="delete" class="danger">Delete</button>
-  `;
-  card.appendChild(menu);
-  menu.addEventListener('click', (ev) => {
+  activeId: string | null | undefined,
+  handlers: ResearchRailHandlers,
+): HTMLElement {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'rs-row';
+  row.dataset.researchId = item.id;
+  row.setAttribute('role', 'option');
+  const isActive = item.id === activeId;
+  row.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  if (isActive) {
+    row.classList.add('is-active');
+  }
+
+  const title = document.createElement('span');
+  title.className = 'rs-row__title';
+  title.textContent = item.query?.trim() || 'Untitled run';
+
+  const meta = document.createElement('span');
+  meta.className = 'rs-row__meta';
+
+  const word = stateWord(item.status);
+  if (word) {
+    const state = document.createElement('span');
+    state.className = `rs-row__state is-${item.status === 'error' ? 'error' : item.status}`;
+    state.textContent = word;
+    meta.appendChild(state);
+  }
+  meta.appendChild(document.createTextNode(researchRunMeta(item)));
+
+  row.append(title, meta);
+  row.addEventListener('click', () => handlers.onSelect(item.id));
+
+  const menuBtn = document.createElement('button');
+  menuBtn.type = 'button';
+  menuBtn.className = 'rs-row__menu';
+  menuBtn.setAttribute('aria-label', `Actions for ${item.query?.trim() || 'this run'}`);
+  menuBtn.innerHTML = iconHtml('more', { size: 14 });
+  menuBtn.addEventListener('click', (ev) => {
+    ev.preventDefault();
     ev.stopPropagation();
-    const target = (ev.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
-    const action = target?.getAttribute('data-action');
-    if (!action) {
-      return;
+    const alreadyOpen = row.classList.contains('is-menu-open');
+    closeRowMenu();
+    if (!alreadyOpen) {
+      openRowMenu(menuBtn, row, item, handlers);
     }
-    closeOpenMenu();
-    if (action === 'open') {
-      handlers.onOpenDetail(item.id);
-      return;
+  });
+
+  // The row is a <button>; the menu control sits beside it, never nested inside.
+  const wrap = document.createElement('div');
+  wrap.className = 'rs-row-wrap';
+  wrap.append(row, menuBtn);
+  return wrap;
+}
+
+function openRowMenu(
+  anchor: HTMLElement,
+  row: HTMLElement,
+  item: ResearchLibraryItem,
+  handlers: ResearchRailHandlers,
+): void {
+  row.classList.add('is-menu-open');
+
+  const menu = document.createElement('div');
+  menu.className = 'rs-menu';
+  menu.setAttribute('role', 'menu');
+
+  const add = (label: string, run: () => void, danger = false): void => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('role', 'menuitem');
+    btn.textContent = label;
+    if (danger) {
+      btn.classList.add('is-danger');
     }
-    if (action === 'report') {
-      handlers.onOpenReport(item.id);
-      return;
-    }
-    if (action === 'discuss') {
-      handlers.onDiscuss(item.id);
-      return;
-    }
-    if (action === 'refine') {
-      handlers.onRefine(item.id, item.query);
-      return;
-    }
-    if (action === 'archive') {
-      void archiveResearch(item.id, !item.archived).then(() => reload());
-      return;
-    }
-    if (action === 'delete') {
+    btn.addEventListener('click', () => {
+      closeRowMenu();
+      run();
+    });
+    menu.appendChild(btn);
+  };
+
+  if (item.status !== 'running') {
+    add('Open report', () => handlers.onOpenReport(item.id));
+    add('Discuss in chat', () => handlers.onDiscuss(item.id));
+    add('Refine', () => handlers.onRefine(item.id, item.query));
+    const sep = document.createElement('div');
+    sep.className = 'rs-menu__sep';
+    menu.appendChild(sep);
+  }
+  add(item.archived ? 'Unarchive' : 'Archive', () => {
+    void archiveResearch(item.id, !item.archived).then(() => handlers.onChanged());
+  });
+  add(
+    'Delete',
+    () => {
       void (async () => {
-        if (!await appConfirm('Delete this research run permanently?')) {
+        const ok = await appConfirm(
+          `Delete this run permanently?\n\n${item.query?.trim() || 'Untitled run'}`,
+        );
+        if (!ok) {
           return;
         }
         await deleteResearch(item.id);
-        reload();
+        handlers.onChanged();
       })();
+    },
+    true,
+  );
+
+  document.body.appendChild(menu);
+  const rect = anchor.getBoundingClientRect();
+  const height = menu.offsetHeight || 200;
+  const top = rect.bottom + height > window.innerHeight ? rect.top - height - 4 : rect.bottom + 4;
+  menu.style.top = `${Math.max(8, top)}px`;
+  menu.style.left = `${Math.max(8, rect.right - menu.offsetWidth)}px`;
+}
+
+let dismissBound = false;
+
+function bindMenuDismiss(): void {
+  if (dismissBound) {
+    return;
+  }
+  dismissBound = true;
+  document.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (target?.closest('.rs-menu') || target?.closest('.rs-row__menu')) {
+      return;
+    }
+    closeRowMenu();
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') {
+      closeRowMenu();
     }
   });
 }
 
-/** Render library toolbar + card grid into the mount element. */
-export async function renderResearchLibrary(options: ResearchLibraryMountOptions): Promise<void> {
-  const { mount, onOpenDetail, onOpenReport, onDiscuss, onRefine, onNewResearch } = options;
-  mount.innerHTML = `
-    <div class="dr-lib-toolbar">
-      <label class="dr-lib-field dr-lib-field-search" for="researchLibrarySearch">
-        <span class="dr-flabel research-mono">SEARCH</span>
-        <input
-          type="search"
-          id="researchLibrarySearch"
-          class="dr-input research-input"
-          placeholder="Filter saved reports…"
-          aria-label="Search library"
-        />
-      </label>
-      <label class="dr-lib-field dr-lib-field-sort" for="researchLibrarySort">
-        <span class="dr-flabel research-mono">SORT</span>
-        <div class="dr-select">
-          <select id="researchLibrarySort" class="research-select" aria-label="Sort library">
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="query">A–Z</option>
-          </select>
-        </div>
-      </label>
-      <div class="dr-lib-field dr-lib-field-archived">
-        <span class="dr-flabel research-mono" id="researchLibraryArchivedLabel">ARCHIVED</span>
-        <label class="dr-switch" for="researchLibraryArchived">
-          <input
-            type="checkbox"
-            id="researchLibraryArchived"
-            class="dr-switch__input"
-            role="switch"
-            aria-labelledby="researchLibraryArchivedLabel"
-          />
-          <span class="dr-switch__track" aria-hidden="true">
-            <span class="dr-switch__thumb"></span>
-          </span>
-        </label>
-      </div>
-    </div>
-    <div class="dr-lib-head">
-      <div class="dr-lib-count research-mono" id="researchLibraryCount">0 saved reports</div>
-      <button type="button" class="dr-run sm" id="btnResearchLibraryNew">+ New research</button>
-    </div>
-    <div id="researchLibraryGrid" class="dr-lib-grid"></div>
-    <p id="researchLibraryEmpty" class="research-library-empty hidden">No research runs yet.</p>
-  `;
+/** Fetch and paint the rail. Returns the merged runs for caller-side lookup. */
+export async function renderResearchRail(
+  options: ResearchRailOptions,
+): Promise<ResearchLibraryItem[]> {
+  const { mount, search, archived, activeId, liveRuns = [] } = options;
+  bindMenuDismiss();
+  closeRowMenu();
 
-  const searchInput = mount.querySelector('#researchLibrarySearch') as HTMLInputElement;
-  const sortSelect = mount.querySelector('#researchLibrarySort') as HTMLSelectElement;
-  const archivedCheck = mount.querySelector('#researchLibraryArchived') as HTMLInputElement;
-  const gridEl = mount.querySelector('#researchLibraryGrid') as HTMLElement;
-  const emptyEl = mount.querySelector('#researchLibraryEmpty') as HTMLParagraphElement;
-  const countEl = mount.querySelector('#researchLibraryCount') as HTMLElement;
-
-  searchInput.value = searchValue;
-  sortSelect.value = sortValue;
-  archivedCheck.checked = showArchived;
-
-  const handlers = { onOpenDetail, onOpenReport, onDiscuss, onRefine };
-
-  const reload = async (): Promise<void> => {
-    searchValue = searchInput.value;
-    sortValue = (sortSelect.value as ResearchLibrarySort) || 'newest';
-    showArchived = archivedCheck.checked;
-    gridEl.innerHTML = '<p class="research-mono" style="padding:12px">Loading…</p>';
-    try {
-      const sortParam =
-        sortValue === 'newest' ? 'recent' : sortValue === 'oldest' ? 'oldest' : 'alpha';
-      const { items } = await fetchResearchLibrary({
-        search: searchValue,
-        sort: sortParam,
-        archived: showArchived,
-      });
-      lastLibraryItems = items;
-      countEl.textContent = `${items.length} saved report${items.length === 1 ? '' : 's'}`;
-      if (!items.length) {
-        gridEl.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-        return;
-      }
-      emptyEl.classList.add('hidden');
-      gridEl.innerHTML = items.map((item) => renderLibraryCard(item)).join('');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not load library';
-      gridEl.innerHTML = `<p class="research-library-empty">${escapeHtml(msg)}</p>`;
-      emptyEl.classList.add('hidden');
-    }
+  const handlers: ResearchRailHandlers = {
+    onSelect: options.onSelect,
+    onOpenReport: options.onOpenReport,
+    onDiscuss: options.onDiscuss,
+    onRefine: options.onRefine,
+    onChanged: options.onChanged,
   };
 
-  gridEl.addEventListener('click', (ev) => {
-    const menuBtn = (ev.target as HTMLElement).closest('[data-action="menu"]') as HTMLElement | null;
-    if (menuBtn) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const id = menuBtn.getAttribute('data-research-id');
-      const card = menuBtn.closest('.dr-lib-card') as HTMLElement | null;
-      if (!id || !card) {
-        return;
-      }
-      if (openMenuId === id) {
-        closeOpenMenu();
-        return;
-      }
-      const item =
-        lastLibraryItems.find((row) => row.id === id) ?? {
-          id,
-          query: card.querySelector('.dr-lib-title')?.textContent?.trim() ?? '',
-          status: 'done' as const,
-          archived: showArchived,
-        };
-      showCardMenu(card, item, handlers, reload);
-      return;
-    }
-    const openBtn = (ev.target as HTMLElement).closest('[data-action="open"]') as HTMLElement | null;
-    if (!openBtn || !gridEl.contains(openBtn)) {
-      return;
-    }
-    const id =
-      openBtn.getAttribute('data-research-id') ??
-      openBtn.closest('[data-research-id]')?.getAttribute('data-research-id');
-    if (id) {
-      closeOpenMenu();
-      onOpenDetail(id);
-    }
-  });
+  let persisted: ResearchLibraryItem[] = [];
+  let loadError = '';
+  try {
+    const { items } = await fetchResearchLibrary({
+      search,
+      sort: 'recent',
+      archived: archived === true,
+      limit: 200,
+    });
+    persisted = items;
+  } catch (err) {
+    loadError = err instanceof Error ? err.message : 'Could not load saved runs';
+  }
 
-  document.addEventListener('click', (ev) => {
-    if (!(ev.target as HTMLElement).closest('.dr-lib-card')) {
-      closeOpenMenu();
+  // Archived view lists only archived work; live runs are never archived.
+  const term = search?.trim().toLowerCase() ?? '';
+  const live = archived
+    ? []
+    : liveRuns.filter((item) => !term || item.query.toLowerCase().includes(term));
+  const runs = mergeResearchRuns(persisted, live);
+
+  mount.replaceChildren();
+
+  if (loadError) {
+    const p = document.createElement('p');
+    p.className = 'rs-rail__empty';
+    p.textContent = loadError;
+    mount.appendChild(p);
+    return runs;
+  }
+
+  if (!runs.length) {
+    const p = document.createElement('p');
+    p.className = 'rs-rail__empty';
+    p.textContent = term
+      ? 'Nothing matches that filter.'
+      : archived
+        ? 'No archived runs.'
+        : 'No research yet. Ask a question and Minnow will go read, then write you a brief.';
+    mount.appendChild(p);
+    return runs;
+  }
+
+  const now = Date.now();
+  const grouped = new Map<string, ResearchLibraryItem[]>();
+  for (const item of runs) {
+    const group = researchRunGroup(item, now);
+    const bucket = grouped.get(group);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      grouped.set(group, [item]);
     }
-  });
+  }
 
-  searchInput.addEventListener('input', () => {
-    void reload();
-  });
-  sortSelect.addEventListener('change', () => {
-    void reload();
-  });
-  archivedCheck.addEventListener('change', () => {
-    void reload();
-  });
-  mount.querySelector('#btnResearchLibraryNew')?.addEventListener('click', () => {
-    onNewResearch?.();
-  });
+  for (const group of GROUP_ORDER) {
+    const items = grouped.get(group);
+    if (!items?.length) {
+      continue;
+    }
+    const label = document.createElement('div');
+    label.className = 'rs-group__label';
+    label.textContent = group;
+    mount.appendChild(label);
+    for (const item of items) {
+      mount.appendChild(buildRow(item, activeId, handlers));
+    }
+  }
 
-  await reload();
+  return runs;
 }
 
-/** Test hook: default sort value. */
-export function getLibrarySortForTests(): ResearchLibrarySort {
-  return sortValue;
+/** Move the selection highlight without refetching the list. */
+export function setActiveResearchRow(mount: HTMLElement, id: string | null): void {
+  for (const row of mount.querySelectorAll<HTMLElement>('.rs-row')) {
+    const on = Boolean(id) && row.dataset.researchId === id;
+    row.classList.toggle('is-active', on);
+    row.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
 }

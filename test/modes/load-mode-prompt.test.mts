@@ -27,10 +27,11 @@ describe('loadModePromptBody', () => {
     for (const id of MODE_IDS) {
       const full = loadModePromptBody(id, 'full');
       const lite = loadModePromptBody(id, 'lite');
+      const markerId = id === 'desktop' ? 'general' : id;
       assert.ok(full.length > 0, `${id} full empty`);
       assert.ok(lite.length > 0, `${id} lite empty`);
-      assert.match(full, new RegExp(`MINNOW_MODE_MARKER: ${id} full`));
-      assert.match(lite, new RegExp(`MINNOW_MODE_MARKER: ${id} lite`));
+      assert.match(full, new RegExp(`MINNOW_MODE_MARKER: ${markerId} full`));
+      assert.match(lite, new RegExp(`MINNOW_MODE_MARKER: ${markerId} lite`));
     }
   });
 

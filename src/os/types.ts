@@ -1,7 +1,6 @@
 /** Minnow app identifiers — one per launcher tile. */
 export type AppId =
   | 'code'
-  | 'chat'
   | 'research'
   | 'experts'
   | 'bench'
@@ -14,11 +13,8 @@ export type AppId =
   | 'issues'
   | 'settings';
 
-/** How an app is presented in the Minnow Shell. */
-export type PresentationMode = 'fullscreen' | 'window' | 'desktop' | 'sidePanel';
-
-/** Shell surface: desktop launcher vs a foreground app. */
-export type OsView = 'desktop' | 'app';
+/** Shell surface: workspace gate vs a foreground app. */
+export type OsView = 'workspaces' | 'app';
 
 /** Persisted desktop appearance (localStorage `minnow.os.*`). */
 export interface DesktopPrefs {

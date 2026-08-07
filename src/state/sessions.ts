@@ -19,11 +19,13 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox';
 import { paintChatHistoryPendingInForegroundShell } from '../ui/messages';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   CHAT_APP_ID,
+  CODE_APP_ID,
   DESKTOP_APP_ID,
   EMAIL_APP_ID,
   createAssistantChat,
@@ -879,6 +881,62 @@ export function migrateSessionV5ToV6(state: SessionState): void {
   state.version = 6;
 }
 
+/** Rewrite legacy sandbox / unscoped chats onto the Scratch workspace path. */
+export function migrateScratchWorkspacePaths(state: SessionState, scratchPath: string): void {
+  const scratchKey = normalizeWorkspacePath(scratchPath);
+  if (!scratchKey) return;
+
+  const remapWorkspaceKey = (key: string): string => {
+    const normalized = normalizeWorkspacePath(key);
+    if (!normalized) return scratchKey;
+    if (isMinnowSandboxWorkspacePath(normalized)) return scratchKey;
+    return normalized;
+  };
+
+  for (const chat of state.chats) {
+    const ws = normalizeWorkspacePath(chat.workspacePath ?? '');
+    const nextWs = remapWorkspaceKey(ws);
+    if (nextWs !== ws) {
+      chat.workspacePath = nextWs;
+    }
+    chat.modeId = normalizeModeId(chat.modeId);
+  }
+
+  for (const group of state.groups ?? []) {
+    const ws = normalizeWorkspacePath(group.workspacePath ?? '');
+    const nextWs = remapWorkspaceKey(ws);
+    if (nextWs !== ws) {
+      group.workspacePath = nextWs;
+    }
+  }
+
+  if (state.lastActiveChatIdByWorkspace) {
+    const nextMap: Record<string, string> = {};
+    for (const [key, chatId] of Object.entries(state.lastActiveChatIdByWorkspace)) {
+      const nextKey = remapWorkspaceKey(key);
+      if (!nextMap[nextKey]) {
+        nextMap[nextKey] = chatId;
+      }
+    }
+    state.lastActiveChatIdByWorkspace = nextMap;
+  }
+
+  if (state.lastActiveChatIdByApp) {
+    const legacyChat = state.lastActiveChatIdByApp[CHAT_APP_ID];
+    if (legacyChat && !state.lastActiveChatIdByApp[CODE_APP_ID]) {
+      state.lastActiveChatIdByApp[CODE_APP_ID] = legacyChat;
+    }
+    delete state.lastActiveChatIdByApp[CHAT_APP_ID];
+  }
+}
+
+/** Apply Scratch migration when workspace sync provides the canonical sandbox path. */
+export function migrateScratchWorkspacePathsForLoadedSession(scratchPath: string): void {
+  if (!sessionState) return;
+  migrateScratchWorkspacePaths(sessionState, scratchPath);
+  scheduleSaveSessions();
+}
+
 /** Coerce a chat row via the shared server/client schema (Phase B.1). */
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   // Shared allowlist — no client-only twin that can drift from validators.
@@ -1085,8 +1143,9 @@ function maybeRememberActiveChatForForegroundApp(
     rememberActiveChatForAppInState(state, EMAIL_APP_ID, chat.id);
     return;
   }
-  if (getForegroundAppId() !== CHAT_APP_ID && !isChatAppForeground()) return;
-  rememberActiveChatForAppInState(state, CHAT_APP_ID, chat.id);
+  if (getForegroundAppId() === 'code' || isChatAppForeground()) {
+    rememberActiveChatForAppInState(state, CODE_APP_ID, chat.id);
+  }
 }
 
 /** Remember the active chat under the current workspace key before switching scope. */
@@ -1150,7 +1209,7 @@ function syncRememberedActiveChatAfterDelete(
     rememberActiveChatForAppInState(state, DESKTOP_APP_ID, next.id);
     return;
   }
-  rememberActiveChatForAppInState(state, CHAT_APP_ID, next.id);
+  rememberActiveChatForAppInState(state, CODE_APP_ID, next.id);
 }
 
 /** Persist the active chat when it belongs to the given project workspace (before desktop chat). */
@@ -1251,7 +1310,7 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
   });
   state.activeId = nextId;
   markSessionScalarsDirty();
-  rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
+  rememberActiveChatForAppInState(state, CODE_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
 }

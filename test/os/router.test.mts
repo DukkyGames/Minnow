@@ -12,10 +12,6 @@ import {
   getInstanceSnapshot,
   resetInstancesForTests,
 } from '../../src/os/instances.ts';
-import {
-  isDesktopChatActive,
-  resetDesktopStateForTests,
-} from '../../src/os/desktop-state.ts';
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   getCurrentRoute,
@@ -28,6 +24,7 @@ import {
   syncOsRouteFromHashForTests,
 } from '../../src/os/router.ts';
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
+import { installHappyDomGlobals } from './dom-helpers.mts';
 
 const CHATS_WS = '/home/user/.minnow/chats';
 
@@ -46,6 +43,7 @@ function setupChatAppDom(win: import('happy-dom').Window): void {
       <aside id="chatAppFiles"><div id="chatAppFilesBody"></div></aside>
     </main>
     <div id="appBody"></div>
+    <textarea id="msgInput"></textarea>
   `;
 }
 
@@ -61,10 +59,13 @@ describe('resolveLegacyHash', () => {
     });
   });
 
-  test('resolveLegacyHash redirects #/app/chat to desktop', () => {
+  test('resolveLegacyHash redirects #/desktop to workspaces', () => {
+    assert.deepEqual(resolveLegacyHash('#/desktop'), { hash: '#/workspaces' });
+  });
+
+  test('resolveLegacyHash redirects #/app/chat to Code chat', () => {
     assert.deepEqual(resolveLegacyHash('#/app/chat'), {
-      hash: '#/desktop',
-      desktopChat: true,
+      hash: '#/app/code/chat',
     });
   });
 
@@ -83,32 +84,31 @@ describe('resolveLegacyHash', () => {
   });
 
   test('redirects legacy full-page routes to OS apps', () => {
-    assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/desktop' });
+    assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/workspaces' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {
-      hash: '#/desktop',
-      desktopResearch: true,
+      hash: '#/app/research',
     });
     assert.deepEqual(resolveLegacyHash('#/experts/gallery'), {
-      hash: '#/desktop',
-      desktopExperts: true,
+      hash: '#/workspaces',
     });
   });
 });
 
 describe('parseOsHash', () => {
-  test('parses desktop and app routes', () => {
-    assert.deepEqual(parseOsHash('#/'), { view: 'desktop' });
-    assert.deepEqual(parseOsHash('#/desktop'), { view: 'desktop' });
+  test('parses workspaces and app routes', () => {
+    assert.deepEqual(parseOsHash('#/'), { view: 'workspaces' });
+    assert.deepEqual(parseOsHash('#/workspaces'), { view: 'workspaces' });
+    assert.deepEqual(parseOsHash('#/desktop'), { view: 'workspaces' });
     assert.deepEqual(parseOsHash('#/app/code'), {
       view: 'app',
       appId: 'code',
       codeSection: 'chat',
     });
-    assert.deepEqual(parseOsHash('#/app/chat'), { view: 'app', appId: 'chat' });
+    assert.deepEqual(parseOsHash('#/app/chat'), { view: 'workspaces' });
   });
 
-  test('falls back to desktop for unknown app ids', () => {
-    assert.deepEqual(parseOsHash('#/app/unknown'), { view: 'desktop' });
+  test('falls back to workspaces for unknown app ids', () => {
+    assert.deepEqual(parseOsHash('#/app/unknown'), { view: 'workspaces' });
   });
 });
 
@@ -129,30 +129,34 @@ describe('os router navigation', () => {
     win.localStorage.clear();
     win.document.body.innerHTML = `
       <header class="topbar"></header>
-      <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
+      <div id="osAppsLayer"></div>
       <div id="appBody"></div>
+      <div id="mainColumn" class="main-column"></div>
+      <div id="chatArea"></div>
     `;
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
     resetAppPreferencesForTests();
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
+    resetAppHostForTests();
+    initOsPageBridge();
+    initAppHost();
     initOsRouter();
   });
 
   afterEach(() => {
     resetOsRouterForTests();
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
+    resetAppHostForTests();
     resetAppPreferencesForTests();
   });
 
-  test('getCurrentRoute reflects desktop hash', () => {
+  test('getCurrentRoute reflects legacy desktop hash as workspaces', () => {
     window.location.hash = '#/desktop';
     syncOsRouteFromHashForTests();
-    assert.deepEqual(getCurrentRoute(), { view: 'desktop' });
+    assert.deepEqual(getCurrentRoute(), { view: 'workspaces' });
   });
 
   test('launchApp updates hash and foreground instance', () => {
@@ -175,28 +179,24 @@ describe('os router navigation', () => {
     setAppEnabled('research', false);
     window.location.hash = '#/app/research';
     syncOsRouteFromHashForTests();
-    // Research deep-links onto the desktop research surface.
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(window.location.hash, '#/app/research');
     assert.equal(isAppEnabled('research'), true);
+    assert.equal(getForegroundAppId(), 'research');
   });
 
-  test('legacy #/experts does not activate desktop experts when app is hidden', async () => {
-    const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
-    );
-    resetDesktopStateForTests();
+  test('legacy #/experts falls back to workspaces when Experts is hidden', async () => {
     window.location.hash = '#/experts/gallery';
     syncOsRouteFromHashForTests();
-    assert.equal(window.location.hash, '#/desktop');
     await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.equal(isDesktopExpertsActive(), false);
+    assert.equal(window.location.hash, '#/workspaces');
+    assert.equal(getInstanceSnapshot().view, 'workspaces');
   });
 
-  test('hash route for a developer-hidden app falls back to desktop', () => {
+  test('hash route for a developer-hidden app falls back to workspaces', () => {
     window.location.hash = '#/app/email';
     syncOsRouteFromHashForTests();
-    assert.equal(window.location.hash, '#/desktop');
-    assert.equal(getInstanceSnapshot().view, 'desktop');
+    assert.equal(window.location.hash, '#/workspaces');
+    assert.equal(getInstanceSnapshot().view, 'workspaces');
     assert.equal(
       getInstanceSnapshot().instances.some((inst) => inst.appId === 'email'),
       false,
@@ -222,67 +222,82 @@ describe('os router navigation', () => {
     assert.equal(window.location.hash, '#/app/issues');
   });
 
-  test('launchApp(chat) redirects to desktop chat', async () => {
-    const { isDesktopChatActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
-    );
-    resetDesktopStateForTests();
+  test('launchApp(chat) routes to Code chat workspace', async () => {
     launchApp('chat', { seed: 'summarize my notes' });
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(window.location.hash, '#/app/code/chat');
     await new Promise((resolve) => setTimeout(resolve, 0));
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
-    assert.equal(snap.instances.find((i) => i.appId === 'chat'), undefined);
-    assert.equal(isDesktopChatActive(), true);
+    assert.equal(snap.view, 'app');
+    assert.equal(getForegroundAppId(), 'code');
   });
 
-  test('launchApp(chat) from code prepares desktop chat before showDesktop emit', () => {
+  test('launchApp(chat) from code stays on Code chat', () => {
     launchApp('code');
     assert.equal(getForegroundAppId(), 'code');
     launchApp('chat');
     syncOsRouteFromHashForTests();
-    assert.equal(window.location.hash, '#/desktop');
-    assert.equal(getInstanceSnapshot().view, 'desktop');
-    assert.equal(isDesktopChatActive(), true);
-    const layer = document.getElementById('osDesktopLayer');
-    assert.equal(layer?.classList.contains('is-chat-active'), true);
+    assert.equal(window.location.hash, '#/app/code/chat');
+    assert.equal(getInstanceSnapshot().view, 'app');
+    assert.equal(getForegroundAppId(), 'code');
   });
 
-  test('launchApp(research) redirects to desktop research', async () => {
-    const { isDesktopResearchActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
+  test('launchApp(research) routes to Research app', async () => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `<div id="osStage"><div id="osAppsLayer"></div></div>
+      <main id="researchView" class="research-page">
+        <div id="researchRailList"></div>
+        <div id="researchAskPane">
+          <textarea id="researchQuery"></textarea>
+          <select id="researchScope"><option value="web">Web</option></select>
+          <select id="researchMaxRounds"><option value="auto">Auto</option></select>
+          <select id="researchCategory"><option value=""></option></select>
+          <select id="researchSearchProvider"><option value=""></option></select>
+          <div id="researchComposerModelAnchor"></div>
+          <input type="hidden" id="researchProviderOverride" value="" />
+          <input type="hidden" id="researchModelOverride" value="" />
+          <button id="btnResearchStart"></button><button id="btnResearchCancel" hidden></button>
+        </div>
+        <div id="researchRunPane" hidden>
+          <div id="researchResultMount"></div><div id="researchProgressMount"></div>
+        </div>
+      </main>`,
     );
-    resetDesktopStateForTests();
-    launchApp('research', { seed: 'Apple stock', autoRun: true });
-    assert.equal(window.location.hash, '#/desktop');
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Remount app layers after injecting Research DOM (beforeEach init ran without researchView).
+    resetAppHostForTests();
+    initAppHost();
+    launchApp('research', { seed: 'Apple stock', autoRun: false });
+    assert.equal(window.location.hash, '#/app/research');
+    syncOsRouteFromHashForTests();
+    // The Research module loads dynamically; poll for it rather than race a fixed sleep.
+    const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+    for (let i = 0; i < 150 && query?.value !== 'Apple stock'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
-    assert.equal(snap.instances.find((i) => i.appId === 'research'), undefined);
-    assert.equal(isDesktopResearchActive(), true);
+    assert.equal(snap.view, 'app');
+    assert.equal(getForegroundAppId(), 'research');
+    assert.equal(snap.instances.find((i) => i.appId === 'research')?.appId, 'research');
+    assert.equal(query?.value, 'Apple stock');
+    assert.equal(document.getElementById('researchView')?.classList.contains('is-open'), true);
   });
 
-  test('launchApp(experts) blocks hidden app and returns to desktop', async () => {
-    const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
-    );
-    resetDesktopStateForTests();
+  test('launchApp(experts) blocks hidden app and returns to workspaces', async () => {
     launchApp('experts');
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(window.location.hash, '#/workspaces');
     await new Promise((resolve) => setTimeout(resolve, 50));
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.view, 'workspaces');
     assert.equal(snap.instances.find((i) => i.appId === 'experts'), undefined);
-    assert.equal(isDesktopExpertsActive(), false);
   });
 
-  test('navigateToDesktop returns to desktop view', () => {
-    launchApp('chat');
+  test('navigateToDesktop returns to workspaces view', () => {
+    launchApp('code');
     syncOsRouteFromHashForTests();
     navigateToDesktop();
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(window.location.hash, '#/workspaces');
     syncOsRouteFromHashForTests();
-    assert.deepEqual(getCurrentRoute(), { view: 'desktop' });
+    assert.deepEqual(getCurrentRoute(), { view: 'workspaces' });
   });
 
   test('legacy settings hash resolves to settings app route', () => {
@@ -302,21 +317,16 @@ describe('os router navigation', () => {
   });
 });
 
-describe('chat app OS integration', () => {
+describe('chat launch via Code', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
+    installHappyDomGlobals(win);
     const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
       fetch: typeof fetch;
     };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
     setupChatAppDom(win);
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
 
     g.fetch = (async (url: RequestInfo | URL) => {
       const path = String(url);
@@ -383,54 +393,40 @@ describe('chat app OS integration', () => {
     setSessionStateForTests(null);
   });
 
-  test('launchApp(chat) from desktop activates desktop chat', async () => {
-    const { isDesktopChatActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
-    );
-    resetDesktopStateForTests();
+  test('launchApp(chat) from workspaces opens Code chat', async () => {
     launchApp('chat', { seed: 'summarize my notes' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
-    assert.equal(window.location.hash, '#/desktop');
-    assert.equal(isDesktopChatActive(), true);
+    assert.equal(snap.view, 'app');
+    assert.equal(window.location.hash, '#/app/code/chat');
+    assert.equal(getForegroundAppId(), 'code');
   });
 
-  test('openChatApp applies seed to composer when empty', async () => {
-    const { openChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
-    await openChatApp('draft a friendly email');
-    const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  test('launchApp(chat) applies seed to Code composer when empty', async () => {
+    const { applyCodeLaunchOptions } = await import('../../src/os/code-launch.ts');
+    await applyCodeLaunchOptions({ seed: 'draft a friendly email' });
+    const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
     assert.equal(input?.value, 'draft a friendly email');
-    assert.equal(isChatAppOpen(), true);
   });
 
-  test('openChatApp does not overwrite non-empty composer', async () => {
-    const { openChatApp } = await import('../../src/ui/chat-app.ts');
-    const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  test('launchApp(chat) does not overwrite non-empty composer', async () => {
+    const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
     if (input) input.value = 'existing prompt';
-    await openChatApp('ignored seed');
+    launchApp('chat', { seed: 'ignored seed' });
+    syncOsRouteFromHashForTests();
+    await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(input?.value, 'existing prompt');
   });
 
-  test('closeChatApp clears open state and returns to desktop', async () => {
-    const { openChatApp, closeChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
-    await openChatApp();
-    assert.equal(isChatAppOpen(), true);
-    closeChatApp();
-    assert.equal(isChatAppOpen(), false);
-    assert.equal(window.location.hash, '#/desktop');
-  });
-
-  test('navigateToDesktop returns to desktop route after chat launch', async () => {
-    const { openChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
+  test('navigateToWorkspaces returns to gate after chat launch', async () => {
+    const { navigateToWorkspaces } = await import('../../src/os/router.ts');
 
     launchApp('chat');
     syncOsRouteFromHashForTests();
-    await openChatApp();
-    assert.equal(isChatAppOpen(), true);
-    navigateToDesktop();
+    assert.equal(getForegroundAppId(), 'code');
+    navigateToWorkspaces();
     syncOsRouteFromHashForTests();
-    assert.equal(getCurrentRoute().view, 'desktop');
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(getCurrentRoute().view, 'workspaces');
+    assert.equal(window.location.hash, '#/workspaces');
   });
 });

@@ -22,9 +22,9 @@ describe('chat app lifecycle contracts', () => {
     assert.match(chatAppSrc, /input\.value = text/);
   });
 
-  test('app-host routes chat foreground to activateDesktopChat with instance seed', () => {
-    assert.match(appHostSrc, /case 'chat':/);
-    assert.match(appHostSrc, /await activateDesktopChat\(\{ seed: options\?\.seed, chatId: options\?\.chatId \}\)/);
+  test('app-host routes Code foreground for chat deep-links', () => {
+    assert.match(appHostSrc, /case 'code':/);
+    assert.doesNotMatch(appHostSrc, /case 'chat':/);
   });
 
   test('closeChatApp navigates to desktop under OS shell', () => {

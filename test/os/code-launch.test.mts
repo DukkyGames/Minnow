@@ -246,7 +246,7 @@ describe('applyCodeLaunchOptions', () => {
     const CHATS_WS = '/home/user/.minnow/chats';
     const { resetChatsWorkspacePathCache } = await import('../../src/lib/chats-workspace.ts');
     const { launchInstance, resetInstancesForTests } = await import('../../src/os/instances.ts');
-    const { setDesktopStateForTests } = await import('../../src/os/desktop-state.ts');
+    const { setDesktopStateForTests } = await import('../helpers/legacy-desktop-state.ts');
     resetChatsWorkspacePathCache();
 
     const g = globalThis as typeof globalThis & { fetch: typeof fetch };

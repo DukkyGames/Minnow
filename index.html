@@ -282,10 +282,10 @@
     </button>
     <div id="workspaceControlSlot" class="topbar-workspace-slot">
       <div class="workspace-control">
-        <span id="workspacePathLabel" class="workspace-path-label" hidden></span>
         <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-describedby="workspacePathLabel" aria-label="Choose workspace folder" title="Choose workspace folder">
           <i class="fi fi-rr-folder icon-svg" aria-hidden="true"></i>
         </button>
+        <span id="workspacePathLabel" class="workspace-path-label" hidden></span>
       </div>
     </div>
     <button class="icon-btn" type="button" id="btnResearch" aria-label="Deep Research" title="Deep Research">
@@ -790,7 +790,7 @@
 
 <main id="welcomeView" class="welcome-page" aria-label="Choose workspace" hidden>
   <div class="welcome-page__inner">
-    <h1 class="welcome-page__title">Choose a folder to work in</h1>
+    <h1 class="welcome-page__title">Choose a workspace</h1>
     <p id="welcomeServerBanner" class="welcome-page__banner hidden" role="status">
       Workspace requires <code>npm start</code> (local tool server), not <code>npm run dev</code> alone.
     </p>
@@ -799,14 +799,14 @@
         <span class="welcome-page__tile-icon" aria-hidden="true">
           <i class="fi fi-rr-folder-open icon-svg" aria-hidden="true"></i>
         </span>
-        <span class="welcome-page__tile-label">Open project</span>
-        <span class="welcome-page__tile-desc">Browse to an existing folder</span>
+        <span class="welcome-page__tile-label">Open folder</span>
+        <span class="welcome-page__tile-desc">Browse to an existing folder on disk</span>
       </button>
       <button type="button" class="welcome-page__tile" id="btnWelcomeCreateProject">
         <span class="welcome-page__tile-icon" aria-hidden="true">
           <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true"></i>
         </span>
-        <span class="welcome-page__tile-label">Create new project</span>
+        <span class="welcome-page__tile-label">Create project</span>
         <span class="welcome-page__tile-desc">New folder under Projects</span>
       </button>
     </div>
@@ -829,7 +829,7 @@
         <span id="welcomeRecentsCount" class="welcome-page__recents-count" hidden></span>
       </div>
       <ul id="welcomeRecentsList" class="welcome-page__recents-list" role="list"></ul>
-      <p id="welcomeRecentsEmpty" class="welcome-page__recents-empty hidden">No recent workspaces yet.</p>
+      <p id="welcomeRecentsEmpty" class="welcome-page__recents-empty hidden">No workspaces yet — open a folder or create a project.</p>
     </section>
     <button type="button" class="welcome-page__continue" id="btnWelcomeContinueMinnow">
       Continue in Minnow folder
@@ -837,115 +837,287 @@
   </div>
 </main>
 
-<main id="researchView" class="research-page dr" aria-label="Deep Research">
-  <div class="dr-tabs research-tabs" role="tablist" aria-label="Research views">
-    <button type="button" class="dr-tab on" id="researchTabRun" role="tab" aria-selected="true" aria-controls="researchPanelRun">Run</button>
-    <button type="button" class="dr-tab" id="researchTabLibrary" role="tab" aria-selected="false" aria-controls="researchPanelLibrary">Library</button>
-  </div>
-  <div class="dr-scroll research-page-body">
-    <div class="dr-col research-page-inner">
-      <div id="researchPanelRun" role="tabpanel">
-        <div class="dr-form">
-          <label class="dr-flabel research-mono" for="researchQuery">RESEARCH QUESTION</label>
-          <textarea id="researchQuery" class="dr-q research-query" rows="3" placeholder="What should I research? Be as specific as you like — e.g. 'research the new Fable 5 model: benchmarks, pricing, and how it compares to Qwen3.6.'"></textarea>
-          <div class="dr-controls research-run-options">
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">ROUNDS</span>
-              <div class="dr-select">
-                <select id="researchMaxRounds" class="research-select">
-                  <option value="auto">Auto</option>
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">SCOPE</span>
-              <div class="dr-select">
-                <select id="researchScope" class="research-select">
-                  <option value="web">Web</option>
-                  <option value="codebase">Codebase</option>
-                  <option value="both">Web + Codebase</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field" id="researchWorkspaceField" hidden>
-              <span class="dr-flabel research-mono">WORKSPACE</span>
-              <div class="dr-research-workspace-row">
-                <div class="dr-select">
-                  <select id="researchWorkspace" class="research-select" aria-label="Research workspace">
-                  </select>
+<main id="researchView" class="research-page" aria-label="Research">
+  <div class="rs-shell">
+    <aside class="rs-rail" id="researchRail" aria-label="Research runs">
+      <div class="rs-rail__head">
+        <button type="button" class="rs-new" id="btnResearchNew">
+          <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
+          New research
+        </button>
+        <button
+          type="button"
+          class="rs-rail__collapse"
+          id="btnResearchRailCollapse"
+          aria-label="Hide run list"
+          aria-expanded="true"
+          aria-controls="researchRail"
+        >
+          <i class="fi fi-rr-sidebar-flip icon-svg" aria-hidden="true" style="--mn-icon-size:16px"></i>
+        </button>
+      </div>
+      <div class="rs-rail__filter">
+        <i class="fi fi-rr-search icon-svg rs-rail__filter-icon" aria-hidden="true" style="--mn-icon-size:13px"></i>
+        <label class="visually-hidden" for="researchRailFilter">Filter runs</label>
+        <input
+          type="search"
+          id="researchRailFilter"
+          class="rs-rail__filter-input"
+          placeholder="Filter runs"
+          autocomplete="off"
+        />
+      </div>
+      <div id="researchRailList" class="rs-rail__list" role="listbox" aria-label="Saved research runs"></div>
+      <div class="rs-rail__foot">
+        <label class="rs-toggle" for="researchRailArchived">
+          <input type="checkbox" id="researchRailArchived" class="rs-toggle__input" />
+          <span class="rs-toggle__box" aria-hidden="true"></span>
+          <span class="rs-toggle__label">Archived</span>
+        </label>
+        <button type="button" class="rs-foot-link" id="btnResearchSettingsLink">Engine</button>
+      </div>
+    </aside>
+
+    <section class="rs-main" id="researchMain">
+      <div class="rs-pane rs-pane--ask" id="researchAskPane">
+        <div class="rs-ask">
+          <h2 class="rs-ask__title">What should we look into?</h2>
+          <p class="rs-ask__sub">
+            Minnow reads the web, or your codebase, and writes back a brief with its sources.
+          </p>
+
+          <div class="rs-composer" id="researchComposer">
+            <label class="visually-hidden" for="researchQuery">Research question</label>
+            <textarea
+              id="researchQuery"
+              class="rs-composer__field"
+              rows="3"
+              placeholder="Ask a question worth an hour of reading…"
+            ></textarea>
+            <div class="rs-composer__bar">
+              <div class="rs-opts" id="researchOptions">
+                <div class="rs-opt" data-opt="scope">
+                  <button
+                    type="button"
+                    class="rs-chip"
+                    id="chipResearchScope"
+                    aria-expanded="false"
+                    aria-controls="popResearchScope"
+                  >
+                    <i class="fi fi-rr-globe icon-svg" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                    <span class="rs-chip__value" data-chip-value>Web</span>
+                    <i class="fi fi-rr-angle-small-down icon-svg rs-chip__caret" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                  </button>
+                  <div class="rs-pop" id="popResearchScope" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Where to look</span>
+                      <div class="rs-select">
+                        <select id="researchScope">
+                          <option value="web">Web</option>
+                          <option value="codebase">Codebase</option>
+                          <option value="both">Web and codebase</option>
+                        </select>
+                      </div>
+                    </label>
+                    <div class="rs-field" id="researchWorkspaceField" hidden>
+                      <label class="rs-field__label" for="researchWorkspace">Workspace</label>
+                      <div class="rs-field__row">
+                        <div class="rs-select">
+                          <select id="researchWorkspace" aria-label="Research workspace"></select>
+                        </div>
+                        <button
+                          type="button"
+                          id="btnResearchWorkspaceBrowse"
+                          class="rs-field__btn"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  id="btnResearchWorkspaceBrowse"
-                  class="settings-inline-btn"
-                  aria-label="Browse for research workspace folder"
-                >
-                  Browse…
-                </button>
+
+                <div class="rs-opt" data-opt="rounds">
+                  <button
+                    type="button"
+                    class="rs-chip"
+                    id="chipResearchRounds"
+                    aria-expanded="false"
+                    aria-controls="popResearchRounds"
+                  >
+                    <span class="rs-chip__value" data-chip-value>Auto depth</span>
+                    <i class="fi fi-rr-angle-small-down icon-svg rs-chip__caret" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                  </button>
+                  <div class="rs-pop" id="popResearchRounds" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Search rounds</span>
+                      <div class="rs-select">
+                        <select id="researchMaxRounds">
+                          <option value="auto">Auto</option>
+                          <option value="1">1 round</option>
+                          <option value="2">2 rounds</option>
+                          <option value="3">3 rounds</option>
+                          <option value="4">4 rounds</option>
+                          <option value="5">5 rounds</option>
+                        </select>
+                      </div>
+                      <span class="rs-field__hint">More rounds means deeper follow-up questions and a longer run.</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="rs-opt" data-opt="category">
+                  <button
+                    type="button"
+                    class="rs-chip"
+                    id="chipResearchCategory"
+                    aria-expanded="false"
+                    aria-controls="popResearchCategory"
+                  >
+                    <span class="rs-chip__value" data-chip-value>Auto topic</span>
+                    <i class="fi fi-rr-angle-small-down icon-svg rs-chip__caret" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                  </button>
+                  <div class="rs-pop" id="popResearchCategory" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Report shape</span>
+                      <div class="rs-select">
+                        <select id="researchCategory">
+                          <option value="">Auto</option>
+                          <option value="technical">Technical</option>
+                          <option value="academic">Academic</option>
+                          <option value="news">News</option>
+                          <option value="market">Market</option>
+                          <option value="general">General</option>
+                        </select>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="rs-opt" data-opt="engine">
+                  <button
+                    type="button"
+                    class="rs-chip rs-chip--icon"
+                    id="chipResearchEngine"
+                    aria-expanded="false"
+                    aria-controls="popResearchEngine"
+                    aria-label="Search and model overrides"
+                    title="Search and model overrides"
+                  >
+                    <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true" style="--mn-icon-size:14px"></i>
+                    <span class="rs-chip__dot" id="researchEngineDot" hidden aria-hidden="true"></span>
+                  </button>
+                  <div class="rs-pop rs-pop--wide" id="popResearchEngine" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Search provider</span>
+                      <div class="rs-select">
+                        <select id="researchSearchProvider">
+                          <option value="">From settings</option>
+                          <option value="searxng">SearXNG</option>
+                          <option value="tavily">Tavily</option>
+                          <option value="brave">Brave</option>
+                          <option value="duckduckgo">DuckDuckGo</option>
+                        </select>
+                      </div>
+                    </label>
+                    <div class="rs-field">
+                      <span class="rs-field__label">Model</span>
+                      <div id="researchComposerModelAnchor" class="rs-model-anchor"></div>
+                      <button
+                        type="button"
+                        class="rs-field__btn rs-field__btn--ghost"
+                        id="btnResearchClearModel"
+                        hidden
+                      >
+                        Use default
+                      </button>
+                      <p class="rs-field__hint">
+                        Override for this run only. Otherwise Settings or your active chat model applies.
+                      </p>
+                      <input type="hidden" id="researchProviderOverride" value="" />
+                      <input type="hidden" id="researchModelOverride" value="" />
+                    </div>
+                  </div>
+                </div>
               </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">CATEGORY</span>
-              <div class="dr-select">
-                <select id="researchCategory" class="research-select">
-                  <option value="">Auto</option>
-                  <option value="technical">Technical</option>
-                  <option value="academic">Academic</option>
-                  <option value="news">News</option>
-                  <option value="market">Market</option>
-                  <option value="general">General</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">SEARCH</span>
-              <div class="dr-select">
-                <select id="researchSearchProvider" class="research-select">
-                  <option value="">Default (Settings)</option>
-                  <option value="searxng">SearXNG</option>
-                  <option value="tavily">Tavily</option>
-                  <option value="brave">Brave</option>
-                  <option value="duckduckgo">DuckDuckGo</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">PROVIDER OVERRIDE</span>
-              <div class="dr-select">
-                <select id="researchProviderOverride" class="research-select">
-                  <option value="">(from settings)</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">MODEL OVERRIDE</span>
-              <input type="text" id="researchModelOverride" class="dr-input research-input" placeholder="(from settings)" />
-            </label>
+
+              <span class="rs-composer__spacer" aria-hidden="true"></span>
+              <button type="button" class="rs-cancel" id="btnResearchCancel" hidden>Stop</button>
+              <button type="button" class="rs-send" id="btnResearchStart" aria-label="Start research">
+                <i class="fi fi-rr-arrow-small-up icon-svg" aria-hidden="true" style="--mn-icon-size:20px"></i>
+              </button>
+            </div>
           </div>
-          <div class="dr-actions research-run-actions">
-            <button type="button" class="dr-run" id="btnResearchStart">
-              <i class="fi fi-rr-search icon-svg dr-run-icon" aria-hidden="true" style="--mn-icon-size:16px"></i>
-              Research
-            </button>
-            <button type="button" class="dr-cancel" id="btnResearchCancel" hidden>Cancel</button>
+
+          <div class="rs-seeds">
+            <span class="rs-seeds__label">Try</span>
+            <button type="button" class="rs-seed" data-research-prompt="Compare the leading options for … Include benchmarks, pricing, and the tradeoffs between them.">comparing options</button>
+            <button type="button" class="rs-seed" data-research-prompt="Summarize the latest news and credible takes on …">scanning the news</button>
+            <button type="button" class="rs-seed" data-research-prompt="Map the market landscape for … Key players, positioning, and the gaps nobody is filling.">mapping a market</button>
+            <button type="button" class="rs-seed" data-research-prompt="In this codebase, how does … work? Cite the files and patterns involved.">reading this codebase</button>
           </div>
         </div>
-        <div id="researchProgressMount" aria-live="polite"></div>
-        <div id="researchResultMount"></div>
       </div>
-      <div id="researchPanelLibrary" class="hidden" role="tabpanel">
-        <div id="researchLibraryMount" class="research-library"></div>
+
+      <div class="rs-pane rs-pane--run" id="researchRunPane" hidden>
+        <div class="rs-runbody" id="researchRunBody">
+          <header class="rs-runhead">
+            <div class="rs-runhead__top">
+              <div class="rs-runhead__ask">
+                <h2 class="rs-runhead__title" id="researchRunTitle"></h2>
+                <button
+                  type="button"
+                  class="rs-runhead__more"
+                  id="btnResearchRunTitleMore"
+                  aria-controls="researchRunTitle"
+                  aria-expanded="false"
+                  hidden
+                >
+                  Show full question
+                </button>
+              </div>
+              <div class="rs-runhead__actions" id="researchRunActions"></div>
+            </div>
+            <div class="rs-runhead__meta">
+              <span class="rs-state" id="researchRunState"></span>
+              <span class="rs-runhead__stats" id="researchRunStats"></span>
+            </div>
+            <div class="rs-segments" role="tablist" aria-label="Run views">
+              <button
+                type="button"
+                class="rs-segment is-on"
+                id="researchViewBrief"
+                role="tab"
+                aria-selected="true"
+                aria-controls="researchResultMount"
+              >
+                Brief
+              </button>
+              <button
+                type="button"
+                class="rs-segment"
+                id="researchViewEvidence"
+                role="tab"
+                aria-selected="false"
+                aria-controls="researchProgressMount"
+              >
+                Evidence
+              </button>
+            </div>
+          </header>
+          <div id="researchResultMount" class="rs-brief" role="tabpanel" aria-labelledby="researchViewBrief"></div>
+          <div
+            id="researchProgressMount"
+            class="rs-ledger"
+            role="tabpanel"
+            aria-labelledby="researchViewEvidence"
+            aria-live="polite"
+            hidden
+          ></div>
+        </div>
       </div>
-    </div>
+    </section>
   </div>
-  <footer class="dr-foot research-page-footer">
-    <button type="button" class="dr-eng research-settings-link" id="btnResearchSettingsLink">Engine settings</button>
-  </footer>
 </main>
 
 <main id="chatView" class="chat-app-page" aria-label="Chat">
@@ -2111,15 +2283,6 @@
     <div class="chat-sidebar-header">
       <span class="chat-sidebar-title">Chats</span>
       <div class="chat-sidebar-header-actions">
-        <!-- Keep the sidebar toggle nearest the sidebar edge for predictable navigation. -->
-        <button
-          class="icon-btn"
-          type="button"
-          id="btnSidebarCollapse"
-          aria-label="Collapse sidebar"
-        >
-          <i class="fi fi-rr-angle-small-left icon-svg" aria-hidden="true"></i>
-        </button>
         <button
           class="icon-btn"
           type="button"
@@ -2130,49 +2293,20 @@
         >
           <i class="fi fi-rr-search icon-svg" aria-hidden="true"></i>
         </button>
+        <!-- Secondary to New chat: same icon vocabulary as search, not a second full-width button. -->
         <button
+          class="icon-btn"
           type="button"
-          class="icon-btn code-overview-nav-btn"
-          id="btnCodeOverviewSidebar"
-          aria-label="Code overview"
-          title="Code overview"
+          id="btnNewChatGroup"
+          aria-label="New group"
+          title="New group"
         >
-          <i class="fi fi-sr-dashboard-panel icon-svg" aria-hidden="true"></i>
+          <i class="fi fi-rr-folder-download icon-svg" aria-hidden="true"></i>
         </button>
       </div>
     </div>
     <button type="button" class="chat-new-wide">+ New chat</button>
-    <button type="button" class="chat-new-compact" aria-label="New chat">+</button>
-    <button type="button" class="chat-new-group-wide" id="btnNewChatGroup" aria-label="New group">
-      <i class="fi fi-rr-folder-download icon-svg chat-new-group-icon" aria-hidden="true"></i>
-      <span class="chat-new-group-label">New group</span>
-    </button>
     <div class="chat-list" id="chatList" role="list"></div>
-    </div>
-    <div class="chat-sidebar-footer">
-      <div class="chat-sidebar-footer-actions">
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="Issues" title="Issues">
-          <i class="fi fi-rr-radar icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
-          <i class="fi fi-rr-stats icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAgentActivity" aria-label="Agent activity" aria-expanded="false" aria-controls="agentActivityPanel" title="Agent activity">
-          <i class="fi fi-rr-user-robot icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
-          <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
-          <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnDevServers" aria-label="Dev servers" title="Dev servers" aria-pressed="false">
-          <i class="fi fi-rr-database icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
-          <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
-        </button>
-      </div>
     </div>
     <div
       class="sidebar-resizer sidebar-resizer--chat"
@@ -2190,6 +2324,41 @@
 
   <div id="workspaceSplit" class="workspace-split">
   <div class="main-column" id="mainColumn">
+    <!--
+      Code view switcher. View buttons replace what the stage shows; Chats toggles
+      the session list (panel chrome, not a stage view).
+    -->
+    <nav class="code-views" id="codeViews" aria-label="Code views">
+      <button
+        type="button"
+        class="code-views__btn"
+        id="btnCodeViewsChats"
+        aria-pressed="false"
+        aria-expanded="false"
+        aria-label="Show chats"
+        title="Show chats"
+      >
+        <i class="fi fi-rr-comment icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label-track"><span class="code-views__label">Chats</span></span>
+      </button>
+      <!-- code-overview.ts owns this one's state via aria-current, not aria-pressed. -->
+      <button type="button" class="code-views__btn" id="btnCodeOverviewSidebar" title="Overview">
+        <i class="fi fi-sr-dashboard-panel icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label-track"><span class="code-views__label">Overview</span></span>
+      </button>
+      <button type="button" class="code-views__btn" id="btnDevServers" aria-pressed="false" title="Dev servers">
+        <i class="fi fi-rr-database icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label-track"><span class="code-views__label">Dev servers</span></span>
+      </button>
+      <button type="button" class="code-views__btn" id="btnCodeBrainMap" aria-pressed="false" aria-expanded="false" title="Code map">
+        <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label-track"><span class="code-views__label">Code map</span></span>
+      </button>
+      <button type="button" class="code-views__btn" id="btnOrchestrate" aria-pressed="false" aria-expanded="false" title="Orchestrate">
+        <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label-track"><span class="code-views__label">Orchestrate</span></span>
+      </button>
+    </nav>
     <!-- Chat messages + jump chip anchored to bottom of scroll viewport -->
     <div class="chat-viewport">
       <main class="chat-area" id="chatArea">
@@ -2444,40 +2613,6 @@
       </div>
     </div>
 
-    <section
-      class="agent-activity-panel"
-      id="agentActivityPanel"
-      role="region"
-      aria-label="Agent activity"
-      hidden
-    >
-      <header class="agent-activity-panel__header">
-        <h2 class="agent-activity-panel__title">Agent activity</h2>
-        <button
-          type="button"
-          class="icon-btn agent-activity-panel__close"
-          id="btnAgentActivityClose"
-          aria-label="Close agent activity"
-        >
-          <i class="fi fi-rr-cross-small icon-svg" aria-hidden="true"></i>
-        </button>
-      </header>
-      <div class="agent-activity-panel__body">
-        <ul id="agentActivityList" class="agent-activity-list"></ul>
-      </div>
-      <footer class="agent-activity-panel__footer">
-        <button
-          type="button"
-          class="agent-activity-panel__stop-all"
-          id="btnAgentActivityStopAll"
-          aria-label="Stop all agents"
-          disabled
-        >
-          Stop all
-        </button>
-      </footer>
-    </section>
-
     <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
       <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
       <header class="terminal-header">
@@ -2715,6 +2850,41 @@
     </div>
     <div id="gitPanelRoot" class="git-panel-root" hidden></div>
   </aside>
+</div><!-- /#workspaceSplit -->
+</div><!-- /#appBody -->
+
+<!--
+  Code status bar. Only holds controls whose panels dock at the bottom of the
+  stage, so each toggle sits directly beneath the thing it opens. Live readouts
+  on the right follow DESIGN.md's Metric Colour Rule: mono, tabular, semantic
+  colour for measurement only.
+-->
+<div class="code-status-bar" id="codeStatusBar">
+  <div class="code-status-bar__group code-status-bar__group--panels">
+    <button
+      class="code-status-bar__btn"
+      type="button"
+      id="btnTerminal"
+      aria-expanded="false"
+      aria-controls="terminalPanel"
+      title="Terminal (Ctrl+`)"
+    >
+      <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
+      <span class="code-status-bar__label">Terminal</span>
+    </button>
+  </div>
+  <div class="code-status-bar__spacer"></div>
+  <button
+    class="code-status-bar__btn code-status-bar__btn--metrics"
+    type="button"
+    id="btnStats"
+    aria-expanded="false"
+    aria-controls="statsStrip"
+    title="Inference metrics"
+  >
+    <i class="fi fi-rr-stats icon-svg" aria-hidden="true"></i>
+    <span class="code-status-bar__metric" id="statusMetricPreview">— t/s</span>
+  </button>
 </div>
 <script>
   /* Fallback if the module bundle fails to boot (avoids an infinite loader). */

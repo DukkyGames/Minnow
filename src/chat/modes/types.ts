@@ -35,6 +35,7 @@ export function isModeId(value: string): value is ModeId {
 
 /** Normalize persisted or unknown values to a valid ModeId. */
 export function normalizeModeId(value: string | null | undefined): ModeId {
+  if (value === 'desktop') return 'general';
   if (value && isModeId(value)) return value;
   return DEFAULT_MODE_ID;
 }

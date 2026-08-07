@@ -10,7 +10,7 @@ import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 import { renderSchedulerPanel } from './scheduler/scheduler-panel';
-import { openJobEditorWindow } from './scheduler/job-editor-window';
+import { openJobEditorWindow } from './scheduler/job-editor-overlay';
 import type { ScheduledJob } from '../scheduler/client';
 
 let initialized = false;
@@ -102,17 +102,10 @@ export function initSchedulerPage(): void {
 }
 
 export async function openScheduler(): Promise<void> {
-  if (isOsShellEnabled()) {
-    const { launchApp } = await import('../os/router');
-    launchApp('scheduler');
-    return;
-  }
-
   const root = getRoot();
   if (!root) return;
 
   root.classList.add('is-open');
-  window.location.hash = '#/scheduler';
   mountHeaderIcon();
   await refreshPanel();
 }
@@ -144,13 +137,4 @@ function onHashChange(): void {
   if (isSchedulerPageOpen()) {
     closeScheduler();
   }
-}
-
-/** Menubar shortcut — opens the Scheduler side panel over the current app. */
-export function openSchedulerFromMenubar(): void {
-  if (isOsShellEnabled()) {
-    void import('../os/scheduler-side-panel').then((m) => m.toggleSchedulerOverlay());
-    return;
-  }
-  void openScheduler();
 }

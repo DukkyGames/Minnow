@@ -3,14 +3,8 @@
  * Mirrors composer-surface routing so prompts are not mounted in hidden shells.
  */
 
-import {
-  isDesktopChatActive,
-  isDesktopExpertsActive,
-  isDesktopResearchActive,
-} from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 import { shouldPaintDesktopChatSurface } from './chat-mount';
-
 const GLOBAL_PROMPT_HOST_IDS = new Set(['globalToolApprovalHost', 'globalQuestionHost']);
 
 /** True when an element can be shown to the user (not display:none / hidden). */
@@ -31,16 +25,12 @@ export function isPromptHostShellVisible(host: HTMLElement): boolean {
 
   const chatView = host.closest('#chatView');
   if (chatView) {
-    if (getForegroundAppId() === 'chat') return true;
     return chatView.classList.contains('is-open');
   }
 
   if (host.closest('#desktopComposerRoot')) {
-    return (
-      isDesktopChatActive() || isDesktopResearchActive() || isDesktopExpertsActive()
-    );
+    return false;
   }
-
   if (host.closest('#mainColumn')) {
     const fg = getForegroundAppId();
     return fg === 'code' || fg == null;
@@ -70,7 +60,6 @@ function pickPromptHost(candidates: (HTMLElement | null)[]): HTMLElement | null 
 
 /** Chat app page is open (legacy #/chat or Minnow Chat window). */
 function isLegacyChatAppOpen(): boolean {
-  if (getForegroundAppId() === 'chat') return true;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
 }
 

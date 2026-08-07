@@ -1,62 +1,72 @@
 /**
- * Ctrl+Tab app surface cycling (macOS Cmd+Tab–style, scoped to Minnow apps).
- * Uses a most-recently-used stack of Desktop + dock apps.
+ * Ctrl+Tab app surface cycling — MRU order over the left app rail roster.
  */
 
-import { APP_SWITCHER_DESKTOP_ID, type AppSwitcherItemId } from './surface-id';
-import { isAppAvailable } from './app-preferences';
+import { listRailApps } from './app-preferences';
+import { isResearchPanelOpen } from '../ui/research-panel';
 import { getForegroundAppId } from './instances';
-import { launchApp, navigateToDesktop } from './router';
+import { launchApp } from './router';
 import type { AppId } from './types';
+
+const RAIL_SETTINGS_ID: AppId = 'settings';
 
 const MAX_MRU = 24;
 
-let mruStack: AppSwitcherItemId[] = [APP_SWITCHER_DESKTOP_ID];
+let mruStack: AppId[] = ['code'];
 let keyboardBound = false;
+let researchSubscribed = false;
 
-/** Whether a switcher surface can be activated right now. */
-function isSurfaceAvailable(id: AppSwitcherItemId): boolean {
-  if (id === APP_SWITCHER_DESKTOP_ID) return true;
-  return isAppAvailable(id as AppId);
+function listRailCycleAppIds(): AppId[] {
+  const ids = listRailApps().map((app) => app.id);
+  if (!ids.includes(RAIL_SETTINGS_ID)) ids.push(RAIL_SETTINGS_ID);
+  return ids;
 }
 
-/** Current OS surface for MRU indexing (foreground app, else Desktop). */
-export function getCurrentAppSurfaceId(): AppSwitcherItemId {
+/** Whether an app id is on the rail and still available. */
+function isRailSurfaceAvailable(id: AppId): boolean {
+  return listRailCycleAppIds().includes(id);
+}
+
+/** Current surface for MRU indexing (Research embed, else foreground app). */
+export function getCurrentAppSurfaceId(): AppId {
+  if (isResearchPanelOpen()) return 'research';
   const foreground = getForegroundAppId();
-  if (foreground) return foreground;
-  return APP_SWITCHER_DESKTOP_ID;
+  if (foreground && isRailSurfaceAvailable(foreground)) return foreground;
+  return mruStack.find((id) => isRailSurfaceAvailable(id)) ?? 'code';
 }
 
-/** Push a surface to the front of the MRU stack after navigation. */
-export function recordAppSurfaceFocus(id: AppSwitcherItemId): void {
-  if (!isSurfaceAvailable(id)) return;
+/** Push a rail app to the front of the MRU stack after navigation. */
+export function recordAppSurfaceFocus(id: AppId): void {
+  if (!isRailSurfaceAvailable(id)) return;
   mruStack = [id, ...mruStack.filter((entry) => entry !== id)];
   if (mruStack.length > MAX_MRU) {
     mruStack.length = MAX_MRU;
   }
 }
 
-/** MRU entries that are still available, preserving recent-first order. */
-export function listCycleableAppSurfaces(): AppSwitcherItemId[] {
-  const seen = new Set<AppSwitcherItemId>();
-  const out: AppSwitcherItemId[] = [];
+/** MRU rail apps, preserving recent-first order. */
+export function listCycleableAppSurfaces(): AppId[] {
+  const allowed = new Set(listRailCycleAppIds());
+  const seen = new Set<AppId>();
+  const out: AppId[] = [];
   for (const id of mruStack) {
-    if (seen.has(id) || !isSurfaceAvailable(id)) continue;
+    if (seen.has(id) || !allowed.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  for (const id of listRailCycleAppIds()) {
+    if (seen.has(id)) continue;
     seen.add(id);
     out.push(id);
   }
   return out;
 }
 
-function activateSurface(id: AppSwitcherItemId): void {
-  if (id === APP_SWITCHER_DESKTOP_ID) {
-    navigateToDesktop();
-    return;
-  }
+function activateSurface(id: AppId): void {
   launchApp(id);
 }
 
-/** Cycle forward (Ctrl+Tab) or backward (Ctrl+Shift+Tab) through recent app surfaces. */
+/** Cycle forward (Ctrl+Tab) or backward (Ctrl+Shift+Tab) through recent rail apps. */
 export function cycleAppSurfaces(direction: 'forward' | 'backward'): void {
   const candidates = listCycleableAppSurfaces();
   if (candidates.length <= 1) return;
@@ -64,8 +74,12 @@ export function cycleAppSurfaces(direction: 'forward' | 'backward'): void {
   const current = getCurrentAppSurfaceId();
   const currentIndex = candidates.indexOf(current);
   const baseIndex = currentIndex >= 0 ? currentIndex : 0;
-  const delta = direction === 'forward' ? 1 : -1;
-  const nextIndex = (baseIndex + delta + candidates.length) % candidates.length;
+  let nextIndex: number;
+  if (direction === 'forward') {
+    nextIndex = (baseIndex + 1) % candidates.length;
+  } else {
+    nextIndex = baseIndex === 0 ? Math.min(1, candidates.length - 1) : baseIndex - 1;
+  }
   const next = candidates[nextIndex];
   if (!next || next === current) return;
   activateSurface(next);
@@ -75,6 +89,15 @@ export function cycleAppSurfaces(direction: 'forward' | 'backward'): void {
 export function initAppFocusCycleKeyboard(): void {
   if (keyboardBound) return;
   keyboardBound = true;
+
+  if (!researchSubscribed) {
+    researchSubscribed = true;
+    void import('../ui/research-panel').then((m) => {
+      m.subscribeResearchPanel(() => {
+        if (m.isResearchPanelOpen()) recordAppSurfaceFocus('research');
+      });
+    });
+  }
 
   document.addEventListener(
     'keydown',
@@ -100,12 +123,13 @@ export function syncAppSurfaceMruFromShell(): void {
 }
 
 /** Read MRU order (tests). */
-export function getAppSurfaceMruForTests(): readonly AppSwitcherItemId[] {
+export function getAppSurfaceMruForTests(): readonly AppId[] {
   return [...mruStack];
 }
 
 /** Reset module state (tests). */
 export function resetAppFocusCycleForTests(): void {
-  mruStack = [APP_SWITCHER_DESKTOP_ID];
+  mruStack = ['code'];
   keyboardBound = false;
+  researchSubscribed = false;
 }

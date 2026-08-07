@@ -7,13 +7,17 @@ import { ensureMinnowLayout } from '../../server/config/home.js';
 import { handleWorkspaceRequest } from '../../server/workspace/middleware.js';
 import {
   dedupeRecentPaths,
+  ensureScratchWorkspaceRegistered,
+  getScratchWorkspacePath,
   getWorkspaceInfo,
   initWorkspaceRoot,
   isPlaceholderWorkspacePath,
   isWorkspaceUserChosen,
   normalizeWorkspacePathKey,
+  SCRATCH_WORKSPACE_LABEL,
   setAppRoot,
   setWorkspaceRoot,
+  workspaceLabel,
 } from '../../server/workspace/root.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 
@@ -384,5 +388,21 @@ describe('workspace API', () => {
     });
     assert.equal(status, 400);
     assert.match(String(json.error ?? ''), /outside the workspace/i);
+  });
+
+  test('Scratch workspace is registered on init with label Scratch', async () => {
+    const scratchPath = await ensureScratchWorkspaceRegistered();
+    assert.equal(path.resolve(scratchPath), path.resolve(getScratchWorkspacePath()));
+    assert.equal(workspaceLabel(scratchPath), SCRATCH_WORKSPACE_LABEL);
+    const info = getWorkspaceInfo();
+    assert.equal(path.resolve(info.scratchPath), path.resolve(scratchPath));
+    const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const config = JSON.parse(configRaw);
+    assert.equal(path.resolve(config.workspace.scratchPath), path.resolve(scratchPath));
+    assert.ok(
+      config.workspace.recentPaths.some(
+        (p) => normalizeWorkspacePathKey(p) === normalizeWorkspacePathKey(scratchPath),
+      ),
+    );
   });
 });

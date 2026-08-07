@@ -1,27 +1,50 @@
 /**
- * Deep Research full-page panel — query, progress stepper, structured brief, library.
+ * Research app controller — library-first workspace.
+ *
+ * One rail of runs, one main pane. The pane shows the composer when nothing is
+ * selected, the evidence ledger while a run works, and the brief once it lands.
+ * Selecting a run never leaves the surface, so reading an old brief while a new
+ * run streams is a normal thing to do rather than a mode switch.
  */
 
 import '../styles/research-page.css';
 
 import { wrapUntrusted } from '../lib/untrusted.mjs';
+import { loadResearchConfig } from '../config/research-config';
 import { resolveResearchModelBinding } from './resolve-binding';
 import { pushNotification } from '../notifications/push';
-import { iconHtml } from '../ui/icon';
 import {
   cancelResearch,
   fetchResearchDetail,
   fetchResearchResult,
+  fetchResearchStatus,
   normalizeResearchActivityLog,
   researchReportUrl,
   startResearch,
   subscribeToResearchStream,
 } from './client';
-import { ResearchActivitySession } from './research-activity-session';
-import { renderResearchLibrary } from './library';
-import { ResearchProgressPanel } from './progress-panel';
+import {
+  clearPersistedActiveResearchRunId,
+  persistActiveResearchRunId,
+  readPersistedActiveResearchRunId,
+} from './active-run-persist';
+import { renderResearchRail, setActiveResearchRow } from './library';
+import {
+  initResearchOptionChips,
+  setResearchOptionChipsDisabled,
+  syncResearchOptionChips,
+} from './option-chips';
+import { ResearchRunLedger } from './run-ledger';
+import { formatRunSummary, normalizeResearchStats } from './run-summary';
 import { renderResearchResultFromMarkdown } from './report-view';
-import type { ResearchCategory, ResearchScope, ResearchStartRequest } from './types';
+import type {
+  ResearchCategory,
+  ResearchLibraryItem,
+  ResearchScope,
+  ResearchStartRequest,
+  ResearchStats,
+  ResearchStatus,
+} from './types';
 import {
   readResearchWorkspaceRoot,
   wireResearchWorkspaceScopeControls,
@@ -33,28 +56,36 @@ import { closeSettings } from '../ui/settings-page';
 import { renderSidebar } from '../ui/sidebar';
 import { setStatus } from '../ui/status';
 import {
-  createAndActivateChat,
-  getActiveChat,
-  scheduleSaveSessions,
-} from '../state/sessions';
+  clearResearchModelOverride,
+  mountResearchComposerModelTrigger,
+  syncComposerModelTriggers,
+} from '../ui/composer-model-trigger';
+import { createAndActivateChat, scheduleSaveSessions } from '../state/sessions';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
-import {
-  deactivateDesktopResearch,
-  isDesktopResearchActive,
-} from '../os/desktop-state';
 
-type ResearchPanelTab = 'run' | 'library';
+type RunView = 'brief' | 'evidence';
 
-let progressPanel: ResearchProgressPanel | null = null;
-let researchActivity = new ResearchActivitySession();
+let ledger: ResearchRunLedger | null = null;
 let streamUnsubscribe: (() => void) | null = null;
 let runAbort: AbortController | null = null;
-let activeResearchId: string | null = null;
+
+/** Run currently shown in the main pane. Null means the composer is up. */
+let activeId: string | null = null;
+/** In-flight run. The server only persists a run once it finishes, so the rail
+ *  would not list it otherwise. */
+let liveRun: ResearchLibraryItem | null = null;
 let running = false;
-let currentTab: ResearchPanelTab = 'run';
+let runView: RunView = 'brief';
+
+let railSearch = '';
+let railArchived = false;
+let knownRuns: ResearchLibraryItem[] = [];
+
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+let runStartMs = 0;
 let pendingAutoRun = false;
-let lastRunRound = 1;
+let controlsBound = false;
 
 function getRoot(): HTMLElement | null {
   return document.getElementById('researchView');
@@ -63,6 +94,17 @@ function getRoot(): HTMLElement | null {
 function getChatShell(): HTMLElement | null {
   return document.getElementById('appBody');
 }
+
+function el<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
+function formatClock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// ── Report surface ──────────────────────────────────────────────────────────
 
 function resolveResearchReportUrl(researchId: string): string {
   const path = researchReportUrl(researchId);
@@ -91,7 +133,7 @@ function openResearchReportInNewSurface(url: string): void {
 /** Open visual report in Electron preview or a new browser tab. */
 export function openResearchReport(researchId: string): void {
   const url = resolveResearchReportUrl(researchId);
-  // Preview lives under #appBody, which research full-page / desktop overlay hides.
+  // Preview lives under #appBody, which the Research surface hides.
   if (isResearchPageOpen()) {
     openResearchReportInNewSurface(url);
     return;
@@ -105,20 +147,255 @@ export function openResearchReport(researchId: string): void {
   });
 }
 
+function isResearchEmbeddedInCode(): boolean {
+  const area = document.getElementById('chatArea');
+  const root = getRoot();
+  return Boolean(
+    area?.classList.contains('chat-area--research') && root && area.contains(root),
+  );
+}
+
+function notifyResearchPanelStatus(): void {
+  if (!isResearchEmbeddedInCode()) return;
+  void import('../ui/research-panel').then((m) => m.syncResearchPanelStatus());
+}
+
+// ── Rail ────────────────────────────────────────────────────────────────────
+
+async function refreshRail(): Promise<void> {
+  const mount = el('researchRailList');
+  if (!mount) {
+    return;
+  }
+  knownRuns = await renderResearchRail({
+    mount,
+    search: railSearch,
+    archived: railArchived,
+    activeId,
+    liveRuns: liveRun ? [liveRun] : [],
+    onSelect: (id) => {
+      void selectRun(id);
+    },
+    onOpenReport: openResearchReport,
+    onDiscuss: (id) => {
+      void discussResearchReport(id);
+    },
+    onRefine: (id, query) => {
+      showAskPane();
+      const input = el<HTMLTextAreaElement>('researchQuery');
+      if (input && query.trim()) {
+        input.value = query;
+      }
+      void startResearchRun({ continueFrom: id });
+    },
+    onChanged: () => {
+      void refreshRail();
+    },
+  });
+}
+
+function findRun(id: string): ResearchLibraryItem | undefined {
+  return knownRuns.find((run) => run.id === id);
+}
+
+// ── Panes ───────────────────────────────────────────────────────────────────
+
+function showAskPane(): void {
+  activeId = null;
+  el('researchAskPane')?.removeAttribute('hidden');
+  el('researchRunPane')?.setAttribute('hidden', '');
+  const mount = el('researchRailList');
+  if (mount) {
+    setActiveResearchRow(mount, null);
+  }
+  syncResearchOptionChips();
+  el<HTMLTextAreaElement>('researchQuery')?.focus();
+  notifyResearchPanelStatus();
+}
+
+function showRunPane(): void {
+  el('researchAskPane')?.setAttribute('hidden', '');
+  el('researchRunPane')?.removeAttribute('hidden');
+  notifyResearchPanelStatus();
+}
+
+function setRunView(view: RunView): void {
+  runView = view;
+  const brief = el('researchResultMount');
+  const evidence = el('researchProgressMount');
+  const briefTab = el('researchViewBrief');
+  const evidenceTab = el('researchViewEvidence');
+  if (brief) {
+    brief.hidden = view !== 'brief';
+  }
+  if (evidence) {
+    evidence.hidden = view !== 'evidence';
+  }
+  briefTab?.classList.toggle('is-on', view === 'brief');
+  briefTab?.setAttribute('aria-selected', view === 'brief' ? 'true' : 'false');
+  evidenceTab?.classList.toggle('is-on', view === 'evidence');
+  evidenceTab?.setAttribute('aria-selected', view === 'evidence' ? 'true' : 'false');
+}
+
+function setEvidenceCount(count: number): void {
+  const tab = el('researchViewEvidence');
+  if (!tab) {
+    return;
+  }
+  let slot = tab.querySelector('.rs-segment__count');
+  if (!count) {
+    slot?.remove();
+    return;
+  }
+  if (!slot) {
+    slot = document.createElement('span');
+    slot.className = 'rs-segment__count';
+    tab.appendChild(slot);
+  }
+  slot.textContent = String(count);
+}
+
+// ── Run header ──────────────────────────────────────────────────────────────
+
+const STATE_WORDS: Record<ResearchStatus, string> = {
+  running: 'running',
+  done: 'done',
+  error: 'failed',
+  cancelled: 'stopped',
+};
+
+/**
+ * Questions long enough to wrap past two lines get a fold rather than an
+ * ellipsis — the prompt is the run's identity, so it stays reachable.
+ */
+const TITLE_FOLD_CHARS = 150;
+
+function setRunHeader(options: {
+  title: string;
+  status: ResearchStatus;
+  stats?: string;
+}): void {
+  const title = el('researchRunTitle');
+  const text = options.title || 'Untitled run';
+  if (title) {
+    title.textContent = text;
+    title.classList.remove('is-expanded');
+  }
+  const more = el<HTMLButtonElement>('btnResearchRunTitleMore');
+  if (more) {
+    more.hidden = text.length <= TITLE_FOLD_CHARS;
+    more.textContent = 'Show full question';
+    more.setAttribute('aria-expanded', 'false');
+  }
+  const state = el('researchRunState');
+  if (state) {
+    state.className = `rs-state is-${options.status === 'error' ? 'error' : options.status}`;
+    state.textContent = STATE_WORDS[options.status];
+  }
+  const stats = el('researchRunStats');
+  if (stats) {
+    stats.textContent = options.stats ?? '';
+  }
+}
+
+function statsLine(stats: ResearchStats | undefined, sourceCount: number): string {
+  return formatRunSummary(normalizeResearchStats(stats, sourceCount));
+}
+
+function renderRunActions(researchId: string, status: ResearchStatus, query: string): void {
+  const host = el('researchRunActions');
+  if (!host) {
+    return;
+  }
+  host.replaceChildren();
+
+  const add = (label: string, run: () => void): void => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'rs-action';
+    btn.textContent = label;
+    btn.addEventListener('click', run);
+    host.appendChild(btn);
+  };
+
+  if (status === 'running') {
+    add('Stop', () => {
+      void cancelActiveRun();
+    });
+    return;
+  }
+
+  add('Report', () => openResearchReport(researchId));
+  add('Discuss', () => {
+    void discussResearchReport(researchId);
+  });
+  add('Refine', () => {
+    showAskPane();
+    const input = el<HTMLTextAreaElement>('researchQuery');
+    if (input && query.trim() && !input.value.trim()) {
+      input.value = query;
+    }
+    void startResearchRun({ continueFrom: researchId });
+  });
+  add('Add to Brain', () => {
+    void import('../ui/chat-brain-capture').then((m) => m.runResearchBrainCapture(researchId));
+  });
+}
+
+function startClock(options?: { startedAtMs?: number }): void {
+  stopClock();
+  if (options?.startedAtMs != null && Number.isFinite(options.startedAtMs)) {
+    runStartMs = performance.now() - (Date.now() - options.startedAtMs);
+  } else {
+    runStartMs = performance.now();
+  }
+  clockTimer = setInterval(() => {
+    const stats = el('researchRunStats');
+    if (!stats || !running) {
+      return;
+    }
+    const scanned = ledger?.getScanned() ?? 0;
+    const parts = [formatClock(performance.now() - runStartMs)];
+    if (scanned) {
+      parts.push(`${scanned} source${scanned === 1 ? '' : 's'} found`);
+    }
+    const read = ledger?.getReadCount() ?? 0;
+    if (read) {
+      parts.push(`${read} read`);
+    }
+    stats.textContent = parts.join(' · ');
+    setEvidenceCount(read);
+  }, 500);
+}
+
+function stopClock(): void {
+  if (clockTimer) {
+    clearInterval(clockTimer);
+    clockTimer = null;
+  }
+}
+
+// ── Running state ───────────────────────────────────────────────────────────
+
 function setRunningState(isRunning: boolean): void {
   running = isRunning;
-  const root = getRoot();
-  root?.classList.toggle('is-running', isRunning);
-  const startBtn = document.getElementById('btnResearchStart') as HTMLButtonElement | null;
-  const cancelBtn = document.getElementById('btnResearchCancel') as HTMLButtonElement | null;
-  const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+  getRoot()?.classList.toggle('is-running', isRunning);
+
+  const startBtn = el<HTMLButtonElement>('btnResearchStart');
+  const cancelBtn = el<HTMLButtonElement>('btnResearchCancel');
+  const queryInput = el<HTMLTextAreaElement>('researchQuery');
+
   if (startBtn) {
     startBtn.disabled = isRunning;
-    startBtn.classList.toggle('busy', isRunning);
     if (isRunning) {
-      startBtn.innerHTML = '<span class="dr-spinner"></span> Running…';
+      startBtn.replaceChildren();
+      const spinner = document.createElement('span');
+      spinner.className = 'rs-spinner';
+      spinner.setAttribute('aria-hidden', 'true');
+      startBtn.appendChild(spinner);
+      startBtn.setAttribute('aria-label', 'Research running');
     } else {
-      startBtn.innerHTML = `${iconHtml('search', { size: 16, className: 'dr-run-icon' })} Research`;
+      renderResearchStartButton();
     }
   }
   if (cancelBtn) {
@@ -128,98 +405,39 @@ function setRunningState(isRunning: boolean): void {
   if (queryInput) {
     queryInput.disabled = isRunning;
   }
-  for (const el of document.querySelectorAll<
-    HTMLInputElement | HTMLSelectElement | HTMLButtonElement
-  >(
-    '#researchView .dr-controls input, #researchView .dr-controls select, #researchView .dr-controls button:not(#btnResearchStart):not(#btnResearchCancel)',
-  )) {
-    el.disabled = isRunning;
-  }
+  setResearchOptionChipsDisabled(isRunning);
+  notifyResearchPanelStatus();
 }
 
-function getProgressMount(): HTMLElement | null {
-  return document.getElementById('researchProgressMount');
-}
-
-function getActivityButtonMount(): HTMLElement | null {
-  return getProgressMount()?.parentElement ?? null;
-}
-
-function getResultMount(): HTMLElement | null {
-  return document.getElementById('researchResultMount');
-}
-
-function setPanelTab(tab: ResearchPanelTab): void {
-  currentTab = tab;
-  const runTab = document.getElementById('researchTabRun');
-  const libTab = document.getElementById('researchTabLibrary');
-  runTab?.setAttribute('aria-selected', tab === 'run' ? 'true' : 'false');
-  libTab?.setAttribute('aria-selected', tab === 'library' ? 'true' : 'false');
-  runTab?.classList.toggle('on', tab === 'run');
-  libTab?.classList.toggle('on', tab === 'library');
-  document.getElementById('researchPanelRun')?.classList.toggle('hidden', tab !== 'run');
-  document.getElementById('researchPanelLibrary')?.classList.toggle('hidden', tab !== 'library');
-  if (tab === 'library') {
-    void refreshLibraryPanel();
-  }
-}
-
-async function refreshLibraryPanel(): Promise<void> {
-  const mount = document.getElementById('researchLibraryMount');
-  if (!mount) {
+function renderResearchStartButton(): void {
+  const startBtn = el<HTMLButtonElement>('btnResearchStart');
+  if (!startBtn || running) {
     return;
   }
-  await renderResearchLibrary({
-    mount,
-    onNewResearch: () => setPanelTab('run'),
-    onOpenDetail: (id) => {
-      setPanelTab('run');
-      void showResultForId(id);
-    },
-    onOpenReport: openResearchReport,
-    onDiscuss: (id) => {
-      void discussResearchReport(id);
-    },
-    onRefine: (id, query) => {
-      setPanelTab('run');
-      const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
-      if (queryInput && query.trim()) {
-        queryInput.value = query;
-      }
-      void startResearchRun({ continueFrom: id });
-    },
-  });
+  startBtn.replaceChildren();
+  const icon = document.createElement('i');
+  icon.className = 'fi fi-rr-arrow-small-up icon-svg';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.style.setProperty('--mn-icon-size', '20px');
+  startBtn.appendChild(icon);
+  startBtn.setAttribute('aria-label', 'Start research');
 }
 
-async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
-  const overrideProvider = (
-    document.getElementById('researchProviderOverride') as HTMLSelectElement | null
-  )?.value?.trim();
-  const overrideModel = (
-    document.getElementById('researchModelOverride') as HTMLInputElement | null
-  )?.value?.trim();
+// ── Options ─────────────────────────────────────────────────────────────────
 
+async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
+  const overrideProvider = el<HTMLInputElement>('researchProviderOverride')?.value?.trim();
+  const overrideModel = el<HTMLInputElement>('researchModelOverride')?.value?.trim();
   return resolveResearchModelBinding({ overrideProvider, overrideModel });
 }
 
 function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
-  const maxRoundsRaw = (
-    document.getElementById('researchMaxRounds') as HTMLSelectElement | null
-  )?.value;
+  const maxRoundsRaw = el<HTMLSelectElement>('researchMaxRounds')?.value;
   const maxRounds = maxRoundsRaw === 'auto' ? 0 : Number(maxRoundsRaw);
-  const category = (
-    (document.getElementById('researchCategory') as HTMLSelectElement | null)?.value ?? ''
-  ) as ResearchCategory;
-  const searchProvider = (
-    document.getElementById('researchSearchProvider') as HTMLSelectElement | null
-  )?.value?.trim();
-  const scope = (
-    (document.getElementById('researchScope') as HTMLSelectElement | null)?.value ?? 'web'
-  ) as ResearchScope;
-  const workspaceRoot = readResearchWorkspaceRoot(
-    document.getElementById('researchWorkspace') as HTMLSelectElement | null,
-    scope,
-  );
+  const category = (el<HTMLSelectElement>('researchCategory')?.value ?? '') as ResearchCategory;
+  const searchProvider = el<HTMLSelectElement>('researchSearchProvider')?.value?.trim();
+  const scope = (el<HTMLSelectElement>('researchScope')?.value ?? 'web') as ResearchScope;
+  const workspaceRoot = readResearchWorkspaceRoot(el<HTMLSelectElement>('researchWorkspace'), scope);
   return {
     maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0,
     category,
@@ -229,95 +447,164 @@ function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'
   };
 }
 
-function teardownStream(): void {
-  streamUnsubscribe?.();
-  streamUnsubscribe = null;
-  runAbort?.abort();
-  runAbort = null;
-}
+// ── Loading a saved run ─────────────────────────────────────────────────────
 
-function resetRunUi(): void {
-  const progressMount = getProgressMount();
-  if (progressMount) {
-    progressPanel?.destroy();
-    progressPanel = null;
-    progressMount.innerHTML = '';
-  }
-  researchActivity.destroy();
-  researchActivity = new ResearchActivitySession();
-  const resultMount = getResultMount();
-  if (resultMount) {
-    resultMount.innerHTML = '';
-  }
-  activeResearchId = null;
-}
-
-async function showResultForId(researchId: string): Promise<void> {
-  const mount = getResultMount();
+function showBriefSkeleton(): void {
+  const mount = el('researchResultMount');
   if (!mount) {
     return;
   }
-  mount.innerHTML = '<p class="dr-rep-stats research-mono">Loading result…</p>';
+  const skeleton = document.createElement('div');
+  skeleton.className = 'rs-skeleton';
+  const head = document.createElement('div');
+  head.className = 'rs-skeleton__line rs-skeleton__line--head';
+  skeleton.appendChild(head);
+  for (let i = 0; i < 7; i += 1) {
+    const line = document.createElement('div');
+    line.className = 'rs-skeleton__line';
+    skeleton.appendChild(line);
+  }
+  mount.replaceChildren(skeleton);
+}
+
+function showBriefNotice(label: string, message: string, isError = false): void {
+  const mount = el('researchResultMount');
+  if (!mount) {
+    return;
+  }
+  const notice = document.createElement('div');
+  notice.className = isError ? 'rs-notice rs-notice--error' : 'rs-notice';
+  const head = document.createElement('span');
+  head.className = 'rs-notice__label';
+  head.textContent = label;
+  notice.append(head, document.createTextNode(message));
+  mount.replaceChildren(notice);
+}
+
+/** Select a run from the rail and paint it into the main pane. */
+async function selectRun(researchId: string): Promise<void> {
+  activeId = researchId;
+  showRunPane();
+  const mount = el('researchRailList');
+  if (mount) {
+    setActiveResearchRow(mount, researchId);
+  }
+
+  // The run streaming right now is already painted; do not refetch over it.
+  if (running && liveRun?.id === researchId) {
+    setRunHeader({ title: liveRun.query, status: 'running' });
+    renderRunActions(researchId, 'running', liveRun.query);
+    setRunView('evidence');
+    return;
+  }
+
+  const known = findRun(researchId);
+  setRunHeader({
+    title: known?.query ?? '',
+    status: known?.status ?? 'done',
+    stats: '',
+  });
+  el('researchRunActions')?.replaceChildren();
+  setRunView('brief');
+  showBriefSkeleton();
+
   try {
     const data = await fetchResearchDetail(researchId);
-    const activityLog = normalizeResearchActivityLog(data);
-    if (activityLog.length) {
-      researchActivity.configure({});
-      researchActivity.hydrate(activityLog);
-      researchActivity.setRunning(data.status === 'running');
-      researchActivity.mountButton(getActivityButtonMount());
+    if (activeId !== researchId) {
+      return;
     }
-    const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
-    const storedQuery = data.query?.trim() ?? '';
-    if (queryInput && storedQuery && !queryInput.value.trim()) {
-      queryInput.value = storedQuery;
+    const query = data.query?.trim() || known?.query || '';
+    const status = data.status ?? 'done';
+
+    setRunHeader({
+      title: query,
+      status,
+      stats: statsLine(data.stats, data.sources?.length ?? 0),
+    });
+    renderRunActions(researchId, status, query);
+
+    const evidence = el('researchProgressMount');
+    if (evidence) {
+      ledger?.destroy();
+      ledger = new ResearchRunLedger(evidence);
+      const activityLog = normalizeResearchActivityLog(data);
+      if (activityLog.length) {
+        ledger.hydrate(activityLog);
+        setEvidenceCount(ledger.getReadCount());
+      } else {
+        ledger.reset();
+        ledger.setRunning(false);
+        const empty = document.createElement('p');
+        empty.className = 'rs-ledger__empty';
+        empty.textContent = 'This run finished before Minnow kept a working record.';
+        evidence.replaceChildren(empty);
+        setEvidenceCount(0);
+      }
     }
-    const query = queryInput?.value?.trim() || storedQuery;
-    renderResearchResultFromMarkdown(
-      mount,
-      data.result,
-      data.sources ?? [],
-      query,
-      data.stats,
-      lastRunRound,
-      {
-        onExport: () => openResearchReport(researchId),
-        onRunAgain: () => {
-          resetRunUi();
-          if (queryInput && query) {
-            queryInput.value = query;
-          }
-          queryInput?.focus();
-        },
-        onDiscuss: () => {
-          void discussResearchReport(researchId);
-        },
-        onRefine: () => {
-          if (queryInput && query && !queryInput.value.trim()) {
-            queryInput.value = query;
-          }
-          void startResearchRun({ continueFrom: researchId });
-        },
-        onFollowUp: (q) => {
-          if (queryInput) {
-            queryInput.value = q;
-          }
-          void startResearchRun({ continueFrom: researchId });
-        },
-        onViewLibrary: () => setPanelTab('library'),
-        onAddToBrain: () => {
-          void import('../ui/chat-brain-capture').then((m) =>
-            m.runResearchBrainCapture(researchId),
-          );
-        },
+
+    if (status === 'running') {
+      liveRun = {
+        id: researchId,
+        query,
+        status: 'running',
+        startedAt: data.startedAt,
+      };
+      persistActiveResearchRunId(researchId);
+      setRunningState(true);
+      ledger?.setRunning(true);
+      setRunView('evidence');
+      const startedAtMs = researchStartedAtMs(data);
+      startClock(startedAtMs != null ? { startedAtMs } : undefined);
+      bindResearchStream(researchId, query);
+      return;
+    }
+
+    const briefMount = el('researchResultMount');
+    if (!briefMount) {
+      return;
+    }
+    if (!data.result?.trim()) {
+      showBriefNotice(
+        status === 'error' ? 'Failed' : 'No brief',
+        status === 'error'
+          ? 'This run failed before writing a brief. The evidence it did gather is under Evidence.'
+          : 'This run has no saved brief.',
+        status === 'error',
+      );
+      // With no brief to read, the working record is the only thing worth showing.
+      if (hasActivityLog(data)) {
+        setRunView('evidence');
+      }
+      return;
+    }
+    renderResearchResultFromMarkdown(briefMount, data.result, data.sources ?? [], query, {
+      onFollowUp: (q) => {
+        showAskPane();
+        const input = el<HTMLTextAreaElement>('researchQuery');
+        if (input) {
+          input.value = q;
+        }
+        void startResearchRun({ continueFrom: researchId });
       },
-      { savedToLibrary: true },
-    );
+    });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Could not load result';
-    mount.innerHTML = `<p class="dr-rep-stats">${msg}</p>`;
+    if (activeId !== researchId) {
+      return;
+    }
+    const msg = err instanceof Error ? err.message : 'Could not load this run';
+    setRunHeader({ title: known?.query ?? '', status: 'error', stats: '' });
+    showBriefNotice('Could not load', msg, true);
+  } finally {
+    notifyResearchPanelStatus();
   }
 }
+
+/** Whether a detail payload carried any activity rows. */
+function hasActivityLog(data: { activityLog?: unknown }): boolean {
+  return Array.isArray(data.activityLog) && data.activityLog.length > 0;
+}
+
+// ── Discuss spinoff ─────────────────────────────────────────────────────────
 
 /** Client spinoff: new chat seeded with the report. */
 export async function discussResearchReport(researchId: string): Promise<void> {
@@ -338,8 +625,9 @@ export async function discussResearchReport(researchId: string): Promise<void> {
     scheduleSaveSessions();
 
     if (isOsShellEnabled()) {
-      const { activateDesktopChat } = await import('../os/desktop-state');
-      await activateDesktopChat({ chatId: chat.id });
+      closeResearch({ skipNavigate: true });
+      const { navigateToCodeChat } = await import('../os/router');
+      navigateToCodeChat();
     } else {
       closeResearch();
       renderChatFromHistory(chat);
@@ -353,35 +641,164 @@ export async function discussResearchReport(researchId: string): Promise<void> {
   }
 }
 
+// ── Running ─────────────────────────────────────────────────────────────────
+
+function teardownStream(): void {
+  streamUnsubscribe?.();
+  streamUnsubscribe = null;
+  runAbort?.abort();
+  runAbort = null;
+}
+
+/** Drop the SSE client only; the server run keeps going. */
+function detachFromActiveResearchRun(): void {
+  teardownStream();
+}
+
+function bindResearchStream(researchId: string, query: string): void {
+  teardownStream();
+  runAbort = new AbortController();
+  streamUnsubscribe = subscribeToResearchStream(researchId, {
+    signal: runAbort.signal,
+    onProgress: (event) => {
+      if (liveRun?.id !== researchId) {
+        return;
+      }
+      ledger?.apply(event);
+    },
+    onEnd: (endEvent) => {
+      const status = endEvent?.status ?? 'done';
+      finishRun(researchId, query, status, endEvent?.message);
+    },
+    onTransportError: (err) => {
+      const msg = err instanceof Error ? err.message : 'Stream error';
+      finishRun(researchId, query, 'error', msg);
+    },
+  });
+}
+
+function researchStartedAtMs(detail: { startedAt?: string }): number | undefined {
+  const raw = detail.startedAt;
+  if (typeof raw === 'string' && raw.trim()) {
+    const t = Date.parse(raw);
+    if (Number.isFinite(t)) {
+      return t;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Follow an in-flight run (new tab, reload, or return from another app).
+ * Replays persisted activity and re-subscribes to SSE.
+ */
+async function attachToRunningResearch(
+  researchId: string,
+  query: string,
+  options: { paintPane?: boolean } = {},
+): Promise<void> {
+  const paintPane = options.paintPane !== false;
+  if (running && liveRun?.id === researchId && streamUnsubscribe) {
+    return;
+  }
+
+  liveRun = {
+    id: researchId,
+    query,
+    status: 'running',
+    startedAt: liveRun?.startedAt ?? new Date().toISOString(),
+  };
+  activeId = researchId;
+  persistActiveResearchRunId(researchId);
+  setRunningState(true);
+
+  let startedAtMs: number | undefined;
+  const evidence = el('researchProgressMount');
+  if (evidence) {
+    try {
+      const data = await fetchResearchDetail(researchId);
+      if (paintPane && activeId !== researchId) {
+        return;
+      }
+      startedAtMs = researchStartedAtMs(data);
+      ledger?.destroy();
+      ledger = new ResearchRunLedger(evidence);
+      const activityLog = normalizeResearchActivityLog(data);
+      if (activityLog.length) {
+        ledger.hydrate(activityLog);
+        ledger.setRunning(true);
+        setEvidenceCount(ledger.getReadCount());
+      } else {
+        ledger.reset();
+      }
+    } catch {
+      ledger?.destroy();
+      ledger = new ResearchRunLedger(evidence);
+      ledger.reset();
+    }
+  }
+
+  if (paintPane) {
+    showRunPane();
+    setRunHeader({ title: query, status: 'running', stats: '0:00' });
+    renderRunActions(researchId, 'running', query);
+    setRunView('evidence');
+    el('researchResultMount')?.replaceChildren();
+  }
+
+  startClock(startedAtMs != null ? { startedAtMs } : undefined);
+  void refreshRail();
+  bindResearchStream(researchId, query);
+}
+
+/** Reconnect after reload or when the Research surface is shown again. */
+async function resumeActiveResearchIfNeeded(): Promise<void> {
+  if (running && liveRun?.id) {
+    if (!streamUnsubscribe) {
+      bindResearchStream(liveRun.id, liveRun.query);
+    }
+    if (!activeId) {
+      activeId = liveRun.id;
+      showRunPane();
+      setRunHeader({ title: liveRun.query, status: 'running' });
+      renderRunActions(liveRun.id, 'running', liveRun.query);
+      setRunView('evidence');
+    }
+    void refreshRail();
+    return;
+  }
+
+  const persistedId = readPersistedActiveResearchRunId();
+  if (!persistedId) {
+    return;
+  }
+
+  try {
+    const status = await fetchResearchStatus(persistedId);
+    if (status.status !== 'running') {
+      clearPersistedActiveResearchRunId();
+      return;
+    }
+    const query = status.query?.trim() || 'Research in progress';
+    await attachToRunningResearch(persistedId, query);
+  } catch {
+    clearPersistedActiveResearchRunId();
+  }
+}
+
 async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<void> {
   if (running) {
     return;
   }
-  const query = (
-    document.getElementById('researchQuery') as HTMLTextAreaElement | null
-  )?.value?.trim();
+  const query = el<HTMLTextAreaElement>('researchQuery')?.value?.trim();
   if (!query) {
     setStatus('err', 'Enter a research question');
+    el<HTMLTextAreaElement>('researchQuery')?.focus();
     return;
   }
 
   teardownStream();
   setRunningState(true);
-  activeResearchId = null;
-
-  const progressMount = getProgressMount();
-  if (progressMount) {
-    progressPanel?.destroy();
-    progressPanel = new ResearchProgressPanel(progressMount);
-    progressPanel.reset();
-  }
-  researchActivity.configure({ buttonInsert: 'prepend' });
-  researchActivity.reset();
-  researchActivity.mountButton(getActivityButtonMount());
-  const resultMount = getResultMount();
-  if (resultMount) {
-    resultMount.innerHTML = '';
-  }
 
   try {
     const binding = await resolveResearchBinding();
@@ -393,77 +810,130 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
       ...extra,
     };
     const { researchId } = await startResearch(body);
-    activeResearchId = researchId;
-    runAbort = new AbortController();
 
-    streamUnsubscribe = subscribeToResearchStream(researchId, {
-      signal: runAbort.signal,
-      onProgress: (event) => {
-        progressPanel?.apply(event);
-        researchActivity.appendProgress(event);
-        if (event.phase === 'searching' && event.round) {
-          lastRunRound = event.round;
-        }
-      },
-      onEnd: (endEvent) => {
-        setRunningState(false);
-        researchActivity.setRunning(false);
-        const status = endEvent?.status ?? 'done';
-        progressPanel?.complete(status, endEvent?.message);
-        if (status === 'done') {
-          void showResultForId(researchId);
-          const scanned = progressPanel?.getScanned() ?? 0;
-          void fetchResearchResult(researchId).then((data) => {
-            const sources = data.sources?.length ?? scanned;
-            const title = query.slice(0, 60);
-            pushNotification({
-              kind: 'research',
-              title: 'Research',
-              preview: `Your research brief on ${title}${query.length > 60 ? '…' : ''} is ready — ${sources} sources.`,
-              appId: 'research',
-              dedupeKey: `research:${researchId}`,
-            });
-          });
-          setStatus('ok', 'Research complete');
-        } else if (status === 'cancelled') {
-          setStatus('ok', 'Research cancelled');
-        } else {
-          setStatus('err', endEvent?.message ?? 'Research failed');
-        }
-        teardownStream();
-      },
-      onTransportError: (err) => {
-        setRunningState(false);
-        researchActivity.setRunning(false);
-        const msg = err instanceof Error ? err.message : 'Stream error';
-        progressPanel?.complete('error', msg);
-        setStatus('err', msg);
-        teardownStream();
-      },
-    });
+    persistActiveResearchRunId(researchId);
+    liveRun = {
+      id: researchId,
+      query,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    };
+    activeId = researchId;
+
+    showRunPane();
+    setRunHeader({ title: query, status: 'running', stats: '0:00' });
+    renderRunActions(researchId, 'running', query);
+    setEvidenceCount(0);
+    setRunView('evidence');
+
+    const evidence = el('researchProgressMount');
+    if (evidence) {
+      ledger?.destroy();
+      ledger = new ResearchRunLedger(evidence);
+      ledger.reset();
+    }
+    el('researchResultMount')?.replaceChildren();
+    startClock();
+    void refreshRail();
+
+    bindResearchStream(researchId, query);
   } catch (err) {
     setRunningState(false);
+    stopClock();
     const msg = err instanceof Error ? err.message : 'Could not start research';
-    progressPanel?.complete('error', msg);
     setStatus('err', msg);
-    teardownStream();
+    if (liveRun) {
+      liveRun.status = 'error';
+    }
+    void refreshRail();
   }
 }
 
+function finishRun(
+  researchId: string,
+  query: string,
+  status: 'done' | 'error' | 'cancelled',
+  message?: string,
+): void {
+  // A cancel and the stream's own end event both land here; first one wins.
+  if (!running) {
+    return;
+  }
+  setRunningState(false);
+  stopClock();
+  ledger?.complete(status, message);
+  teardownStream();
+  clearPersistedActiveResearchRunId();
+
+  if (liveRun?.id === researchId) {
+    liveRun.status = status;
+  }
+
+  if (status === 'done') {
+    setStatus('ok', 'Research complete');
+    void fetchResearchResult(researchId).then((data) => {
+      const sources = data.sources?.length ?? 0;
+      const title = query.slice(0, 60);
+      pushNotification({
+        kind: 'research',
+        title: 'Research',
+        preview: `Your research brief on ${title}${query.length > 60 ? '…' : ''} is ready — ${sources} sources.`,
+        appId: 'research',
+        dedupeKey: `research:${researchId}`,
+      });
+    });
+    // The run is persisted now, so the rail can carry it on its own.
+    liveRun = null;
+    void refreshRail();
+    if (activeId === researchId) {
+      void selectRun(researchId);
+    }
+    return;
+  }
+
+  if (status === 'cancelled') {
+    setStatus('ok', 'Research stopped');
+  } else {
+    setStatus('err', message ?? 'Research failed');
+  }
+
+  if (activeId === researchId) {
+    setRunHeader({
+      title: query,
+      status,
+      stats: `${ledger?.getReadCount() ?? 0} read before stopping`,
+    });
+    renderRunActions(researchId, status, query);
+    showBriefNotice(
+      status === 'error' ? 'Failed' : 'Stopped',
+      message ??
+        (status === 'error'
+          ? 'The run failed before writing a brief.'
+          : 'You stopped this run before it wrote a brief.'),
+      status === 'error',
+    );
+    setRunView('evidence');
+  }
+  void refreshRail();
+}
+
 async function cancelActiveRun(): Promise<void> {
-  if (!activeResearchId) {
+  const id = liveRun?.id;
+  if (!id) {
     return;
   }
   try {
-    await cancelResearch(activeResearchId);
+    await cancelResearch(id);
   } catch {
     /* best-effort */
   }
   teardownStream();
-  setRunningState(false);
-  researchActivity.setRunning(false);
-  progressPanel?.complete('cancelled');
+  if (running) {
+    finishRun(id, liveRun?.query ?? '', 'cancelled');
+  }
 }
+
+// ── Surface lifecycle ───────────────────────────────────────────────────────
 
 function closeOtherOverlays(): void {
   closeSettings({ skipNavigate: true });
@@ -481,18 +951,29 @@ function closeOtherOverlays(): void {
   });
 }
 
-/** Whether the Deep Research page is open. */
+/** Whether the Research surface is open. */
 export function isResearchPageOpen(): boolean {
-  if (isOsShellEnabled() && isDesktopResearchActive()) {
+  if (isOsShellEnabled() && isResearchEmbeddedInCode()) {
     return true;
   }
   return getRoot()?.classList.contains('is-open') ?? false;
 }
 
-/** Close Deep Research and return to chat or desktop. */
+/** Close Research and return to chat or desktop. */
 export function closeResearch(options?: { skipNavigate?: boolean }): void {
   if (isOsShellEnabled()) {
-    deactivateDesktopResearch();
+    if (isResearchEmbeddedInCode()) {
+      void import('../ui/research-panel').then((m) => m.closeResearchPanel());
+      return;
+    }
+    const root = getRoot();
+    if (root) {
+      detachFromActiveResearchRun();
+      root.classList.remove('is-open');
+      void import('../ui/preview-electron-visibility').then((m) =>
+        m.syncElectronPreviewHostVisibility(),
+      );
+    }
     if (!options?.skipNavigate) {
       navigateToDesktop();
     }
@@ -504,7 +985,7 @@ export function closeResearch(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) {
     return;
   }
-  void cancelActiveRun();
+  detachFromActiveResearchRun();
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
   if (!options?.skipNavigate && window.location.hash.startsWith('#/research')) {
@@ -520,7 +1001,46 @@ export interface OpenResearchOptions {
   autoRun?: boolean;
 }
 
-/** Open Deep Research (`#/research` or OS `#/app/research`). */
+function applyOpenOptions(options?: OpenResearchOptions): void {
+  if (options?.seed) {
+    showAskPane();
+    const query = el<HTMLTextAreaElement>('researchQuery');
+    if (query) {
+      query.value = options.seed;
+    }
+  }
+  if (options?.autoRun || pendingAutoRun) {
+    pendingAutoRun = false;
+    void startResearchRun();
+  }
+}
+
+/** Show the Research app surface (OS shell app-host). */
+export function showResearchPage(options?: OpenResearchOptions): void {
+  if (window.location.hash.startsWith('#/settings')) {
+    return;
+  }
+
+  void import('../ui/research-panel').then((m) => {
+    m.teardownResearchPanelBeforeChatPaint();
+  });
+
+  const root = getRoot();
+  if (!root) {
+    return;
+  }
+
+  closeOtherOverlays();
+  root.classList.add('is-open');
+  void import('../ui/preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
+  void refreshRail();
+  applyOpenOptions(options);
+  void resumeActiveResearchIfNeeded();
+}
+
+/** Open Research (`#/research` or OS `#/app/research`). */
 export function openResearch(options?: OpenResearchOptions): void {
   if (isOsShellEnabled()) {
     void import('../os/router').then(({ launchApp }) => {
@@ -538,31 +1058,17 @@ export function openResearch(options?: OpenResearchOptions): void {
   if (!root || !shell) {
     return;
   }
-  if (window.location.hash.startsWith('#/settings')) {
-    return;
-  }
 
   closeOtherOverlays();
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
-    shell.classList.add('hidden');
-    window.location.hash = '#/research';
-  }
+  shell.classList.add('hidden');
+  window.location.hash = '#/research';
   void import('../ui/preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
-  setPanelTab(currentTab);
-
-  if (options?.seed) {
-    const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
-    if (query) {
-      query.value = options.seed;
-    }
-  }
-  if (options?.autoRun || pendingAutoRun) {
-    pendingAutoRun = false;
-    void startResearchRun();
-  }
+  void refreshRail();
+  applyOpenOptions(options);
+  void resumeActiveResearchIfNeeded();
 }
 
 function onHashChange(): void {
@@ -582,27 +1088,99 @@ function onHashChange(): void {
   }
 }
 
+// ── Wiring ──────────────────────────────────────────────────────────────────
+
+let railFilterTimer: ReturnType<typeof setTimeout> | null = null;
+
 function bindStaticControls(): void {
-  document.getElementById('btnResearchStart')?.addEventListener('click', () => {
+  if (controlsBound) {
+    return;
+  }
+  controlsBound = true;
+
+  el('btnResearchStart')?.addEventListener('click', () => {
     void startResearchRun();
   });
-  document.getElementById('btnResearchCancel')?.addEventListener('click', () => {
+  el('btnResearchCancel')?.addEventListener('click', () => {
     void cancelActiveRun();
   });
-  document.getElementById('researchTabRun')?.addEventListener('click', () => setPanelTab('run'));
-  document.getElementById('researchTabLibrary')?.addEventListener('click', () =>
-    setPanelTab('library'),
-  );
-  document.getElementById('btnResearchSettingsLink')?.addEventListener('click', () => {
+  el('btnResearchNew')?.addEventListener('click', () => {
+    showAskPane();
+  });
+
+  const queryInput = el<HTMLTextAreaElement>('researchQuery');
+  queryInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    void startResearchRun();
+  });
+
+  for (const seed of document.querySelectorAll<HTMLButtonElement>('[data-research-prompt]')) {
+    seed.addEventListener('click', () => {
+      const text = seed.getAttribute('data-research-prompt')?.trim();
+      if (!text || !queryInput) {
+        return;
+      }
+      queryInput.value = text;
+      queryInput.focus();
+      // Land the caret on the gap the reader has to fill in.
+      const gap = text.indexOf('…');
+      if (gap >= 0) {
+        queryInput.setSelectionRange(gap, gap + 1);
+      }
+    });
+  }
+
+  el('researchViewBrief')?.addEventListener('click', () => setRunView('brief'));
+  el('researchViewEvidence')?.addEventListener('click', () => setRunView('evidence'));
+
+  el('btnResearchRunTitleMore')?.addEventListener('click', (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const title = el('researchRunTitle');
+    const expanded = title?.classList.toggle('is-expanded') ?? false;
+    button.textContent = expanded ? 'Show less' : 'Show full question';
+    button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  });
+
+  el<HTMLInputElement>('researchRailFilter')?.addEventListener('input', (event) => {
+    railSearch = (event.target as HTMLInputElement).value;
+    if (railFilterTimer) {
+      clearTimeout(railFilterTimer);
+    }
+    railFilterTimer = setTimeout(() => {
+      void refreshRail();
+    }, 140);
+  });
+
+  el<HTMLInputElement>('researchRailArchived')?.addEventListener('change', (event) => {
+    railArchived = (event.target as HTMLInputElement).checked;
+    void refreshRail();
+  });
+
+  el('btnResearchRailCollapse')?.addEventListener('click', () => {
+    const root = getRoot();
+    if (!root) {
+      return;
+    }
+    const hidden = root.classList.toggle('is-rail-hidden');
+    el('btnResearchRailCollapse')?.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+  });
+
+  el('btnResearchSettingsLink')?.addEventListener('click', () => {
     void import('../ui/settings-page').then((m) => m.openSettings('deep-research'));
   });
 
-  const scopeSelect = document.getElementById('researchScope') as HTMLSelectElement | null;
-  const workspaceSelect = document.getElementById('researchWorkspace') as HTMLSelectElement | null;
-  const workspaceField = document.getElementById('researchWorkspaceField');
-  const workspaceBrowse = document.getElementById(
-    'btnResearchWorkspaceBrowse',
-  ) as HTMLButtonElement | null;
+  el('btnResearchClearModel')?.addEventListener('click', () => {
+    clearResearchModelOverride();
+    syncComposerModelTriggers();
+  });
+
+  const scopeSelect = el<HTMLSelectElement>('researchScope');
+  const workspaceSelect = el<HTMLSelectElement>('researchWorkspace');
+  const workspaceField = el('researchWorkspaceField');
+  const workspaceBrowse = el<HTMLButtonElement>('btnResearchWorkspaceBrowse');
   if (scopeSelect && workspaceSelect && workspaceField) {
     wireResearchWorkspaceScopeControls({
       scopeSelect,
@@ -616,9 +1194,18 @@ function bindStaticControls(): void {
 /** Wire hash routing and controls (call once from main). */
 export function initResearchPage(): void {
   bindStaticControls();
-  window.addEventListener('hashchange', onHashChange);
-  if (window.location.hash === '#/research' || window.location.hash.startsWith('#/research/')) {
-    openResearch();
+  mountResearchComposerModelTrigger();
+  void loadResearchConfig().then(() => syncComposerModelTriggers());
+  initResearchOptionChips();
+  renderResearchStartButton();
+  setRunView(runView);
+  void refreshRail();
+  void resumeActiveResearchIfNeeded();
+  if (!isOsShellEnabled()) {
+    window.addEventListener('hashchange', onHashChange);
+    if (window.location.hash === '#/research' || window.location.hash.startsWith('#/research/')) {
+      openResearch();
+    }
   }
 }
 
@@ -631,10 +1218,38 @@ export function queueResearchAutoRun(): void {
   pendingAutoRun = true;
 }
 
+/** Shell embed: start a run (after controls are bound). */
+export async function startResearchRunFromShell(
+  extra: { continueFrom?: string } = {},
+): Promise<void> {
+  await startResearchRun(extra);
+}
+
+/** Shell embed: cancel the stream and return to the composer. */
+export function closeResearchEmbeddedRun(): void {
+  void cancelActiveRun();
+  stopClock();
+  ledger?.destroy();
+  ledger = null;
+  liveRun = null;
+  el('researchResultMount')?.replaceChildren();
+  showAskPane();
+  notifyResearchPanelStatus();
+}
+
+/** Whether a research run is in progress. */
+export function isResearchRunningForShell(): boolean {
+  return running;
+}
+
+/** Cancel the active research run (shell embed). */
+export async function cancelResearchRunForShell(): Promise<void> {
+  await cancelActiveRun();
+}
+
 /** Test hook: whether Start is disabled during a run. */
 export function isResearchStartDisabledForTests(): boolean {
-  const btn = document.getElementById('btnResearchStart') as HTMLButtonElement | null;
-  return btn?.disabled === true;
+  return el<HTMLButtonElement>('btnResearchStart')?.disabled === true;
 }
 
 /** Test hook: toggle running UI without calling the server. */
@@ -642,12 +1257,20 @@ export function setResearchRunningForTests(isRunning: boolean): void {
   setRunningState(isRunning);
 }
 
-/** Test hook: apply mock progress without a server. */
-export function applyProgressForTests(
-  mount: HTMLElement,
-  event: Parameters<ResearchProgressPanel['apply']>[0],
-): void {
-  const panel = new ResearchProgressPanel(mount);
-  panel.reset();
-  panel.apply(event);
+/** Test hook: reset module state between cases. */
+export function resetResearchPanelStateForTests(): void {
+  teardownStream();
+  stopClock();
+  ledger?.destroy();
+  ledger = null;
+  activeId = null;
+  liveRun = null;
+  running = false;
+  runView = 'brief';
+  railSearch = '';
+  railArchived = false;
+  knownRuns = [];
+  controlsBound = false;
+  pendingAutoRun = false;
+  clearPersistedActiveResearchRunId();
 }

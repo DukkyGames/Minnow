@@ -132,11 +132,11 @@ describe('session dirty tracking (B.1/B.2)', () => {
   test('removeChatById purges stale remembered workspace and app ids', () => {
     const state = baseState();
     state.lastActiveChatIdByWorkspace = { '': CHAT_B };
-    state.lastActiveChatIdByApp = { chat: CHAT_B };
+    state.lastActiveChatIdByApp = { code: CHAT_B };
     setSessionStateForTests(state);
     removeChatById(CHAT_B, 'm');
     assert.equal(state.lastActiveChatIdByWorkspace[''], undefined);
-    assert.equal(state.lastActiveChatIdByApp.chat, undefined);
+    assert.equal(state.lastActiveChatIdByApp.code, undefined);
     assert.equal(getSessionDirtyTrackingForTests().sessionScalarsDirty, true);
   });
 
@@ -146,14 +146,14 @@ describe('session dirty tracking (B.1/B.2)', () => {
     state.chats[1]!.history = [{ role: 'user', content: 'bye' }];
     state.activeId = CHAT_B;
     state.lastActiveChatIdByWorkspace = { '': CHAT_B };
-    state.lastActiveChatIdByApp = { chat: CHAT_B };
+    state.lastActiveChatIdByApp = { code: CHAT_B };
     setSessionStateForTests(state);
     const result = removeChatById(CHAT_B, 'm');
     assert.equal(result.ok, true);
     assert.equal(result.activeChanged, true);
     assert.equal(state.activeId, CHAT_A);
     assert.equal(state.lastActiveChatIdByWorkspace[''], CHAT_A);
-    assert.equal(state.lastActiveChatIdByApp.chat, CHAT_A);
+    assert.equal(state.lastActiveChatIdByApp.code, CHAT_A);
   });
 
   test('removeChatById switches to another unassigned chat when active is deleted', () => {

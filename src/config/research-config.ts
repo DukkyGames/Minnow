@@ -49,6 +49,11 @@ export function resetResearchConfigCache(): void {
   cachedResearch = null;
 }
 
+/** Cached config when already fetched; otherwise defaults (sync UI paths). */
+export function peekResearchConfig(): ResearchConfig {
+  return cachedResearch ? { ...cachedResearch } : { ...DEFAULT_RESEARCH_CONFIG };
+}
+
 /** GET /api/config/research (cached until reset). */
 export async function loadResearchConfig(): Promise<ResearchConfig> {
   if (cachedResearch) return cachedResearch;

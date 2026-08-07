@@ -8,15 +8,14 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   APPS,
   getAppById,
-  getPresentationMode,
   isAppId,
 } from '../../src/os/app-registry.ts';
-import { CALENDAR_EVENT_EDITOR_INSTANCE_ID } from '../../src/os/calendar-constants.ts';
 import {
   initAppHost,
   resetAppHostForTests,
   syncAppHostForTests,
 } from '../../src/os/app-host.ts';
+import { installHappyDomGlobals } from './dom-helpers.mts';
 import {
   getInstanceSnapshot,
   launchInstance,
@@ -31,13 +30,9 @@ import {
   resolveLegacyHash,
 } from '../../src/os/router.ts';
 import {
-  resetWindowManagerForTests,
-  windowManager,
-} from '../../src/os/window-manager.ts';
-import {
   openEventEditorWindow,
   resetEventEditorWindowForTests,
-} from '../../src/ui/calendar/event-editor-window.ts';
+} from '../../src/ui/calendar/event-editor-overlay.ts';
 
 function setupCalendarDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
@@ -71,19 +66,15 @@ describe('calendar app registry', () => {
     assert.match(calendar.tag, /CalDAV|ICS/i);
   });
 
-  test('calendar uses window presentation mode', () => {
-    assert.equal(getPresentationMode('calendar'), 'window');
-  });
-
   test('isAppId accepts calendar', () => {
     assert.equal(isAppId('calendar'), true);
   });
 });
 
 describe('calendar router', () => {
-  test('legacy #/calendar redirects to desktop while Calendar app is release-hidden', () => {
+  test('legacy #/calendar redirects to workspaces while Calendar app is release-hidden', () => {
     const legacy = resolveLegacyHash('#/calendar');
-    assert.equal(legacy.hash, '#/desktop');
+    assert.equal(legacy.hash, '#/workspaces');
   });
 
   test('parseOsHash resolves calendar app route', () => {
@@ -117,20 +108,10 @@ describe('calendar window shell', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
-    const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
-      localStorage: Storage;
-    };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
-    g.localStorage = win.localStorage;
+    installHappyDomGlobals(win);
     win.localStorage.clear();
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
     setupCalendarDom(win);
-    resetWindowManagerForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -141,7 +122,6 @@ describe('calendar window shell', () => {
   });
 
   afterEach(() => {
-    resetWindowManagerForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
@@ -149,50 +129,41 @@ describe('calendar window shell', () => {
     resetEventEditorWindowForTests();
   });
 
-  test('launchInstance(calendar) mounts content in a floating window', async () => {
+  test('launchInstance(calendar) mounts content in the apps layer', async () => {
     markCalendarOpen();
     launchInstance('calendar');
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.view, 'app');
     assert.ok(snap.foregroundId);
     assert.equal(snap.instances.some((i) => i.appId === 'calendar'), true);
 
-    const osWin = windowManager.findWindowByInstance(snap.foregroundId!);
-    assert.ok(osWin);
-    assert.equal(osWin.appId, 'calendar');
-    assert.equal(osWin.bounds.width, 960);
-    assert.equal(osWin.bounds.height, 640);
-
     const stage = document.getElementById('osStage');
-    assert.equal(stage?.classList.contains('is-in-app-fullscreen'), false);
+    assert.equal(stage?.classList.contains('is-in-app-fullscreen'), true);
 
     const content = document.getElementById('calendarView');
     assert.ok(content?.classList.contains('is-open'));
-    const frameBody = windowManager.getBodyForInstance(snap.foregroundId!);
-    assert.equal(content?.parentElement, frameBody);
+    assert.equal(content?.parentElement?.id, 'osAppsLayer');
   });
 
-  test('launchApp(calendar) blocks hidden app and returns to desktop', async () => {
+  test('launchApp(calendar) blocks hidden app and returns to workspaces', async () => {
     initOsRouter();
     markCalendarOpen();
     launchInstance('calendar');
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    assert.equal(windowManager.getWindows().length, 1);
-
     launchApp('calendar');
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    assert.equal(window.location.hash, '#/desktop');
-    assert.equal(getInstanceSnapshot().view, 'desktop');
+    assert.equal(window.location.hash, '#/workspaces');
+    assert.equal(getInstanceSnapshot().view, 'workspaces');
   });
 
-  test('openEventEditorWindow opens a child editor window', async () => {
+  test('openEventEditorWindow opens an in-app overlay', async () => {
     markCalendarOpen();
     launchInstance('calendar');
     syncAppHostForTests();
@@ -201,11 +172,7 @@ describe('calendar window shell', () => {
     openEventEditorWindow({ event: null, calendars: [] });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const windows = windowManager.getWindows();
-    assert.equal(windows.length, 2);
-    const editor = windows.find((w) => w.instanceId === CALENDAR_EVENT_EDITOR_INSTANCE_ID);
-    assert.ok(editor);
-    assert.equal(editor.manageInstance, false);
-    assert.equal(editor.title, 'New event');
+    const overlay = document.querySelector('.calendar-event-editor-overlay');
+    assert.ok(overlay);
   });
 });

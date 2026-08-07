@@ -149,13 +149,7 @@ html.mn-phone .mn-os-menubar {
   height: calc(var(--os-menubar-h) + var(--mn-safe-top));
 }
 
-/* The apps grid is the only way home once a sheet covers the dock. */
-html.mn-phone .mn-os-mb-apps:not([hidden]) {
-  width: var(--touch-min);
-  height: var(--touch-min);
-}
-
-/* Desktop dock must sit above window sheets (apps layer z-index 45 in fullscreen). */
+/* The dock remains the primary way home once a sheet covers the desktop. */
 html.mn-phone #osDockLayer {
   z-index: 48;
 }
@@ -261,6 +255,7 @@ html.mn-phone .brain-page-header.brain-overlay-surface {
 html.mn-phone .composer-tools-popover,
 html.mn-phone .composer-model-menu,
 html.mn-phone .mn-os-notif-menu,
+html.mn-phone .agent-activity-panel,
 html.mn-phone .workspace-menu,
 html.mn-phone .skill-picker,
 html.mn-phone .branch-picker__menu,

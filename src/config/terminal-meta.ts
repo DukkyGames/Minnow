@@ -3,6 +3,8 @@
  */
 
 import { TERMINAL_PANEL_MIN_HEIGHT_PX } from '../ui/terminal-layout';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { getWorkspacePath } from '../state/workspace';
 
 export interface TerminalTabMeta {
   id: string;
@@ -43,6 +45,63 @@ const DEFAULT_TERMINAL_META: TerminalMeta = {
 };
 
 let cached: TerminalMeta | null = null;
+let terminalWorkspaceKey = '';
+
+function workspaceTerminalKey(workspacePath?: string): string {
+  const normalized = normalizeWorkspacePath(workspacePath ?? getWorkspacePath());
+  return normalized || '__default__';
+}
+
+function normalizeTerminalWorkspaceSlice(raw: unknown): Partial<TerminalMeta> {
+  if (!raw || typeof raw !== 'object') return {};
+  const row = raw as Record<string, unknown>;
+  const tabsRaw = Array.isArray(row.tabs) ? row.tabs : [];
+  const tabs = tabsRaw
+    .map((t, i) => normalizeTab(t, i))
+    .filter((t): t is TerminalTabMeta => t != null)
+    .sort((a, b) => a.order - b.order);
+  return {
+    open: row.open === true,
+    heightPx:
+      typeof row.heightPx === 'number' && Number.isFinite(row.heightPx)
+        ? Math.min(800, Math.max(TERMINAL_PANEL_MIN_HEIGHT_PX, Math.round(row.heightPx)))
+        : undefined,
+    tabs: tabs.length > 0 ? tabs : undefined,
+    activeTabId:
+      typeof row.activeTabId === 'string' || row.activeTabId === null
+        ? (row.activeTabId as string | null)
+        : undefined,
+  };
+}
+
+async function fetchConfigMeta(): Promise<Record<string, unknown>> {
+  const res = await fetch('/api/config/meta', { cache: 'no-store' });
+  if (!res.ok) return {};
+  return (await res.json()) as Record<string, unknown>;
+}
+
+function mergeTerminalFromMeta(
+  meta: Record<string, unknown>,
+  workspaceKey: string,
+): TerminalMeta {
+  const global = normalizeTerminalMeta(meta.terminal);
+  const workspace = meta.workspace;
+  let slice: Partial<TerminalMeta> = {};
+  if (workspace && typeof workspace === 'object') {
+    const byPath = (workspace as Record<string, unknown>).terminalByPath;
+    if (byPath && typeof byPath === 'object') {
+      const row = (byPath as Record<string, unknown>)[workspaceKey];
+      slice = normalizeTerminalWorkspaceSlice(row);
+    }
+  }
+  return {
+    ...global,
+    ...slice,
+    tabs: slice.tabs ?? global.tabs ?? [],
+    activeTabId:
+      slice.activeTabId !== undefined ? slice.activeTabId : global.activeTabId,
+  };
+}
 
 function normalizeTab(raw: unknown, index: number): TerminalTabMeta | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -112,13 +171,10 @@ function normalizeTerminalMeta(raw: unknown): TerminalMeta {
 export async function loadTerminalMeta(): Promise<TerminalMeta> {
   if (cached) return cached;
   try {
-    const res = await fetch('/api/config/meta', { cache: 'no-store' });
-    if (!res.ok) {
-      cached = { ...DEFAULT_TERMINAL_META, tabs: [] };
-      return cached;
-    }
-    const meta = (await res.json()) as { terminal?: unknown };
-    cached = normalizeTerminalMeta(meta.terminal);
+    const meta = await fetchConfigMeta();
+    const key = workspaceTerminalKey();
+    terminalWorkspaceKey = key;
+    cached = mergeTerminalFromMeta(meta, key);
     return cached;
   } catch {
     cached = { ...DEFAULT_TERMINAL_META, tabs: [] };
@@ -150,10 +206,27 @@ export async function saveTerminalMeta(patch: Partial<TerminalMeta>): Promise<vo
   const current = await loadTerminalMeta();
   const next = mergeTerminalMetaPatch(current, patch);
   cached = next;
+  const key = terminalWorkspaceKey || workspaceTerminalKey();
+  terminalWorkspaceKey = key;
+  const workspaceSlice = {
+    open: next.open,
+    heightPx: next.heightPx,
+    tabs: next.tabs ?? [],
+    activeTabId: next.activeTabId ?? null,
+  };
+  const globalSlice = {
+    autoOpenOnAgentRun: next.autoOpenOnAgentRun,
+    autoFollowAgentTab: next.autoFollowAgentTab,
+    defaultShellProfileId: next.defaultShellProfileId,
+    workspaceShellProfiles: next.workspaceShellProfiles,
+  };
   await fetch('/api/config/meta', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ terminal: next }),
+    body: JSON.stringify({
+      terminal: globalSlice,
+      workspace: { terminalByPath: { [key]: workspaceSlice } },
+    }),
   });
 }
 
@@ -165,16 +238,67 @@ export function saveTerminalMetaKeepalive(patch: Partial<TerminalMeta>): void {
   const current = getTerminalMetaCached();
   const next = mergeTerminalMetaPatch(current, patch);
   cached = next;
+  const key = terminalWorkspaceKey || workspaceTerminalKey();
+  const workspaceSlice = {
+    open: next.open,
+    heightPx: next.heightPx,
+    tabs: next.tabs ?? [],
+    activeTabId: next.activeTabId ?? null,
+  };
+  const globalSlice = {
+    autoOpenOnAgentRun: next.autoOpenOnAgentRun,
+    autoFollowAgentTab: next.autoFollowAgentTab,
+    defaultShellProfileId: next.defaultShellProfileId,
+    workspaceShellProfiles: next.workspaceShellProfiles,
+  };
   try {
     void fetch('/api/config/meta', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ terminal: next }),
+      body: JSON.stringify({
+        terminal: globalSlice,
+        workspace: { terminalByPath: { [key]: workspaceSlice } },
+      }),
       keepalive: true,
     });
   } catch {
     /* unload */
   }
+}
+
+/** Save terminal layout for the workspace being switched away from. */
+export async function persistTerminalForWorkspace(workspacePath: string): Promise<void> {
+  const key = workspaceTerminalKey(workspacePath);
+  const current = getTerminalMetaCached();
+  const workspaceSlice = {
+    open: current.open,
+    heightPx: current.heightPx,
+    tabs: current.tabs ?? [],
+    activeTabId: current.activeTabId ?? null,
+  };
+  const globalSlice = {
+    autoOpenOnAgentRun: current.autoOpenOnAgentRun,
+    autoFollowAgentTab: current.autoFollowAgentTab,
+    defaultShellProfileId: current.defaultShellProfileId,
+    workspaceShellProfiles: current.workspaceShellProfiles,
+  };
+  await fetch('/api/config/meta', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      terminal: globalSlice,
+      workspace: { terminalByPath: { [key]: workspaceSlice } },
+    }),
+  });
+}
+
+/** Reload terminal prefs after the active workspace changes. */
+export async function reloadTerminalForWorkspace(workspacePath: string): Promise<TerminalMeta> {
+  const key = workspaceTerminalKey(workspacePath);
+  terminalWorkspaceKey = key;
+  const meta = await fetchConfigMeta();
+  cached = mergeTerminalFromMeta(meta, key);
+  return cached;
 }
 
 export function getTerminalMetaCached(): TerminalMeta {
@@ -184,4 +308,5 @@ export function getTerminalMetaCached(): TerminalMeta {
 /** Reset cache (tests). */
 export function resetTerminalMetaCache(): void {
   cached = null;
+  terminalWorkspaceKey = '';
 }

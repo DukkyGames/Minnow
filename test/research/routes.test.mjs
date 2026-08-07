@@ -276,6 +276,35 @@ describe('POST /api/research/start lifecycle', () => {
     assert.equal(detail.status, 200);
     assert.match(String(detail.json?.result), /Final Report/);
   });
+
+  it('library lists in-memory running tasks before persistence', async () => {
+    originalLlmCall = engineDeps.llmCall;
+    engineDeps.llmCall = async () => {
+      await new Promise((r) => setTimeout(r, 400));
+      return '{"sub_questions":["slow"],"key_topics":["x"],"success_criteria":"y"}';
+    };
+
+    const start = await httpRequest(baseUrl, 'POST', '/api/research/start', {
+      query: 'Library running row test',
+      providerId: 'mock-provider',
+      model: 'mock-model',
+      minRounds: 5,
+    });
+    assert.equal(start.status, 201);
+    const researchId = start.json.researchId;
+
+    await new Promise((r) => setTimeout(r, 30));
+    const library = await httpRequest(baseUrl, 'GET', '/api/research/library');
+    assert.equal(library.status, 200);
+    const row = library.json?.research?.find((item) => item.id === researchId);
+    assert.ok(row, 'expected running research in library');
+    assert.equal(row.status, 'running');
+
+    await waitForResearchStatus(baseUrl, researchId, 'done', 15_000);
+
+    restoreResearchMocks();
+    installFastResearchMocks();
+  });
 });
 
 describe('POST /api/research/cancel', () => {

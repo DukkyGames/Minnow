@@ -1,4 +1,4 @@
-import type { AppId, PresentationMode } from './types';
+import type { AppId } from './types';
 
 /** Whether users may turn the app off (optional) or it is always on (core). */
 export type AppAvailability = 'core' | 'optional';
@@ -16,7 +16,6 @@ export interface AppDefinition {
   icon: string;
   tag: string;
   description: string;
-  presentationMode: PresentationMode;
   availability: AppAvailability;
   releaseState: AppReleaseState;
 }
@@ -29,17 +28,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'code',
     tag: 'Build & ship in a live workspace',
     description: 'IDE-side editor, dev server, files',
-    presentationMode: 'fullscreen',
-    availability: 'core',
-    releaseState: 'released',
-  },
-  {
-    id: 'chat',
-    name: 'Chat',
-    icon: 'chat',
-    tag: 'Just talk to your model',
-    description: 'General assistant — tools, files, and app routing',
-    presentationMode: 'desktop',
     availability: 'core',
     releaseState: 'released',
   },
@@ -49,7 +37,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'research',
     tag: 'Send a sub-agent to dig deep',
     description: 'Multi-step web + source synthesis',
-    presentationMode: 'desktop',
     availability: 'core',
     releaseState: 'released',
   },
@@ -59,7 +46,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'flask',
     tag: 'Compose & test expert agents',
     description: 'Personas, tools, eval harness',
-    presentationMode: 'desktop',
     availability: 'optional',
     releaseState: 'hidden',
   },
@@ -69,7 +55,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'bench',
     tag: 'Measure models head-to-head',
     description: 'Throughput, latency, quality',
-    presentationMode: 'window',
     availability: 'optional',
     releaseState: 'hidden',
   },
@@ -79,7 +64,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'compare',
     tag: 'Blind A/B model preference',
     description: 'Side-by-side votes, reveal, win rates',
-    presentationMode: 'window',
     availability: 'optional',
     releaseState: 'hidden',
   },
@@ -89,7 +73,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'chip',
     tag: 'Download, run & tune models',
     description: 'Local runtimes, providers, recommendations',
-    presentationMode: 'window',
     availability: 'core',
     releaseState: 'released',
   },
@@ -99,7 +82,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'brain',
     tag: 'Wiki, memory & knowledge graph',
     description: 'Browse and maintain your local Brain wiki',
-    presentationMode: 'window',
     availability: 'core',
     releaseState: 'released',
   },
@@ -109,7 +91,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'scheduler',
     tag: 'Recurring agent jobs & reminders',
     description: 'Interval and cron schedules while Minnow is running',
-    presentationMode: 'sidePanel',
     availability: 'core',
     releaseState: 'released',
   },
@@ -119,7 +100,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'calendar',
     tag: 'Local events, ICS, and CalDAV',
     description: 'Month and week views with agent-assisted scheduling',
-    presentationMode: 'window',
     availability: 'optional',
     releaseState: 'hidden',
   },
@@ -129,7 +109,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'email',
     tag: 'IMAP triage and draft replies',
     description: 'Read-only inbox sync, AI summaries, and explicit-send SMTP',
-    presentationMode: 'fullscreen',
     availability: 'optional',
     releaseState: 'hidden',
   },
@@ -139,7 +118,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'issues',
     tag: 'Capture, triage, and track work',
     description: 'Linear-style issues — list, board, and quick capture',
-    presentationMode: 'fullscreen',
     availability: 'core',
     releaseState: 'released',
   },
@@ -149,7 +127,6 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'gear',
     tag: 'Appearance, prompts, agents',
     description: 'App, prompting, and integration settings',
-    presentationMode: 'window',
     availability: 'core',
     releaseState: 'released',
   },
@@ -165,11 +142,6 @@ export function isAppId(value: string): value is AppId {
 /** Lookup launcher metadata by id. */
 export function getAppById(id: AppId): AppDefinition | undefined {
   return APPS.find((a) => a.id === id);
-}
-
-/** Shell presentation mode for an app (defaults to fullscreen when unknown). */
-export function getPresentationMode(id: AppId): PresentationMode {
-  return getAppById(id)?.presentationMode ?? 'fullscreen';
 }
 
 /** Core apps cannot be disabled by the user. */
@@ -216,6 +188,5 @@ export const APP_MODULE_LOADERS: Partial<Record<AppId, AppModuleLoader>> = {
   email: () => import('../ui/email-page').then((m) => ({ init: m.initEmailPage })),
   issues: () => import('../ui/issues-page').then((m) => ({ init: m.initIssuesPage })),
   research: () => import('../research/panel').then((m) => ({ init: m.initResearchPage })),
-  chat: () => import('../ui/chat-app').then((m) => ({ init: m.initChatApp })),
   experts: () => import('../ui/experts/experts-hub').then((m) => ({ init: m.initExpertsHub })),
 };

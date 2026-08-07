@@ -256,6 +256,7 @@ function ensurePanel(): HTMLDivElement {
 function openMenu(): void {
   const bell = anchorBell;
   if (!bell) return;
+  void import('../ui/agent-activity-panel').then((m) => m.closeAgentActivityPanel());
   closeComposerModelMenu();
   closeAppSwitcherMenu();
   const panel = ensurePanel();

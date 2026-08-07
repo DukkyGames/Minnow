@@ -35,6 +35,9 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
       const { initDevServerScreen } = await import('../ui/dev-server-screen');
       initDevServerScreen();
 
+      const { initCodeViewsChatsToggle } = await import('../ui/code-views-chats-toggle');
+      initCodeViewsChatsToggle();
+
       const { initOrchestrateHub } = await import('../ui/orchestrate-hub');
       initOrchestrateHub();
 

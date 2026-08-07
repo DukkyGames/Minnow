@@ -1,14 +1,25 @@
-import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { sessionState } from '../state/sessions';
 import { scheduleSaveSessions } from '../state/sessions';
+import { emitChatSidebarChanged } from './layout-events';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
+import { isNarrowLayout } from './mobile-layout';
 import {
   syncAppBodySidebarWidthVars,
   syncChatSidebarResizer,
 } from './sidebar-resize';
 
 export function isMobileLayout(): boolean {
-  return window.matchMedia('(max-width: 640px)').matches;
+  return isNarrowLayout();
+}
+
+/** Whether the chat session list is visible (desktop expanded or narrow overlay open). */
+export function isChatSidebarOpen(): boolean {
+  const panel = document.getElementById('chatSidebar');
+  if (!panel) return false;
+  if (isMobileLayout()) {
+    return panel.classList.contains('mobile-open');
+  }
+  return !panel.classList.contains('collapsed');
 }
 
 export function closeMobileSidebar(): void {
@@ -39,33 +50,20 @@ export function openMobileSidebar(): void {
 
 export function applySidebarVisuals(): void {
   const side = document.getElementById('chatSidebar');
-  const btn = document.getElementById('btnSidebarCollapse');
-  if (!side || !btn || !sessionState) return;
+  if (!side || !sessionState) return;
   if (isMobileLayout()) {
     mountOsMobileDrawerBackdrops();
     syncOsMobileDrawerHtmlClass('chat', side.classList.contains('mobile-open'));
   } else {
     syncOsMobileDrawerHtmlClass('chat', false);
-  }
-  if (!isMobileLayout()) {
     closeMobileSidebar();
-    side.classList.toggle('collapsed', sessionState.sidebarCollapsed);
-    btn.innerHTML = sessionState.sidebarCollapsed ? ICON_CHEVRON_RIGHT : ICON_CHEVRON_LEFT;
-    btn.setAttribute(
-      'aria-label',
-      sessionState.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
-    );
-  } else {
-    side.classList.toggle('collapsed', sessionState.sidebarCollapsed);
-    btn.innerHTML = side.classList.contains('mobile-open') ? ICON_CHEVRON_LEFT : ICON_CHEVRON_RIGHT;
-    btn.setAttribute(
-      'aria-label',
-      side.classList.contains('mobile-open') ? 'Close chat list' : 'Open chat list'
-    );
   }
+  side.classList.toggle('collapsed', sessionState.sidebarCollapsed);
   scheduleElectronPreviewHostLayoutAfterChatSidebarChange();
   syncAppBodySidebarWidthVars();
   syncChatSidebarResizer();
+  // Code view chrome mirrors this state on the Chats toggle.
+  emitChatSidebarChanged();
 }
 
 /** Re-align the Electron preview guest when the chat rail width changes. */
@@ -90,20 +88,6 @@ export function toggleSidebarLayout(): void {
     sessionState!.sidebarCollapsed = !sessionState!.sidebarCollapsed;
     applySidebarVisuals();
     scheduleSaveSessions();
-    // Re-render so orchestrate boards collapse to the group glyph on the icon rail.
     void import('./sidebar').then((m) => m.renderSidebar());
   }
-}
-
-export function toggleSidebarCollapsed(): void {
-  if (isMobileLayout()) {
-    closeMobileSidebar();
-    applySidebarVisuals();
-    void import('./sidebar').then((m) => m.renderSidebar());
-    return;
-  }
-  sessionState!.sidebarCollapsed = !sessionState!.sidebarCollapsed;
-  applySidebarVisuals();
-  scheduleSaveSessions();
-  void import('./sidebar').then((m) => m.renderSidebar());
 }

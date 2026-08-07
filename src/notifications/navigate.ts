@@ -31,11 +31,6 @@ export async function openNotificationTarget(record: NotificationRecord): Promis
   }
 
   if (record.chatId) {
-    if (record.appId === 'chat') {
-      const { launchChatWithThread } = await import('../os/chat-launch');
-      await launchChatWithThread(record.chatId);
-      return;
-    }
     const { launchCodeWithChat } = await import('../os/chat-launch');
     await launchCodeWithChat(record.chatId);
     return;

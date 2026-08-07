@@ -182,10 +182,10 @@ describe('lastActiveChatIdByApp', () => {
 });
 
 describe('createDesktopChat', () => {
-  test('defaults to desktop mode, workAgentAuto, and workspace path', () => {
+  test('defaults to general mode, workAgentAuto, and workspace path', () => {
     const desktopWs = '/home/user/.minnow/workspace';
     const chat = createDesktopChat(desktopWs, 'chat-desktop-1', 'model-x');
-    assert.equal(chat.modeId, 'desktop');
+    assert.equal(chat.modeId, 'general');
     assert.equal(chat.workAgentAuto, true);
     assert.equal(chat.modelId, 'model-x');
     assert.equal(normalizeWorkspacePath(chat.workspacePath), normalizeWorkspacePath(desktopWs));

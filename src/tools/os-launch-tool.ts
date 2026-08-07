@@ -64,6 +64,22 @@ export function toolLaunchMinnowApp(
   }
 
   const appId = rawAppId.trim();
+  const seed =
+    typeof args.seed === 'string' && args.seed.trim() ? args.seed.trim() : undefined;
+
+  if (appId === 'chat') {
+    launchApp('code', {
+      ...(seed ? { seed } : {}),
+      codeSection: 'chat',
+    });
+    return JSON.stringify({
+      ok: true,
+      appId: 'code',
+      hash: '#/app/code/chat',
+      ...(seed ? { seed } : {}),
+    });
+  }
+
   if (!isAppId(appId)) {
     return `Error: invalid app_id "${appId}" (expected a Minnow app id)`;
   }
@@ -78,8 +94,8 @@ export function toolLaunchMinnowApp(
   }
 
   const options: LaunchOptions = {};
-  if (typeof args.seed === 'string' && args.seed.trim()) {
-    options.seed = args.seed.trim();
+  if (seed) {
+    options.seed = seed;
   }
 
   if (appId === 'settings') {

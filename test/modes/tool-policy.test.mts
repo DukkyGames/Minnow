@@ -102,16 +102,13 @@ describe('filterToolsByMode', () => {
     assert.ok(filtered.some((t) => t.id === 'spawn_sub_agent'));
   });
 
-  test('desktop includes every built-in tool group', () => {
-    const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'desktop');
-    for (const groupId of TOOL_GROUP_ID_LIST) {
-      for (const toolId of TOOL_GROUP_IDS[groupId]) {
-        assert.ok(
-          filtered.some((t) => t.id === toolId),
-          `desktop should allow ${toolId} (${groupId})`,
-        );
-      }
-    }
+  test('desktop mode id resolves to general tool policy', () => {
+    const desktopFiltered = filterToolsByMode(BUILT_IN_TOOLS, 'desktop');
+    const generalFiltered = filterToolsByMode(BUILT_IN_TOOLS, 'general');
+    assert.deepEqual(
+      new Set(desktopFiltered.map((t) => t.id)),
+      new Set(generalFiltered.map((t) => t.id)),
+    );
   });
 
   test('email keeps mail workflow tools and denies unrelated developer controls', () => {
@@ -154,6 +151,23 @@ describe('per-mode matrix groups', () => {
       const allowedGroups = new Set(MODE_ALLOWED_GROUPS[modeId]);
       for (const groupId of TOOL_GROUP_ID_LIST) {
         const shouldAllow = allowedGroups.has(groupId);
+        if (modeId === 'desktop') {
+          // Persisted desktop chats normalize to general policy at runtime.
+          const generalGroups = new Set(MODE_ALLOWED_GROUPS.general);
+          const generalShouldAllow = generalGroups.has(groupId);
+          if (generalShouldAllow) {
+            assert.ok(
+              groupFullyAllowed(modeId, groupId),
+              `${modeId} should allow full group ${groupId}`,
+            );
+          } else {
+            assert.ok(
+              groupFullyDenied(modeId, groupId),
+              `${modeId} should deny full group ${groupId}`,
+            );
+          }
+          continue;
+        }
         if (groupId === 'files-write' && (modeId === 'plan' || modeId === 'super-plan')) {
           // Plan / Super Plan: partial files-write — only save_file + make_directory
           assert.ok(isToolAllowedForMode(modeId, 'save_file'));
@@ -193,7 +207,7 @@ describe('cross-mode policy invariants', () => {
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
   const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;
 
-  test('issue tools allowed in general, build, plan, debug, and desktop', () => {
+  test('issue tools allowed in general, build, plan, and debug', () => {
     const ISSUE_MODES = new Set<ModeId>(['general', 'build', 'plan', 'debug', 'desktop']);
     for (const modeId of MODE_IDS) {
       for (const toolId of TOOL_GROUP_IDS.issues) {
@@ -219,11 +233,11 @@ describe('cross-mode policy invariants', () => {
     }
   });
 
-  test('email and calendar tools stay inside Email and Desktop modes', () => {
+  test('email and calendar tools stay inside Email mode only', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of [...EMAIL_TOOLS, ...CALENDAR_TOOLS]) {
         const allowed = isToolAllowedForMode(modeId, toolId);
-        const expected = modeId === 'desktop' || modeId === 'email';
+        const expected = modeId === 'email';
         assert.ok(
           allowed === expected,
           `${toolId} in ${modeId}: expected ${expected}`,
@@ -232,28 +246,20 @@ describe('cross-mode policy invariants', () => {
     }
   });
 
-  test('appearance tools denied except in desktop mode', () => {
+  test('appearance tools denied in every mode (desktop id aliases general)', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of APPEARANCE_TOOLS) {
         const allowed = isToolAllowedForMode(modeId, toolId);
-        assert.equal(
-          allowed,
-          modeId === 'desktop',
-          `${toolId} in ${modeId}: expected ${modeId === 'desktop'}`,
-        );
+        assert.equal(allowed, false, `${toolId} in ${modeId}: expected false`);
       }
     }
   });
 
-  test('board tools only in orchestrate and desktop modes', () => {
+  test('board tools only in orchestrate mode', () => {
     for (const modeId of MODE_IDS) {
       for (const toolId of TOOL_GROUP_IDS.board) {
         const allowed = isToolAllowedForMode(modeId, toolId);
-        assert.equal(
-          allowed,
-          modeId === 'orchestrate' || modeId === 'desktop',
-          `${toolId} in ${modeId}`,
-        );
+        assert.equal(allowed, modeId === 'orchestrate', `${toolId} in ${modeId}`);
       }
     }
   });

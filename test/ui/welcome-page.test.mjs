@@ -29,6 +29,7 @@ function setupWelcomeDom() {
     <span id="welcomeRecentsCount" hidden></span>
     <p id="welcomeServerBanner" class="hidden"></p>
     <button type="button" id="btnWelcomeContinueMinnow"></button>
+    <div id="osWorkspaceGate" hidden></div>
   `;
 
   globalThis.fetch = async (url, init) => {
@@ -82,7 +83,6 @@ function setupWelcomeDom() {
 }
 
 const {
-  closeWelcome,
   isOtherFullPageHash,
   isWelcomePageOpen,
   openWelcome,
@@ -141,7 +141,7 @@ describe('welcome-page', { concurrency: false }, () => {
     assert.equal(shouldShowWelcomeOnBoot(), false);
   });
 
-  test('shouldPromptCodeWorkspaceWelcome when default workspace and no launch path', () => {
+  test('shouldPromptCodeWorkspaceWelcome is false when workspace-first OS shell is on', () => {
     setupWelcomeDom();
     resetWelcomeStateForTests();
     resetWorkspaceStateForTests();
@@ -150,14 +150,18 @@ describe('welcome-page', { concurrency: false }, () => {
       label: 'app.asar',
       isDefault: true,
     });
-    assert.equal(shouldPromptCodeWorkspaceWelcome(), true);
+    // Legacy Code-app welcome prompt — superseded by boot workspace gate.
+    assert.equal(shouldPromptCodeWorkspaceWelcome(), false);
     assert.equal(shouldPromptCodeWorkspaceWelcome('/projects/x'), false);
   });
 
-  test('openWelcome shows OS overlay and hides app body', () => {
+  test('openWelcome opens workspace gate with welcome overlay', async () => {
     setupWelcomeDom();
     resetWelcomeStateForTests();
     resetWorkspaceStateForTests();
+    const { resetWorkspaceGateForTests, isWorkspaceGateOpen, closeWorkspaceGate } =
+      await import('../../src/os/workspace-gate.ts');
+    resetWorkspaceGateForTests();
     setWorkspaceFromServer({
       path: '/minnow/app',
       label: 'app',
@@ -165,15 +169,17 @@ describe('welcome-page', { concurrency: false }, () => {
     });
 
     openWelcome({ skipHash: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(isWorkspaceGateOpen(), true);
     assert.equal(isWelcomePageOpen(), true);
-    assert.equal(document.getElementById('appBody')?.classList.contains('hidden'), true);
     assert.equal(
       document.getElementById('welcomeView')?.classList.contains('welcome-page--os-overlay'),
       true,
     );
 
-    closeWelcome({ skipHash: true });
+    closeWorkspaceGate();
+    assert.equal(isWorkspaceGateOpen(), false);
     assert.equal(isWelcomePageOpen(), false);
-    assert.equal(document.getElementById('appBody')?.classList.contains('hidden'), false);
   });
 });

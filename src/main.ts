@@ -13,6 +13,7 @@ import './styles/topbar.css';
 import './styles/model-select.css';
 import './styles/shell-keyboard-help.css';
 import './styles/sidebar.css';
+import './styles/code-chrome.css';
 import './styles/chat-search.css';
 import './styles/messages.css';
 import './styles/context-notice.css';
@@ -48,6 +49,7 @@ import './styles/composer-tools-popover.css';
 import './styles/workspace-menu.css';
 import './styles/workspace-folder-picker.css';
 import './styles/source-control-center.css';
+import './styles/research-panel.css';
 import './styles/git-help-lightbox.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
@@ -65,11 +67,7 @@ import './styles/orchestrate-hub.css';
 import './styles/orchestrate-plan-screen.css';
 import './styles/plan-progress.css';
 import './styles/minnowos-shell.css';
-import './styles/minnowos-desktop.css';
-import './styles/desktop-workspace-rail.css';
 import './styles/minnowos-responsive.css';
-import './styles/minnowos-wallpaper.css';
-import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
 import './styles/models-page.css';
 import './styles/onboarding.css';
@@ -244,6 +242,10 @@ function registerServiceWorker(): void {
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
+  if (isOsShellEnabled()) {
+    const { awaitWorkspaceGateBeforeAppInit } = await import('./os/workspace-gate');
+    await awaitWorkspaceGateBeforeAppInit();
+  }
   // Boot phase marks surface in DevTools when MINNOW_DEBUG=1 (see boot-metrics.ts).
   markBootPhase('ui-init');
   installAppDialogs();
@@ -464,8 +466,15 @@ async function startApp(): Promise<void> {
   installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
     const hash = window.location.hash;
-    if (hash === '' || hash === '#' || hash === '#/') {
-      window.location.replace('#/desktop');
+    // Cold boot lands on the workspace picker — not the last app hash Electron/Chromium may restore.
+    const bootToWorkspacePicker =
+      hash === '' ||
+      hash === '#' ||
+      hash === '#/' ||
+      hash === '#/desktop' ||
+      hash.startsWith('#/app/');
+    if (bootToWorkspacePicker) {
+      window.location.replace('#/workspaces');
     }
     initOsPageBridge();
     initOsShell();

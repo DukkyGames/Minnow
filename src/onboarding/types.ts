@@ -3,7 +3,6 @@
  */
 
 import type { ThemeFamily, ThemeMode } from '../theme';
-import type { WallpaperMode } from '../os/wallpaper';
 
 /** Stable step identifiers aligned with MIN-233 flow. */
 export type OnboardingStepId =
@@ -53,7 +52,6 @@ export interface OnboardingContext {
   modelId: string | null;
   themeMode: ThemeMode | 'system' | null;
   themeFamily: ThemeFamily | null;
-  wallpaper: WallpaperMode | null;
   searxngSkipped: boolean;
   serverAvailable: boolean;
   configServerAvailable: boolean;

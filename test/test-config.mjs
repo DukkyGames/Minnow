@@ -72,6 +72,8 @@ export const RUNNERS = {
     prefixArgs: [
       '--import',
       'tsx',
+      '--import',
+      './test/test-loader.mjs',
       ...ASSERT_GUARD_IMPORT,
       '--test',
       '--test-force-exit',

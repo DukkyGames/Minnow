@@ -1,6 +1,4 @@
-import type { AppId, AppInstance, LaunchOptions, OsView, PresentationMode } from './types';
-import { resolveInstancePresentation, resolvePresentationMode } from './presentation-mode';
-import { windowManager } from './window-manager';
+import type { AppId, AppInstance, LaunchOptions, OsView } from './types';
 
 export interface InstanceSnapshot {
   view: OsView;
@@ -13,7 +11,7 @@ type InstanceListener = (snapshot: InstanceSnapshot) => void;
 const listeners = new Set<InstanceListener>();
 
 let uidCounter = 0;
-let view: OsView = 'desktop';
+let view: OsView = 'workspaces';
 let instances: AppInstance[] = [];
 let foregroundId: string | null = null;
 
@@ -57,37 +55,18 @@ export function getForegroundAppId(): AppId | null {
   return instances.find((i) => i.id === foregroundId)?.appId ?? null;
 }
 
-/** Presentation mode of the focused surface. */
-export function getForegroundPresentationMode(): PresentationMode | null {
-  if (!foregroundId) return null;
-  const inst = instances.find((i) => i.id === foregroundId);
-  return inst ? resolveInstancePresentation(inst) : null;
-}
-
-function viewForPresentationMode(mode: PresentationMode): OsView {
-  return mode === 'window' || mode === 'sidePanel' || mode === 'desktop' ? 'desktop' : 'app';
-}
-
 /**
  * Pick the next foreground after closing `excludeId`.
  * `returnApp` must be captured before the instance is removed from the store.
  */
 function pickNextForeground(excludeId: string, returnApp?: AppId): string | null {
   const remaining = instances.filter((i) => i.id !== excludeId);
-  const windowed = remaining.filter((i) => {
-    const mode = resolveInstancePresentation(i);
-    return mode === 'window' || mode === 'sidePanel';
-  });
-
-  // returnToApp only applies to other floating surfaces — never resurrect background fullscreen apps.
   if (returnApp) {
-    const target = windowed.find((i) => i.appId === returnApp);
+    const target = remaining.find((i) => i.appId === returnApp);
     if (target) return target.id;
   }
-  // Only rotate among floating surfaces — never resurrect a background fullscreen app
-  // (e.g. Code) when the user closes the last window they opened on the desktop.
-  if (windowed.length === 0) return null;
-  return windowed[windowed.length - 1]?.id ?? null;
+  if (remaining.length === 0) return null;
+  return remaining[remaining.length - 1]?.id ?? null;
 }
 
 /** Read-only snapshot for UI renderers. */
@@ -103,26 +82,23 @@ export function subscribeInstances(listener: InstanceListener): () => void {
   };
 }
 
-/** Show the desktop launcher (does not close instances). */
-export function showDesktop(): void {
-  if (view === 'desktop' && !foregroundId) return;
-  view = 'desktop';
+/** Show the workspace gate surface (does not close instances). */
+export function showWorkspaces(): void {
+  if (view === 'workspaces' && !foregroundId) return;
+  view = 'workspaces';
   foregroundId = null;
   emit();
+}
+
+/** @deprecated Phase 5 — use showWorkspaces */
+export function showDesktop(): void {
+  showWorkspaces();
 }
 
 function applyLaunchOptionsToInstance(inst: AppInstance, options?: LaunchOptions): void {
   if (!options || Object.keys(options).length === 0) return;
   inst.launchOptions = { ...inst.launchOptions, ...options };
   if (options.seed) inst.seed = options.seed;
-}
-
-/** Whether a side-panel app should open without stealing the current foreground app. */
-function shouldOpenSidePanelAsOverlay(appId: AppId, options?: LaunchOptions): boolean {
-  const mode = resolvePresentationMode(appId, options);
-  if (mode !== 'sidePanel') return false;
-  const fg = getForegroundAppId();
-  return fg !== null && fg !== appId;
 }
 
 /** Ensure an app instance exists without changing the foreground surface. */
@@ -153,38 +129,26 @@ export function ensureBackgroundInstance(appId: AppId, options?: LaunchOptions):
 export function launchInstance(appId: AppId, options?: LaunchOptions): string {
   const existing = instances.find((i) => i.appId === appId);
   let resolvedOptions = options;
-  if (
-    appId === 'settings' &&
-    getForegroundAppId() === 'code' &&
-    resolvedOptions?.returnToApp == null
-  ) {
-    resolvedOptions = { ...resolvedOptions, returnToApp: 'code' };
+  if (appId === 'settings' && resolvedOptions?.returnToApp == null) {
+    const foreground = getForegroundAppId();
+    if (foreground === 'code') {
+      resolvedOptions = { ...resolvedOptions, returnToApp: 'code' };
+    } else if (foreground && foreground !== 'settings') {
+      resolvedOptions = { ...resolvedOptions, returnToApp: foreground };
+    }
   }
-
-  const overlaySidePanel = shouldOpenSidePanelAsOverlay(appId, resolvedOptions);
 
   if (existing) {
     if (resolvedOptions && Object.keys(resolvedOptions).length > 0) {
       applyLaunchOptionsToInstance(existing, resolvedOptions);
     }
-    if (overlaySidePanel) {
-      existing.unread = 0;
-      emit();
-      return existing.id;
-    }
-    const mode = resolvePresentationMode(appId, existing.launchOptions);
     foregroundId = existing.id;
     existing.unread = 0;
-    view = viewForPresentationMode(mode);
-    if (mode === 'window') {
-      const win = windowManager.findWindowByInstance(existing.id);
-      if (win?.minimized) windowManager.minimize(win.id, false);
-    }
+    view = 'app';
     emit();
     return existing.id;
   }
 
-  const mode = resolvePresentationMode(appId, resolvedOptions);
   const inst: AppInstance = {
     id: uid(),
     appId,
@@ -194,12 +158,8 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
     msg: '',
   };
   instances = [...instances, inst];
-  if (overlaySidePanel) {
-    emit();
-    return inst.id;
-  }
   foregroundId = inst.id;
-  view = viewForPresentationMode(mode);
+  view = 'app';
   emit();
   return inst.id;
 }
@@ -208,10 +168,9 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
 export function focusInstance(id: string): boolean {
   const inst = instances.find((i) => i.id === id);
   if (!inst) return false;
-  const nextView = viewForPresentationMode(resolveInstancePresentation(inst));
-  if (foregroundId === id && view === nextView) return true;
+  if (foregroundId === id && view === 'app') return true;
   foregroundId = id;
-  view = nextView;
+  view = 'app';
   emit();
   return true;
 }
@@ -222,7 +181,7 @@ export function restoreInstance(id: string): boolean {
   if (!inst) return false;
   foregroundId = id;
   inst.unread = 0;
-  view = viewForPresentationMode(resolveInstancePresentation(inst));
+  view = 'app';
   emit();
   return true;
 }
@@ -231,19 +190,13 @@ export function restoreInstance(id: string): boolean {
 export function closeInstance(id: string): boolean {
   const idx = instances.findIndex((i) => i.id === id);
   if (idx < 0) return false;
-  // Read returnToApp before removing — pickNextForeground cannot see the closed row.
   const returnApp = instances[idx]?.launchOptions?.returnToApp;
   instances = instances.filter((i) => i.id !== id);
   if (foregroundId === id) {
     foregroundId = pickNextForeground(id, returnApp);
-    if (!foregroundId) {
-      view = 'desktop';
-    } else {
-      const next = instances.find((i) => i.id === foregroundId);
-      view = next ? viewForPresentationMode(resolveInstancePresentation(next)) : 'desktop';
-    }
+    view = foregroundId ? 'app' : 'workspaces';
   } else if (instances.length === 0) {
-    view = 'desktop';
+    view = 'workspaces';
   }
   emit();
   return true;
@@ -290,7 +243,7 @@ export function clearAllUnread(): void {
 /** Reset module state (tests). */
 export function resetInstancesForTests(): void {
   uidCounter = 0;
-  view = 'desktop';
+  view = 'workspaces';
   instances = [];
   foregroundId = null;
   listeners.clear();

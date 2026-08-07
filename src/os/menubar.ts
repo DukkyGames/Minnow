@@ -1,5 +1,5 @@
 import { getAppById } from './app-registry';
-import { isAppAvailable, subscribeAppPreferences } from './app-preferences';
+import { subscribeAppPreferences } from './app-preferences';
 import {
   getForegroundAppId,
   getOsView,
@@ -13,55 +13,13 @@ import { launchApp } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
 import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
-import { closeAppSwitcherMenu, initAppSwitcherMenu } from './app-switcher-menu';
 import { initOsNotificationsMenu } from './notifications-menu';
-import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
 import { isPhoneWindowSheetOpen } from './shell-chrome';
-import { windowManager } from './window-manager';
 import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
 import { openProductWiki } from '../ui/product-wiki';
-
-function formatClock(d: Date): string {
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-/** Tick the menubar clock on minute boundaries and when the window becomes visible again. */
-function startMenubarClock(el: HTMLElement): () => void {
-  const tick = () => {
-    el.textContent = formatClock(new Date());
-  };
-
-  tick();
-
-  let minuteTimer: number | undefined;
-
-  const scheduleNextMinute = () => {
-    const now = new Date();
-    const msUntilNextMinute =
-      (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 50;
-    minuteTimer = window.setTimeout(() => {
-      tick();
-      scheduleNextMinute();
-    }, msUntilNextMinute);
-  };
-
-  scheduleNextMinute();
-
-  const onVisibility = () => {
-    if (document.visibilityState !== 'visible') return;
-    tick();
-    if (minuteTimer !== undefined) clearTimeout(minuteTimer);
-    scheduleNextMinute();
-  };
-  document.addEventListener('visibilitychange', onVisibility);
-
-  return () => {
-    if (minuteTimer !== undefined) clearTimeout(minuteTimer);
-    document.removeEventListener('visibilitychange', onVisibility);
-  };
-}
+import { initAgentActivityMenubar } from '../ui/agent-activity-panel';
 
 /** Render the Minnow menubar. Returns cleanup function. */
 export function renderMenubar(root: HTMLElement): () => void {
@@ -102,13 +60,10 @@ export function renderMenubar(root: HTMLElement): () => void {
     if (title) statusText.setAttribute('title', title);
   }
 
-  // Icon-only Apps launcher — opens a dock-sized grid with Desktop + apps.
-  const appsBtn = document.createElement('button');
-  appsBtn.type = 'button';
-  appsBtn.className = 'mn-os-mb-icon mn-os-mb-apps';
-  appsBtn.hidden = true;
-  appsBtn.appendChild(createOsIcon('grid', { size: 16 }));
-  const cleanupAppSwitcher = initAppSwitcherMenu(appsBtn);
+  const workspaceSlot = document.createElement('div');
+  workspaceSlot.id = 'osMenubarWorkspaceSlot';
+  workspaceSlot.className = 'mn-os-mb-workspace-slot';
+  workspaceSlot.hidden = true;
 
   const sep = document.createElement('span');
   sep.className = 'mn-os-mb-sep mn-os-mb-app-sep';
@@ -128,42 +83,24 @@ export function renderMenubar(root: HTMLElement): () => void {
   chatToggle.hidden = true;
   chatToggle.innerHTML = iconHtml('menu', { size: 16 });
   chatToggle.addEventListener('click', () => {
-    const fg = getForegroundAppId();
-    if (fg === 'chat') {
-      void import('../ui/chat-app').then((m) => {
-        m.toggleChatAppSessionRail();
-        chatToggle.setAttribute(
-          'aria-pressed',
-          m.isChatAppSessionRailHidden() ? 'false' : 'true',
-        );
-      });
-      return;
-    }
     void import('../ui/layout').then((m) => m.toggleSidebarLayout());
   });
 
-  left.append(brand, appsBtn, sep, appName, statusSep, statusPill, chatToggle);
+  left.append(brand, workspaceSlot, sep, appName, statusSep, statusPill, chatToggle);
 
   const right = document.createElement('div');
   right.className = 'mn-os-mb-right';
-
-  const workspaceSlot = document.createElement('div');
-  workspaceSlot.id = 'osMenubarWorkspaceSlot';
-  workspaceSlot.className = 'mn-os-mb-workspace-slot';
-  workspaceSlot.hidden = true;
 
   const modelChipAnchor = document.createElement('div');
   modelChipAnchor.id = 'osMenubarModelChip';
   modelChipAnchor.className = 'mn-os-mb-model-slot';
   const cleanupModelChip = initMenubarModelChip(modelChipAnchor);
 
-  const schedulerBtn = document.createElement('button');
-  schedulerBtn.type = 'button';
-  schedulerBtn.className = 'mn-os-mb-icon mn-os-mb-scheduler';
-  schedulerBtn.setAttribute('aria-label', 'Scheduler');
-  schedulerBtn.title = 'Scheduler';
-  schedulerBtn.appendChild(createAppIcon('scheduler'));
-  schedulerBtn.addEventListener('click', () => openSchedulerFromMenubar());
+  const agentsBtn = document.createElement('button');
+  agentsBtn.type = 'button';
+  agentsBtn.className = 'mn-os-mb-icon mn-os-mb-agents';
+  agentsBtn.innerHTML = iconHtml('appAgentActivity', { size: 16 });
+  const cleanupAgentActivity = initAgentActivityMenubar(agentsBtn);
 
   const bell = document.createElement('button');
   bell.type = 'button';
@@ -198,19 +135,13 @@ export function renderMenubar(root: HTMLElement): () => void {
   wikiBtn.innerHTML = iconHtml('help', { size: 16 });
   wikiBtn.addEventListener('click', () => openProductWiki());
 
-  const timeEl = document.createElement('span');
-  timeEl.className = 'mn-os-mb-time mn-os-mono';
-  timeEl.textContent = formatClock(new Date());
-
   right.append(
-    workspaceSlot,
     modelChipAnchor,
-    schedulerBtn,
+    agentsBtn,
     bell,
     updateSlot,
     wikiBtn,
     settingsBtn,
-    timeEl,
   );
   root.append(left, right);
 
@@ -222,19 +153,16 @@ export function renderMenubar(root: HTMLElement): () => void {
     // A phone window sheet hides the desktop (and its dock) while the shell still
     // reports the desktop view — keep the switcher reachable so home stays one tap away.
     const phoneSheet = isPhoneWindowSheetOpen();
-    const onDesktop = view === 'desktop' && !phoneSheet;
+    const onWorkspaces = view === 'workspaces' && !phoneSheet;
 
     // A covering sheet is "in an app" as far as the menubar is concerned, even
     // though windowed apps technically run inside the desktop view.
-    root.dataset.view = onDesktop ? 'desktop' : 'app';
-    brand.hidden = !onDesktop;
-    appsBtn.hidden = onDesktop;
-    // Dock covers Desktop; dismiss the switcher if we navigated home.
-    if (onDesktop) closeAppSwitcherMenu();
-    sep.hidden = onDesktop;
-    appName.hidden = onDesktop;
+    root.dataset.view = onWorkspaces ? 'workspaces' : 'app';
+    brand.hidden = !onWorkspaces;
+    sep.hidden = onWorkspaces;
+    appName.hidden = onWorkspaces;
 
-    if (!onDesktop && fgApp) {
+    if (!onWorkspaces && fgApp) {
       const meta = getAppById(fgApp);
       appName.replaceChildren();
       if (meta) {
@@ -248,19 +176,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     if (toggleLabel) {
       chatToggle.setAttribute('aria-label', toggleLabel);
     }
-    if (fgApp === 'chat') {
-      void import('../ui/chat-app').then((m) => {
-        chatToggle.setAttribute(
-          'aria-pressed',
-          m.isChatAppSessionRailHidden() ? 'false' : 'true',
-        );
-      });
-    } else {
-      chatToggle.removeAttribute('aria-pressed');
-    }
-
-    // Scheduler shortcut follows the same availability rule as the dock.
-    schedulerBtn.hidden = !isAppAvailable('scheduler');
+    chatToggle.removeAttribute('aria-pressed');
 
     void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 
@@ -285,8 +201,6 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   syncMenubar();
   const unsub = subscribeInstances(syncMenubar);
-  // Opening/closing a window does not emit an instance change on its own.
-  const unsubWindows = windowManager.subscribe(syncMenubar);
   const unsubInbox = subscribeNotifications(syncMenubar);
   const unsubPrefs = subscribeAppPreferences(syncMenubar);
   const unsubNotif = onNewNotification((record) => {
@@ -294,17 +208,13 @@ export function renderMenubar(root: HTMLElement): () => void {
     if (!record.read) ringBell();
   });
 
-  const stopClock = startMenubarClock(timeEl);
-
   return () => {
     unsub();
-    unsubWindows();
     unsubInbox();
     unsubPrefs();
     unsubNotif();
-    stopClock();
-    cleanupAppSwitcher();
     cleanupModelChip();
+    cleanupAgentActivity();
     cleanupNotifications();
     cleanupUpdatePill();
     cleanupShellChrome();

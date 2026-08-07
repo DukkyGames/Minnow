@@ -70,7 +70,7 @@ html.minnow-os-enabled {
   flex: 0 1 auto;
   /* Clip long status text when the left cluster shrinks. */
   overflow: hidden;
-  /* Room for :focus-visible outlines; open state uses inset ring (see .mn-os-mb-apps). */
+  /* Room for :focus-visible outlines on left-cluster controls. */
   padding: 3px;
   margin: -3px;
 }
@@ -94,17 +94,17 @@ html.minnow-os-enabled {
   display: none !important;
 }
 
-/* Model label expands left from the chip; tuck workspace aside so they do not overlap. */
-.mn-os-menubar:has(.mn-os-mb-model-chip.is-expanded) .mn-os-mb-workspace-slot:not([hidden]) {
-  flex: 0 0 0;
-  max-width: 0;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  overflow: hidden;
+/* Workspace picker in the menubar left cluster (replaces former app switcher) */
+.mn-os-mb-left .mn-os-mb-workspace-slot .workspace-control {
+  max-width: min(14rem, 32vw);
 }
 
-/* Workspace picker in the menubar right cluster */
+.mn-os-mb-left .mn-os-mb-workspace-slot .workspace-path-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--os-text);
+}
+
 .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-control {
   max-width: min(18rem, 28vw);
 }
@@ -173,10 +173,8 @@ html.minnow-os-enabled {
 }
 
 /* `display: grid` / flex on buttons can override the native [hidden] rule — hide via view + attribute */
-.mn-os-menubar[data-view='desktop'] .mn-os-mb-apps,
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-app-sep,
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-appname,
-.mn-os-mb-apps[hidden],
 .mn-os-mb-app-sep[hidden],
 .mn-os-mb-appname[hidden] {
   display: none !important;
@@ -185,14 +183,6 @@ html.minnow-os-enabled {
 .mn-os-menubar[data-view='app'] .mn-os-mb-brand,
 .mn-os-mb-brand[hidden] {
   display: none !important;
-}
-
-/* Inset ring — outer box-shadow was clipped by .mn-os-mb-left overflow. */
-.mn-os-mb-apps.is-open {
-  background: var(--os-surface-2);
-  color: var(--os-text);
-  border-color: var(--os-accent-glow);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--os-accent-glow) 70%, transparent);
 }
 
 .mn-os-mb-sep {
@@ -210,8 +200,7 @@ html.minnow-os-enabled {
   color: var(--os-text-dim);
 }
 
-.mn-os-mb-appname .icon-svg,
-.mn-os-mb-scheduler .icon-svg {
+.mn-os-mb-appname .icon-svg {
   --mn-icon-size: 14px;
 }
 
@@ -262,7 +251,8 @@ html.minnow-os-enabled {
 }
 
 .mn-os-mb-icon,
-.mn-os-mb-bell {
+.mn-os-mb-bell,
+.mn-os-mb-agents {
   position: relative;
   flex-shrink: 0;
   width: 32px;
@@ -277,13 +267,24 @@ html.minnow-os-enabled {
 }
 
 .mn-os-mb-icon:hover,
-.mn-os-mb-bell:hover {
+.mn-os-mb-bell:hover,
+.mn-os-mb-agents:hover {
   background: var(--os-surface-2);
   color: var(--os-text);
 }
 
 .mn-os-mb-bell.is-on {
   color: var(--os-accent);
+}
+
+.mn-os-mb-agents.is-on {
+  color: var(--os-accent);
+}
+
+.mn-os-mb-agents.is-open {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  box-shadow: 0 0 0 2px var(--os-accent-glow);
 }
 
 .mn-os-mb-bell.is-muted {
@@ -671,14 +672,6 @@ html.minnow-os-enabled {
   display: none !important;
 }
 
-.mn-os-mb-time {
-  font-size: 12.5px;
-  color: var(--os-text-dim);
-  min-width: 56px;
-  text-align: right;
-  font-family: var(--font-mono);
-}
-
 /* ---------- frameless Electron shell menubar ---------- */
 
 html.is-electron-shell .mn-os-menubar--shell-frameless {
@@ -720,6 +713,41 @@ html.is-electron-shell[data-platform='darwin'] .mn-os-mb-window-controls {
   gap: 2px;
   flex-shrink: 0;
   margin-left: 6px;
+}
+
+/* Frameless Electron titlebar — shared with legacy floating windows (styles live here after Phase 5). */
+.mn-os-window-btn {
+  width: var(--os-window-btn-size);
+  height: var(--os-window-btn-size);
+  min-width: var(--os-window-btn-size);
+  min-height: var(--os-window-btn-size);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--os-text-dim);
+  cursor: pointer;
+  transition: 0.14s var(--os-ease);
+}
+
+.mn-os-window-btn .icon-svg {
+  --mn-icon-size: var(--os-window-btn-icon-size);
+  display: block;
+  flex-shrink: 0;
+}
+
+.mn-os-window-btn:hover {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  border-color: var(--os-border);
+}
+
+.mn-os-window-btn--close:hover {
+  background: color-mix(in srgb, #e5484d 18%, var(--os-surface-2));
+  color: #ffb4b4;
+  border-color: color-mix(in srgb, #e5484d 35%, var(--os-border));
 }
 
 .mn-os-ws-dot {
@@ -865,31 +893,96 @@ html.minnow-os-enabled header.topbar.hidden {
   display: none;
 }
 
-/* Mobile Code drawers — html class toggled from mobile-drawer-portal.ts (no reparenting). */
+/* Narrow Code drawers — html.mn-narrow from mobile-layout.ts + drawer portal classes. */
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-stage,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-apps-layer,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-stage,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-apps-layer {
+  overflow: visible;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-code-layer.is-active,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .app-body,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .app-body {
+  overflow: visible;
+}
+
+/* Drop app-layer transform so fixed drawers use the viewport, not a nested box. */
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-code-layer.is-active {
+  transform: none;
+  filter: none;
+  animation: none;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer #chatSidebar.mobile-open {
+  position: fixed;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  left: 0;
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+  max-width: 100%;
+  height: auto;
+  padding-left: env(safe-area-inset-left, 0px);
+  transform: translateX(0);
+  box-shadow: var(--shadow-sidebar);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer #sidebarBackdrop.open {
+  z-index: 49;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer #fileSidebar.mobile-open {
+  position: fixed;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  right: 0;
+  left: auto;
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+  max-width: 100%;
+  height: auto;
+  padding-right: env(safe-area-inset-right, 0px);
+  transform: translateX(0);
+  box-shadow: var(--shadow-sidebar-left);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer #fileSidebarBackdrop.open {
+  z-index: 49;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Legacy phone-only drawer block (pre–workspace-first); kept for non-OS layouts. */
 @media (max-width: 640px) {
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-stage,
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-apps-layer,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-stage,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-apps-layer {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-stage,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-apps-layer,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-stage,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-apps-layer {
     overflow: visible;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-code-layer.is-active,
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .app-body,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .app-body {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .app-body,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .app-body {
     overflow: visible;
   }
 
-  /* Drop app-layer transform so fixed drawers use the viewport, not a nested box. */
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-code-layer.is-active {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-code-layer.is-active {
     transform: none;
     filter: none;
     animation: none;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer #chatSidebar.mobile-open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer #chatSidebar.mobile-open {
     position: fixed;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
     left: 0;
@@ -905,12 +998,12 @@ html.minnow-os-enabled header.topbar.hidden {
     pointer-events: auto;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer #sidebarBackdrop.open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer #sidebarBackdrop.open {
     z-index: 49;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
   }
 
-  html.minnow-os-enabled.mn-os-mobile-file-drawer #fileSidebar.mobile-open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer #fileSidebar.mobile-open {
     position: fixed;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
     right: 0;
@@ -927,7 +1020,7 @@ html.minnow-os-enabled header.topbar.hidden {
     pointer-events: auto;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-file-drawer #fileSidebarBackdrop.open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer #fileSidebarBackdrop.open {
     z-index: 49;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
   }
@@ -985,7 +1078,18 @@ html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
     display: none !important;
   }
 
-  /* Workspace path lives in the folder popover on narrow screens */
+  /* Folder name stays visible beside the icon on narrow menubars */
+  .mn-os-mb-left .mn-os-mb-workspace-slot .workspace-path-label {
+    display: block;
+    max-width: min(9rem, 28vw);
+  }
+
+  .mn-os-mb-left .mn-os-mb-workspace-slot .workspace-control {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: min(12rem, 42vw);
+  }
+
   .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-path-label {
     display: none;
   }
@@ -1003,12 +1107,9 @@ html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
     display: none;
   }
 
-  .mn-os-mb-time {
-    display: none;
-  }
-
   .mn-os-mb-icon,
   .mn-os-mb-bell,
+  .mn-os-mb-agents,
   .mn-os-mb-workspace-slot .workspace-btn.icon-btn {
     width: var(--touch-min);
     height: var(--touch-min);
@@ -1016,13 +1117,6 @@ html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
 
   .mn-os-notif-menu {
     max-width: calc(100vw - max(12px, env(safe-area-inset-left, 0px)) - max(12px, env(safe-area-inset-right, 0px)));
-  }
-}
-
-/* Ultra-narrow phones: drop scheduler to keep workspace + inbox reachable */
-@media (max-width: 400px) {
-  .mn-os-mb-scheduler {
-    display: none;
   }
 }
 

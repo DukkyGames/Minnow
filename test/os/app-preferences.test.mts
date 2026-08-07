@@ -46,11 +46,10 @@ function setupDom(): void {
 }
 
 describe('app registry availability invariants', () => {
-  test('core apps include chat, code, research, models, brain, scheduler, issues, settings', () => {
+  test('core apps include code, research, models, brain, scheduler, issues, settings', () => {
     const coreIds = listCoreReleasedApps().map((app) => app.id).sort();
     assert.deepEqual(coreIds, [
       'brain',
-      'chat',
       'code',
       'issues',
       'models',
@@ -69,8 +68,8 @@ describe('app registry availability invariants', () => {
   });
 
   test('every app has availability + releaseState; five apps are hidden', () => {
-    assert.equal(APPS.length, 13);
-    assert.equal(listReleasedApps().length, 8);
+    assert.equal(APPS.length, 12);
+    assert.equal(listReleasedApps().length, 7);
     for (const app of APPS) {
       assert.ok(app.availability === 'core' || app.availability === 'optional');
       assert.ok(app.releaseState === 'released' || app.releaseState === 'hidden');
@@ -117,12 +116,10 @@ describe('app preferences', () => {
   });
 
   test('setAppEnabled cannot disable core apps including research and scheduler', () => {
-    setAppEnabled('chat', false);
     setAppEnabled('code', false);
     setAppEnabled('settings', false);
     setAppEnabled('research', false);
     setAppEnabled('scheduler', false);
-    assert.equal(isAppEnabled('chat'), true);
     assert.equal(isAppEnabled('code'), true);
     assert.equal(isAppEnabled('settings'), true);
     assert.equal(isAppEnabled('research'), true);

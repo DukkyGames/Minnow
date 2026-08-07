@@ -15,6 +15,9 @@ describe('menubar model chip', () => {
     const win = new Window();
     const doc = win.document;
     doc.body.innerHTML = `
+      <style>
+        .mn-os-mb-model-chip.is-expanded .mn-os-mb-model-static-role { visibility: hidden; }
+      </style>
       <select id="modelSelect">
         <option value="lmstudio\u001fqwen2.5-7b">Qwen 2.5 7B — LM Studio</option>
       </select>
@@ -24,8 +27,10 @@ describe('menubar model chip', () => {
 
     const prevDocument = globalThis.document;
     const prevWindow = globalThis.window;
+    const prevGetComputedStyle = globalThis.getComputedStyle;
     (globalThis as { document: Document }).document = doc as unknown as Document;
     (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+    globalThis.getComputedStyle = win.getComputedStyle.bind(win);
 
     const chat = createEmptyChatObject('lmstudio\u001fqwen2.5-7b');
     setSessionStateForTests({ chats: [chat], activeId: chat.id });
@@ -42,8 +47,10 @@ describe('menubar model chip', () => {
       initMenubarModelChip(doc.getElementById('osMenubarModelChip')!);
       syncComposerModelTriggers();
 
+      const staticRole = doc.querySelector('.mn-os-mb-model-static-role');
       const label = doc.querySelector('.mn-os-mb-model-label');
       const provider = doc.querySelector('.mn-os-mb-model-provider');
+      assert.equal(staticRole?.textContent, 'Default model');
       assert.equal(label?.textContent, 'Qwen 2.5 7B');
       assert.equal(provider?.textContent, 'LM Studio');
       assert.equal(provider?.hidden, false);
@@ -53,10 +60,15 @@ describe('menubar model chip', () => {
       const expand = doc.querySelector('.mn-os-mb-model-expand') as HTMLElement;
       assert.ok(expand);
       assert.equal(expand.getAttribute('aria-hidden'), 'true');
+      const expandRole = expand.querySelector('.mn-os-mb-model-expand-role');
+      assert.equal(expandRole?.textContent, 'Default model');
+      const staticRoleCollapsed = chip.querySelector('.mn-os-mb-model-static-role') as HTMLElement;
+      assert.equal(getComputedStyle(staticRoleCollapsed).visibility, 'hidden');
     } finally {
       setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;
+      globalThis.getComputedStyle = prevGetComputedStyle;
     }
   });
 

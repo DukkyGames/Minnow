@@ -1,0 +1,300 @@
+/**
+ * Code app chrome: the view switcher above the stage and the status bar below it.
+ *
+ * These two replaced a seven-button strip pinned to the bottom of the chat
+ * sidebar, where the control's position told you nothing about where its effect
+ * would appear. The split is by behaviour:
+ *
+ *   .code-views       replace what the stage shows, plus the Chats panel toggle
+ *                      in the same row as the view switchers
+ *   .code-status-bar  dock a panel under the stage  -> sit under the stage
+ */
+
+/* ─── VIEW SWITCHER ─── */
+
+.code-views {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
+}
+
+.code-views__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.16s var(--ease-out),
+    color 0.16s var(--ease-out),
+    gap 0.26s var(--ease-out),
+    padding 0.26s var(--ease-out);
+}
+
+/* Collapsed width; expands on hover/focus so sibling icons slide aside. */
+.code-views__label-track {
+  display: grid;
+  grid-template-columns: 0fr;
+  transition: grid-template-columns 0.26s var(--ease-out);
+}
+
+.code-views__label {
+  overflow: hidden;
+  min-width: 0;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-out);
+}
+
+.code-views__btn .icon-svg {
+  --mn-icon-size: 15px;
+  flex: none;
+  opacity: 0.85;
+}
+
+.code-views__btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+/* Open view: accent tint, matching the app rail's foreground tile. */
+.code-views__btn[aria-pressed='true'],
+.code-views__btn[aria-current='page'] {
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+  color: var(--mn-accent);
+}
+
+.code-views__btn[aria-pressed='true'] .icon-svg,
+.code-views__btn[aria-current='page'] .icon-svg {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .code-views__btn:hover,
+  .code-views__btn:focus-visible {
+    gap: 7px;
+    padding: 5px 11px;
+  }
+
+  .code-views__btn:hover .code-views__label-track,
+  .code-views__btn:focus-visible .code-views__label-track {
+    grid-template-columns: 1fr;
+  }
+
+  .code-views__btn:hover .code-views__label,
+  .code-views__btn:focus-visible .code-views__label {
+    opacity: 1;
+  }
+
+  .code-views__btn:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+  }
+
+  .code-views__btn:hover .icon-svg {
+    opacity: 1;
+  }
+
+  .code-views__btn[aria-pressed='true']:hover,
+  .code-views__btn[aria-current='page']:hover {
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+    color: var(--mn-accent);
+  }
+
+  .code-views__btn[aria-pressed='true']:focus-visible,
+  .code-views__btn[aria-current='page']:focus-visible {
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+    color: var(--mn-accent);
+  }
+}
+
+/*
+ * Labels drop below ~720px of column width so the switcher never wraps or
+ * scrolls. Container query, not @media: this sits inside a MinnowOS window and
+ * a resizable split, so viewport width says nothing about the column.
+ */
+.main-column {
+  container-type: inline-size;
+  container-name: code-stage;
+}
+
+@container code-stage (max-width: 720px) {
+  .code-views__btn {
+    padding: 5px 7px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .code-views__btn:hover,
+    .code-views__btn:focus-visible {
+      padding: 5px 10px;
+    }
+  }
+}
+
+/* ─── STATUS BAR ─── */
+
+.code-status-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 0 8px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
+  /* Flat Chrome Rule: no shadow at rest. */
+}
+
+.code-status-bar__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.code-status-bar__spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.code-status-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.16s var(--ease-out),
+    color 0.16s var(--ease-out);
+}
+
+.code-status-bar__btn .icon-svg {
+  --mn-icon-size: 13px;
+  flex: none;
+  opacity: 0.8;
+}
+
+.code-status-bar__btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.code-status-bar__btn[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+  color: var(--mn-accent);
+}
+
+.code-status-bar__btn[aria-expanded='true'] .icon-svg {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .code-status-bar__btn:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+  }
+
+  .code-status-bar__btn:hover .icon-svg {
+    opacity: 1;
+  }
+
+  .code-status-bar__btn[aria-expanded='true']:hover {
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+    color: var(--mn-accent);
+  }
+}
+
+/* Instrumentation reads as measurement: mono, tabular, never accent-tinted. */
+.code-status-bar__metric {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-subtle);
+}
+
+.code-status-bar__btn[aria-expanded='true'] .code-status-bar__metric {
+  color: var(--mn-accent);
+}
+
+/*
+ * Narrow: the app rail is already a bottom tab bar, so a second full bar above
+ * it would stack two bands over the safe-area inset. Keep the toggles, drop the
+ * words and the idle readout.
+ */
+html.mn-narrow .code-status-bar {
+  padding-bottom: 0;
+  justify-content: space-around;
+}
+
+html.mn-narrow .code-status-bar__label,
+html.mn-narrow .code-status-bar__spacer,
+html.mn-narrow .code-status-bar__metric {
+  display: none;
+}
+
+/*
+ * The bar is a real 44px touch strip here rather than a 28px one with an
+ * expanded pseudo-target: the tab bar sits directly below it, so an overflowing
+ * hit area would be covered by the rail (z-index 35) and silently lose taps.
+ * Costs ~44px above the tab bar; these three toggles have no other home on
+ * narrow now that the sidebar footer is gone.
+ */
+html.mn-narrow .code-status-bar {
+  min-height: var(--touch-min, 44px);
+}
+
+html.mn-narrow .code-status-bar__btn {
+  height: var(--touch-min, 44px);
+  min-width: var(--touch-min, 44px);
+  justify-content: center;
+  padding: 0 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-views__btn,
+  .code-views__label-track,
+  .code-views__label,
+  .code-status-bar__btn {
+    transition: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .code-views__btn:focus-visible {
+      gap: 7px;
+      padding: 5px 11px;
+    }
+
+    .code-views__btn:focus-visible .code-views__label-track {
+      grid-template-columns: 1fr;
+    }
+
+    .code-views__btn:focus-visible .code-views__label {
+      opacity: 1;
+    }
+  }
+}

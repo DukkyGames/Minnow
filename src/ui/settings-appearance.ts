@@ -9,7 +9,6 @@ import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 import { appendAppearanceThemePresets } from './settings-appearance-theme';
 import { appendAppearanceCustomColors } from './settings-appearance-colors';
 import { appendAppearanceFonts } from './settings-appearance-fonts';
-import { appendAppearanceWallpaper } from './settings-appearance-wallpaper';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -62,7 +61,7 @@ export function renderAppearanceSettingsSection(mount: HTMLElement): void {
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Palette, typography, and the Minnow desktop background. Terminals and LAN access live under ',
+    'Palette and typography. Terminals and LAN access live under ',
     linkToSettingsSection('General', 'general'),
     '.',
   );
@@ -80,15 +79,6 @@ export function renderAppearanceSettingsSection(mount: HTMLElement): void {
   );
   appendAppearanceLivePreview(presets);
   appendAppearanceThemePresets(presets);
-
-  const wallpaper = appendSettingsGroup(
-    content,
-    'Desktop wallpaper',
-    'Ambient backgrounds on the Minnow desktop. Default is Underwater.',
-    'appearance.wallpaper',
-    { emphasis: true },
-  );
-  appendAppearanceWallpaper(wallpaper);
 
   const fonts = appendSettingsGroup(
     content,

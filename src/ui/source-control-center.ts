@@ -906,6 +906,9 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
   teardownIssuesEmbedBeforeChatPaint();
 
+  const { teardownResearchPanelBeforeChatPaint } = await import('./research-panel');
+  teardownResearchPanelBeforeChatPaint();
+
   const { closeDevServerScreen, isDevServerScreenOpen } = await import('./dev-server-screen');
   if (isDevServerScreenOpen()) closeDevServerScreen({ skipNavigate: true, restoreChat: false });
 
