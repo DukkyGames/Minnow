@@ -32,7 +32,7 @@ function resolveSurfaceKey(): keyof typeof SURFACES {
   if (foregroundAppId === 'code') return 'code';
   if (isDesktopChatActive()) return 'desktop';
   if (isChatAppForeground()) return 'chat';
-  if (getOsView() === 'desktop' && document.getElementById('desktopContextRing')) return 'desktop';
+  if (getOsView() === 'workspaces' && document.getElementById('desktopContextRing')) return 'desktop';
   return 'code';
 }
 

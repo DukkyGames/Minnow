@@ -101,7 +101,7 @@ function resolveChatModelTriggerVariant(): ComposerModelSurfaceVariant | null {
   const chatAnchor = document.getElementById('chatAppComposerModelAnchor');
   if (chatAnchor && isElementVisible(chatAnchor)) return 'chat';
 
-  if (getOsView() === 'desktop' && desktopInput) return 'desktop';
+  if (getOsView() === 'workspaces' && desktopInput) return 'desktop';
   return null;
 }
 

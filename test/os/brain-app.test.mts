@@ -16,7 +16,6 @@ describe('brain app registry', () => {
     assert.ok(brain);
     assert.match(brain.tag, /wiki/i);
     assert.equal(brain.icon, 'brain');
-    assert.equal(brain.presentationMode, 'window');
   });
 
   test('isAppId accepts brain', () => {

@@ -162,6 +162,26 @@ export function listAvailableApps(): AppDefinition[] {
   return listReleasedApps().filter((app) => isAppEnabled(app.id));
 }
 
+/** Fixed roster for the left app rail (settings is appended separately in app-rail). */
+const RAIL_PRIMARY_APP_IDS: AppId[] = [
+  'code',
+  'research',
+  'issues',
+  'brain',
+  'models',
+  'scheduler',
+];
+
+/** Available apps shown on the workspace rail (excludes settings tile group). */
+export function listRailApps(): AppDefinition[] {
+  const out: AppDefinition[] = [];
+  for (const id of RAIL_PRIMARY_APP_IDS) {
+    const def = getAppById(id);
+    if (def && isAppEnabled(id)) out.push(def);
+  }
+  return out;
+}
+
 /** Available apps for the dock (chat lives on the desktop, not the dock). */
 export function listDockApps(): AppDefinition[] {
   return listAvailableApps().filter((app) => app.id !== 'chat');

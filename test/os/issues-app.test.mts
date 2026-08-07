@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { describe, test } from 'node:test';
-import { APPS, getAppById, getPresentationMode, isAppId } from '../../src/os/app-registry.ts';
+import { APPS, getAppById, isAppId } from '../../src/os/app-registry.ts';
 import { hashForRoute, parseOsHash, resolveLegacyHash } from '../../src/os/router.ts';
 
 describe('issues app registry', () => {
@@ -14,10 +14,6 @@ describe('issues app registry', () => {
     const issues = getAppById('issues');
     assert.ok(issues);
     assert.match(issues.tag, /triage|track|capture/i);
-  });
-
-  test('issues uses fullscreen presentation mode', () => {
-    assert.equal(getPresentationMode('issues'), 'fullscreen');
   });
 
   test('isAppId accepts issues', () => {

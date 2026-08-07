@@ -244,6 +244,10 @@ function registerServiceWorker(): void {
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
+  if (isOsShellEnabled()) {
+    const { awaitWorkspaceGateBeforeAppInit } = await import('./os/workspace-gate');
+    await awaitWorkspaceGateBeforeAppInit();
+  }
   // Boot phase marks surface in DevTools when MINNOW_DEBUG=1 (see boot-metrics.ts).
   markBootPhase('ui-init');
   installAppDialogs();
@@ -465,7 +469,7 @@ async function startApp(): Promise<void> {
   if (isOsShellEnabled()) {
     const hash = window.location.hash;
     if (hash === '' || hash === '#' || hash === '#/') {
-      window.location.replace('#/desktop');
+      window.location.replace('#/workspaces');
     }
     initOsPageBridge();
     initOsShell();

@@ -48,7 +48,8 @@ export function isOtherFullPageHash(hash: string): boolean {
     hash.startsWith('#/expert-lab') ||
     hash.startsWith('#/experts') ||
     hash.startsWith('#/app/') ||
-    hash.startsWith('#/desktop')
+    hash.startsWith('#/desktop') ||
+    hash.startsWith('#/workspaces')
   );
 }
 
@@ -59,6 +60,9 @@ export function isWelcomeDismissedForSession(): boolean {
 
 /** Whether welcome should open when foregrounding the Code app (Minnow Shell). */
 export function shouldPromptCodeWorkspaceWelcome(launchWorkspacePath?: string): boolean {
+  if (isOsShellEnabled()) {
+    return false;
+  }
   if (isWelcomeDismissedForSession()) {
     return false;
   }
@@ -142,6 +146,56 @@ function showCreateError(message: string | null): void {
   }
   el.textContent = message;
   el.classList.remove('hidden');
+}
+
+let gateSwitchMode = false;
+
+async function setWorkspaceGateOpening(opening: boolean): Promise<void> {
+  if (!isOsShellEnabled()) return;
+  const gate = await import('../os/workspace-gate');
+  gate.markWorkspaceGateOpening(opening);
+}
+
+async function completeWorkspaceActivation(): Promise<void> {
+  if (isOsShellEnabled()) {
+    await setWorkspaceGateOpening(false);
+    const gate = await import('../os/workspace-gate');
+    await gate.onWorkspaceGateChosen();
+    return;
+  }
+  closeWelcome();
+}
+
+/** Refresh gate UI after open (server banner, recents). */
+export function refreshWorkspaceGateUi(): void {
+  syncServerAvailabilityUi();
+  void detectLocalServer().then(() => {
+    syncServerAvailabilityUi();
+    void loadWizardParentFromServer().then(() => renderRecentsList());
+  });
+  showCreatePanel(false);
+}
+
+/** Menubar workspace switch — hide continue-with-default affordance. */
+export function onWorkspaceGateOpenedForSwitch(): void {
+  gateSwitchMode = true;
+  syncGateContinueVisibility();
+}
+
+/** Boot / route gate — show continue-with-default affordance. */
+export function resetWorkspaceGateSwitchMode(): void {
+  gateSwitchMode = false;
+  syncGateContinueVisibility();
+}
+
+function syncGateContinueVisibility(): void {
+  const continueBtn = document.getElementById('btnWelcomeContinueMinnow');
+  if (!continueBtn) return;
+  if (!isOsShellEnabled()) {
+    continueBtn.hidden = false;
+    return;
+  }
+  continueBtn.toggleAttribute('hidden', gateSwitchMode);
 }
 
 function showCreatePanel(show: boolean): void {
@@ -290,14 +344,18 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
     return;
   }
   setStatus('spin', 'Switching workspace…');
+  await setWorkspaceGateOpening(true);
   try {
     const info = await executeWorkspaceSwitch(absPath);
     if (!info) {
+      await setWorkspaceGateOpening(false);
       setStatus('ok', 'Workspace unchanged');
       return;
     }
-    closeWelcome();
+    await completeWorkspaceActivation();
+    setStatus('ok', `Workspace: ${info.label}`);
   } catch (err) {
+    await setWorkspaceGateOpening(false);
     const message = err instanceof Error ? err.message : String(err);
     setStatus('err', message);
   }
@@ -310,23 +368,29 @@ async function onOpenProject(): Promise<void> {
   }
 
   setStatus('spin', 'Choose workspace folder…');
+  await setWorkspaceGateOpening(true);
   try {
     const result = await openWorkspaceFolderPicker();
     if (result.cancelled) {
+      await setWorkspaceGateOpening(false);
       setStatus('ok', 'Workspace unchanged');
       return;
     }
     if (!result.path) {
+      await setWorkspaceGateOpening(false);
       setStatus('err', 'No folder selected');
       return;
     }
     const info = await executeWorkspaceSwitch(result.path);
     if (!info) {
+      await setWorkspaceGateOpening(false);
       setStatus('ok', 'Workspace unchanged');
       return;
     }
-    closeWelcome();
+    await completeWorkspaceActivation();
+    setStatus('ok', `Workspace: ${info.label}`);
   } catch (err) {
+    await setWorkspaceGateOpening(false);
     const message = err instanceof Error ? err.message : String(err);
     setStatus('err', message);
   }
@@ -373,16 +437,19 @@ async function onCreateProjectSubmit(): Promise<void> {
   showCreateError(null);
   setStatus('spin', 'Creating project…');
 
+  await setWorkspaceGateOpening(true);
   try {
     const created = await createWorkspaceSubfolder(parent, name.trim());
     const info = await executeWorkspaceSwitch(created.path);
     if (!info) {
+      await setWorkspaceGateOpening(false);
       setStatus('ok', 'Workspace unchanged');
       return;
     }
     showCreatePanel(false);
-    closeWelcome();
+    await completeWorkspaceActivation();
   } catch (err) {
+    await setWorkspaceGateOpening(false);
     const message = err instanceof Error ? err.message : String(err);
     showCreateError(message);
     setStatus('err', message);
@@ -414,6 +481,11 @@ function closePeerFullPageViews(): void {
 
 /** Show welcome and hide the main chat shell. */
 export function openWelcome(options?: { skipHash?: boolean }): void {
+  if (isOsShellEnabled()) {
+    void import('../os/workspace-gate').then((m) => m.openWorkspaceGate());
+    return;
+  }
+
   if (!isDefaultWorkspace()) {
     closeWelcome({ skipHash: true });
     return;
@@ -541,8 +613,15 @@ function bindStaticControls(): void {
 
   document.getElementById('btnWelcomeContinueMinnow')?.addEventListener('click', () => {
     welcomeDismissedForSession = true;
-    closeWelcome();
-    setStatus('ok', 'Working in Minnow folder');
+    void (async () => {
+      if (isOsShellEnabled()) {
+        const gate = await import('../os/workspace-gate');
+        await gate.onWorkspaceGateChosen();
+        return;
+      }
+      closeWelcome();
+      setStatus('ok', 'Working in Minnow folder');
+    })();
   });
 
   const projectInput = document.getElementById('welcomeProjectName');
@@ -585,4 +664,5 @@ export function resetWelcomeStateForTests(): void {
   welcomeDismissedForSession = false;
   wizardParentPath = '';
   createPanelOpen = false;
+  gateSwitchMode = false;
 }

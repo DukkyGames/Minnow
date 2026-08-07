@@ -9,15 +9,19 @@ import type { AppId } from './types';
 import { isAppAvailable } from './app-preferences';
 import { isDeveloperReleased } from './app-registry';
 
+function gateOpenClass(): boolean {
+  return document.documentElement.classList.contains('os-workspace-gate-open');
+}
+
 /** Feature flag — always on until a gradual rollout toggle exists. */
 export function isOsShellEnabled(): boolean {
   return true;
 }
 
-/** Whether the hash belongs to the Minnow Shell (desktop or foreground app). */
+/** Whether the hash belongs to the Minnow Shell (workspace gate or foreground app). */
 export function isOsAppHash(hash?: string): boolean {
   const h = hash ?? window.location.hash;
-  return h === '#/desktop' || h.startsWith('#/app/');
+  return h === '#/workspaces' || h === '#/desktop' || h.startsWith('#/app/');
 }
 
 /** Settings embedded in the OS apps layer (not legacy full-page swap). */
@@ -38,7 +42,7 @@ export function shouldHideAppBody(): boolean {
   if (isDesktopChatActive()) return true;
   if (isDesktopResearchActive()) return true;
   if (isDesktopExpertsActive()) return true;
-  if (getOsView() === 'desktop') return true;
+  if (getOsView() === 'workspaces') return true;
   return getForegroundAppId() !== 'code';
 }
 
@@ -60,9 +64,13 @@ export function syncLegacyChromeVisibility(): void {
     ?.toggleAttribute('hidden', !isDeveloperReleased('experts'));
 
   const view = getOsView();
+  const onWorkspaces = view === 'workspaces';
   const codeForeground = isCodeForeground();
-  document.documentElement.classList.toggle('os-desktop', view === 'desktop');
+  document.documentElement.classList.toggle('os-workspaces', onWorkspaces);
+  // Legacy desktop chrome hooks remain until phase 5 teardown.
+  document.documentElement.classList.toggle('os-desktop', onWorkspaces);
   document.documentElement.classList.toggle('os-in-app', view === 'app');
+  document.documentElement.classList.toggle('os-workspace-gate', onWorkspaces && gateOpenClass());
   document.documentElement.classList.toggle(
     'os-desktop-chat',
     !codeForeground && isDesktopChatActive(),
@@ -168,7 +176,10 @@ export function resetOsPageBridgeForTests(): void {
   delete document.documentElement.dataset.osApp;
   document.documentElement.classList.remove(
     'os-desktop',
+    'os-workspaces',
     'os-in-app',
+    'os-workspace-gate',
+    'os-workspace-gate-open',
     'os-desktop-chat',
     'os-desktop-research',
     'os-desktop-experts',

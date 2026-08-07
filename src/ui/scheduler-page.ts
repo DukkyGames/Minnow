@@ -102,17 +102,10 @@ export function initSchedulerPage(): void {
 }
 
 export async function openScheduler(): Promise<void> {
-  if (isOsShellEnabled()) {
-    const { launchApp } = await import('../os/router');
-    launchApp('scheduler');
-    return;
-  }
-
   const root = getRoot();
   if (!root) return;
 
   root.classList.add('is-open');
-  window.location.hash = '#/scheduler';
   mountHeaderIcon();
   await refreshPanel();
 }
@@ -146,11 +139,7 @@ function onHashChange(): void {
   }
 }
 
-/** Menubar shortcut — opens the Scheduler side panel over the current app. */
+/** Menubar shortcut — opens Scheduler as a main-view app. */
 export function openSchedulerFromMenubar(): void {
-  if (isOsShellEnabled()) {
-    void import('../os/scheduler-side-panel').then((m) => m.toggleSchedulerOverlay());
-    return;
-  }
-  void openScheduler();
+  void import('../os/router').then((m) => m.launchApp('scheduler'));
 }

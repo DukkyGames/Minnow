@@ -1,0 +1,86 @@
+/**
+ * Left app rail (workspace-first shell) — 56px launcher column.
+ */
+
+.mn-os-workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+#osAppRail {
+  flex: none;
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 4px;
+  background: var(--mn-surface-1);
+  border-right: 1px solid var(--mn-border);
+  z-index: 30;
+}
+
+#osAppRail[hidden] {
+  display: none;
+}
+
+.mn-os-app-rail__nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.mn-os-app-rail__divider {
+  width: 28px;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--mn-border);
+  flex: none;
+}
+
+.mn-os-app-rail__btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  flex: none;
+  transition:
+    background 0.16s var(--os-ease, ease),
+    color 0.16s var(--os-ease, ease);
+}
+
+.mn-os-app-rail__btn .icon-svg {
+  --mn-icon-size: 22px;
+}
+
+.mn-os-app-rail__btn.is-active {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent);
+}
+
+.mn-os-app-rail__btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-os-app-rail__btn:not(.is-active):hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+  }
+
+  .mn-os-app-rail__btn.is-active:hover {
+    background: var(--mn-accent-soft);
+    color: var(--mn-accent);
+  }
+}

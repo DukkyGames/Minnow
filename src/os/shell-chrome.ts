@@ -18,7 +18,7 @@ export function isFocusedWindowMaximized(): boolean {
  * completely hidden. The menubar uses this to keep a way home on screen.
  */
 export function isPhoneWindowSheetOpen(): boolean {
-  return isPhoneLayout() && getOsView() === 'desktop' && isFocusedWindowMaximized();
+  return isPhoneLayout() && getOsView() === 'workspaces' && isFocusedWindowMaximized();
 }
 
 /**

@@ -222,19 +222,19 @@ export function renderMenubar(root: HTMLElement): () => void {
     // A phone window sheet hides the desktop (and its dock) while the shell still
     // reports the desktop view — keep the switcher reachable so home stays one tap away.
     const phoneSheet = isPhoneWindowSheetOpen();
-    const onDesktop = view === 'desktop' && !phoneSheet;
+    const onWorkspaces = view === 'workspaces' && !phoneSheet;
 
     // A covering sheet is "in an app" as far as the menubar is concerned, even
     // though windowed apps technically run inside the desktop view.
-    root.dataset.view = onDesktop ? 'desktop' : 'app';
-    brand.hidden = !onDesktop;
-    appsBtn.hidden = onDesktop;
+    root.dataset.view = onWorkspaces ? 'workspaces' : 'app';
+    brand.hidden = !onWorkspaces;
+    appsBtn.hidden = onWorkspaces;
     // Dock covers Desktop; dismiss the switcher if we navigated home.
-    if (onDesktop) closeAppSwitcherMenu();
-    sep.hidden = onDesktop;
-    appName.hidden = onDesktop;
+    if (onWorkspaces) closeAppSwitcherMenu();
+    sep.hidden = onWorkspaces;
+    appName.hidden = onWorkspaces;
 
-    if (!onDesktop && fgApp) {
+    if (!onWorkspaces && fgApp) {
       const meta = getAppById(fgApp);
       appName.replaceChildren();
       if (meta) {

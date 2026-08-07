@@ -61,9 +61,13 @@ describe('resolveLegacyHash', () => {
     });
   });
 
-  test('resolveLegacyHash redirects #/app/chat to desktop', () => {
+  test('resolveLegacyHash redirects #/desktop to workspaces', () => {
+    assert.deepEqual(resolveLegacyHash('#/desktop'), { hash: '#/workspaces' });
+  });
+
+  test('resolveLegacyHash redirects #/app/chat to workspaces with desktop chat', () => {
     assert.deepEqual(resolveLegacyHash('#/app/chat'), {
-      hash: '#/desktop',
+      hash: '#/workspaces',
       desktopChat: true,
     });
   });
@@ -83,22 +87,21 @@ describe('resolveLegacyHash', () => {
   });
 
   test('redirects legacy full-page routes to OS apps', () => {
-    assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/desktop' });
+    assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/workspaces' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {
-      hash: '#/desktop',
-      desktopResearch: true,
+      hash: '#/app/research',
     });
     assert.deepEqual(resolveLegacyHash('#/experts/gallery'), {
-      hash: '#/desktop',
-      desktopExperts: true,
+      hash: '#/app/experts',
     });
   });
 });
 
 describe('parseOsHash', () => {
-  test('parses desktop and app routes', () => {
-    assert.deepEqual(parseOsHash('#/'), { view: 'desktop' });
-    assert.deepEqual(parseOsHash('#/desktop'), { view: 'desktop' });
+  test('parses workspaces and app routes', () => {
+    assert.deepEqual(parseOsHash('#/'), { view: 'workspaces' });
+    assert.deepEqual(parseOsHash('#/workspaces'), { view: 'workspaces' });
+    assert.deepEqual(parseOsHash('#/desktop'), { view: 'workspaces' });
     assert.deepEqual(parseOsHash('#/app/code'), {
       view: 'app',
       appId: 'code',
@@ -107,8 +110,8 @@ describe('parseOsHash', () => {
     assert.deepEqual(parseOsHash('#/app/chat'), { view: 'app', appId: 'chat' });
   });
 
-  test('falls back to desktop for unknown app ids', () => {
-    assert.deepEqual(parseOsHash('#/app/unknown'), { view: 'desktop' });
+  test('falls back to workspaces for unknown app ids', () => {
+    assert.deepEqual(parseOsHash('#/app/unknown'), { view: 'workspaces' });
   });
 });
 
@@ -132,7 +135,7 @@ describe('os router navigation', () => {
       <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
       <div id="appBody"></div>
     `;
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
     resetAppPreferencesForTests();
     resetInstancesForTests();
     resetDesktopStateForTests();
@@ -316,7 +319,7 @@ describe('chat app OS integration', () => {
     g.document = win.document;
     g.HTMLElement = win.HTMLElement;
     setupChatAppDom(win);
-    win.location.hash = '#/desktop';
+    win.location.hash = '#/workspaces';
 
     g.fetch = (async (url: RequestInfo | URL) => {
       const path = String(url);

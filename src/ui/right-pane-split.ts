@@ -37,7 +37,7 @@ import { activatePreviewTab } from './preview-tab-store';
 function isDesktopWorkspaceHostingSurface(): boolean {
   const codeForeground = getOsView() === 'app' && getForegroundAppId() === 'code';
   if (codeForeground) return false;
-  return isDesktopChatActive() || getOsView() === 'desktop';
+  return isDesktopChatActive() || getOsView() === 'workspaces';
 }
 
 export const WORKSPACE_PREVIEW_SECONDARY_INSTANCE = 'workspace-preview-secondary';

@@ -1,7 +1,4 @@
-/**
- * Top bar workspace folder button — recent workspaces menu + in-app folder picker.
- */
-
+import { isOsShellEnabled } from '../os/page-bridge';
 import type { WorkspaceInfo } from '../config/workspace-api';
 import { executeWorkspaceSwitch, dismissBoardViewOutsideWorkspace } from './workspace-switch-guard';
 import {
@@ -147,6 +144,10 @@ export function initWorkspaceButton(): void {
   });
 
   btn.addEventListener('click', () => {
+    if (isOsShellEnabled()) {
+      void import('../os/workspace-gate').then((m) => m.openWorkspaceGate({ switch: true }));
+      return;
+    }
     void toggleWorkspaceMenu(btn);
   });
 

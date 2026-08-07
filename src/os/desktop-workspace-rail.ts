@@ -56,7 +56,7 @@ function syncRailChrome(): void {
   if (rail) {
     rail.classList.toggle('is-expanded', state.open);
     rail.classList.toggle('is-collapsed', !state.open);
-    rail.hidden = shouldSuppressDesktopChrome() || getOsView() !== 'desktop';
+    rail.hidden = shouldSuppressDesktopChrome() || getOsView() !== 'workspaces';
   }
 
   for (const { id, tab, label } of TAB_DEFS) {

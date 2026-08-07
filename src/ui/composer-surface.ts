@@ -43,7 +43,7 @@ function resolveComposerKey(): AppId | 'desktop' {
   if (foregroundAppId === 'code') return 'code';
   if (isDesktopChatActive()) return 'desktop';
   if (isChatAppForeground()) return 'chat';
-  if (getOsView() === 'desktop' && document.getElementById('desktopInput')) return 'desktop';
+  if (getOsView() === 'workspaces' && document.getElementById('desktopInput')) return 'desktop';
   return foregroundAppId ?? 'code';
 }
 

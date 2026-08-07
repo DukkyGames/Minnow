@@ -790,7 +790,7 @@
 
 <main id="welcomeView" class="welcome-page" aria-label="Choose workspace" hidden>
   <div class="welcome-page__inner">
-    <h1 class="welcome-page__title">Choose a folder to work in</h1>
+    <h1 class="welcome-page__title">Choose a workspace</h1>
     <p id="welcomeServerBanner" class="welcome-page__banner hidden" role="status">
       Workspace requires <code>npm start</code> (local tool server), not <code>npm run dev</code> alone.
     </p>
@@ -799,14 +799,14 @@
         <span class="welcome-page__tile-icon" aria-hidden="true">
           <i class="fi fi-rr-folder-open icon-svg" aria-hidden="true"></i>
         </span>
-        <span class="welcome-page__tile-label">Open project</span>
-        <span class="welcome-page__tile-desc">Browse to an existing folder</span>
+        <span class="welcome-page__tile-label">Open folder</span>
+        <span class="welcome-page__tile-desc">Browse to an existing folder on disk</span>
       </button>
       <button type="button" class="welcome-page__tile" id="btnWelcomeCreateProject">
         <span class="welcome-page__tile-icon" aria-hidden="true">
           <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true"></i>
         </span>
-        <span class="welcome-page__tile-label">Create new project</span>
+        <span class="welcome-page__tile-label">Create project</span>
         <span class="welcome-page__tile-desc">New folder under Projects</span>
       </button>
     </div>
@@ -829,7 +829,7 @@
         <span id="welcomeRecentsCount" class="welcome-page__recents-count" hidden></span>
       </div>
       <ul id="welcomeRecentsList" class="welcome-page__recents-list" role="list"></ul>
-      <p id="welcomeRecentsEmpty" class="welcome-page__recents-empty hidden">No recent workspaces yet.</p>
+      <p id="welcomeRecentsEmpty" class="welcome-page__recents-empty hidden">No workspaces yet — open a folder or create a project.</p>
     </section>
     <button type="button" class="welcome-page__continue" id="btnWelcomeContinueMinnow">
       Continue in Minnow folder

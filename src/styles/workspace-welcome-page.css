@@ -273,12 +273,16 @@
 }
 
 .welcome-page__recents-path {
+  display: block;
   font-size: 12px;
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--mn-fg-subtle);
+  direction: rtl;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  unicode-bidi: plaintext;
 }
 
 .welcome-page__recents-remove {

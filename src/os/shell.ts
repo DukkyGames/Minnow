@@ -1,3 +1,4 @@
+import '../styles/minnowos-rail.css';
 import '../styles/minnowos-shell.css';
 import '../styles/minnowos-desktop.css';
 import '../styles/minnowos-wallpaper.css';
@@ -8,9 +9,11 @@ import '../styles/git-panel.css';
 import '../styles/research-page.css';
 
 import { initAppHost } from './app-host';
+import { initAppRail } from './app-rail';
 import { renderDesktop } from './desktop';
 import { initDockLauncher } from './dock-launcher';
 import { renderMenubar } from './menubar';
+import { initWorkspaceGate } from './workspace-gate';
 import { isOsShellEnabled } from './page-bridge';
 
 let shellCleanup: (() => void) | null = null;
@@ -35,12 +38,41 @@ function ensureShellDom(): {
     root.appendChild(menubar);
   }
 
+  let workspace = document.getElementById('osWorkspace');
+  if (!workspace) {
+    workspace = document.createElement('div');
+    workspace.id = 'osWorkspace';
+    workspace.className = 'mn-os-workspace';
+    root.appendChild(workspace);
+  }
+
+  let appRail = document.getElementById('osAppRail');
+  if (!appRail) {
+    appRail = document.createElement('nav');
+    appRail.id = 'osAppRail';
+    appRail.className = 'mn-os-app-rail';
+    workspace.appendChild(appRail);
+  }
+
   let stage = document.getElementById('osStage');
   if (!stage) {
     stage = document.createElement('div');
     stage.id = 'osStage';
     stage.className = 'mn-os-stage';
-    root.appendChild(stage);
+    workspace.appendChild(stage);
+  } else if (stage.parentElement !== workspace) {
+    workspace.appendChild(stage);
+  }
+
+  let workspaceGate = document.getElementById('osWorkspaceGate');
+  if (!workspaceGate) {
+    workspaceGate = document.createElement('div');
+    workspaceGate.id = 'osWorkspaceGate';
+    workspaceGate.className = 'mn-os-workspace-gate';
+    workspaceGate.hidden = true;
+    stage.prepend(workspaceGate);
+  } else if (workspaceGate.parentElement !== stage) {
+    stage.prepend(workspaceGate);
   }
 
   let desktopLayer = document.getElementById('osDesktopLayer');
@@ -95,10 +127,13 @@ export function initOsShell(): void {
   const cleanupDesktop = renderDesktop(desktopLayer);
   const cleanupDock = initDockLauncher(dockLayer);
   const cleanupMenubar = renderMenubar(menubar);
+  const cleanupRail = initAppRail(document.getElementById('osAppRail')!);
+  initWorkspaceGate();
   shellCleanup = () => {
     cleanupDesktop();
     cleanupDock();
     cleanupMenubar();
+    cleanupRail();
   };
 
   initAppHost();

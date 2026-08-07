@@ -3,12 +3,7 @@
  */
 
 import { createAppIcon } from './icons';
-import {
-  closeInstance,
-  ensureBackgroundInstance,
-  getInstanceSnapshot,
-  subscribeInstances,
-} from './instances';
+import { closeInstance, getInstanceSnapshot, subscribeInstances } from './instances';
 import type { ScheduledJob } from '../scheduler/client';
 
 let panelRoot: HTMLElement | null = null;
@@ -155,35 +150,14 @@ export function closeSchedulerSidePanel(): void {
   document.documentElement.classList.remove('is-scheduler-side-panel-open');
 }
 
-/** Whether the scheduler side panel should stay visible for the current shell state. */
-function shouldShowSchedulerSidePanel(): boolean {
-  const snap = getInstanceSnapshot();
-  return snap.instances.some((i) => i.appId === 'scheduler');
-}
-
-/** Open or close the scheduler rail without leaving the current foreground app. */
+/** Legacy entry — routes to the Scheduler main-view app. */
 export async function toggleSchedulerOverlay(): Promise<void> {
-  const snap = getInstanceSnapshot();
-  const existing = snap.instances.find((i) => i.appId === 'scheduler');
-
-  if (existing && isSchedulerSidePanelOpen()) {
-    closeInstance(existing.id);
-    return;
-  }
-
-  if (!existing) {
-    ensureBackgroundInstance('scheduler');
-  }
-
-  await openSchedulerSidePanel();
+  const { launchApp } = await import('./router');
+  launchApp('scheduler');
 }
 
-/** Show or hide the panel based on scheduler instance + foreground app (hide only for Code). */
+/** Keep the legacy side panel closed — Scheduler is a main-view app in workspace mode. */
 export function syncSchedulerSidePanel(): void {
-  if (shouldShowSchedulerSidePanel()) {
-    void openSchedulerSidePanel();
-    return;
-  }
   closeSchedulerSidePanel();
 }
 

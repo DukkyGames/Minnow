@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   APPS,
   getAppById,
-  getPresentationMode,
   isAppId,
 } from '../../src/os/app-registry.ts';
 import { CALENDAR_EVENT_EDITOR_INSTANCE_ID } from '../../src/os/calendar-constants.ts';
@@ -69,10 +68,6 @@ describe('calendar app registry', () => {
     const calendar = getAppById('calendar');
     assert.ok(calendar);
     assert.match(calendar.tag, /CalDAV|ICS/i);
-  });
-
-  test('calendar uses window presentation mode', () => {
-    assert.equal(getPresentationMode('calendar'), 'window');
   });
 
   test('isAppId accepts calendar', () => {
@@ -149,30 +144,25 @@ describe('calendar window shell', () => {
     resetEventEditorWindowForTests();
   });
 
-  test('launchInstance(calendar) mounts content in a floating window', async () => {
+  test('launchInstance(calendar) mounts content in the apps layer', async () => {
     markCalendarOpen();
     launchInstance('calendar');
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.view, 'app');
     assert.ok(snap.foregroundId);
     assert.equal(snap.instances.some((i) => i.appId === 'calendar'), true);
 
-    const osWin = windowManager.findWindowByInstance(snap.foregroundId!);
-    assert.ok(osWin);
-    assert.equal(osWin.appId, 'calendar');
-    assert.equal(osWin.bounds.width, 960);
-    assert.equal(osWin.bounds.height, 640);
+    assert.equal(windowManager.getWindows().length, 0);
 
     const stage = document.getElementById('osStage');
-    assert.equal(stage?.classList.contains('is-in-app-fullscreen'), false);
+    assert.equal(stage?.classList.contains('is-in-app-fullscreen'), true);
 
     const content = document.getElementById('calendarView');
-    assert.ok(content?.classList.contains('is-open'));
-    const frameBody = windowManager.getBodyForInstance(snap.foregroundId!);
-    assert.equal(content?.parentElement, frameBody);
+    assert.ok(content?.classList.contains('is-active'));
+    assert.equal(content?.parentElement?.id, 'osAppsLayer');
   });
 
   test('launchApp(calendar) blocks hidden app and returns to desktop', async () => {
@@ -182,7 +172,7 @@ describe('calendar window shell', () => {
     syncAppHostForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    assert.equal(windowManager.getWindows().length, 1);
+    assert.equal(windowManager.getWindows().length, 0);
 
     launchApp('calendar');
     syncAppHostForTests();

@@ -1,10 +1,4 @@
-import { getPresentationMode } from './app-registry';
-import { resolveInstancePresentation, resolvePresentationMode } from './presentation-mode';
 import { ensureAppInitialized } from './app-modules';
-import {
-  CALENDAR_WINDOW_MIN_HEIGHT,
-  CALENDAR_WINDOW_MIN_WIDTH,
-} from './calendar-constants';
 import { isOsShellEnabled } from './page-bridge';
 import {
   getForegroundAppId,
@@ -16,11 +10,8 @@ import { getCurrentRoute } from './router';
 import type { AppId, LaunchOptions } from './types';
 import type { SettingsSectionId } from '../ui/settings-page-types';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
-import { windowManager } from './window-manager';
 import { syncSchedulerSidePanel } from './scheduler-side-panel';
-import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
 import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
-import { isPhoneLayout } from '../ui/mobile-layout';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
@@ -44,7 +35,6 @@ let lastForegroundApp: AppId | null = null;
 let lastAppliedSettingsSection: string | undefined;
 /** Last Brain section/path applied to its mounted window. */
 let lastAppliedBrainNavigation: string | undefined;
-const mountedWindowInstances = new Set<string>();
 /** Bumps on each syncFromSnapshot so stale openAppPage work cannot relaunch apps. */
 let syncGeneration = 0;
 
@@ -229,19 +219,11 @@ async function openAppPage(
       break;
     }
     case 'research': {
-      if (isOsShellEnabled()) {
-        const { activateDesktopResearch } = await import('./desktop-state');
-        await activateDesktopResearch({
-          seed: options?.seed,
-          autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
-        });
-      } else {
-        const { openResearch } = await import('../research/panel');
-        openResearch({
-          seed: options?.seed,
-          autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
-        });
-      }
+      const { openResearch } = await import('../research/panel');
+      openResearch({
+        seed: options?.seed,
+        autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+      });
       break;
     }
     case 'bench': {
@@ -277,10 +259,8 @@ async function openAppPage(
       break;
     }
     case 'scheduler': {
-      if (!isOsShellEnabled()) {
-        const { openScheduler } = await import('../ui/scheduler-page');
-        await openScheduler();
-      }
+      const { openScheduler } = await import('../ui/scheduler-page');
+      await openScheduler();
       break;
     }
     case 'calendar': {
@@ -300,16 +280,8 @@ async function openAppPage(
       break;
     }
     case 'experts': {
-      if (isOsShellEnabled()) {
-        const { activateDesktopExperts } = await import('./desktop-state');
-        await activateDesktopExperts({
-          step: options?.step,
-          expertId: options?.expertId,
-        });
-      } else {
-        const { openExperts } = await import('../ui/experts/experts-hub');
-        openExperts();
-      }
+      const { openExperts } = await import('../ui/experts/experts-hub');
+      openExperts();
       break;
     }
     case 'code': {
@@ -358,8 +330,11 @@ async function openAppPage(
       break;
     }
     case 'chat': {
-      const { activateDesktopChat } = await import('./desktop-state');
-      await activateDesktopChat({ seed: options?.seed, chatId: options?.chatId });
+      const { openChatApp } = await import('../ui/chat-app');
+      await openChatApp({
+        seed: options?.seed,
+        chatId: options?.chatId,
+      });
       break;
     }
     default:
@@ -388,139 +363,18 @@ function launchOptionsFromSnapshot(snapshot: InstanceSnapshot): LaunchOptions | 
   return inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
 }
 
-function presentationForSnapshot(
-  snapshot: InstanceSnapshot,
-  appId: AppId,
-): ReturnType<typeof getPresentationMode> {
-  const inst = snapshot.instances.find((i) => i.id === snapshot.foregroundId);
-  if (inst?.appId === appId) {
-    return resolveInstancePresentation(inst);
-  }
-  return getPresentationMode(appId);
-}
-
-function usesFullscreenLayer(mode: ReturnType<typeof getPresentationMode>): boolean {
-  return mode === 'fullscreen' || mode === 'desktop';
-}
-
-function shouldBlurDesktop(snapshot: InstanceSnapshot): boolean {
-  if (snapshot.view !== 'app') return false;
-  const appId = getForegroundAppId();
-  if (!appId) return false;
-  return usesFullscreenLayer(presentationForSnapshot(snapshot, appId));
-}
-
-function stashWindowContent(appId: AppId): void {
+function ensureLayerInAppsLayer(appId: AppId): void {
   const el = layerForApp(appId);
-  if (!el) return;
+  const appsLayer = getAppsLayer();
+  if (!el || !appsLayer || el.parentElement === appsLayer) return;
   if (appId === 'settings') {
     el.classList.remove('settings-page--in-os-window');
   }
-  const appsLayer = getAppsLayer();
-  if (appsLayer && el.parentElement !== appsLayer) {
-    appsLayer.appendChild(el);
-  }
-  el.classList.remove('is-open');
+  appsLayer.appendChild(el);
 }
 
-async function ensureWindowSurface(
-  instanceId: string,
-  appId: AppId,
-  options?: LaunchOptions,
-  generation?: number,
-): Promise<void> {
-  if (!WINDOW_MOUNTED_APPS.has(appId)) return;
-
-  windowManager.ensureLayer();
-  const openOptions: Parameters<typeof windowManager.open>[1] = {
-    instanceId,
-    // Sync walks every open instance — never steal focus until the foreground pass below.
-    activate: false,
-  };
-  if (appId === 'calendar') {
-    openOptions.minWidth = CALENDAR_WINDOW_MIN_WIDTH;
-    openOptions.minHeight = CALENDAR_WINDOW_MIN_HEIGHT;
-  }
-  const windowId = windowManager.open(appId, openOptions);
-  const body = windowManager.getFrame(windowId)?.body;
-  const content = layerForApp(appId);
-  if (body && content && content.parentElement !== body) {
-    body.appendChild(content);
-  }
-  if (appId === 'settings' && content) {
-    content.classList.add('settings-page--in-os-window');
-  }
-  mountedWindowInstances.add(instanceId);
-
-  const needsContentOpen = !isAppPageLayerOpen(appId);
-  const settingsSectionChanged =
-    appId === 'settings' &&
-    Boolean(options?.settingsSection) &&
-    options!.settingsSection !== lastAppliedSettingsSection;
-
-  if (needsContentOpen || settingsSectionChanged) {
-    if (settingsSectionChanged) {
-      lastAppliedSettingsSection = options!.settingsSection!;
-    } else if (appId === 'settings') {
-      lastAppliedSettingsSection =
-        options?.settingsSection ?? getCurrentRoute().settingsSection ?? 'general';
-    }
-    await openAppPage(appId, options, generation);
-  }
-  if (appId === 'brain' && brainNavigationKey(options) !== lastAppliedBrainNavigation) {
-    await openAppPage(appId, options, generation);
-  }
-}
-
-function teardownWindowSurface(instanceId: string, appId: AppId): void {
-  if (!mountedWindowInstances.has(instanceId)) return;
-  mountedWindowInstances.delete(instanceId);
-
-  layerForApp(appId)?.classList.remove('is-open');
-  runWindowTeardown(appId);
-  if (appId === 'settings') {
-    lastAppliedSettingsSection = undefined;
-  }
-  if (appId === 'brain') {
-    lastAppliedBrainNavigation = undefined;
-  }
-
-  stashWindowContent(appId);
-  const win = windowManager.findWindowByInstance(instanceId);
-  if (win) windowManager.close(win.id);
-}
-
-function syncWindowSurfaces(snapshot: InstanceSnapshot, generation: number): void {
-  const openIds = new Set(snapshot.instances.map((i) => i.id));
-
-  for (const inst of snapshot.instances) {
-    if (resolveInstancePresentation(inst) !== 'window') continue;
-    if (!WINDOW_MOUNTED_APPS.has(inst.appId)) continue;
-    const options =
-      inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
-    void ensureWindowSurface(inst.id, inst.appId, options, generation);
-    const win = windowManager.findWindowByInstance(inst.id);
-    if (!win) continue;
-    if (inst.id === snapshot.foregroundId) {
-      // Restoring a minimized window is launchInstance's job — doing it here
-      // would undo an explicit minimize on the next sync.
-      windowManager.focus(win.id);
-    } else if (snapshot.view === 'desktop' && isPhoneLayout() && !win.minimized) {
-      // Phone windows fill the stage, so an open one hides the desktop entirely.
-      // Going home parks them instead of forcing the user to close the app.
-      windowManager.minimize(win.id, true);
-    }
-  }
-
-  for (const mountedId of [...mountedWindowInstances]) {
-    const inst = snapshot.instances.find((i) => i.id === mountedId);
-    const usesWindow =
-      inst != null && resolveInstancePresentation(inst) === 'window';
-    if (!openIds.has(mountedId) || !usesWindow) {
-      const win = windowManager.findWindowByInstance(mountedId);
-      teardownWindowSurface(mountedId, win?.appId ?? 'settings');
-    }
-  }
+function shouldBlurDesktop(snapshot: InstanceSnapshot): boolean {
+  return snapshot.view === 'app' && Boolean(getForegroundAppId());
 }
 
 function syncFromSnapshot(snapshot: InstanceSnapshot): void {
@@ -528,7 +382,6 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   if (!stage) return;
 
   const generation = ++syncGeneration;
-  syncWindowSurfaces(snapshot, generation);
 
   syncSchedulerSidePanel();
 
@@ -538,14 +391,9 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   stage.classList.toggle('is-in-app-fullscreen', blur);
   stage.classList.toggle('is-immersive-app', immersive);
 
-  if (snapshot.view === 'desktop') {
+  if (snapshot.view === 'workspaces') {
     hideAllLayers();
-    const hadFullscreenForeground =
-      lastForegroundApp !== null &&
-      usesFullscreenLayer(
-        presentationForSnapshot(snapshot, lastForegroundApp),
-      );
-    if (hadFullscreenForeground) closeAllAppPages();
+    if (lastForegroundApp !== null) closeAllAppPages();
     lastForegroundApp = null;
     void import('./desktop-state').then(async () => {
       const { restoreDesktopSessionOnForeground } = await import('./desktop-launch');
@@ -557,44 +405,8 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   const appId = getForegroundAppId();
   if (!appId) return;
 
-  const mode = presentationForSnapshot(snapshot, appId);
   const options = launchOptionsFromSnapshot(snapshot);
-
-  if (mode === 'window' && WINDOW_MOUNTED_APPS.has(appId)) {
-    hideAllLayers();
-    lastForegroundApp = appId;
-    return;
-  }
-
-  if (mode === 'desktop') {
-    hideAllLayers();
-    if (appId === 'chat') {
-      void import('./desktop-state').then((m) =>
-        m.activateDesktopChat({
-          seed: options?.seed,
-          chatId: options?.chatId,
-        }),
-      );
-    } else if (appId === 'research') {
-      void import('./desktop-state').then((m) =>
-        m.activateDesktopResearch({
-          seed: options?.seed,
-          autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
-        }),
-      );
-    } else if (appId === 'experts') {
-      void import('./desktop-state').then((m) =>
-        m.activateDesktopExperts({
-          step: options?.step,
-          expertId: options?.expertId,
-        }),
-      );
-    }
-    lastForegroundApp = null;
-    return;
-  }
-
-  if (!usesFullscreenLayer(mode)) return;
+  ensureLayerInAppsLayer(appId);
 
   if (appId !== lastForegroundApp) {
     const animateEnter = lastForegroundApp === null;
@@ -604,7 +416,6 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   } else if (options && (appId === 'chat' || appId === 'code' || appId === 'research')) {
     void openAppPage(appId, options, generation);
   } else if (!isAppPageLayerOpen(appId)) {
-    // Stale openAppPage was cancelled after showAppLayer / window mount bookkeeping.
     void openAppPage(appId, options, generation);
   }
 }
@@ -614,9 +425,7 @@ export function initAppHost(): void {
   if (!isOsShellEnabled() || initialized) return;
   initialized = true;
   mountAppLayers();
-  windowManager.ensureLayer();
   subscribeInstances((snap) => syncFromSnapshot(snap));
-  windowManager.subscribe(() => syncFromSnapshot(getInstanceSnapshot()));
   syncFromSnapshot(getInstanceSnapshot());
 }
 
@@ -627,7 +436,6 @@ export function resetAppHostForTests(): void {
   lastAppliedSettingsSection = undefined;
   lastAppliedBrainNavigation = undefined;
   syncGeneration = 0;
-  mountedWindowInstances.clear();
   const appsLayer = getAppsLayer();
   if (appsLayer) delete appsLayer.dataset.mounted;
 }

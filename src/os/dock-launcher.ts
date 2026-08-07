@@ -40,10 +40,10 @@ function isDockAppActive(appId: AppId): boolean {
   if (getForegroundAppId() === appId) {
     return true;
   }
-  if (appId === 'research' && getOsView() === 'desktop' && isDesktopResearchActive()) {
+  if (appId === 'research' && getOsView() === 'workspaces' && isDesktopResearchActive()) {
     return true;
   }
-  if (appId === 'experts' && getOsView() === 'desktop' && isDesktopExpertsActive()) {
+  if (appId === 'experts' && getOsView() === 'workspaces' && isDesktopExpertsActive()) {
     return true;
   }
   return false;
@@ -160,7 +160,7 @@ export function initDockLauncher(root: HTMLElement): () => void {
   function syncShellState(): void {
     const immersive = shouldSuppressDesktopChrome();
     const inApp = getOsView() === 'app';
-    const onDesktop = getOsView() === 'desktop';
+    const onDesktop = getOsView() === 'workspaces';
     const phone = isPhoneLayout();
     // Phones keep the dock on the desktop surface (including over window sheets).
     const phoneKeepsDock = phone && onDesktop;
@@ -198,7 +198,7 @@ export function initDockLauncher(root: HTMLElement): () => void {
   document.addEventListener('keydown', onKeyDown);
 
   const unsubInstances = subscribeInstances(() => {
-    if (getOsView() === 'desktop' && !shouldSuppressDesktopChrome()) {
+    if (getOsView() === 'workspaces' && !shouldSuppressDesktopChrome()) {
       dockOpenInApp = false;
     } else if (shouldSuppressDesktopChrome()) {
       dockOpenInApp = false;

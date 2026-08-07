@@ -68,7 +68,7 @@ function isCodeForeground(): boolean {
 
 function shouldHostOnDesktop(): boolean {
   if (isCodeForeground()) return false;
-  return isDesktopChatActive() || getOsView() === 'desktop';
+  return isDesktopChatActive() || getOsView() === 'workspaces';
 }
 
 /** True when file-tree / preview / viewer mounts are hosted in the desktop drawer. */

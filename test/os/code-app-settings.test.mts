@@ -33,7 +33,6 @@ describe('code app settings (MIN-417)', () => {
   let getInstanceSnapshot: typeof import('../../src/os/instances.ts').getInstanceSnapshot;
   let getOsView: typeof import('../../src/os/instances.ts').getOsView;
   let resetInstancesForTests: typeof import('../../src/os/instances.ts').resetInstancesForTests;
-  let resolveInstancePresentation: typeof import('../../src/os/presentation-mode.ts').resolveInstancePresentation;
   let resetWindowManagerForTests: typeof import('../../src/os/window-manager.ts').resetWindowManagerForTests;
   let windowManager: typeof import('../../src/os/window-manager.ts').windowManager;
   let initSettingsPage: typeof import('../../src/ui/settings-page.ts').initSettingsPage;
@@ -79,7 +78,6 @@ describe('code app settings (MIN-417)', () => {
       getOsView,
       resetInstancesForTests,
     } = await import('../../src/os/instances.ts'));
-    ({ resolveInstancePresentation } = await import('../../src/os/presentation-mode.ts'));
     ({
       resetWindowManagerForTests,
       windowManager,
@@ -130,7 +128,7 @@ describe('code app settings (MIN-417)', () => {
     }
   });
 
-  test('opening settings from Code uses fullscreen presentation', async () => {
+  test('opening settings from Code foregrounds settings in the apps layer', async () => {
     assert.equal(getForegroundAppId(), 'code');
     openSettingsFromTopbar();
     syncOsRouteFromHashForTests();
@@ -141,7 +139,6 @@ describe('code app settings (MIN-417)', () => {
     const settingsInst = snap.instances.find((i) => i.appId === 'settings');
     assert.ok(settingsInst);
     assert.equal(settingsInst.launchOptions?.returnToApp, 'code');
-    assert.equal(resolveInstancePresentation(settingsInst), 'fullscreen');
     assert.equal(getOsView(), 'app');
     assert.equal(getForegroundAppId(), 'settings');
     assert.equal(windowManager.getWindows().length, 0);
