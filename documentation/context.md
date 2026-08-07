@@ -626,4 +626,4 @@ Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:onboarding
 - Match surrounding code style; CSS uses `--mn-*` tokens only ([`tokens.css`](../src/styles/tokens.css)).
 - Update **this file** when architecture, APIs, or storage change.
 - Feature plans and historical notes live in [`documentation/plans/`](plans/) � not here.
-- Path safety: file/git tools resolve under workspace root unless `TOOLS_ALLOW_ALL_PATHS=1`. On Windows, [`normalizeWorkspacePathKey`](../server/workspace/root.js) canonicalizes via `realpathForBoundaryCheck` so 8.3 short paths (GitHub Actions `RUNNER~1`) match long paths from Node/git worktree list.
+- Path safety: file/git tools resolve under workspace root unless `TOOLS_ALLOW_ALL_PATHS=1`. On Windows and macOS, [`normalizeWorkspacePathKey`](../server/workspace/root.js) canonicalizes via `realpathForBoundaryCheck` so short/symlinked paths (GitHub Actions `RUNNER~1`, `/var` → `/private/var`) match long paths from Node/git worktree list.

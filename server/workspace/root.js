@@ -104,6 +104,13 @@ export function normalizeWorkspacePathKey(absPath) {
       return resolved.toLowerCase();
     }
   }
+  if (process.platform === 'darwin') {
+    try {
+      return realpathForBoundaryCheck(resolved);
+    } catch {
+      return resolved;
+    }
+  }
   return resolved;
 }
 

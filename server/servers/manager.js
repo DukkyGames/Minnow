@@ -15,6 +15,7 @@ import {
   getServerVenvDir,
   getServersRoot,
 } from './paths.js';
+import { realpathForBoundaryCheck } from '../workspace/safe-path.js';
 
 /** @typedef {'pending'|'installing'|'starting'|'running'|'stopped'|'error'} ServerRuntimePhase */
 
@@ -290,9 +291,16 @@ function readProcessCommandLine(pid) {
 function processCommandMatchesServer(serverId, recordedCommand, liveCommand) {
   if (!liveCommand) return false;
   const venvDir = getServerVenvDir(serverId);
-  const normalizedVenv = path.normalize(venvDir);
+  let venvReal = path.normalize(venvDir);
+  try {
+    venvReal = path.normalize(realpathForBoundaryCheck(path.resolve(venvDir)));
+  } catch {
+    /* use unresolved */
+  }
   const normalizedLive = path.normalize(liveCommand);
-  if (normalizedLive.includes(normalizedVenv)) return true;
+  if (normalizedLive.includes(venvReal) || normalizedLive.includes(path.normalize(venvDir))) {
+    return true;
+  }
   if (recordedCommand && liveCommand.includes(recordedCommand.trim().slice(0, 48))) return true;
   return false;
 }
