@@ -26,14 +26,15 @@ export function isOsEmbedded(): boolean {
 
 /** True when Code is the active fullscreen app. */
 function isCodeForeground(): boolean {
-  return getOsView() === 'app' && getForegroundAppId() === 'code';
+  return getForegroundAppId() === 'code';
 }
 
 /** True when the legacy chat workspace (`#appBody`) should be hidden. */
 export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;
   if (isCodeForeground()) return false;
-  if (isResearchPanelOpen()) return true;
+  // Deep Research embeds in #chatArea inside #appBody — hiding the shell breaks sidebars + embed.
+  if (isResearchPanelOpen()) return false;
   if (getOsView() === 'workspaces') return true;
   return getForegroundAppId() !== 'code';
 }

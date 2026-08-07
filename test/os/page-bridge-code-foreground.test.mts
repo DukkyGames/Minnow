@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetAppHostForTests } from '../../src/os/app-host.ts';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
@@ -6,6 +6,7 @@ import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
   shouldHideAppBody,
+  syncLegacyChromeVisibility,
 } from '../../src/os/page-bridge.ts';
 import { initOsRouter, resetOsRouterForTests } from '../../src/os/router.ts';
 
@@ -13,6 +14,7 @@ function setupDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
     <header class="topbar"></header>
     <div id="appBody"></div>
+    <main id="chatArea"></main>
     <div id="osStage">
       <div id="osAppsLayer"></div>
     </div>
@@ -56,5 +58,17 @@ describe('page-bridge code foreground', () => {
     assert.equal(shouldHideAppBody(), false);
     assert.equal(document.getElementById('appBody')?.classList.contains('hidden'), false);
     assert.equal(document.documentElement.dataset.osApp, 'code');
+  });
+
+  test('keeps #appBody visible when embedded research is open in Code', () => {
+    launchInstance('code');
+    const area = document.getElementById('chatArea');
+    const research = document.createElement('div');
+    research.id = 'researchView';
+    area?.classList.add('chat-area--research');
+    area?.appendChild(research);
+    assert.equal(shouldHideAppBody(), false);
+    syncLegacyChromeVisibility();
+    assert.equal(document.getElementById('appBody')?.classList.contains('hidden'), false);
   });
 });

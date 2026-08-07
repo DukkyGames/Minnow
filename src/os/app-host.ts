@@ -1,5 +1,5 @@
 import { ensureAppInitialized } from './app-modules';
-import { isOsShellEnabled } from './page-bridge';
+import { isOsShellEnabled, syncLegacyChromeVisibility } from './page-bridge';
 import {
   getForegroundAppId,
   getInstanceSnapshot,
@@ -353,6 +353,10 @@ export function showAppLayer(appId: AppId, animateEnter = false): void {
     const layer = layerForApp(id);
     clearAppEnterAnimation(layer);
     setLayerActive(layer, false);
+  }
+  if (appId === 'code') {
+    mountOsMobileDrawerBackdrops();
+    syncLegacyChromeVisibility();
   }
 }
 
