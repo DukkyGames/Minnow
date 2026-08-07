@@ -4,7 +4,6 @@
 
 import {
   getAllowUnsandboxedShellFromConfig,
-  getAutopilotShellSandboxFromConfig,
   getShellSandboxFromConfig,
 } from '../../config/tool-security.js';
 import {
@@ -69,20 +68,24 @@ export async function resolveShellSandboxForRun({
   env = process.env,
 } = {}) {
   const board = await resolveBoardSandboxContext(chatId ?? '');
-  const [globalMode, autopilotDefault, alwaysAllow] = await Promise.all([
+  const [globalMode, alwaysAllow] = await Promise.all([
     getShellSandboxFromConfig(),
-    getAutopilotShellSandboxFromConfig(),
     getAllowUnsandboxedShellFromConfig(),
   ]);
 
   const mode =
     modeOverride != null
-      ? modeOverride
+      ? resolveEffectiveShellSandboxMode({
+          globalMode: modeOverride,
+          onBoard: false,
+          platform: process.platform,
+          env,
+        })
       : resolveEffectiveShellSandboxMode({
           globalMode,
           boardMode: board.boardMode,
-          autopilotBoardDefault: autopilotDefault,
           onBoard: board.onBoard,
+          platform: process.platform,
           env,
         });
 

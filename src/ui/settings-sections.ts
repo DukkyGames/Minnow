@@ -492,7 +492,7 @@ async function renderGeneralSection(): Promise<void> {
   const shellSandbox = appendSettingsGroup(
     shell,
     'Agent shell sandbox',
-    'Contain agent one-shot shells with OS filesystem sandboxing (Seatbelt / Landlock). Off by default; boards default to Require under Autopilot.',
+    'Contain agent one-shot shells with OS filesystem sandboxing (Seatbelt / Landlock). Same mode for normal chats and orchestrate boards. Off by default.',
     'general.shellSandbox',
     { emphasis: true },
   );

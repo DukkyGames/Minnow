@@ -170,30 +170,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
       select: isoSelect,
       searchKey: 'agents.autopilot.isolation',
       description:
-        'Git worktree isolation for parallel board tasks — not OS host containment. Agent shells still need the shell sandbox for filesystem containment.',
-    }).row,
-  );
-
-  const shellSandboxSelect = document.createElement('select');
-  shellSandboxSelect.id = 'settingsAutopilotShellSandbox';
-  shellSandboxSelect.className = 'settings-select';
-  for (const opt of [
-    { value: 'require', label: 'Require (fail closed)' },
-    { value: 'prefer', label: 'Prefer (Ask if unavailable)' },
-    { value: 'off', label: 'Off' },
-  ]) {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.label;
-    shellSandboxSelect.appendChild(option);
-  }
-  shellSandboxSelect.value = meta.shellSandbox;
-  defaultsBody.appendChild(
-    createSettingsSelectRow('Default board shell sandbox', {
-      select: shellSandboxSelect,
-      searchKey: 'agents.autopilot.shellSandbox',
-      description:
-        'Host filesystem containment for agent shells on orchestrate boards. Default Require. Overridable per board. Complementary to worktree isolation.',
+        'Git worktree isolation for parallel board tasks — not OS host containment. Pair with Settings → General → Agent shell sandbox when you need filesystem containment for agent shells.',
     }).row,
   );
 
@@ -389,11 +366,6 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
   isoSelect.addEventListener('change', () => {
     void persist({
       isolationMode: isoSelect.value as AutopilotIsolationMode,
-    });
-  });
-  shellSandboxSelect.addEventListener('change', () => {
-    void persist({
-      shellSandbox: shellSandboxSelect.value as AutopilotMeta['shellSandbox'],
     });
   });
   conc.input.addEventListener('change', () => {

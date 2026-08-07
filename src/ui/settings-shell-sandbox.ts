@@ -8,6 +8,7 @@ import {
   saveToolSecurityMeta,
   type ShellSandboxMode,
 } from '../config/tool-security-meta';
+import { fetchSandboxStatus } from '../tools/shell-sandbox-client';
 import { setStatus } from './status';
 import { appendSettingsOfflineHint } from './settings-controls';
 
@@ -58,11 +59,33 @@ export async function renderShellSandboxSettings(mount: HTMLElement): Promise<vo
     return;
   }
 
+  const status = await fetchSandboxStatus(true);
+  const requireSupported = status?.requireSupported !== false;
+
   const meta = await loadToolSecurityMeta();
   let selectedMode: ShellSandboxMode = meta.shellSandbox;
+  if (!requireSupported && selectedMode === 'require') {
+    selectedMode = 'prefer';
+  }
 
   const section = el('section', 'settings-filesystem');
   section.dataset.settingsSearchKey = 'general.shellSandbox';
+
+  const intro = el(
+    'p',
+    'settings-field-hint settings-filesystem-hint',
+    'Applies to all chats, including orchestrate boards. macOS uses Seatbelt; Linux uses Landlock; Windows uses WSL2 + Landlock inside your distro (not native cmd/PowerShell). On Windows, install node, python3, and git inside WSL — host-only toolchains are not used for sandboxed agent shells.',
+  );
+  section.appendChild(intro);
+
+  if (!requireSupported) {
+    const winNote = el(
+      'p',
+      'settings-field-hint settings-filesystem-hint',
+      'Require is not available on Windows (sandboxed commands run in WSL). Use Prefer or Off; Prefer asks before running unsandboxed when the sandbox cannot apply.',
+    );
+    section.appendChild(winNote);
+  }
 
   const segmentGroup = el('div', 'settings-network-segments settings-filesystem-segments');
   segmentGroup.setAttribute('role', 'group');
@@ -74,9 +97,11 @@ export async function renderShellSandboxSettings(mount: HTMLElement): Promise<vo
   createSegmentButton('Prefer', 'prefer', segmentGroup, (mode) => {
     void applyMode(mode);
   }).id = 'shellSandboxPreferSettings';
-  createSegmentButton('Require', 'require', segmentGroup, (mode) => {
-    void applyMode(mode);
-  }).id = 'shellSandboxRequireSettings';
+  if (requireSupported) {
+    createSegmentButton('Require', 'require', segmentGroup, (mode) => {
+      void applyMode(mode);
+    }).id = 'shellSandboxRequireSettings';
+  }
 
   setActiveSegment(segmentGroup, selectedMode);
   section.appendChild(segmentGroup);
@@ -94,7 +119,7 @@ export async function renderShellSandboxSettings(mount: HTMLElement): Promise<vo
   const hintRequire = el(
     'p',
     'settings-field-hint settings-filesystem-hint',
-    'Fail closed when the sandbox cannot apply — no silent unsandboxed fallback. Boards default to Require under Autopilot. On Windows, install WSL2 with a Landlock-capable distro (Minnow ships the Linux helper and installs it into the distro on first use). Sandboxed agent shells run inside WSL — install node, python3, and git in that Linux environment; Windows-only toolchains on the host are not used.',
+    'Fail closed when the sandbox cannot apply — no silent unsandboxed fallback.',
   );
 
   function refreshHints(mode: ShellSandboxMode): void {
@@ -105,11 +130,16 @@ export async function renderShellSandboxSettings(mount: HTMLElement): Promise<vo
   refreshHints(selectedMode);
   section.appendChild(hintOff);
   section.appendChild(hintPrefer);
-  section.appendChild(hintRequire);
+  if (requireSupported) {
+    section.appendChild(hintRequire);
+  }
 
   mount.appendChild(section);
 
   async function applyMode(mode: ShellSandboxMode): Promise<void> {
+    if (!requireSupported && mode === 'require') {
+      return;
+    }
     if (mode === selectedMode) return;
     const prev = selectedMode;
     selectedMode = mode;

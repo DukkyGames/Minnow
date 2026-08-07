@@ -173,11 +173,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     allowedValues: ['auto', 'off', 'per-task', 'per-wave'],
     refreshAreas: ['autopilot'],
   }),
-  'agents.autopilot.shellSandbox': meta('autopilot.shellSandbox', 'enum', {
-    allowedValues: ['off', 'prefer', 'require'],
-    sensitivity: 'dangerous',
-    refreshAreas: ['autopilot'],
-  }),
   'agents.autopilot.concurrency': meta('autopilot.maxConcurrentTasks', 'number', {
     refreshAreas: ['autopilot'],
   }),

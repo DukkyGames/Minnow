@@ -2,7 +2,8 @@
  * Three-state agent shell sandbox mode resolution (MIN-553 Phase 3).
  *
  * Global: toolSecurity.shellSandbox ∈ off | prefer | require (default off).
- * Boards: autopilot.shellSandbox default require (overridable per board).
+ * Boards: same global setting (optional per-board shellSandboxMode override).
+ * Windows: require is clamped to prefer (WSL+Landlock toolchain constraints).
  * Dev: MINNOW_SHELL_SANDBOX=1 elevates off → prefer.
  */
 
@@ -23,41 +24,55 @@ export function normalizeShellSandboxMode(value, fallback = 'off') {
 }
 
 /**
+ * Require mode is not offered on Windows (agent shells run in WSL+Landlock).
+ * @param {ShellSandboxMode} mode
+ * @param {string} [platform]
+ * @returns {ShellSandboxMode}
+ */
+export function clampShellSandboxModeForPlatform(mode, platform = process.platform) {
+  if (platform === 'win32' && mode === 'require') {
+    return 'prefer';
+  }
+  return mode;
+}
+
+/**
  * Resolve the effective mode for one agent shell spawn.
  *
  * @param {object} [params]
  * @param {unknown} [params.globalMode] toolSecurity.shellSandbox
- * @param {unknown} [params.boardMode] per-board override (undefined = inherit)
- * @param {unknown} [params.autopilotBoardDefault] autopilot.shellSandbox (boards only)
+ * @param {unknown} [params.boardMode] per-board override (undefined = use global)
  * @param {boolean} [params.onBoard]
+ * @param {string} [params.platform]
  * @param {NodeJS.ProcessEnv} [params.env]
  * @returns {ShellSandboxMode}
  */
 export function resolveEffectiveShellSandboxMode({
   globalMode,
   boardMode,
-  autopilotBoardDefault = 'require',
   onBoard = false,
+  platform = process.platform,
   env = process.env,
 } = {}) {
+  const global = normalizeShellSandboxMode(globalMode, 'off');
   /** @type {ShellSandboxMode} */
   let mode;
-  if (onBoard) {
-    // Board path: explicit board override → autopilot default (require) — not global off.
-    if (boardMode !== undefined && boardMode !== null && String(boardMode).trim() !== '') {
-      mode = normalizeShellSandboxMode(boardMode, 'require');
-    } else {
-      mode = normalizeShellSandboxMode(autopilotBoardDefault, 'require');
-    }
+  if (
+    onBoard &&
+    boardMode !== undefined &&
+    boardMode !== null &&
+    String(boardMode).trim() !== ''
+  ) {
+    mode = normalizeShellSandboxMode(boardMode, global);
   } else {
-    mode = normalizeShellSandboxMode(globalMode, 'off');
+    mode = global;
   }
 
   // Dev canary / local force-enable: treat as prefer (Ask on unavailable, not hard-fail).
   if (mode === 'off' && env?.MINNOW_SHELL_SANDBOX === '1') {
-    return 'prefer';
+    mode = 'prefer';
   }
-  return mode;
+  return clampShellSandboxModeForPlatform(mode, platform);
 }
 
 /**

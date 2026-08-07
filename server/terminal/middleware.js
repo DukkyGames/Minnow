@@ -65,13 +65,11 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
       const {
         getShellSandboxFromConfig,
         getAllowUnsandboxedShellFromConfig,
-        getAutopilotShellSandboxFromConfig,
       } = await import('../config/tool-security.js');
-      const [probe, mode, allowUnsandboxed, autopilotMode] = await Promise.all([
+      const [probe, mode, allowUnsandboxed] = await Promise.all([
         probeSandbox(),
         getShellSandboxFromConfig(),
         getAllowUnsandboxedShellFromConfig(),
-        getAutopilotShellSandboxFromConfig(),
       ]);
       const adapter = resolveSandbox();
       sendJson(res, 200, {
@@ -81,7 +79,8 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         detail: probe.detail ?? null,
         mode,
         allowUnsandboxed,
-        autopilotMode,
+        platform: process.platform,
+        requireSupported: process.platform !== 'win32',
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

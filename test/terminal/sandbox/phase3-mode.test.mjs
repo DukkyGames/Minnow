@@ -43,25 +43,52 @@ describe('Phase 3: shell sandbox mode resolution', () => {
     );
   });
 
-  it('boards inherit autopilot require by default', () => {
+  it('boards use global setting unless board override is set', () => {
     assert.equal(
       resolveEffectiveShellSandboxMode({
         globalMode: 'off',
         onBoard: true,
-        autopilotBoardDefault: 'require',
         env: {},
       }),
-      'require',
+      'off',
+    );
+    assert.equal(
+      resolveEffectiveShellSandboxMode({
+        globalMode: 'prefer',
+        onBoard: true,
+        env: {},
+      }),
+      'prefer',
     );
     assert.equal(
       resolveEffectiveShellSandboxMode({
         globalMode: 'off',
         onBoard: true,
         boardMode: 'prefer',
-        autopilotBoardDefault: 'require',
         env: {},
       }),
       'prefer',
+    );
+  });
+
+  it('clamps require to prefer on Windows', () => {
+    assert.equal(
+      resolveEffectiveShellSandboxMode({
+        globalMode: 'require',
+        onBoard: false,
+        platform: 'win32',
+        env: {},
+      }),
+      'prefer',
+    );
+    assert.equal(
+      resolveEffectiveShellSandboxMode({
+        globalMode: 'require',
+        onBoard: false,
+        platform: 'linux',
+        env: {},
+      }),
+      'require',
     );
   });
 

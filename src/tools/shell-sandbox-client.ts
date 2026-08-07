@@ -7,10 +7,7 @@ import {
   loadToolSecurityMeta,
   type ShellSandboxMode,
 } from '../config/tool-security-meta';
-import {
-  getAutopilotMetaSync,
-  loadAutopilotMeta,
-} from '../config/autopilot-meta';
+import { loadAutopilotMeta } from '../config/autopilot-meta';
 import { findChatById } from '../state/sessions';
 import { getBoardGroupForChat } from '../state/chat-groups.ts';
 
@@ -21,7 +18,8 @@ export interface SandboxStatusPayload {
   detail: string | null;
   mode: ShellSandboxMode;
   allowUnsandboxed: boolean;
-  autopilotMode: ShellSandboxMode;
+  platform?: string;
+  requireSupported?: boolean;
 }
 
 let statusCache: { at: number; payload: SandboxStatusPayload } | null = null;
@@ -44,9 +42,18 @@ export async function fetchSandboxStatus(force = false): Promise<SandboxStatusPa
   }
 }
 
-/** Resolve effective shell sandbox mode for a chat (board inherit vs global). */
+function clampShellSandboxForClient(mode: ShellSandboxMode): ShellSandboxMode {
+  if (typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent) && mode === 'require') {
+    return 'prefer';
+  }
+  return mode;
+}
+
+/** Resolve effective shell sandbox mode for a chat (boards use General setting). */
 export function resolveShellSandboxModeForChat(chatId?: string): ShellSandboxMode {
+  const globalMode = getToolSecurityMetaCached().shellSandbox;
   const id = chatId?.trim();
+  let mode = globalMode;
   if (id) {
     const chat = findChatById(id);
     const group = chat ? getBoardGroupForChat(chat) : undefined;
@@ -54,12 +61,11 @@ export function resolveShellSandboxModeForChat(chatId?: string): ShellSandboxMod
     if (board) {
       const boardMode = board.shellSandboxMode;
       if (boardMode === 'off' || boardMode === 'prefer' || boardMode === 'require') {
-        return boardMode;
+        mode = boardMode;
       }
-      return getAutopilotMetaSync().shellSandbox;
     }
   }
-  return getToolSecurityMetaCached().shellSandbox;
+  return clampShellSandboxForClient(mode);
 }
 
 /** Warm caches used by the permission gate. */

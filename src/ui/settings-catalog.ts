@@ -344,7 +344,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   }),
   field('agents.autopilot.executionMode', 'Default execution mode', 'agents', 'autopilot'),
   field('agents.autopilot.isolation', 'Default isolation mode', 'agents', 'autopilot'),
-  field('agents.autopilot.shellSandbox', 'Default board shell sandbox', 'agents', 'autopilot'),
   field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
   field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),
   field('agents.watchdog', 'Watchdog', 'agents', 'watchdog', {

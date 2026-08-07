@@ -26,7 +26,7 @@ export interface AutopilotMeta {
   defaultExecutionMode: AutopilotExecutionMode;
   maxConcurrentTasks: number;
   isolationMode: AutopilotIsolationMode;
-  /** Default host shell sandbox for boards (MIN-553). Default require. */
+/** @deprecated Boards use toolSecurity.shellSandbox; kept for legacy config.json reads. */
   shellSandbox: AutopilotShellSandboxMode;
   maxTestAttempts: number;
   maxBuildAttempts: number;
@@ -64,7 +64,7 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   defaultExecutionMode: 'manual',
   maxConcurrentTasks: FALLBACK_MAX_CONCURRENT,
   isolationMode: 'auto',
-  shellSandbox: 'require',
+  shellSandbox: 'off',
   maxTestAttempts: FALLBACK_MAX_TEST_ATTEMPTS,
   maxBuildAttempts: FALLBACK_MAX_BUILD_ATTEMPTS,
   maxFinalTestAttempts: FALLBACK_MAX_FINAL_TEST_ATTEMPTS,

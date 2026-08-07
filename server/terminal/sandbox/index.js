@@ -398,6 +398,7 @@ export {
 export {
   normalizeShellSandboxMode,
   resolveEffectiveShellSandboxMode,
+  clampShellSandboxModeForPlatform,
   modeAttemptsSandbox,
   formatRequireSandboxError,
   formatPreferEscalationError,

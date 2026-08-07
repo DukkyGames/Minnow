@@ -1229,7 +1229,7 @@ export function mergeConfigMeta(existing, patch) {
       defaultExecutionMode: 'manual',
       maxConcurrentTasks: 3,
       isolationMode: 'auto',
-      shellSandbox: 'require',
+      shellSandbox: 'off',
       maxTestAttempts: 3,
       maxBuildAttempts: 2,
       maxFinalTestAttempts: 3,

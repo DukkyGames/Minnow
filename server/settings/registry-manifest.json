@@ -1314,26 +1314,6 @@
     ]
   },
   {
-    "key": "agents.autopilot.shellSandbox",
-    "label": "Default board shell sandbox",
-    "description": "Host containment for agent shells on orchestrate boards. Defaults to Require (fail closed when the OS sandbox is unavailable). Overridable per board. Complementary to worktree isolation.",
-    "category": "agents",
-    "area": "autopilot",
-    "storage": "meta",
-    "path": "autopilot.shellSandbox",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "prefer",
-      "require"
-    ],
-    "sensitivity": "dangerous",
-    "writable": true,
-    "refreshAreas": [
-      "autopilot"
-    ]
-  },
-  {
     "key": "agents.autopilot.concurrency",
     "label": "Max concurrent tasks",
     "category": "agents",
