@@ -559,6 +559,11 @@ export interface OrchestrateBoardState {
    * resolved from {@link executionMode} (sequential/manual → off, auto/afk → per-task).
    */
   isolationMode?: 'off' | 'per-task' | 'per-wave';
+  /**
+   * Agent shell sandbox for this board (MIN-553). When unset, inherits Autopilot
+   * default (`require`). Complementary to {@link isolationMode} (git worktrees).
+   */
+  shellSandboxMode?: 'off' | 'prefer' | 'require';
   /** Board integration branch that task/wave branches merge into; minted at first isolated start. */
   integrationBranch?: string;
   /** Base branch/commit the integration branch was created from (cleanup/reset reference). */
@@ -615,6 +620,7 @@ export type BoardLogEventType =
   | 'task_quarantined'
   | 'tool_call'
   | 'terminal_run'
+  | 'sandbox'
   | 'dev_server'
   | 'phase_start'
   | 'phase_end'

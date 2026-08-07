@@ -25,7 +25,7 @@ import {
   uninstallGitHook,
 } from '../../../server/brain/code/cascade.js';
 import { reindexCode } from '../../../server/brain/code/indexer.js';
-import { findSymbol } from '../../../server/brain/code/query.js';
+import { findSymbol, repoMap } from '../../../server/brain/code/query.js';
 import { closeCodeDbForTests, getCodeDb } from '../../../server/brain/code/schema.js';
 import { brainWorkspaceKeyFromPath } from '../../../server/brain/paths.js';
 import { setWorkspaceRoot } from '../../../server/workspace/root.js';
@@ -197,6 +197,35 @@ describe('MIN-B10 cascade', () => {
 
     await fs.writeFile(abs, SAMPLE_TEXT, 'utf8');
     await propagateCodeChanges({ files: [SAMPLE_PATH], trigger: 'manual' });
+  });
+
+  it('purges index rows when a file is deleted and repo map omits the path', async () => {
+    const repo = brainWorkspaceKeyFromPath(workspaceDir);
+    const db = getCodeDb(repo);
+    const abs = path.join(workspaceDir, SAMPLE_PATH);
+
+    await fs.writeFile(abs, SAMPLE_TEXT, 'utf8');
+    await reindexCode({ files: [SAMPLE_PATH] });
+    assert.ok(
+      db.prepare('SELECT COUNT(*) AS n FROM symbols WHERE repo = ? AND file = ?').get(repo, SAMPLE_PATH).n > 0,
+    );
+    assert.ok(db.prepare('SELECT sha256 FROM file_hashes WHERE repo = ? AND file = ?').get(repo, SAMPLE_PATH));
+
+    await fs.unlink(abs);
+    await reindexCode({ files: [SAMPLE_PATH] });
+
+    assert.equal(
+      db.prepare('SELECT COUNT(*) AS n FROM symbols WHERE repo = ? AND file = ?').get(repo, SAMPLE_PATH).n,
+      0,
+    );
+    assert.equal(
+      db.prepare('SELECT COUNT(*) AS n FROM file_hashes WHERE repo = ? AND file = ?').get(repo, SAMPLE_PATH).n,
+      0,
+    );
+
+    const map = await repoMap({ focus: SAMPLE_PATH });
+    assert.ok(!map.text.includes('## sample.fake'));
+    assert.ok(!map.text.includes('callee'));
   });
 
   it('cadence gating skips automatic triggers when disabled', () => {

@@ -1248,7 +1248,8 @@ function wireBoardHeaderControls(
   // Isolation mode override (Auto = global default or derive from execution mode)
   const isoWrapper = document.createElement('label');
   isoWrapper.className = 'board-header__isolation';
-  isoWrapper.title = 'Worktree isolation (Auto uses Settings default or execution mode)';
+  isoWrapper.title =
+    'Git worktree isolation (Auto uses Settings default or execution mode). Isolates checkouts between tasks — not OS host containment.';
   const isoSelect = document.createElement('select');
   isoSelect.className = 'board-header__isolation-select';
   isoSelect.setAttribute('aria-label', 'Isolation mode');

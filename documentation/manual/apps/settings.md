@@ -45,7 +45,7 @@ Theme family and mode — 16 themes in total, eight families each with a dark an
 | **Agents** | Prompt profiles (Full / Lite / custom) with a live token estimate, composer modes, Super Plan pipeline settings, plan granularity, work agents, sub-agent types, context policy, setup profile export and import |
 | **Rules** | Standing instructions injected into every prompt, organised into groups |
 | **Agent packs** | Download a template or the built-in pack, upload a zip, manage installed packs |
-| **Autopilot** | Defaults for orchestrate boards: execution mode, isolation, concurrency, planner model, retries, self-heal, infra provisioning |
+| **Autopilot** | Defaults for orchestrate boards: execution mode, git worktree isolation (not host containment), concurrency, planner model, retries, self-heal, infra provisioning |
 | **Watchdog** | Generation limits while streaming, plus agent stall, heartbeat, and loop detection |
 
 **Watchdog** is the setting to reach for when a run hangs and sits there forever. It has two halves.

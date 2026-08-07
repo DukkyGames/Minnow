@@ -823,6 +823,8 @@ export function renderToolResult(
     summary.querySelector('.tool-call-code-change')?.remove();
   }
 
+  appendSandboxBadge(summary, result);
+
   if (body.dataset.resultRendered === 'true') return;
   body.dataset.resultRendered = 'true';
 
@@ -879,6 +881,32 @@ export function renderToolResult(
   }
 
   if (!rawShownInline) appendRawDisclosure(body, argsForPresentation, result);
+}
+
+/** Sandbox trailer badge on agent shell tool rows (MIN-553). */
+function appendSandboxBadge(summary: Element, result: string): void {
+  summary.querySelector('.tool-call-sandbox-badge')?.remove();
+  const sandboxed = result.match(/\[sandboxed:\s*([^\]]+)\]/i);
+  const notSandboxed = result.match(/\[NOT sandboxed:\s*([^\]]+)\]/i);
+  if (!sandboxed && !notSandboxed) return;
+
+  const badge = document.createElement('span');
+  badge.className = sandboxed
+    ? 'tool-call-sandbox-badge tool-call-sandbox-badge--ok'
+    : 'tool-call-sandbox-badge tool-call-sandbox-badge--warn';
+  badge.textContent = sandboxed
+    ? `Sandboxed · ${sandboxed[1]!.trim()}`
+    : 'Not sandboxed';
+  badge.title = sandboxed
+    ? `Sandboxed: ${sandboxed[1]!.trim()}`
+    : `Not sandboxed: ${notSandboxed?.[1]?.trim() ?? ''}`;
+  const outcome = summary.querySelector('.tool-call-outcome');
+  if (outcome) {
+    outcome.classList.remove('hidden');
+    outcome.appendChild(badge);
+  } else {
+    summary.appendChild(badge);
+  }
 }
 
 /** Numbered answers for ask_question; the source lines already carry "N." prefixes. */

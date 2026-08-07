@@ -53,13 +53,15 @@ Everything else that is enabled starts on **Ask**. Files, git, shell and browser
 
 ## The workspace boundary
 
-This is the important one.
+This is the important one for file and git tools.
 
 File, git and search tools resolve **under the working folder for that surface** — the project open in Code, the desktop workspace folder, or a board task's own git worktree. A path outside it is rejected before anything runs. Symlinks that point outside are rejected too.
 
-You can turn this off: **Settings → General → Filesystem access → Full disk**. Then file tools can read and write anywhere your user account can. There are legitimate reasons to do it and you should understand that it removes the main containment in the product.
+You can turn this off: **Settings → General → Filesystem access → Full disk**. Then file tools can read and write anywhere your user account can. There are legitimate reasons to do it and you should understand that it removes the main *file-tool* containment in the product.
 
-Shell commands have their own guards: an agent cannot kill Minnow or bind its port out from under itself.
+**`execute_command` on Full is different.** The workspace path check never sees the shell string — once the model is inside `cmd` / `$SHELL -c`, it has the same filesystem authority as Minnow unless the **agent shell sandbox** is on. Other Full tools still resolve paths in JS first; shell does not. Enable containment in **Settings → General → Agent shell sandbox** (`off` / `prefer` / `require`; default off). Dev canaries can still set **`MINNOW_SHELL_SANDBOX=1`** (treated as prefer). Boards default to **require** under Autopilot.
+
+Shell commands also have specific guards even without the sandbox: an agent cannot kill Minnow or bind its port out from under itself. Interactive PTY tabs are never sandboxed.
 
 ## Content the model reads is data, not instructions
 
@@ -86,7 +88,7 @@ See [Integrations](../extend/integrations.md).
 
 **Working on one project all day.** Add file writes and git writes on Full, keep `execute_command` and `delete_path` on Ask. Commit before long agent runs — Minnow's undo can restore a working tree from a snapshot, but a commit is cheaper and more certain.
 
-**Unattended runs** (Scheduler, AFK boards). Anything on Ask will simply stall with nobody to approve it. Decide deliberately what gets Full for those jobs, and prefer running them against an isolated worktree.
+**Unattended runs** (Scheduler, AFK boards). Anything on Ask will simply stall with nobody to approve it. Decide deliberately what gets Full for those jobs. Prefer worktree isolation so parallel tasks do not collide on one checkout — that isolates *git* work, not the rest of the host. For host filesystem containment on agent shells, use the agent shell sandbox (see [Privacy and security](../reference/privacy-and-security.md)).
 
 ## Related
 

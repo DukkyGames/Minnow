@@ -7,7 +7,7 @@ import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail, stopActiveRunsForChat } from '../terminal-runner.js';
 import { resolveChatCwd } from '../workspace/chat-cwd.js';
 import { resolvePtySessionCwd } from './session-cwd.js';
-import { listShellProfilesForApi } from './shell-config.js';
+import { listShellProfilesForApi, resolveExecuteShellProfile } from './shell-config.js';
 import {
   createPtySession,
   destroyPtySession,
@@ -59,6 +59,36 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
     return true;
   }
 
+  if (pathname === '/api/terminal/sandbox-status' && req.method === 'GET') {
+    try {
+      const { probeSandbox, resolveSandbox } = await import('./sandbox/index.js');
+      const {
+        getShellSandboxFromConfig,
+        getAllowUnsandboxedShellFromConfig,
+      } = await import('../config/tool-security.js');
+      const [probe, mode, allowUnsandboxed] = await Promise.all([
+        probeSandbox(),
+        getShellSandboxFromConfig(),
+        getAllowUnsandboxedShellFromConfig(),
+      ]);
+      const adapter = resolveSandbox();
+      sendJson(res, 200, {
+        available: probe.ok === true,
+        kind: adapter.kind,
+        reason: probe.reason ?? null,
+        detail: probe.detail ?? null,
+        mode,
+        allowUnsandboxed,
+        platform: process.platform,
+        requireSupported: process.platform !== 'win32',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, 500, { error: message });
+    }
+    return true;
+  }
+
   if (pathname === '/api/terminal/run' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req);
@@ -100,6 +130,8 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         : [];
       const shell = body?.shell === true;
 
+      const shellProfile = await resolveExecuteShellProfile(base);
+
       const rawTimeout = body?.timeoutMs;
       const timeoutMs =
         typeof rawTimeout === 'number' && isFinite(rawTimeout)
@@ -115,6 +147,12 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
         chatId,
         toolCallId,
         timeoutMs,
+        shellProfile,
+        allowUnsandboxed: body?.allowUnsandboxed === true,
+        worktreeRoot:
+          typeof body?.worktreeRoot === 'string' && body.worktreeRoot.trim()
+            ? body.worktreeRoot.trim()
+            : undefined,
       });
 
       sendJson(res, 200, { runId: started.runId, startedAt: started.startedAt });

@@ -1,0 +1,3 @@
+# Keep Landlock helper build scripts Unix-LF so WSL/`bash` can run them on Windows checkouts.
+native/minnow-sandbox/**/*.sh text eol=lf
+native/minnow-sandbox/**/*.c text eol=lf

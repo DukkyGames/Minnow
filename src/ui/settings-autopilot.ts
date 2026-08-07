@@ -10,6 +10,7 @@ import {
   type AutopilotContinueSmartRoute,
   type AutopilotExecutionMode,
   type AutopilotIsolationMode,
+  type AutopilotMeta,
 } from '../config/autopilot-meta';
 import {
   appendSettingsCrosslinks,
@@ -97,7 +98,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Global defaults for orchestrate boards: execution mode, concurrency, isolation, test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
+    'Global defaults for orchestrate boards: execution mode, concurrency, git worktree isolation (not host containment), test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
     linkToSettingsSection('Watchdog', 'watchdog'),
     '; work agents under ',
     linkToSettingsSection('Agents', 'agent-center'),
@@ -168,6 +169,8 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
     createSettingsSelectRow('Default isolation mode', {
       select: isoSelect,
       searchKey: 'agents.autopilot.isolation',
+      description:
+        'Git worktree isolation for parallel board tasks — not OS host containment. Pair with Settings → General → Agent shell sandbox when you need filesystem containment for agent shells.',
     }).row,
   );
 
@@ -280,7 +283,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
   const selfHealBody = appendSettingsGroup(
     content,
     'Self-heal & provisioning',
-    'How the AFK orchestrator handles task failures, infra setup, and worktree isolation.',
+    'How the AFK orchestrator handles task failures and infra setup. Worktree isolation is configured under Default isolation mode (git checkouts only — not host containment).',
     'agents.autopilot.selfHeal',
     { emphasis: true },
   );
@@ -345,7 +348,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
       checked: meta.guardCdOutsideWorktree,
       searchKey: 'agents.autopilot.guardCdOutsideWorktree',
       description:
-        'Rewrite leading absolute cd commands that escape the task worktree boundary.',
+        'Rewrite leading absolute cd commands that escape the task worktree boundary. Git isolation only — does not sandbox the rest of the host filesystem.',
     },
   );
   selfHealBody.appendChild(guardCdRow);

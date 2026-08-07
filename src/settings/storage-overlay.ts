@@ -219,6 +219,11 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     sensitivity: 'dangerous',
     refreshAreas: ['general'],
   }),
+  'general.shellSandbox': meta('toolSecurity.shellSandbox', 'enum', {
+    allowedValues: ['off', 'prefer', 'require'],
+    sensitivity: 'dangerous',
+    refreshAreas: ['general'],
+  }),
   'integrations.mcp': section(['mcp']),
   'integrations.lsp': section(['lsp']),
   'integrations.editor': section(['editor']),

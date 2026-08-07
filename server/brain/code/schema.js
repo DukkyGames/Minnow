@@ -252,6 +252,19 @@ export function openCodeDbCountForTests() {
   return dbByWorkspaceKey.size;
 }
 
+/**
+ * Remove all index rows for a file that no longer exists on disk (symbols, FTS, edges, file_hashes).
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} repo
+ * @param {string} file — workspace-relative posix path
+ */
+export function purgeFileFromIndex(db, repo, file) {
+  const relFile = String(file ?? '').trim().replace(/\\/g, '/');
+  if (!relFile) return;
+  deleteSymbolsForFile(db, repo, relFile);
+  db.prepare('DELETE FROM file_hashes WHERE repo = ? AND file = ?').run(repo, relFile);
+}
+
 /** Remove symbols and FTS rows for one file before re-indexing it. */
 export function deleteSymbolsForFile(db, repo, file) {
   const ids = db

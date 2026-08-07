@@ -768,6 +768,8 @@ export async function runCommandWithTerminalStream(
     cwd?: string;
     /** Custom timeout in ms forwarded to the server (1000–600000; default 30s). */
     timeoutMs?: number;
+    /** Prefer-mode approval to run without sandbox when unavailable. */
+    allowUnsandboxed?: boolean;
   },
 ): Promise<string> {
   const isAgentRun = options.source === 'agent';
@@ -800,6 +802,7 @@ export async function runCommandWithTerminalStream(
     workspaceRoot: options.workspaceRoot,
     cwd: options.cwd,
     timeoutMs: options.timeoutMs,
+    allowUnsandboxed: options.allowUnsandboxed,
   });
 
   activeRunId = runId;

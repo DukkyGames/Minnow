@@ -110,6 +110,8 @@ export interface ComposeContext {
   orchestratePlanPath?: string | null;
   /** True once a preview browser tool has been invoked in this chat (gates allowlist fragment). */
   browserActivated?: boolean;
+  /** Effective agent shell sandbox mode for this chat (MIN-553); gates shell-sandbox tool-usage. */
+  shellSandboxMode?: 'off' | 'prefer' | 'require';
 }
 
 /** Tokens replaced in composed bodies via interpolate.ts. */

@@ -88,6 +88,18 @@ describe('resolveOneShotSpawn', () => {
     assert.equal(wsl.shell, false);
   });
 
+  it('rewrites node -e one-shot strings to argv spawn', () => {
+    const resolved = resolveOneShotSpawn({
+      command: 'node -e "console.log(1)"',
+      args: [],
+      platform: 'win32',
+      shell: true,
+    });
+    assert.equal(resolved.command, 'node');
+    assert.deepEqual(resolved.args, ['-e', 'console.log(1)']);
+    assert.equal(resolved.shell, false);
+  });
+
   it('passes argv invocations through unchanged', () => {
     const direct = resolveOneShotSpawn({
       command: 'node',

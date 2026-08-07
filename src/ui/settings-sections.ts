@@ -54,6 +54,7 @@ import { renderNotificationsSettingsSection } from './settings-notifications';
 import { renderNetworkAccessSettings } from './settings-network';
 import { renderDesktopShellSettings } from './settings-desktop-shell';
 import { renderFilesystemAccessSettings } from './settings-filesystem';
+import { renderShellSandboxSettings } from './settings-shell-sandbox';
 import { renderAppUpdatesSettings } from './settings-updates';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderAutopilotSettingsSection } from './settings-autopilot';
@@ -486,6 +487,17 @@ async function renderGeneralSection(): Promise<void> {
   );
   filesystem.id = 'settingsFilesystemAccess';
   await renderFilesystemAccessSettings(filesystem);
+  if (isAsyncSectionRenderStale('general', generation)) return;
+
+  const shellSandbox = appendSettingsGroup(
+    shell,
+    'Agent shell sandbox',
+    'Contain agent one-shot shells with OS filesystem sandboxing (Seatbelt / Landlock). Same mode for normal chats and orchestrate boards. Off by default.',
+    'general.shellSandbox',
+    { emphasis: true },
+  );
+  shellSandbox.id = 'settingsShellSandbox';
+  await renderShellSandboxSettings(shellSandbox);
   if (isAsyncSectionRenderStale('general', generation)) return;
 
   const network = appendSettingsGroup(

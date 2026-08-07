@@ -1005,9 +1005,31 @@ export function registerPreviewHostIpc(): void {
   ipcMain.handle(
     channels.PREVIEW_CAPTURE_PAGE,
     async (event, tabId?: string, instanceId?: string) => {
+      const win = windowFromInvoke(event);
       const entry = getActiveEntry(event, tabId, instanceId);
       if (!entry) {
         throw new Error('Preview guest is not available');
+      }
+      if (win && !entry.visible) {
+        const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+        const bounds = lastBoundsByInstance.get(boundsKey(win.id, id));
+        if (isValidPreviewBounds(bounds)) {
+          applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
+          rememberPreviewBounds(win, bounds, id);
+          try {
+            win.contentView.addChildView(entry.view);
+          } catch {
+            /* already attached */
+          }
+          if (entry.devtools) {
+            try {
+              win.contentView.addChildView(entry.devtools);
+            } catch {
+              /* already attached */
+            }
+          }
+          previewInstances.setVisible(win.id, id, true);
+        }
       }
       return previewCapturePageBase64(entry.view.webContents);
     },

@@ -6,7 +6,11 @@ import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { findChatById, isGoalLoopActive } from '../state/sessions';
 import { getBoardGroupForChat } from '../state/chat-groups.ts';
 import { logInteractionRequired } from '../state/orchestrate-board-store.ts';
-import { getToolSecurityMetaCached, loadToolSecurityMeta } from '../config/tool-security-meta';
+import {
+  getToolSecurityMetaCached,
+  loadToolSecurityMeta,
+  saveToolSecurityMeta,
+} from '../config/tool-security-meta';
 import {
   loadToolConfig,
   saveToolConfigAsync,
@@ -21,6 +25,12 @@ import { enqueueToolApproval, type ToolApprovalContext } from './approval-queue'
 import type { ToolApprovalRequest } from './tool-approval-types';
 import { resolveEffectivePermission } from './permission-resolve';
 import { applyDestructiveConfirmationAfterUserApproval } from './destructive-tool-confirm';
+import {
+  ensureShellSandboxCaches,
+  fetchSandboxStatus,
+  resolveShellSandboxModeForChat,
+  SHELL_SANDBOX_TOOL_IDS,
+} from './shell-sandbox-client';
 
 export type { ToolApprovalContext };
 
@@ -153,65 +163,158 @@ export async function maybeBlockToolForUserApproval(
   // even when the host's shared tool setting is Full.
   const needsCompanionAck = companionRequiresApproval(permissionToolId);
   const needsPermissionAck = perm === 'ask' || needsCompanionAck;
-  if (!needsPathAck && !needsPermissionAck) {
+
+  if (needsPathAck || needsPermissionAck) {
+    const afkBlocked = blockAfkInteractionAttempt(
+      context,
+      needsPathAck ? 'confirmation' : 'approval',
+      needsPathAck
+        ? `${execName} requested a path outside the allowed workspace`
+        : `${execName} requires user approval`,
+    );
+    if (afkBlocked) return afkBlocked;
+
+    // Server rejects out-of-workspace paths unless full filesystem access is on — do not modal.
+    if (needsPathAck) {
+      return { content: outsideWorkspaceBlockMessage(pathsOutsideWorkspace[0]!) };
+    }
+
+    let goalAutoApproved = false;
+    if (needsPermissionAck && !needsCompanionAck && context.chatId) {
+      const chat = findChatById(context.chatId);
+      if (chat && isGoalLoopActive(chat)) {
+        applyDestructiveConfirmationAfterUserApproval(permissionToolId, args);
+        goalAutoApproved = true;
+      }
+    }
+
+    if (!goalAutoApproved) {
+      if (typeof document === 'undefined') {
+        // Headless: cannot show Ask strip — still run sandbox escalation below for shell tools.
+      } else {
+        const summary = describeToolInvocation(execName, args);
+        const workspace: ToolApprovalRequest['workspace'] = workspaceRoot
+          ? { label: getWorkspaceLabel() || workspaceRoot, path: workspaceRoot }
+          : {
+              hint: 'Not loaded — open Minnow and choose a workspace folder.',
+            };
+
+        const decision = await enqueueToolApproval({
+          toolName: execName,
+          title: summary.title,
+          description: summary.description,
+          argsJson: summary.argsJson,
+          workspace,
+          subAgentType: context.subAgentType,
+          workAgentId: context.workAgentId,
+        });
+
+        if (decision === 'cancel') {
+          return { content: 'Error: User denied tool execution' };
+        }
+
+        if (decision === 'always-allow' && !needsCompanionAck) {
+          config.permissions.default[permissionToolId] = 'full';
+          await saveToolConfigAsync(config);
+        }
+
+        applyDestructiveConfirmationAfterUserApproval(permissionToolId, args);
+      }
+    }
+  }
+
+  // MIN-553 Phase 3: prefer → Ask to run unsandboxed; require → clear error (AFK fail-closed).
+  if (SHELL_SANDBOX_TOOL_IDS.has(permissionToolId)) {
+    const sandboxGate = await maybeEscalateShellSandbox(
+      permissionToolId,
+      args,
+      context,
+      execName,
+    );
+    if (sandboxGate) return sandboxGate;
+  }
+
+  return null;
+}
+
+/**
+ * When shell sandbox mode is on but the OS backend is unavailable:
+ * require → error; prefer → Ask strip (Allow once / Always allow / Cancel).
+ */
+async function maybeEscalateShellSandbox(
+  permissionToolId: string,
+  args: Record<string, unknown>,
+  context: ToolApprovalContext,
+  execName: string,
+): Promise<ToolExecutionResult | null> {
+  await ensureShellSandboxCaches().catch(() => undefined);
+  const mode = resolveShellSandboxModeForChat(context.chatId);
+  if (mode === 'off') return null;
+
+  const status = await fetchSandboxStatus();
+  const available = status?.available === true;
+  if (available) return null;
+
+  const detail =
+    status?.detail?.trim() ||
+    status?.reason?.trim() ||
+    'Agent shell sandbox is not available on this platform';
+
+  if (mode === 'require') {
+    return {
+      content:
+        `Error: Agent shell sandbox is required but unavailable. ${detail}. ` +
+        'Install/enable the platform sandbox, or change Agent shell sandbox / board sandbox mode.',
+    };
+  }
+
+  // prefer — already always-allowed?
+  if (getToolSecurityMetaCached().allowUnsandboxedShell || args.allow_unsandboxed === true) {
+    args.allow_unsandboxed = true;
     return null;
   }
+
   const afkBlocked = blockAfkInteractionAttempt(
     context,
-    needsPathAck ? 'confirmation' : 'approval',
-    needsPathAck
-      ? `${execName} requested a path outside the allowed workspace`
-      : `${execName} requires user approval`,
+    'approval',
+    `${execName} needs approval to run unsandboxed (sandbox unavailable)`,
   );
   if (afkBlocked) return afkBlocked;
 
   if (typeof document === 'undefined') {
-    return null;
+    return {
+      content:
+        `Error: Agent shell sandbox unavailable (${detail}). ` +
+        'Cannot prompt for unsandboxed approval in this context.',
+    };
   }
 
-  // Auto-approve while a /goal loop is active on this chat (hands-free until goal clears).
-  if (needsPermissionAck && !needsCompanionAck && context.chatId) {
-    const chat = findChatById(context.chatId);
-    if (chat && isGoalLoopActive(chat)) {
-      applyDestructiveConfirmationAfterUserApproval(permissionToolId, args);
-      return null;
-    }
-  }
-
-  // Server rejects out-of-workspace paths unless full filesystem access is on — do not modal.
-  if (needsPathAck) {
-    return { content: outsideWorkspaceBlockMessage(pathsOutsideWorkspace[0]!) };
-  }
-
-  const summary = describeToolInvocation(execName, args);
+  const workspaceRoot = context.workspaceRoot?.trim() || getWorkspacePath();
   const workspace: ToolApprovalRequest['workspace'] = workspaceRoot
     ? { label: getWorkspaceLabel() || workspaceRoot, path: workspaceRoot }
-    : {
-        hint: 'Not loaded — open Minnow and choose a workspace folder.',
-      };
+    : { hint: 'Not loaded — open Minnow and choose a workspace folder.' };
 
   const decision = await enqueueToolApproval({
     toolName: execName,
-    title: summary.title,
-    description: summary.description,
-    argsJson: summary.argsJson,
+    title: 'Run unsandboxed?',
+    description:
+      `The agent shell sandbox is unavailable (${detail}). ` +
+      'Allow this command to run without host filesystem containment?',
+    argsJson: JSON.stringify(args, null, 2),
     workspace,
     subAgentType: context.subAgentType,
     workAgentId: context.workAgentId,
   });
 
   if (decision === 'cancel') {
-    return { content: 'Error: User denied tool execution' };
+    return { content: 'Error: User denied unsandboxed shell execution' };
   }
 
-  if (decision === 'always-allow' && !needsCompanionAck) {
-    config.permissions.default[permissionToolId] = 'full';
-    await saveToolConfigAsync(config);
+  if (decision === 'always-allow') {
+    await saveToolSecurityMeta({ allowUnsandboxedShell: true }).catch(() => undefined);
   }
 
-  // Ask-strip approval satisfies server confirmed gates (manage_brain, manage_calendar delete, …).
-  applyDestructiveConfirmationAfterUserApproval(permissionToolId, args);
-
+  args.allow_unsandboxed = true;
   return null;
 }
 

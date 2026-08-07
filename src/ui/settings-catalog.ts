@@ -184,6 +184,10 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['workspace', 'full disk', 'path', 'sandbox', 'file tools', 'git'],
     description: 'Limit file and git tools to the open project folder, or allow paths anywhere on this computer.',
   }),
+  field('general.shellSandbox', 'Agent shell sandbox', 'general', 'general', {
+    keywords: ['sandbox', 'shell', 'seatbelt', 'landlock', 'execute_command', 'containment'],
+    description: 'Contain agent one-shot shells with OS filesystem sandboxing.',
+  }),
   field('general.onboarding', 'Run setup again', 'general', 'general', {
     keywords: ['wizard', 'onboarding', 'first run', 'setup'],
     description: 'Re-open the first-run setup wizard.',

@@ -109,26 +109,46 @@ export function invalidateBrowserMetaCache(): void {
   loadPromise = null;
 }
 
-export interface BrowserAllowlistCheckResult {
+export interface BrowserAllowlistCheckPayload {
   allowed: boolean;
   allowNavigate: boolean;
   suggestedPattern: string;
   origin: string;
 }
 
+export type BrowserAllowlistCheckFailureReason = 'auth' | 'network' | 'invalid' | 'http';
+
+export type BrowserAllowlistCheckResult =
+  | ({ success: true } & BrowserAllowlistCheckPayload)
+  | { success: false; reason: BrowserAllowlistCheckFailureReason; status?: number };
+
 /** Ask the server whether a URL may be navigated to (authoritative allowlist check). */
 export async function checkBrowserNavigationAllowed(
   url: string,
-): Promise<BrowserAllowlistCheckResult | null> {
+): Promise<BrowserAllowlistCheckResult> {
   try {
     const res = await fetch(
       `/api/browser/allowlist/check?url=${encodeURIComponent(url)}`,
       { cache: 'no-store' },
     );
-    if (!res.ok) return null;
-    return (await res.json()) as BrowserAllowlistCheckResult;
+    if (res.status === 401 || res.status === 403) {
+      return { success: false, reason: 'auth', status: res.status };
+    }
+    if (res.status === 400) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      const errText = typeof body.error === 'string' ? body.error.toLowerCase() : '';
+      if (errText.includes('invalid')) {
+        return { success: false, reason: 'invalid', status: 400 };
+      }
+      return { success: false, reason: 'http', status: 400 };
+    }
+    if (!res.ok) {
+      return { success: false, reason: 'http', status: res.status };
+    }
+    const payload = (await res.json()) as BrowserAllowlistCheckPayload;
+    return { success: true, ...payload };
   } catch {
-    return null;
+    return { success: false, reason: 'network' };
   }
 }
 

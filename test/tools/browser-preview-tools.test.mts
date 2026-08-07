@@ -375,4 +375,58 @@ describe('browser-preview-tools', () => {
     assert.equal(result.attachments?.[0]?.url, '/api/browser/screenshot/shot1');
     assert.equal(result.attachments?.[0]?.mime, 'image/png');
   });
+
+  test('browser_screenshot returns friendly message when capturePage is empty', async () => {
+    const uploads: unknown[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/config/meta')) {
+        return new Response(
+          JSON.stringify({
+            browser: {
+              enabled: true,
+              allowNavigate: true,
+              allowedOriginPatterns: [],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url === '/api/browser/screenshot' && init?.method === 'POST') {
+        uploads.push(init.body);
+        return new Response(JSON.stringify({ error: 'dataBase64 is required' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        minnow: {
+          app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
+          preview: {
+            execJs: async () => ({}),
+            capturePage: async () => '   ',
+            getInfo: async () => ({
+              url: 'http://localhost:3000/',
+              title: 't',
+              loading: false,
+            }),
+            navigateAndWait: async () => ({ ok: true, url: '', title: '' }),
+            show: async () => {},
+          },
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    const result = await mod.executeBrowserPreviewTool('browser_screenshot', {});
+    assert.equal(uploads.length, 0);
+    assert.match(result.content ?? '', /no image/i);
+    assert.doesNotMatch(result.content ?? '', /dataBase64 is required/i);
+  });
 });

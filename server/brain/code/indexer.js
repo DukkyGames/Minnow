@@ -20,6 +20,7 @@ import { normalizeBrainCodeConfig } from './config.js';
 import {
   deleteSymbolsForFile,
   getCodeDb,
+  purgeFileFromIndex,
   upsertEdge,
   upsertFileHash,
   upsertSymbol,
@@ -442,8 +443,21 @@ export async function reindexCode(opts = {}) {
       const result = await indexSingleFile(db, repo, relFile, absFile, globalByFileLine);
       results.push(result);
     } catch (err) {
+      purgeFileFromIndex(db, repo, relFile);
       const message = err instanceof Error ? err.message : String(err);
       results.push({ file: relFile, symbols: 0, edges: 0, error: message });
+    }
+  }
+
+  if (!opts.files) {
+    const liveFiles = new Set(files);
+    const orphans = db
+      .prepare('SELECT file FROM file_hashes WHERE repo = ?')
+      .all(repo)
+      .map((row) => String(row.file))
+      .filter((indexedFile) => !liveFiles.has(indexedFile));
+    for (const orphan of orphans) {
+      purgeFileFromIndex(db, repo, orphan);
     }
   }
 

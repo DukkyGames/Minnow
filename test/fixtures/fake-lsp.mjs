@@ -66,6 +66,23 @@ function publishDiagnosticsForFixture(uri) {
     return;
   }
 
+  if (base === 'cold-init-ordering.fake') {
+    setTimeout(() => {
+      publishDiagnostics(uri, [
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 1 },
+          },
+          severity: 1,
+          message: 'Cold init ordering ok.',
+          source: 'fake',
+        },
+      ]);
+    }, 600);
+    return;
+  }
+
   if (base === 'sample.fake' || uri.includes('sample.fake')) {
     publishDiagnostics(uri, [
       {

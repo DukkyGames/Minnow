@@ -31,6 +31,7 @@ import { shouldRunFirstTurnInjections } from './first-turn-injection';
 import { loadPromptConfig } from './prompt-configs';
 import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
+import { resolveShellSandboxModeForChat } from '../../tools/shell-sandbox-client';
 import type { ComposeContext, PromptProfile } from './types';
 import { normalizeOrchestratePlanPath } from '../orchestrate/plan-path';
 
@@ -185,6 +186,7 @@ export async function buildComposeContext(
     browserActivated:
       options?.overrides?.browserActivated ??
       chatHistoryHasBrowserToolUse(chat.history),
+    shellSandboxMode: resolveShellSandboxModeForChat(chat.id),
     ...options?.overrides,
   };
 

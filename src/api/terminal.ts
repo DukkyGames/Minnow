@@ -46,6 +46,8 @@ export async function startTerminalRun(body: {
   cwd?: string;
   /** Custom timeout in ms (1000–600000). Defaults to server COMMAND_TIMEOUT_MS (30s). */
   timeoutMs?: number;
+  /** Prefer-mode approval to run without sandbox when unavailable. */
+  allowUnsandboxed?: boolean;
 }): Promise<TerminalRunStart> {
   const res = await fetch('/api/terminal/run', {
     method: 'POST',

@@ -17,7 +17,7 @@ For UI key bindings (composer, editor, file tree, terminal), see [Keyboard short
 | `npm run build` | `tsc && vite build` → `dist/`. `prebuild` regenerates `src/skills/builtin-manifest.json`. |
 | `npm run preview` | `vite preview` of the production build (no tool API). |
 | `npm run package` | Build + Electron build + **electron-builder** installer → `release/pkg` (Windows NSIS, macOS dmg/zip, plus `latest.yml` auto-update feed metadata; never uploads — see [releasing](../maintainer/releasing.md)). |
-| `npm run package:win` / `package:mac` / `package:linux` | Package a single platform. On Windows/macOS, **AppImage** needs Docker — use `npm run package:linux:docker`. |
+| `npm run package:win` / `package:mac` / `package:linux` | Package a single platform. On Windows/macOS, **AppImage** needs Docker — use `npm run package:linux:docker`. `package:win` / `package:linux` run `sandbox:ensure-helper` first (Linux ELF for Landlock; WSL build on Windows). |
 | `npm run package:dir` | Same, unpacked directory (`--dir`). |
 | `npm run package:clean` | Clean the `release/` output. |
 | `npx tsc --noEmit` | Typecheck only. |
@@ -75,7 +75,7 @@ UI-only tools (e.g. `ask_question`) fail with a clear error in headless mode unl
 
 **Memory:** every runner preloads [`test/assert-dom-safe.mjs`](../../test/assert-dom-safe.mjs). Without it a *failing* `assert.equal(document.querySelector('.x'), null)` hands a happy-dom node to node:assert, which inspects it at `depth: 1000` and Myers-diffs the result — synchronous, unbounded typed-array allocation that `--max-old-space-size` cannot cap, and enough to freeze a 64 GB workstation from a single test process (measured: one child at 49 GB and still climbing). The guard compares DOM operands itself and reports a short descriptor (`<section.board-root>`) instead. Do not remove the preload, and prefer `assert.ok(!el)` over comparing elements when adding assertions.
 
-**CI (MIN-383):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `npm ci` → `test:check-coverage` → `npx tsc --noEmit` → `npm test` on `windows-latest` and `ubuntu-latest` (includes `test/headless/`). Require the **`ci`** status check on `main` before merge ([`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md)).
+**CI (MIN-383):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on pull requests and pushes to `main`: `npm ci` → `test:check-coverage` → `npx tsc --noEmit` → `npm test` on `windows-latest`, `ubuntu-latest`, and `macos-latest` (includes `test/headless/`). Require the **`ci`** status check on `main` before merge ([`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md)).
 
 Scoped suites (each delegates to `node test/run-all.mjs --suite <name>`):
 

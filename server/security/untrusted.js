@@ -14,6 +14,7 @@ export {
 } from '../../src/lib/untrusted.mjs';
 
 import { isMcpToolName } from '../mcp/registry.js';
+import { parseNamespacedName } from '../mcp/bridge.js';
 import path from 'node:path';
 import { isWrappedUntrusted, wrapUntrusted } from '../../src/lib/untrusted.mjs';
 
@@ -35,6 +36,15 @@ const TOOL_SOURCE_RESOLVERS = {
   web_search_tavily: () => 'web-search:tavily',
   web_search_searxng: () => 'web-search:searxng',
 };
+
+/** Human-readable MCP source label for untrusted fences (e.g. mcp:fixture/echo). */
+function mcpToolSourceLabel(toolName) {
+  const parsed = parseNamespacedName(toolName);
+  if (parsed) {
+    return `mcp:${parsed.serverId}/${parsed.toolName}`;
+  }
+  return `mcp:${String(toolName).replace(/^mcp_/, '')}`;
+}
 
 /**
  * Whether a tool result string should be wrapped at the middleware boundary.
@@ -74,7 +84,7 @@ export function wrapServerToolResult(toolName, args, result) {
   const resolver = TOOL_SOURCE_RESOLVERS[toolName];
   const source = resolver
     ? resolver(args ?? {})
-    : `mcp:${toolName.replace(/^mcp_/, '')}`;
+    : mcpToolSourceLabel(toolName);
 
   return wrapUntrusted(text, { source });
 }

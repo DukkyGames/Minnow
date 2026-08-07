@@ -46,6 +46,7 @@ import { enqueueAskQuestion } from './ask-question-queue';
 import {
   executeBrowserNavigateWithGate,
   executeRequestBrowserOriginAccess,
+  formatBrowserAllowlistCheckFailure,
 } from './browser-navigation-gate';
 import { checkBrowserNavigationAllowed } from '../config/browser-meta';
 import { executeBrowserPreviewTool } from './browser-preview-tools';
@@ -295,7 +296,10 @@ async function executeToolInner(
       targetUrl && isLocalServerAvailable()
         ? await checkBrowserNavigationAllowed(targetUrl)
         : null;
-    if (!allowlistCheck?.allowed) {
+    if (allowlistCheck && !allowlistCheck.success) {
+      return { content: formatBrowserAllowlistCheckFailure(allowlistCheck) };
+    }
+    if (!allowlistCheck?.success || !allowlistCheck.allowed) {
       const blocked = await maybeBlockToolForUserApproval(
         'request_browser_origin_access',
         args,
@@ -664,12 +668,9 @@ function mapCodeToolToCommand(
     if (typeof command !== 'string' || !command.trim()) {
       return null;
     }
-    const isWin =
-      typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent);
     return {
       command: command.trim(),
       argv: [],
-      shell: isWin,
       label: command.trim(),
     };
   }
@@ -727,6 +728,7 @@ async function executeStreamingCodeTool(
       workspaceRoot,
       cwd: relativeCwd || undefined,
       timeoutMs: rawTimeoutMs,
+      allowUnsandboxed: args.allow_unsandboxed === true,
       abortSignal: context.chatId
         ? getChatAbort(context.chatId)?.signal
         : undefined,

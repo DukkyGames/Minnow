@@ -101,10 +101,27 @@ async function uploadScreenshotBase64(dataBase64: string): Promise<{ id: string;
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `screenshot upload failed (HTTP ${res.status})`);
+    const raw = body.error ?? `screenshot upload failed (HTTP ${res.status})`;
+    throw new Error(remapScreenshotUploadError(raw));
   }
   return (await res.json()) as { id: string; sizeBytes: number };
 }
+
+function remapScreenshotUploadError(message: string): string {
+  if (/dataBase64 is required/i.test(message)) {
+    return (
+      'Preview browser not available — use the Minnow desktop shell, open a preview tab, ' +
+      'and navigate with browser_navigate before browser_screenshot.'
+    );
+  }
+  return message;
+}
+
+const EMPTY_SCREENSHOT_MESSAGE =
+  'Error: Screenshot capture returned no image. Navigate with browser_navigate first, or ensure the preview guest is loaded in the Minnow desktop shell.';
+
+const BLANK_PAGE_SCREENSHOT_MESSAGE =
+  'Error: Nothing to screenshot — preview page is empty (about:blank). Use browser_navigate to open a URL first.';
 
 export async function browserPreviewList(instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
@@ -353,7 +370,24 @@ export async function browserPreviewScreenshot(instance?: string): Promise<ToolE
 
   try {
     const tabId = await ensureBrowserPreviewTab(instance);
-    const dataBase64 = await previewApi().capturePage(tabId, instance);
+    const api = previewApi();
+    const { prepareElectronPreviewForCapture, pollPreviewGuestUntilIdle } = await import(
+      '../ui/preview-capture-ready'
+    );
+    await prepareElectronPreviewForCapture();
+    await pollPreviewGuestUntilIdle(() => api.getInfo(tabId, instance));
+
+    const info = await api.getInfo(tabId, instance);
+    const pageUrl = (info.url ?? '').trim();
+    if (!pageUrl || pageUrl === 'about:blank') {
+      return { content: BLANK_PAGE_SCREENSHOT_MESSAGE };
+    }
+
+    const dataBase64 = await api.capturePage(tabId, instance);
+    if (!dataBase64?.trim()) {
+      return { content: EMPTY_SCREENSHOT_MESSAGE };
+    }
+
     const { id, sizeBytes } = await uploadScreenshotBase64(dataBase64);
     const url = `/api/browser/screenshot/${id}`;
     const kb = Math.round(sizeBytes / 1024);

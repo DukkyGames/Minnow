@@ -135,3 +135,13 @@ describe('wrapUntrusted', () => {
     assert.ok(!preBody.includes('\n'));
   });
 });
+
+describe('wrapServerToolResult MCP labels', () => {
+  test('uses server/tool label for namespaced MCP tools', async () => {
+    const { wrapServerToolResult } = await import('../../server/security/untrusted.js');
+    const wrapped = wrapServerToolResult('mcp__fixture__echo', {}, 'echo payload');
+    assert.match(wrapped, /source="mcp:fixture\/echo"/);
+    assert.match(wrapped, /echo payload/);
+    assert.doesNotMatch(wrapped, /mcp:_fixture__echo/);
+  });
+});

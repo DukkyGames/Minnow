@@ -650,6 +650,8 @@ export async function startServe(body) {
     cwd: llamaServerSpawnCwd(llamaServerPath),
     env: spawnEnv,
     source: 'agent',
+    // Model runtime is user-installed software — not agent-authored argv (MIN-553).
+    sandbox: false,
     logSubdir: 'models',
   });
 

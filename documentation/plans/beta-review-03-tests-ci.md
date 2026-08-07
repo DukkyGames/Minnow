@@ -4,7 +4,7 @@
 
 Minnow has a **large, well-wired automated suite**: **1,058** `test/**/*.test.{js,mjs,mts,ts}` files, **1,056** included in `npm test`, **2** intentionally excluded (`test/terminal/pty-session.test.mjs`, `test/terminal-stream.test.mjs`). `npm run test:check-coverage` passed locally (**no orphans**).
 
-**PR CI** (`.github/workflows/ci.yml`) runs on **Windows + Ubuntu**: `test:check-coverage` → `check:icons` → `tsc --noEmit` → full `npm test`, plus separate jobs for **board scenario contract** and **production build + bundle budgets**. **Boot budget** is enforced inside `npm test` via `test/boot/boot-budget-ci.test.mts` (reads `budgets.json` `startup.appReadyHarnessMaxMs`: **2500 ms**), not in the `performance-budgets` job (bundle only).
+**PR CI** (`.github/workflows/ci.yml`) runs on **Windows + Ubuntu + macOS**: `test:check-coverage` → `check:icons` → `tsc --noEmit` → full `npm test`, plus separate jobs for **board scenario contract** and **production build + bundle budgets**. **Boot budget** is enforced inside `npm test` via `test/boot/boot-budget-ci.test.mts` (reads `budgets.json` `startup.appReadyHarnessMaxMs`: **2500 ms**), not in the `performance-budgets` job (bundle only).
 
 **Beta-facing features** vary in automation depth: **Orchestrate** and **Brain** are heavily covered; **Issues**, **Scheduler**, and **onboarding** lean on unit/happy-dom tests with **no dedicated scoped npm scripts** and **no full-app journey tests** matching `documentation/guides/release-e2e-testing.md`. **Release E2E** remains the main safety net for UX, packaged Electron, providers, and cross-app flows.
 
@@ -37,7 +37,7 @@ Minnow has a **large, well-wired automated suite**: **1,058** `test/**/*.test.{j
 
 ## 2. `.github/workflows/ci.yml`
 
-- **Matrix:** `windows-latest`, `ubuntu-latest`, `fail-fast: false`, Node **24**, `npm ci`.
+- **Matrix:** `windows-latest`, `ubuntu-latest`, `macos-latest`, `fail-fast: false`, Node **24**, `npm ci`.
 - **Not in gate job:** `npm run build`, `check:performance-budgets` (separate **performance-budgets** job on Ubuntu only).
 - **Also not in gate:** `test:board`, `board:electron-smoke`, release E2E, `test:terminal-pty`.
 

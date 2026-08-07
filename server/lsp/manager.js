@@ -36,7 +36,6 @@ const LSP_SCOPE_AGENT = 'agent';
 
 const DEFAULT_DIAG_QUIET_PERIOD_MS = 150;
 const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
-const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = 15_000;
 /** Default timeout for indexing/search LSP requests (workspace/symbol, documentSymbol). */
 const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 6000;
 /** Cold CI runners can be slow to answer the first completion request. */
@@ -46,6 +45,9 @@ const LSP_SIGNATURE_TIMEOUT_MS = 1000;
 const LSP_DEFINITION_TIMEOUT_MS = 3000;
 const LSP_FORMAT_TIMEOUT_MS = 10_000;
 const LSP_INITIALIZE_TIMEOUT_MS = 20_000;
+/** Publish settle window for agent `get_lsp_diagnostics` after sync (excludes cold init). */
+const DIAG_AGENT_SETTLE_MARGIN_MS = 10_000;
+const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = LSP_INITIALIZE_TIMEOUT_MS + DIAG_AGENT_SETTLE_MARGIN_MS;
 const MAX_LSP_STDERR_LINES = 80;
 const MAX_DIAGNOSTIC_SNAPSHOT_ENTRIES = 128;
 
@@ -769,9 +771,14 @@ function notifyDiagnosticWaiters(scope, serverId, fileUri, diagnostics) {
 
 /**
  * Event-driven waiter for publishDiagnostics — register before didOpen/didChange.
- * @returns {{ promise: Promise<{ receivedAny: boolean, diagnostics: unknown[], reason: string }>, cancel: () => void }}
+ * @param {{ deferTotalTimer?: boolean }} [options] - When true, call `startTotalTimer()` after sync (agent tool).
+ * @returns {{
+ *   promise: Promise<{ receivedAny: boolean, diagnostics: unknown[], reason: string }>,
+ *   cancel: () => void,
+ *   startTotalTimer: () => void,
+ * }}
  */
-function createDiagnosticWaiter(scope, serverId, fileUri) {
+function createDiagnosticWaiter(scope, serverId, fileUri, options = {}) {
   const key = diagnosticWaiterKey(scope, serverId, fileUri);
   let receivedAny = false;
   let settled = false;
@@ -815,17 +822,24 @@ function createDiagnosticWaiter(scope, serverId, fileUri) {
     },
   };
 
-  totalTimer = setTimeout(() => {
-    if (!receivedAny) {
-      settle('timeout');
-    } else {
-      settle('total-timeout');
-    }
-  }, diagTotalTimeoutMs);
+  const startTotalTimer = () => {
+    if (totalTimer != null || settled) return;
+    totalTimer = setTimeout(() => {
+      if (!receivedAny) {
+        settle('timeout');
+      } else {
+        settle('total-timeout');
+      }
+    }, diagTotalTimeoutMs);
+  };
+
+  if (options.deferTotalTimer !== true) {
+    startTotalTimer();
+  }
 
   diagnosticWaiters.set(key, waiter);
 
-  return { promise, cancel: () => waiter.cancel() };
+  return { promise, cancel: () => waiter.cancel(), startTotalTimer };
 }
 
 function cancelAllDiagnosticWaiters() {
@@ -1260,6 +1274,10 @@ export async function getLspDiagnostics(relativePath) {
   try {
     diskText = await fs.readFile(abs, 'utf8');
   } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+    if (code === 'ENOENT') {
+      return `Error: File not found: ${relativePath}`;
+    }
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
   }
@@ -1274,29 +1292,45 @@ export async function getLspDiagnostics(relativePath) {
 
   const parts = [];
   for (const { id, config } of matchers) {
-    const { promise, cancel } = createDiagnosticWaiter(LSP_SCOPE_AGENT, id, fileUri);
     try {
       await getConnection(LSP_SCOPE_AGENT, id, config);
-      await ensureDocumentSyncedForScope(LSP_SCOPE_AGENT, relativePath, {
-        diskText,
-        forceChange: true,
-      });
-      const settled = await promise;
-      if (!settled.receivedAny) {
-        parts.push(
-          `[${id}] Diagnostics unavailable: no publishDiagnostics received within ${diagTotalTimeoutMs}ms. ` +
-            'The language server may still be starting or does not publish diagnostics for this file.',
+
+      const waitAfterSync = async () => {
+        const { promise, cancel, startTotalTimer } = createDiagnosticWaiter(
+          LSP_SCOPE_AGENT,
+          id,
+          fileUri,
+          { deferTotalTimer: true },
         );
-        continue;
+        try {
+          await ensureDocumentSyncedForScope(LSP_SCOPE_AGENT, relativePath, {
+            diskText,
+            forceChange: true,
+          });
+          startTotalTimer();
+          return await promise;
+        } catch (err) {
+          cancel();
+          throw err;
+        }
+      };
+
+      let settled = await waitAfterSync();
+      if (!settled.receivedAny) {
+        settled = await waitAfterSync();
       }
-      const diags = settled.diagnostics;
+
+      const state = await getConnection(LSP_SCOPE_AGENT, id, config);
+      const diags =
+        settled.receivedAny === true
+          ? settled.diagnostics
+          : (state.diagnostics.get(fileUri) ?? []);
       if (diags.length === 0) {
         parts.push(`No LSP diagnostics for ${relativePath} (${id}).`);
       } else {
         parts.push(formatDiagnostics(`${relativePath} (${id})`, diags));
       }
     } catch (err) {
-      cancel();
       const message = err instanceof Error ? err.message : String(err);
       parts.push(`[${id}] Error: ${message}`);
     }

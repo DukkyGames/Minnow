@@ -63,13 +63,21 @@ export function createBrowserAllowlistMiddleware() {
           return;
         }
 
+        let origin;
+        try {
+          origin = originFromUrl(target);
+        } catch {
+          sendJson(res, 400, { error: 'invalid url' });
+          return;
+        }
+
         const cfg = await loadBrowserConfig();
         const allowed = isNavigationAllowed(target, cfg.allowedOriginPatterns);
         sendJson(res, 200, {
           allowed,
           allowNavigate: cfg.allowNavigate,
           suggestedPattern: suggestAllowlistPattern(target),
-          origin: originFromUrl(target),
+          origin,
         });
         return;
       }

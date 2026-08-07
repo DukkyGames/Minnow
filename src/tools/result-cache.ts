@@ -90,8 +90,13 @@ function pathKeysFromArgs(
   return out;
 }
 
+const FILE_AND_GIT_READ_INVALIDATION_TARGETS = [
+  ...FILE_READ_INVALIDATION_TARGETS,
+  ...GIT_READ_INVALIDATION_TARGETS,
+] as const;
+
 const saveFileInvalidation: InvalidationRule = {
-  invalidateTools: FILE_READ_INVALIDATION_TARGETS,
+  invalidateTools: FILE_AND_GIT_READ_INVALIDATION_TARGETS,
   pathFromArgs: (_, args) => pathKeysFromArgs(args, PATH_WRITE_KEYS),
 };
 
@@ -108,17 +113,17 @@ const INVALIDATION_MAP: Record<string, InvalidationRule> = {
     pathFromArgs: (_, args) => pathKeysFromArgs(args, PATH_WRITE_KEYS),
   },
   move_file: {
-    invalidateTools: FILE_READ_INVALIDATION_TARGETS,
+    invalidateTools: FILE_AND_GIT_READ_INVALIDATION_TARGETS,
     pathFromArgs: (_, args) =>
       pathKeysFromArgs(args, ['source', 'destination'] as const),
   },
   copy_file: {
-    invalidateTools: FILE_READ_INVALIDATION_TARGETS,
+    invalidateTools: FILE_AND_GIT_READ_INVALIDATION_TARGETS,
     pathFromArgs: (_, args) =>
       pathKeysFromArgs(args, ['source', 'destination'] as const),
   },
   delete_path: {
-    invalidateTools: FILE_READ_INVALIDATION_TARGETS,
+    invalidateTools: FILE_AND_GIT_READ_INVALIDATION_TARGETS,
     pathFromArgs: (_, args) => pathKeysFromArgs(args, PATH_WRITE_KEYS),
   },
   git_add: {

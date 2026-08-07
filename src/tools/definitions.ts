@@ -985,7 +985,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'manage_dev_servers',
-      'Registry CRUD + start/stop/restart. Prefer over ad-hoc shells for named servers. startup.md rows: edit file for command/cwd/health; update only port/network/autoStart/worktree.',
+      'Registry CRUD + start/stop/restart. Prefer over ad-hoc shells for named servers. startup.md rows: edit file for command/cwd/health; update only port/network/autoStart/worktree. With healthUrl, start may return status starting until the health probe passes (background reconcile; default ~45s timeout).',
       {
         action: {
           type: 'string',
@@ -1684,7 +1684,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'run_impeccable',
-      'Spawn npx impeccable <command> or the live script in the project root (60s timeout). Use /impeccable <cmd> for teach, audit, shape, craft, polish, and other harness commands.',
+      'Run the bundled Impeccable CLI (detect, live) or live script in the active workspace (60s timeout). detect defaults target to "." when omitted. Use /impeccable <cmd> for teach, audit, shape, craft, polish, and other harness commands.',
       {
         command: {
           type: 'string',
@@ -1692,7 +1692,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
         target: {
           type: 'string',
-          description: 'Optional target path or URL passed to the command',
+          description: 'Optional path or URL; for detect, omitted means project root (.)',
         },
       },
       ['command'],

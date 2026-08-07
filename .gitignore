@@ -8,6 +8,10 @@ build/macos-signing/
 public/material-icons/
 test.log
 
+# Built Landlock helper (MIN-553) — compile on Linux via native/minnow-sandbox/build.sh
+native/minnow-sandbox/minnow-sandbox
+native/minnow-sandbox/minnow-sandbox.exe
+
 # Runtime-scratch Minnow homes under test/fixtures — tests wipe and regenerate these on every run; never commit
 test/fixtures/lsp-typescript-home/
 test/fixtures/lsp-workspace-home/

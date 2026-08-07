@@ -16,6 +16,9 @@ export type AutopilotExecutionMode = 'manual' | 'sequential' | 'auto' | 'afk';
 /** Stored isolation sentinel `auto` means derive from execution mode at resolve time. */
 export type AutopilotIsolationMode = 'auto' | 'off' | 'per-task' | 'per-wave';
 
+/** Board default for agent shell sandbox (MIN-553); overridable per board. */
+export type AutopilotShellSandboxMode = 'off' | 'prefer' | 'require';
+
 export type AutopilotContinueSmartRoute = 'off' | 'conservative' | 'aggressive';
 
 /** Persisted global autopilot defaults for orchestrate boards. */
@@ -23,6 +26,8 @@ export interface AutopilotMeta {
   defaultExecutionMode: AutopilotExecutionMode;
   maxConcurrentTasks: number;
   isolationMode: AutopilotIsolationMode;
+/** @deprecated Boards use toolSecurity.shellSandbox; kept for legacy config.json reads. */
+  shellSandbox: AutopilotShellSandboxMode;
   maxTestAttempts: number;
   maxBuildAttempts: number;
   maxFinalTestAttempts: number;
@@ -59,6 +64,7 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   defaultExecutionMode: 'manual',
   maxConcurrentTasks: FALLBACK_MAX_CONCURRENT,
   isolationMode: 'auto',
+  shellSandbox: 'off',
   maxTestAttempts: FALLBACK_MAX_TEST_ATTEMPTS,
   maxBuildAttempts: FALLBACK_MAX_BUILD_ATTEMPTS,
   maxFinalTestAttempts: FALLBACK_MAX_FINAL_TEST_ATTEMPTS,
@@ -90,6 +96,12 @@ const ISOLATION_MODES = new Set<AutopilotIsolationMode>([
   'off',
   'per-task',
   'per-wave',
+]);
+
+const SHELL_SANDBOX_MODES = new Set<AutopilotShellSandboxMode>([
+  'off',
+  'prefer',
+  'require',
 ]);
 
 const CONTINUE_SMART_ROUTE_MODES = new Set<AutopilotContinueSmartRoute>([
@@ -141,6 +153,14 @@ function parseIsolationMode(value: unknown): AutopilotIsolationMode {
   return DEFAULT_AUTOPILOT_META.isolationMode;
 }
 
+function parseShellSandboxMode(value: unknown): AutopilotShellSandboxMode {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (SHELL_SANDBOX_MODES.has(raw as AutopilotShellSandboxMode)) {
+    return raw as AutopilotShellSandboxMode;
+  }
+  return DEFAULT_AUTOPILOT_META.shellSandbox;
+}
+
 export function parseContinueSmartRoute(value: unknown): AutopilotContinueSmartRoute {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (CONTINUE_SMART_ROUTE_MODES.has(raw as AutopilotContinueSmartRoute)) {
@@ -166,6 +186,7 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
       DEFAULT_AUTOPILOT_META.maxConcurrentTasks,
     ),
     isolationMode: parseIsolationMode(block.isolationMode),
+    shellSandbox: parseShellSandboxMode(block.shellSandbox),
     maxTestAttempts: clampAttempts(
       block.maxTestAttempts,
       DEFAULT_AUTOPILOT_META.maxTestAttempts,

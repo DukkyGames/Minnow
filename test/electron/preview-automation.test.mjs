@@ -23,22 +23,26 @@ function createMockWebContents(overrides = {}) {
     captureCalls: 0,
     ...overrides,
   };
+  const isLoadingFn =
+    typeof overrides.isLoading === 'function' ? overrides.isLoading : () => state.loading;
   return {
     isDestroyed: () => false,
     getURL: () => state.url,
     getTitle: () => state.title,
-    isLoading: () => state.loading,
+    isLoading: isLoadingFn,
     executeJavaScript: async (code, userGesture) => {
       state.execCalls.push({ code, userGesture });
       if (state.execResult !== undefined) return state.execResult;
       return state.execReturn;
     },
-    capturePage: async () => {
-      state.captureCalls += 1;
-      return {
-        toPNG: () => Buffer.from('png-bytes'),
-      };
-    },
+    capturePage:
+      overrides.capturePage ??
+      (async () => {
+        state.captureCalls += 1;
+        return {
+          toPNG: () => Buffer.from('png-bytes'),
+        };
+      }),
     loadURL: async (url) => {
       state.loadCalls.push(url);
       if (state.loadReject) {
@@ -74,6 +78,34 @@ describe('preview guest actions', () => {
     const b64 = await previewCapturePageBase64(wc);
     assert.equal(b64, Buffer.from('png-bytes').toString('base64'));
     assert.equal(wc._state.captureCalls, 1);
+  });
+
+  test('previewCapturePageBase64 retries when PNG is empty', async () => {
+    let captureCalls = 0;
+    const wc = createMockWebContents({
+      capturePage: async () => {
+        captureCalls += 1;
+        const bytes = captureCalls >= 2 ? Buffer.from('png-bytes') : Buffer.alloc(0);
+        return { toPNG: () => bytes };
+      },
+    });
+    const b64 = await previewCapturePageBase64(wc);
+    assert.equal(b64, Buffer.from('png-bytes').toString('base64'));
+    assert.equal(captureCalls, 2);
+  });
+
+  test('previewCapturePageBase64 waits for guest loading to finish', async () => {
+    let loading = true;
+    const wc = createMockWebContents({
+      isLoading: () => loading,
+    });
+    setTimeout(() => {
+      loading = false;
+    }, 80);
+    const started = Date.now();
+    const b64 = await previewCapturePageBase64(wc);
+    assert.equal(b64, Buffer.from('png-bytes').toString('base64'));
+    assert.ok(Date.now() - started >= 50);
   });
 
   test('previewGetGuestInfo returns url title loading', () => {

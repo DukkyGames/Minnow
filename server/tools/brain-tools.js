@@ -219,11 +219,15 @@ export async function toolBrainIngestSource(args) {
       filename: args?.filename !== undefined ? String(args.filename) : undefined,
       title: args?.title !== undefined ? String(args.title) : undefined,
     });
-    const paths = Array.isArray(result?.paths) ? result.paths : [];
-    if (!paths.length) {
+    const pages = Array.isArray(result?.pages)
+      ? result.pages
+      : Array.isArray(result?.paths)
+        ? result.paths
+        : [];
+    if (!pages.length) {
       return 'Ingest completed but no wiki pages were created.';
     }
-    return `Ingested source into ${paths.length} page(s): ${paths.join(', ')}`;
+    return `Ingested source into ${pages.length} page(s): ${pages.join(', ')}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error ingesting source: ${message}`;

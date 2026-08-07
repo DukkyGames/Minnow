@@ -132,6 +132,8 @@ import { resolveChatContext } from '../workspace/chat-cwd.js';
 import { appendBoardLogLine } from '../orchestrate/board-log-sink.js';
 import { guardCdOutsideWorktree as _guardCdRaw } from '../tools/cwd-guard.js';
 import { readConfigJson } from '../config/store.js';
+import { brainWorkspaceKeyFromPath } from '../brain/paths.js';
+import { purgeFileFromIndex, getCodeDb } from '../brain/code/schema.js';
 
 const execFileAsync = promisify(execFile);
 const FIND_FILES_MAX = 500;
@@ -310,6 +312,32 @@ function withCodeChange(message, codeChange) {
     return { result: message, codeChange };
   }
   return message;
+}
+
+/** Drop brain code-index rows for paths removed by delete_path (best-effort). */
+function purgeBrainCodeIndexAfterDelete(relPath, isDirectory) {
+  try {
+    const normalized = String(relPath ?? '').trim().replace(/\\/g, '/');
+    if (!normalized) return;
+    const root = getEffectiveWorkspaceRoot();
+    const repo = brainWorkspaceKeyFromPath(root) || 'workspace';
+    const db = getCodeDb(repo);
+    if (isDirectory) {
+      const base = normalized.replace(/\/$/, '');
+      const rows = db
+        .prepare(
+          `SELECT file FROM file_hashes WHERE repo = ? AND (file = ? OR file LIKE ?)`,
+        )
+        .all(repo, base, `${base}/%`);
+      for (const row of rows) {
+        purgeFileFromIndex(db, repo, String(row.file));
+      }
+    } else {
+      purgeFileFromIndex(db, repo, normalized);
+    }
+  } catch {
+    /* code index is optional — never fail delete_path */
+  }
 }
 
 async function toolReadFileRange(args) {
@@ -636,17 +664,20 @@ async function toolDeletePath(args) {
   const stat = await fs.stat(target);
   if (stat.isDirectory()) {
     await fs.rm(target, { recursive: true, force: true });
+    purgeBrainCodeIndexAfterDelete(rel, true);
     return `Deleted ${rel}`;
   }
   if (stat.size > MAX_DIFF_STAT_BYTES) {
     // Too large to load for line-diff stats — delete without the codeChange payload.
     await fs.unlink(target);
+    purgeBrainCodeIndexAfterDelete(rel, false);
     return `Deleted ${rel}`;
   }
   const content = await fs.readFile(target, 'utf8');
   const deletions = countLinesInText(content);
   const { lines, truncated } = buildRemoveOnlyDiffLines(content);
   await fs.unlink(target);
+  purgeBrainCodeIndexAfterDelete(rel, false);
   const message = `Deleted ${rel}`;
   if (deletions === 0) return message;
   return withCodeChange(
@@ -904,12 +935,16 @@ async function toolExecuteCommand(args) {
   }
 
   if (args?.background === true) {
-    const command = typeof args?.command === 'string' ? args.command.trim() : '';
+    let command = typeof args?.command === 'string' ? args.command.trim() : '';
     if (!command) return 'Error: command is required';
 
     const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
 
     let cwd;
+    /** @type {string | undefined} */
+    let worktreeRoot;
+    /** @type {string | undefined} */
+    let groupId;
     if (typeof args?.cwd === 'string' && args.cwd.trim()) {
       try {
         cwd = resolveCommandCwd(args);
@@ -917,8 +952,18 @@ async function toolExecuteCommand(args) {
         const message = err instanceof Error ? err.message : String(err);
         return `Error: ${message}`;
       }
+      const ctx = await resolveChatContext(chatId ?? '');
+      worktreeRoot = ctx.worktreeRoot;
+      groupId = ctx.groupId;
     } else {
+      const ctx = await resolveChatContext(chatId ?? '');
+      worktreeRoot = ctx.worktreeRoot;
+      groupId = ctx.groupId;
       cwd = await resolveDefaultCwd(chatId);
+      if (worktreeRoot && (await isGuardCdEnabled())) {
+        const guarded = guardCdOutsideWorktree(command, worktreeRoot, { chatId, groupId });
+        if (guarded.redirected) command = guarded.command;
+      }
     }
     const toolCallId =
       typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
@@ -928,12 +973,14 @@ async function toolExecuteCommand(args) {
       const started = await createBackgroundRun({
         command,
         cwd,
-        shell: process.platform === 'win32' && !usesWsl,
+        shell: false,
         source: 'agent',
         chatId,
         toolCallId,
         logSubdir: 'terminal',
         shellProfile,
+        allowUnsandboxed: args?.allow_unsandboxed === true,
+        worktreeRoot: worktreeRoot || undefined,
         ...(spawnEnv ? { env: spawnEnv } : {}),
       });
       const blockUntilMs = clampBlockUntilMs(args?.block_until_ms);
@@ -970,6 +1017,10 @@ async function toolExecuteCommand(args) {
 
   let command = rawCommand;
   let cwd;
+  /** @type {string | undefined} */
+  let worktreeRoot;
+  /** @type {string | undefined} */
+  let groupId;
   if (typeof args?.cwd === 'string' && args.cwd.trim()) {
     try {
       cwd = resolveCommandCwd(args);
@@ -977,8 +1028,13 @@ async function toolExecuteCommand(args) {
       const message = err instanceof Error ? err.message : String(err);
       return `Error: ${message}`;
     }
+    const ctx = await resolveChatContext(chatId ?? '');
+    worktreeRoot = ctx.worktreeRoot;
+    groupId = ctx.groupId;
   } else {
-    const { worktreeRoot, groupId } = await resolveChatContext(chatId ?? '');
+    const ctx = await resolveChatContext(chatId ?? '');
+    worktreeRoot = ctx.worktreeRoot;
+    groupId = ctx.groupId;
     cwd = worktreeRoot ?? getEffectiveWorkspaceRoot();
     if (worktreeRoot && await isGuardCdEnabled()) {
       const guarded = guardCdOutsideWorktree(rawCommand, worktreeRoot, { chatId, groupId });
@@ -1004,13 +1060,32 @@ async function toolExecuteCommand(args) {
     const output = await executeCommandBlocking({
       command,
       cwd,
-      shell: process.platform === 'win32' && !usesWsl,
+      shell: false,
       chatId,
       toolCallId,
       timeoutMs: typeof args?.timeout_ms === 'number' ? args.timeout_ms : undefined,
       shellProfile,
+      allowUnsandboxed: args?.allow_unsandboxed === true,
+      worktreeRoot: worktreeRoot || undefined,
       ...(spawnEnv ? { env: spawnEnv } : {}),
     });
+    if (groupId) {
+      const text = String(output);
+      const sandboxed = /\[sandboxed:/i.test(text);
+      const notSandboxed = /\[NOT sandboxed:/i.test(text);
+      if (sandboxed || notSandboxed || text.trimStart().startsWith('Error: Agent shell sandbox')) {
+        void appendBoardLogLine(groupId, {
+          type: 'sandbox',
+          chatId,
+          applied: sandboxed,
+          trailer: sandboxed
+            ? (text.match(/\[sandboxed:[^\]]+\]/i)?.[0] ?? null)
+            : (text.match(/\[NOT sandboxed:[^\]]+\]/i)?.[0] ?? null),
+          error: text.trimStart().startsWith('Error: Agent shell sandbox') ? text.slice(0, 400) : null,
+          ts: Date.now(),
+        });
+      }
+    }
     if (String(output).trimStart().startsWith('Error')) {
       return output;
     }
@@ -1057,6 +1132,12 @@ async function toolListRunningCommands(args) {
   return JSON.stringify({ ok: true, runs }, null, 2);
 }
 
+/**
+ * run_javascript / run_python previously called runProcess directly and bypassed
+ * the resolveOneShotSpawn → applyAgentShellSandbox chokepoint (MIN-553 Phase 2).
+ * Route through executeCommandBlocking → createRun so agent code-exec inherits the
+ * same Seatbelt/Landlock wrap as execute_command when MINNOW_SHELL_SANDBOX=1.
+ */
 async function toolRunJavascript(args) {
   const code = args?.code;
   if (!code || typeof code !== 'string') {
@@ -1064,15 +1145,44 @@ async function toolRunJavascript(args) {
   }
 
   try {
-    const result = await runProcess('node', ['-e', code], {
+    // Argv form (not a shell one-shot) so the model code is not re-parsed by cmd/zsh.
+    // Result label is the binary name ("node"), matching createRun's state.command.
+    return await executeCommandBlocking({
+      command: 'node',
+      args: ['-e', code],
       cwd: getEffectiveWorkspaceRoot(),
-      timeout: COMMAND_TIMEOUT_MS,
+      shell: false,
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      allowUnsandboxed: args?.allow_unsandboxed === true,
+      chatId: typeof args?.chatId === 'string' ? args.chatId : undefined,
+      toolCallId: typeof args?.toolCallId === 'string' ? args.toolCallId : undefined,
     });
-    return formatProcessOutput('node -e', result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
   }
+}
+
+/**
+ * Probe interpreters with a trusted --version spawn (not model code), then run the
+ * real payload through createRun. createRun maps spawn ENOENT to a finished exit-1
+ * string, so the old try/catch candidate loop cannot drive selection by itself.
+ */
+async function resolvePythonBin(cwd) {
+  const candidates =
+    process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
+  let lastError = '';
+
+  for (const bin of candidates) {
+    try {
+      await runProcess(bin, ['--version'], { cwd, timeout: 5_000 });
+      return { bin };
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  return { error: lastError };
 }
 
 async function toolRunPython(args) {
@@ -1081,22 +1191,27 @@ async function toolRunPython(args) {
     return 'Error: code is required';
   }
 
-  const candidates = process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
-  let lastError = '';
-
-  for (const bin of candidates) {
-    try {
-      const result = await runProcess(bin, ['-c', code], {
-        cwd: getEffectiveWorkspaceRoot(),
-        timeout: COMMAND_TIMEOUT_MS,
-      });
-      return formatProcessOutput(`${bin} -c`, result);
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-    }
+  const cwd = getEffectiveWorkspaceRoot();
+  const resolved = await resolvePythonBin(cwd);
+  if (!resolved.bin) {
+    return `Error: could not run Python (${resolved.error || 'no interpreter found'})`;
   }
 
-  return `Error: could not run Python (${lastError})`;
+  try {
+    return await executeCommandBlocking({
+      command: resolved.bin,
+      args: ['-c', code],
+      cwd,
+      shell: false,
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      allowUnsandboxed: args?.allow_unsandboxed === true,
+      chatId: typeof args?.chatId === 'string' ? args.chatId : undefined,
+      toolCallId: typeof args?.toolCallId === 'string' ? args.toolCallId : undefined,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error: ${message}`;
+  }
 }
 
 // --- Utility tools ---

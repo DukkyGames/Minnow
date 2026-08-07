@@ -151,6 +151,17 @@ export function resolveWslDistroFromProfileId(profileId, defaultDistro = null) {
 }
 
 /**
+ * Escape unescaped `$` for Windows `wsl.exe … bash -c` one-shots so host parsing
+ * does not strip variables before bash sees them. Idempotent (already `\$` unchanged).
+ * @param {string} command
+ * @returns {string}
+ */
+export function escapeDollarsForWindowsWslOneShot(command) {
+  if (typeof command !== 'string' || command.length === 0) return command;
+  return command.replace(/(?<!\\)\$/g, '\\$');
+}
+
+/**
  * Build argv for `wsl.exe` interactive bash (PTY tabs).
  * @param {object} options
  * @param {string | null} [options.distro]
@@ -191,7 +202,11 @@ export function buildWslOneShotSpawn({
   }
 
   if (args.length === 0) {
-    wslArgs.push('--', 'bash', '-l', '-c', command);
+    const script =
+      process.platform === 'win32'
+        ? escapeDollarsForWindowsWslOneShot(command)
+        : command;
+    wslArgs.push('--', 'bash', '-l', '-c', script);
   } else {
     wslArgs.push('--', command, ...args);
   }
