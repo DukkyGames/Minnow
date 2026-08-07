@@ -53,10 +53,12 @@ describe('research panel', () => {
     const cancel = document.getElementById('btnResearchCancel') as HTMLButtonElement;
     assert.equal(cancel.hidden, false);
     const start = document.getElementById('btnResearchStart') as HTMLButtonElement;
-    assert.match(start.textContent ?? '', /Running/);
+    assert.equal(start.getAttribute('aria-label'), 'Research running');
+    assert.ok(start.querySelector('.dr-spinner'));
     setResearchRunningForTests(false);
     assert.equal(isResearchStartDisabledForTests(), false);
     assert.equal(cancel.hidden, true);
+    assert.equal(start.getAttribute('aria-label'), 'Start research');
   });
 
   test('openResearchReport uses external surface while research page is open', () => {

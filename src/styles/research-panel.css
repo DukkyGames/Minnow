@@ -33,8 +33,24 @@
   min-height: 0;
 }
 
+#researchView.research-page--embedded .dr-scroll {
+  padding-top: 12px;
+}
+
+#researchView.research-page--embedded.is-idle .dr-scroll {
+  justify-content: flex-start;
+}
+
+#researchView.research-page--embedded .dr-title {
+  font-size: clamp(22px, 3vw, 26px);
+}
+
+#researchView.research-page--embedded .dr-prompts {
+  gap: 6px;
+}
+
 .research-panel-banner {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   padding: 12px 14px;
   border-radius: var(--mn-radius-md, 8px);
   background: var(--mn-surface-elevated);

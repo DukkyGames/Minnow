@@ -114,6 +114,29 @@ function notifyResearchPanelStatus(): void {
   void import('../ui/research-panel').then((m) => m.syncResearchPanelStatus());
 }
 
+function syncResearchIdleChrome(): void {
+  const root = getRoot();
+  const idle = document.getElementById('researchIdleChrome');
+  if (!root || !idle) return;
+
+  const progress = getProgressMount();
+  const result = getResultMount();
+  const hasRunChrome =
+    Boolean(progress?.childElementCount) || Boolean(result?.childElementCount);
+  const hideIdle = running || hasRunChrome || currentTab !== 'run';
+
+  root.classList.toggle('is-idle', !hideIdle);
+  idle.hidden = hideIdle;
+  idle.setAttribute('aria-hidden', hideIdle ? 'true' : 'false');
+}
+
+function renderResearchStartButton(): void {
+  const startBtn = document.getElementById('btnResearchStart') as HTMLButtonElement | null;
+  if (!startBtn || running) return;
+  startBtn.innerHTML = iconHtml('arrowUp', { size: 20, className: 'dr-send-icon' });
+  startBtn.setAttribute('aria-label', 'Start research');
+}
+
 function setRunningState(isRunning: boolean): void {
   running = isRunning;
   const root = getRoot();
@@ -125,9 +148,10 @@ function setRunningState(isRunning: boolean): void {
     startBtn.disabled = isRunning;
     startBtn.classList.toggle('busy', isRunning);
     if (isRunning) {
-      startBtn.innerHTML = '<span class="dr-spinner"></span> Running…';
+      startBtn.innerHTML = '<span class="dr-spinner" aria-hidden="true"></span>';
+      startBtn.setAttribute('aria-label', 'Research running');
     } else {
-      startBtn.innerHTML = `${iconHtml('search', { size: 16, className: 'dr-run-icon' })} Research`;
+      renderResearchStartButton();
     }
   }
   if (cancelBtn) {
@@ -144,6 +168,7 @@ function setRunningState(isRunning: boolean): void {
   )) {
     el.disabled = isRunning;
   }
+  syncResearchIdleChrome();
   notifyResearchPanelStatus();
 }
 
@@ -172,6 +197,7 @@ function setPanelTab(tab: ResearchPanelTab): void {
   if (tab === 'library') {
     void refreshLibraryPanel();
   }
+  syncResearchIdleChrome();
   notifyResearchPanelStatus();
 }
 
@@ -261,6 +287,7 @@ function resetRunUi(): void {
     resultMount.innerHTML = '';
   }
   activeResearchId = null;
+  syncResearchIdleChrome();
 }
 
 async function showResultForId(researchId: string): Promise<void> {
@@ -328,6 +355,7 @@ async function showResultForId(researchId: string): Promise<void> {
     const msg = err instanceof Error ? err.message : 'Could not load result';
     mount.innerHTML = `<p class="dr-rep-stats">${msg}</p>`;
   }
+  syncResearchIdleChrome();
   notifyResearchPanelStatus();
 }
 
@@ -642,6 +670,30 @@ function bindStaticControls(): void {
   document.getElementById('btnResearchCancel')?.addEventListener('click', () => {
     void cancelActiveRun();
   });
+  document.getElementById('btnResearchOptions')?.addEventListener('click', () => {
+    const panel = document.getElementById('researchOptionsPanel');
+    const btn = document.getElementById('btnResearchOptions');
+    if (!panel || !btn) return;
+    const open = panel.hidden;
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.classList.toggle('is-on', open);
+  });
+  for (const chip of document.querySelectorAll<HTMLButtonElement>('[data-research-prompt]')) {
+    chip.addEventListener('click', () => {
+      const seed = chip.getAttribute('data-research-prompt')?.trim();
+      const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+      if (!seed || !queryInput) return;
+      queryInput.value = seed;
+      queryInput.focus();
+    });
+  }
+  const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+  queryInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    void startResearchRun();
+  });
   document.getElementById('researchTabRun')?.addEventListener('click', () => setPanelTab('run'));
   document.getElementById('researchTabLibrary')?.addEventListener('click', () =>
     setPanelTab('library'),
@@ -669,6 +721,8 @@ function bindStaticControls(): void {
 /** Wire hash routing and controls (call once from main). */
 export function initResearchPage(): void {
   bindStaticControls();
+  renderResearchStartButton();
+  syncResearchIdleChrome();
   if (!isOsShellEnabled()) {
     window.addEventListener('hashchange', onHashChange);
     if (window.location.hash === '#/research' || window.location.hash.startsWith('#/research/')) {

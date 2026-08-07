@@ -845,10 +845,86 @@
   <div class="dr-scroll research-page-body">
     <div class="dr-col research-page-inner">
       <div id="researchPanelRun" role="tabpanel">
-        <div class="dr-form">
-          <label class="dr-flabel research-mono" for="researchQuery">RESEARCH QUESTION</label>
-          <textarea id="researchQuery" class="dr-q research-query" rows="3" placeholder="What should I research? Be as specific as you like — e.g. 'research the new Fable 5 model: benchmarks, pricing, and how it compares to Qwen3.6.'"></textarea>
-          <div class="dr-controls research-run-options">
+        <div class="dr-run-shell">
+          <div class="dr-idle" id="researchIdleChrome">
+            <div class="dr-mark" aria-hidden="true">
+              <span class="dr-mark__ring"></span>
+              <i class="fi fi-rr-search icon-svg dr-mark__icon" aria-hidden="true"></i>
+            </div>
+            <p class="dr-eyebrow research-mono">Deep research</p>
+            <h2 class="dr-title">What should we dig into?</h2>
+            <div class="dr-prompts" role="list">
+              <button
+                type="button"
+                class="dr-prompt"
+                role="listitem"
+                data-research-prompt="Compare the leading options for … Include benchmarks, pricing, and tradeoffs."
+              >
+                <i class="fi fi-rr-stats icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
+                Compare options
+              </button>
+              <button
+                type="button"
+                class="dr-prompt"
+                role="listitem"
+                data-research-prompt="Summarize the latest news and credible takes on …"
+              >
+                <i class="fi fi-rr-newspaper icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
+                News scan
+              </button>
+              <button
+                type="button"
+                class="dr-prompt"
+                role="listitem"
+                data-research-prompt="Map the market landscape for … Key players, positioning, and gaps."
+              >
+                <i class="fi fi-rr-chart-pie-alt icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
+                Market map
+              </button>
+              <button
+                type="button"
+                class="dr-prompt"
+                role="listitem"
+                data-research-prompt="In this codebase, how does … work? Cite files and patterns."
+              >
+                <i class="fi fi-rr-folder-tree icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
+                Codebase dive
+              </button>
+            </div>
+          </div>
+          <div class="dr-form">
+            <div class="dr-composer" id="researchComposer">
+              <label class="visually-hidden" for="researchQuery">Research question</label>
+              <textarea
+                id="researchQuery"
+                class="dr-q dr-composer-field research-query"
+                rows="2"
+                placeholder="Ask anything…"
+              ></textarea>
+              <div class="dr-composer-bar">
+                <button
+                  type="button"
+                  class="dr-bar-btn"
+                  id="btnResearchOptions"
+                  aria-expanded="false"
+                  aria-controls="researchOptionsPanel"
+                >
+                  <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
+                  Options
+                </button>
+                <span class="dr-composer-spacer" aria-hidden="true"></span>
+                <button type="button" class="dr-cancel dr-composer-cancel" id="btnResearchCancel" hidden>Cancel</button>
+                <button
+                  type="button"
+                  class="dr-send"
+                  id="btnResearchStart"
+                  aria-label="Start research"
+                >
+                  <i class="fi fi-rr-arrow-small-up icon-svg dr-send-icon" aria-hidden="true" style="--mn-icon-size:20px"></i>
+                </button>
+              </div>
+            </div>
+            <div class="dr-controls research-run-options" id="researchOptionsPanel" hidden>
             <label class="dr-field">
               <span class="dr-flabel research-mono">ROUNDS</span>
               <div class="dr-select">
@@ -927,12 +1003,6 @@
               <input type="text" id="researchModelOverride" class="dr-input research-input" placeholder="(from settings)" />
             </label>
           </div>
-          <div class="dr-actions research-run-actions">
-            <button type="button" class="dr-run" id="btnResearchStart">
-              <i class="fi fi-rr-search icon-svg dr-run-icon" aria-hidden="true" style="--mn-icon-size:16px"></i>
-              Research
-            </button>
-            <button type="button" class="dr-cancel" id="btnResearchCancel" hidden>Cancel</button>
           </div>
         </div>
         <div id="researchProgressMount" aria-live="polite"></div>
