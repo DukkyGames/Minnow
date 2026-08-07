@@ -548,9 +548,8 @@ async function drillToRun(record: PersistedRunRecord): Promise<void> {
   if (record.parentChatId) {
     switchChat(record.parentChatId);
   }
-  const { toggleAgentActivityPanel } = await import('./agent-activity-panel');
-  const panel = document.getElementById('agentActivityPanel');
-  if (panel && !panel.classList.contains('is-open')) toggleAgentActivityPanel();
+  const { toggleAgentActivityPanel, isAgentActivityPanelOpen } = await import('./agent-activity-panel');
+  if (!isAgentActivityPanelOpen()) toggleAgentActivityPanel();
 }
 
 async function enterCodeChat(): Promise<void> {

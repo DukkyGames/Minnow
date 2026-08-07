@@ -1,32 +1,23 @@
-/* ─── Agent activity panel (global in-flight workers) ─── */
+/* ─── Agent activity panel (global in-flight workers, OS menubar popover) ─── */
 .agent-activity-panel {
   position: fixed;
-  left: 0;
-  bottom: 0;
-  z-index: 45;
+  z-index: 55;
   width: min(22rem, calc(100vw - 1rem));
-  max-height: min(50vh, 24rem);
-  margin: 0 0 0.5rem 0.5rem;
+  max-height: min(60vh, 24rem);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--mn-border);
-  border-radius: var(--radius-md, 8px);
-  background: var(--mn-surface-1);
-  box-shadow: var(--shadow-elevated, 0 8px 24px rgba(0, 0, 0, 0.2));
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  box-shadow: var(--shadow-popover-soft, 0 8px 24px rgba(0, 0, 0, 0.2));
   font-family: var(--font-ui);
   font-size: 13px;
-  transform: translateY(110%);
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform var(--duration-normal) var(--ease-out),
-    opacity var(--duration-normal) var(--ease-out);
+  color: var(--mn-fg);
+  overflow: hidden;
 }
 
-.agent-activity-panel.is-open {
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: auto;
+.agent-activity-panel[hidden] {
+  display: none;
 }
 
 .agent-activity-panel__header {
@@ -189,15 +180,15 @@
   border-radius: 4px;
 }
 
-/* Badge anchor for the status bar's Agents toggle. */
+/* Badge on the menubar agents control. */
 #btnAgentActivity {
   position: relative;
 }
 
 .agent-activity-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 4px;
+  right: 4px;
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
@@ -209,15 +200,4 @@
   background: var(--mn-accent);
   border-radius: 7px;
   pointer-events: none;
-}
-
-@media (max-width: 640px) {
-  .agent-activity-panel {
-    left: 0;
-    right: 0;
-    width: auto;
-    margin: 0;
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-    max-height: 45vh;
-  }
 }

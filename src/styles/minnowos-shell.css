@@ -251,7 +251,8 @@ html.minnow-os-enabled {
 }
 
 .mn-os-mb-icon,
-.mn-os-mb-bell {
+.mn-os-mb-bell,
+.mn-os-mb-agents {
   position: relative;
   flex-shrink: 0;
   width: 32px;
@@ -266,13 +267,24 @@ html.minnow-os-enabled {
 }
 
 .mn-os-mb-icon:hover,
-.mn-os-mb-bell:hover {
+.mn-os-mb-bell:hover,
+.mn-os-mb-agents:hover {
   background: var(--os-surface-2);
   color: var(--os-text);
 }
 
 .mn-os-mb-bell.is-on {
   color: var(--os-accent);
+}
+
+.mn-os-mb-agents.is-on {
+  color: var(--os-accent);
+}
+
+.mn-os-mb-agents.is-open {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  box-shadow: 0 0 0 2px var(--os-accent-glow);
 }
 
 .mn-os-mb-bell.is-muted {
@@ -1097,6 +1109,7 @@ html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
 
   .mn-os-mb-icon,
   .mn-os-mb-bell,
+  .mn-os-mb-agents,
   .mn-os-mb-workspace-slot .workspace-btn.icon-btn {
     width: var(--touch-min);
     height: var(--touch-min);

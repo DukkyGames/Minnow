@@ -37,6 +37,8 @@ import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
+import { closeOsNotificationsMenu } from '../os/notifications-menu';
+import { iconHtml } from './icon';
 import { openSubAgentDrawer } from './sub-agent-drawer';
 import { switchChat } from './sidebar';
 
@@ -49,28 +51,130 @@ let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 let contextCache = new Map<string, AgentActivityContextFill>();
 let subAgentLabelCache = new Map<string, string>();
+let anchorToggleBtn: HTMLButtonElement | null = null;
+let toggleClickHandler: (() => void) | null = null;
+let outsideHandler: ((e: PointerEvent) => void) | null = null;
+let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+let panelChromeBound = false;
 
 function getPanel(): HTMLElement | null {
   return document.getElementById('agentActivityPanel');
 }
 
-function getToggleBtn(): HTMLElement | null {
-  return document.getElementById('btnAgentActivity');
+function getToggleBtn(): HTMLButtonElement | null {
+  return anchorToggleBtn;
+}
+
+function positionAgentActivityPanel(anchor: HTMLButtonElement, panel: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  const margin = 8;
+  panel.style.top = `${rect.bottom + 4}px`;
+  panel.style.right = 'auto';
+
+  const panelWidth = panel.offsetWidth || panel.getBoundingClientRect().width;
+  let left = rect.right - panelWidth;
+  left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
+  panel.style.left = `${left}px`;
+}
+
+function detachGlobalListeners(): void {
+  if (outsideHandler) {
+    document.removeEventListener('pointerdown', outsideHandler, true);
+    outsideHandler = null;
+  }
+  if (escapeHandler) {
+    document.removeEventListener('keydown', escapeHandler, true);
+    escapeHandler = null;
+  }
+}
+
+/** Ensure the activity popover lives on `document.body` (global across apps). */
+function ensureAgentActivityPanelDom(): HTMLElement {
+  let panel = document.getElementById('agentActivityPanel');
+  if (!panel) {
+    panel = document.createElement('section');
+    panel.id = 'agentActivityPanel';
+    panel.className = 'agent-activity-panel';
+    panel.setAttribute('role', 'region');
+    panel.setAttribute('aria-label', 'Agent activity');
+    panel.hidden = true;
+
+    panel.innerHTML = `
+      <header class="agent-activity-panel__header">
+        <h2 class="agent-activity-panel__title">Agent activity</h2>
+        <button
+          type="button"
+          class="icon-btn agent-activity-panel__close"
+          id="btnAgentActivityClose"
+          aria-label="Close agent activity"
+        >
+          ${iconHtml('close', { size: 16 })}
+        </button>
+      </header>
+      <div class="agent-activity-panel__body">
+        <ul id="agentActivityList" class="agent-activity-list"></ul>
+      </div>
+      <footer class="agent-activity-panel__footer">
+        <button
+          type="button"
+          class="agent-activity-panel__stop-all"
+          id="btnAgentActivityStopAll"
+          aria-label="Stop all agents"
+          disabled
+        >
+          Stop all
+        </button>
+      </footer>
+    `;
+  }
+  if (panel.parentElement !== document.body) {
+    document.body.appendChild(panel);
+  }
+  if (!panelChromeBound) {
+    bindPanelChrome();
+    panelChromeBound = true;
+  }
+  return panel;
+}
+
+function attachGlobalListeners(): void {
+  outsideHandler = (e: PointerEvent) => {
+    const panel = getPanel();
+    const btn = getToggleBtn();
+    const target = e.target as Node | null;
+    if (!panel || !btn) return;
+    if (panel.contains(target) || btn.contains(target)) return;
+    setAgentActivityPanelOpen(false);
+  };
+  document.addEventListener('pointerdown', outsideHandler, true);
+
+  escapeHandler = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape' || !panelOpen) return;
+    e.preventDefault();
+    setAgentActivityPanelOpen(false);
+  };
+  document.addEventListener('keydown', escapeHandler, true);
 }
 
 export function isAgentActivityPanelOpen(): boolean {
   return panelOpen;
 }
 
+/** Close the agent activity menubar popover. */
+export function closeAgentActivityPanel(): void {
+  if (!panelOpen) return;
+  setAgentActivityPanelOpen(false);
+}
+
 export function setAgentActivityPanelOpen(open: boolean): void {
-  const panel = getPanel();
+  const panel = ensureAgentActivityPanelDom();
   const btn = getToggleBtn();
-  if (!panel) return;
 
   panelOpen = open;
   panel.classList.toggle('is-open', open);
   panel.hidden = !open;
   btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  btn?.classList.toggle('is-open', open);
 
   try {
     localStorage.setItem(AGENT_ACTIVITY_OPEN_KEY, open ? '1' : '0');
@@ -79,6 +183,10 @@ export function setAgentActivityPanelOpen(open: boolean): void {
   }
 
   if (open) {
+    closeOsNotificationsMenu();
+    if (btn) positionAgentActivityPanel(btn, panel);
+    detachGlobalListeners();
+    attachGlobalListeners();
     if (!chromePopoverRegistered) {
       registerChromePopover();
       chromePopoverRegistered = true;
@@ -86,6 +194,7 @@ export function setAgentActivityPanelOpen(open: boolean): void {
     void refreshAgentActivityPanel(true);
     startElapsedTimer();
   } else {
+    detachGlobalListeners();
     if (chromePopoverRegistered) {
       unregisterChromePopover();
       chromePopoverRegistered = false;
@@ -197,6 +306,7 @@ function updateStopAllButtonState(): void {
 function updateBadgeCount(count: number): void {
   const btn = getToggleBtn();
   if (!btn) return;
+  btn.classList.toggle('is-on', count > 0);
   let badge = btn.querySelector('.agent-activity-badge');
   if (count <= 0) {
     badge?.remove();
@@ -393,8 +503,6 @@ async function handleStopAllClick(): Promise<void> {
 }
 
 function bindPanelChrome(): void {
-  getToggleBtn()?.addEventListener('click', () => toggleAgentActivityPanel());
-
   document.getElementById('btnAgentActivityClose')?.addEventListener('click', () => {
     setAgentActivityPanelOpen(false);
   });
@@ -402,25 +510,37 @@ function bindPanelChrome(): void {
   document.getElementById('btnAgentActivityStopAll')?.addEventListener('click', () => {
     void handleStopAllClick();
   });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !panelOpen) return;
-    const panel = getPanel();
-    if (!panel || panel.hidden) return;
-    setAgentActivityPanelOpen(false);
-  });
 }
 
-/** Wire panel toggle, subscriptions, and persisted open state. */
+/** Wire the OS menubar agents control. Returns cleanup. */
+export function initAgentActivityMenubar(btn: HTMLButtonElement): () => void {
+  anchorToggleBtn = btn;
+  btn.id = 'btnAgentActivity';
+  btn.setAttribute('aria-haspopup', 'dialog');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-controls', 'agentActivityPanel');
+  btn.title = 'Agent activity';
+  btn.setAttribute('aria-label', 'Agent activity');
+
+  ensureAgentActivityPanelDom();
+
+  toggleClickHandler = () => toggleAgentActivityPanel();
+  btn.addEventListener('click', toggleClickHandler);
+  void refreshAgentActivityPanel(true);
+
+  return () => {
+    if (toggleClickHandler) {
+      btn.removeEventListener('click', toggleClickHandler);
+      toggleClickHandler = null;
+    }
+    closeAgentActivityPanel();
+    anchorToggleBtn = null;
+  };
+}
+
+/** Subscriptions and shared panel DOM (menubar supplies the toggle). */
 export function initAgentActivityPanel(): void {
-  let open = false;
-  try {
-    open = localStorage.getItem(AGENT_ACTIVITY_OPEN_KEY) === '1';
-  } catch {
-    open = false;
-  }
+  ensureAgentActivityPanelDom();
   bindActivitySubscriptions();
-  bindPanelChrome();
-  setAgentActivityPanelOpen(open);
   void refreshAgentActivityPanel(true);
 }

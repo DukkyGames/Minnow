@@ -19,6 +19,7 @@ import { isPhoneWindowSheetOpen } from './shell-chrome';
 import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
 import { openProductWiki } from '../ui/product-wiki';
+import { initAgentActivityMenubar } from '../ui/agent-activity-panel';
 
 /** Render the Minnow menubar. Returns cleanup function. */
 export function renderMenubar(root: HTMLElement): () => void {
@@ -95,6 +96,12 @@ export function renderMenubar(root: HTMLElement): () => void {
   modelChipAnchor.className = 'mn-os-mb-model-slot';
   const cleanupModelChip = initMenubarModelChip(modelChipAnchor);
 
+  const agentsBtn = document.createElement('button');
+  agentsBtn.type = 'button';
+  agentsBtn.className = 'mn-os-mb-icon mn-os-mb-agents';
+  agentsBtn.innerHTML = iconHtml('appAgentActivity', { size: 16 });
+  const cleanupAgentActivity = initAgentActivityMenubar(agentsBtn);
+
   const bell = document.createElement('button');
   bell.type = 'button';
   bell.className = 'mn-os-mb-bell';
@@ -130,6 +137,7 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   right.append(
     modelChipAnchor,
+    agentsBtn,
     bell,
     updateSlot,
     wikiBtn,
@@ -206,6 +214,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     unsubPrefs();
     unsubNotif();
     cleanupModelChip();
+    cleanupAgentActivity();
     cleanupNotifications();
     cleanupUpdatePill();
     cleanupShellChrome();
