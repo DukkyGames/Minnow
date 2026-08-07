@@ -865,31 +865,96 @@ html.minnow-os-enabled header.topbar.hidden {
   display: none;
 }
 
-/* Mobile Code drawers — html class toggled from mobile-drawer-portal.ts (no reparenting). */
+/* Narrow Code drawers — html.mn-narrow from mobile-layout.ts + drawer portal classes. */
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-stage,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-apps-layer,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-stage,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-apps-layer {
+  overflow: visible;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-code-layer.is-active,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .app-body,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .app-body {
+  overflow: visible;
+}
+
+/* Drop app-layer transform so fixed drawers use the viewport, not a nested box. */
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer .mn-os-code-layer.is-active {
+  transform: none;
+  filter: none;
+  animation: none;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer #chatSidebar.mobile-open {
+  position: fixed;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  left: 0;
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+  max-width: 100%;
+  height: auto;
+  padding-left: env(safe-area-inset-left, 0px);
+  transform: translateX(0);
+  box-shadow: var(--shadow-sidebar);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-chat-drawer #sidebarBackdrop.open {
+  z-index: 49;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer #fileSidebar.mobile-open {
+  position: fixed;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  right: 0;
+  left: auto;
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+  max-width: 100%;
+  height: auto;
+  padding-right: env(safe-area-inset-right, 0px);
+  transform: translateX(0);
+  box-shadow: var(--shadow-sidebar-left);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+html.minnow-os-enabled.mn-narrow.mn-os-mobile-file-drawer #fileSidebarBackdrop.open {
+  z-index: 49;
+  top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
+  bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Legacy phone-only drawer block (pre–workspace-first); kept for non-OS layouts. */
 @media (max-width: 640px) {
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-stage,
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-apps-layer,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-stage,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-apps-layer {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-stage,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-apps-layer,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-stage,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-apps-layer {
     overflow: visible;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-code-layer.is-active,
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .app-body,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .app-body {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .app-body,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .app-body {
     overflow: visible;
   }
 
-  /* Drop app-layer transform so fixed drawers use the viewport, not a nested box. */
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
-  html.minnow-os-enabled.mn-os-mobile-file-drawer .mn-os-code-layer.is-active {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer .mn-os-code-layer.is-active,
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer .mn-os-code-layer.is-active {
     transform: none;
     filter: none;
     animation: none;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer #chatSidebar.mobile-open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer #chatSidebar.mobile-open {
     position: fixed;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
     left: 0;
@@ -905,12 +970,12 @@ html.minnow-os-enabled header.topbar.hidden {
     pointer-events: auto;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-chat-drawer #sidebarBackdrop.open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-chat-drawer #sidebarBackdrop.open {
     z-index: 49;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
   }
 
-  html.minnow-os-enabled.mn-os-mobile-file-drawer #fileSidebar.mobile-open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer #fileSidebar.mobile-open {
     position: fixed;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
     right: 0;
@@ -927,7 +992,7 @@ html.minnow-os-enabled header.topbar.hidden {
     pointer-events: auto;
   }
 
-  html.minnow-os-enabled.mn-os-mobile-file-drawer #fileSidebarBackdrop.open {
+  html.minnow-os-enabled:not(.mn-narrow).mn-os-mobile-file-drawer #fileSidebarBackdrop.open {
     z-index: 49;
     top: calc(var(--os-menubar-h, 46px) + env(safe-area-inset-top, 0px));
   }

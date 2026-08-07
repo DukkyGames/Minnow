@@ -115,6 +115,8 @@ describe('theme-contrast', () => {
       const surface1 = vars['--mn-surface-1'];
       const fgMuted = resolveToken(vars, '--mn-fg-muted');
       const accentInk = resolveToken(vars, '--mn-accent-ink');
+      const accent = resolveToken(vars, '--mn-accent');
+      const surfaceElevated = resolveToken(vars, '--mn-surface-elevated');
       assert.ok(bg && surface1, `missing surfaces for ${themeId}`);
       if (fgMuted) {
         assert.ok(
@@ -126,6 +128,12 @@ describe('theme-contrast', () => {
         assert.ok(
           contrastRatio(accentInk, surface1) >= 4.5,
           `accent-ink on surface-1 ${contrastRatio(accentInk, surface1).toFixed(2)} < 4.5 for ${themeId}`,
+        );
+      }
+      if (accent && surfaceElevated) {
+        assert.ok(
+          contrastRatio(accent, surfaceElevated) >= 4.5,
+          `accent on surface-elevated ${contrastRatio(accent, surfaceElevated).toFixed(2)} < 4.5 for ${themeId}`,
         );
       }
     });

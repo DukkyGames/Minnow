@@ -2,13 +2,14 @@ import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { sessionState } from '../state/sessions';
 import { scheduleSaveSessions } from '../state/sessions';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
+import { isNarrowLayout } from './mobile-layout';
 import {
   syncAppBodySidebarWidthVars,
   syncChatSidebarResizer,
 } from './sidebar-resize';
 
 export function isMobileLayout(): boolean {
-  return window.matchMedia('(max-width: 640px)').matches;
+  return isNarrowLayout();
 }
 
 export function closeMobileSidebar(): void {

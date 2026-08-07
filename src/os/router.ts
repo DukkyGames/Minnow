@@ -9,7 +9,6 @@ import {
   showWorkspaces,
 } from './instances';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
-import { APP_SWITCHER_DESKTOP_ID } from './surface-id';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
 import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
 
@@ -47,7 +46,7 @@ function rejectUnavailableApp(appId: AppId): boolean {
 let initialized = false;
 let applyingRoute = false;
 let lastForegroundApp: AppId | null = null;
-let lastRecordedSurface: typeof APP_SWITCHER_DESKTOP_ID | AppId | null = null;
+let lastRecordedSurface: AppId | null = null;
 let pendingSettingsSection: string | undefined;
 let pendingModelsSection: string | undefined;
 let pendingBrainSection: string | undefined;
@@ -227,10 +226,12 @@ function syncForegroundLifecycle(nextApp: AppId | null): void {
   }
   lastForegroundApp = nextApp;
 
-  const surfaceId = nextApp ?? APP_SWITCHER_DESKTOP_ID;
-  if (surfaceId !== lastRecordedSurface) {
+  const surfaceId = nextApp;
+  if (surfaceId && surfaceId !== lastRecordedSurface) {
     recordAppSurfaceFocus(surfaceId);
     lastRecordedSurface = surfaceId;
+  } else if (!surfaceId) {
+    lastRecordedSurface = null;
   }
 }
 

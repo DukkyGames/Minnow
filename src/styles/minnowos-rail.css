@@ -20,6 +20,7 @@
   background: var(--mn-surface-1);
   border-right: 1px solid var(--mn-border);
   z-index: 30;
+  position: relative;
 }
 
 #osAppRail[hidden] {
@@ -69,8 +70,9 @@
 }
 
 .mn-os-app-rail__btn.is-active {
-  background: var(--mn-accent-soft);
+  background: var(--mn-surface-elevated);
   color: var(--mn-accent);
+  box-shadow: inset 3px 0 0 var(--mn-accent);
 }
 
 .mn-os-app-rail__btn:focus-visible {
@@ -85,7 +87,77 @@
   }
 
   .mn-os-app-rail__btn.is-active:hover {
-    background: var(--mn-accent-soft);
+    background: var(--mn-surface-elevated);
     color: var(--mn-accent);
   }
+}
+
+.mn-os-app-rail__tooltip {
+  position: absolute;
+  z-index: 60;
+  pointer-events: none;
+  max-width: 200px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--mn-fg);
+  background: var(--mn-surface-elevated);
+  border: 1px solid var(--mn-border);
+  border-radius: 6px;
+  box-shadow: var(--mn-shadow-popover, 0 8px 24px rgba(0, 0, 0, 0.18));
+  white-space: nowrap;
+}
+
+.mn-os-app-rail__tooltip[hidden] {
+  display: none;
+}
+
+/* Narrow layout: bottom tab bar (see NARROW_MQ in mobile-layout.ts). */
+html.mn-narrow.minnow-os-enabled .mn-os-workspace {
+  flex-direction: column;
+}
+
+html.mn-narrow.minnow-os-enabled #osStage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+html.mn-narrow.minnow-os-enabled #osAppRail {
+  order: 2;
+  width: 100%;
+  height: auto;
+  min-height: calc(52px + env(safe-area-inset-bottom, 0px));
+  flex-direction: row;
+  align-items: stretch;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  border-right: none;
+  border-top: 1px solid var(--mn-border);
+  z-index: 35;
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__nav {
+  flex-direction: row;
+  justify-content: space-around;
+  gap: 2px;
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__divider {
+  width: 1px;
+  height: 28px;
+  margin: 0 4px;
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__btn.is-active {
+  box-shadow: inset 0 3px 0 var(--mn-accent);
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__btn {
+  width: 44px;
+  height: 44px;
+  flex: 0 1 auto;
+}
+
+html.mn-narrow.minnow-os-enabled .mn-os-app-rail__tooltip {
+  display: none !important;
 }

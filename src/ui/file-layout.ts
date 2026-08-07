@@ -20,11 +20,12 @@ import {
   isRightPaneSplitActive,
   isRightPaneSplitLayoutEnabled,
 } from './right-pane-split';
+import { isNarrowLayout } from './mobile-layout';
 
 let chatColumnDragCollapsed = false;
 
 export function isMobileLayout(): boolean {
-  return window.matchMedia('(max-width: 640px)').matches;
+  return isNarrowLayout();
 }
 
 const RIGHT_PANE_CHILD_IDS = [

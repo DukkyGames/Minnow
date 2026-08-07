@@ -8,7 +8,7 @@ function gateOpenClass(): boolean {
   return document.documentElement.classList.contains('os-workspace-gate-open');
 }
 
-/** Feature flag — always on until a gradual rollout toggle exists. */
+/** Feature flag — OS shell is always enabled in workspace-first builds. */
 export function isOsShellEnabled(): boolean {
   return true;
 }
