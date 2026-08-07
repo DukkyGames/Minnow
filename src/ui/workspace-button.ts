@@ -26,28 +26,32 @@ function getWorkspacePathLabel(): HTMLElement | null {
   return document.getElementById('workspacePathLabel');
 }
 
-/** Reflect current workspace on the top bar button and path label. */
+/** Reflect current workspace on the top bar button and folder name label. */
 export function updateWorkspaceButtonLabel(label: string, fullPath: string): void {
   const btn = getWorkspaceButton();
   if (!btn) return;
   const short = label.trim() || 'Workspace';
   const path = fullPath.trim();
-  btn.title = path ? `Workspace: ${path}` : 'Choose workspace folder';
+  const pathTooltip = path || 'Choose workspace folder';
+  btn.title = pathTooltip;
   btn.setAttribute('aria-label', `Workspace: ${short}. Click to open recent workspaces.`);
   btn.setAttribute('aria-haspopup', 'menu');
 
   const pathLabel = getWorkspacePathLabel();
+  const control = pathLabel?.closest('.workspace-control') ?? null;
   if (!pathLabel) return;
   if (path) {
-    pathLabel.textContent = path;
+    pathLabel.textContent = short;
     pathLabel.title = path;
     pathLabel.hidden = false;
     btn.setAttribute('aria-describedby', 'workspacePathLabel');
+    if (control) control.title = path;
   } else {
     pathLabel.textContent = '';
     pathLabel.removeAttribute('title');
     pathLabel.hidden = true;
     btn.removeAttribute('aria-describedby');
+    if (control) control.removeAttribute('title');
   }
 }
 

@@ -70,7 +70,7 @@ html.minnow-os-enabled {
   flex: 0 1 auto;
   /* Clip long status text when the left cluster shrinks. */
   overflow: hidden;
-  /* Room for :focus-visible outlines; open state uses inset ring (see .mn-os-mb-apps). */
+  /* Room for :focus-visible outlines on left-cluster controls. */
   padding: 3px;
   margin: -3px;
 }
@@ -94,17 +94,17 @@ html.minnow-os-enabled {
   display: none !important;
 }
 
-/* Model label expands left from the chip; tuck workspace aside so they do not overlap. */
-.mn-os-menubar:has(.mn-os-mb-model-chip.is-expanded) .mn-os-mb-workspace-slot:not([hidden]) {
-  flex: 0 0 0;
-  max-width: 0;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  overflow: hidden;
+/* Workspace picker in the menubar left cluster (replaces former app switcher) */
+.mn-os-mb-left .mn-os-mb-workspace-slot .workspace-control {
+  max-width: min(14rem, 32vw);
 }
 
-/* Workspace picker in the menubar right cluster */
+.mn-os-mb-left .mn-os-mb-workspace-slot .workspace-path-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--os-text);
+}
+
 .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-control {
   max-width: min(18rem, 28vw);
 }
@@ -173,10 +173,8 @@ html.minnow-os-enabled {
 }
 
 /* `display: grid` / flex on buttons can override the native [hidden] rule — hide via view + attribute */
-.mn-os-menubar[data-view='desktop'] .mn-os-mb-apps,
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-app-sep,
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-appname,
-.mn-os-mb-apps[hidden],
 .mn-os-mb-app-sep[hidden],
 .mn-os-mb-appname[hidden] {
   display: none !important;
@@ -185,14 +183,6 @@ html.minnow-os-enabled {
 .mn-os-menubar[data-view='app'] .mn-os-mb-brand,
 .mn-os-mb-brand[hidden] {
   display: none !important;
-}
-
-/* Inset ring — outer box-shadow was clipped by .mn-os-mb-left overflow. */
-.mn-os-mb-apps.is-open {
-  background: var(--os-surface-2);
-  color: var(--os-text);
-  border-color: var(--os-accent-glow);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--os-accent-glow) 70%, transparent);
 }
 
 .mn-os-mb-sep {
@@ -1085,7 +1075,18 @@ html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
     display: none !important;
   }
 
-  /* Workspace path lives in the folder popover on narrow screens */
+  /* Folder name stays visible beside the icon on narrow menubars */
+  .mn-os-mb-left .mn-os-mb-workspace-slot .workspace-path-label {
+    display: block;
+    max-width: min(9rem, 28vw);
+  }
+
+  .mn-os-mb-left .mn-os-mb-workspace-slot .workspace-control {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: min(12rem, 42vw);
+  }
+
   .mn-os-mb-right .mn-os-mb-workspace-slot .workspace-path-label {
     display: none;
   }

@@ -10,7 +10,7 @@ import {
 } from './instances';
 import { isAppAvailable } from './app-preferences';
 import type { AppId } from './types';
-import { closeResearchPanel, isResearchPanelOpen } from '../ui/research-panel';
+import { isResearchPageOpen } from '../research/panel';
 
 /**
  * Close instances / overlays for unavailable apps.
@@ -27,8 +27,8 @@ export function closeUnavailableAppSurfaces(): void {
     closeInstance(inst.id);
   }
 
-  if (isResearchPanelOpen() && !isAppAvailable('research')) {
-    closeResearchPanel();
+  if (isResearchPageOpen() && !isAppAvailable('research')) {
+    void import('../research/panel').then((m) => m.closeResearch({ skipNavigate: true }));
     closedForeground = true;
   }
 

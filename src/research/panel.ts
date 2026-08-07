@@ -350,8 +350,7 @@ export async function discussResearchReport(researchId: string): Promise<void> {
     scheduleSaveSessions();
 
     if (isOsShellEnabled()) {
-      const { closeResearchPanel } = await import('../ui/research-panel');
-      closeResearchPanel();
+      closeResearch({ skipNavigate: true });
       const { navigateToCodeChat } = await import('../os/router');
       navigateToCodeChat();
     } else {
@@ -510,6 +509,14 @@ export function closeResearch(options?: { skipNavigate?: boolean }): void {
       void import('../ui/research-panel').then((m) => m.closeResearchPanel());
       return;
     }
+    const root = getRoot();
+    if (root) {
+      void cancelActiveRun();
+      root.classList.remove('is-open');
+      void import('../ui/preview-electron-visibility').then((m) =>
+        m.syncElectronPreviewHostVisibility(),
+      );
+    }
     if (!options?.skipNavigate) {
       navigateToDesktop();
     }
@@ -537,6 +544,40 @@ export interface OpenResearchOptions {
   autoRun?: boolean;
 }
 
+/** Show the Research app surface (OS shell app-host). */
+export function showResearchPage(options?: OpenResearchOptions): void {
+  if (window.location.hash.startsWith('#/settings')) {
+    return;
+  }
+
+  void import('../ui/research-panel').then((m) => {
+    m.teardownResearchPanelBeforeChatPaint();
+  });
+
+  const root = getRoot();
+  if (!root) {
+    return;
+  }
+
+  closeOtherOverlays();
+  root.classList.add('is-open');
+  void import('../ui/preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
+  setPanelTab(currentTab);
+
+  if (options?.seed) {
+    const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+    if (query) {
+      query.value = options.seed;
+    }
+  }
+  if (options?.autoRun || pendingAutoRun) {
+    pendingAutoRun = false;
+    void startResearchRun();
+  }
+}
+
 /** Open Deep Research (`#/research` or OS `#/app/research`). */
 export function openResearch(options?: OpenResearchOptions): void {
   if (isOsShellEnabled()) {
@@ -555,16 +596,11 @@ export function openResearch(options?: OpenResearchOptions): void {
   if (!root || !shell) {
     return;
   }
-  if (window.location.hash.startsWith('#/settings')) {
-    return;
-  }
 
   closeOtherOverlays();
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
-    shell.classList.add('hidden');
-    window.location.hash = '#/research';
-  }
+  shell.classList.add('hidden');
+  window.location.hash = '#/research';
   void import('../ui/preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -633,9 +669,11 @@ function bindStaticControls(): void {
 /** Wire hash routing and controls (call once from main). */
 export function initResearchPage(): void {
   bindStaticControls();
-  window.addEventListener('hashchange', onHashChange);
-  if (window.location.hash === '#/research' || window.location.hash.startsWith('#/research/')) {
-    openResearch();
+  if (!isOsShellEnabled()) {
+    window.addEventListener('hashchange', onHashChange);
+    if (window.location.hash === '#/research' || window.location.hash.startsWith('#/research/')) {
+      openResearch();
+    }
   }
 }
 

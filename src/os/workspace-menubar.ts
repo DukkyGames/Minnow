@@ -1,5 +1,5 @@
 /**
- * Reparents workspace path + folder control into the OS menubar while Code is foreground.
+ * Reparents workspace folder control into the OS menubar left cluster while Code is foreground.
  */
 
 import { getForegroundAppId, getOsView } from './instances';
@@ -21,7 +21,7 @@ function getMenubarSlot(): HTMLElement | null {
   return document.getElementById(MENUBAR_SLOT_ID);
 }
 
-/** True when workspace controls should live in the menubar right slot. */
+/** True when workspace controls should live in the menubar left slot. */
 export function shouldMountWorkspaceInMenubar(): boolean {
   if (!isOsShellEnabled()) return false;
   if (getOsView() !== 'app') return false;

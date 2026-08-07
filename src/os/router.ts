@@ -10,11 +10,6 @@ import {
 } from './instances';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
-import {
-  closeResearchPanel,
-  isResearchPanelOpen,
-  queueResearchPanelOpen,
-} from '../ui/research-panel';
 import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
 
 /** Legacy `#/app/…` target, or workspace gate when that app is unavailable. */
@@ -76,9 +71,7 @@ export function resolveLegacyHash(hash: string): {
   modelsSection?: string;
   brainSection?: string;
   desktopChat?: boolean;
-  desktopResearch?: boolean;
   desktopExperts?: boolean;
-  codeResearch?: boolean;
 } {
   const trimmed = hash || '#/';
   if (trimmed === '#/desktop' || trimmed === '#/' || trimmed === '#' || trimmed === '#/workspaces') {
@@ -134,10 +127,10 @@ export function resolveLegacyHash(hash: string): {
     return { hash: `#/app/brain/${section}`, brainSection: section };
   }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
-    return { hash: '#/app/code/chat', codeResearch: true };
+    return { hash: '#/app/research' };
   }
   if (trimmed === '#/app/research' || trimmed.startsWith('#/app/research/')) {
-    return { hash: '#/app/code/chat', codeResearch: true };
+    return { hash: trimmed };
   }
   if (trimmed === '#/experts' || trimmed.startsWith('#/experts/')) {
     return { hash: legacyHashForApp('experts') };
@@ -306,9 +299,6 @@ function applyRouteFromHash(): void {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;
       if (legacy.modelsSection) pendingModelsSection = legacy.modelsSection;
       if (legacy.brainSection) pendingBrainSection = legacy.brainSection;
-      if (legacy.codeResearch) {
-        queueResearchPanelOpen(pendingLaunchOptions);
-      }
       window.location.hash = legacy.hash;
       return;
     }
@@ -349,22 +339,6 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
     return;
   }
   if (rejectUnavailableApp(appId)) return;
-
-  if (appId === 'research') {
-    if (isResearchPanelOpen()) {
-      closeResearchPanel();
-      return;
-    }
-    queueResearchPanelOpen({
-      seed: options?.seed,
-      autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
-    });
-    launchApp('code', {
-      ...options,
-      codeSection: 'chat',
-    });
-    return;
-  }
 
   if (options?.settingsSection) {
     pendingSettingsSection = options.settingsSection;

@@ -33,7 +33,7 @@ function isCodeForeground(): boolean {
 export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;
   if (isCodeForeground()) return false;
-  // Deep Research embeds in #chatArea inside #appBody — hiding the shell breaks sidebars + embed.
+  // Legacy Code embed — keep appBody visible until the view is reparented back.
   if (isResearchPanelOpen()) return false;
   if (getOsView() === 'workspaces') return true;
   return getForegroundAppId() !== 'code';
@@ -58,17 +58,12 @@ export function syncLegacyChromeVisibility(): void {
 
   const view = getOsView();
   const onWorkspaces = view === 'workspaces';
-  const codeForeground = isCodeForeground();
   document.documentElement.classList.toggle('os-workspaces', onWorkspaces);
   document.documentElement.classList.toggle('os-in-app', view === 'app');
   document.documentElement.classList.toggle('os-workspace-gate', onWorkspaces && gateOpenClass());
 
   const fg = getForegroundAppId();
-  if (codeForeground) {
-    document.documentElement.dataset.osApp = 'code';
-  } else if (isResearchPanelOpen()) {
-    document.documentElement.dataset.osApp = 'research';
-  } else if (fg) {
+  if (fg) {
     document.documentElement.dataset.osApp = fg;
   } else {
     delete document.documentElement.dataset.osApp;

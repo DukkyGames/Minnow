@@ -85,8 +85,7 @@ describe('resolveLegacyHash', () => {
   test('redirects legacy full-page routes to OS apps', () => {
     assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/workspaces' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {
-      hash: '#/app/code/chat',
-      codeResearch: true,
+      hash: '#/app/research',
     });
     assert.deepEqual(resolveLegacyHash('#/experts/gallery'), {
       hash: '#/workspaces',
@@ -177,9 +176,9 @@ describe('os router navigation', () => {
     setAppEnabled('research', false);
     window.location.hash = '#/app/research';
     syncOsRouteFromHashForTests();
-    // Research deep-links onto the Code chat surface.
-    assert.equal(window.location.hash, '#/app/code/chat');
+    assert.equal(window.location.hash, '#/app/research');
     assert.equal(isAppEnabled('research'), true);
+    assert.equal(getForegroundAppId(), 'research');
   });
 
   test('legacy #/experts falls back to workspaces when Experts is hidden', async () => {
@@ -239,14 +238,10 @@ describe('os router navigation', () => {
     assert.equal(getForegroundAppId(), 'code');
   });
 
-  test('launchApp(research) routes to Code research embed', async () => {
-    const { isResearchPanelOpen, resetResearchPanelForTests, openResearchPanel } = await import(
-      '../../src/ui/research-panel.ts',
-    );
-    resetResearchPanelForTests();
+  test('launchApp(research) routes to Research app', async () => {
     document.body.insertAdjacentHTML(
       'beforeend',
-      `<div id="chatArea"></div><div id="mainColumn"></div>
+      `<div id="osStage"><div id="osAppsLayer"></div></div>
       <main id="researchView" class="research-page dr">
         <button id="researchTabRun"></button><button id="researchTabLibrary"></button>
         <div id="researchPanelRun"><textarea id="researchQuery"></textarea>
@@ -260,18 +255,18 @@ describe('os router navigation', () => {
         <div id="researchPanelLibrary" class="hidden"></div><div id="researchLibraryMount"></div>
         <button id="btnResearchSettingsLink"></button></main>`,
     );
-    launchApp('code');
+    initAppHost();
     launchApp('research', { seed: 'Apple stock', autoRun: false });
-    assert.equal(window.location.hash, '#/app/code/chat');
+    assert.equal(window.location.hash, '#/app/research');
     syncOsRouteFromHashForTests();
     await new Promise((resolve) => setTimeout(resolve, 100));
-    if (!isResearchPanelOpen()) {
-      await openResearchPanel({ seed: 'Apple stock', autoRun: false });
-    }
     const snap = getInstanceSnapshot();
-    assert.equal(snap.instances.find((i) => i.appId === 'research'), undefined);
-    assert.equal(getForegroundAppId(), 'code');
-    assert.equal(isResearchPanelOpen(), true);
+    assert.equal(snap.view, 'app');
+    assert.equal(getForegroundAppId(), 'research');
+    assert.equal(snap.instances.find((i) => i.appId === 'research')?.appId, 'research');
+    const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+    assert.equal(query?.value, 'Apple stock');
+    assert.equal(document.getElementById('researchView')?.classList.contains('is-open'), true);
   });
 
   test('launchApp(experts) blocks hidden app and returns to workspaces', async () => {

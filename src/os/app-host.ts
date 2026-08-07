@@ -11,8 +11,6 @@ import type { AppId, LaunchOptions } from './types';
 import type { SettingsSectionId } from '../ui/settings-page-types';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
-import { hasPendingResearchPanelOpen } from '../ui/research-panel';
-
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
   settings: 'settingsView',
@@ -218,8 +216,11 @@ async function openAppPage(
       break;
     }
     case 'research': {
-      const { launchApp } = await import('./router');
-      launchApp('research', options);
+      const { showResearchPage } = await import('../research/panel');
+      showResearchPage({
+        seed: options?.seed,
+        autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+      });
       break;
     }
     case 'bench': {
@@ -323,15 +324,6 @@ async function openAppPage(
         const { restoreCodeSessionOnForeground } = await import('./code-launch');
         await restoreCodeSessionOnForeground();
       }
-      {
-        const { consumePendingResearchPanelOpen, openResearchPanel } = await import(
-          '../ui/research-panel'
-        );
-        const pendingResearch = consumePendingResearchPanelOpen();
-        if (pendingResearch !== null) {
-          await openResearchPanel(pendingResearch ?? {});
-        }
-      }
       break;
     }
     default:
@@ -410,8 +402,6 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
     lastForegroundApp = appId;
   } else if (options && (appId === 'code' || appId === 'research')) {
     void openAppPage(appId, options, generation);
-  } else if (appId === 'code' && hasPendingResearchPanelOpen()) {
-    void openAppPage(appId, options ?? { codeSection: 'chat' }, generation);
   } else if (!isAppPageLayerOpen(appId)) {
     void openAppPage(appId, options, generation);
   }

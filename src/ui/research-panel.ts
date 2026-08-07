@@ -256,52 +256,13 @@ async function applyOpenOptions(options?: ResearchPanelOpenOptions): Promise<voi
   void syncResearchPanelStatus();
 }
 
-/** Mount Research inside Code (#chatArea); foreground app stays Code. */
+/** Mount Research as a fullscreen app (legacy embed API → launch Research app). */
 export async function openResearchPanel(options?: ResearchPanelOpenOptions): Promise<void> {
-  if (!isOsShellEnabled()) return;
-
-  await ensureResearchControls();
-
-  if (isResearchPanelOpen()) {
-    await applyOpenOptions(options);
-    emit();
-    return;
-  }
-
-  const root = getRoot();
-  const area = document.getElementById('chatArea');
-  if (!root || !area) return;
-
-  if (getOsView() !== 'app' || getForegroundAppId() !== 'code') {
-    queueResearchPanelOpen(options);
-    const { launchApp } = await import('../os/router');
-    launchApp('code', { codeSection: 'chat', seed: options?.seed, autoRun: options?.autoRun });
-    return;
-  }
-
-  await closeCompetingMainColumnViews();
-
-  returnChatId = sessionState?.activeId ?? null;
-  rememberResearchViewHome(root);
-
-  area.replaceChildren();
-  area.appendChild(root);
-  stripMainColumnOverlayClasses();
-  area.classList.add(CHAT_AREA_CLASS);
-  document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_CLASS);
-  root.classList.add(EMBEDDED_CLASS);
-  root.classList.remove('is-open');
-
-  ensureEmbeddedBackButton();
-  ensureStatusBanner();
-  bindEmbedEscape();
-
-  const panel = await import('../research/panel');
-  panel.setResearchPanelTab('run');
-  await applyOpenOptions(options);
-
-  notifyAskQuestionDisplayContextChanged();
-  emit();
+  const { launchApp } = await import('../os/router');
+  launchApp('research', {
+    seed: options?.seed,
+    autoRun: options?.autoRun,
+  });
 }
 
 /** Tear down the embed and restore chat in the main column. */

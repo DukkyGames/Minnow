@@ -49,7 +49,7 @@ describe('topbar layout (feature-01)', () => {
     assert.match(actionsBlock, /class="workspace-control"/);
     const pathIdx = actionsBlock.indexOf(`id="${fixture.workspacePathLabelId}"`);
     const btnIdx = actionsBlock.indexOf('id="btnWorkspace"');
-    assert.ok(pathIdx >= 0 && btnIdx > pathIdx, 'workspace path precedes workspace button');
+    assert.ok(pathIdx >= 0 && btnIdx >= 0 && pathIdx > btnIdx, 'workspace button precedes folder name');
     assert.doesNotMatch(actionsBlock, /class="model-wrap"/);
     assert.doesNotMatch(actionsBlock, /id="modelSelect"/);
   });

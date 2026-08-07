@@ -13,7 +13,6 @@ import { launchApp } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
 import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
-import { closeAppSwitcherMenu, initAppSwitcherMenu } from './app-switcher-menu';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
@@ -101,13 +100,10 @@ export function renderMenubar(root: HTMLElement): () => void {
     if (title) statusText.setAttribute('title', title);
   }
 
-  // Icon-only Apps launcher — opens a dock-sized grid with Desktop + apps.
-  const appsBtn = document.createElement('button');
-  appsBtn.type = 'button';
-  appsBtn.className = 'mn-os-mb-icon mn-os-mb-apps';
-  appsBtn.hidden = true;
-  appsBtn.appendChild(createOsIcon('grid', { size: 16 }));
-  const cleanupAppSwitcher = initAppSwitcherMenu(appsBtn);
+  const workspaceSlot = document.createElement('div');
+  workspaceSlot.id = 'osMenubarWorkspaceSlot';
+  workspaceSlot.className = 'mn-os-mb-workspace-slot';
+  workspaceSlot.hidden = true;
 
   const sep = document.createElement('span');
   sep.className = 'mn-os-mb-sep mn-os-mb-app-sep';
@@ -130,15 +126,10 @@ export function renderMenubar(root: HTMLElement): () => void {
     void import('../ui/layout').then((m) => m.toggleSidebarLayout());
   });
 
-  left.append(brand, appsBtn, sep, appName, statusSep, statusPill, chatToggle);
+  left.append(brand, workspaceSlot, sep, appName, statusSep, statusPill, chatToggle);
 
   const right = document.createElement('div');
   right.className = 'mn-os-mb-right';
-
-  const workspaceSlot = document.createElement('div');
-  workspaceSlot.id = 'osMenubarWorkspaceSlot';
-  workspaceSlot.className = 'mn-os-mb-workspace-slot';
-  workspaceSlot.hidden = true;
 
   const modelChipAnchor = document.createElement('div');
   modelChipAnchor.id = 'osMenubarModelChip';
@@ -191,7 +182,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.textContent = formatClock(new Date());
 
   right.append(
-    workspaceSlot,
     modelChipAnchor,
     schedulerBtn,
     bell,
@@ -216,9 +206,6 @@ export function renderMenubar(root: HTMLElement): () => void {
     // though windowed apps technically run inside the desktop view.
     root.dataset.view = onWorkspaces ? 'workspaces' : 'app';
     brand.hidden = !onWorkspaces;
-    appsBtn.hidden = onWorkspaces;
-    // Dock covers Desktop; dismiss the switcher if we navigated home.
-    if (onWorkspaces) closeAppSwitcherMenu();
     sep.hidden = onWorkspaces;
     appName.hidden = onWorkspaces;
 
@@ -279,7 +266,6 @@ export function renderMenubar(root: HTMLElement): () => void {
     unsubPrefs();
     unsubNotif();
     stopClock();
-    cleanupAppSwitcher();
     cleanupModelChip();
     cleanupNotifications();
     cleanupUpdatePill();

@@ -38,21 +38,7 @@ const TOOLTIP_DELAY_MS = 500;
 
 
 
-/** Whether the rail should treat Research as the active app. */
-
-function isResearchRailActive(): boolean {
-
-  return isResearchPanelOpen();
-
-}
-
-
-
 function isRailAppActive(appId: AppId): boolean {
-
-  if (appId === 'research') return isResearchRailActive();
-
-  if (appId === 'code' && isResearchPanelOpen()) return false;
 
   return getForegroundAppId() === appId;
 
