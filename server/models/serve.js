@@ -70,6 +70,20 @@ import {
 let servesCache = [];
 let loaded = false;
 
+/** User-facing error for serves left starting when the tool server restarts. */
+export const INTERRUPTED_SERVE_ERROR = 'Model load interrupted (Minnow restarted)';
+
+/** @type {((baseUrl: string) => Promise<boolean>) | null} */
+let reachabilityProbeOverrideForTests = null;
+
+export function setServeReachabilityProbeOverrideForTests(fn) {
+  reachabilityProbeOverrideForTests = fn;
+}
+
+export function resetServeReachabilityProbeOverrideForTests() {
+  reachabilityProbeOverrideForTests = null;
+}
+
 /** Test overrides — avoid spawning real llama-server in unit tests. */
 /** @type {typeof createBackgroundRun | null} */
 let createBackgroundRunOverrideForTests = null;
@@ -92,6 +106,84 @@ export function resetServeHealthOverrideForTests() {
   waitForHealthOverrideForTests = null;
 }
 
+/**
+ * Best-effort probe that a serve's HTTP surface is up (llama.cpp, mlx-lm, Ollama, …).
+ * @param {string} baseUrl
+ */
+async function isServeEndpointReachable(baseUrl) {
+  if (reachabilityProbeOverrideForTests) {
+    return reachabilityProbeOverrideForTests(baseUrl);
+  }
+  const urls = [`${baseUrl}/health`, `${baseUrl}/v1/models`];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(2_500) });
+      if (res.ok) return true;
+    } catch {
+      /* try next */
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a persisted row still reflects a live process after a server restart.
+ * @param {ServeRecord} row
+ */
+async function isServeStillLive(row) {
+  if (row.runtime === 'llama-cpp' && row.runId) {
+    const run = getRun(row.runId);
+    if (run && !run.finished) return true;
+  }
+  if (row.baseUrl) {
+    return isServeEndpointReachable(row.baseUrl);
+  }
+  return false;
+}
+
+/**
+ * Mark queued/running serves from a previous server process as stopped (or error
+ * when still "starting"). Child processes and in-memory terminal runs do not
+ * survive a Minnow restart, but `serves.json` often still lists them as loaded.
+ */
+async function reconcileInterruptedServes() {
+  let changed = false;
+  for (const row of servesCache) {
+    if (row.status !== 'running' && row.status !== 'starting') continue;
+    if (await isServeStillLive(row)) continue;
+
+    if (row.status === 'starting') {
+      row.status = 'error';
+      row.error = INTERRUPTED_SERVE_ERROR;
+    } else {
+      row.status = 'stopped';
+      row.error = undefined;
+    }
+    row.stoppedAt = Date.now();
+    row.runId = undefined;
+    row.pid = undefined;
+    changed = true;
+  }
+  if (!changed) return;
+
+  await saveServes();
+
+  for (const runtime of ['llama-cpp', 'mlx-lm']) {
+    const providerId = runtime === 'llama-cpp' ? LLAMA_CPP_LOCAL_ID : MLX_LM_LOCAL_ID;
+    const stillRunning = servesCache.some(
+      (s) =>
+        s.runtime === runtime && (s.status === 'running' || s.status === 'starting'),
+    );
+    if (!stillRunning) {
+      try {
+        await updateProvider(providerId, { enabled: false });
+      } catch {
+        /* provider may have been removed manually */
+      }
+    }
+  }
+}
+
 async function loadServes() {
   if (loaded) return;
   loaded = true;
@@ -102,6 +194,7 @@ async function loadServes() {
   } catch {
     servesCache = [];
   }
+  await reconcileInterruptedServes();
 }
 
 async function saveServes() {
@@ -671,4 +764,5 @@ export async function resetServesForTests() {
   loaded = false;
   resetServeBackgroundRunOverrideForTests();
   resetServeHealthOverrideForTests();
+  resetServeReachabilityProbeOverrideForTests();
 }

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { getModelsConfig } from './models-config.js';
 import { getModelsRoot, repoDownloadDir } from './paths.js';
 import { scanInstalledArtifacts } from './installed.js';
+import { contextLengthFromTransformersConfig } from './mlx-context-length.js';
 
 /** LM Studio / Ollama metadata folders — not model roots. */
 const CUSTOM_DIR_SKIP_NAMES = new Set(['blobs', 'manifests']);
@@ -41,6 +42,7 @@ const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
  * @property {CachedGgufFile[]} [gguf_files]
  * @property {string} [mlx_root]
  * @property {string} [mlx_quant]
+ * @property {number} [mlx_context_length]
  * @property {string} [status]
  */
 
@@ -62,7 +64,7 @@ const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
  *
  * @param {string} dir
  * @param {string} repoId
- * @returns {Promise<{ root: string, quant: string } | null>}
+ * @returns {Promise<{ root: string, quant: string, contextLength?: number } | null>}
  */
 async function detectMlxRepo(dir, repoId) {
   let hasSafetensors = false;
@@ -84,6 +86,8 @@ async function detectMlxRepo(dir, repoId) {
     return null;
   }
   if (!config || typeof config !== 'object') return null;
+
+  const contextLength = contextLengthFromTransformersConfig(config);
 
   const quantization = /** @type {Record<string, unknown> | undefined} */ (config.quantization);
   const quantConfig = /** @type {Record<string, unknown> | undefined} */ (
@@ -110,17 +114,38 @@ async function detectMlxRepo(dir, repoId) {
     }
   }
   if (Number.isFinite(bits) && bits > 0) {
-    return { root: dir, quant: `mlx-${bits}bit` };
+    return {
+      root: dir,
+      quant: `mlx-${bits}bit`,
+      ...(contextLength !== undefined ? { contextLength } : {}),
+    };
   }
 
   // Fallback: an mlx-named repo whose config carries no quantization block, i.e.
   // an unquantized MLX conversion. Take the width from the name when it says so.
   if (/(^|[-_/])mlx([-_/]|$)/i.test(repoId)) {
     const named = /(\d+)\s*bit/i.exec(repoId);
-    return { root: dir, quant: named ? `mlx-${named[1]}bit` : 'mlx' };
+    return {
+      root: dir,
+      quant: named ? `mlx-${named[1]}bit` : 'mlx',
+      ...(contextLength !== undefined ? { contextLength } : {}),
+    };
   }
 
   return null;
+}
+
+/**
+ * @param {{ root: string, quant: string, contextLength?: number }} mlx
+ */
+function mlxRowFields(mlx) {
+  return {
+    mlx_root: mlx.root,
+    mlx_quant: mlx.quant,
+    ...(typeof mlx.contextLength === 'number' && mlx.contextLength > 0
+      ? { mlx_context_length: mlx.contextLength }
+      : {}),
+  };
 }
 
 /**
@@ -370,7 +395,7 @@ async function scanHfCache(cache, seen) {
       is_diffusion: isDiffusion,
       is_gguf: ggufFiles.length > 0,
       gguf_files: ggufFiles,
-      ...(mlx ? { mlx_root: mlx.root, mlx_quant: mlx.quant } : {}),
+      ...(mlx ? mlxRowFields(mlx) : {}),
       status: hasIncomplete ? 'incomplete' : 'cached',
     });
   }
@@ -482,7 +507,7 @@ async function scanCustomDir(dirPath, seen) {
         is_diffusion: isDiffusion,
         is_gguf: ggufFiles.length > 0,
         gguf_files: ggufFiles,
-        ...(mlx ? { mlx_root: mlx.root, mlx_quant: mlx.quant } : {}),
+        ...(mlx ? mlxRowFields(mlx) : {}),
         status: 'local',
       });
     }
@@ -629,6 +654,9 @@ async function scanMlxArtifacts(seen, existing) {
     if (already) {
       already.mlx_root = mlx.root;
       already.mlx_quant = mlx.quant;
+      if (typeof mlx.contextLength === 'number' && mlx.contextLength > 0) {
+        already.mlx_context_length = mlx.contextLength;
+      }
       continue;
     }
     if (seen.has(repoId)) continue;
@@ -651,6 +679,9 @@ async function scanMlxArtifacts(seen, existing) {
       gguf_files: [],
       mlx_root: mlx.root,
       mlx_quant: mlx.quant,
+      ...(typeof mlx.contextLength === 'number' && mlx.contextLength > 0
+        ? { mlx_context_length: mlx.contextLength }
+        : {}),
       status: 'downloaded',
     });
   }

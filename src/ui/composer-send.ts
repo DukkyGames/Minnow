@@ -1,5 +1,9 @@
 import { streaming } from '../app-state';
-import { enqueueComposerMessage } from '../chat/message-queue';
+import {
+  enqueueComposerMessage,
+  getPendingMessageQueue,
+  pushQueuedMessageNow,
+} from '../chat/message-queue';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import { getActiveChat } from '../state/sessions';
@@ -171,11 +175,29 @@ function submitQueueFromComposer(): void {
   syncComposerMessageQueue();
 }
 
+/** Promote the oldest queued follow-up to steer while the turn is still streaming. */
+function pushFirstQueuedMessageAsSteer(chat: ReturnType<typeof getActiveChat>): boolean {
+  const first = getPendingMessageQueue(chat)[0];
+  if (!first) return false;
+  if (!pushQueuedMessageNow(chat, first.id)) return false;
+  setStatus('ok', 'Steering at next step…');
+  refreshComposerStreamingAffordance();
+  syncComposerMessageQueue();
+  return true;
+}
+
 /** Send when idle; queue follow-up when streaming with text; stop when streaming with empty input. */
 export function handleComposerPrimaryAction(): void {
   if (isActiveChatStreaming()) {
+    const chat = getActiveChat();
     if (composerInputHasText()) {
       submitQueueFromComposer();
+      return;
+    }
+    if (chat.pendingSteerMessage?.trim()) {
+      return;
+    }
+    if (pushFirstQueuedMessageAsSteer(chat)) {
       return;
     }
     stopGeneration();

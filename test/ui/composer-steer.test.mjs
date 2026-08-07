@@ -6,6 +6,7 @@ const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts'
 );
+const { enqueueComposerMessageForTests } = await import('../../src/chat/message-queue.ts');
 const { handleComposerPrimaryAction } = await import('../../src/ui/composer-send.ts');
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
@@ -82,5 +83,47 @@ describe('composer queue vs stop', () => {
     handleComposerPrimaryAction();
 
     assert.equal(aborted, true);
+  });
+
+  test('streaming with queued follow-up and empty input steers without abort', () => {
+    const chat = seedStreamingChat();
+    setupDom();
+
+    enqueueComposerMessageForTests(chat, {
+      id: '22222222-2222-2222-2222-222222222222',
+      text: STEER_TEXT,
+      createdAt: 1,
+    });
+
+    let aborted = false;
+    const controller = new AbortController();
+    controller.signal.addEventListener('abort', () => {
+      aborted = true;
+    });
+    appState.setChatAbort(chat.id, controller);
+
+    handleComposerPrimaryAction();
+
+    assert.equal(aborted, false);
+    assert.equal(chat.pendingSteerMessage, STEER_TEXT);
+    assert.equal(chat.pendingMessageQueue?.length ?? 0, 0);
+  });
+
+  test('streaming with pending steer and empty input does not abort', () => {
+    const chat = seedStreamingChat();
+    setupDom();
+    chat.pendingSteerMessage = STEER_TEXT;
+
+    let aborted = false;
+    const controller = new AbortController();
+    controller.signal.addEventListener('abort', () => {
+      aborted = true;
+    });
+    appState.setChatAbort(chat.id, controller);
+
+    handleComposerPrimaryAction();
+
+    assert.equal(aborted, false);
+    assert.equal(chat.pendingSteerMessage, STEER_TEXT);
   });
 });

@@ -11,7 +11,13 @@ import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { handleModelsRequest } from '../../server/models/routes.js';
 import { modelsLogDir } from '../../server/models/paths.js';
-import { readServeLogTail, subscribeServeLog } from '../../server/models/serve-logs.js';
+import {
+  MLX_LM_MANAGED_SERVER_ID,
+  readServeLogTail,
+  readServeLogTailForServe,
+  resolveServeLogPath,
+  subscribeServeLog,
+} from '../../server/models/serve-logs.js';
 import { resetServesForTests } from '../../server/models/serve.js';
 
 function httpRequest(baseUrl, method, pathname) {
@@ -94,6 +100,20 @@ describe('serve log tail', () => {
     assert.match(events[0].text, /boot/);
     assert.match(events[1].text, /loading 50\.00 %/);
     assert.ok(!events[1].text.includes('boot'), 'follow-up chunks are deltas, not the whole file');
+  });
+
+  test('MLX serves resolve to the managed mlx-lm server log', async () => {
+    const mlxLogPath = resolveServeLogPath({ runtime: 'mlx-lm', runId: null });
+    assert.ok(mlxLogPath?.includes('mlx-lm.log'));
+    await fs.mkdir(path.dirname(mlxLogPath), { recursive: true });
+    await fs.writeFile(mlxLogPath, 'mlx server boot\n', 'utf8');
+
+    const tail = await readServeLogTailForServe({ runtime: 'mlx-lm' });
+    assert.ok(tail);
+    assert.match(tail.text, /mlx server boot/);
+    assert.equal(tail.size, (await fs.stat(mlxLogPath)).size);
+    assert.equal(resolveServeLogPath({ runtime: 'llama-cpp' }), null);
+    assert.equal(MLX_LM_MANAGED_SERVER_ID, 'mlx-lm');
   });
 });
 

@@ -2,7 +2,7 @@
 .msg.msg--has-actions {
   position: relative;
   /* .msg is full column width; shrink so absolute top/right hugs the bubble cluster. */
-  width: fit-content;
+  width: max-content;
 }
 
 .message-actions__trigger {

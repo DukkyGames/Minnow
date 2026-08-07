@@ -84,6 +84,7 @@ describe('MLX repo detection', () => {
     await writeCachedRepo('mlx-community/Qwen3-8B-4bit', {
       model_type: 'qwen3',
       architectures: ['Qwen3ForCausalLM'],
+      max_position_embeddings: 40_960,
       quantization: { group_size: 64, bits: 4 },
     });
 
@@ -139,6 +140,7 @@ describe('MLX repo detection', () => {
     assert.ok(row, 'expected the MLX repo to be scanned');
     assert.ok(row.mlx_root, 'expected mlx_root to be set');
     assert.equal(row.mlx_quant, 'mlx-4bit');
+    assert.equal(row.mlx_context_length, 40_960);
   });
 
   test('a single-shard repo has no index.json, and is found anyway', async () => {

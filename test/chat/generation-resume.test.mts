@@ -70,8 +70,17 @@ describe('runChatTurn resumeGenerationId errors', () => {
   });
 
   test('clears currentGenerationId when subscribe returns 404', async () => {
-    globalThis.fetch = async () =>
-      new Response('not found', { status: 404 });
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      // runChatTurn remaps My Models via cached/serves before subscribe.
+      if (url.includes('/api/models/cached')) {
+        return Response.json({ models: [] });
+      }
+      if (url.includes('/api/models/serve')) {
+        return Response.json({ serves: [] });
+      }
+      return new Response('not found', { status: 404 });
+    };
 
     const chat = makeChat(CHAT_A, GEN_A);
     chat.history.push({ role: 'user', content: 'Hi' });

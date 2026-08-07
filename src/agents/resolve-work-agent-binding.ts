@@ -4,7 +4,10 @@
 
 import { listProviders } from '../providers/store';
 import type { ProviderPublic } from '../providers/types';
-import { resolveUpstreamProviderId } from '../models/model-select-library';
+import {
+  isLibraryModelBinding,
+  resolveUpstreamProviderId,
+} from '../models/model-select-library';
 import type { Chat } from '../types';
 import type {
   WorkAgentBinding,
@@ -54,6 +57,17 @@ export async function resolveWorkAgentBinding(
 
   if (!modelId) {
     throw new WorkAgentConfigError('No model selected for this chat');
+  }
+
+  // My Models uses synthetic minnow-library keys; llama-cpp-local may stay disabled until serve.
+  if (isLibraryModelBinding(providerId, modelId)) {
+    return {
+      agentId,
+      providerId,
+      modelId,
+      baseUrl: '',
+      headers: {},
+    };
   }
 
   const providers =

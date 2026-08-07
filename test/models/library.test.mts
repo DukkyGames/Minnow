@@ -170,6 +170,25 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].incomplete, true);
   });
 
+  test('uses mlx_context_length from the scan for MLX rows', async () => {
+    const rows = await buildLibrary([
+      {
+        repo_id: 'mlx-community/SmolLM2-360M-Instruct-4bit',
+        size_bytes: 200_000_000,
+        nb_files: 3,
+        has_incomplete: false,
+        path: '/home/u/.minnow/models/artifacts/mlx-community--SmolLM2-360M-Instruct-4bit',
+        status: 'downloaded',
+        mlx_root: '/home/u/.minnow/models/artifacts/mlx-community--SmolLM2-360M-Instruct-4bit',
+        mlx_quant: 'mlx-4bit',
+        mlx_context_length: 8192,
+      },
+    ]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].format, 'MLX');
+    assert.equal(rows[0].contextLength, 8192);
+  });
+
   test('resolves maker from the weight name when the repo publisher is a quantizer', async () => {
     const rows = await buildLibrary([
       ggufRow({

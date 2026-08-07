@@ -189,8 +189,9 @@
 .msg.user {
   align-self: flex-end;
   align-items: flex-end;
-  /* Shrink-wrap so short text is not squeezed by the full-width flex row (overflow-wrap: anywhere on bubbles). */
-  width: fit-content;
+  /* Shrink-wrap short user turns; max-content avoids the min-content collapse that fit-content
+     hit when bubbles allowed mid-word soft wraps (hello → hel / lo). */
+  width: max-content;
   max-width: 100%;
 }
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
@@ -300,8 +301,10 @@
   line-height: 1.65;
   font-size: 14px;
   white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  /* break-word wraps long tokens only when a line would overflow. Do not use
+     overflow-wrap: anywhere or word-break: break-word — both shrink min-content to ~1ch
+     and collapse width: fit-content / max-content user bubbles into mid-word wraps. */
+  overflow-wrap: break-word;
   max-width: 100%;
 }
 
@@ -340,9 +343,8 @@
   border: none;
   color: var(--mn-fg);
   border-bottom-right-radius: var(--radius-sm);
-  width: fit-content;
+  width: max-content;
   max-width: 100%;
-  overflow-wrap: break-word;
 }
 
 .msg-bubble.msg-bubble--user-parts {

@@ -133,10 +133,22 @@ export function resolveServedBindingForLibraryId(
   if (!serve || serve.status !== 'running') return null;
 
   const model = library.find((m) => m.id === libraryId.trim());
+  const upstreamId = upstreamProviderForLibraryModel(model);
+
+  // mlx_lm.server keys requests by absolute snapshot directory, not picker ids or
+  // short labels from /v1/models.
+  if (upstreamId === MLX_LM_LOCAL_PROVIDER_ID || serve.runtime === 'mlx-lm') {
+    const mlxModelId =
+      serve.modelPath?.trim() ||
+      model?.path?.trim() ||
+      serve.modelLabel?.trim() ||
+      '';
+    if (!mlxModelId) return null;
+    return { providerId: MLX_LM_LOCAL_PROVIDER_ID, modelId: mlxModelId };
+  }
+
   const label = serve.modelLabel?.trim() || model?.name?.trim() || '';
   if (!label) return null;
-
-  const upstreamId = upstreamProviderForLibraryModel(model);
 
   if (upstreamId === LLAMA_CPP_LOCAL_PROVIDER_ID) {
     const llama =
@@ -147,17 +159,6 @@ export function resolveServedBindingForLibraryId(
       );
       if (hit) {
         return { providerId: LLAMA_CPP_LOCAL_PROVIDER_ID, modelId: hit.id };
-      }
-    }
-  } else {
-    const mlx =
-      providerModels?.find((r) => r.provider.id === MLX_LM_LOCAL_PROVIDER_ID) ?? null;
-    if (mlx) {
-      const hit = mlx.models.find(
-        (m) => m.id === label || m.id.toLowerCase() === label.toLowerCase(),
-      );
-      if (hit) {
-        return { providerId: MLX_LM_LOCAL_PROVIDER_ID, modelId: hit.id };
       }
     }
   }
@@ -175,6 +176,83 @@ export function libraryModelNeedsLoad(
   if (!row) return true;
   const state = row.state?.trim().toLowerCase();
   return state !== 'loaded';
+}
+
+/**
+ * Whether a My Models chat turn should run the load path before completions.
+ * Live serve status wins: no running serve always needs load (picker cache can
+ * stay "loaded" after Models eject). Optional cache kept for call-site symmetry.
+ */
+export function libraryBindingNeedsServeLoad(
+  libraryId: string,
+  library: LibraryModel[],
+  serves: ServeRecord[],
+  _cache?: ReadonlyMap<string, LmModelRecord>,
+): boolean {
+  const serve = activeServeForLibraryId(libraryId, library, serves);
+  if (serve?.status === 'running') return false;
+  return true;
+}
+
+/**
+ * Completions provider/model for a My Models row once a serve is running.
+ * Returns null when there is no running serve (caller must ensure-load first).
+ */
+export function resolveLibrarySendBinding(
+  libraryId: string,
+  library: LibraryModel[],
+  serves: ServeRecord[],
+  providerModels?: ProviderModelsResult[],
+): { providerId: string; modelId: string } | null {
+  return resolveServedBindingForLibraryId(libraryId, library, serves, providerModels);
+}
+
+function normalizeBindingToken(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? '';
+}
+
+/**
+ * Resolve the My Models library id for a chat binding.
+ * After a served turn, chats often persist llama-cpp-local / mlx-lm-local + upstream
+ * model ids — those must still auto-load when the serve is gone.
+ */
+export function resolveLibraryModelIdForChatBinding(
+  providerId: string | undefined,
+  modelId: string | undefined,
+  library: LibraryModel[],
+): string | null {
+  const pid = providerId?.trim();
+  const mid = modelId?.trim();
+  if (!pid || !mid) return null;
+
+  if (isLibraryModelBinding(pid, mid)) return mid;
+
+  if (pid === LLAMA_CPP_LOCAL_PROVIDER_ID) {
+    const want = normalizeBindingToken(mid);
+    const hit = library.find((model) => {
+      if (model.format === 'MLX' || model.id.startsWith('mlx:')) return false;
+      const name = normalizeBindingToken(model.name);
+      const file = normalizeBindingToken(model.fileName);
+      const repo = normalizeBindingToken(model.repoId);
+      return want === name || (file && want === file) || (repo && want === repo);
+    });
+    return hit?.id ?? null;
+  }
+
+  if (pid === MLX_LM_LOCAL_PROVIDER_ID) {
+    const want = mid.trim();
+    const wantLower = want.toLowerCase();
+    const hit = library.find((model) => {
+      if (model.format !== 'MLX' && !model.id.startsWith('mlx:')) return false;
+      const path = model.path?.trim();
+      if (path && (path === want || path.endsWith(want))) return true;
+      const name = normalizeBindingToken(model.name);
+      return wantLower === name;
+    });
+    return hit?.id ?? null;
+  }
+
+  return null;
 }
 
 /**

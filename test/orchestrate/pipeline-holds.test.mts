@@ -83,21 +83,23 @@ describe('pipeline holds', () => {
     assert.equal(isTaskStalledForRestart(board, task, () => false), true);
   });
 
-  test('TTL-on-read: expired hold is invisible to hasPipelineHold and countHeldTaskIds', async () => {
+  test('TTL-on-read: expired hold is invisible to hasPipelineHold and countHeldTaskIds', () => {
     const group = makeBoardGroup();
     const board = group.orchestrateBoard!;
     setPipelineHoldMaxMsForTests(1);
     const hold = acquirePipelineHold(board, 'W1-A', 'merge');
     assert.ok(hold);
-    assert.equal(hasPipelineHold(board, 'W1-A'), true);
-    assert.equal(countHeldTaskIds(board), 1);
-    await new Promise<void>((r) => setTimeout(r, 5));
-    assert.equal(hasPipelineHold(board, 'W1-A'), false);
-    assert.equal(countHeldTaskIds(board), 0);
+    // Pin nowMs to acquisition time so slow CI cannot expire the hold between reads.
+    const whileFresh = hold.acquiredAt;
+    assert.equal(hasPipelineHold(board, 'W1-A', whileFresh), true);
+    assert.equal(countHeldTaskIds(board, undefined, whileFresh), 1);
+    const afterTtl = hold.acquiredAt + 2;
+    assert.equal(hasPipelineHold(board, 'W1-A', afterTtl), false);
+    assert.equal(countHeldTaskIds(board, undefined, afterTtl), 0);
     releasePipelineHoldsForTask(board, 'W1-A');
   });
 
-  test('logger context receives acquire and TTL expiry with post-event counts', async () => {
+  test('logger context receives acquire and TTL expiry with post-event counts', () => {
     const group = makeBoardGroup();
     const board = group.orchestrateBoard!;
     const seen: Array<{ action: string; holdId: string; active: number }> = [];
@@ -108,8 +110,8 @@ describe('pipeline holds', () => {
       },
     });
     assert.ok(hold);
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
-    assert.equal(hasPipelineHold(board, 'W1-A'), false);
+    // Advance logical time past TTL to trigger expiry-on-read without wall-clock races.
+    assert.equal(hasPipelineHold(board, 'W1-A', hold.acquiredAt + 2), false);
     assert.deepEqual(seen, [
       { action: 'acquire', holdId: hold.id, active: 1 },
       { action: 'expiry', holdId: hold.id, active: 0 },
