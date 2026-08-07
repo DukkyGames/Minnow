@@ -20,10 +20,20 @@ export interface ReportViewActions {
 /**
  * Inline markdown the engine actually emits: citation markers, links, bold,
  * italic and code. Citation markers come first so `[3]` is read as a citation
- * rather than the opening of a link.
+ * rather than the opening of a link. The href allows one level of nested
+ * parentheses, because URLs like `/wiki/Transformer_(deep_learning)` are
+ * routine in these reports and stopping at the first `)` mangles them.
  */
-const INLINE_RE =
-  /\[(\d{1,3})\](?!\()|\[([^\]]+)\]\(\s*(<?)([^)\s>]+)\3[^)]*\)|\*\*([^*]+)\*\*|`([^`]+)`|(?<![*\w])\*([^*\n]+)\*(?!\*)/g;
+const INLINE_RE = new RegExp(
+  [
+    String.raw`\[(?<cite>\d{1,3})\](?!\()`,
+    String.raw`\[(?<label>[^\]]+)\]\(\s*<?(?<href>(?:[^\s()<>]|\([^\s()<>]*\))+)>?(?:\s+"[^"]*")?\s*\)`,
+    String.raw`\*\*(?<bold>[^*]+)\*\*`,
+    '`(?<code>[^`]+)`',
+    String.raw`(?<![*\w])\*(?<italic>[^*\n]+)\*(?!\*)`,
+  ].join('|'),
+  'g',
+);
 
 function isSafeHref(url: string): boolean {
   return /^https?:\/\//i.test(url);
@@ -49,7 +59,7 @@ function appendInline(
     }
     last = match.index + match[0].length;
 
-    const [, citeN, linkLabel, , linkUrl, bold, code, italic] = match;
+    const { cite: citeN, label, href, bold, code, italic } = match.groups ?? {};
 
     if (citeN !== undefined) {
       const cite = makeCite(Number(citeN));
@@ -58,17 +68,17 @@ function appendInline(
       }
       continue;
     }
-    if (linkLabel !== undefined) {
-      if (isSafeHref(linkUrl)) {
+    if (label !== undefined) {
+      if (isSafeHref(href)) {
         const a = document.createElement('a');
         a.className = 'rs-link';
-        a.href = linkUrl;
+        a.href = href;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
-        a.textContent = linkLabel;
+        a.textContent = label;
         target.appendChild(a);
       } else {
-        target.appendChild(document.createTextNode(linkLabel));
+        target.appendChild(document.createTextNode(label));
       }
       continue;
     }

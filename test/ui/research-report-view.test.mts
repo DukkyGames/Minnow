@@ -126,6 +126,100 @@ describe('research brief', () => {
     assert.equal(asked, 'What about pricing?');
   });
 
+  test('a finding body renders markdown instead of printing it', () => {
+    const mount = document.getElementById('reportMount') as HTMLElement;
+    renderResearchReportView(
+      mount,
+      brief({
+        sources: SOURCES,
+        findings: [
+          {
+            heading: 'Attention',
+            body: 'ignored when blocks are present',
+            cites: [1],
+            blocks: [
+              { kind: 'sub', text: 'Why it works' },
+              {
+                kind: 'para',
+                text: 'Dated to a 1950 paper ([Turing](https://example.com/a)) with **weight** [1].',
+              },
+              { kind: 'list', items: ['Uses `softmax` over scores'] },
+            ],
+          },
+        ],
+      }),
+      { onFollowUp: () => {} },
+    );
+
+    const text = mount.querySelector('.rs-findings')?.textContent ?? '';
+    assert.doesNotMatch(text, /#{2,}/);
+    assert.doesNotMatch(text, /\]\(http/);
+    assert.doesNotMatch(text, /\*\*/);
+
+    assert.equal(mount.querySelector('.rs-finding__sub')?.textContent, 'Why it works');
+    const link = mount.querySelector('.rs-link') as HTMLAnchorElement;
+    assert.equal(link.getAttribute('href'), 'https://example.com/a');
+    assert.equal(link.textContent, 'Turing');
+    assert.equal(link.getAttribute('rel'), 'noopener noreferrer');
+    assert.equal(mount.querySelector('.rs-findings strong')?.textContent, 'weight');
+    assert.equal(mount.querySelector('.rs-code')?.textContent, 'softmax');
+    assert.equal(mount.querySelectorAll('.rs-finding__list li').length, 1);
+
+    // The marker sits where the prose put it, not appended after the body.
+    const cites = mount.querySelectorAll('.rs-cite');
+    assert.equal(cites.length, 1);
+    assert.equal(cites[0].closest('.rs-finding__body')?.textContent?.includes('1950'), true);
+  });
+
+  test('a url with parentheses survives intact', () => {
+    const mount = document.getElementById('reportMount') as HTMLElement;
+    renderResearchReportView(
+      mount,
+      brief({
+        findings: [
+          {
+            heading: 'Claim',
+            body: '',
+            cites: [],
+            blocks: [
+              {
+                kind: 'para',
+                text: 'See [the article](https://en.wikipedia.org/wiki/Transformer_(deep_learning)) now.',
+              },
+            ],
+          },
+        ],
+      }),
+      { onFollowUp: () => {} },
+    );
+    assert.equal(
+      (mount.querySelector('.rs-link') as HTMLAnchorElement).getAttribute('href'),
+      'https://en.wikipedia.org/wiki/Transformer_(deep_learning)',
+    );
+    assert.match(mount.querySelector('.rs-finding__body')?.textContent ?? '', /See the article now\./);
+  });
+
+  test('a javascript: link is rendered as plain text', () => {
+    const mount = document.getElementById('reportMount') as HTMLElement;
+    renderResearchReportView(
+      mount,
+      brief({
+        findings: [
+          {
+            heading: 'Claim',
+            body: '',
+            cites: [],
+            // eslint-disable-next-line no-script-url
+            blocks: [{ kind: 'para', text: 'See [here](javascript:alert(1)) for more.' }],
+          },
+        ],
+      }),
+      { onFollowUp: () => {} },
+    );
+    assert.equal(mount.querySelector('.rs-link'), null);
+    assert.match(mount.querySelector('.rs-finding__body')?.textContent ?? '', /See here for more/);
+  });
+
   test('run-level actions are not duplicated in the brief body', () => {
     const mount = document.getElementById('reportMount') as HTMLElement;
     renderResearchReportView(mount, brief(), { onFollowUp: () => {} });

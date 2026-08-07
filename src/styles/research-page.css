@@ -1118,7 +1118,7 @@
 .rs-link {
   color: var(--mn-fg);
   text-decoration: underline;
-  text-decoration-color: var(--mn-border-strong);
+  text-decoration-color: color-mix(in srgb, currentcolor 42%, transparent);
   text-underline-offset: 2px;
   transition: text-decoration-color var(--duration-fast) var(--ease-out);
 }
