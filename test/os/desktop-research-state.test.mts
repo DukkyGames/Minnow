@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetAppHostForTests } from '../../src/os/app-host.ts';
-import { resetInstancesForTests } from '../../src/os/instances.ts';
+import { getForegroundAppId, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
   activateDesktopResearch,
   getDesktopState,
@@ -77,74 +77,64 @@ describe('desktop research state', () => {
     assert.equal(layer?.classList.contains('is-research-active'), false);
   });
 
-  test('activateDesktopResearch applies research-idle and placeholder', async () => {
+  test('activateDesktopResearch launches Code research panel route', async () => {
     await activateDesktopResearch({ seed: 'quantum computing' });
-    assert.equal(getDesktopState(), 'researchIdle');
-    assert.equal(isDesktopResearchActive(), true);
-    assert.equal(isDesktopResearchRunActive(), false);
-    const layer = document.getElementById('osDesktopLayer');
-    assert.equal(layer?.classList.contains('is-research-idle'), true);
-    assert.equal(layer?.classList.contains('is-research-mode'), true);
-    assert.equal(layer?.classList.contains('is-composer-docked'), true);
-    const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
-    assert.equal(input?.placeholder, 'What would you like to research?');
-    const greet = document.querySelector('.mn-os-desk-hero .mn-os-greet');
-    const greetSub = document.querySelector('.mn-os-desk-hero .mn-os-greet-sub');
-    assert.equal(greet?.textContent, 'Deep research.');
-    assert.equal(
-      greetSub?.textContent,
-      "What would you like to research? I'll gather sources and synthesize a report.",
-    );
-    assert.equal(input?.value, 'quantum computing');
-    const dock = document.querySelector('.mn-os-composer-dock');
-    const composer = document.getElementById('desktopComposerRoot');
-    assert.ok(dock?.contains(composer ?? null));
-    const overlay = document.querySelector('.mn-os-desktop-research');
-    assert.ok(overlay);
-    assert.ok(document.getElementById('desktopResearchProgressMount'));
-    assert.ok(document.getElementById('desktopResearchProgressBody'));
-    assert.ok(document.getElementById('desktopResearchResultMount'));
-    assert.ok(document.getElementById('desktopResearchResultBody'));
-    assert.ok(document.getElementById('btnDesktopResearchClose'));
-    assert.ok(document.getElementById('desktopResearchMaxRounds'));
-    assert.ok(document.getElementById('desktopResearchScope'));
-    assert.ok(document.getElementById('desktopResearchWorkspace'));
-    assert.ok(document.getElementById('desktopResearchWorkspaceLabel'));
-    assert.ok(document.getElementById('btnDesktopResearchWorkspaceBrowse'));
+    assert.equal(window.location.hash, '#/app/code/chat');
   });
 
-  test('resolveLegacyHash redirects research routes to desktop', () => {
+  test('resolveLegacyHash redirects research routes to Code embed', () => {
     assert.deepEqual(resolveLegacyHash('#/research'), {
-      hash: '#/desktop',
-      desktopResearch: true,
+      hash: '#/app/code/chat',
+      codeResearch: true,
     });
     assert.deepEqual(resolveLegacyHash('#/app/research'), {
-      hash: '#/desktop',
-      desktopResearch: true,
+      hash: '#/app/code/chat',
+      codeResearch: true,
     });
   });
 
-  test('launchApp(research) without options still activates research idle', async () => {
-    launchApp('research');
-    assert.equal(window.location.hash, '#/desktop');
-    await new Promise((r) => setTimeout(r, 50));
-    assert.equal(isDesktopResearchActive(), true);
-    assert.equal(getDesktopState(), 'researchIdle');
-    const layer = document.getElementById('osDesktopLayer');
-    assert.equal(layer?.classList.contains('is-research-mode'), true);
-  });
-
-  test('launchApp(research) stays on desktop and activates research idle', async () => {
+  test('launchApp(research) routes to Code and opens panel when DOM is ready', async () => {
+    const { isResearchPanelOpen, resetResearchPanelForTests } = await import(
+      '../../src/ui/research-panel.ts',
+    );
+    resetResearchPanelForTests();
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `
+      <div id="chatArea"></div>
+      <div id="mainColumn"></div>
+      <main id="researchView" class="research-page dr">
+        <button id="researchTabRun"></button>
+        <button id="researchTabLibrary"></button>
+        <div id="researchPanelRun">
+          <textarea id="researchQuery"></textarea>
+          <select id="researchMaxRounds"><option value="auto">Auto</option></select>
+          <select id="researchCategory"><option value=""></option></select>
+          <select id="researchSearchProvider"><option value=""></option></select>
+          <select id="researchProviderOverride"><option value=""></option></select>
+          <input id="researchModelOverride" />
+          <button id="btnResearchStart"></button>
+          <button id="btnResearchCancel" hidden></button>
+          <div id="researchProgressMount"></div>
+          <div id="researchResultMount"></div>
+        </div>
+        <div id="researchPanelLibrary" class="hidden"></div>
+        <div id="researchLibraryMount"></div>
+        <button id="btnResearchSettingsLink"></button>
+      </main>
+    `,
+    );
+    launchApp('code');
     launchApp('research', { seed: 'Apple stock' });
-    assert.equal(window.location.hash, '#/desktop');
-    await new Promise((r) => setTimeout(r, 0));
-    assert.equal(isDesktopResearchActive(), true);
-    assert.equal(getDesktopState(), 'researchIdle');
+    assert.equal(window.location.hash, '#/app/code/chat');
+    await new Promise((r) => setTimeout(r, 80));
+    assert.equal(isResearchPanelOpen(), true);
     const snap = await import('../../src/os/instances.ts').then((m) => m.getInstanceSnapshot());
     assert.equal(snap.instances.find((i) => i.appId === 'research'), undefined);
+    assert.equal(getForegroundAppId(), 'code');
   });
 
-  test('parseOsHash still accepts desktop route', () => {
-    assert.deepEqual(parseOsHash('#/desktop'), { view: 'desktop' });
+  test('parseOsHash still accepts workspaces route alias', () => {
+    assert.deepEqual(parseOsHash('#/desktop'), { view: 'workspaces' });
   });
 });

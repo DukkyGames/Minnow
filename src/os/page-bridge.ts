@@ -3,8 +3,8 @@ import { shouldSuppressDesktopChrome } from './shell-chrome';
 import {
   isDesktopChatActive,
   isDesktopExpertsActive,
-  isDesktopResearchActive,
 } from './desktop-state';
+import { isResearchPanelOpen } from '../ui/research-panel';
 import type { AppId } from './types';
 import { isAppAvailable } from './app-preferences';
 import { isDeveloperReleased } from './app-registry';
@@ -40,7 +40,7 @@ export function shouldHideAppBody(): boolean {
   // Code reparents #appBody into the fullscreen layer — never hide it while Code is foreground.
   if (isCodeForeground()) return false;
   if (isDesktopChatActive()) return true;
-  if (isDesktopResearchActive()) return true;
+  if (isResearchPanelOpen()) return true;
   if (isDesktopExpertsActive()) return true;
   if (getOsView() === 'workspaces') return true;
   return getForegroundAppId() !== 'code';
@@ -77,7 +77,7 @@ export function syncLegacyChromeVisibility(): void {
   );
   document.documentElement.classList.toggle(
     'os-desktop-research',
-    !codeForeground && isDesktopResearchActive(),
+    !codeForeground && isResearchPanelOpen(),
   );
   document.documentElement.classList.toggle(
     'os-desktop-experts',
@@ -89,7 +89,7 @@ export function syncLegacyChromeVisibility(): void {
     document.documentElement.dataset.osApp = 'code';
   } else if (isDesktopChatActive()) {
     document.documentElement.dataset.osApp = 'chat';
-  } else if (isDesktopResearchActive()) {
+  } else if (isResearchPanelOpen()) {
     document.documentElement.dataset.osApp = 'research';
   } else if (isDesktopExpertsActive()) {
     document.documentElement.dataset.osApp = 'experts';
@@ -163,6 +163,9 @@ export function initOsPageBridge(): void {
   });
   void import('./desktop-state').then(({ subscribeDesktopState }) => {
     subscribeDesktopState(() => syncLegacyChromeVisibility());
+  });
+  void import('../ui/research-panel').then(({ subscribeResearchPanel }) => {
+    subscribeResearchPanel(() => syncLegacyChromeVisibility());
   });
   void import('./window-manager').then(({ windowManager }) => {
     windowManager.subscribe(() => syncLegacyChromeVisibility());

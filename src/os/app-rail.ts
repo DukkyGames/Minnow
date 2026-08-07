@@ -10,22 +10,26 @@ import {
   getOsView,
   subscribeInstances,
 } from './instances';
-import { isDesktopResearchActive } from './desktop-state';
+import { isResearchPanelOpen, subscribeResearchPanel } from '../ui/research-panel';
 import { launchApp } from './router';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
 import type { AppId } from './types';
 
 const RAIL_SETTINGS_ID: AppId = 'settings';
 
-/** Whether the rail should treat Research as the active app (phase 3 will refine). */
+/** Whether the rail should treat Research as the active app. */
 function isResearchRailActive(): boolean {
-  if (getForegroundAppId() === 'research') return true;
-  return getOsView() === 'workspaces' && isDesktopResearchActive();
+  return isResearchPanelOpen();
 }
 
 function isRailAppActive(appId: AppId): boolean {
   if (appId === 'research') return isResearchRailActive();
+  if (appId === 'code' && isResearchPanelOpen()) return false;
   return getForegroundAppId() === appId;
+}
+
+function isRailAppHosting(appId: AppId): boolean {
+  return appId === 'code' && isResearchPanelOpen() && getForegroundAppId() === 'code';
 }
 
 function buildRailButton(appId: AppId, label: string, tooltip: string): HTMLButtonElement {
@@ -44,9 +48,11 @@ function buildRailButton(appId: AppId, label: string, tooltip: string): HTMLButt
 
 function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
   for (const [appId, btn] of tileByAppId) {
+    const hosting = isRailAppHosting(appId);
     const active = isRailAppActive(appId);
     btn.classList.toggle('is-active', active);
-    btn.setAttribute('aria-current', active ? 'page' : 'false');
+    btn.classList.toggle('is-hosting', hosting);
+    btn.setAttribute('aria-current', active ? 'page' : hosting ? 'true' : 'false');
   }
 }
 
@@ -109,11 +115,13 @@ export function initAppRail(root: HTMLElement): () => void {
 
   const unsubInstances = subscribeInstances(onInstances);
   const unsubPrefs = subscribeAppPreferences(rebuild);
+  const unsubResearch = subscribeResearchPanel(onInstances);
   syncRailVisibility(root);
 
   return () => {
     unsubInstances();
     unsubPrefs();
+    unsubResearch();
     root.replaceChildren();
   };
 }

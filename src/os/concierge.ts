@@ -17,7 +17,6 @@ import {
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from '../ui/skill-picker';
 import { handleComposerPromptHistoryKeydown } from '../ui/composer-prompt-history';
-import { handleDesktopResearchSubmit } from './research-desktop';
 import { iconHtml } from '../ui/icon';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 
@@ -234,9 +233,10 @@ export function renderConcierge(container: HTMLElement): void {
     if (!q) return;
 
     if (isDesktopResearchActive()) {
-      field.value = q;
-      field.dispatchEvent(new window.Event('input', { bubbles: true }));
-      await handleDesktopResearchSubmit();
+      const { launchApp } = await import('./router');
+      launchApp('research', { seed: q, autoRun: true });
+      field.value = '';
+      autoResizeDesktopComposer(field);
       syncUi();
       return;
     }

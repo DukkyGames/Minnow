@@ -198,7 +198,12 @@ export function isDesktopChatActive(): boolean {
 
 /** True when desktop research mode is active (idle or running). */
 export function isDesktopResearchActive(): boolean {
-  return state === 'researchIdle' || state === 'researchActive';
+  if (typeof document === 'undefined') return false;
+  return (
+    state === 'researchIdle' ||
+    state === 'researchActive' ||
+    document.getElementById('chatArea')?.classList.contains('chat-area--research') === true
+  );
 }
 
 /** True when a research run is showing progress/result cards. */
@@ -370,45 +375,31 @@ export function deactivateDesktopChat(): void {
 }
 
 /**
- * Enter desktop research mode — composer placeholder changes; optional seed / auto-run.
+ * Enter workspace-first research (Code main-column panel).
  */
 export async function activateDesktopResearch(
   options?: DesktopResearchActivateOptions,
 ): Promise<void> {
-  if (state === 'chatActive') {
-    deactivateDesktopChat();
-  }
-  if (isDesktopExpertsActive()) {
-    deactivateDesktopExperts();
-  }
-  setState('researchIdle');
-  await ensureDesktopComposerDocked();
-
-  const { bootstrapDesktopResearch } = await import('./research-desktop');
-  await bootstrapDesktopResearch(options);
+  const { launchApp } = await import('./router');
+  launchApp('research', options);
 }
 
-/** Mark research as actively running (progress/result cards visible). */
-export function setDesktopResearchRunActive(active: boolean): void {
-  if (!isDesktopResearchActive() && active) {
-    setState('researchActive');
-    return;
-  }
-  if (active) {
-    setState('researchActive');
-  } else if (state === 'researchActive') {
-    setState('researchIdle');
-  }
+/** @deprecated Research runs no longer use desktop layer state. */
+export function setDesktopResearchRunActive(_active: boolean): void {
+  /* no-op — phase 3 embed */
 }
 
-/** Leave desktop research mode. */
+/** Leave research mode (close Code embed when open). */
 export function deactivateDesktopResearch(): void {
-  if (!isDesktopResearchActive()) {
-    return;
+  void import('../ui/research-panel').then((m) => {
+    if (m.isResearchPanelOpen()) {
+      m.closeResearchPanel();
+    }
+  });
+  if (state === 'researchIdle' || state === 'researchActive') {
+    setState('idle');
+    returnDesktopComposerToHero();
   }
-  void import('./research-desktop').then((m) => m.teardownDesktopResearch());
-  setState('idle');
-  returnDesktopComposerToHero();
 }
 
 /**

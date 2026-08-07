@@ -39,10 +39,6 @@ import {
 } from '../state/sessions';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
-import {
-  deactivateDesktopResearch,
-  isDesktopResearchActive,
-} from '../os/desktop-state';
 
 type ResearchPanelTab = 'run' | 'library';
 
@@ -105,6 +101,19 @@ export function openResearchReport(researchId: string): void {
   });
 }
 
+function isResearchEmbeddedInCode(): boolean {
+  const area = document.getElementById('chatArea');
+  const root = document.getElementById('researchView');
+  return Boolean(
+    area?.classList.contains('chat-area--research') && root && area.contains(root),
+  );
+}
+
+function notifyResearchPanelStatus(): void {
+  if (!isResearchEmbeddedInCode()) return;
+  void import('../ui/research-panel').then((m) => m.syncResearchPanelStatus());
+}
+
 function setRunningState(isRunning: boolean): void {
   running = isRunning;
   const root = getRoot();
@@ -135,6 +144,7 @@ function setRunningState(isRunning: boolean): void {
   )) {
     el.disabled = isRunning;
   }
+  notifyResearchPanelStatus();
 }
 
 function getProgressMount(): HTMLElement | null {
@@ -162,6 +172,7 @@ function setPanelTab(tab: ResearchPanelTab): void {
   if (tab === 'library') {
     void refreshLibraryPanel();
   }
+  notifyResearchPanelStatus();
 }
 
 async function refreshLibraryPanel(): Promise<void> {
@@ -317,6 +328,7 @@ async function showResultForId(researchId: string): Promise<void> {
     const msg = err instanceof Error ? err.message : 'Could not load result';
     mount.innerHTML = `<p class="dr-rep-stats">${msg}</p>`;
   }
+  notifyResearchPanelStatus();
 }
 
 /** Client spinoff: new chat seeded with the report. */
@@ -338,8 +350,10 @@ export async function discussResearchReport(researchId: string): Promise<void> {
     scheduleSaveSessions();
 
     if (isOsShellEnabled()) {
-      const { activateDesktopChat } = await import('../os/desktop-state');
-      await activateDesktopChat({ chatId: chat.id });
+      const { closeResearchPanel } = await import('../ui/research-panel');
+      closeResearchPanel();
+      const { navigateToCodeChat } = await import('../os/router');
+      navigateToCodeChat();
     } else {
       closeResearch();
       renderChatFromHistory(chat);
@@ -483,7 +497,7 @@ function closeOtherOverlays(): void {
 
 /** Whether the Deep Research page is open. */
 export function isResearchPageOpen(): boolean {
-  if (isOsShellEnabled() && isDesktopResearchActive()) {
+  if (isOsShellEnabled() && isResearchEmbeddedInCode()) {
     return true;
   }
   return getRoot()?.classList.contains('is-open') ?? false;
@@ -492,7 +506,10 @@ export function isResearchPageOpen(): boolean {
 /** Close Deep Research and return to chat or desktop. */
 export function closeResearch(options?: { skipNavigate?: boolean }): void {
   if (isOsShellEnabled()) {
-    deactivateDesktopResearch();
+    if (isResearchEmbeddedInCode()) {
+      void import('../ui/research-panel').then((m) => m.closeResearchPanel());
+      return;
+    }
     if (!options?.skipNavigate) {
       navigateToDesktop();
     }
@@ -650,4 +667,33 @@ export function applyProgressForTests(
   const panel = new ResearchProgressPanel(mount);
   panel.reset();
   panel.apply(event);
+}
+
+/** Shell embed: switch Run / Library tabs. */
+export function setResearchPanelTab(tab: ResearchPanelTab): void {
+  setPanelTab(tab);
+}
+
+/** Shell embed: start a run (after controls are bound). */
+export async function startResearchRunFromShell(
+  extra: { continueFrom?: string } = {},
+): Promise<void> {
+  await startResearchRun(extra);
+}
+
+/** Shell embed: cancel stream and clear progress/result mounts. */
+export function closeResearchEmbeddedRun(): void {
+  void cancelActiveRun();
+  resetRunUi();
+  notifyResearchPanelStatus();
+}
+
+/** Whether a research run is in progress (shell embed or legacy page). */
+export function isResearchRunningForShell(): boolean {
+  return running;
+}
+
+/** Cancel the active research run (shell embed). */
+export async function cancelResearchRunForShell(): Promise<void> {
+  await cancelActiveRun();
 }

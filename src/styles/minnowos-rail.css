@@ -63,6 +63,11 @@
   --mn-icon-size: 22px;
 }
 
+.mn-os-app-rail__btn.is-hosting {
+  color: var(--mn-fg);
+  background: transparent;
+}
+
 .mn-os-app-rail__btn.is-active {
   background: var(--mn-accent-soft);
   color: var(--mn-accent);

@@ -1,6 +1,7 @@
 import type { AppDefinition } from './app-registry';
 import { listDockApps, subscribeAppPreferences } from './app-preferences';
-import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
+import { isDesktopExpertsActive, subscribeDesktopState } from './desktop-state';
+import { isResearchPanelOpen } from '../ui/research-panel';
 import { createAppIcon, createOsIcon } from './icons';
 import {
   getForegroundAppId,
@@ -9,25 +10,19 @@ import {
   subscribeInstances,
 } from './instances';
 import { launchApp } from './router';
-import { RESEARCH_LIBRARY_INSTANCE_ID } from './research-constants';
 import { isPhoneLayout } from '../ui/mobile-layout';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { windowManager } from './window-manager';
 import type { AppId } from './types';
 
-/** Whether the research library window is open (avoids importing library-window CSS in tests). */
-function isResearchLibraryOpen(): boolean {
-  return Boolean(windowManager.findWindowByInstance(RESEARCH_LIBRARY_INSTANCE_ID));
-}
-
-/** Whether an app surface is running (instance, desktop research, or library window). */
+/** Whether an app surface is running (instance or embedded research panel). */
 function isDockAppOpen(appId: AppId): boolean {
   const snap = getInstanceSnapshot();
   if (snap.instances.some((inst) => inst.appId === appId)) {
     return true;
   }
   if (appId === 'research') {
-    return isDesktopResearchActive() || isResearchLibraryOpen();
+    return isResearchPanelOpen();
   }
   if (appId === 'experts') {
     return isDesktopExpertsActive();
@@ -40,8 +35,8 @@ function isDockAppActive(appId: AppId): boolean {
   if (getForegroundAppId() === appId) {
     return true;
   }
-  if (appId === 'research' && getOsView() === 'workspaces' && isDesktopResearchActive()) {
-    return true;
+  if (appId === 'research') {
+    return isResearchPanelOpen();
   }
   if (appId === 'experts' && getOsView() === 'workspaces' && isDesktopExpertsActive()) {
     return true;

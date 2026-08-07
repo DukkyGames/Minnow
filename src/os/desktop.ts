@@ -9,11 +9,15 @@ import {
   wireDesktopWorkspaceRail,
 } from './desktop-workspace-rail';
 import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
-import { wireDesktopResearchControls } from './research-desktop';
 import { DESKTOP_RAIL_TAB_ICON_SIZE } from './desktop-rail-constants';
 import { createOsIcon } from './icons';
 import { ICON_CHEVRON_LEFT, ICON_SEARCH } from '../constants';
 import type { DesktopPrefs } from './types';
+
+/** Legacy desktop research toolbar — phase 3 uses Code embed; no-op until phase 5 teardown. */
+function wireDesktopResearchControls(): void {
+  /* no-op */
+}
 
 function greetingFor(d: Date): string {
   const h = d.getHours();

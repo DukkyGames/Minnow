@@ -365,6 +365,8 @@ async function closeCompetingMainColumnViews(): Promise<void> {
   }
   const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
   teardownCodeBrainMapBeforeChatPaint();
+  const { teardownResearchPanelBeforeChatPaint } = await import('./research-panel');
+  teardownResearchPanelBeforeChatPaint();
   const { teardownHub } = await import('./hub');
   teardownHub();
 }

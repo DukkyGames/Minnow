@@ -1,20 +1,13 @@
 import {
   activateDesktopChat,
   activateDesktopExperts,
-  activateDesktopResearch,
   consumePendingDesktopChatActivation,
   consumePendingDesktopExpertsActivation,
-  consumePendingDesktopResearchActivation,
   deactivateDesktopExperts,
-  deactivateDesktopResearch,
-  isDesktopExpertsActive,
-  isDesktopResearchActive,
   prepareDesktopChatSurface,
   prepareDesktopExpertsSurface,
-  prepareDesktopResearchSurface,
   queueDesktopChatActivation,
   queueDesktopExpertsActivation,
-  queueDesktopResearchActivation,
 } from './desktop-state';
 import { getAppById, isAppId } from './app-registry';
 import { getAppUnavailableReason, isAppAvailable } from './app-preferences';
@@ -98,6 +91,7 @@ export function resolveLegacyHash(hash: string): {
   desktopChat?: boolean;
   desktopResearch?: boolean;
   desktopExperts?: boolean;
+  codeResearch?: boolean;
 } {
   const trimmed = hash || '#/';
   if (trimmed === '#/desktop' || trimmed === '#/' || trimmed === '#' || trimmed === '#/workspaces') {
@@ -153,10 +147,10 @@ export function resolveLegacyHash(hash: string): {
     return { hash: `#/app/brain/${section}`, brainSection: section };
   }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
-    return { hash: '#/app/research' };
+    return { hash: '#/app/code/chat', codeResearch: true };
   }
   if (trimmed === '#/app/research' || trimmed.startsWith('#/app/research/')) {
-    return { hash: trimmed };
+    return { hash: '#/app/code/chat', codeResearch: true };
   }
   if (trimmed === '#/experts' || trimmed.startsWith('#/experts/')) {
     return { hash: legacyHashForApp('experts') };
@@ -262,14 +256,11 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     syncForegroundLifecycle(null);
     parkPhoneWindowSheets();
     const comingFromFullscreenApp = getOsView() === 'app';
-    const pendingResearch = consumePendingDesktopResearchActivation();
     const pendingExperts = consumePendingDesktopExpertsActivation();
     const pendingChat = consumePendingDesktopChatActivation();
     // Apply desktop surface classes before instance emit so app-host never paints idle hero.
     if (comingFromFullscreenApp) {
-      if (pendingResearch !== null) {
-        prepareDesktopResearchSurface();
-      } else if (pendingExperts !== null && isAppAvailable('experts')) {
+      if (pendingExperts !== null && isAppAvailable('experts')) {
         prepareDesktopExpertsSurface();
       } else if (pendingChat !== null) {
         prepareDesktopChatSurface();
@@ -277,10 +268,6 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     }
     showWorkspaces();
     void import('./workspace-gate').then((m) => m.syncWorkspaceGateFromRoute());
-    if (pendingResearch !== null) {
-      void activateDesktopResearch(pendingResearch);
-      return;
-    }
     if (pendingExperts !== null) {
       if (isAppAvailable('experts')) {
         void activateDesktopExperts(pendingExperts);
@@ -357,8 +344,10 @@ function applyRouteFromHash(): void {
       if (legacy.desktopChat) {
         queueDesktopChatActivation(pendingLaunchOptions);
       }
-      if (legacy.desktopResearch) {
-        queueDesktopResearchActivation(pendingLaunchOptions);
+      if (legacy.codeResearch) {
+        void import('../ui/research-panel').then((m) => {
+          m.queueResearchPanelOpen(pendingLaunchOptions);
+        });
       }
       if (legacy.desktopExperts && isAppAvailable('experts')) {
         queueDesktopExpertsActivation(pendingLaunchOptions);
@@ -399,6 +388,24 @@ export function navigateToDesktop(): void {
 /** Launch or foreground an app and update the hash. */
 export function launchApp(appId: AppId, options?: LaunchOptions): void {
   if (rejectUnavailableApp(appId)) return;
+
+  if (appId === 'research') {
+    void import('../ui/research-panel').then((m) => {
+      if (m.isResearchPanelOpen()) {
+        m.closeResearchPanel();
+        return;
+      }
+      m.queueResearchPanelOpen({
+        seed: options?.seed,
+        autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+      });
+      launchApp('code', {
+        ...options,
+        codeSection: 'chat',
+      });
+    });
+    return;
+  }
 
   if (options?.settingsSection) {
     pendingSettingsSection = options.settingsSection;

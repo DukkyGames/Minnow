@@ -219,8 +219,8 @@ async function openAppPage(
       break;
     }
     case 'research': {
-      const { openResearch } = await import('../research/panel');
-      openResearch({
+      const { openResearchPanel } = await import('../ui/research-panel');
+      await openResearchPanel({
         seed: options?.seed,
         autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
       });
@@ -326,6 +326,15 @@ async function openAppPage(
       } else {
         const { restoreCodeSessionOnForeground } = await import('./code-launch');
         await restoreCodeSessionOnForeground();
+      }
+      {
+        const { consumePendingResearchPanelOpen, openResearchPanel } = await import(
+          '../ui/research-panel'
+        );
+        const pendingResearch = consumePendingResearchPanelOpen();
+        if (pendingResearch !== null) {
+          await openResearchPanel(pendingResearch ?? {});
+        }
       }
       break;
     }

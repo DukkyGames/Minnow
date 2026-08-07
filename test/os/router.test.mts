@@ -89,7 +89,8 @@ describe('resolveLegacyHash', () => {
   test('redirects legacy full-page routes to OS apps', () => {
     assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/workspaces' });
     assert.deepEqual(resolveLegacyHash('#/research/run'), {
-      hash: '#/app/research',
+      hash: '#/app/code/chat',
+      codeResearch: true,
     });
     assert.deepEqual(resolveLegacyHash('#/experts/gallery'), {
       hash: '#/app/experts',
@@ -251,18 +252,35 @@ describe('os router navigation', () => {
     assert.equal(layer?.classList.contains('is-chat-active'), true);
   });
 
-  test('launchApp(research) redirects to desktop research', async () => {
-    const { isDesktopResearchActive, resetDesktopStateForTests } = await import(
-      '../../src/os/desktop-state.ts'
+  test('launchApp(research) routes to Code research embed', async () => {
+    const { isResearchPanelOpen, resetResearchPanelForTests } = await import(
+      '../../src/ui/research-panel.ts',
     );
-    resetDesktopStateForTests();
+    resetResearchPanelForTests();
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `<div id="chatArea"></div><div id="mainColumn"></div>
+      <main id="researchView" class="research-page dr">
+        <button id="researchTabRun"></button><button id="researchTabLibrary"></button>
+        <div id="researchPanelRun"><textarea id="researchQuery"></textarea>
+        <select id="researchMaxRounds"><option value="auto">Auto</option></select>
+        <select id="researchCategory"><option value=""></option></select>
+        <select id="researchSearchProvider"><option value=""></option></select>
+        <select id="researchProviderOverride"><option value=""></option></select>
+        <input id="researchModelOverride" />
+        <button id="btnResearchStart"></button><button id="btnResearchCancel" hidden></button>
+        <div id="researchProgressMount"></div><div id="researchResultMount"></div></div>
+        <div id="researchPanelLibrary" class="hidden"></div><div id="researchLibraryMount"></div>
+        <button id="btnResearchSettingsLink"></button></main>`,
+    );
+    launchApp('code');
     launchApp('research', { seed: 'Apple stock', autoRun: true });
-    assert.equal(window.location.hash, '#/desktop');
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(window.location.hash, '#/app/code/chat');
+    await new Promise((resolve) => setTimeout(resolve, 80));
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'desktop');
     assert.equal(snap.instances.find((i) => i.appId === 'research'), undefined);
-    assert.equal(isDesktopResearchActive(), true);
+    assert.equal(getForegroundAppId(), 'code');
+    assert.equal(isResearchPanelOpen(), true);
   });
 
   test('launchApp(experts) blocks hidden app and returns to desktop', async () => {
