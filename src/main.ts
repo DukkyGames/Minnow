@@ -466,7 +466,14 @@ async function startApp(): Promise<void> {
   installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
     const hash = window.location.hash;
-    if (hash === '' || hash === '#' || hash === '#/') {
+    // Cold boot lands on the workspace picker — not the last app hash Electron/Chromium may restore.
+    const bootToWorkspacePicker =
+      hash === '' ||
+      hash === '#' ||
+      hash === '#/' ||
+      hash === '#/desktop' ||
+      hash.startsWith('#/app/');
+    if (bootToWorkspacePicker) {
       window.location.replace('#/workspaces');
     }
     initOsPageBridge();

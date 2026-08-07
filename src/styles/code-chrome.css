@@ -5,7 +5,8 @@
  * sidebar, where the control's position told you nothing about where its effect
  * would appear. The split is by behaviour:
  *
- *   .code-views       replace what the stage shows  -> sit on top of the stage
+ *   .code-views       replace what the stage shows, plus the Chats panel toggle
+ *                      in the same row as the view switchers
  *   .code-status-bar  dock a panel under the stage  -> sit under the stage
  */
 

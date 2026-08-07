@@ -12,6 +12,16 @@ export function isMobileLayout(): boolean {
   return isNarrowLayout();
 }
 
+/** Whether the chat session list is visible (desktop expanded or narrow overlay open). */
+export function isChatSidebarOpen(): boolean {
+  const panel = document.getElementById('chatSidebar');
+  if (!panel) return false;
+  if (isMobileLayout()) {
+    return panel.classList.contains('mobile-open');
+  }
+  return !panel.classList.contains('collapsed');
+}
+
 export function closeMobileSidebar(): void {
   const side = document.getElementById('chatSidebar');
   const bd = document.getElementById('sidebarBackdrop');
@@ -52,7 +62,7 @@ export function applySidebarVisuals(): void {
   scheduleElectronPreviewHostLayoutAfterChatSidebarChange();
   syncAppBodySidebarWidthVars();
   syncChatSidebarResizer();
-  // The app rail mirrors this state on its tile; tell it the panel settled.
+  // Code view chrome mirrors this state on the Chats toggle.
   emitChatSidebarChanged();
 }
 

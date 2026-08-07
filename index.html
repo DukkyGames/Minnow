@@ -2325,11 +2325,22 @@
   <div id="workspaceSplit" class="workspace-split">
   <div class="main-column" id="mainColumn">
     <!--
-      Code view switcher. These four replace what the stage shows, so they sit at
-      the top of the stage they change. They are not panel toggles and do not
-      belong in the status bar.
+      Code view switcher. View buttons replace what the stage shows; Chats toggles
+      the session list (panel chrome, not a stage view).
     -->
     <nav class="code-views" id="codeViews" aria-label="Code views">
+      <button
+        type="button"
+        class="code-views__btn"
+        id="btnCodeViewsChats"
+        aria-pressed="false"
+        aria-expanded="false"
+        aria-label="Show chats"
+        title="Show chats"
+      >
+        <i class="fi fi-rr-comment icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label">Chats</span>
+      </button>
       <!-- code-overview.ts owns this one's state via aria-current, not aria-pressed. -->
       <button type="button" class="code-views__btn" id="btnCodeOverviewSidebar">
         <i class="fi fi-sr-dashboard-panel icon-svg" aria-hidden="true"></i>

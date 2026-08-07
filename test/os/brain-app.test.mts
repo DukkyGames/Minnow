@@ -61,6 +61,12 @@ describe('brain router', () => {
 });
 
 describe('brain markup contract', () => {
+  test('global.css hides brain until lazy page CSS loads', () => {
+    const css = fs.readFileSync(new URL('../../src/styles/global.css', import.meta.url), 'utf8');
+    assert.match(css, /\.brain-page\s*\{\s*display:\s*none/);
+    assert.doesNotMatch(css, /\.brain-page\.is-open\s*\{[^}]*display:\s*flex/);
+  });
+
   test('index.html defines brainView shell', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="brainView"/);

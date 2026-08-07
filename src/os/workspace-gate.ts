@@ -4,7 +4,7 @@
 
 import '../styles/workspace-gate.css';
 
-import { isDefaultWorkspace, loadWorkspaceFromServer } from '../state/workspace';
+import { loadWorkspaceFromServer } from '../state/workspace';
 import { isOsShellEnabled } from './page-bridge';
 import { getOsView, subscribeInstances } from './instances';
 import { launchApp } from './router';
@@ -128,15 +128,11 @@ export function syncWorkspaceGateFromRoute(): void {
     if (gateOpen) closeWorkspaceGate();
     return;
   }
-  if (isDefaultWorkspace()) {
-    openWorkspaceGate();
-  } else {
-    closeWorkspaceGate();
-  }
+  openWorkspaceGate();
 }
 
 function ensureBootGatePromise(): void {
-  if (!isOsShellEnabled() || !isDefaultWorkspace()) return;
+  if (!isOsShellEnabled()) return;
   if (bootGatePromise) return;
   bootGatePromise = new Promise<void>((resolve) => {
     resolveBootGate = resolve;
@@ -150,22 +146,6 @@ export async function awaitWorkspaceGateBeforeAppInit(): Promise<void> {
   if (!isOsShellEnabled()) return;
 
   await loadWorkspaceFromServer();
-
-  if (!isDefaultWorkspace()) {
-    const hash = window.location.hash;
-    if (
-      hash === '#/workspaces' ||
-      hash === '#/desktop' ||
-      hash === '' ||
-      hash === '#/' ||
-      hash === '#'
-    ) {
-      if (window.location.hash !== '#/app/code/chat') {
-        window.location.replace('#/app/code/chat');
-      }
-    }
-    return;
-  }
 
   ensureBootGatePromise();
   mountWorkspaceGateDom();

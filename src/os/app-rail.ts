@@ -1,9 +1,8 @@
 /**
  * Left app rail — fixed roster for workspace-first shell navigation.
  *
- * The rail is the shell's only navigation column. Clicking a background app
- * brings it forward; clicking the foreground app toggles its session panel, so
- * the panel never has to collapse into a second icon rail beside this one.
+ * The rail is the shell's only navigation column. Clicking any tile launches
+ * or focuses that app; chat panel visibility is toggled from Code view chrome.
  */
 
 import { getAppById } from './app-registry';
@@ -14,9 +13,7 @@ import {
   getOsView,
   subscribeInstances,
 } from './instances';
-import { isChatToggleVisible } from './menubar-visibility';
 import { isCoarsePointer } from '../ui/mobile-layout';
-import { CHAT_SIDEBAR_CHANGED_EVENT } from '../ui/layout-events';
 import { isResearchPanelOpen, subscribeResearchPanel } from '../ui/research-panel';
 import { launchApp } from './router';
 import type { AppId } from './types';
@@ -31,27 +28,6 @@ function isRailAppActive(appId: AppId): boolean {
 
 function isRailAppHosting(appId: AppId): boolean {
   return appId === 'code' && isResearchPanelOpen() && getForegroundAppId() === 'code';
-}
-
-/** Apps that own a session panel; only these toggle instead of re-launching. */
-function railAppOwnsPanel(appId: AppId): boolean {
-  return isChatToggleVisible(appId);
-}
-
-/** Read panel state from the DOM so menubar and rail toggles never disagree. */
-function isRailPanelOpen(): boolean {
-  const panel = document.getElementById('chatSidebar');
-  if (!panel) return false;
-  if (document.documentElement.classList.contains('mn-narrow')) {
-    return panel.classList.contains('mobile-open');
-  }
-  return !panel.classList.contains('collapsed');
-}
-
-/** Tooltip label: name for navigation, the actual outcome for the panel toggle. */
-function railTooltipText(appId: AppId, label: string): string {
-  if (!railAppOwnsPanel(appId) || !isRailAppActive(appId)) return label;
-  return isRailPanelOpen() ? 'Hide chats' : 'Show chats';
 }
 
 let tooltipEl: HTMLDivElement | null = null;
@@ -159,12 +135,7 @@ function bindRailTooltip(btn: HTMLButtonElement, getText: () => string): void {
   btn.addEventListener('blur', onBlur);
 }
 
-/** Foreground + owns a panel means the click toggles rather than re-launches. */
 function handleRailClick(appId: AppId): void {
-  if (railAppOwnsPanel(appId) && isRailAppActive(appId)) {
-    void import('../ui/layout').then((m) => m.toggleSidebarLayout());
-    return;
-  }
   launchApp(appId);
 }
 
@@ -177,30 +148,22 @@ function buildRailButton(appId: AppId, label: string): HTMLButtonElement {
   btn.setAttribute('aria-label', label);
   const icon = createAppIcon((def?.icon ?? 'code') as 'code');
   btn.appendChild(icon);
-  bindRailTooltip(btn, () => railTooltipText(appId, label));
+  bindRailTooltip(btn, () => label);
   btn.addEventListener('click', () => handleRailClick(appId));
   return btn;
 }
 
 function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
-  const panelOpen = isRailPanelOpen();
   for (const [appId, btn] of tileByAppId) {
     const hosting = isRailAppHosting(appId);
     const active = isRailAppActive(appId);
-    const ownsPanel = railAppOwnsPanel(appId);
     btn.classList.toggle('is-active', active);
     btn.classList.toggle('is-hosting', hosting);
-    // Tile fill carries panel state; icon colour carries "you are here".
-    btn.classList.toggle('is-panel-closed', active && ownsPanel && !panelOpen);
+    btn.classList.remove('is-panel-closed');
     btn.setAttribute('aria-current', active ? 'page' : hosting ? 'true' : 'false');
-    if (active && ownsPanel) {
-      btn.setAttribute('aria-expanded', panelOpen ? 'true' : 'false');
-      btn.setAttribute('aria-label', panelOpen ? 'Hide chats' : 'Show chats');
-    } else {
-      btn.removeAttribute('aria-expanded');
-      const label = getAppById(appId)?.name;
-      if (label) btn.setAttribute('aria-label', label);
-    }
+    btn.removeAttribute('aria-expanded');
+    const label = getAppById(appId)?.name;
+    if (label) btn.setAttribute('aria-label', label);
   }
   refreshRailTooltip();
 }
@@ -255,10 +218,6 @@ export function initAppRail(root: HTMLElement): () => void {
   const unsubResearch = subscribeResearchPanel(onInstances);
   syncRailVisibility(root);
 
-  // Panel can also be toggled from the menubar; mirror it so the tile never lies.
-  const onPanelChange = (): void => syncRailButtons(tileByAppId);
-  window.addEventListener(CHAT_SIDEBAR_CHANGED_EVENT, onPanelChange);
-
   const onLayoutChange = (): void => {
     if (tooltipAnchor && tooltipEl && !tooltipEl.hidden) {
       positionRailTooltip(tooltipAnchor, tooltipEl);
@@ -271,7 +230,6 @@ export function initAppRail(root: HTMLElement): () => void {
   return () => {
     window.removeEventListener('resize', onLayoutChange);
     window.removeEventListener('scroll', onLayoutChange, true);
-    window.removeEventListener(CHAT_SIDEBAR_CHANGED_EVENT, onPanelChange);
     unsubInstances();
     unsubPrefs();
     unsubResearch();

@@ -186,10 +186,14 @@ function closeAllAppPages(): void {
   }
 }
 
+/** Defer OS layer visibility until lazy page CSS + `is-open` are applied (avoids FOUC). */
+type OpenAppPageLayerReveal = { animateEnter: boolean };
+
 async function openAppPage(
   appId: AppId,
   options?: LaunchOptions,
   generation?: number,
+  layerReveal?: OpenAppPageLayerReveal,
 ): Promise<void> {
   if (generation != null && generation !== syncGeneration) return;
   await ensureAppInitialized(appId);
@@ -332,6 +336,11 @@ async function openAppPage(
     default:
       break;
   }
+
+  if (layerReveal != null) {
+    if (generation != null && generation !== syncGeneration) return;
+    showAppLayer(appId, layerReveal.animateEnter);
+  }
 }
 
 /** Show the requested app layer and hide others without a blank intermediate frame. */
@@ -351,6 +360,9 @@ export function showAppLayer(appId: AppId, animateEnter = false): void {
     mountOsMobileDrawerBackdrops();
     syncLegacyChromeVisibility();
   }
+  void import('../ui/preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
 }
 
 function launchOptionsFromSnapshot(snapshot: InstanceSnapshot): LaunchOptions | undefined {
@@ -398,15 +410,26 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   const options = launchOptionsFromSnapshot(snapshot);
   ensureLayerInAppsLayer(appId);
 
+  const deferLayerUntilPageOpen = PAGE_OPEN_LAYER_APPS.has(appId);
+
   if (appId !== lastForegroundApp) {
     const animateEnter = lastForegroundApp === null;
-    showAppLayer(appId, animateEnter);
-    void openAppPage(appId, options, generation);
+    if (deferLayerUntilPageOpen) {
+      void openAppPage(appId, options, generation, { animateEnter });
+    } else {
+      showAppLayer(appId, animateEnter);
+      void openAppPage(appId, options, generation);
+    }
     lastForegroundApp = appId;
   } else if (options && (appId === 'code' || appId === 'research')) {
     void openAppPage(appId, options, generation);
   } else if (!isAppPageLayerOpen(appId)) {
-    void openAppPage(appId, options, generation);
+    void openAppPage(
+      appId,
+      options,
+      generation,
+      deferLayerUntilPageOpen ? { animateEnter: false } : undefined,
+    );
   }
 }
 

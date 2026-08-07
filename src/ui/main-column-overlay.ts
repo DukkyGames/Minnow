@@ -41,17 +41,18 @@ export function stripMainColumnOverlayClasses(): void {
  * Uses DOM markers only — safe to import from streaming-state without circular deps.
  */
 export function isMainColumnOverlaySuppressingChatDom(): boolean {
-  const area = document.getElementById('chatArea');
-  if (!area) return false;
   if (document.getElementById('codeOverviewRoot')) return true;
   if (document.getElementById('codeBrainMapRoot')) return true;
   if (document.getElementById('orchestrateHub')) return true;
   if (document.getElementById('orchestratePlanScreen')) return true;
-  // Issues reparents #issuesView into #chatArea when opened from the Code sidebar.
-  if (area.contains(document.getElementById('issuesView'))) return true;
   if (document.getElementById('devServerScreenRoot')) return true;
   if (document.getElementById('sourceControlCenterRoot')) return true;
-  if (document.getElementById('researchView') && document.getElementById('chatArea')?.contains(document.getElementById('researchView'))) {
+
+  const area = document.getElementById('chatArea');
+  if (!area) return false;
+  // Issues reparents #issuesView into #chatArea when opened from the Code sidebar.
+  if (area.contains(document.getElementById('issuesView'))) return true;
+  if (document.getElementById('researchView') && area.contains(document.getElementById('researchView'))) {
     return true;
   }
   for (const className of CHAT_AREA_OVERLAY_CLASSES) {

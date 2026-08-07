@@ -1034,6 +1034,9 @@ export async function openCodeOverview(): Promise<void> {
   startPolling();
   await refreshAllPanels();
   notifyAskQuestionDisplayContextChanged();
+  void import('./preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
 }
 
 /** Tear down overview and optionally restore chat view. */
@@ -1068,6 +1071,9 @@ export function closeCodeOverview(options?: {
     area.replaceChildren();
   }
   notifyAskQuestionDisplayContextChanged();
+  void import('./preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
 }
 
 const PHONE_LAYOUT_MQ = '(max-width: 600px)';

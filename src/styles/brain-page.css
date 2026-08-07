@@ -35,7 +35,9 @@
   pointer-events: auto;
 }
 
-.brain-page.is-open {
+.brain-page.is-open,
+.mn-os-app-layer.is-active.brain-page,
+#brainView.mn-os-app-layer.is-active {
   display: flex;
 }
 

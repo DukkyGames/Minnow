@@ -69,6 +69,8 @@ describe('preview-electron-visibility', () => {
               add: (cls: string) => entry.classList.add(cls),
               remove: (cls: string) => entry.classList.delete(cls),
             },
+            contains: (child: unknown) =>
+              typeof entry.contains === 'function' ? entry.contains(child) : false,
             getBoundingClientRect: () => ({
               left: 10,
               top: 20,
@@ -103,6 +105,10 @@ describe('preview-electron-visibility', () => {
     });
     elements.set('previewPane', { classList: new Set(['hidden']) });
     elements.set('previewBody', { classList: new Set() });
+    elements.set('chatArea', {
+      classList: new Set<string>(),
+      contains: (_child: unknown) => false,
+    });
     elements.set('issuesView', { classList: new Set() });
     elements.set('appBody', { classList: new Set(['hidden']) });
   });
@@ -256,6 +262,37 @@ describe('preview-electron-visibility', () => {
     assert.equal(lastBounds, null);
   });
 
+  test('shouldShowElectronPreviewHost is false when Code main-column overlay is mounted', () => {
+    Object.assign(globalThis.window, {
+      minnow: { preview: { show: async () => {}, hide: async () => {} } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    elements.set('codeOverviewRoot', { classList: new Set() });
+    assert.equal(shouldShowElectronPreviewHost(), false);
+  });
+
+  test('syncElectronPreviewHostLayout hides when Code main-column overlay is mounted', async () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    elements.set('codeOverviewRoot', { classList: new Set() });
+
+    await syncElectronPreviewHostLayout();
+
+    assert.equal(showCalls, 0);
+    assert.equal(hideCalls, 1);
+  });
+
   test('syncElectronPreviewHostLayout hides when preview pane is closed', async () => {
     await syncElectronPreviewHostLayout();
     assert.equal(showCalls, 0);
@@ -295,6 +332,8 @@ describe('preview-electron-visibility', () => {
               add: (cls: string) => entry.classList.add(cls),
               remove: (cls: string) => entry.classList.delete(cls),
             },
+            contains: (child: unknown) =>
+              typeof entry.contains === 'function' ? entry.contains(child) : false,
             getBoundingClientRect: () => ({
               left: rectLeft,
               top: 20,
