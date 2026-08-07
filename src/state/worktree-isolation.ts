@@ -241,13 +241,26 @@ export function resolveChatWorktreeRoot(
 }
 
 /**
+ * Chats owned by a Minnow app surface (desktop, Email, …) run in their own bound
+ * folder, not the live Code workspace. `modeId === 'desktop'` is a safe
+ * discriminator: `desktop` is excluded from `listComposerModes()` so a user can
+ * never select it on a Code chat, and `createDesktopChat()` is its only producer.
+ */
+function isAppSurfaceChat(chat: Pick<Chat, 'appScope' | 'modeId'>): boolean {
+  return Boolean(chat.appScope) || chat.modeId === 'desktop';
+}
+
+/**
  * Tool workspace root for a chat: isolated worktree when present, otherwise the
- * chat's bound sandbox (~/.minnow/workspace or ~/.minnow/chats) or board project
- * workspace. Plain Code chats without a worktree return undefined so callers fall
- * back to the live top-bar workspace.
+ * chat's own bound folder — app-surface chats (desktop/Email), the
+ * ~/.minnow sandbox, or the board project workspace. Plain Code chats without a
+ * worktree return undefined so callers fall back to the live top-bar workspace.
  */
 export function resolveChatToolWorkspaceRoot(
-  chat: Pick<Chat, 'worktreeRoot' | 'boardTaskId' | 'boardGroupId' | 'workspacePath'>,
+  chat: Pick<
+    Chat,
+    'worktreeRoot' | 'boardTaskId' | 'boardGroupId' | 'workspacePath' | 'appScope' | 'modeId'
+  >,
   groups: ChatGroup[] | undefined,
 ): string | undefined {
   const worktree = resolveChatWorktreeRoot(chat, groups);
@@ -258,6 +271,7 @@ export function resolveChatToolWorkspaceRoot(
   const normalized = normalizeWorkspacePath(ws);
 
   if (chat.boardGroupId?.trim()) return normalized;
+  if (isAppSurfaceChat(chat)) return normalized;
   if (isMinnowSandboxWorkspacePath(normalized)) return normalized;
   return undefined;
 }

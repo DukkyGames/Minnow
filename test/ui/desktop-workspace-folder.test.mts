@@ -113,4 +113,59 @@ describe('desktop-workspace-folder', () => {
     activateDesktopAssistantChatForApp(PROJECT_WS);
     assert.equal(getActiveChat().id, 'project-chat');
   });
+
+  test('activateDesktopChatSession refuses a chat bound to another folder', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'project-chat',
+      sidebarCollapsed: false,
+      chats: [
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'project-chat',
+          name: 'Project chat',
+          workspacePath: PROJECT_WS,
+          modeId: 'desktop',
+          history: [{ role: 'user', content: 'project work' }],
+        },
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'foreign-chat',
+          name: 'Other folder chat',
+          workspacePath: DESKTOP_WS,
+          modeId: 'desktop',
+          history: [{ role: 'user', content: 'other folder' }],
+        },
+      ],
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: RequestInfo | URL) => {
+      if (String(url).includes('/api/desktop-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, path: PROJECT_WS, label: 'myproject', fileCount: 1 }),
+        } as Response;
+      }
+      return originalFetch(url);
+    }) as typeof fetch;
+
+    try {
+      // Desktop workspace is PROJECT_WS; the requested chat lives in DESKTOP_WS.
+      const { fetchDesktopWorkspaceInfo } = await import('../../src/lib/desktop-workspace.ts');
+      await fetchDesktopWorkspaceInfo();
+
+      const { activateDesktopChatSession } = await import('../../src/os/desktop-chat.ts');
+      const { sessionState } = await import('../../src/state/sessions.ts');
+
+      await activateDesktopChatSession('foreign-chat');
+      assert.equal(sessionState?.activeId, 'project-chat');
+
+      await activateDesktopChatSession('project-chat');
+      assert.equal(sessionState?.activeId, 'project-chat');
+    } finally {
+      globalThis.fetch = originalFetch;
+      resetDesktopWorkspacePathCache();
+    }
+  });
 });

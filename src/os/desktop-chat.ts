@@ -8,6 +8,7 @@ import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { copyChatModelBinding } from '../lib/model-select-key';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { normalizeModeId } from '../chat/modes/types';
 import { isAssistantChat } from '../state/session-workspace-scope';
 import {
@@ -249,12 +250,38 @@ export function syncDesktopChatSessionSwitch(
   void resumeIncompleteToolBatchOnChatSwitch(chat);
 }
 
+/**
+ * True when a chat may be opened on the desktop surface: expert threads follow
+ * the user, everything else must be bound to the current desktop folder. Each
+ * desktop chat sends its own folder as the tool `workspaceRoot`, and the server
+ * allowlist only accepts the current desktop workspace — so a foreign-folder
+ * chat must never become active here.
+ */
+async function canOpenOnDesktop(chat: Chat): Promise<boolean> {
+  if (isExpertChat(chat)) return true;
+  if (!desktopWorkspacePath) {
+    try {
+      desktopWorkspacePath = await getDesktopWorkspacePath();
+    } catch {
+      /* server offline */
+    }
+  }
+  // Folder unknown (server unreachable): no writes can land anywhere, so don't
+  // block the switch — only a *known* mismatch is refused.
+  if (!desktopWorkspacePath) return true;
+  return (
+    normalizeWorkspacePath(chat.workspacePath ?? '') ===
+    normalizeWorkspacePath(desktopWorkspacePath)
+  );
+}
+
 /** Switch the active assistant thread on the desktop surface. */
 export async function activateDesktopChatSession(chatId: string): Promise<void> {
   if (!sessionState) return;
   const prevId = sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
+  if (!(await canOpenOnDesktop(chat))) return;
   if (chatId === prevId) {
     // Fast path when history is already resident; otherwise await hydrate then paint.
     if (chat.historyLoaded === false) {
@@ -323,7 +350,8 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
     const state = sessionState;
     if (options?.chatId?.trim()) {
       try {
-        const chat = state.chats.find((c) => c.id === options.chatId?.trim());
+        const requested = state.chats.find((c) => c.id === options.chatId?.trim());
+        const chat = requested && (await canOpenOnDesktop(requested)) ? requested : null;
         if (chat) {
           state.activeId = chat.id;
           markSessionScalarsDirty();

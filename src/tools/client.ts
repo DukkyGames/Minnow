@@ -62,9 +62,8 @@ import {
 } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
-import { isDesktopChatActive } from '../os/desktop-state';
 import { resolveChatToolWorkspaceRoot } from '../state/worktree-isolation';
-import { isChatAppForeground } from '../ui/chat-mount';
+import { isChatAppForeground, shouldPaintDesktopChatSurface } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
 import { validateToolRequiredArgs } from './validate-tool-required-args';
@@ -738,7 +737,7 @@ async function executeStreamingCodeTool(
 }
 
 /** Resolve tool workspace from chat binding, then desktop/chat UI foreground, else server default. */
-async function resolveToolWorkspaceRoot(
+export async function resolveToolWorkspaceRoot(
   context?: ExecuteToolContext,
 ): Promise<string | undefined> {
   const chatId = context?.chatId?.trim();
@@ -749,7 +748,10 @@ async function resolveToolWorkspaceRoot(
       if (scoped) return scoped;
     }
   }
-  if (isDesktopChatActive()) {
+  // Desktop chat state stays `chatActive` while Code is fullscreen (for return
+  // navigation), so gate on the foreground-aware predicate — a Code chat must
+  // never resolve to the desktop workspace.
+  if (shouldPaintDesktopChatSurface()) {
     const path = await getDesktopWorkspacePath();
     return path ?? undefined;
   }

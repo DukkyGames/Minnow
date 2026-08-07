@@ -340,6 +340,36 @@ describe('resolveChatToolWorkspaceRoot', () => {
       '/home/user/.minnow/chats',
     );
   });
+
+  test('desktop chats keep their own folder outside the sandbox (MIN-573)', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        { modeId: 'desktop', workspacePath: 'D:/Projects/Foo' },
+        [],
+      ),
+      'D:/Projects/Foo',
+    );
+  });
+
+  test('app-scoped chats keep their own folder', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        { appScope: 'email', workspacePath: 'D:/Projects/Foo' },
+        [],
+      ),
+      'D:/Projects/Foo',
+    );
+  });
+
+  test('plain code chats still follow the live top-bar workspace', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        { modeId: 'general', workspacePath: 'D:/Projects/Foo' },
+        [],
+      ),
+      undefined,
+    );
+  });
 });
 
 describe('dev port allocation', () => {
