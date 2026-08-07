@@ -13,6 +13,7 @@ import './styles/topbar.css';
 import './styles/model-select.css';
 import './styles/shell-keyboard-help.css';
 import './styles/sidebar.css';
+import './styles/code-chrome.css';
 import './styles/chat-search.css';
 import './styles/messages.css';
 import './styles/context-notice.css';

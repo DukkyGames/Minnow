@@ -1,6 +1,6 @@
-import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { sessionState } from '../state/sessions';
 import { scheduleSaveSessions } from '../state/sessions';
+import { emitChatSidebarChanged } from './layout-events';
 import { mountOsMobileDrawerBackdrops, syncOsMobileDrawerHtmlClass } from './mobile-drawer-portal';
 import { isNarrowLayout } from './mobile-layout';
 import {
@@ -40,33 +40,20 @@ export function openMobileSidebar(): void {
 
 export function applySidebarVisuals(): void {
   const side = document.getElementById('chatSidebar');
-  const btn = document.getElementById('btnSidebarCollapse');
-  if (!side || !btn || !sessionState) return;
+  if (!side || !sessionState) return;
   if (isMobileLayout()) {
     mountOsMobileDrawerBackdrops();
     syncOsMobileDrawerHtmlClass('chat', side.classList.contains('mobile-open'));
   } else {
     syncOsMobileDrawerHtmlClass('chat', false);
-  }
-  if (!isMobileLayout()) {
     closeMobileSidebar();
-    side.classList.toggle('collapsed', sessionState.sidebarCollapsed);
-    btn.innerHTML = sessionState.sidebarCollapsed ? ICON_CHEVRON_RIGHT : ICON_CHEVRON_LEFT;
-    btn.setAttribute(
-      'aria-label',
-      sessionState.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
-    );
-  } else {
-    side.classList.toggle('collapsed', sessionState.sidebarCollapsed);
-    btn.innerHTML = side.classList.contains('mobile-open') ? ICON_CHEVRON_LEFT : ICON_CHEVRON_RIGHT;
-    btn.setAttribute(
-      'aria-label',
-      side.classList.contains('mobile-open') ? 'Close chat list' : 'Open chat list'
-    );
   }
+  side.classList.toggle('collapsed', sessionState.sidebarCollapsed);
   scheduleElectronPreviewHostLayoutAfterChatSidebarChange();
   syncAppBodySidebarWidthVars();
   syncChatSidebarResizer();
+  // The app rail mirrors this state on its tile; tell it the panel settled.
+  emitChatSidebarChanged();
 }
 
 /** Re-align the Electron preview guest when the chat rail width changes. */
@@ -91,20 +78,6 @@ export function toggleSidebarLayout(): void {
     sessionState!.sidebarCollapsed = !sessionState!.sidebarCollapsed;
     applySidebarVisuals();
     scheduleSaveSessions();
-    // Re-render so orchestrate boards collapse to the group glyph on the icon rail.
     void import('./sidebar').then((m) => m.renderSidebar());
   }
-}
-
-export function toggleSidebarCollapsed(): void {
-  if (isMobileLayout()) {
-    closeMobileSidebar();
-    applySidebarVisuals();
-    void import('./sidebar').then((m) => m.renderSidebar());
-    return;
-  }
-  sessionState!.sidebarCollapsed = !sessionState!.sidebarCollapsed;
-  applySidebarVisuals();
-  scheduleSaveSessions();
-  void import('./sidebar').then((m) => m.renderSidebar());
 }

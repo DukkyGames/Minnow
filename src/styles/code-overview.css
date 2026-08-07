@@ -846,31 +846,6 @@
   background: var(--mn-success);
 }
 
-/* Overview nav icon in sidebar header cluster */
-.code-overview-nav-btn[aria-current='page'] .icon-svg {
-  opacity: 1;
-}
-
-/* Match visual weight of the adjacent collapse chevron (muted SVG stroke) */
-.chat-sidebar-header-actions .code-overview-nav-btn .icon-svg {
-  opacity: 0.85;
-}
-
-.chat-sidebar-header-actions .code-overview-nav-btn[aria-current='page'] .icon-svg {
-  opacity: 1;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .chat-sidebar-header-actions .code-overview-nav-btn:hover .icon-svg {
-    opacity: 1;
-  }
-}
-
-.code-overview-nav-btn[aria-current='page'] {
-  background: var(--mn-accent-soft);
-  color: var(--mn-accent);
-}
-
 @media (min-width: 601px) {
   .code-overview__rail .code-overview__section.is-collapsed .code-overview__section-body {
     display: block;

@@ -451,6 +451,8 @@ Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](
 
 **Deep Research** is a dedicated panel (not a composer mode). **Compare** runs 2–6 blind model slots. **Bench** runs integration + academic packs; distinct from eval harness task packs.
 
+**Managed SearXNG** ([`server/servers/searxng.js`](../server/servers/searxng.js), port **8899**, autostart): `writeSearxngSettings` merges engine overrides into upstream defaults — **Bing** enabled (stock SearXNG ships it disabled), **Google** left on, and **brave / duckduckgo / startpage** disabled so rate-limited scrapers do not zero out general JSON search when Bing or Google still respond. Settings are rewritten on each spawn via `getSpawnSpec`. Empty tool results surface SearXNG `unresponsive_engines` when present ([`server/tools/web-search-searxng.js`](../server/tools/web-search-searxng.js)).
+
 ### Email sync engine
 
 - **Store:** one SQLite DB per account (`~/.minnow/email/mail-<accountId>.db`, WAL) — `server/email/store.js` owns the schema, `cache.js` the async API. `message_row_id` is the stable PK, so a move rewrites `folder`/`uid` while triage, reply variants, and bodies survive. `messages_fts` (FTS5) backs search over subject/sender/body. Legacy `cache/<id>/messages.json` is imported once on first sync and renamed `.migrated`.

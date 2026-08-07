@@ -162,13 +162,6 @@ function toggleSidebarWaveCollapsed(group: ChatGroup, waveId: number | string): 
   scheduleSaveSessions();
 }
 
-/** True when the Code chat sidebar is the 48px icon rail (not the mobile overlay). */
-function isChatSidebarIconRail(): boolean {
-  if (!sessionState?.sidebarCollapsed) return false;
-  const side = document.getElementById('chatSidebar');
-  return Boolean(side && !side.classList.contains('mobile-open'));
-}
-
 function appendWaveSubgroupHeader(
   container: HTMLElement,
   waveId: number | string,
@@ -622,11 +615,7 @@ function appendGroupHeader(
   }
   head.dataset.groupId = group.id;
   head.title = group.name;
-  // Icon rail always hides board members, so treat the folder as collapsed for a11y.
-  const membersHidden =
-    group.collapsed ||
-    (isChatSidebarIconRail() &&
-      (Boolean(group.orchestrateBoard) || isBoardSetupIncomplete(group)));
+  const membersHidden = group.collapsed;
   head.setAttribute('aria-expanded', membersHidden ? 'false' : 'true');
 
   const icon = createIcon(
@@ -853,11 +842,7 @@ export function renderSidebar(): void {
         members,
         members.length,
       );
-      // Icon rail: board folders collapse to the folder glyph only (no waves/tasks).
-      const isBoardFolder =
-        Boolean(group.orchestrateBoard) || isBoardSetupIncomplete(group);
-      const hideBoardMembers = isBoardFolder && isChatSidebarIconRail();
-      if (!group.collapsed && members.length > 0 && !hideBoardMembers) {
+      if (!group.collapsed && members.length > 0) {
         const membersEl = document.createElement('div');
         membersEl.className = 'chat-group-members';
         membersEl.setAttribute('role', 'group');
@@ -880,8 +865,29 @@ export function renderSidebar(): void {
     .filter((c) => !isHiddenFromMainSidebar(c))
     .filter(excludeAssistantChats);
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
+  if (!list.firstChild) appendChatListEmptyState(list);
   syncChatItemDotsInDom();
   syncChatItemLoopIconsInDom();
+}
+
+/**
+ * Shown when the workspace has no chats yet. The panel is 300px of nothing
+ * otherwise, which reads as broken rather than new.
+ */
+function appendChatListEmptyState(list: HTMLElement): void {
+  const empty = document.createElement('div');
+  empty.className = 'chat-list-empty';
+
+  const title = document.createElement('p');
+  title.className = 'chat-list-empty__title';
+  title.textContent = 'No chats yet';
+
+  const hint = document.createElement('p');
+  hint.className = 'chat-list-empty__hint';
+  hint.textContent = 'Start one to work on this folder with a model.';
+
+  empty.append(title, hint);
+  list.appendChild(empty);
 }
 
 function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): void {

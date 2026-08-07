@@ -1341,10 +1341,6 @@ function bindStaticControls(): void {
     renderIssuesPanel();
   });
 
-  // Sidebar: Issues embeds in Code; desktop/dock still launch the fullscreen app.
-  document.getElementById('btnAllBugs')?.addEventListener('click', () => {
-    openIssuesFromSidebar();
-  });
 }
 
 /** Open Issues from the chat sidebar footer button. */

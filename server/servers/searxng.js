@@ -320,6 +320,23 @@ function venvPythonPath(venvDir) {
 }
 
 /**
+ * Engine overrides merged into upstream defaults (see searx settings_loader.update_settings).
+ * Bing is disabled in stock SearXNG but tends to stay up on loopback; brave/ddg/startpage
+ * rate-limit automated metasearch and can leave general queries with zero hits.
+ */
+export const SEARXNG_ENGINE_OVERRIDES_YAML = `
+engines:
+  - name: bing
+    disabled: false
+  - name: brave
+    disabled: true
+  - name: duckduckgo
+    disabled: true
+  - name: startpage
+    disabled: true
+`;
+
+/**
  * @param {number} port
  */
 export async function writeSearxngSettings(port) {
@@ -340,7 +357,7 @@ search:
 
 general:
   debug: false
-`;
+${SEARXNG_ENGINE_OVERRIDES_YAML}`;
   const settingsPath = getServerSettingsPath(SERVER_ID);
   await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
   await fsp.writeFile(settingsPath, yaml, 'utf8');

@@ -12,11 +12,7 @@ import {
 } from './settings';
 import { clearChat } from './messages';
 import { isAppAvailable } from '../os/app-preferences';
-import {
-  closeMobileSidebar,
-  toggleSidebarCollapsed,
-  toggleSidebarLayout,
-} from './layout';
+import { closeMobileSidebar, toggleSidebarLayout } from './layout';
 import { closeMobileFileSidebar, toggleFileSidebarLayout } from './file-layout';
 import { createChat, onModelSelectChange } from './sidebar';
 import { handleComposerPrimaryAction } from './input';
@@ -116,8 +112,8 @@ export function initShellHandlers(): void {
     if (!btn) return;
     void import('./chat-search-popover').then((m) => m.toggleChatSearchPopover(btn));
   });
-  wireClick('btnSidebarCollapse', toggleSidebarCollapsed);
-  wireClickAll('.chat-new-wide, .chat-new-compact', createChat);
+  // Panel open/close lives on the app rail tile (see os/app-rail.ts).
+  wireClickAll('.chat-new-wide', createChat);
   wireClick('btnOrchestrate', () => {
     void import('./orchestrate-hub').then((m) => m.toggleOrchestrateHubFromTopbar());
   });

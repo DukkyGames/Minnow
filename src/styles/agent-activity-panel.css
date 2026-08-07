@@ -189,7 +189,8 @@
   border-radius: 4px;
 }
 
-.chat-sidebar-footer-btn {
+/* Badge anchor for the status bar's Agents toggle. */
+#btnAgentActivity {
   position: relative;
 }
 

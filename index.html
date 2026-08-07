@@ -2283,15 +2283,6 @@
     <div class="chat-sidebar-header">
       <span class="chat-sidebar-title">Chats</span>
       <div class="chat-sidebar-header-actions">
-        <!-- Keep the sidebar toggle nearest the sidebar edge for predictable navigation. -->
-        <button
-          class="icon-btn"
-          type="button"
-          id="btnSidebarCollapse"
-          aria-label="Collapse sidebar"
-        >
-          <i class="fi fi-rr-angle-small-left icon-svg" aria-hidden="true"></i>
-        </button>
         <button
           class="icon-btn"
           type="button"
@@ -2302,49 +2293,20 @@
         >
           <i class="fi fi-rr-search icon-svg" aria-hidden="true"></i>
         </button>
+        <!-- Secondary to New chat: same icon vocabulary as search, not a second full-width button. -->
         <button
+          class="icon-btn"
           type="button"
-          class="icon-btn code-overview-nav-btn"
-          id="btnCodeOverviewSidebar"
-          aria-label="Code overview"
-          title="Code overview"
+          id="btnNewChatGroup"
+          aria-label="New group"
+          title="New group"
         >
-          <i class="fi fi-sr-dashboard-panel icon-svg" aria-hidden="true"></i>
+          <i class="fi fi-rr-folder-download icon-svg" aria-hidden="true"></i>
         </button>
       </div>
     </div>
     <button type="button" class="chat-new-wide">+ New chat</button>
-    <button type="button" class="chat-new-compact" aria-label="New chat">+</button>
-    <button type="button" class="chat-new-group-wide" id="btnNewChatGroup" aria-label="New group">
-      <i class="fi fi-rr-folder-download icon-svg chat-new-group-icon" aria-hidden="true"></i>
-      <span class="chat-new-group-label">New group</span>
-    </button>
     <div class="chat-list" id="chatList" role="list"></div>
-    </div>
-    <div class="chat-sidebar-footer">
-      <div class="chat-sidebar-footer-actions">
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="Issues" title="Issues">
-          <i class="fi fi-rr-radar icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
-          <i class="fi fi-rr-stats icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAgentActivity" aria-label="Agent activity" aria-expanded="false" aria-controls="agentActivityPanel" title="Agent activity">
-          <i class="fi fi-rr-user-robot icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
-          <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnCodeBrainMap" aria-label="Code map" title="Code map" aria-pressed="false" aria-expanded="false">
-          <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnDevServers" aria-label="Dev servers" title="Dev servers" aria-pressed="false">
-          <i class="fi fi-rr-database icon-svg" aria-hidden="true"></i>
-        </button>
-        <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false">
-          <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
-        </button>
-      </div>
     </div>
     <div
       class="sidebar-resizer sidebar-resizer--chat"
@@ -2362,6 +2324,30 @@
 
   <div id="workspaceSplit" class="workspace-split">
   <div class="main-column" id="mainColumn">
+    <!--
+      Code view switcher. These four replace what the stage shows, so they sit at
+      the top of the stage they change. They are not panel toggles and do not
+      belong in the status bar.
+    -->
+    <nav class="code-views" id="codeViews" aria-label="Code views">
+      <!-- code-overview.ts owns this one's state via aria-current, not aria-pressed. -->
+      <button type="button" class="code-views__btn" id="btnCodeOverviewSidebar">
+        <i class="fi fi-sr-dashboard-panel icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label">Overview</span>
+      </button>
+      <button type="button" class="code-views__btn" id="btnDevServers" aria-pressed="false">
+        <i class="fi fi-rr-database icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label">Dev servers</span>
+      </button>
+      <button type="button" class="code-views__btn" id="btnCodeBrainMap" aria-pressed="false" aria-expanded="false">
+        <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label">Code map</span>
+      </button>
+      <button type="button" class="code-views__btn" id="btnOrchestrate" aria-pressed="false" aria-expanded="false">
+        <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label">Orchestrate</span>
+      </button>
+    </nav>
     <!-- Chat messages + jump chip anchored to bottom of scroll viewport -->
     <div class="chat-viewport">
       <main class="chat-area" id="chatArea">
@@ -2887,6 +2873,53 @@
     </div>
     <div id="gitPanelRoot" class="git-panel-root" hidden></div>
   </aside>
+</div><!-- /#workspaceSplit -->
+</div><!-- /#appBody -->
+
+<!--
+  Code status bar. Only holds controls whose panels dock at the bottom of the
+  stage, so each toggle sits directly beneath the thing it opens. Live readouts
+  on the right follow DESIGN.md's Metric Colour Rule: mono, tabular, semantic
+  colour for measurement only.
+-->
+<div class="code-status-bar" id="codeStatusBar">
+  <div class="code-status-bar__group code-status-bar__group--panels">
+    <button
+      class="code-status-bar__btn"
+      type="button"
+      id="btnTerminal"
+      aria-expanded="false"
+      aria-controls="terminalPanel"
+      title="Terminal (Ctrl+`)"
+    >
+      <i class="fi fi-rr-terminal icon-svg" aria-hidden="true"></i>
+      <span class="code-status-bar__label">Terminal</span>
+    </button>
+    <button
+      class="code-status-bar__btn"
+      type="button"
+      id="btnAgentActivity"
+      aria-expanded="false"
+      aria-controls="agentActivityPanel"
+      title="Agent activity"
+    >
+      <i class="fi fi-rr-user-robot icon-svg" aria-hidden="true"></i>
+      <span class="code-status-bar__label">Agents</span>
+      <!-- Running count is appended here by agent-activity-panel.ts. -->
+    </button>
+  </div>
+  <div class="code-status-bar__spacer"></div>
+  <button
+    class="code-status-bar__btn code-status-bar__btn--metrics"
+    type="button"
+    id="btnStats"
+    aria-expanded="false"
+    aria-controls="statsStrip"
+    title="Inference metrics"
+  >
+    <i class="fi fi-rr-stats icon-svg" aria-hidden="true"></i>
+    <span class="code-status-bar__metric" id="statusMetricPreview">— t/s</span>
+  </button>
 </div>
 <script>
   /* Fallback if the module bundle fails to boot (avoids an infinite loader). */

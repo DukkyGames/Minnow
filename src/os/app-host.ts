@@ -68,6 +68,9 @@ function mountAppLayers(): void {
     codeWrap.dataset.osApp = 'code';
     if (topbar) codeWrap.appendChild(topbar);
     codeWrap.appendChild(appBody);
+    // Status bar spans the full stage width, below every column in .app-body.
+    const statusBar = document.getElementById('codeStatusBar');
+    if (statusBar) codeWrap.appendChild(statusBar);
     const welcome = document.getElementById('welcomeView');
     if (welcome) codeWrap.appendChild(welcome);
     appsLayer.appendChild(codeWrap);

@@ -544,11 +544,6 @@
   display: none;
 }
 
-/* Expert scope sidebar — mirrors main chat sidebar chrome */
-.chat-sidebar--expert-scope .chat-sidebar-footer {
-  display: none;
-}
-
 .expert-scope-chrome {
   display: flex;
   flex-direction: column;

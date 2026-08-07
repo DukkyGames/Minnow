@@ -64,9 +64,19 @@
   background: transparent;
 }
 
+/*
+ * Two independent channels, so one tile carries two facts without a side stripe:
+ *   icon colour  → which app is foreground
+ *   tile fill    → accent tint when nothing is tucked away, neutral when the
+ *                  foreground app's session panel is collapsed.
+ */
 .mn-os-app-rail__btn.is-active {
   color: var(--mn-accent);
   background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+}
+
+.mn-os-app-rail__btn.is-active.is-panel-closed {
+  background: var(--mn-surface-elevated);
 }
 
 .mn-os-app-rail__btn:focus-visible {
@@ -83,6 +93,11 @@
   .mn-os-app-rail__btn.is-active:hover {
     background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
     color: var(--mn-accent);
+  }
+
+  /* Hovering a collapsed panel's tile previews the accent fill it returns to. */
+  .mn-os-app-rail__btn.is-active.is-panel-closed:hover {
+    background: color-mix(in srgb, var(--mn-accent) 8%, var(--mn-surface-elevated));
   }
 }
 
@@ -106,6 +121,52 @@
 
 .mn-os-app-rail__tooltip[hidden] {
   display: none;
+}
+
+/*
+ * Arrow ties the label to its tile. Without it a fixed-position box reads as a
+ * stray toast floating over whatever panel happens to be underneath.
+ */
+.mn-os-app-rail__tooltip::before,
+.mn-os-app-rail__tooltip::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+}
+
+.mn-os-app-rail__tooltip[data-side='right']::before,
+.mn-os-app-rail__tooltip[data-side='right']::after {
+  top: var(--rail-tooltip-arrow-y, 50%);
+  translate: 0 -50%;
+}
+
+/* Border layer sits one pixel further out than the fill layer. */
+.mn-os-app-rail__tooltip[data-side='right']::before {
+  right: 100%;
+  border-right-color: var(--mn-border);
+}
+
+.mn-os-app-rail__tooltip[data-side='right']::after {
+  right: calc(100% - 1px);
+  border-right-color: var(--mn-bg);
+}
+
+.mn-os-app-rail__tooltip[data-side='top']::before,
+.mn-os-app-rail__tooltip[data-side='top']::after {
+  left: 50%;
+  translate: -50% 0;
+}
+
+.mn-os-app-rail__tooltip[data-side='top']::before {
+  top: 100%;
+  border-top-color: var(--mn-border);
+}
+
+.mn-os-app-rail__tooltip[data-side='top']::after {
+  top: calc(100% - 1px);
+  border-top-color: var(--mn-bg);
 }
 
 /* Narrow layout: bottom tab bar (see NARROW_MQ in mobile-layout.ts). */

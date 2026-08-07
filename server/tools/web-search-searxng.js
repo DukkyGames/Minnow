@@ -79,7 +79,13 @@ export async function searchSearxngStructured(query, searxngBaseUrl, count = SEA
 
   const results = mapSearxngResults(payload, safeCount);
   if (!results.length) {
-    return { results: [], error: `No SearXNG results found for: ${query}` };
+    const unresponsive = payload && typeof payload === 'object' && Array.isArray(payload.unresponsive_engines)
+      ? payload.unresponsive_engines
+      : [];
+    const engineHint = unresponsive.length
+      ? ` (${unresponsive.map((row) => `${row[0]}: ${row[1]}`).join('; ')})`
+      : '';
+    return { results: [], error: `No SearXNG results found for: ${query}${engineHint}` };
   }
 
   return { results };
