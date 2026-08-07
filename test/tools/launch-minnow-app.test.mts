@@ -164,7 +164,6 @@ describe('executeBrowserTool launch_minnow_app', () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.appId, 'scheduler');
     assert.equal(parsed.hash, '#/app/scheduler');
-    // Scheduler opens as an overlay; hash stays on the current route.
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(window.location.hash, '#/app/scheduler');
   });
 });

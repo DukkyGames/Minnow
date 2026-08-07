@@ -15,6 +15,7 @@ import {
   resetAppHostForTests,
   syncAppHostForTests,
 } from '../../src/os/app-host.ts';
+import { installHappyDomGlobals } from './dom-helpers.mts';
 import {
   getInstanceSnapshot,
   launchInstance,
@@ -107,16 +108,7 @@ describe('calendar window shell', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
-    const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
-      localStorage: Storage;
-    };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
-    g.localStorage = win.localStorage;
+    installHappyDomGlobals(win);
     win.localStorage.clear();
     win.location.hash = '#/workspaces';
     setupCalendarDom(win);

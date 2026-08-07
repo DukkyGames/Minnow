@@ -57,8 +57,8 @@ describe('menubar model chip', () => {
       assert.equal(expand.getAttribute('aria-hidden'), 'true');
       const expandRole = expand.querySelector('.mn-os-mb-model-expand-role');
       assert.equal(expandRole?.textContent, 'Default model');
-      const staticRole = chip.querySelector('.mn-os-mb-model-static-role') as HTMLElement;
-      assert.equal(getComputedStyle(staticRole).visibility, 'hidden');
+      const staticRoleCollapsed = chip.querySelector('.mn-os-mb-model-static-role') as HTMLElement;
+      assert.equal(getComputedStyle(staticRoleCollapsed).visibility, 'hidden');
     } finally {
       setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;

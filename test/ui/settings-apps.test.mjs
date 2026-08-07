@@ -76,7 +76,7 @@ describe('settings apps renderer', () => {
     assert.match(mount.querySelector('.mn-app-picker-core')?.textContent ?? '', /Always included/);
     assert.match(mount.querySelector('.mn-app-picker-core')?.textContent ?? '', /Research/);
     assert.match(mount.querySelector('.mn-app-picker-core')?.textContent ?? '', /Scheduler/);
-    assert.ok(mount.querySelector('[data-settings-search-key="apps.core.chat"]'));
+    assert.ok(mount.querySelector('[data-settings-search-key="apps.core.code"]'));
     assert.ok(mount.querySelector('[data-settings-search-key="apps.core.research"]'));
     assert.ok(mount.querySelector('[data-settings-search-key="apps.visibility"]'));
     assert.ok(mount.querySelector('.mn-app-picker-coming-soon'));

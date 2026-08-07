@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 describe('appIdForChat', () => {
-  test('returns chat for ~/.minnow/chats workspace paths', async () => {
+  test('returns code for ~/.minnow/chats workspace paths', async () => {
     const { appIdForChat } = await import('../../src/notifications/app-for-chat.ts');
     assert.equal(
       appIdForChat({
@@ -15,11 +15,11 @@ describe('appIdForChat', () => {
         modelInfo: {},
         updatedAt: 1,
       }),
-      'chat',
+      'code',
     );
   });
 
-  test('returns chat for Email-scoped chats when Email app is release-hidden', async () => {
+  test('returns code for Email-scoped chats when Email app is release-hidden', async () => {
     const { appIdForChat } = await import('../../src/notifications/app-for-chat.ts');
     assert.equal(
       appIdForChat({
@@ -34,7 +34,7 @@ describe('appIdForChat', () => {
         modelInfo: {},
         updatedAt: 1,
       }),
-      'chat',
+      'code',
     );
   });
 

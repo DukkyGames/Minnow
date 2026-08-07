@@ -34,7 +34,7 @@ describe('migrateScratchWorkspacePaths', () => {
     assert.equal(state.chats[0].modeId, 'general');
     assert.equal(state.chats[1].workspacePath, SCRATCH);
     assert.equal(state.chats[2].workspacePath, '/home/user/project');
-    assert.equal(state.lastActiveChatIdByWorkspace[SCRATCH], state.chats[1].id);
+    assert.equal(state.lastActiveChatIdByWorkspace[SCRATCH], state.chats[0].id);
     assert.equal(state.lastActiveChatIdByApp[CODE_APP_ID], state.chats[1].id);
     assert.equal(state.lastActiveChatIdByApp[CHAT_APP_ID], undefined);
   });

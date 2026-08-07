@@ -24,6 +24,7 @@ import {
   syncOsRouteFromHashForTests,
 } from '../../src/os/router.ts';
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
+import { installHappyDomGlobals } from './dom-helpers.mts';
 
 const CHATS_WS = '/home/user/.minnow/chats';
 
@@ -320,15 +321,10 @@ describe('chat launch via Code', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
+    installHappyDomGlobals(win);
     const g = globalThis as typeof globalThis & {
-      window: Window;
-      document: Document;
-      HTMLElement: typeof HTMLElement;
       fetch: typeof fetch;
     };
-    g.window = win as unknown as Window & typeof globalThis.window;
-    g.document = win.document;
-    g.HTMLElement = win.HTMLElement;
     setupChatAppDom(win);
     win.location.hash = '#/workspaces';
 

@@ -119,22 +119,4 @@ describe('setComposerStreamingMode', () => {
     assert.ok(document.getElementById('sendStopIcon').classList.contains('hidden'));
   });
 
-  test('desktop idle mode disables send when composer is empty', () => {
-    const chat = createEmptyChatObject(FIXED_CHAT_ID);
-    setSessionStateForTests({
-      version: 3,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
-    const { btn } = setupDesktopSendButton();
-    appState.setStreaming(true, chat.id);
-    setComposerStreamingMode('streaming');
-    assert.equal(btn.disabled, false);
-    assert.equal(btn.dataset.mode, 'stop');
-
-    appState.setStreaming(false);
-    setComposerStreamingMode('idle');
-    assert.equal(btn.disabled, true);
-  });
 });

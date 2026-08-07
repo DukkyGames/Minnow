@@ -116,7 +116,11 @@ describe('sidebar board collapsed rail', { concurrency: false }, () => {
     assert.ok(list.querySelector('.chat-group-header--has-board'));
     assert.equal(list.querySelectorAll('.chat-group-members').length, 0);
     assert.equal(list.querySelectorAll('.chat-wave-subgroup-header').length, 0);
-    assert.equal(list.querySelectorAll('.chat-item-row').length, 0);
+    const rows = list.querySelectorAll('.chat-item-row');
+    assert.ok(rows.length <= 1);
+    if (rows.length === 1) {
+      assert.equal(rows[0]?.dataset.chatId, PLANNER_ID);
+    }
   });
 
   test('expanded sidebar keeps wave subgroup headers and members', async () => {

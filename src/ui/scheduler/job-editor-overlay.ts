@@ -384,5 +384,6 @@ async function mountEditor(
 
 /** Reset module state (tests). */
 export function resetJobEditorWindowForTests(): void {
+  overlayRoot?.remove();
   overlayRoot = null;
 }

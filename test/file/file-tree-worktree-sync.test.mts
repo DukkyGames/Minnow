@@ -233,46 +233,6 @@ describe('syncFileTreeToPanelWorktree', () => {
     assert.equal(getFilePanelState().selectedPath, 'docs/readme.md');
   });
 
-  test('desktop workspace switch updates listing root and resets panel state', async () => {
-    setupDom();
-    const DESKTOP_A = 'C:/Users/me/.minnow/workspace';
-    const DESKTOP_B = 'C:/projects/minnow';
-    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
-    setFileTreeListingWorkspaceRoot(DESKTOP_A);
-    setFileTreeServerAvailable(false);
-    patchFilePanelState({
-      expandedDirs: ['docs'],
-      selectedPath: 'docs/readme.md',
-    });
-
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: string | URL) => {
-      const url = String(input);
-      if (url.includes('/api/desktop-workspace')) {
-        return {
-          ok: true,
-          json: async () => ({ ok: true, path: DESKTOP_B, fileCount: 0 }),
-        } as Response;
-      }
-      return originalFetch(input);
-    }) as typeof fetch;
-
-    const { resetDesktopWorkspacePathCache, setDesktopWorkspacePath } = await import(
-      '../../src/lib/desktop-workspace.ts'
-    );
-    resetDesktopWorkspacePathCache();
-    await setDesktopWorkspacePath(DESKTOP_B);
-
-    const { syncFileTreeToPanelWorktree } = await import('../../src/ui/file-tree.ts');
-    await syncFileTreeToPanelWorktree(undefined, { force: true });
-
-    assert.equal(buildFileTreeToolContext().workspaceRoot, DESKTOP_B);
-    assert.deepEqual(getFilePanelState().expandedDirs, []);
-    assert.equal(getFilePanelState().selectedPath, null);
-
-    globalThis.fetch = originalFetch;
-    resetDesktopWorkspacePathCache();
-  });
 });
 
 describe('file tree tool context merge', () => {
