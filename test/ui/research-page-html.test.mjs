@@ -10,20 +10,42 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const RESEARCH_IDS = [
   'btnResearch',
   'researchView',
+  // Rail
+  'researchRail',
+  'btnResearchNew',
+  'researchRailFilter',
+  'researchRailList',
+  'researchRailArchived',
+  // Composer
   'researchQuery',
+  'btnResearchStart',
+  'btnResearchCancel',
+  // Options (still native controls behind the chips)
   'researchMaxRounds',
   'researchScope',
   'researchWorkspace',
   'researchWorkspaceField',
   'btnResearchWorkspaceBrowse',
   'researchCategory',
-  'btnResearchStart',
-  'btnResearchCancel',
+  'researchSearchProvider',
+  'researchProviderOverride',
+  'researchModelOverride',
+  // Chips
+  'chipResearchScope',
+  'chipResearchRounds',
+  'chipResearchCategory',
+  'chipResearchEngine',
+  // Run pane
+  'researchRunPane',
+  'researchAskPane',
+  'researchRunTitle',
+  'researchRunState',
+  'researchRunStats',
+  'researchRunActions',
+  'researchViewBrief',
+  'researchViewEvidence',
   'researchProgressMount',
   'researchResultMount',
-  'researchTabRun',
-  'researchTabLibrary',
-  'researchLibraryMount',
 ];
 
 describe('research page HTML', () => {
@@ -48,5 +70,18 @@ describe('research page HTML', () => {
   test('page sub-header removed (OS menubar supplies navigation)', () => {
     assert.doesNotMatch(html, /class="research-page-header"/);
     assert.doesNotMatch(html, /id="btnResearchPageBack"/);
+  });
+
+  test('run and library are one surface, not two tabs', () => {
+    assert.doesNotMatch(html, /id="researchTabRun"/);
+    assert.doesNotMatch(html, /id="researchTabLibrary"/);
+  });
+
+  test('every option control sits inside a chip popover', () => {
+    const view = html.slice(html.indexOf('id="researchView"'));
+    const surface = view.slice(0, view.indexOf('</main>'));
+    for (const pop of ['popResearchScope', 'popResearchRounds', 'popResearchCategory', 'popResearchEngine']) {
+      assert.match(surface, new RegExp(`id="${pop}"`));
+    }
   });
 });

@@ -837,185 +837,275 @@
   </div>
 </main>
 
-<main id="researchView" class="research-page dr" aria-label="Deep Research">
-  <div class="dr-tabs research-tabs" role="tablist" aria-label="Research views">
-    <button type="button" class="dr-tab on" id="researchTabRun" role="tab" aria-selected="true" aria-controls="researchPanelRun">Run</button>
-    <button type="button" class="dr-tab" id="researchTabLibrary" role="tab" aria-selected="false" aria-controls="researchPanelLibrary">Library</button>
-  </div>
-  <div class="dr-scroll research-page-body">
-    <div class="dr-col research-page-inner">
-      <div id="researchPanelRun" role="tabpanel">
-        <div class="dr-run-shell">
-          <div class="dr-idle" id="researchIdleChrome">
-            <div class="dr-mark" aria-hidden="true">
-              <span class="dr-mark__ring"></span>
-              <i class="fi fi-rr-search icon-svg dr-mark__icon" aria-hidden="true"></i>
-            </div>
-            <p class="dr-eyebrow research-mono">Deep research</p>
-            <h2 class="dr-title">What should we dig into?</h2>
-            <div class="dr-prompts" role="list">
-              <button
-                type="button"
-                class="dr-prompt"
-                role="listitem"
-                data-research-prompt="Compare the leading options for … Include benchmarks, pricing, and tradeoffs."
-              >
-                <i class="fi fi-rr-stats icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
-                Compare options
-              </button>
-              <button
-                type="button"
-                class="dr-prompt"
-                role="listitem"
-                data-research-prompt="Summarize the latest news and credible takes on …"
-              >
-                <i class="fi fi-rr-newspaper icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
-                News scan
-              </button>
-              <button
-                type="button"
-                class="dr-prompt"
-                role="listitem"
-                data-research-prompt="Map the market landscape for … Key players, positioning, and gaps."
-              >
-                <i class="fi fi-rr-chart-pie-alt icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
-                Market map
-              </button>
-              <button
-                type="button"
-                class="dr-prompt"
-                role="listitem"
-                data-research-prompt="In this codebase, how does … work? Cite files and patterns."
-              >
-                <i class="fi fi-rr-folder-tree icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
-                Codebase dive
-              </button>
-            </div>
-          </div>
-          <div class="dr-form">
-            <div class="dr-composer" id="researchComposer">
-              <label class="visually-hidden" for="researchQuery">Research question</label>
-              <textarea
-                id="researchQuery"
-                class="dr-q dr-composer-field research-query"
-                rows="2"
-                placeholder="Ask anything…"
-              ></textarea>
-              <div class="dr-composer-bar">
-                <button
-                  type="button"
-                  class="dr-bar-btn"
-                  id="btnResearchOptions"
-                  aria-expanded="false"
-                  aria-controls="researchOptionsPanel"
-                >
-                  <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
-                  Options
-                </button>
-                <span class="dr-composer-spacer" aria-hidden="true"></span>
-                <button type="button" class="dr-cancel dr-composer-cancel" id="btnResearchCancel" hidden>Cancel</button>
-                <button
-                  type="button"
-                  class="dr-send"
-                  id="btnResearchStart"
-                  aria-label="Start research"
-                >
-                  <i class="fi fi-rr-arrow-small-up icon-svg dr-send-icon" aria-hidden="true" style="--mn-icon-size:20px"></i>
-                </button>
-              </div>
-            </div>
-            <div class="dr-controls research-run-options" id="researchOptionsPanel" hidden>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">ROUNDS</span>
-              <div class="dr-select">
-                <select id="researchMaxRounds" class="research-select">
-                  <option value="auto">Auto</option>
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">SCOPE</span>
-              <div class="dr-select">
-                <select id="researchScope" class="research-select">
-                  <option value="web">Web</option>
-                  <option value="codebase">Codebase</option>
-                  <option value="both">Web + Codebase</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field" id="researchWorkspaceField" hidden>
-              <span class="dr-flabel research-mono">WORKSPACE</span>
-              <div class="dr-research-workspace-row">
-                <div class="dr-select">
-                  <select id="researchWorkspace" class="research-select" aria-label="Research workspace">
-                  </select>
+<main id="researchView" class="research-page" aria-label="Research">
+  <div class="rs-shell">
+    <aside class="rs-rail" id="researchRail" aria-label="Research runs">
+      <div class="rs-rail__head">
+        <button type="button" class="rs-new" id="btnResearchNew">
+          <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true" style="--mn-icon-size:15px"></i>
+          New research
+        </button>
+        <button
+          type="button"
+          class="rs-rail__collapse"
+          id="btnResearchRailCollapse"
+          aria-label="Hide run list"
+          aria-expanded="true"
+          aria-controls="researchRail"
+        >
+          <i class="fi fi-rr-sidebar-flip icon-svg" aria-hidden="true" style="--mn-icon-size:16px"></i>
+        </button>
+      </div>
+      <div class="rs-rail__filter">
+        <i class="fi fi-rr-search icon-svg rs-rail__filter-icon" aria-hidden="true" style="--mn-icon-size:13px"></i>
+        <label class="visually-hidden" for="researchRailFilter">Filter runs</label>
+        <input
+          type="search"
+          id="researchRailFilter"
+          class="rs-rail__filter-input"
+          placeholder="Filter runs"
+          autocomplete="off"
+        />
+      </div>
+      <div id="researchRailList" class="rs-rail__list" role="listbox" aria-label="Saved research runs"></div>
+      <div class="rs-rail__foot">
+        <label class="rs-toggle" for="researchRailArchived">
+          <input type="checkbox" id="researchRailArchived" class="rs-toggle__input" />
+          <span class="rs-toggle__box" aria-hidden="true"></span>
+          <span class="rs-toggle__label">Archived</span>
+        </label>
+        <button type="button" class="rs-foot-link" id="btnResearchSettingsLink">Engine</button>
+      </div>
+    </aside>
+
+    <section class="rs-main" id="researchMain">
+      <div class="rs-pane rs-pane--ask" id="researchAskPane">
+        <div class="rs-ask">
+          <h2 class="rs-ask__title">What should we look into?</h2>
+          <p class="rs-ask__sub">
+            Minnow reads the web, or your codebase, and writes back a brief with its sources.
+          </p>
+
+          <div class="rs-composer" id="researchComposer">
+            <label class="visually-hidden" for="researchQuery">Research question</label>
+            <textarea
+              id="researchQuery"
+              class="rs-composer__field"
+              rows="3"
+              placeholder="Ask a question worth an hour of reading…"
+            ></textarea>
+            <div class="rs-composer__bar">
+              <div class="rs-opts" id="researchOptions">
+                <div class="rs-opt" data-opt="scope">
+                  <button
+                    type="button"
+                    class="rs-chip"
+                    id="chipResearchScope"
+                    aria-expanded="false"
+                    aria-controls="popResearchScope"
+                  >
+                    <i class="fi fi-rr-globe icon-svg" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                    <span class="rs-chip__value" data-chip-value>Web</span>
+                    <i class="fi fi-rr-angle-small-down icon-svg rs-chip__caret" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                  </button>
+                  <div class="rs-pop" id="popResearchScope" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Where to look</span>
+                      <div class="rs-select">
+                        <select id="researchScope">
+                          <option value="web">Web</option>
+                          <option value="codebase">Codebase</option>
+                          <option value="both">Web and codebase</option>
+                        </select>
+                      </div>
+                    </label>
+                    <div class="rs-field" id="researchWorkspaceField" hidden>
+                      <label class="rs-field__label" for="researchWorkspace">Workspace</label>
+                      <div class="rs-field__row">
+                        <div class="rs-select">
+                          <select id="researchWorkspace" aria-label="Research workspace"></select>
+                        </div>
+                        <button
+                          type="button"
+                          id="btnResearchWorkspaceBrowse"
+                          class="rs-field__btn"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  id="btnResearchWorkspaceBrowse"
-                  class="settings-inline-btn"
-                  aria-label="Browse for research workspace folder"
-                >
-                  Browse…
-                </button>
+
+                <div class="rs-opt" data-opt="rounds">
+                  <button
+                    type="button"
+                    class="rs-chip"
+                    id="chipResearchRounds"
+                    aria-expanded="false"
+                    aria-controls="popResearchRounds"
+                  >
+                    <span class="rs-chip__value" data-chip-value>Auto depth</span>
+                    <i class="fi fi-rr-angle-small-down icon-svg rs-chip__caret" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                  </button>
+                  <div class="rs-pop" id="popResearchRounds" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Search rounds</span>
+                      <div class="rs-select">
+                        <select id="researchMaxRounds">
+                          <option value="auto">Auto</option>
+                          <option value="1">1 round</option>
+                          <option value="2">2 rounds</option>
+                          <option value="3">3 rounds</option>
+                          <option value="4">4 rounds</option>
+                          <option value="5">5 rounds</option>
+                        </select>
+                      </div>
+                      <span class="rs-field__hint">More rounds means deeper follow-up questions and a longer run.</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="rs-opt" data-opt="category">
+                  <button
+                    type="button"
+                    class="rs-chip"
+                    id="chipResearchCategory"
+                    aria-expanded="false"
+                    aria-controls="popResearchCategory"
+                  >
+                    <span class="rs-chip__value" data-chip-value>Auto topic</span>
+                    <i class="fi fi-rr-angle-small-down icon-svg rs-chip__caret" aria-hidden="true" style="--mn-icon-size:13px"></i>
+                  </button>
+                  <div class="rs-pop" id="popResearchCategory" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Report shape</span>
+                      <div class="rs-select">
+                        <select id="researchCategory">
+                          <option value="">Auto</option>
+                          <option value="technical">Technical</option>
+                          <option value="academic">Academic</option>
+                          <option value="news">News</option>
+                          <option value="market">Market</option>
+                          <option value="general">General</option>
+                        </select>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="rs-opt" data-opt="engine">
+                  <button
+                    type="button"
+                    class="rs-chip rs-chip--icon"
+                    id="chipResearchEngine"
+                    aria-expanded="false"
+                    aria-controls="popResearchEngine"
+                    aria-label="Search and model overrides"
+                    title="Search and model overrides"
+                  >
+                    <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true" style="--mn-icon-size:14px"></i>
+                    <span class="rs-chip__dot" id="researchEngineDot" hidden aria-hidden="true"></span>
+                  </button>
+                  <div class="rs-pop rs-pop--wide" id="popResearchEngine" hidden>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Search provider</span>
+                      <div class="rs-select">
+                        <select id="researchSearchProvider">
+                          <option value="">From settings</option>
+                          <option value="searxng">SearXNG</option>
+                          <option value="tavily">Tavily</option>
+                          <option value="brave">Brave</option>
+                          <option value="duckduckgo">DuckDuckGo</option>
+                        </select>
+                      </div>
+                    </label>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Provider</span>
+                      <div class="rs-select">
+                        <select id="researchProviderOverride">
+                          <option value="">From settings</option>
+                        </select>
+                      </div>
+                    </label>
+                    <label class="rs-field">
+                      <span class="rs-field__label">Model</span>
+                      <input
+                        type="text"
+                        id="researchModelOverride"
+                        class="rs-input"
+                        placeholder="From settings"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">CATEGORY</span>
-              <div class="dr-select">
-                <select id="researchCategory" class="research-select">
-                  <option value="">Auto</option>
-                  <option value="technical">Technical</option>
-                  <option value="academic">Academic</option>
-                  <option value="news">News</option>
-                  <option value="market">Market</option>
-                  <option value="general">General</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">SEARCH</span>
-              <div class="dr-select">
-                <select id="researchSearchProvider" class="research-select">
-                  <option value="">Default (Settings)</option>
-                  <option value="searxng">SearXNG</option>
-                  <option value="tavily">Tavily</option>
-                  <option value="brave">Brave</option>
-                  <option value="duckduckgo">DuckDuckGo</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">PROVIDER OVERRIDE</span>
-              <div class="dr-select">
-                <select id="researchProviderOverride" class="research-select">
-                  <option value="">(from settings)</option>
-                </select>
-              </div>
-            </label>
-            <label class="dr-field">
-              <span class="dr-flabel research-mono">MODEL OVERRIDE</span>
-              <input type="text" id="researchModelOverride" class="dr-input research-input" placeholder="(from settings)" />
-            </label>
+
+              <span class="rs-composer__spacer" aria-hidden="true"></span>
+              <button type="button" class="rs-cancel" id="btnResearchCancel" hidden>Stop</button>
+              <button type="button" class="rs-send" id="btnResearchStart" aria-label="Start research">
+                <i class="fi fi-rr-arrow-small-up icon-svg" aria-hidden="true" style="--mn-icon-size:20px"></i>
+              </button>
+            </div>
           </div>
+
+          <div class="rs-seeds">
+            <span class="rs-seeds__label">Try</span>
+            <button type="button" class="rs-seed" data-research-prompt="Compare the leading options for … Include benchmarks, pricing, and the tradeoffs between them.">comparing options</button>
+            <button type="button" class="rs-seed" data-research-prompt="Summarize the latest news and credible takes on …">scanning the news</button>
+            <button type="button" class="rs-seed" data-research-prompt="Map the market landscape for … Key players, positioning, and the gaps nobody is filling.">mapping a market</button>
+            <button type="button" class="rs-seed" data-research-prompt="In this codebase, how does … work? Cite the files and patterns involved.">reading this codebase</button>
           </div>
         </div>
-        <div id="researchProgressMount" aria-live="polite"></div>
-        <div id="researchResultMount"></div>
       </div>
-      <div id="researchPanelLibrary" class="hidden" role="tabpanel">
-        <div id="researchLibraryMount" class="research-library"></div>
+
+      <div class="rs-pane rs-pane--run" id="researchRunPane" hidden>
+        <header class="rs-runhead">
+          <div class="rs-runhead__top">
+            <h2 class="rs-runhead__title" id="researchRunTitle"></h2>
+            <div class="rs-runhead__actions" id="researchRunActions"></div>
+          </div>
+          <div class="rs-runhead__meta">
+            <span class="rs-state" id="researchRunState"></span>
+            <span class="rs-runhead__stats" id="researchRunStats"></span>
+          </div>
+          <div class="rs-segments" role="tablist" aria-label="Run views">
+            <button
+              type="button"
+              class="rs-segment is-on"
+              id="researchViewBrief"
+              role="tab"
+              aria-selected="true"
+              aria-controls="researchResultMount"
+            >
+              Brief
+            </button>
+            <button
+              type="button"
+              class="rs-segment"
+              id="researchViewEvidence"
+              role="tab"
+              aria-selected="false"
+              aria-controls="researchProgressMount"
+            >
+              Evidence
+            </button>
+          </div>
+        </header>
+        <div class="rs-runbody" id="researchRunBody">
+          <div id="researchResultMount" class="rs-brief" role="tabpanel" aria-labelledby="researchViewBrief"></div>
+          <div
+            id="researchProgressMount"
+            class="rs-ledger"
+            role="tabpanel"
+            aria-labelledby="researchViewEvidence"
+            aria-live="polite"
+            hidden
+          ></div>
+        </div>
       </div>
-    </div>
+    </section>
   </div>
-  <footer class="dr-foot research-page-footer">
-    <button type="button" class="dr-eng research-settings-link" id="btnResearchSettingsLink">Engine settings</button>
-  </footer>
 </main>
 
 <main id="chatView" class="chat-app-page" aria-label="Chat">

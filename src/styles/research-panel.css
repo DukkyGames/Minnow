@@ -33,20 +33,15 @@
   min-height: 0;
 }
 
-#researchView.research-page--embedded .dr-scroll {
-  padding-top: 12px;
-}
-
-#researchView.research-page--embedded.is-idle .dr-scroll {
+/* The Code column is narrower than the standalone app; start the composer at
+   the top rather than centring it in a short viewport. */
+#researchView.research-page--embedded .rs-pane--ask {
   justify-content: flex-start;
+  padding-top: 20px;
 }
 
-#researchView.research-page--embedded .dr-title {
-  font-size: clamp(22px, 3vw, 26px);
-}
-
-#researchView.research-page--embedded .dr-prompts {
-  gap: 6px;
+#researchView.research-page--embedded .rs-ask__title {
+  font-size: 21px;
 }
 
 .research-panel-banner {

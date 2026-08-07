@@ -242,29 +242,36 @@ describe('os router navigation', () => {
     document.body.insertAdjacentHTML(
       'beforeend',
       `<div id="osStage"><div id="osAppsLayer"></div></div>
-      <main id="researchView" class="research-page dr">
-        <button id="researchTabRun"></button><button id="researchTabLibrary"></button>
-        <div id="researchPanelRun"><textarea id="researchQuery"></textarea>
-        <select id="researchMaxRounds"><option value="auto">Auto</option></select>
-        <select id="researchCategory"><option value=""></option></select>
-        <select id="researchSearchProvider"><option value=""></option></select>
-        <select id="researchProviderOverride"><option value=""></option></select>
-        <input id="researchModelOverride" />
-        <button id="btnResearchStart"></button><button id="btnResearchCancel" hidden></button>
-        <div id="researchProgressMount"></div><div id="researchResultMount"></div></div>
-        <div id="researchPanelLibrary" class="hidden"></div><div id="researchLibraryMount"></div>
-        <button id="btnResearchSettingsLink"></button></main>`,
+      <main id="researchView" class="research-page">
+        <div id="researchRailList"></div>
+        <div id="researchAskPane">
+          <textarea id="researchQuery"></textarea>
+          <select id="researchScope"><option value="web">Web</option></select>
+          <select id="researchMaxRounds"><option value="auto">Auto</option></select>
+          <select id="researchCategory"><option value=""></option></select>
+          <select id="researchSearchProvider"><option value=""></option></select>
+          <select id="researchProviderOverride"><option value=""></option></select>
+          <input id="researchModelOverride" />
+          <button id="btnResearchStart"></button><button id="btnResearchCancel" hidden></button>
+        </div>
+        <div id="researchRunPane" hidden>
+          <div id="researchResultMount"></div><div id="researchProgressMount"></div>
+        </div>
+      </main>`,
     );
     initAppHost();
     launchApp('research', { seed: 'Apple stock', autoRun: false });
     assert.equal(window.location.hash, '#/app/research');
     syncOsRouteFromHashForTests();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The Research module loads dynamically; poll for it rather than race a fixed sleep.
+    const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+    for (let i = 0; i < 150 && query?.value !== 'Apple stock'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     const snap = getInstanceSnapshot();
     assert.equal(snap.view, 'app');
     assert.equal(getForegroundAppId(), 'research');
     assert.equal(snap.instances.find((i) => i.appId === 'research')?.appId, 'research');
-    const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
     assert.equal(query?.value, 'Apple stock');
     assert.equal(document.getElementById('researchView')?.classList.contains('is-open'), true);
   });

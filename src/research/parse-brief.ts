@@ -16,7 +16,8 @@ export interface ParsedBriefSource {
   title: string;
   host: string;
   type: string;
-  confidence: 'high' | 'med';
+  /** Excerpt the engine captured, when it captured one. */
+  snippet: string;
 }
 
 export interface ParsedBrief {
@@ -199,7 +200,7 @@ export function parseResearchBrief(
       title: titleText,
       host: hostFromUrl(url),
       type: inferSourceType(url),
-      confidence: snippet.length > 80 || i < 3 ? 'high' : 'med',
+      snippet,
     };
   });
 

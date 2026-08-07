@@ -122,8 +122,8 @@ function removeEmbeddedBackButton(): void {
 
 function ensureEmbeddedBackButton(): void {
   if (document.getElementById(EMBED_BACK_BTN_ID)) return;
-  const tabs = getRoot()?.querySelector('.research-tabs');
-  if (!tabs) return;
+  const railHead = getRoot()?.querySelector('.rs-rail__head');
+  if (!railHead) return;
 
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -135,12 +135,13 @@ function ensureEmbeddedBackButton(): void {
   btn.addEventListener('click', () => {
     closeResearchPanel();
   });
-  tabs.insertBefore(btn, tabs.firstChild);
+  railHead.insertBefore(btn, railHead.firstChild);
 }
 
 function ensureStatusBanner(): void {
-  const form = getRoot()?.querySelector('.dr-form');
-  if (!form || document.getElementById(BANNER_ID)) return;
+  const ask = getRoot()?.querySelector('.rs-ask');
+  const composer = ask?.querySelector('.rs-composer');
+  if (!ask || !composer || document.getElementById(BANNER_ID)) return;
 
   const banner = document.createElement('div');
   banner.id = BANNER_ID;
@@ -158,7 +159,7 @@ function ensureStatusBanner(): void {
   err.hidden = true;
 
   banner.append(idle, err);
-  form.insertBefore(banner, form.firstChild);
+  ask.insertBefore(banner, composer);
 }
 
 /** Refresh idle / engine-config banner (call after run UI changes). */
@@ -167,16 +168,14 @@ export async function syncResearchPanelStatus(): Promise<void> {
   const banner = document.getElementById(BANNER_ID);
   const idle = document.getElementById(IDLE_COPY_ID);
   const err = document.getElementById(CONFIG_ERROR_ID);
-  const progress = document.getElementById('researchProgressMount');
-  const result = document.getElementById('researchResultMount');
   if (!banner || !idle || !err) return;
 
-  const hasRunChrome =
-    Boolean(progress?.childElementCount) || Boolean(result?.childElementCount);
+  // The banner belongs to the composer, so it only shows while the composer is up.
+  const askVisible = document.getElementById('researchAskPane')?.hidden === false;
   const root = getRoot();
   const running = root?.classList.contains('is-running') ?? false;
 
-  if (hasRunChrome || running) {
+  if (!askVisible || running) {
     banner.hidden = true;
     return;
   }
