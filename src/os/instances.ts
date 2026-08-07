@@ -129,12 +129,13 @@ export function ensureBackgroundInstance(appId: AppId, options?: LaunchOptions):
 export function launchInstance(appId: AppId, options?: LaunchOptions): string {
   const existing = instances.find((i) => i.appId === appId);
   let resolvedOptions = options;
-  if (
-    appId === 'settings' &&
-    getForegroundAppId() === 'code' &&
-    resolvedOptions?.returnToApp == null
-  ) {
-    resolvedOptions = { ...resolvedOptions, returnToApp: 'code' };
+  if (appId === 'settings' && resolvedOptions?.returnToApp == null) {
+    const foreground = getForegroundAppId();
+    if (foreground === 'code') {
+      resolvedOptions = { ...resolvedOptions, returnToApp: 'code' };
+    } else if (foreground && foreground !== 'settings') {
+      resolvedOptions = { ...resolvedOptions, returnToApp: foreground };
+    }
   }
 
   if (existing) {

@@ -162,7 +162,7 @@ export function listAvailableApps(): AppDefinition[] {
   return listReleasedApps().filter((app) => isAppEnabled(app.id));
 }
 
-/** Fixed roster for the left app rail (settings is appended separately in app-rail). */
+/** Fixed roster for the left app rail. */
 const RAIL_PRIMARY_APP_IDS: AppId[] = [
   'code',
   'research',
@@ -172,7 +172,7 @@ const RAIL_PRIMARY_APP_IDS: AppId[] = [
   'scheduler',
 ];
 
-/** Available apps shown on the workspace rail (excludes settings tile group). */
+/** Available apps shown on the workspace rail. */
 export function listRailApps(): AppDefinition[] {
   const out: AppDefinition[] = [];
   for (const id of RAIL_PRIMARY_APP_IDS) {

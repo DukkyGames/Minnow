@@ -17,11 +17,17 @@ import {
   cancelResearch,
   fetchResearchDetail,
   fetchResearchResult,
+  fetchResearchStatus,
   normalizeResearchActivityLog,
   researchReportUrl,
   startResearch,
   subscribeToResearchStream,
 } from './client';
+import {
+  clearPersistedActiveResearchRunId,
+  persistActiveResearchRunId,
+  readPersistedActiveResearchRunId,
+} from './active-run-persist';
 import { renderResearchRail, setActiveResearchRow } from './library';
 import {
   initResearchOptionChips,
@@ -336,9 +342,13 @@ function renderRunActions(researchId: string, status: ResearchStatus, query: str
   });
 }
 
-function startClock(): void {
+function startClock(options?: { startedAtMs?: number }): void {
   stopClock();
-  runStartMs = performance.now();
+  if (options?.startedAtMs != null && Number.isFinite(options.startedAtMs)) {
+    runStartMs = performance.now() - (Date.now() - options.startedAtMs);
+  } else {
+    runStartMs = performance.now();
+  }
   clockTimer = setInterval(() => {
     const stats = el('researchRunStats');
     if (!stats || !running) {
@@ -532,6 +542,23 @@ async function selectRun(researchId: string): Promise<void> {
       }
     }
 
+    if (status === 'running') {
+      liveRun = {
+        id: researchId,
+        query,
+        status: 'running',
+        startedAt: data.startedAt,
+      };
+      persistActiveResearchRunId(researchId);
+      setRunningState(true);
+      ledger?.setRunning(true);
+      setRunView('evidence');
+      const startedAtMs = researchStartedAtMs(data);
+      startClock(startedAtMs != null ? { startedAtMs } : undefined);
+      bindResearchStream(researchId, query);
+      return;
+    }
+
     const briefMount = el('researchResultMount');
     if (!briefMount) {
       return;
@@ -623,6 +650,142 @@ function teardownStream(): void {
   runAbort = null;
 }
 
+/** Drop the SSE client only; the server run keeps going. */
+function detachFromActiveResearchRun(): void {
+  teardownStream();
+}
+
+function bindResearchStream(researchId: string, query: string): void {
+  teardownStream();
+  runAbort = new AbortController();
+  streamUnsubscribe = subscribeToResearchStream(researchId, {
+    signal: runAbort.signal,
+    onProgress: (event) => {
+      if (liveRun?.id !== researchId) {
+        return;
+      }
+      ledger?.apply(event);
+    },
+    onEnd: (endEvent) => {
+      const status = endEvent?.status ?? 'done';
+      finishRun(researchId, query, status, endEvent?.message);
+    },
+    onTransportError: (err) => {
+      const msg = err instanceof Error ? err.message : 'Stream error';
+      finishRun(researchId, query, 'error', msg);
+    },
+  });
+}
+
+function researchStartedAtMs(detail: { startedAt?: string }): number | undefined {
+  const raw = detail.startedAt;
+  if (typeof raw === 'string' && raw.trim()) {
+    const t = Date.parse(raw);
+    if (Number.isFinite(t)) {
+      return t;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Follow an in-flight run (new tab, reload, or return from another app).
+ * Replays persisted activity and re-subscribes to SSE.
+ */
+async function attachToRunningResearch(
+  researchId: string,
+  query: string,
+  options: { paintPane?: boolean } = {},
+): Promise<void> {
+  const paintPane = options.paintPane !== false;
+  if (running && liveRun?.id === researchId && streamUnsubscribe) {
+    return;
+  }
+
+  liveRun = {
+    id: researchId,
+    query,
+    status: 'running',
+    startedAt: liveRun?.startedAt ?? new Date().toISOString(),
+  };
+  activeId = researchId;
+  persistActiveResearchRunId(researchId);
+  setRunningState(true);
+
+  let startedAtMs: number | undefined;
+  const evidence = el('researchProgressMount');
+  if (evidence) {
+    try {
+      const data = await fetchResearchDetail(researchId);
+      if (paintPane && activeId !== researchId) {
+        return;
+      }
+      startedAtMs = researchStartedAtMs(data);
+      ledger?.destroy();
+      ledger = new ResearchRunLedger(evidence);
+      const activityLog = normalizeResearchActivityLog(data);
+      if (activityLog.length) {
+        ledger.hydrate(activityLog);
+        ledger.setRunning(true);
+        setEvidenceCount(ledger.getReadCount());
+      } else {
+        ledger.reset();
+      }
+    } catch {
+      ledger?.destroy();
+      ledger = new ResearchRunLedger(evidence);
+      ledger.reset();
+    }
+  }
+
+  if (paintPane) {
+    showRunPane();
+    setRunHeader({ title: query, status: 'running', stats: '0:00' });
+    renderRunActions(researchId, 'running', query);
+    setRunView('evidence');
+    el('researchResultMount')?.replaceChildren();
+  }
+
+  startClock(startedAtMs != null ? { startedAtMs } : undefined);
+  void refreshRail();
+  bindResearchStream(researchId, query);
+}
+
+/** Reconnect after reload or when the Research surface is shown again. */
+async function resumeActiveResearchIfNeeded(): Promise<void> {
+  if (running && liveRun?.id) {
+    if (!streamUnsubscribe) {
+      bindResearchStream(liveRun.id, liveRun.query);
+    }
+    if (!activeId) {
+      activeId = liveRun.id;
+      showRunPane();
+      setRunHeader({ title: liveRun.query, status: 'running' });
+      renderRunActions(liveRun.id, 'running', liveRun.query);
+      setRunView('evidence');
+    }
+    void refreshRail();
+    return;
+  }
+
+  const persistedId = readPersistedActiveResearchRunId();
+  if (!persistedId) {
+    return;
+  }
+
+  try {
+    const status = await fetchResearchStatus(persistedId);
+    if (status.status !== 'running') {
+      clearPersistedActiveResearchRunId();
+      return;
+    }
+    const query = status.query?.trim() || 'Research in progress';
+    await attachToRunningResearch(persistedId, query);
+  } catch {
+    clearPersistedActiveResearchRunId();
+  }
+}
+
 async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<void> {
   if (running) {
     return;
@@ -648,6 +811,7 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
     };
     const { researchId } = await startResearch(body);
 
+    persistActiveResearchRunId(researchId);
     liveRun = {
       id: researchId,
       query,
@@ -672,24 +836,7 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
     startClock();
     void refreshRail();
 
-    runAbort = new AbortController();
-    streamUnsubscribe = subscribeToResearchStream(researchId, {
-      signal: runAbort.signal,
-      onProgress: (event) => {
-        if (liveRun?.id !== researchId) {
-          return;
-        }
-        ledger?.apply(event);
-      },
-      onEnd: (endEvent) => {
-        const status = endEvent?.status ?? 'done';
-        finishRun(researchId, query, status, endEvent?.message);
-      },
-      onTransportError: (err) => {
-        const msg = err instanceof Error ? err.message : 'Stream error';
-        finishRun(researchId, query, 'error', msg);
-      },
-    });
+    bindResearchStream(researchId, query);
   } catch (err) {
     setRunningState(false);
     stopClock();
@@ -716,6 +863,7 @@ function finishRun(
   stopClock();
   ledger?.complete(status, message);
   teardownStream();
+  clearPersistedActiveResearchRunId();
 
   if (liveRun?.id === researchId) {
     liveRun.status = status;
@@ -820,7 +968,7 @@ export function closeResearch(options?: { skipNavigate?: boolean }): void {
     }
     const root = getRoot();
     if (root) {
-      void cancelActiveRun();
+      detachFromActiveResearchRun();
       root.classList.remove('is-open');
       void import('../ui/preview-electron-visibility').then((m) =>
         m.syncElectronPreviewHostVisibility(),
@@ -837,7 +985,7 @@ export function closeResearch(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) {
     return;
   }
-  void cancelActiveRun();
+  detachFromActiveResearchRun();
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
   if (!options?.skipNavigate && window.location.hash.startsWith('#/research')) {
@@ -889,6 +1037,7 @@ export function showResearchPage(options?: OpenResearchOptions): void {
   );
   void refreshRail();
   applyOpenOptions(options);
+  void resumeActiveResearchIfNeeded();
 }
 
 /** Open Research (`#/research` or OS `#/app/research`). */
@@ -919,6 +1068,7 @@ export function openResearch(options?: OpenResearchOptions): void {
   );
   void refreshRail();
   applyOpenOptions(options);
+  void resumeActiveResearchIfNeeded();
 }
 
 function onHashChange(): void {
@@ -1050,6 +1200,7 @@ export function initResearchPage(): void {
   renderResearchStartButton();
   setRunView(runView);
   void refreshRail();
+  void resumeActiveResearchIfNeeded();
   if (!isOsShellEnabled()) {
     window.addEventListener('hashchange', onHashChange);
     if (window.location.hash === '#/research' || window.location.hash.startsWith('#/research/')) {
@@ -1121,4 +1272,5 @@ export function resetResearchPanelStateForTests(): void {
   knownRuns = [];
   controlsBound = false;
   pendingAutoRun = false;
+  clearPersistedActiveResearchRunId();
 }

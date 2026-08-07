@@ -138,8 +138,3 @@ function onHashChange(): void {
     closeScheduler();
   }
 }
-
-/** Menubar shortcut — opens Scheduler as a main-view app. */
-export function openSchedulerFromMenubar(): void {
-  void import('../os/router').then((m) => m.launchApp('scheduler'));
-}

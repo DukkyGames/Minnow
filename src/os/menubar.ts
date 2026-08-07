@@ -1,5 +1,5 @@
 import { getAppById } from './app-registry';
-import { isAppAvailable, subscribeAppPreferences } from './app-preferences';
+import { subscribeAppPreferences } from './app-preferences';
 import {
   getForegroundAppId,
   getOsView,
@@ -14,52 +14,11 @@ import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
 import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
 import { initOsNotificationsMenu } from './notifications-menu';
-import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 import { initShellMenubarChrome } from './menubar-window-controls';
 import { isPhoneWindowSheetOpen } from './shell-chrome';
 import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
 import { openProductWiki } from '../ui/product-wiki';
-
-function formatClock(d: Date): string {
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-/** Tick the menubar clock on minute boundaries and when the window becomes visible again. */
-function startMenubarClock(el: HTMLElement): () => void {
-  const tick = () => {
-    el.textContent = formatClock(new Date());
-  };
-
-  tick();
-
-  let minuteTimer: number | undefined;
-
-  const scheduleNextMinute = () => {
-    const now = new Date();
-    const msUntilNextMinute =
-      (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 50;
-    minuteTimer = window.setTimeout(() => {
-      tick();
-      scheduleNextMinute();
-    }, msUntilNextMinute);
-  };
-
-  scheduleNextMinute();
-
-  const onVisibility = () => {
-    if (document.visibilityState !== 'visible') return;
-    tick();
-    if (minuteTimer !== undefined) clearTimeout(minuteTimer);
-    scheduleNextMinute();
-  };
-  document.addEventListener('visibilitychange', onVisibility);
-
-  return () => {
-    if (minuteTimer !== undefined) clearTimeout(minuteTimer);
-    document.removeEventListener('visibilitychange', onVisibility);
-  };
-}
 
 /** Render the Minnow menubar. Returns cleanup function. */
 export function renderMenubar(root: HTMLElement): () => void {
@@ -136,14 +95,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   modelChipAnchor.className = 'mn-os-mb-model-slot';
   const cleanupModelChip = initMenubarModelChip(modelChipAnchor);
 
-  const schedulerBtn = document.createElement('button');
-  schedulerBtn.type = 'button';
-  schedulerBtn.className = 'mn-os-mb-icon mn-os-mb-scheduler';
-  schedulerBtn.setAttribute('aria-label', 'Scheduler');
-  schedulerBtn.title = 'Scheduler';
-  schedulerBtn.appendChild(createAppIcon('scheduler'));
-  schedulerBtn.addEventListener('click', () => openSchedulerFromMenubar());
-
   const bell = document.createElement('button');
   bell.type = 'button';
   bell.className = 'mn-os-mb-bell';
@@ -177,18 +128,12 @@ export function renderMenubar(root: HTMLElement): () => void {
   wikiBtn.innerHTML = iconHtml('help', { size: 16 });
   wikiBtn.addEventListener('click', () => openProductWiki());
 
-  const timeEl = document.createElement('span');
-  timeEl.className = 'mn-os-mb-time mn-os-mono';
-  timeEl.textContent = formatClock(new Date());
-
   right.append(
     modelChipAnchor,
-    schedulerBtn,
     bell,
     updateSlot,
     wikiBtn,
     settingsBtn,
-    timeEl,
   );
   root.append(left, right);
 
@@ -225,9 +170,6 @@ export function renderMenubar(root: HTMLElement): () => void {
     }
     chatToggle.removeAttribute('aria-pressed');
 
-    // Scheduler shortcut follows the same availability rule as the dock.
-    schedulerBtn.hidden = !isAppAvailable('scheduler');
-
     void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 
     const unread = getUnreadNotificationCount();
@@ -258,14 +200,11 @@ export function renderMenubar(root: HTMLElement): () => void {
     if (!record.read) ringBell();
   });
 
-  const stopClock = startMenubarClock(timeEl);
-
   return () => {
     unsub();
     unsubInbox();
     unsubPrefs();
     unsubNotif();
-    stopClock();
     cleanupModelChip();
     cleanupNotifications();
     cleanupUpdatePill();

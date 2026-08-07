@@ -21,6 +21,7 @@
   border-right: 1px solid var(--mn-border);
   z-index: 30;
   position: relative;
+  overflow: visible;
 }
 
 #osAppRail[hidden] {
@@ -35,14 +36,6 @@
   width: 100%;
   padding: 0 4px;
   box-sizing: border-box;
-}
-
-.mn-os-app-rail__divider {
-  width: 24px;
-  height: 1px;
-  margin: 4px 0;
-  background: var(--mn-border);
-  flex: none;
 }
 
 .mn-os-app-rail__btn {
@@ -94,18 +87,20 @@
 }
 
 .mn-os-app-rail__tooltip {
-  position: absolute;
-  z-index: 60;
+  position: fixed;
+  /* Above #minnowOsRoot (20) and chat context menus (100020) when portaled to body */
+  z-index: 100021;
   pointer-events: none;
   max-width: 200px;
   padding: 6px 10px;
   font-size: 12px;
   line-height: 1.35;
   color: var(--mn-fg);
-  background: var(--mn-surface-elevated);
+  /* Solid popover surface (not --mn-surface-elevated veil) so labels stay readable over stage UI */
+  background: var(--mn-bg);
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  box-shadow: var(--mn-shadow-popover, 0 8px 24px rgba(0, 0, 0, 0.18));
+  box-shadow: var(--shadow-popover-soft);
   white-space: nowrap;
 }
 
@@ -142,12 +137,6 @@ html.mn-narrow.minnow-os-enabled .mn-os-app-rail__nav {
   justify-content: space-around;
   gap: 2px;
   padding: 0 4px;
-}
-
-html.mn-narrow.minnow-os-enabled .mn-os-app-rail__divider {
-  width: 1px;
-  height: 24px;
-  margin: 0 2px;
 }
 
 html.mn-narrow.minnow-os-enabled .mn-os-app-rail__btn {

@@ -32,8 +32,6 @@ import type { AppId } from './types';
 
 
 
-const RAIL_SETTINGS_ID: AppId = 'settings';
-
 const TOOLTIP_DELAY_MS = 500;
 
 
@@ -76,20 +74,15 @@ function clearTooltipTimer(): void {
 
 
 
-function ensureTooltipLayer(root: HTMLElement): HTMLDivElement {
-
-  if (tooltipEl && tooltipEl.parentElement === root) return tooltipEl;
-
+/** Body portal so labels paint above chat/code side rails (stack above #minnowOsRoot). */
+function ensureTooltipLayer(): HTMLDivElement {
+  if (tooltipEl?.isConnected) return tooltipEl;
+  tooltipEl?.remove();
   tooltipEl = document.createElement('div');
-
   tooltipEl.className = 'mn-os-app-rail__tooltip';
-
   tooltipEl.hidden = true;
-
-  root.appendChild(tooltipEl);
-
+  document.body.appendChild(tooltipEl);
   return tooltipEl;
-
 }
 
 
@@ -107,60 +100,36 @@ function hideRailTooltip(): void {
 
 
 function positionRailTooltip(anchor: HTMLElement, layer: HTMLDivElement): void {
-
-  const rail = anchor.closest('#osAppRail');
-
-  if (!rail) return;
-
-  const railBox = rail.getBoundingClientRect();
-
   const anchorBox = anchor.getBoundingClientRect();
-
   const isBottomRail = document.documentElement.classList.contains('mn-narrow');
 
   layer.style.left = '';
-
   layer.style.top = '';
-
   layer.style.bottom = '';
-
+  layer.style.right = '';
   layer.style.transform = '';
 
-
-
   if (isBottomRail) {
-
-    const centerX = anchorBox.left + anchorBox.width / 2 - railBox.left;
-
+    const centerX = anchorBox.left + anchorBox.width / 2;
     layer.style.left = `${centerX}px`;
-
-    layer.style.bottom = `${railBox.bottom - anchorBox.top + 8}px`;
-
+    layer.style.bottom = `${window.innerHeight - anchorBox.top + 8}px`;
     layer.style.transform = 'translateX(-50%)';
-
     return;
-
   }
 
-
-
-  const centerY = anchorBox.top + anchorBox.height / 2 - railBox.top;
-
-  layer.style.left = `${anchorBox.right - railBox.left + 10}px`;
-
+  const centerY = anchorBox.top + anchorBox.height / 2;
+  layer.style.left = `${anchorBox.right + 10}px`;
   layer.style.top = `${centerY}px`;
-
   layer.style.transform = 'translateY(-50%)';
-
 }
 
 
 
-function showRailTooltip(root: HTMLElement, anchor: HTMLElement, text: string): void {
+function showRailTooltip(anchor: HTMLElement, text: string): void {
 
   if (isCoarsePointer()) return;
 
-  const layer = ensureTooltipLayer(root);
+  const layer = ensureTooltipLayer();
 
   layer.textContent = text;
 
@@ -174,7 +143,7 @@ function showRailTooltip(root: HTMLElement, anchor: HTMLElement, text: string): 
 
 
 
-function scheduleRailTooltip(root: HTMLElement, anchor: HTMLElement, text: string): void {
+function scheduleRailTooltip(anchor: HTMLElement, text: string): void {
 
   if (isCoarsePointer()) return;
 
@@ -184,7 +153,7 @@ function scheduleRailTooltip(root: HTMLElement, anchor: HTMLElement, text: strin
 
     tooltipTimer = null;
 
-    showRailTooltip(root, anchor, text);
+    showRailTooltip(anchor, text);
 
   }, TOOLTIP_DELAY_MS);
 
@@ -192,9 +161,9 @@ function scheduleRailTooltip(root: HTMLElement, anchor: HTMLElement, text: strin
 
 
 
-function bindRailTooltip(root: HTMLElement, btn: HTMLButtonElement, text: string): void {
+function bindRailTooltip(btn: HTMLButtonElement, text: string): void {
 
-  const onEnter = (): void => scheduleRailTooltip(root, btn, text);
+  const onEnter = (): void => scheduleRailTooltip(btn, text);
 
   const onLeave = (): void => {
 
@@ -202,7 +171,7 @@ function bindRailTooltip(root: HTMLElement, btn: HTMLButtonElement, text: string
 
   };
 
-  const onFocus = (): void => showRailTooltip(root, btn, text);
+  const onFocus = (): void => showRailTooltip(btn, text);
 
   const onBlur = (): void => {
 
@@ -225,15 +194,9 @@ function bindRailTooltip(root: HTMLElement, btn: HTMLButtonElement, text: string
 
 
 function buildRailButton(
-
-  root: HTMLElement,
-
   appId: AppId,
-
   label: string,
-
   tooltip: string,
-
 ): HTMLButtonElement {
 
   const def = getAppById(appId);
@@ -252,7 +215,7 @@ function buildRailButton(
 
   btn.appendChild(icon);
 
-  bindRailTooltip(root, btn, tooltip);
+  bindRailTooltip(btn, tooltip);
 
   btn.addEventListener('click', () => launchApp(appId));
 
@@ -337,45 +300,11 @@ export function initAppRail(root: HTMLElement): () => void {
 
     for (const app of listRailApps()) {
 
-      const btn = buildRailButton(root, app.id, app.name, app.tag);
+      const btn = buildRailButton(app.id, app.name, app.tag);
 
       tileByAppId.set(app.id, btn);
 
       nav.appendChild(btn);
-
-    }
-
-
-
-    const divider = document.createElement('div');
-
-    divider.className = 'mn-os-app-rail__divider';
-
-    divider.setAttribute('aria-hidden', 'true');
-
-    nav.appendChild(divider);
-
-
-
-    const settings = getAppById(RAIL_SETTINGS_ID);
-
-    if (settings) {
-
-      const settingsBtn = buildRailButton(
-
-        root,
-
-        RAIL_SETTINGS_ID,
-
-        settings.name,
-
-        settings.tag,
-
-      );
-
-      tileByAppId.set(RAIL_SETTINGS_ID, settingsBtn);
-
-      nav.appendChild(settingsBtn);
 
     }
 
@@ -424,12 +353,14 @@ export function initAppRail(root: HTMLElement): () => void {
   };
 
   window.addEventListener('resize', onLayoutChange, { passive: true });
+  window.addEventListener('scroll', onLayoutChange, { passive: true, capture: true });
 
 
 
   return () => {
 
     window.removeEventListener('resize', onLayoutChange);
+    window.removeEventListener('scroll', onLayoutChange, true);
 
     unsubInstances();
 
@@ -439,9 +370,11 @@ export function initAppRail(root: HTMLElement): () => void {
 
     hideRailTooltip();
 
-    root.replaceChildren();
+    tooltipEl?.remove();
 
     tooltipEl = null;
+
+    root.replaceChildren();
 
   };
 

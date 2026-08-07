@@ -106,7 +106,7 @@ Mark each section **Pass / Fail / Skip (reason)**.
 ### First desktop minute
 
 - [ ] Dock shows eight apps: Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings
-- [ ] Menubar: model chip, notifications bell, clock, settings gear
+- [ ] Menubar: model chip, notifications bell, settings gear
 - [ ] Concierge send routes or starts a chat (online routing or offline keyword fallback)
 - [ ] Status pill shows Ready (not stuck loading)
 

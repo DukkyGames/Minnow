@@ -18,7 +18,7 @@ In **Settings → General → Network access → Paired devices**, select **Revo
 
 ## Companion layout
 
-At 640px and narrower, a paired non-host browser opens Chat with a mode picker, notifications, and Scheduler access. Desktop-only app navigation, outputs, browser automation, and terminal chrome are omitted. Mutating tools require approval on the companion even when the shared host permission is set to Full.
+At 640px and narrower, a paired non-host browser opens Chat with a mode picker and notifications. Desktop-only app navigation, outputs, browser automation, and terminal chrome are omitted. Mutating tools require approval on the companion even when the shared host permission is set to Full.
 
 Wider tablets and desktop browsers retain the full released-app shell. Calendar and Email do not appear while their developer release state is hidden.
 

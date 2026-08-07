@@ -200,8 +200,7 @@ html.minnow-os-enabled {
   color: var(--os-text-dim);
 }
 
-.mn-os-mb-appname .icon-svg,
-.mn-os-mb-scheduler .icon-svg {
+.mn-os-mb-appname .icon-svg {
   --mn-icon-size: 14px;
 }
 
@@ -661,14 +660,6 @@ html.minnow-os-enabled {
   display: none !important;
 }
 
-.mn-os-mb-time {
-  font-size: 12.5px;
-  color: var(--os-text-dim);
-  min-width: 56px;
-  text-align: right;
-  font-family: var(--font-mono);
-}
-
 /* ---------- frameless Electron shell menubar ---------- */
 
 html.is-electron-shell .mn-os-menubar--shell-frameless {
@@ -1104,10 +1095,6 @@ html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
     display: none;
   }
 
-  .mn-os-mb-time {
-    display: none;
-  }
-
   .mn-os-mb-icon,
   .mn-os-mb-bell,
   .mn-os-mb-workspace-slot .workspace-btn.icon-btn {
@@ -1117,13 +1104,6 @@ html.mn-phone.mn-os-mobile-desktop-chat-rail #osDesktopLayer {
 
   .mn-os-notif-menu {
     max-width: calc(100vw - max(12px, env(safe-area-inset-left, 0px)) - max(12px, env(safe-area-inset-right, 0px)));
-  }
-}
-
-/* Ultra-narrow phones: drop scheduler to keep workspace + inbox reachable */
-@media (max-width: 400px) {
-  .mn-os-mb-scheduler {
-    display: none;
   }
 }
 

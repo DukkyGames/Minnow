@@ -1030,6 +1030,38 @@ function researchListSortTime(row) {
 }
 
 /**
+ * In-memory runs still executing (not yet persisted to disk).
+ * @returns {object[]}
+ */
+export function listInMemoryRunningResearch() {
+  /** @type {object[]} */
+  const items = [];
+  for (const state of tasks.values()) {
+    if (state.status !== 'running' || state.archived) {
+      continue;
+    }
+    const sources = Array.isArray(state.sources) ? state.sources : [];
+    const stats =
+      state.stats && typeof state.stats === 'object'
+        ? /** @type {Record<string, unknown>} */ (state.stats)
+        : {};
+    items.push({
+      id: state.id,
+      query: state.query,
+      category: typeof state.category === 'string' ? state.category : '',
+      source_count: sources.length,
+      status: 'running',
+      duration: '',
+      rounds: stats.Rounds ?? '',
+      started_at: state.startedAt,
+      completed_at: null,
+      archived: false,
+    });
+  }
+  return items;
+}
+
+/**
  * @param {{ search?: string; sort?: string; limit?: number; archived?: boolean }} [opts]
  * @returns {Promise<{ research: object[]; total: number }>}
  */
@@ -1087,6 +1119,18 @@ export async function listResearchLibrary(opts = {}) {
       });
     } catch {
       continue;
+    }
+  }
+
+  if (!archived) {
+    for (const live of listInMemoryRunningResearch()) {
+      const q = typeof live.query === 'string' ? live.query : '';
+      if (search && !q.toLowerCase().includes(search)) {
+        continue;
+      }
+      if (!items.some((row) => row.id === live.id)) {
+        items.push(live);
+      }
     }
   }
 
