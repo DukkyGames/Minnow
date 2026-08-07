@@ -144,7 +144,7 @@ describe('calendar window shell', () => {
     assert.equal(stage?.classList.contains('is-in-app-fullscreen'), true);
 
     const content = document.getElementById('calendarView');
-    assert.ok(content?.classList.contains('is-active'));
+    assert.ok(content?.classList.contains('is-open'));
     assert.equal(content?.parentElement?.id, 'osAppsLayer');
   });
 

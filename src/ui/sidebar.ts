@@ -842,7 +842,9 @@ export function renderSidebar(): void {
         members,
         members.length,
       );
-      if (!group.collapsed && members.length > 0) {
+      const hideMembersInIconRail =
+        sessionState.sidebarCollapsed === true && Boolean(group.orchestrateBoard);
+      if (!group.collapsed && members.length > 0 && !hideMembersInIconRail) {
         const membersEl = document.createElement('div');
         membersEl.className = 'chat-group-members';
         membersEl.setAttribute('role', 'group');
