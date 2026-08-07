@@ -25,9 +25,9 @@
 .code-views__btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 0;
   min-height: 30px;
-  padding: 5px 11px;
+  padding: 5px 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -40,7 +40,23 @@
   cursor: pointer;
   transition:
     background 0.16s var(--ease-out),
-    color 0.16s var(--ease-out);
+    color 0.16s var(--ease-out),
+    gap 0.26s var(--ease-out),
+    padding 0.26s var(--ease-out);
+}
+
+/* Collapsed width; expands on hover/focus so sibling icons slide aside. */
+.code-views__label-track {
+  display: grid;
+  grid-template-columns: 0fr;
+  transition: grid-template-columns 0.26s var(--ease-out);
+}
+
+.code-views__label {
+  overflow: hidden;
+  min-width: 0;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-out);
 }
 
 .code-views__btn .icon-svg {
@@ -67,6 +83,22 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .code-views__btn:hover,
+  .code-views__btn:focus-visible {
+    gap: 7px;
+    padding: 5px 11px;
+  }
+
+  .code-views__btn:hover .code-views__label-track,
+  .code-views__btn:focus-visible .code-views__label-track {
+    grid-template-columns: 1fr;
+  }
+
+  .code-views__btn:hover .code-views__label,
+  .code-views__btn:focus-visible .code-views__label {
+    opacity: 1;
+  }
+
   .code-views__btn:hover {
     background: var(--mn-surface-elevated);
     color: var(--mn-fg);
@@ -78,6 +110,12 @@
 
   .code-views__btn[aria-pressed='true']:hover,
   .code-views__btn[aria-current='page']:hover {
+    background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+    color: var(--mn-accent);
+  }
+
+  .code-views__btn[aria-pressed='true']:focus-visible,
+  .code-views__btn[aria-current='page']:focus-visible {
     background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
     color: var(--mn-accent);
   }
@@ -95,18 +133,14 @@
 
 @container code-stage (max-width: 720px) {
   .code-views__btn {
-    padding: 5px 8px;
+    padding: 5px 7px;
   }
 
-  .code-views__label {
-    /* Name stays in the accessible tree via the label element's text. */
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  @media (hover: hover) and (pointer: fine) {
+    .code-views__btn:hover,
+    .code-views__btn:focus-visible {
+      padding: 5px 10px;
+    }
   }
 }
 
@@ -243,7 +277,24 @@ html.mn-narrow .code-status-bar__btn {
 
 @media (prefers-reduced-motion: reduce) {
   .code-views__btn,
+  .code-views__label-track,
+  .code-views__label,
   .code-status-bar__btn {
     transition: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .code-views__btn:focus-visible {
+      gap: 7px;
+      padding: 5px 11px;
+    }
+
+    .code-views__btn:focus-visible .code-views__label-track {
+      grid-template-columns: 1fr;
+    }
+
+    .code-views__btn:focus-visible .code-views__label {
+      opacity: 1;
+    }
   }
 }
