@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T04:33:00.566Z",
+  "generatedAt": "2026-08-07T05:17:07.538Z",
   "skills": [
     {
       "id": "ask-user",
@@ -74,9 +74,21 @@
       "source": "builtin"
     },
     {
+      "id": "orchestrate-plan",
+      "label": "Orchestrate Plan",
+      "description": "Runs multi-phase plans by delegating each phase to sub-agents and gating progress on a dedicated verification pass after every phase. The lead agent does not implement product code. Use when the user asks to orchestrate a plan, execute a plan via sub-agents, delegate phases, or run plan-and-verify loops.",
+      "source": "builtin"
+    },
+    {
       "id": "partymode",
       "label": "Partymode",
       "description": "Party mode — Bird Man, your local party animal. Cool-dude persona with maximum vibes. Invoke with /partymode. Stays pinned until dismissed or the user says stop party.",
+      "source": "builtin"
+    },
+    {
+      "id": "plan-work",
+      "label": "Plan Work",
+      "description": "Produces implementation plans in documentation/plans/ through discovery, codebase research via sub-agents, and a review pass before handoff. The lead agent does not write product code. Use when the user asks for a plan, roadmap, phased breakdown, implementation spec, or to plan a feature before building; pair with orchestrate-plan for execution.",
       "source": "builtin"
     },
     {
