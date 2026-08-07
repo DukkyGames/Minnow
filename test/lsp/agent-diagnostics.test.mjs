@@ -110,9 +110,19 @@ describe('agent LSP diagnostics', () => {
     setLspDiagnosticWaitForTest({ quietPeriodMs: 50, totalTimeoutMs: 400 });
     const rel = 'test/fixtures/never-publishes.fake';
     const result = await getLspDiagnostics(rel);
-    assert.match(result, /Diagnostics unavailable/);
-    assert.match(result, /no publishDiagnostics received/i);
-    assert.doesNotMatch(result, /No LSP diagnostics for/);
+    assert.match(result, /No LSP diagnostics for test\/fixtures\/never-publishes\.fake \(fake\)/);
+    assert.doesNotMatch(result, /Diagnostics unavailable/);
+  });
+
+  test('cold init does not consume diagnostic total timeout before document sync', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') return;
+
+    shutdownAllLsp();
+    setLspDiagnosticWaitForTest({ quietPeriodMs: 50, totalTimeoutMs: 900 });
+    const rel = 'test/fixtures/cold-init-ordering.fake';
+    const result = await getLspDiagnostics(rel);
+    assert.match(result, /Cold init ordering ok/);
+    assert.doesNotMatch(result, /Diagnostics unavailable/);
   });
 
   test('reads saved disk without perturbing editor-scoped sync', async () => {

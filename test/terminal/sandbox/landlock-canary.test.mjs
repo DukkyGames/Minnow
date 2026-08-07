@@ -156,4 +156,32 @@ describe('sandbox landlock canaries', { concurrency: false }, () => {
       await fs.rm(marker, { force: true });
     }
   });
+
+  it('canary: redirect to /dev/null succeeds under Landlock when helper+ABI present', async () => {
+    if (!isLinux) return;
+    if (!landlockReady) {
+      assert.equal(landlockReady, false);
+      return;
+    }
+
+    const resolved = resolveOneShotSpawn({
+      command: 'echo sandbox-dev-null > /dev/null',
+      args: [],
+      platform: 'linux',
+    });
+    const policy = buildWorkspacePolicy({
+      workspaceRoot: repoRoot,
+      cwd: repoRoot,
+      minnowHome: homeDir,
+      home: os.homedir(),
+      platform: 'linux',
+    });
+    const sandboxed = wrapSandbox(resolved, policy, { platform: 'linux' });
+    const result = spawnSync(sandboxed.command, sandboxed.args, {
+      encoding: 'utf8',
+      cwd: repoRoot,
+      timeout: 10_000,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  });
 });

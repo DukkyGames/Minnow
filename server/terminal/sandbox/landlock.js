@@ -128,6 +128,15 @@ export function defaultSystemReadRoots() {
 }
 
 /**
+ * Device nodes that are not under policy writeRoots but must stay writable
+ * (shell redirects, tty ioctl). Mirrors Seatbelt literals in seatbelt.js.
+ * @returns {readonly string[]}
+ */
+export function landlockDeviceWriteAllowlist() {
+  return ['/dev/null', '/dev/zero', '/dev/tty'];
+}
+
+/**
  * Shell / toolchain files under $HOME that must stay readable without granting
  * the entire home (which would also allow ~/.minnow / ~/.ssh via Landlock
  * parent→child inheritance). Only emit paths that exist as regular files —
@@ -222,7 +231,7 @@ export function buildHomeReadAllowlist(policy) {
  * @returns {{ writePaths: string[], readPaths: string[] }}
  */
 export function buildLandlockPathLists(policy) {
-  const writePaths = [...policy.writeRoots];
+  const writePaths = [...policy.writeRoots, ...landlockDeviceWriteAllowlist()];
   const readSet = new Set([
     ...defaultSystemReadRoots(),
     ...policy.writeRoots,

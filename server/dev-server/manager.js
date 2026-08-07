@@ -53,8 +53,90 @@ import { probePort } from './ports.js';
 const byWorkspaceKey = new Map();
 
 const HEALTH_TIMEOUT_MS = 4_000;
-/** Max time to wait in `starting` before promoting to error when health never passes. */
-const STARTING_TIMEOUT_MS = 120_000;
+const HEALTH_RECONCILE_INTERVAL_MS = 250;
+
+/** Max time in `starting` before error when health never passes (override via env). */
+function startingTimeoutMs() {
+  const raw = process.env.MINNOW_DEV_SERVER_START_TIMEOUT_MS;
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 45_000;
+}
+
+/** @type {Map<string, ReturnType<typeof setInterval>>} */
+const healthReconcileTimers = new Map();
+
+/** @type {((healthUrl: string) => Promise<boolean> | boolean) | null} */
+let probeHealthOverrideForTests = null;
+
+/**
+ * @param {string} workspaceKey
+ * @param {string} serverId
+ */
+function healthReconcileKey(workspaceKey, serverId) {
+  return `${workspaceKey}\0${serverId}`;
+}
+
+/**
+ * @param {string} workspaceKey
+ * @param {string} serverId
+ */
+function stopHealthReconcile(workspaceKey, serverId) {
+  const key = healthReconcileKey(workspaceKey, serverId);
+  const timer = healthReconcileTimers.get(key);
+  if (timer) {
+    clearInterval(timer);
+    healthReconcileTimers.delete(key);
+  }
+}
+
+/**
+ * Background ticks until status leaves `starting` (pattern: servers/manager waitForHealth).
+ * @param {ManagedDevServer} row
+ * @param {string} healthUrl
+ */
+function ensureHealthReconcileScheduled(row, healthUrl) {
+  if (!healthUrl || row.status !== 'starting') return;
+  const key = healthReconcileKey(row.workspaceKey, row.serverId);
+  if (healthReconcileTimers.has(key)) return;
+
+  const tick = async () => {
+    const wsMap = byWorkspaceKey.get(row.workspaceKey);
+    const current = wsMap?.get(row.serverId);
+    if (!current || current.status !== 'starting') {
+      stopHealthReconcile(row.workspaceKey, row.serverId);
+      return;
+    }
+    const url =
+      current.healthUrl && typeof current.healthUrl === 'string' ? current.healthUrl : healthUrl;
+    await reconcileHealth(current, url);
+    if (current.status !== 'starting') {
+      stopHealthReconcile(row.workspaceKey, row.serverId);
+    }
+  };
+
+  const interval = setInterval(() => {
+    void tick();
+  }, HEALTH_RECONCILE_INTERVAL_MS);
+  if (typeof interval.unref === 'function') interval.unref();
+  healthReconcileTimers.set(key, interval);
+  void tick();
+}
+
+/**
+ * Whether the managed row still has a live child (in-memory run or PID).
+ * @param {ManagedDevServer} row
+ */
+function isManagedChildAlive(row) {
+  if (row.runId) {
+    const run = getRun(row.runId);
+    if (run && !run.finished) return true;
+  }
+  if (row.pid != null && isPidAlive(row.pid)) return true;
+  return false;
+}
 
 /**
  * @param {string} workspaceRoot
@@ -252,6 +334,9 @@ async function reconcileRow(row) {
  */
 async function probeHealth(healthUrl) {
   if (!healthUrl || typeof healthUrl !== 'string') return true;
+  if (probeHealthOverrideForTests) {
+    return Boolean(await probeHealthOverrideForTests(healthUrl));
+  }
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
@@ -291,6 +376,9 @@ async function applyStartedRun(row, started, guide) {
   }
 
   await saveState(row);
+  if (row.status === 'starting' && guide.healthUrl) {
+    ensureHealthReconcileScheduled(row, guide.healthUrl);
+  }
 }
 
 /**
@@ -342,17 +430,14 @@ async function reconcileHealth(row, healthUrl) {
   let healthOk = null;
   if ((row.status === 'running' || row.status === 'starting') && healthUrl) {
     healthOk = await probeHealth(healthUrl);
-    if (row.status === 'starting' && healthOk) {
-      const run = row.runId ? getRun(row.runId) : null;
-      if (run && !run.finished) {
-        row.status = 'running';
-        await saveState(row);
-      }
+    if (row.status === 'starting' && healthOk && isManagedChildAlive(row)) {
+      row.status = 'running';
+      await saveState(row);
     } else if (
       row.status === 'starting' &&
       healthOk === false &&
       row.startedAt &&
-      Date.now() - row.startedAt > STARTING_TIMEOUT_MS
+      Date.now() - row.startedAt > startingTimeoutMs()
     ) {
       if (row.runId) {
         const run = getRun(row.runId);
@@ -408,6 +493,9 @@ export async function getDevServerStatusById(
     ? (row.healthUrl ?? effective?.healthUrl ?? def?.healthUrl ?? startup.guide?.healthUrl)
     : (effective?.healthUrl ?? def?.healthUrl ?? startup.guide?.healthUrl ?? row.healthUrl);
   const healthOk = await reconcileHealth(row, healthUrl);
+  if (row.status === 'starting' && healthUrl) {
+    ensureHealthReconcileScheduled(row, healthUrl);
+  }
 
   const hasGuide = Boolean(def?.command || (serverId === PRIMARY_DEV_SERVER_ID && startup.guide));
   const displayPort = live
@@ -575,6 +663,7 @@ export async function startDevServerById(
   const cwdRel = effective.cwd ?? '.';
 
   row.status = 'starting';
+  row.startedAt = Date.now();
   row.command = effective.command;
   row.healthUrl = effective.healthUrl;
   row.port = effective.port;
@@ -652,6 +741,7 @@ export async function stopDevServerById(
     return { ok: true, status: row.status };
   }
 
+  stopHealthReconcile(row.workspaceKey, row.serverId);
   row.status = 'stopping';
   await saveState(row);
 
@@ -691,6 +781,7 @@ export async function stopDevServerById(
   row.pid = null;
   row.worktreeRoot = undefined;
   row.error = undefined;
+  row.startedAt = undefined;
   await saveState(row);
 
   return { ok: true, status: row.status };
@@ -724,10 +815,12 @@ async function clearRowForRunId(runId) {
   for (const wsMap of byWorkspaceKey.values()) {
     for (const row of wsMap.values()) {
       if (row.runId === runId) {
+        stopHealthReconcile(row.workspaceKey, row.serverId);
         row.status = 'stopped';
         row.runId = undefined;
         row.pid = null;
         row.orphaned = false;
+        row.startedAt = undefined;
         await saveState(row);
         return;
       }
@@ -861,7 +954,17 @@ export async function toolStopCommand(args) {
 
 /** Clear in-memory dev-server rows between tests (does not touch persisted config). */
 export function resetDevServerManagerForTests() {
+  for (const timer of healthReconcileTimers.values()) {
+    clearInterval(timer);
+  }
+  healthReconcileTimers.clear();
+  probeHealthOverrideForTests = null;
   byWorkspaceKey.clear();
+}
+
+/** @param {(healthUrl: string) => Promise<boolean> | boolean} fn */
+export function setProbeHealthOverrideForTests(fn) {
+  probeHealthOverrideForTests = fn;
 }
 
 export { readStartupGuide };

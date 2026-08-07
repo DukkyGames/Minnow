@@ -104,6 +104,18 @@ export function extractWslInnerSpawn(spawnTarget) {
  * @returns {{ command: string, args: string[] }}
  */
 export function recoverCommandFromWinSpawn(spawnTarget) {
+  const inner = extractWslInnerSpawn(spawnTarget);
+  if (inner) {
+    const baseInner = path.basename(String(inner.command || '')).toLowerCase();
+    if (baseInner === 'bash' || baseInner === 'sh') {
+      const cIdx = inner.args.findIndex((a) => a === '-c' || a === '-C');
+      if (cIdx >= 0 && typeof inner.args[cIdx + 1] === 'string') {
+        return { command: inner.args[cIdx + 1], args: [] };
+      }
+    }
+    return { command: inner.command, args: [...inner.args] };
+  }
+
   const args = Array.isArray(spawnTarget.args) ? spawnTarget.args : [];
   const base = path.basename(String(spawnTarget.command || '')).toLowerCase();
   if (base === 'cmd.exe' || base === 'cmd') {

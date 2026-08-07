@@ -17,6 +17,8 @@ import {
 } from '../../server/terminal-runner.js';
 import { toolStopBackgroundCommand } from '../../server/dev-server/manager.js';
 import { executeServerTool } from '../../server/runtime/tools-middleware.js';
+import { listWslDistros } from '../../server/terminal/wsl.js';
+import { spawnSync } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
@@ -26,6 +28,32 @@ function longRunningCommand() {
     return 'powershell -NoProfile -Command "Start-Sleep -Seconds 120"';
   }
   return 'sleep 120';
+}
+
+function wslLiveReady() {
+  if (process.platform !== 'win32') return false;
+  try {
+    const { distros } = listWslDistros();
+    if (!distros.length) return false;
+    const probe = spawnSync('wsl.exe', ['-e', 'true'], { timeout: 10_000 });
+    return probe.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+function wslShellProfile() {
+  const { defaultDistro } = listWslDistros();
+  const distro = defaultDistro ?? 'Ubuntu';
+  return {
+    id: `wsl:${distro}`,
+    label: `WSL ${distro}`,
+    shell: 'wsl.exe',
+    args: [],
+    platform: 'win32',
+    runtime: 'wsl',
+    distro,
+  };
 }
 
 describe('execute_command background lifecycle', () => {
@@ -119,4 +147,24 @@ describe('execute_command background lifecycle', () => {
     assert.equal(parsed.runId, started.runId);
   });
 
+  it('WSL background one-shot preserves $HOME expansion', { skip: !wslLiveReady() }, async () => {
+    const started = await createBackgroundRun({
+      command: 'echo $HOME',
+      cwd: repoRoot,
+      shell: false,
+      source: 'agent',
+      logSubdir: 'terminal',
+      shellProfile: wslShellProfile(),
+    });
+
+    await new Promise((r) => setTimeout(r, 2000));
+    const snapshot = await readCommandLogSnapshot(started.runId);
+    await stopActiveRun(started.runId);
+
+    const combined = String(snapshot.output ?? '').trim();
+    assert.ok(
+      combined.startsWith('/'),
+      `expected WSL home in log, got: ${combined.slice(0, 120)}`,
+    );
+  });
 });

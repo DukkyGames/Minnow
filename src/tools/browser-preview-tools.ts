@@ -371,11 +371,15 @@ export async function browserPreviewScreenshot(instance?: string): Promise<ToolE
   try {
     const tabId = await ensureBrowserPreviewTab(instance);
     const api = previewApi();
+    const { prepareElectronPreviewForCapture, pollPreviewGuestUntilIdle } = await import(
+      '../ui/preview-capture-ready'
+    );
+    await prepareElectronPreviewForCapture();
+    await pollPreviewGuestUntilIdle(() => api.getInfo(tabId, instance));
+
     const info = await api.getInfo(tabId, instance);
     const pageUrl = (info.url ?? '').trim();
     if (!pageUrl || pageUrl === 'about:blank') {
-      const { showPreviewSplit } = await import('../ui/file-layout');
-      showPreviewSplit();
       return { content: BLANK_PAGE_SCREENSHOT_MESSAGE };
     }
 

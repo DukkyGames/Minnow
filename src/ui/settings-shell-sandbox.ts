@@ -94,7 +94,7 @@ export async function renderShellSandboxSettings(mount: HTMLElement): Promise<vo
   const hintRequire = el(
     'p',
     'settings-field-hint settings-filesystem-hint',
-    'Fail closed when the sandbox cannot apply — no silent unsandboxed fallback. Boards default to Require under Autopilot. On Windows, install WSL2 with a Landlock-capable distro (Minnow ships the Linux helper and installs it into the distro on first use).',
+    'Fail closed when the sandbox cannot apply — no silent unsandboxed fallback. Boards default to Require under Autopilot. On Windows, install WSL2 with a Landlock-capable distro (Minnow ships the Linux helper and installs it into the distro on first use). Sandboxed agent shells run inside WSL — install node, python3, and git in that Linux environment; Windows-only toolchains on the host are not used.',
   );
 
   function refreshHints(mode: ShellSandboxMode): void {

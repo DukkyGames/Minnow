@@ -55,7 +55,11 @@ export function toolRunImpeccable(args, appRoot, projectRoot) {
     });
   }
 
-  const target = typeof args?.target === 'string' ? args.target.trim() : '';
+  const targetExplicit = typeof args?.target === 'string' && args.target.trim() !== '';
+  let target = targetExplicit ? args.target.trim() : '';
+  if (!targetExplicit && command === 'detect') {
+    target = '.';
+  }
 
   if (isCliCommand(command)) {
     return runBundledImpeccableCli(command, target, appRoot, projectRoot);
@@ -147,7 +151,10 @@ function runBundledScript(command, target, appRoot, projectRoot) {
  */
 function spawnWithCapture(cmd, args, options, commandLabel, projectRoot, spawnLabel) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, options);
+    const child = spawn(cmd, args, {
+      ...options,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     let stdout = '';
     let stderr = '';
@@ -173,7 +180,7 @@ function spawnWithCapture(cmd, args, options, commandLabel, projectRoot, spawnLa
       const relRoot = path.basename(projectRoot) === 'Minnow' ? '.' : projectRoot;
       if (timedOut) {
         resolve({
-          result: `Error: run_impeccable timed out after ${IMPECCABLE_TIMEOUT_MS / 1000}s`,
+          result: `Error: run_impeccable (${commandLabel} via ${spawnLabel}) timed out after ${IMPECCABLE_TIMEOUT_MS / 1000}s (cwd ${relRoot})`,
         });
         return;
       }

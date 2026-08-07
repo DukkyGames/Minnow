@@ -208,6 +208,58 @@ async function searchBrave(query: string, apiKey: string): Promise<string> {
   return `Brave search results for "${query}":\n\n${lines.join('\n\n')}`;
 }
 
+type WikipediaQueryPage = {
+  title?: string;
+  description?: string;
+  extract?: string;
+};
+
+/** Loads short descriptions/extracts for article titles (best-effort; empty map on failure). */
+async function fetchWikipediaDescriptionsByTitle(titles: string[]): Promise<Map<string, string>> {
+  const byTitle = new Map<string, string>();
+  if (!titles.length) {
+    return byTitle;
+  }
+
+  const queryUrl = new URL('https://en.wikipedia.org/w/api.php');
+  queryUrl.searchParams.set('action', 'query');
+  queryUrl.searchParams.set('titles', titles.join('|'));
+  queryUrl.searchParams.set('prop', 'description|extracts');
+  queryUrl.searchParams.set('exintro', '1');
+  queryUrl.searchParams.set('explaintext', '1');
+  queryUrl.searchParams.set('exsentences', '2');
+  queryUrl.searchParams.set('format', 'json');
+  queryUrl.searchParams.set('origin', '*');
+
+  try {
+    const response = await fetch(queryUrl.toString());
+    if (!response.ok) {
+      return byTitle;
+    }
+    const data = (await response.json()) as {
+      query?: { pages?: Record<string, WikipediaQueryPage> };
+    };
+    const pages = data.query?.pages;
+    if (!pages) {
+      return byTitle;
+    }
+    for (const page of Object.values(pages)) {
+      const title = page.title?.trim();
+      if (!title) {
+        continue;
+      }
+      const text = page.description?.trim() || page.extract?.trim() || '';
+      if (text) {
+        byTitle.set(title, text);
+      }
+    }
+  } catch {
+    // Opensearch titles/URLs still useful without query snippets.
+  }
+
+  return byTitle;
+}
+
 /** Wikipedia opensearch (CORS-open) plus short extracts when available. */
 async function toolWikipediaSearch(args: Record<string, unknown>): Promise<string> {
   const query = stringArg(args, 'query');
@@ -247,17 +299,22 @@ async function toolWikipediaSearch(args: Record<string, unknown>): Promise<strin
   }
 
   const titles = payload[1] as string[];
-  const descriptions = payload[2] as string[];
+  const opensearchDescriptions = payload[2] as string[];
   const urls = payload[3] as string[];
 
   if (!titles.length) {
     return `No Wikipedia articles found for: ${query}`;
   }
 
+  const descriptionsByTitle = await fetchWikipediaDescriptionsByTitle(titles);
+
   const blocks: string[] = [];
   for (let i = 0; i < titles.length; i += 1) {
     const title = titles[i] ?? '';
-    const desc = descriptions[i]?.trim() || '(no description)';
+    const desc =
+      descriptionsByTitle.get(title)?.trim() ||
+      opensearchDescriptions[i]?.trim() ||
+      '(no description)';
     const pageUrl = urls[i] ?? '';
     blocks.push(`${i + 1}. ${title}\n   ${pageUrl}\n   ${desc}`);
   }

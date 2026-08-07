@@ -132,6 +132,8 @@ import { resolveChatContext } from '../workspace/chat-cwd.js';
 import { appendBoardLogLine } from '../orchestrate/board-log-sink.js';
 import { guardCdOutsideWorktree as _guardCdRaw } from '../tools/cwd-guard.js';
 import { readConfigJson } from '../config/store.js';
+import { brainWorkspaceKeyFromPath } from '../brain/paths.js';
+import { purgeFileFromIndex, getCodeDb } from '../brain/code/schema.js';
 
 const execFileAsync = promisify(execFile);
 const FIND_FILES_MAX = 500;
@@ -310,6 +312,32 @@ function withCodeChange(message, codeChange) {
     return { result: message, codeChange };
   }
   return message;
+}
+
+/** Drop brain code-index rows for paths removed by delete_path (best-effort). */
+function purgeBrainCodeIndexAfterDelete(relPath, isDirectory) {
+  try {
+    const normalized = String(relPath ?? '').trim().replace(/\\/g, '/');
+    if (!normalized) return;
+    const root = getEffectiveWorkspaceRoot();
+    const repo = brainWorkspaceKeyFromPath(root) || 'workspace';
+    const db = getCodeDb(repo);
+    if (isDirectory) {
+      const base = normalized.replace(/\/$/, '');
+      const rows = db
+        .prepare(
+          `SELECT file FROM file_hashes WHERE repo = ? AND (file = ? OR file LIKE ?)`,
+        )
+        .all(repo, base, `${base}/%`);
+      for (const row of rows) {
+        purgeFileFromIndex(db, repo, String(row.file));
+      }
+    } else {
+      purgeFileFromIndex(db, repo, normalized);
+    }
+  } catch {
+    /* code index is optional — never fail delete_path */
+  }
 }
 
 async function toolReadFileRange(args) {
@@ -636,17 +664,20 @@ async function toolDeletePath(args) {
   const stat = await fs.stat(target);
   if (stat.isDirectory()) {
     await fs.rm(target, { recursive: true, force: true });
+    purgeBrainCodeIndexAfterDelete(rel, true);
     return `Deleted ${rel}`;
   }
   if (stat.size > MAX_DIFF_STAT_BYTES) {
     // Too large to load for line-diff stats — delete without the codeChange payload.
     await fs.unlink(target);
+    purgeBrainCodeIndexAfterDelete(rel, false);
     return `Deleted ${rel}`;
   }
   const content = await fs.readFile(target, 'utf8');
   const deletions = countLinesInText(content);
   const { lines, truncated } = buildRemoveOnlyDiffLines(content);
   await fs.unlink(target);
+  purgeBrainCodeIndexAfterDelete(rel, false);
   const message = `Deleted ${rel}`;
   if (deletions === 0) return message;
   return withCodeChange(
@@ -904,12 +935,16 @@ async function toolExecuteCommand(args) {
   }
 
   if (args?.background === true) {
-    const command = typeof args?.command === 'string' ? args.command.trim() : '';
+    let command = typeof args?.command === 'string' ? args.command.trim() : '';
     if (!command) return 'Error: command is required';
 
     const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
 
     let cwd;
+    /** @type {string | undefined} */
+    let worktreeRoot;
+    /** @type {string | undefined} */
+    let groupId;
     if (typeof args?.cwd === 'string' && args.cwd.trim()) {
       try {
         cwd = resolveCommandCwd(args);
@@ -917,8 +952,18 @@ async function toolExecuteCommand(args) {
         const message = err instanceof Error ? err.message : String(err);
         return `Error: ${message}`;
       }
+      const ctx = await resolveChatContext(chatId ?? '');
+      worktreeRoot = ctx.worktreeRoot;
+      groupId = ctx.groupId;
     } else {
+      const ctx = await resolveChatContext(chatId ?? '');
+      worktreeRoot = ctx.worktreeRoot;
+      groupId = ctx.groupId;
       cwd = await resolveDefaultCwd(chatId);
+      if (worktreeRoot && (await isGuardCdEnabled())) {
+        const guarded = guardCdOutsideWorktree(command, worktreeRoot, { chatId, groupId });
+        if (guarded.redirected) command = guarded.command;
+      }
     }
     const toolCallId =
       typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
@@ -935,6 +980,7 @@ async function toolExecuteCommand(args) {
         logSubdir: 'terminal',
         shellProfile,
         allowUnsandboxed: args?.allow_unsandboxed === true,
+        worktreeRoot: worktreeRoot || undefined,
         ...(spawnEnv ? { env: spawnEnv } : {}),
       });
       const blockUntilMs = clampBlockUntilMs(args?.block_until_ms);

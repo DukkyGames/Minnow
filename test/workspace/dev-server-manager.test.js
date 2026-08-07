@@ -9,6 +9,7 @@ import {
   getDevServerStatus,
   getDevServerStatusById,
   resetDevServerManagerForTests,
+  setProbeHealthOverrideForTests,
   startDevServer,
   startDevServerById,
   stopDevServer,
@@ -32,6 +33,9 @@ describe('dev-server manager tools', () => {
   let workspaceDir;
   /** @type {string | null} */
   let activeRunId = null;
+
+  /** @type {string | undefined} */
+  let savedStartTimeoutEnv;
 
   before(async () => {
     homeDir = setTestHome(process.env, 'minnow-test-dev-server-manager');
@@ -69,6 +73,11 @@ describe('dev-server manager tools', () => {
       activeRunId = null;
     }
     await stopDevServer(workspaceDir).catch(() => undefined);
+    if (savedStartTimeoutEnv !== undefined) {
+      if (savedStartTimeoutEnv === null) delete process.env.MINNOW_DEV_SERVER_START_TIMEOUT_MS;
+      else process.env.MINNOW_DEV_SERVER_START_TIMEOUT_MS = savedStartTimeoutEnv;
+      savedStartTimeoutEnv = undefined;
+    }
     await clearPersistedDevServerState();
   });
 
@@ -219,5 +228,61 @@ describe('dev-server manager tools', () => {
     assert.equal(status.command, guideCmd);
     assert.equal(status.error, null);
     assert.equal(status.lastError, 'Health check timed out');
+  });
+
+  test('background reconciler promotes starting to running without status polling', async () => {
+    const healthUrl = 'http://127.0.0.1:39999/health';
+    let probeCount = 0;
+    setProbeHealthOverrideForTests(async () => {
+      probeCount += 1;
+      return probeCount >= 3;
+    });
+
+    await fs.writeFile(
+      path.join(workspaceDir, 'startup.md'),
+      `---\ncommand: ${LONG_RUNNING_CMD}\ncwd: .\nhealthUrl: ${healthUrl}\n---\n`,
+      'utf8',
+    );
+
+    const started = await startDevServer(workspaceDir);
+    assert.equal(started.ok, true);
+    assert.equal(started.status, 'starting');
+    activeRunId = started.runId ?? null;
+
+    await new Promise((r) => setTimeout(r, 1200));
+
+    const status = await getDevServerStatus(workspaceDir);
+    assert.equal(status.status, 'running');
+    assert.equal(status.healthOk, true);
+
+    const stopped = await stopDevServer(workspaceDir);
+    assert.equal(stopped.ok, true);
+    activeRunId = null;
+    const afterStop = await getDevServerStatus(workspaceDir);
+    assert.equal(afterStop.startedAt, null);
+  });
+
+  test('starting times out to error when health never passes', async () => {
+    savedStartTimeoutEnv = process.env.MINNOW_DEV_SERVER_START_TIMEOUT_MS ?? null;
+    process.env.MINNOW_DEV_SERVER_START_TIMEOUT_MS = '300';
+    setProbeHealthOverrideForTests(async () => false);
+
+    const healthUrl = 'http://127.0.0.1:39998/health';
+    await fs.writeFile(
+      path.join(workspaceDir, 'startup.md'),
+      `---\ncommand: ${LONG_RUNNING_CMD}\ncwd: .\nhealthUrl: ${healthUrl}\n---\n`,
+      'utf8',
+    );
+
+    const started = await startDevServer(workspaceDir);
+    assert.equal(started.ok, true);
+    assert.equal(started.status, 'starting');
+
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const status = await getDevServerStatus(workspaceDir);
+    assert.equal(status.status, 'stopped');
+    assert.equal(status.lastError, 'Health check timed out');
+    activeRunId = null;
   });
 });

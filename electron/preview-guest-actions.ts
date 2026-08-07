@@ -18,16 +18,64 @@ export interface PreviewGuestInfo {
   loading: boolean;
 }
 
+const PREVIEW_CAPTURE_MAX_RETRIES = 3;
+const PREVIEW_LOAD_POLL_MS = 50;
+const PREVIEW_LOAD_MAX_WAIT_MS = 3_000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Wait until the guest stops navigating (bounded poll). */
+export async function waitForPreviewGuestNotLoading(
+  wc: WebContents,
+  maxWaitMs = PREVIEW_LOAD_MAX_WAIT_MS,
+): Promise<void> {
+  if (wc.isDestroyed()) return;
+  const start = Date.now();
+  while (wc.isLoading()) {
+    if (Date.now() - start >= maxWaitMs) break;
+    await delay(PREVIEW_LOAD_POLL_MS);
+  }
+}
+
+/** Two animation frames in the guest document so layout/paint can settle before capture. */
+export async function waitForPreviewGuestDoubleRaf(wc: WebContents): Promise<void> {
+  if (wc.isDestroyed()) return;
+  try {
+    await wc.executeJavaScript(
+      'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+      true,
+    );
+  } catch {
+    /* no document yet — capture may still succeed */
+  }
+}
+
 /** Run JavaScript in the preview guest page context. */
 export async function previewExecJs(wc: WebContents, code: string): Promise<unknown> {
   const wrapped = `(function(){ try { return (${code}); } catch(e) { return { __execError: e && e.message ? e.message : String(e) }; } })()`;
   return wc.executeJavaScript(wrapped, true);
 }
 
-/** Capture the preview guest as a base64-encoded PNG. */
+/** Capture the preview guest as a base64-encoded PNG (waits for load, retries empty frames). */
 export async function previewCapturePageBase64(wc: WebContents): Promise<string> {
-  const image = await wc.capturePage();
-  return image.toPNG().toString('base64');
+  if (wc.isDestroyed()) return '';
+
+  await waitForPreviewGuestNotLoading(wc);
+  await waitForPreviewGuestDoubleRaf(wc);
+
+  for (let attempt = 0; attempt < PREVIEW_CAPTURE_MAX_RETRIES; attempt++) {
+    const image = await wc.capturePage();
+    const png = image.toPNG();
+    const b64 = png.length > 0 ? png.toString('base64') : '';
+    if (b64.trim()) return b64;
+    if (attempt < PREVIEW_CAPTURE_MAX_RETRIES - 1) {
+      await waitForPreviewGuestDoubleRaf(wc);
+      await delay(PREVIEW_LOAD_POLL_MS);
+    }
+  }
+  return '';
 }
 
 /** Read current preview guest URL, title, and loading flag. */

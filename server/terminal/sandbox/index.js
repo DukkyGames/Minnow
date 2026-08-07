@@ -365,6 +365,7 @@ export {
   buildLandlockArgv,
   buildLandlockPathLists,
   buildHomeReadAllowlist,
+  landlockDeviceWriteAllowlist,
   probeLandlock,
   resolveMinnowSandboxHelper,
   wrapWithLandlock,

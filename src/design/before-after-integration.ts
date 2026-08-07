@@ -7,13 +7,13 @@
  */
 import { createBeforeAfterPairing, type BeforeAfterCapture, type BeforeAfterPair } from './before-after';
 import { DEFAULT_DIFF_HISTORY_LIMIT, loadDesignMeta } from '../config/design-meta';
+import { pollPreviewGuestUntilIdle } from '../ui/preview-capture-ready';
 
 async function captureViewport(): Promise<BeforeAfterCapture | null> {
   const preview = window.minnow?.preview;
   if (!preview?.capturePage) return null;
   try {
-    const info = await preview.getInfo?.();
-    if (info?.loading) return null;
+    await pollPreviewGuestUntilIdle(() => preview.getInfo?.());
     const base64 = await preview.capturePage();
     if (!base64) return null;
     return { dataUrl: `data:image/png;base64,${base64}`, capturedAt: Date.now() };
