@@ -41,6 +41,26 @@
   --rs-rail-w: 264px;
   --rs-read: 68ch;
   --rs-gutter: 28px;
+
+  /*
+   * One measured page for the whole run view. Header, tabs, brief and ledger
+   * all resolve --rs-pad-x against the same containing block, so they share a
+   * left and right edge no matter how wide the window gets. Full-bleed rules
+   * (the header hairline) still span the pane, because padding never moves the
+   * border box.
+   */
+  /*
+   * The two columns are sized directly and the page is their sum, so the
+   * header, the tabs and both columns always end on the same right edge.
+   * Reading column is set in px, not ch: ch resolves against this element's
+   * 14px font, while the prose inside it runs at 16px, so a ch value here
+   * would silently mean something else than it says.
+   */
+  --rs-read-col: 790px;
+  --rs-aside-w: 460px;
+  --rs-col-gap: 76px;
+  --rs-page: calc(var(--rs-read-col) + var(--rs-col-gap) + var(--rs-aside-w));
+  --rs-pad-x: max(var(--rs-gutter), (100% - var(--rs-page)) / 2);
 }
 
 /* ── Rail ──────────────────────────────────────────────────────────────────
@@ -786,10 +806,18 @@
 
 /* ── Run pane header ───────────────────────────────────────────────────── */
 
+/*
+ * The header scrolls with the brief and pins at the top. Living inside the
+ * scroll container is also what keeps it aligned: it resolves --rs-pad-x
+ * against the same content box as the columns below, scrollbar included.
+ */
 .rs-runhead {
-  flex: 0 0 auto;
-  padding: 20px var(--rs-gutter) 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 20px var(--rs-pad-x) 0;
   border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg);
 }
 
 .rs-runhead__top {
@@ -798,9 +826,22 @@
   gap: 16px;
 }
 
-.rs-runhead__title {
+.rs-runhead__ask {
   flex: 1;
   min-width: 0;
+}
+
+/*
+ * The question is the run's identity, so it is never truncated away — it is
+ * folded to two lines and unfolds in place. A research prompt is often a
+ * paragraph, and a paragraph set as a heading is not a heading.
+ */
+.rs-runhead__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   margin: 0;
   color: var(--mn-fg);
   font-size: 19px;
@@ -810,9 +851,33 @@
   overflow-wrap: anywhere;
 }
 
+.rs-runhead__title.is-expanded {
+  display: block;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+}
+
+.rs-runhead__more {
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.rs-runhead__more[hidden] {
+  display: none;
+}
+
 .rs-runhead__actions {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 4px;
 }
 
@@ -935,6 +1000,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .rs-runbody > [hidden] {
@@ -944,15 +1010,30 @@
 /* ── Brief ─────────────────────────────────────────────────────────────── */
 
 .rs-brief {
-  padding: 26px var(--rs-gutter) 64px;
+  padding: 26px var(--rs-pad-x) 64px;
+}
+
+/*
+ * Narrow windows stack: read the brief, then the sources. Once there is room
+ * for both, the sources move beside the findings so a citation number and the
+ * thing it cites are on screen together.
+ */
+.rs-report {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.rs-report__main,
+.rs-report__aside {
+  min-width: 0;
 }
 
 .rs-answer {
   max-width: var(--rs-read);
-  margin: 0 0 32px;
+  margin: 0 0 36px;
   color: var(--mn-fg);
-  font-size: 16.5px;
-  line-height: 1.65;
+  font-size: 18px;
+  line-height: 1.6;
 }
 
 .rs-sec {
@@ -978,25 +1059,76 @@
 .rs-findings {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 34px;
   max-width: var(--rs-read);
-  margin-bottom: 40px;
+  margin-bottom: 44px;
 }
 
 .rs-finding__claim {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: var(--mn-fg);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.4;
 }
 
 .rs-finding__body {
-  margin: 0;
+  margin: 0 0 12px;
   color: var(--mn-fg-muted);
-  font-size: 14.5px;
-  line-height: 1.65;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.rs-finding__body:last-child {
+  margin-bottom: 0;
+}
+
+/* Engine subheadings inside a finding. Smaller and quieter than the claim so
+   the finding still reads as one unit. */
+.rs-finding__sub {
+  margin: 18px 0 7px;
+  color: var(--mn-fg);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.rs-finding__sub:first-of-type {
+  margin-top: 4px;
+}
+
+.rs-finding__list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  color: var(--mn-fg-muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.rs-finding__list li {
+  margin-bottom: 5px;
+}
+
+.rs-finding__list li::marker {
+  color: var(--mn-fg-subtle);
+}
+
+.rs-link {
+  color: var(--mn-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--mn-border-strong);
+  text-underline-offset: 2px;
+  transition: text-decoration-color var(--duration-fast) var(--ease-out);
+}
+
+.rs-code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--mn-surface-elevated);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
 }
 
 .rs-cite {
@@ -1077,18 +1209,24 @@
   margin-bottom: 40px;
 }
 
+/*
+ * Follow-ups are questions you can run, not prose. The arrow keeps its own
+ * column so it stays on the first line however far the question wraps.
+ */
 .rs-follow__item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px;
   align-items: baseline;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
-  padding: 9px 4px;
+  padding: 11px 4px;
   border: 0;
   border-bottom: 1px solid var(--mn-border);
   background: transparent;
-  color: var(--mn-fg-muted);
+  color: var(--mn-fg);
   font: inherit;
   font-size: 14px;
+  line-height: 1.55;
   text-align: left;
   cursor: pointer;
   transition: color var(--duration-fast) var(--ease-out);
@@ -1096,8 +1234,9 @@
 
 .rs-follow__item::after {
   content: '→';
-  margin-left: auto;
   color: var(--mn-fg-subtle);
+  transition: color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 /* ── References ────────────────────────────────────────────────────────── */
@@ -1107,15 +1246,21 @@
   counter-reset: rs-ref;
 }
 
+/* Host sits under the title rather than beside it: the sources column is
+   narrow, and a domain crushed against a wrapped title reads as noise. */
 .rs-ref {
   display: grid;
-  grid-template-columns: 26px 1fr auto;
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: baseline;
-  gap: 4px 8px;
-  padding: 8px 4px;
+  gap: 2px 6px;
+  padding: 8px 6px 9px 2px;
   border-bottom: 1px solid var(--mn-border);
+  border-radius: 4px;
   color: inherit;
   text-decoration: none;
+  /* Start margin clears the pinned run header when a citation scrolls here. */
+  scroll-margin-block: 168px 24px;
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .rs-ref__n {
@@ -1128,14 +1273,16 @@
   min-width: 0;
   color: var(--mn-fg);
   font-size: 13.5px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .rs-ref__host {
+  grid-column: 2;
   color: var(--mn-fg-muted);
   font-family: var(--font-mono);
   font-size: 10.5px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .rs-ref.is-focus {
@@ -1159,7 +1306,7 @@
 /* ── Evidence ledger ───────────────────────────────────────────────────── */
 
 .rs-ledger {
-  padding: 22px var(--rs-gutter) 64px;
+  padding: 22px var(--rs-pad-x) 64px;
 }
 
 .rs-ledger__plan {
@@ -1423,12 +1570,21 @@
     background: var(--mn-surface-elevated);
   }
 
-  .rs-follow__item:hover {
+  .rs-follow__item:hover::after {
+    color: var(--mn-accent);
+    transform: translateX(2px);
+  }
+
+  .rs-runhead__more:hover {
     color: var(--mn-fg);
   }
 
   .rs-citebox__link:hover {
     text-decoration: underline;
+  }
+
+  .rs-link:hover {
+    text-decoration-color: var(--mn-accent);
   }
 }
 
@@ -1438,8 +1594,40 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
-/* ── Narrow windows ────────────────────────────────────────────────────────
-   Container query, not @media: apps live inside MinnowOS windows. */
+/* ── Width steps ───────────────────────────────────────────────────────────
+   Container queries, not @media: apps live inside MinnowOS windows. */
+
+/* Enough room for the reading column plus a sources column beside it. The
+   grid owns the measure here, so the per-block caps that keep the stacked
+   layout readable are lifted. */
+@container research (min-width: 1120px) {
+  .rs-report {
+    grid-template-columns: minmax(0, var(--rs-read-col)) minmax(0, var(--rs-aside-w));
+    column-gap: var(--rs-col-gap);
+    align-items: start;
+  }
+
+  .rs-report__main .rs-answer,
+  .rs-report__main .rs-findings,
+  .rs-report__main .rs-follow {
+    max-width: none;
+  }
+
+  .rs-report__aside .rs-sec {
+    margin-top: 3px;
+  }
+}
+
+/* Ultra-wide: the reading column grows a little, the sources column takes the
+   rest. Body copy past roughly 90 characters a line gets harder to track, not
+   easier, so the extra width buys source titles that stop wrapping. */
+@container research (min-width: 1820px) {
+  .rs-shell {
+    --rs-read-col: 860px;
+    --rs-aside-w: 540px;
+    --rs-col-gap: 88px;
+  }
+}
 
 @container research (max-width: 860px) {
   .rs-shell {

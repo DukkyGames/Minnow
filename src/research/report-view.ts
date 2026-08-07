@@ -9,12 +9,124 @@
  * Run-level actions (export, discuss, refine) live in the run header, not here.
  */
 
-import type { ParsedBrief, ParsedBriefSource } from './parse-brief';
+import type { ParsedBrief, ParsedBriefSource, ParsedFindingBlock } from './parse-brief';
 import { parseResearchBrief } from './parse-brief';
 import type { ResearchSource } from './types';
 
 export interface ReportViewActions {
   onFollowUp: (query: string) => void;
+}
+
+/**
+ * Inline markdown the engine actually emits: citation markers, links, bold,
+ * italic and code. Citation markers come first so `[3]` is read as a citation
+ * rather than the opening of a link.
+ */
+const INLINE_RE =
+  /\[(\d{1,3})\](?!\()|\[([^\]]+)\]\(\s*(<?)([^)\s>]+)\3[^)]*\)|\*\*([^*]+)\*\*|`([^`]+)`|(?<![*\w])\*([^*\n]+)\*(?!\*)/g;
+
+function isSafeHref(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/**
+ * Render one run of inline markdown into `target`. Citation markers become live
+ * controls via `makeCite`; anything it declines to build is dropped, because a
+ * marker pointing at a source the run never recorded is noise.
+ */
+function appendInline(
+  target: Node,
+  text: string,
+  makeCite: (n: number) => HTMLElement | null,
+): void {
+  let last = 0;
+  INLINE_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = INLINE_RE.exec(text)) !== null) {
+    if (match.index > last) {
+      target.appendChild(document.createTextNode(text.slice(last, match.index)));
+    }
+    last = match.index + match[0].length;
+
+    const [, citeN, linkLabel, , linkUrl, bold, code, italic] = match;
+
+    if (citeN !== undefined) {
+      const cite = makeCite(Number(citeN));
+      if (cite) {
+        target.appendChild(cite);
+      }
+      continue;
+    }
+    if (linkLabel !== undefined) {
+      if (isSafeHref(linkUrl)) {
+        const a = document.createElement('a');
+        a.className = 'rs-link';
+        a.href = linkUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = linkLabel;
+        target.appendChild(a);
+      } else {
+        target.appendChild(document.createTextNode(linkLabel));
+      }
+      continue;
+    }
+    if (bold !== undefined) {
+      const strong = document.createElement('strong');
+      strong.textContent = bold;
+      target.appendChild(strong);
+      continue;
+    }
+    if (code !== undefined) {
+      const el = document.createElement('code');
+      el.className = 'rs-code';
+      el.textContent = code;
+      target.appendChild(el);
+      continue;
+    }
+    if (italic !== undefined) {
+      const em = document.createElement('em');
+      em.textContent = italic;
+      target.appendChild(em);
+    }
+  }
+
+  if (last < text.length) {
+    target.appendChild(document.createTextNode(text.slice(last)));
+  }
+}
+
+/** Render a finding's structured body: subheadings, paragraphs and lists. */
+function appendBlocks(
+  target: Node,
+  blocks: ParsedFindingBlock[],
+  makeCite: (n: number) => HTMLElement | null,
+): void {
+  for (const block of blocks) {
+    if (block.kind === 'sub') {
+      const sub = document.createElement('h5');
+      sub.className = 'rs-finding__sub';
+      appendInline(sub, block.text, makeCite);
+      target.appendChild(sub);
+      continue;
+    }
+    if (block.kind === 'list') {
+      const list = document.createElement('ul');
+      list.className = 'rs-finding__list';
+      for (const item of block.items) {
+        const li = document.createElement('li');
+        appendInline(li, item, makeCite);
+        list.appendChild(li);
+      }
+      target.appendChild(list);
+      continue;
+    }
+    const para = document.createElement('p');
+    para.className = 'rs-finding__body';
+    appendInline(para, block.text, makeCite);
+    target.appendChild(para);
+  }
 }
 
 function sectionLabel(text: string): HTMLElement {
@@ -68,15 +180,23 @@ export function renderResearchReportView(
   const root = document.createElement('div');
   root.className = 'rs-report';
 
+  // Reading column and sources column. They stack on narrow windows and sit
+  // side by side once there is room, so the split lives in CSS, not here.
+  const main = document.createElement('div');
+  main.className = 'rs-report__main';
+  const aside = document.createElement('div');
+  aside.className = 'rs-report__aside';
+  root.append(main, aside);
+
   if (brief.tldr.trim()) {
     const answer = document.createElement('p');
     answer.className = 'rs-answer';
     answer.textContent = brief.tldr;
-    root.appendChild(answer);
+    main.appendChild(answer);
   }
 
   if (brief.findings.length) {
-    root.appendChild(sectionLabel('Findings'));
+    main.appendChild(sectionLabel('Findings'));
     const list = document.createElement('div');
     list.className = 'rs-findings';
 
@@ -88,19 +208,17 @@ export function renderResearchReportView(
       claim.className = 'rs-finding__claim';
       claim.textContent = finding.heading;
 
-      const body = document.createElement('p');
-      body.className = 'rs-finding__body';
-      body.appendChild(document.createTextNode(finding.body));
-
       const box = document.createElement('div');
       box.className = 'rs-citebox';
       box.hidden = true;
 
-      for (const n of finding.cites) {
+      const emitted = new Set<number>();
+      const makeCite = (n: number): HTMLElement | null => {
         const source = brief.sources[n - 1];
         if (!source) {
-          continue;
+          return null;
         }
+        emitted.add(n);
         const cite = document.createElement('button');
         cite.type = 'button';
         cite.className = 'rs-cite';
@@ -124,19 +242,46 @@ export function renderResearchReportView(
           box.dataset.cite = String(n);
           box.hidden = false;
           cite.classList.add('is-on');
-          root.querySelector(`.rs-ref[data-ref="${n}"]`)?.classList.add('is-focus');
+          const ref = root.querySelector(`.rs-ref[data-ref="${n}"]`);
+          ref?.classList.add('is-focus');
+          ref?.scrollIntoView({ block: 'nearest' });
         });
-        body.appendChild(cite);
+        return cite;
+      };
+
+      article.appendChild(claim);
+
+      if (finding.blocks?.length) {
+        appendBlocks(article, finding.blocks, makeCite);
+      } else {
+        const body = document.createElement('p');
+        body.className = 'rs-finding__body';
+        appendInline(body, finding.body, makeCite);
+        article.appendChild(body);
       }
 
-      article.append(claim, body, box);
+      // Markers the engine listed for this finding but never placed in the
+      // prose still need a way in, so they trail the last paragraph.
+      const orphans = finding.cites.filter((n) => !emitted.has(n));
+      if (orphans.length) {
+        const tail =
+          article.querySelector<HTMLElement>('.rs-finding__body:last-of-type') ?? article;
+        for (const n of orphans) {
+          const cite = makeCite(n);
+          if (cite) {
+            tail.appendChild(cite);
+          }
+        }
+      }
+
+      article.appendChild(box);
       list.appendChild(article);
     }
-    root.appendChild(list);
+    main.appendChild(list);
   }
 
   if (brief.followups.length) {
-    root.appendChild(sectionLabel('Where next'));
+    main.appendChild(sectionLabel('Where next'));
     const follow = document.createElement('div');
     follow.className = 'rs-follow';
     for (const question of brief.followups) {
@@ -147,10 +292,10 @@ export function renderResearchReportView(
       btn.addEventListener('click', () => actions.onFollowUp(question));
       follow.appendChild(btn);
     }
-    root.appendChild(follow);
+    main.appendChild(follow);
   }
 
-  root.appendChild(sectionLabel(`References · ${brief.sources.length}`));
+  aside.appendChild(sectionLabel(`References · ${brief.sources.length}`));
   if (brief.sources.length) {
     const refs = document.createElement('div');
     refs.className = 'rs-refs';
@@ -177,12 +322,12 @@ export function renderResearchReportView(
       ref.append(n, title, host);
       refs.appendChild(ref);
     });
-    root.appendChild(refs);
+    aside.appendChild(refs);
   } else {
     const none = document.createElement('p');
     none.className = 'rs-ledger__empty';
     none.textContent = 'This run recorded no sources.';
-    root.appendChild(none);
+    aside.appendChild(none);
   }
 
   mount.replaceChildren(root);

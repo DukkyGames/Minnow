@@ -258,14 +258,28 @@ const STATE_WORDS: Record<ResearchStatus, string> = {
   cancelled: 'stopped',
 };
 
+/**
+ * Questions long enough to wrap past two lines get a fold rather than an
+ * ellipsis — the prompt is the run's identity, so it stays reachable.
+ */
+const TITLE_FOLD_CHARS = 150;
+
 function setRunHeader(options: {
   title: string;
   status: ResearchStatus;
   stats?: string;
 }): void {
   const title = el('researchRunTitle');
+  const text = options.title || 'Untitled run';
   if (title) {
-    title.textContent = options.title || 'Untitled run';
+    title.textContent = text;
+    title.classList.remove('is-expanded');
+  }
+  const more = el<HTMLButtonElement>('btnResearchRunTitleMore');
+  if (more) {
+    more.hidden = text.length <= TITLE_FOLD_CHARS;
+    more.textContent = 'Show full question';
+    more.setAttribute('aria-expanded', 'false');
   }
   const state = el('researchRunState');
   if (state) {
@@ -971,6 +985,14 @@ function bindStaticControls(): void {
 
   el('researchViewBrief')?.addEventListener('click', () => setRunView('brief'));
   el('researchViewEvidence')?.addEventListener('click', () => setRunView('evidence'));
+
+  el('btnResearchRunTitleMore')?.addEventListener('click', (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const title = el('researchRunTitle');
+    const expanded = title?.classList.toggle('is-expanded') ?? false;
+    button.textContent = expanded ? 'Show less' : 'Show full question';
+    button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  });
 
   el<HTMLInputElement>('researchRailFilter')?.addEventListener('input', (event) => {
     railSearch = (event.target as HTMLInputElement).value;

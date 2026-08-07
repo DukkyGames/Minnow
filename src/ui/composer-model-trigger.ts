@@ -717,7 +717,14 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   providerEl.className = 'mn-os-mb-model-provider';
   providerEl.hidden = true;
 
-  expandInner.append(labelEl, providerEl);
+  if (variant === 'menubar') {
+    const expandRoleEl = document.createElement('span');
+    expandRoleEl.className = 'mn-os-mb-model-expand-role';
+    expandRoleEl.textContent = 'Default model';
+    expandInner.append(expandRoleEl, labelEl, providerEl);
+  } else {
+    expandInner.append(labelEl, providerEl);
+  }
   expandEl.appendChild(expandInner);
 
   const triggerBtn = document.createElement('button');
@@ -741,8 +748,15 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   fallbackWrap.setAttribute('aria-hidden', 'true');
 
   triggerBtn.append(dotEl, iconLogoEl, fallbackWrap);
-  // Icon stays in the menubar flow; label is portaled to body as a fixed overlay.
-  root.appendChild(triggerBtn);
+  if (variant === 'menubar') {
+    const staticRole = document.createElement('span');
+    staticRole.className = 'mn-os-mb-model-static-role';
+    staticRole.textContent = 'Default model';
+    staticRole.setAttribute('aria-hidden', 'true');
+    root.append(staticRole, triggerBtn);
+  } else {
+    root.appendChild(triggerBtn);
+  }
   document.body.appendChild(expandEl);
 
   const resolveLoadUnload =

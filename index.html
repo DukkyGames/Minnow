@@ -1060,39 +1060,51 @@
       </div>
 
       <div class="rs-pane rs-pane--run" id="researchRunPane" hidden>
-        <header class="rs-runhead">
-          <div class="rs-runhead__top">
-            <h2 class="rs-runhead__title" id="researchRunTitle"></h2>
-            <div class="rs-runhead__actions" id="researchRunActions"></div>
-          </div>
-          <div class="rs-runhead__meta">
-            <span class="rs-state" id="researchRunState"></span>
-            <span class="rs-runhead__stats" id="researchRunStats"></span>
-          </div>
-          <div class="rs-segments" role="tablist" aria-label="Run views">
-            <button
-              type="button"
-              class="rs-segment is-on"
-              id="researchViewBrief"
-              role="tab"
-              aria-selected="true"
-              aria-controls="researchResultMount"
-            >
-              Brief
-            </button>
-            <button
-              type="button"
-              class="rs-segment"
-              id="researchViewEvidence"
-              role="tab"
-              aria-selected="false"
-              aria-controls="researchProgressMount"
-            >
-              Evidence
-            </button>
-          </div>
-        </header>
         <div class="rs-runbody" id="researchRunBody">
+          <header class="rs-runhead">
+            <div class="rs-runhead__top">
+              <div class="rs-runhead__ask">
+                <h2 class="rs-runhead__title" id="researchRunTitle"></h2>
+                <button
+                  type="button"
+                  class="rs-runhead__more"
+                  id="btnResearchRunTitleMore"
+                  aria-controls="researchRunTitle"
+                  aria-expanded="false"
+                  hidden
+                >
+                  Show full question
+                </button>
+              </div>
+              <div class="rs-runhead__actions" id="researchRunActions"></div>
+            </div>
+            <div class="rs-runhead__meta">
+              <span class="rs-state" id="researchRunState"></span>
+              <span class="rs-runhead__stats" id="researchRunStats"></span>
+            </div>
+            <div class="rs-segments" role="tablist" aria-label="Run views">
+              <button
+                type="button"
+                class="rs-segment is-on"
+                id="researchViewBrief"
+                role="tab"
+                aria-selected="true"
+                aria-controls="researchResultMount"
+              >
+                Brief
+              </button>
+              <button
+                type="button"
+                class="rs-segment"
+                id="researchViewEvidence"
+                role="tab"
+                aria-selected="false"
+                aria-controls="researchProgressMount"
+              >
+                Evidence
+              </button>
+            </div>
+          </header>
           <div id="researchResultMount" class="rs-brief" role="tabpanel" aria-labelledby="researchViewBrief"></div>
           <div
             id="researchProgressMount"

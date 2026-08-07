@@ -322,6 +322,39 @@
   cursor: default;
 }
 
+.mn-os-mb-model-static-role {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--os-text-dim);
+  opacity: 0.82;
+  user-select: none;
+  transition: opacity 0.15s var(--ease-out), visibility 0.15s var(--ease-out);
+}
+
+/* Hover expand carries the full line; hide the static caption so labels do not stack. */
+.mn-os-mb-model-chip.is-expanded .mn-os-mb-model-static-role,
+.mn-os-mb-model-chip.is-open .mn-os-mb-model-static-role {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.mn-os-mb-model-expand-role {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--os-text-dim);
+  opacity: 0.82;
+}
+
+.mn-os-mb-model-expand-role::after {
+  content: '·';
+  margin: 0 5px;
+  opacity: 0.55;
+}
+
 .mn-os-mb-model-label {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -42,8 +42,10 @@ describe('menubar model chip', () => {
       initMenubarModelChip(doc.getElementById('osMenubarModelChip')!);
       syncComposerModelTriggers();
 
+      const staticRole = doc.querySelector('.mn-os-mb-model-static-role');
       const label = doc.querySelector('.mn-os-mb-model-label');
       const provider = doc.querySelector('.mn-os-mb-model-provider');
+      assert.equal(staticRole?.textContent, 'Default model');
       assert.equal(label?.textContent, 'Qwen 2.5 7B');
       assert.equal(provider?.textContent, 'LM Studio');
       assert.equal(provider?.hidden, false);
@@ -53,6 +55,10 @@ describe('menubar model chip', () => {
       const expand = doc.querySelector('.mn-os-mb-model-expand') as HTMLElement;
       assert.ok(expand);
       assert.equal(expand.getAttribute('aria-hidden'), 'true');
+      const expandRole = expand.querySelector('.mn-os-mb-model-expand-role');
+      assert.equal(expandRole?.textContent, 'Default model');
+      const staticRole = chip.querySelector('.mn-os-mb-model-static-role') as HTMLElement;
+      assert.equal(getComputedStyle(staticRole).visibility, 'hidden');
     } finally {
       setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;
