@@ -105,7 +105,8 @@ export function listComposerModes(): ModeDefinition[] {
 }
 
 export function getMode(id: ModeId): ModeDefinition {
-  const mode = MODE_DEFINITIONS.find((m) => m.id === id);
+  const resolvedId = id === 'desktop' ? 'general' : id;
+  const mode = MODE_DEFINITIONS.find((m) => m.id === resolvedId);
   if (!mode) {
     throw new Error(`Unknown mode id: ${id}`);
   }
@@ -123,7 +124,8 @@ export function resolveModePromptPath(id: ModeId, profile: 'full' | 'lite'): str
  * Load mode prompt body for compose / tests.
  */
 export function loadModePromptBody(id: ModeId, profile: 'full' | 'lite'): string {
+  const resolvedId = id === 'desktop' ? 'general' : id;
   const loadProfile: PromptProfile = profile;
-  const loaded = loadPromptById('mode', id, loadProfile);
+  const loaded = loadPromptById('mode', resolvedId, loadProfile);
   return loaded?.body?.trim() ?? '';
 }

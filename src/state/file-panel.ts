@@ -3,6 +3,8 @@
  */
 
 import { detectConfigServer } from '../config/storage-mode';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { getWorkspacePath } from './workspace';
 
 /** Workspace file or arbitrary URL shown in the preview panel. */
 export type PreviewSource =
@@ -164,6 +166,7 @@ function clampFileSidebarWidth(value: number): number {
 }
 
 let panelState: FilePanelState = { ...DEFAULT_FILE_PANEL_STATE };
+let panelWorkspaceKey = '';
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -575,13 +578,37 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   };
 }
 
-async function fetchFilePanelFromMeta(): Promise<FilePanelState> {
+function workspacePanelKey(workspacePath?: string): string {
+  const normalized = normalizeWorkspacePath(workspacePath ?? getWorkspacePath());
+  return normalized || '__default__';
+}
+
+function resolveFilePanelRaw(
+  meta: Record<string, unknown>,
+  workspaceKey: string,
+): unknown {
+  const workspace = meta.workspace;
+  if (workspace && typeof workspace === 'object') {
+    const byPath = (workspace as Record<string, unknown>).filePanelByPath;
+    if (byPath && typeof byPath === 'object') {
+      const row = (byPath as Record<string, unknown>)[workspaceKey];
+      if (row && typeof row === 'object') {
+        return row;
+      }
+    }
+  }
+  return meta.filePanel;
+}
+
+async function fetchFilePanelFromMeta(workspaceKey?: string): Promise<FilePanelState> {
   const res = await fetch('/api/config/meta', { cache: 'no-store' });
   if (!res.ok) {
     return { ...DEFAULT_FILE_PANEL_STATE };
   }
   const meta = (await res.json()) as Record<string, unknown>;
-  return normalizeFilePanelBlock(meta.filePanel);
+  const key = workspaceKey ?? workspacePanelKey();
+  panelWorkspaceKey = key;
+  return normalizeFilePanelBlock(resolveFilePanelRaw(meta, key));
 }
 
 /** Current file panel state (mutate via patch helpers). */
@@ -718,21 +745,53 @@ export async function loadFilePanelPrefs(): Promise<FilePanelState> {
   return panelState;
 }
 
-/** Persist current state to meta API (no localStorage). */
+/** Persist current state to meta API (scoped to the active workspace). */
 export async function saveFilePanelPrefs(): Promise<void> {
   const serverUp = await detectConfigServer();
   if (!serverUp) return;
 
+  const key = panelWorkspaceKey || workspacePanelKey();
+  panelWorkspaceKey = key;
   await fetch('/api/config/meta', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filePanel: panelState }),
+    body: JSON.stringify({
+      workspace: { filePanelByPath: { [key]: panelState } },
+    }),
   });
+}
+
+/** Save panel state under a specific workspace key (used before workspace switches). */
+export async function persistFilePanelForWorkspace(workspacePath: string): Promise<void> {
+  const serverUp = await detectConfigServer();
+  if (!serverUp) return;
+  const key = workspacePanelKey(workspacePath);
+  await fetch('/api/config/meta', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspace: { filePanelByPath: { [key]: panelState } },
+    }),
+  });
+}
+
+/** Load persisted panel state for a workspace after a switch. */
+export async function reloadFilePanelForWorkspace(workspacePath: string): Promise<FilePanelState> {
+  const key = workspacePanelKey(workspacePath);
+  panelWorkspaceKey = key;
+  const serverUp = await detectConfigServer();
+  if (serverUp) {
+    panelState = await fetchFilePanelFromMeta(key);
+  } else {
+    panelState = { ...DEFAULT_FILE_PANEL_STATE };
+  }
+  return panelState;
 }
 
 /** Test helper: reset module state. */
 export function resetFilePanelStateForTests(): void {
   panelState = { ...DEFAULT_FILE_PANEL_STATE };
+  panelWorkspaceKey = '';
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;

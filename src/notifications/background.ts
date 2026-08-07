@@ -18,7 +18,7 @@ export function shouldNotifyForChatTurn(chatId: string): boolean {
   if (getOsView() === 'workspaces') return true;
 
   const fgApp = getForegroundAppId();
-  if (getOsView() === 'app' && fgApp && fgApp !== 'code' && fgApp !== 'chat') {
+  if (getOsView() === 'app' && fgApp && fgApp !== 'code') {
     return true;
   }
 

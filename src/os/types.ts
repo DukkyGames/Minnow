@@ -1,7 +1,6 @@
 /** Minnow app identifiers — one per launcher tile. */
 export type AppId =
   | 'code'
-  | 'chat'
   | 'research'
   | 'experts'
   | 'bench'

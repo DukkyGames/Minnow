@@ -95,11 +95,7 @@ export function isAskQuestionDomVisible(chatId: string): boolean {
   if (isBoardViewActive()) return false;
 
   const foregroundAppId = getForegroundAppId();
-  if (
-    foregroundAppId == null ||
-    foregroundAppId === 'code' ||
-    foregroundAppId === 'chat'
-  ) {
+  if (foregroundAppId == null || foregroundAppId === 'code') {
     if (isChatAppForeground()) return true;
     return true;
   }

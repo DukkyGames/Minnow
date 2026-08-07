@@ -32,15 +32,6 @@ export const APPS: readonly AppDefinition[] = [
     releaseState: 'released',
   },
   {
-    id: 'chat',
-    name: 'Chat',
-    icon: 'chat',
-    tag: 'Just talk to your model',
-    description: 'General assistant — tools, files, and app routing',
-    availability: 'core',
-    releaseState: 'released',
-  },
-  {
     id: 'research',
     name: 'Research',
     icon: 'research',
@@ -197,6 +188,5 @@ export const APP_MODULE_LOADERS: Partial<Record<AppId, AppModuleLoader>> = {
   email: () => import('../ui/email-page').then((m) => ({ init: m.initEmailPage })),
   issues: () => import('../ui/issues-page').then((m) => ({ init: m.initIssuesPage })),
   research: () => import('../research/panel').then((m) => ({ init: m.initResearchPage })),
-  chat: () => import('../ui/chat-app').then((m) => ({ init: m.initChatApp })),
   experts: () => import('../ui/experts/experts-hub').then((m) => ({ init: m.initExpertsHub })),
 };

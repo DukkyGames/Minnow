@@ -48,16 +48,15 @@ export async function launchCodeWithChat(chatId: string): Promise<void> {
   await switchToCodeChat(trimmed);
 }
 
-/** Foreground desktop chat and activate the given assistant thread. */
+/** Foreground Code chat and activate the given assistant thread (legacy desktop/chat deep-links). */
 export async function launchChatWithThread(chatId: string): Promise<void> {
   const trimmed = chatId.trim();
   if (!trimmed) {
-    launchApp('chat');
+    launchApp('code', { codeSection: 'chat' });
     return;
   }
 
-  launchApp('chat', { chatId: trimmed });
-  await switchToDesktopChatThread(trimmed);
+  await launchCodeWithChat(trimmed);
 }
 
 /** Switch sidebar to a chat after Code app is foreground (app-host / deep-link). */

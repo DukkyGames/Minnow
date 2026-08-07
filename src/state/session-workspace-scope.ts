@@ -85,7 +85,10 @@ export function getChatLastMessageAt(chat: Chat): number {
   return typeof updated === 'number' && Number.isFinite(updated) ? updated : 0;
 }
 
-/** Minnow Chat app id stored in `lastActiveChatIdByApp`. */
+/** Minnow Code app id stored in `lastActiveChatIdByApp`. */
+export const CODE_APP_ID = 'code';
+
+/** Legacy Chat app id — migrated to {@link CODE_APP_ID} on session load. */
 export const CHAT_APP_ID = 'chat';
 
 /** Minnow desktop chat id stored in `lastActiveChatIdByApp` (separate from legacy Chat app). */
@@ -263,7 +266,7 @@ export function createDesktopChat(
     name: PLACEHOLDER_CHAT_NAME,
     workspacePath: normalizeWorkspacePath(desktopWorkspacePath),
     modelId: modelId || '',
-    modeId: 'desktop',
+    modeId: 'general',
     workAgentAuto: true,
     history: [],
     lastStats: null,

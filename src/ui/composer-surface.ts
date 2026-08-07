@@ -42,13 +42,15 @@ function resolveComposerKey(): AppId | 'desktop' {
   // Code keeps desktop chat state for return navigation, but Code owns the composer.
   if (foregroundAppId === 'code') return 'code';
   if (isDesktopChatActive()) return 'desktop';
-  if (isChatAppForeground()) return 'chat';
   if (getOsView() === 'workspaces' && document.getElementById('desktopInput')) return 'desktop';
   return foregroundAppId ?? 'code';
 }
 
 /** Composer for the foreground Minnow app; Code app when shell is on desktop idle. */
 export function getActiveComposerSurface(): ComposerSurface {
+  if (isChatAppForeground()) {
+    return resolveByIds(DEFAULT_IDS.chat!.inputId, DEFAULT_IDS.chat!.sendBtnId);
+  }
   const key = resolveComposerKey();
   const registered = registry.get(key);
   if (registered) return registered;

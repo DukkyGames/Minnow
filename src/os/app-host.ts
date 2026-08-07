@@ -15,7 +15,6 @@ import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
-  chat: 'chatView',
   settings: 'settingsView',
   research: 'researchView',
   bench: 'benchmarkView',
@@ -338,14 +337,6 @@ async function openAppPage(
       }
       break;
     }
-    case 'chat': {
-      const { openChatApp } = await import('../ui/chat-app');
-      await openChatApp({
-        seed: options?.seed,
-        chatId: options?.chatId,
-      });
-      break;
-    }
     default:
       break;
   }
@@ -422,7 +413,7 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
     showAppLayer(appId, animateEnter);
     void openAppPage(appId, options, generation);
     lastForegroundApp = appId;
-  } else if (options && (appId === 'chat' || appId === 'code' || appId === 'research')) {
+  } else if (options && (appId === 'code' || appId === 'research')) {
     void openAppPage(appId, options, generation);
   } else if (!isAppPageLayerOpen(appId)) {
     void openAppPage(appId, options, generation);

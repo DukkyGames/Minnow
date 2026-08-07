@@ -18,7 +18,6 @@ export function isChatAppForeground(): boolean {
   // Code fullscreen keeps desktop chat state for return navigation, but Code owns the UI.
   if (foregroundAppId === 'code') return false;
   if (isDesktopChatActive()) return true;
-  if (foregroundAppId === 'chat') return true;
   if (foregroundAppId != null) return false;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
 }

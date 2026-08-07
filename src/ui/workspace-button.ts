@@ -60,6 +60,16 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   clearCachesForWorkspace(previousPath);
   setWorkspaceFromServer(info);
   updateWorkspaceButtonLabel(info.label, info.path);
+  const { persistFilePanelForWorkspace, reloadFilePanelForWorkspace } = await import(
+    '../state/file-panel'
+  );
+  const { persistTerminalForWorkspace, reloadTerminalForWorkspace } = await import(
+    '../config/terminal-meta'
+  );
+  await persistFilePanelForWorkspace(previousPath);
+  await persistTerminalForWorkspace(previousPath);
+  await reloadFilePanelForWorkspace(info.path);
+  await reloadTerminalForWorkspace(info.path);
   const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
   const closedCodeMap = teardownCodeBrainMapBeforeChatPaint();
   const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');

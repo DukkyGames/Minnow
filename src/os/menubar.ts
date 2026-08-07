@@ -128,17 +128,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   chatToggle.hidden = true;
   chatToggle.innerHTML = iconHtml('menu', { size: 16 });
   chatToggle.addEventListener('click', () => {
-    const fg = getForegroundAppId();
-    if (fg === 'chat') {
-      void import('../ui/chat-app').then((m) => {
-        m.toggleChatAppSessionRail();
-        chatToggle.setAttribute(
-          'aria-pressed',
-          m.isChatAppSessionRailHidden() ? 'false' : 'true',
-        );
-      });
-      return;
-    }
     void import('../ui/layout').then((m) => m.toggleSidebarLayout());
   });
 
@@ -248,16 +237,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     if (toggleLabel) {
       chatToggle.setAttribute('aria-label', toggleLabel);
     }
-    if (fgApp === 'chat') {
-      void import('../ui/chat-app').then((m) => {
-        chatToggle.setAttribute(
-          'aria-pressed',
-          m.isChatAppSessionRailHidden() ? 'false' : 'true',
-        );
-      });
-    } else {
-      chatToggle.removeAttribute('aria-pressed');
-    }
+    chatToggle.removeAttribute('aria-pressed');
 
     // Scheduler shortcut follows the same availability rule as the dock.
     schedulerBtn.hidden = !isAppAvailable('scheduler');

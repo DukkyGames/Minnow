@@ -159,7 +159,7 @@ export function resolveLegacyHash(hash: string): {
     return { hash: trimmed };
   }
   if (trimmed === '#/app/chat' || trimmed.startsWith('#/app/chat/')) {
-    return { hash: '#/workspaces', desktopChat: true };
+    return { hash: '#/app/code/chat' };
   }
   return { hash: trimmed };
 }
@@ -387,6 +387,10 @@ export function navigateToDesktop(): void {
 
 /** Launch or foreground an app and update the hash. */
 export function launchApp(appId: AppId, options?: LaunchOptions): void {
+  if ((appId as string) === 'chat') {
+    launchApp('code', { ...options, codeSection: 'chat' });
+    return;
+  }
   if (rejectUnavailableApp(appId)) return;
 
   if (appId === 'research') {

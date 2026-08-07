@@ -182,9 +182,9 @@ export function listRailApps(): AppDefinition[] {
   return out;
 }
 
-/** Available apps for the dock (chat lives on the desktop, not the dock). */
+/** Available apps for the dock. */
 export function listDockApps(): AppDefinition[] {
-  return listAvailableApps().filter((app) => app.id !== 'chat');
+  return listAvailableApps();
 }
 
 /** Optional released apps currently enabled by the user. */

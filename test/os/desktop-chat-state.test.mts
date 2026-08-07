@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetChatsWorkspacePathCache } from '../../src/lib/chats-workspace.ts';
 import { resetDesktopWorkspacePathCache } from '../../src/lib/desktop-workspace.ts';
 import { resetAppHostForTests } from '../../src/os/app-host.ts';
-import { resetInstancesForTests } from '../../src/os/instances.ts';
+import { resetInstancesForTests, getForegroundAppId } from '../../src/os/instances.ts';
 import {
   activateDesktopChat,
   getDesktopState,
@@ -167,22 +167,20 @@ describe('desktop chat state', () => {
     assert.equal(getActiveChat().history.length, 0);
   });
 
-  test('resolveLegacyHash redirects #/app/chat to desktop', () => {
+  test('resolveLegacyHash redirects #/app/chat to Code chat', () => {
     assert.deepEqual(resolveLegacyHash('#/app/chat'), {
-      hash: '#/desktop',
-      desktopChat: true,
+      hash: '#/app/code/chat',
     });
   });
 
-  test('launchApp(chat) stays on desktop and activates chat', async () => {
+  test('launchApp(chat) opens Code chat workspace', async () => {
     launchApp('chat');
-    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(window.location.hash, '#/app/code/chat');
     await new Promise((r) => setTimeout(r, 0));
-    assert.equal(isDesktopChatActive(), true);
-    assert.equal(getDesktopState(), 'chatActive');
+    assert.equal(getForegroundAppId(), 'code');
   });
 
-  test('parseOsHash still accepts desktop route', () => {
-    assert.deepEqual(parseOsHash('#/desktop'), { view: 'desktop' });
+  test('parseOsHash still maps #/desktop to workspaces', () => {
+    assert.deepEqual(parseOsHash('#/desktop'), { view: 'workspaces' });
   });
 });

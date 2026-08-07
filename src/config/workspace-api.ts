@@ -17,6 +17,8 @@ export interface WorkspaceInfo {
   recent?: WorkspaceRecentItem[];
   /** Parent directory for welcome "Create new project" (~/Projects). */
   newProjectParent?: string;
+  /** Absolute path to the Minnow Scratch sandbox (~/.minnow/workspace). */
+  scratchPath?: string;
 }
 
 export interface WorkspacePickResult {
