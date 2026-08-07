@@ -10,6 +10,11 @@ import {
 } from './instances';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
+import {
+  closeResearchPanel,
+  isResearchPanelOpen,
+  queueResearchPanelOpen,
+} from '../ui/research-panel';
 import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
 
 /** Legacy `#/app/…` target, or workspace gate when that app is unavailable. */
@@ -348,19 +353,17 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
   if (rejectUnavailableApp(appId)) return;
 
   if (appId === 'research') {
-    void import('../ui/research-panel').then((m) => {
-      if (m.isResearchPanelOpen()) {
-        m.closeResearchPanel();
-        return;
-      }
-      m.queueResearchPanelOpen({
-        seed: options?.seed,
-        autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
-      });
-      launchApp('code', {
-        ...options,
-        codeSection: 'chat',
-      });
+    if (isResearchPanelOpen()) {
+      closeResearchPanel();
+      return;
+    }
+    queueResearchPanelOpen({
+      seed: options?.seed,
+      autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+    });
+    launchApp('code', {
+      ...options,
+      codeSection: 'chat',
     });
     return;
   }

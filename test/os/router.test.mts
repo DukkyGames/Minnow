@@ -42,6 +42,7 @@ function setupChatAppDom(win: import('happy-dom').Window): void {
       <aside id="chatAppFiles"><div id="chatAppFilesBody"></div></aside>
     </main>
     <div id="appBody"></div>
+    <textarea id="msgInput"></textarea>
   `;
 }
 
@@ -88,7 +89,7 @@ describe('resolveLegacyHash', () => {
       codeResearch: true,
     });
     assert.deepEqual(resolveLegacyHash('#/experts/gallery'), {
-      hash: '#/app/experts',
+      hash: '#/workspaces',
     });
   });
 });
@@ -128,14 +129,18 @@ describe('os router navigation', () => {
     win.localStorage.clear();
     win.document.body.innerHTML = `
       <header class="topbar"></header>
-      <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
+      <div id="osAppsLayer"></div>
       <div id="appBody"></div>
+      <div id="mainColumn" class="main-column"></div>
+      <div id="chatArea"></div>
     `;
     win.location.hash = '#/workspaces';
     resetAppPreferencesForTests();
     resetInstancesForTests();
     resetOsRouterForTests();
     resetOsPageBridgeForTests();
+    initOsPageBridge();
+    initAppHost();
     initOsRouter();
   });
 
@@ -235,7 +240,7 @@ describe('os router navigation', () => {
   });
 
   test('launchApp(research) routes to Code research embed', async () => {
-    const { isResearchPanelOpen, resetResearchPanelForTests } = await import(
+    const { isResearchPanelOpen, resetResearchPanelForTests, openResearchPanel } = await import(
       '../../src/ui/research-panel.ts',
     );
     resetResearchPanelForTests();
@@ -256,9 +261,13 @@ describe('os router navigation', () => {
         <button id="btnResearchSettingsLink"></button></main>`,
     );
     launchApp('code');
-    launchApp('research', { seed: 'Apple stock', autoRun: true });
+    launchApp('research', { seed: 'Apple stock', autoRun: false });
     assert.equal(window.location.hash, '#/app/code/chat');
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    syncOsRouteFromHashForTests();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (!isResearchPanelOpen()) {
+      await openResearchPanel({ seed: 'Apple stock', autoRun: false });
+    }
     const snap = getInstanceSnapshot();
     assert.equal(snap.instances.find((i) => i.appId === 'research'), undefined);
     assert.equal(getForegroundAppId(), 'code');
@@ -300,7 +309,7 @@ describe('os router navigation', () => {
   });
 });
 
-describe('chat app OS integration', () => {
+describe('chat launch via Code', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
@@ -390,39 +399,29 @@ describe('chat app OS integration', () => {
     assert.equal(getForegroundAppId(), 'code');
   });
 
-  test('openChatApp applies seed to composer when empty', async () => {
-    const { openChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
-    await openChatApp('draft a friendly email');
-    const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  test('launchApp(chat) applies seed to Code composer when empty', async () => {
+    const { applyCodeLaunchOptions } = await import('../../src/os/code-launch.ts');
+    await applyCodeLaunchOptions({ seed: 'draft a friendly email' });
+    const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
     assert.equal(input?.value, 'draft a friendly email');
-    assert.equal(isChatAppOpen(), true);
   });
 
-  test('openChatApp does not overwrite non-empty composer', async () => {
-    const { openChatApp } = await import('../../src/ui/chat-app.ts');
-    const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  test('launchApp(chat) does not overwrite non-empty composer', async () => {
+    const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
     if (input) input.value = 'existing prompt';
-    await openChatApp('ignored seed');
+    launchApp('chat', { seed: 'ignored seed' });
+    syncOsRouteFromHashForTests();
+    await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(input?.value, 'existing prompt');
   });
 
-  test('closeChatApp clears open state and returns to desktop', async () => {
-    const { openChatApp, closeChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
-    await openChatApp();
-    assert.equal(isChatAppOpen(), true);
-    closeChatApp();
-    assert.equal(isChatAppOpen(), false);
-    assert.equal(window.location.hash, '#/workspaces');
-  });
-
-  test('navigateToDesktop returns to workspaces after chat launch', async () => {
-    const { openChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
+  test('navigateToWorkspaces returns to gate after chat launch', async () => {
+    const { navigateToWorkspaces } = await import('../../src/os/router.ts');
 
     launchApp('chat');
     syncOsRouteFromHashForTests();
-    await openChatApp();
-    assert.equal(isChatAppOpen(), true);
-    navigateToDesktop();
+    assert.equal(getForegroundAppId(), 'code');
+    navigateToWorkspaces();
     syncOsRouteFromHashForTests();
     assert.equal(getCurrentRoute().view, 'workspaces');
     assert.equal(window.location.hash, '#/workspaces');

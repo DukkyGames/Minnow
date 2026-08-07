@@ -30,8 +30,6 @@ import {
 
   resetAppPreferencesForTests,
 
-  setAppEnabled,
-
 } from '../../src/os/app-preferences.ts';
 
 import {
@@ -156,12 +154,11 @@ describe('app focus cycle', () => {
 
 
 
-  test('listCycleableAppSurfaces omits user-disabled rail apps', () => {
+  test('listCycleableAppSurfaces omits MRU ids outside the rail roster', () => {
     recordAppSurfaceFocus('code');
-    recordAppSurfaceFocus('brain');
-    setAppEnabled('brain', false);
+    recordAppSurfaceFocus('compare');
 
-    assert.equal(listCycleableAppSurfaces().includes('brain'), false);
+    assert.equal(listCycleableAppSurfaces().includes('compare'), false);
   });
 
 
