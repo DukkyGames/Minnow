@@ -30,7 +30,7 @@ import {
 import { startEmailPollLoop, stopEmailPollLoop } from './server/email/poller.js';
 import { setSchedulerServerBaseUrl } from './server/scheduler/server-base-url.js';
 import { shutdownSchedulerRuns } from './server/scheduler/runner.js';
-import { shutdownAllServers } from './server/servers/index.js';
+import { shutdownAllServers, shutdownAllServersNow } from './server/servers/index.js';
 import { shutdownAllModelServes } from './server/models/index.js';
 import {
   resolveSafePath,
@@ -218,22 +218,23 @@ async function main() {
     stopCalendarReminderLoop();
     stopEmailPollLoop();
     shutdownSchedulerRuns();
-    shutdownAllServers();
+    await shutdownAllServers();
     await shutdownAllModelServes();
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
   };
-  process.on('exit', () => {
-    /* sync-only: async teardown runs on SIGINT/SIGTERM below */
+  const onShutdownSync = () => {
     clearDevHostState();
     stopSchedulerTickLoop();
     stopCalendarReminderLoop();
     stopEmailPollLoop();
     shutdownSchedulerRuns();
-    shutdownAllServers();
+    shutdownAllServersNow();
+    void shutdownAllModelServes();
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
-  });
+  };
+  process.on('exit', onShutdownSync);
   process.on('SIGINT', () => {
     void onShutdown()
       .catch((err) => console.error('[shutdown]', err))

@@ -979,6 +979,62 @@ export function killProcessTree(child) {
 }
 
 /**
+ * Wait until a child exits or a deadline passes.
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {number} timeoutMs
+ */
+function waitForChildExit(child, timeoutMs) {
+  if (!child) return Promise.resolve();
+  if (child.exitCode != null || child.signalCode != null) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const done = () => {
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      child.removeListener('exit', done);
+      child.removeListener('close', done);
+      clearTimeout(timer);
+    };
+    child.on('exit', done);
+    child.on('close', done);
+    const timer = setTimeout(done, timeoutMs);
+  });
+}
+
+/**
+ * SIGTERM the process tree, wait, then SIGKILL on POSIX if still alive.
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {{ graceMs?: number }} [opts]
+ */
+export async function killProcessTreeAndWait(child, opts = {}) {
+  const graceMs = opts.graceMs ?? 3000;
+  if (!child?.pid) return;
+  if (child.exitCode != null || child.signalCode != null) return;
+
+  killProcessTree(child);
+  await waitForChildExit(child, graceMs);
+
+  if (child.exitCode == null && child.signalCode == null && child.pid) {
+    if (process.platform === 'win32') {
+      killProcessTree(child);
+    } else {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+    await waitForChildExit(child, 1500);
+  }
+}
+
+/**
  * @param {string} chatId
  * @returns {Promise<TerminalRunRecord[]>}
  */

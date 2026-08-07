@@ -17,6 +17,7 @@ import { after, before, beforeEach, describe, mock, test } from 'node:test';
 
 /** Calls into the managed-server manager, so the test can assert idempotence. */
 const startServerCalls = [];
+const stopServerCalls = [];
 let mlxInstalled = true;
 
 mock.module('../../server/servers/manager.js', {
@@ -24,6 +25,10 @@ mock.module('../../server/servers/manager.js', {
     startServer: async (id) => {
       startServerCalls.push(id);
       return { ok: true, alreadyRunning: startServerCalls.length > 1 };
+    },
+    stopServer: async (id) => {
+      stopServerCalls.push(id);
+      return { ok: true, wasRunning: true };
     },
     getManagedServerPort: async () => 8087,
     isManagedServerRunning: () => true,
@@ -77,6 +82,7 @@ describe('MLX serve', () => {
   beforeEach(async () => {
     await resetServesForTests();
     startServerCalls.length = 0;
+    stopServerCalls.length = 0;
     backgroundRuns = 0;
     mlxInstalled = true;
     // resetServesForTests clears the spawn override, so reinstate it.
@@ -141,6 +147,10 @@ describe('MLX serve', () => {
     const first = await startServe({ modelPath: mlxDir, runtime: 'mlx-lm', modelLabel: mlxDir });
     const second = await startServe({ modelPath: other, runtime: 'mlx-lm', modelLabel: other });
 
+    const serves = await listServes();
+    const firstRow = serves.find((s) => s.id === first.id);
+    assert.equal(firstRow?.status, 'stopped');
+
     // Same process, same provider, same port — only the model key differs.
     assert.equal(first.port, second.port);
     assert.equal(first.providerId, second.providerId);
@@ -158,6 +168,23 @@ describe('MLX serve', () => {
 
     const { providers } = await listProviders();
     assert.equal(providers.find((p) => p.id === 'mlx-lm-local')?.enabled, true);
+  });
+
+  test('stops the managed server when the last MLX serve is ejected', async () => {
+    const serve = await startServe({ modelPath: mlxDir, runtime: 'mlx-lm', modelLabel: mlxDir });
+    await stopServe(serve.id);
+    assert.deepEqual(stopServerCalls, ['mlx-lm']);
+  });
+
+  test('does not stop the managed server while another MLX serve is active', async () => {
+    const other = path.join(homeDir, 'models', 'artifacts', 'mlx-community--Llama-3B-4bit');
+    await fsp.mkdir(other, { recursive: true });
+
+    const first = await startServe({ modelPath: mlxDir, runtime: 'mlx-lm', modelLabel: mlxDir });
+    await startServe({ modelPath: other, runtime: 'mlx-lm', modelLabel: other });
+    stopServerCalls.length = 0;
+    await stopServe(first.id);
+    assert.equal(stopServerCalls.length, 0);
   });
 
   test('rejects a model directory that is not there', async () => {
