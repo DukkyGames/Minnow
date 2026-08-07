@@ -499,9 +499,10 @@ export function resolveWslLandlockHelper(env = process.env, opts = {}) {
 
   const override = env.MINNOW_SANDBOX_HELPER?.trim() || '';
 
-  // Linux-side / bare override: use as-is (no copy).
+  // Linux-side / bare override: use as-is (no copy). Skip when unit tests simulate Windows WSL.
   if (
     override &&
+    !opts.forceWin32 &&
     (override.startsWith('/') || (!override.includes('\\') && !/^[a-zA-Z]:/.test(override)))
   ) {
     return override;

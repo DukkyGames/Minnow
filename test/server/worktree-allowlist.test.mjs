@@ -23,7 +23,7 @@ import { setWorkspaceRoot } from '../../server/workspace/root.js';
 
 const execFileAsync = promisify(execFile);
 
-describe('worktree allowlist', () => {
+describe('worktree allowlist', { concurrency: false }, () => {
   let repoDir;
   let siblingWt;
   let localWt;
@@ -64,11 +64,15 @@ describe('worktree allowlist', () => {
   });
 
   test('isRegisteredGitWorktreePath accepts sibling git worktree paths', async () => {
+    await setWorkspaceRoot(repoDir);
+    invalidateRegisteredWorktreeCache();
     assert.equal(await isRegisteredGitWorktreePath(siblingWt), true);
     assert.equal(await isAllowedWorkspaceRootAsync(siblingWt), true);
   });
 
   test('validateAllowedWorkspaceRoot resolves registered worktree directory', async () => {
+    await setWorkspaceRoot(repoDir);
+    invalidateRegisteredWorktreeCache();
     const resolved = await validateAllowedWorkspaceRoot(siblingWt);
     assert.equal(path.resolve(resolved), path.resolve(siblingWt));
   });
