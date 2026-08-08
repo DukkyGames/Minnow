@@ -48,6 +48,17 @@ export function openMobileSidebar(): void {
   }
 }
 
+/**
+ * Board view carries its own board rail; hide the workspace chat list when entering
+ * (hub/plan screens suppress it in CSS — teardown would otherwise restore it).
+ */
+export function collapseChatSidebarForBoardEnter(): void {
+  if (!sessionState || sessionState.sidebarCollapsed) return;
+  sessionState.sidebarCollapsed = true;
+  scheduleSaveSessions();
+  applySidebarVisuals();
+}
+
 export function applySidebarVisuals(): void {
   const side = document.getElementById('chatSidebar');
   if (!side || !sessionState) return;

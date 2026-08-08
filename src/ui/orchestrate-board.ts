@@ -155,8 +155,24 @@ import {
   disposeOrchestratePageShell,
   OB_CHAT_AREA_CLASS,
   paintOrchestrateBoardRail,
+  paintOrchestrateChatRail,
   queryMountedBoardRoot,
 } from './orchestrate-page-shell';
+import {
+  boardChatRailCollapsedWaves,
+  confirmBoardChatDelete,
+  mountBoardChatHost,
+  refreshBoardChatHeader,
+  toggleBoardChatRailWave,
+  unmountBoardChatHost,
+} from './orchestrate-board-chat';
+import {
+  getOpenBoardChatId,
+  isBoardChatEmbedOpen,
+  setOpenBoardChatId,
+} from './orchestrate-board-chat-state';
+import { showChatItemContextMenu } from './sidebar';
+import { setStatus } from './status';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { teardownHub } from './hub';
 
@@ -1929,7 +1945,7 @@ function buildRunningTaskChip(
     }
     controls.appendChild(
       createRunningTaskControlButton('open', `Open chat for ${slot.taskId}`, () => {
-        if (chat) switchChat(chat.id);
+        if (chat) openBoardChatInOrchestrate(chat.id);
       }),
     );
     chip.appendChild(controls);
@@ -2291,7 +2307,12 @@ function appendTaskCardChats(
     btn.appendChild(label);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      switchChat(row.chatId);
+      openBoardChatInOrchestrate(row.chatId);
+    });
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showBoardChatRailMenu(row.chatId, label, { x: e.clientX, y: e.clientY });
     });
     item.appendChild(btn);
     list.appendChild(item);
@@ -3352,6 +3373,16 @@ export async function mountBoardOnboardingPanel(
 export function refreshActiveBoardIfMounted(): void {
   if (isOrchestrateHubMounted()) return;
   if (isBoardDomRefreshBlockedByOverlay()) return;
+  /*
+   * A chat is showing in `.ob-main` and the board root is parked off-DOM.
+   * Rebuilding here would evict the transcript mid-read, so only the live parts
+   * that stay on screen (rail dots, header state) refresh.
+   */
+  if (isBoardChatEmbedOpen()) {
+    repaintBoardRail?.();
+    refreshBoardChatHeader();
+    return;
+  }
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   const group = getActiveBoardGroup();
   if (!group) return;
@@ -3367,6 +3398,128 @@ export function refreshActiveBoardIfMounted(): void {
   }
   if (root && !board) return;
   renderBoardView(group);
+}
+
+// ─── Board chats in the main pane ────────────────────────────────────────────
+
+/**
+ * Repaint the rail at whichever level is current. Set by renderBoardView so
+ * opening or closing a chat can swap the rail without rebuilding the page.
+ */
+let repaintBoardRail: (() => void) | null = null;
+
+/** Repaint the rail if a board page is mounted (no-op otherwise). */
+export function refreshBoardRailIfMounted(): void {
+  repaintBoardRail?.();
+}
+
+/** Rail row context menu — the sidebar's menu, minus its orchestrator entry. */
+function showBoardChatRailMenu(
+  chatId: string,
+  nameEl: HTMLSpanElement,
+  coords: { x: number; y: number },
+): void {
+  const chat = findChatById(chatId);
+  if (!chat) return;
+  showChatItemContextMenu(coords.x, coords.y, chat, nameEl, {
+    hideOrchestrateEntry: true,
+    onRenamed: () => {
+      refreshBoardRailIfMounted();
+      refreshBoardChatHeader();
+    },
+    onDelete: (victim) => {
+      void (async () => {
+        if (isChatStreaming(victim.id)) {
+          setStatus('spin', 'Finish the current reply first');
+          return;
+        }
+        if (!(await confirmBoardChatDelete(victim))) return;
+        if (getOpenBoardChatId() === victim.id) closeBoardChatInOrchestrate();
+        const { removeChatById } = await import('../state/sessions');
+        removeChatById(victim.id, '');
+        refreshBoardRailIfMounted();
+        refreshActiveBoardIfMounted();
+      })();
+    },
+  });
+}
+
+/**
+ * Re-attach the live streaming row to the freshly painted embed.
+ *
+ * Opening a task chat while the board runs is the normal case, and
+ * `renderChatFromHistory` rebuilds the transcript from persisted history only —
+ * without this the in-flight turn keeps streaming into a detached row and the
+ * embed sits at whatever the task had already written.
+ */
+function remountBoardChatStreamDom(chatId: string): void {
+  if (!isChatStreaming(chatId)) return;
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
+}
+
+/**
+ * Show a board chat in `.ob-main` in place of the board.
+ *
+ * Every entry point (task card row, running chip, rail row) routes here, so a
+ * board chat never lands in the main column where it would have no way back.
+ */
+export function openBoardChatInOrchestrate(chatId: string): void {
+  const chat = findChatById(chatId);
+  if (!chat) return;
+  const group = getBoardGroupForChat(chat) ?? getActiveBoardGroup();
+  if (!group) {
+    void switchChat(chatId);
+    return;
+  }
+
+  setOpenBoardChatId(chatId);
+  const host = mountBoardChatHost(chat, group, () => closeBoardChatInOrchestrate());
+  if (!host) {
+    // Orchestrate does not own the column (deep link, background call) — fall
+    // back to normal navigation rather than dropping the request.
+    setOpenBoardChatId(null);
+    void switchChat(chatId);
+    return;
+  }
+
+  repaintBoardRail?.();
+
+  /*
+   * The planner is usually already the active chat while a board is open, and
+   * switchChat short-circuits on the active id — which would leave the host we
+   * just mounted empty. Paint it directly in that case.
+   */
+  if (sessionState?.activeId === chatId) {
+    void import('./messages').then((m) => {
+      m.renderChatFromHistory(chat);
+      refreshBoardChatHeader();
+      remountBoardChatStreamDom(chatId);
+    });
+    return;
+  }
+
+  void switchChat(chatId).then(() => {
+    refreshBoardChatHeader();
+    repaintBoardRail?.();
+    remountBoardChatStreamDom(chatId);
+  });
+}
+
+/** Return `.ob-main` to the board and put the rail back on the board library. */
+export function closeBoardChatInOrchestrate(): void {
+  if (!isBoardChatEmbedOpen()) return;
+  const group = getActiveBoardGroup();
+  setOpenBoardChatId(null);
+  unmountBoardChatHost();
+  repaintBoardRail?.();
+
+  const plannerId = group?.plannerChatId?.trim();
+  if (plannerId && sessionState?.activeId !== plannerId) {
+    // resolveBoardRestoreGroupOnSwitch reopens the kanban for us.
+    void switchChat(plannerId);
+    return;
+  }
+  if (group) renderBoardView(group);
 }
 
 /** Open another board from the run-pane rail without bouncing through the hub. */
@@ -3385,6 +3538,12 @@ function openBoardGroupFromBoardRail(groupId: string, plannerChatId?: string): v
 /** Render Orchestrate board into the board mount (#chatArea or split top pane). */
 export function renderBoardView(group: ChatGroup): void {
   if (isBoardDomRefreshBlockedByOverlay()) return;
+  // Board chat is showing in `.ob-main`; the board root is parked, not gone.
+  if (isBoardChatEmbedOpen()) {
+    repaintBoardRail?.();
+    refreshBoardChatHeader();
+    return;
+  }
   teardownOrchestrateHub();
   teardownHub();
   const area = document.getElementById('chatArea');
@@ -3446,11 +3605,45 @@ export function renderBoardView(group: ChatGroup): void {
     },
   });
 
-  let filterText = '';
+  /*
+   * The rail shows one level at a time: the board library, or the open board's
+   * chats. A board with 31 tasks stacked under the library would rebuild the
+   * sidebar tree this surface exists to replace.
+   */
+  let boardFilterText = '';
+  let chatFilterText = '';
+  let railListLevel: 'boards' | 'chats' | null = null;
   const paintRail = () => {
+    const chatLevel = isBoardChatEmbedOpen();
+    const level = chatLevel ? 'chats' : 'boards';
+    if (railListLevel !== level) {
+      delete railList.dataset.obRailKey;
+      railListLevel = level;
+    }
+    filterInput.placeholder = chatLevel ? 'Filter chats' : 'Filter boards';
+    filterInput.setAttribute('aria-label', chatLevel ? 'Filter chats' : 'Filter boards');
+    if (filterInput.value !== (chatLevel ? chatFilterText : boardFilterText)) {
+      filterInput.value = chatLevel ? chatFilterText : boardFilterText;
+    }
+    if (chatLevel) {
+      paintOrchestrateChatRail(railList, {
+        group,
+        activeChatId: getOpenBoardChatId(),
+        filterText: chatFilterText,
+        collapsedWaves: boardChatRailCollapsedWaves(),
+        onToggleWave: (key) => {
+          toggleBoardChatRailWave(key);
+          paintRail();
+        },
+        onSelectChat: (chatId) => openBoardChatInOrchestrate(chatId),
+        onChatContextMenu: showBoardChatRailMenu,
+        onBack: () => closeBoardChatInOrchestrate(),
+      });
+      return;
+    }
     paintOrchestrateBoardRail(railList, {
       activeGroupId: group.id,
-      filterText,
+      filterText: boardFilterText,
       onSelectBoard: openBoardGroupFromBoardRail,
       onEmptyAction: () => {
         void import('./orchestrate-hub').then((m) => m.renderOrchestrateHub());
@@ -3458,9 +3651,11 @@ export function renderBoardView(group: ChatGroup): void {
     });
   };
   filterInput.addEventListener('input', () => {
-    filterText = filterInput.value;
+    if (isBoardChatEmbedOpen()) chatFilterText = filterInput.value;
+    else boardFilterText = filterInput.value;
     paintRail();
   });
+  repaintBoardRail = paintRail;
   paintRail();
 
   const root = document.createElement('section');

@@ -7,12 +7,15 @@
  * in the Code view bar now, beside Orchestrate and Dev servers, and behaves like
  * they do: press to open, press again to leave.
  *
- * What the button opens depends on what is already going:
+ * What the Code view-bar button opens depends on what is already going:
  *
  *   1. the run the planning session is already pointing at,
  *   2. otherwise the newest pipeline still in flight (a 20-minute run must never
  *      be hidden behind a blank composer),
  *   3. otherwise a new plan, with the library rail listing everything saved.
+ *
+ * Orchestrate hub **Make a plan** always wants a blank composer (`preferNew`),
+ * so it does not resume the last session or jump into a live run.
  */
 
 import '../styles/super-plan-page.css';
@@ -98,30 +101,45 @@ interface SuperPlanTarget {
   phase: OrchestratePlanScreenPhase;
 }
 
-function resolveSuperPlanTarget(): SuperPlanTarget | null {
+/** Options for {@link openSuperPlanScreen}. */
+export interface OpenSuperPlanScreenOptions {
+  /**
+   * Skip resuming the last planning session or an in-flight run and open a
+   * blank Super Plan composer (reuse an empty spare chat when one exists).
+   * Used by Orchestrate hub **Make a plan**.
+   */
+  preferNew?: boolean;
+}
+
+function resolveSuperPlanTarget(options?: OpenSuperPlanScreenOptions): SuperPlanTarget | null {
   if (!sessionState) return null;
 
-  const session = getOrchestratePlanScreenSession();
-  const sessionChat = session ? findChatById(session.chatId) : null;
-  if (isSuperPlanChat(sessionChat) && isChatInCurrentWorkspace(sessionChat!)) {
-    return {
-      chat: sessionChat!,
-      phase: sessionChat!.superPlan
-        ? derivePlanScreenPhaseFromSuperPlan(sessionChat!)
-        : 'prompt',
-    };
-  }
+  // Explicit "new plan" entry points must not restore the previous surface.
+  if (!options?.preferNew) {
+    const session = getOrchestratePlanScreenSession();
+    const sessionChat = session ? findChatById(session.chatId) : null;
+    if (isSuperPlanChat(sessionChat) && isChatInCurrentWorkspace(sessionChat!)) {
+      return {
+        chat: sessionChat!,
+        phase: sessionChat!.superPlan
+          ? derivePlanScreenPhaseFromSuperPlan(sessionChat!)
+          : 'prompt',
+      };
+    }
 
-  const live = findLiveSuperPlanChat();
-  if (live) return { chat: live, phase: derivePlanScreenPhaseFromSuperPlan(live) };
+    const live = findLiveSuperPlanChat();
+    if (live) return { chat: live, phase: derivePlanScreenPhaseFromSuperPlan(live) };
+  }
 
   const compose = resolveOrCreateComposeChat();
   return compose ? { chat: compose, phase: 'prompt' } : null;
 }
 
 /** Mount the Super Plan surface, remembering where to come back to. */
-export async function openSuperPlanScreen(): Promise<void> {
-  if (isSuperPlanScreenOpen()) return;
+export async function openSuperPlanScreen(options?: OpenSuperPlanScreenOptions): Promise<void> {
+  // Resume path: if the surface is already up, leave it alone.
+  // preferNew remounts onto a blank composer even when a prior plan is showing.
+  if (isSuperPlanScreenOpen() && !options?.preferNew) return;
 
   await closeCompetingMainColumnViews();
 
@@ -130,8 +148,13 @@ export async function openSuperPlanScreen(): Promise<void> {
     returnChatId = activeChat.id;
   }
 
-  const target = resolveSuperPlanTarget();
+  const target = resolveSuperPlanTarget(options);
   if (!target) return;
+
+  // Drop any suspended / prior plan-screen session so paint cannot revive it.
+  if (options?.preferNew) {
+    teardownOrchestratePlanScreen();
+  }
 
   if (sessionState && sessionState.activeId !== target.chat.id) {
     await switchChat(target.chat.id);

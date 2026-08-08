@@ -4,6 +4,10 @@
 
 import { getForegroundAppId } from '../os/instances';
 import { getOrchestrateChatMountElement } from './orchestrate-board-init-split';
+import {
+  isBoardChatEmbedOpen,
+  queryBoardChatTranscriptHost,
+} from './orchestrate-board-chat-state';
 
 /** Desktop chat surface was removed with the workspace-first shell. */
 export function shouldPaintDesktopChatSurface(): boolean {
@@ -85,8 +89,18 @@ export function resolveSubAgentOverlayMount(): HTMLElement | null {
 /** Active transcript root: override, desktop column, Chat app column, or Code orchestrate mount. */
 export function getActiveChatMountElement(): HTMLElement {
   if (mountOverride) return mountOverride;
+  /*
+   * A board chat open in the Orchestrate screen owns the transcript, and it wins
+   * over `turnMount`: the common case is opening a task chat whose turn is
+   * already in flight, which pinned #chatArea before `.ob-chat` existed. Without
+   * this the stream keeps appending off-screen and the embed looks frozen.
+   *
+   * Flag before query — this runs per stream token, and the DOM lookup is only
+   * worth paying for while the embed is actually open.
+   */
+  const boardChatHost = isBoardChatEmbedOpen() ? queryBoardChatTranscriptHost() : null;
+  if (boardChatHost) return boardChatHost;
   if (turnMount) return turnMount;
-  const codeForeground = getForegroundAppId() === 'code';
   if (isEmailAssistantForeground()) {
     const emailCol = document.getElementById('emailAssistantMessageCol');
     if (emailCol) return emailCol;

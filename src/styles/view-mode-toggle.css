@@ -122,9 +122,13 @@
 
 
 
-/* Board view: hide chat composer (kanban + header controls only) */
+/*
+ * Board view: hide chat composer (kanban + header controls only).
+ * A board chat open in `.ob-main` is a real conversation, so it keeps the
+ * composer, the jump chip and the diff strip.
+ */
 
-.main-column.main-column--board-view .input-bar {
+.main-column.main-column--board-view:not(.main-column--board-chat) .input-bar {
 
   display: none !important;
 
@@ -134,13 +138,13 @@
 
 /* Board view: jump chip is for chat scroll only */
 
-.main-column.main-column--board-view .chat-jump-latest {
+.main-column.main-column--board-view:not(.main-column--board-chat) .chat-jump-latest {
 
   display: none !important;
 
 }
 
-.main-column.main-column--board-view .code-change-strip-wrap {
+.main-column.main-column--board-view:not(.main-column--board-chat) .code-change-strip-wrap {
 
   display: none !important;
 
