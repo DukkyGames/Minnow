@@ -82,6 +82,7 @@ describe('brain markup contract', () => {
     assert.match(html, /id="brainGraphCanvas"/);
     assert.match(html, /id="brainInspector"/);
     assert.match(html, /id="brainInspectorResize"/);
+    assert.match(html, /id="brainGraphSidebarResize"/);
     assert.match(html, /data-brain-nav="graph"/);
     assert.match(html, /data-brain-nav="proposals"/);
     assert.match(html, /id="brainProposalsList"/);

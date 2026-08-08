@@ -9,6 +9,7 @@ import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { launchApp, navigateToDesktop } from '../os/router';
 import { closeBrainInspector } from './brain/inspector';
+import { initBrainGraphSidebarResize } from './brain/graph-sidebar-resize';
 import { initBrainInspectorResize } from './brain/inspector-resize';
 import { renderBrainSection } from './brain/sections';
 import { fetchBrainUsage } from '../brain/client';
@@ -418,6 +419,7 @@ export function initBrainPage(): void {
   registerWindowTeardown('brain', () => closeBrain({ skipNavigate: true }));
   bindStaticSections();
   initBrainInspectorResize();
+  initBrainGraphSidebarResize();
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash.includes('/brain')) {
     openBrain(parseHashSection());

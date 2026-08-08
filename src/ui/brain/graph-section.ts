@@ -10,6 +10,7 @@ import { buildPageGraph, filterGraphByQuery } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi, type ForceGraphStats } from './graph/force-graph';
 import type { GraphEmphasisKey } from './graph/types';
 import { closeBrainInspector, renderBrainInspector } from './inspector';
+import { initBrainGraphSidebarResize } from './graph-sidebar-resize';
 
 const SHOW_ARCHIVES_KEY = 'minnow.brain.showArchives';
 const READOUT_COLLAPSED_KEY = 'minnow.brain.readoutCollapsed';
@@ -546,6 +547,7 @@ function showFirstRunHint(): void {
 /** Render graph home section. */
 export async function renderGraphSection(): Promise<void> {
   bindGraphToolbar();
+  initBrainGraphSidebarResize();
 
   const treeMount = document.getElementById('brainGraphTree');
   const offlineEl = document.getElementById('brainGraphOffline');

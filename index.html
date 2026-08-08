@@ -643,7 +643,6 @@
       </section>
       <section id="settingsSection-voice" class="settings-section settings-section--wide settings-area settings-area--title-suppressed" data-area="voice">
         <h2>Voice</h2>
-        <p class="settings-lead">Whisper speech-to-text and Qwen3-TTS. Device routing lives under <strong>Settings → Audio</strong>.</p>
         <div id="modelsVoiceBody" class="settings-section-body"></div>
       </section>
       </div>
@@ -1303,17 +1302,17 @@
       <section id="modelsSection-server" class="models-section models-section--flush">
         <div id="modelsServerBody" class="models-surface"></div>
       </section>
-      <section id="modelsSection-settings" class="models-section">
+      <section id="modelsSection-settings" class="models-section models-section--centered">
         <h2>Storage</h2>
         <p class="models-lead">Where Minnow looks for weights, and the token it uses to fetch gated ones.</p>
         <div id="modelsSettingsBody"></div>
       </section>
-      <section id="modelsSection-voice" class="models-section"></section>
-      <section id="modelsSection-providers" class="models-section"></section>
-      <section id="modelsSection-routing" class="models-section"></section>
-      <section id="modelsSection-sampler" class="models-section"></section>
-      <section id="modelsSection-thinking" class="models-section"></section>
-      <section id="modelsSection-usage" class="models-section"></section>
+      <section id="modelsSection-voice" class="models-section models-section--centered models-section--settings-wide"></section>
+      <section id="modelsSection-providers" class="models-section models-section--centered"></section>
+      <section id="modelsSection-routing" class="models-section models-section--centered models-section--settings-wide"></section>
+      <section id="modelsSection-sampler" class="models-section models-section--centered models-section--settings-wide"></section>
+      <section id="modelsSection-thinking" class="models-section models-section--centered models-section--settings-wide"></section>
+      <section id="modelsSection-usage" class="models-section models-section--centered"></section>
     </div>
     <aside class="models-inspector" id="modelsInspector" aria-label="Model details"></aside>
   </div>
@@ -1414,6 +1413,15 @@
           </div>
           <p id="brainGraphDenseNote" class="brain-muted brain-graph-dense brain-overlay-card hidden">Dense graph: showing a capped subset. Use search to focus.</p>
           <div class="brain-graph-sidebar">
+            <div
+              class="brain-graph-sidebar__resize"
+              id="brainGraphSidebarResize"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize pages panel"
+              aria-valuemin="200"
+              tabindex="-1"
+            ></div>
             <aside id="brainGraphTreePanel" class="brain-graph-tree-panel brain-overlay-card">
               <div class="brain-graph-tree-head">
                 <h3 class="brain-section-subtitle">Pages</h3>
@@ -1705,42 +1713,56 @@
         </div>
       </section>
       <section id="brainSection-settings" class="brain-section brain-section--centered">
-        <p id="brainSettingsStatusLine" class="brain-muted">Checking wiki status…</p>
-        <p id="brainSettingsStatus" class="brain-status" aria-live="polite"></p>
+        <header class="brain-settings-page-head">
+          <p id="brainSettingsStatusLine" class="brain-settings-page-head__summary">Checking wiki status…</p>
+          <p id="brainSettingsStatus" class="brain-status brain-settings-page-head__toast" aria-live="polite"></p>
+        </header>
         <div class="brain-settings-stack">
-          <div class="brain-settings-group brain-card">
-            <h3>Auto-learning cadence</h3>
-            <p id="brainSynthesisOffline" class="brain-muted hidden">Offline</p>
+          <div class="brain-settings-group">
+            <div class="brain-settings-group__head">
+              <h3 class="brain-settings-group__title">Auto-learning cadence</h3>
+              <p id="brainSynthesisOffline" class="brain-settings-group__offline hidden">Offline</p>
+            </div>
             <div class="brain-form-grid">
               <label><input type="checkbox" id="brainSynthesisEnabled" checked> Enable post-turn memory synthesis</label>
               <label>Extraction throttle (message pairs)
                 <input type="number" id="brainSynthesisThrottle" class="settings-input settings-input--narrow" min="1" value="4">
               </label>
-              <p id="brainSynthesisThrottleHint" class="brain-muted">Runs after every 4 completed user+assistant turns.</p>
+              <p id="brainSynthesisThrottleHint" class="brain-form-hint">Runs after every 4 completed user+assistant turns.</p>
               <label>Auto-write confidence
                 <input type="number" id="brainSynthesisAutoWrite" class="settings-input settings-input--narrow" min="0" max="1" step="0.05" value="0.85">
               </label>
-              <p class="brain-muted">Facts at or above this confidence are written to the wiki directly. Below it, they queue as proposals for review.</p>
-              <label>Skill: minimum rounds
-                <input type="number" id="brainSkillMinRounds" class="settings-input settings-input--narrow" min="1" max="10" value="2">
-              </label>
-              <label>Skill: minimum tool calls
-                <input type="number" id="brainSkillMinToolCalls" class="settings-input settings-input--narrow" min="1" max="20" value="2">
-              </label>
-              <label>Skill: sessions before proposing
-                <input type="number" id="brainSkillMinOccurrences" class="settings-input settings-input--narrow" min="1" max="5" value="2">
-              </label>
-              <p class="brain-muted">A skill is only proposed once this many separate sessions hit the same kind of problem. Set to 1 to propose from a single session.</p>
-              <div class="brain-field-row">
+              <p class="brain-form-hint">Facts at or above this confidence are written to the wiki directly. Below it, they queue as proposals for review.</p>
+              <div class="brain-settings-subsection" aria-labelledby="brainSkillProposalTitle">
+                <h4 class="brain-settings-subsection__title" id="brainSkillProposalTitle">Skill proposals</h4>
+                <p class="brain-form-hint brain-form-hint--lead">Propose a skill when separate sessions solve the same kind of problem.</p>
+                <div class="brain-settings-metrics">
+                  <label>Minimum rounds
+                    <input type="number" id="brainSkillMinRounds" class="settings-input settings-input--narrow" min="1" max="10" value="2">
+                  </label>
+                  <label>Minimum tool calls
+                    <input type="number" id="brainSkillMinToolCalls" class="settings-input settings-input--narrow" min="1" max="20" value="2">
+                  </label>
+                  <label>Sessions before proposing
+                    <input type="number" id="brainSkillMinOccurrences" class="settings-input settings-input--narrow" min="1" max="5" value="2">
+                  </label>
+                </div>
+                <p class="brain-form-hint">Set sessions to 1 to propose from a single session.</p>
+              </div>
+              <div class="brain-settings-footer">
                 <button type="button" class="brain-action-btn is-primary" id="brainSynthesisSave">Save synthesis settings</button>
               </div>
             </div>
           </div>
-          <div class="brain-settings-group brain-card">
-            <h3>Semantic embeddings</h3>
-            <p id="brainEmbeddingsOffline" class="brain-muted hidden">Offline</p>
-            <p id="brainEmbeddingsStatus" class="brain-muted">Checking embeddings…</p>
-            <span id="brainEmbeddingsReindexBadge" class="settings-memory-badge settings-memory-badge--pinned hidden">Reindex needed</span>
+          <div class="brain-settings-group">
+            <div class="brain-settings-group__head">
+              <h3 class="brain-settings-group__title">Semantic embeddings</h3>
+              <p id="brainEmbeddingsOffline" class="brain-settings-group__offline hidden">Offline</p>
+            </div>
+            <div class="brain-settings-group__meta">
+              <p id="brainEmbeddingsStatus" class="brain-settings-group__status">Checking embeddings…</p>
+              <span id="brainEmbeddingsReindexBadge" class="brain-settings-badge brain-settings-badge--warning hidden">Reindex needed</span>
+            </div>
             <div class="brain-form-grid">
               <label><input type="checkbox" id="brainEmbeddingsEnabled"> Enable hybrid vector retrieval</label>
               <label>Backend
@@ -1759,58 +1781,79 @@
                   </select>
                 </label>
               </div>
-              <label>Vector blend
-                <span id="brainEmbeddingsBlendLabel" class="brain-muted">50% vector</span>
-                <input type="range" id="brainEmbeddingsBlend" min="0" max="1" step="0.05" value="0.5">
-              </label>
-              <div class="brain-field-row">
+              <div class="brain-range-field">
+                <div class="brain-range-field__head">
+                  <span class="brain-range-field__label">Vector blend</span>
+                  <span id="brainEmbeddingsBlendLabel" class="brain-range-field__value">50% vector</span>
+                </div>
+                <input type="range" id="brainEmbeddingsBlend" min="0" max="1" step="0.05" value="0.5" aria-labelledby="brainEmbeddingsBlendLabel">
+              </div>
+              <div class="brain-settings-footer brain-settings-footer--actions">
                 <button type="button" class="brain-action-btn" id="brainEmbeddingsSave">Save embeddings</button>
                 <button type="button" class="brain-action-btn" id="brainEmbeddingsDownload">Download model</button>
                 <button type="button" class="brain-action-btn" id="brainEmbeddingsReindex">Reindex all</button>
               </div>
             </div>
           </div>
-          <div class="brain-settings-group brain-card">
-            <h3>Code index</h3>
-            <p id="brainCodeSettingsOffline" class="brain-muted hidden">Offline</p>
-            <p id="brainCodeSettingsStatus" class="brain-muted">Checking code index…</p>
+          <div class="brain-settings-group">
+            <div class="brain-settings-group__head">
+              <h3 class="brain-settings-group__title">Code index</h3>
+              <p id="brainCodeSettingsOffline" class="brain-settings-group__offline hidden">Offline</p>
+            </div>
+            <p id="brainCodeSettingsStatus" class="brain-settings-group__status">Checking code index…</p>
             <div class="brain-form-grid">
               <label><input type="checkbox" id="brainCodeEnabled" checked> Enable workspace code index</label>
-              <label>Include globs (one per line)
-                <textarea id="brainCodeIncludeGlobs" rows="4" spellcheck="false"></textarea>
-              </label>
-              <label>Exclude globs (one per line)
-                <textarea id="brainCodeExcludeGlobs" rows="3" spellcheck="false"></textarea>
-              </label>
-              <label>Repo map token budget
-                <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="1500">
-              </label>
-              <label>Code map injection token budget
-                <input type="number" id="brainCodeInjectionTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="10000">
-              </label>
-              <p class="brain-muted">Injection budget applies to per-send composer code-map injection; repo map budget is for the tool and Brain Code map panel.</p>
-              <label><input type="checkbox" id="brainFeatureCodeMapInjectionDefault"> Inject code map by default (inherit)</label>
-              <p class="brain-muted">Per-chat override: Code composer toolbar code-map icon (inherit / on / off).</p>
-              <label>Reindex cadence
-                <select id="brainCodeReindexCadence">
-                  <option value="on-demand">On demand</option>
-                  <option value="on-switch">On workspace switch</option>
-                  <option value="git-hook">Git hook</option>
-                </select>
-              </label>
-              <label><input type="checkbox" id="brainCodeEmbeddingsEnabled"> Enable code embeddings (reserved)</label>
-              <label><input type="checkbox" id="brainCodeAutoScaffold" checked> Auto-create <code>.minnow/jsconfig.json</code> when the workspace has JS/TS but no tsconfig/jsconfig</label>
-              <p class="brain-muted">Indexing scaffold lives under <code>.minnow/</code> and is not written to the repo root. Disable if you manage project config yourself.</p>
-              <p class="brain-muted">Semantic code search is not wired yet; this toggle is saved for a future release.</p>
-              <div class="brain-settings-actions">
-                <button type="button" class="brain-action-btn" id="brainCodeGitHookInstall">Install git post-commit hook</button>
-                <button type="button" class="brain-action-btn" id="brainCodeGitHookUninstall">Remove git hook</button>
-                <span id="brainCodeGitHookStatus" class="brain-muted" aria-live="polite"></span>
+              <div class="brain-settings-subsection" aria-labelledby="brainCodeGlobsTitle">
+                <h4 class="brain-settings-subsection__title" id="brainCodeGlobsTitle">File patterns</h4>
+                <label>Include globs (one per line)
+                  <textarea id="brainCodeIncludeGlobs" class="brain-form-textarea--compact" rows="4" spellcheck="false"></textarea>
+                </label>
+                <label>Exclude globs (one per line)
+                  <textarea id="brainCodeExcludeGlobs" class="brain-form-textarea--compact" rows="3" spellcheck="false"></textarea>
+                </label>
               </div>
-              <button type="button" class="brain-action-btn is-primary" id="brainCodeSettingsSave">Save code index settings</button>
+              <div class="brain-settings-subsection" aria-labelledby="brainCodeBudgetsTitle">
+                <h4 class="brain-settings-subsection__title" id="brainCodeBudgetsTitle">Token budgets</h4>
+                <div class="brain-settings-metrics brain-settings-metrics--wide">
+                  <label>Repo map token budget
+                    <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="1500">
+                  </label>
+                  <label>Code map injection token budget
+                    <input type="number" id="brainCodeInjectionTokenBudget" class="settings-input settings-input--narrow" min="200" max="128000" step="100" value="10000">
+                  </label>
+                </div>
+                <p class="brain-form-hint">Injection budget applies to per-send composer code-map injection. Repo map budget is for the tool and Brain Code map panel.</p>
+              </div>
+              <div class="brain-settings-subsection" aria-labelledby="brainCodeComposerTitle">
+                <h4 class="brain-settings-subsection__title" id="brainCodeComposerTitle">Composer &amp; reindex</h4>
+                <label><input type="checkbox" id="brainFeatureCodeMapInjectionDefault"> Inject code map by default (inherit)</label>
+                <p class="brain-form-hint">Per-chat override: Code composer toolbar code-map icon (inherit / on / off).</p>
+                <label>Reindex cadence
+                  <select id="brainCodeReindexCadence">
+                    <option value="on-demand">On demand</option>
+                    <option value="on-switch">On workspace switch</option>
+                    <option value="git-hook">Git hook</option>
+                  </select>
+                </label>
+                <div class="brain-settings-actions">
+                  <button type="button" class="brain-action-btn" id="brainCodeGitHookInstall">Install git post-commit hook</button>
+                  <button type="button" class="brain-action-btn" id="brainCodeGitHookUninstall">Remove git hook</button>
+                </div>
+                <p id="brainCodeGitHookStatus" class="brain-form-hint" aria-live="polite"></p>
+              </div>
+              <div class="brain-settings-subsection" aria-labelledby="brainCodeAdvancedTitle">
+                <h4 class="brain-settings-subsection__title" id="brainCodeAdvancedTitle">Advanced</h4>
+                <label><input type="checkbox" id="brainCodeEmbeddingsEnabled"> Enable code embeddings (reserved)</label>
+                <p class="brain-form-hint">Semantic code search is not wired yet; this toggle is saved for a future release.</p>
+                <label><input type="checkbox" id="brainCodeAutoScaffold" checked> Auto-create <code>.minnow/jsconfig.json</code> when the workspace has JS/TS but no tsconfig/jsconfig</label>
+                <p class="brain-form-hint">Indexing scaffold lives under <code>.minnow/</code> and is not written to the repo root. Disable if you manage project config yourself.</p>
+              </div>
+              <div class="brain-settings-footer">
+                <button type="button" class="brain-action-btn is-primary" id="brainCodeSettingsSave">Save code index settings</button>
+              </div>
             </div>
           </div>
-          <div class="brain-settings-group brain-card brain-settings-group--danger">
+          <div class="brain-settings-group brain-settings-group--danger">
             <h3>Danger zone</h3>
             <p class="brain-danger-lead">Destructive actions cannot be undone. Backup first when offered.</p>
             <div class="brain-danger-blocks">

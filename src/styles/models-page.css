@@ -172,6 +172,33 @@
   display: block;
 }
 
+/* Settings-style sections: centered column (matches Brain → Settings). */
+.models-section.models-section--centered {
+  width: 100%;
+  max-width: 52rem;
+  margin-inline: auto;
+}
+
+.models-section.models-section--centered.models-section--settings-wide {
+  max-width: min(72rem, 100%);
+}
+
+.models-section.models-section--centered > h2,
+.models-section.models-section--centered > .models-lead {
+  max-width: none;
+}
+
+.models-section.models-section--centered .settings-section-body {
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+
+.models-section.models-section--centered .settings-general.settings-general--wide {
+  width: 100%;
+  max-width: 100%;
+}
+
 /* Keep section titles readable without capping the scroll column width. */
 .models-section:not(.models-section--flush) > h2,
 .models-section:not(.models-section--flush) > .models-lead {

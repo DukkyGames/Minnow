@@ -1439,6 +1439,12 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
   padding: 16px 18px 24px;
 }
 
+/* Changelog is a wide table-like log; do not apply readable-line markdown width. */
+.brain-section--log #brainLogBody.brain-markdown {
+  max-width: none;
+  width: 100%;
+}
+
 .brain-ingest-form {
   display: flex;
   flex: 1;
@@ -1565,6 +1571,56 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
   resize: vertical;
 }
 
+.brain-form-grid textarea.brain-form-textarea--compact {
+  min-height: 5.5rem;
+}
+
+.brain-form-hint {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  max-width: 72ch;
+}
+
+.brain-form-hint--lead {
+  margin: 0 0 4px;
+}
+
+.brain-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.brain-range-field__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.brain-range-field__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mn-fg);
+}
+
+.brain-range-field__value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.brain-form-grid input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--mn-accent);
+}
+
 .brain-field-row {
   display: flex;
   flex-wrap: wrap;
@@ -1613,32 +1669,151 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
 
 /* ── Settings ─────────────────────────────────────────────────────────────── */
 
+.brain-settings-page-head {
+  margin: 0 0 20px;
+}
+
+.brain-settings-page-head__summary {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mn-fg);
+}
+
+.brain-settings-page-head__toast {
+  margin: 6px 0 0;
+}
+
 .brain-settings-stack {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  max-width: 52rem;
+  gap: 16px;
 }
 
-.brain-settings-group.brain-card,
 .brain-settings-group {
   padding: 16px 18px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  background: var(--mn-surface-1);
-  box-shadow: var(--shadow-card);
+  background: color-mix(in srgb, var(--mn-fg) 1.5%, var(--mn-bg));
 }
 
-.brain-settings-group h3 {
-  margin: 0 0 12px;
+.brain-settings-group__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.brain-settings-group__title {
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brain-settings-group__offline {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-warning);
+}
+
+.brain-settings-group__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 0 0 14px;
+}
+
+.brain-settings-group__status {
+  margin: 0 0 14px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  word-break: break-word;
+}
+
+.brain-settings-group__meta .brain-settings-group__status {
+  margin: 0;
+  flex: 1 1 12rem;
+}
+
+.brain-settings-badge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.brain-settings-badge--warning {
+  border-color: color-mix(in srgb, var(--mn-warning) 45%, var(--mn-border));
+  color: var(--mn-warning);
+  background: color-mix(in srgb, var(--mn-warning) 10%, transparent);
+}
+
+.brain-settings-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  margin-top: 2px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.brain-settings-subsection__title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.brain-settings-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 12px;
+}
+
+.brain-settings-metrics--wide {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.brain-settings-metrics label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.brain-settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 14px;
+  margin-top: 4px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.brain-settings-footer--actions {
+  border-top: none;
+  padding-top: 4px;
+  margin-top: 0;
 }
 
 .brain-settings-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
 .brain-settings-group .brain-action-btn.is-primary {

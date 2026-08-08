@@ -28,6 +28,7 @@
   --brain-graph-overlay-gap: 10px;
   /* Measured from toolbar height in graph-section.ts; fallback fits one toolbar row. */
   --brain-graph-below-toolbar: 92px;
+  --brain-graph-sidebar-w: 300px;
 }
 
 .brain-stage {
@@ -674,13 +675,14 @@
 .brain-graph-sidebar {
   position: relative;
   z-index: 3;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   align-self: flex-start;
   display: flex;
   flex-direction: column;
   gap: var(--brain-graph-overlay-gap);
-  width: min(232px, 30vw);
+  width: var(--brain-graph-sidebar-w);
   max-width: calc(100% - 2 * var(--brain-graph-overlay-pad));
+  min-width: 200px;
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
@@ -688,13 +690,32 @@
   transition: width 0.22s var(--brain-ease-out);
 }
 
+.brain-graph-sidebar.is-resizing {
+  transition: none !important;
+}
+
 .brain-graph-sidebar > * {
   pointer-events: auto;
 }
 
-/* Tree layout hides the canvas, so the rail can afford to be wider. */
-.brain-graph-stage.is-tree-layout .brain-graph-sidebar {
-  width: min(400px, 44vw);
+.brain-graph-sidebar__resize {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  margin-right: -3px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brain-graph-sidebar__resize:hover,
+  .brain-graph-sidebar__resize.dragging {
+    background: var(--mn-accent-soft);
+  }
 }
 
 .brain-graph-tree-panel {
@@ -1143,7 +1164,11 @@
 
   .brain-graph-sidebar,
   .brain-graph-stage.is-tree-layout .brain-graph-sidebar {
-    width: min(210px, 42vw);
+    max-width: calc(100% - 2 * var(--brain-graph-overlay-pad));
+  }
+
+  .brain-graph-sidebar__resize {
+    display: none !important;
   }
 
   .brain-page.is-graph-canvas-bg .brain-inspector.is-open {
