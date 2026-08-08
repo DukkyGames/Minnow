@@ -290,10 +290,29 @@ function readProcessCommandLine(pid) {
 }
 
 /**
+ * @param {number} pid
+ */
+function readDarwinProcessExecutable(pid) {
+  if (process.platform !== 'darwin' || !isPidAlive(pid)) return null;
+  try {
+    const out = spawnSync('sysctl', ['-n', `proc_pidpath:${pid}`], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    const line = (out.stdout ?? '').trim();
+    return line || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {string} serverId
  * @param {string} recordedCommand
+ * @param {string} liveCommand
+ * @param {number} [pid]
  */
-function processCommandMatchesServer(serverId, recordedCommand, liveCommand) {
+function processCommandMatchesServer(serverId, recordedCommand, liveCommand, pid) {
   if (!liveCommand) return false;
   const venvDir = getServerVenvDir(serverId);
   let venvReal = path.normalize(venvDir);
@@ -302,8 +321,16 @@ function processCommandMatchesServer(serverId, recordedCommand, liveCommand) {
   } catch {
     /* use unresolved */
   }
+  const venvNorm = path.normalize(venvDir);
+  const executable = Number.isInteger(pid) && pid > 0 ? readDarwinProcessExecutable(pid) : null;
+  if (executable) {
+    const normalizedExe = path.normalize(executable);
+    if (normalizedExe.includes(venvReal) || normalizedExe.includes(venvNorm)) {
+      return true;
+    }
+  }
   const normalizedLive = path.normalize(liveCommand);
-  if (normalizedLive.includes(venvReal) || normalizedLive.includes(path.normalize(venvDir))) {
+  if (normalizedLive.includes(venvReal) || normalizedLive.includes(venvNorm)) {
     return true;
   }
   if (recordedCommand && liveCommand.includes(recordedCommand.trim().slice(0, 48))) return true;
@@ -398,7 +425,7 @@ async function reapOrphanedServerRun(serverId) {
 
   const liveCommand = readProcessCommandLine(pid);
   const recordedCommand = typeof record.command === 'string' ? record.command : '';
-  if (!processCommandMatchesServer(serverId, recordedCommand, liveCommand ?? '')) {
+  if (!processCommandMatchesServer(serverId, recordedCommand, liveCommand ?? '', pid)) {
     await deleteServerRunRecord(serverId);
     return;
   }

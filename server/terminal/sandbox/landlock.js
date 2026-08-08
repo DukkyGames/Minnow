@@ -186,6 +186,63 @@ function isUnder(absPath, root) {
 }
 
 /**
+ * Map a host path to a POSIX form when it mirrors `/tmp` on a Windows drive.
+ * @param {string} p
+ */
+function toPosixTmpAligned(p) {
+  if (typeof p !== 'string' || !p) return p;
+  if (p.startsWith('/') && !/^[a-zA-Z]:/.test(p)) return p.replace(/\\/g, '/');
+  const norm = path.normalize(p);
+  const winTmp = /^([a-zA-Z]):[\\/]tmp(?:[\\/](.*))?$/i.exec(norm);
+  if (winTmp) {
+    const rest = winTmp[2] ? winTmp[2].replace(/\\/g, '/') : '';
+    return rest ? `/tmp/${rest}` : '/tmp';
+  }
+  return norm.replace(/\\/g, '/');
+}
+
+/**
+ * Prefix check for Landlock write-root scoping (POSIX `/tmp` vs `C:\tmp\…` on Windows).
+ * @param {string} absPath
+ * @param {string} root
+ */
+function isUnderWriteRoot(absPath, root) {
+  const posixRoot = root.startsWith('/') && !/^[a-zA-Z]:[/\\]/.test(root);
+  if (!posixRoot) return isUnder(absPath, root);
+  const a = toPosixTmpAligned(absPath);
+  const r = toPosixTmpAligned(root);
+  if (a === r) return true;
+  const prefix = r.endsWith('/') ? r : `${r}/`;
+  return a.startsWith(prefix);
+}
+
+/**
+ * Normalize a write root for Landlock without mapping WSL POSIX paths like `/tmp`
+ * to `C:\tmp` when argv is built on Windows for execution inside WSL.
+ * @param {string} writeRoot
+ */
+function resolveLandlockWriteRoot(writeRoot) {
+  if (typeof writeRoot !== 'string' || !writeRoot.trim()) return writeRoot;
+  const trimmed = writeRoot.trim();
+  if (trimmed.startsWith('/') && !/^[a-zA-Z]:[/\\]/.test(trimmed)) {
+    return trimmed.replace(/\\/g, '/');
+  }
+  return path.resolve(trimmed);
+}
+
+/**
+ * Join a write root with a directory entry (POSIX roots stay POSIX).
+ * @param {string} root
+ * @param {string} name
+ */
+function joinWriteRootEntry(root, name) {
+  if (root.startsWith('/') && !/^[a-zA-Z]:[/\\]/.test(root)) {
+    return path.posix.join(root, name);
+  }
+  return path.join(root, name);
+}
+
+/**
  * Enumerate $HOME children for RO allow, skipping credential / minnow deny roots.
  * Landlock cannot "carve out" a deny under an allowed parent — so we never grant
  * the home directory itself, only selected children + shell rc files.
@@ -234,9 +291,9 @@ export function buildHomeReadAllowlist(policy) {
  * @returns {string[]}
  */
 export function buildScopedWriteRootGrants(writeRoot, policy) {
-  const root = path.resolve(writeRoot);
+  const root = resolveLandlockWriteRoot(writeRoot);
   const hasBlockedDescendant = policy.denyReadRoots.some(
-    (deny) => deny && (deny === root || isUnder(deny, root)),
+    (deny) => deny && (deny === root || isUnderWriteRoot(deny, root)),
   );
   if (!hasBlockedDescendant) {
     return [root];
@@ -252,9 +309,13 @@ export function buildScopedWriteRootGrants(writeRoot, policy) {
   }
 
   for (const ent of entries) {
-    const abs = path.join(root, ent.name);
+    const abs = joinWriteRootEntry(root, ent.name);
     const touchesDeny = policy.denyReadRoots.some(
-      (deny) => deny && (isUnder(deny, abs) || isUnder(abs, deny) || abs === deny),
+      (deny) =>
+        deny &&
+        (isUnderWriteRoot(deny, abs) ||
+          isUnderWriteRoot(abs, deny) ||
+          toPosixTmpAligned(abs) === toPosixTmpAligned(deny)),
     );
     if (touchesDeny) continue;
     grants.push(abs);
