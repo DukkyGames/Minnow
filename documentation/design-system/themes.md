@@ -47,7 +47,7 @@ Legacy values (`light`, `dark`, `system`, pre-rename families like `sage`→`swa
 
 Simplified mode derives full palettes via [`theme-derive.ts`](../../src/appearance/theme-derive.ts). Success is a fixed-hue semantic green (not a copy of accent); warning/folder shift from accent hue; danger comes from the danger seed.
 
-**Agent tools (desktop only):** `get_appearance`, `update_appearance`, `upload_appearance_asset` in [`appearance-tools.ts`](../../src/tools/appearance-tools.ts).
+**Agent tools (Electron only):** `get_appearance`, `update_appearance`, `upload_appearance_asset` in [`appearance-tools.ts`](../../src/tools/appearance-tools.ts).
 
 ## Downstream consumers
 

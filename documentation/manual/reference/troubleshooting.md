@@ -89,10 +89,6 @@ If the ring shows no cap, the model did not report a context length. See [Contex
 | Want a clean profile | Point `MINNOW_HOME` at an empty folder and launch. Your real profile is untouched. |
 | Want to remove everything | Delete your Minnow home. Uninstalling deliberately leaves it in place. |
 
-## Apps that are not there
-
-Compare, Benchmarking, Experts, Calendar and Email are behind a release gate in this build. They are absent from the app rail, Settings, shortcuts and routes on purpose. See [Apps overview](../apps/overview.md#not-in-this-release).
-
 ## Still stuck
 
 Take **Copy report** from Health & diagnostics and open a [GitHub issue](https://github.com/HenriGrimm/Minnow/issues). It includes version, platform and recent errors with paths and secrets redacted, which is most of what anyone will ask you for.

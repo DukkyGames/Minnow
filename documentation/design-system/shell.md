@@ -1,6 +1,6 @@
 # Minnow Shell
 
-Electron desktop layer wrapping Minnow apps. Tokens alias the chat palette via **`--os-*`** → **`--mn-*`**.
+Electron shell layer wrapping Minnow apps: menubar, app rail, workspace gate, full-stage app surfaces. Tokens alias the chat palette via **`--os-*`** → **`--mn-*`**.
 
 ## Token layer
 
@@ -51,10 +51,11 @@ These names may still appear in old CSS comments or git history; they are **not*
 | [`minnowos-shell.css`](../../src/styles/minnowos-shell.css) | Menubar, stage chrome, app rail |
 | [`minnowos-rail.css`](../../src/styles/minnowos-rail.css) | App rail tiles |
 | [`workspace-gate.css`](../../src/styles/workspace-gate.css) | Workspaces picker |
-| [`minnowos-wallpaper.css`](../../src/styles/minnowos-wallpaper.css) | Wallpaper layers |
-| [`minnowos-apps.css`](../../src/styles/minnowos-apps.css) | Full-stage app shells |
+| [`minnowos-responsive.css`](../../src/styles/minnowos-responsive.css) | Narrow-layout rail, drawers, bottom tab bar |
 
-Legacy window/dock/desktop-chat styles were removed with Phase 5; do not reintroduce floating-window chrome in new UI.
+Wallpaper layers and full-stage app chrome are declared in `minnowos-tokens.css` and `minnowos-shell.css`; there is no separate wallpaper or apps stylesheet.
+
+The shell is a single full-stage surface. Do not introduce floating-window chrome, dock tiles, or a separate chat surface: apps take the stage, Scheduler overlays it as a side panel, and chat lives in Code.
 
 ## Wallpaper modes
 

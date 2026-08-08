@@ -36,7 +36,7 @@
 | `tool-call-diff.css` | Tool diff panels |
 | `skill-picker.css` | [`skill-picker.ts`](../../src/ui/skill-picker.ts) |
 | `chat-search.css` | Chat search popover |
-| `chat-app.css` | Chat app container |
+| `chat-app.css` | Chat transcript + composer container (mounted inside Code) |
 | `toast.css` | [`toast.ts`](../../src/ui/toast.ts) |
 | `voice.css` | Voice controls |
 

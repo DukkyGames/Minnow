@@ -1,6 +1,8 @@
 # Minnow roadmap
 
-Minnow develops as one local-first workspace: plan, build, run agents, and keep knowledge without a cloud account. This page describes product direction, not delivery dates. Individual engineering work is tracked in Linear and versioned plans under `documentation/plans/`.
+Minnow develops as one local-first development workspace: plan, build, run agents, and keep knowledge without a cloud account. Depth in the build loop comes before breadth across surfaces. This page describes product direction, not delivery dates. Individual engineering work is tracked in Linear and versioned plans under `documentation/plans/`.
+
+This is the one page that talks about work not yet shipped. The manual describes only what is in the build you installed.
 
 ## Shipped
 
@@ -24,7 +26,7 @@ Minnow develops as one local-first workspace: plan, build, run agents, and keep 
 
 Compare, Benchmarking, Experts, Calendar, and Email remain in the codebase with tests but do not appear on the shipped app rail. They move to released only when their workflows, reliability, accessibility, documentation, and support burden meet the same bar as the core apps.
 
-See [Apps overview](manual/apps/overview.md#not-in-this-release) for what users see today.
+See [Apps overview](manual/apps/overview.md) for what users see today.
 
 ## How priorities are chosen
 

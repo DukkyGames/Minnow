@@ -73,7 +73,7 @@ This skips onboarding and `board_init` — the planner chat and Kanban already e
 
 | Flag | Default | Purpose |
 |------|---------|---------|
-| `--preset quick` | quick | 3 parallel W1 tasks ([`test-board-quick.md`](../plans/test-board-quick.md)) |
+| `--preset quick` | quick | 3 parallel W1 tasks (`test-board-quick.md`) |
 | `--preset smoke` | | 6-task smoke plan (`documentation/plans/orchestrator-board-smoke.md` — path referenced by the seeder; the file is not checked in) |
 | `--workspace <path>` | cwd | Workspace folder to bind |
 | `--mode manual\|auto\|sequential\|afk` | manual | Execution mode |
@@ -204,7 +204,7 @@ npm run board:soak -- --iterations 10
 
 Nightly CI: [`.github/workflows/board-nightly.yml`](../../.github/workflows/board-nightly.yml). Release Electron smoke: [`.github/workflows/board-release.yml`](../../.github/workflows/board-release.yml).
 
-Full reliability plan: [orchestrate-board-afk-e2e-reliability.md](../plans/orchestrate-board-afk-e2e-reliability.md).
+Full reliability plan: orchestrate-board-afk-e2e-reliability.md.
 
 ---
 
@@ -238,7 +238,7 @@ Headless E2E wraps real `runChatTurn` with a custom runner (must not be the `run
 | [`_fake-api-router.mts`](../../test/orchestrate/_fake-api-router.mts) | `globalThis.fetch` router for generations, tools, worktree |
 | [`_board-quirk-fixtures.mts`](../../test/orchestrate/_board-quirk-fixtures.mts) | Model-misbehaviour SSE scenarios (families A–H) |
 
-**LLM-quirk TDD:** See [orchestrate-board-llm-quirk-tdd.md](../plans/orchestrate-board-llm-quirk-tdd.md) for the full scenario matrix and **known red** backlog. New quirk tests assert **intended** behaviour; `npm run test:board` may fail until product fixes land — do not weaken assertions.
+**LLM-quirk TDD:** See orchestrate-board-llm-quirk-tdd.md for the full scenario matrix and **known red** backlog. New quirk tests assert **intended** behaviour; `npm run test:board` may fail until product fixes land — do not weaken assertions.
 
 **Drive modes:**
 
@@ -363,7 +363,7 @@ npx tsx --import ./test/test-loader.mjs --import ./test/assert-dom-safe.mjs \
 1. Add an SSE scenario to [`_board-quirk-fixtures.mts`](../../test/orchestrate/_board-quirk-fixtures.mts) and register in `quirkFixtures` — use `generationErrorEndSse` / `generationPostErrorTurn` for context-window overflow; see `CONTEXT_EXCEEDED_MESSAGES`.
 2. Add a case to [`board-headless-e2e.test.mts`](../../test/orchestrate/board-headless-e2e.test.mts) (or the relevant unit suite for dispatcher-only edges).
 3. Assert final task statuses **and** `checkBoardLog(events, opts).ok` where the board converges.
-4. If documenting a known product gap, add the test to **Known red** in [orchestrate-board-llm-quirk-tdd.md](../plans/orchestrate-board-llm-quirk-tdd.md).
+4. If documenting a known product gap, add the test to **Known red** in orchestrate-board-llm-quirk-tdd.md.
 
 New tests assert **intended** recovery behaviour and may stay red until product fixes land.
 
@@ -399,6 +399,6 @@ New tests assert **intended** recovery behaviour and may stay red until product 
 
 - [Command reference](commands.md) — all npm scripts
 - [Orchestrate boards (`context.md`)](../context.md#orchestrate-boards) — architecture reference
-- [AFK E2E reliability plan](../plans/orchestrate-board-afk-e2e-reliability.md) — MIN-513 scenario catalog, gates, acceptance criteria
-- [Quick test board plan](../plans/test-board-quick.md) — the `quick` preset's plan document
-- [Test board quick plan](../plans/test-board-quick.md) — minimal 3-task plan
+- AFK E2E reliability plan — MIN-513 scenario catalog, gates, acceptance criteria
+- Quick test board plan — the `quick` preset's plan document
+- Test board quick plan — minimal 3-task plan

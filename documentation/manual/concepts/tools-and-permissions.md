@@ -1,6 +1,6 @@
 # Tools and permissions
 
-A tool is a function the model may call: read a file, run a command, search the web, write a Brain page, open a browser tab. Minnow ships **114** of them, of which 106 are exposed in this build — the rest belong to apps held behind the release gate.
+A tool is a function the model may call: read a file, run a command, search the web, write a Brain page, open a browser tab. Minnow ships **106** of them.
 
 Tools are what make Minnow useful and what make it risky. This page is how you keep the first without the second.
 

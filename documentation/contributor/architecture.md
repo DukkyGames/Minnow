@@ -39,7 +39,7 @@ A high-level map of how Minnow fits together. For the exhaustive, file-by-file r
 
 No UI framework — direct TypeScript + DOM with CSS tokens. Boot order in [`src/main.ts`](../../src/main.ts): page bridge → OS shell → router. Key areas:
 
-- **`src/os/`** — workspace-first shell: stage, app rail, menubar, router, workspace gate, app registry; released apps mount as full-stage layers in `#osAppsLayer` (Phase 5 removed the old floating window manager).
+- **`src/os/`** — workspace-first shell: stage, app rail, menubar, router, workspace gate, app registry; released apps mount as full-stage layers in `#osAppsLayer`. Scheduler is the one side-panel overlay; nothing floats.
 - **`src/chat/`** — chat orchestration, composer **modes** (`modes/registry.ts`; four in the composer strip), prompt composition (`prompts/`).
 - **`src/tools/`** — the tool catalog ([`definitions.ts`](../../src/tools/definitions.ts); 114 built-in tools — entries with an `appId` are filtered while that app is hidden or disabled), executors, permission gating, and the agent loop ([`loop.ts`](../../src/tools/loop.ts)).
 - **`src/agents/`** — sub-agent runner/controller, work agents, sampler resolution, UI Designer.

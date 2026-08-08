@@ -32,7 +32,7 @@ Two settings here matter more than the rest:
 
 ### Appearance
 
-Theme family and mode — 16 themes in total, eight families each with a dark and a light variant — plus desktop wallpaper, fonts, and custom accent colours.
+Theme family and mode — 16 themes in total, eight families each with a dark and a light variant — plus wallpaper, fonts, and custom accent colours.
 
 ### Models
 

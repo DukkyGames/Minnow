@@ -16,7 +16,7 @@ Get the installer from [Minnow Releases](https://github.com/HenriGrimm/Minnow/re
 
 ### If Windows blocks the installer
 
-Builds may be unsigned, and Windows SmartScreen will say so. Choose **More info**, then **Run anyway**. You should only need to do that once — later in-app updates install without repeating it.
+Builds may be unsigned, and SmartScreen will announce that the publisher is unknown. This is true. It is also the most accurate thing Windows will tell you today. Choose **More info**, then **Run anyway** — you should only need to do it once, after which Windows will forget it ever objected.
 
 ## What happens on first launch
 
@@ -24,7 +24,7 @@ Minnow opens on the **workspaces picker**: choose a project folder (or continue 
 
 Two things happen behind the scenes:
 
-- Minnow creates its home folder, `%USERPROFILE%\.minnow` on Windows or `~/.minnow` elsewhere, and scaffolds the folders it uses. Empty directories in there are normal. See [Where your data lives](../reference/configuration.md).
+- Minnow creates its home folder, `%USERPROFILE%\.minnow` on Windows or `~/.minnow` elsewhere, and scaffolds the folders it uses. Empty directories in there are normal; they are waiting for things that have not happened to you yet. See [Where your data lives](../reference/configuration.md).
 - A local tool server starts on port **9473**. It is what lets chat read files, run git, open a terminal, and save your sessions. It listens on loopback only unless you deliberately turn on LAN access.
 
 You will usually also get the **first-run setup wizard**: a short guided flow for picking a theme, choosing a provider, selecting a model, setting tool permissions, and turning memory on. You can skip it and run it again later from **Settings → General → Run setup again**.

@@ -4,9 +4,9 @@ Read this page once and most of the product stops needing explanation.
 
 Minnow is three things stacked together:
 
-1. **A workspace-first shell** — a workspaces picker (`#/workspaces`), a left app rail, a menubar, and full-stage apps in the main view. You choose a folder, then work in Code with chat beside your project.
+1. **A workspace-first shell** — a workspaces picker (`#/workspaces`), a left app rail, and a menubar. You choose a folder, then work in **Code** with chat beside your project. The other surfaces support that work; none of them replace it.
 2. **A local tool server** on port 9473. It does everything the browser cannot: reading and writing files, running git, spawning terminals, indexing your code, storing your chats, downloading models.
-3. **A model you supply.** Minnow never ships weights and has no built-in model. It streams to whatever OpenAI-compatible endpoint you point it at.
+3. **A model you supply.** Minnow never ships weights and has no built-in model. It streams to whatever OpenAI-compatible endpoint you point it at, and is serenely indifferent to whether that endpoint is in your living room or a datacentre.
 
 Everything else — modes, tools, boards, memory — is arrangement on top of those three.
 
@@ -22,7 +22,7 @@ When you press Enter, this happens:
 
 Two consequences fall out of that loop and explain most surprises:
 
-- **A model with no tool-calling ability can only talk.** If tools never fire, the model is the likely cause, not the permission.
+- **A model with no tool-calling ability can only talk**, which some models will do at length and with great confidence. If tools never fire, the model is the likely cause, not the permission.
 - **Every tool result costs context.** Reading a huge file is not free — it competes with your conversation for room in the window.
 
 ## Local by default
@@ -68,11 +68,9 @@ See [Modes](modes.md).
 
 ## Apps are surfaces, not silos
 
-The seven released apps share one chat engine, one set of tools, one session store, and one workspace folder at a time. Chat is part of Code, not a separate dock icon. Opening Research does not start a different assistant; it gives the same assistant a different layout and workflow, still backed by the same sessions.
+Every surface shares one chat engine, one set of tools, one session store, and one workspace folder at a time. Chat is part of Code, not a separate dock icon. Opening Research does not start a different assistant; it gives the same assistant a different layout and workflow, still backed by the same sessions.
 
-That is why an app can hand off to another one: an issue in the tracker can be sent to a chat in a chosen mode, a research report can be discussed in chat, and a plan document can become a board of tasks worked by agents.
-
-Hidden apps (Compare, Benchmarking, Experts, Calendar, Email) are not reachable in this build. Deep links to them bounce to `#/workspaces` when the release gate keeps them hidden.
+That is why one surface can hand off to another: an issue in the tracker can be sent to a chat in a chosen mode, a research report can be discussed in chat, and a plan document can become a board of tasks worked by agents. Work does not have to be exported anywhere to move between them.
 
 ## Agents all the way down
 
@@ -85,7 +83,7 @@ Each has a role prompt, its own tool allowlist and its own context budget. See [
 
 ## When the server is not there
 
-Chat, modes and providers work in a plain browser tab without the tool server. Files, git, terminal, persistence and most other tools do not. If a tool reports "not implemented" or "server required", that is what happened. In the packaged desktop app the server is always running.
+Chat, modes and providers work in a plain browser tab without the tool server. Files, git, terminal, persistence and most other tools do not. If a tool reports "not implemented" or "server required", that is what happened. In the packaged app the server is always running.
 
 ## Related
 

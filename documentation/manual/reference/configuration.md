@@ -59,7 +59,7 @@ The simplest approach is to back up the whole `.minnow` folder and exclude `mode
 | `workspace/` | **Scratch** workspace folder (`~/.minnow/workspace`) for chats without a project root |
 | `backups/` | Rotating backups of session state |
 
-Folders belonging to release-gated apps — `calendar/`, `email/`, `benchmarks/`, `compare/` — exist but stay empty in this build.
+Some folders in there are scaffolded ahead of the features that fill them and stay empty. That is normal, and nothing needs cleaning up.
 
 ## Encrypted secrets
 

@@ -1,10 +1,10 @@
 # Minnow manual
 
-Minnow is a local-first AI workspace that runs on your own computer. It talks to models you host yourself — LM Studio, Ollama, `llama-server`, or any OpenAI-compatible endpoint — and it can also talk to cloud APIs if you give it a key. Either way, your chats, notes, files, and credentials stay in a folder on your disk. Nothing is uploaded to Minnow's authors, and there is no telemetry.
+Minnow is a local-first development workspace that runs on your own computer: editor, terminal, git, issues, planning, agents, research, and local model hosting in one app. It talks to models you host yourself — LM Studio, Ollama, `llama-server`, or any OpenAI-compatible endpoint — and it can also talk to cloud APIs if you give it a key. Either way, your chats, notes, files, and credentials stay in a folder on your disk. Nothing is uploaded to Minnow's authors, and there is no telemetry — an arrangement that was once unremarkable and is now, apparently, a feature.
 
-What you get is not a chat box. It is a workspace-first shell with seven core apps: **Code** (editor, terminal, git, and chat in one surface), **Research**, **Models**, **Brain**, **Issues**, **Scheduler**, and **Settings**. The same assistant and tool set back all of them.
+You open a project folder and land in **Code**: your files and editor on one side, chat on the other, driving the same repo. Five surfaces support that work from the app rail — **Research**, **Models**, **Brain**, **Issues**, and **Scheduler** — plus **Settings** from the menubar. The same assistant and tool set back all of them.
 
-This manual covers the packaged desktop app you install from GitHub Releases. If you build from source, everything here still applies, plus the developer setup notes in the [GitHub Wiki](https://github.com/HenriGrimm/Minnow/wiki).
+This manual covers the packaged app you install from GitHub Releases. If you build from source, everything here still applies, plus the developer setup notes in the [GitHub Wiki](https://github.com/HenriGrimm/Minnow/wiki).
 
 ## Start here
 
@@ -48,12 +48,12 @@ Press **?** anywhere outside a text field for the keyboard shortcut sheet.
 
 ### Apps
 
-- [Apps overview](apps/overview.md) — the seven apps and how each one opens
-- [Code](apps/code.md) — editor, terminal, git, dev servers, preview
-- [Research](apps/research.md) — multi-round web and codebase research with a saved library
-- [Brain](apps/brain.md) — your wiki, memories, ingest, and code index
+- [Code](apps/code.md) — editor, terminal, git, dev servers, preview: the surface you work in
+- [Apps overview](apps/overview.md) — Code and the surfaces around it, and how each one opens
 - [Models](apps/models.md) — downloads, local serving, providers, routing, sampler, usage
 - [Issues](apps/issues.md) — list, board, agent triage
+- [Brain](apps/brain.md) — your wiki, memories, ingest, and code index
+- [Research](apps/research.md) — multi-round web and codebase research with a saved library
 - [Scheduler](apps/scheduler.md) — interval and cron jobs
 - [Settings](apps/settings.md) — the full map of every settings section
 

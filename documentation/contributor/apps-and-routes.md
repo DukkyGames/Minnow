@@ -8,7 +8,7 @@ Shell internals: [`src/os/`](../../src/os/). Exhaustive reference: **Minnow Shel
 
 ## What ships
 
-Seven apps, all **core** (always installed, always on):
+**Code** is the primary surface; the rest support work done there. All are **core** (always installed, always on):
 
 | App | Route | Presentation |
 |-----|-------|--------------|

@@ -20,11 +20,11 @@ The phone stores its own credential. The host stores only a SHA-256 hash of it â
 
 On a phone-sized screen (640px and narrower) the companion is a focused chat shell: conversations, the composer, the mode picker, notifications, and Scheduler.
 
-Deliberately absent: the file explorer, terminal, browser automation, and desktop app navigation. Those need a desktop.
+Deliberately absent: the file explorer, terminal, browser automation, and app navigation. Those need a real screen and a keyboard.
 
 **Mutating tools always ask for approval on the companion**, even when the host has that tool set to Full. A phone in your pocket should not be able to silently authorize a file deletion.
 
-Tablets and desktop browsers on wide screens get the full app shell.
+Tablets and laptop browsers on wide screens get the full app shell.
 
 ## Revoking a device
 

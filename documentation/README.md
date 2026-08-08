@@ -8,8 +8,8 @@ In-app help: menubar **?** → `#/wiki` ( **`documentation/manual/`** plus roadm
 
 | Doc | What's in it |
 |-----|--------------|
-| [Minnow manual](manual/README.md) | Install, chat, apps, shortcuts, data, troubleshooting (canonical for users). |
-| [Roadmap](ROADMAP.md) | Shipped capabilities, active direction, release-gated areas (also in-app). |
+| [Minnow manual](manual/README.md) | Install, Code, chat, shortcuts, data, troubleshooting (canonical for users, describes what ships today). |
+| [Roadmap](ROADMAP.md) | Active direction and what is still being built (also in-app). |
 | [Guides index](guides/README.md) | Redirect stubs for stable GitHub links → manual or contributor. |
 
 ## Building & contributing

@@ -4,7 +4,7 @@
     {
       "path": "documentation/manual/README.md",
       "title": "Minnow manual",
-      "summary": "Minnow is a local first AI workspace that runs on your own computer. It talks to models you host yourself — LM Studio, Ollama, llama server , or any OpenAI compatible endpoint — and it can also talk to cloud APIs if you give it a key. Either way, your chats, notes, files, and cre",
+      "summary": "Minnow is a local first development workspace that runs on your own computer: editor, terminal, git, issues, planning, agents, research, and local model hosting in one app. It talks to models you host yourself — LM Studio, Ollama, llama server , or any OpenAI compatible endpoint ",
       "headings": [
         "Start here",
         "Finding help while you work",
@@ -18,7 +18,7 @@
         "Reference"
       ],
       "section": "Overview",
-      "hash": "b211696aa7d808e60ce58de3a441e6d70e207bc22aa677c1a9b0c84b898cdcfc"
+      "hash": "1f11b8714fe526bd9121313ae0cbbe0ff42ca81be3c271d693662b256d909615"
     },
     {
       "path": "documentation/manual/get-started/install.md",
@@ -34,7 +34,7 @@
         "Next"
       ],
       "section": "Get started",
-      "hash": "b9fa0123ba2220d50e3d87309114f4f2302458dd8903686d93669f84f3e05369"
+      "hash": "8bdd0267dc3a6b033176a7f76c15ccac72678d1bf10d78c7e7a23d0a272312dd"
     },
     {
       "path": "documentation/manual/get-started/connect-a-model.md",
@@ -59,7 +59,7 @@
     {
       "path": "documentation/manual/get-started/first-chat.md",
       "title": "Your first chat",
-      "summary": "You start at the workspaces picker — open a project folder or continue without one. Minnow then opens Code with the chat rail on the left. There is no separate Chat app. This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what yo",
+      "summary": "You start at the workspaces picker — open a project folder or continue without one. Minnow then opens Code with the chat rail on the left, beside the repo it will be working on. This page walks through one real turn: send a message, watch it stream, approve a tool, and understand",
       "headings": [
         "Code with chat open",
         "Send something",
@@ -73,12 +73,12 @@
         "Next steps"
       ],
       "section": "Get started",
-      "hash": "2d9135ec4ab24313840abd011664cabfc478d278bf7e1ed55234158c3ef0920b"
+      "hash": "b7bd72f2a0f4a79bb6add4054dfac24861c362c7855f0745ca87d067bc373319"
     },
     {
       "path": "documentation/manual/concepts/how-minnow-works.md",
       "title": "How Minnow works",
-      "summary": "Read this page once and most of the product stops needing explanation. Minnow is three things stacked together: 1. A workspace first shell — a workspaces picker ( /workspaces ), a left app rail, a menubar, and full stage apps in the main view. You choose a folder, then work in Co",
+      "summary": "Read this page once and most of the product stops needing explanation. Minnow is three things stacked together: 1. A workspace first shell — a workspaces picker ( /workspaces ), a left app rail, and a menubar. You choose a folder, then work in Code with chat beside your project. ",
       "headings": [
         "The loop",
         "Local by default",
@@ -90,7 +90,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "4f3462f407090fbd1ab1d782f7ae3b81774cb486ccb5367530f532430e353f8d"
+      "hash": "4ebb923b25d3145be2f265dbe30d0034009a953189e9527efafd9d126404d1fc"
     },
     {
       "path": "documentation/manual/concepts/modes.md",
@@ -100,19 +100,18 @@
         "The four you choose",
         "What Plan mode actually blocks",
         "Modes you enter (not on the strip)",
-        "Desktop (tool policy only)",
         "Tool access at a glance",
         "Modes are a ceiling, not a grant",
         "Practical mode picking",
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "2540670a24e9a82d43409bea6053f8439c4df87114a3f822a399a995e899b1a8"
+      "hash": "0930773477b0d7e4ce012c14bf212c9eb87465c47722233bdbe817c293de81ff"
     },
     {
       "path": "documentation/manual/concepts/tools-and-permissions.md",
       "title": "Tools and permissions",
-      "summary": "A tool is a function the model may call: read a file, run a command, search the web, write a Brain page, open a browser tab. Minnow ships 114 of them, of which 106 are exposed in this build — the rest belong to apps held behind the release gate. Tools are what make Minnow useful ",
+      "summary": "A tool is a function the model may call: read a file, run a command, search the web, write a Brain page, open a browser tab. Minnow ships 106 of them. Tools are what make Minnow useful and what make it risky. This page is how you keep the first without the second. The three permi",
       "headings": [
         "The three permission levels",
         "Where to set them",
@@ -126,7 +125,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "1944392c25881e77268c3e763ea6d0b3eadf3f5f0a6640e7b9087202753c84d5"
+      "hash": "a771fa572ea3fe70122155f433b2cfd83621af171034f38a3db68b8906e2fbc1"
     },
     {
       "path": "documentation/manual/concepts/context-and-memory.md",
@@ -182,22 +181,21 @@
     {
       "path": "documentation/manual/apps/overview.md",
       "title": "Apps overview",
-      "summary": "Minnow is one shell with seven core apps: always installed, always on, no toggles. Six are on the left app rail; Settings opens from the menubar gear. There is no app store. They share one chat engine, one tool set, one session store, and one workspace folder at a time. Code is w",
+      "summary": "Minnow is one shell built around Code . Everything else is a surface that supports the work you do there. There are no toggles, no marketplace and nothing to enable: what ships is installed and on, which removes an entire category of afternoon. Code, Research, Models, Brain, Issu",
       "headings": [
-        "The seven",
         "Code",
-        "Research",
+        "The supporting surfaces",
         "Models",
-        "Brain",
         "Issues",
+        "Brain",
+        "Research",
         "Scheduler",
         "Settings",
-        "Beyond the app rail",
-        "Not in this release",
+        "Not on the rail",
         "Related"
       ],
       "section": "Apps",
-      "hash": "73591df022e6d49e6716bf45e814ed9d8cf2597e96e70fe2116aa5b1e65f60cc"
+      "hash": "640ea773d0fdd0fef67b44f0b7b32eb8c5fd9f0f20829c59a57efdcd4d39210f"
     },
     {
       "path": "documentation/manual/apps/code.md",
@@ -254,7 +252,7 @@
     {
       "path": "documentation/manual/apps/models.md",
       "title": "Models",
-      "summary": "Everything about models lives here: what your machine can run, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. Open it from the app rail. It fills the main stage with nine sections. Section What it is ",
+      "summary": "This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. You come here to configure, then go back to Code and work. Open it from th",
       "headings": [
         "Recommendations",
         "Library and Installed",
@@ -270,7 +268,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "fd82aff201ed98d2288663f22a9593b188a716cdb56cb62f69bfe832d5b1f51b"
+      "hash": "97704b3175fa0f815d7b5e07ad552f1254d67461a57d47a935c0750733e31956"
     },
     {
       "path": "documentation/manual/apps/issues.md",
@@ -323,7 +321,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "29e867e5dd0fb870f8bddeca1660373cc4f9f6cf4063a6a9d2b5e5bba89657c4"
+      "hash": "cd733975d8af4190edb37959d5cd114dd0f433effb5bbd13867651f024e62186"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",
@@ -428,7 +426,7 @@
         "Related"
       ],
       "section": "Extend Minnow",
-      "hash": "dbafbed3dd8a326188c4b0a791bd913be4ea37a35f222cd1db32dd1835f0afc7"
+      "hash": "ec03af3d30dff43b797a1a7aaf51e87644c3e4a061e2bb893face4b0d00e1c6d"
     },
     {
       "path": "documentation/manual/reference/keyboard-shortcuts.md",
@@ -463,7 +461,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "8b9fd1326dcfd8dc044803ad5309fc6e612b8caf62c636ffe9bc6e32c856e97d"
+      "hash": "8c06b192e361e0c4a336c7c4609dfafe4a65f486f9a37767f204977e1e570dec"
     },
     {
       "path": "documentation/manual/reference/privacy-and-security.md",
@@ -497,12 +495,11 @@
         "Voice",
         "Updates and install",
         "Data and secrets",
-        "Apps that are not there",
         "Still stuck",
         "Related"
       ],
       "section": "Reference",
-      "hash": "df7b4c93c8b3a1f629ba3d8c10bf4f0520140373e4444c0bc8b0ecbf1aabe948"
+      "hash": "8a60ab3e895995f0d5d3a9f98fe5e0cf1eb5889147bf36d57ef485809dacab12"
     },
     {
       "path": "documentation/manual/reference/glossary.md",
@@ -533,17 +530,17 @@
     {
       "path": "documentation/manual/reference/roadmap.md",
       "title": "Roadmap",
-      "summary": "The full roadmap is its own page in this wiki — open Roadmap from the navigation, or search for it. It describes product direction, not delivery dates. Two things people usually come here for: Why is an app missing from my dock? Compare, Benchmarking, Experts, Calendar and Email ",
+      "summary": "The full roadmap is its own page in this wiki — open Roadmap from the navigation, or search for it. It describes product direction, not delivery dates. This manual describes what ships in the build you have installed. Anything still being built lives on the roadmap page, not here",
       "headings": [
         "Related"
       ],
       "section": "Reference",
-      "hash": "05831b1aa0bbe90b64b8b84b97ada716e00fea04f7f5499f40453a355420a534"
+      "hash": "413d4466ccdd769a9c63a797a7c89bb6617c7b6402d3a08923e5a82882ba4cbd"
     },
     {
       "path": "documentation/ROADMAP.md",
       "title": "Minnow roadmap",
-      "summary": "Minnow develops as one local first workspace: plan, build, run agents, and keep knowledge without a cloud account. This page describes product direction, not delivery dates. Individual engineering work is tracked in Linear and versioned plans under documentation/plans/ . Shipped ",
+      "summary": "Minnow develops as one local first development workspace: plan, build, run agents, and keep knowledge without a cloud account. Depth in the build loop comes before breadth across surfaces. This page describes product direction, not delivery dates. Individual engineering work is t",
       "headings": [
         "Shipped",
         "Active direction",
@@ -551,7 +548,7 @@
         "How priorities are chosen"
       ],
       "section": "Roadmap",
-      "hash": "8c12558d89fb0a00f767a6502afb43cf51faba7b1f14472dbd97c32433682276"
+      "hash": "bf744607cc3b6cf896edf36f6f572891f1ee47f37ee63baae6e2064dd78b6e68"
     },
     {
       "path": "documentation/THIRD_PARTY_NOTICES.md",

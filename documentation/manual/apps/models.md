@@ -1,8 +1,8 @@
 # Models
 
-Everything about models lives here: what your machine can run, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs.
+This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs.
 
-Open it from the app rail. It fills the main stage with nine sections.
+You come here to configure, then go back to Code and work. Open it from the app rail; it fills the main stage with nine sections.
 
 | Section | What it is |
 |---------|------------|

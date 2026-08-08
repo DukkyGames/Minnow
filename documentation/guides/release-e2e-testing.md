@@ -17,7 +17,7 @@ Manual end-to-end checklist for validating Minnow before a release. Use it after
 
 ## Scope
 
-**In scope for a public release** — seven core apps and every user-facing surface that ships with `releaseState: 'released'`:
+**In scope for a public release** — every user-facing surface that ships with `releaseState: 'released'`, with **Code** carrying the most weight because it carries the most use:
 
 Code, Research, Models, Brain, Issues, Scheduler, Settings — plus composer modes **General**, **Build**, **Plan**, **Debug**, **Super Plan**, and **Orchestrate** (hub). Chat sessions live in **Code** (`#/app/code/chat`).
 
@@ -260,7 +260,7 @@ You do not need 111 separate clicks. For each **category**, run one prompt in **
 | Category | Example prompt | Server required |
 |----------|----------------|-----------------|
 | Utility | “What is today’s date?” (`get_datetime`) | No |
-| Web | “Search the web for Minnow AI workspace” | Yes + search provider configured |
+| Web | “Search the web for Minnow development workspace” | Yes + search provider configured |
 | Files | “Read package.json first 20 lines” | Yes |
 | Git | “git status summary” | Yes + git repo |
 | Code exec | “Run `npm test` with a 60s cap” | Yes |
