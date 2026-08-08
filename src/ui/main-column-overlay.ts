@@ -4,11 +4,13 @@
  */
 
 import { emitChatSidebarChanged } from './layout-events';
+import { isSuperPlanChromeActive } from './super-plan-chrome';
 
 const CHAT_AREA_OVERLAY_CLASSES = [
   'chat-area--code-overview',
   'chat-area--code-brain-map',
   'chat-area--orchestrate-hub',
+  'chat-area--orchestrate',
   'chat-area--plan-screen',
   'chat-area--issues',
   'chat-area--dev-server',
@@ -68,7 +70,7 @@ export function isMainColumnOverlaySuppressingChatDom(): boolean {
  * is hidden in CSS (same behaviour as Super Plan).
  */
 export function isCodeStageViewHidingChatSidebar(): boolean {
-  return isMainColumnOverlaySuppressingChatDom();
+  return isSuperPlanChromeActive() || isMainColumnOverlaySuppressingChatDom();
 }
 
 /** Notify Code view chrome (Chats toggle) after a stage view opens or closes. */

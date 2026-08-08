@@ -1454,25 +1454,24 @@ function buildBoardHeader(
   plannerChat: Chat,
 ): HTMLElement {
   const header = document.createElement('header');
-  // Dual-class: quiet SP/RS runhead chrome while keeping board-header test hooks.
-  header.className = 'board-header ob-runhead';
+  header.className = 'board-header';
 
   // Single instrument strip: identity + inline telemetry + run controls.
   const toolbar = document.createElement('div');
-  toolbar.className = 'board-header__toolbar ob-runhead__top';
+  toolbar.className = 'board-header__toolbar';
 
   const leading = document.createElement('div');
-  leading.className = 'board-header__leading ob-runhead__ask';
+  leading.className = 'board-header__leading';
 
   const title = document.createElement('h2');
-  title.className = 'board-header__title ob-runhead__title';
+  title.className = 'board-header__title';
   title.textContent = shortPlanName(planPath);
   leading.appendChild(title);
   leading.appendChild(buildBoardStatusBadge(headerStatus));
   leading.appendChild(buildBoardHeaderTelemetry(metrics, board));
 
   const controls = document.createElement('div');
-  controls.className = 'board-header__controls ob-runhead__actions';
+  controls.className = 'board-header__controls';
   wireBoardHeaderControls(controls, planPath, group, board, plannerChat);
 
   toolbar.appendChild(leading);
@@ -1480,7 +1479,7 @@ function buildBoardHeader(
 
   // Secondary band: only alerts / live slots (keeps the primary strip tight).
   const meta = document.createElement('div');
-  meta.className = 'board-header__meta ob-runhead__meta';
+  meta.className = 'board-header__meta';
 
   const pendingAfkBanner = buildPendingAfkBanner(group, board, plannerChat);
   if (pendingAfkBanner) meta.appendChild(pendingAfkBanner);
@@ -3351,6 +3350,9 @@ export function renderBoardView(group: ChatGroup): void {
     Boolean(existingRoot?.querySelector('[data-board-action="open-plan"]'));
 
   if (canRefreshInPlace && board) {
+    if (!splitActive) {
+      area.classList.add(OB_CHAT_AREA_CLASS);
+    }
     refreshBoardDom(existingRoot!, group, plannerChat, board);
     ensureBoardSession(group, plannerChat);
     syncViewModeToggleFromActiveChat();
@@ -3400,7 +3402,7 @@ export function renderBoardView(group: ChatGroup): void {
   paintRail();
 
   const root = document.createElement('section');
-  root.className = 'board-root ob-pane--run';
+  root.className = 'board-root';
 
   const planPath =
     group.orchestratePlanPath ?? plannerChat.orchestratePlanPath ?? board?.planPath ?? '';

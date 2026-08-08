@@ -9,7 +9,9 @@
 
 /* Edge-to-edge shell; hub no longer centres a 640px marketing column. */
 .chat-area.chat-area--orchestrate-hub,
-.chat-area.chat-area--orchestrate {
+.chat-area.chat-area--orchestrate,
+.main-column.main-column--board-view .chat-area,
+#chatArea.chat-area:has(.ob-page) {
   display: flex;
   flex-direction: column;
   justify-content: stretch;
@@ -23,7 +25,9 @@
 
 /* Default .chat-area padding (messages.css) must not inset the shell. */
 main#chatArea.chat-area--orchestrate-hub,
-main#chatArea.chat-area--orchestrate {
+main#chatArea.chat-area--orchestrate,
+.main-column.main-column--board-view main#chatArea.chat-area,
+main#chatArea.chat-area:has(.ob-page) {
   padding: 0;
   gap: 0;
 }
@@ -481,14 +485,16 @@ main#chatArea.chat-area--orchestrate {
   border-top: 1px solid var(--mn-border);
 }
 
-/* ── Run pane: board nested in main ─────────────────────────────────────── */
+/* ── Board in main pane: layout only (visuals stay in orchestrate-board.css) ─ */
 
 .ob-main > .board-root {
-  display: flex;
   flex: 1;
-  flex-direction: column;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* Match legacy #chatArea inset (messages.css) now that the shell is edge-to-edge. */
+  padding: 24px 20px 12px;
+  box-sizing: border-box;
 }
 
 .ob-main > .board-root > .board-main,
@@ -497,133 +503,6 @@ main#chatArea.chat-area--orchestrate {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-}
-
-/*
- * Quiet runhead: dual-class on .board-header. Keep controls reachable;
- * demote density via spacing and type, not by hiding Start/Stop.
- */
-.ob-main .board-header.ob-runhead,
-.ob-main .board-header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  flex-shrink: 0;
-  padding: 16px var(--ob-pad-x) 12px;
-  border-bottom: 1px solid var(--mn-border);
-  background: var(--mn-bg);
-  gap: 8px;
-}
-
-.ob-main .board-header__toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.ob-main .board-header__leading {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  min-width: 0;
-}
-
-.ob-main .board-header__title {
-  margin: 0;
-  max-width: var(--ob-read-col);
-  color: var(--mn-fg);
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.3;
-}
-
-.ob-main .board-header__telemetry {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.ob-main .board-header__metrics {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--mn-fg-muted);
-}
-
-.ob-main .board-header__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-/* Wave section rhythm (mono label + hairline), SP/RS .*-sec twin */
-.ob-main .board-wave-block {
-  margin: 0 0 18px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.ob-main .board-wave-block__head,
-.ob-main .ob-sec {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 10px;
-  padding: 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--mn-fg-muted);
-}
-
-.ob-main .kanban-grid {
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  overflow: hidden;
-}
-
-.ob-main .kanban-column {
-  background: transparent;
-}
-
-.ob-main .kanban-column h3,
-.ob-main .kanban-column__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mn-fg-muted);
-}
-
-/* Task items: quieter bordered rows, not heavy card stacks */
-.ob-main .board-task-card {
-  border-radius: var(--radius-sm);
-  box-shadow: none;
-  background: var(--mn-bg);
-}
-
-.ob-main .board-onboarding {
-  padding: 28px var(--ob-pad-x) 40px;
-  box-sizing: border-box;
-}
-
-.ob-main .board-finish-dashboard {
-  padding: 20px var(--ob-pad-x) 32px;
-  box-sizing: border-box;
 }
 
 /* Narrow: rail overlays like Super Plan */

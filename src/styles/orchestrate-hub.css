@@ -10,7 +10,8 @@
   padding: 0;
 }
 
-.main-column:has(.chat-area--orchestrate-hub) .stats-strip {
+.main-column:has(.chat-area--orchestrate-hub) .stats-strip,
+.main-column:has(.chat-area--orchestrate) .stats-strip {
   display: none;
 }
 
@@ -18,7 +19,12 @@
 .main-column:has(.chat-area--orchestrate-hub) .tool-approval-host,
 .main-column:has(.chat-area--orchestrate-hub) .question-host,
 .main-column:has(.chat-area--orchestrate-hub) .code-change-strip-wrap,
-.main-column:has(.chat-area--orchestrate-hub) .chat-jump-latest {
+.main-column:has(.chat-area--orchestrate-hub) .chat-jump-latest,
+.main-column:has(.chat-area--orchestrate) .input-bar,
+.main-column:has(.chat-area--orchestrate) .tool-approval-host,
+.main-column:has(.chat-area--orchestrate) .question-host,
+.main-column:has(.chat-area--orchestrate) .code-change-strip-wrap,
+.main-column:has(.chat-area--orchestrate) .chat-jump-latest {
   display: none !important;
 }
 
@@ -33,20 +39,49 @@
   display: none;
 }
 
-/* Plan preview: use the orchestrate read column and more vertical space than the
-   default embed cap (min(48vh, 420px) in orchestrate-plan-screen.css). */
+/* Plan preview: read column width; fill ask pane to bottom padding (32px, see .ob-pane--ask). */
+.ob-pane--ask:has(#orchestrateHubPlanPreview:not([hidden])) {
+  overflow: hidden;
+}
+
 .ob-ask:has(#orchestrateHubPlanPreview:not([hidden])) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
   max-width: min(100%, var(--ob-read-col, 790px));
 }
 
-.ob-ask #orchestrateHubPlanPreview .orchestrate-plan-screen__preview-wrap {
+.ob-ask:has(#orchestrateHubPlanPreview:not([hidden])) .orchestrate-hub__workflow {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-height: 0;
 }
 
-.ob-ask #orchestrateHubPlanPreviewMount.orchestrate-plan-screen__preview {
+.ob-ask:has(#orchestrateHubPlanPreview:not([hidden])) #orchestrateHubPlanPreview {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ob-ask:has(#orchestrateHubPlanPreview:not([hidden])) #orchestrateHubPlanPreview .orchestrate-plan-screen__path {
+  flex-shrink: 0;
+}
+
+.ob-ask:has(#orchestrateHubPlanPreview:not([hidden])) #orchestrateHubPlanPreview .orchestrate-plan-screen__preview-wrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ob-ask:has(#orchestrateHubPlanPreview:not([hidden])) #orchestrateHubPlanPreviewMount.orchestrate-plan-screen__preview {
+  flex: 1;
   width: 100%;
-  min-height: 360px;
-  max-height: min(72vh, 680px);
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
