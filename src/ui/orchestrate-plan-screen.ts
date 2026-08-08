@@ -28,7 +28,10 @@ import {
   startSuperPlan,
   subscribeSuperPlanController,
 } from '../chat/super-plan/controller';
-import { SUPER_PLAN_STAGE_LABELS } from '../chat/super-plan/types';
+import {
+  SUPER_PLAN_STAGE_LABELS,
+  type SuperPlanStageId,
+} from '../chat/super-plan/types';
 import { isFirstUserMessagePending } from '../chat/titles/schedule';
 import {
   getMainTurnActivity,
@@ -80,6 +83,17 @@ import {
 } from './plan-progress-screen';
 import { PlanActivityCollector } from './plan-activity-collector';
 import { ResearchActivitySession } from '../research/research-activity-session';
+import {
+  buildSuperPlanPageDom,
+  getSuperPlanQuestionsHost,
+  isSuperPlanPageMounted,
+  refreshSuperPlanLibrary,
+  syncSuperPlanPage,
+  teardownSuperPlanPage,
+  SUPER_PLAN_PAGE_ROOT_ID,
+  type SuperPlanPageHandlers,
+} from './super-plan-page';
+import { openSettings } from './settings-page';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
 export const ORCHESTRATE_PLAN_SCREEN_PROMPT_ID = 'orchestratePlanScreenPrompt';
@@ -139,6 +153,14 @@ let superPlanUnsubscribe: (() => void) | null = null;
 let planProgressPanel: PlanProgressPanel | null = null;
 let planActivitySession: ResearchActivitySession | null = null;
 let planActivityCollector: PlanActivityCollector | null = null;
+/**
+ * Set while the user is reading a plan they picked out of the library rather
+ * than the run that owns the session. Live controller ticks stand down until
+ * they navigate back, so the page they are reading is not painted over.
+ */
+let superPlanDocPath: string | null = null;
+/** Artifact signature of the last library refresh, so ticks do not re-list. */
+let lastSuperPlanArtifacts = '';
 
 function ensureStreamEndListener(): void {
   if (streamEndUnsubscribe) return;
@@ -147,10 +169,13 @@ function ensureStreamEndListener(): void {
   });
 }
 
-/** True when plan screen root is in #chatArea. */
+/** True when either plan screen root (centered overlay or Super Plan page) is in #chatArea. */
 export function isOrchestratePlanScreenMounted(): boolean {
   if (typeof document === 'undefined') return false;
-  return Boolean(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
+  return Boolean(
+    document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID) ||
+      document.getElementById(SUPER_PLAN_PAGE_ROOT_ID),
+  );
 }
 
 /** User switched away while a plan session exists (DOM torn down, session kept). */
@@ -373,8 +398,12 @@ export function teardownOrchestratePlanScreenDom(
   }
   resetPlanScreenDomMounts();
   removeOrchestratePlanScreenSuspendedBanner();
+  superPlanDocPath = null;
   document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID)?.remove();
-  document.getElementById('chatArea')?.classList.remove(CHAT_AREA_PLAN_SCREEN_CLASS);
+  document.getElementById(SUPER_PLAN_PAGE_ROOT_ID)?.remove();
+  document
+    .getElementById('chatArea')
+    ?.classList.remove(CHAT_AREA_PLAN_SCREEN_CLASS, CHAT_AREA_SUPER_PLAN_CLASS);
   document
     .getElementById('mainColumn')
     ?.classList.remove(MAIN_COLUMN_PLAN_SCREEN_CLASS);
@@ -434,6 +463,11 @@ export function resolveOrchestratePlanScreenQuestionHost(
   if (session.phase === 'working' || session.phase === 'super-plan-working') {
     session.phase = 'questions';
   }
+  // Super Plan keeps the interview inline in the ledger column, so its host is
+  // already on the page and never needs a repaint to appear.
+  if (isSuperPlanPageMounted()) {
+    return getSuperPlanQuestionsHost();
+  }
   let host = document.getElementById(ORCHESTRATE_PLAN_SCREEN_QUESTIONS_ID);
   if (!host) {
     renderOrchestratePlanScreen({
@@ -451,6 +485,23 @@ export function resolveOrchestratePlanScreenQuestionHost(
 
 function resolvePlanScreenWorkingPhase(chat: Chat): 'working' | 'super-plan-working' {
   return normalizeModeId(chat.modeId) === 'super-plan' ? 'super-plan-working' : 'working';
+}
+
+/** Confirm + rewind when the user clicks a completed stage in the pipeline column. */
+async function handleSuperPlanStageRework(
+  chatId: string,
+  stageId: SuperPlanStageId,
+): Promise<void> {
+  const chat = findChatById(chatId);
+  if (!chat?.superPlan || chat.superPlan.cancelled) return;
+  const confirmed = await appConfirm(
+    `Rework the pipeline from "${SUPER_PLAN_STAGE_LABELS[stageId]}"? Later stages will run again.`,
+  );
+  if (!confirmed) return;
+  if (planSession?.chatId === chat.id) {
+    planSession.phase = 'super-plan-working';
+  }
+  void rewindSuperPlanToStage(chat, stageId);
 }
 
 /** Confirm + rewind when the user clicks a completed stepper node. */
@@ -614,6 +665,29 @@ function refreshSuspendedPlanBanner(chat: Chat): void {
 async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
   const session = planSession;
   if (!session || session.chatId !== chat.id) return;
+
+  /*
+   * The Super Plan page is one surface for every pipeline phase, so a stage
+   * change patches it rather than rebuilding it. Repainting here would reset
+   * the ledger scroll position and replay the entry animation on every tick.
+   */
+  if (isSuperPlanPageMounted() && !superPlanDocPath) {
+    session.phase = derivePlanScreenPhaseFromSuperPlan(chat);
+    session.planPath =
+      resolvePlanSessionArtifactPath(chat, session.phase) ?? session.planPath;
+    if (!canRepaintPlanScreen(chat)) {
+      refreshSuspendedPlanBanner(chat);
+      return;
+    }
+    syncSuperPlanPage(chat);
+    // Re-list only when the run's files changed, not on every controller tick.
+    const artifacts = `${chat.superPlan?.specPath ?? ''}|${chat.superPlan?.planPath ?? ''}`;
+    if (artifacts !== lastSuperPlanArtifacts) {
+      lastSuperPlanArtifacts = artifacts;
+      refreshSuperPlanLibrary();
+    }
+    return;
+  }
 
   const checkpoint = getSuperPlanCheckpointKind(chat);
   if (checkpoint === 'spec_confirm') {
@@ -1086,7 +1160,121 @@ function appendPlanScreenHeader(
   parent.appendChild(header);
 }
 
+/**
+ * Super Plan owns its own surface (rail + run pane). The centered overlay
+ * below still serves regular Plan mode and the Orchestrate prompt, which have
+ * no library and no ten-stage pipeline to show.
+ */
+function buildSuperPlanScreenDom(
+  opts: RenderOrchestratePlanScreenOptions,
+  chat: Chat,
+): HTMLElement {
+  const handlers: SuperPlanPageHandlers = {
+    onStart: (prompt) => {
+      void startPlanningFromPrompt(prompt);
+    },
+    onViewChat: () => {
+      const target = findChatById(opts.chatId);
+      if (target) suspendToViewChat(target);
+    },
+    onPause: () => {
+      const target = findChatById(opts.chatId);
+      if (target) pauseSuperPlan(target);
+    },
+    onResume: () => {
+      const target = findChatById(opts.chatId);
+      if (target) void resumeSuperPlanPipeline(target);
+    },
+    onStop: () => {
+      const target = findChatById(opts.chatId);
+      if (target?.superPlan) cancelSuperPlan(target);
+      else stopGeneration(opts.chatId);
+    },
+    onSkipInterview: () => {
+      const target = findChatById(opts.chatId);
+      if (target) void skipSuperPlanStage(target);
+    },
+    onConfirmSpec: () => {
+      const target = findChatById(opts.chatId);
+      if (target) void resumeSuperPlanAfterUser(target, 'confirm');
+    },
+    onReviseSpec: () => {
+      const target = findChatById(opts.chatId);
+      if (target) void resumeSuperPlanAfterUser(target, 'revise');
+    },
+    onRetryStage: () => {
+      const target = findChatById(opts.chatId);
+      if (target) void retrySuperPlanStage(target);
+    },
+    onSkipStage: () => {
+      const target = findChatById(opts.chatId);
+      if (target) void skipSuperPlanStage(target);
+    },
+    onCancelPipeline: () => {
+      const target = findChatById(opts.chatId);
+      if (target) cancelSuperPlan(target);
+    },
+    onRework: (stageId) => {
+      void handleSuperPlanStageRework(opts.chatId, stageId);
+    },
+    onOrchestrate: (planPath) => {
+      if (planPath) openBoardWithPlan(planPath);
+    },
+    onBuild: (planPath) => {
+      if (!planPath) return;
+      teardownOrchestratePlanScreen();
+      createChatWithMode({
+        modeId: 'build',
+        orchestratePlanPath: planPath,
+        initialUserMessage: `Implement the plan at ${planPath}.`,
+      });
+    },
+    onRevisePlan: (planPath) => {
+      if (!planPath) return;
+      startRevisePlanFromPath(planPath, { savedPrompt: opts.savedPrompt });
+    },
+    onOpenSettings: () => {
+      openSettings('modes', { searchKey: 'agents.modes.superPlan' });
+    },
+    onSelectRun: (chatId) => {
+      openSuperPlanRun(chatId);
+    },
+    onOpenPlanFile: (path) => {
+      renderSuperPlanDoc(path);
+    },
+    onNewPlan: () => {
+      superPlanDocPath = null;
+      renderOrchestratePlanScreen({ phase: 'prompt', chatId: opts.chatId });
+    },
+  };
+
+  /*
+   * The phase decides the surface, not the presence of pipeline state: a run
+   * that has just been started has no `superPlan` record yet, and dropping
+   * back to the composer there would take the interview's question host with it.
+   */
+  const mode: 'compose' | 'run' | 'doc' = superPlanDocPath
+    ? 'doc'
+    : opts.phase === 'prompt'
+      ? 'compose'
+      : 'run';
+
+  return buildSuperPlanPageDom({
+    chatId: opts.chatId,
+    mode,
+    savedPrompt: opts.savedPrompt,
+    errorMessage: opts.errorMessage,
+    docPath: superPlanDocPath ?? undefined,
+    handlers,
+  });
+}
+
 function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLElement {
+  const superPlanChat = findChatById(opts.chatId);
+  if (superPlanChat && normalizeModeId(superPlanChat.modeId) === 'super-plan') {
+    return buildSuperPlanScreenDom(opts, superPlanChat);
+  }
+
   const root = document.createElement('div');
   root.id = ORCHESTRATE_PLAN_SCREEN_ROOT_ID;
   root.className = 'orchestrate-plan-screen';
@@ -1443,6 +1631,7 @@ function buildPlanScreenDom(opts: RenderOrchestratePlanScreenOptions): HTMLEleme
 
 /** Drop progress/activity mounts before rebuilding the plan screen DOM. */
 function resetPlanScreenDomMounts(): void {
+  teardownSuperPlanPage();
   activityUnsubscribe?.();
   activityUnsubscribe = null;
   planActivityCollector?.stop();
@@ -1468,10 +1657,58 @@ function mountPlanActivityButton(actionsStart: HTMLElement): void {
   planActivitySession.mountButton(actionsStart);
 }
 
+const CHAT_AREA_SUPER_PLAN_CLASS = 'chat-area--super-plan';
+
+/** Open a Super Plan run picked from the library rail. */
+function openSuperPlanRun(chatId: string): void {
+  const chat = findChatById(chatId);
+  if (!chat?.superPlan) return;
+  superPlanDocPath = null;
+  ensureStreamEndListener();
+  if (sessionState && sessionState.activeId !== chatId) {
+    switchChat(chatId);
+  }
+  renderOrchestratePlanScreen({
+    phase: derivePlanScreenPhaseFromSuperPlan(chat),
+    chatId,
+    savedPrompt: chat.superPlan.prompt,
+  });
+}
+
+/**
+ * Show a saved plan the rail found on disk. The session keeps pointing at
+ * whatever run owns it, so returning to that run costs one click on the rail.
+ */
+function renderSuperPlanDoc(path: string): void {
+  const trimmed = path.trim();
+  if (!trimmed) return;
+  const chatId = planSession?.chatId ?? getActiveChat().id;
+  const chat = findChatById(chatId);
+  if (!chat || normalizeModeId(chat.modeId) !== 'super-plan') return;
+  const area = document.getElementById('chatArea');
+  if (!area) return;
+
+  superPlanDocPath = trimmed;
+  removeOrchestratePlanScreenSuspendedBanner();
+  teardownHub();
+  area.replaceChildren();
+  area.appendChild(
+    buildPlanScreenDom({
+      phase: planSession?.phase ?? 'preview',
+      chatId,
+      savedPrompt: planSession?.savedPrompt,
+    }),
+  );
+  area.classList.add(CHAT_AREA_PLAN_SCREEN_CLASS, CHAT_AREA_SUPER_PLAN_CLASS);
+  document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_PLAN_SCREEN_CLASS);
+  notifyAskQuestionDisplayContextChanged();
+}
+
 /** Paint plan screen into #chatArea for the given phase. */
 export function renderOrchestratePlanScreen(
   opts: RenderOrchestratePlanScreenOptions,
 ): void {
+  superPlanDocPath = null;
   removeOrchestratePlanScreenSuspendedBanner();
   teardownHub();
   const prior = planSession;
@@ -1496,14 +1733,16 @@ export function renderOrchestratePlanScreen(
     planProgressPanel?.destroy();
     planProgressPanel = null;
   }
+  const chat = findChatById(opts.chatId);
+  const isSuperPlan = chat && normalizeModeId(chat.modeId) === 'super-plan';
+
   area.replaceChildren();
   area.appendChild(buildPlanScreenDom(opts));
   area.classList.add(CHAT_AREA_PLAN_SCREEN_CLASS);
+  area.classList.toggle(CHAT_AREA_SUPER_PLAN_CLASS, Boolean(isSuperPlan));
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_PLAN_SCREEN_CLASS);
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
 
-  const chat = findChatById(opts.chatId);
-  const isSuperPlan = chat && normalizeModeId(chat.modeId) === 'super-plan';
   const wiresSuperPlanListener =
     isSuperPlan &&
     (opts.phase === 'working' ||

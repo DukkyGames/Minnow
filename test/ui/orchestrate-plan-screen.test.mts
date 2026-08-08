@@ -23,6 +23,7 @@ import {
   shouldRouteComposerSendToSuperPlan,
   suspendOrchestratePlanScreenOnLeave,
 } from '../../src/ui/orchestrate-plan-screen.ts';
+import { SUPER_PLAN_PAGE_ROOT_ID } from '../../src/ui/super-plan-page.ts';
 import { switchChat } from '../../src/ui/sidebar.ts';
 import { createInitialSuperPlanStages } from '../../src/chat/super-plan/state.ts';
 import { showQuestionCardsModal } from '../../src/ui/question-cards-modal.ts';
@@ -108,6 +109,18 @@ describe('orchestrate plan screen', () => {
 
     const chat = createEmptyChatObject('sp-spec');
     chat.modeId = 'super-plan';
+    const specStages = createInitialSuperPlanStages();
+    specStages.grill.status = 'done';
+    specStages.spec_confirm.status = 'blocked_user';
+    specStages.spec_confirm.artifactPath =
+      'documentation/plans/references/oauth-spec.md';
+    chat.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'spec_confirm',
+      specPath: 'documentation/plans/references/oauth-spec.md',
+      stages: specStages,
+    };
     setSessionStateForTests({
       version: 5,
       activeId: chat.id,
@@ -122,29 +135,31 @@ describe('orchestrate plan screen', () => {
       savedPrompt: 'Add OAuth login',
     });
 
-    assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
-    assert.match(document.body.textContent ?? '', /Confirm build spec/);
-    const root = document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID);
+    // Super Plan renders its own library-first page, not the centered overlay.
+    assert.ok(document.getElementById(SUPER_PLAN_PAGE_ROOT_ID));
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
     assert.ok(
-      root?.classList.contains('orchestrate-plan-screen--super-plan-artifact'),
-      'spec_confirm should use the wider Super Plan artifact layout',
+      document.getElementById('chatArea')?.classList.contains('chat-area--super-plan'),
+      'the chat area hands back its centering for the Super Plan page',
     );
-    const preview = document.querySelector('.orchestrate-plan-screen__preview');
-    assert.ok(preview, 'build spec preview mount should exist');
-    assert.match(
-      preview?.textContent ?? '',
-      /build spec file is empty or could not be loaded/,
-      'spec_confirm should use build-spec empty copy when no markdown is loaded yet',
-    );
+    const dock = document.querySelector('.sp-dock');
+    assert.ok(dock, 'a blocked checkpoint docks its actions under the artifact');
+    assert.equal((dock as HTMLElement).hidden, false);
     assert.ok(
-      [...document.querySelectorAll('.orchestrate-plan-screen__btn')].some(
+      [...document.querySelectorAll('.sp-btn')].some(
         (btn) => btn.textContent === 'Confirm spec',
       ),
     );
     assert.ok(
-      [...document.querySelectorAll('.orchestrate-plan-screen__btn')].some(
+      [...document.querySelectorAll('.sp-btn')].some(
         (btn) => btn.textContent === 'Revise spec',
       ),
+    );
+    assert.ok(
+      [...document.querySelectorAll('.sp-segment')].some(
+        (seg) => seg.textContent?.trim() === 'Spec' && seg.classList.contains('is-on'),
+      ),
+      'the spec checkpoint opens on the Spec segment',
     );
 
     const session = getOrchestratePlanScreenSession();
@@ -594,13 +609,13 @@ describe('orchestrate plan screen', () => {
 
     assert.ok(planHost?.querySelector('.question-cards-panel'));
 
-    const viewChatBtn = [...document.querySelectorAll('.orchestrate-plan-screen__btn')].find(
-      (btn) => btn.textContent === 'View chat',
-    ) as HTMLButtonElement | undefined;
+    const viewChatBtn = document.querySelector(
+      '[data-plan-action="viewChat"]',
+    ) as HTMLButtonElement | null;
     assert.ok(viewChatBtn);
     viewChatBtn.click();
     assert.equal(isOrchestratePlanScreenSuspended(), true);
-    assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
+    assert.equal(document.getElementById(SUPER_PLAN_PAGE_ROOT_ID), null);
     assert.ok(composerHost.querySelector('.question-cards-panel'));
     assert.equal(planHost?.childElementCount, 0);
 
@@ -811,11 +826,11 @@ describe('orchestrate plan screen', () => {
       chatId: chat.id,
       savedPrompt: 'Add OAuth login',
     });
-    assert.ok(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID));
+    assert.ok(document.getElementById(SUPER_PLAN_PAGE_ROOT_ID));
 
     await switchChat(chat.id);
 
-    assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
+    assert.equal(document.getElementById(SUPER_PLAN_PAGE_ROOT_ID), null);
     assert.equal(isOrchestratePlanScreenSuspended(), true);
     const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
     assert.ok(banner, 'resume banner should appear after sidebar click');
@@ -858,7 +873,7 @@ describe('orchestrate plan screen', () => {
     });
 
     const skipBtn = document.querySelector(
-      '[data-plan-skip-interview]',
+      '[data-plan-action="skipInterview"]',
     ) as HTMLButtonElement | null;
     assert.ok(skipBtn, 'skip interview button should render');
     assert.equal(skipBtn?.hidden, false, 'skip button visible during the interview');
@@ -871,7 +886,7 @@ describe('orchestrate plan screen', () => {
       savedPrompt: 'Add OAuth login',
     });
     const skipAfter = document.querySelector(
-      '[data-plan-skip-interview]',
+      '[data-plan-action="skipInterview"]',
     ) as HTMLButtonElement | null;
     assert.equal(skipAfter?.hidden, true, 'skip button hidden once past the interview');
   });

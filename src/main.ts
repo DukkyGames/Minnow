@@ -66,6 +66,7 @@ import './styles/code-overview.css';
 import './styles/orchestrate-hub.css';
 import './styles/orchestrate-plan-screen.css';
 import './styles/plan-progress.css';
+import './styles/super-plan-page.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-responsive.css';
 import './styles/chat-app.css';
