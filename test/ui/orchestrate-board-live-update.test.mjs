@@ -31,6 +31,7 @@ const {
   deriveTaskAgentBadge,
   getBoardTaskPrimaryRunId,
   buildKanbanRefreshKey,
+  closeBoardChatInOrchestrate,
 } = await import('../../src/ui/orchestrate-board.ts');
 const { closeSubAgentDrawer } = await import('../../src/ui/sub-agent-drawer.ts');
 const { setOrchestrateViewMode } = await import('../../src/ui/view-mode-toggle.ts');
@@ -238,9 +239,10 @@ async function waitForKanban() {
   throw new Error('kanban grid not rendered');
 }
 
-describe('orchestrate board live updates', () => {
+describe('orchestrate board live updates', { concurrency: false }, () => {
   afterEach(async () => {
     closeSubAgentDrawer();
+    closeBoardChatInOrchestrate();
     disposeBoardViewForTests();
     clearBoardListenersForTests();
     resetSubAgentConfigCache();
@@ -694,6 +696,7 @@ describe('orchestrate board live updates', () => {
     await flushUiWork();
     assert.equal(getActiveChat().id, chat.id);
 
+    closeBoardChatInOrchestrate();
     group.viewMode = 'board';
     setSessionStateForTests(
       sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),

@@ -30,7 +30,11 @@ export function exitBoardViewForNavigation(): boolean {
   // chats panel to return from.
   closeBoardChatEmbedForTeardown();
   const boardWasOpen = dismissActiveBoardView();
-  if (!boardWasOpen) return false;
+  const area = document.getElementById('chatArea');
+  const hadBoardDom = Boolean(
+    area?.querySelector(':scope > .ob-page, :scope > .board-root'),
+  );
+  if (!boardWasOpen && !hadBoardDom) return false;
   disposeOrchestrateBoardSession();
   releaseOrchestrateChatArea();
   syncOrchestrateInitSplitChrome();

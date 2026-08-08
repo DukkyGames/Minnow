@@ -369,7 +369,8 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
    */
   if (codeMount && !boardChatHost && isBoardOwnedChat(chat)) {
     const owner = getBoardGroupForChat(chat);
-    if (owner) {
+    // Respect explicit chat view — only reopen the board when the folder is in board mode.
+    if (owner?.viewMode === 'board') {
       void import('../state/chat-groups').then((m) => m.openBoardGroup(owner.id));
       return;
     }

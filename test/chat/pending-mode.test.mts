@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import {
+  installHappyDomGlobals,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
 import { setStreaming } from '../../src/app-state.ts';
 import {
   enqueuePendingMode,
@@ -15,6 +19,9 @@ import {
 } from '../../src/state/sessions.ts';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
+
+/** happy-dom window for DOM-touching mode handoff paths. */
+let win: Window | undefined;
 
 function seedChat(modeId: 'plan' | 'build' = 'plan') {
   const chat = createEmptyChatObject('m1');
@@ -31,16 +38,19 @@ function seedChat(modeId: 'plan' | 'build' = 'plan') {
 
 describe('pending-mode (MIN-191)', () => {
   beforeEach(() => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    win = new Window();
+    installHappyDomGlobals(win);
     setStreaming(false);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     flushScheduledSessionSaveForTests();
     setSessionStateForTests(null);
     setStreaming(false);
+    if (win) {
+      await teardownHappyDomAsync(win);
+      win = undefined;
+    }
   });
 
   test('executeSetChatMode defers when streaming', () => {

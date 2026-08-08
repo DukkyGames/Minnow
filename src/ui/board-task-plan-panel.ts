@@ -43,7 +43,7 @@ export function openBoardTaskChat(
     related.find((row) => row.isPrimary)?.chatId ||
     related[0]?.chatId ||
     plannerChat.id;
-  void import('./sidebar').then((m) => m.switchChat(targetId));
+  void import('./orchestrate-board').then((m) => m.openBoardChatInOrchestrate(targetId));
 }
 
 function findTaskOnBoard(

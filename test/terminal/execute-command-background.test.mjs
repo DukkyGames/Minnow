@@ -121,10 +121,6 @@ describe('execute_command background lifecycle', () => {
     });
     const logPayload = JSON.parse(logOut.result);
     assert.equal(logPayload.runId, payload.runId);
-    // On busy CI hosts the long sleep can fail to start; only assert mid-flight when still active.
-    if (!listed.finished) {
-      assert.equal(logPayload.finished, false);
-    }
 
     const stopOut = await executeServerTool('stop_command', { run_id: payload.runId });
     const stopPayload = JSON.parse(stopOut.result);

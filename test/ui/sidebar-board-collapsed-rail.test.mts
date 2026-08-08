@@ -1,6 +1,6 @@
 /**
  * Orchestrate boards on the collapsed chat sidebar icon rail.
- * Only the board group header remains; waves and member chats stay hidden.
+ * Board-owned folders and task chats live on the Orchestrate rail, not #chatList.
  */
 
 import assert from 'node:assert/strict';
@@ -105,7 +105,7 @@ describe('sidebar board collapsed rail', { concurrency: false }, () => {
     }
   });
 
-  test('icon rail shows only the board group header', async () => {
+  test('icon rail omits board-owned folder and chats', async () => {
     setupDom(true);
     seedBoardSession(true);
     const { renderSidebar } = await import('../../src/ui/sidebar.ts');
@@ -113,13 +113,13 @@ describe('sidebar board collapsed rail', { concurrency: false }, () => {
 
     const list = document.getElementById('chatList');
     assert.ok(list);
-    assert.ok(list.querySelector('.chat-group-header--has-board'));
+    assert.equal(list.querySelectorAll('.chat-group-header--has-board').length, 0);
     assert.equal(list.querySelectorAll('.chat-group-members').length, 0);
     assert.equal(list.querySelectorAll('.chat-wave-subgroup-header').length, 0);
     assert.equal(list.querySelectorAll('.chat-item-row').length, 0);
   });
 
-  test('expanded sidebar keeps wave subgroup headers and members', async () => {
+  test('expanded sidebar omits board-owned folder and task chats', async () => {
     setupDom(false);
     seedBoardSession(false);
     const { renderSidebar } = await import('../../src/ui/sidebar.ts');
@@ -127,12 +127,10 @@ describe('sidebar board collapsed rail', { concurrency: false }, () => {
 
     const list = document.getElementById('chatList');
     assert.ok(list);
-    assert.equal(list.querySelectorAll('.chat-wave-subgroup-header').length, 1);
-    assert.match(list.querySelector('.chat-wave-subgroup-header')?.textContent ?? '', /Wave 6/);
-    const taskRow = list.querySelector<HTMLElement>(`.chat-item-row[data-chat-id="${TASK_CHAT_ID}"]`);
-    assert.ok(taskRow);
-    assert.ok(taskRow.querySelector('.chat-item-board-cat-icon'));
-    assert.equal(taskRow.querySelectorAll('.chat-item-icon').length, 0);
-    assert.equal(taskRow.querySelectorAll('.chat-item-board-cat-icon').length, 1);
+    assert.equal(list.querySelectorAll('.chat-wave-subgroup-header').length, 0);
+    assert.equal(
+      list.querySelector(`.chat-item-row[data-chat-id="${TASK_CHAT_ID}"]`),
+      null,
+    );
   });
 });
