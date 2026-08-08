@@ -4,7 +4,7 @@
  * Used by the electron-builder afterSign hook and `npm run signing:notarize`.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -62,6 +62,31 @@ export function notarytoolAuthorizationArgs() {
  */
 export function isTransientNotarizeUploadError(output) {
   return TRANSIENT_NOTARIZE_UPLOAD_RE.test(output);
+}
+
+/**
+ * Run a command and stream stdout/stderr live (notarytool progress bar needs this).
+ * @param {string} cmd
+ * @param {string[]} args
+ * @param {{ cwd?: string }} [options]
+ * @returns {Promise<{ code: number; output: string }>}
+ */
+function runStreaming(cmd, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: options.cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '';
+    const onData = (chunk) => {
+      output += chunk.toString();
+      process.stdout.write(chunk);
+    };
+    child.stdout?.on('data', onData);
+    child.stderr?.on('data', onData);
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? 1, output }));
+  });
 }
 
 /**
@@ -125,10 +150,12 @@ function stapleApp(appPath) {
 
 /**
  * Submit zip to Apple and wait for processing.
+ * Uses normal output (not JSON) so notarytool can show upload progress.
  * @param {string} zipPath
  * @param {{ useS3Acceleration: boolean; waitTimeout: string; verbose: boolean }} options
+ * @returns {Promise<{ ok: boolean; output: string; parsed: null }>}
  */
-export function submitNotarizationZip(zipPath, options) {
+export async function submitNotarizationZip(zipPath, options) {
   const authArgs = notarytoolAuthorizationArgs();
   const submitArgs = [
     'notarytool',
@@ -138,8 +165,6 @@ export function submitNotarizationZip(zipPath, options) {
     '--wait',
     '--timeout',
     options.waitTimeout,
-    '--output-format',
-    'json',
   ];
   if (!options.useS3Acceleration) {
     submitArgs.push('--no-s3-acceleration');
@@ -148,16 +173,12 @@ export function submitNotarizationZip(zipPath, options) {
     submitArgs.push('--verbose');
   }
 
-  const result = run('xcrun', submitArgs);
-  let parsed;
-  try {
-    parsed = JSON.parse(result.output.trim());
-  } catch {
-    return { ok: false, output: result.output, parsed: null };
-  }
-
-  const accepted = result.code === 0 && parsed?.status === 'Accepted';
-  return { ok: accepted, output: result.output, parsed };
+  const result = await runStreaming('xcrun', submitArgs);
+  const accepted =
+    result.code === 0 ||
+    /status:\s*Accepted/i.test(result.output) ||
+    /Accepted/i.test(result.output);
+  return { ok: accepted, output: result.output, parsed: null };
 }
 
 /**
@@ -184,13 +205,41 @@ export async function notarizeMacApp(appPath, opts = {}) {
   const waitTimeout =
     opts.waitTimeout ??
     (process.env.MINNOW_NOTARIZE_WAIT_TIMEOUT?.trim() || DEFAULT_WAIT_TIMEOUT);
-  const verbose = process.env.MINNOW_DEBUG === '1';
+  const verbose = process.env.MINNOW_NOTARIZE_VERBOSE !== '0';
 
-  const zipPath = zipAppForNotarization(appPath);
-  const zipDir = path.dirname(zipPath);
+  const existingZip = process.env.MINNOW_NOTARIZE_ZIP?.trim();
+  let zipPath;
+  let zipDir;
+  let removeZipDir = false;
+
+  if (existingZip) {
+    zipPath = path.resolve(existingZip);
+    if (!fs.existsSync(zipPath)) {
+      throw new Error(`MINNOW_NOTARIZE_ZIP not found: ${zipPath}`);
+    }
+    zipDir = path.dirname(zipPath);
+    console.log(`[notarize] Using existing archive: ${zipPath}`);
+  } else {
+    console.log('[notarize] Zipping .app for upload (ditto — may take a few minutes for a ~1 GB bundle)…');
+    zipPath = zipAppForNotarization(appPath);
+    zipDir = path.dirname(zipPath);
+    removeZipDir = true;
+  }
+
+  const zipStat = fs.statSync(zipPath);
+  const zipMb = (zipStat.size / (1024 * 1024)).toFixed(1);
+  const zipBytes = zipStat.size;
+  // Rough upload ETA at common home uplink speeds (upload + Apple scan adds more time).
+  const etaMinSlow = Math.ceil((zipBytes * 8) / (2 * 1_000_000) / 60);
+  const etaMinFast = Math.ceil((zipBytes * 8) / (20 * 1_000_000) / 60);
+  console.log(
+    `[notarize] Upload size: ${zipMb} MB (expect ~${etaMinFast}–${etaMinSlow} min upload at 20–2 Mbps uplink, then Apple processing)`,
+  );
+  console.log('[notarize] You should see a notarytool progress bar below during upload.\n');
 
   try {
-    let useS3Acceleration = process.env.MINNOW_NOTARIZE_S3_ACCELERATION !== '0';
+    // Direct S3 is the safer default: Transfer Acceleration often triggers deadlineExceeded on large uploads.
+    let useS3Acceleration = process.env.MINNOW_NOTARIZE_S3_ACCELERATION === '1';
     let lastOutput = '';
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -202,7 +251,7 @@ export async function notarizeMacApp(appPath, opts = {}) {
         `[notarize] Submitting to Apple (attempt ${attempt}/${maxAttempts}${useS3Acceleration ? '' : ', direct S3 upload'})…`,
       );
 
-      const result = submitNotarizationZip(zipPath, {
+      const result = await submitNotarizationZip(zipPath, {
         useS3Acceleration,
         waitTimeout,
         verbose,
@@ -210,7 +259,7 @@ export async function notarizeMacApp(appPath, opts = {}) {
       lastOutput = result.output;
 
       if (result.ok) {
-        console.log(`[notarize] Accepted (id: ${result.parsed?.id ?? 'unknown'})`);
+        console.log('[notarize] Accepted by Apple notary service');
         stapleApp(appPath);
         console.log('[notarize] Stapled ticket to app');
         return;
@@ -228,7 +277,9 @@ export async function notarizeMacApp(appPath, opts = {}) {
       throw new Error(`Notarization failed:\n\n${lastOutput}`);
     }
   } finally {
-    fs.rmSync(zipDir, { recursive: true, force: true });
+    if (removeZipDir) {
+      fs.rmSync(zipDir, { recursive: true, force: true });
+    }
   }
 }
 
