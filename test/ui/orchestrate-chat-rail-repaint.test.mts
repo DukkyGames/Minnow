@@ -113,4 +113,17 @@ describe('orchestrate chat rail repaint', () => {
     const active = container.querySelector('.ob-row.is-active') as HTMLElement | null;
     assert.equal(active?.dataset.chatId, planner.id);
   });
+
+  test('stale paint key with an empty list still repaints', () => {
+    const { group, build } = seed();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    container.dataset.obRailKey = `chats|stale|${build.id}`;
+    const options = { group, activeChatId: build.id, onSelectChat: () => {}, onBack: () => {} };
+
+    paintOrchestrateChatRail(container, options);
+
+    assert.ok(container.querySelector('.ob-back'));
+    assert.ok(container.querySelector('.ob-row'));
+  });
 });

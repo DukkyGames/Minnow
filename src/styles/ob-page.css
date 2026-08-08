@@ -139,6 +139,12 @@ main#chatArea.chat-area:has(.ob-page) {
 
 .main-column.main-column--board-chat > .chat-viewport {
   position: static;
+  /* Rail is pinned to #mainColumn; don't clip it with the viewport scrollport. */
+  overflow: visible;
+}
+
+.main-column.main-column--board-chat main#chatArea.chat-area--orchestrate {
+  overflow: hidden;
 }
 
 .main-column.main-column--board-chat .ob-shell {
@@ -153,6 +159,9 @@ main#chatArea.chat-area:has(.ob-page) {
   bottom: 0;
   height: auto;
   z-index: 3;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /*

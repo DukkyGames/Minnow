@@ -131,9 +131,13 @@ describe('orchestrate chat rail rows', () => {
     assert.deepEqual(listBoardChatRailRows(group, []), []);
   });
 
-  test('a chat referenced by the board but absent from state is skipped', () => {
+  test('a chat referenced by the board but absent from session still lists the task', () => {
     const group = boardGroup([task({ id: 'W1-A', wave: 'w1', chatId: 'gone' })]);
-    assert.deepEqual(listBoardChatRailRows(group, []), []);
+    const rows = listBoardChatRailRows(group, []);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.chatId, 'gone');
+    assert.equal(rows[0]!.title, 'W1-A');
+    assert.equal(rows[0]!.meta, 'W1-A · build');
   });
 
   test('the final integration test gets its own row, outside any wave', () => {

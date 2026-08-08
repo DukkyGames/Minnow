@@ -112,11 +112,12 @@ export function listBoardChatRailRows(
   const seen = new Set<string>();
 
   const plannerId = group.plannerChatId?.trim();
-  if (plannerId && byId.has(plannerId)) {
+  if (plannerId) {
+    const plannerChat = byId.get(plannerId);
     rows.push({
       chatId: plannerId,
       title: 'Orchestrator',
-      meta: byId.get(plannerId)!.name || 'planner',
+      meta: plannerChat?.name?.trim() || 'planner',
       isPlanner: true,
     });
     seen.add(plannerId);
@@ -130,12 +131,11 @@ export function listBoardChatRailRows(
       const chatId = raw?.trim();
       if (!chatId || seen.has(chatId)) continue;
       const chat = byId.get(chatId);
-      if (!chat) continue;
       seen.add(chatId);
       const role = chatRoleForTask(task, chatId);
       rows.push({
         chatId,
-        title: chat.name?.trim() || task.title || task.id,
+        title: chat?.name?.trim() || task.title || task.id,
         meta: role ? `${task.id} · ${role}` : task.id,
         isPlanner: false,
         wave: task.wave,
@@ -144,10 +144,11 @@ export function listBoardChatRailRows(
   }
 
   const finalTestId = board.finalTest?.chatId?.trim();
-  if (finalTestId && !seen.has(finalTestId) && byId.has(finalTestId)) {
+  if (finalTestId && !seen.has(finalTestId)) {
+    const finalChat = byId.get(finalTestId);
     rows.push({
       chatId: finalTestId,
-      title: byId.get(finalTestId)!.name?.trim() || 'Final integration test',
+      title: finalChat?.name?.trim() || 'Final integration test',
       meta: 'final test',
       isPlanner: false,
     });
@@ -422,7 +423,11 @@ export function paintOrchestrateBoardRail(
  * `lastKanbanRefreshKey`; the key covers every value the rows render.
  */
 function shouldRepaintRail(container: HTMLElement, paintKey: string): boolean {
-  if (container.dataset.obRailKey === paintKey) return false;
+  if (container.dataset.obRailKey === paintKey) {
+    // Key can outlive the DOM if something cleared the list without resetting it.
+    if (container.childElementCount > 0) return false;
+    delete container.dataset.obRailKey;
+  }
   container.dataset.obRailKey = paintKey;
   return true;
 }
@@ -438,7 +443,7 @@ function appendChatRailRow(
   row: OrchestrateChatRailRow,
   options: PaintOrchestrateChatRailOptions,
   dotCtx: ReturnType<typeof getChatItemDotContext>,
-  chat: Chat,
+  chat: Chat | undefined,
 ): void {
   const wrap = el('div', 'ob-row-wrap');
   const btn = el('button', 'ob-row ob-row--chat') as HTMLButtonElement;
@@ -457,7 +462,9 @@ function appendChatRailRow(
   const meta = el('span', 'ob-row__meta');
   const dot = el('span', 'ob-row__dot chat-item-dot');
   dot.setAttribute('aria-hidden', 'true');
-  applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx), btn);
+  if (chat) {
+    applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx), btn);
+  }
   meta.append(dot, document.createTextNode(row.meta));
 
   btn.append(titleEl, meta);
@@ -552,8 +559,7 @@ export function paintOrchestrateChatRail(
   }
 
   for (const row of rows.filter((r) => r.isPlanner)) {
-    const chat = byId.get(row.chatId);
-    if (chat) appendChatRailRow(container, row, options, dotCtx, chat);
+    appendChatRailRow(container, row, options, dotCtx, byId.get(row.chatId));
   }
 
   // Group the rest by wave, in board wave order, then anything unwaved (final test).
@@ -590,8 +596,7 @@ export function paintOrchestrateChatRail(
 
     if (collapsed) continue;
     for (const row of bucket) {
-      const chat = byId.get(row.chatId);
-      if (chat) appendChatRailRow(container, row, options, dotCtx, chat);
+      appendChatRailRow(container, row, options, dotCtx, byId.get(row.chatId));
     }
   }
 }

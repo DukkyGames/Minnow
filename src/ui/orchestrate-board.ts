@@ -3612,8 +3612,14 @@ export function renderBoardView(group: ChatGroup): void {
    */
   let boardFilterText = '';
   let chatFilterText = '';
+  let railListLevel: 'boards' | 'chats' | null = null;
   const paintRail = () => {
     const chatLevel = isBoardChatEmbedOpen();
+    const level = chatLevel ? 'chats' : 'boards';
+    if (railListLevel !== level) {
+      delete railList.dataset.obRailKey;
+      railListLevel = level;
+    }
     filterInput.placeholder = chatLevel ? 'Filter chats' : 'Filter boards';
     filterInput.setAttribute('aria-label', chatLevel ? 'Filter chats' : 'Filter boards');
     if (filterInput.value !== (chatLevel ? chatFilterText : boardFilterText)) {
