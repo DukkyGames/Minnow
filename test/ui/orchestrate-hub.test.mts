@@ -6,11 +6,20 @@ import {
   refreshOrchestrateHubPlanPreview,
   resetOrchestrateHubForTests,
 } from '../../src/ui/orchestrate-hub.ts';
+import { resetSuperPlanEntryForTests } from '../../src/ui/super-plan-entry.ts';
+import {
+  ORCHESTRATE_PLAN_SCREEN_ROOT_ID,
+  resetOrchestratePlanScreenForTests,
+} from '../../src/ui/orchestrate-plan-screen.ts';
+import { SUPER_PLAN_PAGE_ROOT_ID } from '../../src/ui/super-plan-page.ts';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import { getOrCreateBoardGroup } from '../../src/state/chat-groups.ts';
 import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/sessions.ts';
 
 const WORKSPACE = '/tmp/orchestrate-hub-test';
+
+let lastHubTestWindow: Window | undefined;
 
 /** happy-dom Window + globals required by hub mount (Super Plan chrome teardown). */
 function mountHubDom(): { area: HTMLElement; btn: HTMLButtonElement } {
@@ -35,6 +44,37 @@ function mountHubDom(): { area: HTMLElement; btn: HTMLButtonElement } {
   btn.id = 'btnOrchestrate';
   document.body.appendChild(btn);
   return { area, btn };
+}
+
+/** Extra DOM + globals for hub → Super Plan navigation (switchChat + spare chat). */
+function mountHubDomForSuperPlan(): void {
+  lastHubTestWindow?.close();
+  const win = new Window();
+  lastHubTestWindow = win;
+  installHappyDomGlobals(win);
+  const g = globalThis as unknown as { CustomEvent: unknown; Event: unknown };
+  g.CustomEvent = win.CustomEvent;
+  g.Event = win.Event;
+  (globalThis as Record<string, unknown>).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+
+  const sidebar = document.createElement('aside');
+  sidebar.id = 'chatSidebar';
+  document.body.appendChild(sidebar);
+
+  const area = document.createElement('main');
+  area.id = 'chatArea';
+  document.body.appendChild(area);
+
+  document.body.appendChild(Object.assign(document.createElement('button'), { id: 'btnOrchestrate' }));
+  document.body.appendChild(Object.assign(document.createElement('button'), { id: 'btnSuperPlan' }));
+
+  const mainColumn = document.createElement('div');
+  mainColumn.id = 'mainColumn';
+  document.body.appendChild(mainColumn);
 }
 
 describe('listWorkspaceOrchestrateBoardGroups', () => {
@@ -83,7 +123,11 @@ describe('listWorkspaceOrchestrateBoardGroups', () => {
 describe('orchestrate hub mount', () => {
   afterEach(() => {
     resetOrchestrateHubForTests();
+    resetSuperPlanEntryForTests();
+    resetOrchestratePlanScreenForTests();
     setSessionStateForTests(null);
+    lastHubTestWindow?.close();
+    lastHubTestWindow = undefined;
   });
 
   test('toggle renders hub root in chat area', async () => {
@@ -218,5 +262,40 @@ describe('orchestrate hub mount', () => {
     });
     assert.equal(section.hidden, true);
     assert.equal(previewMount.childElementCount, 0);
+  });
+
+  test('Make a plan opens Super Plan instead of legacy plan screen', async () => {
+    mountHubDomForSuperPlan();
+
+    const chat = createEmptyChatObject('m1');
+    chat.modeId = 'general';
+    const spareSuperPlan = createEmptyChatObject('spare-sp');
+    spareSuperPlan.modeId = 'super-plan';
+    setSessionStateForTests({
+      version: 4,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat, spareSuperPlan],
+    });
+
+    const hub = await import('../../src/ui/orchestrate-hub.ts');
+    hub.renderOrchestrateHub();
+    const makePlanBtn = document.getElementById('orchestrateHubMakePlan') as HTMLButtonElement | null;
+    assert.ok(makePlanBtn);
+    makePlanBtn.click();
+    for (let i = 0; i < 20; i += 1) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    assert.equal(document.getElementById('orchestrateHub'), null, 'hub should close');
+    assert.ok(
+      document.getElementById(SUPER_PLAN_PAGE_ROOT_ID),
+      'Super Plan surface should mount',
+    );
+    assert.equal(
+      document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID),
+      null,
+      'legacy orchestrate plan screen should not mount',
+    );
   });
 });
