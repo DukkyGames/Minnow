@@ -227,13 +227,13 @@ export function buildHomeReadAllowlist(policy) {
 /**
  * Landlock cannot carve a deny out of an allowed parent. When a writable root
  * (e.g. /tmp) contains a deny-read subtree (tests may put MINNOW_HOME there),
- * grant read on siblings only instead of the whole parent.
+ * grant read/write on siblings only instead of the whole parent (--write implies read).
  *
  * @param {string} writeRoot
  * @param {import('./policy.js').SandboxPolicy} policy
  * @returns {string[]}
  */
-export function buildWriteRootReadGrants(writeRoot, policy) {
+export function buildScopedWriteRootGrants(writeRoot, policy) {
   const root = path.resolve(writeRoot);
   const hasBlockedDescendant = policy.denyReadRoots.some(
     (deny) => deny && (deny === root || isUnder(deny, root)),
@@ -262,6 +262,9 @@ export function buildWriteRootReadGrants(writeRoot, policy) {
   return grants;
 }
 
+/** @deprecated Use buildScopedWriteRootGrants */
+export const buildWriteRootReadGrants = buildScopedWriteRootGrants;
+
 /**
  * Build --write / --read path lists for the helper from a workspace policy.
  *
@@ -269,14 +272,17 @@ export function buildWriteRootReadGrants(writeRoot, policy) {
  * @returns {{ writePaths: string[], readPaths: string[] }}
  */
 export function buildLandlockPathLists(policy) {
-  const writePaths = [...policy.writeRoots, ...landlockDeviceWriteAllowlist()];
+  const writePaths = [
+    ...landlockDeviceWriteAllowlist(),
+    ...policy.writeRoots.flatMap((wr) => buildScopedWriteRootGrants(wr, policy)),
+  ];
   const readSet = new Set([
     ...defaultSystemReadRoots(),
     ...policy.allowReadExceptions,
     ...buildHomeReadAllowlist(policy),
   ]);
   for (const wr of policy.writeRoots) {
-    for (const grant of buildWriteRootReadGrants(wr, policy)) {
+    for (const grant of buildScopedWriteRootGrants(wr, policy)) {
       readSet.add(grant);
     }
   }

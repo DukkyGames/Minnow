@@ -273,7 +273,12 @@ function readProcessCommandLine(pid) {
     }
   }
   try {
-    const out = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], {
+    // macOS truncates `ps` output unless -ww is set (orphan reaper needs the venv path).
+    const psArgs =
+      process.platform === 'darwin'
+        ? ['-ww', '-o', 'command=', '-p', String(pid)]
+        : ['-o', 'command=', '-p', String(pid)];
+    const out = spawnSync('ps', psArgs, {
       encoding: 'utf8',
       timeout: 5000,
     });

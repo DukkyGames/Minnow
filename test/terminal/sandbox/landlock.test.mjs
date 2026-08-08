@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import {
   buildLandlockArgv,
   buildLandlockPathLists,
-  buildWriteRootReadGrants,
+  buildScopedWriteRootGrants,
   landlockDeviceWriteAllowlist,
 } from '../../../server/terminal/sandbox/landlock.js';
 import { buildWorkspacePolicy } from '../../../server/terminal/sandbox/index.js';
@@ -71,17 +71,22 @@ describe('landlock device write allowlist', () => {
       cwd: FAKE_WORKSPACE,
       platform: 'linux',
     });
-    const { readPaths } = buildLandlockPathLists(policy);
+    const { readPaths, writePaths } = buildLandlockPathLists(policy);
     assert.ok(!readPaths.includes('/tmp'), 'expected no blanket /tmp read allow');
+    assert.ok(!writePaths.includes('/tmp'), 'expected no blanket /tmp write allow');
     assert.ok(
       readPaths.includes(minnowUnderTmp) === false,
       'denied minnow home must not appear in read allows',
     );
     assert.ok(
+      writePaths.includes(minnowUnderTmp) === false,
+      'denied minnow home must not appear in write allows',
+    );
+    assert.ok(
       readPaths.includes(path.resolve(FAKE_WORKSPACE)),
       'workspace read should remain allowed',
     );
-    const tmpGrants = buildWriteRootReadGrants('/tmp', policy);
+    const tmpGrants = buildScopedWriteRootGrants('/tmp', policy);
     assert.ok(!tmpGrants.includes('/tmp'));
     assert.ok(!tmpGrants.some((p) => p === minnowUnderTmp || p.startsWith(`${minnowUnderTmp}/`)));
   });
