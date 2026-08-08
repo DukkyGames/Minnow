@@ -16,7 +16,7 @@ import {
 } from './cleanup-model-binding';
 import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { navigateBrainGraphPage, renderGraphSection } from './graph-section';
-import { renderBrainMarkdown } from './wikilink-markdown';
+import { renderCleanupPlanMarkdown } from './cleanup-plan-markup';
 
 type LintUiState =
   | { kind: 'empty' }
@@ -87,13 +87,29 @@ function formatSummaryChipLabel(key: keyof BrainCleanupPlanSummaryCounts): strin
     case 'linkFixes':
       return 'Link fixes';
     case 'staleActions':
-      return 'Stale actions';
+      return 'Stale';
     case 'anchorDrift':
       return 'Anchor drift';
     case 'risks':
       return 'Risks';
     default:
       return key;
+  }
+}
+
+function summaryChipModifier(key: keyof BrainCleanupPlanSummaryCounts): string {
+  switch (key) {
+    case 'deletes':
+    case 'risks':
+      return 'is-risk';
+    case 'merges':
+    case 'staleActions':
+      return 'is-warn';
+    case 'linkFixes':
+    case 'anchorDrift':
+      return 'is-accent';
+    default:
+      return '';
   }
 }
 
@@ -113,9 +129,10 @@ function renderSummaryChips(summary: BrainCleanupPlanSummaryCounts): HTMLElement
     const value = summary[key] ?? 0;
     if (value <= 0) continue;
     const chip = document.createElement('span');
-    chip.className = 'brain-cleanup-summary__chip';
+    const modifier = summaryChipModifier(key);
+    chip.className = `brain-cleanup-summary__chip${modifier ? ` ${modifier}` : ''}`;
     chip.setAttribute('role', 'listitem');
-    chip.textContent = `${formatSummaryChipLabel(key)}: ${value}`;
+    chip.textContent = `${formatSummaryChipLabel(key)} ${value}`;
     row.append(chip);
   }
   if (!row.children.length) {
@@ -168,6 +185,33 @@ function renderPlanActions(
   mount.append(actions);
 }
 
+function buildCleanupReviewShell(
+  plan: BrainCleanupPlanResponse,
+  binding: { providerId: string; modelId: string },
+  options?: { showDoneHint?: boolean },
+): HTMLElement {
+  const review = document.createElement('div');
+  review.className = 'brain-cleanup-review';
+
+  const header = document.createElement('div');
+  header.className = 'brain-cleanup-review__header';
+  header.append(renderSummaryChips(plan.summary));
+
+  const body = document.createElement('div');
+  body.className = 'brain-cleanup-review__body';
+  const planMount = document.createElement('div');
+  planMount.className = 'brain-cleanup-plan-document';
+  renderCleanupPlanMarkdown(planMount, plan.planMarkdown, navigateBrainGraphPage);
+  body.append(planMount);
+
+  const footer = document.createElement('div');
+  footer.className = 'brain-cleanup-review__footer';
+  renderPlanActions(footer, plan, binding, options);
+
+  review.append(header, body, footer);
+  return review;
+}
+
 function renderPlanReady(
   mount: HTMLElement,
   plan: BrainCleanupPlanResponse,
@@ -176,15 +220,7 @@ function renderPlanReady(
 ): void {
   mount.replaceChildren();
   syncPlanIdDataset(mount, plan.planId);
-
-  mount.append(renderSummaryChips(plan.summary));
-
-  const planMount = document.createElement('div');
-  planMount.className = 'brain-cleanup-plan';
-  renderBrainMarkdown(planMount, plan.planMarkdown, navigateBrainGraphPage);
-  mount.append(planMount);
-
-  renderPlanActions(mount, plan, binding, options);
+  mount.append(buildCleanupReviewShell(plan, binding, options));
 }
 
 function appendExecutionLog(container: HTMLElement, entries: BrainCleanupExecuteLogEntry[]): void {
@@ -229,14 +265,8 @@ function renderDone(
   outcome.className = 'brain-cleanup-outcome';
   outcome.textContent = resultText || 'Cleanup finished.';
 
-  mount.append(outcome, renderSummaryChips(plan.summary));
-
-  const planMount = document.createElement('div');
-  planMount.className = 'brain-cleanup-plan';
-  renderBrainMarkdown(planMount, plan.planMarkdown, navigateBrainGraphPage);
-  mount.append(planMount);
-
-  renderPlanActions(mount, plan, binding, { showDoneHint: true });
+  mount.append(outcome);
+  mount.append(buildCleanupReviewShell(plan, binding, { showDoneHint: true }));
 }
 
 function renderError(mount: HTMLElement, message: string): void {
