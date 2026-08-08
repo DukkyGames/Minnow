@@ -1648,7 +1648,7 @@ function startPlanActivitySession(chatId: string): void {
   planActivitySession.configure({ title: 'Activity' });
   planActivitySession.reset();
   planActivityCollector = new PlanActivityCollector(chatId, planActivitySession.buffer);
-  planActivityCollector.start();
+  void planActivityCollector.start();
 }
 
 function mountPlanActivityButton(actionsStart: HTMLElement): void {

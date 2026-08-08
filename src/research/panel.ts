@@ -481,6 +481,35 @@ function showBriefNotice(label: string, message: string, isError = false): void 
   mount.replaceChildren(notice);
 }
 
+/** Refill the evidence ledger from the server when the Research UI remounts mid-run. */
+async function ensureRunningLedgerHydrated(researchId: string): Promise<void> {
+  const evidence = el('researchProgressMount');
+  if (!evidence) {
+    return;
+  }
+  if (ledger && ledger.getReadCount() > 0) {
+    return;
+  }
+  try {
+    const data = await fetchResearchDetail(researchId);
+    if (liveRun?.id !== researchId) {
+      return;
+    }
+    const activityLog = normalizeResearchActivityLog(data);
+    ledger?.destroy();
+    ledger = new ResearchRunLedger(evidence);
+    if (activityLog.length) {
+      ledger.hydrate(activityLog);
+      ledger.setRunning(true);
+      setEvidenceCount(ledger.getReadCount());
+    } else {
+      ledger.reset();
+    }
+  } catch {
+    /* stream will still append new rows */
+  }
+}
+
 /** Select a run from the rail and paint it into the main pane. */
 async function selectRun(researchId: string): Promise<void> {
   activeId = researchId;
@@ -490,11 +519,12 @@ async function selectRun(researchId: string): Promise<void> {
     setActiveResearchRow(mount, researchId);
   }
 
-  // The run streaming right now is already painted; do not refetch over it.
+  // The run streaming right now is already painted; rehydrate evidence if the UI remounted.
   if (running && liveRun?.id === researchId) {
     setRunHeader({ title: liveRun.query, status: 'running' });
     renderRunActions(researchId, 'running', liveRun.query);
     setRunView('evidence');
+    void ensureRunningLedgerHydrated(researchId);
     return;
   }
 
