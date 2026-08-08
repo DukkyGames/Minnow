@@ -166,6 +166,18 @@ export async function revealAppAfterWorkspaceGate(): Promise<void> {
   closeWorkspaceGate();
 }
 
+/**
+ * Close the gate after an in-session workspace switch. Code is already booted and
+ * `applyWorkspaceSwitch` has refreshed chrome — unlike cold pick, initApp will not run again.
+ */
+export async function finishWorkspaceGateSwitch(): Promise<void> {
+  if (!isOsShellEnabled()) return;
+  await waitForStablePaint();
+  setHoldingGateCover(false);
+  setGateOpening(false);
+  closeWorkspaceGate();
+}
+
 /** Hold opening UI until the workspace PUT finishes. */
 export function markWorkspaceGateOpening(opening: boolean): void {
   // While holding for app-ready, keep the opening affordance on.

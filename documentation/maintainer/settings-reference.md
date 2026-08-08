@@ -242,7 +242,7 @@ Entered elsewhere: `orchestrate` (hub) · `super-plan` (Plan sub-menu) · `deskt
 |----------|-------|
 | Tool policy | Default allow/deny (prompts in Prompts hub) |
 | Plan granularity | `large` / `medium` / `small` — `config.planning.granularity` |
-| Super Plan pipeline | Settings → Modes → Super Plan — `config.planning.superPlan` |
+| Super Plan pipeline | Settings → Agents → Super Plan mode (lightbox) — `config.planning.superPlan` |
 
 #### Super Plan (`config.planning.superPlan`)
 

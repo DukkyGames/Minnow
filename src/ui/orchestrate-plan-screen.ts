@@ -1230,7 +1230,7 @@ function buildSuperPlanScreenDom(
       startRevisePlanFromPath(planPath, { savedPrompt: opts.savedPrompt });
     },
     onOpenSettings: () => {
-      openSettings('modes', { searchKey: 'agents.modes.superPlan' });
+      openSettings('agent-center', { searchKey: 'modes.super-plan' });
     },
     onSelectRun: (chatId) => {
       openSuperPlanRun(chatId);

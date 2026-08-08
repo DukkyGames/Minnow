@@ -192,24 +192,16 @@ export function paintOrchestrateBoardRail(
     const empty = el('div', 'ob-rail__empty orchestrate-hub__board-empty');
     empty.setAttribute('role', 'status');
 
-    const title = el(
-      'p',
-      'orchestrate-hub__board-empty-title',
-      filter ? 'No boards match that filter.' : 'No boards in this workspace yet',
-    );
-    const hint = el(
-      'p',
-      'orchestrate-hub__board-empty-hint',
-      filter
-        ? 'Clear the filter or start a new board from a plan.'
-        : 'Start a board from a plan in the main pane.',
-    );
-    empty.append(title, hint);
+    const copy = el('p', 'ob-rail__empty-copy');
+    copy.textContent = filter
+      ? 'No boards match that filter. Clear it or start a board from a plan.'
+      : 'No boards yet. Pick a plan in the main pane to start one.';
+    empty.appendChild(copy);
 
     if (!filter && options.onEmptyAction) {
       const focusBtn = el(
         'button',
-        'orchestrate-hub__board-empty-action',
+        'ob-rail__empty-link',
         'Choose a plan',
       ) as HTMLButtonElement;
       focusBtn.type = 'button';

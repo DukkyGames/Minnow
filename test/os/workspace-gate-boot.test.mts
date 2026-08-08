@@ -13,6 +13,10 @@ function setupShellDom() {
 const { isPageReload } = await import('../../src/boot/page-navigation.ts');
 
 const {
+  finishWorkspaceGateSwitch,
+  isWorkspaceGateOpen,
+  mountWorkspaceGateDom,
+  openWorkspaceGate,
   resetWorkspaceGateForTests,
   shouldBlockBootOnWorkspaceGate,
 } = await import('../../src/os/workspace-gate.ts');
@@ -57,5 +61,32 @@ describe('workspace-gate boot', { concurrency: false }, () => {
     performance.getEntriesByType = () => [{ type: 'navigate' }];
 
     assert.equal(shouldBlockBootOnWorkspaceGate(), true);
+  });
+
+  test('finishWorkspaceGateSwitch closes an open gate without holding for initApp', async () => {
+    const window = setupShellDom();
+    resetWorkspaceGateForTests();
+    // happy-dom does not pump rAF unless we shim it (finishWorkspaceGateSwitch waits for paint).
+    const rafShim = (cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
+    };
+    window.requestAnimationFrame = rafShim;
+    globalThis.requestAnimationFrame = rafShim;
+    window.document.body.innerHTML = `
+      <div id="osWorkspaceGate" hidden></div>
+      <div id="welcomeView" hidden></div>
+    `;
+    mountWorkspaceGateDom();
+    openWorkspaceGate({ switch: true });
+    assert.equal(isWorkspaceGateOpen(), true);
+
+    await finishWorkspaceGateSwitch();
+
+    assert.equal(isWorkspaceGateOpen(), false);
+    assert.equal(
+      document.documentElement.classList.contains('os-workspace-gate-holding'),
+      false,
+    );
   });
 });

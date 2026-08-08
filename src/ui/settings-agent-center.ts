@@ -40,6 +40,7 @@ import {
   appendAgentCenterSection,
   openAgentCenterLightbox,
 } from './settings-agent-center-lightbox';
+import { mountSuperPlanSettings } from './super-plan-settings';
 import {
   loadPromptMetaSettings,
   savePromptMetaSettings,
@@ -183,6 +184,12 @@ function findDefaultWorkAgentForMode(
   return null;
 }
 
+/** Open a mode lightbox from settings navigation (e.g. Super Plan pipeline link). */
+export async function openModeLightboxFromSettings(modeId: string): Promise<void> {
+  const remote = await fetchWorkAgentsList();
+  openModeLightbox(modeId, remote?.agents ?? []);
+}
+
 function openModeLightbox(modeId: string, agents: WorkAgentDefinition[]): void {
   const mode = listModes().find((m) => m.id === modeId);
   if (!mode) return;
@@ -223,6 +230,13 @@ function openModeLightbox(modeId: string, agents: WorkAgentDefinition[]): void {
       if (modeId === 'plan') {
         appendAgentCenterSection(body, 'Mode options', (panel) => {
           void mountPlanGranularityField(panel);
+        });
+      }
+
+      if (modeId === 'super-plan') {
+        appendAgentCenterSection(body, 'Pipeline', (panel) => {
+          panel.dataset.settingsSearchKey = 'agents.modes.superPlan';
+          mountSuperPlanSettings(panel);
         });
       }
 
