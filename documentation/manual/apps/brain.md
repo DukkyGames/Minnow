@@ -17,7 +17,7 @@ Brain is **not** this manual. The manual ships with the build and is read-only; 
 | **Proposals** | AI-suggested memories waiting for your review before they become pages |
 | **Memories** | The memory store: turn it on, manage entries, control what gets injected |
 | **Ingest** | Hand Minnow a raw source and let it synthesize pages from it |
-| **Lint** | A health report: orphans, stale pages, broken links, contradictions |
+| **Lint** | AI cleanup planner: scan the wiki, review a model-written plan, run approved fixes |
 | **Code** | The indexed repo map — search symbols, inspect call graphs |
 | **Settings** | Embeddings, synthesis cadence, code index options |
 
@@ -53,9 +53,15 @@ The index is per workspace and lives in your Minnow home.
 
 ## Keeping it healthy
 
-A wiki nobody prunes becomes a wiki nobody trusts. **Lint** is the tool for that: it reports orphan pages nothing links to, pages that have not changed in a long time, broken wikilinks, and — most valuable — **contradictions**, where two pages assert incompatible things. A contradiction is worse than a gap, because the model will confidently pick one.
+A wiki nobody prunes becomes a wiki nobody trusts. **Lint** helps you fix that without guessing.
 
-Run it occasionally. Delete aggressively. A small accurate Brain beats a large stale one.
+1. **Generate plan** — Minnow scans your wiki read-only (orphan and stale pages, broken wikilinks, code anchor drift, and weak `similarTo` links). It uses the **model in the top bar** (same picker as chat) to draft a markdown cleanup plan plus summary chips (deletes, merges, link fixes, and so on).
+2. **Review** — Read the plan before anything changes. The planner is conservative; destructive steps should cite evidence in the plan text.
+3. **Run cleanup** — After you confirm, a server agent executes only that plan (edits, merges, link fixes, pruning weak links, anchor drift handling). A live log shows progress; when it finishes, check **Graph** for the updated wiki.
+
+You need the Minnow tool server running and a model selected in the top bar. Run this occasionally. A small accurate Brain beats a large stale one.
+
+For scripted lint (including optional contradiction detection) without the planner UI, the server still exposes `POST /api/brain/lint` for automation and tests.
 
 ## What belongs here
 

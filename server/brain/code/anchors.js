@@ -176,10 +176,10 @@ export async function queuePageResynthesis(pageId) {
 }
 
 /**
- * Compare anchor hashes to current symbol content_hash; mark drifted pages stale.
- * @returns {Promise<Array<{ pageId: string, path: string, title: string, symbolId: string }>>}
+ * Compare anchor hashes to current symbol content_hash (read-only).
+ * @returns {Promise<Array<{ pageId: string, path: string, title: string, symbolIds: string[] }>>}
  */
-export async function detectAndApplyAnchorDrift() {
+export async function detectAnchorDrift() {
   const db = activeDb();
   const rows = db
     .prepare(
@@ -201,19 +201,16 @@ export async function detectAndApplyAnchorDrift() {
 
   if (driftedByPage.size === 0) return [];
 
-  const { loadCatalog, updatePage } = await import('../store.js');
+  const { loadCatalog } = await import('../store.js');
   const catalog = await loadCatalog();
   const byId = new Map(catalog.pages.map((p) => [p.id, p]));
-  const applied = [];
+  /** @type {Array<{ pageId: string, path: string, title: string, symbolIds: string[] }>} */
+  const drifted = [];
 
   for (const [pageId, symbols] of driftedByPage) {
     const page = byId.get(pageId);
     if (!page) continue;
-    if (page.status !== 'stale') {
-      await updatePage(page.path, { status: 'stale', skipAnchorSync: true });
-    }
-    await queuePageResynthesis(pageId);
-    applied.push({
+    drifted.push({
       pageId,
       path: page.path,
       title: page.title,
@@ -221,5 +218,36 @@ export async function detectAndApplyAnchorDrift() {
     });
   }
 
+  return drifted;
+}
+
+/**
+ * Compare anchor hashes to current symbol content_hash; mark drifted pages stale.
+ * @returns {Promise<Array<{ pageId: string, path: string, title: string, symbolIds: string[] }>>}
+ */
+export async function detectAndApplyAnchorDrift() {
+  const drifted = await detectAnchorDrift();
+  if (drifted.length === 0) return [];
+
+  const { loadCatalog, updatePage } = await import('../store.js');
+  const catalog = await loadCatalog();
+  const byId = new Map(catalog.pages.map((p) => [p.id, p]));
+  const applied = [];
+
+  for (const entry of drifted) {
+    const page = byId.get(entry.pageId);
+    if (!page) continue;
+    if (page.status !== 'stale') {
+      await updatePage(page.path, { status: 'stale', skipAnchorSync: true });
+    }
+    await queuePageResynthesis(entry.pageId);
+    applied.push(entry);
+  }
+
   return applied;
+}
+
+/** Apply anchor drift fixes (mark stale + queue resynthesis). Used by cleanup execute. */
+export async function applyAnchorDrift() {
+  return detectAndApplyAnchorDrift();
 }

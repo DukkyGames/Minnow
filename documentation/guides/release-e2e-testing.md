@@ -368,7 +368,7 @@ Sections at `#/app/brain`:
 - [ ] **Memories** — CRUD memory entries; toggle store
 - [ ] **Ingest** — ingest URL or file snippet
 - [ ] **Code** — index workspace; repo map panel loads
-- [ ] **Lint** — run wiki lint; show findings
+- [ ] **Lint** — **Generate plan** (top-bar model set); review plan markdown + summary chips; **Run cleanup** after confirm; execution log completes; Graph reflects changes (or plan-only path if skipping execute)
 - [ ] **Proposals** — synthesis proposal queue (if synthesis enabled)
 - [ ] **Settings** — embeddings on/off; code index rebuild
 - [ ] Chat: `brain_search` + `brain_read_page` in Build mode

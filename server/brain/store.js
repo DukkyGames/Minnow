@@ -481,6 +481,40 @@ export async function getPageTree() {
 }
 
 /**
+ * Resolve a wikilink key against catalog metadata only (no filesystem).
+ * Mirrors the catalog branch of {@link resolvePageLookup}.
+ * @param {string} key
+ * @param {Array<{ id?: string, path: string }>} pages
+ * @returns {'missing' | 'ambiguous' | string} resolved path, or sentinel when not unique
+ */
+export function resolvePageKeyInCatalog(key, pages) {
+  const input = String(key ?? '').trim().replace(/\\/g, '/');
+  if (!input) return 'missing';
+
+  if (isValidPageId(input)) {
+    const byId = pages.find((p) => p.id === input);
+    return byId ? byId.path : 'missing';
+  }
+
+  const basename = path.posix.basename(input);
+  const normalizedInput = normalizePageRef(input);
+  const candidates = pages.filter((page) => {
+    const pagePath = page.path.replace(/\\/g, '/');
+    if (normalizePageRef(pagePath) === normalizedInput) return true;
+    if (pagePath === input) return true;
+    if (path.posix.basename(pagePath) === basename) return true;
+    if (input.endsWith('.md') && pagePath.endsWith(`/${input}`)) return true;
+    if (!input.includes('/') && pagePath.endsWith(`/${input}.md`)) return true;
+    if (!input.includes('/') && path.posix.basename(pagePath, '.md') === input) return true;
+    return false;
+  });
+
+  if (candidates.length === 1) return candidates[0].path;
+  if (candidates.length > 1) return 'ambiguous';
+  return 'missing';
+}
+
+/**
  * Resolve a page lookup key (full path, basename, or page id) to a pages-relative path.
  * @param {string} key
  * @returns {Promise<string>}
@@ -510,28 +544,31 @@ export async function resolvePageLookup(key) {
   }
 
   const pages = await listPages();
-  const basename = path.posix.basename(input);
-  const candidates = pages.filter((page) => {
-    const pagePath = page.path.replace(/\\/g, '/');
-    if (pagePath === input) return true;
-    if (path.posix.basename(pagePath) === basename) return true;
-    if (input.endsWith('.md') && pagePath.endsWith(`/${input}`)) return true;
-    if (!input.includes('/') && pagePath.endsWith(`/${input}.md`)) return true;
-    if (!input.includes('/') && path.posix.basename(pagePath, '.md') === input) return true;
-    return false;
-  });
-
-  if (candidates.length === 1) return candidates[0].path;
-  if (candidates.length > 1) {
+  const resolved = resolvePageKeyInCatalog(input, pages);
+  if (resolved === 'missing') {
+    throw new Error(
+      `No wiki page found at "${input}". Use brain_search or brain_list to find the correct path.`,
+    );
+  }
+  if (resolved === 'ambiguous') {
+    const basename = path.posix.basename(input);
+    const normalizedInput = normalizePageRef(input);
+    const candidates = pages.filter((page) => {
+      const pagePath = page.path.replace(/\\/g, '/');
+      if (normalizePageRef(pagePath) === normalizedInput) return true;
+      if (pagePath === input) return true;
+      if (path.posix.basename(pagePath) === basename) return true;
+      if (input.endsWith('.md') && pagePath.endsWith(`/${input}`)) return true;
+      if (!input.includes('/') && pagePath.endsWith(`/${input}.md`)) return true;
+      if (!input.includes('/') && path.posix.basename(pagePath, '.md') === input) return true;
+      return false;
+    });
     const options = candidates.map((page) => page.path).join(', ');
     throw new Error(
       `Ambiguous page lookup "${input}". Use the full path from brain_search: ${options}`,
     );
   }
-
-  throw new Error(
-    `No wiki page found at "${input}". Use brain_search or brain_list to find the correct path.`,
-  );
+  return resolved;
 }
 
 /** Read one page by relative path. */

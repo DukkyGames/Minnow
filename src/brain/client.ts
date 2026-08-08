@@ -16,6 +16,9 @@ import type {
   BrainCodeStatus,
   BrainCodeWhoCallsResult,
   BrainIngestResult,
+  BrainCleanupExecuteResult,
+  BrainCleanupPlanResponse,
+  BrainCleanupPlanResult,
   BrainLintReport,
   BrainPruneLinksReport,
   BrainUsageReport,
@@ -154,6 +157,65 @@ export async function pruneBrainWeakLinks(options?: {
   return brainFetch<BrainPruneLinksReport>('/api/brain/prune-links', {
     method: 'POST',
     body: JSON.stringify({ apply: options?.apply === true }),
+  });
+}
+
+function summarizeCleanupPlan(
+  summary: BrainCleanupPlanResult['plan']['summary'],
+): BrainCleanupPlanResponse['summary'] {
+  return {
+    deletes: summary.deletes?.length ?? 0,
+    merges: summary.merges?.length ?? 0,
+    linkFixes: summary.linkFixes?.length ?? 0,
+    staleActions: summary.staleActions?.length ?? 0,
+    anchorDrift: summary.anchorDrift?.length ?? 0,
+    risks: summary.risks?.length ?? 0,
+  };
+}
+
+/** Read-only diagnostics + LLM cleanup plan (top-bar model). */
+export async function planBrainWikiCleanup(input: {
+  providerId: string;
+  modelId: string;
+}): Promise<BrainCleanupPlanResponse | null> {
+  const data = await brainFetch<BrainCleanupPlanResult>('/api/brain/cleanup/plan', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!data?.plan) return null;
+  return {
+    planId: data.planId,
+    createdAt: data.createdAt,
+    snapshotHash: data.snapshotHash,
+    planMarkdown: data.plan.planMarkdown,
+    planVersion: data.plan.planVersion,
+    summary: summarizeCleanupPlan(data.plan.summary),
+  };
+}
+
+/** Server-shaped cleanup plan (includes diagnostics + nested plan). */
+export async function fetchBrainCleanupPlanRaw(input: {
+  providerId: string;
+  modelId: string;
+}): Promise<BrainCleanupPlanResult | null> {
+  return brainFetch<BrainCleanupPlanResult>('/api/brain/cleanup/plan', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** Alias for planBrainWikiCleanup. */
+export const generateBrainCleanupPlan = planBrainWikiCleanup;
+
+/** Execute a persisted cleanup plan via the trusted server agent. */
+export async function executeBrainWikiCleanup(input: {
+  planId: string;
+  providerId: string;
+  modelId: string;
+}): Promise<BrainCleanupExecuteResult | null> {
+  return brainFetch<BrainCleanupExecuteResult>('/api/brain/cleanup/execute', {
+    method: 'POST',
+    body: JSON.stringify(input),
   });
 }
 

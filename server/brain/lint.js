@@ -11,9 +11,10 @@ import {
   loadBrainConfig,
   updatePage,
   deletePage,
+  resolvePageKeyInCatalog,
 } from './store.js';
 import { loadSynthesisConfig, resolveSynthesisModel } from './synthesis-config.js';
-import { detectAndApplyAnchorDrift } from './code/anchors.js';
+import { detectAnchorDrift, detectAndApplyAnchorDrift } from './code/anchors.js';
 import { loadAllPagesWithBodies } from './retrieve.js';
 import { scorePagesByCosine, titleKeywords } from './synthesis.js';
 import { normalizeLinkingConfig } from './linking-config.js';
@@ -28,6 +29,10 @@ Given catalog metadata and candidate issues, return JSON:
 
 Be conservative. Return ONLY valid JSON.`;
 
+/** Planner-facing definition of wiki orphans (matches findOrphanPages in store.js). */
+export const WIKI_ORPHAN_DEFINITION =
+  'A page is an orphan when it has no inbound wikilinks, is not connected via similarTo edges to any other page, is not index.md, or is explicitly marked status orphan. Pages only linked through similarTo count as connected even without inbound wikilinks.';
+
 /**
  * Collect pages explicitly marked stale or with stale status in frontmatter cache.
  * @param {Array<{ path: string, status?: string }>} pages
@@ -38,26 +43,26 @@ export function findStalePages(pages) {
 
 /**
  * Detect wikilink targets that do not resolve to an existing page path.
- * @param {Array<{ path: string, links?: string[] }>} pages
+ * Resolution rules match {@link resolvePageLookup} (catalog slice).
+ * @param {Array<{ id?: string, path: string, links?: string[] }>} pages
  */
 export function findMissingLinkTargets(pages) {
-  const known = new Set();
-  for (const page of pages) {
-    const rel = page.path.replace(/\.md$/i, '');
-    known.add(rel);
-    known.add(page.path);
-  }
-
   const missing = [];
   for (const page of pages) {
     for (const link of page.links ?? []) {
       const target = String(link).replace(/\\/g, '/');
-      const asPath = target.endsWith('.md') ? target : `${target}.md`;
-      if (!known.has(target) && !known.has(asPath)) {
+      const resolved = resolvePageKeyInCatalog(target, pages);
+      if (resolved === 'missing') {
         missing.push({
           from: page.path,
           target,
           summary: `[[${target}]] has no matching page`,
+        });
+      } else if (resolved === 'ambiguous') {
+        missing.push({
+          from: page.path,
+          target,
+          summary: `[[${target}]] is ambiguous — use a full page path`,
         });
       }
     }
@@ -163,6 +168,58 @@ export async function pruneWeakSimilarLinks(opts = {}) {
   };
 }
 
+function mapAnchorDriftForReport(drifted) {
+  return drifted.map((d) => ({
+    pageId: d.pageId,
+    path: d.path,
+    title: d.title,
+    symbolIds: d.symbolIds,
+    summary: `Anchored symbol(s) changed: ${d.symbolIds.join(', ')}`,
+  }));
+}
+
+/**
+ * Read-only wiki diagnostics for cleanup planning (no writes, no LLM).
+ * @param {Record<string, never>} [_opts] reserved for future filters
+ */
+export async function collectWikiDiagnostics(_opts = {}) {
+  const catalog = await loadCatalog();
+  const pages = catalog.pages.length > 0 ? catalog.pages : await listPages();
+  const orphans = findOrphanPages({ pages });
+  const stale = findStalePages(pages);
+  const missingLinks = findMissingLinkTargets(pages);
+  const anchorDrift = await detectAnchorDrift();
+  const weakSimilarLinks = await pruneWeakSimilarLinks({ dryRun: true });
+  const brainConfig = await loadBrainConfig();
+
+  return {
+    generatedAt: new Date().toISOString(),
+    pageCount: pages.length,
+    definitions: {
+      orphans: WIKI_ORPHAN_DEFINITION,
+    },
+    orphans: orphans.map((p) => ({
+      path: p.path,
+      title: p.title,
+      status: p.status,
+    })),
+    stale: stale.map((p) => ({
+      path: p.path,
+      title: p.title,
+      status: p.status,
+    })),
+    missingLinks,
+    anchorDrift: mapAnchorDriftForReport(anchorDrift),
+    weakSimilarLinks: {
+      dryRun: true,
+      pagesScanned: weakSimilarLinks.pagesScanned,
+      edgesScanned: weakSimilarLinks.edgesScanned,
+      removals: weakSimilarLinks.removals,
+    },
+    embeddingsEnabled: brainConfig.embeddings?.enabled === true,
+  };
+}
+
 /**
  * Optional LLM pass for contradictions (skipped when no model is available).
  * @param {object[]} pages
@@ -207,7 +264,7 @@ async function detectContradictionsWithLlm(pages) {
  * @param {{ includeLlm?: boolean, apply?: boolean }} [opts]
  */
 export async function lintBrainWiki(opts = {}) {
-  const anchorDrift = await detectAndApplyAnchorDrift();
+  const anchorDriftApplied = await detectAndApplyAnchorDrift();
   const catalog = await loadCatalog();
   const pages = catalog.pages.length > 0 ? catalog.pages : await listPages();
   const orphans = findOrphanPages({ pages });
@@ -215,7 +272,7 @@ export async function lintBrainWiki(opts = {}) {
   const missingLinks = findMissingLinkTargets(pages);
 
   const contradictions =
-    opts.includeLlm !== false
+    opts.includeLlm === true
       ? await detectContradictionsWithLlm(pages)
       : [];
 
@@ -273,16 +330,11 @@ export async function lintBrainWiki(opts = {}) {
       title: p.title,
       status: p.status,
     })),
-    anchorDrift: anchorDrift.map((d) => ({
-      path: d.path,
-      title: d.title,
-      symbolIds: d.symbolIds,
-      summary: `Anchored symbol(s) changed: ${d.symbolIds.join(', ')}`,
-    })),
+    anchorDrift: mapAnchorDriftForReport(anchorDriftApplied),
     missingLinks,
     contradictions,
     extensions: {
-      anchorDrift: anchorDrift.length > 0 ? 'active' : 'ok',
+      anchorDrift: anchorDriftApplied.length > 0 ? 'active' : 'ok',
     },
     embeddingsEnabled: brainConfig.embeddings?.enabled === true,
     ...(opts.apply ? { applied } : {}),
