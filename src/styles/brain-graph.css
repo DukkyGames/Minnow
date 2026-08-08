@@ -520,6 +520,15 @@
   pointer-events: auto;
 }
 
+/*
+ * OS app layers use pointer-events:none on the inactive root, but graph chrome
+ * opts children back into auto — the full-bleed canvas can still steal the cursor
+ * from Settings (and other apps) stacked underneath.
+ */
+#brainView.mn-os-app-layer:not(.is-active) * {
+  pointer-events: none !important;
+}
+
 .brain-graph-stage {
   position: absolute;
   inset: 0;

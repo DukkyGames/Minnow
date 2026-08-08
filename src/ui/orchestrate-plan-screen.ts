@@ -101,7 +101,7 @@ import { syncSuperPlanChrome } from './super-plan-chrome';
 import { openSettings } from './settings-page';
 import { readDefaultModelBinding } from './default-model';
 import { setStatus } from './status';
-import type { PlanLibraryEntry } from '../chat/super-plan/plan-library';
+import { isChatInCurrentWorkspace, type PlanLibraryEntry } from '../chat/super-plan/plan-library';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
 export const ORCHESTRATE_PLAN_SCREEN_PROMPT_ID = 'orchestratePlanScreenPrompt';
@@ -1739,7 +1739,7 @@ async function deleteSuperPlanLibraryEntry(entry: PlanLibraryEntry): Promise<voi
 /** Open a Super Plan run picked from the library rail. */
 function openSuperPlanRun(chatId: string): void {
   const chat = findChatById(chatId);
-  if (!chat?.superPlan) return;
+  if (!chat?.superPlan || !isChatInCurrentWorkspace(chat)) return;
   superPlanDocPath = null;
   ensureStreamEndListener();
   if (sessionState && sessionState.activeId !== chatId) {

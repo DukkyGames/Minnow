@@ -95,6 +95,9 @@ export function osOnAppOpen(appId: AppId): void {
 /** Called when a foreground app is replaced or the shell returns to the workspace gate. */
 export function osOnAppClose(appId: AppId): void {
   if (!isOsShellEnabled()) return;
+  if (appId === 'brain') {
+    void import('../ui/brain-page').then((m) => m.suspendBrainAppSurface());
+  }
   if (appId === 'code') {
     void import('../state/sessions').then(({ sessionState }) => {
       const activeId = sessionState?.activeId;

@@ -369,6 +369,16 @@ export function openBrainNewPage(): void {
   pathEl?.focus();
 }
 
+/**
+ * Brain stayed open in the OS layer stack (e.g. user opened Settings from the menubar).
+ * Drop graph hit-testing and cursors so the foreground app is fully interactive.
+ */
+export function suspendBrainAppSurface(): void {
+  getBrainRoot()?.classList.remove('is-graph-canvas-bg');
+  teardownGraphSection();
+  document.body.style.removeProperty('cursor');
+}
+
 /** Close Brain and return to chat or desktop. */
 export function closeBrain(options?: { skipNavigate?: boolean }): void {
   const root = getBrainRoot();

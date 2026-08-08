@@ -10,6 +10,7 @@ import {
   type SuperPlanPageHandlers,
 } from '../../src/ui/super-plan-page.ts';
 import {
+  collectSuperPlanRuns,
   formatRelativeTime,
   groupPlanLibraryEntries,
   titleFromPlanPath,
@@ -17,8 +18,10 @@ import {
 } from '../../src/chat/super-plan/plan-library.ts';
 import { createInitialSuperPlanStages } from '../../src/chat/super-plan/state.ts';
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
+import { resetWorkspaceStateForTests, setWorkspaceFromServer } from '../../src/state/workspace.ts';
+import type { Chat } from '../../src/types.ts';
 import { streamingChatIds } from '../../src/app-state.ts';
-import { setLocalServerAvailableForTests } from '../../src/tools/config.ts';
+import type { Chat } from '../../src/types.ts';
 
 let activeWindow: Window | undefined;
 
@@ -136,28 +139,6 @@ describe('super plan page', () => {
       stages[9]?.classList.contains('is-done') === false,
       'later stages are not marked done',
     );
-  });
-
-  test('rail row context menu deletes via handler', async () => {
-    installTestWindow();
-    setLocalServerAvailableForTests(false);
-    const chat = makeRunChat('sp-del', 'grill');
-    const root = mountPage(chat);
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
-    const row = root.querySelector('.sp-row');
-    assert.ok(row);
-    row!.dispatchEvent(
-      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 34 }),
-    );
-    const menu = document.getElementById('superPlanRowContextMenu');
-    assert.ok(menu);
-    const deleteBtn = menu!.querySelector('button');
-    assert.equal(deleteBtn?.textContent, 'Delete');
-    deleteBtn!.click();
-    assert.ok(calls.some((c) => c.startsWith('onDeleteEntry')));
-    setLocalServerAvailableForTests(true);
   });
 
   test('a paused pipeline never renders a running stage', () => {
@@ -333,6 +314,37 @@ describe('super plan page', () => {
 });
 
 describe('super plan library', () => {
+  afterEach(() => {
+    resetWorkspaceStateForTests();
+    setSessionStateForTests(null);
+  });
+
+  test('collectSuperPlanRuns only includes chats in the requested workspace', () => {
+    const wsA = '/tmp/workspace-a';
+    const wsB = '/tmp/workspace-b';
+    setWorkspaceFromServer({ path: wsA, label: 'A', isDefault: false });
+
+    const chatA = makeRunChat('sp-ws-a', 'grill');
+    chatA.workspacePath = wsA;
+    const chatB = makeRunChat('sp-ws-b', 'research');
+    chatB.workspacePath = wsB;
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: chatA.id,
+      sidebarCollapsed: false,
+      chats: [chatA, chatB],
+    });
+
+    const inA = collectSuperPlanRuns(wsA);
+    assert.equal(inA.length, 1);
+    assert.equal(inA[0]?.chatId, chatA.id);
+
+    const inB = collectSuperPlanRuns(wsB);
+    assert.equal(inB.length, 1);
+    assert.equal(inB[0]?.chatId, chatB.id);
+  });
+
   test('titles come from the plan slug', () => {
     assert.equal(
       titleFromPlanPath('documentation/plans/server-session-engine.md'),

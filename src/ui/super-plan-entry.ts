@@ -17,7 +17,7 @@
 
 import '../styles/super-plan-page.css';
 
-import { collectSuperPlanRuns } from '../chat/super-plan/plan-library';
+import { collectSuperPlanRuns, isChatInCurrentWorkspace } from '../chat/super-plan/plan-library';
 import { normalizeModeId } from '../chat/modes/types';
 import { findChatById, sessionState } from '../state/sessions';
 import type { Chat } from '../types';
@@ -80,7 +80,11 @@ function findLiveSuperPlanChat(): Chat | null {
 /** An empty super-plan chat is a spare composer; reuse it before making another. */
 function resolveOrCreateComposeChat(): Chat | null {
   const spare = sessionState?.chats.find(
-    (c) => isSuperPlanChat(c) && c.history.length === 0 && !c.superPlan,
+    (c) =>
+      isSuperPlanChat(c) &&
+      isChatInCurrentWorkspace(c) &&
+      c.history.length === 0 &&
+      !c.superPlan,
   );
   if (spare) return spare;
 
@@ -99,7 +103,7 @@ function resolveSuperPlanTarget(): SuperPlanTarget | null {
 
   const session = getOrchestratePlanScreenSession();
   const sessionChat = session ? findChatById(session.chatId) : null;
-  if (isSuperPlanChat(sessionChat)) {
+  if (isSuperPlanChat(sessionChat) && isChatInCurrentWorkspace(sessionChat!)) {
     return {
       chat: sessionChat!,
       phase: sessionChat!.superPlan

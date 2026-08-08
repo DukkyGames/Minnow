@@ -7,11 +7,13 @@
  * that has not written its plan yet has no file to stat.
  */
 
+import { normalizeWorkspacePath } from '../../lib/normalize-workspace-path';
 import { executeTool } from '../../tools/client';
 import { isLocalServerAvailable } from '../../tools/config';
 import { isExecutableOrchestratePlan } from '../orchestrate/plan-path';
 import { normalizeModeId } from '../modes/types';
 import { sessionState } from '../../state/sessions';
+import { getWorkspacePath } from '../../state/workspace';
 import type { Chat } from '../../types';
 import {
   SUPER_PLAN_STAGE_LABELS,
@@ -120,11 +122,25 @@ function runPlanPath(sp: SuperPlanState): string {
   );
 }
 
-/** Every super-plan chat that carries pipeline state, newest first. */
-export function collectSuperPlanRuns(): PlanLibraryEntry[] {
+/** True when the chat row belongs to the given workspace folder. */
+export function isChatInWorkspace(chat: Chat, workspacePath: string): boolean {
+  const key = normalizeWorkspacePath(workspacePath);
+  if (!key) return false;
+  return normalizeWorkspacePath(chat.workspacePath ?? '') === key;
+}
+
+/** True when the chat belongs to the workspace folder Minnow has open right now. */
+export function isChatInCurrentWorkspace(chat: Chat): boolean {
+  return isChatInWorkspace(chat, getWorkspacePath());
+}
+
+/** Every super-plan chat that carries pipeline state in the given workspace. */
+export function collectSuperPlanRuns(workspacePath = getWorkspacePath()): PlanLibraryEntry[] {
+  const workspaceKey = normalizeWorkspacePath(workspacePath);
   const chats: Chat[] = sessionState?.chats ?? [];
   const rows: PlanLibraryEntry[] = [];
   for (const chat of chats) {
+    if (workspaceKey && !isChatInWorkspace(chat, workspaceKey)) continue;
     if (normalizeModeId(chat.modeId) !== 'super-plan') continue;
     const sp = chat.superPlan;
     if (!sp) continue;

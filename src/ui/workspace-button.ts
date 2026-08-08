@@ -93,6 +93,10 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   setStatus('ok', `Workspace: ${info.label}`);
   const { refreshHubLiveData } = await import('./hub');
   refreshHubLiveData();
+  const { isSuperPlanPageMounted, refreshSuperPlanLibrary } = await import('./super-plan-page');
+  if (isSuperPlanPageMounted()) {
+    refreshSuperPlanLibrary();
+  }
 }
 
 /** Load workspace from server and refresh top bar + file tree. */

@@ -5,6 +5,7 @@
  * can tell what happened without opening anything. A run that is still in
  * flight lives only in the server's memory until it finishes, so the caller
  * passes it in as `liveRuns` and it is merged ahead of the persisted list.
+ * Right-click a row (or use the ⋯ control) for archive, delete, and related actions.
  */
 
 import { appConfirm } from '../ui/app-dialog';
@@ -137,6 +138,33 @@ function closeRowMenu(): void {
     .forEach((el) => el.classList.remove('is-menu-open'));
 }
 
+type RowMenuPosition =
+  | { kind: 'anchor'; anchor: HTMLElement }
+  | { kind: 'pointer'; clientX: number; clientY: number };
+
+function positionRowMenu(menu: HTMLElement, position: RowMenuPosition): void {
+  const height = menu.offsetHeight || 200;
+  const width = menu.offsetWidth || 180;
+  let top: number;
+  let left: number;
+  if (position.kind === 'pointer') {
+    top =
+      position.clientY + height > window.innerHeight
+        ? position.clientY - height - 4
+        : position.clientY + 4;
+    left =
+      position.clientX + width > window.innerWidth
+        ? position.clientX - width
+        : position.clientX;
+  } else {
+    const rect = position.anchor.getBoundingClientRect();
+    top = rect.bottom + height > window.innerHeight ? rect.top - height - 4 : rect.bottom + 4;
+    left = rect.right - width;
+  }
+  menu.style.top = `${Math.max(8, top)}px`;
+  menu.style.left = `${Math.max(8, left)}px`;
+}
+
 function buildRow(
   item: ResearchLibraryItem,
   activeId: string | null | undefined,
@@ -171,6 +199,11 @@ function buildRow(
 
   row.append(title, meta);
   row.addEventListener('click', () => handlers.onSelect(item.id));
+  row.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    closeRowMenu();
+    openRowMenu({ kind: 'pointer', clientX: ev.clientX, clientY: ev.clientY }, row, item, handlers);
+  });
 
   const menuBtn = document.createElement('button');
   menuBtn.type = 'button';
@@ -183,7 +216,7 @@ function buildRow(
     const alreadyOpen = row.classList.contains('is-menu-open');
     closeRowMenu();
     if (!alreadyOpen) {
-      openRowMenu(menuBtn, row, item, handlers);
+      openRowMenu({ kind: 'anchor', anchor: menuBtn }, row, item, handlers);
     }
   });
 
@@ -195,7 +228,7 @@ function buildRow(
 }
 
 function openRowMenu(
-  anchor: HTMLElement,
+  position: RowMenuPosition,
   row: HTMLElement,
   item: ResearchLibraryItem,
   handlers: ResearchRailHandlers,
@@ -250,11 +283,7 @@ function openRowMenu(
   );
 
   document.body.appendChild(menu);
-  const rect = anchor.getBoundingClientRect();
-  const height = menu.offsetHeight || 200;
-  const top = rect.bottom + height > window.innerHeight ? rect.top - height - 4 : rect.bottom + 4;
-  menu.style.top = `${Math.max(8, top)}px`;
-  menu.style.left = `${Math.max(8, rect.right - menu.offsetWidth)}px`;
+  positionRowMenu(menu, position);
 }
 
 let dismissBound = false;
