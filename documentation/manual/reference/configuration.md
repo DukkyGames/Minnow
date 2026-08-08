@@ -56,7 +56,7 @@ The simplest approach is to back up the whole `.minnow` folder and exclude `mode
 | `updater.json` | Your update channel |
 | `logs/` | `diagnostics.jsonl` and `crash.jsonl` |
 | `worktrees/` | Git worktrees created for isolated board tasks |
-| `workspace/` | The default desktop chat working folder |
+| `workspace/` | **Scratch** workspace folder (`~/.minnow/workspace`) for chats without a project root |
 | `backups/` | Rotating backups of session state |
 
 Folders belonging to release-gated apps — `calendar/`, `email/`, `benchmarks/`, `compare/` — exist but stay empty in this build.

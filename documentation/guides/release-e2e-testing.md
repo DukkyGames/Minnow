@@ -17,9 +17,9 @@ Manual end-to-end checklist for validating Minnow before a release. Use it after
 
 ## Scope
 
-**In scope for a public release** — eight core apps and every user-facing surface that ships with `releaseState: 'released'`:
+**In scope for a public release** — seven core apps and every user-facing surface that ships with `releaseState: 'released'`:
 
-Chat (desktop), Code, Research, Models, Brain, Issues, Scheduler, Settings — plus composer modes **General**, **Build**, **Plan**, **Debug**, **Super Plan**, and **Orchestrate** (hub).
+Code, Research, Models, Brain, Issues, Scheduler, Settings — plus composer modes **General**, **Build**, **Plan**, **Debug**, **Super Plan**, and **Orchestrate** (hub). Chat sessions live in **Code** (`#/app/code/chat`).
 
 **Out of scope unless you are flipping a release gate** — Compare, Bench, Experts, Calendar, Email (hidden per MIN-471). A short appendix lists smoke checks if you enable them locally.
 
@@ -100,12 +100,12 @@ Mark each section **Pass / Fail / Skip (reason)**.
 - [ ] Provider path: local (LM Studio / Ollama) **or** cloud — credentials save; errors are readable
 - [ ] Model pick: menubar chip lists models after refresh
 - [ ] Extras / permissions / memory steps complete without console errors
-- [ ] Finish step opens desktop; desktop is usable
+- [ ] Finish step opens **Code** (or workspaces picker → Code); chat rail is usable
 - [ ] Skip: Email and Calendar steps (not applicable when apps are hidden)
 
-### First desktop minute
+### First minute after onboarding
 
-- [ ] Dock shows eight apps: Chat, Code, Research, Models, Brain, Issues, Scheduler, Settings
+- [ ] App rail shows six apps: Code, Research, Models, Brain, Issues, Scheduler (Settings via menubar gear)
 - [ ] Menubar: model chip, notifications bell, settings gear
 - [ ] Concierge send routes or starts a chat (online routing or offline keyword fallback)
 - [ ] Status pill shows Ready (not stuck loading)
@@ -116,11 +116,12 @@ Mark each section **Pass / Fail / Skip (reason)**.
 
 ### Navigation
 
-- [ ] Dock: open each released app; correct presentation (fullscreen / window / side panel)
-- [ ] **Ctrl+Tab** / **Ctrl+Shift+Tab** cycles desktop ↔ recent apps (Windows)
-- [ ] Hash routes work: `#/desktop`, `#/app/code`, `#/app/issues`, `#/app/settings/general`
+- [ ] Dock / app rail: open each released app; correct presentation (fullscreen / window / side panel)
+- [ ] **Ctrl+Tab** / **Ctrl+Shift+Tab** cycles workspaces picker ↔ recent apps (Windows)
+- [ ] Hash routes work: `#/workspaces`, `#/app/code/chat`, `#/app/code`, `#/app/issues`, `#/app/settings/general`
+- [ ] Legacy `#/desktop` and `#/app/chat` redirect as expected
 - [ ] Legacy `#/settings/<section>` redirects into Settings app
-- [ ] Settings opened from Code → **Back** returns to Code (not desktop)
+- [ ] Settings opened from Code → **Back** returns to Code (not workspaces picker)
 - [ ] Scheduler opens as **side panel** without stealing fullscreen Code focus
 - [ ] Deep link `#/app/issues/ISS-n` opens issue detail (after you create an issue in §8)
 
@@ -143,14 +144,14 @@ Mark each section **Pass / Fail / Skip (reason)**.
 
 ---
 
-## 3. Desktop Chat
+## 3. Code chat
 
 ### Sessions
 
-- [ ] New chat from rail; switch chats; titles generate or are editable
+- [ ] New chat from Code session rail; switch chats; titles generate or are editable
 - [ ] Chat search popover: find by message text (server FTS when on `npm start`)
 - [ ] Multi-select chats (Mod+click, Shift+range); delete with confirm (`appConfirm`, not native `window.confirm`)
-- [ ] Workspace folder for desktop chat (Files drawer): change folder; tree reloads
+- [ ] Workspace picker: change project folder; file tree reloads under new root
 - [ ] Restart app: chats restore; lazy history loads when opening a chat (no blank transcript flash)
 
 ### Composer
@@ -500,7 +501,7 @@ Only when `releaseState` is flipped to `released` in `src/os/app-registry.ts`:
 
 1. Pre-flight §0  
 2. Onboarding §1 (or rerun wizard)  
-3. Desktop send + tool approval §3  
+3. Code chat send + tool approval §3  
 4. Code: open file, terminal, git status §5  
 5. Plan vs Build write guard §4  
 6. One Issues capture §8  

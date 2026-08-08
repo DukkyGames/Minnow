@@ -2,7 +2,7 @@
 
 Minnow is a local-first AI workspace that runs on your own computer. It talks to models you host yourself — LM Studio, Ollama, `llama-server`, or any OpenAI-compatible endpoint — and it can also talk to cloud APIs if you give it a key. Either way, your chats, notes, files, and credentials stay in a folder on your disk. Nothing is uploaded to Minnow's authors, and there is no telemetry.
 
-What you get is not a chat box. It is a desktop with eight apps: a full code workspace with an editor, terminal and git; a deep-research agent; a personal knowledge wiki the model can read and write; an issue tracker; a job scheduler; and a model manager that can download and serve weights for you. A chat assistant sits underneath all of it and can drive most of it with tools.
+What you get is not a chat box. It is a workspace-first shell with seven core apps: **Code** (editor, terminal, git, and chat in one surface), **Research**, **Models**, **Brain**, **Issues**, **Scheduler**, and **Settings**. The same assistant and tool set back all of them.
 
 This manual covers the packaged desktop app you install from GitHub Releases. If you build from source, everything here still applies, plus the developer setup notes in the [GitHub Wiki](https://github.com/HenriGrimm/Minnow/wiki).
 
@@ -32,7 +32,7 @@ Press **?** anywhere outside a text field for the keyboard shortcut sheet.
 
 - [Install and first launch](get-started/install.md) — installers, SmartScreen, updates, the system tray
 - [Connect a model](get-started/connect-a-model.md) — LM Studio, Ollama, local serve, cloud APIs, routing
-- [Your first chat](get-started/first-chat.md) — the desktop, the composer, approving a tool
+- [Your first chat](get-started/first-chat.md) — workspace picker, Code chat, approving a tool
 
 ### Core concepts
 
@@ -48,7 +48,7 @@ Press **?** anywhere outside a text field for the keyboard shortcut sheet.
 
 ### Apps
 
-- [Apps overview](apps/overview.md) — the eight apps and how each one opens
+- [Apps overview](apps/overview.md) — the seven apps and how each one opens
 - [Code](apps/code.md) — editor, terminal, git, dev servers, preview
 - [Research](apps/research.md) — multi-round web and codebase research with a saved library
 - [Brain](apps/brain.md) — your wiki, memories, ingest, and code index

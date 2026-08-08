@@ -1,43 +1,40 @@
 # Minnow apps
 
-Minnow's desktop shell ("Minnow") presents focused apps on a desktop with a **dock** launcher and a **menubar** (model chip, notifications bell). The desktop itself is the **chat** surface; other apps open as fullscreen surfaces, floating windows, or side panels. Routes use hashes like `#/desktop` and `#/app/<id>`.
+Minnow Shell (Electron + SPA) is a **workspace-first** stage: menubar, workspace picker, left **app rail**, and full-stage apps in `#osAppsLayer`. Chat lives inside **Code** at `#/app/code/chat`, not on a separate home surface. Default boot hash is `#/workspaces`; legacy `#/desktop` and `#/app/chat` rewrite in [`resolveLegacyHash`](../../src/os/router.ts).
 
-Official product help opens as a focused overlay from the menubar **?** button. It ships the user manual, not this developer page. See [Wiki and Brain](../manual/reference/wiki-and-brain.md).
+Official product help opens from the menubar **?** button (user manual, not this page). See [Wiki and Brain](../manual/reference/wiki-and-brain.md).
 
-Shell internals live in [`src/os/`](../../src/os/); the exhaustive reference is the "Minnow Shell" section of [`../context.md`](../context.md).
+Shell internals: [`src/os/`](../../src/os/). Exhaustive reference: **Minnow Shell** in [`../context.md`](../context.md).
 
 ## What ships
 
-Eight apps, all **core** — always installed, always on, no user toggle:
+Seven apps, all **core** (always installed, always on):
 
 | App | Route | Presentation |
 |-----|-------|--------------|
-| Chat | `#/desktop` | desktop |
-| Code | `#/app/code` | fullscreen |
-| Research | `#/app/research` | desktop |
-| Models | `#/app/models` | window |
-| Brain | `#/app/brain` | window |
-| Issues | `#/app/issues` | fullscreen |
-| Scheduler | `#/app/scheduler` | side panel |
-| Settings | `#/app/settings` | window |
+| Code | `#/app/code` (+ `overview`, `chat`, `dev-server`) | fullscreen |
+| Research | `#/app/research` | fullscreen |
+| Models | `#/app/models/<section>` | fullscreen |
+| Brain | `#/app/brain/<section>` | fullscreen |
+| Issues | `#/app/issues` (+ optional `/<issueId>`) | fullscreen |
+| Scheduler | `#/app/scheduler` | side panel overlay (stays over Code) |
+| Settings | `#/app/settings` | menubar gear (not on app rail) |
 
-Because no *optional* app is released, the **Choose your apps** onboarding step and **Settings → Apps** show the core "Always included" line plus a **Coming soon** empty state — there is nothing to pick. See [Behind the release gate](#behind-the-release-gate) for what is held back and why.
+**Settings** opens from the menubar; the left rail lists the other six released apps ([`RAIL_PRIMARY_APP_IDS`](../../src/os/app-preferences.ts)).
 
-## Desktop chat
+No optional app is **released** today, so onboarding **Choose your apps** and **Settings → Apps** show core “Always included” plus **Coming soon**. See [Behind the release gate](#behind-the-release-gate).
 
-The default surface. Type in the concierge composer to start a conversation, or use the left-edge **chat rail** to switch sessions. A **smart concierge** makes one structured LLM call on submit to route your request to the right app and seed it (with offline keyword-routing fallback). Choose a **mode** per message and watch the **context ring** beside Send.
+## Workspace gate and Code
 
-## Code
+Cold boot lands on `#/workspaces` until the user picks a folder or continues without one ([`workspace-gate.ts`](../../src/os/workspace-gate.ts), welcome UI in [`welcome-page.ts`](../../src/ui/welcome-page.ts)). After pick, routing goes to `#/app/code` (overview or chat depending on hash).
 
-The IDE-style surface: file tree, **CodeMirror** editor (with AI completion), CRUD, search, and drag-to-composer workspace references. Opens fullscreen and reparents the legacy chat/topbar into the app layer. File and git tools resolve under the open **workspace root**. Includes the integrated **terminal** (xterm.js PTY tabs).
+**Code** reparents the chat stack into the main column: file tree, CodeMirror, terminal, git, dev servers, browser preview, and the session rail. File and git tools resolve under the open **workspace root**.
 
-The **browser preview** pane (desktop shell only) renders workspace HTML and localhost URLs in a real Chromium guest. Press **F12** (or **Ctrl+Shift+I** / **Cmd+Opt+I**, or the `</>` toolbar button) to toggle **DevTools** docked below the page — console, network, and element inspection for the previewed page, whether focus is in the preview or the surrounding app.
+The **browser preview** pane (Electron only) renders workspace HTML and localhost URLs in a Chromium guest. **F12** (or **Ctrl+Shift+I** / **Cmd+Opt+I**, or the `</>` toolbar button) toggles DevTools for the previewed page.
 
 ## Models
 
-Everything about models in one place (`#/app/models/<section>`):
-
-Nine sections, labels from `SECTION_LABELS` in [`src/ui/models-page.ts`](../../src/ui/models-page.ts):
+Everything model-related in one place (`#/app/models/<section>`). Nine sections, labels from `SECTION_LABELS` in [`src/ui/models-page.ts`](../../src/ui/models-page.ts):
 
 | Section id | Label | Contents |
 |-----------|-------|----------|
@@ -51,29 +48,29 @@ Nine sections, labels from `SECTION_LABELS` in [`src/ui/models-page.ts`](../../s
 | `thinking` | Thinking | Reasoning controls |
 | `usage` | Usage & cost | Token usage totals |
 
-The last five are **reparented Settings panels** — `reparentSettingsSectionIntoModels` in [`src/ui/models-sections.ts`](../../src/ui/models-sections.ts) moves the `providers` / `model-routing` / `sampler` / `thinking` / `usage` section nodes out of the Settings page and into Models. They keep their Settings section ids for search and deep links but do **not** appear in the Settings sidebar.
+The last five are **reparented Settings panels** — `reparentSettingsSectionIntoModels` in [`src/ui/models-sections.ts`](../../src/ui/models-sections.ts) moves the `providers` / `model-routing` / `sampler` / `thinking` / `usage` section nodes out of the Settings page and into Models. They keep their Settings section ids for search and deep links but do not appear in the Settings sidebar.
 
 ## Research
 
-Deep, multi-step web research. Enter a topic; a sub-agent gathers and synthesizes sources behind a progress stepper. Save reports to a **Library** (a floating window) and re-open or **discuss** them later. Extracted source text is wrapped in untrusted-data fences before reaching the model.
+Deep, multi-step web research. A sub-agent gathers and synthesizes sources behind a progress stepper. Reports save to a **Library** and can be reopened or discussed. Extracted source text is wrapped in untrusted-data fences before reaching the model.
 
 ## Brain
 
-The knowledge surface backed by the **Brain wiki** (CORTEX) at `~/.minnow/brain/`: nested markdown pages with YAML frontmatter, hybrid keyword/vector retrieval, code-symbol indexing, ingest, and lint. Agent tools: `brain_search`, `brain_read_page`, `brain_list`, `brain_write_page`, `brain_append_log`, `brain_ingest_source`, plus code tools `repo_map`, `find_symbol`, `who_calls`, `read_symbol`, `explain_symbol`. `save_memory` writes facts here.
+Knowledge surface backed by the **Brain wiki** (CORTEX) at `~/.minnow/brain/`: nested markdown pages with YAML frontmatter, hybrid keyword/vector retrieval, code-symbol indexing, ingest, and lint. Agent tools: `brain_search`, `brain_read_page`, `brain_list`, `brain_write_page`, `brain_append_log`, `brain_ingest_source`, plus code tools `repo_map`, `find_symbol`, `who_calls`, `read_symbol`, `explain_symbol`. `save_memory` writes facts here.
 
-**Sections:** Graph (home), Edit, Log, Schema, Proposals, **Memories** (store toggles + entry CRUD), Ingest, Lint, Code, Settings (embeddings, synthesis cadence, code index). Legacy `#/settings/memory` opens **Memories**.
+**Sections:** Graph (home), Edit, Log, Schema, Proposals, **Memories**, Ingest, Lint, Code, Settings (embeddings, synthesis cadence, code index). Legacy `#/settings/memory` opens **Memories**.
 
 ## Issues
 
-Linear-style issue tracking (`#/app/issues`), fullscreen. List and board views, quick capture, taxonomy (status, priority, labels) in Settings, and `issue_*` agent tools so the model can file and triage its own findings. **Debug** mode routes here — it replaced the old bug tracker (MIN-261).
+Linear-style issue tracking (`#/app/issues`), fullscreen. List and board views, quick capture, taxonomy in Settings, and `issue_*` agent tools. **Debug** mode routes here (MIN-261). Code can embed the Issues view in the chat column without changing the hash to fullscreen Issues.
 
 ## Scheduler
 
-Local recurring agent jobs (`~/.minnow/scheduler.json`) as a side panel. Each job runs a prompt on an **interval** (60s minimum) or **cron** schedule, in a chosen workspace/model, via a headless `minnow run` subprocess. Run history and in-app reminders are persisted. **Jobs only run while Minnow is open** (`npm start` or the desktop shell).
+Local recurring agent jobs (`~/.minnow/scheduler.json`) as a full-stage app. Interval (60s minimum) or **cron**, chosen workspace/model, headless `minnow run`. **Jobs only run while Minnow is open** (`npm start` or the packaged shell).
 
 ## Settings
 
-Full-page sections at `#/app/settings` (legacy `#/settings/<section>` redirects). Sidebar groups come from `SETTINGS_NAV_GROUPS` in [`src/ui/settings-page-types.ts`](../../src/ui/settings-page-types.ts):
+Full-page sections at `#/app/settings` (legacy `#/settings/<section>` redirects). Sidebar groups from `SETTINGS_NAV_GROUPS` in [`src/ui/settings-page-types.ts`](../../src/ui/settings-page-types.ts):
 
 | Group | Sections |
 |-------|----------|
@@ -83,49 +80,49 @@ Full-page sections at `#/app/settings` (legacy `#/settings/<section>` redirects)
 | **Tools & integrations** | Search, Deep Research, Servers, Tools, Skills, Skills Library, Browser, MCP servers, Language servers, Editor, Webhooks |
 | **Advanced** | Health & diagnostics, Board testing |
 
-`SettingsSectionId` also defines `providers`, `usage`, `model-routing`, `sampler`, `thinking`, `prompting`, `modes`, `work-agents`, and `sub-agents`. These are **not in any nav group** — the first five reparent into the **Models** app (see above) and the rest are reachable only via search or a direct hash. **Memory** settings live in the **Brain** app. The search box indexes every section and deep-links across apps.
+`SettingsSectionId` also defines `providers`, `usage`, `model-routing`, `sampler`, `thinking`, `prompting`, `modes`, `work-agents`, and `sub-agents`. These are not in every nav group: the first five reparent into **Models**; the rest are reachable via search or direct hash. **Memory** settings live in **Brain**. Search indexes every section and deep-links across apps.
 
 ---
 
 ## Behind the release gate
 
-Each app carries a developer `releaseState` (`released` | `hidden`) alongside its `core` / `optional` availability ([`src/os/app-registry.ts`](../../src/os/app-registry.ts)). Hidden apps stay in the codebase and keep their tests, but are omitted from **onboarding, Settings, the dock, the menubar switcher, keyboard shortcuts, hash routes, notifications, and `launch_minnow_app`**. Deep links to a hidden app bounce back to the desktop.
+Each app has developer `releaseState` (`released` | `hidden`) and `core` / `optional` availability ([`src/os/app-registry.ts`](../../src/os/app-registry.ts)). Hidden apps stay in the tree and tests, but are omitted from onboarding, Settings, the app rail, menubar switcher, shortcuts, notifications, and `launch_minnow_app`. [`parseOsHash`](../../src/os/router.ts) still recognizes `#/app/<appId>` for every registry id; [`applyRoute`](../../src/os/router.ts) blocks developer-hidden apps (redirect to **`#/workspaces`**, no toast) or user-disabled optional apps (toast + redirect).
 
 Currently hidden (MIN-471):
 
 | App | Status |
 |-----|--------|
-| **Compare** | Blind A/B across 2–6 models, win-rate history under `~/.minnow/compare/`. Working, not v1 scope. |
-| **Benchmarking** (`bench`) | In-app benchmark battery + run history; complements the headless eval harness (`server/evals/`). |
-| **Experts** | The "Experts' Lab" roster of specialist sandbox chats. |
-| **Calendar** | Local SQLite calendar, `.ics` import/export, RRULE, encrypted CalDAV sync. |
+| **Compare** | Blind A/B across 2–6 models, win-rate history under `~/.minnow/compare/`. |
+| **Benchmarking** (`bench`) | In-app benchmark battery + run history. |
+| **Experts** | Experts' Lab roster of specialist sandbox chats. |
+| **Calendar** | Local SQLite calendar, `.ics`, RRULE, encrypted CalDAV sync. |
 | **Email** | IMAP triage, AI digests, review-first automations, explicit-send SMTP. |
 
-Tools follow their app. A catalog entry with an `appId` is filtered out of the model's tool list *and* the Settings → Tools page while that app is hidden or user-disabled (MIN-472) — today that is `manage_calendar` plus the seven email tools. Nothing offers the model a capability the user cannot reach.
+Tools follow their app. Catalog entries with an `appId` filter out of the model tool list and Settings → Tools while hidden or disabled (MIN-472).
 
-**Removed, not gated:** the **Reef** mini-app runtime and its mode were deleted outright (MIN-473). A rebuilt studio surface is tracked separately (MIN-137).
+**Removed, not gated:** **Reef** mini-app and mode (MIN-473).
 
 ---
 
 ## Operating modes
 
-Modes change the system prompt and tool policy ([`src/chat/modes/registry.ts`](../../src/chat/modes/registry.ts)). Four appear in the composer strip:
+Modes change system prompt and tool policy ([`src/chat/modes/registry.ts`](../../src/chat/modes/registry.ts)). Four appear in the composer strip:
 
 | Mode | Behavior |
 |------|----------|
-| **General** | Everyday Q&A and brainstorming; all enabled tools with approval. |
+| **General** | Everyday Q&A; all enabled tools with approval. |
 | **Build** | Default development mode; broad tool access. |
-| **Plan** | Analyze and plan with destructive tools denied (no shell, writes, deletes, moves, or git mutations). |
-| **Debug** | Investigate issues; file/triage via the **Issues** app and `issue_*` tools. |
+| **Plan** | Plan and analyze; destructive file/git tools denied (plan-write guard). |
+| **Debug** | Investigate; file/triage via **Issues** and `issue_*` tools. |
 
-The rest are entered from elsewhere and never appear in the strip:
+Entered elsewhere (not in the strip):
 
 | Mode | Entered from |
 |------|--------------|
-| **Orchestrate** | The Orchestrate hub / top bar — board + plans under `documentation/plans/`. |
-| **Super Plan** | The caret sub-menu under **Plan**, or the Orchestrate plan screen. |
-| **Desktop** | The Minnow desktop chat surface. |
-| **Email** | The Email assistant dock (ships with the hidden Email app). |
-| **Onboarding** | First run only — the guide chat. |
+| **Orchestrate** | Orchestrate hub in Code sidebar / boards. |
+| **Super Plan** | Caret under **Plan**, or Orchestrate plan screen. |
+| **Desktop** | Legacy tool policy id (widest allowlist); not a separate UI surface. |
+| **Email** | Hidden Email app (when released). |
+| **Onboarding** | First-run wizard only. |
 
 **Reef** mode was removed in MIN-473.

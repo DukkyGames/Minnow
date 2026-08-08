@@ -4,7 +4,7 @@ Minnow develops as one local-first workspace: plan, build, run agents, and keep 
 
 ## Shipped
 
-- **Desktop chat and Code** — workspace chat, files, CodeMirror, LSP, terminal, source control, browser preview, and agent undo.
+- **Code workspace** — chat beside the repo, CodeMirror, LSP, terminal, source control, browser preview, and agent undo.
 - **Planning and delivery** — Plan, Super Plan, Orchestrate boards, work agents, isolated worktrees, and test/fix loops.
 - **Knowledge and research** — Brain, official Minnow wiki, chat retrieval, code index, saved research, and web RAG.
 - **Operations** — Models, providers, routing, Scheduler, Issues, settings, diagnostics, skills, MCP, and local tool plugins.

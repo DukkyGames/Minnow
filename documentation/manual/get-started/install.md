@@ -20,7 +20,7 @@ Builds may be unsigned, and Windows SmartScreen will say so. Choose **More info*
 
 ## What happens on first launch
 
-Minnow opens on the **desktop**: a wallpaper, a dock along the top, a menubar, and a chat composer in the middle. That desktop *is* the chat surface — you are not looking at a launcher that will get out of the way.
+Minnow opens on the **workspaces picker**: choose a project folder (or continue without one), then land in **Code** with chat in the left rail beside your editor. The menubar and app rail are always there; chat is not a separate home screen or dock app.
 
 Two things happen behind the scenes:
 

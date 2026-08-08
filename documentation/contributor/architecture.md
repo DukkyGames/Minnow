@@ -14,7 +14,7 @@ A high-level map of how Minnow fits together. For the exhaustive, file-by-file r
                 │ loads
 ┌───────────────▼─────────────────────────────────────────────┐
 │ SPA  (src/, index.html — Vite + TypeScript, no framework)    │
-│  • Minnow Shell (src/os/): desktop, dock, windows, apps    │
+│  • Minnow Shell (src/os/): workspace gate, app rail, menubar, app host   │
 │  • Chat + modes + prompts (src/chat/)                        │
 │  • Agent layer: tools, sub-agents, work agents (src/agents,  │
 │    src/tools)                                                 │
@@ -33,13 +33,13 @@ A high-level map of how Minnow fits together. For the exhaustive, file-by-file r
 
 - **`npm start`** (`server.js`) runs all three: Vite + tool server, then launches Electron.
 - **`npm run dev`** runs only the SPA via Vite — the tool server and most features are absent.
-- **`npm run electron:dev`** runs Vite + Electron (HMR) without the full `server.js` bootstrap.
+- **`npm run electron:dev`** / **`npm run desktop`** run `server.js` with `MINNOW_ELECTRON=1` plus the Electron dev launcher (HMR-friendly alias of the full stack).
 
 ## The SPA (`src/`)
 
 No UI framework — direct TypeScript + DOM with CSS tokens. Boot order in [`src/main.ts`](../../src/main.ts): page bridge → OS shell → router. Key areas:
 
-- **`src/os/`** — the desktop shell: stage layers, window manager, dock, menubar, app host/registry, concierge agent + intent routing, per-app desktop integration.
+- **`src/os/`** — workspace-first shell: stage, app rail, menubar, router, workspace gate, app registry; released apps mount as full-stage layers in `#osAppsLayer` (Phase 5 removed the old floating window manager).
 - **`src/chat/`** — chat orchestration, composer **modes** (`modes/registry.ts`; four in the composer strip), prompt composition (`prompts/`).
 - **`src/tools/`** — the tool catalog ([`definitions.ts`](../../src/tools/definitions.ts); 114 built-in tools — entries with an `appId` are filtered while that app is hidden or disabled), executors, permission gating, and the agent loop ([`loop.ts`](../../src/tools/loop.ts)).
 - **`src/agents/`** — sub-agent runner/controller, work agents, sampler resolution, UI Designer.

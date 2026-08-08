@@ -2,7 +2,7 @@
 
 A mode changes two things at once: the instructions the model gets, and the tools that exist for that turn. It is the most consequential control in the composer, and it is one click.
 
-Nine modes exist. Four are in the composer strip; the rest belong to a surface or a workflow and you enter them by going there.
+The product defines several mode ids for prompts and tool policy. **Four** are in the composer strip on every chat surface. The others attach to a workflow (Orchestrate, Super Plan, onboarding) or exist only for legacy sessions and internal routing — you do not pick them from the strip.
 
 ## The four you choose
 
@@ -19,15 +19,20 @@ Plan mode is the one people misunderstand, so it is worth being precise. Removed
 
 So Plan can look anywhere and can run things, but it cannot rewrite your code. If you want a spec without touching the repo, this is the mode.
 
-## The five you enter
+## Modes you enter (not on the strip)
 
 | Mode | Where it comes from |
 |------|---------------------|
-| **Desktop** | The desktop chat surface. The widest tool set in the product — every built-in group. |
 | **Orchestrate** | The Orchestrate hub. Coordinates a board: reads code, delegates tasks, cannot spawn free-form sub-agents or write files itself. |
 | **Super Plan** | The caret under **Plan**, or the Orchestrate plan screen. Runs the interview-to-spec pipeline. |
 | **Onboarding** | First-run setup only. A deliberately safe demo set: no shell, no writes. |
 | **Email** | The Email assistant, which ships behind the release gate and is not in this build. |
+
+### Desktop (tool policy only)
+
+**Desktop** is still a mode id in the registry, but it is **not** a chat surface and **not** in the composer strip. Day-to-day chat runs in **Code** (or Research and other apps) with General, Build, Plan, or Debug.
+
+Desktop exists so older chats and internal paths can keep the **widest built-in tool allowlist** — every tool group, including appearance. New sessions use the four composer modes; prompts for the Desktop id resolve like **General**, while tool policy can still follow the Desktop matrix when a session is tagged that way. You change theme and wallpaper in **Settings**, not by switching to a “Desktop mode.”
 
 Orchestrate has one deliberate asymmetry worth knowing: it can call `delegate_tasks` to start board work, but `spawn_sub_agent` is denied. Delegation on a board goes through the board, so the work is visible and recoverable, not hidden inside an unmanaged sub-agent.
 
@@ -56,7 +61,7 @@ Rough shape of what each composer mode can reach. "Read" means read-only variant
 Two entries surprise people:
 
 - **Build cannot read the Minnow manual.** Developer modes keep a tighter payload budget; they read your repository and `documentation/context.md` directly instead. Ask product questions in General.
-- **Only General can change settings**, and only General and Desktop can change appearance. A coding agent should not be reconfiguring your app mid-task.
+- **Only General can change settings** among the composer modes. Appearance tools are tied to the internal Desktop tool policy, not something you select in the strip — use **Settings** for theme and wallpaper. A coding agent should not be reconfiguring your app mid-task.
 
 ## Modes are a ceiling, not a grant
 

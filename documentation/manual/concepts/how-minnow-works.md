@@ -4,7 +4,7 @@ Read this page once and most of the product stops needing explanation.
 
 Minnow is three things stacked together:
 
-1. **A desktop shell** with a dock, a menubar, floating windows and fullscreen apps. It is where you work.
+1. **A workspace-first shell** — a workspaces picker (`#/workspaces`), a left app rail, a menubar, floating windows, and fullscreen apps. You choose a folder, then work in Code with chat beside your project.
 2. **A local tool server** on port 9473. It does everything the browser cannot: reading and writing files, running git, spawning terminals, indexing your code, storing your chats, downloading models.
 3. **A model you supply.** Minnow never ships weights and has no built-in model. It streams to whatever OpenAI-compatible endpoint you point it at.
 
@@ -43,15 +43,16 @@ Full detail: [Privacy and security](../reference/privacy-and-security.md).
 
 ## The workspace boundary
 
-File, git, search and terminal tools resolve **under one folder**, not across your whole disk. Which folder depends on where you are:
+File, git, search and terminal tools resolve **under one folder**, not across your whole disk. In normal use that is the **project you opened** from the workspaces picker into Code.
 
 | Surface | Working folder |
 |---------|----------------|
-| Code app | The project you opened |
-| Desktop chat | The desktop workspace folder (change it in the Files panel) |
+| Code (chat included) | The project you opened |
 | A board task chat with isolation on | That task's own git worktree |
 
 An attempt to read outside the boundary fails. That is a feature, and it is the single most important safety property in Minnow. You can lift it — **Settings → General → Filesystem access → full** — but then an agent can touch anything your user account can.
+
+Legacy hashes like `#/desktop` redirect to `#/workspaces`. Old `#/app/chat` links land on Code chat.
 
 ## Modes decide what exists
 
@@ -59,7 +60,7 @@ A mode is not a personality setting. It swaps the system prompt *and* the tool l
 
 Plan mode does not merely ask the model to avoid editing your files; the editing tools are not in the payload. Debug mode is the only composer-strip mode that can read local diagnostics.
 
-The shipped **manual** (`minnow_docs_search`, `minnow_docs_read`, `minnow_docs_list`) is available in composer **General** and in the first-run **onboarding** tour. **Desktop** chat on the main surface uses **Desktop** mode (not the four composer-strip modes): it includes every built-in tool group, including the manual tools. **Build**, **Plan**, and **Debug** do not get `minnow_docs_*`; they rely on your repo and Brain instead.
+The shipped **manual** (`minnow_docs_search`, `minnow_docs_read`, `minnow_docs_list`) is available in composer **General** and in the first-run **onboarding** tour. **Build**, **Plan**, and **Debug** do not get `minnow_docs_*`; they rely on your repo and Brain instead.
 
 Choosing a mode is choosing what is possible for that turn.
 
@@ -67,9 +68,11 @@ See [Modes](modes.md).
 
 ## Apps are surfaces, not silos
 
-The eight apps share one chat engine, one set of tools, one session store, and one workspace. Opening Code does not start a different assistant; it gives the same assistant an editor, a terminal and a git panel to work beside, and points file tools at your project.
+The seven released apps share one chat engine, one set of tools, one session store, and one workspace folder at a time. Chat is part of Code, not a separate dock icon. Opening Research does not start a different assistant; it gives the same assistant a different layout and workflow, still backed by the same sessions.
 
 That is why an app can hand off to another one: an issue in the tracker can be sent to a chat in a chosen mode, a research report can be discussed in chat, and a plan document can become a board of tasks worked by agents.
+
+Hidden apps (Compare, Benchmarking, Experts, Calendar, Email) are not reachable in this build. Deep links to them bounce to `#/workspaces` when the release gate keeps them hidden.
 
 ## Agents all the way down
 

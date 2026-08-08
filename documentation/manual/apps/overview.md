@@ -1,39 +1,34 @@
 # Apps overview
 
-Minnow is one desktop with eight apps on it. All eight are **core**: always installed, always on, no toggles. There is no app store.
+Minnow is one shell with seven **core** apps: always installed, always on, no toggles. Six are on the left app rail; **Settings** opens from the menubar gear. There is no app store.
 
-They share one chat engine, one tool set, one session store and one workspace. Opening Code does not start a different assistant — it gives the same assistant an editor, a terminal and a git panel to work beside.
+They share one chat engine, one tool set, one session store, and one workspace folder at a time. **Code** is where you land after you pick a project; chat lives in its left rail, not as a separate app. Opening Research does not start a different assistant — it gives the same assistant a research workflow.
 
-## The eight
+Cold start opens the **workspaces picker** (`#/workspaces`). Choose a folder (or continue without one) and you route into Code. The menubar **workspace** control opens the same picker anytime.
+
+## The seven
 
 | App | What it is for | How it opens |
 |-----|----------------|--------------|
-| **Chat** | The desktop itself: conversations, composer, notifications | The default surface |
-| **Code** | Editor, terminal, git, dev servers, preview — chat beside your project | Fullscreen |
-| **Research** | Multi-round web and codebase research with a saved report library | Desktop layout |
-| **Models** | Downloads, local serving, providers, routing, sampler, voice, usage | Floating window |
-| **Brain** | Your knowledge wiki, memories, ingest, lint, code index | Floating window |
+| **Code** | Editor, terminal, git, dev servers, preview — **and chat** beside your project | Fullscreen; default after a workspace |
+| **Research** | Multi-round web and codebase research with a saved report library | Fullscreen |
+| **Models** | Downloads, local serving, providers, routing, sampler, voice, usage | Fullscreen app |
+| **Brain** | Your knowledge wiki, memories, ingest, lint, code index | Fullscreen app |
 | **Issues** | Issue list and board with agent triage | Fullscreen |
 | **Scheduler** | Recurring jobs on an interval or cron | Side panel |
-| **Settings** | Everything configurable | Floating window |
+| **Settings** | Everything configurable | Menubar gear (not on the app rail) |
 
-The presentation is not decoration. **Scheduler opens as a side panel** and deliberately does not steal focus, so you can add a job without leaving what you were doing. **Models, Brain and Settings are windows** you can stack and resize. **Code and Issues take the screen** because that is what they need.
+**Scheduler** opens as a side panel over what you were doing so you can add a job without leaving Code. The other six rail apps take the main stage; **Settings** is always one click away in the menubar.
 
-Move between surfaces with **Ctrl+Tab** / **Ctrl+Shift+Tab**, or the grid icon in the menubar. **Alt+`** cycles floating windows.
-
-## Chat
-
-The home surface. Sessions in the left rail, composer in the middle, workspace panel on the right with Files, Browser and File preview for the desktop's working folder.
-
-→ [Your first chat](../get-started/first-chat.md), [Working in chat](../chat/chatting.md)
+Move between surfaces with **Ctrl+Tab** / **Ctrl+Shift+Tab**, or the grid icon in the menubar.
 
 ## Code
 
-The full development environment: file tree with real file operations, a CodeMirror editor with AI completion and language-server intelligence, xterm terminal tabs, a source-control panel, a dev-server manager, and a browser preview with DevTools.
+The home surface for day-to-day work. Sessions in the chat rail on the left, composer in the middle, project files and editor on the right. File and git tools resolve under the **workspace root** you opened here.
 
-File and git tools resolve under the **workspace root** you open here.
+Legacy links to `#/app/chat` rewrite to Code chat (`#/app/code/chat`). So does `#/desktop` — it sends you to the workspaces picker, not a separate chat app.
 
-→ [Code app](code.md)
+→ [Your first chat](../get-started/first-chat.md), [Working in chat](../chat/chatting.md), [Code app](code.md)
 
 ## Research
 
@@ -83,11 +78,11 @@ These are real features that are not separate apps:
 
 - **Orchestrate boards** — from the Orchestrate button in the Code sidebar rail. See [Orchestrate boards](../orchestrate/boards.md).
 - **Super Plan** — the caret under Plan in the composer. See [Super Plan](../orchestrate/super-plan.md).
-- **This manual** — the menubar **?**. Read-only, ships with the build, not a ninth app.
+- **This manual** — the menubar **?**. Read-only, ships with the build, not an eighth app.
 
 ## Not in this release
 
-Five apps exist in the codebase but are held behind a release gate. They do not appear in the dock, in Settings, in keyboard shortcuts, in routes, or in the model's tool list, and deep links to them bounce back to the desktop. You do not need to configure them, and their absence is not a fault:
+Five apps exist in the codebase but are held behind a release gate. They do not appear in the rail, in Settings, in keyboard shortcuts, in routes, or in the model's tool list. Deep links to them resolve to `#/workspaces` when the app is hidden — the workspaces picker, not Code. You do not need to configure them, and their absence is not a fault:
 
 | App | What it will be |
 |-----|-----------------|

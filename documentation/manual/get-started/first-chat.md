@@ -1,20 +1,20 @@
 # Your first chat
 
-The desktop is the chat. There is no "open the chat app" step — you land in it, and everything else opens around it.
+You start at the **workspaces picker** — open a project folder or continue without one. Minnow then opens **Code** with the chat rail on the left. There is no separate Chat app.
 
 This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what you just saw.
 
-## The desktop
+## Code with chat open
 
 | Area | What it is |
 |------|------------|
-| **Dock** (top) | Launch Code, Research, Models, Brain, Issues, Scheduler, or return to Chat |
-| **Menubar** (top right) | Model chip, notification bell, update pill, Settings, help (**?**) |
-| **Chat rail** (left edge) | Your conversations. Hover or click the tab to open it; search and start new chats from here. |
+| **App rail** (left edge) | Switch between Code, Research, Models, Brain, Issues, Scheduler; open the workspaces picker from the workspace control in the menubar |
+| **Menubar** (top) | Workspace chip, model chip, notification bell, update pill, Settings, help (**?**) |
+| **Chat rail** (inside Code, left) | Your conversations. Search and start new chats from here. |
 | **Composer** (centre) | Where you type. Mode strip, attachments, tools, microphone, model, send. |
-| **Workspace panel** (right edge) | Files, Browser, and File preview for the desktop's working folder |
+| **Project panel** (right) | File tree, editor, preview — everything scoped to the folder you opened |
 
-The desktop has its own working folder, separate from whatever project you open in Code. It defaults to a `workspace` folder inside your Minnow home; change it from the **Files** panel on the right, either by picking a recent folder or browsing to a new one. File tools in desktop chat resolve inside that folder.
+The folder you pick at the workspaces screen becomes the **workspace root**. File and git tools in chat resolve inside that folder. Change workspace anytime from the menubar — you return to the picker (`#/workspaces`) and can open a different project.
 
 ## Send something
 
@@ -69,7 +69,7 @@ Drag files onto the composer, or use the attachment button. Up to 10 MB per file
 
 - **Images** are sent as image parts, which only works if the model has vision. A text-only model will ignore them.
 - **PDF, Word, Excel and similar** are parsed to text by the local tool server before the model sees them.
-- For code, you usually do not want an attachment at all — open the folder in Code and let the model read files with tools. It can then read the parts it needs instead of you guessing.
+- For code, you usually do not want an attachment at all — keep the project open in Code and let the model read files with tools. It can then read the parts it needs instead of you guessing.
 
 ## Slash skills
 
@@ -81,7 +81,7 @@ See [Skills and slash commands](../chat/skills-and-commands.md).
 
 ## Opening another app
 
-Click **Code** in the dock to work in a project folder with the editor, terminal and git beside chat. Click **Research** to hand a question to a research agent that runs multiple rounds and writes you a report.
+Click **Research** on the rail to hand a question to a research agent that runs multiple rounds and writes you a report. **Models**, **Brain**, and **Settings** open as floating windows you can stack beside Code.
 
 The assistant can also open apps itself when it decides that is what you want — that is the `launch_minnow_app` tool, and it can carry your message across as a seed.
 

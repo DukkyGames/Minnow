@@ -55,7 +55,7 @@ Everything else that is enabled starts on **Ask**. Files, git, shell and browser
 
 This is the important one for file and git tools.
 
-File, git and search tools resolve **under the working folder for that surface** — the project open in Code, the desktop workspace folder, or a board task's own git worktree. A path outside it is rejected before anything runs. Symlinks that point outside are rejected too.
+File, git and search tools resolve **under the working folder for that surface**: the project open in Code, **Scratch** (`~/.minnow/workspace`), or a board task's own git worktree. A path outside it is rejected before anything runs. Symlinks that point outside are rejected too.
 
 You can turn this off: **Settings → General → Filesystem access → Full disk**. Then file tools can read and write anywhere your user account can. There are legitimate reasons to do it and you should understand that it removes the main *file-tool* containment in the product.
 

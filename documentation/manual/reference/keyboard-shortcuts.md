@@ -12,9 +12,9 @@ Single-key shortcuts — **?**, the tool-approval digits — are suppressed whil
 |------|--------|
 | **?** | Open the keyboard shortcuts sheet |
 | **Escape** | Close the top overlay, popover, modal or side panel |
-| **Ctrl+Tab** / **Ctrl+Shift+Tab** | Cycle between the desktop and recent apps (Ctrl even on macOS, since Cmd+Tab belongs to the OS) |
+| **Ctrl+Tab** / **Ctrl+Shift+Tab** | Cycle the workspaces picker and recent apps (Ctrl even on macOS, since Cmd+Tab belongs to the OS) |
 | **Alt+`** | Cycle focus among open floating windows |
-| **Tab** / **Shift+Tab** | Move focus through the dock, menubar and app chrome |
+| **Tab** / **Shift+Tab** | Move focus through the app rail, menubar and app chrome |
 | **Ctrl+Scroll wheel** | Zoom the interface in / out (desktop app; Ctrl+ / Ctrl− also adjust zoom) |
 
 In Code, **Ctrl+Tab** cycles editor tabs when the editor has focus.
