@@ -15,6 +15,7 @@ import type { ScheduledJob } from '../scheduler/client';
 
 let initialized = false;
 let statusTimer: number | undefined;
+let headerAddBound = false;
 
 function getRoot(): HTMLElement | null {
   return document.getElementById('schedulerView');
@@ -40,17 +41,46 @@ function setPanelStatus(state: 'ok' | 'err', message: string): void {
   }, 4000);
 }
 
+function formatHeaderSummary(total: number, enabled: number): string {
+  if (total < 0) return '—';
+  if (total === 0) {
+    return 'Recurring agent jobs while Minnow is open';
+  }
+  const enabledPart =
+    enabled === total ? `${enabled} enabled` : `${enabled} of ${total} enabled`;
+  return `${total} job${total === 1 ? '' : 's'} · ${enabledPart}`;
+}
+
+function openAddTaskEditor(): void {
+  openJobEditorWindow({
+    onSaved: () => {
+      void refreshPanel();
+    },
+    onStatus: setPanelStatus,
+  });
+}
+
+function bindHeaderAddButton(): void {
+  if (headerAddBound) return;
+  const btn = document.getElementById('btnSchedulerAdd');
+  if (!btn) return;
+  headerAddBound = true;
+  btn.addEventListener('click', () => {
+    openAddTaskEditor();
+  });
+}
+
 function panelEditorCallbacks() {
   return {
     onStatus: setPanelStatus,
-    onAddTask: () => {
-      openJobEditorWindow({
-        onSaved: () => {
-          void refreshPanel();
-        },
-        onStatus: setPanelStatus,
-      });
+    externalAddControl: true,
+    onCountsChange: ({ total, enabled }: { total: number; enabled: number }) => {
+      const summary = document.getElementById('schedulerSummary');
+      if (summary) {
+        summary.textContent = formatHeaderSummary(total, enabled);
+      }
     },
+    onAddTask: openAddTaskEditor,
     onEditJob: (job: ScheduledJob) => {
       openJobEditorWindow({
         jobId: job.id,
@@ -90,6 +120,7 @@ export function initSchedulerPage(): void {
   if (initialized) return;
   initialized = true;
   mountHeaderIcon();
+  bindHeaderAddButton();
   if (!isOsShellEnabled()) {
     window.addEventListener('hashchange', onHashChange);
     if (

@@ -20,6 +20,6 @@
 }
 
 /* Embedded app page headers (Issues, Scheduler, Calendar). */
-:is(#issuesPageIcon, #schedulerPageIcon, #calendarPageIcon, .issues-header__icon, .scheduler-hdr-ico, .calendar-hdr-ico) .icon-svg {
+:is(#issuesPageIcon, #schedulerPageIcon, #calendarPageIcon, .issues-header__icon, .scheduler-header__icon, .calendar-hdr-ico) .icon-svg {
   --mn-icon-size: 18px;
 }

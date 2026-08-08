@@ -2093,11 +2093,16 @@
 </main>
 
 <main id="schedulerView" class="scheduler-page" aria-label="Scheduler">
-  <header class="scheduler-hdr">
-    <span class="scheduler-hdr-ico" id="schedulerPageIcon" aria-hidden="true"></span>
-    <div class="scheduler-hdr-txt">
-      <h2>Scheduler</h2>
-      <span>Recurring local agent jobs and in-app reminders</span>
+  <header class="scheduler-header">
+    <div class="scheduler-header__brand">
+      <span id="schedulerPageIcon" class="scheduler-header__icon" aria-hidden="true"></span>
+      <div class="scheduler-header__titles">
+        <h1>Scheduler</h1>
+        <p id="schedulerSummary" class="scheduler-summary" aria-live="polite">—</p>
+      </div>
+    </div>
+    <div class="scheduler-header__controls">
+      <button type="button" class="scheduler-btn scheduler-btn--primary" id="btnSchedulerAdd">Add task</button>
     </div>
   </header>
   <div id="schedulerAppBody" class="scheduler-body">

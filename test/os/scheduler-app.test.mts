@@ -69,6 +69,9 @@ describe('scheduler markup contract', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="schedulerView"/);
     assert.match(html, /id="schedulerPanelMount"/);
+    assert.match(html, /id="schedulerStatus"/);
+    assert.match(html, /id="schedulerSummary"/);
+    assert.match(html, /id="btnSchedulerAdd"/);
   });
 });
 

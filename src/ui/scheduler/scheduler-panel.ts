@@ -37,6 +37,10 @@ export interface SchedulerPanelOptions {
   onAddTask?: () => void;
   /** Open the edit-task editor for an existing job. */
   onEditJob?: (job: ScheduledJob) => void;
+  /** Primary add control is rendered outside the panel (full-page app header). */
+  externalAddControl?: boolean;
+  /** Live job counts for page chrome (header summary). */
+  onCountsChange?: (counts: { total: number; enabled: number }) => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -162,25 +166,48 @@ export async function renderSchedulerPanel(
     return;
   }
 
-  const head = el('div', 'scheduler-panel-head');
-  const stats = el('div', 'scheduler-stats');
+  const useExternalAdd = Boolean(options.externalAddControl);
 
-  const jobCountStat = el('div', 'scheduler-stat');
-  jobCountStat.appendChild(el('span', 'scheduler-stat__label', 'Jobs'));
-  const jobCountValue = el('span', 'scheduler-stat__value', '0');
-  jobCountStat.appendChild(jobCountValue);
+  let toolbarSummary: HTMLElement | null = null;
+  if (!useExternalAdd) {
+    const toolbar = el('div', 'scheduler-toolbar');
+    toolbarSummary = el('p', 'scheduler-toolbar__summary', '—');
+    toolbarSummary.setAttribute('aria-live', 'polite');
+    toolbar.appendChild(toolbarSummary);
 
-  const activeCountStat = el('div', 'scheduler-stat');
-  activeCountStat.appendChild(el('span', 'scheduler-stat__label', 'Enabled'));
-  const activeCountValue = el('span', 'scheduler-stat__value', '0');
-  activeCountStat.appendChild(activeCountValue);
+    const toolbarAddBtn = el(
+      'button',
+      'scheduler-btn scheduler-btn--primary scheduler-toolbar__add',
+      'Add task',
+    ) as HTMLButtonElement;
+    toolbarAddBtn.type = 'button';
+    toolbarAddBtn.addEventListener('click', openAddTask);
+    toolbar.appendChild(toolbarAddBtn);
+    panel.appendChild(toolbar);
+  }
 
-  stats.append(jobCountStat, activeCountStat);
-  head.appendChild(stats);
-  panel.appendChild(head);
+  function formatCountsSummary(total: number, enabled: number): string {
+    if (total === 0) {
+      return 'No jobs yet · schedules pause when Minnow closes';
+    }
+    const enabledPart =
+      enabled === total ? `${enabled} enabled` : `${enabled} of ${total} enabled`;
+    return `${total} job${total === 1 ? '' : 's'} · ${enabledPart}`;
+  }
+
+  function publishCounts(total: number, enabled: number): void {
+    if (toolbarSummary) {
+      toolbarSummary.textContent = formatCountsSummary(total, enabled);
+    }
+    options.onCountsChange?.({ total, enabled });
+  }
 
   const main = el('div', 'scheduler-panel-main');
   panel.appendChild(main);
+
+  const listHead = el('div', 'scheduler-jobs-head hidden');
+  listHead.appendChild(el('h2', 'scheduler-jobs-head__title', 'Scheduled jobs'));
+  main.appendChild(listHead);
 
   const list = el('div', 'scheduler-jobs');
   list.setAttribute('role', 'list');
@@ -189,13 +216,6 @@ export async function renderSchedulerPanel(
   const historyPanel = el('section', 'scheduler-history hidden');
   historyPanel.setAttribute('aria-label', 'Run history');
   panel.appendChild(historyPanel);
-
-  const footer = el('div', 'scheduler-panel-footer');
-  const addBtn = el('button', 'settings-action-btn settings-action-btn--primary scheduler-panel-add-btn', 'Add task');
-  addBtn.type = 'button';
-  addBtn.addEventListener('click', openAddTask);
-  footer.appendChild(addBtn);
-  panel.appendChild(footer);
 
   let selectedHistoryJobId: string | null = null;
   let defaultWorkspacePath = '';
@@ -469,13 +489,19 @@ export async function renderSchedulerPanel(
       el(
         'p',
         'scheduler-empty__hint',
-        'Run a prompt on a timer while Minnow stays open. Good for standups, reminders, and recurring checks.',
+        'Run a prompt on a timer while Minnow stays open. Standups, reminders, and recurring checks work well here.',
       ),
     );
-    const cta = el('button', 'settings-action-btn settings-action-btn--primary', 'Create first job');
-    cta.type = 'button';
-    cta.addEventListener('click', openAddTask);
-    empty.appendChild(cta);
+    if (!useExternalAdd) {
+      const cta = el('button', 'scheduler-btn scheduler-btn--primary', 'Add task');
+      cta.type = 'button';
+      cta.addEventListener('click', openAddTask);
+      empty.appendChild(cta);
+    } else {
+      empty.appendChild(
+        el('p', 'scheduler-empty__action-hint', 'Use Add task above to create your first schedule.'),
+      );
+    }
     return empty;
   }
 
@@ -488,13 +514,17 @@ export async function renderSchedulerPanel(
       list.appendChild(
         el('p', 'scheduler-field__hint', err instanceof Error ? err.message : String(err)),
       );
-      jobCountValue.textContent = '—';
-      activeCountValue.textContent = '—';
+      if (toolbarSummary) {
+        toolbarSummary.textContent = 'Could not load jobs';
+      }
+      options.onCountsChange?.({ total: -1, enabled: -1 });
       return;
     }
 
-    jobCountValue.textContent = String(jobs.length);
-    activeCountValue.textContent = String(jobs.filter((job) => job.enabled).length);
+    const enabledCount = jobs.filter((job) => job.enabled).length;
+    publishCounts(jobs.length, enabledCount);
+    list.classList.toggle('scheduler-jobs--empty', jobs.length === 0);
+    listHead.classList.toggle('hidden', jobs.length === 0);
 
     if (jobs.length === 0) {
       list.appendChild(renderEmptyState());
