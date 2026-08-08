@@ -1,11 +1,26 @@
-/* Cumulative file line stats above the composer (+ undo control, MIN-409) */
+/* Cumulative file line stats over the chat viewport (+ undo control, MIN-409) */
 
 .code-change-strip-wrap {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--chat-code-change-gap, 12px);
+  z-index: 11;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin: 0 12px 10px;
+  margin: 0;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+}
+
+.code-change-strip-wrap[hidden] {
+  display: none !important;
+}
+
+/* Keep jump chip above the code-change row when both are visible */
+.chat-viewport:has(.code-change-strip-wrap:not([hidden])) .chat-jump-latest:not(.hidden) {
+  bottom: calc(var(--chat-code-change-gap, 12px) + 38px);
 }
 
 /* Strip pill + undo icon share one centered row. */
@@ -15,6 +30,7 @@
   justify-content: center;
   gap: 6px;
   max-width: 100%;
+  pointer-events: auto;
 }
 
 .code-change-strip {
@@ -351,4 +367,21 @@
 .tool-call-details--file > summary {
   cursor: default;
   pointer-events: none;
+}
+
+/* Not part of chat transcript — hide with composer chrome on overlays / boards / hub */
+.main-column:has(.chat-area--plan-screen) .code-change-strip-wrap,
+.main-column:has(.chat-area--orchestrate-hub) .code-change-strip-wrap,
+.main-column:has(.chat-area--code-brain-map) .code-change-strip-wrap,
+.main-column.main-column--hub .code-change-strip-wrap,
+.main-column.main-column--board-view .code-change-strip-wrap,
+.main-column.main-column--code-overview .code-change-strip-wrap,
+.main-column.main-column--code-brain-map .code-change-strip-wrap,
+.main-column.main-column--plan-screen .code-change-strip-wrap,
+.main-column.main-column--issues .code-change-strip-wrap,
+.main-column.main-column--dev-server .code-change-strip-wrap,
+.main-column.main-column--source-control .code-change-strip-wrap,
+.main-column.main-column--research .code-change-strip-wrap,
+.main-column.main-column--terminal-maximized .code-change-strip-wrap {
+  display: none !important;
 }

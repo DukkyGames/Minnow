@@ -387,7 +387,7 @@ describe('orchestrate plan screen', () => {
     );
   });
 
-  test('switching away from restored super-plan chat removes resume banner', () => {
+  test('switching away from a super-plan chat drops its surface and paints the next chat', () => {
     installTestWindow();
 
     mountCodeChatAreaForTests();
@@ -422,7 +422,11 @@ describe('orchestrate plan screen', () => {
 
     assert.equal(restoreOrchestratePlanScreenSessionFromChat(chat), true);
     renderChatFromHistory(chat);
-    assert.ok(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID));
+    assert.ok(
+      document.getElementById(SUPER_PLAN_PAGE_ROOT_ID),
+      'a super-plan chat paints its planning surface, never a transcript',
+    );
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID), null);
 
     setSessionStateForTests({
       version: 5,
@@ -433,19 +437,18 @@ describe('orchestrate plan screen', () => {
     renderChatFromHistory(otherChat);
 
     assert.equal(
-      document.getElementById(ORCHESTRATE_PLAN_BANNER_ID),
+      document.getElementById(SUPER_PLAN_PAGE_ROOT_ID),
       null,
-      'resume banner should not follow other chats',
+      'the surface should not follow other chats',
     );
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID), null);
     assert.match(
       document.getElementById('chatArea')?.textContent ?? '',
       /Hello from another chat/,
     );
-    assert.equal(getOrchestratePlanScreenSession()?.chatId, chat.id);
-    assert.equal(getOrchestratePlanScreenSession()?.planScreenSuspended, true);
   });
 
-  test('restore session from persisted superPlan shows resume banner after reload', () => {
+  test('restore session from persisted superPlan reopens the surface after reload', () => {
     installTestWindow();
 
     const area = mountCodeChatAreaForTests();
@@ -484,19 +487,20 @@ describe('orchestrate plan screen', () => {
     assert.equal(session?.planScreenSuspended, true);
 
     renderChatFromHistory(chat);
-    const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
-    assert.ok(banner);
-    assert.equal(banner?.parentElement?.classList.contains('chat-viewport'), true);
-    assert.equal(area.contains(banner), false, 'banner should float over chat, not inside scroll content');
+    assert.ok(
+      area.querySelector(`#${SUPER_PLAN_PAGE_ROOT_ID}`),
+      'reload lands back on the planning surface, not the transcript',
+    );
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID), null);
     assert.equal(document.getElementById(ORCHESTRATE_PLAN_SCREEN_ROOT_ID), null);
-    assert.match(
-      document.getElementById('chatArea')?.textContent ?? '',
-      /Add OAuth login/,
-      'transcript should render beneath the resume banner (not a blank page)',
+    assert.equal(
+      document.documentElement.classList.contains('mn-super-plan-open'),
+      true,
+      'the shell hides the chat list while the surface is up',
     );
   });
 
-  test('restore session from cancelled superPlan shows resume banner after reload', () => {
+  test('restore session from cancelled superPlan reopens the surface after reload', () => {
     installTestWindow();
 
     const area = mountCodeChatAreaForTests();
@@ -538,17 +542,14 @@ describe('orchestrate plan screen', () => {
     assert.equal(session?.planScreenSuspended, true);
 
     renderChatFromHistory(chat);
-    const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
-    assert.ok(banner);
-    assert.match(
-      banner?.textContent ?? '',
-      /Super Plan was stopped/,
-      'cancelled pipeline should offer a return path after reload',
+    assert.ok(
+      area.querySelector(`#${SUPER_PLAN_PAGE_ROOT_ID}`),
+      'a stopped run still opens on the surface, where the rail offers a fresh plan',
     );
-    assert.equal(area.contains(banner), false, 'banner should float over chat, not inside scroll content');
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID), null);
   });
 
-  test('view chat during grill questions migrates strip to composer without cancelling', async () => {
+  test('the run surface offers no route to the transcript', async () => {
     installTestWindow();
     globalThis.requestAnimationFrame = (cb: () => void) => {
       cb();
@@ -609,15 +610,21 @@ describe('orchestrate plan screen', () => {
 
     assert.ok(planHost?.querySelector('.question-cards-panel'));
 
-    const viewChatBtn = document.querySelector(
-      '[data-plan-action="viewChat"]',
-    ) as HTMLButtonElement | null;
-    assert.ok(viewChatBtn);
-    viewChatBtn.click();
-    assert.equal(isOrchestratePlanScreenSuspended(), true);
-    assert.equal(document.getElementById(SUPER_PLAN_PAGE_ROOT_ID), null);
-    assert.ok(composerHost.querySelector('.question-cards-panel'));
-    assert.equal(planHost?.childElementCount, 0);
+    assert.equal(
+      document.querySelector('[data-plan-action="viewChat"]'),
+      null,
+      'Super Plan is a screen, not a conversation — nothing offers to swap it for one',
+    );
+    assert.ok(
+      document.getElementById(SUPER_PLAN_PAGE_ROOT_ID),
+      'the surface stays up while the interview runs',
+    );
+    assert.equal(isOrchestratePlanScreenSuspended(), false);
+    assert.equal(
+      composerHost.querySelector('.question-cards-panel'),
+      null,
+      'interview questions stay inline in the ledger column',
+    );
 
     const session = getOrchestratePlanScreenSession();
     assert.equal(session?.phase, 'questions');
@@ -791,7 +798,7 @@ describe('orchestrate plan screen', () => {
     assert.equal(settled, true);
   });
 
-  test('clicking active super-plan chat in sidebar shows transcript instead of blank area', async () => {
+  test('clicking the active super-plan chat in the sidebar keeps the surface up', async () => {
     installTestWindow();
 
     const area = mountCodeChatAreaForTests();
@@ -830,15 +837,12 @@ describe('orchestrate plan screen', () => {
 
     await switchChat(chat.id);
 
-    assert.equal(document.getElementById(SUPER_PLAN_PAGE_ROOT_ID), null);
-    assert.equal(isOrchestratePlanScreenSuspended(), true);
-    const banner = document.getElementById(ORCHESTRATE_PLAN_BANNER_ID);
-    assert.ok(banner, 'resume banner should appear after sidebar click');
-    assert.match(
-      document.getElementById('chatArea')?.textContent ?? '',
-      /Add OAuth login/,
-      'transcript should render beneath the resume banner (not a blank page)',
+    assert.ok(
+      area.querySelector(`#${SUPER_PLAN_PAGE_ROOT_ID}`),
+      'the surface survives a click on the chat that owns it',
     );
+    assert.equal(isOrchestratePlanScreenSuspended(), false);
+    assert.equal(document.getElementById(ORCHESTRATE_PLAN_BANNER_ID), null);
   });
 
   test('skip interview button shows only while the grill stage is active', () => {

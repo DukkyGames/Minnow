@@ -12,7 +12,10 @@ import {
   isOrchestratePlanScreenSessionActive,
   isOrchestratePlanScreenSuppressingChatDom,
   isOrchestratePlanScreenSuspendedForChat,
+  isSuperPlanScreenMountedForOtherChat,
+  isSuperPlanScreenShowingChat,
   removeOrchestratePlanScreenSuspendedBanner,
+  reopenSuperPlanScreenForChat,
   restoreOrchestratePlanScreenSessionFromChat,
   showOrchestratePlanScreenSuspendedBanner,
   teardownOrchestratePlanScreen,
@@ -230,6 +233,16 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const codeMount = isCodeChatMount(mount);
   const scrollAnchor = captureChatScrollAnchor();
 
+  /*
+   * The Super Plan surface suppresses transcript DOM like every other
+   * full-column overlay, but unlike them it is bound to a chat. A paint for a
+   * different chat is navigation away from it, so drop it first rather than
+   * letting the guard below turn the navigation into a no-op.
+   */
+  if (codeMount && isSuperPlanScreenMountedForOtherChat(chat.id)) {
+    teardownOrchestratePlanScreen();
+  }
+
   // Code overview / code map / Issues embed own #chatArea — do not repaint underneath.
   if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
     return;
@@ -249,6 +262,19 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
   if (codeMount) {
     restoreOrchestratePlanScreenSessionFromChat(chat);
+  }
+  /*
+   * Super Plan is a screen, not a conversation. Its chat carries the pipeline's
+   * tool calls, which the surface already reports as stages, artifacts and a
+   * ledger — so a super-plan chat always paints the planning surface and never
+   * falls through to the transcript beneath it.
+   */
+  if (codeMount && normalizeModeId(chat.modeId) === 'super-plan') {
+    if (isSuperPlanScreenShowingChat(chat.id)) return;
+    teardownHub();
+    removeOrchestratePlanScreenSuspendedBanner();
+    reopenSuperPlanScreenForChat(chat);
+    return;
   }
   // Suspended plan session: keep the resume banner but still render the
   // transcript beneath it (a banner-only page reads as a blank/lost chat).

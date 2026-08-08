@@ -29,18 +29,6 @@
   flex-shrink: 0;
 }
 
-/* Submenu drops below the Plan segment into the textarea row — elevate the
-   whole controls strip so the menu paints above .input-row / send stack. */
-.composer-controls:has(.is-submenu-open) {
-  overflow: visible;
-  position: relative;
-  z-index: 30;
-}
-
-.mode-segment-wrap--plan.is-submenu-open {
-  z-index: 30;
-}
-
 /* Hug labelled content; shrink (and scroll / go compact) when the row is tight. */
 #modeSelector.mode-segmented,
 .mode-segmented {
@@ -65,15 +53,6 @@
 /* Keep board-managed chats hidden even though the strip declares its own display mode. */
 #modeSelector[hidden] {
   display: none;
-}
-
-/* Must beat `#modeSelector.mode-segmented { overflow-x: auto }` (ID specificity),
-   or the Plan/Super Plan menu is clipped inside the strip. */
-#modeSelector.mode-segmented:has(.is-submenu-open),
-.mode-segmented:has(.is-submenu-open) {
-  overflow: visible;
-  overflow-x: visible;
-  overflow-y: visible;
 }
 
 .mode-segmented::-webkit-scrollbar {
@@ -140,105 +119,6 @@
   outline-offset: 2px;
 }
 
-.mode-segment-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: stretch;
-  flex-shrink: 0;
-}
-
-.mode-segment-wrap--plan .mode-segment--plan {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  padding-right: 4px;
-}
-
-.mode-segment__caret {
-  appearance: none;
-  border: 1px solid transparent;
-  border-left: none;
-  background: transparent;
-  color: var(--mn-fg-muted);
-  font-family: inherit;
-  font-size: 0.65rem;
-  line-height: 1;
-  padding: 4px 5px 4px 2px;
-  border-top-right-radius: calc(var(--radius-md) - 2px);
-  border-bottom-right-radius: calc(var(--radius-md) - 2px);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  transition:
-    background 0.2s var(--ease-out),
-    color 0.2s var(--ease-out),
-    border-color 0.2s var(--ease-out);
-}
-
-.mode-segment-wrap--plan:has(.mode-segment[aria-checked='true']) .mode-segment__caret {
-  background: var(--mn-accent);
-  color: var(--mn-fg-on-accent);
-  border-color: var(--mn-accent);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .mode-segment-wrap--plan:not(:has(.mode-segment[aria-checked='true'])) .mode-segment__caret:hover:not(:disabled) {
-    background: var(--mn-bg);
-    color: var(--mn-fg);
-    border-color: var(--mn-border);
-  }
-
-  .mode-segment-wrap--plan:has(.mode-segment[aria-checked='true']) .mode-segment__caret:hover:not(:disabled) {
-    filter: brightness(1.05);
-  }
-}
-
-.mode-segment__caret:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.mode-segment__caret:focus-visible {
-  outline: 2px solid var(--mn-accent);
-  outline-offset: 2px;
-}
-
-.mode-submenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 40;
-  background: var(--mn-bg);
-  border: 1px solid var(--mn-border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  min-width: 140px;
-  padding: 4px;
-}
-
-.mode-submenu__item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 12px;
-  border: none;
-  background: none;
-  color: var(--mn-fg);
-  font: inherit;
-  font-size: 0.8125rem;
-  cursor: pointer;
-  border-radius: 6px;
-}
-
-.mode-submenu__item:hover {
-  background: var(--mn-surface-1, var(--mn-bg-elevated));
-}
-
-.mode-submenu__item[aria-current='true'] {
-  background: var(--mn-accent);
-  color: var(--mn-fg-on-accent);
-}
-
 /* Icon-only when the strip itself is squeezed (class toggled in mode-selector.ts). */
 .mode-segmented--compact .mode-segment__label {
   display: none;
@@ -248,17 +128,6 @@
   padding: 5px;
   gap: 0;
   min-width: 26px;
-}
-
-.mode-segmented--compact .mode-segment-wrap--plan .mode-segment--plan {
-  padding-right: 5px;
-  min-width: 26px;
-  border-top-right-radius: calc(var(--radius-md) - 2px);
-  border-bottom-right-radius: calc(var(--radius-md) - 2px);
-}
-
-.mode-segmented--compact .mode-segment__caret {
-  display: none;
 }
 
 @media (max-width: 600px) {

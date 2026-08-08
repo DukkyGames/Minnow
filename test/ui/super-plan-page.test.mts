@@ -40,7 +40,6 @@ function stubHandlers(): SuperPlanPageHandlers {
     };
   return {
     onStart: record('onStart'),
-    onViewChat: record('onViewChat'),
     onPause: record('onPause'),
     onResume: record('onResume'),
     onStop: record('onStop'),

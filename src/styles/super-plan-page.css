@@ -13,6 +13,22 @@
  */
 
 /*
+ * One list, not two. Super Plan's rail already lists every plan and every run,
+ * and each of those runs is a chat — so leaving the session list open puts the
+ * same work on screen twice under two different names. The shell hides it (and
+ * the view-bar toggle that would reopen it) for as long as the surface is up.
+ *
+ * A document-level class, not `sessionState.sidebarCollapsed`: the user's own
+ * open/closed preference must survive the visit and come back on exit.
+ */
+html.mn-super-plan-open #chatSidebar,
+html.mn-super-plan-open #chatSidebarResizer,
+html.mn-super-plan-open #sidebarBackdrop,
+html.mn-super-plan-open #btnCodeViewsChats {
+  display: none;
+}
+
+/*
  * The shared plan-screen chat area centres a 640px column and scrolls. Super
  * Plan fills the column edge to edge and owns its own scrollers, so the outer
  * centring and overflow are handed back here.

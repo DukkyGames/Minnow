@@ -57,7 +57,6 @@ type SegmentId = 'activity' | 'spec' | 'plan';
 
 export interface SuperPlanPageHandlers {
   onStart: (prompt: string) => void;
-  onViewChat: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -1051,7 +1050,6 @@ class SuperPlanPage {
     // Only reachable below 660px, where the rail overlays instead of docking.
     addAction('rail', 'Plans', () => this.root.classList.toggle('is-rail-hidden'));
     this.actionRefs.get('rail')?.classList.add('sp-action--rail');
-    addAction('viewChat', 'View chat', () => this.handlers.onViewChat());
     addAction('copyPath', 'Copy path', () => this.copyPlanPath());
     addAction('skipInterview', 'Skip interview', () => this.handlers.onSkipInterview());
     addAction('pause', 'Pause', () => this.handlers.onPause());

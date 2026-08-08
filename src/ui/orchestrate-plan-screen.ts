@@ -93,6 +93,7 @@ import {
   SUPER_PLAN_PAGE_ROOT_ID,
   type SuperPlanPageHandlers,
 } from './super-plan-page';
+import { syncSuperPlanChrome } from './super-plan-chrome';
 import { openSettings } from './settings-page';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
@@ -245,7 +246,7 @@ export function isSuperPlanPlanScreenRestorable(chat: Chat): boolean {
   return true;
 }
 
-function derivePlanScreenPhaseFromSuperPlan(chat: Chat): OrchestratePlanScreenPhase {
+export function derivePlanScreenPhaseFromSuperPlan(chat: Chat): OrchestratePlanScreenPhase {
   const checkpoint = getSuperPlanCheckpointKind(chat);
   if (checkpoint === 'spec_confirm') return 'spec_confirm';
   if (checkpoint === 'present') return 'preview';
@@ -407,6 +408,7 @@ export function teardownOrchestratePlanScreenDom(
   document
     .getElementById('mainColumn')
     ?.classList.remove(MAIN_COLUMN_PLAN_SCREEN_CLASS);
+  syncSuperPlanChrome(false);
   notifyAskQuestionDisplayContextChanged();
 }
 
@@ -1173,10 +1175,6 @@ function buildSuperPlanScreenDom(
     onStart: (prompt) => {
       void startPlanningFromPrompt(prompt);
     },
-    onViewChat: () => {
-      const target = findChatById(opts.chatId);
-      if (target) suspendToViewChat(target);
-    },
     onPause: () => {
       const target = findChatById(opts.chatId);
       if (target) pauseSuperPlan(target);
@@ -1676,6 +1674,51 @@ function openSuperPlanRun(chatId: string): void {
 }
 
 /**
+ * True when the Super Plan surface is already what this chat is showing.
+ * Repainting it during an ordinary transcript render would reset the ledger
+ * scroll position and replay the entry animation, so callers check here first.
+ */
+export function isSuperPlanScreenShowingChat(chatId: string): boolean {
+  return Boolean(
+    isSuperPlanPageMounted() &&
+      planSession?.chatId === chatId &&
+      !planSession.planScreenSuspended,
+  );
+}
+
+/** True when the Super Plan surface is mounted, but for some other chat. */
+export function isSuperPlanScreenMountedForOtherChat(chatId: string): boolean {
+  return Boolean(
+    isSuperPlanPageMounted() && planSession && planSession.chatId !== chatId,
+  );
+}
+
+/**
+ * Paint the Super Plan surface for a chat that just came to the foreground.
+ *
+ * Super Plan is a screen, not a conversation: the chat behind it is a transport
+ * for pipeline tool calls, and the surface already shows the stages, the
+ * artifacts and the plan itself. Wherever a transcript would otherwise be
+ * painted for a super-plan chat, this stands in.
+ */
+export function reopenSuperPlanScreenForChat(chat: Chat): void {
+  if (normalizeModeId(chat.modeId) !== 'super-plan') return;
+  if (isSuperPlanScreenShowingChat(chat.id)) return;
+
+  const carried = planSession?.chatId === chat.id ? planSession : null;
+  const phase: OrchestratePlanScreenPhase = chat.superPlan
+    ? derivePlanScreenPhaseFromSuperPlan(chat)
+    : 'prompt';
+  ensureStreamEndListener();
+  renderOrchestratePlanScreen({
+    phase,
+    chatId: chat.id,
+    planPath: resolvePlanSessionArtifactPath(chat, phase) ?? carried?.planPath,
+    savedPrompt: chat.superPlan?.prompt ?? carried?.savedPrompt,
+  });
+}
+
+/**
  * Show a saved plan the rail found on disk. The session keeps pointing at
  * whatever run owns it, so returning to that run costs one click on the rail.
  */
@@ -1701,6 +1744,7 @@ function renderSuperPlanDoc(path: string): void {
   );
   area.classList.add(CHAT_AREA_PLAN_SCREEN_CLASS, CHAT_AREA_SUPER_PLAN_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_PLAN_SCREEN_CLASS);
+  syncSuperPlanChrome(true);
   notifyAskQuestionDisplayContextChanged();
 }
 
@@ -1742,6 +1786,7 @@ export function renderOrchestratePlanScreen(
   area.classList.toggle(CHAT_AREA_SUPER_PLAN_CLASS, Boolean(isSuperPlan));
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_PLAN_SCREEN_CLASS);
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
+  syncSuperPlanChrome(Boolean(isSuperPlan));
 
   const wiresSuperPlanListener =
     isSuperPlan &&

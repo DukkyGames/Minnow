@@ -16,6 +16,7 @@ import {
 } from '../usage/code-change-ledger';
 import { buildHistoryUserContent, runChatTurn } from '../tools/loop';
 import { setStatus } from './status';
+import { syncCodeChangeStripWrapVisibility } from './code-change-strip';
 
 const GIT_COMMIT_SKILL_ID = 'git-commit';
 const CREATE_PR_SKILL_ID = 'create-pr';
@@ -383,6 +384,7 @@ export function syncCodeChangeStripActionsVisibility(chat?: Chat | null): void {
       commit.style.display = visible ? '' : 'none';
       pr.style.display = visible ? '' : 'none';
       host.style.display = visible ? '' : 'none';
+      syncCodeChangeStripWrapVisibility();
       return;
     }
     commit.style.display = '';
@@ -392,6 +394,7 @@ export function syncCodeChangeStripActionsVisibility(chat?: Chat | null): void {
     pr.disabled = busy;
     commit.setAttribute('aria-disabled', busy ? 'true' : 'false');
     pr.setAttribute('aria-disabled', busy ? 'true' : 'false');
+    syncCodeChangeStripWrapVisibility();
   })();
 }
 
