@@ -35,6 +35,16 @@ export function installHappyDomGlobals(
   g.getComputedStyle = win.getComputedStyle.bind(win);
   g.requestAnimationFrame = (cb: FrameRequestCallback) =>
     win.setTimeout(() => cb(win.performance.now()), 0) as unknown as number;
+  // happy-dom lacks ResizeObserver; calendar panel and other UIs expect it in node tests.
+  if (typeof globalThis.ResizeObserver === 'undefined') {
+    class ResizeObserverStub {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    g.ResizeObserver = ResizeObserverStub as typeof ResizeObserver;
+    win.ResizeObserver = ResizeObserverStub as typeof ResizeObserver;
+  }
   win.matchMedia = ((query: string) => ({
     matches: query.includes('prefers-reduced-motion'),
     media: query,

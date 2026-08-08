@@ -307,13 +307,18 @@ export function getActiveBoardGroup(): ChatGroup | undefined {
 /** Clear board main-column focus (same as leaving board via switchChat). */
 export function dismissActiveBoardView(): boolean {
   const state = sessionState;
-  if (!state?.activeBoardGroupId) return false;
-  const openGroup = getActiveBoardGroup();
-  if (openGroup) {
-    openGroup.viewMode = 'chat';
-    markGroupDirty(openGroup.id);
+  if (!state) return false;
+  let openGroup = getActiveBoardGroup();
+  if (!openGroup) {
+    const active = state.chats.find((c) => c.id === state.activeId);
+    if (active) openGroup = getBoardGroupForChat(active);
   }
-  delete state.activeBoardGroupId;
+  if (!openGroup) return false;
+  openGroup.viewMode = 'chat';
+  markGroupDirty(openGroup.id);
+  if (state.activeBoardGroupId === openGroup.id) {
+    delete state.activeBoardGroupId;
+  }
   markSessionScalarsDirty();
   scheduleSaveSessions();
   return true;

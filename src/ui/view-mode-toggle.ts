@@ -16,6 +16,8 @@ import {
   getOrCreateBoardGroup,
   openBoardGroup,
 } from '../state/chat-groups';
+import { exitBoardViewForNavigation } from './exit-board-view';
+import { isBoardChatEmbedOpen } from './orchestrate-board-chat-state';
 import {
   getActiveChat,
   scheduleSaveSessions,
@@ -242,7 +244,15 @@ export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
 
   const activeGroup = getActiveBoardGroup() ?? getBoardGroupForChat(chat);
   if (!activeGroup) return;
-  if (activeGroup.viewMode === 'chat') return;
+  if (activeGroup.viewMode === 'chat') {
+    const area = document.getElementById('chatArea');
+    const boardDomVisible = Boolean(
+      area?.querySelector(':scope > .ob-page, :scope > .board-root'),
+    );
+    if (!boardDomVisible && !isBoardChatEmbedOpen()) return;
+  }
+  activeGroup.viewMode = 'chat';
+  exitBoardViewForNavigation();
   closeBoardGroupView(activeGroup);
   syncViewModeToggleFromActiveChat();
   void import('./git-panel').then((m) =>

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import {
+  installHappyDomGlobals,
+  teardownHappyDomAsync,
+} from '../os/dom-helpers.mts';
 
 const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts'
@@ -13,15 +17,12 @@ const {
   scrollChatToBottom,
 } = await import('../../src/ui/chat-scroll.ts');
 
+/** @type {import('happy-dom').Window | undefined} */
+let domWindow;
+
 function setupCodeTranscriptDom() {
-  const window = new Window();
-  globalThis.document = window.document;
-  globalThis.HTMLElement = window.HTMLElement;
-  globalThis.Node = window.Node;
-  globalThis.requestAnimationFrame = (cb) => {
-    cb();
-    return 0;
-  };
+  domWindow = new Window();
+  installHappyDomGlobals(domWindow);
 
   resetInstancesForTests();
 
@@ -45,7 +46,7 @@ function setupCodeTranscriptDom() {
   document.body.appendChild(chip);
 
   initChatScroll();
-  chatArea.dispatchEvent(new window.Event('scroll'));
+  chatArea.dispatchEvent(new domWindow.Event('scroll'));
 
   const chat = createEmptyChatObject('');
   chat.id = 'history-scroll-chat';
@@ -61,13 +62,17 @@ function setupCodeTranscriptDom() {
     chats: [chat],
   });
 
-  return { window, chatArea, chat, getScrollTop: () => scrollTop };
+  return { chatArea, chat, getScrollTop: () => scrollTop };
 }
 
 describe('renderChatFromHistory scroll preservation', { concurrency: false }, () => {
-  afterEach(() => {
+  afterEach(async () => {
     setSessionStateForTests(null);
     resetInstancesForTests();
+    if (domWindow) {
+      await teardownHappyDomAsync(domWindow);
+      domWindow = undefined;
+    }
   });
 
   test('history rebuild preserves read position when scrolled up', () => {

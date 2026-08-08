@@ -60,7 +60,7 @@ function initBoardForChat(chat, input) {
   return group;
 }
 
-describe('orchestrate chat stream remount', () => {
+describe('orchestrate chat stream remount', { concurrency: false }, () => {
   afterEach(() => {
     setStreaming(false);
     disposeBoardViewForTests();

@@ -108,9 +108,21 @@ describe('calendar window shell', () => {
   beforeEach(async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
-    installHappyDomGlobals(win);
-    win.localStorage.clear();
-    win.location.hash = '#/workspaces';
+    win.location.href = 'http://127.0.0.1/#/workspaces';
+    const calendarFetch: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.includes('/api/calendar/calendars')) {
+        return Response.json({ calendars: [] });
+      }
+      if (url.includes('/api/calendar/events')) {
+        return Response.json({ events: [] });
+      }
+      if (url.includes('/api/calendar/caldav')) {
+        return Response.json({ accounts: [] });
+      }
+      return Response.json({});
+    };
+    installHappyDomGlobals(win, { fetch: calendarFetch });
     setupCalendarDom(win);
     resetInstancesForTests();
     resetOsRouterForTests();
