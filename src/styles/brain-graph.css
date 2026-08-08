@@ -684,7 +684,9 @@
 .brain-graph-sidebar {
   position: relative;
   z-index: 3;
-  flex: 0 0 auto;
+  /* Fill the overlay column below the toolbar so the tree scrolls instead of
+     stretching the stage (and pushing Structure off-screen). */
+  flex: 1 1 0;
   align-self: flex-start;
   display: flex;
   flex-direction: column;
@@ -730,9 +732,9 @@
 .brain-graph-tree-panel {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  /* Navigation outranks the readout: keep ~5 rows even in a short rail. */
-  min-height: 168px;
+  flex: 1 1 0;
+  /* Let the page list shrink so Structure stays in the rail viewport. */
+  min-height: 0;
   overflow: hidden;
 }
 
