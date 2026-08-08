@@ -174,10 +174,12 @@ import {
 import { showChatItemContextMenu } from './sidebar';
 import { setStatus } from './status';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
+import { isCodeOverviewOpen } from './code-overview';
 import { teardownHub } from './hub';
 
 /** Live kanban uses chat-area--orchestrate for layout; that must not block board refresh. */
 function isBoardDomRefreshBlockedByOverlay(): boolean {
+  if (isCodeOverviewOpen()) return true;
   if (isOrchestrateBoardViewActive() || isOrchestrateInitSplitChromeActive()) {
     return false;
   }
