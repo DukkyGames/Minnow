@@ -116,11 +116,18 @@ export function electronBuilderSigningArgs() {
 
   const args = [`--config.mac.identity=${identity}`];
 
-  if (hasNotarizationCredentials()) {
+  if (process.env.MINNOW_SKIP_NOTARIZATION === '1') {
+    console.warn(
+      '[signing] MINNOW_SKIP_NOTARIZATION=1 — signed build without Apple notarization (Gatekeeper may still block).',
+    );
+    args.push('--config.mac.notarize=false');
+  } else if (hasNotarizationCredentials()) {
     const teamId = process.env.APPLE_TEAM_ID?.trim();
-    console.log(`[signing] Notarization enabled (team ${teamId}).`);
-    // electron-builder 26+: notarize is boolean only; APPLE_* env vars supply credentials.
-    args.push('--config.mac.notarize=true');
+    console.log(
+      `[signing] Notarization enabled (team ${teamId}) via afterSign hook (retries + direct S3 fallback).`,
+    );
+    // Built-in notarize uses @electron/notarize without --no-s3-acceleration; afterSign runs scripts/macos-notarize-after-sign.mjs.
+    args.push('--config.mac.notarize=false');
   } else {
     console.warn(
       '[signing] Signed build, but notarization credentials missing — app may still be quarantined.',

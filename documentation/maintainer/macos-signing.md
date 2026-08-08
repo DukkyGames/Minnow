@@ -83,7 +83,7 @@ You should see ✓ for the certificate, `.env.signing`, and notarization credent
 npm run package:mac
 ```
 
-[`scripts/electron-builder-run.mjs`](../../scripts/electron-builder-run.mjs) loads `.env.signing`, picks the first **Developer ID Application** identity in your keychain (override with `CSC_NAME` — use the name only, e.g. `Grim Media (TEAMID)`, not the `Developer ID Application:` prefix), signs with hardened runtime + entitlements in [`build/entitlements.mac.plist`](../../build/entitlements.mac.plist), and notarizes when credentials are present.
+[`scripts/electron-builder-run.mjs`](../../scripts/electron-builder-run.mjs) loads `.env.signing`, picks the first **Developer ID Application** identity in your keychain (override with `CSC_NAME` — use the name only, e.g. `Grim Media (TEAMID)`, not the `Developer ID Application:` prefix), signs with hardened runtime + entitlements in [`build/entitlements.mac.plist`](../../build/entitlements.mac.plist), and notarizes via [`scripts/macos-notarize-after-sign.mjs`](../../scripts/macos-notarize-after-sign.mjs) when credentials are present (retries transient S3 upload failures).
 
 Output lands in `release/pkg/`:
 
@@ -100,6 +100,16 @@ MINNOW_SKIP_SIGNING=1 npm run package:mac
 ```
 
 Gatekeeper will block first open; auto-update stays disabled in Settings.
+
+### Signed build without notarization (local / flaky upload)
+
+When `.env.signing` is configured, `package:mac` signs **and** notarizes. Notarization uploads the whole `.app` to Apple (often hundreds of MB or more); slow or unstable networks can fail with `HTTPClientError.deadlineExceeded` / `abortedUpload` even though signing already succeeded.
+
+```bash
+MINNOW_SKIP_NOTARIZATION=1 npm run package:mac
+```
+
+You get a Developer ID–signed `.dmg` / `.zip` without waiting on Apple's notary service. For release builds, retry on a stable connection or submit manually with `xcrun notarytool submit` after packaging.
 
 ---
 
@@ -138,6 +148,7 @@ If notarization fails with an entitlement error, adjust these plists and rebuild
 | `0 valid identities found` | Create/install **Developer ID Application** (not “Apple Development”) |
 | `Please remove prefix "Developer ID Application:"` | Fixed automatically by [`macos-signing-env.mjs`](../../scripts/macos-signing-env.mjs); if you set `CSC_NAME` manually, omit the prefix |
 | Notarization fails immediately | Check `.env.signing`; team id must match the signing cert |
+| `deadlineExceeded` / `abortedUpload` during notarize | Apple's `notarytool` upload to S3 timed out (Minnow's `.app` is large — often ~1GB). `package:mac` now notarizes via an **afterSign** hook with retries and `--no-s3-acceleration` on later attempts. Retry `npm run package:mac`, or notarize an existing signed app: `npm run signing:notarize -- release/pkg/mac-arm64/Minnow.app`. If uploads still fail, raise the client timeout (Xcode 16+): `defaults write com.apple.gke.notary.tool nt-upload-connection-timeout 900` then verify with `xcrun notarytool submit --verbose …` (look for `Setting S3 timeout to …`). Or `MINNOW_SKIP_NOTARIZATION=1` for a signed local build. |
 | App opens but updater disabled | Build was unsigned or ad-hoc — use a signed `package:mac` build |
 | `node-pty` / native module crash on launch | Ensure `com.apple.security.cs.disable-library-validation` is in both entitlements files |
 | Want CI signing later | Use App Store Connect API key env vars; store secrets in GitHub Actions |

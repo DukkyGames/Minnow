@@ -66,6 +66,7 @@
     "package:linux": "node scripts/ensure-minnow-sandbox-helper.mjs && npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --linux",
     "package:linux:docker": "node scripts/package-linux-docker.mjs",
     "signing:check": "node scripts/check-macos-signing.mjs",
+    "signing:notarize": "node scripts/macos-notarize-app.mjs",
     "signing:setup": "node scripts/check-macos-signing.mjs --setup",
     "sandbox:build-helper": "bash native/minnow-sandbox/build.sh",
     "sandbox:ensure-helper": "node scripts/ensure-minnow-sandbox-helper.mjs",
@@ -221,6 +222,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "build": {
+    "afterSign": "scripts/macos-notarize-after-sign.mjs",
     "appId": "org.grimmedia.minnow",
     "productName": "Minnow",
     "publish": {
