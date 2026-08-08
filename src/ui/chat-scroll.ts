@@ -6,6 +6,7 @@ import {
   isChatAppForeground,
   isEmailAssistantForeground,
 } from './chat-mount';
+import { OB_CHAT_SCROLL_SELECTOR } from './orchestrate-board-chat-state';
 import { getForegroundAppId } from '../os/instances';
 
 /** Distance from bottom that still counts as "pinned" (larger than terminal — more padding in .chat-area). */
@@ -29,8 +30,12 @@ export interface ChatScrollAnchor {
   distanceFromBottom: number;
 }
 
-/** Scroll container for messages: split bottom pane during board_init, else #chatArea. */
+/** Scroll container for messages: Orchestrate chat pane, split bottom pane, else #chatArea. */
 export function getChatScrollRoot(): HTMLElement | null {
+  // #chatArea is overflow:hidden while Orchestrate owns the column, so the
+  // embedded board chat brings its own scroller.
+  const boardChatPane = document.querySelector<HTMLElement>(OB_CHAT_SCROLL_SELECTOR);
+  if (boardChatPane) return boardChatPane;
   const splitPane = document.querySelector(
     `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
   ) as HTMLElement | null;
@@ -192,6 +197,11 @@ export function bindDesktopChatTranscriptScroll(): void {
   bindScrollTarget(
     document.querySelector(DESKTOP_CHAT_TRANSCRIPT_SELECTOR) as HTMLElement | null,
   );
+}
+
+/** Bind scroll listener on the embedded Orchestrate board chat (idempotent; call after mount). */
+export function bindOrchestrateBoardChatScroll(): void {
+  bindScrollTarget(document.querySelector<HTMLElement>(OB_CHAT_SCROLL_SELECTOR));
 }
 
 /** Bind scroll listener on the board-init split chat pane (idempotent). */

@@ -15,16 +15,18 @@
   display: none;
 }
 
+/* Composer + strips: see the same rule in ob-page.css. A board chat open in the
+   main pane (.main-column--board-chat) keeps them. */
 .main-column:has(.chat-area--orchestrate-hub) .input-bar,
 .main-column:has(.chat-area--orchestrate-hub) .tool-approval-host,
 .main-column:has(.chat-area--orchestrate-hub) .question-host,
 .main-column:has(.chat-area--orchestrate-hub) .code-change-strip-wrap,
 .main-column:has(.chat-area--orchestrate-hub) .chat-jump-latest,
-.main-column:has(.chat-area--orchestrate) .input-bar,
-.main-column:has(.chat-area--orchestrate) .tool-approval-host,
-.main-column:has(.chat-area--orchestrate) .question-host,
-.main-column:has(.chat-area--orchestrate) .code-change-strip-wrap,
-.main-column:has(.chat-area--orchestrate) .chat-jump-latest {
+.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .input-bar,
+.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .tool-approval-host,
+.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .question-host,
+.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .code-change-strip-wrap,
+.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .chat-jump-latest {
   display: none !important;
 }
 

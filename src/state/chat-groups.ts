@@ -63,6 +63,25 @@ export type WorkspaceSidebarEntry =
   | { kind: 'group'; group: ChatGroup; members: Chat[] }
   | { kind: 'chat'; chat: Chat };
 
+/**
+ * True when a chat belongs to an Orchestrate board (planner, task, tester or fixer).
+ *
+ * Every board chat is stamped with `boardGroupId` when it is created
+ * (see orchestrate-board-actions.ts and linkPlannerChatToBoardFolder), so this
+ * stays a plain field read: no group lookup, no import cycle with sessions.ts.
+ *
+ * Board chats live in the Orchestrate screen, not the chats panel. Callers that
+ * paint a chat list use this to leave them out.
+ */
+export function isBoardOwnedChat(chat: Chat): boolean {
+  return Boolean(chat.boardGroupId?.trim());
+}
+
+/** True when a folder is a board (running or still in setup) and so is Orchestrate's, not the sidebar's. */
+export function isBoardOwnedGroup(group: ChatGroup): boolean {
+  return Boolean(group.orchestrateBoard) || isBoardSetupIncomplete(group);
+}
+
 /** Board folders pin the planner chat first; other members stay activity-sorted. */
 function sortBoardGroupMembers(group: ChatGroup, members: Chat[]): Chat[] {
   const plannerId = group.plannerChatId?.trim();

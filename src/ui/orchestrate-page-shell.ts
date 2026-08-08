@@ -7,8 +7,13 @@ import { boardSetupStatusLabel } from '../chat/orchestrate/board-setup';
 import { getGroupsForWorkspace } from '../state/chat-groups';
 import { getBoardProgressPercent } from '../state/orchestrate-board-store';
 import { sessionState } from '../state/sessions';
-import type { ChatGroup } from '../types';
+import type { BoardTask, Chat, ChatGroup } from '../types';
 import { getWorkspacePath } from '../state/workspace';
+import {
+  applyChatItemDotClasses,
+  getChatItemDotContext,
+  resolveChatItemDotState,
+} from './chat-item-dot';
 import { shortPlanLabel } from './orchestrate-plan-picker';
 
 /** Boards/plans linked to this workspace (shared with hub list helpers). */
@@ -45,6 +50,106 @@ export interface PaintOrchestrateRailOptions {
   onEmptyAction?: () => void;
   /** Optional filter string (lowercase). */
   filterText?: string;
+}
+
+/** One row in the rail's chat level (planner, task, tester or fixer chat). */
+export interface OrchestrateChatRailRow {
+  chatId: string;
+  title: string;
+  /** Mono meta line: task id and role, e.g. `T4 · tester`. */
+  meta: string;
+  /** Planner sorts first and never sits under a wave. */
+  isPlanner: boolean;
+  /** Wave this row belongs to; absent for the planner and the final test. */
+  wave?: number | string;
+}
+
+export interface PaintOrchestrateChatRailOptions {
+  group: ChatGroup;
+  /** Chat currently open in the main pane. */
+  activeChatId?: string | null;
+  onSelectChat: (chatId: string) => void;
+  /** Return to the board list level. */
+  onBack: () => void;
+  /** Right-click on a chat row. */
+  onChatContextMenu?: (
+    chatId: string,
+    nameEl: HTMLSpanElement,
+    coords: { x: number; y: number },
+  ) => void;
+  /** Collapsed wave ids (rail-local, so board collapse state is untouched). */
+  collapsedWaves?: ReadonlySet<string>;
+  onToggleWave?: (waveKey: string) => void;
+  filterText?: string;
+}
+
+/** Role suffix for a chat's meta line, derived from the task it is linked to. */
+function chatRoleForTask(task: BoardTask, chatId: string): string | null {
+  if (task.chatId?.trim() === chatId) return 'build';
+  if (task.testChatId?.trim() === chatId) return 'tester';
+  if (task.fixerChatId?.trim() === chatId) {
+    return task.fixerKind === 'env' ? 'env fix' : 'merge fix';
+  }
+  return null;
+}
+
+/**
+ * Rows for a board's chats: planner first, then every task-linked chat grouped
+ * by wave. Mirrors the sidebar's board folder ordering so moving the list into
+ * the rail does not reshuffle what people already learned.
+ */
+export function listBoardChatRailRows(
+  group: ChatGroup,
+  chats: readonly Chat[],
+): OrchestrateChatRailRow[] {
+  const board = group.orchestrateBoard;
+  const byId = new Map(chats.map((c) => [c.id, c]));
+  const rows: OrchestrateChatRailRow[] = [];
+  const seen = new Set<string>();
+
+  const plannerId = group.plannerChatId?.trim();
+  if (plannerId && byId.has(plannerId)) {
+    rows.push({
+      chatId: plannerId,
+      title: 'Orchestrator',
+      meta: byId.get(plannerId)!.name || 'planner',
+      isPlanner: true,
+    });
+    seen.add(plannerId);
+  }
+
+  if (!board) return rows;
+
+  for (const task of board.tasks) {
+    const linked = [task.chatId, task.testChatId, task.fixerChatId];
+    for (const raw of linked) {
+      const chatId = raw?.trim();
+      if (!chatId || seen.has(chatId)) continue;
+      const chat = byId.get(chatId);
+      if (!chat) continue;
+      seen.add(chatId);
+      const role = chatRoleForTask(task, chatId);
+      rows.push({
+        chatId,
+        title: chat.name?.trim() || task.title || task.id,
+        meta: role ? `${task.id} · ${role}` : task.id,
+        isPlanner: false,
+        wave: task.wave,
+      });
+    }
+  }
+
+  const finalTestId = board.finalTest?.chatId?.trim();
+  if (finalTestId && !seen.has(finalTestId) && byId.has(finalTestId)) {
+    rows.push({
+      chatId: finalTestId,
+      title: byId.get(finalTestId)!.name?.trim() || 'Final integration test',
+      meta: 'final test',
+      isPlanner: false,
+    });
+  }
+
+  return rows;
 }
 
 /** Tiny DOM helper matching Super Plan’s `el` pattern. */
@@ -266,6 +371,153 @@ export function paintOrchestrateBoardRail(
     });
     wrap.appendChild(row);
     container.appendChild(wrap);
+  }
+}
+
+/** Stable key for a wave id (waves are `number | string`). */
+export function waveKey(wave: number | string | undefined): string {
+  return wave == null ? 'none' : String(wave);
+}
+
+/** Append one chat row; shared by the planner row and each wave's rows. */
+function appendChatRailRow(
+  container: HTMLElement,
+  row: OrchestrateChatRailRow,
+  options: PaintOrchestrateChatRailOptions,
+  dotCtx: ReturnType<typeof getChatItemDotContext>,
+  chat: Chat,
+): void {
+  const wrap = el('div', 'ob-row-wrap');
+  const btn = el('button', 'ob-row ob-row--chat') as HTMLButtonElement;
+  btn.type = 'button';
+  btn.setAttribute('role', 'listitem');
+  btn.dataset.chatId = row.chatId;
+  if (row.isPlanner) btn.classList.add('ob-row--planner');
+  if (options.activeChatId && options.activeChatId === row.chatId) {
+    btn.classList.add('is-active');
+    btn.setAttribute('aria-current', 'true');
+  }
+
+  const titleEl = el('span', 'ob-row__title') as HTMLSpanElement;
+  titleEl.textContent = row.title;
+
+  const meta = el('span', 'ob-row__meta');
+  const dot = el('span', 'ob-row__dot chat-item-dot');
+  dot.setAttribute('aria-hidden', 'true');
+  applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx), btn);
+  meta.append(dot, document.createTextNode(row.meta));
+
+  btn.append(titleEl, meta);
+  btn.setAttribute('aria-label', `Open chat: ${row.title}, ${row.meta}`);
+  btn.addEventListener('click', () => options.onSelectChat(row.chatId));
+  btn.addEventListener('contextmenu', (e) => {
+    if (!options.onChatContextMenu) return;
+    e.preventDefault();
+    options.onChatContextMenu(row.chatId, titleEl, { x: e.clientX, y: e.clientY });
+  });
+
+  wrap.appendChild(btn);
+  container.appendChild(wrap);
+}
+
+/**
+ * Paint the rail's chat level for one board: back row, planner, then waves.
+ *
+ * The rail shows one level at a time. A board with 31 tasks would otherwise
+ * bury the board library it sits above, which is the sidebar tree this surface
+ * exists to replace.
+ */
+export function paintOrchestrateChatRail(
+  container: HTMLElement,
+  options: PaintOrchestrateChatRailOptions,
+): void {
+  container.replaceChildren();
+  const chats = sessionState?.chats ?? [];
+  const filter = (options.filterText ?? '').trim().toLowerCase();
+  const allRows = listBoardChatRailRows(options.group, chats);
+  const rows = filter
+    ? allRows.filter(
+        (r) =>
+          r.title.toLowerCase().includes(filter) || r.meta.toLowerCase().includes(filter),
+      )
+    : allRows;
+
+  const back = el('button', 'ob-back') as HTMLButtonElement;
+  back.type = 'button';
+  back.append(el('span', 'ob-back__caret', '‹'), document.createTextNode('All boards'));
+  back.setAttribute('aria-label', 'Back to board list');
+  back.addEventListener('click', () => options.onBack());
+  container.appendChild(back);
+
+  const label = el('span', 'ob-group__label', boardTileTitle(options.group));
+  container.appendChild(label);
+
+  if (!rows.length) {
+    const empty = el('div', 'ob-rail__empty');
+    empty.setAttribute('role', 'status');
+    empty.append(
+      el(
+        'p',
+        'orchestrate-hub__board-empty-title',
+        filter ? 'No chats match that filter.' : 'No task chats yet',
+      ),
+      el(
+        'p',
+        'orchestrate-hub__board-empty-hint',
+        filter
+          ? 'Clear the filter to see every chat on this board.'
+          : 'Start the board and each task opens its own chat here.',
+      ),
+    );
+    container.appendChild(empty);
+    return;
+  }
+
+  const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
+  const byId = new Map(chats.map((c) => [c.id, c]));
+
+  for (const row of rows.filter((r) => r.isPlanner)) {
+    const chat = byId.get(row.chatId);
+    if (chat) appendChatRailRow(container, row, options, dotCtx, chat);
+  }
+
+  // Group the rest by wave, in board wave order, then anything unwaved (final test).
+  const waved = rows.filter((r) => !r.isPlanner);
+  const order: string[] = [];
+  const buckets = new Map<string, OrchestrateChatRailRow[]>();
+  for (const row of waved) {
+    const key = waveKey(row.wave);
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      order.push(key);
+    }
+    buckets.get(key)!.push(row);
+  }
+
+  for (const key of order) {
+    const bucket = buckets.get(key)!;
+    // A filter that matches only a few rows should show them, not hide them
+    // behind a collapsed wave the user cannot see the contents of.
+    const collapsed = !filter && (options.collapsedWaves?.has(key) ?? false);
+
+    if (key !== 'none') {
+      const head = el('button', 'ob-wave') as HTMLButtonElement;
+      head.type = 'button';
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      head.append(
+        el('span', 'ob-wave__caret', collapsed ? '▸' : '▾'),
+        el('span', 'ob-wave__name', `Wave ${key}`),
+        el('span', 'ob-wave__count', String(bucket.length)),
+      );
+      head.addEventListener('click', () => options.onToggleWave?.(key));
+      container.appendChild(head);
+    }
+
+    if (collapsed) continue;
+    for (const row of bucket) {
+      const chat = byId.get(row.chatId);
+      if (chat) appendChatRailRow(container, row, options, dotCtx, chat);
+    }
   }
 }
 

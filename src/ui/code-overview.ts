@@ -16,7 +16,7 @@ import {
 } from '../os/router';
 import { fetchSchedulerJobs } from '../scheduler/client';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
-import { getGroupsForWorkspace, openBoardGroup } from '../state/chat-groups';
+import { getGroupsForWorkspace, isBoardOwnedChat, openBoardGroup } from '../state/chat-groups';
 import { gitStatus } from '../state/git-api';
 import {
   getBoardProgressPercent,
@@ -598,10 +598,10 @@ function refreshSessionsPanel(): void {
   const host = document.getElementById('codeOverviewSessionsBody');
   if (!host || !sessionState) return;
 
-  const chats = getSidebarListedChatsForWorkspace(getWorkspacePath(), sessionState).slice(
-    0,
-    RECENT_SESSION_LIMIT,
-  );
+  // Board chats live in Orchestrate, not in the chats panel — and not on this dashboard either.
+  const chats = getSidebarListedChatsForWorkspace(getWorkspacePath(), sessionState)
+    .filter((c) => !isBoardOwnedChat(c))
+    .slice(0, RECENT_SESSION_LIMIT);
 
   host.replaceChildren();
   if (!chats.length) {
