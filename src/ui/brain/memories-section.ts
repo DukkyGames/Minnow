@@ -1,5 +1,5 @@
 /**
- * Brain app — Memories: store toggles, entry CRUD, backup/clear.
+ * Brain app — Memories: store toggles, entry list + detail, backup/clear.
  */
 
 import {
@@ -26,6 +26,8 @@ let listBindingsDone = false;
 let addFormBound = false;
 /** Bumps on each list refresh so stale concurrent fetches cannot append twice. */
 let memoryListRefreshGen = 0;
+let selectedMemoryId: string | null = null;
+let cachedEntries: MemoryEntryWithBody[] = [];
 
 const MEMORY_BODY_MAX_BYTES = 32 * 1024;
 
@@ -81,72 +83,160 @@ function formatMemoryTimestamp(iso: string): string {
   });
 }
 
-function renderMemoryEntryRow(entry: MemoryEntryWithBody): HTMLElement {
-  const row = document.createElement('article');
-  row.className = 'settings-memory-row';
-  row.setAttribute('role', 'listitem');
-  row.dataset.memoryId = entry.id;
+function setPaneVisible(
+  id: 'brainMemoryEmptyState' | 'brainMemoryDetail' | 'brainMemoryAddPanel',
+  visible: boolean,
+): void {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('hidden', !visible);
+  if (visible) el.removeAttribute('hidden');
+  else el.setAttribute('hidden', '');
+}
+
+function showMemoryEmptyPane(): void {
+  setPaneVisible('brainMemoryEmptyState', true);
+  setPaneVisible('brainMemoryDetail', false);
+  setPaneVisible('brainMemoryAddPanel', false);
+}
+
+function showMemoryComposePane(): void {
+  setPaneVisible('brainMemoryEmptyState', false);
+  setPaneVisible('brainMemoryDetail', false);
+  setPaneVisible('brainMemoryAddPanel', true);
+  const titleInput = document.getElementById('brainMemoryAddTitle') as HTMLInputElement | null;
+  titleInput?.focus();
+}
+
+function showMemoryDetailPane(): void {
+  setPaneVisible('brainMemoryEmptyState', false);
+  setPaneVisible('brainMemoryAddPanel', false);
+  setPaneVisible('brainMemoryDetail', true);
+}
+
+function updateListSelectionHighlight(): void {
+  const listEl = document.getElementById('brainMemoryList');
+  if (!listEl) return;
+  listEl.querySelectorAll<HTMLButtonElement>('[data-memory-select]').forEach((btn) => {
+    const selected = btn.dataset.memorySelect === selectedMemoryId;
+    btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+  });
+}
+
+function renderMemoryDetail(entry: MemoryEntryWithBody): void {
+  const mount = document.getElementById('brainMemoryDetail');
+  if (!mount) return;
+  mount.replaceChildren();
 
   const head = document.createElement('div');
-  head.className = 'settings-memory-row-head';
+  head.className = 'brain-memory-detail__head';
 
-  const title = document.createElement('h3');
-  title.className = 'settings-memory-title';
+  const titleWrap = document.createElement('div');
+  const title = document.createElement('h2');
+  title.className = 'brain-memory-detail__title';
   title.textContent = entry.title || 'Untitled';
-  head.append(title);
-
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.className = 'settings-inline-btn settings-memory-remove';
-  removeBtn.textContent = 'Delete';
-  removeBtn.setAttribute('aria-label', `Delete memory ${entry.title}`);
-  removeBtn.dataset.memoryRemove = entry.id;
-  head.append(removeBtn);
-
-  row.append(head);
+  titleWrap.append(title);
 
   const meta = document.createElement('div');
-  meta.className = 'settings-memory-meta';
+  meta.className = 'brain-memory-detail__meta';
 
   if (entry.pinned) {
     const pin = document.createElement('span');
-    pin.className = 'settings-memory-badge settings-memory-badge--pinned';
+    pin.className = 'brain-memory-chip brain-memory-chip--pinned';
     pin.textContent = 'Pinned';
     meta.append(pin);
   }
 
   const source = document.createElement('span');
-  source.className = 'settings-memory-badge';
+  source.className = 'brain-memory-chip';
   source.textContent = entry.source;
   meta.append(source);
 
   const updated = document.createElement('span');
-  updated.className = 'settings-memory-updated';
   updated.textContent = `Updated ${formatMemoryTimestamp(entry.updatedAt)}`;
   meta.append(updated);
 
   if (entry.tags.length) {
     const tags = document.createElement('span');
-    tags.className = 'settings-memory-tags';
-    tags.textContent = entry.tags.join(', ');
+    tags.className = 'brain-memory-list-item__meta';
+    tags.textContent = entry.tags.map((t) => `#${t}`).join(' ');
     meta.append(tags);
   }
 
-  row.append(meta);
+  titleWrap.append(meta);
+  head.append(titleWrap);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'brain-action-btn brain-action-btn--danger';
+  removeBtn.textContent = 'Delete';
+  removeBtn.setAttribute('aria-label', `Delete memory ${entry.title}`);
+  removeBtn.dataset.memoryRemove = entry.id;
+  head.append(removeBtn);
 
   const body = document.createElement('pre');
-  body.className = 'settings-memory-body';
+  body.className = 'brain-memory-detail__body';
   body.textContent = entry.body?.trim() ? entry.body : '(empty)';
-  row.append(body);
 
+  mount.append(head, body);
+  showMemoryDetailPane();
+}
+
+function selectMemoryEntry(id: string | null): void {
+  selectedMemoryId = id;
+  updateListSelectionHighlight();
+  if (!id) {
+    showMemoryEmptyPane();
+    return;
+  }
+  const entry = cachedEntries.find((e) => e.id === id);
+  if (!entry) {
+    showMemoryEmptyPane();
+    return;
+  }
+  renderMemoryDetail(entry);
+}
+
+function renderMemoryListItem(entry: MemoryEntryWithBody): HTMLElement {
+  const row = document.createElement('article');
+  row.className = 'brain-memory-list-item';
+  row.setAttribute('role', 'listitem');
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'brain-memory-list-item__btn';
+  btn.dataset.memorySelect = entry.id;
+  btn.setAttribute('aria-selected', entry.id === selectedMemoryId ? 'true' : 'false');
+
+  const title = document.createElement('span');
+  title.className = 'brain-memory-list-item__title';
+  title.textContent = entry.title || 'Untitled';
+
+  const metaParts: string[] = [];
+  if (entry.pinned) metaParts.push('pinned');
+  metaParts.push(entry.source);
+  const meta = document.createElement('span');
+  meta.className = 'brain-memory-list-item__meta';
+  meta.textContent = metaParts.join(' · ');
+
+  btn.append(title, meta);
+  row.append(btn);
   return row;
 }
 
-function bindMemoryListActions(listEl: HTMLElement): void {
+function bindMemoryListActions(): void {
   if (listBindingsDone) return;
   listBindingsDone = true;
 
-  listEl.addEventListener('click', (ev) => {
+  const onClick = (ev: Event) => {
+    const selectBtn = (ev.target as HTMLElement).closest(
+      '[data-memory-select]',
+    ) as HTMLButtonElement | null;
+    if (selectBtn?.dataset.memorySelect) {
+      selectMemoryEntry(selectBtn.dataset.memorySelect);
+      return;
+    }
+
     const target = (ev.target as HTMLElement).closest(
       '[data-memory-remove]',
     ) as HTMLButtonElement | null;
@@ -154,19 +244,22 @@ function bindMemoryListActions(listEl: HTMLElement): void {
 
     const id = target.dataset.memoryRemove;
     void (async () => {
-      // Electron patches window.confirm to always return false — use in-app dialog.
       if (!(await appConfirm('Delete this memory entry?', { confirmLabel: 'Delete', danger: true }))) {
         return;
       }
       const ok = await deleteMemoryEntry(id);
       if (ok) {
+        if (selectedMemoryId === id) selectedMemoryId = null;
         setStatus('ok', 'Memory entry deleted');
         await refreshMemoryEntriesList();
         return;
       }
       setStatus('err', 'Delete failed. Open or restart Minnow.');
     })();
-  });
+  };
+
+  document.getElementById('brainMemoryList')?.addEventListener('click', onClick);
+  document.getElementById('brainMemoryDetailPane')?.addEventListener('click', onClick);
 }
 
 function bindMemoryAddForm(): void {
@@ -176,8 +269,16 @@ function bindMemoryAddForm(): void {
   const form = document.getElementById('brainMemoryAddForm') as HTMLFormElement | null;
   const errEl = document.getElementById('brainMemoryAddError');
   const resetBtn = document.getElementById('brainMemoryAddReset');
+  const cancelBtn = document.getElementById('brainMemoryAddCancel');
 
   resetBtn?.addEventListener('click', () => clearMemoryAddForm());
+
+  cancelBtn?.addEventListener('click', () => {
+    clearMemoryAddForm();
+    if (selectedMemoryId) selectMemoryEntry(selectedMemoryId);
+    else if (cachedEntries.length) selectMemoryEntry(cachedEntries[0].id);
+    else showMemoryEmptyPane();
+  });
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -227,14 +328,14 @@ function bindMemoryAddForm(): void {
 
       if (errEl) errEl.classList.add('hidden');
       clearMemoryAddForm();
-      const panel = document.getElementById('brainMemoryAddPanel') as HTMLDetailsElement | null;
-      if (panel) panel.open = false;
+      selectedMemoryId = entry.id;
       setStatus('ok', `Saved memory “${entry.title}”`);
       await refreshMemoryEntriesList();
       showMemorySavedToast(memorySavedPayloadFromEntry(entry, body), {
         onReject: async () => {
           const rejected = await deleteMemoryEntry(entry.id);
           if (rejected) {
+            if (selectedMemoryId === entry.id) selectedMemoryId = null;
             await refreshMemoryEntriesList();
           }
           return rejected;
@@ -270,6 +371,11 @@ async function hydrateToggles(): Promise<void> {
 function bindMemoriesSection(): void {
   if (bindingsDone) return;
   bindingsDone = true;
+
+  document.getElementById('brainMemoryAddOpen')?.addEventListener('click', () => {
+    clearMemoryAddForm();
+    showMemoryComposePane();
+  });
 
   const enableEl = document.getElementById('brainMemoryEnabled') as HTMLInputElement | null;
   enableEl?.addEventListener('change', async () => {
@@ -321,7 +427,10 @@ function bindMemoriesSection(): void {
       ok ? 'ok' : 'err',
       ok ? 'Memory cleared (archived)' : 'Clear failed. Open or restart Minnow.',
     );
-    if (ok) await refreshMemoryEntriesList();
+    if (ok) {
+      selectedMemoryId = null;
+      await refreshMemoryEntriesList();
+    }
   });
 
   bindMemoryAddForm();
@@ -332,60 +441,79 @@ async function refreshMemoryEntriesList(): Promise<void> {
   const hintEl = document.getElementById('brainMemoryServerHint');
   const listEl = document.getElementById('brainMemoryList');
   const offlineEl = document.getElementById('brainMemoryOffline');
-  const addPanel = document.getElementById('brainMemoryAddPanel');
+  const addOpenBtn = document.getElementById('brainMemoryAddOpen') as HTMLButtonElement | null;
   if (!countEl || !hintEl || !listEl) return;
 
   const refreshGen = ++memoryListRefreshGen;
   const isStale = () => refreshGen !== memoryListRefreshGen;
 
   listEl.replaceChildren();
-  bindMemoryListActions(listEl);
+  bindMemoryListActions();
 
   const status = await fetchMemoryStatus();
   if (isStale()) return;
   const online = !!status;
   offlineEl?.classList.toggle('hidden', online);
-  addPanel?.classList.toggle('hidden', !online);
+  addOpenBtn?.toggleAttribute('disabled', !online);
 
   if (!status) {
-    countEl.textContent = 'Entries: —';
+    countEl.textContent = '— entries';
     hintEl.textContent = 'Open Minnow for memory API';
+    cachedEntries = [];
+    selectedMemoryId = null;
     const offline = document.createElement('p');
-    offline.className = 'settings-section-note';
+    offline.className = 'brain-memory-list__note';
     offline.textContent = 'Open Minnow to view and manage stored memories.';
     listEl.append(offline);
+    showMemoryEmptyPane();
     return;
   }
 
-  countEl.textContent = `Entries: ${status.entryCount}`;
-  hintEl.textContent = status.home ? `Store: ${status.home}` : 'Server connected';
+  const count = status.entryCount;
+  countEl.textContent = `${count} ${count === 1 ? 'entry' : 'entries'}`;
+  hintEl.textContent = status.home ? status.home : 'Server connected';
 
   const entries = await fetchMemoryEntries(true);
   if (isStale()) return;
   if (!entries) {
+    cachedEntries = [];
     const err = document.createElement('p');
-    err.className = 'settings-section-note';
+    err.className = 'brain-memory-list__note';
     err.textContent = 'Could not load memory entries.';
     listEl.append(err);
+    showMemoryEmptyPane();
     return;
   }
 
-  if (!entries.length) {
+  cachedEntries = sortMemoryEntries(entries);
+
+  if (!cachedEntries.length) {
+    selectedMemoryId = null;
     const empty = document.createElement('p');
-    empty.className = 'settings-section-note';
+    empty.className = 'brain-memory-list__note';
     empty.textContent = 'No memory entries yet.';
     listEl.append(empty);
+    showMemoryEmptyPane();
     return;
   }
 
-  const sorted = sortMemoryEntries(entries);
-  for (const entry of sorted) {
-    listEl.append(renderMemoryEntryRow(entry));
+  if (selectedMemoryId && !cachedEntries.some((e) => e.id === selectedMemoryId)) {
+    selectedMemoryId = null;
   }
+  if (!selectedMemoryId) {
+    selectedMemoryId = cachedEntries[0].id;
+  }
+
+  for (const entry of cachedEntries) {
+    listEl.append(renderMemoryListItem(entry));
+  }
+
+  selectMemoryEntry(selectedMemoryId);
 }
 
 /** Load Brain memories section: toggles, entries, backup/clear. */
 export async function renderMemoriesSection(): Promise<void> {
+  bindMemoryListActions();
   bindMemoriesSection();
   await hydrateToggles();
   await refreshMemoryEntriesList();

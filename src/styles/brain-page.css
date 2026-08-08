@@ -33,6 +33,52 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
   pointer-events: none;
 }
 
+/* Utility sections: Models-style grid — nav spans full height; header only over content. */
+.brain-page:not(.is-graph-canvas-bg) .brain-page-chrome {
+  display: grid;
+  grid-template-columns: var(--brain-rail-w, 200px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.brain-page:not(.is-graph-canvas-bg) .brain-page-body {
+  display: contents;
+}
+
+.brain-page:not(.is-graph-canvas-bg) .brain-page-header {
+  grid-column: 2;
+  grid-row: 1;
+  pointer-events: auto;
+}
+
+.brain-page:not(.is-graph-canvas-bg) .brain-rail {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: stretch;
+}
+
+.brain-page:not(.is-graph-canvas-bg) .brain-stage {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.brain-page:not(.is-graph-canvas-bg) .brain-page-header.brain-overlay-surface {
+  margin: 0;
+  padding: 10px 16px;
+  min-height: var(--topbar-h);
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--mn-surface-1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 /* Floating chrome (header + rail) stays interactive over full-bleed graph canvas. */
 .brain-page-header,
 .brain-page .brain-rail,
@@ -729,10 +775,544 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
 }
 
 .brain-edit-preview {
-  min-height: 200px;
-  max-height: 70vh;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: visible;
+  font-size: 14px;
+}
+
+/* ── Edit workspace (preview-first page studio) ───────────────────────────── */
+
+.brain-content.is-brain-workspace {
+  overflow: hidden;
+  padding: 12px 16px 16px;
+  min-height: 0;
+}
+
+.brain-section--edit.is-active,
+.brain-section--memories.is-active {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.brain-edit-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.brain-edit-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+}
+
+.brain-edit-toolbar__fields {
+  flex: 1 1 280px;
+  display: grid;
+  grid-template-columns: minmax(140px, 1.1fr) minmax(120px, 1fr) minmax(100px, 0.85fr);
+  gap: 10px 12px;
+  min-width: 0;
+}
+
+.brain-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.brain-edit-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.brain-edit-input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  font: inherit;
   font-size: 13px;
+}
+
+.brain-edit-input--mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.brain-edit-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mn-accent) 45%, transparent);
+  outline-offset: 2px;
+  border-color: var(--mn-accent);
+}
+
+.brain-edit-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.brain-edit-view-modes {
+  display: inline-flex;
+  flex-wrap: nowrap;
+}
+
+.brain-edit-status {
+  flex: 1 1 100%;
+  margin: 0;
+  min-height: 1.25em;
+  font-size: 12px;
+}
+
+.brain-edit-workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.brain-edit-workspace.is-view-source {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.brain-edit-workspace.is-view-source .brain-edit-pane--preview {
+  display: none;
+}
+
+.brain-edit-workspace.is-view-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.brain-edit-workspace.is-view-preview .brain-edit-pane--source {
+  display: none;
+}
+
+.brain-edit-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  overflow: hidden;
+}
+
+.brain-edit-pane__eyebrow {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--mn-border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.brain-edit-source {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 0;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.55;
+  resize: none;
+}
+
+.brain-edit-source:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mn-accent) 35%, transparent);
+}
+
+.brain-edit-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 24px;
+}
+
+.brain-edit-pane--preview .brain-wiki-viewer__body {
+  max-width: none;
+}
+
+.brain-edit-pane--preview .brain-markdown {
+  max-width: min(72ch, 100%);
+}
+
+@media (max-width: 900px) {
+  .brain-edit-toolbar__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-edit-workspace.is-view-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(200px, 42vh) minmax(240px, 1fr);
+  }
+}
+
+/* ── Memories workbench (list + detail) ─────────────────────────────────── */
+
+.brain-memory-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.brain-memory-toolbar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) auto auto;
+  gap: 12px 16px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+}
+
+.brain-memory-toolbar__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brain-memory-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.brain-memory-toggle__label {
+  font-weight: 500;
+}
+
+.brain-memory-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--mn-accent);
+}
+
+.brain-memory-toolbar__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  max-width: 42ch;
+}
+
+.brain-memory-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.brain-memory-stat--muted {
+  color: var(--mn-fg-muted);
+}
+
+.brain-memory-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.brain-memory-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  min-height: 1.25em;
+  font-size: 12px;
+}
+
+.brain-memory-offline {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+}
+
+.brain-memory-workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.brain-memory-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  overflow: hidden;
+}
+
+.brain-memory-list-pane__eyebrow {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--mn-border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.brain-memory-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.brain-memory-list__note {
+  margin: 8px 6px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.brain-memory-list-item {
+  margin: 0;
+}
+
+.brain-memory-list-item__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brain-memory-list-item__btn:hover {
+    background: color-mix(in srgb, var(--mn-fg) 5%, var(--mn-surface-1));
+    border-color: var(--mn-border);
+  }
+}
+
+.brain-memory-list-item__btn[aria-selected='true'] {
+  border-color: var(--mn-accent);
+  background: color-mix(in srgb, var(--mn-accent) 10%, var(--mn-surface-1));
+}
+
+.brain-memory-list-item__title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.brain-memory-list-item__meta {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.brain-memory-detail-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  overflow: hidden;
+}
+
+.brain-memory-empty {
+  margin: auto;
+  padding: 24px;
+  text-align: center;
+  max-width: 36ch;
+  font-size: 13px;
+}
+
+.brain-memory-detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.brain-memory-detail__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.brain-memory-detail__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.brain-memory-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.brain-memory-chip {
+  padding: 2px 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.brain-memory-chip--pinned {
+  border-color: var(--mn-accent);
+  color: var(--mn-accent);
+}
+
+.brain-memory-detail__body {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 18px 24px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--mn-bg);
+}
+
+.brain-memory-compose {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.brain-memory-compose__eyebrow {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--mn-border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.brain-memory-form {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.brain-memory-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.brain-memory-form__field--grow {
+  flex: 1;
+  min-height: 0;
+}
+
+.brain-memory-form__body {
+  flex: 1;
+  min-height: 120px;
+}
+
+.brain-memory-form__hint {
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.brain-memory-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.brain-memory-form-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-danger);
+}
+
+@media (max-width: 900px) {
+  .brain-memory-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-memory-toolbar__actions {
+    justify-content: flex-start;
+  }
+
+  .brain-memory-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(160px, 34vh) minmax(240px, 1fr);
+  }
 }
 
 .brain-wiki-backlinks__list {

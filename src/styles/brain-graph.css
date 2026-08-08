@@ -51,10 +51,10 @@
   background: var(--mn-surface-1);
 }
 
-/* Utility sections: flat workbench rail (matches Models / Settings). */
+/* Utility sections: flat workbench rail (grid placement in brain-page.css). */
 .brain-page:not(.is-graph-canvas-bg) .brain-rail.brain-overlay-surface {
-  flex: 0 0 var(--brain-rail-w);
-  align-self: stretch;
+  flex: none;
+  width: auto;
   margin: 0;
   max-height: none;
   padding: 16px 10px;
@@ -1184,7 +1184,20 @@
     clip: rect(0, 0, 0, 0);
   }
 
+  .brain-page:not(.is-graph-canvas-bg) .brain-page-chrome {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .brain-page:not(.is-graph-canvas-bg) .brain-page-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
   .brain-page:not(.is-graph-canvas-bg) .brain-rail {
+    grid-column: auto;
+    grid-row: auto;
     flex: none;
     flex-direction: row;
     flex-wrap: wrap;
@@ -1192,6 +1205,17 @@
     padding: 10px 12px;
     border-right: none;
     border-bottom: 1px solid var(--mn-border);
+  }
+
+  .brain-page:not(.is-graph-canvas-bg) .brain-page-header {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .brain-page:not(.is-graph-canvas-bg) .brain-stage {
+    grid-column: auto;
+    grid-row: auto;
+    flex: 1;
   }
 
   .brain-page:not(.is-graph-canvas-bg) .brain-rail__btn {

@@ -315,7 +315,7 @@ The in-app reader is a responsive overlay at `#/wiki/<encoded-documentation-path
 
 **Brain code index API** (`/api/brain/code/*`): status, reindex, repo-map, and symbol queries accept optional `workspaceRoot` (query param or JSON body), validated like tool `workspaceRoot` overrides. The Code app Brain/code-map UI passes the active Code workspace path so indexing and maps target the same tree as the file viewer (worktrees included).
 
-UI: **Brain** app `#/app/brain/<section>`. Settings for embeddings/synthesis live in Brain ? Settings.
+UI: **Brain** app `#/app/brain/<section>`. Settings for embeddings/synthesis live in Brain ? Settings. **Edit** is a full-height split workspace: compact path/title/tags toolbar, monospace source pane, and a wiki-style rendered preview (Source / Split / Preview layout toggle). **Memories** uses a list + detail workbench (full body in the reading pane, compose via Add memory).
 
 Tools: `brain_search`, `brain_read_page`, `brain_write_page`, `save_memory`, `repo_map`, `find_symbol`, �
 

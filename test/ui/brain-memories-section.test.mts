@@ -14,6 +14,8 @@ describe('brain memories section', () => {
     assert.match(html, /data-brain-nav="memories"/);
     assert.match(html, /id="brainSection-memories"/);
     assert.match(html, /id="brainMemoryEnabled"/);
+    assert.match(html, /id="brainMemoryAddOpen"/);
+    assert.match(html, /brain-section--memories/);
   });
 
   test('resolveBrainMemoryRoute maps store keys to memories', () => {

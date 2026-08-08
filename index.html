@@ -1439,34 +1439,52 @@
           </div>
         </div>
       </section>
-      <section id="brainSection-edit" class="brain-section brain-section--panel">
-        <div class="brain-section__cols">
-          <div class="brain-card brain-section__main">
-            <div class="brain-form-grid">
-              <label>Path
-                <input type="text" id="brainEditPath" placeholder="facts/my-note.md" autocomplete="off">
+      <section id="brainSection-edit" class="brain-section brain-section--edit" aria-label="Wiki page editor">
+        <div class="brain-edit-shell">
+          <div class="brain-edit-toolbar" role="toolbar" aria-label="Page metadata and actions">
+            <div class="brain-edit-toolbar__fields">
+              <label class="brain-edit-field brain-edit-field--path">
+                <span class="brain-edit-field__label">Path</span>
+                <input type="text" id="brainEditPath" class="brain-edit-input brain-edit-input--mono" placeholder="facts/my-note.md" autocomplete="off" spellcheck="false">
               </label>
-              <label>Title
-                <input type="text" id="brainEditTitle" maxlength="200">
+              <label class="brain-edit-field brain-edit-field--title">
+                <span class="brain-edit-field__label">Title</span>
+                <input type="text" id="brainEditTitle" class="brain-edit-input" maxlength="200" placeholder="Page title">
               </label>
-              <label>Tags (comma-separated)
-                <input type="text" id="brainEditTags" autocomplete="off">
+              <label class="brain-edit-field brain-edit-field--tags">
+                <span class="brain-edit-field__label">Tags</span>
+                <input type="text" id="brainEditTags" class="brain-edit-input" placeholder="comma-separated" autocomplete="off">
               </label>
-              <label>Body
-                <textarea id="brainEditBody" rows="14"></textarea>
-              </label>
-              <div class="brain-field-row">
-                <button type="button" class="brain-action-btn" id="brainEditNew">New page</button>
-                <button type="button" class="brain-action-btn" id="brainEditLoad">Load</button>
-                <button type="button" class="brain-action-btn is-primary" id="brainEditSave">Save</button>
+            </div>
+            <div class="brain-edit-toolbar__actions">
+              <div class="brain-edit-view-modes brain-graph-seg" role="group" aria-label="Editor layout">
+                <button type="button" class="brain-action-btn" data-brain-edit-view="source" aria-pressed="false">Source</button>
+                <button type="button" class="brain-action-btn" data-brain-edit-view="split" aria-pressed="true">Split</button>
+                <button type="button" class="brain-action-btn" data-brain-edit-view="preview" aria-pressed="false">Preview</button>
               </div>
-              <p id="brainEditStatus" class="brain-status" aria-live="polite"></p>
+              <button type="button" class="brain-action-btn" id="brainEditNew">New page</button>
+              <button type="button" class="brain-action-btn" id="brainEditLoad">Load</button>
+              <button type="button" class="brain-action-btn is-primary" id="brainEditSave">Save</button>
+            </div>
+            <p id="brainEditStatus" class="brain-edit-status brain-status" aria-live="polite"></p>
+          </div>
+          <div id="brainEditWorkspace" class="brain-edit-workspace is-view-split">
+            <div class="brain-edit-pane brain-edit-pane--source">
+              <p class="brain-edit-pane__eyebrow">Markdown source</p>
+              <textarea id="brainEditBody" class="brain-edit-source" placeholder="Write markdown here. Wikilinks and headings render in the preview pane." spellcheck="true"></textarea>
+            </div>
+            <div class="brain-edit-pane brain-edit-pane--preview" aria-label="Rendered page preview">
+              <p class="brain-edit-pane__eyebrow">Rendered page</p>
+              <div class="brain-edit-preview-scroll">
+                <header class="brain-wiki-viewer__head">
+                  <h2 id="brainEditPreviewTitle" class="brain-wiki-viewer__title">Untitled page</h2>
+                  <p id="brainEditPreviewPath" class="brain-wiki-viewer__path">—</p>
+                  <p id="brainEditPreviewTags" class="brain-wiki-viewer__tags hidden" hidden></p>
+                </header>
+                <div id="brainEditPreview" class="brain-markdown brain-wiki-viewer__body brain-muted">Start typing in the source pane to see a live preview.</div>
+              </div>
             </div>
           </div>
-          <aside class="brain-card brain-card--aside brain-section__aside">
-            <h3 class="brain-card__title">Preview</h3>
-            <div id="brainEditPreview" class="brain-markdown brain-edit-preview brain-muted">Start typing in the body to see a live preview.</div>
-          </aside>
         </div>
       </section>
       <section id="brainSection-log" class="brain-section brain-section--centered">
@@ -1509,62 +1527,67 @@
           </div>
         </div>
       </section>
-      <section id="brainSection-memories" class="brain-section brain-section--centered">
-        <div class="brain-card">
-          <p id="brainMemoriesStatus" class="brain-status" aria-live="polite"></p>
-          <p class="brain-muted">Saved under <code>~/.minnow/memory/</code>. Relevant entries can be added to the prompt when you send a message.</p>
-          <section class="settings-group settings-group--flat">
-            <h3 class="settings-group__title">Store &amp; retrieval</h3>
-            <div class="settings-group__body">
-              <label class="settings-toggle-row">
-                <span>Enable memory store</span>
-                <input type="checkbox" id="brainMemoryEnabled">
+      <section id="brainSection-memories" class="brain-section brain-section--memories" aria-label="Memory store">
+        <div class="brain-memory-shell">
+          <header class="brain-memory-toolbar">
+            <div class="brain-memory-toolbar__controls">
+              <label class="brain-memory-toggle">
+                <span class="brain-memory-toggle__label">Memory store</span>
+                <input type="checkbox" id="brainMemoryEnabled" role="switch">
               </label>
-              <label class="settings-toggle-row">
-                <span>Inject matching memories on send</span>
-                <input type="checkbox" id="brainFeatureMemoryInjection" checked>
+              <label class="brain-memory-toggle">
+                <span class="brain-memory-toggle__label">Inject on send</span>
+                <input type="checkbox" id="brainFeatureMemoryInjection" role="switch" checked>
               </label>
-              <p class="settings-field-hint">When injection is off, entries are still saved but not added to the prompt.</p>
+              <p class="brain-memory-toolbar__hint">Injection off still saves entries; they are not added to the prompt.</p>
             </div>
-          </section>
-          <div id="brainMemoryStats" class="settings-memory-stats" aria-live="polite">
-            <span class="settings-memory-stat" id="brainMemoryEntryCount">Entries: —</span>
-            <span class="settings-memory-stat settings-memory-stat--muted" id="brainMemoryServerHint">Checking server…</span>
-          </div>
-          <p id="brainMemoryOffline" class="field-hint settings-memory-offline hidden">
-            Start with <code>npm start</code> to add and manage memories.
-          </p>
-          <details id="brainMemoryAddPanel" class="settings-memory-add-panel hidden">
-            <summary class="settings-memory-add-summary">Add memory</summary>
-            <form id="brainMemoryAddForm" class="settings-memory-form" novalidate>
-              <div class="field">
-                <label for="brainMemoryAddTitle">Title</label>
-                <input type="text" id="brainMemoryAddTitle" name="title" required maxlength="200"
-                  autocomplete="off" placeholder="e.g. Preferred test command">
+            <div id="brainMemoryStats" class="brain-memory-stats" aria-live="polite">
+              <span class="brain-memory-stat" id="brainMemoryEntryCount">— entries</span>
+              <span class="brain-memory-stat brain-memory-stat--muted" id="brainMemoryServerHint">Checking server…</span>
+            </div>
+            <div class="brain-memory-toolbar__actions">
+              <button type="button" class="brain-action-btn" id="brainMemoryAddOpen">Add memory</button>
+              <button type="button" class="brain-action-btn" id="brainMemoryBackup">Backup</button>
+              <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainMemoryClear">Clear (archive)</button>
+            </div>
+            <p id="brainMemoriesStatus" class="brain-memory-status brain-status" aria-live="polite"></p>
+            <p id="brainMemoryOffline" class="brain-memory-offline brain-muted hidden">
+              Start with <code>npm start</code> to add and manage memories. Files live under <code>~/.minnow/memory/</code>.
+            </p>
+          </header>
+          <div class="brain-memory-workspace">
+            <aside class="brain-memory-list-pane" aria-label="Memory entries">
+              <p class="brain-memory-list-pane__eyebrow">Entries</p>
+              <div id="brainMemoryList" class="brain-memory-list" role="list"></div>
+            </aside>
+            <div class="brain-memory-detail-pane" id="brainMemoryDetailPane">
+              <p id="brainMemoryEmptyState" class="brain-memory-empty brain-muted">Select an entry to read the full text, or add a new memory.</p>
+              <div id="brainMemoryDetail" class="brain-memory-detail hidden" hidden></div>
+              <div id="brainMemoryAddPanel" class="brain-memory-compose hidden" hidden>
+                <p class="brain-memory-compose__eyebrow">New memory</p>
+                <form id="brainMemoryAddForm" class="brain-memory-form" novalidate>
+                  <label class="brain-memory-form__field">
+                    <span class="brain-edit-field__label">Title</span>
+                    <input type="text" id="brainMemoryAddTitle" name="title" required maxlength="200" class="brain-edit-input" autocomplete="off" placeholder="e.g. Preferred test command">
+                  </label>
+                  <label class="brain-memory-form__field brain-memory-form__field--grow">
+                    <span class="brain-edit-field__label">Body</span>
+                    <textarea id="brainMemoryAddBody" name="body" required class="brain-edit-source brain-memory-form__body" placeholder="What should be remembered across chats?"></textarea>
+                    <span class="brain-memory-form__hint">Max 32 KB. Retrieved on send when injection is enabled.</span>
+                  </label>
+                  <label class="brain-memory-form__field">
+                    <span class="brain-edit-field__label">Tags</span>
+                    <input type="text" id="brainMemoryAddTags" name="tags" class="brain-edit-input" autocomplete="off" placeholder="testing, npm">
+                  </label>
+                  <p id="brainMemoryAddError" class="brain-memory-form-error hidden" role="alert"></p>
+                  <div class="brain-memory-form__actions">
+                    <button type="submit" class="brain-action-btn is-primary">Save memory</button>
+                    <button type="button" id="brainMemoryAddReset" class="brain-action-btn">Clear form</button>
+                    <button type="button" id="brainMemoryAddCancel" class="brain-action-btn is-ghost">Cancel</button>
+                  </div>
+                </form>
               </div>
-              <div class="field">
-                <label for="brainMemoryAddBody">Body</label>
-                <textarea id="brainMemoryAddBody" name="body" required rows="6"
-                  placeholder="What should be remembered across chats?"></textarea>
-                <p class="field-hint">Max 32 KB. Used for retrieval on send when memory injection is enabled.</p>
-              </div>
-              <div class="field">
-                <label for="brainMemoryAddTags">Tags (optional)</label>
-                <input type="text" id="brainMemoryAddTags" name="tags" autocomplete="off"
-                  placeholder="testing, npm">
-                <p class="field-hint">Comma-separated. Max 64 characters per tag.</p>
-              </div>
-              <p id="brainMemoryAddError" class="settings-memory-form-error hidden" role="alert"></p>
-              <div class="settings-memory-form-actions">
-                <button type="submit" class="settings-action-btn">Save memory</button>
-                <button type="button" id="brainMemoryAddReset" class="settings-inline-btn">Clear form</button>
-              </div>
-            </form>
-          </details>
-          <div id="brainMemoryList" class="settings-memory-list" role="list" aria-label="Memory entries"></div>
-          <div class="settings-actions">
-            <button type="button" id="brainMemoryBackup" class="settings-action-btn">Backup memory</button>
-            <button type="button" id="brainMemoryClear" class="settings-action-btn settings-action-btn--danger">Clear (archive)</button>
+            </div>
           </div>
         </div>
       </section>

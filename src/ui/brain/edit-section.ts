@@ -1,5 +1,5 @@
 /**
- * Brain app — Edit section: frontmatter fields + body editor, save via PUT /page.
+ * Brain app — Edit section: metadata toolbar + split source/preview, save via PUT /page.
  */
 
 import { fetchBrainPage, saveBrainPage } from '../../brain/client';
@@ -10,8 +10,11 @@ import {
   showMemorySavedToast,
 } from '../memory-saved-toast';
 
+type EditViewMode = 'source' | 'split' | 'preview';
+
 let bindingsDone = false;
 let previewBound = false;
+let activeViewMode: EditViewMode = 'split';
 
 function setEditStatus(kind: 'ok' | 'err' | 'spin', message: string): void {
   const el = document.getElementById('brainEditStatus');
@@ -20,23 +23,72 @@ function setEditStatus(kind: 'ok' | 'err' | 'spin', message: string): void {
   el.dataset.kind = kind;
 }
 
+/** Mirror path, title, and tags into the wiki-style preview header. */
+function refreshEditPreviewChrome(): void {
+  const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
+  const titleEl = document.getElementById('brainEditTitle') as HTMLInputElement | null;
+  const tagsEl = document.getElementById('brainEditTags') as HTMLInputElement | null;
+  const previewTitle = document.getElementById('brainEditPreviewTitle');
+  const previewPath = document.getElementById('brainEditPreviewPath');
+  const previewTags = document.getElementById('brainEditPreviewTags');
+
+  const path = pathEl?.value.trim().replace(/\\/g, '/') || '—';
+  const title = titleEl?.value.trim() || 'Untitled page';
+  const tags = (tagsEl?.value ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  if (previewTitle) previewTitle.textContent = title;
+  if (previewPath) previewPath.textContent = path;
+  if (previewTags) {
+    if (tags.length) {
+      previewTags.textContent = tags.map((t) => `#${t}`).join(' ');
+      previewTags.classList.remove('hidden');
+      previewTags.hidden = false;
+    } else {
+      previewTags.textContent = '';
+      previewTags.classList.add('hidden');
+      previewTags.hidden = true;
+    }
+  }
+}
+
 /** Refresh the live markdown preview pane from the body textarea. */
 function refreshEditPreview(): void {
   const bodyEl = document.getElementById('brainEditBody') as HTMLTextAreaElement | null;
   const previewEl = document.getElementById('brainEditPreview');
   if (!bodyEl || !previewEl) return;
 
+  refreshEditPreviewChrome();
+
   const body = bodyEl.value;
   if (!body.trim()) {
     previewEl.replaceChildren();
     previewEl.classList.add('brain-muted');
-    previewEl.textContent = 'Start typing in the body to see a live preview.';
+    previewEl.textContent = 'Start typing in the source pane to see a live preview.';
     return;
   }
 
   previewEl.classList.remove('brain-muted');
   renderBrainMarkdown(previewEl, body, (path) => {
     void import('../brain-page').then((m) => m.openBrainEditForPath(path));
+  });
+}
+
+function applyEditViewMode(mode: EditViewMode): void {
+  activeViewMode = mode;
+  const workspace = document.getElementById('brainEditWorkspace');
+  if (workspace) {
+    workspace.classList.remove('is-view-source', 'is-view-split', 'is-view-preview');
+    workspace.classList.add(`is-view-${mode}`);
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-brain-edit-view]').forEach((btn) => {
+    const view = btn.dataset.brainEditView as EditViewMode | undefined;
+    const pressed = view === mode;
+    btn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    btn.classList.toggle('is-active', pressed);
   });
 }
 
@@ -55,13 +107,25 @@ function bindEditSection(): void {
   document.getElementById('brainEditSave')?.addEventListener('click', () => {
     void saveEditForm();
   });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-brain-edit-view]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.brainEditView as EditViewMode | undefined;
+      if (mode) applyEditViewMode(mode);
+    });
+  });
 }
 
 function bindEditPreview(): void {
   if (previewBound) return;
   previewBound = true;
+
   const bodyEl = document.getElementById('brainEditBody');
   bodyEl?.addEventListener('input', refreshEditPreview);
+
+  for (const id of ['brainEditPath', 'brainEditTitle', 'brainEditTags']) {
+    document.getElementById(id)?.addEventListener('input', refreshEditPreviewChrome);
+  }
 }
 
 async function loadEditForm(): Promise<void> {
@@ -149,12 +213,14 @@ async function saveEditForm(): Promise<void> {
   setGraphSelectedPath(relPath);
   setEditStatus('ok', `Saved ${relPath}`);
   showMemorySavedToast(memorySavedPayloadFromBrainPage(saved));
+  refreshEditPreview();
 }
 
 /** Mount edit section and optionally pre-fill a path from Wiki. */
 export async function renderEditSection(prefillPath?: string): Promise<void> {
   bindEditSection();
   bindEditPreview();
+  applyEditViewMode(activeViewMode);
 
   const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
   if (pathEl && prefillPath) {
