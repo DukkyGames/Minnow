@@ -1258,12 +1258,23 @@ function wireBoardHeaderControls(
   modeWrapper.appendChild(afkHint);
   controls.appendChild(modeWrapper);
 
+  // Run settings cluster: concurrency, isolation, per-task testing. Grouped so
+  // the strip reads as two clusters (autonomy | settings) instead of a control wall.
+  const settings = document.createElement('div');
+  settings.className = 'board-header__settings';
+  settings.setAttribute('role', 'group');
+  settings.setAttribute('aria-label', 'Run settings');
+
   // Max concurrent stepper (editable in Auto and AFK modes)
   const concWrapper = document.createElement('label');
   concWrapper.className = 'board-header__concurrency';
   concWrapper.title = isOomPauseActive()
     ? `Max concurrent tasks (throttled to ${resolveEffectiveMaxConcurrent(board)} after OOM crash)`
     : 'Max concurrent tasks (Auto and AFK modes)';
+  const concLabel = document.createElement('span');
+  concLabel.className = 'board-header__field-label';
+  concLabel.textContent = 'max';
+  concWrapper.appendChild(concLabel);
   const concInput = document.createElement('input');
   concInput.type = 'number';
   concInput.className = 'board-header__concurrency-input';
@@ -1290,13 +1301,17 @@ function wireBoardHeaderControls(
       'Renderer ran out of memory recently — concurrency is limited until you press Start again';
     concWrapper.appendChild(oomHint);
   }
-  controls.appendChild(concWrapper);
+  settings.appendChild(concWrapper);
 
   // Isolation mode override (Auto = global default or derive from execution mode)
   const isoWrapper = document.createElement('label');
   isoWrapper.className = 'board-header__isolation';
   isoWrapper.title =
     'Git worktree isolation (Auto uses Settings default or execution mode). Isolates checkouts between tasks — not OS host containment.';
+  const isoLabel = document.createElement('span');
+  isoLabel.className = 'board-header__field-label';
+  isoLabel.textContent = 'isolate';
+  isoWrapper.appendChild(isoLabel);
   const isoSelect = document.createElement('select');
   isoSelect.className = 'board-header__isolation-select';
   isoSelect.setAttribute('aria-label', 'Isolation mode');
@@ -1318,7 +1333,7 @@ function wireBoardHeaderControls(
     refreshActiveBoardIfMounted();
   });
   isoWrapper.appendChild(isoSelect);
-  controls.appendChild(isoWrapper);
+  settings.appendChild(isoWrapper);
 
   const skipWrapper = document.createElement('label');
   skipWrapper.className = 'board-header__skip-per-task-tests';
@@ -1334,12 +1349,24 @@ function wireBoardHeaderControls(
     setBoardSkipPerTaskTesting(group, skipInput.checked, plannerChat);
     refreshActiveBoardIfMounted();
   });
+  // Two spellings of the same label; the container query picks one by width so
+  // the checkbox never truncates mid-word in a narrow board column.
   const skipText = document.createElement('span');
   skipText.className = 'board-header__skip-per-task-tests-label';
-  skipText.textContent = 'Skip per-task tests';
+  skipText.setAttribute('aria-hidden', 'true');
+  const skipTextFull = document.createElement('span');
+  skipTextFull.className = 'board-header__label-full';
+  skipTextFull.textContent = 'Skip per-task tests';
+  const skipTextShort = document.createElement('span');
+  skipTextShort.className = 'board-header__label-short';
+  skipTextShort.textContent = 'Skip tests';
+  skipText.appendChild(skipTextFull);
+  skipText.appendChild(skipTextShort);
   skipWrapper.appendChild(skipInput);
   skipWrapper.appendChild(skipText);
-  controls.appendChild(skipWrapper);
+  settings.appendChild(skipWrapper);
+
+  controls.appendChild(settings);
 
   // Start / Stop button (shown in sequential, auto, and afk modes)
   if (currentMode !== 'manual') {
@@ -2959,9 +2986,13 @@ function refreshBoardDom(
       if (!runBtn) {
         runBtn = document.createElement('button');
         runBtn.type = 'button';
-        const openPlanAnchor = controls.querySelector('[data-board-action="open-plan"]');
-        if (openPlanAnchor) {
-          controls.insertBefore(runBtn, openPlanAnchor);
+        // Keep build order (… settings, Start, Timeline, plan): anchor on the
+        // first trailing action that is a direct child of the controls row.
+        const anchor =
+          controls.querySelector(':scope > .board-timeline-btn') ??
+          controls.querySelector(':scope > [data-board-action="open-plan"]');
+        if (anchor) {
+          controls.insertBefore(runBtn, anchor);
         } else {
           controls.appendChild(runBtn);
         }

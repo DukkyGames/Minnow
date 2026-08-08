@@ -10,8 +10,17 @@
   min-height: 12rem;
 }
 
-/* Tight instrument strip: identity + inline telemetry + controls in one band. */
+/* Tight instrument strip: identity + inline telemetry + controls in one band.
+ *
+ * The board mounts inside a resizable Code column and inside MinnowOS windows,
+ * so its real width is never the viewport width — every width rule below keys
+ * off `@container boardhdr`, never `@media`. Three states:
+ *   ≥1460px  one row  (identity … controls)
+ *   ≥ 900px  two rows (identity / controls, right-aligned)
+ *   < 900px  two rows with the control clusters wrapping and labels elided
+ */
 .board-header {
+  container: boardhdr / inline-size;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -24,7 +33,8 @@
 .board-header__toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  column-gap: 16px;
+  row-gap: 8px;
   width: 100%;
   min-width: 0;
   min-height: 40px;
@@ -34,7 +44,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   flex-wrap: nowrap;
 }
@@ -476,11 +486,43 @@
 
 .board-header__controls {
   display: flex;
-  flex-shrink: 0;
+  flex: 0 1 auto;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  column-gap: 10px;
+  row-gap: 8px;
+  min-width: 0;
   margin-left: auto;
+}
+
+/* Run settings (concurrency · isolation · per-task tests) read as one cluster,
+   so the strip is two groups — autonomy, then settings — not eight loose fields. */
+.board-header__settings {
+  display: flex;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+/* Hairline rules separate the clusters without boxing anything. */
+.board-header__settings::before,
+.board-header__settings::after {
+  content: '';
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 2px;
+  background: var(--mn-border);
+}
+
+.board-header__field-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-subtle);
+  white-space: nowrap;
 }
 
 .board-header__auto-pilot {
@@ -619,6 +661,7 @@
 .board-header__concurrency {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 32px;
 }
 
@@ -652,6 +695,7 @@
 .board-header__isolation {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 32px;
 }
 
@@ -688,6 +732,15 @@
 .board-header__skip-per-task-tests-input:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.board-header__skip-per-task-tests-label {
+  white-space: nowrap;
+}
+
+/* Long spelling by default; the narrow container query swaps in the short one. */
+.board-header__label-short {
+  display: none;
 }
 
 .board-header__skip-per-task-tests-hint {
@@ -1966,25 +2019,75 @@
   .kanban-column:nth-child(n + 3) {
     border-top: 1px solid var(--mn-border);
   }
-
-  .board-header__title {
-    max-width: 10rem;
-  }
-
-  .board-header__telemetry {
-    max-width: 22rem;
-  }
 }
 
-/* Phone: stack header controls; swipe lanes instead of four squeezed columns */
-@media (max-width: 600px) {
+/* ---------------------------------------------------------------------------
+ * Header responsiveness. Keyed to the header's own inline size, because the
+ * board lives in a resizable Code column and in MinnowOS windows where the
+ * viewport width says nothing about how much room these controls actually have.
+ * ------------------------------------------------------------------------- */
+
+/* Two rows: identity on top, controls right-aligned beneath. The single-row
+   strip needs ~1460px before the run controls start crowding the telemetry. */
+@container boardhdr (max-width: 1459px) {
   .board-header__toolbar {
     flex-wrap: wrap;
-    align-items: stretch;
+    align-items: center;
   }
 
   .board-header__leading {
     flex: 1 1 100%;
+  }
+
+  .board-header__telemetry {
+    max-width: none;
+  }
+
+  .board-header__controls {
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+
+/* Control clusters wrap among themselves; field labels and the long checkbox
+   spelling drop out before anything is allowed to truncate. */
+@container boardhdr (max-width: 899px) {
+  .board-header__title {
+    max-width: 10rem;
+  }
+
+  .board-header__controls,
+  .board-header__settings {
+    flex-wrap: wrap;
+  }
+
+  .board-header__settings::before,
+  .board-header__settings::after {
+    display: none;
+  }
+
+  .board-header__settings {
+    column-gap: 12px;
+    padding: 0;
+  }
+
+  .board-header__field-label {
+    display: none;
+  }
+
+  .board-header__label-full {
+    display: none;
+  }
+
+  .board-header__label-short {
+    display: inline;
+  }
+}
+
+/* Narrow column / phone: identity wraps, metrics wrap, touch-sized targets. */
+@container boardhdr (max-width: 620px) {
+  .board-header__leading {
     flex-wrap: wrap;
     row-gap: 6px;
   }
@@ -1996,26 +2099,37 @@
 
   .board-header__telemetry {
     flex: 1 1 100%;
-    max-width: none;
   }
 
   .board-header__metrics {
     flex-wrap: wrap;
     row-gap: 2px;
+    overflow: visible;
   }
 
   .board-header__controls {
-    flex: 1 1 100%;
-    margin-left: 0;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 10px;
+    justify-content: flex-start;
+    column-gap: 8px;
+  }
+
+  .board-header__exec-mode,
+  .board-header__exec-mode-segments {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .board-header__exec-mode-segment {
+    flex: 1 1 auto;
     min-height: var(--touch-min);
     padding: 0 10px;
     font-size: 0.75rem;
+  }
+
+  /* Touch-sized, but never stretched: a 300px-wide "Start" reads as a banner. */
+  .board-header__run-btn {
+    height: var(--touch-min);
+    flex: 0 0 auto;
+    padding: 0 18px;
   }
 
   .board-header__controls .board-header__view-toggle,
@@ -2025,6 +2139,26 @@
     min-height: var(--touch-min);
   }
 
+  .board-header__controls .board-btn {
+    min-height: var(--touch-min);
+    flex: 0 0 auto;
+  }
+}
+
+/* Viewport fallback where container queries are unsupported: never let the
+   single-row strip overlap, even without a container to measure. */
+@supports not (container-type: inline-size) {
+  .board-header__toolbar {
+    flex-wrap: wrap;
+  }
+
+  .board-header__controls {
+    margin-left: auto;
+  }
+}
+
+/* Phone: swipe lanes instead of four squeezed columns */
+@media (max-width: 600px) {
   .board-btn {
     min-height: var(--touch-min);
     flex: 1 1 auto;
