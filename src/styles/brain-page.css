@@ -7,13 +7,20 @@
   flex-direction: column;
   position: relative;
   isolation: isolate;
-  height: 100vh;
+  /* Fill the OS app layer (stage below menubar), not the full viewport. */
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: var(--mn-bg);
   color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
+}
+
+/* Legacy full-page takeover when the OS shell is off (browser-only). */
+html:not(.minnow-os-enabled) .brain-page.is-open {
+  height: 100vh;
 }
 
 .brain-page-chrome {

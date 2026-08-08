@@ -848,6 +848,18 @@
   margin-bottom: 4px;
 }
 
+/* Text/number inputs reuse `.settings-select` for row height in KV tables; no chevron. */
+input.settings-select,
+textarea.settings-select {
+  background-image: none;
+  padding-right: 12px;
+  cursor: text;
+}
+
+input.settings-select[type='number'] {
+  cursor: auto;
+}
+
 .settings-select {
   appearance: none;
   -webkit-appearance: none;

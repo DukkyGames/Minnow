@@ -39,31 +39,49 @@
 }
 
 .brain-rail {
-  flex: 0 0 var(--sidebar-rail, 48px);
+  --brain-rail-w: 200px;
+  flex: 0 0 var(--brain-rail-w);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 2px;
-  padding: 8px 6px;
+  padding: 16px 10px;
+  overflow-y: auto;
   border-right: 1px solid var(--mn-border);
   background: var(--mn-surface-1);
 }
 
-.brain-rail.brain-overlay-surface {
+/* Utility sections: flat workbench rail (matches Models / Settings). */
+.brain-page:not(.is-graph-canvas-bg) .brain-rail.brain-overlay-surface {
+  flex: 0 0 var(--brain-rail-w);
+  align-self: stretch;
+  margin: 0;
+  max-height: none;
+  padding: 16px 10px;
+  border: none;
+  border-right: 1px solid var(--mn-border);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--mn-surface-1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Graph canvas: compact floating rail over the stage. */
+.brain-page.is-graph-canvas-bg .brain-rail.brain-overlay-surface {
   flex: 0 0 auto;
   align-self: flex-start;
+  width: auto;
   margin: 8px 0 8px 8px;
-  padding: 8px 6px;
+  padding: 6px;
   max-height: calc(100% - 16px);
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  border-right: 1px solid var(--mn-border);
-  background: var(--mn-surface-1);
   box-shadow: var(--shadow-card);
 }
 
 @supports (backdrop-filter: blur(1px)) {
-  .brain-rail.brain-overlay-surface {
+  .brain-page.is-graph-canvas-bg .brain-rail.brain-overlay-surface {
     background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -72,21 +90,38 @@
 
 .brain-rail__btn {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  min-height: var(--touch-min, 44px);
-  padding: 6px 4px;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 0;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--mn-fg-muted);
   cursor: pointer;
+  transition:
+    background var(--duration-fast, 0.16s) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+    color var(--duration-fast, 0.16s) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.brain-page.is-graph-canvas-bg .brain-rail__btn {
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-width: var(--touch-min, 44px);
+  min-height: var(--touch-min, 44px);
+  padding: 6px;
 }
 
 .brain-rail__btn .icon-svg {
-  --mn-icon-size: 18px;
+  --mn-icon-size: 15px;
+  flex-shrink: 0;
+  color: var(--mn-fg-subtle);
   stroke: currentColor;
   fill: none;
   stroke-width: 1.75;
@@ -94,12 +129,34 @@
   stroke-linejoin: round;
 }
 
+.brain-page.is-graph-canvas-bg .brain-rail__btn .icon-svg {
+  --mn-icon-size: 18px;
+}
+
 .brain-rail__label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 1.15;
+  min-width: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.3;
+}
+
+.brain-page.is-graph-canvas-bg .brain-rail__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.brain-rail__btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -110,8 +167,24 @@
 }
 
 .brain-rail__btn[aria-current='page'] {
-  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+  font-weight: 600;
   color: var(--mn-fg);
+  background: var(--mn-accent-soft);
+}
+
+.brain-rail__btn[aria-current='page'] .icon-svg {
+  color: var(--mn-accent);
+}
+
+.brain-rail__btn[data-brain-nav='settings'] {
+  margin-top: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.brain-page.is-graph-canvas-bg .brain-rail__btn[data-brain-nav='settings'] {
+  margin-top: 4px;
+  padding-top: 10px;
 }
 
 /* ── Inspector ────────────────────────────────────────────────────────────── */
@@ -462,6 +535,7 @@
   gap: var(--brain-graph-overlay-gap);
   padding: var(--brain-graph-overlay-pad);
   min-height: 0;
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -608,6 +682,8 @@
   width: min(232px, 30vw);
   max-width: calc(100% - 2 * var(--brain-graph-overlay-pad));
   min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
   pointer-events: none;
   transition: width 0.22s var(--brain-ease-out);
 }
@@ -1089,7 +1165,7 @@
     flex-direction: column;
   }
 
-  .brain-rail.brain-overlay-surface {
+  .brain-page.is-graph-canvas-bg .brain-rail.brain-overlay-surface {
     flex: none;
     flex-direction: row;
     flex-wrap: wrap;
@@ -1100,8 +1176,27 @@
     border-right: 1px solid var(--mn-border);
   }
 
-  .brain-rail__label {
-    display: none;
+  .brain-page.is-graph-canvas-bg .brain-rail__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .brain-page:not(.is-graph-canvas-bg) .brain-rail {
+    flex: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--mn-border);
+  }
+
+  .brain-page:not(.is-graph-canvas-bg) .brain-rail__btn {
+    flex: 0 1 auto;
+    padding: 8px 12px;
   }
 
   .brain-graph-overlays {

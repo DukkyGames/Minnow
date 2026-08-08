@@ -167,7 +167,7 @@ export function buildSamplerFieldInputs(
     input.type = 'number';
     input.className = useGrid
       ? 'settings-sampler-field__input'
-      : 'settings-select settings-kv-input';
+      : 'settings-sampler-field__input settings-kv-input';
     if (inputId) input.id = inputId;
     if (useGrid && inputId) {
       input.setAttribute('aria-describedby', `${inputId}-hint`);

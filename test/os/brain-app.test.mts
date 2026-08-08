@@ -67,6 +67,14 @@ describe('brain markup contract', () => {
     assert.doesNotMatch(css, /\.brain-page\.is-open\s*\{[^}]*display:\s*flex/);
   });
 
+  test('brain-page fills OS stage height (not viewport 100vh)', () => {
+    const css = fs.readFileSync(new URL('../../src/styles/brain-page.css', import.meta.url), 'utf8');
+    assert.match(css, /\.brain-page\s*\{[\s\S]*?height:\s*100%/);
+    assert.match(css, /html:not\(\.minnow-os-enabled\)\s*\.brain-page\.is-open/);
+    const shell = fs.readFileSync(new URL('../../src/styles/minnowos-shell.css', import.meta.url), 'utf8');
+    assert.match(shell, /#osAppsLayer\s*\.brain-page\.is-open/);
+  });
+
   test('index.html defines brainView shell', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="brainView"/);
