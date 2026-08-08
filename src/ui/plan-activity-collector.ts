@@ -18,7 +18,12 @@ import {
   entryFromSubAgentStatus,
   entryFromSuperPlanStage,
 } from '../research/activity-log';
-import { subscribeToResearchStream } from '../research/client';
+import {
+  fetchResearchDetail,
+  normalizeResearchActivityLog,
+  subscribeToResearchStream,
+} from '../research/client';
+import type { ResearchProgress } from '../research/types';
 
 export class PlanActivityCollector {
   private readonly chatId: string;
@@ -38,12 +43,26 @@ export class PlanActivityCollector {
     this.buffer = buffer;
   }
 
-  start(): void {
+  /**
+   * Subscribe to live activity. Replays persisted stage + research rows first so
+   * reload does not wipe the Activity ledger.
+   */
+  async start(): Promise<void> {
     this.stop();
     const chat = findChatById(this.chatId);
     if (chat?.superPlan) {
+      let researchLog: ResearchProgress[] = [];
+      const researchId = chat.superPlan.researchId?.trim();
+      if (researchId) {
+        try {
+          const detail = await fetchResearchDetail(researchId);
+          researchLog = normalizeResearchActivityLog(detail);
+        } catch {
+          /* run may not exist yet */
+        }
+      }
+      this.replayPersistedActivity(chat.superPlan, researchLog);
       this.recordStage(chat.superPlan);
-      this.lastPaused = Boolean(chat.superPlan.paused);
       if (chat.superPlan.paused) {
         this.buffer.append(entryFromSuperPlanStage(chat.superPlan.activeStage, 'paused'));
       }
@@ -103,6 +122,30 @@ export class PlanActivityCollector {
     this.lastMainTurnKey = '';
     this.lastReviewerKey = '';
     this.lastPaused = null;
+  }
+
+  /** Restore stage transitions and research SSE history from persisted chat + API. */
+  private replayPersistedActivity(state: SuperPlanState, researchLog: ResearchProgress[]): void {
+    for (const stageId of SUPER_PLAN_STAGE_ORDER) {
+      const record = state.stages[stageId];
+      if (!record || record.status === 'pending') {
+        continue;
+      }
+      const status = record.status === 'blocked_user' ? 'waiting' : record.status;
+      const atMs = record.finishedAt ?? record.startedAt ?? Date.now();
+      this.buffer.append(entryFromSuperPlanStage(stageId, status, atMs));
+    }
+    for (const event of researchLog) {
+      this.buffer.appendFromResearchProgress(event);
+    }
+    const active = state.activeStage;
+    const activeRecord = state.stages[active];
+    this.lastStageKey = `${active}:${activeRecord?.status ?? 'unknown'}`;
+    this.lastPaused = Boolean(state.paused);
+    const rid = state.researchId?.trim() ?? '';
+    if (rid) {
+      this.wiredResearchId = rid;
+    }
   }
 
   private recordStage(state: SuperPlanState): void {

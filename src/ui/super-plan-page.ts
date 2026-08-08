@@ -1176,7 +1176,7 @@ class SuperPlanPage {
     this.buffer = new ActivityLogBuffer();
     this.unsubBuffer = this.buffer.subscribe(() => this.paintLedger());
     this.collector = new PlanActivityCollector(this.chatId, this.buffer);
-    this.collector.start();
+    void this.collector.start();
   }
 
   private startTicker(): void {

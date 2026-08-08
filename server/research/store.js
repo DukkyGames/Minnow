@@ -53,6 +53,8 @@ export const RESEARCH_ID_RE = /^rs-[a-f0-9]{12}$/;
  * @property {boolean} runTimedOut
  * @property {string | null} errorMessage
  * @property {ReturnType<typeof setTimeout> | null} runTimeoutTimer
+ * @property {boolean} [checkpointPersisted]
+ * @property {ReturnType<typeof setTimeout> | null} [persistDebounceTimer]
  */
 
 /** @type {Map<string, ResearchTaskState>} */
@@ -310,6 +312,44 @@ function parseActivityLogFromEvents(events) {
   return log;
 }
 
+/** Debounce window for checkpointing in-flight runs to disk (reload / server restart). */
+const RESEARCH_CHECKPOINT_DEBOUNCE_MS = 1500;
+
+/**
+ * @param {ResearchTaskState} state
+ */
+function scheduleResearchCheckpoint(state) {
+  if (isTerminal(state.status)) {
+    return;
+  }
+  if (state.persistDebounceTimer) {
+    clearTimeout(state.persistDebounceTimer);
+  }
+  state.persistDebounceTimer = setTimeout(() => {
+    state.persistDebounceTimer = null;
+    void persistResearch(state).catch((err) => {
+      console.error('[research] checkpoint persist failed:', err);
+    });
+  }, RESEARCH_CHECKPOINT_DEBOUNCE_MS);
+}
+
+/**
+ * @param {ResearchTaskState} state
+ */
+function checkpointResearchProgress(state) {
+  if (isTerminal(state.status)) {
+    return;
+  }
+  if (!state.checkpointPersisted) {
+    state.checkpointPersisted = true;
+    void persistResearch(state).catch((err) => {
+      console.error('[research] initial checkpoint failed:', err);
+    });
+    return;
+  }
+  scheduleResearchCheckpoint(state);
+}
+
 /**
  * @param {ServerResponse} res
  * @returns {SubscriberWriteState}
@@ -441,6 +481,7 @@ function appendProgress(state, event) {
   for (const res of [...state.subscribers]) {
     enqueueToSubscriber(state, res, buf);
   }
+  checkpointResearchProgress(state);
 }
 
 /**
@@ -886,9 +927,15 @@ export async function startResearch(opts) {
     runTimedOut: false,
     errorMessage: null,
     runTimeoutTimer: null,
+    checkpointPersisted: false,
+    persistDebounceTimer: null,
   };
 
   tasks.set(id, state);
+  void persistResearch(state).catch((err) => {
+    console.error('[research] run bootstrap persist failed:', err);
+  });
+  state.checkpointPersisted = true;
 
   void runResearchTask(state, {
     priorReport,
