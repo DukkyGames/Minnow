@@ -239,7 +239,7 @@ async function waitForKanban() {
   throw new Error('kanban grid not rendered');
 }
 
-describe('orchestrate board live updates', () => {
+describe('orchestrate board live updates', { concurrency: false }, () => {
   afterEach(async () => {
     closeSubAgentDrawer();
     closeBoardChatInOrchestrate();
