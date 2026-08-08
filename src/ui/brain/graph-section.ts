@@ -31,6 +31,15 @@ function filterCatalogPages(pages: BrainPageMeta[]): BrainPageMeta[] {
 let selectedPath: string | null = null;
 let catalogPages: BrainPageMeta[] = [];
 let graphApi: ForceGraphApi | null = null;
+
+/** Stop graph interaction when leaving the Graph section (other Brain panels stay usable). */
+export function teardownGraphSection(): void {
+  document.body.style.removeProperty('cursor');
+  const canvas = document.getElementById('brainGraphCanvas');
+  canvas?.style.removeProperty('cursor');
+  graphApi?.destroy();
+  graphApi = null;
+}
 // Off by default: free-form tags connect almost every page to every other one,
 // which buries the real similarTo/wikilink structure. Toggle stays available.
 let includeTags = false;

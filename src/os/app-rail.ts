@@ -32,6 +32,8 @@ function isRailAppHosting(appId: AppId): boolean {
 
 let tooltipEl: HTMLDivElement | null = null;
 let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
+/** Button waiting on TOOLTIP_DELAY_MS; cleared on leave so labels do not pop in late. */
+let scheduledTooltipAnchor: HTMLElement | null = null;
 let tooltipAnchor: HTMLElement | null = null;
 let tooltipTextFor: (() => string) | null = null;
 
@@ -40,6 +42,11 @@ function clearTooltipTimer(): void {
     clearTimeout(tooltipTimer);
     tooltipTimer = null;
   }
+  scheduledTooltipAnchor = null;
+}
+
+function isTooltipAnchorHovered(anchor: HTMLElement): boolean {
+  return anchor.matches(':hover') || document.activeElement === anchor;
 }
 
 /** Body portal so labels paint above chat/code side rails (stack above #minnowOsRoot). */
@@ -106,8 +113,11 @@ function showRailTooltip(anchor: HTMLElement, getText: () => string): void {
 function scheduleRailTooltip(anchor: HTMLElement, getText: () => string): void {
   if (isCoarsePointer()) return;
   clearTooltipTimer();
+  scheduledTooltipAnchor = anchor;
   tooltipTimer = setTimeout(() => {
     tooltipTimer = null;
+    scheduledTooltipAnchor = null;
+    if (!isTooltipAnchorHovered(anchor)) return;
     showRailTooltip(anchor, getText);
   }, TOOLTIP_DELAY_MS);
 }
@@ -120,8 +130,12 @@ function refreshRailTooltip(): void {
 }
 
 function bindRailTooltip(btn: HTMLButtonElement, getText: () => string): void {
-  const onEnter = (): void => scheduleRailTooltip(btn, getText);
+  const onEnter = (): void => {
+    if (tooltipAnchor && tooltipAnchor !== btn) hideRailTooltip();
+    scheduleRailTooltip(btn, getText);
+  };
   const onLeave = (): void => {
+    if (scheduledTooltipAnchor === btn) clearTooltipTimer();
     if (tooltipAnchor === btn) hideRailTooltip();
   };
   const onFocus = (): void => showRailTooltip(btn, getText);
@@ -205,6 +219,12 @@ export function initAppRail(root: HTMLElement): () => void {
     syncRailButtons(tileByAppId);
   }
 
+  const onNavPointerLeave = (): void => {
+    clearTooltipTimer();
+    hideRailTooltip();
+  };
+  nav.addEventListener('pointerleave', onNavPointerLeave);
+
   root.appendChild(nav);
   rebuild();
 
@@ -228,6 +248,7 @@ export function initAppRail(root: HTMLElement): () => void {
   window.addEventListener('scroll', onLayoutChange, { passive: true, capture: true });
 
   return () => {
+    nav.removeEventListener('pointerleave', onNavPointerLeave);
     window.removeEventListener('resize', onLayoutChange);
     window.removeEventListener('scroll', onLayoutChange, true);
     unsubInstances();

@@ -858,7 +858,7 @@ export function createForceGraph(
 
   let lastClick = { id: '', at: 0 };
 
-  canvas.addEventListener('click', (ev) => {
+  const onCanvasClick = (ev: MouseEvent): void => {
     const node = pickNode(ev.clientX, ev.clientY);
     const now = Date.now();
     if (
@@ -876,22 +876,26 @@ export function createForceGraph(
     selectedId = node?.id ?? null;
     highlightIds = selectedId ? computeNeighborSet(selectedId) : null;
     callbacks.onSelect?.(node);
-  });
+  };
 
-  canvas.addEventListener('mousemove', (ev) => {
+  const onCanvasMouseMove = (ev: MouseEvent): void => {
     const node = pickNode(ev.clientX, ev.clientY);
     const nextId = node?.id ?? null;
     if (nextId === hoverId) return;
     hoverId = nextId;
     canvas.style.cursor = node ? 'pointer' : 'grab';
     callbacks.onHover?.(node);
-  });
+  };
 
-  canvas.addEventListener('mouseleave', () => {
+  const onCanvasMouseLeave = (): void => {
     hoverId = null;
     canvas.style.cursor = 'grab';
     callbacks.onHover?.(null);
-  });
+  };
+
+  canvas.addEventListener('click', onCanvasClick);
+  canvas.addEventListener('mousemove', onCanvasMouseMove);
+  canvas.addEventListener('mouseleave', onCanvasMouseLeave);
 
   const themeObserver = new MutationObserver(() => {
     theme = readForceGraphTheme();
@@ -1022,6 +1026,10 @@ export function createForceGraph(
       themeObserver.disconnect();
       resizeObserver.disconnect();
       document.removeEventListener('keydown', handleKeydown);
+      canvas.removeEventListener('click', onCanvasClick);
+      canvas.removeEventListener('mousemove', onCanvasMouseMove);
+      canvas.removeEventListener('mouseleave', onCanvasMouseLeave);
+      canvas.style.removeProperty('cursor');
       select(canvas).on('.zoom', null).on('.drag', null);
     },
     getTransform() {

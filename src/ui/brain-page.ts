@@ -11,6 +11,7 @@ import { launchApp, navigateToDesktop } from '../os/router';
 import { closeBrainInspector } from './brain/inspector';
 import { initBrainGraphSidebarResize } from './brain/graph-sidebar-resize';
 import { initBrainInspectorResize } from './brain/inspector-resize';
+import { teardownGraphSection } from './brain/graph-section';
 import { renderBrainSection } from './brain/sections';
 import { fetchBrainUsage } from '../brain/client';
 
@@ -266,6 +267,9 @@ function setActiveSection(section: BrainSectionId, options?: { editPath?: string
   if (prevSection !== section) {
     const inspector = document.getElementById('brainInspector');
     if (inspector) closeBrainInspector(inspector);
+    if (prevSection === 'graph' && section !== 'graph') {
+      teardownGraphSection();
+    }
   }
 
   const nextHash = `#/app/brain/${section}`;
@@ -372,6 +376,8 @@ export function closeBrain(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) return;
 
   root.classList.remove('is-open');
+
+  teardownGraphSection();
 
   if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
