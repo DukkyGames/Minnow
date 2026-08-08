@@ -41,9 +41,12 @@ function wrapPathSegmentsInText(textNode: Text, pathClass: string): void {
   parent.replaceChild(fragment, textNode);
 }
 
+/** Walk text nodes only (NodeFilter.SHOW_TEXT = 4). */
+const TREE_WALKER_SHOW_TEXT = 4;
+
 /** Highlight file paths inside prose and action targets (skip code blocks and links). */
 function highlightPlanPaths(root: HTMLElement): void {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const walker = document.createTreeWalker(root, TREE_WALKER_SHOW_TEXT);
   const nodes: Text[] = [];
   let current: Node | null;
   while ((current = walker.nextNode())) {
