@@ -184,17 +184,16 @@ describe('super plan top-bar entry', () => {
     assert.equal(isSuperPlanScreenOpen(), false);
   });
 
-  test('the shell hides the session list and its toggle while the surface is up', () => {
+  test('the shell hides the session list but not the Chats control while the surface is up', () => {
     const css = readFileSync(
       new URL('../../src/styles/super-plan-page.css', import.meta.url),
       'utf8',
     );
     const rule = css.slice(
-      css.indexOf('html.mn-super-plan-open'),
-      css.indexOf('}', css.indexOf('html.mn-super-plan-open')),
+      css.indexOf('html.mn-super-plan-open #chatSidebar'),
+      css.indexOf('}', css.indexOf('html.mn-super-plan-open #chatSidebar')),
     );
-    for (const selector of ['#chatSidebar', '#btnCodeViewsChats']) {
-      assert.ok(rule.includes(selector), `${selector} should be hidden with the surface`);
-    }
+    assert.ok(rule.includes('#chatSidebar'), '#chatSidebar should be hidden with the surface');
+    assert.ok(!rule.includes('#btnCodeViewsChats'), 'Chats toggle should stay visible');
   });
 });

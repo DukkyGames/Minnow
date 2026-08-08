@@ -5,9 +5,16 @@
 
 import { CHAT_SIDEBAR_CHANGED_EVENT } from './layout-events';
 import { isChatSidebarOpen, toggleSidebarLayout } from './layout';
+import { isSuperPlanChromeActive } from './super-plan-chrome';
+
+function isCodeViewsChatsPanelOpen(): boolean {
+  // Super Plan hides the session list in CSS; Chats exits the surface instead of toggling it.
+  if (isSuperPlanChromeActive()) return false;
+  return isChatSidebarOpen();
+}
 
 function syncCodeViewsChatsToggle(btn: HTMLButtonElement): void {
-  const open = isChatSidebarOpen();
+  const open = isCodeViewsChatsPanelOpen();
   btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   btn.setAttribute('aria-pressed', open ? 'true' : 'false');
   const label = open ? 'Hide chats' : 'Show chats';
@@ -24,6 +31,10 @@ export function initCodeViewsChatsToggle(): void {
   const onSync = (): void => syncCodeViewsChatsToggle(btn as HTMLButtonElement);
 
   btn.addEventListener('click', () => {
+    if (isSuperPlanChromeActive()) {
+      void import('./super-plan-entry').then((m) => m.closeSuperPlanScreen());
+      return;
+    }
     toggleSidebarLayout();
   });
   window.addEventListener(CHAT_SIDEBAR_CHANGED_EVENT, onSync);
