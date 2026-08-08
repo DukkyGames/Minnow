@@ -2211,6 +2211,7 @@
   padding: 8px 10px 6px;
   margin-bottom: 0;
   border-bottom: none;
+  cursor: pointer;
 }
 
 .board-wave-compact {

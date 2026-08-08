@@ -5069,9 +5069,9 @@ export function toggleWaveCollapsed(group: ChatGroup, waveId: number | string): 
   if (!board) return;
   const wave = board.waves.find((w) => String(w.id) === String(waveId));
   if (!wave) return;
-  const expanding = wave.collapsed !== false;
-  wave.collapsed = !expanding;
-  if (expanding) {
+  const collapsed = wave.collapsed === true;
+  wave.collapsed = !collapsed;
+  if (collapsed) {
     for (const other of board.waves) {
       if (String(other.id) !== String(waveId)) other.collapsed = true;
     }

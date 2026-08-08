@@ -159,6 +159,14 @@ import {
 } from './orchestrate-page-shell';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { teardownHub } from './hub';
+
+/** Live kanban uses chat-area--orchestrate for layout; that must not block board refresh. */
+function isBoardDomRefreshBlockedByOverlay(): boolean {
+  if (isOrchestrateBoardViewActive() || isOrchestrateInitSplitChromeActive()) {
+    return false;
+  }
+  return isMainColumnOverlaySuppressingChatDom();
+}
 import { setChatMode } from './mode-selector';
 import {
   isOrchestrateHubMounted,
@@ -780,7 +788,7 @@ let boardUiRefreshFrame: number | undefined;
  */
 function scheduleBoardUiRefresh(groupId: string): void {
   if (isOrchestrateHubMounted()) return;
-  if (isMainColumnOverlaySuppressingChatDom()) return;
+  if (isBoardDomRefreshBlockedByOverlay()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   if (getActiveBoardGroup()?.id !== groupId) return;
   if (boardUiRefreshFrame !== undefined) return;
@@ -2754,6 +2762,14 @@ async function populateKanbanWaves(
       toggleWaveCollapsed(group, wave.id);
       refreshActiveBoardIfMounted();
     });
+    header.addEventListener('click', (e) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('.board-wave-block__start')) return;
+      if (target.closest('.board-wave-block__caret')) return;
+      toggleWaveCollapsed(group, wave.id);
+      refreshActiveBoardIfMounted();
+    });
     header.appendChild(caret);
 
     const title = document.createElement('h3');
@@ -3335,7 +3351,7 @@ export async function mountBoardOnboardingPanel(
  */
 export function refreshActiveBoardIfMounted(): void {
   if (isOrchestrateHubMounted()) return;
-  if (isMainColumnOverlaySuppressingChatDom()) return;
+  if (isBoardDomRefreshBlockedByOverlay()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   const group = getActiveBoardGroup();
   if (!group) return;
@@ -3368,7 +3384,7 @@ function openBoardGroupFromBoardRail(groupId: string, plannerChatId?: string): v
 
 /** Render Orchestrate board into the board mount (#chatArea or split top pane). */
 export function renderBoardView(group: ChatGroup): void {
-  if (isMainColumnOverlaySuppressingChatDom()) return;
+  if (isBoardDomRefreshBlockedByOverlay()) return;
   teardownOrchestrateHub();
   teardownHub();
   const area = document.getElementById('chatArea');
