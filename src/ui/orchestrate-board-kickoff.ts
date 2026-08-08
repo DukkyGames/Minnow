@@ -3,6 +3,7 @@
  */
 
 import { GIT_SETUP_SKILL_ID, prepareGitSetupTurn } from '../skills/git-setup-client';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { formatHistoryWithSkillTag } from '../skills/parse-slash';
 import { getWorkspaceGitStatus } from '../state/git-workspace';
 import { getActiveChat } from '../state/sessions';
@@ -11,8 +12,10 @@ import { detectLocalServer } from '../tools/client';
 import { buildHistoryUserContent, runChatTurn } from '../tools/loop';
 import {
   getBoardKickoffAbortSignal,
+  isBoardKickoffInProgress,
   promptBoardGitSetup,
   setBoardKickoffInProgress,
+  setBoardOnboardingAwaitingInit,
   setBoardOnboardingGitSetupActive,
   type BoardGitPromptKind,
 } from './orchestrate-board-onboarding-state';
@@ -24,6 +27,21 @@ export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
 
 /** Legacy alias for onboarding kickoff (historical transcripts / init-split detection). */
 export const BOARD_BUILD_KICKOFF_MESSAGE = BOARD_ONBOARDING_KICKOFF_MESSAGE;
+
+/** Skip a second kickoff when launch or onboarding already posted the init message. */
+export function shouldSkipDuplicateBoardOnboardingKickoff(chat: {
+  history: Array<{ role: string; content?: unknown }>;
+}): boolean {
+  if (isBoardKickoffInProgress()) return true;
+  if (isActiveChatStreaming()) return true;
+  for (let i = chat.history.length - 1; i >= 0; i -= 1) {
+    const msg = chat.history[i];
+    if (msg.role !== 'user') continue;
+    const text = typeof msg.content === 'string' ? msg.content : '';
+    return text.includes(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+  }
+  return false;
+}
 
 const GIT_SETUP_USER_TEXT: Record<BoardGitPromptKind, string> = {
   init:
@@ -127,6 +145,7 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
     }
 
     sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+    setBoardOnboardingAwaitingInit(true);
   } finally {
     setBoardKickoffInProgress(false);
     refreshBoardOnboardingIfMounted();

@@ -4,6 +4,13 @@ import { CHAT_SIDEBAR_CHANGED_EVENT } from '../../src/ui/layout-events.ts';
 import { initCodeViewsChatsToggle } from '../../src/ui/code-views-chats-toggle.ts';
 import { syncSuperPlanChrome } from '../../src/ui/super-plan-chrome.ts';
 import { resetMobileLayoutForTests } from '../../src/ui/mobile-layout.ts';
+import { OB_CHAT_AREA_CLASS } from '../../src/ui/orchestrate-page-shell.ts';
+import {
+  createEmptyChatObject,
+  sessionState,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
+import { getOrCreateBoardGroup } from '../../src/state/chat-groups.ts';
 import { installHappyDomGlobals, teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 describe('code views chats toggle', () => {
@@ -27,6 +34,7 @@ describe('code views chats toggle', () => {
   });
 
   afterEach(async () => {
+    setSessionStateForTests(null);
     if (happyDomWindow) await teardownHappyDomAsync(happyDomWindow);
   });
 
@@ -76,5 +84,44 @@ describe('code views chats toggle', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     assert.equal(document.getElementById('codeOverviewRoot'), null);
+  });
+
+  test('clicking Chats expands the rail during orchestrate board view', () => {
+    const ws = 'C:\\workspace\\demo';
+    const planner = createEmptyChatObject('', ws);
+    planner.id = '11111111-1111-1111-1111-111111111111';
+    planner.modeId = 'orchestrate';
+    setSessionStateForTests({
+      version: 5,
+      activeId: planner.id,
+      sidebarCollapsed: true,
+      groups: [],
+      chats: [planner],
+    });
+    const group = getOrCreateBoardGroup(planner);
+    group.viewMode = 'board';
+    assert.ok(sessionState);
+    sessionState.activeBoardGroupId = group.id;
+    sessionState.sidebarCollapsed = true;
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    area.classList.add(OB_CHAT_AREA_CLASS);
+    document.body.appendChild(area);
+
+    const side = document.getElementById('chatSidebar');
+    assert.ok(side);
+    side.classList.add('collapsed');
+
+    happyDomWindow!.dispatchEvent(new happyDomWindow!.CustomEvent(CHAT_SIDEBAR_CHANGED_EVENT));
+
+    const btn = document.getElementById('btnCodeViewsChats');
+    assert.ok(btn);
+    assert.equal(btn.getAttribute('aria-label'), 'Show chats');
+
+    btn.click();
+
+    assert.equal(side.classList.contains('collapsed'), false);
+    assert.equal(sessionState.sidebarCollapsed, false);
   });
 });

@@ -240,6 +240,45 @@ describe('validateBoardInitArgs', () => {
       assert.ok(r.error.includes('plan_path must match selected plan'));
     }
   });
+
+  test('accepts plan_path matching group-only selection', () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: CHAT_ID,
+      sidebarCollapsed: false,
+      groups: [
+        {
+          id: 'grp_board_tools',
+          name: 'Board',
+          workspacePath: '',
+          plannerChatId: CHAT_ID,
+          orchestratePlanPath: PLAN_PATH,
+        } as ChatGroup,
+      ],
+      chats: [
+        {
+          id: CHAT_ID,
+          name: 'x',
+          workspacePath: '',
+          modelId: 'm',
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1,
+          boardGroupId: 'grp_board_tools',
+        } as Chat,
+      ],
+    });
+    const r = validateBoardInitArgs(
+      {
+        plan_path: PLAN_PATH,
+        tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+        waves: [{ id: 'W1' }],
+      },
+      findChatById(CHAT_ID),
+    );
+    assert.equal(r.ok, true);
+  });
 });
 
 describe('validateBoardUpdateTaskArgs', () => {

@@ -4,7 +4,7 @@
 
 import { executeTool } from '../../tools/client';
 import { isLocalServerAvailable } from '../../tools/config';
-import { isExecutableOrchestratePlan } from './plan-path';
+import { isOrchestratePlanPickerEntry } from './plan-path';
 
 export type PlanDiscoverError = 'server_off' | 'no_plans_dir' | string;
 
@@ -50,7 +50,7 @@ export async function discoverOrchestratePlans(): Promise<DiscoverOrchestratePla
 
   const raw = (await executeTool('find_files', {
     path: 'documentation/plans',
-    pattern: '**/*.md',
+    pattern: '*.md',
   })).content;
 
   const content = typeof raw === 'string' ? raw : '';
@@ -65,7 +65,7 @@ export async function discoverOrchestratePlans(): Promise<DiscoverOrchestratePla
 
   const paths = parseFindFilesOutputPaths(content);
   const plans = paths
-    .filter((p) => isExecutableOrchestratePlan(p))
+    .filter((p) => isOrchestratePlanPickerEntry(p))
     .sort((a, b) => {
       const baseA = a.split('/').pop() ?? a;
       const baseB = b.split('/').pop() ?? b;

@@ -15,6 +15,7 @@ import {
   getBoardGitSetupPromptKind,
   isBoardGitSetupPromptActive,
   isBoardKickoffInProgress,
+  isBoardOnboardingAwaitingInit,
   isBoardOnboardingGitSetupActive,
   resetBoardOnboardingTransientState,
   resolveBoardGitSetupPrompt,
@@ -154,12 +155,18 @@ function currentRotatingMessage(phase: BoardOnboardingBusyPhase): string {
 }
 
 /** Resolve which loading affordance the onboarding shell should show. */
-export function resolveBoardOnboardingBusyPhase(plansLoading: boolean): BoardOnboardingBusyPhase {
-  if (plansLoading) return 'plans';
+export function resolveBoardOnboardingBusyPhase(
+  plansLoading: boolean,
+  boundPlanReady = false,
+): BoardOnboardingBusyPhase {
+  if (plansLoading && !boundPlanReady) return 'plans';
   if (isBoardGitSetupPromptActive()) return 'git-prompt';
   if (isBoardOnboardingGitSetupActive()) return 'git-setup';
   if (isBoardKickoffInProgress()) return 'init';
+  if (isBoardOnboardingAwaitingInit()) return 'init';
   if (isActiveChatStreaming()) return 'init';
+  if (plansLoading && boundPlanReady) return 'init';
+  if (boundPlanReady) return 'init';
   return 'idle';
 }
 
@@ -363,9 +370,11 @@ export function syncBoardOnboardingBusyUI(
   }
 
   if (planName && planSelect) {
-    planName.textContent = formatBoardOnboardingPlanDisplay(planSelect.value);
-    planName.title = planSelect.value.trim() || '';
-    planName.classList.toggle('hidden', !showLoader || !planSelect.value.trim());
+    const path =
+      planSelect.value.trim() || wrap.dataset.boardOnboardingPlanPath?.trim() || '';
+    planName.textContent = formatBoardOnboardingPlanDisplay(path);
+    planName.title = path;
+    planName.classList.toggle('hidden', !showLoader || !path);
   }
 
   startStatusRotation(wrap, phase, chat);
@@ -377,6 +386,12 @@ export function cancelBoardOnboardingSetup(chatId?: string): void {
   resolveBoardGitSetupPrompt(false);
   resetBoardOnboardingTransientState();
   stopGeneration(id);
+  const sel = document.getElementById('boardOnboardingPlanSelect');
+  const wrap = sel?.closest('.board-onboarding') as HTMLElement | null;
+  if (wrap) {
+    delete wrap.dataset.boardOnboardingBoundPlan;
+    delete wrap.dataset.boardOnboardingPlanPath;
+  }
   void import('./orchestrate-board').then((m) => m.refreshBoardOnboardingIfMounted());
 }
 

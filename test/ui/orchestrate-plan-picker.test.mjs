@@ -74,4 +74,40 @@ describe('orchestrate-plan-picker', () => {
     assert.equal(chat.orchestratePlanPath, saved);
     assert.equal(sel.value, saved);
   });
+
+  test('restores plan path from board group when chat field is empty', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const groupPath = 'documentation/plans/from-group.md';
+    const chat = createEmptyChatObject('');
+    chat.id = '33333333-3333-3333-3333-333333333333';
+    chat.modeId = 'orchestrate';
+    chat.boardGroupId = 'grp_picker';
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      groups: [
+        {
+          id: 'grp_picker',
+          name: 'Board',
+          workspacePath: '',
+          plannerChatId: chat.id,
+          orchestratePlanPath: groupPath,
+        },
+      ],
+      chats: [chat],
+    });
+
+    const sel = document.createElement('select');
+    const hint = document.createElement('p');
+
+    await populateOrchestratePlanSelect(sel, hint, chat, {
+      discoverPlans: async () => ({ plans: [] }),
+    });
+
+    assert.equal(sel.value, groupPath);
+  });
 });

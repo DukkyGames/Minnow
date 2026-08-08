@@ -3,6 +3,7 @@
  * Code overview, code map, orchestrate hub, plan screen, and Issues embeds.
  */
 
+import { getActiveBoardGroup } from '../state/chat-groups';
 import { emitChatSidebarChanged } from './layout-events';
 import { isSuperPlanChromeActive } from './super-plan-chrome';
 
@@ -65,12 +66,39 @@ export function isMainColumnOverlaySuppressingChatDom(): boolean {
   return false;
 }
 
+/** Stage roots and embeds that hide the chat rail (see code-chrome.css). */
+function isCodeStageRootHidingChatSidebar(): boolean {
+  if (document.getElementById('codeOverviewRoot')) return true;
+  if (document.getElementById('codeBrainMapRoot')) return true;
+  if (document.getElementById('orchestrateHub')) return true;
+  if (document.getElementById('orchestratePlanScreen')) return true;
+  if (document.getElementById('devServerScreenRoot')) return true;
+  if (document.getElementById('sourceControlCenterRoot')) return true;
+
+  const area = document.getElementById('chatArea');
+  if (area?.contains(document.getElementById('issuesView'))) return true;
+  if (
+    document.getElementById('researchView') &&
+    area?.contains(document.getElementById('researchView'))
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * True while a Code view-bar destination owns the stage and the session list
  * is hidden in CSS (same behaviour as Super Plan).
  */
 export function isCodeStageViewHidingChatSidebar(): boolean {
-  return isSuperPlanChromeActive() || isMainColumnOverlaySuppressingChatDom();
+  if (isSuperPlanChromeActive()) return true;
+  if (isCodeStageRootHidingChatSidebar()) return true;
+
+  // Kanban board uses chat-area--orchestrate for layout; Chats still toggles the rail.
+  const boardGroup = getActiveBoardGroup();
+  if (boardGroup?.viewMode === 'board') return false;
+
+  return isMainColumnOverlaySuppressingChatDom();
 }
 
 /** Notify Code view chrome (Chats toggle) after a stage view opens or closes. */

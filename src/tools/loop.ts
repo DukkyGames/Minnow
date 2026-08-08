@@ -281,6 +281,7 @@ import {
   orchestrateRequiresPlanBlock,
   resolveOrchestrateSlashInput,
 } from '../chat/orchestrate/send-gate';
+import { resolveEffectiveOrchestratePlanPathWithSync } from '../chat/orchestrate/plan-path-sync';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
 import { UI_DESIGNER_AGENT_ID } from '../agents/ui-designer/constants';
@@ -3118,10 +3119,16 @@ export async function sendMessageWithTools(
     clearComposerAfterSend(chat, input);
   }
 
+  const orchestratePlanPath = resolveEffectiveOrchestratePlanPathWithSync(
+    chat,
+    getBoardGroupForChat(chat),
+    { sync: true },
+  );
+
   if (
     orchestrateRequiresPlanBlock(
       chat.modeId,
-      chat.orchestratePlanPath,
+      orchestratePlanPath,
       effectiveRawText,
       pendingWithoutErrors.length,
     ) === 'block'
@@ -3132,7 +3139,7 @@ export async function sendMessageWithTools(
 
   const slashInput = resolveOrchestrateSlashInput(
     chat.modeId,
-    chat.orchestratePlanPath,
+    orchestratePlanPath,
     effectiveRawText,
   );
   const pickerSkillId = goalDriven ? null : getPickerAppliedSkillId(input);

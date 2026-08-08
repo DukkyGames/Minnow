@@ -90,6 +90,49 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     assert.ok(wrap.querySelector('[data-board-onboarding-cancel]'));
   });
 
+  test('mountBoardOnboardingPanel loader-first when group already has plan path', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const planPath = 'documentation/plans/prebound.md';
+    const chat = createEmptyChatObject('');
+    chat.id = '44444444-4444-4444-4444-444444444444';
+    chat.modeId = 'orchestrate';
+    chat.viewMode = 'board';
+    chat.boardGroupId = 'grp_onboard';
+    const group = {
+      id: 'grp_onboard',
+      name: 'Board',
+      workspacePath: '',
+      plannerChatId: chat.id,
+      orchestratePlanPath: planPath,
+    };
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      groups: [group],
+      chats: [chat],
+    });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'board-onboarding';
+    document.body.appendChild(wrap);
+
+    await mountBoardOnboardingPanel(wrap, chat, {
+      group,
+      discoverPlans: async () => ({ plans: [planPath] }),
+    });
+
+    assert.equal(chat.orchestratePlanPath, planPath);
+    assert.equal(wrap.dataset.boardOnboardingBoundPlan, 'true');
+    const setup = wrap.querySelector('[data-board-onboarding-setup]');
+    assert.ok(setup?.classList.contains('hidden'));
+    const loader = wrap.querySelector('[data-board-onboarding-loader]');
+    assert.ok(loader && !loader.classList.contains('hidden'));
+  });
+
   test('resolveBoardOnboardingBusyPhase prefers plan load over stream', () => {
     const chat = createEmptyChatObject('');
     chat.id = '77777777-7777-7777-7777-777777777777';

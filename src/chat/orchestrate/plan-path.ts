@@ -3,11 +3,16 @@
  * Executable plans live under documentation/plans/ but exclude references/ and verification/.
  */
 
+import type { Chat, ChatGroup } from '../../types';
+
 /** Prefix for all orchestrate plan paths (workspace-relative, forward slashes). */
 export const ORCHESTRATE_PLANS_PREFIX = 'documentation/plans/';
 
 /** Canonical lowercase prefix for workspace-relative plan roots. */
 const PLANS_PREFIX_LOWER = ORCHESTRATE_PLANS_PREFIX.toLowerCase();
+
+/** Super Plan reference artifact basename suffixes (misplaced at plans root). */
+const SUPER_PLAN_ARTIFACT_BASENAME = /-(spec|research|context)\.md$/i;
 
 /**
  * Builds canonical `documentation/plans/...` path or null when not under plans/*.md.
@@ -38,4 +43,46 @@ export function normalizeOrchestratePlanPath(raw: unknown): string | undefined {
  */
 export function isExecutableOrchestratePlan(path: string): boolean {
   return normalizeOrchestratePlanPath(path) !== undefined;
+}
+
+/**
+ * True when the plan is a single file directly under documentation/plans/ (no nested folders).
+ */
+export function isTopLevelOrchestratePlan(path: string): boolean {
+  const canonical = normalizeOrchestratePlanPath(path);
+  if (!canonical) return false;
+  const rest = canonical.slice(ORCHESTRATE_PLANS_PREFIX.length);
+  return rest.length > 0 && !rest.includes('/');
+}
+
+/** True when the basename looks like a Super Plan reference artifact (spec / research / context). */
+export function isSuperPlanReferenceArtifactBasename(path: string): boolean {
+  const base = path.split('/').pop() ?? '';
+  return SUPER_PLAN_ARTIFACT_BASENAME.test(base);
+}
+
+/**
+ * Paths eligible for orchestrate plan dropdowns (top-level executable plans, not SP artifacts).
+ */
+export function isOrchestratePlanPickerEntry(path: string): boolean {
+  return (
+    isExecutableOrchestratePlan(path) &&
+    isTopLevelOrchestratePlan(path) &&
+    !isSuperPlanReferenceArtifactBasename(path)
+  );
+}
+
+export function resolveEffectiveOrchestratePlanPath(
+  chat: Chat,
+  group?: ChatGroup | null,
+): string | undefined {
+  const fromChat = normalizeOrchestratePlanPath(chat.orchestratePlanPath ?? '');
+  const fromGroup = group
+    ? normalizeOrchestratePlanPath(group.orchestratePlanPath ?? '')
+    : undefined;
+  const fromBoard = group?.orchestrateBoard?.planPath
+    ? normalizeOrchestratePlanPath(group.orchestrateBoard.planPath)
+    : undefined;
+
+  return fromChat ?? fromGroup ?? fromBoard;
 }

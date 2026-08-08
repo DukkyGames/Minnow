@@ -33,7 +33,8 @@ import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
 import { resolveShellSandboxModeForChat } from '../../tools/shell-sandbox-client';
 import type { ComposeContext, PromptProfile } from './types';
-import { normalizeOrchestratePlanPath } from '../orchestrate/plan-path';
+import { getBoardGroupForChat } from '../../state/chat-groups';
+import { resolveEffectiveOrchestratePlanPathWithSync } from '../orchestrate/plan-path-sync';
 
 /** Workspace folder path for {{cwd}} in system prompts (falls back to origin). */
 export function resolveComposeCwd(): string {
@@ -90,7 +91,9 @@ export async function buildComposeContext(
   const modeId = normalizeModeId(chat.modeId);
   const orchestratePlanPath =
     modeId === 'orchestrate'
-      ? normalizeOrchestratePlanPath(chat.orchestratePlanPath) ?? null
+      ? resolveEffectiveOrchestratePlanPathWithSync(chat, getBoardGroupForChat(chat), {
+          sync: true,
+        }) ?? null
       : null;
   const enabledToolIds = getEnabledToolIdsForChat(chat);
 

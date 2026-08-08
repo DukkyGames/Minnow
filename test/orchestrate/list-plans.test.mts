@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   isExecutableOrchestratePlan,
+  isOrchestratePlanPickerEntry,
   normalizeOrchestratePlanPath,
 } from '../../src/chat/orchestrate/plan-path.ts';
 import {
@@ -59,6 +60,21 @@ describe('orchestrate plan-path', () => {
   test('rejects paths outside documentation/plans', () => {
     assert.equal(isExecutableOrchestratePlan('src/main.ts'), false);
     assert.equal(isExecutableOrchestratePlan('plans/foo.md'), false);
+  });
+
+  test('isOrchestratePlanPickerEntry excludes nested and spec artifacts', () => {
+    assert.equal(
+      isOrchestratePlanPickerEntry('documentation/plans/waves/foo.md'),
+      false,
+    );
+    assert.equal(
+      isOrchestratePlanPickerEntry('documentation/plans/run-research.md'),
+      false,
+    );
+    assert.equal(
+      isOrchestratePlanPickerEntry('documentation/plans/run.md'),
+      true,
+    );
   });
 });
 

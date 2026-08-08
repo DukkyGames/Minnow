@@ -8,6 +8,9 @@ let boardOnboardingGitSetupActive = false;
 /** True while kickoff preflight (git prompt / git setup) is in flight. */
 let boardKickoffInProgress = false;
 
+/** True from board_init kickoff send until stream ends or board store appears (reduces picker flicker). */
+let boardOnboardingAwaitingInit = false;
+
 /** AbortController for the active kickoff sequence (git prompt, git skill, pre-send). */
 let kickoffAbort: AbortController | null = null;
 
@@ -51,6 +54,16 @@ export function setBoardOnboardingGitSetupActive(active: boolean): void {
 
 export function isBoardKickoffInProgress(): boolean {
   return boardKickoffInProgress;
+}
+
+export function isBoardOnboardingAwaitingInit(): boolean {
+  return boardOnboardingAwaitingInit;
+}
+
+export function setBoardOnboardingAwaitingInit(active: boolean): void {
+  if (boardOnboardingAwaitingInit === active) return;
+  boardOnboardingAwaitingInit = active;
+  notifyOnboardingStateListeners();
 }
 
 /** Returns true when kickoff was already in progress (caller should bail). */
@@ -109,6 +122,7 @@ export function resetBoardOnboardingTransientState(): void {
   kickoffAbort?.abort();
   boardOnboardingGitSetupActive = false;
   boardKickoffInProgress = false;
+  boardOnboardingAwaitingInit = false;
   kickoffAbort = null;
   if (gitSetupPromptResolver) {
     gitSetupPromptResolver(false);

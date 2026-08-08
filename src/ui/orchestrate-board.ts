@@ -46,6 +46,7 @@ import {
 import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import {
   getActiveBoardGroup,
+  getBoardGroupForChat,
   getPlannerChatForGroup,
   openBoardGroup,
 } from '../state/chat-groups.ts';
@@ -111,7 +112,9 @@ import {
   sessionState,
   touchChat,
 } from '../state/sessions';
+import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
 import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
+import { resolveEffectiveOrchestratePlanPathWithSync } from '../chat/orchestrate/plan-path-sync';
 import type {
   BoardTask,
   BoardTaskStatus,
@@ -161,9 +164,14 @@ import {
   isOrchestrateHubMounted,
   teardownOrchestrateHub,
 } from './orchestrate-hub';
-import { kickoffOrchestrateBoardBuild } from './orchestrate-board-kickoff';
+import {
+  kickoffOrchestrateBoardBuild,
+  shouldSkipDuplicateBoardOnboardingKickoff,
+} from './orchestrate-board-kickoff';
 import {
   isBoardKickoffInProgress,
+  isBoardOnboardingAwaitingInit,
+  setBoardOnboardingAwaitingInit,
 } from './orchestrate-board-onboarding-state';
 import { BOARD_ONBOARDING_QUESTIONS_ID } from './orchestrate-board-onboarding-questions';
 import {
@@ -2992,6 +3000,8 @@ export { kickoffOrchestrateBoardBuild, BOARD_ONBOARDING_KICKOFF_MESSAGE } from '
 export interface MountBoardOnboardingPanelOptions {
   /** Test-only: inject fake plan discovery instead of hitting the local tool server. */
   discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
+  /** Board folder when the planner chat is linked (plan path may live on the group). */
+  group?: ChatGroup;
 }
 
 /** Keeps Start / Open plan / refresh aligned with streaming and executable plan paths. */
@@ -3048,6 +3058,14 @@ export function refreshBoardOnboardingIfMounted(): void {
   if (!startBtn || !openPlanBtn || !refreshBtn || !pickPlanHint) return;
   const plansCount = Number(wrap.dataset.boardOnboardingPlansCount ?? '0');
   const plansLoading = wrap.dataset.boardOnboardingPlansLoading === 'true';
+  const boundPlanReady = wrap.dataset.boardOnboardingBoundPlan === 'true';
+  if (
+    !isActiveChatStreaming() &&
+    isBoardOnboardingAwaitingInit() &&
+    !getActiveBoardGroup()?.orchestrateBoard
+  ) {
+    setBoardOnboardingAwaitingInit(false);
+  }
   syncBoardOnboardingControls(
     sel,
     startBtn,
@@ -3059,7 +3077,7 @@ export function refreshBoardOnboardingIfMounted(): void {
   );
   syncBoardOnboardingBusyUI(
     wrap,
-    resolveBoardOnboardingBusyPhase(plansLoading),
+    resolveBoardOnboardingBusyPhase(plansLoading, boundPlanReady),
     getActiveChat(),
   );
 }
@@ -3074,6 +3092,19 @@ export async function mountBoardOnboardingPanel(
 ): Promise<void> {
   disposeBoardOnboardingUiTimers();
   container.replaceChildren();
+
+  const group = options.group ?? getBoardGroupForChat(chat);
+  const effectivePath = resolveEffectiveOrchestratePlanPathWithSync(chat, group, { sync: true });
+  const boundPlanReady = Boolean(
+    effectivePath && group && isBoardSetupIncomplete(group),
+  );
+  if (boundPlanReady && effectivePath) {
+    container.dataset.boardOnboardingBoundPlan = 'true';
+    container.dataset.boardOnboardingPlanPath = effectivePath;
+  } else {
+    delete container.dataset.boardOnboardingBoundPlan;
+    delete container.dataset.boardOnboardingPlanPath;
+  }
 
   const panel = document.createElement('div');
   panel.className = 'board-onboarding__panel';
@@ -3140,6 +3171,13 @@ export async function mountBoardOnboardingPanel(
   sel.className = 'board-select';
   sel.dataset.testid = 'boardOnboardingPlanSelect';
   sel.setAttribute('aria-label', 'Orchestrate plan file');
+  if (effectivePath) {
+    const preOpt = document.createElement('option');
+    preOpt.value = effectivePath;
+    preOpt.textContent = effectivePath.replace(/^documentation\/plans\//, '');
+    sel.appendChild(preOpt);
+    sel.value = effectivePath;
+  }
 
   const refreshBtn = document.createElement('button');
   refreshBtn.type = 'button';
@@ -3231,7 +3269,7 @@ export async function mountBoardOnboardingPanel(
     );
     syncBoardOnboardingBusyUI(
       container,
-      resolveBoardOnboardingBusyPhase(plansLoading),
+      resolveBoardOnboardingBusyPhase(plansLoading, boundPlanReady),
       chat,
     );
   };
@@ -3281,6 +3319,14 @@ export async function mountBoardOnboardingPanel(
   });
 
   await loadPlans();
+
+  if (
+    boundPlanReady &&
+    !options.discoverPlans &&
+    !shouldSkipDuplicateBoardOnboardingKickoff(chat)
+  ) {
+    void kickoffOrchestrateBoardBuild();
+  }
 }
 
 /**
@@ -3419,7 +3465,7 @@ export function renderBoardView(group: ChatGroup): void {
     ensureBoardSession(group, plannerChat);
     syncViewModeToggleFromActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
-    void mountBoardOnboardingPanel(wrap, plannerChat);
+    void mountBoardOnboardingPanel(wrap, plannerChat, { group });
     return;
   }
 

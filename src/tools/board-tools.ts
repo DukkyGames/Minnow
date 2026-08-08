@@ -8,6 +8,7 @@ import {
   isSubAgentRunSuccessful,
 } from '../agents/sub-agent-outcome.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
+import { resolveEffectiveOrchestratePlanPath } from '../chat/orchestrate/plan-path.ts';
 import {
   getBoardGroupForChat,
   getOrCreateBoardGroup,
@@ -232,10 +233,14 @@ export function validateBoardInitArgs(
     typeof normalized.plan_path === 'string' ? normalized.plan_path.trim() : '';
   if (!plan_path) return { ok: false, error: 'Error: board_init requires "plan_path"' };
 
-  if (chat?.orchestratePlanPath && chat.orchestratePlanPath !== plan_path) {
+  const group = chat ? getBoardGroupForChat(chat) : undefined;
+  const selectedPlan = chat
+    ? resolveEffectiveOrchestratePlanPath(chat, group)
+    : undefined;
+  if (selectedPlan && selectedPlan !== plan_path) {
     return {
       ok: false,
-      error: `Error: plan_path must match selected plan (${chat.orchestratePlanPath})`,
+      error: `Error: plan_path must match selected plan (${selectedPlan})`,
     };
   }
 
