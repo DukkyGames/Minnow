@@ -29,6 +29,10 @@ function listWorkspaceBoards(workspacePath: string): ChatGroup[] {
 
 /** Root class for the Orchestrate library-first page. */
 export const OB_PAGE_CLASS = 'ob-page';
+/** Added while a board chat owns `.ob-main` (see orchestrate-board-chat.ts). */
+export const OB_PAGE_CHAT_OPEN_CLASS = 'is-chat-open';
+
+const OB_RAIL_NARROW_MAX_PX = 660;
 /** Edge-to-edge chat-area class (alias kept for hub tests: chat-area--orchestrate-hub). */
 export const OB_CHAT_AREA_CLASS = 'chat-area--orchestrate';
 
@@ -191,6 +195,18 @@ function boardTileTitle(group: ChatGroup): string {
 }
 
 /**
+ * Auto-hide the overlay rail on narrow pages. While a board chat is open the rail
+ * must stay reachable so you can switch task chats without backing out to kanban.
+ */
+export function syncOrchestratePageRailVisibility(page: HTMLElement): void {
+  const width = page.clientWidth;
+  if (width <= 0) return;
+  const narrow = width < OB_RAIL_NARROW_MAX_PX;
+  const chatOpen = page.classList.contains(OB_PAGE_CHAT_OPEN_CLASS);
+  page.classList.toggle('is-rail-hidden', narrow && !chatOpen);
+}
+
+/**
  * Build the empty Orchestrate page chrome: `.ob-page > .ob-shell > rail + main`.
  * Caller fills `main` (ask or run) and paints the rail.
  */
@@ -251,14 +267,15 @@ export function buildOrchestratePageShell(options: {
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? 0;
       if (width <= 0) return;
-      const narrow = width < 660;
+      const narrow = width < OB_RAIL_NARROW_MAX_PX;
       if (narrow === wasNarrow) return;
       wasNarrow = narrow;
-      page.classList.toggle('is-rail-hidden', narrow);
+      syncOrchestratePageRailVisibility(page);
     });
     observer.observe(page);
     (page as HTMLElement & { __obRailObserver?: ResizeObserver }).__obRailObserver =
       observer;
+    syncOrchestratePageRailVisibility(page);
   }
 
   return { page, shell, rail, railList, main, filterInput };
@@ -281,7 +298,6 @@ export function paintOrchestrateBoardRail(
   container: HTMLElement,
   options: PaintOrchestrateRailOptions,
 ): void {
-  container.replaceChildren();
   const workspacePath = getWorkspacePath();
   const all = listWorkspaceBoards(workspacePath);
   const filter = (options.filterText ?? '').trim().toLowerCase();
@@ -292,6 +308,28 @@ export function paintOrchestrateBoardRail(
         return title.includes(filter) || path.includes(filter);
       })
     : all;
+
+  const paintKey = [
+    'boards',
+    options.activeGroupId ?? '',
+    filter,
+    ...boards.map((g) => {
+      const board = g.orchestrateBoard;
+      const status = board ? 'Board' : boardSetupStatusLabel(g);
+      const pct = board ? getBoardProgressPercent(board) : 0;
+      return [
+        g.id,
+        boardTileTitle(g),
+        status,
+        formatRelativeTime(boardGroupSortKey(g)),
+        board ? board.tasks.length : 0,
+        pct,
+      ].join('|');
+    }),
+  ].join(' | ');
+  if (!shouldRepaintRail(container, paintKey)) return;
+
+  container.replaceChildren();
 
   if (!boards.length) {
     const empty = el('div', 'ob-rail__empty orchestrate-hub__board-empty');
@@ -374,6 +412,21 @@ export function paintOrchestrateBoardRail(
   }
 }
 
+/**
+ * Skip a rail rebuild when nothing it draws has changed.
+ *
+ * A live board emits a change per stream token, so both rail levels repaint on
+ * every animation frame of a run. Rebuilding ~90 rows at that rate saturated the
+ * main thread and swapped nodes out from under in-flight clicks, which is what
+ * made an open board chat feel frozen. Same idiom as the kanban's
+ * `lastKanbanRefreshKey`; the key covers every value the rows render.
+ */
+function shouldRepaintRail(container: HTMLElement, paintKey: string): boolean {
+  if (container.dataset.obRailKey === paintKey) return false;
+  container.dataset.obRailKey = paintKey;
+  return true;
+}
+
 /** Stable key for a wave id (waves are `number | string`). */
 export function waveKey(wave: number | string | undefined): string {
   return wave == null ? 'none' : String(wave);
@@ -431,7 +484,6 @@ export function paintOrchestrateChatRail(
   container: HTMLElement,
   options: PaintOrchestrateChatRailOptions,
 ): void {
-  container.replaceChildren();
   const chats = sessionState?.chats ?? [];
   const filter = (options.filterText ?? '').trim().toLowerCase();
   const allRows = listBoardChatRailRows(options.group, chats);
@@ -441,6 +493,32 @@ export function paintOrchestrateChatRail(
           r.title.toLowerCase().includes(filter) || r.meta.toLowerCase().includes(filter),
       )
     : allRows;
+
+  const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
+  const byId = new Map(chats.map((c) => [c.id, c]));
+
+  const paintKey = [
+    'chats',
+    boardTileTitle(options.group),
+    options.activeChatId ?? '',
+    filter,
+    [...(options.collapsedWaves ?? [])].sort().join(','),
+    ...rows.map((r) => {
+      const chat = byId.get(r.chatId);
+      const dot = chat ? resolveChatItemDotState(chat, dotCtx) : 'missing';
+      return [
+        r.chatId,
+        r.title,
+        r.meta,
+        waveKey(r.wave),
+        r.isPlanner ? 'p' : '',
+        dot,
+      ].join('|');
+    }),
+  ].join(' | ');
+  if (!shouldRepaintRail(container, paintKey)) return;
+
+  container.replaceChildren();
 
   const back = el('button', 'ob-back') as HTMLButtonElement;
   back.type = 'button';
@@ -472,9 +550,6 @@ export function paintOrchestrateChatRail(
     container.appendChild(empty);
     return;
   }
-
-  const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
-  const byId = new Map(chats.map((c) => [c.id, c]));
 
   for (const row of rows.filter((r) => r.isPlanner)) {
     const chat = byId.get(row.chatId);

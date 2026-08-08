@@ -11,6 +11,7 @@ import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-ch
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
+import { collapseChatSidebarForBoardEnter } from '../ui/layout';
 import {
   markGroupDeleted,
   markGroupDirty,
@@ -419,6 +420,7 @@ export function getPlannerChatForGroup(group: ChatGroup): Chat | undefined {
 /** Mount board view for a folder after session fields are set. */
 function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   const state = requireSession();
+  collapseChatSidebarForBoardEnter();
   state.activeBoardGroupId = groupId;
   markSessionScalarsDirty();
   group.viewMode = 'board';

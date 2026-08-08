@@ -99,6 +99,63 @@ main#chatArea.chat-area:has(.ob-page) {
 }
 
 /*
+ * The composer and its strips are `.main-column` rows, so by default they run the
+ * full width of the window — under the board rail and far wider than the
+ * transcript they belong to. `syncBoardChatComposerBox` measures the open
+ * transcript's content box and publishes it here, so the composer sits directly
+ * beneath the messages instead of spanning the whole bottom edge.
+ *
+ * Measured rather than derived from `--ob-rail-w` / `--ob-read-col`: those live
+ * on `.ob-page` (out of reach from `.main-column`), and the rail overlays rather
+ * than reserves space once the pane is narrow.
+ */
+.main-column--board-chat .input-bar,
+.main-column--board-chat .tool-approval-host,
+.main-column--board-chat .question-host {
+  box-sizing: border-box;
+  margin-left: var(--ob-chat-composer-left, 0px);
+  width: var(--ob-chat-composer-width, auto);
+  max-width: calc(100% - var(--ob-chat-composer-left, 0px));
+}
+
+/* Free-standing over the page: a full-bleed strip would re-draw the edge the
+   inset above just removed. The composer keeps its own border. */
+.main-column--board-chat .input-bar {
+  border-top: 0;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/*
+ * Board chat lives in #chatArea (.chat-viewport) but the composer is a
+ * #mainColumn row below the viewport — the rail must span the full column
+ * (composer only in the main pane). Pin the rail to #mainColumn; reserve width
+ * on .ob-shell so .ob-main does not sit under the out-of-flow rail.
+ */
+.main-column.main-column--board-chat {
+  position: relative;
+}
+
+.main-column.main-column--board-chat > .chat-viewport {
+  position: static;
+}
+
+.main-column.main-column--board-chat .ob-shell {
+  padding-left: var(--ob-rail-w);
+  box-sizing: border-box;
+}
+
+.main-column.main-column--board-chat .ob-rail {
+  position: absolute;
+  top: var(--ob-board-chat-rail-top, 0);
+  left: var(--ob-board-chat-rail-left, 0);
+  bottom: 0;
+  height: auto;
+  z-index: 3;
+}
+
+/*
  * Sizing vars live on .ob-shell (not .ob-page) so @container overrides apply —
  * same rule as Super Plan / Research.
  */
@@ -108,8 +165,6 @@ main#chatArea.chat-area:has(.ob-page) {
   width: 100%;
   min-width: 0;
   min-height: 0;
-
-  --ob-pad-x: max(var(--ob-gutter), (100% - var(--ob-read-col)) / 2);
 }
 
 /* ── Rail: rows, not cards ──────────────────────────────────────────────── */
@@ -119,7 +174,8 @@ main#chatArea.chat-area:has(.ob-page) {
   flex-direction: column;
   flex: 0 0 var(--ob-rail-w);
   width: var(--ob-rail-w);
-  min-width: 0;
+  /* Keep the library rail at full width — min-width: 0 let the list pinch in chat view. */
+  min-width: var(--ob-rail-w);
   border-right: 1px solid var(--mn-border);
   background: var(--mn-surface-0, var(--mn-bg));
 }
@@ -192,7 +248,10 @@ main#chatArea.chat-area:has(.ob-page) {
 
 .ob-rail__list {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -624,13 +683,16 @@ main#chatArea.chat-area:has(.ob-page) {
 /*
  * Header is deliberately quiet: the rail beside it is dense, and this strip
  * only has to say which chat you are in and how it is doing.
+ *
+ * Pane-edge gutters only (`--ob-gutter`), same as the transcript — tool-heavy
+ * board chats need the full main-pane width, not a centred 790px column.
  */
 .ob-chat__head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex: 0 0 auto;
-  padding: 14px var(--ob-pad-x, var(--ob-gutter)) 12px;
+  padding: 12px var(--ob-gutter, 28px);
   border-bottom: 1px solid var(--mn-border);
 }
 
@@ -742,7 +804,7 @@ main#chatArea.chat-area:has(.ob-page) {
  * still apply, which means the edge-to-edge rule at the top of this file
  * (`.main-column--board-view .chat-area`, 0-3-0) matches it too and would flatten
  * padding and the inter-message gap to 0. Hence the deliberately heavier selector.
- * Horizontal padding matches `.ob-chat__head` so the header sits over the column.
+ * Horizontal padding matches `.ob-chat__head` (pane gutters, not `--ob-read-col`).
  */
 .ob-chat .ob-chat__scroll .ob-chat__transcript.chat-area {
   display: flex;
@@ -751,7 +813,7 @@ main#chatArea.chat-area:has(.ob-page) {
   gap: 20px;
   min-height: 0;
   overflow: visible;
-  padding: 24px var(--ob-pad-x, var(--ob-gutter));
+  padding: 20px var(--ob-gutter, 28px);
 }
 
 .ob-chat__empty {
@@ -775,6 +837,14 @@ main#chatArea.chat-area:has(.ob-page) {
 
 /* Narrow: rail overlays like Super Plan */
 @container orchestrate (max-width: 659px) {
+  .ob-shell {
+    position: relative;
+  }
+
+  .ob-chat {
+    --ob-gutter: 16px;
+  }
+
   .ob-rail {
     position: absolute;
     inset: 0 auto 0 0;
@@ -789,15 +859,11 @@ main#chatArea.chat-area:has(.ob-page) {
   .ob-page.is-rail-hidden .ob-rail {
     display: none;
   }
-
-  .ob-shell {
-    --ob-pad-x: 16px;
-  }
 }
 
 @container orchestrate (max-width: 900px) {
-  .ob-shell {
-    --ob-pad-x: 20px;
+  .ob-chat {
+    --ob-gutter: 20px;
   }
 }
 

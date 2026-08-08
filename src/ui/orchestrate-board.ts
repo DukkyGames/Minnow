@@ -3445,6 +3445,19 @@ function showBoardChatRailMenu(
 }
 
 /**
+ * Re-attach the live streaming row to the freshly painted embed.
+ *
+ * Opening a task chat while the board runs is the normal case, and
+ * `renderChatFromHistory` rebuilds the transcript from persisted history only —
+ * without this the in-flight turn keeps streaming into a detached row and the
+ * embed sits at whatever the task had already written.
+ */
+function remountBoardChatStreamDom(chatId: string): void {
+  if (!isChatStreaming(chatId)) return;
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
+}
+
+/**
  * Show a board chat in `.ob-main` in place of the board.
  *
  * Every entry point (task card row, running chip, rail row) routes here, so a
@@ -3480,6 +3493,7 @@ export function openBoardChatInOrchestrate(chatId: string): void {
     void import('./messages').then((m) => {
       m.renderChatFromHistory(chat);
       refreshBoardChatHeader();
+      remountBoardChatStreamDom(chatId);
     });
     return;
   }
@@ -3487,6 +3501,7 @@ export function openBoardChatInOrchestrate(chatId: string): void {
   void switchChat(chatId).then(() => {
     refreshBoardChatHeader();
     repaintBoardRail?.();
+    remountBoardChatStreamDom(chatId);
   });
 }
 

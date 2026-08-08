@@ -23,6 +23,9 @@ const {
 const { BOARD_ONBOARDING_KICKOFF_MESSAGE } = await import(
   '../../src/ui/orchestrate-board-kickoff.ts'
 );
+const { setOpenBoardChatId } = await import(
+  '../../src/ui/orchestrate-board-chat-state.ts'
+);
 
 /** @type {import('happy-dom').Window | undefined} */
 let win;
@@ -36,6 +39,7 @@ beforeEach(() => {
 afterEach(async () => {
   appState.setStreaming(false);
   appState.setExpertLabPageOpen(false);
+  setOpenBoardChatId(null);
   resetInstancesForTests();
   setSessionStateForTests(null);
   if (win) {
@@ -58,6 +62,40 @@ function seedTwoChats(activeId) {
     chats: [a, b],
   });
   return { a, b };
+}
+
+/** Board view active, a task chat streaming and active. */
+function seedRunningBoardTaskChat() {
+  const planner = createEmptyChatObject('');
+  planner.id = 'chat-planner';
+  planner.modeId = 'orchestrate';
+  planner.orchestratePlanPath = 'documentation/plans/x.md';
+  const task = createEmptyChatObject('');
+  task.id = 'chat-task';
+  task.modeId = 'build';
+  task.boardGroupId = 'grp-board-task';
+  const group = {
+    id: 'grp-board-task',
+    name: 'Board',
+    workspacePath: planner.workspacePath || '',
+    collapsed: false,
+    order: 0,
+    createdAt: 1,
+    viewMode: 'board',
+    plannerChatId: planner.id,
+    orchestrateBoard: { planPath: planner.orchestratePlanPath, tasks: [], waves: [] },
+  };
+  planner.boardGroupId = group.id;
+  setSessionStateForTests({
+    version: 5,
+    activeId: task.id,
+    activeBoardGroupId: group.id,
+    sidebarCollapsed: false,
+    chats: [planner, task],
+    groups: [group],
+  });
+  appState.setStreaming(true, task.id);
+  return { planner, task, group };
 }
 
 describe('streaming-state helpers', () => {
@@ -106,35 +144,24 @@ describe('streaming-state helpers', () => {
   });
 
   test('isStreamDomVisible false for build task chat during full board view', () => {
-    const planner = createEmptyChatObject('');
-    planner.id = 'chat-planner';
-    planner.modeId = 'orchestrate';
-    planner.orchestratePlanPath = 'documentation/plans/x.md';
-    const task = createEmptyChatObject('');
-    task.id = 'chat-task';
-    task.modeId = 'build';
-    task.boardGroupId = 'grp-board-task';
-    const group = {
-      id: 'grp-board-task',
-      name: 'Board',
-      workspacePath: planner.workspacePath || '',
-      collapsed: false,
-      order: 0,
-      createdAt: 1,
-      viewMode: 'board',
-      plannerChatId: planner.id,
-      orchestrateBoard: { planPath: planner.orchestratePlanPath, tasks: [], waves: [] },
-    };
-    planner.boardGroupId = group.id;
-    setSessionStateForTests({
-      version: 5,
-      activeId: task.id,
-      activeBoardGroupId: group.id,
-      sidebarCollapsed: false,
-      chats: [planner, task],
-      groups: [group],
-    });
-    appState.setStreaming(true, task.id);
+    const { task } = seedRunningBoardTaskChat();
+    assert.equal(isStreamDomVisible(task.id), false);
+  });
+
+  /*
+   * The embed paints inside the board page rather than over it, so both board
+   * guards have to stand down for it. Without this the transcript you open on a
+   * running task never receives another token and reads as frozen.
+   */
+  test('isStreamDomVisible true for a board chat open in the Orchestrate embed', () => {
+    const { task } = seedRunningBoardTaskChat();
+    setOpenBoardChatId(task.id);
+    assert.equal(isStreamDomVisible(task.id), true);
+  });
+
+  test('the embed exemption is scoped to the chat it is showing', () => {
+    const { planner, task } = seedRunningBoardTaskChat();
+    setOpenBoardChatId(planner.id);
     assert.equal(isStreamDomVisible(task.id), false);
   });
 

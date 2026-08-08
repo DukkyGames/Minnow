@@ -20,6 +20,10 @@ import { sessionState } from '../state/sessions';
 import type { BoardTask, Chat, ChatGroup } from '../types';
 import { appConfirm } from './app-dialog';
 import {
+  OB_PAGE_CHAT_OPEN_CLASS,
+  syncOrchestratePageRailVisibility,
+} from './orchestrate-page-shell';
+import {
   ORCHESTRATE_CHAT_PANE_TESTID,
   getOpenBoardChatId,
   isBoardChatEmbedOpen,
@@ -30,7 +34,6 @@ import {
 export { queryBoardChatTranscriptHost };
 
 const OB_CHAT_CLASS = 'ob-chat';
-const PAGE_CHAT_OPEN_CLASS = 'is-chat-open';
 /**
  * Marks the column while a board chat is open, so the composer and its strips
  * come back. A class on `.main-column` (the idiom every other stage view uses)
@@ -43,6 +46,113 @@ function syncMainColumnBoardChatClass(open: boolean): void {
   document
     .getElementById('mainColumn')
     ?.classList.toggle(MAIN_COLUMN_CHAT_CLASS, open);
+}
+
+/** Watches the column so the composer box follows rail collapse and window resize. */
+let composerBoxObserver: ResizeObserver | null = null;
+let composerBoxSyncRaf = 0;
+
+function scheduleBoardChatComposerBoxSync(): void {
+  if (composerBoxSyncRaf) return;
+  composerBoxSyncRaf = requestAnimationFrame(() => {
+    composerBoxSyncRaf = 0;
+    syncBoardChatRailColumnBox();
+    syncBoardChatComposerBox();
+  });
+}
+
+/**
+ * The composer is a `#mainColumn` sibling of `.chat-viewport`, but the board rail
+ * lives inside `#chatArea`. Without this, the rail height stops at the viewport
+ * bottom while the composer sits underneath in the main pane column only.
+ */
+function syncBoardChatRailColumnBox(): void {
+  const column = document.getElementById('mainColumn');
+  if (!column) return;
+  if (!column.classList.contains(MAIN_COLUMN_CHAT_CLASS)) {
+    column.style.removeProperty('--ob-board-chat-rail-top');
+    column.style.removeProperty('--ob-board-chat-rail-left');
+    return;
+  }
+  const viewport = column.querySelector(':scope > .chat-viewport');
+  if (!(viewport instanceof HTMLElement)) return;
+  const columnRect = column.getBoundingClientRect();
+  const viewportRect = viewport.getBoundingClientRect();
+  const top = Math.max(0, Math.round(viewportRect.top - columnRect.top));
+  const left = Math.max(0, Math.round(viewportRect.left - columnRect.left));
+  const nextTop = `${top}px`;
+  const nextLeft = `${left}px`;
+  if (
+    column.style.getPropertyValue('--ob-board-chat-rail-top') === nextTop &&
+    column.style.getPropertyValue('--ob-board-chat-rail-left') === nextLeft
+  ) {
+    return;
+  }
+  column.style.setProperty('--ob-board-chat-rail-top', nextTop);
+  column.style.setProperty('--ob-board-chat-rail-left', nextLeft);
+}
+
+/**
+ * Publish the open transcript's content box to `.main-column` (see ob-page.css).
+ *
+ * The composer is a `.main-column` row and cannot see inside `.ob-page`, so it
+ * would otherwise stretch the full window width — under the rail, and far wider
+ * than the messages it writes to. Measuring beats deriving from `--ob-rail-w`:
+ * the rail overlays instead of reserving space on a narrow pane.
+ */
+function syncBoardChatComposerBox(): void {
+  const column = document.getElementById('mainColumn');
+  if (!column) return;
+  const transcript = queryBoardChatTranscriptHost();
+  if (!transcript || !transcript.isConnected) {
+    column.style.removeProperty('--ob-chat-composer-left');
+    column.style.removeProperty('--ob-chat-composer-width');
+    syncBoardChatRailColumnBox();
+    return;
+  }
+  const style = getComputedStyle(transcript);
+  const padLeft = Number.parseFloat(style.paddingLeft) || 0;
+  const padRight = Number.parseFloat(style.paddingRight) || 0;
+  const left =
+    transcript.getBoundingClientRect().left - column.getBoundingClientRect().left + padLeft;
+  const width = transcript.clientWidth - padLeft - padRight;
+  if (width <= 0) return;
+  const nextLeft = `${Math.max(0, Math.round(left))}px`;
+  const nextWidth = `${Math.round(width)}px`;
+  // Writing unconditionally would resize the composer, resize the page, and call
+  // this observer straight back — bail once the box has settled.
+  if (
+    column.style.getPropertyValue('--ob-chat-composer-left') === nextLeft &&
+    column.style.getPropertyValue('--ob-chat-composer-width') === nextWidth
+  ) {
+    return;
+  }
+  column.style.setProperty('--ob-chat-composer-left', nextLeft);
+  column.style.setProperty('--ob-chat-composer-width', nextWidth);
+}
+
+function bindComposerBoxObserver(): void {
+  unbindComposerBoxObserver();
+  scheduleBoardChatComposerBoxSync();
+  const column = document.getElementById('mainColumn');
+  const transcript = queryBoardChatTranscriptHost();
+  const codeViews = document.getElementById('codeViews');
+  if (!column || typeof ResizeObserver !== 'function') return;
+  // Observe the column + transcript, not `.ob-page` — the shell rail observer
+  // already watches the page; doubling up caused ResizeObserver loop noise.
+  composerBoxObserver = new ResizeObserver(() => scheduleBoardChatComposerBoxSync());
+  composerBoxObserver.observe(column);
+  if (transcript?.isConnected) composerBoxObserver.observe(transcript);
+  if (codeViews instanceof HTMLElement) composerBoxObserver.observe(codeViews);
+}
+
+function unbindComposerBoxObserver(): void {
+  composerBoxObserver?.disconnect();
+  composerBoxObserver = null;
+  if (composerBoxSyncRaf) {
+    cancelAnimationFrame(composerBoxSyncRaf);
+    composerBoxSyncRaf = 0;
+  }
 }
 
 /** Board root parked while a chat is showing, so returning does not rebuild it. */
@@ -158,6 +268,23 @@ function headerStateTone(chat: Chat, task: BoardTask | undefined): string {
   return '';
 }
 
+/**
+ * Everything the header draws, as one string.
+ *
+ * `refreshBoardChatHeader` runs on every animation frame of a live run (board
+ * changes fire per stream token), and replacing the header that often threw away
+ * the Back button between a click's mousedown and mouseup.
+ */
+function chatHeaderKey(chat: Chat, task: BoardTask | undefined): string {
+  return [
+    chat.name?.trim() ?? '',
+    task?.id ?? '',
+    task?.wave ?? '',
+    headerStateLabel(chat, task),
+    headerStateTone(chat, task),
+  ].join(' | ');
+}
+
 function buildChatHeader(
   chat: Chat,
   group: ChatGroup,
@@ -188,6 +315,7 @@ function buildChatHeader(
 
   titleWrap.append(title, meta);
   head.append(back, titleWrap, state);
+  head.dataset.headKey = chatHeaderKey(chat, task);
   return head;
 }
 
@@ -224,9 +352,12 @@ export function mountBoardChatHost(
   scroll.appendChild(transcript);
   host.append(buildChatHeader(chat, group, onBack), scroll);
 
-  queryOrchestratePage()?.classList.add(PAGE_CHAT_OPEN_CLASS);
+  queryOrchestratePage()?.classList.add(OB_PAGE_CHAT_OPEN_CLASS);
+  const page = queryOrchestratePage();
+  if (page) syncOrchestratePageRailVisibility(page);
   syncMainColumnBoardChatClass(true);
   bindEscapeToBoard(onBack);
+  bindComposerBoxObserver();
   void import('./chat-scroll').then((m) => m.bindOrchestrateBoardChatScroll());
   return transcript;
 }
@@ -242,6 +373,9 @@ export function refreshBoardChatHeader(): void {
   if (!chat || !group) return;
   const oldHead = host.querySelector(':scope > .ob-chat__head');
   if (!(oldHead instanceof HTMLElement)) return;
+  if (oldHead.dataset.headKey === chatHeaderKey(chat, findTaskForChat(group, chat.id))) {
+    return;
+  }
   const back = oldHead.querySelector('.ob-chat__back');
   const onBack = (): void => {
     if (back instanceof HTMLButtonElement) back.click();
@@ -256,11 +390,16 @@ export function refreshBoardChatHeader(): void {
 export function unmountBoardChatHost(): boolean {
   const main = queryObMain();
   const host = main?.querySelector(`:scope > .${OB_CHAT_CLASS}`);
-  queryOrchestratePage()?.classList.remove(PAGE_CHAT_OPEN_CLASS);
+  queryOrchestratePage()?.classList.remove(OB_PAGE_CHAT_OPEN_CLASS);
+  const pageAfterClose = queryOrchestratePage();
+  if (pageAfterClose) syncOrchestratePageRailVisibility(pageAfterClose);
   syncMainColumnBoardChatClass(false);
+  syncBoardChatRailColumnBox();
   unbindEscapeToBoard();
+  unbindComposerBoxObserver();
   if (!(host instanceof HTMLElement)) {
     parkedBoardRoot = null;
+    syncBoardChatComposerBox();
     return false;
   }
   host.remove();
@@ -268,6 +407,8 @@ export function unmountBoardChatHost(): boolean {
     main.appendChild(parkedBoardRoot);
   }
   parkedBoardRoot = null;
+  // After the host is gone, so the measured box clears rather than going stale.
+  syncBoardChatComposerBox();
   return true;
 }
 
