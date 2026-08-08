@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { CHAT_SIDEBAR_CHANGED_EVENT } from '../../src/ui/layout-events.ts';
 import { initCodeViewsChatsToggle } from '../../src/ui/code-views-chats-toggle.ts';
+import { collapseChatSidebarForBoardEnter } from '../../src/ui/layout.ts';
 import { syncSuperPlanChrome } from '../../src/ui/super-plan-chrome.ts';
 import { resetMobileLayoutForTests } from '../../src/ui/mobile-layout.ts';
 import { OB_CHAT_AREA_CLASS } from '../../src/ui/orchestrate-page-shell.ts';
@@ -84,6 +85,24 @@ describe('code views chats toggle', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     assert.equal(document.getElementById('codeOverviewRoot'), null);
+  });
+
+  test('collapseChatSidebarForBoardEnter hides an expanded session list', () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: '11111111-1111-1111-1111-111111111111',
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [],
+    });
+    const side = document.getElementById('chatSidebar');
+    assert.ok(side);
+    assert.ok(sessionState);
+
+    collapseChatSidebarForBoardEnter();
+
+    assert.equal(sessionState.sidebarCollapsed, true);
+    assert.equal(side.classList.contains('collapsed'), true);
   });
 
   test('clicking Chats expands the rail during orchestrate board view', () => {

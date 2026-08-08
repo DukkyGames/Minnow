@@ -12,6 +12,8 @@ import {
   getBoardGroupForChat,
   buildSortedWorkspaceSidebarEntries,
   getGroupsForWorkspace,
+  isBoardOwnedChat,
+  isBoardOwnedGroup,
   listBoardGroupChatIds,
   openBoardGroup,
   renameGroup,
@@ -109,6 +111,7 @@ import {
   suspendOrchestratePlanScreenOnLeave,
 } from './orchestrate-plan-screen';
 import { exitBoardViewForNavigation } from './exit-board-view';
+import { isBoardChatEmbedOpenForChat } from './orchestrate-board-chat-state';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
@@ -824,12 +827,16 @@ export function renderSidebar(): void {
   const ws = getWorkspacePath();
   const excludeAssistantChats = (chat: { workspacePath?: string }) =>
     !isChatsWorkspacePath(chat.workspacePath ?? '');
+  // Board chats and board folders belong to the Orchestrate screen, which carries
+  // its own rail of boards and of each board's chats. Two lists for the same thing
+  // reads as one confused column (same reasoning as Super Plan's hidden session list).
   const workspaceChats = getSidebarListedChatsForWorkspace(ws, sessionState)
     .filter((c) => !isHiddenFromMainSidebar(c))
+    .filter((c) => !isBoardOwnedChat(c))
     .filter(excludeAssistantChats);
   const highlightChatId = sidebarHighlightChatId();
   const sidebarEntries = buildSortedWorkspaceSidebarEntries(
-    getGroupsForWorkspace(ws),
+    getGroupsForWorkspace(ws).filter((g) => !isBoardOwnedGroup(g)),
     workspaceChats,
   );
 
@@ -865,6 +872,7 @@ export function renderSidebar(): void {
 
   const unassigned = getUnassignedChats(sessionState)
     .filter((c) => !isHiddenFromMainSidebar(c))
+    .filter((c) => !isBoardOwnedChat(c))
     .filter(excludeAssistantChats);
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   if (!list.firstChild) appendChatListEmptyState(list);
@@ -1002,12 +1010,32 @@ function chatBrainCaptureState(chat: Chat): { disabled: boolean; title: string }
   return { disabled: false, title: 'Add to Brain' };
 }
 
-function showChatItemContextMenu(
+/** Extra behaviour for callers outside the sidebar (Orchestrate's chat rail). */
+export interface ChatItemContextMenuOptions {
+  /** Override default deleteChat (e.g. Experts hub detail list refresh). */
+  onDelete?: (chat: Chat) => void;
+  /**
+   * Drop "Open in orchestrator". Dead weight when the menu is already open
+   * inside the Orchestrate screen.
+   */
+  hideOrchestrateEntry?: boolean;
+  /** Repaint after an inline rename commits. Defaults to the sidebar. */
+  onRenamed?: (chat: Chat) => void;
+}
+
+/**
+ * Row context menu for a chat: Rename, Add to Brain, Open in orchestrator, Delete.
+ *
+ * Exported so Orchestrate's chat rail shows the same menu rather than a
+ * near-copy that drifts. Callers pass `hideOrchestrateEntry` when the menu opens
+ * on a surface where "Open in orchestrator" is a no-op.
+ */
+export function showChatItemContextMenu(
   x: number,
   y: number,
   chat: Chat,
   nameSpan: HTMLSpanElement,
-  options?: Pick<AppendChatRowOptions, 'onDelete'>,
+  options?: ChatItemContextMenuOptions,
 ): void {
   const existing = document.getElementById('chatItemContextMenu');
   existing?.remove();
@@ -1039,7 +1067,7 @@ function showChatItemContextMenu(
     e.preventDefault();
     e.stopPropagation();
     closeMenu();
-    beginRenameChat(chat.id, nameSpan);
+    beginRenameChat(chat.id, nameSpan, options?.onRenamed);
   });
 
   const brainState = chatBrainCaptureState(chat);
@@ -1058,7 +1086,7 @@ function showChatItemContextMenu(
 
   const isPlannerChat = normalizeModeId(chat.modeId) === 'orchestrate';
   let orchestrateItem: HTMLButtonElement | null = null;
-  if (isPlannerChat) {
+  if (isPlannerChat && !options?.hideOrchestrateEntry) {
     orchestrateItem = document.createElement('button');
     orchestrateItem.type = 'button';
     orchestrateItem.textContent = 'Open in orchestrator';
@@ -1105,7 +1133,11 @@ function showChatItemContextMenu(
   }, 0);
 }
 
-function beginRenameChat(chatId: string, nameSpan: HTMLSpanElement): void {
+function beginRenameChat(
+  chatId: string,
+  nameSpan: HTMLSpanElement,
+  onRenamed?: (chat: Chat) => void,
+): void {
   const chat = sessionState!.chats.find((c) => c.id === chatId);
   if (!chat) return;
   const inp = document.createElement('input');
@@ -1124,7 +1156,11 @@ function beginRenameChat(chatId: string, nameSpan: HTMLSpanElement): void {
     inp.replaceWith(nameSpan);
     nameSpan.textContent = chat.name;
     touchChat(chat);
-    renderSidebar();
+    if (onRenamed) {
+      onRenamed(chat);
+    } else {
+      renderSidebar();
+    }
     scheduleSaveSessions();
   };
 
@@ -1224,7 +1260,16 @@ export async function switchChat(id: string): Promise<void> {
     return;
   }
 
-  const boardRestoreGroup = resolveBoardRestoreGroupOnSwitch(id);
+  /*
+   * The Orchestrate chat embed drives its own switches: the board stays mounted
+   * behind `.ob-chat`, and the planner is just another row in its rail rather
+   * than a signal to reopen the kanban.
+   */
+  const boardChatEmbedOpen = isBoardChatEmbedOpenForChat(id);
+
+  const boardRestoreGroup = boardChatEmbedOpen
+    ? undefined
+    : resolveBoardRestoreGroupOnSwitch(id);
   if (boardRestoreGroup) {
     const prevActiveId = sessionState.activeId;
     if (prevActiveId !== id) {
@@ -1240,7 +1285,7 @@ export async function switchChat(id: string): Promise<void> {
     return;
   }
 
-  const boardWasOpen = exitBoardViewForNavigation();
+  const boardWasOpen = boardChatEmbedOpen ? false : exitBoardViewForNavigation();
 
   if (id === sessionState.activeId) {
     acknowledgeChatViewed(id);

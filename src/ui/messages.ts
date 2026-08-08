@@ -41,7 +41,15 @@ import { createIcon, type IconName } from './icon';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
-import { getActiveBoardGroup } from '../state/chat-groups';
+import {
+  getActiveBoardGroup,
+  getBoardGroupForChat,
+  isBoardOwnedChat,
+} from '../state/chat-groups';
+import {
+  isBoardChatEmbedOpenForChat,
+  queryBoardChatTranscriptHost,
+} from './orchestrate-board-chat-state';
 import {
   clearActiveGoal,
   clearActiveLoops,
@@ -181,15 +189,18 @@ function buildChatHistoryPendingMarker(): HTMLElement {
  * never leaves another chat's bubbles visible during the history GET.
  */
 export function paintChatTranscriptHistoryPending(mount?: string | HTMLElement): void {
-  const area = resolveChatMount(mount);
-  const codeMount = isCodeChatMount(mount);
+  // An open board chat owns the pending marker too, or the previous task's
+  // transcript lingers in `.ob-main` during the history GET.
+  const boardChatHost = mount == null ? queryBoardChatTranscriptHost() : null;
+  const area = boardChatHost ?? resolveChatMount(mount);
+  const codeMount = boardChatHost != null || isCodeChatMount(mount);
 
   // Full-column overlays own #chatArea — same guard as renderChatFromHistory.
-  if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
+  if (codeMount && !boardChatHost && isMainColumnOverlaySuppressingChatDom()) {
     return;
   }
 
-  const boardGroup = codeMount ? getActiveBoardGroup() : null;
+  const boardGroup = codeMount && !boardChatHost ? getActiveBoardGroup() : null;
   if (boardGroup?.viewMode === 'board') {
     return;
   }
@@ -228,9 +239,36 @@ export function renderStatsForChat(chat: Chat): void {
   if (isHubMounted()) refreshHubLiveData();
 }
 
+/** Empty transcript for a board task that has not run yet. */
+function buildBoardChatEmptyState(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'ob-chat__empty';
+  wrap.setAttribute('role', 'status');
+
+  const title = document.createElement('p');
+  title.className = 'ob-chat__empty-title';
+  title.textContent = 'This task has not started.';
+
+  const hint = document.createElement('p');
+  hint.className = 'ob-chat__empty-hint';
+  hint.textContent = 'Its transcript appears here once the board runs it.';
+
+  wrap.append(title, hint);
+  return wrap;
+}
+
 export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
-  const area = resolveChatMount(mount);
-  const codeMount = isCodeChatMount(mount);
+  /*
+   * Board chats are not listed in the chats panel, so they never paint over the
+   * column. When one is open from the Orchestrate screen it paints inside
+   * `.ob-main`, beside the rail that lists it.
+   */
+  const boardChatHost =
+    mount == null && isBoardChatEmbedOpenForChat(chat.id)
+      ? queryBoardChatTranscriptHost()
+      : null;
+  const area = boardChatHost ?? resolveChatMount(mount);
+  const codeMount = boardChatHost != null || isCodeChatMount(mount);
   const scrollAnchor = captureChatScrollAnchor();
 
   /*
@@ -243,15 +281,21 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     teardownOrchestratePlanScreen();
   }
 
-  // Code overview / code map / Issues embed own #chatArea — do not repaint underneath.
-  if (codeMount && isMainColumnOverlaySuppressingChatDom()) {
+  /*
+   * Code overview / code map / Issues embed own #chatArea — do not repaint
+   * underneath. Orchestrate is on that list too (`chat-area--orchestrate`), but
+   * a board chat paints *inside* it rather than over it, so the embed is exempt.
+   */
+  if (codeMount && !boardChatHost && isMainColumnOverlaySuppressingChatDom()) {
     return;
   }
 
   runWithChatMount(area, () => {
   suppressBubbleScroll = true;
   try {
-  if (codeMount) {
+  // Skipped for the embed: stripping overlay classes would take
+  // `chat-area--orchestrate` off #chatArea and collapse the page around it.
+  if (codeMount && !boardChatHost) {
     teardownCodeBrainMapBeforeChatPaint();
     teardownIssuesEmbedBeforeChatPaint();
     stripMainColumnOverlayClasses();
@@ -307,7 +351,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   } else if (codeMount && isOrchestratePlanScreenMounted()) {
     teardownOrchestratePlanScreenDom();
   }
-  const boardGroup = codeMount ? getActiveBoardGroup() : null;
+  const boardGroup = codeMount && !boardChatHost ? getActiveBoardGroup() : null;
   if (boardGroup?.viewMode === 'board') {
     teardownHub();
     void import('./orchestrate-board-setup-banner').then((m) => m.removeBoardSetupReturnBanner());
@@ -317,10 +361,27 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     });
     return;
   }
+  /*
+   * A board chat with no board on screen would be a transcript with no home:
+   * it has no row in the chats panel to navigate back from. Reopen the board
+   * that owns it instead. Placed after the board branch above so the reopen
+   * (which activates the planner, itself a board chat) settles rather than loops.
+   */
+  if (codeMount && !boardChatHost && isBoardOwnedChat(chat)) {
+    const owner = getBoardGroupForChat(chat);
+    if (owner) {
+      void import('../state/chat-groups').then((m) => m.openBoardGroup(owner.id));
+      return;
+    }
+  }
   void import('./orchestrate-board-setup-banner').then((m) => m.syncBoardSetupReturnBanner(chat));
   clearSubAgentCardDomRegistry();
   if (!chat.history.length) {
-    if (codeMount) {
+    if (boardChatHost) {
+      // renderHub replaces all of #chatArea, which here is the Orchestrate page.
+      // An unstarted task gets a line of its own instead.
+      area.replaceChildren(buildBoardChatEmptyState());
+    } else if (codeMount) {
       renderHub(chat);
       // Sub-agent cards mount in the transcript only (see sub-agent-cards.ts).
     } else {

@@ -12,6 +12,7 @@ import {
   shouldPaintDesktopChatSurface,
 } from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
+import { isBoardChatEmbedOpenForChat } from '../ui/orchestrate-board-chat-state';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
 import { reportBackgroundError } from '../boot/report-background-error';
 
@@ -155,6 +156,14 @@ export function isStreamDomVisible(chatId: string): boolean {
   }
   // Desktop chat owns its transcript — do not let Code board/plan overlays suppress it.
   if (shouldPaintDesktopChatSurface()) return true;
+  /*
+   * A board chat opened from the Orchestrate screen paints inside `.ob-chat`,
+   * which lives *within* the board page rather than over it. Without this the
+   * two guards below both fire — `chat-area--orchestrate` is a main-column
+   * overlay class and the board view is active — so the embed never receives
+   * stream or tool DOM and reads as a frozen transcript while the task runs.
+   */
+  if (isBoardChatEmbedOpenForChat(chatId)) return true;
   if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;
   if (isMainColumnOverlaySuppressingChatDom()) return false;
   if (active.kind === 'expert-lab' && expertsPageOpen) return false;
