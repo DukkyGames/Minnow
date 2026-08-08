@@ -44,6 +44,7 @@ import { stopGeneration } from '../chat/stop-generation';
 import {
   findChatById,
   getActiveChat,
+  removeChatById,
   scheduleSaveSessions,
   sessionState,
 } from '../state/sessions';
@@ -52,7 +53,8 @@ import {
   buildHistoryUserContent,
   runChatTurn,
 } from '../tools/loop';
-import { detectLocalServer } from '../tools/client';
+import { detectLocalServer, executeTool } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import { setChatMode } from './mode-selector';
 import { teardownHub } from './hub';
 import {
@@ -65,7 +67,7 @@ import { shortPlanLabel } from './orchestrate-plan-picker';
 import { launchBoardFromPlan } from './orchestrate-launch';
 import { applyComposerDraftForChat, persistComposerDraftOnChat } from './composer-draft';
 import { getActiveComposerSurface } from './composer-surface';
-import { createChatWithMode, switchChat } from './sidebar';
+import { createChatWithMode, renderSidebar, switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
 import {
   forceCloseAskQuestionModalForChat,
@@ -97,6 +99,9 @@ import {
 } from './super-plan-page';
 import { syncSuperPlanChrome } from './super-plan-chrome';
 import { openSettings } from './settings-page';
+import { readDefaultModelBinding } from './default-model';
+import { setStatus } from './status';
+import type { PlanLibraryEntry } from '../chat/super-plan/plan-library';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
 export const ORCHESTRATE_PLAN_SCREEN_PROMPT_ID = 'orchestratePlanScreenPrompt';
@@ -117,6 +122,7 @@ export const ORCHESTRATE_PLAN_SCREEN_STATUS_LINES = [
 export const ORCHESTRATE_PLAN_SCREEN_FISH_STATUS = ORCHESTRATE_PLAN_SCREEN_STATUS_LINES;
 
 const CHAT_AREA_PLAN_SCREEN_CLASS = 'chat-area--plan-screen';
+const CHAT_AREA_SUPER_PLAN_CLASS = 'chat-area--super-plan';
 const MAIN_COLUMN_PLAN_SCREEN_CLASS = 'main-column--plan-screen';
 
 export type OrchestratePlanScreenPhase =
@@ -1236,6 +1242,9 @@ function buildSuperPlanScreenDom(
       superPlanDocPath = null;
       renderOrchestratePlanScreen({ phase: 'prompt', chatId: opts.chatId });
     },
+    onDeleteEntry: (entry) => {
+      void deleteSuperPlanLibraryEntry(entry);
+    },
   };
 
   /*
@@ -1647,7 +1656,85 @@ function mountPlanActivityButton(actionsStart: HTMLElement): void {
   planActivitySession.mountButton(actionsStart);
 }
 
-const CHAT_AREA_SUPER_PLAN_CLASS = 'chat-area--super-plan';
+/** Remove a plan from the library rail (run chat, plan file, or both). */
+async function deleteSuperPlanLibraryEntry(entry: PlanLibraryEntry): Promise<void> {
+  const title = entry.title.trim() || 'this plan';
+  const removes: string[] = [];
+  if (entry.chatId) removes.push('the run chat');
+  if (entry.path?.trim()) removes.push('the plan file');
+  const detail = removes.length
+    ? `This removes ${removes.join(' and ')}.`
+    : 'This cannot be undone.';
+
+  if (
+    !(await appConfirm(`Delete "${title}"? ${detail}`, {
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  ) {
+    return;
+  }
+
+  if (entry.chatId && isChatStreaming(entry.chatId)) {
+    setStatus('spin', 'Finish the current reply first');
+    return;
+  }
+
+  const viewingDoc = Boolean(entry.path?.trim() && superPlanDocPath === entry.path.trim());
+  const viewingRun = Boolean(
+    entry.chatId && planSession?.chatId === entry.chatId && !superPlanDocPath,
+  );
+
+  if (entry.path?.trim()) {
+    if (!isLocalServerAvailable()) {
+      await appAlert('Start the local server to delete plan files on disk.');
+      if (!entry.chatId) return;
+    } else {
+      setStatus('spin', 'Deleting…');
+      try {
+        const result = await executeTool('delete_path', { path: entry.path.trim() });
+        const content = typeof result.content === 'string' ? result.content : '';
+        if (content.startsWith('Error:')) {
+          setStatus('err', content.replace(/^Error:\s*/i, '').trim() || 'Delete failed');
+          if (!entry.chatId) return;
+        }
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : 'Delete failed');
+        if (!entry.chatId) return;
+      }
+    }
+  }
+
+  if (entry.chatId) {
+    const chat = findChatById(entry.chatId);
+    if (chat?.superPlan) {
+      const live =
+        entry.state === 'running' ||
+        entry.state === 'waiting' ||
+        entry.state === 'paused' ||
+        entry.state === 'error';
+      if (live) cancelSuperPlan(chat);
+    }
+    const { modelId } = readDefaultModelBinding();
+    const result = removeChatById(entry.chatId, modelId);
+    if (result.ok) {
+      scheduleSaveSessions();
+      renderSidebar();
+    }
+  }
+
+  if (viewingDoc || viewingRun) {
+    superPlanDocPath = null;
+    const nextId = sessionState?.activeId;
+    if (nextId) {
+      renderOrchestratePlanScreen({ phase: 'prompt', chatId: nextId });
+    }
+  } else {
+    refreshSuperPlanLibrary();
+  }
+
+  setStatus('idle', 'Plan deleted');
+}
 
 /** Open a Super Plan run picked from the library rail. */
 function openSuperPlanRun(chatId: string): void {

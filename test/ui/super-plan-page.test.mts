@@ -18,7 +18,7 @@ import {
 import { createInitialSuperPlanStages } from '../../src/chat/super-plan/state.ts';
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import { streamingChatIds } from '../../src/app-state.ts';
-import type { Chat } from '../../src/types.ts';
+import { setLocalServerAvailableForTests } from '../../src/tools/config.ts';
 
 let activeWindow: Window | undefined;
 
@@ -56,6 +56,7 @@ function stubHandlers(): SuperPlanPageHandlers {
     onSelectRun: record('onSelectRun'),
     onOpenPlanFile: record('onOpenPlanFile'),
     onNewPlan: record('onNewPlan'),
+    onDeleteEntry: record('onDeleteEntry'),
   };
 }
 
@@ -135,6 +136,28 @@ describe('super plan page', () => {
       stages[9]?.classList.contains('is-done') === false,
       'later stages are not marked done',
     );
+  });
+
+  test('rail row context menu deletes via handler', async () => {
+    installTestWindow();
+    setLocalServerAvailableForTests(false);
+    const chat = makeRunChat('sp-del', 'grill');
+    const root = mountPage(chat);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    const row = root.querySelector('.sp-row');
+    assert.ok(row);
+    row!.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 34 }),
+    );
+    const menu = document.getElementById('superPlanRowContextMenu');
+    assert.ok(menu);
+    const deleteBtn = menu!.querySelector('button');
+    assert.equal(deleteBtn?.textContent, 'Delete');
+    deleteBtn!.click();
+    assert.ok(calls.some((c) => c.startsWith('onDeleteEntry')));
+    setLocalServerAvailableForTests(true);
   });
 
   test('a paused pipeline never renders a running stage', () => {

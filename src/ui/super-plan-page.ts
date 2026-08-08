@@ -75,6 +75,8 @@ export interface SuperPlanPageHandlers {
   onSelectRun: (chatId: string) => void;
   onOpenPlanFile: (path: string) => void;
   onNewPlan: () => void;
+  /** Rail context menu: remove the plan file and/or its run chat. */
+  onDeleteEntry: (entry: PlanLibraryEntry) => void;
 }
 
 export interface SuperPlanPageOptions {
@@ -140,6 +142,55 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+/** Right-click menu on a library row — same affordances as chat rows in the sidebar. */
+function showSuperPlanRowContextMenu(
+  x: number,
+  y: number,
+  entry: PlanLibraryEntry,
+  onDelete: (entry: PlanLibraryEntry) => void,
+): void {
+  const existing = document.getElementById('superPlanRowContextMenu');
+  existing?.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'superPlanRowContextMenu';
+  menu.className = 'chat-group-context-menu';
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  const closeMenu = (): void => {
+    menu.remove();
+    document.removeEventListener('pointerdown', onPointerDownOutside, true);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onPointerDownOutside = (e: PointerEvent): void => {
+    if (menu.contains(e.target as Node)) return;
+    closeMenu();
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') closeMenu();
+  };
+
+  const deleteItem = document.createElement('button');
+  deleteItem.type = 'button';
+  deleteItem.textContent = 'Delete';
+  deleteItem.className = 'chat-context-menu__item--danger';
+  deleteItem.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu();
+    onDelete(entry);
+  });
+
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+
+  window.setTimeout(() => {
+    document.addEventListener('pointerdown', onPointerDownOutside, true);
+    document.addEventListener('keydown', onKey);
+  }, 0);
 }
 
 function formatClock(ms: number): string {
@@ -487,6 +538,10 @@ class SuperPlanPage {
       this.collapseRailIfOverlaying();
       if (entry.chatId) this.handlers.onSelectRun(entry.chatId);
       else if (entry.path) this.handlers.onOpenPlanFile(entry.path);
+    });
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showSuperPlanRowContextMenu(e.clientX, e.clientY, entry, this.handlers.onDeleteEntry);
     });
     wrap.appendChild(row);
     return wrap;
