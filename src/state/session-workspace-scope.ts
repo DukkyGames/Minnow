@@ -402,6 +402,25 @@ export function getUnassignedChats(state: SessionState): Chat[] {
 }
 
 /**
+ * Start a new empty chat when the user opens or switches into a project workspace.
+ * Avoids restoring the last Orchestrate planner or board-linked session.
+ */
+export function createFreshChatIdForWorkspaceEntry(
+  workspacePath: string,
+  state: SessionState,
+  fallbackModelId: string,
+  createScopedEmptyChat: (modelId: string, workspaceKey: string) => Chat,
+): string {
+  const key = normalizeWorkspacePath(workspacePath);
+  const fresh = createScopedEmptyChat(fallbackModelId, key);
+  state.chats.unshift(fresh);
+  const now = Date.now();
+  fresh.updatedAt = now;
+  fresh.lastMessageAt = now;
+  return fresh.id;
+}
+
+/**
  * Pick the active chat id for a workspace: remembered id, else newest scoped chat,
  * else create a new empty chat bound to that workspace.
  */

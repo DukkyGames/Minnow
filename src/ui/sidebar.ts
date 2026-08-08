@@ -344,6 +344,8 @@ export async function applyWorkspaceScopedSession(
   options?: { skipFileTreeSync?: boolean },
 ): Promise<void> {
   clearChatSelection();
+  // Opening a workspace should land in chat view, not the last Orchestrate board.
+  exitBoardViewForNavigation();
   // Workspace switch may enter/leave a git repo — recheck Undo visibility.
   invalidateComposerUndoGitCache();
   // Awaits history hydrate for the workspace's active chat before painting.

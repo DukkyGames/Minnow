@@ -49,6 +49,7 @@ import {
   resolveActiveAssistantChatId,
   resolveActiveEmailAssistantChatId,
   resolveActiveChatIdForWorkspace as pickActiveChatIdForWorkspace,
+  createFreshChatIdForWorkspaceEntry as pickFreshChatIdForWorkspaceEntry,
   type RawSessionJson,
 } from './session-workspace-scope';
 import { getForegroundAppId } from '../os/instances';
@@ -1435,10 +1436,17 @@ export async function onWorkspaceChanged(
 
   const fallbackModelId =
     state.chats.find((c) => c.id === state.activeId)?.modelId ?? '';
-  const nextId = resolveActiveChatIdForWorkspace(newPath, state, fallbackModelId);
+  const nextId = pickFreshChatIdForWorkspaceEntry(
+    newPath,
+    state,
+    fallbackModelId,
+    (modelId, workspaceKey) => createEmptyChatObject(modelId, workspaceKey),
+  );
   const activeChanged = state.activeId !== nextId;
   state.activeId = nextId;
   markSessionScalarsDirty();
+  touchChat(getActiveChat());
+  pruneEphemeralEmptyChats(state, nextId);
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(newPath));
   scheduleSaveSessions();
   // C.1: hydrate before callers paint — lazy-boot chats have empty history until this lands.

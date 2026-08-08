@@ -12,6 +12,7 @@ import {
   getChatsForWorkspace,
   getUnassignedChats,
   migrateSessionStateV1ToV2,
+  createFreshChatIdForWorkspaceEntry,
   resolveActiveChatIdForWorkspace,
 } from '../../src/state/session-workspace-scope.ts';
 import type { SessionState } from '../../src/types.ts';
@@ -163,6 +164,27 @@ describe('getUnassignedChats', () => {
     const unassigned = getUnassignedChats(state);
     assert.equal(unassigned.length, 1);
     assert.equal(unassigned[0].id, CHAT_LEGACY);
+  });
+});
+
+describe('createFreshChatIdForWorkspaceEntry', () => {
+  it('always creates a new scoped chat even when a workspace chat is remembered', () => {
+    const key = normalizeWorkspacePath(PATH_A);
+    const state = seedState({
+      activeId: CHAT_B,
+      lastActiveChatIdByWorkspace: { [key]: CHAT_A },
+      chats: [
+        chatRow(CHAT_A, 'Orchestrate planner', PATH_A, 300),
+        chatRow(CHAT_B, 'B1', PATH_B, 200),
+      ],
+    });
+
+    const next = createFreshChatIdForWorkspaceEntry(PATH_A, state, 'fallback-model', (modelId, ws) =>
+      chatRow('new-chat', 'New', ws, Date.now()),
+    );
+    assert.notEqual(next, CHAT_A);
+    assert.equal(state.chats[0].id, next);
+    assert.equal(normalizeWorkspacePath(state.chats[0].workspacePath), key);
   });
 });
 
