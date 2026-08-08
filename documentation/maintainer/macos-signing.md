@@ -101,9 +101,23 @@ MINNOW_SKIP_SIGNING=1 npm run package:mac
 
 Gatekeeper will block first open; auto-update stays disabled in Settings.
 
+### How long notarization should take
+
+The shipped macOS app is **~1 GB on disk** but compresses to **~350 MB** for Apple’s upload (similar to `Minnow-*-arm64.zip` in `release/pkg/`). Expect **several minutes** to zip locally, **~5–15 minutes** to upload on a typical home connection, then more time while Apple scans. That has been true since 0.0.2 — it is not a new 0.0.3 bundle blow-up.
+
+If a run feels *much* longer than your last release, the usual causes are: **upload timeouts** (`deadlineExceeded` / `abortedUpload`) followed by **automatic retries** (each retry re-uploads the whole zip), or Apple/notarytool slowness — not a dramatically larger app.
+
+`notarytool` defaults to S3 Transfer Acceleration; for large Minnow builds, **direct S3** (`--no-s3-acceleration`) is the default in our afterSign hook. Opt into acceleration with `MINNOW_NOTARIZE_S3_ACCELERATION=1` only if you know it helps on your network.
+
+To skip re-zipping when you already have an archive (e.g. `release/pkg/Minnow-notarize-submit.zip`):
+
+```bash
+MINNOW_NOTARIZE_ZIP=release/pkg/Minnow-notarize-submit.zip npm run signing:notarize -- release/pkg/mac-arm64/Minnow.app
+```
+
 ### Signed build without notarization (local / flaky upload)
 
-When `.env.signing` is configured, `package:mac` signs **and** notarizes. Notarization uploads the whole `.app` to Apple (often hundreds of MB or more); slow or unstable networks can fail with `HTTPClientError.deadlineExceeded` / `abortedUpload` even though signing already succeeded.
+When `.env.signing` is configured, `package:mac` signs **and** notarizes. Notarization uploads a **~350 MB** zip to Apple; uploads can fail with `HTTPClientError.deadlineExceeded` / `abortedUpload` even on good Wi‑Fi because of Apple’s client timeouts, not because Minnow grew 10× since the last release.
 
 ```bash
 MINNOW_SKIP_NOTARIZATION=1 npm run package:mac
