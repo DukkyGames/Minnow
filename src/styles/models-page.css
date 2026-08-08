@@ -2037,9 +2037,12 @@
   }
 }
 
-/* Reparented settings sections keep their own styling. */
+/* Reparented settings sections keep their own styling.
+   Models panels already own the centered column — do not double-constrain. */
 .models-section .settings-section {
   display: block;
+  max-width: none;
+  margin-inline: 0;
 }
 
 /* ------------------------------------------------------- Models → Voice */
