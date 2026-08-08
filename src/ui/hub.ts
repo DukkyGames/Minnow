@@ -2,6 +2,8 @@
  * Vibe Coding Hub — rich empty-chat landing inside #chatArea.
  */
 
+import '../styles/hub.css';
+
 import { EMPTY_STATE_HTML, PLACEHOLDER_CHAT_NAME } from '../constants';
 import { listModes } from '../chat/modes/registry';
 import { normalizeModeId } from '../chat/modes/types';

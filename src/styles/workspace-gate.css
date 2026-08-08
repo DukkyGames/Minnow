@@ -39,6 +39,12 @@ html.os-workspaces .mn-os-stage.is-in-app #osWorkspaceGate {
   display: none;
 }
 
+/* After cold pick: keep the gate covering Code until first chrome paint. */
+html.os-workspace-gate-holding #osWorkspaceGate {
+  display: flex !important;
+  z-index: 80;
+}
+
 #osWorkspaceGate.workspace-gate--opening {
   pointer-events: none;
 }

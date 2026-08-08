@@ -2,6 +2,8 @@
  * Orchestrate hub: top-bar entry for plan pick + recent boards (Vibe hub layout).
  */
 
+import '../styles/orchestrate-hub.css';
+
 import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import {
   mountPlanPreviewContent,

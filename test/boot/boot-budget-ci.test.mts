@@ -1,7 +1,7 @@
 /**
  * CI boot budget — happy-dom harness for scheduleMarkAppReady (loader dismiss path).
  * CSS sentinel is applied AFTER the timer starts so the harness actually waits for
- * whenAppShellStyled (pre-applying it made the gate resolve in ~20 ms unfalsifiably).
+ * whenAppShellStyled. Chrome-ready is signaled separately (dual-gate).
  */
 
 import assert from 'node:assert/strict';
@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 import {
   APP_CSS_READY_PROPERTY,
+  markChromeReady,
+  resetAppReadyForTests,
   scheduleMarkAppReady,
 } from '../../src/boot/app-ready.ts';
 
@@ -44,18 +46,25 @@ describe('boot budget (CI harness)', () => {
   let win: Window;
 
   afterEach(() => {
+    resetAppReadyForTests();
     win?.close();
   });
 
   it('scheduleMarkAppReady completes within startup harness ceiling', async () => {
     win = new Window();
     installWindow(win);
+    win.document.body.innerHTML =
+      '<div id="app-loader" class="app-loader" aria-busy="true"></div>';
     win.window.__MINNOW_BOOT_ORIGIN_MS = win.performance.now();
 
     const started = win.performance.now();
     scheduleMarkAppReady();
     // Apply CSS after the timer starts — mirrors real boot where stylesheet arrives async.
-    win.setTimeout(() => applyAppCss(win), 12);
+    win.setTimeout(() => {
+      applyAppCss(win);
+      // Dual-gate: chrome paint must also signal before the loader dismisses.
+      markChromeReady();
+    }, 12);
 
     await new Promise<void>((resolve) => {
       const deadline = started + budgets.startup.appReadyHarnessMaxMs;
@@ -73,23 +82,42 @@ describe('boot budget (CI harness)', () => {
       tick();
     });
 
-    const elapsed = win.performance.now() - started;
+    const elapsed = win.performance.now();
+    const delta = elapsed - started;
     assert.ok(
       win.document.documentElement.classList.contains('app-ready'),
       'expected app-ready class',
     );
     assert.ok(
-      elapsed <= budgets.startup.appReadyHarnessMaxMs,
-      `boot harness took ${elapsed.toFixed(1)} ms (limit ${budgets.startup.appReadyHarnessMaxMs} ms)`,
+      delta <= budgets.startup.appReadyHarnessMaxMs,
+      `boot harness took ${delta.toFixed(1)} ms (limit ${budgets.startup.appReadyHarnessMaxMs} ms)`,
     );
     // Gate must not resolve before CSS is applied (previously ~20 ms with pre-seeded sentinel).
     assert.ok(
-      elapsed >= 12,
-      `boot harness resolved too fast (${elapsed.toFixed(1)} ms) — CSS sentinel may have been pre-applied`,
+      delta >= 12,
+      `boot harness resolved too fast (${delta.toFixed(1)} ms) — CSS sentinel may have been pre-applied`,
     );
 
     const metrics = win.window.__MINNOW_BOOT_METRICS__;
     assert.ok(metrics);
     assert.ok(metrics!.appReadyMs <= budgets.startup.appReadyHarnessMaxMs);
+  });
+
+  it('does not dismiss the loader on CSS alone without chrome-ready', async () => {
+    win = new Window();
+    installWindow(win);
+    win.document.body.innerHTML =
+      '<div id="app-loader" class="app-loader" aria-busy="true"></div>';
+
+    scheduleMarkAppReady();
+    applyAppCss(win);
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 80));
+
+    assert.equal(
+      win.document.documentElement.classList.contains('app-ready'),
+      false,
+      'loader must wait for chrome-ready',
+    );
   });
 });

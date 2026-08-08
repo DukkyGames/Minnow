@@ -2,6 +2,11 @@
  * Wire file tree sidebar, split viewer, and resizer after app boot.
  */
 
+import '../styles/file-panel.css';
+/* Material Icon Theme (PKief) — colorful file/folder glyphs for Code tree + tabs */
+import '../styles/file-type-icons.css';
+import '../styles/git-commit-diff.css';
+
 import {
   getFilePanelState,
   loadFilePanelPrefs,

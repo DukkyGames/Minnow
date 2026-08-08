@@ -4,6 +4,10 @@ import { Window } from 'happy-dom';
 import {
   APP_CSS_READY_PROPERTY,
   isAppShellStyled,
+  isChromeReady,
+  markChromeReady,
+  resetAppReadyForTests,
+  scheduleMarkAppReady,
   whenAppShellStyled,
   whenAppStylesReady,
 } from '../../src/boot/app-ready.ts';
@@ -12,6 +16,7 @@ describe('whenAppStylesReady', () => {
   let win: Window;
 
   afterEach(() => {
+    resetAppReadyForTests();
     win?.close();
   });
 
@@ -115,6 +120,7 @@ describe('isAppShellStyled', () => {
   let win: Window;
 
   afterEach(() => {
+    resetAppReadyForTests();
     win?.close();
   });
 
@@ -156,6 +162,7 @@ describe('whenAppShellStyled', () => {
   let win: Window;
 
   afterEach(() => {
+    resetAppReadyForTests();
     win?.close();
   });
 
@@ -189,5 +196,48 @@ describe('whenAppShellStyled', () => {
 
     assert.equal(isAppShellStyled(), false);
     assert.ok(elapsed < 1_000, `expected a bounded wait, took ${elapsed}ms`);
+  });
+});
+
+describe('dual-gate chrome ready', () => {
+  let win: Window;
+
+  afterEach(() => {
+    resetAppReadyForTests();
+    win?.close();
+  });
+
+  it('markChromeReady is idempotent and flips isChromeReady', () => {
+    win = new Window();
+    installWindow(win);
+    assert.equal(isChromeReady(), false);
+    markChromeReady();
+    markChromeReady();
+    assert.equal(isChromeReady(), true);
+  });
+
+  it('reveals only after both CSS and chrome gates', async () => {
+    win = new Window();
+    installWindow(win);
+    win.document.body.innerHTML = '<div id="app-loader"></div>';
+
+    scheduleMarkAppReady();
+    markChromeReady();
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 40));
+    assert.equal(win.document.documentElement.classList.contains('app-ready'), false);
+
+    applyAppCss(win);
+    await new Promise<void>((resolve) => {
+      const deadline = Date.now() + 2_000;
+      const tick = () => {
+        if (win.document.documentElement.classList.contains('app-ready') || Date.now() >= deadline) {
+          resolve();
+          return;
+        }
+        win.setTimeout(tick, 8);
+      };
+      tick();
+    });
+    assert.equal(win.document.documentElement.classList.contains('app-ready'), true);
   });
 });

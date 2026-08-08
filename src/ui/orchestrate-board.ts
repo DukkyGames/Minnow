@@ -3,6 +3,8 @@ import { appAlert, appConfirm, appPrompt } from './app-dialog';
  * Orchestrate Board View: Kanban, plan panel, controls.
  */
 
+import '../styles/orchestrate-board.css';
+
 import {
   renderFinishDashboard,
   syncFinishDashboard,

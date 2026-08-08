@@ -74,13 +74,14 @@ function clearLegacyLocalStorage(): void {
 
 /**
  * POST /api/config/migrate when server storage is up and not yet migrated.
+ * @returns true when a migration ran and sessions should be re-fetched.
  */
-export async function runMigrationIfNeeded(): Promise<void> {
-  if (!isServerStorageMode()) return;
+export async function runMigrationIfNeeded(): Promise<boolean> {
+  if (!isServerStorageMode()) return false;
 
   try {
     const status = await fetchConfigStatus();
-    if (status.migrated) return;
+    if (status.migrated) return false;
 
     const localStoragePayload = readLegacyLocalStorage();
     const hasData =
@@ -88,7 +89,7 @@ export async function runMigrationIfNeeded(): Promise<void> {
       localStoragePayload.tools ||
       localStoragePayload.systemPrompt;
 
-    if (!hasData) return;
+    if (!hasData) return false;
 
     const result = await postMigrate({
       localStorage: localStoragePayload,
@@ -97,8 +98,10 @@ export async function runMigrationIfNeeded(): Promise<void> {
 
     if (result.ok && !result.skipped) {
       clearLegacyLocalStorage();
+      return true;
     }
   } catch (err) {
     console.warn('[Minnow] Config migration failed:', err);
   }
+  return false;
 }

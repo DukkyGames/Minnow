@@ -158,7 +158,8 @@ async function setWorkspaceGateOpening(opening: boolean): Promise<void> {
 
 async function completeWorkspaceActivation(): Promise<void> {
   if (isOsShellEnabled()) {
-    await setWorkspaceGateOpening(false);
+    // Keep the gate up as a cover while Code chrome paints (opening = busy).
+    await setWorkspaceGateOpening(true);
     const gate = await import('../os/workspace-gate');
     await gate.onWorkspaceGateChosen();
     return;

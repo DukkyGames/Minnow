@@ -35,43 +35,29 @@ import './styles/mode-icons.css';
 import './styles/composer-controls.css';
 import './styles/composer-expand.css';
 import './styles/composer-message-queue.css';
-import './styles/file-panel.css';
-/* Material Icon Theme (PKief) — colorful file/folder glyphs for Code tree + tabs */
-import './styles/file-type-icons.css';
-import './styles/git-commit-diff.css';
+/* file-panel / terminal / SCC / orchestrate surfaces: CSS loads with their lazy modules */
 import './styles/editor-quick-edit.css';
 import './styles/editor-intent-mode.css';
 import './styles/preview-panel.css';
 import './styles/design-mode.css';
-import './styles/terminal.css';
 import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
 import './styles/workspace-menu.css';
 import './styles/workspace-folder-picker.css';
-import './styles/source-control-center.css';
 import './styles/research-panel.css';
 import './styles/git-help-lightbox.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
 import './styles/sub-agent-drawer.css';
-import './styles/orchestrate-plan-selector.css';
 import './styles/composer-pinned-skill.css';
 import './styles/composer-model-trigger.css';
 import './styles/view-mode-toggle.css';
-import './styles/orchestrate-board.css';
 import './styles/toast.css';
 import './styles/memory-saved-toast.css';
-import './styles/hub.css';
-import './styles/code-overview.css';
-import './styles/orchestrate-hub.css';
-import './styles/orchestrate-plan-screen.css';
 import './styles/plan-progress.css';
-import './styles/super-plan-page.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-responsive.css';
 import './styles/chat-app.css';
-import './styles/models-page.css';
-import './styles/onboarding.css';
 import './styles/app-picker.css';
 import './styles/app-dialog.css';
 /* Phone layer last: it overrides the desktop shell above. */
@@ -100,7 +86,7 @@ import {
 } from './api/models';
 import { initWorkAgentSystem } from './agents/init-work-agents';
 import { initPromptSystem } from './chat/prompts/init-prompts';
-import { detectConfigServer, isServerStorageMode, refreshConfigStorageBanner } from './config/storage-mode';
+import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
 import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
@@ -153,7 +139,6 @@ import {
 import { initAppSidebarResizers } from './ui/sidebar-resize';
 import {
   fillSystemPromptPresetSelect,
-  fillToolsSection,
   loadSystemPromptSettings,
   registerToolHandlers,
 } from './ui/settings';
@@ -224,7 +209,7 @@ import {
 import { getWorkspacePath } from './state/workspace.ts';
 import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
 import { isPageReload } from './boot/page-navigation';
-import { scheduleMarkAppReady } from './boot/app-ready';
+import { markChromeReady, scheduleMarkAppReady } from './boot/app-ready';
 import { installRendererDiagnostics } from './boot/diagnostics';
 import { installLongTaskObserver } from './boot/long-task-observer';
 import { initNotificationAudioUnlock } from './notifications/sound';
@@ -244,10 +229,15 @@ function registerServiceWorker(): void {
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
+  // Cold boot: show workspace picker immediately and warm the rest of the app behind it.
+  let workspaceGatePending: Promise<void> | null = null;
+  let workspaceGateModule: typeof import('./os/workspace-gate') | null = null;
   if (isOsShellEnabled()) {
-    const { awaitWorkspaceGateBeforeAppInit } = await import('./os/workspace-gate');
-    await awaitWorkspaceGateBeforeAppInit();
+    workspaceGateModule = await import('./os/workspace-gate');
+    const gateHandle = await workspaceGateModule.beginWorkspaceGateForBoot();
+    workspaceGatePending = gateHandle?.whenChosen ?? null;
   }
+
   // Boot phase marks surface in DevTools when MINNOW_DEBUG=1 (see boot-metrics.ts).
   markBootPhase('ui-init');
   installAppDialogs();
@@ -265,12 +255,13 @@ export async function initApp(): Promise<void> {
   await detectConfigServer();
   refreshConfigStorageBanner();
   initBoardLogDiskSink();
-  await runMigrationIfNeeded();
+  const migrated = await runMigrationIfNeeded();
   // Load tools before any UI reads permissions (drawer + settings page rebuilds).
   await loadToolConfigFromStorage();
   await initPromptSystem();
   await initWorkAgentSystem();
-  await loadSessionsFromStorage(isServerStorageMode() ? { force: true } : undefined);
+  // Skip forced re-fetch when startApp already hydrated unless migration wrote new data.
+  await loadSessionsFromStorage(migrated ? { force: true } : undefined);
   registerOrchestrateBoardShutdownHandler();
   registerSessionPersistenceShutdownHandler();
   // Issues store migrates leftover bugs/state.json / minnow-bugs-v1 on first load.
@@ -294,10 +285,7 @@ export async function initApp(): Promise<void> {
   initAgentActivityPanel();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
-  fillToolsSection();
-  fillToolsSection('composerToolsList', { variant: 'composer' });
-  fillToolsSection('chatAppToolsList', { variant: 'composer' });
-  fillToolsSection('desktopToolsList', { variant: 'composer' });
+  // Tool permission DOM is built on first open (popover / drawer / Settings) — not at cold boot.
   registerToolHandlers();
   initComposerToolsPopover();
   initChatAppToolsPopover();
@@ -331,12 +319,13 @@ export async function initApp(): Promise<void> {
   startSchedulerNotificationPoll();
   initNotificationProducers();
   onWelcomeServerAvailabilityChanged();
-  const { notifyCodeWorkspaceServerAvailability } = await import(
+  const { notifyCodeWorkspaceServerAvailability, ensureCodeWorkspaceModules } = await import(
     './boot/code-workspace-modules'
   );
   await notifyCodeWorkspaceServerAvailability();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
+  // Workspace path may still be default until the gate resolves — refresh again after pick.
   await refreshWorkspaceUi();
   markWelcomePendingIfNeeded();
   initWelcomePage();
@@ -354,22 +343,21 @@ export async function initApp(): Promise<void> {
   }
   initAllComposerSlashPickers();
   initComposerDrop();
-  const { ensureCodeWorkspaceModulesForBoot } = await import('./boot/code-workspace-modules');
-  await ensureCodeWorkspaceModulesForBoot();
   initAppSidebarResizers();
-  // Config cluster — seven independent loads; mark the span for cold-boot traces.
+  // Config cluster — independent loads; run in parallel while the user picks a folder.
   markBootPhase('config');
-  await loadSkillConfigFromStorage();
-  await loadToolSecurityMeta().catch(() => undefined);
-  await loadBrowserMeta().catch(() => undefined);
-  await loadChatMeta().catch(() => undefined);
-  await loadSamplerMeta()
-    .then(applySamplerMetaToDrawer)
-    .catch(() => undefined);
-  await loadLibraryInferencePrefs().catch(() => undefined);
-  await loadAutopilotMeta().catch(() => undefined);
-  await loadThinkingMeta().catch(() => undefined);
-  // End mark is not a BootPhase — only used to bound the config-cluster measure.
+  await Promise.all([
+    loadSkillConfigFromStorage(),
+    loadToolSecurityMeta().catch(() => undefined),
+    loadBrowserMeta().catch(() => undefined),
+    loadChatMeta().catch(() => undefined),
+    loadSamplerMeta()
+      .then(applySamplerMetaToDrawer)
+      .catch(() => undefined),
+    loadLibraryInferencePrefs().catch(() => undefined),
+    loadAutopilotMeta().catch(() => undefined),
+    loadThinkingMeta().catch(() => undefined),
+  ]);
   try {
     performance.mark('minnow:boot:config-done');
     performance.measure(
@@ -385,30 +373,41 @@ export async function initApp(): Promise<void> {
   initMinnowBrowserLinkRouting();
   loadToolConfigIntoDrawer();
   void syncWebSearchProviderFromSearchConfig();
+
+  // Wait for folder pick if this was a cold boot — gate stays covering Code.
+  if (workspaceGatePending) {
+    await workspaceGatePending;
+  }
+
+  // Workspace-scoped chrome: file tree / terminal / hub, then sidebar + chat.
+  await refreshWorkspaceUi();
+  await notifyCodeWorkspaceServerAvailability();
+  // After cold pick, hash is Code — always warm workspace modules under the gate cover.
+  if (
+    workspaceGateModule?.isHoldingWorkspaceGateForAppReady() ||
+    window.location.hash.startsWith('#/app/code')
+  ) {
+    await ensureCodeWorkspaceModules();
+  } else {
+    const { ensureCodeWorkspaceModulesForBoot } = await import('./boot/code-workspace-modules');
+    await ensureCodeWorkspaceModulesForBoot();
+  }
+
   applySidebarVisuals();
   renderSidebar();
   const { wireSidebarNewGroupButton } = await import('./ui/sidebar');
   wireSidebarNewGroupButton();
-  const { refreshTerminalHistoryForActiveChat } = await import('./ui/terminal-panel');
-  await refreshTerminalHistoryForActiveChat();
-  const { ensureBootAppsInitialized } = await import('./os/app-modules');
+  const { ensureBootAppsInitialized, warmIssuesAppInBackground } = await import(
+    './os/app-modules'
+  );
   await ensureBootAppsInitialized();
-  await fetchModels();
   syncModelSelectForActiveChat();
   syncModelSelectPicker();
   syncComposerModelTriggers();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
-  markBootPhase('first-paint');
-  measureBootPhase('minnow:phase:to-first-paint', 'ui-init', 'first-paint');
   const { applyComposerDraftForChat } = await import('./ui/composer-draft');
   applyComposerDraftForChat(getActiveChat());
-  if (sessionState) {
-    await rehydrateAllBoardWorktreeRoots(sessionState);
-    await bootGenerationResumeForChats(sessionState.chats);
-    await bootIncompleteToolResumeForChats(sessionState.chats);
-    await bootOrchestrateBoardResume(sessionState);
-  }
   renderStatsForChat(getActiveChat());
   refreshContextUsageRing();
   syncModeSelectorFromActiveChat();
@@ -422,6 +421,32 @@ export async function initApp(): Promise<void> {
   syncTodoPanel();
   renderSidebar();
   bootstrapActiveChatOpenedTimestamp();
+  markBootPhase('first-paint');
+  measureBootPhase('minnow:phase:to-first-paint', 'ui-init', 'first-paint');
+
+  // Drop the workspace-gate cover only after Code chrome is composed.
+  if (workspaceGateModule?.isHoldingWorkspaceGateForAppReady()) {
+    await workspaceGateModule.revealAppAfterWorkspaceGate();
+  }
+  // Dual-gate for reload / non-gate boots (idempotent if the gate already revealed the loader).
+  markChromeReady();
+
+  // Post-reveal: terminal history, models catalog, Issues warm, resumes.
+  void import('./ui/terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
+  void fetchModels().then(() => {
+    syncModelSelectForActiveChat();
+    syncModelSelectPicker();
+    syncComposerModelTriggers();
+    updateModelLoadUnloadButtons();
+  });
+  warmIssuesAppInBackground();
+
+  if (sessionState) {
+    await rehydrateAllBoardWorktreeRoots(sessionState);
+    await bootGenerationResumeForChats(sessionState.chats);
+    await bootIncompleteToolResumeForChats(sessionState.chats);
+    await bootOrchestrateBoardResume(sessionState);
+  }
 
   // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)
   const { startLoopTicker } = await import('./chat/loop/ticker');

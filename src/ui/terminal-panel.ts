@@ -2,6 +2,8 @@
  * Bottom docked terminal: interactive PTY tabs (xterm) + agent run stream sidebar.
  */
 
+import '../styles/terminal.css';
+
 import {
   cancelTerminalRun,
   fetchTerminalLog,

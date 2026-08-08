@@ -15,6 +15,8 @@
  *   3. otherwise a new plan, with the library rail listing everything saved.
  */
 
+import '../styles/super-plan-page.css';
+
 import { collectSuperPlanRuns } from '../chat/super-plan/plan-library';
 import { normalizeModeId } from '../chat/modes/types';
 import { findChatById, sessionState } from '../state/sessions';

@@ -1,4 +1,4 @@
-/** Max wait before revealing the shell even if a stylesheet never loads. */
+/** Max wait before revealing the shell even if CSS or chrome never signals ready. */
 const APP_READY_STYLE_TIMEOUT_MS = 4_000;
 
 /**
@@ -142,8 +142,58 @@ import {
   recordAppReadyMetrics,
 } from './boot-metrics.ts';
 
+/** Dual-gate state: CSS ready + first coherent chrome before dismissing the loader. */
+let stylesGateReady = false;
+let chromeGateReady = false;
+let revealFinished = false;
+let revealTimeoutId: number | undefined;
+let stylesGatePromise: Promise<void> | null = null;
+let chromeGateResolvers: Array<() => void> = [];
+
+/** True after the loader has been dismissed (or safety timeout fired). */
+export function isAppReady(): boolean {
+  return revealFinished;
+}
+
+/** True once initApp (or workspace gate) signaled a coherent first composition. */
+export function isChromeReady(): boolean {
+  return chromeGateReady;
+}
+
+/** Resolve waiters when chrome becomes ready (tests / dual-gate). */
+function notifyChromeReadyWaiters(): void {
+  const waiters = chromeGateResolvers;
+  chromeGateResolvers = [];
+  for (const resolve of waiters) resolve();
+}
+
+/**
+ * Signal that primary chrome is painted (workspace gate, or sidebar+composer+chat).
+ * Combined with the CSS gate before `markAppReady` so the shell does not pop in piece by piece.
+ */
+export function markChromeReady(): void {
+  if (chromeGateReady) return;
+  chromeGateReady = true;
+  notifyChromeReadyWaiters();
+  tryRevealApp();
+}
+
+/** Wait until chrome-ready has been signaled (or already true). */
+export function whenChromeReady(): Promise<void> {
+  if (chromeGateReady) return Promise.resolve();
+  return new Promise((resolve) => {
+    chromeGateResolvers.push(resolve);
+  });
+}
+
 /** Dismiss the inline loading shell (see index.html `#app-loader`). */
 export function markAppReady(): void {
+  if (revealFinished) return;
+  revealFinished = true;
+  if (revealTimeoutId !== undefined) {
+    window.clearTimeout(revealTimeoutId);
+    revealTimeoutId = undefined;
+  }
   const snapshot = recordAppReadyMetrics();
   logBootMetricsIfDebug(snapshot);
   const loader = document.getElementById('app-loader');
@@ -151,24 +201,81 @@ export function markAppReady(): void {
     loader.setAttribute('aria-busy', 'false');
     loader.setAttribute('aria-hidden', 'true');
   }
+  const status = document.getElementById('appLoaderStatus');
+  if (status) status.textContent = '';
   document.documentElement.classList.add('app-ready');
 }
 
-/** Hide the loader once bundled CSS is ready; always unblock after a safety timeout. */
-export function scheduleMarkAppReady(): void {
-  let finished = false;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    window.clearTimeout(timeoutId);
+/** Reveal when both gates pass (or the safety timeout already forced reveal). */
+function tryRevealApp(): void {
+  if (revealFinished) return;
+  if (!stylesGateReady || !chromeGateReady) return;
+  void waitForStablePaint().then(() => {
+    if (revealFinished) return;
+    if (!stylesGateReady || !chromeGateReady) return;
     markAppReady();
-  };
+  });
+}
 
-  const timeoutId = window.setTimeout(finish, APP_READY_STYLE_TIMEOUT_MS);
+/** Mark the CSS half of the dual gate and attempt reveal. */
+function markStylesGateReady(): void {
+  if (stylesGateReady) return;
+  stylesGateReady = true;
+  tryRevealApp();
+}
 
-  void Promise.all([whenAppStylesReady(), whenViteInjectedStylesReady()])
-    .then(() => whenAppShellStyled())
-    .then(() => waitForStablePaint())
-    .then(finish)
-    .catch(finish);
+/**
+ * Wait for bundled CSS (and Vite-injected styles in DEV), then open the styles gate.
+ * Idempotent — concurrent callers share one promise.
+ */
+export function signalStylesReadyForReveal(): Promise<void> {
+  if (stylesGateReady) return Promise.resolve();
+  if (!stylesGatePromise) {
+    stylesGatePromise = Promise.all([whenAppStylesReady(), whenViteInjectedStylesReady()])
+      .then(() => whenAppShellStyled())
+      .then(() => {
+        markStylesGateReady();
+      })
+      .catch(() => {
+        // Still open the styles gate so chrome-ready alone can finish (timeout is the backstop).
+        markStylesGateReady();
+      });
+  }
+  return stylesGatePromise;
+}
+
+/**
+ * Dual-gate loader dismiss: CSS applied + chrome ready.
+ * Always unblocks after a safety timeout so a stalled gate cannot trap the user.
+ */
+export function scheduleMarkAppReady(): void {
+  if (revealFinished) return;
+
+  if (revealTimeoutId === undefined) {
+    revealTimeoutId = window.setTimeout(() => {
+      // Safety: force both gates so the shell becomes usable.
+      stylesGateReady = true;
+      chromeGateReady = true;
+      notifyChromeReadyWaiters();
+      markAppReady();
+    }, APP_READY_STYLE_TIMEOUT_MS);
+  }
+
+  void signalStylesReadyForReveal();
+}
+
+/** Reset dual-gate state (tests only). */
+export function resetAppReadyForTests(): void {
+  stylesGateReady = false;
+  chromeGateReady = false;
+  revealFinished = false;
+  stylesGatePromise = null;
+  chromeGateResolvers = [];
+  if (revealTimeoutId !== undefined) {
+    window.clearTimeout(revealTimeoutId);
+    revealTimeoutId = undefined;
+  }
+  if (typeof document !== 'undefined') {
+    document.documentElement.classList.remove('app-ready');
+  }
 }

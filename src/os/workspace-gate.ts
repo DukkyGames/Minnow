@@ -1,9 +1,12 @@
 /**
  * Workspace gate — full-stage picker until a workspace is chosen (workspace-first shell).
+ * After pick, the gate stays up as a cover until Code chrome finishes its first paint
+ * so the shell does not assemble piece-by-piece under the user.
  */
 
 import '../styles/workspace-gate.css';
 
+import { markChromeReady, waitForStablePaint } from '../boot/app-ready';
 import { isPageReload } from '../boot/page-navigation';
 import { loadWorkspaceFromServer } from '../state/workspace';
 import { isOsShellEnabled } from './page-bridge';
@@ -12,6 +15,8 @@ import { launchApp } from './router';
 
 let gateMounted = false;
 let gateOpen = false;
+/** Keep the gate covering Code until initApp finishes first paint after a cold pick. */
+let holdGateUntilAppReady = false;
 let bootGatePromise: Promise<void> | null = null;
 let resolveBootGate: (() => void) | null = null;
 
@@ -52,8 +57,19 @@ export function isWorkspaceGateOpen(): boolean {
   return gateOpen;
 }
 
+/** True while Code is painting under the gate cover after a cold pick. */
+export function isHoldingWorkspaceGateForAppReady(): boolean {
+  return holdGateUntilAppReady;
+}
+
 function setGateOpening(opening: boolean): void {
   getGateRoot()?.classList.toggle('workspace-gate--opening', opening);
+}
+
+function setHoldingGateCover(holding: boolean): void {
+  holdGateUntilAppReady = holding;
+  document.documentElement.classList.toggle('os-workspace-gate-holding', holding);
+  if (holding) setGateOpening(true);
 }
 
 /** Mount #welcomeView inside #osWorkspaceGate and wire welcome module once. */
@@ -122,11 +138,16 @@ export function closeWorkspaceGate(): void {
   hideGateElement();
 }
 
-/** Called after PUT /api/workspace succeeds — enter Code and release boot gate. */
+/**
+ * Called after PUT /api/workspace succeeds.
+ * Launches Code behind the gate and releases the boot wait — gate stays up as a
+ * cover until `revealAppAfterWorkspaceGate()` after first paint.
+ */
 export async function onWorkspaceGateChosen(): Promise<void> {
   markWorkspaceGatePassedThisSession();
-  setGateOpening(false);
-  closeWorkspaceGate();
+  // Cover Code while composer/sidebar/chat finish their first composition.
+  setHoldingGateCover(true);
+  showGateElement();
   resolveBootGate?.();
   resolveBootGate = null;
   bootGatePromise = null;
@@ -136,8 +157,19 @@ export async function onWorkspaceGateChosen(): Promise<void> {
   }
 }
 
+/** Drop the gate cover once Code chrome has painted (cold-boot transition). */
+export async function revealAppAfterWorkspaceGate(): Promise<void> {
+  if (!holdGateUntilAppReady && !gateOpen) return;
+  await waitForStablePaint();
+  setHoldingGateCover(false);
+  setGateOpening(false);
+  closeWorkspaceGate();
+}
+
 /** Hold opening UI until the workspace PUT finishes. */
 export function markWorkspaceGateOpening(opening: boolean): void {
+  // While holding for app-ready, keep the opening affordance on.
+  if (holdGateUntilAppReady && !opening) return;
   if (!gateOpen && opening) return;
   setGateOpening(opening);
 }
@@ -146,6 +178,8 @@ export function markWorkspaceGateOpening(opening: boolean): void {
 export function syncWorkspaceGateFromRoute(): void {
   if (!isOsShellEnabled()) return;
   if (getOsView() !== 'workspaces') {
+    // Do not tear down the cover while Code is still painting after a cold pick.
+    if (holdGateUntilAppReady) return;
     if (gateOpen) closeWorkspaceGate();
     return;
   }
@@ -171,19 +205,38 @@ export function shouldBlockBootOnWorkspaceGate(): boolean {
   return true;
 }
 
-export async function awaitWorkspaceGateBeforeAppInit(): Promise<void> {
-  if (!isOsShellEnabled()) return;
+/**
+ * Open the cold-boot workspace picker and dismiss the app loader so the user can pick.
+ * Returns a handle whose `whenChosen` resolves when a workspace is selected (gate stays
+ * covering), or null when boot should not block (reload / shell off).
+ *
+ * Note: do not return a bare Promise from an async function — TypeScript/JS flatten
+ * nested thenables and would resolve as soon as the gate opens.
+ */
+export async function beginWorkspaceGateForBoot(): Promise<{ whenChosen: Promise<void> } | null> {
+  if (!isOsShellEnabled()) return null;
 
   await loadWorkspaceFromServer();
 
   if (!shouldBlockBootOnWorkspaceGate()) {
-    return;
+    return null;
   }
 
   ensureBootGatePromise();
   mountWorkspaceGateDom();
   openWorkspaceGate();
-  await bootGatePromise;
+  // Reveal the loader so the workspace picker is usable.
+  markChromeReady();
+  return { whenChosen: bootGatePromise ?? Promise.resolve() };
+}
+
+/**
+ * @deprecated Prefer beginWorkspaceGateForBoot + revealAppAfterWorkspaceGate.
+ * Kept for callers that still await the full gate before any init.
+ */
+export async function awaitWorkspaceGateBeforeAppInit(): Promise<void> {
+  const handle = await beginWorkspaceGateForBoot();
+  if (handle) await handle.whenChosen;
 }
 
 /** Subscribe gate to shell view changes. */
@@ -199,10 +252,12 @@ export function initWorkspaceGate(): void {
 export function resetWorkspaceGateForTests(): void {
   gateOpen = false;
   gateMounted = false;
+  holdGateUntilAppReady = false;
   bootGatePromise = null;
   resolveBootGate = null;
   setGateOpening(false);
   document.documentElement.classList.remove('os-workspace-gate-open');
+  document.documentElement.classList.remove('os-workspace-gate-holding');
   try {
     sessionStorage.removeItem(WORKSPACE_GATE_SESSION_KEY);
   } catch {

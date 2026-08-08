@@ -8,6 +8,8 @@
  * Replaces the Git Center lightbox (MIN-198 era).
  */
 
+import '../styles/source-control-center.css';
+
 import {
   gitBranches,
   gitCheckout,

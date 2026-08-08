@@ -124,6 +124,33 @@ describe('eager boot graph', () => {
             .map((v) => `  ${path.relative(REPO_ROOT, v.file)} → ${v.specifier}`)
             .join('\n')}`
         : undefined,
+      );
+  });
+
+  it('does not side-effect-import deferred feature CSS from src/main.ts', () => {
+    const sourceText = fs.readFileSync(ENTRY, 'utf8');
+    const forbiddenCss = [
+      'file-panel.css',
+      'file-type-icons.css',
+      'git-commit-diff.css',
+      'terminal.css',
+      'source-control-center.css',
+      'orchestrate-board.css',
+      'orchestrate-hub.css',
+      'orchestrate-plan-screen.css',
+      'super-plan-page.css',
+      'code-overview.css',
+      'models-page.css',
+      'onboarding.css',
+      'hub.css',
+      'orchestrate-plan-selector.css',
+    ];
+    const sideEffectCss = [
+      ...sourceText.matchAll(/^\s*import\s+['"]([^'"]+\.css)['"]\s*;?/gm),
+    ].map((m) => m[1] ?? '');
+    const hits = forbiddenCss.filter((name) =>
+      sideEffectCss.some((spec) => spec.endsWith(name) || spec.includes(`/${name}`)),
     );
+    assert.deepEqual(hits, [], `deferred CSS still imported from main.ts: ${hits.join(', ')}`);
   });
 });

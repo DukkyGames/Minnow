@@ -2,6 +2,8 @@
  * Onboarding wizard public API.
  */
 
+import '../styles/onboarding.css';
+
 export {
   mountOnboarding,
   unmountOnboarding,

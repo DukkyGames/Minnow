@@ -229,6 +229,8 @@ export function fillToolsSection(
   container.replaceChildren();
   container.classList.toggle('tools-list--composer', variant === 'composer');
   container.classList.toggle('tools-list--settings', variant === 'settings');
+  container.dataset.toolsFilled = '1';
+  container.dataset.toolsVariant = variant;
 
   const toolbar = document.createElement('div');
   toolbar.className = 'tool-list-toolbar';
@@ -337,6 +339,22 @@ export function fillToolsSection(
   }
 
   bindToolsListChange(container);
+}
+
+/**
+ * Build a tools list on first use (boot defers these so cold start does not
+ * construct 100+ permission rows four times before first paint).
+ */
+export function ensureToolsSectionFilled(
+  containerId: string,
+  options: FillToolsSectionOptions = {},
+): void {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (container.dataset.toolsFilled === '1' && container.querySelector('[data-tool-id]')) {
+    return;
+  }
+  fillToolsSection(containerId, options);
 }
 
 /** Bind tool lists and Brave API key field to config handlers (once per app boot). */

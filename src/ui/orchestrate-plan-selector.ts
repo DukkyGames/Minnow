@@ -2,6 +2,8 @@
  * Orchestrate mode: plan picker in the composer toolbar (plan strip hidden in chat view).
  */
 
+import '../styles/orchestrate-plan-selector.css';
+
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   normalizeOrchestratePlanPath,

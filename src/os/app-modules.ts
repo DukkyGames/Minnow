@@ -40,13 +40,17 @@ function bootAppIdFromHash(hash: string): AppId | null {
 
 /** Initialize app modules required for the current hash route at cold boot. */
 export async function ensureBootAppsInitialized(): Promise<void> {
-  // Sidebar Issues button + badge need listeners on every boot.
-  await ensureAppInitialized('issues');
-
+  // Issues page + CSS chunk loads on demand (or after first paint) — only the
+  // hash-routed app must be ready before chrome reveal.
   const appId = bootAppIdFromHash(window.location.hash);
-  if (appId && isAppAvailable(appId) && appId !== 'issues') {
+  if (appId && isAppAvailable(appId)) {
     await ensureAppInitialized(appId);
   }
+}
+
+/** Warm Issues listeners after first paint (badge / embed button). */
+export function warmIssuesAppInBackground(): void {
+  void ensureAppInitialized('issues');
 }
 
 /** Reset lazy-init state (tests). */

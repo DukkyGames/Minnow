@@ -3,6 +3,7 @@
  */
 
 import { loadToolConfigIntoDrawer, syncWebSearchProviderFromSearchConfig } from '../tools/config';
+import { ensureToolsSectionFilled } from './tools-list';
 
 interface ToolsPopoverIds {
   buttonId: string;
@@ -55,6 +56,22 @@ function openToolsPopover(ids: ToolsPopoverIds): void {
   if (!popover || !button) return;
 
   closeOtherToolsPopovers(ids.popoverId);
+
+  // Lazy-build the permission list the first time this popover opens.
+  const list = popover.querySelector<HTMLElement>('[id$="ToolsList"], .tools-list');
+  const listId =
+    list?.id ||
+    (ids.popoverId === 'composerToolsPopover'
+      ? 'composerToolsList'
+      : ids.popoverId === 'chatAppToolsPopover'
+        ? 'chatAppToolsList'
+        : ids.popoverId === 'desktopToolsPopover'
+          ? 'desktopToolsList'
+          : '');
+  if (listId) {
+    ensureToolsSectionFilled(listId, { variant: 'composer' });
+  }
+
   loadToolConfigIntoDrawer(document);
   void syncWebSearchProviderFromSearchConfig();
 

@@ -4,6 +4,8 @@ import { appAlert, appConfirm, appPrompt } from './app-dialog';
  * Suppresses chat stream DOM while mounted; supports suspend/resume via sidebar.
  */
 
+import '../styles/orchestrate-plan-screen.css';
+
 import { findLastPlanSavePath } from '../chat/orchestrate/plan-from-history';
 import {
   mountPlanPreviewContent,

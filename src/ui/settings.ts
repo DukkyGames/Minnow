@@ -7,6 +7,7 @@ import { setStatus } from './status';
 import { appConfirm } from './app-dialog';
 import type { SystemPromptSettings } from '../types';
 export { fillToolsSection, registerToolHandlers } from './tools-list';
+import { ensureToolsSectionFilled } from './tools-list';
 import {
   activeSystemPromptPresetId,
   setActiveSystemPromptPresetId,
@@ -180,6 +181,8 @@ export function toggleDrawer(): void {
     closeDrawer();
     return;
   }
+  // Legacy drawer tools list is built on first open (not during cold boot).
+  ensureToolsSectionFilled('toolsList');
   drawerReturnFocus = document.activeElement as HTMLElement | null;
   drawer.classList.add('open');
   document.getElementById('drawerOverlay')!.classList.add('open');
