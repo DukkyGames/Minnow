@@ -41,6 +41,9 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
       const { initOrchestrateHub } = await import('../ui/orchestrate-hub');
       initOrchestrateHub();
 
+      const { initSuperPlanEntry } = await import('../ui/super-plan-entry');
+      initSuperPlanEntry();
+
       const { initCodeChangeStrip } = await import('../ui/code-change-strip');
       initCodeChangeStrip();
 

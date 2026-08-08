@@ -9,5 +9,5 @@
 export const CHAT_SIDEBAR_CHANGED_EVENT = 'minnow:chat-sidebar-changed';
 
 export function emitChatSidebarChanged(): void {
-  window.dispatchEvent(new CustomEvent(CHAT_SIDEBAR_CHANGED_EVENT));
+  window.dispatchEvent(new window.CustomEvent(CHAT_SIDEBAR_CHANGED_EVENT));
 }

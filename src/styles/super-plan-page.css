@@ -1,0 +1,1509 @@
+/**
+ * Super Plan — library-first planning surface.
+ *
+ * Rail of plans on the left, one main pane on the right that shows whichever
+ * plan is selected: composer when new, stage ledger while the pipeline runs,
+ * the plan document when it lands.
+ *
+ * Sibling of research-page.css by design. The two surfaces share measurements,
+ * row vocabulary and section rules so a user fluent in one is fluent in both.
+ *
+ * Apps render inside MinnowOS windows, so width rules use @container, never
+ * @media — a media query measures the viewport and never matches app width.
+ */
+
+/*
+ * One list, not two. Super Plan's rail already lists every plan and every run,
+ * and each of those runs is a chat — so leaving the session list open puts the
+ * same work on screen twice under two different names. The shell hides that list
+ * for as long as the surface is up. Chats in the view bar stays visible and
+ * closes Super Plan to return to the normal chat workspace.
+ *
+ * A document-level class, not `sessionState.sidebarCollapsed`: the user's own
+ * open/closed preference must survive the visit and come back on exit.
+ */
+html.mn-super-plan-open #chatSidebar,
+html.mn-super-plan-open #chatSidebarResizer,
+html.mn-super-plan-open #sidebarBackdrop {
+  display: none;
+}
+
+/*
+ * The shared plan-screen chat area centres a 640px column and scrolls. Super
+ * Plan fills the column edge to edge and owns its own scrollers, so the outer
+ * centring and overflow are handed back here.
+ */
+.chat-area.chat-area--plan-screen.chat-area--super-plan {
+  justify-content: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.super-plan-page {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui, inherit);
+  font-size: 14px;
+  line-height: 1.5;
+
+  container-type: inline-size;
+  container-name: superplan;
+}
+
+/*
+ * Sizing vars live on .sp-shell, one level below the container element,
+ * because @container rules never match the container itself — declaring them
+ * on .super-plan-page would make every width override a silent no-op.
+ */
+.sp-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+
+  --sp-rail-w: 264px;
+  --sp-gutter: 28px;
+
+  /*
+   * The two columns are sized directly and the page is their sum, so the
+   * header, the segments and both columns always end on the same right edge.
+   * Reading column is px, not ch: ch resolves against this element's 14px
+   * font while the prose inside runs at 16px, so a ch value here would
+   * silently mean something other than what it says.
+   */
+  --sp-read-col: 790px;
+  --sp-aside-w: 460px;
+  --sp-col-gap: 76px;
+  --sp-page: calc(var(--sp-read-col) + var(--sp-col-gap) + var(--sp-aside-w));
+  --sp-pad-x: max(var(--sp-gutter), (100% - var(--sp-page)) / 2);
+}
+
+/* ── Rail ──────────────────────────────────────────────────────────────────
+   Rows, not cards. Full-bleed, hairline-separated, grouped by recency. */
+
+.sp-rail {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--sp-rail-w);
+  width: var(--sp-rail-w);
+  min-width: 0;
+  border-right: 1px solid var(--mn-border);
+  background: var(--mn-surface-0, var(--mn-bg));
+}
+
+.sp-rail__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 10px 8px 12px;
+}
+
+.sp-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast, 0.12s) var(--ease-out),
+    border-color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-rail__collapse {
+  display: none;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.sp-rail__filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 12px 10px;
+}
+
+.sp-rail__filter-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.sp-rail__filter-input::placeholder {
+  color: var(--mn-fg-subtle);
+}
+
+.sp-rail__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sp-group__label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  padding: 10px 14px 5px;
+  background: var(--mn-surface-0, var(--mn-bg));
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sp-group__label:empty {
+  display: none;
+}
+
+.sp-row-wrap {
+  position: relative;
+}
+
+/* Two lines at 9px/10px padding clears the 44px touch minimum. */
+.sp-row {
+  display: block;
+  width: 100%;
+  padding: 9px 34px 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--mn-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-row__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--mn-fg);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sp-row__meta {
+  margin-top: 4px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+}
+
+/* Selected reads as a tint plus weight. No coloured side stripe. */
+.sp-row.is-active {
+  background: var(--mn-accent-soft);
+}
+
+.sp-row.is-active .sp-row__title {
+  font-weight: 600;
+}
+
+/* The tint eats about a stop of contrast, so the meta line steps up to match. */
+.sp-row.is-active .sp-row__meta {
+  color: var(--mn-fg);
+}
+
+.sp-row:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: -2px;
+}
+
+/*
+ * Colour is never the only signal: every state carries its word. One rule
+ * across this surface decides which of the two gets the hue — the dot carries
+ * the colour, the word carries the meaning, and the word is always --mn-fg.
+ * Accent ink and the semantic hues land between 3.6:1 and 4.4:1 on the lighter
+ * palette families, which is fine for a 5px dot and short of AA for an 11px word.
+ */
+.sp-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.sp-state::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mn-fg-subtle);
+}
+
+.sp-state.is-running::before,
+.sp-state.is-waiting::before {
+  background: var(--mn-accent);
+}
+
+.sp-state.is-error::before {
+  background: var(--mn-danger);
+}
+
+.sp-state.is-paused::before,
+.sp-state.is-cancelled::before {
+  background: var(--mn-warning);
+}
+
+.sp-state.is-done::before {
+  background: var(--mn-success);
+}
+
+.sp-state.is-running::before {
+  animation: sp-breathe 2.4s var(--ease-out) infinite;
+}
+
+@keyframes sp-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.sp-rail__empty {
+  padding: 20px 16px;
+  color: var(--mn-fg-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sp-rail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.sp-foot-link {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ── Main pane ─────────────────────────────────────────────────────────── */
+
+.sp-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sp-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.sp-pane[hidden] {
+  display: none;
+}
+
+/* ── Composer ──────────────────────────────────────────────────────────── */
+
+.sp-pane--ask {
+  overflow-y: auto;
+  justify-content: center;
+  padding: 32px var(--sp-gutter);
+}
+
+.sp-ask {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.sp-ask__title {
+  margin: 0;
+  color: var(--mn-fg);
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.sp-ask__sub {
+  max-width: 56ch;
+  margin: 8px 0 22px;
+  color: var(--mn-fg-muted);
+  font-size: 14px;
+}
+
+.sp-composer {
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-0, var(--mn-bg));
+  transition: border-color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-composer:focus-within {
+  border-color: var(--mn-accent);
+}
+
+.sp-composer__field {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  max-height: 320px;
+  padding: 13px 14px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.sp-composer__field:focus {
+  outline: none;
+}
+
+.sp-composer__field::placeholder {
+  color: var(--mn-fg-subtle);
+}
+
+.sp-composer__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+}
+
+.sp-composer__spacer {
+  flex: 1;
+}
+
+/* ── Option chips ──────────────────────────────────────────────────────── */
+
+.sp-opts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sp-opt {
+  position: relative;
+}
+
+.sp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 27px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.12s) var(--ease-out),
+    border-color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-chip__caret {
+  color: var(--mn-fg-subtle);
+  font-size: 9px;
+}
+
+.sp-chip[aria-expanded='true'],
+.sp-chip.is-set {
+  border-color: var(--mn-accent-border, var(--mn-accent));
+  color: var(--mn-fg);
+}
+
+.sp-chip.is-off {
+  text-decoration: line-through;
+  text-decoration-color: var(--mn-fg-subtle);
+}
+
+.sp-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 248px;
+  padding: 12px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: var(--shadow-popover);
+}
+
+.sp-pop[hidden] {
+  display: none;
+}
+
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sp-field__label {
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sp-field__hint {
+  color: var(--mn-fg-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.sp-field__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mn-fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sp-select {
+  position: relative;
+  display: flex;
+}
+
+.sp-select::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--mn-fg-subtle);
+  border-bottom: 1px solid var(--mn-fg-subtle);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.sp-select select,
+.sp-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+  appearance: none;
+}
+
+.sp-input {
+  padding-right: 8px;
+}
+
+.sp-select select:focus-visible,
+.sp-input:focus-visible,
+.sp-rail__filter-input:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: -1px;
+}
+
+/* ── Send ──────────────────────────────────────────────────────────────── */
+
+.sp-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent, var(--mn-bg));
+  cursor: pointer;
+  transition: opacity var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-send:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.sp-seeds {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 16px;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+}
+
+.sp-seeds__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sp-seed {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--mn-border-strong);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.12s) var(--ease-out),
+    border-color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+/* ── Run header ────────────────────────────────────────────────────────────
+   Lives inside the scroll container and pins at the top, which is also what
+   keeps it aligned: it resolves --sp-pad-x against the same content box as
+   the columns below, scrollbar included. */
+
+.sp-runhead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 20px var(--sp-pad-x) 0;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+}
+
+.sp-runhead__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sp-runhead__ask {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * The prompt is the run's identity, so it is never truncated away: it folds to
+ * two lines and unfolds in place. A planning brief is often a paragraph, and a
+ * paragraph set as a heading is not a heading.
+ */
+.sp-runhead__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* A planning brief is a paragraph. Hold it to the reading measure so the two
+     folded lines stay scannable instead of running the full pane width. */
+  max-width: var(--sp-read-col);
+  margin: 0;
+  color: var(--mn-fg);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.sp-runhead__title.is-expanded {
+  display: block;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+}
+
+.sp-runhead__more {
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-runhead__more[hidden] {
+  display: none;
+}
+
+.sp-runhead__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.sp-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.12s) var(--ease-out),
+    border-color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-action[hidden] {
+  display: none;
+}
+
+.sp-action--danger {
+  color: var(--mn-danger-ink, var(--mn-danger));
+}
+
+/* The rail docks at this width, so its toggle would be a control for nothing. */
+.sp-action--rail {
+  display: none;
+}
+
+.sp-runhead__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.sp-runhead__meta .sp-state {
+  margin-right: 0;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
+.sp-runhead__stats {
+  color: var(--mn-fg-muted);
+}
+
+.sp-segments {
+  display: flex;
+  gap: 2px;
+  margin-top: 14px;
+}
+
+.sp-segment {
+  position: relative;
+  padding: 6px 2px 9px;
+  margin-right: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-segment[hidden] {
+  display: none;
+}
+
+.sp-segment::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: transparent;
+  transition: background var(--duration-normal, 0.15s) var(--ease-out);
+}
+
+.sp-segment.is-on {
+  color: var(--mn-fg);
+  font-weight: 500;
+}
+
+.sp-segment.is-on::after {
+  background: var(--mn-accent);
+}
+
+.sp-segment__count {
+  margin-left: 5px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.sp-runbody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.sp-body {
+  padding: 26px var(--sp-pad-x) 64px;
+}
+
+/*
+ * Narrow windows stack: read the run, then the pipeline. Once there is room
+ * for both, the pipeline moves beside the ledger so a stage and the work it
+ * produced are on screen together.
+ */
+.sp-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sp-cols__main,
+.sp-cols__aside {
+  min-width: 0;
+}
+
+.sp-cols__aside {
+  margin-top: 40px;
+}
+
+.sp-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 16px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sp-sec::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--mn-border);
+}
+
+/* ── Stage ledger ──────────────────────────────────────────────────────── */
+
+.sp-ledger {
+  max-width: 82ch;
+}
+
+.sp-round {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 26px 0 8px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sp-round::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--mn-border);
+}
+
+.sp-round:first-child {
+  margin-top: 0;
+}
+
+.sp-entry {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* Muted, not subtle: at 10.5px these are body-size text for contrast purposes,
+   and --mn-fg-subtle lands under 3:1 on the light families. */
+.sp-entry__at {
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-entry__text {
+  min-width: 0;
+  color: var(--mn-fg-muted);
+  overflow-wrap: anywhere;
+}
+
+.sp-entry__label {
+  color: var(--mn-fg);
+  font-weight: 500;
+}
+
+.sp-entry--source .sp-entry__text a {
+  color: var(--mn-fg);
+  text-decoration: none;
+}
+
+.sp-entry--query .sp-entry__text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Trouble reads as full-strength text plus a coloured pip, never as tinted
+   body copy: the tint alone would drop these lines below AA on light families. */
+.sp-entry--warning .sp-entry__text,
+.sp-entry--error .sp-entry__text {
+  color: var(--mn-fg);
+}
+
+.sp-entry--warning .sp-entry__label::before,
+.sp-entry--error .sp-entry__label::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.sp-entry--warning .sp-entry__label::before {
+  background: var(--mn-warning);
+}
+
+.sp-entry--error .sp-entry__label::before {
+  background: var(--mn-danger);
+}
+
+.sp-entry__queries {
+  margin: 4px 0 0;
+  padding-left: 14px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.sp-entry--enter {
+  animation: sp-entry-in var(--duration-normal, 0.18s) var(--ease-out) both;
+}
+
+@keyframes sp-entry-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.sp-ledger__empty {
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── Pipeline timeline (aside) ─────────────────────────────────────────── */
+
+.sp-stages {
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-stage {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 9px 6px 10px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--mn-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition: background var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-stage--clickable {
+  cursor: pointer;
+}
+
+.sp-stage__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mn-fg-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.sp-stage__dot {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 50%;
+}
+
+.sp-stage__name {
+  min-width: 0;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.sp-stage__time {
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sp-stage__note {
+  grid-column: 2 / -1;
+  margin-top: 3px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.sp-stage__note a {
+  color: inherit;
+}
+
+.sp-stage.is-done .sp-stage__mark {
+  color: var(--mn-success);
+}
+
+.sp-stage.is-done .sp-stage__name {
+  color: var(--mn-fg);
+}
+
+.sp-stage.is-running .sp-stage__mark {
+  color: var(--mn-accent-ink, var(--mn-accent));
+}
+
+.sp-stage.is-running .sp-stage__dot {
+  border-color: currentcolor;
+  background: currentcolor;
+  animation: sp-breathe 2.4s var(--ease-out) infinite;
+}
+
+.sp-stage.is-running .sp-stage__name {
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+/* Paused or stalled: the stage is current but nothing is happening in it. */
+.sp-stage.is-halted .sp-stage__mark {
+  color: var(--mn-warning);
+}
+
+.sp-stage.is-halted .sp-stage__dot {
+  border-color: currentcolor;
+  background: currentcolor;
+}
+
+.sp-stage.is-halted .sp-stage__name {
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.sp-stage.is-halted .sp-stage__note {
+  color: var(--mn-fg-muted);
+}
+
+.sp-stage.is-waiting .sp-stage__mark {
+  color: var(--mn-accent-ink, var(--mn-accent));
+}
+
+/* Ring, not a fill: the stage is current but the pipeline is not working in it. */
+.sp-stage.is-waiting .sp-stage__dot {
+  border-color: currentcolor;
+  box-shadow: 0 0 0 2px var(--mn-accent-soft);
+}
+
+.sp-stage.is-waiting .sp-stage__note {
+  color: var(--mn-fg-muted);
+}
+
+.sp-stage.is-waiting .sp-stage__name {
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.sp-stage.is-error .sp-stage__mark {
+  color: var(--mn-danger);
+}
+
+.sp-stage.is-error .sp-stage__name {
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.sp-stage.is-skipped .sp-stage__name {
+  color: var(--mn-fg-subtle);
+}
+
+.sp-stage:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: -2px;
+}
+
+/* ── Artifacts ─────────────────────────────────────────────────────────── */
+
+.sp-artifacts {
+  margin-top: 34px;
+}
+
+.sp-artifact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 8px 6px 9px 2px;
+  border-bottom: 1px solid var(--mn-border);
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-artifact__name {
+  color: var(--mn-fg);
+  font-size: 13.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.sp-artifact__kind {
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sp-artifact__path {
+  grid-column: 1 / -1;
+  color: var(--mn-fg-subtle);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.sp-empty {
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── Document (plan / spec) ────────────────────────────────────────────── */
+
+.sp-doc {
+  max-width: var(--sp-read-col);
+}
+
+.sp-doc .plan-preview__body.msg-bubble.msg-bubble--md {
+  max-width: none;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.sp-doc__missing {
+  color: var(--mn-fg-muted);
+  font-size: 13.5px;
+}
+
+/* ── Notices ───────────────────────────────────────────────────────────── */
+
+.sp-notice {
+  max-width: 68ch;
+  margin: 0 0 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-0, var(--mn-bg));
+  color: var(--mn-fg-muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.sp-notice--error {
+  border-color: var(--mn-danger-border, var(--mn-border-strong));
+  background: var(--mn-danger-soft, var(--mn-surface-1));
+}
+
+.sp-notice--warning {
+  border-color: var(--mn-warning-border, var(--mn-border-strong));
+}
+
+.sp-notice__label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--mn-fg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* --mn-danger-ink is the palette's text-weight danger, tuned per family. */
+.sp-notice--error .sp-notice__label {
+  color: var(--mn-danger-ink, var(--mn-danger));
+}
+
+.sp-notice--error {
+  color: var(--mn-fg);
+}
+
+/* ── Questions ─────────────────────────────────────────────────────────── */
+
+.sp-questions {
+  max-width: var(--sp-read-col);
+  margin-bottom: 28px;
+}
+
+.sp-questions[hidden] {
+  display: none;
+}
+
+.sp-questions .question-cards-panel--embedded {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-0, var(--mn-bg));
+  padding: 12px 14px 14px;
+}
+
+/* ── Checkpoint dock ───────────────────────────────────────────────────────
+   Full-bleed under the scroll area, not a floating card: the actions stay
+   reachable while the artifact above them scrolls. */
+
+.sp-dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 12px var(--sp-pad-x);
+  border-top: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+}
+
+.sp-dock[hidden] {
+  display: none;
+}
+
+.sp-dock__copy {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sp-dock__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast, 0.12s) var(--ease-out),
+    border-color var(--duration-fast, 0.12s) var(--ease-out),
+    color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.sp-btn--primary {
+  border-color: var(--mn-accent);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent, var(--mn-bg));
+  font-weight: 600;
+}
+
+.sp-btn--danger {
+  border-color: var(--mn-danger-border, var(--mn-border-strong));
+  color: var(--mn-danger-ink, var(--mn-danger));
+}
+
+.sp-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* ── Hover (fine pointers only) ────────────────────────────────────────── */
+
+@media (hover: hover) and (pointer: fine) {
+  .sp-new:hover {
+    border-color: var(--mn-accent-border, var(--mn-accent));
+    background: var(--mn-accent-soft);
+  }
+
+  .sp-row:hover {
+    background: var(--mn-surface-elevated);
+  }
+
+  .sp-rail__collapse:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+  }
+
+  .sp-chip:hover:not(:disabled) {
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg);
+  }
+
+  .sp-action:hover,
+  .sp-btn:hover:not(:disabled):not(.sp-btn--primary) {
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg);
+    background: var(--mn-surface-elevated);
+  }
+
+  .sp-action--danger:hover {
+    border-color: var(--mn-danger-border, var(--mn-border-strong));
+    color: var(--mn-danger-ink, var(--mn-danger));
+    background: var(--mn-danger-soft, var(--mn-surface-elevated));
+  }
+
+  .sp-btn--primary:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--mn-accent) 88%, var(--mn-fg));
+    border-color: var(--mn-accent);
+    color: var(--mn-fg-on-accent, var(--mn-bg));
+  }
+
+  .sp-send:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+
+  .sp-seed:hover,
+  .sp-foot-link:hover {
+    border-color: var(--mn-accent);
+    color: var(--mn-fg);
+  }
+
+  .sp-segment:hover {
+    color: var(--mn-fg);
+  }
+
+  .sp-stage--clickable:hover,
+  .sp-artifact:hover {
+    background: var(--mn-surface-elevated);
+  }
+
+  .sp-runhead__more:hover {
+    color: var(--mn-fg);
+  }
+}
+
+.super-plan-page button:focus-visible,
+.super-plan-page a:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: 2px;
+}
+
+/* ── Width steps ───────────────────────────────────────────────────────────
+   Container queries, not @media: apps live inside MinnowOS windows. */
+
+/* Enough room for the reading column plus the pipeline beside it. The grid
+   owns the measure here, so the caps that keep the stacked layout readable
+   are lifted. */
+@container superplan (min-width: 1120px) {
+  .sp-cols {
+    grid-template-columns: minmax(0, var(--sp-read-col)) minmax(0, var(--sp-aside-w));
+    column-gap: var(--sp-col-gap);
+    align-items: start;
+  }
+
+  .sp-cols__aside {
+    margin-top: 0;
+  }
+
+  .sp-cols__aside .sp-sec {
+    margin-top: 3px;
+  }
+}
+
+/* Ultra-wide: the reading column grows a little and the pipeline takes the
+   rest, which buys stage notes and artifact paths that stop wrapping. */
+@container superplan (min-width: 1820px) {
+  .sp-shell {
+    --sp-read-col: 860px;
+    --sp-aside-w: 520px;
+    --sp-col-gap: 88px;
+  }
+}
+
+@container superplan (max-width: 860px) {
+  .sp-shell {
+    --sp-rail-w: 224px;
+    --sp-gutter: 20px;
+  }
+}
+
+@container superplan (max-width: 660px) {
+  .sp-shell {
+    position: relative;
+  }
+
+  .sp-rail {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    box-shadow: var(--shadow-sidebar, 4px 0 24px oklch(0.1 0.02 250 / 0.4));
+    transition: transform var(--duration-normal, 0.18s) var(--ease-out);
+  }
+
+  .sp-rail__collapse {
+    display: inline-flex;
+  }
+
+  .sp-action--rail {
+    display: inline-flex;
+  }
+
+  .super-plan-page.is-rail-hidden .sp-rail {
+    transform: translateX(-100%);
+  }
+
+  .sp-runhead__title {
+    font-size: 17px;
+  }
+
+  .sp-ask__title {
+    font-size: 21px;
+  }
+
+  .sp-runhead__top {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sp-runhead__actions {
+    justify-content: flex-start;
+  }
+
+  .sp-dock {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sp-dock__actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-state.is-running::before,
+  .sp-stage.is-running .sp-stage__dot {
+    animation: none;
+  }
+
+  .sp-entry--enter {
+    animation: none;
+  }
+
+  .sp-rail,
+  .sp-segment::after {
+    transition: none;
+  }
+}

@@ -4,6 +4,7 @@
 
 import '../styles/workspace-gate.css';
 
+import { isPageReload } from '../boot/page-navigation';
 import { loadWorkspaceFromServer } from '../state/workspace';
 import { isOsShellEnabled } from './page-bridge';
 import { getOsView, subscribeInstances } from './instances';
@@ -13,6 +14,25 @@ let gateMounted = false;
 let gateOpen = false;
 let bootGatePromise: Promise<void> | null = null;
 let resolveBootGate: (() => void) | null = null;
+
+const WORKSPACE_GATE_SESSION_KEY = 'minnow:workspace-gate-passed';
+
+/** User completed the workspace gate earlier in this browser/Electron session. */
+export function hasWorkspaceGatePassedThisSession(): boolean {
+  try {
+    return sessionStorage.getItem(WORKSPACE_GATE_SESSION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markWorkspaceGatePassedThisSession(): void {
+  try {
+    sessionStorage.setItem(WORKSPACE_GATE_SESSION_KEY, '1');
+  } catch {
+    /* private mode / disabled storage */
+  }
+}
 
 function getGateRoot(): HTMLElement | null {
   return document.getElementById('osWorkspaceGate');
@@ -104,6 +124,7 @@ export function closeWorkspaceGate(): void {
 
 /** Called after PUT /api/workspace succeeds — enter Code and release boot gate. */
 export async function onWorkspaceGateChosen(): Promise<void> {
+  markWorkspaceGatePassedThisSession();
   setGateOpening(false);
   closeWorkspaceGate();
   resolveBootGate?.();
@@ -128,6 +149,10 @@ export function syncWorkspaceGateFromRoute(): void {
     if (gateOpen) closeWorkspaceGate();
     return;
   }
+  if (isPageReload() && hasWorkspaceGatePassedThisSession()) {
+    launchApp('code');
+    return;
+  }
   openWorkspaceGate();
 }
 
@@ -139,13 +164,21 @@ function ensureBootGatePromise(): void {
   });
 }
 
-/**
- * Block initApp until the user picks a workspace (or continues in the default folder).
- */
+/** Whether initApp should block on the workspace gate (cold launch only). */
+export function shouldBlockBootOnWorkspaceGate(): boolean {
+  if (!isOsShellEnabled()) return false;
+  if (isPageReload()) return false;
+  return true;
+}
+
 export async function awaitWorkspaceGateBeforeAppInit(): Promise<void> {
   if (!isOsShellEnabled()) return;
 
   await loadWorkspaceFromServer();
+
+  if (!shouldBlockBootOnWorkspaceGate()) {
+    return;
+  }
 
   ensureBootGatePromise();
   mountWorkspaceGateDom();
@@ -170,4 +203,9 @@ export function resetWorkspaceGateForTests(): void {
   resolveBootGate = null;
   setGateOpening(false);
   document.documentElement.classList.remove('os-workspace-gate-open');
+  try {
+    sessionStorage.removeItem(WORKSPACE_GATE_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
 }

@@ -13,6 +13,7 @@ import {
   type FileChangeSummary,
 } from '../usage/code-change-ledger';
 import { iconHtml } from './icon';
+import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 
 let _currentChat: Chat | null = null;
 let _panelOpen = false;
@@ -263,6 +264,36 @@ export function initCodeChangeStrip(): void {
   });
 }
 
+/** True when the strip should not appear (boards, plan screen, hub, etc.). */
+function isCodeChangeStripContextSuppressed(): boolean {
+  if (isMainColumnOverlaySuppressingChatDom()) return true;
+  const main = document.getElementById('mainColumn');
+  if (!main) return false;
+  return (
+    main.classList.contains('main-column--hub') ||
+    main.classList.contains('main-column--board-view')
+  );
+}
+
+/** Hide the wrap when no chrome is visible or we are not on the chat transcript. */
+export function syncCodeChangeStripWrapVisibility(): void {
+  const { wrap, strip } = getStripElements();
+  if (!wrap) return;
+
+  if (isCodeChangeStripContextSuppressed()) {
+    wrap.hidden = true;
+    return;
+  }
+
+  const stripVisible = Boolean(strip && !strip.classList.contains('hidden'));
+  const undo = document.getElementById('btnCodeChangeUndo') as HTMLButtonElement | null;
+  const undoVisible = Boolean(undo && !undo.hidden);
+  const actions = document.getElementById('codeChangeStripActions');
+  const actionsVisible = Boolean(actions && !actions.hidden);
+
+  wrap.hidden = !(stripVisible || undoVisible || actionsVisible);
+}
+
 /** Show or hide the strip above the input bar from chat totals. */
 export function updateCodeChangeStrip(chat?: Chat | null): void {
   const { strip, statsEl } = getStripElements();
@@ -270,6 +301,17 @@ export function updateCodeChangeStrip(chat?: Chat | null): void {
 
   _currentChat = chat ?? null;
   closeCodeChangePanel();
+
+  if (isCodeChangeStripContextSuppressed()) {
+    strip.classList.add('hidden');
+    statsEl.textContent = '';
+    strip.setAttribute('aria-label', 'Code changes in this chat');
+    syncCodeChangeStripWrapVisibility();
+    void import('./code-change-strip-actions').then((m) =>
+      m.syncCodeChangeStripActionsVisibility(null),
+    );
+    return;
+  }
 
   const totals = chat?.codeChangeTotals;
   if (!hasCodeChangeTotals(totals) || !totals || !chat) {
@@ -279,6 +321,7 @@ export function updateCodeChangeStrip(chat?: Chat | null): void {
     void import('./code-change-strip-actions').then((m) =>
       m.syncCodeChangeStripActionsVisibility(null),
     );
+    syncCodeChangeStripWrapVisibility();
     return;
   }
 
@@ -292,4 +335,5 @@ export function updateCodeChangeStrip(chat?: Chat | null): void {
   void import('./code-change-strip-actions').then((m) =>
     m.syncCodeChangeStripActionsVisibility(chat),
   );
+  syncCodeChangeStripWrapVisibility();
 }

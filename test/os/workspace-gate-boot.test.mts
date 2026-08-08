@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import { Window } from 'happy-dom';
+
+function setupShellDom() {
+  const window = new Window();
+  globalThis.window = window;
+  globalThis.document = window.document;
+  globalThis.performance = window.performance;
+  return window;
+}
+
+const { isPageReload } = await import('../../src/boot/page-navigation.ts');
+
+const {
+  resetWorkspaceGateForTests,
+  shouldBlockBootOnWorkspaceGate,
+} = await import('../../src/os/workspace-gate.ts');
+
+const { resetWorkspaceStateForTests, setWorkspaceFromServer } = await import(
+  '../../src/state/workspace.ts'
+);
+
+describe('page-navigation', () => {
+  test('isPageReload is false without a navigation entry', () => {
+    setupShellDom();
+    assert.equal(isPageReload(), false);
+  });
+});
+
+describe('workspace-gate boot', { concurrency: false }, () => {
+  test('shouldBlockBootOnWorkspaceGate is false on reload', () => {
+    setupShellDom();
+    resetWorkspaceGateForTests();
+    resetWorkspaceStateForTests();
+    setWorkspaceFromServer({
+      path: '/projects/app',
+      label: 'app',
+      isDefault: false,
+    });
+
+    performance.getEntriesByType = () => [{ type: 'reload' }];
+
+    assert.equal(shouldBlockBootOnWorkspaceGate(), false);
+  });
+
+  test('shouldBlockBootOnWorkspaceGate is true on cold launch', () => {
+    setupShellDom();
+    resetWorkspaceGateForTests();
+    resetWorkspaceStateForTests();
+    setWorkspaceFromServer({
+      path: '/projects/app',
+      label: 'app',
+      isDefault: false,
+    });
+
+    performance.getEntriesByType = () => [{ type: 'navigate' }];
+
+    assert.equal(shouldBlockBootOnWorkspaceGate(), true);
+  });
+});

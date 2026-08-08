@@ -2354,6 +2354,10 @@
         <i class="fi fi-rr-sitemap icon-svg" aria-hidden="true"></i>
         <span class="code-views__label-track"><span class="code-views__label">Code map</span></span>
       </button>
+      <button type="button" class="code-views__btn" id="btnSuperPlan" aria-pressed="false" aria-expanded="false" title="Super Plan">
+        <i class="fi fi-rr-clipboard-list-check icon-svg" aria-hidden="true"></i>
+        <span class="code-views__label-track"><span class="code-views__label">Super Plan</span></span>
+      </button>
       <button type="button" class="code-views__btn" id="btnOrchestrate" aria-pressed="false" aria-expanded="false" title="Orchestrate">
         <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
         <span class="code-views__label-track"><span class="code-views__label">Orchestrate</span></span>
@@ -2372,6 +2376,65 @@
       </main>
 
       <button type="button" id="chatJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
+
+      <!-- Code changes + undo: floats over the transcript (not a main-column flex row) -->
+      <div class="code-change-strip-wrap" hidden>
+        <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">
+          <div id="codeChangePanelList" class="code-change-panel__list"></div>
+        </div>
+        <div class="code-change-strip-row">
+          <button
+            type="button"
+            id="codeChangeStrip"
+            class="code-change-strip hidden"
+            aria-live="polite"
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            aria-label="Code changes in this chat"
+          >
+            <span class="code-change-strip__label">Code changes</span>
+            <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
+          </button>
+          <div id="codeChangeStripActions" class="code-change-strip__actions" hidden>
+            <button
+              type="button"
+              id="btnCodeChangeCommit"
+              class="code-change-strip__action"
+              title="Stage and commit files changed in this chat"
+              hidden
+            >
+              Commit
+            </button>
+            <button
+              type="button"
+              id="btnCodeChangeCreatePr"
+              class="code-change-strip__action"
+              title="Push and open a pull request for this branch"
+              hidden
+            >
+              Create PR
+            </button>
+          </div>
+          <!-- Undo last agent turn — lives with code-change chrome (MIN-409); Uicons undo glyph.
+               Hidden unless git + the undo target turn mutated files. -->
+          <button
+            type="button"
+            id="btnCodeChangeUndo"
+            class="code-change-strip__undo"
+            aria-label="Undo last agent turn"
+            title="Undo last agent turn"
+            aria-disabled="true"
+            disabled
+            hidden
+          >
+            <i
+              class="fi fi-rr-undo-alt icon-svg code-change-strip__undo-icon"
+              aria-hidden="true"
+              style="--mn-icon-size: 14px"
+            ></i>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Tool approval: mounted here by showToolApprovalModal (above composer, not a full-screen popup) -->
@@ -2379,64 +2442,6 @@
 
     <!-- Ask question: structured Q&A strip (below tool approval, above composer) -->
     <div id="questionHost" class="question-host" aria-live="polite" hidden></div>
-
-    <div class="code-change-strip-wrap">
-      <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">
-        <div id="codeChangePanelList" class="code-change-panel__list"></div>
-      </div>
-      <div class="code-change-strip-row">
-        <button
-          type="button"
-          id="codeChangeStrip"
-          class="code-change-strip hidden"
-          aria-live="polite"
-          aria-expanded="false"
-          aria-haspopup="listbox"
-          aria-label="Code changes in this chat"
-        >
-          <span class="code-change-strip__label">Code changes</span>
-          <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
-        </button>
-        <div id="codeChangeStripActions" class="code-change-strip__actions" hidden>
-          <button
-            type="button"
-            id="btnCodeChangeCommit"
-            class="code-change-strip__action"
-            title="Stage and commit files changed in this chat"
-            hidden
-          >
-            Commit
-          </button>
-          <button
-            type="button"
-            id="btnCodeChangeCreatePr"
-            class="code-change-strip__action"
-            title="Push and open a pull request for this branch"
-            hidden
-          >
-            Create PR
-          </button>
-        </div>
-        <!-- Undo last agent turn — lives with code-change chrome (MIN-409); Uicons undo glyph.
-             Hidden unless git + the undo target turn mutated files. -->
-        <button
-          type="button"
-          id="btnCodeChangeUndo"
-          class="code-change-strip__undo"
-          aria-label="Undo last agent turn"
-          title="Undo last agent turn"
-          aria-disabled="true"
-          disabled
-          hidden
-        >
-          <i
-            class="fi fi-rr-undo-alt icon-svg code-change-strip__undo-icon"
-            aria-hidden="true"
-            style="--mn-icon-size: 14px"
-          ></i>
-        </button>
-      </div>
-    </div>
 
     <!-- Input bar -->
     <div class="input-bar">

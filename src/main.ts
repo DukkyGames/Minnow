@@ -66,6 +66,7 @@ import './styles/code-overview.css';
 import './styles/orchestrate-hub.css';
 import './styles/orchestrate-plan-screen.css';
 import './styles/plan-progress.css';
+import './styles/super-plan-page.css';
 import './styles/minnowos-shell.css';
 import './styles/minnowos-responsive.css';
 import './styles/chat-app.css';
@@ -222,6 +223,7 @@ import {
 } from './ui/welcome-page';
 import { getWorkspacePath } from './state/workspace.ts';
 import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
+import { isPageReload } from './boot/page-navigation';
 import { scheduleMarkAppReady } from './boot/app-ready';
 import { installRendererDiagnostics } from './boot/diagnostics';
 import { installLongTaskObserver } from './boot/long-task-observer';
@@ -465,8 +467,16 @@ async function startApp(): Promise<void> {
   initShellKeyboardHelp();
   installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
+    initOsPageBridge();
+    initOsShell();
+  }
+  installRendererDiagnostics();
+  installLongTaskObserver();
+  initNotificationAudioUnlock();
+  // Sessions must load before OS routing — Code app mount calls getActiveChat().
+  await detectConfigServer();
+  if (isOsShellEnabled() && !isPageReload()) {
     const hash = window.location.hash;
-    // Cold boot lands on the workspace picker — not the last app hash Electron/Chromium may restore.
     const bootToWorkspacePicker =
       hash === '' ||
       hash === '#' ||
@@ -476,14 +486,7 @@ async function startApp(): Promise<void> {
     if (bootToWorkspacePicker) {
       window.location.replace('#/workspaces');
     }
-    initOsPageBridge();
-    initOsShell();
   }
-  installRendererDiagnostics();
-  installLongTaskObserver();
-  initNotificationAudioUnlock();
-  // Sessions must load before OS routing — Code app mount calls getActiveChat().
-  await detectConfigServer();
   // Probe the tool server in parallel with session hydrate — Code boot reads this flag (MIN-436).
   await Promise.all([loadSessionsFromStorage(), detectLocalServer()]);
   markBootPhase('sessions');

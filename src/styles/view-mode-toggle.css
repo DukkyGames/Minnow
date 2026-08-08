@@ -140,6 +140,12 @@
 
 }
 
+.main-column.main-column--board-view .code-change-strip-wrap {
+
+  display: none !important;
+
+}
+
 
 
 /* Init split: #chatArea hosts board+chat shell; transcript scrolls in __chat */

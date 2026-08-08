@@ -21,6 +21,7 @@ import { runHadCodeChanges } from '../usage/code-change-ledger';
 import { renderChatFromHistory, renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
 import { setStatus } from './status';
+import { syncCodeChangeStripWrapVisibility } from './code-change-strip';
 
 const TITLE_ENABLED = 'Undo last agent turn';
 /** Prefer the strip-area id; keep legacy id as a fallback for older DOM. */
@@ -198,6 +199,7 @@ export function syncComposerUndoFromActiveChat(): void {
       btn.disabled = true;
       btn.setAttribute('aria-disabled', 'true');
       btn.dataset.undoReason = !hasGit ? 'no_git' : 'no_file_changes';
+      syncCodeChangeStripWrapVisibility();
       return;
     }
 
@@ -212,6 +214,7 @@ export function syncComposerUndoFromActiveChat(): void {
     btn.setAttribute('aria-label', hint);
     btn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
     btn.dataset.undoReason = eligibility.reason ?? '';
+    syncCodeChangeStripWrapVisibility();
   })();
 }
 

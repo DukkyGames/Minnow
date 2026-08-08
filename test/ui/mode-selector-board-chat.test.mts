@@ -130,6 +130,47 @@ describe('mode selector for orchestrator board chats', () => {
     assert.ok(modeSelector.querySelector('.mode-segment__label'));
   });
 
+  test('Plan is a plain segment: no caret, no hidden Super Plan menu', () => {
+    const modeSelector = setupModeSelectorDom();
+    const chat = createEmptyChatObject('');
+    chat.id = REGULAR_CHAT_ID;
+    chat.modeId = 'plan';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    initModeSelector();
+
+    assert.equal(modeSelector.querySelector('.mode-segment__caret'), null);
+    assert.equal(modeSelector.querySelector('.mode-submenu'), null);
+    const plan = modeSelector.querySelector('[data-mode-id="plan"]');
+    assert.equal(plan?.querySelector('.mode-segment__label')?.textContent, 'Plan');
+    assert.equal(plan?.getAttribute('aria-checked'), 'true');
+  });
+
+  test('a Super Plan chat still lights the Plan segment', () => {
+    const modeSelector = setupModeSelectorDom();
+    const chat = createEmptyChatObject('');
+    chat.id = REGULAR_CHAT_ID;
+    chat.modeId = 'super-plan';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    initModeSelector();
+
+    assert.equal(
+      modeSelector.querySelector('[data-mode-id="plan"]')?.getAttribute('aria-checked'),
+      'true',
+    );
+  });
+
   test('keeps the hidden selector out of layout despite its inline-flex styling', () => {
     const modeSelectorCss = readFileSync(
       new URL('../../src/styles/mode-selector.css', import.meta.url),

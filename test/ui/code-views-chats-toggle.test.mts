@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { CHAT_SIDEBAR_CHANGED_EVENT } from '../../src/ui/layout-events.ts';
 import { initCodeViewsChatsToggle } from '../../src/ui/code-views-chats-toggle.ts';
+import { syncSuperPlanChrome } from '../../src/ui/super-plan-chrome.ts';
 import { resetMobileLayoutForTests } from '../../src/ui/mobile-layout.ts';
 import { installHappyDomGlobals, teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
@@ -41,6 +42,17 @@ describe('code views chats toggle', () => {
 
     side.classList.add('collapsed');
     happyDomWindow.dispatchEvent(new happyDomWindow.CustomEvent(CHAT_SIDEBAR_CHANGED_EVENT));
+
+    assert.equal(btn.getAttribute('aria-expanded'), 'false');
+    assert.equal(btn.getAttribute('aria-label'), 'Show chats');
+  });
+
+  test('shows Show chats while Super Plan hides the session list', () => {
+    const btn = document.getElementById('btnCodeViewsChats');
+    assert.ok(btn);
+    assert.ok(happyDomWindow);
+
+    syncSuperPlanChrome(true);
 
     assert.equal(btn.getAttribute('aria-expanded'), 'false');
     assert.equal(btn.getAttribute('aria-label'), 'Show chats');
