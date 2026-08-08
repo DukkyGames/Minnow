@@ -1171,13 +1171,13 @@
       "research scope"
     ],
     "category": "agents",
-    "area": "modes",
+    "area": "agent-center",
     "storage": "section",
     "type": "string",
     "sensitivity": "normal",
     "writable": false,
     "refreshAreas": [
-      "modes"
+      "agent-center"
     ]
   },
   {

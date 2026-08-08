@@ -121,12 +121,20 @@ export class ResearchRunLedger {
   /** Clear the in-progress marker on the newest source row. */
   setRunning(running: boolean): void {
     this.running = running;
-    if (running || !this.activeEntry) {
+    if (!running) {
+      this.finalizeActiveEntry();
+    }
+  }
+
+  /** Swap the live spinner on the current source row for a completed checkmark. */
+  private finalizeActiveEntry(): void {
+    if (!this.activeEntry) {
       return;
     }
     this.activeEntry.classList.remove('is-active');
     const mark = this.activeEntry.querySelector('.rs-entry__mark');
     if (mark) {
+      mark.replaceChildren();
       mark.textContent = MARKS.source;
     }
     this.activeEntry = null;
@@ -200,7 +208,7 @@ export class ResearchRunLedger {
         }
         this.seenSources.add(url);
         this.readCount += 1;
-        this.setRunning(this.running);
+        this.finalizeActiveEntry();
         const entry = this.addEntry({
           kind: 'source',
           text: event.title?.trim() || url,
@@ -219,7 +227,7 @@ export class ResearchRunLedger {
           this.ensureRound(event.round);
         }
         this.scanned = event.totalSources ?? this.scanned;
-        this.setRunning(this.running);
+        this.finalizeActiveEntry();
         this.addEntry({
           kind: 'phase',
           text: event.message?.trim() || `Cross-checking round ${this.getRound()}`,
@@ -234,7 +242,7 @@ export class ResearchRunLedger {
 
       case 'writing':
         this.scanned = event.totalSources ?? this.scanned;
-        this.setRunning(this.running);
+        this.finalizeActiveEntry();
         this.addEntry({ kind: 'phase', text: event.message?.trim() || 'Writing the brief' });
         break;
 

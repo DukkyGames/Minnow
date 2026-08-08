@@ -24,6 +24,7 @@ const REQUIRED_RUNTIME_PATHS = [
   'src/chat/prompts/work-agents/registry.json',
   'src/state/session-schema.mjs',
   'src/product-wiki/path-filter.mjs',
+  'src/styles/tokens.css',
   'build/icon.ico',
 ];
 

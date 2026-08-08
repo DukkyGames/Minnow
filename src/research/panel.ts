@@ -219,11 +219,26 @@ function showRunPane(): void {
   notifyResearchPanelStatus();
 }
 
+/** Brief tab is shown only once a finished run has a saved report to read. */
+function setBriefTabVisible(visible: boolean): void {
+  const briefTab = el('researchViewBrief');
+  if (!briefTab) {
+    return;
+  }
+  briefTab.hidden = !visible;
+  if (!visible && runView === 'brief') {
+    setRunView('evidence');
+  }
+}
+
 function setRunView(view: RunView): void {
+  const briefTab = el('researchViewBrief');
+  if (view === 'brief' && briefTab?.hidden) {
+    view = 'evidence';
+  }
   runView = view;
   const brief = el('researchResultMount');
   const evidence = el('researchProgressMount');
-  const briefTab = el('researchViewBrief');
   const evidenceTab = el('researchViewEvidence');
   if (brief) {
     brief.hidden = view !== 'brief';
@@ -523,6 +538,7 @@ async function selectRun(researchId: string): Promise<void> {
   if (running && liveRun?.id === researchId) {
     setRunHeader({ title: liveRun.query, status: 'running' });
     renderRunActions(researchId, 'running', liveRun.query);
+    setBriefTabVisible(false);
     setRunView('evidence');
     void ensureRunningLedgerHydrated(researchId);
     return;
@@ -535,7 +551,8 @@ async function selectRun(researchId: string): Promise<void> {
     stats: '',
   });
   el('researchRunActions')?.replaceChildren();
-  setRunView('brief');
+  setBriefTabVisible(false);
+  setRunView('evidence');
   showBriefSkeleton();
 
   try {
@@ -582,6 +599,7 @@ async function selectRun(researchId: string): Promise<void> {
       persistActiveResearchRunId(researchId);
       setRunningState(true);
       ledger?.setRunning(true);
+      setBriefTabVisible(false);
       setRunView('evidence');
       const startedAtMs = researchStartedAtMs(data);
       startClock(startedAtMs != null ? { startedAtMs } : undefined);
@@ -594,6 +612,7 @@ async function selectRun(researchId: string): Promise<void> {
       return;
     }
     if (!data.result?.trim()) {
+      setBriefTabVisible(false);
       showBriefNotice(
         status === 'error' ? 'Failed' : 'No brief',
         status === 'error'
@@ -607,6 +626,8 @@ async function selectRun(researchId: string): Promise<void> {
       }
       return;
     }
+    setBriefTabVisible(true);
+    setRunView('brief');
     renderResearchResultFromMarkdown(briefMount, data.result, data.sources ?? [], query, {
       onFollowUp: (q) => {
         showAskPane();
@@ -623,6 +644,8 @@ async function selectRun(researchId: string): Promise<void> {
     }
     const msg = err instanceof Error ? err.message : 'Could not load this run';
     setRunHeader({ title: known?.query ?? '', status: 'error', stats: '' });
+    setBriefTabVisible(false);
+    setRunView('evidence');
     showBriefNotice('Could not load', msg, true);
   } finally {
     notifyResearchPanelStatus();
@@ -772,6 +795,7 @@ async function attachToRunningResearch(
     showRunPane();
     setRunHeader({ title: query, status: 'running', stats: '0:00' });
     renderRunActions(researchId, 'running', query);
+    setBriefTabVisible(false);
     setRunView('evidence');
     el('researchResultMount')?.replaceChildren();
   }
@@ -792,6 +816,7 @@ async function resumeActiveResearchIfNeeded(): Promise<void> {
       showRunPane();
       setRunHeader({ title: liveRun.query, status: 'running' });
       renderRunActions(liveRun.id, 'running', liveRun.query);
+      setBriefTabVisible(false);
       setRunView('evidence');
     }
     void refreshRail();
@@ -854,6 +879,7 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
     setRunHeader({ title: query, status: 'running', stats: '0:00' });
     renderRunActions(researchId, 'running', query);
     setEvidenceCount(0);
+    setBriefTabVisible(false);
     setRunView('evidence');
 
     const evidence = el('researchProgressMount');
@@ -934,6 +960,7 @@ function finishRun(
       stats: `${ledger?.getReadCount() ?? 0} read before stopping`,
     });
     renderRunActions(researchId, status, query);
+    setBriefTabVisible(false);
     showBriefNotice(
       status === 'error' ? 'Failed' : 'Stopped',
       message ??
@@ -1287,6 +1314,11 @@ export function setResearchRunningForTests(isRunning: boolean): void {
   setRunningState(isRunning);
 }
 
+/** Test hook: toggle Brief segment visibility. */
+export function setBriefTabVisibleForTests(visible: boolean): void {
+  setBriefTabVisible(visible);
+}
+
 /** Test hook: reset module state between cases. */
 export function resetResearchPanelStateForTests(): void {
   teardownStream();
@@ -1303,4 +1335,5 @@ export function resetResearchPanelStateForTests(): void {
   controlsBound = false;
   pendingAutoRun = false;
   clearPersistedActiveResearchRunId();
+  setBriefTabVisible(true);
 }

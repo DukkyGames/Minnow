@@ -5,6 +5,7 @@ import {
   isResearchStartDisabledForTests,
   openResearchReport,
   resetResearchPanelStateForTests,
+  setBriefTabVisibleForTests,
   setResearchRunningForTests,
 } from '../../src/research/panel.ts';
 import { resetResearchOptionChipsForTests } from '../../src/research/option-chips.ts';
@@ -102,6 +103,17 @@ describe('research panel', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+  });
+
+  test('Brief tab is hidden until a saved report is ready', () => {
+    const briefTab = document.getElementById('researchViewBrief') as HTMLButtonElement;
+    const evidenceTab = document.getElementById('researchViewEvidence') as HTMLButtonElement;
+    setBriefTabVisibleForTests(false);
+    assert.equal(briefTab.hidden, true);
+    assert.equal(evidenceTab.classList.contains('is-on'), true);
+
+    setBriefTabVisibleForTests(true);
+    assert.equal(briefTab.hidden, false);
   });
 
   test('running state disables Start and shows Stop', () => {

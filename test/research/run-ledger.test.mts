@@ -112,6 +112,56 @@ describe('research run ledger', () => {
     assert.equal(host.querySelector('.rs-entry--source .rs-entry__mark')?.textContent, '✓');
   });
 
+  test('only the newest source spins while reading; earlier sources show a check', () => {
+    const host = mount();
+    const ledger = new ResearchRunLedger(host);
+    ledger.reset();
+    ledger.apply({
+      phase: 'reading',
+      round: 1,
+      url: 'https://example.com/a',
+      title: 'A',
+      totalSources: 2,
+    });
+    ledger.apply({
+      phase: 'reading',
+      round: 1,
+      url: 'https://example.com/b',
+      title: 'B',
+      totalSources: 2,
+    });
+
+    const marks = [...host.querySelectorAll('.rs-entry--source .rs-entry__mark')];
+    assert.equal(marks.length, 2);
+    assert.equal(marks[0]?.textContent, '✓');
+    assert.ok(marks[1]?.querySelector('.rs-spinner'));
+    assert.equal(host.querySelectorAll('.rs-entry--source.is-active').length, 1);
+  });
+
+  test('analyzing clears the live marker on the last source', () => {
+    const host = mount();
+    const ledger = new ResearchRunLedger(host);
+    ledger.reset();
+    ledger.apply({
+      phase: 'reading',
+      round: 1,
+      url: 'https://example.com/a',
+      title: 'A',
+      totalSources: 1,
+    });
+    ledger.apply({
+      phase: 'analyzing',
+      round: 1,
+      message: 'Synthesizing round 1',
+      totalSources: 1,
+      totalFindings: 0,
+    });
+
+    assert.equal(host.querySelector('.rs-entry--source.is-active'), null);
+    assert.equal(host.querySelector('.rs-entry--source .rs-entry__mark')?.textContent, '✓');
+    assert.match(host.textContent ?? '', /Synthesizing round 1/);
+  });
+
   test('hydrating a finished run replays the same record without live markers', () => {
     const host = mount();
     const ledger = new ResearchRunLedger(host);

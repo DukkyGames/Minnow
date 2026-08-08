@@ -256,7 +256,8 @@
       "!**/*.map",
       "!src/**/*.ts",
       "!src/**/*.tsx",
-      "!src/**/*.css"
+      "!src/**/*.css",
+      "src/styles/tokens.css"
     ],
     "asarUnpack": [
       "node_modules/@lydell/node-pty/**",
