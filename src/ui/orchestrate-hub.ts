@@ -35,10 +35,8 @@ import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
 import { teardownIssuesEmbedBeforeChatPaint } from './issues-page';
 import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
 import { teardownHub } from './hub';
-import {
-  openOrchestratePlanScreen,
-  teardownOrchestratePlanScreen,
-} from './orchestrate-plan-screen';
+import { teardownOrchestratePlanScreen } from './orchestrate-plan-screen';
+import { openSuperPlanScreen } from './super-plan-entry';
 import {
   buildOrchestratePageShell,
   disposeOrchestratePageShell,
@@ -404,9 +402,10 @@ function buildOrchestrateHubDom(): HTMLElement {
     });
   });
 
+  // Always a blank Super Plan composer — not the last plan / live run the
+  // Code view-bar button would resume.
   makePlanBtn.addEventListener('click', () => {
-    teardownOrchestrateHub();
-    void openOrchestratePlanScreen();
+    void openSuperPlanScreen({ preferNew: true });
   });
 
   startBtn.addEventListener('click', () => startBoardFromHub(sel));
