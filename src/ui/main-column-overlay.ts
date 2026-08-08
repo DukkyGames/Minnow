@@ -3,6 +3,8 @@
  * Code overview, code map, orchestrate hub, plan screen, and Issues embeds.
  */
 
+import { emitChatSidebarChanged } from './layout-events';
+
 const CHAT_AREA_OVERLAY_CLASSES = [
   'chat-area--code-overview',
   'chat-area--code-brain-map',
@@ -59,4 +61,63 @@ export function isMainColumnOverlaySuppressingChatDom(): boolean {
     if (area.classList.contains(className)) return true;
   }
   return false;
+}
+
+/**
+ * True while a Code view-bar destination owns the stage and the session list
+ * is hidden in CSS (same behaviour as Super Plan).
+ */
+export function isCodeStageViewHidingChatSidebar(): boolean {
+  return isMainColumnOverlaySuppressingChatDom();
+}
+
+/** Notify Code view chrome (Chats toggle) after a stage view opens or closes. */
+export function notifyCodeStageViewChanged(): void {
+  emitChatSidebarChanged();
+}
+
+/** Leave whichever Code stage view is active and restore the chat transcript. */
+export async function closeActiveCodeStageView(): Promise<void> {
+  const superPlan = await import('./super-plan-entry');
+  if (superPlan.isSuperPlanScreenOpen()) {
+    await superPlan.closeSuperPlanScreen();
+    return;
+  }
+
+  if (document.getElementById('orchestratePlanScreen')) {
+    const plan = await import('./orchestrate-plan-screen');
+    const { sessionState } = await import('../state/sessions');
+    plan.teardownOrchestratePlanScreen();
+    const chat = sessionState?.activeId
+      ? sessionState.chats.find((c) => c.id === sessionState.activeId)
+      : undefined;
+    if (chat) {
+      const { renderChatFromHistory } = await import('./messages');
+      renderChatFromHistory(chat);
+    }
+    return;
+  }
+
+  const hub = await import('./orchestrate-hub');
+  if (hub.isOrchestrateHubMounted()) {
+    hub.closeOrchestrateHub();
+    return;
+  }
+
+  const overview = await import('./code-overview');
+  if (overview.isCodeOverviewOpen()) {
+    overview.closeCodeOverview();
+    return;
+  }
+
+  const dev = await import('./dev-server-screen');
+  if (dev.isDevServerScreenOpen()) {
+    dev.closeDevServerScreen();
+    return;
+  }
+
+  const brain = await import('./code-brain-map');
+  if (brain.isCodeBrainMapOpen()) {
+    brain.closeCodeBrainMap();
+  }
 }

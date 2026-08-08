@@ -34,7 +34,7 @@ import {
 } from './git-graph-context-menu';
 import { createChat, switchChat } from './sidebar';
 import { showToast } from './toast';
-import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
 import {
   isMissingGitRepositoryError,
   openGitSetupFromOverview,
@@ -1036,6 +1036,7 @@ export async function openCodeOverview(): Promise<void> {
   void import('./preview-electron-visibility').then((m) =>
     m.scheduleElectronPreviewHostVisibilitySync(),
   );
+  notifyCodeStageViewChanged();
 }
 
 /** Tear down overview and optionally restore chat view. */
@@ -1055,7 +1056,10 @@ export function closeCodeOverview(options?: {
   returnChatId = null;
   syncOverviewNavButtons();
 
-  if (options?.restoreChat === false) return;
+  if (options?.restoreChat === false) {
+    notifyCodeStageViewChanged();
+    return;
+  }
 
   const targetId =
     savedReturnChatId && sessionState?.chats.some((c) => c.id === savedReturnChatId)
@@ -1073,6 +1077,7 @@ export function closeCodeOverview(options?: {
   void import('./preview-electron-visibility').then((m) =>
     m.scheduleElectronPreviewHostVisibilitySync(),
   );
+  notifyCodeStageViewChanged();
 }
 
 const PHONE_LAYOUT_MQ = '(max-width: 600px)';

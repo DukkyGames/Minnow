@@ -32,3 +32,21 @@
 .orchestrate-hub__plan-hint.hidden {
   display: none;
 }
+
+/* Plan preview: use the orchestrate read column and more vertical space than the
+   default embed cap (min(48vh, 420px) in orchestrate-plan-screen.css). */
+.ob-ask:has(#orchestrateHubPlanPreview:not([hidden])) {
+  max-width: min(100%, var(--ob-read-col, 790px));
+}
+
+.ob-ask #orchestrateHubPlanPreview .orchestrate-plan-screen__preview-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ob-ask #orchestrateHubPlanPreviewMount.orchestrate-plan-screen__preview {
+  width: 100%;
+  min-height: 360px;
+  max-height: min(72vh, 680px);
+}

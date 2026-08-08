@@ -47,7 +47,7 @@ import {
   type PortsSortKey,
 } from './dev-server-screen-view';
 import { subAgentLiveStatusLine } from './sub-agent-live-status';
-import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
 import { formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
 import { listWorktrees } from '../state/worktree-service';
 import { getWorkspacePath } from '../state/workspace';
@@ -979,6 +979,7 @@ export async function openDevServerScreen(): Promise<void> {
   void import('./preview-electron-visibility').then((m) =>
     m.scheduleElectronPreviewHostVisibilitySync(),
   );
+  notifyCodeStageViewChanged();
 }
 
 export function closeDevServerScreen(options?: {
@@ -1017,6 +1018,7 @@ export function closeDevServerScreen(options?: {
     void import('./preview-electron-visibility').then((m) =>
       m.scheduleElectronPreviewHostVisibilitySync(),
     );
+    notifyCodeStageViewChanged();
     return;
   }
 
@@ -1035,6 +1037,7 @@ export function closeDevServerScreen(options?: {
   void import('./preview-electron-visibility').then((m) =>
     m.scheduleElectronPreviewHostVisibilitySync(),
   );
+  notifyCodeStageViewChanged();
 }
 
 function onHashChange(): void {

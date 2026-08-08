@@ -1135,6 +1135,8 @@ function maybeRememberActiveChatForForegroundApp(
   state: SessionState,
   chat: Chat,
 ): void {
+  // Super Plan chats are pipeline transport — do not poison remembered foreground ids.
+  if (normalizeModeId(chat.modeId) === 'super-plan') return;
   if (shouldPaintDesktopChatSurface()) {
     rememberActiveChatForAppInState(state, DESKTOP_APP_ID, chat.id);
     return;
@@ -1152,6 +1154,8 @@ function maybeRememberActiveChatForForegroundApp(
 function rememberActiveChatForWorkspaceKey(workspaceKey: string): void {
   const state = sessionState;
   if (!state?.activeId) return;
+  const active = state.chats.find((c) => c.id === state.activeId);
+  if (active && normalizeModeId(active.modeId) === 'super-plan') return;
   if (!state.lastActiveChatIdByWorkspace) {
     state.lastActiveChatIdByWorkspace = {};
   }

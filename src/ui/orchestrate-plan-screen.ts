@@ -221,17 +221,7 @@ export function isOrchestratePlanScreenSuspendedForChat(chat: Chat): boolean {
   );
 }
 
-/** True when persisted {@link Chat.superPlan} still has a resumable pipeline (not finished/cancelled). */
-export function isSuperPlanPipelineResumable(chat: Chat): boolean {
-  if (normalizeModeId(chat.modeId) !== 'super-plan') return false;
-  const sp = chat.superPlan;
-  if (!sp || sp.cancelled) return false;
-  if (sp.activeStage === 'present') {
-    const record = sp.stages.present;
-    if (record?.status === 'done') return false;
-  }
-  return true;
-}
+export { isSuperPlanPipelineResumable } from '../chat/super-plan/resumable';
 
 /**
  * True when persisted {@link Chat.superPlan} should rebuild the plan-screen

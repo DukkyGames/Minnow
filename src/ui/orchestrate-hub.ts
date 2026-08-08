@@ -33,7 +33,7 @@ import { renderChatFromHistory } from './messages';
 import { closeCodeOverview, isCodeOverviewOpen } from './code-overview';
 import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
 import { teardownIssuesEmbedBeforeChatPaint } from './issues-page';
-import { stripMainColumnOverlayClasses } from './main-column-overlay';
+import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
 import { teardownHub } from './hub';
 import {
   openOrchestratePlanScreen,
@@ -128,6 +128,7 @@ export function teardownOrchestrateHub(): void {
   hubReturnChatId = null;
   syncTopBarOrchestrateButton();
   notifyAskQuestionDisplayContextChanged();
+  notifyCodeStageViewChanged();
 }
 
 /** Workspace folders that have an orchestrate board or plan path. */
@@ -446,6 +447,7 @@ export function renderOrchestrateHub(): void {
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
   syncTopBarOrchestrateButton();
   notifyAskQuestionDisplayContextChanged();
+  notifyCodeStageViewChanged();
 }
 
 /** Close hub and restore the chat that was active when the hub opened. */

@@ -5,11 +5,14 @@
 
 import { CHAT_SIDEBAR_CHANGED_EVENT } from './layout-events';
 import { isChatSidebarOpen, toggleSidebarLayout } from './layout';
-import { isSuperPlanChromeActive } from './super-plan-chrome';
+import {
+  closeActiveCodeStageView,
+  isCodeStageViewHidingChatSidebar,
+} from './main-column-overlay';
 
 function isCodeViewsChatsPanelOpen(): boolean {
-  // Super Plan hides the session list in CSS; Chats exits the surface instead of toggling it.
-  if (isSuperPlanChromeActive()) return false;
+  // Stage views hide the session list in CSS; Chats exits the surface instead of toggling it.
+  if (isCodeStageViewHidingChatSidebar()) return false;
   return isChatSidebarOpen();
 }
 
@@ -31,8 +34,8 @@ export function initCodeViewsChatsToggle(): void {
   const onSync = (): void => syncCodeViewsChatsToggle(btn as HTMLButtonElement);
 
   btn.addEventListener('click', () => {
-    if (isSuperPlanChromeActive()) {
-      void import('./super-plan-entry').then((m) => m.closeSuperPlanScreen());
+    if (isCodeStageViewHidingChatSidebar()) {
+      void closeActiveCodeStageView();
       return;
     }
     toggleSidebarLayout();

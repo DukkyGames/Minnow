@@ -57,4 +57,24 @@ describe('code views chats toggle', () => {
     assert.equal(btn.getAttribute('aria-expanded'), 'false');
     assert.equal(btn.getAttribute('aria-label'), 'Show chats');
   });
+
+  test('clicking Chats closes a Code overview stage view', async () => {
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    const overview = document.createElement('div');
+    overview.id = 'codeOverviewRoot';
+    area.appendChild(overview);
+    document.body.appendChild(area);
+
+    happyDomWindow!.dispatchEvent(new happyDomWindow!.CustomEvent(CHAT_SIDEBAR_CHANGED_EVENT));
+
+    const btn = document.getElementById('btnCodeViewsChats');
+    assert.ok(btn);
+    assert.equal(btn.getAttribute('aria-expanded'), 'false');
+
+    btn.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(document.getElementById('codeOverviewRoot'), null);
+  });
 });
