@@ -171,6 +171,36 @@ describe('super plan top-bar entry', () => {
     );
   });
 
+  test('preferNew skips the last session and any live run', async () => {
+    installShellDom();
+    const chat = createEmptyChatObject('general');
+    const live = makeLiveSuperPlanChat();
+    const spare = makeEmptySuperPlanChat();
+    seed([chat, spare, live], chat.id);
+
+    // Seed a prior plan-screen session the same way a previous visit would.
+    const { renderOrchestratePlanScreen } = await import(
+      '../../src/ui/orchestrate-plan-screen.ts'
+    );
+    renderOrchestratePlanScreen({
+      phase: 'super-plan-working',
+      chatId: live.id,
+      savedPrompt: live.superPlan?.prompt,
+    });
+    assert.equal(getOrchestratePlanScreenSession()?.chatId, live.id);
+
+    await openSuperPlanScreen({ preferNew: true });
+
+    const session = getOrchestratePlanScreenSession();
+    assert.ok(session, 'plan-screen session should exist');
+    assert.notEqual(
+      session?.chatId,
+      live.id,
+      'Make a plan must open a blank composer, not the last or live run',
+    );
+    assert.equal(session?.phase, 'prompt');
+  });
+
   test('the button toggles the surface', async () => {
     installShellDom();
     const chat = createEmptyChatObject('general');

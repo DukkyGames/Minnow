@@ -402,8 +402,10 @@ function buildOrchestrateHubDom(): HTMLElement {
     });
   });
 
+  // Always a blank Super Plan composer — not the last plan / live run the
+  // Code view-bar button would resume.
   makePlanBtn.addEventListener('click', () => {
-    void openSuperPlanScreen();
+    void openSuperPlanScreen({ preferNew: true });
   });
 
   startBtn.addEventListener('click', () => startBoardFromHub(sel));

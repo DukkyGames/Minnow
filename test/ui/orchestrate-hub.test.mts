@@ -264,18 +264,33 @@ describe('orchestrate hub mount', () => {
     assert.equal(previewMount.childElementCount, 0);
   });
 
-  test('Make a plan opens Super Plan instead of legacy plan screen', async () => {
+  test('Make a plan opens a blank Super Plan, not the last live run', async () => {
     mountHubDomForSuperPlan();
 
     const chat = createEmptyChatObject('m1');
     chat.modeId = 'general';
     const spareSuperPlan = createEmptyChatObject('spare-sp');
     spareSuperPlan.modeId = 'super-plan';
+    const live = createEmptyChatObject('live-sp');
+    live.modeId = 'super-plan';
+    const { createInitialSuperPlanStages } = await import(
+      '../../src/chat/super-plan/state.ts'
+    );
+    const stages = createInitialSuperPlanStages();
+    stages.research.status = 'running';
+    stages.research.startedAt = Date.now() - 60_000;
+    live.superPlan = {
+      slug: 'oauth',
+      prompt: 'Add OAuth login',
+      activeStage: 'research',
+      stages,
+      uiInvolved: false,
+    };
     setSessionStateForTests({
       version: 4,
       activeId: chat.id,
       sidebarCollapsed: false,
-      chats: [chat, spareSuperPlan],
+      chats: [chat, spareSuperPlan, live],
     });
 
     const hub = await import('../../src/ui/orchestrate-hub.ts');
@@ -297,5 +312,16 @@ describe('orchestrate hub mount', () => {
       null,
       'legacy orchestrate plan screen should not mount',
     );
+    const { getOrchestratePlanScreenSession } = await import(
+      '../../src/ui/orchestrate-plan-screen.ts'
+    );
+    const session = getOrchestratePlanScreenSession();
+    assert.ok(session, 'plan-screen session should exist');
+    assert.notEqual(
+      session?.chatId,
+      live.id,
+      'Make a plan must not resume the live pipeline',
+    );
+    assert.equal(session?.phase, 'prompt', 'blank Super Plan composer');
   });
 });
