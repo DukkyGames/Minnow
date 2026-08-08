@@ -20,8 +20,8 @@ let clearPendingBound = false;
 
 /** Mount the proposals review list inside the Brain app. */
 export async function renderProposalsSection(): Promise<void> {
-  const panel = document.getElementById('brainProposalsPanel');
-  if (!panel) return;
+  const root = document.getElementById('brainSection-proposals');
+  if (!root) return;
 
   if (!clearPendingBound) {
     clearPendingBound = true;
@@ -42,7 +42,7 @@ export async function renderProposalsSection(): Promise<void> {
     });
   }
 
-  await mountMemoryProposalsPanel(panel, setProposalsStatus, {
+  await mountMemoryProposalsPanel(root, setProposalsStatus, {
     onMemoryAccepted: () => {
       void import('./graph-section').then((m) => m.renderGraphSection());
     },

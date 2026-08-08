@@ -1487,42 +1487,51 @@
           </div>
         </div>
       </section>
-      <section id="brainSection-log" class="brain-section brain-section--centered">
-        <div class="brain-card">
-          <p id="brainLogOffline" class="brain-muted hidden">Offline</p>
-          <div id="brainLogBody"></div>
+      <section id="brainSection-log" class="brain-section brain-section--log" aria-label="Wiki changelog">
+        <div class="brain-workbench-shell">
+          <header class="brain-workbench-toolbar">
+            <p class="brain-workbench-toolbar__lead">Read-only history from <code>log.md</code>.</p>
+            <p id="brainLogOffline" class="brain-workbench-toolbar__note brain-muted hidden">Start Minnow to load the changelog.</p>
+          </header>
+          <div id="brainLogBody" class="brain-workbench-pane brain-workbench-pane--scroll brain-markdown"></div>
         </div>
       </section>
-      <section id="brainSection-schema" class="brain-section brain-section--panel">
-        <div class="brain-section__cols">
-          <div class="brain-card brain-section__main">
-            <p id="brainSchemaOffline" class="brain-muted hidden">Offline</p>
-            <textarea id="brainSchemaEditor" rows="16" style="width:100%;font-family:var(--font-mono,ui-monospace,monospace)"></textarea>
-            <div class="brain-field-row">
+      <section id="brainSection-schema" class="brain-section brain-section--schema" aria-label="Wiki schema editor">
+        <div class="brain-workbench-shell">
+          <header class="brain-workbench-toolbar">
+            <p class="brain-workbench-toolbar__lead">Edit <code>schema.md</code> taxonomy for tags and frontmatter fields.</p>
+            <div class="brain-workbench-toolbar__actions">
               <button type="button" class="brain-action-btn" id="brainSchemaReload">Reload</button>
               <button type="button" class="brain-action-btn is-primary" id="brainSchemaSave">Save</button>
             </div>
-            <p id="brainSchemaStatus" class="brain-status" aria-live="polite"></p>
+            <p id="brainSchemaStatus" class="brain-workbench-status brain-status" aria-live="polite"></p>
+            <p id="brainSchemaOffline" class="brain-workbench-toolbar__note brain-muted hidden">Offline — open Minnow to edit schema.</p>
+          </header>
+          <div class="brain-workbench-split">
+            <div class="brain-edit-pane brain-edit-pane--source">
+              <p class="brain-edit-pane__eyebrow">schema.md</p>
+              <textarea id="brainSchemaEditor" class="brain-edit-source" spellcheck="false" placeholder="Define wiki taxonomy…"></textarea>
+            </div>
+            <div class="brain-edit-pane brain-edit-pane--preview">
+              <p class="brain-edit-pane__eyebrow">Live reference</p>
+              <div class="brain-edit-preview-scroll">
+                <div id="brainSchemaPreview" class="brain-schema-preview">Edit schema.md to define wiki taxonomy fields and tags.</div>
+              </div>
+            </div>
           </div>
-          <aside class="brain-card brain-card--aside brain-section__aside">
-            <h3 class="brain-card__title">Schema reference</h3>
-            <div id="brainSchemaPreview" class="brain-schema-preview">Edit schema.md to define wiki taxonomy fields and tags.</div>
-          </aside>
         </div>
       </section>
-      <section id="brainSection-proposals" class="brain-section brain-section--centered">
-        <div class="brain-card">
-          <div class="brain-field-row brain-proposals-toolbar">
-            <p id="brainProposalsStatus" class="brain-status" aria-live="polite"></p>
-            <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainProposalsClearPending">
-              Clear pending
-            </button>
-          </div>
-          <div id="brainProposalsPanel" class="settings-group settings-group--flat">
-            <p id="brainProposalsCount" class="settings-memory-stat">Pending: —</p>
-            <p id="brainProposalsOffline" class="field-hint settings-memory-offline hidden">
-              Start npm start to review proposals.
-            </p>
+      <section id="brainSection-proposals" class="brain-section brain-section--proposals" aria-label="Synthesis proposals">
+        <div class="brain-workbench-shell">
+          <header class="brain-workbench-toolbar">
+            <p id="brainProposalsCount" class="brain-workbench-stat">Pending: —</p>
+            <div class="brain-workbench-toolbar__actions">
+              <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainProposalsClearPending">Clear pending</button>
+            </div>
+            <p id="brainProposalsStatus" class="brain-workbench-status brain-status" aria-live="polite"></p>
+            <p id="brainProposalsOffline" class="brain-workbench-toolbar__note brain-muted hidden">Start Minnow to review proposals.</p>
+          </header>
+          <div id="brainProposalsPanel" class="brain-workbench-pane brain-workbench-pane--scroll brain-proposals-panel">
             <div id="brainProposalsList" class="settings-proposals-list" role="list" aria-label="Pending synthesis proposals"></div>
           </div>
         </div>
@@ -1591,82 +1600,107 @@
           </div>
         </div>
       </section>
-      <section id="brainSection-ingest" class="brain-section brain-section--panel">
-        <div class="brain-section__cols">
-          <div class="brain-card brain-section__main">
-            <div class="brain-form-grid">
-              <label>Title (optional)
-                <input type="text" id="brainIngestTitle">
-              </label>
-              <label>Filename hint (optional)
-                <input type="text" id="brainIngestFilename" placeholder="notes.txt">
-              </label>
-              <label>Source content
-                <textarea id="brainIngestBody" rows="12"></textarea>
-              </label>
-              <div class="brain-field-row">
-                <button type="button" class="brain-action-btn is-primary" id="brainIngestSubmit">Ingest</button>
+      <section id="brainSection-ingest" class="brain-section brain-section--ingest" aria-label="Source ingest">
+        <div class="brain-workbench-shell">
+          <header class="brain-workbench-toolbar">
+            <p class="brain-workbench-toolbar__lead">Paste raw sources; the utility model writes wiki pages under <code>brain/pages/</code>.</p>
+            <p id="brainIngestStatus" class="brain-workbench-status brain-status" aria-live="polite"></p>
+          </header>
+          <div class="brain-workbench-split">
+            <div class="brain-edit-pane brain-edit-pane--source">
+              <p class="brain-edit-pane__eyebrow">Source</p>
+              <div class="brain-ingest-form">
+                <label class="brain-edit-field">
+                  <span class="brain-edit-field__label">Title (optional)</span>
+                  <input type="text" id="brainIngestTitle" class="brain-edit-input" autocomplete="off">
+                </label>
+                <label class="brain-edit-field">
+                  <span class="brain-edit-field__label">Filename hint (optional)</span>
+                  <input type="text" id="brainIngestFilename" class="brain-edit-input brain-edit-input--mono" placeholder="notes.txt" autocomplete="off" spellcheck="false">
+                </label>
+                <label class="brain-edit-field brain-ingest-form__body-field">
+                  <span class="brain-edit-field__label">Content</span>
+                  <textarea id="brainIngestBody" class="brain-edit-source brain-ingest-form__body" placeholder="Paste notes, transcripts, or documents…"></textarea>
+                </label>
+                <div class="brain-ingest-form__actions">
+                  <button type="button" class="brain-action-btn is-primary" id="brainIngestSubmit">Run ingest</button>
+                </div>
+                <div id="brainIngestResult" class="brain-ingest-result-mount"></div>
               </div>
-              <p id="brainIngestStatus" class="brain-status" aria-live="polite"></p>
-              <div id="brainIngestResult"></div>
             </div>
-          </div>
-          <aside class="brain-card brain-card--aside brain-section__aside brain-ingest-guide">
-            <h3 class="brain-card__title">How synthesis works</h3>
-            <p>Paste raw notes, transcripts, or docs. The utility model extracts facts and writes wiki pages under <code>brain/pages/</code>.</p>
-            <h4>Workflow</h4>
-            <ol>
-              <li>Paste source content and optional title hint.</li>
-              <li>Submit — synthesis runs against your configured utility model.</li>
-              <li>Review proposals before they merge into the wiki.</li>
-              <li>Open new pages from the graph or Edit section.</li>
-            </ol>
-            <h4>Tips</h4>
-            <p>Shorter, focused sources produce cleaner pages. Use Schema to define tags and field conventions first.</p>
-          </aside>
-        </div>
-      </section>
-      <section id="brainSection-lint" class="brain-section brain-section--centered">
-        <div class="brain-card">
-          <p id="brainLintOffline" class="brain-muted hidden">Offline</p>
-          <div id="brainLintBody"></div>
-        </div>
-      </section>
-      <section id="brainSection-code" class="brain-section">
-        <p id="brainCodeOffline" class="brain-muted hidden">Start npm start to use the code index.</p>
-        <div class="brain-code-toolbar">
-          <p id="brainCodeStatusLine" class="brain-code-toolbar__status">Checking index…</p>
-          <div class="brain-code-toolbar__actions" role="group" aria-label="Code index actions">
-            <button type="button" class="brain-action-btn is-primary" id="brainCodeReindex">Reindex</button>
-            <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainCodeResetIndex">Reset index</button>
-          </div>
-        </div>
-        <p id="brainCodeActionStatus" class="brain-status" aria-live="polite"></p>
-        <div class="brain-code-layout">
-          <div class="brain-code-map-panel brain-card">
-            <div class="brain-field-row brain-code-map-controls">
-              <label class="brain-code-focus-label">Focus
-                <input type="search" id="brainCodeFocus" placeholder="filter map…" autocomplete="off">
-              </label>
-              <span id="brainCodeMapBudget" class="brain-muted" aria-live="polite"></span>
-            </div>
-            <div id="brainCodeMap" class="brain-code-map" role="region" aria-label="Repo map"></div>
-          </div>
-          <div class="brain-code-search-panel brain-card">
-            <label class="brain-code-search-label">Find symbol
-              <input type="search" id="brainCodeSearch" placeholder="function or class name" autocomplete="off">
-            </label>
-            <ul id="brainCodeResults" class="brain-code-results" aria-label="Symbol matches"></ul>
-            <div id="brainCodeDetail" class="brain-code-detail" hidden></div>
-            <div id="brainCodeGraphPanel" class="brain-code-graph-panel" hidden>
-              <h3 class="brain-section-subtitle">Call graph</h3>
-              <canvas id="brainCodeGraphCanvas" class="brain-graph-canvas brain-graph-canvas--code" aria-label="Symbol call graph"></canvas>
-            </div>
-            <aside id="brainCodeExplain" class="brain-code-explain">
-              <h3 class="brain-section-subtitle">Explain</h3>
-              <div id="brainCodeExplainEmpty"></div>
-              <ul id="brainCodeExplainList" class="brain-code-explain-list" aria-label="Anchored wiki pages"></ul>
+            <aside class="brain-edit-pane brain-edit-pane--preview brain-ingest-guide" aria-label="Ingest guide">
+              <p class="brain-edit-pane__eyebrow">How it works</p>
+              <div class="brain-edit-preview-scroll">
+                <p>The utility model extracts facts and drafts wiki pages. Review output in <strong>Proposals</strong> before it lands in the graph.</p>
+                <h4>Workflow</h4>
+                <ol>
+                  <li>Paste source content and optional title hint.</li>
+                  <li>Submit — synthesis runs against your configured utility model.</li>
+                  <li>Review proposals before they merge into the wiki.</li>
+                  <li>Open new pages from the graph or Edit section.</li>
+                </ol>
+                <h4>Tips</h4>
+                <p>Shorter, focused sources produce cleaner pages. Define tags in Schema first.</p>
+              </div>
             </aside>
+          </div>
+        </div>
+      </section>
+      <section id="brainSection-lint" class="brain-section brain-section--lint" aria-label="Wiki health">
+        <div class="brain-workbench-shell">
+          <header class="brain-workbench-toolbar">
+            <p class="brain-workbench-toolbar__lead">Orphans, stale pages, broken wikilinks, and optional contradiction scan.</p>
+            <div class="brain-workbench-toolbar__actions">
+              <button type="button" class="brain-action-btn is-primary" id="brainLintRun">Run lint</button>
+            </div>
+            <p id="brainLintOffline" class="brain-workbench-toolbar__note brain-muted hidden">Start Minnow to run wiki health checks.</p>
+          </header>
+          <div id="brainLintBody" class="brain-workbench-pane brain-workbench-pane--scroll brain-lint-body"></div>
+        </div>
+      </section>
+      <section id="brainSection-code" class="brain-section brain-section--code" aria-label="Code index">
+        <div class="brain-workbench-shell">
+          <header class="brain-code-toolbar brain-workbench-toolbar brain-workbench-toolbar--code">
+            <p id="brainCodeStatusLine" class="brain-code-toolbar__status">Checking index…</p>
+            <div class="brain-code-toolbar__actions" role="group" aria-label="Code index actions">
+              <button type="button" class="brain-action-btn is-primary" id="brainCodeReindex">Reindex</button>
+              <button type="button" class="brain-action-btn brain-action-btn--danger" id="brainCodeResetIndex">Reset index</button>
+            </div>
+            <p id="brainCodeOffline" class="brain-workbench-toolbar__note brain-muted hidden">Start Minnow to use the code index.</p>
+            <p id="brainCodeActionStatus" class="brain-workbench-status brain-status" aria-live="polite"></p>
+          </header>
+          <div class="brain-code-layout brain-workbench-split brain-workbench-split--code">
+            <div class="brain-code-map-panel brain-workbench-pane">
+              <p class="brain-edit-pane__eyebrow">Repo map</p>
+              <div class="brain-code-map-panel__body">
+                <div class="brain-field-row brain-code-map-controls">
+                  <label class="brain-code-focus-label">Focus
+                    <input type="search" id="brainCodeFocus" class="brain-edit-input" placeholder="filter map…" autocomplete="off">
+                  </label>
+                  <span id="brainCodeMapBudget" class="brain-muted" aria-live="polite"></span>
+                </div>
+                <div id="brainCodeMap" class="brain-code-map" role="region" aria-label="Repo map"></div>
+              </div>
+            </div>
+            <div class="brain-code-search-panel brain-workbench-pane">
+              <p class="brain-edit-pane__eyebrow">Symbols</p>
+              <div class="brain-code-search-panel__body">
+                <label class="brain-code-search-label">Find symbol
+                  <input type="search" id="brainCodeSearch" class="brain-edit-input" placeholder="function or class name" autocomplete="off">
+                </label>
+                <ul id="brainCodeResults" class="brain-code-results" aria-label="Symbol matches"></ul>
+                <div id="brainCodeDetail" class="brain-code-detail" hidden></div>
+                <div id="brainCodeGraphPanel" class="brain-code-graph-panel" hidden>
+                  <h3 class="brain-section-subtitle">Call graph</h3>
+                  <canvas id="brainCodeGraphCanvas" class="brain-graph-canvas brain-graph-canvas--code" aria-label="Symbol call graph"></canvas>
+                </div>
+                <aside id="brainCodeExplain" class="brain-code-explain">
+                  <h3 class="brain-section-subtitle">Explain</h3>
+                  <div id="brainCodeExplainEmpty"></div>
+                  <ul id="brainCodeExplainList" class="brain-code-explain-list" aria-label="Anchored wiki pages"></ul>
+                </aside>
+              </div>
+            </div>
           </div>
         </div>
       </section>

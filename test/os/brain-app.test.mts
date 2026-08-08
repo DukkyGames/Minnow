@@ -97,6 +97,8 @@ describe('brain markup contract', () => {
     assert.match(html, /id="brainCodeSettingsSave"/);
     assert.match(html, /id="brainGraphOrphanToggle"/);
     assert.match(html, /id="brainEditWorkspace"/);
-    assert.match(html, /brain-section--edit/);
+    assert.match(html, /id="brainLintRun"/);
+    assert.match(html, /brain-section--code/);
+    assert.match(html, /brain-section--schema/);
   });
 });

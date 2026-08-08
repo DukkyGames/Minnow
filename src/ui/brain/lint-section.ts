@@ -319,8 +319,17 @@ async function runPrune(apply: boolean): Promise<void> {
   busy.replaceWith(...holder.children);
 }
 
+let lintToolbarBound = false;
+
 /** Show lint intro; empty-state CTA runs the health check. */
 export async function renderLintSection(): Promise<void> {
+  if (!lintToolbarBound) {
+    lintToolbarBound = true;
+    document.getElementById('brainLintRun')?.addEventListener('click', () => {
+      void runLint();
+    });
+  }
+
   const mount = document.getElementById('brainLintBody');
   if (!mount || mount.dataset.lintRan === '1') return;
   renderBrainEmptyState(mount, {

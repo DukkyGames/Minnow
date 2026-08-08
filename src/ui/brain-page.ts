@@ -84,6 +84,17 @@ const SECTION_LEADS: Record<BrainSectionId, string> = {
   settings: 'Memory synthesis cadence, semantic embeddings, and code index settings.',
 };
 
+const BRAIN_WORKSPACE_SECTIONS: BrainSectionId[] = [
+  'edit',
+  'memories',
+  'schema',
+  'log',
+  'proposals',
+  'ingest',
+  'lint',
+  'code',
+];
+
 let activeSection: BrainSectionId = 'graph';
 let staticBindingsDone = false;
 
@@ -249,7 +260,7 @@ function setActiveSection(section: BrainSectionId, options?: { editPath?: string
 
   document
     .querySelector('.brain-content')
-    ?.classList.toggle('is-brain-workspace', section === 'edit' || section === 'memories');
+    ?.classList.toggle('is-brain-workspace', BRAIN_WORKSPACE_SECTIONS.includes(section));
 
   if (prevSection !== section) {
     const inspector = document.getElementById('brainInspector');
