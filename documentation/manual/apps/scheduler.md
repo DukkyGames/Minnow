@@ -2,7 +2,7 @@
 
 Scheduler runs a prompt on a schedule, without a conversation. Each job is a headless agent run in a workspace you choose with a model you choose — a nightly test summary, a Monday dependency check, a periodic sync of notes into Brain.
 
-Open it from the dock or the menubar. It opens as a **side panel** and deliberately does not take focus, so you can add a job without leaving what you are doing.
+Open it from the app rail or the menubar. It opens as a **side panel** and deliberately does not take focus, so you can add a job without leaving what you are doing.
 
 ## The one rule
 

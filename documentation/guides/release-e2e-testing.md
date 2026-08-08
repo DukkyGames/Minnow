@@ -116,7 +116,7 @@ Mark each section **Pass / Fail / Skip (reason)**.
 
 ### Navigation
 
-- [ ] Dock / app rail: open each released app; correct presentation (fullscreen / window / side panel)
+- [ ] Dock / app rail: open each released app; correct presentation (fullscreen main stage or Scheduler side panel)
 - [ ] **Ctrl+Tab** / **Ctrl+Shift+Tab** cycles workspaces picker ↔ recent apps (Windows)
 - [ ] Hash routes work: `#/workspaces`, `#/app/code/chat`, `#/app/code`, `#/app/issues`, `#/app/settings/general`
 - [ ] Legacy `#/desktop` and `#/app/chat` redirect as expected
@@ -125,11 +125,11 @@ Mark each section **Pass / Fail / Skip (reason)**.
 - [ ] Scheduler opens as **side panel** without stealing fullscreen Code focus
 - [ ] Deep link `#/app/issues/ISS-n` opens issue detail (after you create an issue in §8)
 
-### Windowing (floating apps)
+### Overlays and Scheduler
 
-- [ ] Models / Brain / Settings windows drag, resize, minimize behavior feels correct
-- [ ] Multiple floating windows stack; focus order sane
-- [ ] **Escape** closes top overlay (tools popover, modals, drawers)
+- [ ] Models, Brain, and other rail apps fill the main stage; back navigation returns to Code as expected
+- [ ] Scheduler side panel opens over the current app without losing workspace context
+- [ ] **Escape** closes top overlay (tools popover, modals, drawers, Scheduler panel)
 
 ### Notifications
 

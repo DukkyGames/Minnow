@@ -14,7 +14,7 @@ Three overlapping audiences, one growth direction:
 
 **Growth direction:** workspace-first orchestration. Pick a repo root, work in Code, and grow into plans, boards, and Brain from there. Minnow Shell is the packaged Electron runtime, not a separate chat home. Primary references: the Code workspace (editor, terminal, git, chat rail), workspace picker (`#/workspaces`; legacy `#/desktop` redirects there), and multi-agent delivery (Orchestrator + Super Plan), not a standalone chat box or cloud dashboard.
 
-**Scope discipline:** the shipped surface is deliberately narrow: Code, Research, Models, Brain, Issues, Scheduler, Settings (seven released apps per `app-registry.ts`). Anything that is not finished stays behind a release gate rather than landing half-built in the dock. Breadth is earned one app at a time; depth in the build loop comes first.
+**Scope discipline:** the shipped surface is deliberately narrow: Code, Research, Models, Brain, Issues, Scheduler, Settings (seven released apps per `app-registry.ts`). Anything that is not finished stays behind a release gate rather than landing half-built on the app rail. Breadth is earned one app at a time; depth in the build loop comes first.
 
 ## Product purpose
 
@@ -40,7 +40,7 @@ The reference point is **Blender**, not a SaaS product: one complete suite cover
 
 - **Four composer modes**: General, Build, Plan, Debug (Issues workflows), plus Orchestrate from the hub and Super Plan under Plan. Each has tuned prompts and tool policy.
 - **Agent layer**: 114 built-in tools (106 in a default build; app-bound tools are hidden with their app), sub-agents, work agents, skills (`/commands`), tool permissions (Full / Ask / Off), MCP and local plugins.
-- **Minnow apps**: a fixed core set (Code, Research, Models, Brain, Issues, Scheduler, Settings) from the dock. Optional apps can be toggled in Settings → Apps when they are developer-released; today every optional app is release-gated hidden.
+- **Minnow apps**: a fixed core set (Code, Research, Models, Brain, Issues, Scheduler, Settings) on the app rail. Optional apps can be toggled in Settings → Apps when they are developer-released; today every optional app is release-gated hidden.
 - **Workspace tools**: memory synthesis, voice I/O, browser CDP automation (Electron), webhooks, semantic embeddings.
 
 **Success looks like:** users treat Minnow as the one place for local AI: plan here, build here, orchestrate delivery here, and grow knowledge in Brain, without cloud lock-in or subscription gates.
@@ -71,7 +71,7 @@ The reference point is **Blender**, not a SaaS product: one complete suite cover
 - Cloud-only AI tools and subscription gatekeeping as the default mental model
 - Hype-y autonomous-agent marketing language
 - Enterprise bloatware patterns (empty dashboards, vanity metrics, modal-first flows)
-- Surface sprawl: a dock full of demo-grade apps, or a feature list padded with things that half work
+- Surface sprawl: an app rail full of demo-grade apps, or a feature list padded with things that half work
 
 ## Design principles
 

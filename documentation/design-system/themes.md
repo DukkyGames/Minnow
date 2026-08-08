@@ -62,6 +62,6 @@ Simplified mode derives full palettes via [`theme-derive.ts`](../../src/appearan
 
 1. Add a `:root[data-theme="family-mode"]` block in [`tokens.css`](../../src/styles/tokens.css) with all core `--mn-*` keys.
 2. Copy derived tokens (`--mn-selection-bg`, shadows, tool-call, syntax) from an existing block.
-3. Add wallpaper tints in [`minnowos-tokens.css`](../../src/styles/minnowos-tokens.css) if the desktop shell is used.
+3. Add wallpaper tints in [`minnowos-tokens.css`](../../src/styles/minnowos-tokens.css) when the workspace shell uses them.
 4. Register family in `THEME_FAMILIES` / `THEME_FAMILY_META` in [`theme.ts`](../../src/theme.ts).
 5. Run `test/theme.test.mts` and `test/theme-contrast.test.mts`.

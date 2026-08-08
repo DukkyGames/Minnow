@@ -2,7 +2,7 @@
 
 A tracker that agents can use. Issues is a Linear-style list and board for work in your workspace, with the difference that the assistant can file, triage, expand and close items through tools — so "I found three problems while reading this" becomes three real cards instead of a paragraph you will lose.
 
-Open it from the dock for the fullscreen app, or from the Issues button in the Code sidebar rail to embed it beside your code.
+Open it from the app rail for the fullscreen app, or from the Issues button in the Code sidebar rail to embed it beside your code.
 
 ## Views
 

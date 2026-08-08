@@ -1,6 +1,6 @@
 # Documentation rewrite plan — workspace-first, Code-primary UI
 
-**Status:** Phase 2 largely complete; Phase 3 QA/images pending  
+**Status:** Phase 3 complete (QA, catalog test, image spec; PNG refresh deferred)  
 **Voice:** PRODUCT.md register — plain, capable, no hype; documentation not marketing.  
 **Impeccable:** Align copy with PRODUCT.md anti-references (no hero metrics, no “autonomous AGI” cadence).
 
@@ -195,11 +195,11 @@ flowchart LR
 
 ## Deliverables checklist
 
-- [ ] This plan marked **Complete** with PR link  
-- [ ] `documentation/context.md` updated (user rule)  
+- [x] This plan marked **Complete** (worktree `wiki-docs-b14e7589`; merge via `/apply-worktree`)  
+- [x] `documentation/context.md` updated (user rule)  
 - [x] No remaining “eight apps” / “Chat app” in `manual/` user paths (glossary documents legacy hashes only)  
-- [ ] README hero reflects Code workspace  
-- [ ] Review reports archived under `documentation/plans/documentation-ui-rewrite-reviews.md`
+- [ ] README hero reflects Code workspace (PNG refresh deferred per `documentation/images/README.md`)  
+- [x] Review reports archived under `documentation/plans/documentation-ui-rewrite-reviews.md`
 
 ## Todos (master)
 
@@ -208,6 +208,6 @@ flowchart LR
 - [x] Phase 1 reviews complete + must-fix merged (spine only)  
 - [x] Phase 2 authors complete (contributor, reference, e2e, context partial)  
 - [x] Phase 2 reviews complete (`review-contributor` must-fix on apps-and-routes, architecture, glossary)  
-- [ ] Phase 3 QA + images  
-- [ ] context.md + AGENTS.md synced  
+- [x] Phase 3 QA + images (spec only; no new PNGs)  
+- [x] context.md + AGENTS.md synced  
 - [ ] `/apply-worktree` merge back to user branch

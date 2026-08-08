@@ -2,7 +2,7 @@
 
 Everything about models lives here: what your machine can run, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs.
 
-Open it from the dock. It opens as a floating window with nine sections.
+Open it from the app rail. It fills the main stage with nine sections.
 
 | Section | What it is |
 |---------|------------|

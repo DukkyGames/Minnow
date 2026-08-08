@@ -18,7 +18,7 @@
         "Reference"
       ],
       "section": "Overview",
-      "hash": "3b8df42367d8964f18a1c4da14035f95853e89bd57c89fd9eec8a5ead1085a17"
+      "hash": "b211696aa7d808e60ce58de3a441e6d70e207bc22aa677c1a9b0c84b898cdcfc"
     },
     {
       "path": "documentation/manual/get-started/install.md",
@@ -34,7 +34,7 @@
         "Next"
       ],
       "section": "Get started",
-      "hash": "4f21dd8f8d362053dad4040ab43757a7475b6a15fe57874cd46dcc6016a87166"
+      "hash": "b9fa0123ba2220d50e3d87309114f4f2302458dd8903686d93669f84f3e05369"
     },
     {
       "path": "documentation/manual/get-started/connect-a-model.md",
@@ -54,14 +54,14 @@
         "Related"
       ],
       "section": "Get started",
-      "hash": "fc0f300f07891314b2d4a90d5ab8ec67f68a1e8d78c14eb9a22dab68267b45da"
+      "hash": "d5bbe1367870018c7c76f16b32a08b4b98b9dcd40b0029d8147b5426db1a04ab"
     },
     {
       "path": "documentation/manual/get-started/first-chat.md",
       "title": "Your first chat",
-      "summary": "The desktop is the chat. There is no \"open the chat app\" step — you land in it, and everything else opens around it. This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what you just saw. The desktop Area What it is Dock (top) La",
+      "summary": "You start at the workspaces picker — open a project folder or continue without one. Minnow then opens Code with the chat rail on the left. There is no separate Chat app. This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what yo",
       "headings": [
-        "The desktop",
+        "Code with chat open",
         "Send something",
         "Approving a tool",
         "The mode strip",
@@ -73,12 +73,12 @@
         "Next steps"
       ],
       "section": "Get started",
-      "hash": "b80f8aa32310f0c78fe151c7d4a2e88dc2ec9f85b901a47cf87e55c318cc3182"
+      "hash": "2d9135ec4ab24313840abd011664cabfc478d278bf7e1ed55234158c3ef0920b"
     },
     {
       "path": "documentation/manual/concepts/how-minnow-works.md",
       "title": "How Minnow works",
-      "summary": "Read this page once and most of the product stops needing explanation. Minnow is three things stacked together: 1. A desktop shell with a dock, a menubar, floating windows and fullscreen apps. It is where you work. 2. A local tool server on port 9473. It does everything the brows",
+      "summary": "Read this page once and most of the product stops needing explanation. Minnow is three things stacked together: 1. A workspace first shell — a workspaces picker ( /workspaces ), a left app rail, a menubar, and full stage apps in the main view. You choose a folder, then work in Co",
       "headings": [
         "The loop",
         "Local by default",
@@ -90,23 +90,24 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "a125086391529adda363812203acc282e0d10791e1a18e113c5a64f84731958a"
+      "hash": "4f3462f407090fbd1ab1d782f7ae3b81774cb486ccb5367530f532430e353f8d"
     },
     {
       "path": "documentation/manual/concepts/modes.md",
       "title": "Modes",
-      "summary": "A mode changes two things at once: the instructions the model gets, and the tools that exist for that turn. It is the most consequential control in the composer, and it is one click. Nine modes exist. Four are in the composer strip; the rest belong to a surface or a workflow and ",
+      "summary": "A mode changes two things at once: the instructions the model gets, and the tools that exist for that turn. It is the most consequential control in the composer, and it is one click. The product defines several mode ids for prompts and tool policy. Four are in the composer strip ",
       "headings": [
         "The four you choose",
         "What Plan mode actually blocks",
-        "The five you enter",
+        "Modes you enter (not on the strip)",
+        "Desktop (tool policy only)",
         "Tool access at a glance",
         "Modes are a ceiling, not a grant",
         "Practical mode picking",
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "470ec47e5851577fcfc56872f7f53e465fb32aa856a1739915c34a626d08bdf8"
+      "hash": "2540670a24e9a82d43409bea6053f8439c4df87114a3f822a399a995e899b1a8"
     },
     {
       "path": "documentation/manual/concepts/tools-and-permissions.md",
@@ -125,7 +126,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "f289105895c8c5255d0cd4a4573f45f09bac9299cafa6b921637964556f1b4ae"
+      "hash": "1944392c25881e77268c3e763ea6d0b3eadf3f5f0a6640e7b9087202753c84d5"
     },
     {
       "path": "documentation/manual/concepts/context-and-memory.md",
@@ -181,10 +182,9 @@
     {
       "path": "documentation/manual/apps/overview.md",
       "title": "Apps overview",
-      "summary": "Minnow is one desktop with eight apps on it. All eight are core : always installed, always on, no toggles. There is no app store. They share one chat engine, one tool set, one session store and one workspace. Opening Code does not start a different assistant — it gives the same a",
+      "summary": "Minnow is one shell with seven core apps: always installed, always on, no toggles. Six are on the left app rail; Settings opens from the menubar gear. There is no app store. They share one chat engine, one tool set, one session store, and one workspace folder at a time. Code is w",
       "headings": [
-        "The eight",
-        "Chat",
+        "The seven",
         "Code",
         "Research",
         "Models",
@@ -192,17 +192,17 @@
         "Issues",
         "Scheduler",
         "Settings",
-        "Beyond the dock",
+        "Beyond the app rail",
         "Not in this release",
         "Related"
       ],
       "section": "Apps",
-      "hash": "fdc143117eb00d2f793afc2c7ca7c831119707e0fdfc41815e1cffd7d171efd2"
+      "hash": "73591df022e6d49e6716bf45e814ed9d8cf2597e96e70fe2116aa5b1e65f60cc"
     },
     {
       "path": "documentation/manual/apps/code.md",
       "title": "Code",
-      "summary": "Code is the development environment: a file tree, an editor with AI completion and language server intelligence, terminals, git, dev servers, and a browser preview — with chat sitting beside all of it, working on the same folder you are. Open it from the dock. It takes the full s",
+      "summary": "Code is the development environment: a file tree, an editor with AI completion and language server intelligence, terminals, git, dev servers, and a browser preview — with chat sitting beside all of it, working on the same folder you are. Open it from the app rail (or land here af",
       "headings": [
         "Open a project",
         "The layout",
@@ -217,7 +217,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "cdad4997edf5b59a70f87f82e94d2b84c276e19fa62ea61397c108645cda79b6"
+      "hash": "30c68f8e0c6e6a317aacb71521a1cb8e674413ff96a144cc0409422c504a1fec"
     },
     {
       "path": "documentation/manual/apps/research.md",
@@ -232,12 +232,12 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "44ec5b927f86d9ee86eed65cacddd6a9dce9380c8b400b0fb9fcc14bdf270aef"
+      "hash": "0e0e0df55378d9a9831fa1c7d65337277106de128f6e20eb1bf7256679536dee"
     },
     {
       "path": "documentation/manual/apps/brain.md",
       "title": "Brain",
-      "summary": "Brain is Minnow's memory, and it is not a black box. It is a wiki of markdown pages in a folder on your disk that you can read, edit, delete and back up. The assistant searches and writes it with tools; you curate it. Open it from the dock. It opens as a floating window. Brain is",
+      "summary": "Brain is Minnow's memory, and it is not a black box. It is a wiki of markdown pages in a folder on your disk that you can read, edit, delete and back up. The assistant searches and writes it with tools; you curate it. Open it from the app rail. It fills the main stage like the ot",
       "headings": [
         "The sections",
         "How things get in",
@@ -249,12 +249,12 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "ba86a187b2d6b3bdf7589b20b9d4856e668647ddccb0a5d7cedceffce9a1496c"
+      "hash": "fec16d1949e50f19f4357d0069629c56bef6d7ab941d3822062de2ed70938b40"
     },
     {
       "path": "documentation/manual/apps/models.md",
       "title": "Models",
-      "summary": "Everything about models lives here: what your machine can run, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. Open it from the dock. It opens as a floating window with nine sections. Section What it i",
+      "summary": "Everything about models lives here: what your machine can run, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. Open it from the app rail. It fills the main stage with nine sections. Section What it is ",
       "headings": [
         "Recommendations",
         "Library and Installed",
@@ -270,7 +270,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "8d1ba7dc090a6bab048339c0f4001141d442bb31ea7ae81dce4af5e59c0faec5"
+      "hash": "fd82aff201ed98d2288663f22a9593b188a716cdb56cb62f69bfe832d5b1f51b"
     },
     {
       "path": "documentation/manual/apps/issues.md",
@@ -286,12 +286,12 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "f8082a83050488f146535ab82a7a41e7fd612a04dc3d08585d9896e56b78888a"
+      "hash": "08909a4265cbab19fe4b866e0016cf18c3b73bb76da4b161064a0e2a832bdb42"
     },
     {
       "path": "documentation/manual/apps/scheduler.md",
       "title": "Scheduler",
-      "summary": "Scheduler runs a prompt on a schedule, without a conversation. Each job is a headless agent run in a workspace you choose with a model you choose — a nightly test summary, a Monday dependency check, a periodic sync of notes into Brain. Open it from the dock or the menubar. It ope",
+      "summary": "Scheduler runs a prompt on a schedule, without a conversation. Each job is a headless agent run in a workspace you choose with a model you choose — a nightly test summary, a Monday dependency check, a periodic sync of notes into Brain. Open it from the app rail or the menubar. It",
       "headings": [
         "The one rule",
         "Creating a job",
@@ -303,12 +303,12 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "c58690905de9e0e5e2a27449f0ffc00b376aa4e029aa64b5b559636d9bb398a0"
+      "hash": "73bea2bed86cdf737e69cc6698e5b78f175ebfc8945b234759679c502cd5835d"
     },
     {
       "path": "documentation/manual/apps/settings.md",
       "title": "Settings",
-      "summary": "Everything configurable, in seven categories. Open it from the dock or the menubar gear. Find things by searching Press Ctrl+K / Cmd+K with Settings open. Type a keyword — \"webhook\", \"tray\", \"MCP\", \"temperature\", \"memory\" — and the results deep link straight to the control, highl",
+      "summary": "Everything configurable, in seven categories. Open it from the app rail or the menubar gear. Find things by searching Press Ctrl+K / Cmd+K with Settings open. Type a keyword — \"webhook\", \"tray\", \"MCP\", \"temperature\", \"memory\" — and the results deep link straight to the control, h",
       "headings": [
         "Find things by searching",
         "The map",
@@ -323,7 +323,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "8f0453014e9587d54e17c944f0c1cef968fab70ae35124ad6b41cb889b8ab54b"
+      "hash": "29e867e5dd0fb870f8bddeca1660373cc4f9f6cf4063a6a9d2b5e5bba89657c4"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",
@@ -448,7 +448,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "2105052745e74d2371169f3dd7a75b2acc9025a5f79fd49202823960928e93eb"
+      "hash": "c7fc48fc96ea44e5519fcf78e65e297311b3b656a8d4e3f8e855d13ab38783af"
     },
     {
       "path": "documentation/manual/reference/configuration.md",
@@ -463,7 +463,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "7125286be8e3afc6b17eb30e683a51b38352902664061cec15ff203f411b820b"
+      "hash": "8b9fd1326dcfd8dc044803ad5309fc6e612b8caf62c636ffe9bc6e32c856e97d"
     },
     {
       "path": "documentation/manual/reference/privacy-and-security.md",
@@ -481,7 +481,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "ad6288572ab7bd7ff9ded0958c6e8c44feb2aabe7f4034da53f24ae8cc5addb7"
+      "hash": "610c22dcc67f638924f5e4e1a1e11e655690c354e215910fdcad0f4c3d6973de"
     },
     {
       "path": "documentation/manual/reference/troubleshooting.md",
@@ -502,7 +502,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "27129fcd052b566a7bdc3ef277bef66a4fefae011977f516e90b638bdf28bf43"
+      "hash": "df7b4c93c8b3a1f629ba3d8c10bf4f0520140373e4444c0bc8b0ecbf1aabe948"
     },
     {
       "path": "documentation/manual/reference/glossary.md",
@@ -512,7 +512,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "0b5c030cb72c341eb33edc701e7cbc810d50e6bed68c89c7a46f282a27a8ac2a"
+      "hash": "a78a5cf70cb8a5374584ba33dd139106dc0a80ae851112cc857d86efe1434c51"
     },
     {
       "path": "documentation/manual/reference/wiki-and-brain.md",
@@ -551,7 +551,7 @@
         "How priorities are chosen"
       ],
       "section": "Roadmap",
-      "hash": "1b8d39fdb24d79b6da669cda107c15f2c611ed8c7ac0f43e35d256c4de5ea086"
+      "hash": "8c12558d89fb0a00f767a6502afb43cf51faba7b1f14472dbd97c32433682276"
     },
     {
       "path": "documentation/THIRD_PARTY_NOTICES.md",

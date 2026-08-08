@@ -22,7 +22,7 @@ Minnow develops as one local-first workspace: plan, build, run agents, and keep 
 
 ## Behind the release gate
 
-Compare, Benchmarking, Experts, Calendar, and Email remain in the codebase with tests but do not appear in the shipped dock. They move to released only when their workflows, reliability, accessibility, documentation, and support burden meet the same bar as the core apps.
+Compare, Benchmarking, Experts, Calendar, and Email remain in the codebase with tests but do not appear on the shipped app rail. They move to released only when their workflows, reliability, accessibility, documentation, and support burden meet the same bar as the core apps.
 
 See [Apps overview](manual/apps/overview.md#not-in-this-release) for what users see today.
 

@@ -45,15 +45,29 @@ Full row-level table: see subagent transcript [docs-a0-inventory](f07f6b8b-23d7-
 
 ### Phase 2 open items
 
-- `manual/apps/overview.md` still describes floating windows for Models/Brain/Settings (may need alignment with Phase 5 full-stage shell)
-- `design-system/shell.md`, `documentation/images/` hero refresh (Phase 3)
-- Onboarding prompts listing Chat (code, not manual)
-- README should-fix from Phase 1 review (brochure tone, Orchestrate as mode)
+- [x] `manual/apps/overview.md` full-stage Models/Brain/Settings (Phase 3)
+- [x] `design-system/shell.md`, `documentation/images/README.md` spec (Phase 3; PNG refresh deferred)
+- [x] Onboarding/desktop prompts (seven apps, Code-primary)
+- [x] README dock → app rail wording
 
+## Phase 3 (completed in worktree)
+
+| Area | Result |
+|------|--------|
+| Straggler sweep | Manual, README, PRODUCT, ROADMAP, design-system shell/css-map, release-e2e, prompts, accessibility-audit |
+| Wiki QA | `npm run wiki:generate`; `product-wiki.test.mjs` + banned-phrase catalog scan |
+| Images | `documentation/images/README.md` workspace-first spec; `app-chat.png` row removed |
+| context.md | Wiki doc-pass note; “ninth dock app” → app rail |
+
+### Phase 3 review notes
+
+- **review-manual:** overview vs apps-and-routes aligned on six rail apps + Settings menubar; legacy hashes cite glossary.
+- **review-front-door:** PRODUCT app rail wording; README “seven core apps on the app rail”.
+- **review-secondary:** shell.md Phase 5 legacy module table; release-e2e overlay section replaces floating-window checklist.
 
 ## Voice checklist (all future edits)
 
-- [ ] No em dashes in user-facing copy (PRODUCT rule)
-- [ ] Say **Minnow Shell** when meaning the Electron binary
-- [ ] Say **Desktop** only for Settings section or composer **Desktop** tool policy
-- [ ] Lead with workspace pick → Code, not feature laundry lists
+- [x] No em dashes in user-facing copy (PRODUCT rule) — spot-check Phase 3 edits
+- [x] Say **Minnow Shell** when meaning the Electron binary
+- [x] Say **Desktop** only for Settings section or composer **Desktop** tool policy
+- [x] Lead with workspace pick → Code, not feature laundry lists

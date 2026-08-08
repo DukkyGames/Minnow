@@ -81,7 +81,7 @@ See [Skills and slash commands](../chat/skills-and-commands.md).
 
 ## Opening another app
 
-Click **Research** on the rail to hand a question to a research agent that runs multiple rounds and writes you a report. **Models**, **Brain**, and **Settings** open as floating windows you can stack beside Code.
+Click **Research** on the rail to hand a question to a research agent that runs multiple rounds and writes you a report. **Models** and **Brain** open as full-stage apps; **Settings** opens from the menubar gear.
 
 The assistant can also open apps itself when it decides that is what you want — that is the `launch_minnow_app` tool, and it can carry your message across as a seed.
 

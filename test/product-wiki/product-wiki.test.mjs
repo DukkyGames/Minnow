@@ -80,6 +80,54 @@ describe('product wiki catalog generation', () => {
     assert.deepEqual(sorted.map((entry) => entry.path), paths);
   });
 
+  test('manual bodies avoid retired onboarding navigation phrases', async () => {
+    const generated = await buildProductWikiCatalog(path.join(repositoryRoot, 'documentation'));
+    const manualEntries = generated.entries.filter((entry) =>
+      entry.path.startsWith('documentation/manual/'),
+    );
+
+    const bannedPhrases = [
+      { label: 'eight apps', pattern: /\beight apps\b/iu },
+      { label: 'eight core apps', pattern: /\beight core apps\b/iu },
+      { label: 'Chat (desktop)', pattern: /\bChat \(desktop\)/iu },
+      { label: 'desktop chat surface', pattern: /\bdesktop chat surface\b/iu },
+    ];
+
+    const violations = [];
+
+    for (const entry of manualEntries) {
+      const relative = entry.path.replace(/^documentation\//u, '');
+      const absolute = path.join(repositoryRoot, 'documentation', relative);
+      const body = await fs.readFile(absolute, 'utf8');
+      const isGlossary = relative === 'manual/reference/glossary.md';
+
+      for (const { label, pattern } of bannedPhrases) {
+        if (pattern.test(body)) {
+          violations.push(`${entry.path}: banned phrase "${label}"`);
+        }
+      }
+
+      const desktopHash = /#\/desktop/gu;
+      let match = desktopHash.exec(body);
+      while (match) {
+        const lineStart = body.lastIndexOf('\n', match.index) + 1;
+        const lineEnd = body.indexOf('\n', match.index);
+        const line = body.slice(lineStart, lineEnd === -1 ? body.length : lineEnd);
+        const sectionStart = body.lastIndexOf('\n## ', match.index);
+        const sectionHeading =
+          sectionStart === -1 ? '' : body.slice(sectionStart, body.indexOf('\n', sectionStart + 1));
+        const legacyContext =
+          isGlossary || /legacy/i.test(line) || /legacy/i.test(sectionHeading);
+        if (!legacyContext) {
+          violations.push(`${entry.path}: #/desktop outside glossary/legacy context`);
+        }
+        match = desktopHash.exec(body);
+      }
+    }
+
+    assert.deepEqual(violations, []);
+  });
+
   test('committed catalog covers every generated page', async () => {
     const generated = await buildProductWikiCatalog(path.join(repositoryRoot, 'documentation'));
     const committed = await loadProductWikiCatalog();

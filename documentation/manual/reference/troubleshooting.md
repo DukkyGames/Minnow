@@ -91,7 +91,7 @@ If the ring shows no cap, the model did not report a context length. See [Contex
 
 ## Apps that are not there
 
-Compare, Benchmarking, Experts, Calendar and Email are behind a release gate in this build. They are absent from the dock, Settings, shortcuts and routes on purpose. See [Apps overview](../apps/overview.md#not-in-this-release).
+Compare, Benchmarking, Experts, Calendar and Email are behind a release gate in this build. They are absent from the app rail, Settings, shortcuts and routes on purpose. See [Apps overview](../apps/overview.md#not-in-this-release).
 
 ## Still stuck
 

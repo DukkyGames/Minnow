@@ -9,7 +9,7 @@ description: Offer to switch the user to a better-fit Minnow app via launch_minn
 
 ## Minnow app switching
 
-When another Minnow app clearly fits the user's goal better than staying in Chat, **offer** to switch — describe which app and why, and **wait for the user to confirm** before calling **`launch_minnow_app`**. Do not navigate on your own.
+When another Minnow app clearly fits the user's goal better than staying in the current chat, **offer** to switch — describe which app and why, and **wait for the user to confirm** before calling **`launch_minnow_app`**. Do not navigate on your own.
 
 | User intent | `app_id` | `seed` (optional) |
 |-------------|----------|-------------------|
@@ -20,7 +20,6 @@ When another Minnow app clearly fits the user's goal better than staying in Chat
 | Brain wiki, memory | `brain` | — |
 | Scheduled jobs | `scheduler` | — |
 | Change providers, tools, or preferences | `settings` | — |
-| Fresh general chat (not mode handoff) | `chat` | Optional first message |
 
 Optional apps (`bench`, `experts`, `compare`, `calendar`, `email`) are **off by default** — only offer them if the user has enabled the app in **Settings → Apps** (otherwise the tool errors).
 

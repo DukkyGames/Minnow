@@ -26,7 +26,7 @@ Move between surfaces with **Ctrl+Tab** / **Ctrl+Shift+Tab**, or the grid icon i
 
 The home surface for day-to-day work. Sessions in the chat rail on the left, composer in the middle, project files and editor on the right. File and git tools resolve under the **workspace root** you opened here.
 
-Legacy links to `#/app/chat` rewrite to Code chat (`#/app/code/chat`). So does `#/desktop` — it sends you to the workspaces picker, not a separate chat app.
+Legacy links to `#/app/chat` rewrite to Code chat (`#/app/code/chat`). The legacy `#/desktop` hash also rewrites to the workspaces picker, not a separate chat app.
 
 → [Your first chat](../get-started/first-chat.md), [Working in chat](../chat/chatting.md), [Code app](code.md)
 
@@ -72,7 +72,7 @@ Seven categories: General, Apps, Appearance, Models, Agents, Integrations, Advan
 
 → [Settings app](settings.md)
 
-## Beyond the dock
+## Beyond the app rail
 
 These are real features that are not separate apps:
 

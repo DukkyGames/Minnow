@@ -17,30 +17,44 @@ Electron desktop layer wrapping Minnow apps. Tokens alias the chat palette via *
 | `--os-r-sm/md/lg/xl` | Radii (md = 9px, xl = 20px) |
 | `--os-wall-a/b/c` | Wallpaper gradient stops (per theme) |
 
-Core `--os-*` tokens are on `:root` as well as `.mn-os` so wallpaper thumbnails render outside the desktop shell.
+Core `--os-*` tokens are on `:root` as well as `.mn-os` so wallpaper thumbnails render outside the live shell.
 
-## Shell modules
+## Workspace-first shell (current)
 
 | Module | Role |
 |--------|------|
-| [`shell.ts`](../../src/os/shell.ts) | OS stage, immersive mode |
-| [`window-manager.ts`](../../src/os/window-manager.ts) | Floating app windows |
-| [`dock-launcher.ts`](../../src/os/dock-launcher.ts) | Bottom app dock |
-| [`menubar.ts`](../../src/os/menubar.ts) | Top menubar + model chip |
-| [`desktop-chat.ts`](../../src/os/desktop-chat.ts) | Desktop composer activation |
-| [`wallpaper.ts`](../../src/os/wallpaper.ts) | Desktop background renderer |
-| [`app-registry.ts`](../../src/os/app-registry.ts) | Launcher metadata for 12+ apps |
+| [`shell.ts`](../../src/os/shell.ts) | OS stage (`#osStage`), immersive mode |
+| [`workspace-gate.ts`](../../src/os/workspace-gate.ts) | `#/workspaces` picker until a folder is chosen |
+| [`app-rail.ts`](../../src/os/app-rail.ts) | Left app rail (released apps) |
+| [`menubar.ts`](../../src/os/menubar.ts) | Top menubar, model chip, settings entry |
+| [`router.ts`](../../src/os/router.ts) | Hash routes, legacy redirects (`#/desktop`, `#/app/chat`) |
+| [`app-registry.ts`](../../src/os/app-registry.ts) | Released app metadata (rail, shortcuts, launches) |
+| [`wallpaper.ts`](../../src/os/wallpaper.ts) | Stage background renderer |
+| [`window-control-buttons.ts`](../../src/os/window-control-buttons.ts) | Frameless Electron chrome |
+
+Released apps mount as **full-stage layers** in `#osAppsLayer`. **Scheduler** is a side-panel overlay; **Settings** opens from the menubar gear.
+
+### Legacy modules (removed in Phase 5 — file map only)
+
+These names may still appear in old CSS comments or git history; they are **not** in the tree:
+
+| Former module | Replaced by |
+|---------------|-------------|
+| `dock-launcher.ts` | [`app-rail.ts`](../../src/os/app-rail.ts) |
+| `desktop-chat.ts` | Code chat rail (`#/app/code/chat`) |
+| `window-manager.ts` | Full-stage `#osAppsLayer` + Scheduler side panel |
 
 ## Stylesheets
 
 | File | Scope |
 |------|-------|
-| [`minnowos-shell.css`](../../src/styles/minnowos-shell.css) | Menubar, dock, stage chrome |
-| [`minnowos-desktop.css`](../../src/styles/minnowos-desktop.css) | Desktop chat rail, workspace |
-| [`minnowos-windows.css`](../../src/styles/minnowos-windows.css) | Window frames |
+| [`minnowos-shell.css`](../../src/styles/minnowos-shell.css) | Menubar, stage chrome, app rail |
+| [`minnowos-rail.css`](../../src/styles/minnowos-rail.css) | App rail tiles |
+| [`workspace-gate.css`](../../src/styles/workspace-gate.css) | Workspaces picker |
 | [`minnowos-wallpaper.css`](../../src/styles/minnowos-wallpaper.css) | Wallpaper layers |
-| [`minnowos-apps.css`](../../src/styles/minnowos-apps.css) | App launcher tiles |
-| [`desktop-workspace-rail.css`](../../src/styles/desktop-workspace-rail.css) | Files / Browser / Preview drawer |
+| [`minnowos-apps.css`](../../src/styles/minnowos-apps.css) | Full-stage app shells |
+
+Legacy window/dock/desktop-chat styles were removed with Phase 5; do not reintroduce floating-window chrome in new UI.
 
 ## Wallpaper modes
 

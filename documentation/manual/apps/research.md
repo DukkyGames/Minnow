@@ -4,7 +4,7 @@ Research is for questions that deserve more than one search. You describe what y
 
 Use chat for "what is the syntax for X". Use Research for "compare these four libraries and tell me which fits our constraints".
 
-Open it from the dock.
+Open it from the app rail.
 
 ## Running a search
 

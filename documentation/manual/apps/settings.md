@@ -1,6 +1,6 @@
 # Settings
 
-Everything configurable, in seven categories. Open it from the dock or the menubar gear.
+Everything configurable, in seven categories. Open it from the app rail or the menubar gear.
 
 ## Find things by searching
 

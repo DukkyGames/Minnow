@@ -33,7 +33,7 @@ Prefer an installer? Packaged builds for Windows, macOS, and Linux are on [Relea
 
 ## What's in it
 
-These ship in the tree. The seven dock apps are core and stay on; unfinished apps stay release-gated until they are ready.
+These ship in the tree. The seven core apps on the app rail stay on; unfinished apps stay release-gated until they are ready.
 
 | | |
 |---|---|

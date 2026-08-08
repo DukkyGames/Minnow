@@ -4,7 +4,7 @@ Read this page once and most of the product stops needing explanation.
 
 Minnow is three things stacked together:
 
-1. **A workspace-first shell** — a workspaces picker (`#/workspaces`), a left app rail, a menubar, floating windows, and fullscreen apps. You choose a folder, then work in Code with chat beside your project.
+1. **A workspace-first shell** — a workspaces picker (`#/workspaces`), a left app rail, a menubar, and full-stage apps in the main view. You choose a folder, then work in Code with chat beside your project.
 2. **A local tool server** on port 9473. It does everything the browser cannot: reading and writing files, running git, spawning terminals, indexing your code, storing your chats, downloading models.
 3. **A model you supply.** Minnow never ships weights and has no built-in model. It streams to whatever OpenAI-compatible endpoint you point it at.
 

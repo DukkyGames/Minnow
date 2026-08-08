@@ -102,12 +102,11 @@
 
 | File | Scope |
 |------|-------|
-| `minnowos-shell.css` | Menubar, dock |
-| `minnowos-desktop.css` | Desktop layout |
-| `minnowos-windows.css` | Window chrome |
+| `minnowos-shell.css` | Menubar, stage chrome, app rail |
+| `minnowos-rail.css` | App rail |
+| `workspace-gate.css` | Workspaces picker |
 | `minnowos-wallpaper.css` | Wallpapers |
-| `minnowos-apps.css` | App grid |
-| `desktop-workspace-rail.css` | Workspace rail |
+| `minnowos-apps.css` | Full-stage app shells |
 | `update-menubar.css` | Update pill |
 
 ## Misc

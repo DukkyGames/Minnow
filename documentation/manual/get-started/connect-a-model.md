@@ -2,7 +2,7 @@
 
 Minnow does not ship a model. It speaks the **OpenAI-compatible** chat API, which means it can talk to almost anything: a local runtime on your own machine, a model Minnow downloads and serves for you, or a cloud API you pay for. You need at least one, and you can have several at once.
 
-Everything on this page lives in the **Models** app. Open it from the dock.
+Everything on this page lives in the **Models** app. Open it from the app rail.
 
 ## Pick your route
 
