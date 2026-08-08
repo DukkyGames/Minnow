@@ -131,6 +131,21 @@ function shiftHue(color: RgbaColor, degrees: number): RgbaColor {
   return hslToRgb({ ...hsl, h: hsl.h + degrees });
 }
 
+/**
+ * Semantic success green (~145°). Keeps accent chroma character but never
+ * copies the accent hue — status green must stay distinct from brand accent.
+ */
+function deriveSuccessColor(accent: RgbaColor, dark: boolean): RgbaColor {
+  const hsl = rgbToHsl(accent);
+  // Floor saturation so near-gray accents still yield a readable status green.
+  const s = Math.max(hsl.s, dark ? 0.25 : 0.3);
+  // Clamp lightness into ranges that read as "ok" on dark vs light shells.
+  const l = dark
+    ? clamp01(Math.max(0.55, Math.min(0.72, hsl.l)))
+    : clamp01(Math.max(0.32, Math.min(0.48, hsl.l)));
+  return hslToRgb({ h: 145, s, l });
+}
+
 const BLACK: RgbaColor = { r: 0, g: 0, b: 0, a: 1 };
 const WHITE: RgbaColor = { r: 255, g: 255, b: 255, a: 1 };
 
@@ -157,6 +172,12 @@ export function deriveThemeTokensFromSeeds(seeds: SimplifiedThemeSeeds): Record<
   const accentBorder = rgbaWithAlpha(accent, 0.28);
   const accentInk = dark ? lighten(accent, 0.35) : darken(accent, 0.35);
 
+  // Success is a fixed-hue semantic green, not a clone of accent (desert/ocean/coral accents are not green).
+  const success = deriveSuccessColor(accent, dark);
+  const successSoft = rgbaWithAlpha(success, 0.14);
+  const successBorder = rgbaWithAlpha(success, 0.28);
+  const successInk = dark ? lighten(success, 0.35) : darken(success, 0.35);
+
   const warning = shiftHue(accent, 32);
   const folder = shiftHue(accent, 48);
 
@@ -181,10 +202,10 @@ export function deriveThemeTokensFromSeeds(seeds: SimplifiedThemeSeeds): Record<
     'accent-soft': accentSoft,
     'accent-border': accentBorder,
     'accent-ink': formatCssColor(accentInk),
-    success: formatCssColor(accent),
-    'success-soft': accentSoft,
-    'success-border': accentBorder,
-    'success-ink': formatCssColor(accentInk),
+    success: formatCssColor(success),
+    'success-soft': successSoft,
+    'success-border': successBorder,
+    'success-ink': formatCssColor(successInk),
     warning: formatCssColor(warning),
     danger: formatCssColor(danger),
     'danger-soft': dangerSoft,
@@ -221,5 +242,27 @@ export function extractSimplifiedSeeds(
     fg: tokens.fg?.trim() || defaults.fg,
     accent: tokens.accent?.trim() || defaults.accent,
     danger: tokens.danger?.trim() || defaults.danger,
+  };
+}
+
+/**
+ * Repair palettes where success was cloned from accent (legacy simplified derive).
+ * Returns the same object when no repair is needed.
+ */
+export function repairLegacyMirroredSuccess<T extends Partial<Record<CoreThemeTokenKey, string>>>(
+  tokens: T,
+): T {
+  const accent = tokens.accent?.trim();
+  const success = tokens.success?.trim();
+  if (!accent || !success) return tokens;
+  if (accent.toLowerCase() !== success.toLowerCase()) return tokens;
+
+  const derived = deriveThemeTokensFromSeeds(extractSimplifiedSeeds(tokens));
+  return {
+    ...tokens,
+    success: derived.success,
+    'success-soft': derived['success-soft'],
+    'success-border': derived['success-border'],
+    'success-ink': derived['success-ink'],
   };
 }

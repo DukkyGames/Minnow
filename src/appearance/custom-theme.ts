@@ -2,6 +2,7 @@
  * Runtime custom palette token overrides on top of preset themes.
  */
 
+import { repairLegacyMirroredSuccess } from './theme-derive';
 import {
   APPEARANCE_STORAGE_KEYS,
   CORE_THEME_TOKEN_KEYS,
@@ -95,10 +96,23 @@ export function getCustomBootBgColor(): string | null {
   return getCustomThemeTokens().bg ?? null;
 }
 
+/**
+ * Fix stored simplified palettes that cloned success from accent, then return
+ * the map to apply. Advanced editor tokens are left untouched.
+ */
+function maybeRepairStoredSuccess(map: CustomThemeTokens): CustomThemeTokens {
+  if (isCustomThemeAdvanced()) return map;
+  const repaired = repairLegacyMirroredSuccess(map);
+  if (repaired === map) return map;
+  // Persist so the next boot does not re-detect the legacy clone.
+  writeStorage(APPEARANCE_STORAGE_KEYS.customTokens, JSON.stringify(repaired));
+  return repaired;
+}
+
 /** Apply inline --mn-* overrides on documentElement. */
 export function applyCustomTheme(tokens?: CustomThemeTokens): void {
   const root = document.documentElement;
-  const map = tokens ?? getCustomThemeTokens();
+  const map = maybeRepairStoredSuccess(tokens ?? getCustomThemeTokens());
   if (!isCustomThemeEnabled()) {
     clearCustomTheme();
     return;

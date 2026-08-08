@@ -440,6 +440,8 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` â†
 
 Runtime: [`src/theme.ts`](../src/theme.ts), Settings ? Appearance, desktop wallpaper ([`src/os/wallpaper.ts`](../src/os/wallpaper.ts)). Catalog: **Underwater** (default, animated), **Minnow** (fish boids), **Aurora**, **Starfield**, **Gradient**, **Flat**, **Custom image**. Retired `mesh` / `grain` prefs migrate to `gradient` / `flat`.
 
+**Custom colors:** simplified seed mode (`bg` / `fg` / `accent` / `danger`) expands via [`theme-derive.ts`](../src/appearance/theme-derive.ts). `--mn-success` is always a semantic green (not cloned from accent); stored simplified palettes that still have `success === accent` are repaired on apply ([`custom-theme.ts`](../src/appearance/custom-theme.ts)).
+
 **`color-mix` gotcha:** Prefer `color-mix(in srgb, ï¿½)` (or a solid `--mn-surface-*` token) for fg/bg veils. Mixing near-achromatic `--mn-fg` into `--mn-bg` with `in oklch` can drop hue to `none` and paint a cool lavender wash on warm themes (e.g. coral-light). Dev Server log host uses `--mn-surface-0` for that reason.
 
 Design reference: [`DESIGN.md`](../DESIGN.md), [`documentation/design-system/`](design-system/README.md).

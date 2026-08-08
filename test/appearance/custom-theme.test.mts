@@ -114,15 +114,46 @@ describe('custom-theme', () => {
     assert.equal(storage.get(APPEARANCE_STORAGE_KEYS.customAdvanced), '1');
   });
 
-  test('import JSON enables advanced editor mode', () => {
+  test('applyCustomTheme repairs legacy success=accent in simplified mode', () => {
     mockLocalStorage();
     mockDocument();
-    const json = JSON.stringify({
-      version: 1,
-      enabled: true,
-      tokens: { bg: '#101010', accent: '#aabbcc' },
-    });
-    assert.equal(importCustomThemeJson(json), true);
-    assert.equal(isCustomThemeAdvanced(), true);
+    // Legacy simplified derive cloned success from a non-green accent.
+    storage.set(
+      APPEARANCE_STORAGE_KEYS.customTokens,
+      JSON.stringify({
+        bg: '#101010',
+        fg: '#eeeeee',
+        accent: '#d4a574',
+        danger: '#cc4444',
+        success: '#d4a574',
+        'success-soft': 'rgba(212,165,116,0.14)',
+        'success-border': 'rgba(212,165,116,0.28)',
+        'success-ink': '#e8c89a',
+      }),
+    );
+    setCustomThemeEnabled(true);
+    applyCustomTheme();
+    const stored = getCustomThemeTokens();
+    assert.notEqual(stored.success, stored.accent);
+    assert.notEqual(
+      document.documentElement.style.getPropertyValue('--mn-success'),
+      document.documentElement.style.getPropertyValue('--mn-accent'),
+    );
+  });
+
+  test('applyCustomTheme does not rewrite success=accent in advanced mode', () => {
+    mockLocalStorage();
+    mockDocument();
+    setCustomThemeAdvanced(true);
+    storage.set(
+      APPEARANCE_STORAGE_KEYS.customTokens,
+      JSON.stringify({
+        accent: '#d4a574',
+        success: '#d4a574',
+      }),
+    );
+    setCustomThemeEnabled(true);
+    applyCustomTheme();
+    assert.equal(getCustomThemeTokens().success, '#d4a574');
   });
 });

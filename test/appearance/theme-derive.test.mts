@@ -10,6 +10,7 @@ import {
   deriveThemeTokensFromSeeds,
   extractSimplifiedSeeds,
   relativeLuminance,
+  repairLegacyMirroredSuccess,
 } from '../../src/appearance/theme-derive.ts';
 import { CORE_THEME_TOKEN_KEYS } from '../../src/appearance/types.ts';
 
@@ -45,15 +46,52 @@ describe('theme-derive', () => {
     assert.ok(darkShadow.a > lightShadow.a);
   });
 
-  test('success mirrors accent in derived palette', () => {
+  test('success stays a distinct green, not a copy of accent', () => {
+    // Non-green accent (ocean-like cyan) must not paint status/ok chrome as cyan.
     const tokens = deriveThemeTokensFromSeeds({
       bg: '#101010',
       fg: '#eeeeee',
-      accent: '#44aa88',
+      accent: '#7dd3e8',
       danger: '#cc4444',
     });
-    assert.equal(tokens.success, tokens.accent);
-    assert.equal(tokens['success-soft'], tokens['accent-soft']);
+    assert.notEqual(tokens.success, tokens.accent);
+    assert.notEqual(tokens['success-soft'], tokens['accent-soft']);
+
+    const success = parseCssColor(tokens.success)!;
+    const accent = parseCssColor(tokens.accent)!;
+    // Green channel should dominate blue for a semantic success green.
+    assert.ok(success.g > success.b, `expected green-dominant success, got ${tokens.success}`);
+    assert.ok(accent.b > accent.g, `fixture accent should be cyan-dominant, got ${tokens.accent}`);
+  });
+
+  test('success remains green when accent is already green', () => {
+    const tokens = deriveThemeTokensFromSeeds({
+      bg: '#0f1216',
+      fg: '#dfe3e8',
+      accent: '#9ec5a7',
+      danger: '#e07a6f',
+    });
+    const success = parseCssColor(tokens.success)!;
+    assert.ok(success.g >= success.r && success.g >= success.b);
+  });
+
+  test('repairLegacyMirroredSuccess rewrites cloned success tokens', () => {
+    const broken = {
+      bg: '#101010',
+      fg: '#eeeeee',
+      accent: '#d4a574',
+      danger: '#cc4444',
+      success: '#d4a574',
+      'success-soft': 'rgba(212,165,116,0.14)',
+      'success-ink': '#e8c89a',
+    };
+    const repaired = repairLegacyMirroredSuccess(broken);
+    assert.notEqual(repaired.success, repaired.accent);
+    const success = parseCssColor(repaired.success!)!;
+    assert.ok(success.g > success.b);
+
+    const alreadyOk = { ...broken, success: '#a8c48a' };
+    assert.equal(repairLegacyMirroredSuccess(alreadyOk), alreadyOk);
   });
 
   test('extractSimplifiedSeeds prefers explicit token values', () => {
