@@ -9,6 +9,7 @@ import { BrainPathError, getBrainDir, getBrainLogPath, getBrainSchemaPath } from
 import { backupBrain, restoreBrain } from './backup.js';
 import { ingestSource, clearIngestSources } from './ingest.js';
 import { lintBrainWiki, pruneWeakSimilarLinks } from './lint.js';
+import { generateBrainCleanupPlan } from './cleanup/plan.js';
 import { readBrainUsage } from './usage.js';
 import {
   listMemoryProposals,
@@ -33,6 +34,7 @@ import { handleCodeIndexRequest } from './code/routes.js';
 import { handleSynthesisRequest } from './synthesis-routes.js';
 import { slugifyFactTitle } from './synthesis.js';
 import { clearReindexNeeded } from './vector-sync.js';
+import { executeBrainCleanup } from './cleanup/execute.js';
 import { createVectorStore } from '../engine/vector-store.js';
 import { getEnginePaths } from './engine-paths.js';
 import { isValidPageId } from './paths.js';
@@ -332,6 +334,38 @@ export async function handleBrainRequest(req, res, pathname) {
       // Dry run unless the caller explicitly confirms — this rewrites frontmatter.
       const report = await pruneWeakSimilarLinks({ dryRun: body.apply !== true });
       sendJson(res, 200, report);
+      return true;
+    }
+
+    if (pathname === '/api/brain/cleanup/execute' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const outcome = await executeBrainCleanup({
+        planId: String(body.planId ?? ''),
+        providerId: String(body.providerId ?? ''),
+        modelId: String(body.modelId ?? ''),
+      });
+      const httpStatus = outcome.status === 'error' ? 500 : 200;
+      sendJson(res, httpStatus, outcome);
+      return true;
+    }
+
+    if (pathname === '/api/brain/cleanup/plan' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      try {
+        const result = await generateBrainCleanupPlan({
+          providerId: body.providerId,
+          modelId: body.modelId ?? body.model,
+          maxSnapshotChars: body.maxSnapshotChars,
+        });
+        sendJson(res, 200, result);
+      } catch (err) {
+        const status =
+          err && typeof err === 'object' && 'statusCode' in err && typeof err.statusCode === 'number'
+            ? err.statusCode
+            : 500;
+        const message = err instanceof Error ? err.message : String(err);
+        sendJson(res, status, { error: message });
+      }
       return true;
     }
 

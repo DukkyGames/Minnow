@@ -62,6 +62,11 @@ export function getBrainStatePath() {
   return path.join(getBrainDir(), 'state.json');
 }
 
+/** Persisted wiki cleanup plans (LLM-generated, review-only). */
+export function getBrainCleanupDir() {
+  return path.join(getBrainDir(), '.cleanup');
+}
+
 /** Validate page id (UUID v4 style). */
 export function isValidPageId(id) {
   return typeof id === 'string' && UUID_RE.test(id);

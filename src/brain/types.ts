@@ -83,6 +83,85 @@ export interface BrainPruneLinksReport {
   applied: string[];
 }
 
+/** Structured counts / actions in a cleanup plan summary. */
+export interface BrainCleanupPlanSummary {
+  deletes: Array<{ path: string; reason: string }>;
+  merges: Array<{ from: string[]; into: string; reason: string }>;
+  linkFixes: Array<{
+    from: string;
+    target: string;
+    suggestion?: string;
+    reason: string;
+  }>;
+  staleActions: Array<{ path: string; action: string; reason: string }>;
+  anchorDrift: Array<{
+    path: string;
+    symbolIds: string[];
+    action: string;
+    reason: string;
+  }>;
+  risks: Array<{ summary: string; mitigation?: string }>;
+}
+
+/** LLM cleanup plan payload (planVersion 1). */
+export interface BrainCleanupPlan {
+  planVersion: 1;
+  planMarkdown: string;
+  summary: BrainCleanupPlanSummary;
+}
+
+/** POST /api/brain/cleanup/plan result. */
+export interface BrainCleanupPlanResult {
+  planId: string;
+  createdAt: string;
+  snapshotHash: string;
+  diagnostics: BrainLintReport & {
+    weakSimilarLinks?: {
+      dryRun: boolean;
+      pagesScanned: number;
+      edgesScanned: number;
+      removals: BrainPruneLinksReport['removals'];
+    };
+    definitions?: { orphans?: string };
+  };
+  plan: BrainCleanupPlan;
+}
+
+/** Action counts for confirm dialogs (derived from {@link BrainCleanupPlanSummary}). */
+export interface BrainCleanupPlanSummaryCounts {
+  deletes: number;
+  merges: number;
+  linkFixes: number;
+  staleActions: number;
+  anchorDrift: number;
+  risks: number;
+}
+
+/** Flat plan payload used by the Brain lint UI. */
+export interface BrainCleanupPlanResponse {
+  planId: string;
+  planMarkdown: string;
+  planVersion: number;
+  summary: BrainCleanupPlanSummaryCounts;
+  createdAt?: string;
+  snapshotHash?: string;
+}
+
+/** One line in POST /api/brain/cleanup/execute log. */
+export interface BrainCleanupExecuteLogEntry {
+  message: string;
+  tool?: string;
+  path?: string;
+}
+
+/** POST /api/brain/cleanup/execute result. */
+export interface BrainCleanupExecuteResult {
+  ok: boolean;
+  log: BrainCleanupExecuteLogEntry[];
+  result?: string;
+  error?: string;
+}
+
 /** GET /api/brain/usage — weekly read/write counters, newest bucket in `thisWeek`. */
 export interface BrainUsageReport {
   week: string;
