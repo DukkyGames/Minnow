@@ -12,6 +12,31 @@ import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/
 
 const WORKSPACE = '/tmp/orchestrate-hub-test';
 
+/** happy-dom Window + globals required by hub mount (Super Plan chrome teardown). */
+function mountHubDom(): { area: HTMLElement; btn: HTMLButtonElement } {
+  const win = new Window();
+  globalThis.window = win as unknown as Window & typeof globalThis;
+  globalThis.document = win.document;
+  globalThis.HTMLElement = win.HTMLElement;
+  (globalThis as Record<string, unknown>).HTMLSelectElement = win.HTMLSelectElement;
+  (globalThis as Record<string, unknown>).HTMLButtonElement = win.HTMLButtonElement;
+  (globalThis as Record<string, unknown>).HTMLInputElement = win.HTMLInputElement;
+  (globalThis as Record<string, unknown>).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+
+  const area = document.createElement('main');
+  area.id = 'chatArea';
+  document.body.appendChild(area);
+
+  const btn = document.createElement('button');
+  btn.id = 'btnOrchestrate';
+  document.body.appendChild(btn);
+  return { area, btn };
+}
+
 describe('listWorkspaceOrchestrateBoardGroups', () => {
   afterEach(() => {
     resetOrchestrateHubForTests();
@@ -62,17 +87,7 @@ describe('orchestrate hub mount', () => {
   });
 
   test('toggle renders hub root in chat area', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
-
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
-
-    const btn = document.createElement('button');
-    btn.id = 'btnOrchestrate';
-    document.body.appendChild(btn);
+    const { area, btn } = mountHubDom();
 
     const chat = createEmptyChatObject('m1');
     setSessionStateForTests({
@@ -97,6 +112,9 @@ describe('orchestrate hub mount', () => {
     assert.ok(boardList, 'board list container should exist');
     assert.equal(boardList?.getAttribute('role'), 'list');
     assert.ok(area.classList.contains('chat-area--orchestrate-hub'));
+    assert.ok(document.querySelector('.ob-page'), 'ob-page shell should mount');
+    assert.ok(document.querySelector('.ob-rail'), 'board library rail should mount');
+    assert.ok(document.querySelector('.ob-pane--ask'), 'ask pane should mount');
     assert.equal(btn.getAttribute('aria-pressed'), 'true');
 
     hub.toggleOrchestrateHubFromTopbar();
@@ -105,19 +123,7 @@ describe('orchestrate hub mount', () => {
   });
 
   test('refreshOrchestrateHubPlanList re-populates the plan dropdown (MIN-215)', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
-    // The refresh helper guards on these constructors; expose them for instanceof.
-    (globalThis as Record<string, unknown>).HTMLSelectElement = window.HTMLSelectElement;
-    (globalThis as Record<string, unknown>).HTMLButtonElement = window.HTMLButtonElement;
-
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
-    document.body.appendChild(
-      Object.assign(document.createElement('button'), { id: 'btnOrchestrate' }),
-    );
+    mountHubDom();
 
     const chat = createEmptyChatObject('m1');
     setSessionStateForTests({
@@ -160,17 +166,7 @@ describe('orchestrate hub mount', () => {
   });
 
   test('board live refresh does not replace an open orchestrate hub', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
-
-    const area = document.createElement('main');
-    area.id = 'chatArea';
-    document.body.appendChild(area);
-
-    document.body.appendChild(
-      Object.assign(document.createElement('button'), { id: 'btnOrchestrate' }),
-    );
+    const { area } = mountHubDom();
 
     const chat = createEmptyChatObject('m1');
     chat.modeId = 'orchestrate';
@@ -204,9 +200,9 @@ describe('orchestrate hub mount', () => {
   });
 
   test('refreshOrchestrateHubPlanPreview hides panel for empty selection', async () => {
-    const window = new Window();
-    globalThis.document = window.document;
-    globalThis.HTMLElement = window.HTMLElement;
+    const win = new Window();
+    globalThis.document = win.document;
+    globalThis.HTMLElement = win.HTMLElement;
 
     const section = document.createElement('div');
     section.id = 'orchestrateHubPlanPreview';

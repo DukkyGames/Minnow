@@ -47,6 +47,7 @@ import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import {
   getActiveBoardGroup,
   getPlannerChatForGroup,
+  openBoardGroup,
 } from '../state/chat-groups.ts';
 import { isOomPauseActive } from '../chat/orchestrate/oom-recovery.ts';
 import {
@@ -107,6 +108,7 @@ import {
   getActiveChat,
   getChatsSortedByUpdatedDesc,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
 } from '../state/sessions';
 import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
@@ -145,9 +147,20 @@ import {
   getOrchestrateBoardMountElement,
   isOrchestrateInitSplitChromeActive,
 } from './orchestrate-board-init-split';
-import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import {
+  buildOrchestratePageShell,
+  disposeOrchestratePageShell,
+  OB_CHAT_AREA_CLASS,
+  paintOrchestrateBoardRail,
+  queryMountedBoardRoot,
+} from './orchestrate-page-shell';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { teardownHub } from './hub';
+import { setChatMode } from './mode-selector';
+import {
+  isOrchestrateHubMounted,
+  teardownOrchestrateHub,
+} from './orchestrate-hub';
 import { kickoffOrchestrateBoardBuild } from './orchestrate-board-kickoff';
 import {
   isBoardKickoffInProgress,
@@ -1441,24 +1454,25 @@ function buildBoardHeader(
   plannerChat: Chat,
 ): HTMLElement {
   const header = document.createElement('header');
-  header.className = 'board-header';
+  // Dual-class: quiet SP/RS runhead chrome while keeping board-header test hooks.
+  header.className = 'board-header ob-runhead';
 
   // Single instrument strip: identity + inline telemetry + run controls.
   const toolbar = document.createElement('div');
-  toolbar.className = 'board-header__toolbar';
+  toolbar.className = 'board-header__toolbar ob-runhead__top';
 
   const leading = document.createElement('div');
-  leading.className = 'board-header__leading';
+  leading.className = 'board-header__leading ob-runhead__ask';
 
   const title = document.createElement('h2');
-  title.className = 'board-header__title';
+  title.className = 'board-header__title ob-runhead__title';
   title.textContent = shortPlanName(planPath);
   leading.appendChild(title);
   leading.appendChild(buildBoardStatusBadge(headerStatus));
   leading.appendChild(buildBoardHeaderTelemetry(metrics, board));
 
   const controls = document.createElement('div');
-  controls.className = 'board-header__controls';
+  controls.className = 'board-header__controls ob-runhead__actions';
   wireBoardHeaderControls(controls, planPath, group, board, plannerChat);
 
   toolbar.appendChild(leading);
@@ -1466,7 +1480,7 @@ function buildBoardHeader(
 
   // Secondary band: only alerts / live slots (keeps the primary strip tight).
   const meta = document.createElement('div');
-  meta.className = 'board-header__meta';
+  meta.className = 'board-header__meta ob-runhead__meta';
 
   const pendingAfkBanner = buildPendingAfkBanner(group, board, plannerChat);
   if (pendingAfkBanner) meta.appendChild(pendingAfkBanner);
@@ -3284,7 +3298,7 @@ export function refreshActiveBoardIfMounted(): void {
   const mount = getOrchestrateBoardMountElement();
 
   const board = group.orchestrateBoard;
-  const root = mount.querySelector(':scope > .board-root') as HTMLElement | null;
+  const root = queryMountedBoardRoot(mount);
   if (root && board && root.querySelector('.board-main')) {
     refreshBoardDom(root, group, plannerChat, board);
     refreshMetricsStripForChat(plannerChat);
@@ -3292,6 +3306,19 @@ export function refreshActiveBoardIfMounted(): void {
   }
   if (root && !board) return;
   renderBoardView(group);
+}
+
+/** Open another board from the run-pane rail without bouncing through the hub. */
+function openBoardGroupFromBoardRail(groupId: string, plannerChatId?: string): void {
+  if (!sessionState) return;
+  if (plannerChatId && sessionState.activeId !== plannerChatId) {
+    switchChat(plannerChatId);
+  }
+  const chat = getActiveChat();
+  if (normalizeModeId(chat.modeId) !== 'orchestrate') {
+    setChatMode('orchestrate');
+  }
+  openBoardGroup(groupId);
 }
 
 /** Render Orchestrate board into the board mount (#chatArea or split top pane). */
@@ -3307,7 +3334,7 @@ export function renderBoardView(group: ChatGroup): void {
   const plannerChat = plannerForGroup(group);
   const board = group.orchestrateBoard;
   const sameGroupSession = currentSession?.groupId === group.id;
-  const existingRoot = mount.querySelector(':scope > .board-root') as HTMLElement | null;
+  const existingRoot = queryMountedBoardRoot(mount);
   const chatMount = splitActive
     ? area.querySelector('[data-testid="boardInitSplitChat"]')
     : null;
@@ -3335,14 +3362,45 @@ export function renderBoardView(group: ChatGroup): void {
   }
 
   if (!sameGroupSession) disposeBoardSession();
+
+  // Tear down prior ob-page observer before wiping the mount.
+  const priorPage = mount.querySelector(':scope > .ob-page');
+  if (priorPage instanceof HTMLElement) disposeOrchestratePageShell(priorPage);
+
   if (splitActive) {
     mount.replaceChildren();
   } else {
     area.innerHTML = '';
   }
 
+  // Library-first shell: rail of boards + main pane for this board.
+  const { page, main, railList, filterInput } = buildOrchestratePageShell({
+    rootId: 'orchestrateBoardPage',
+    ariaLabel: 'Orchestrate board',
+    onNewBoard: () => {
+      void import('./orchestrate-hub').then((m) => m.renderOrchestrateHub());
+    },
+  });
+
+  let filterText = '';
+  const paintRail = () => {
+    paintOrchestrateBoardRail(railList, {
+      activeGroupId: group.id,
+      filterText,
+      onSelectBoard: openBoardGroupFromBoardRail,
+      onEmptyAction: () => {
+        void import('./orchestrate-hub').then((m) => m.renderOrchestrateHub());
+      },
+    });
+  };
+  filterInput.addEventListener('input', () => {
+    filterText = filterInput.value;
+    paintRail();
+  });
+  paintRail();
+
   const root = document.createElement('section');
-  root.className = 'board-root';
+  root.className = 'board-root ob-pane--run';
 
   const planPath =
     group.orchestratePlanPath ?? plannerChat.orchestratePlanPath ?? board?.planPath ?? '';
@@ -3351,7 +3409,11 @@ export function renderBoardView(group: ChatGroup): void {
     const wrap = document.createElement('div');
     wrap.className = 'board-onboarding';
     root.appendChild(wrap);
-    mount.appendChild(root);
+    main.appendChild(root);
+    mount.appendChild(page);
+    if (!splitActive) {
+      area.classList.add(OB_CHAT_AREA_CLASS);
+    }
     ensureBoardSession(group, plannerChat);
     syncViewModeToggleFromActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
@@ -3382,14 +3444,18 @@ export function renderBoardView(group: ChatGroup): void {
     plannerChat,
   );
 
-  const main = document.createElement('div');
-  main.className = 'board-main';
-  mountBoardMainSurface(main, board, group, plannerChat);
+  const mainSurface = document.createElement('div');
+  mainSurface.className = 'board-main';
+  mountBoardMainSurface(mainSurface, board, group, plannerChat);
   seedKanbanRefreshKey(board, plannerChat, group);
 
   root.appendChild(header);
-  root.appendChild(main);
-  mount.appendChild(root);
+  root.appendChild(mainSurface);
+  main.appendChild(root);
+  mount.appendChild(page);
+  if (!splitActive) {
+    area.classList.add(OB_CHAT_AREA_CLASS);
+  }
 
   ensureBoardSession(group, plannerChat);
   syncViewModeToggleFromActiveChat();

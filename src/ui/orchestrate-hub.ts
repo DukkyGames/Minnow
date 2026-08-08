@@ -1,17 +1,14 @@
 /**
- * Orchestrate hub: top-bar entry for plan pick + recent boards (Vibe hub layout).
+ * Orchestrate hub: library-first ask pane + board rail (ob-* twin of Super Plan).
  */
 
 import '../styles/orchestrate-hub.css';
+import '../styles/ob-page.css';
 
-import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import {
   mountPlanPreviewContent,
   readPlanArtifactMarkdown,
 } from '../chat/orchestrate/plan-preview';
-import {
-  boardSetupStatusLabel,
-} from '../chat/orchestrate/board-setup';
 import {
   isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
@@ -21,7 +18,6 @@ import {
   getGroupsForWorkspace,
   openBoardGroup,
 } from '../state/chat-groups';
-import { getBoardProgressPercent } from '../state/orchestrate-board-store';
 import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat, ChatGroup } from '../types';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
@@ -43,8 +39,13 @@ import {
   openOrchestratePlanScreen,
   teardownOrchestratePlanScreen,
 } from './orchestrate-plan-screen';
+import {
+  buildOrchestratePageShell,
+  disposeOrchestratePageShell,
+  OB_CHAT_AREA_CLASS,
+  paintOrchestrateBoardRail,
+} from './orchestrate-page-shell';
 export const ORCHESTRATE_HUB_ROOT_ID = 'orchestrateHub';
-const ORCHESTRATE_HUB_RECENT_LIMIT = 9;
 
 let hubReturnChatId: string | null = null;
 /** Bumps on each preview fetch so stale read_file results are ignored. */
@@ -118,23 +119,15 @@ export function teardownOrchestrateHub(): void {
     return;
   }
   const root = document.getElementById(ORCHESTRATE_HUB_ROOT_ID);
-  if (root) root.remove();
-  document.getElementById('chatArea')?.classList.remove('chat-area--orchestrate-hub');
+  if (root) {
+    disposeOrchestratePageShell(root);
+    root.remove();
+  }
+  const area = document.getElementById('chatArea');
+  area?.classList.remove('chat-area--orchestrate-hub', OB_CHAT_AREA_CLASS);
   hubReturnChatId = null;
   syncTopBarOrchestrateButton();
   notifyAskQuestionDisplayContextChanged();
-}
-
-function formatRelativeTime(ts: number): string {
-  if (!ts) return '—';
-  const delta = Date.now() - ts;
-  const mins = Math.floor(delta / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 /** Workspace folders that have an orchestrate board or plan path. */
@@ -167,31 +160,6 @@ function boardGroupSortKey(group: ChatGroup): number {
   return group.createdAt;
 }
 
-function boardTileMetrics(group: ChatGroup): string[] {
-  const board = group.orchestrateBoard;
-  if (!board) {
-    const plan = group.orchestratePlanPath?.trim();
-    return plan ? [shortPlanLabel(plan)] : ['Plan selected'];
-  }
-  const total = board.tasks.length;
-  const pct = getBoardProgressPercent(board);
-  if (!total) return ['0 tasks'];
-  return [`${pct}%`, `${total} task${total === 1 ? '' : 's'}`];
-}
-
-function boardTileTitle(group: ChatGroup): string {
-  const plan = group.orchestratePlanPath?.trim();
-  if (plan) return shortPlanLabel(plan);
-  if (group.name?.trim()) return group.name.trim();
-  return PLACEHOLDER_CHAT_NAME;
-}
-
-/** Join board stats for list row copy and aria labels. */
-function formatBoardStatsLine(metrics: string[]): string {
-  if (!metrics.length) return '';
-  return metrics.join(' · ');
-}
-
 function openBoardGroupFromHub(groupId: string, plannerChatId?: string): void {
   teardownOrchestrateHub();
   if (!sessionState) return;
@@ -212,10 +180,20 @@ function startBoardFromHub(planSelect: HTMLSelectElement): void {
   launchBoardFromPlan(path);
 }
 
-/** Re-render recent boards when session groups change (e.g. planner chat deleted). */
+/** Re-render board rail when session groups change (e.g. planner chat deleted). */
 export function refreshOrchestrateHubBoardList(): void {
   const container = document.getElementById('orchestrateHubBoardsRow');
-  if (container) renderBoardList(container);
+  if (!container) return;
+  const filterInput = document.querySelector(
+    '.ob-page .ob-rail__filter-input',
+  ) as HTMLInputElement | null;
+  paintOrchestrateBoardRail(container, {
+    filterText: filterInput?.value ?? '',
+    onSelectBoard: openBoardGroupFromHub,
+    onEmptyAction: () => {
+      document.getElementById('orchestrateHubPlanSelect')?.focus();
+    },
+  });
 }
 
 /**
@@ -246,119 +224,6 @@ export async function refreshOrchestrateHubPlanList(): Promise<void> {
   }
 }
 
-function renderBoardList(container: HTMLElement): void {
-  container.replaceChildren();
-  const workspacePath = getWorkspacePath();
-  const boards = listWorkspaceOrchestrateBoardGroups(workspacePath).slice(
-    0,
-    ORCHESTRATE_HUB_RECENT_LIMIT,
-  );
-  const countEl = document.querySelector('.orchestrate-hub__board-count');
-  const total = listWorkspaceOrchestrateBoardGroups(workspacePath).length;
-  if (countEl) {
-    countEl.textContent =
-      total === 0 ? 'None yet' : `${total} in workspace`;
-  }
-
-  if (!boards.length) {
-    const empty = document.createElement('div');
-    empty.className = 'orchestrate-hub__board-empty';
-    empty.setAttribute('role', 'status');
-
-    const title = document.createElement('p');
-    title.className = 'orchestrate-hub__board-empty-title';
-    title.textContent = 'No boards in this workspace yet';
-
-    const hint = document.createElement('p');
-    hint.className = 'orchestrate-hub__board-empty-hint';
-    hint.textContent = 'Choose a plan above, or draft one with Make a plan.';
-
-    const focusBtn = document.createElement('button');
-    focusBtn.type = 'button';
-    focusBtn.className = 'orchestrate-hub__board-empty-action';
-    focusBtn.textContent = 'Choose a plan';
-    focusBtn.addEventListener('click', () => {
-      document.getElementById('orchestrateHubPlanSelect')?.focus();
-    });
-
-    empty.append(title, hint, focusBtn);
-    container.appendChild(empty);
-    return;
-  }
-
-  for (const group of boards) {
-    const title = boardTileTitle(group);
-    const when = formatRelativeTime(boardGroupSortKey(group));
-    const metrics = boardTileMetrics(group);
-    const statsLine = formatBoardStatsLine(metrics);
-    const statusLabel = group.orchestrateBoard ? 'Board' : boardSetupStatusLabel(group);
-    const board = group.orchestrateBoard;
-    const taskCount = board?.tasks.length ?? 0;
-    const progressPct = board ? getBoardProgressPercent(board) : 0;
-    const showProgress = Boolean(board && taskCount > 0);
-
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'orchestrate-hub__board-row';
-    row.setAttribute('role', 'listitem');
-
-    const main = document.createElement('div');
-    main.className = 'orchestrate-hub__board-row-main';
-
-    const titleEl = document.createElement('span');
-    titleEl.className = 'orchestrate-hub__board-row-title';
-    titleEl.textContent = title;
-
-    const chip = document.createElement('span');
-    chip.className = 'orchestrate-hub__board-row-chip';
-    chip.textContent = statusLabel;
-
-    main.append(titleEl, chip);
-
-    const meta = document.createElement('div');
-    meta.className = 'orchestrate-hub__board-row-meta';
-
-    const whenEl = document.createElement('span');
-    whenEl.className = 'orchestrate-hub__board-row-when';
-    whenEl.textContent = when;
-
-    const statsEl = document.createElement('span');
-    statsEl.className = 'orchestrate-hub__board-row-stats';
-    statsEl.textContent = statsLine || '—';
-
-    meta.append(whenEl, statsEl);
-    row.append(main, meta);
-
-    if (showProgress) {
-      const track = document.createElement('div');
-      track.className = 'orchestrate-hub__board-progress';
-      track.setAttribute('role', 'progressbar');
-      track.setAttribute('aria-valuemin', '0');
-      track.setAttribute('aria-valuemax', '100');
-      track.setAttribute('aria-valuenow', String(progressPct));
-      track.setAttribute(
-        'aria-label',
-        `${progressPct}% complete, ${taskCount} task${taskCount === 1 ? '' : 's'}`,
-      );
-
-      const fill = document.createElement('div');
-      fill.className = 'orchestrate-hub__board-progress-fill';
-      fill.style.width = `${progressPct}%`;
-      track.appendChild(fill);
-      row.appendChild(track);
-    }
-
-    row.setAttribute(
-      'aria-label',
-      `${title}, ${statusLabel}, updated ${when}${statsLine ? `, ${statsLine}` : ''}`,
-    );
-    row.addEventListener('click', () =>
-      openBoardGroupFromHub(group.id, group.plannerChatId),
-    );
-    container.appendChild(row);
-  }
-}
-
 async function loadHubPlans(
   sel: HTMLSelectElement,
   hint: HTMLElement,
@@ -370,34 +235,55 @@ async function loadHubPlans(
 }
 
 function buildOrchestrateHubDom(): HTMLElement {
-  const root = document.createElement('div');
-  root.id = ORCHESTRATE_HUB_ROOT_ID;
-  root.className = 'hub-root orchestrate-hub-root';
-  root.setAttribute('role', 'region');
-  root.setAttribute('aria-label', 'Orchestrate boards');
+  let filterText = '';
 
-  const inner = document.createElement('div');
-  inner.className = 'hub-inner orchestrate-hub__inner';
+  const { page, main, railList, filterInput } = buildOrchestratePageShell({
+    rootId: ORCHESTRATE_HUB_ROOT_ID,
+    ariaLabel: 'Orchestrate boards',
+    // Library shell only — do not add .hub-root (Vibe hub padding/centering breaks the rail).
+    extraRootClass: 'orchestrate-hub-root',
+    onNewBoard: () => {
+      document.getElementById('orchestrateHubPlanSelect')?.focus();
+    },
+  });
 
-  const header = document.createElement('header');
-  header.className = 'orchestrate-hub__header';
+  const paintRail = () => {
+    paintOrchestrateBoardRail(railList, {
+      filterText,
+      onSelectBoard: openBoardGroupFromHub,
+      onEmptyAction: () => {
+        document.getElementById('orchestrateHubPlanSelect')?.focus();
+      },
+    });
+  };
+
+  filterInput.addEventListener('input', () => {
+    filterText = filterInput.value;
+    paintRail();
+  });
+
+  // Ask pane: start from plan (dual-class titles for hub tests).
+  const pane = document.createElement('div');
+  pane.className = 'ob-pane--ask';
+
+  const ask = document.createElement('div');
+  ask.className = 'ob-ask';
 
   const eyebrow = document.createElement('p');
-  eyebrow.className = 'orchestrate-hub__eyebrow';
+  eyebrow.className = 'ob-ask__eyebrow orchestrate-hub__eyebrow';
   eyebrow.textContent = 'Orchestrate';
 
   const heading = document.createElement('h1');
-  heading.className = 'orchestrate-hub__title';
+  heading.className = 'ob-ask__title orchestrate-hub__title';
   heading.textContent = 'Boards & plans';
 
   const lede = document.createElement('p');
-  lede.className = 'orchestrate-hub__lede';
-  lede.textContent =
-    'Open a plan-backed board or resume work already linked to this workspace.';
+  lede.className = 'ob-ask__lede orchestrate-hub__lede';
+  lede.textContent = 'Run a plan as a board, or resume work already linked to this workspace.';
 
   const workspaceLine = document.createElement('p');
   workspaceLine.id = 'orchestrateHubWorkspace';
-  workspaceLine.className = 'orchestrate-hub__workspace';
+  workspaceLine.className = 'ob-ask__workspace orchestrate-hub__workspace';
   const workspaceLabel = getWorkspaceLabel().trim();
   const workspacePath = getWorkspacePath().trim();
   const workspaceDisplay = workspaceLabel || workspacePath;
@@ -411,24 +297,17 @@ function buildOrchestrateHubDom(): HTMLElement {
     workspaceLine.setAttribute('aria-hidden', 'true');
   }
 
-  header.append(eyebrow, heading, lede, workspaceLine);
+  const sec = document.createElement('span');
+  sec.id = 'orchestrateHubPlanLabel';
+  sec.className = 'ob-ask__sec hub-strip__label';
+  sec.textContent = 'Start from plan';
 
   const workflow = document.createElement('section');
   workflow.className = 'orchestrate-hub__workflow';
   workflow.setAttribute('aria-labelledby', 'orchestrateHubPlanLabel');
 
-  const workflowHead = document.createElement('div');
-  workflowHead.className = 'orchestrate-hub__workflow-head';
-
-  const planLabel = document.createElement('span');
-  planLabel.id = 'orchestrateHubPlanLabel';
-  planLabel.className = 'hub-strip__label';
-  planLabel.textContent = 'Start from plan';
-
-  workflowHead.appendChild(planLabel);
-
-  const workflowBody = document.createElement('div');
-  workflowBody.className = 'orchestrate-hub__workflow-body';
+  const field = document.createElement('div');
+  field.className = 'ob-ask__field orchestrate-hub__workflow-body';
 
   const sel = document.createElement('select');
   sel.id = 'orchestrateHubPlanSelect';
@@ -436,7 +315,7 @@ function buildOrchestrateHubDom(): HTMLElement {
   sel.setAttribute('aria-label', 'Orchestrate plan file');
 
   const workflowActions = document.createElement('div');
-  workflowActions.className = 'orchestrate-hub__workflow-actions';
+  workflowActions.className = 'ob-ask__actions orchestrate-hub__workflow-actions';
 
   const secondaryActions = document.createElement('div');
   secondaryActions.className = 'orchestrate-hub__workflow-secondary';
@@ -463,7 +342,7 @@ function buildOrchestrateHubDom(): HTMLElement {
   startBtn.textContent = 'Open board';
 
   workflowActions.append(secondaryActions, startBtn);
-  workflowBody.append(sel, workflowActions);
+  field.append(sel, workflowActions);
 
   const hint = document.createElement('p');
   hint.id = 'orchestrateHubPlanHint';
@@ -495,35 +374,10 @@ function buildOrchestrateHubDom(): HTMLElement {
     previewMount,
   };
 
-  workflow.append(workflowHead, workflowBody, hint, previewSection);
-
-  const boardsSection = document.createElement('section');
-  boardsSection.className = 'orchestrate-hub__boards';
-  boardsSection.setAttribute('aria-labelledby', 'orchestrateHubBoardsLabel');
-
-  const boardsHead = document.createElement('div');
-  boardsHead.className = 'orchestrate-hub__boards-head';
-
-  const boardsLabel = document.createElement('span');
-  boardsLabel.id = 'orchestrateHubBoardsLabel';
-  boardsLabel.className = 'hub-strip__label';
-  boardsLabel.textContent = 'Recent boards';
-
-  const boardCount = document.createElement('span');
-  boardCount.className = 'orchestrate-hub__board-count';
-  boardCount.textContent = 'None yet';
-
-  boardsHead.append(boardsLabel, boardCount);
-
-  const boardsList = document.createElement('div');
-  boardsList.className = 'orchestrate-hub__board-list';
-  boardsList.id = 'orchestrateHubBoardsRow';
-  boardsList.setAttribute('role', 'list');
-
-  boardsSection.append(boardsHead, boardsList);
-
-  inner.append(header, workflow, boardsSection);
-  root.appendChild(inner);
+  workflow.append(sec, field, hint, previewSection);
+  ask.append(eyebrow, heading, lede, workspaceLine, workflow);
+  pane.appendChild(ask);
+  main.appendChild(pane);
 
   const chat = getActiveChat();
 
@@ -560,9 +414,9 @@ function buildOrchestrateHubDom(): HTMLElement {
     syncStartDisabled();
     syncPlanPreview();
   });
-  renderBoardList(boardsList);
+  paintRail();
 
-  return root;
+  return page;
 }
 
 /** Paint orchestrate hub into #chatArea (replaces current main view). */
@@ -587,7 +441,7 @@ export function renderOrchestrateHub(): void {
   area.replaceChildren();
   area.appendChild(buildOrchestrateHubDom());
   stripMainColumnOverlayClasses();
-  area.classList.add('chat-area--orchestrate-hub');
+  area.classList.add('chat-area--orchestrate-hub', OB_CHAT_AREA_CLASS);
   // Board view stays in chat state; hide board chrome while the hub overlay is open.
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
   syncTopBarOrchestrateButton();

@@ -1,0 +1,678 @@
+/**
+ * Orchestrate boards page — library-first twin of Super Plan / Research.
+ *
+ * Rail of boards on the left, one main pane on the right: ask/start when idle,
+ * quiet runhead + kanban when a board is open.
+ *
+ * Sibling of super-plan-page.css and research-page.css by design.
+ */
+
+/* Edge-to-edge shell; hub no longer centres a 640px marketing column. */
+.chat-area.chat-area--orchestrate-hub,
+.chat-area.chat-area--orchestrate {
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Default .chat-area padding (messages.css) must not inset the shell. */
+main#chatArea.chat-area--orchestrate-hub,
+main#chatArea.chat-area--orchestrate {
+  padding: 0;
+  gap: 0;
+}
+
+.ob-page {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  align-self: stretch;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui, inherit);
+  font-size: 14px;
+  line-height: 1.5;
+
+  container-type: inline-size;
+  container-name: orchestrate;
+
+  --ob-rail-w: 264px;
+  --ob-gutter: 28px;
+  --ob-read-col: 790px;
+}
+
+/*
+ * Legacy orchestrate-hub.css / hub.css must not center or pad this surface.
+ * (Vibe .hub-root adds 16px/24px padding; old .orchestrate-hub-root centered the column.)
+ */
+#orchestrateHub.ob-page,
+#orchestrateBoardPage.ob-page,
+.ob-page.orchestrate-hub-root,
+.ob-page.hub-root {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  max-width: none;
+}
+
+.main-column:has(.chat-area--orchestrate-hub) .stats-strip,
+.main-column:has(.chat-area--orchestrate) .stats-strip {
+  display: none;
+}
+
+.main-column:has(.chat-area--orchestrate-hub) .input-bar,
+.main-column:has(.chat-area--orchestrate-hub) .tool-approval-host,
+.main-column:has(.chat-area--orchestrate-hub) .question-host,
+.main-column:has(.chat-area--orchestrate-hub) .code-change-strip-wrap,
+.main-column:has(.chat-area--orchestrate-hub) .chat-jump-latest,
+.main-column:has(.chat-area--orchestrate) .input-bar,
+.main-column:has(.chat-area--orchestrate) .tool-approval-host,
+.main-column:has(.chat-area--orchestrate) .question-host,
+.main-column:has(.chat-area--orchestrate) .code-change-strip-wrap,
+.main-column:has(.chat-area--orchestrate) .chat-jump-latest {
+  display: none !important;
+}
+
+/*
+ * Sizing vars live on .ob-shell (not .ob-page) so @container overrides apply —
+ * same rule as Super Plan / Research.
+ */
+.ob-shell {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+
+  --ob-pad-x: max(var(--ob-gutter), (100% - var(--ob-read-col)) / 2);
+}
+
+/* ── Rail: rows, not cards ──────────────────────────────────────────────── */
+
+.ob-rail {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--ob-rail-w);
+  width: var(--ob-rail-w);
+  min-width: 0;
+  border-right: 1px solid var(--mn-border);
+  background: var(--mn-surface-0, var(--mn-bg));
+}
+
+.ob-rail__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 10px 8px 12px;
+}
+
+.ob-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast, 0.12s) var(--ease-out),
+    border-color var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.ob-rail__collapse {
+  display: none;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ob-rail__filter {
+  display: flex;
+  align-items: center;
+  padding: 0 12px 10px;
+}
+
+.ob-rail__filter-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ob-rail__filter-input::placeholder {
+  color: var(--mn-fg-subtle);
+}
+
+.ob-rail__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ob-group__label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  padding: 10px 14px 5px;
+  background: var(--mn-surface-0, var(--mn-bg));
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ob-row-wrap {
+  position: relative;
+}
+
+.ob-row {
+  display: block;
+  width: 100%;
+  padding: 9px 14px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--mn-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.ob-row__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--mn-fg);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ob-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+}
+
+.ob-row.is-active {
+  background: var(--mn-accent-soft);
+}
+
+.ob-row.is-active .ob-row__title {
+  font-weight: 600;
+}
+
+.ob-row:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: -2px;
+}
+
+.ob-state {
+  display: inline-block;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ob-rail__empty {
+  padding: 16px 14px;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ob-rail__empty .orchestrate-hub__board-empty-title {
+  margin: 0 0 6px;
+  color: var(--mn-fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ob-rail__empty .orchestrate-hub__board-empty-hint {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--mn-fg-muted);
+}
+
+.ob-rail__empty .orchestrate-hub__board-empty-action {
+  display: inline-flex;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* ── Main pane ──────────────────────────────────────────────────────────── */
+
+.ob-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--mn-bg);
+}
+
+.ob-pane--ask {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  justify-content: flex-start;
+  padding: 32px var(--ob-gutter);
+  box-sizing: border-box;
+}
+
+.ob-ask {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Plan start block: flat in-pane (not the old bordered workflow card). */
+.ob-ask .orchestrate-hub__workflow {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ob-ask .orchestrate-hub__workflow-body,
+.ob-ask .ob-ask__field {
+  width: 100%;
+  min-width: 0;
+}
+
+.ob-ask__eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.ob-ask__title,
+.ob-ask .orchestrate-hub__title {
+  margin: 0 0 10px;
+  color: var(--mn-fg);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.ob-ask__lede,
+.ob-ask .orchestrate-hub__lede {
+  margin: 0 0 22px;
+  max-width: 54ch;
+  color: var(--mn-fg-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ob-ask__workspace,
+.ob-ask .orchestrate-hub__workspace {
+  margin: -12px 0 22px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mn-fg-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-ask__workspace.hidden {
+  display: none;
+}
+
+.ob-ask__sec {
+  display: block;
+  margin: 0 0 10px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ob-ask__field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ob-ask__field .orchestrate-hub__plan-select,
+.ob-ask .orchestrate-hub__plan-select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ob-ask__actions,
+.ob-ask .orchestrate-hub__workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ob-ask .orchestrate-hub__workflow-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ob-ask .orchestrate-hub__plan-refresh,
+.ob-ask .orchestrate-hub__make-plan-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ob-ask .orchestrate-hub__start-btn,
+.ob-btn--primary {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--mn-accent);
+  border-radius: var(--radius-sm);
+  background: var(--mn-accent);
+  color: var(--mn-text-hover, var(--mn-bg));
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ob-ask .orchestrate-hub__start-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ob-ask .orchestrate-hub__plan-hint {
+  margin: 10px 0 0;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+}
+
+.ob-ask .orchestrate-hub__plan-preview {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mn-border);
+}
+
+/* ── Run pane: board nested in main ─────────────────────────────────────── */
+
+.ob-main > .board-root {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ob-main > .board-root > .board-main,
+.ob-main > .board-root > .board-onboarding {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/*
+ * Quiet runhead: dual-class on .board-header. Keep controls reachable;
+ * demote density via spacing and type, not by hiding Start/Stop.
+ */
+.ob-main .board-header.ob-runhead,
+.ob-main .board-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  padding: 16px var(--ob-pad-x) 12px;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  gap: 8px;
+}
+
+.ob-main .board-header__toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ob-main .board-header__leading {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 0;
+}
+
+.ob-main .board-header__title {
+  margin: 0;
+  max-width: var(--ob-read-col);
+  color: var(--mn-fg);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.ob-main .board-header__telemetry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ob-main .board-header__metrics {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.ob-main .board-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Wave section rhythm (mono label + hairline), SP/RS .*-sec twin */
+.ob-main .board-wave-block {
+  margin: 0 0 18px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ob-main .board-wave-block__head,
+.ob-main .ob-sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.ob-main .kanban-grid {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  overflow: hidden;
+}
+
+.ob-main .kanban-column {
+  background: transparent;
+}
+
+.ob-main .kanban-column h3,
+.ob-main .kanban-column__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+/* Task items: quieter bordered rows, not heavy card stacks */
+.ob-main .board-task-card {
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  background: var(--mn-bg);
+}
+
+.ob-main .board-onboarding {
+  padding: 28px var(--ob-pad-x) 40px;
+  box-sizing: border-box;
+}
+
+.ob-main .board-finish-dashboard {
+  padding: 20px var(--ob-pad-x) 32px;
+  box-sizing: border-box;
+}
+
+/* Narrow: rail overlays like Super Plan */
+@container orchestrate (max-width: 659px) {
+  .ob-rail {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    box-shadow: 4px 0 24px color-mix(in oklch, var(--mn-fg) 18%, transparent);
+  }
+
+  .ob-rail__collapse {
+    display: inline-flex;
+  }
+
+  .ob-page.is-rail-hidden .ob-rail {
+    display: none;
+  }
+
+  .ob-shell {
+    --ob-pad-x: 16px;
+  }
+}
+
+@container orchestrate (max-width: 900px) {
+  .ob-shell {
+    --ob-pad-x: 20px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ob-new:hover {
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+
+  .ob-row:hover {
+    background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 5%, transparent));
+  }
+
+  .ob-ask .orchestrate-hub__plan-refresh:hover,
+  .ob-ask .orchestrate-hub__make-plan-btn:hover {
+    color: var(--mn-fg);
+    border-color: var(--mn-border-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-new,
+  .ob-row {
+    transition: none;
+  }
+}
