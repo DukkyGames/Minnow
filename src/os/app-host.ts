@@ -110,7 +110,10 @@ const PAGE_OPEN_LAYER_APPS = new Set<AppId>([
 
 function isAppPageLayerOpen(appId: AppId): boolean {
   if (!PAGE_OPEN_LAYER_APPS.has(appId)) return true;
-  return layerForApp(appId)?.classList.contains('is-open') ?? false;
+  const layer = layerForApp(appId);
+  if (!layer) return false;
+  // Page modules mark readiness with `is-open`; the OS shell still needs `is-active`.
+  return layer.classList.contains('is-open') && layer.classList.contains('is-active');
 }
 
 const APP_ENTER_CLASS = 'mn-os-app-enter';
@@ -338,8 +341,13 @@ async function openAppPage(
   }
 
   if (layerReveal != null) {
-    if (generation != null && generation !== syncGeneration) return;
-    showAppLayer(appId, layerReveal.animateEnter);
+    const staleGeneration = generation != null && generation !== syncGeneration;
+    // Hash bumps from page open (e.g. Brain #/app/brain → #/app/brain/graph) can stale the
+    // generation before we reveal the layer; still show when this app remains foreground.
+    if (!staleGeneration || getForegroundAppId() === appId) {
+      showAppLayer(appId, layerReveal.animateEnter);
+    }
+    if (staleGeneration) return;
   }
 }
 
