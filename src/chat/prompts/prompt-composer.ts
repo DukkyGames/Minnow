@@ -324,6 +324,33 @@ function resolveSubAgentDelegationBody(ctx: ComposeContext, profile: PromptProfi
   return loaded?.body?.trim() ?? '';
 }
 
+/** Brain save guidance when write tools are enabled for this chat. */
+function resolveMemorySaveBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (!contextHasBrainWriteTools(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('info', 'memory-save', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
+/** Work-agent knowledge capture when save_memory / brain_write_page are enabled. */
+function resolveWorkAgentKnowledgeCaptureBody(
+  ctx: ComposeContext,
+  profile: PromptProfile,
+): string {
+  if (!contextHasBrainWriteTools(ctx)) {
+    return '';
+  }
+  const agentId = ctx.workAgentId?.trim();
+  if (!agentId || agentId === 'default') {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', `${agentId}-knowledge-capture`, loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 /** Browser navigation allowlist + ask_question flow when preview browser tools are enabled. */
 function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile): string {
   if (!contextHasBrowserPreviewTools(ctx)) {
@@ -479,9 +506,29 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
       sections.push(interpolated.trim());
     }
 
+    const profileKey = effectiveProfile === 'lite' ? 'lite' : 'full';
+    if (partId === 'memory') {
+      const saveRaw = resolveMemorySaveBody(ctx, profileKey);
+      if (saveRaw.trim()) {
+        const saveInterpolated = interpolatePromptBody(saveRaw, vars);
+        if (saveInterpolated.trim()) {
+          sections.push(saveInterpolated.trim());
+        }
+      }
+    }
+    if (partId === 'work-agent') {
+      const captureRaw = resolveWorkAgentKnowledgeCaptureBody(ctx, profileKey);
+      if (captureRaw.trim()) {
+        const captureInterpolated = interpolatePromptBody(captureRaw, vars);
+        if (captureInterpolated.trim()) {
+          sections.push(captureInterpolated.trim());
+        }
+      }
+    }
+
     if (partId === 'tool-usage') {
-      const profileKey = effectiveProfile === 'lite' ? 'lite' : 'full';
-      const factVerificationRaw = resolveFactVerificationBody(ctx, profileKey);
+      const profileKeyTool = effectiveProfile === 'lite' ? 'lite' : 'full';
+      const factVerificationRaw = resolveFactVerificationBody(ctx, profileKeyTool);
       if (factVerificationRaw.trim()) {
         const factInterpolated = interpolatePromptBody(factVerificationRaw, vars);
         if (factInterpolated.trim()) {

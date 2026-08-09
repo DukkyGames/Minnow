@@ -178,6 +178,63 @@ describe('buildComposeContext cwd', () => {
     );
     assert.equal(activated.browserActivated, true);
   });
+
+  it('omits save_memory from enabledToolIds on board task chats', async () => {
+    const plannerId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    setSessionStateForTests({
+      version: 5,
+      activeId: plannerId,
+      sidebarCollapsed: false,
+      chats: [
+        {
+          id: plannerId,
+          name: 'Planner',
+          modelId: '',
+          modeId: 'orchestrate',
+          history: [],
+          updatedAt: 1,
+          boardGroupId: GROUP_ID,
+        },
+        baseChat({
+          boardGroupId: GROUP_ID,
+          boardTaskId: TASK_ID,
+        }),
+      ],
+      groups: [
+        {
+          id: GROUP_ID,
+          name: 'Board',
+          workspacePath: MAIN_REPO,
+          collapsed: false,
+          order: 0,
+          createdAt: 1,
+          plannerChatId: plannerId,
+          orchestrateBoard: {
+            planPath: 'plan.md',
+            executionMode: 'auto',
+            tasks: [
+              {
+                id: TASK_ID,
+                title: 'Foundation',
+                wave: 'W1',
+                category: 'build',
+                status: 'in_progress',
+                chatId: CHAT_ID,
+              },
+            ],
+            waves: [{ id: 'W1', status: 'in_progress' }],
+            finalTest: { status: 'pending' },
+          },
+        },
+      ],
+    });
+    const chat = baseChat({
+      boardGroupId: GROUP_ID,
+      boardTaskId: TASK_ID,
+    });
+    const ctx = await buildComposeContext(chat);
+    assert.ok(!ctx.enabledToolIds.includes('save_memory'));
+  });
 });
 
 describe('builder prompt cwd rendering', () => {

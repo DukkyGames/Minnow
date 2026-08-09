@@ -35,6 +35,7 @@ import { teardownCodeBrainMapBeforeChatPaint } from './code-brain-map';
 import { teardownIssuesEmbedBeforeChatPaint } from './issues-page';
 import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
 import { teardownHub } from './hub';
+import { closeBoardChatEmbedForTeardown } from './orchestrate-board-chat';
 import { teardownOrchestratePlanScreen } from './orchestrate-plan-screen';
 import { openSuperPlanScreen } from './super-plan-entry';
 import {
@@ -435,6 +436,9 @@ export function renderOrchestrateHub(): void {
   });
   const area = document.getElementById('chatArea');
   if (!area) return;
+  // Hub replaces #chatArea wholesale. Clear embed state first so a later
+  // renderBoardView does not think a task chat is still open and skip rebuild.
+  closeBoardChatEmbedForTeardown();
   if (!hubReturnChatId && sessionState?.activeId) {
     hubReturnChatId = sessionState.activeId;
   }

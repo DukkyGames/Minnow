@@ -240,6 +240,7 @@ const DEFAULT_META = {
     utilityModelId: '',
     maxPendingProposals: 100,
     rejectedRetentionDays: 30,
+    includeBoardChats: false,
   },
   planning: {
     granularity: 'medium',

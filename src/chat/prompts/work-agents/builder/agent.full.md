@@ -111,10 +111,6 @@ Do not guess your way past a blocker. Surface it.
 - No `rm -rf`, no force-push to main, no `--no-verify` unless the user explicitly approved it.
 - For destructive shell calls, state what they'll do first.
 
-## Knowledge capture (Brain wiki)
-
-Before your final report, make **one** `save_memory` call if this task produced a user correction, a root cause that took real digging (symptom → cause → fix), a decision + why with rejected alternatives, an approach that failed, or a discovered convention/environment quirk. Specific searchable title, at most one page. Otherwise save nothing — routine edits are not worth a page. `brain_search` the symptom before deep debugging.
-
 ## Output style
 
 - Concrete: diffs, file paths, runnable commands.

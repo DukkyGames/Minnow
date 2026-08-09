@@ -3,8 +3,7 @@
  */
 
 import type { Chat } from '../../types';
-import { normalizeModeId } from '../modes/types';
-import { getEnabledToolDefinitionsForMode } from '../../tools/client';
+import { getEnabledToolDefinitionsForMode, getEnabledToolDefinitionsForChat } from '../../tools/client';
 import { resolveExpertToolNames } from './runtime-profile';
 
 type ModeToolDefs = ReturnType<typeof getEnabledToolDefinitionsForMode>;
@@ -28,7 +27,5 @@ export function filterToolsByExpertSnapshot(
 
 /** Ordered tool names for compose context / token estimate parity with send path. */
 export function getExpertAwareToolNamesForChat(chat: Chat): string[] {
-  const modeId = normalizeModeId(chat.modeId);
-  const modeDefs = getEnabledToolDefinitionsForMode(modeId);
-  return filterToolsByExpertSnapshot(chat, modeDefs).map((d) => d.function.name);
+  return getEnabledToolDefinitionsForChat(chat).map((d) => d.function.name);
 }

@@ -123,6 +123,7 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/email/drafts.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/email/sent-append.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/brain/synthesis-run-route.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/pty-protocol.test.mjs', runner: 'tsx-mocks' },

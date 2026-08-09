@@ -78,6 +78,11 @@ export function isBoardOwnedChat(chat: Chat): boolean {
   return Boolean(chat.boardGroupId?.trim());
 }
 
+/** True when a chat is an Orchestrate board task worker (builder / tester / fixer). */
+export function isBoardTaskChat(chat: Chat): boolean {
+  return Boolean(chat.boardTaskId?.trim());
+}
+
 /** True when a folder is a board (running or still in setup) and so is Orchestrate's, not the sidebar's. */
 export function isBoardOwnedGroup(group: ChatGroup): boolean {
   return Boolean(group.orchestrateBoard) || isBoardSetupIncomplete(group);

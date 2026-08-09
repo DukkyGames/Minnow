@@ -407,6 +407,10 @@ export interface BoardTask {
   runHistory?: string[];
   startedAt?: number;
   endedAt?: number;
+  /** Set when the forced build-pass Brain synthesis has already run for this task. */
+  synthesizedBuildAt?: number;
+  /** Set when the forced post-merge Brain synthesis has already run for this task. */
+  synthesizedTestAt?: number;
   filesChanged?: number;
   notes?: string;
   error?: string;

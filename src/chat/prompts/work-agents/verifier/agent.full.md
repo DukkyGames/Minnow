@@ -96,10 +96,6 @@ $ npm test
 - If the Test spec is ambiguous, report AMBIGUOUS with the specific ambiguity, and FAIL the task — the plan needs fixing.
 - If a Verifier-side bug occurs (you can't read a file you should have access to), report ERROR with detail.
 
-## Knowledge capture (Brain wiki)
-
-Make **one** `save_memory` call if verification surfaced a non-obvious way to exercise this feature, an environment quirk that blocks verification, or a root cause behind a repeated failure. Specific searchable title, at most one page. Otherwise save nothing.
-
 ## Output style
 
 - Lead with the verdict line. Everything else is supporting evidence.

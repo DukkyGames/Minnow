@@ -2942,6 +2942,7 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
     utilityModelId: '',
     maxPendingProposals: 100,
     rejectedRetentionDays: 30,
+    includeBoardChats: false,
     ...existing,
   };
 
@@ -2949,6 +2950,9 @@ export function normalizeSynthesisConfig(raw, existing = {}) {
   const row = /** @type {Record<string, unknown>} */ (raw);
 
   if (typeof row.enabled === 'boolean') base.enabled = row.enabled;
+  if (typeof row.includeBoardChats === 'boolean') {
+    base.includeBoardChats = row.includeBoardChats;
+  }
   if (typeof row.requireConfirmation === 'boolean') {
     base.requireConfirmation = row.requireConfirmation;
   }

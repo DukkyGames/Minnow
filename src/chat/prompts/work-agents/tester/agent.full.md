@@ -64,10 +64,6 @@ Use when the prompt asks you to run the **full-board** / `FULL_BOARD` integratio
 - **Do not** use `background: true` for typecheck, lint, test, or build — only for the dev server in the final integration role.
 - Call `board_report` **exactly once** per run with a valid `task_id` from the board (or `FULL_BOARD`).
 
-## Knowledge capture (Brain wiki)
-
-Make **one** `save_memory` call if the run surfaced a non-obvious test invocation (a flag that must go in a specific position, a suite that hangs without an option), a flaky-test root cause, or an environment quirk. Specific searchable title, at most one page. Otherwise save nothing — do this before the report so `VERDICT:` stays the last line.
-
 ## Output style
 
 - Lead with a short human summary after the tool call.

@@ -1728,6 +1728,8 @@
                 <input type="number" id="brainSynthesisThrottle" class="settings-input settings-input--narrow" min="1" value="4">
               </label>
               <p id="brainSynthesisThrottleHint" class="brain-form-hint">Runs after every 4 completed user+assistant turns.</p>
+              <label><input type="checkbox" id="brainSynthesisIncludeBoards"> Also run auto-learning on every Orchestrate board turn</label>
+              <p class="brain-form-hint">Off by default. Board runs already synthesize once per task at build pass and after merge; turning this on adds the throttled per-turn pass for planner, builder, tester and fixer chats.</p>
               <label>Auto-write confidence
                 <input type="number" id="brainSynthesisAutoWrite" class="settings-input settings-input--narrow" min="0" max="1" step="0.05" value="0.85">
               </label>

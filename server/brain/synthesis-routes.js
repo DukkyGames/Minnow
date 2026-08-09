@@ -8,7 +8,7 @@ import { getAppRoot } from '../workspace/root.js';
 import { loadSynthesisConfig, saveSynthesisConfig } from './synthesis-config.js';
 import { runMemorySynthesis, writeSynthesisFactPage } from './synthesis.js';
 import { runSkillSynthesis } from './skill-synthesis.js';
-import { incrementMessagePairs } from './synthesis-state.js';
+import { incrementMessagePairs, getMessagePairs } from './synthesis-state.js';
 import {
   listMemoryProposals,
   getMemoryProposal,
@@ -119,8 +119,21 @@ export async function handleSynthesisRequest(req, res, pathname) {
       const chatId =
         typeof body.chatId === 'string' ? body.chatId.trim() : '';
       const force = body.force === true;
+      const boardChat = body.boardChat === true;
+      if (boardChat && !force && cfg.includeBoardChats !== true) {
+        sendJson(res, 200, {
+          ok: true,
+          skipped: ['board-chat'],
+          memoryProposals: [],
+          memoryPages: [],
+          skillProposal: null,
+        });
+        return true;
+      }
       const pairCount = chatId
-        ? await incrementMessagePairs(chatId)
+        ? force
+          ? await getMessagePairs(chatId)
+          : await incrementMessagePairs(chatId)
         : Number(body.messagePairCount) || 1;
       const throttle = Math.max(1, cfg.throttleMessagePairs ?? 4);
 

@@ -58,6 +58,8 @@ export interface SynthesisConfig {
   autoWriteConfidence: number;
   maxProposalsPerTurn: number;
   throttleMessagePairs: number;
+  /** When false (default), throttled post-turn synthesis skips Orchestrate board chats. */
+  includeBoardChats: boolean;
   skillMinRounds: number;
   skillMinToolCalls: number;
   /** Distinct sessions that must hit the same problem class before a skill is proposed. */
@@ -226,6 +228,8 @@ export interface SynthesisRunInput {
   assistantText?: string;
   /** Bypass throttle — use for completion-triggered writes (board tasks). */
   force?: boolean;
+  /** Orchestrate board planner or task chat — server may skip throttled synthesis. */
+  boardChat?: boolean;
   /** Expert chat specialist id — scopes synthesized memories for review. */
   expertId?: string;
   /** Explicit model binding so background synthesis doesn't fall back to active chat. */
@@ -254,6 +258,7 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
           toolCount: input.toolCount,
           sourceExcerpt: input.sourceExcerpt,
           ...(input.force ? { force: true } : {}),
+          ...(input.boardChat ? { boardChat: true } : {}),
           ...(input.providerId ? { providerId: input.providerId } : {}),
           ...(input.modelId ? { modelId: input.modelId } : {}),
           ...(input.expertId ? { expertId: input.expertId } : {}),

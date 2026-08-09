@@ -196,6 +196,15 @@ describe('applyBoardMemberToolFilter', () => {
     assert.equal(filtered.length, 2);
   });
 
+  test('save_memory stripped for build, test, and fix board roles', () => {
+    seedBoardSession();
+    for (const chat of [builderChat, testerChat, fixerChat]) {
+      const names = new Set(filteredNames(chat));
+      assert.ok(names.has('brain_search'), `${chat.id} keeps brain_search`);
+      assert.ok(!names.has('save_memory'), `${chat.id} strips save_memory`);
+    }
+  });
+
   test('excludes ask_question from all board roles (MIN-333 matrix)', () => {
     seedBoardSession();
     for (const chat of [builderChat, testerChat, fixerChat]) {
@@ -237,6 +246,7 @@ describe('applyBoardMemberToolFilter', () => {
     assert.ok(names.has('web_search'));
     assert.ok(names.has('save_file'));
     assert.ok(names.has('brain_search'));
+    assert.ok(!names.has('save_memory'));
     assert.ok(!names.has('spawn_sub_agent'));
     assert.ok(!names.has('bug_add'));
     assert.ok(!names.has('load_impeccable_context'));

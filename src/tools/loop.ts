@@ -99,7 +99,7 @@ import {
   emitMainTurnActivity,
   patchMainTurnActivity,
 } from '../chat/main-turn-activity';
-import { getBoardGroupForChat } from '../state/chat-groups';
+import { getBoardGroupForChat, isBoardOwnedChat, isBoardTaskChat } from '../state/chat-groups';
 import {
   ensureChatHistoryLoaded,
   getActiveChat,
@@ -2616,13 +2616,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
     }
-    const isBoardTaskChat = Boolean(chat.boardTaskId?.trim());
+    const isBoardTaskChatFlag = isBoardTaskChat(chat);
     const failedRun = turnRunId ? findRunById(chat, turnRunId) : undefined;
     const failedForkIndex =
       failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
     let rolledBack = false;
     let preservedTurnOutput = false;
-    if (isBoardTaskChat) {
+    if (isBoardTaskChatFlag) {
       const repaired = repairSessionHistoryTail(chat);
       if (repaired) {
         recordChatMessage(chat);
@@ -2755,6 +2755,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           toolCount: synthesisToolCount,
           sourceExcerpt: buildSynthesisExcerpt(chat),
           assistantText,
+          boardChat: isBoardOwnedChat(chat) || isBoardTaskChat(chat),
           ...(chat.kind === 'expert' && chat.expertId?.trim()
             ? { expertId: chat.expertId.trim() }
             : {}),

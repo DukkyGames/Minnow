@@ -29,7 +29,7 @@ import {
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { filterToolsByExpertSnapshot } from '../chat/experts/expert-tool-policy';
 import type { Chat } from '../types';
-import { getBoardGroupForChat } from '../state/chat-groups';
+import { getBoardGroupForChat, isBoardTaskChat } from '../state/chat-groups';
 import type { CodeChangeStats, ToolExecutionResult } from '../types';
 import { findChatById } from '../state/sessions';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
@@ -598,7 +598,7 @@ export function getEnabledToolDefinitionsForChat(
   let defs = getEnabledToolDefinitionsForMode(normalized);
   defs = filterToolsByExpertSnapshot(chat, defs);
   const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
-  if (chat.boardTaskId?.trim()) {
+  if (isBoardTaskChat(chat)) {
     defs = injectBoardMemberSubsetTools(defs);
   }
   defs = applyBoardMemberToolFilter(defs, chat, executionMode);

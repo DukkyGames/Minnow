@@ -78,6 +78,7 @@ describe('synthesis config API', () => {
     const res = await httpRequest(baseUrl, 'GET', '/api/memory/synthesis/config');
     assert.equal(res.status, 200);
     assert.equal(res.json.synthesis.throttleMessagePairs, 4);
+    assert.equal(res.json.synthesis.includeBoardChats, false);
   });
 
   test('PUT updates throttle message pairs', async () => {
@@ -90,5 +91,16 @@ describe('synthesis config API', () => {
 
     const again = await httpRequest(baseUrl, 'GET', '/api/memory/synthesis/config');
     assert.equal(again.json.synthesis.throttleMessagePairs, 1);
+  });
+
+  test('PUT round-trips includeBoardChats', async () => {
+    const res = await httpRequest(baseUrl, 'PUT', '/api/memory/synthesis/config', {
+      includeBoardChats: true,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.synthesis.includeBoardChats, true);
+
+    const again = await httpRequest(baseUrl, 'GET', '/api/memory/synthesis/config');
+    assert.equal(again.json.synthesis.includeBoardChats, true);
   });
 });

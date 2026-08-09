@@ -1209,6 +1209,8 @@ export type UpdateTaskPatch = Partial<
     | 'lastHealCategory'
     | 'lifecycleRun'
     | 'buildOutcome'
+    | 'synthesizedBuildAt'
+    | 'synthesizedTestAt'
   >
 >;
 

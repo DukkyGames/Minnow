@@ -147,10 +147,15 @@ function bindSettingsSection(): void {
         return;
       }
 
+      const includeBoardsEl = document.getElementById(
+        'brainSynthesisIncludeBoards',
+      ) as HTMLInputElement | null;
+
       const saved = await saveSynthesisConfig({
         enabled: enabledEl?.checked === true,
         throttleMessagePairs: Math.round(throttle),
         autoWriteConfidence: autoWrite,
+        includeBoardChats: includeBoardsEl?.checked === true,
         skillMinRounds: Math.round(readNumberField('brainSkillMinRounds', 2)),
         skillMinToolCalls: Math.round(readNumberField('brainSkillMinToolCalls', 2)),
         skillMinOccurrences: Math.round(readNumberField('brainSkillMinOccurrences', 2)),
@@ -488,6 +493,9 @@ function toggleProviderRow(): void {
 async function refreshSynthesisFields(): Promise<void> {
   const offlineEl = document.getElementById('brainSynthesisOffline');
   const enabledEl = document.getElementById('brainSynthesisEnabled') as HTMLInputElement | null;
+  const includeBoardsEl = document.getElementById(
+    'brainSynthesisIncludeBoards',
+  ) as HTMLInputElement | null;
   const throttleEl = document.getElementById('brainSynthesisThrottle') as HTMLInputElement | null;
   const hint = document.getElementById('brainSynthesisThrottleHint');
   const config = await fetchSynthesisConfig();
@@ -495,6 +503,9 @@ async function refreshSynthesisFields(): Promise<void> {
   if (!config) return;
   if (enabledEl && !enabledEl.matches(':focus')) {
     enabledEl.checked = config.enabled !== false;
+  }
+  if (includeBoardsEl && !includeBoardsEl.matches(':focus')) {
+    includeBoardsEl.checked = config.includeBoardChats === true;
   }
   if (throttleEl && !throttleEl.matches(':focus')) {
     throttleEl.value = String(config.throttleMessagePairs ?? 4);

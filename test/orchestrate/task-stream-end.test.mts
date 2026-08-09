@@ -180,6 +180,31 @@ describe('task stream end finalization', () => {
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(updated.status, 'testing');
     assert.ok(updated.endedAt);
+    assert.ok(updated.synthesizedBuildAt);
+  });
+
+  test('second build pass on same task does not bump synthesizedBuildAt', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    updateTask(group, 'W1-A', { boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
+    const task = group.orchestrateBoard!.tasks[0]!;
+    finalizeBoardTaskOnStreamEnd(group, task, planner);
+    const firstStamp = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.synthesizedBuildAt;
+    assert.ok(firstStamp);
+    updateTask(
+      group,
+      'W1-A',
+      {
+        status: 'in_progress',
+        boardReport: { outcome: 'pass', summary: 'Rebuild after test fail' },
+        synthesizedBuildAt: firstStamp,
+      },
+      planner,
+    );
+    const retryTask = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    finalizeBoardTaskOnStreamEnd(group, retryTask, planner);
+    const secondStamp = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.synthesizedBuildAt;
+    assert.equal(secondStamp, firstStamp);
   });
 
   test('manual mode moves successful task to testing', () => {

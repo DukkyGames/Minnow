@@ -531,9 +531,38 @@ describe('skip per-task testing', () => {
   test('completeTaskAfterVerificationPass marks task complete on skipped merge', async () => {
     const group = makeGroup({ 'W1-A': 'in_progress' });
     const planner = makePlanner();
+    const testChat: Chat = {
+      id: TEST_CHAT_ID,
+      name: 'Test W1-A',
+      workspacePath: '/tmp/ws',
+      modeId: 'build',
+      modelId: 'm1',
+      workAgentId: 'tester',
+      history: [
+        { role: 'user', content: 'Test' },
+        { role: 'assistant', content: 'VERDICT: pass' },
+      ],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      boardGroupId: GROUP_ID,
+      boardTaskId: 'W1-A',
+    };
+    updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
+    setSessionStateForTests({
+      chats: [planner, testChat],
+      groups: [group],
+      activeChatId: PLANNER_ID,
+    });
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     await completeTaskAfterVerificationPass(group, task, planner);
-    assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'complete');
+    assert.ok(updated.synthesizedTestAt);
+    const firstStamp = updated.synthesizedTestAt;
+    await completeTaskAfterVerificationPass(group, updated, planner);
+    const again = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(again.synthesizedTestAt, firstStamp);
   });
 });
 

@@ -32,6 +32,7 @@ const {
   getBoardTaskPrimaryRunId,
   buildKanbanRefreshKey,
   closeBoardChatInOrchestrate,
+  openBoardChatInOrchestrate,
 } = await import('../../src/ui/orchestrate-board.ts');
 const { closeSubAgentDrawer } = await import('../../src/ui/sub-agent-drawer.ts');
 const { setOrchestrateViewMode } = await import('../../src/ui/view-mode-toggle.ts');
@@ -1552,6 +1553,62 @@ describe('orchestrate board live updates', { concurrency: false }, () => {
       null,
       'board should not repaint over the overlay',
     );
+  });
+
+  test('orchestrate hub clears board chat embed so board rebuilds after hub', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.modeId = 'build';
+    taskChat.boardTaskId = 'W1-A';
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    taskChat.groupId = FIXED_GROUP_ID;
+    taskChat.history = [{ role: 'user', content: 'go' }];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Task A',
+          wave: 'W1',
+          category: 'build',
+          chatId: FIXED_TASK_CHAT_ID,
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
+
+    renderBoardView(group);
+    await waitForKanban();
+
+    const { isBoardChatEmbedOpen } = await import(
+      '../../src/ui/orchestrate-board-chat-state.ts'
+    );
+    const hub = await import('../../src/ui/orchestrate-hub.ts');
+
+    openBoardChatInOrchestrate(FIXED_TASK_CHAT_ID);
+    await flushUiWork();
+    assert.ok(isBoardChatEmbedOpen());
+    assert.ok(document.querySelector('.ob-chat'));
+
+    hub.renderOrchestrateHub();
+    assert.equal(isBoardChatEmbedOpen(), false);
+    assert.ok(document.getElementById('orchestrateHub'));
+
+    hub.teardownOrchestrateHub();
+    openBoardGroup(group.id);
+    await flushUiWork();
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-main'));
+    assert.equal(document.querySelector('.ob-chat'), null);
+
+    hub.resetOrchestrateHubForTests();
   });
 
 });

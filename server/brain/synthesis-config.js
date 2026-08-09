@@ -108,6 +108,7 @@ export const DEFAULT_SYNTHESIS_CONFIG = {
   utilityModelId: '',
   maxPendingProposals: 100,
   rejectedRetentionDays: 30,
+  includeBoardChats: false,
 };
 
 /**

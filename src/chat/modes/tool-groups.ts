@@ -344,9 +344,8 @@ export const BOARD_ROLE_BOARD_SUBSET = ['board_get_state', 'board_report'] as co
  * Per-role group matrix for orchestrator board chats (MIN-333). Build and fix differ
  * only by browser (build ●, fix ○). Tester omits files-write.
  *
- * All three get `brain-core`: workers hold the discovery context, so they must be
- * able to look up prior findings and record new ones themselves. Routing writes
- * through the orchestrator instead would strip the detail worth saving.
+ * All three get `brain-core` for read/search during work; durable writes on board
+ * tasks go through milestone synthesis at build pass and post-merge, not `save_memory`.
  */
 export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGroupId[]> = {
   build: [

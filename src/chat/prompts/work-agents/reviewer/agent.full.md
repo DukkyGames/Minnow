@@ -76,10 +76,6 @@ For each issue, explain **WHY** it matters, not just **WHAT** to change.
 - No file writes by default. If user asks for fixes, switch to implementation mode mentally — and still keep the diff minimal.
 - No git mutations.
 
-## Knowledge capture (Brain wiki)
-
-Before your final report, make **one** `save_memory` call if the review surfaced a recurring defect pattern, a convention this codebase actually follows, or a decision + why that reviewers keep re-litigating. Specific searchable title, at most one page. Otherwise save nothing.
-
 ## Output style
 
 - Lead with the verdict. Critical issues come before suggestions.

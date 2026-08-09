@@ -1105,7 +1105,7 @@ export function finalizeBoardTaskOnStreamEnd(
     logBuildVerdict(group, task.id, 'pass');
 
     const builderChat = findChatById(chatId);
-    if (builderChat) {
+    if (builderChat && !freshTask.synthesizedBuildAt) {
       const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
       const lastAssistant = [...builderChat.history].reverse().find((m) => m.role === 'assistant');
       const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
@@ -1122,6 +1122,7 @@ export function finalizeBoardTaskOnStreamEnd(
         providerId: providerId || undefined,
         modelId: modelId || undefined,
       });
+      updateTask(group, task.id, { synthesizedBuildAt: Date.now() }, plannerChat);
     }
 
     const boardAfterPass = group.orchestrateBoard;
@@ -3853,7 +3854,9 @@ export async function completeTaskAfterVerificationPass(
 
     const testChatIdAfterMerge = fresh.testChatId?.trim();
     const testChat = testChatIdAfterMerge ? findChatById(testChatIdAfterMerge) : null;
-    if (testChat) {
+    const latestTask =
+      group.orchestrateBoard?.tasks.find((t) => t.id === fresh.id) ?? fresh;
+    if (testChat && !latestTask.synthesizedTestAt) {
       const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
       const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
       const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
@@ -3870,6 +3873,7 @@ export async function completeTaskAfterVerificationPass(
         providerId: providerId || undefined,
         modelId: modelId || undefined,
       });
+      updateTask(group, fresh.id, { synthesizedTestAt: Date.now() }, plannerChat);
     }
   } finally {
     releasePipelineHold(hold);

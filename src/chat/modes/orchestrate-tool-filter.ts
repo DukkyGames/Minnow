@@ -4,7 +4,7 @@
 
 import { BUILT_IN_TOOLS, type OpenAIFunctionDefinition } from '../../tools/definitions';
 import type { AutopilotExecutionMode } from '../../config/autopilot-meta';
-import { getBoardGroupForChat } from '../../state/chat-groups';
+import { getBoardGroupForChat, isBoardTaskChat } from '../../state/chat-groups';
 import type { Chat } from '../../types';
 import { isExternalDynamicTool } from './tool-policy';
 import {
@@ -18,6 +18,7 @@ const BOARD_MEMBER_STRIPPED_TOOLS = new Set([
   'board_update_task',
   'board_set_autonomy',
   'delegate_tasks',
+  'save_memory',
 ]);
 
 /**
@@ -102,7 +103,7 @@ export function applyBoardMemberToolFilter(
   chat: Chat,
   executionMode?: AutopilotExecutionMode,
 ): OpenAIFunctionDefinition[] {
-  if (!chat.boardTaskId?.trim()) return defs;
+  if (!isBoardTaskChat(chat)) return defs;
 
   const role = resolveBoardMemberRole(chat);
   const roleAllowed = expandBoardRoleAllowedTools(role);
