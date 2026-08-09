@@ -162,8 +162,19 @@ describe('model host filter actions', () => {
       const { setStorageModeForTests } = await import('../../src/config/storage-mode.ts');
       setStorageModeForTests('server');
       const { modelCache } = await import('../../src/app-state.ts');
-      const { renderModelSelectMenuRows } = await import('../../src/ui/model-select-picker.ts');
+      const {
+        renderModelSelectMenuRows,
+        setModelHostFilter,
+        setModelLocalLoadFilter,
+        setModelLibraryFilter,
+        clearModelSearchQuery,
+      } = await import('../../src/ui/model-select-picker.ts');
       const { syncModelOptionLoadUnloadButtonElement } = await import('../../src/api/models.ts');
+
+      clearModelSearchQuery();
+      setModelHostFilter('all');
+      setModelLocalLoadFilter('all');
+      setModelLibraryFilter('all');
 
       modelCache.clear();
       modelCache.set('lmstudio::qwen/qwen2.5-7b', { id: 'qwen/qwen2.5-7b', state: 'loaded' });

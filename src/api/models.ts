@@ -29,6 +29,7 @@ import {
   beginModelLoadUnload,
   endModelLoadUnload,
   getModelLoadUnloadPhase,
+  getModelLoadUnloadTargetSelectValue,
   isModelLoadUnloadBusy,
   setModelLoadUnloadButtonBusy,
   setModelLoadUnloadButtonIdle,
