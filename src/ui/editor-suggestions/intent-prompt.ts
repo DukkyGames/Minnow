@@ -243,7 +243,17 @@ export async function resolveIntentSuggestion(
     return { text: null, error: validation.message };
   }
 
-  const provider = await resolveProv(binding.providerId);
+  // Strict: the binding is already remapped off any synthetic My Models id, so a
+  // miss here means the request would land on an unrelated backend.
+  let provider;
+  try {
+    provider = await resolveProv(binding.providerId, { strict: true });
+  } catch (err) {
+    return {
+      text: null,
+      error: err instanceof Error ? err.message : EDITOR_AI_REQUEST_FAILED_MESSAGE,
+    };
+  }
   const maxTokens = Math.min(
     input.intentConfig?.maxTokens ?? INTENT_DEFAULT_MAX_TOKENS,
     INTENT_DEFAULT_MAX_TOKENS,

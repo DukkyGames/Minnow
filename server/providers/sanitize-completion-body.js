@@ -95,5 +95,11 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     delete next.thinking_budget_tokens;
   }
 
+  // Jinja template kwargs reach the model only on local runtimes; hosted
+  // OpenAI-compatible APIs reject the unknown field with a 400.
+  if (providerId !== 'llama-cpp-local' && providerId !== 'mlx-lm-local') {
+    delete next.chat_template_kwargs;
+  }
+
   return next;
 }

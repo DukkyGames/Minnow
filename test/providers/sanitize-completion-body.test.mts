@@ -188,4 +188,26 @@ describe('sanitizeCompletionBodyForProvider', () => {
     );
     assert.equal(stripped.thinking_budget_tokens, undefined);
   });
+
+  test('keeps chat_template_kwargs only for local runtime providers', () => {
+    const body = () => ({
+      model: 'qwen3',
+      chat_template_kwargs: { enable_thinking: false },
+    });
+
+    // llama.cpp and mlx_lm ignore thinking.type — the template kwarg is the only
+    // switch that reaches the model.
+    for (const id of ['llama-cpp-local', 'mlx-lm-local']) {
+      const kept = sanitizeCompletionBodyForProvider(body(), { ...OPENAI, id }, {
+        reasoning: true,
+      });
+      assert.deepEqual(kept.chat_template_kwargs, { enable_thinking: false });
+    }
+
+    // Hosted OpenAI-compatible APIs 400 on unknown body fields.
+    const stripped = sanitizeCompletionBodyForProvider(body(), OPENAI, {
+      reasoning: true,
+    });
+    assert.equal(stripped.chat_template_kwargs, undefined);
+  });
 });

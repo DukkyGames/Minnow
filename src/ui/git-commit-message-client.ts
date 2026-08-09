@@ -530,7 +530,15 @@ export async function fetchGitCommitMessage(
     return { text: null, error: validation.message };
   }
 
-  const provider = await resolveProvider(binding.providerId);
+  let provider;
+  try {
+    provider = await resolveProvider(binding.providerId, { strict: true });
+  } catch (err) {
+    return {
+      text: null,
+      error: err instanceof Error ? err.message : EDITOR_AI_REQUEST_FAILED_MESSAGE,
+    };
+  }
   const messages = buildGitCommitMessagePrompt({
     changedPaths: input.changedPaths,
     patch: input.patch,

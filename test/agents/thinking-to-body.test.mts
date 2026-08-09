@@ -43,7 +43,10 @@ describe('thinkingToCompletionBody', () => {
       contextLength: null,
       loadState: null,
     });
-    assert.deepEqual(body, { thinking: { type: 'disabled' } });
+    assert.deepEqual(body, {
+      thinking: { type: 'disabled' },
+      chat_template_kwargs: { enable_thinking: false },
+    });
     assert.equal(body.reasoning_effort, undefined);
   });
 
@@ -165,7 +168,10 @@ describe('thinkingToCompletionBody', () => {
 describe('reasoningEffortToCompletionBody', () => {
   test('openai-v1 off disables thinking without reasoning_effort none', () => {
     const { body } = reasoningEffortToCompletionBody('off', 'openai-v1', reasoningCaps);
-    assert.deepEqual(body, { thinking: { type: 'disabled' } });
+    assert.deepEqual(body, {
+      thinking: { type: 'disabled' },
+      chat_template_kwargs: { enable_thinking: false },
+    });
   });
 
   test('openai-v1 on enables thinking without enable_thinking', () => {

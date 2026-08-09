@@ -19,9 +19,13 @@ import {
   sanitizeExpandedPrompt,
 } from '../chat/prompts/expand-prompt';
 import { encodeModelSelectKey, decodeModelSelectKey } from '../lib/model-select-key';
+import { ensureChatModelLoadedForTurn } from '../api/ensure-chat-model-loaded';
+import { resolveLibraryRequestBinding } from '../models/library-request-binding';
+import { LIBRARY_MODEL_PROVIDER_ID } from '../models/model-select-library';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { resolveProvider } from '../providers/store';
 import { getActiveChat } from '../state/sessions';
+import { setStatus } from './status';
 import { getActiveModelIdFromDom } from './editor-ai-binding';
 import type { Attachment } from '../attachments/types';
 
@@ -34,6 +38,8 @@ export const EXPAND_NO_MODEL_MESSAGE =
 export const EXPAND_FAILED_MESSAGE =
   'Expand failed — check provider and model in Settings';
 export const EXPAND_EMPTY_MESSAGE = 'Model returned no expanded prompt.';
+export const EXPAND_MODEL_LOAD_FAILED_MESSAGE =
+  'Could not start the selected model — load it in Models and try again.';
 
 export interface ExpandPromptBinding {
   providerId: string;
@@ -68,6 +74,43 @@ export async function resolveExpandPromptBinding(): Promise<ExpandPromptBinding>
     chat.providerId?.trim() ||
     (await resolveProvider()).id;
   return { providerId, modelId };
+}
+
+/**
+ * Binding the completions request should carry. My Models rows resolve to the
+ * running serve; unloaded ones are started first, the same as a chat turn.
+ */
+async function resolveExpandSendBinding(
+  binding: ExpandPromptBinding,
+  signal: AbortSignal,
+): Promise<{ binding: ExpandPromptBinding } | { error: string }> {
+  let resolved = await resolveLibraryRequestBinding(binding.providerId, binding.modelId);
+
+  if (resolved.kind === 'needsLoad') {
+    setStatus('spin', 'Loading model…');
+    try {
+      await ensureChatModelLoadedForTurn(
+        LIBRARY_MODEL_PROVIDER_ID,
+        resolved.libraryModelId,
+        signal,
+      );
+    } catch (err) {
+      if (signal.aborted) return { error: '' };
+      return { error: errorMessageFrom(err) };
+    }
+    resolved = await resolveLibraryRequestBinding(
+      LIBRARY_MODEL_PROVIDER_ID,
+      resolved.libraryModelId,
+    );
+    if (resolved.kind === 'needsLoad') {
+      return { error: EXPAND_MODEL_LOAD_FAILED_MESSAGE };
+    }
+    setStatus('spin', 'Expanding prompt…');
+  }
+
+  return {
+    binding: { providerId: resolved.providerId, modelId: resolved.modelId },
+  };
 }
 
 function errorMessageFrom(err: unknown): string {
@@ -107,12 +150,25 @@ export async function fetchExpandedPrompt(
   // Attachments enrich the draft; they never stand in for one.
   const attachments = input.attachments ?? getPendingAttachments();
 
-  const binding = await resolveExpandPromptBinding();
-  if (!binding.modelId.trim()) {
+  const picked = await resolveExpandPromptBinding();
+  if (!picked.modelId.trim()) {
     return { text: null, error: EXPAND_NO_MODEL_MESSAGE };
   }
 
-  const provider = await resolveProvider(binding.providerId);
+  // My Models rows must be remapped to the running serve before completions —
+  // `minnow-library` is synthetic and resolveProvider would silently pick another.
+  const send = await resolveExpandSendBinding(picked, input.signal);
+  if ('error' in send) {
+    return { text: null, error: send.error || undefined };
+  }
+  const binding = send.binding;
+
+  let provider;
+  try {
+    provider = await resolveProvider(binding.providerId, { strict: true });
+  } catch (err) {
+    return { text: null, error: errorMessageFrom(err) };
+  }
   const body: Record<string, unknown> = {
     model: binding.modelId,
     messages: buildExpandPromptMessages(draft, attachments),

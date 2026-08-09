@@ -58,18 +58,57 @@ export function stripInterleavedOriginalLines(output: string, originalText: stri
 const REASONING_MONOLOGUE_RE =
   /^\s*(?:the user |i need |i should |i will |let me |thinking(?:\s+process)?\s*:)/i;
 
-/** True when text looks like model reasoning, not insertable code. */
-function looksLikeReasoningMonologue(text: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed) return false;
-  if (
-    /[{}();=]|^\s*(const|let|var|function|class|import|export|return|if|for|async|await|def |public |private )\b/m.test(
-      trimmed,
-    )
-  ) {
-    return false;
+/** Line that reads as code rather than prose. */
+const CODE_LINE_RE =
+  /[{}();=]|^\s*(const|let|var|function|class|import|export|return|if|for|async|await|def |public |private )\b/;
+
+function firstNonEmptyLine(text: string): string {
+  for (const line of text.split('\n')) {
+    if (line.trim()) return line.trim();
   }
-  return REASONING_MONOLOGUE_RE.test(trimmed);
+  return '';
+}
+
+/**
+ * True when text looks like model reasoning, not insertable code.
+ *
+ * Only the opening line is judged, and a stray `=` or `()` no longer buys an
+ * exemption: reasoning chains quote code constantly, so a whole-text token test
+ * let entire monologues through as ghost text.
+ */
+function looksLikeReasoningMonologue(text: string): boolean {
+  const first = firstNonEmptyLine(text);
+  if (!first) return false;
+  if (!REASONING_MONOLOGUE_RE.test(first)) return false;
+  // `let me = 1;` opens with a keyword but is code; prose that merely mentions
+  // code is still prose, so require the line to close like a statement.
+  return !/[;{}]\s*$/.test(first);
+}
+
+/**
+ * Sentence-shaped line — prose, even when it name-drops code.
+ * `validate(form)` inside a reasoning sentence satisfies {@link CODE_LINE_RE},
+ * so the code test alone cannot tell narration from a statement.
+ */
+function looksLikeProseLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!/[.!?]$/.test(trimmed)) return false;
+  return trimmed.split(/\s+/).length >= 4;
+}
+
+/** True when a line reads as an actual statement, not narration about one. */
+function isCodeLine(line: string): boolean {
+  return CODE_LINE_RE.test(line) && !looksLikeProseLine(line);
+}
+
+/** True when every non-empty line reads as code — no interleaved narration. */
+function isEntirelyCodeLike(text: string): boolean {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return false;
+  return lines.every(isCodeLine);
 }
 
 /** Remove reasoning blocks and model chatter before editor insertion. */
@@ -112,8 +151,11 @@ export function extractEditorCodeFromReasoning(reasoning: string): string {
     }
   }
 
+  // Only accept the whole reasoning body when it is code end to end. Anything
+  // with narration in it is a thinking chain, and painting that as ghost text is
+  // worse than showing nothing.
   const stripped = stripEditorModelOutput(trimmed);
-  if (stripped && !looksLikeReasoningMonologue(stripped)) {
+  if (stripped && !looksLikeReasoningMonologue(stripped) && isEntirelyCodeLike(stripped)) {
     return stripped;
   }
 
@@ -125,12 +167,8 @@ export function extractEditorCodeFromReasoning(reasoning: string): string {
       if (codeLines.length > 0) break;
       continue;
     }
-    if (looksLikeReasoningMonologue(line)) break;
-    if (
-      /[{}();=]|^\s*(const|let|var|function|class|import|export|return|if|for|async|await|def |public |private )\b/.test(
-        line,
-      )
-    ) {
+    if (looksLikeReasoningMonologue(line) || looksLikeProseLine(line)) break;
+    if (isCodeLine(line)) {
       codeLines.unshift(line);
     } else if (codeLines.length > 0) {
       break;

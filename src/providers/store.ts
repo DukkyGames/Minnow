@@ -116,26 +116,62 @@ export async function listProviders(): Promise<ProviderListResponse> {
   }
 }
 
+export interface ResolveProviderOptions {
+  /**
+   * Reject an explicit id that matches no enabled provider instead of falling
+   * back. Use on request paths that have already resolved a real registry id —
+   * silently substituting another provider sends the turn to the wrong backend.
+   */
+  strict?: boolean;
+}
+
+/** Thrown by `resolveProvider` in strict mode when the requested id is not usable. */
+export class UnknownProviderError extends Error {
+  readonly providerId: string;
+
+  constructor(providerId: string) {
+    super(`Provider "${providerId}" is not available — check Settings → Providers.`);
+    this.name = 'UnknownProviderError';
+    this.providerId = providerId;
+  }
+}
+
 /**
  * Resolve which provider record to use for chat, benchmarks, and generations.
  * Ignores persisted `activeProviderId` — routing is driven by explicit `chat.providerId`
  * or the first enabled provider in registry order.
+ *
+ * A requested id that misses is a routing bug (e.g. the synthetic `minnow-library`
+ * key reaching a send path unmapped), so the fallback warns rather than swapping
+ * backends behind the caller's back.
  */
-export async function resolveProvider(chatProviderId?: string): Promise<ProviderPublic> {
+export async function resolveProvider(
+  chatProviderId?: string,
+  options?: ResolveProviderOptions,
+): Promise<ProviderPublic> {
   const { providers } = await listProviders();
   const enabled = providers.filter((p) => p.enabled !== false);
   const want = chatProviderId?.trim();
   if (want) {
     const found = enabled.find((p) => p.id === want);
     if (found) return found;
+    if (options?.strict) {
+      throw new UnknownProviderError(want);
+    }
+    console.warn(
+      `[providers] no enabled provider "${want}" — falling back to "${enabled[0]?.id ?? 'vite-fallback'}"`,
+    );
   }
   if (enabled.length > 0) return enabled[0];
   return getViteOnlyFallbackProvider();
 }
 
 /** @deprecated Use resolveProvider — kept for call-site compatibility; no longer reads activeProviderId. */
-export async function getActiveProvider(chatProviderId?: string): Promise<ProviderPublic> {
-  return resolveProvider(chatProviderId);
+export async function getActiveProvider(
+  chatProviderId?: string,
+  options?: ResolveProviderOptions,
+): Promise<ProviderPublic> {
+  return resolveProvider(chatProviderId, options);
 }
 
 /** POST set-active on server; no-op in Vite-only mode. */

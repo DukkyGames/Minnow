@@ -281,7 +281,14 @@ export async function fetchEditorAiCompletion(
   });
   const { messages } = promptResult;
 
-  const provider = await resolveProv(input.binding.providerId);
+  // Strict: the binding is already remapped off any synthetic My Models id, so a
+  // miss here means the request would land on an unrelated backend.
+  let provider;
+  try {
+    provider = await resolveProv(input.binding.providerId, { strict: true });
+  } catch (err) {
+    return { text: null, error: createGenerationErrorMessage(err) };
+  }
   const body: Record<string, unknown> = {
     model: modelId || undefined,
     temperature: input.config.temperature,

@@ -110,6 +110,33 @@ describe('extractEditorCodeFromReasoning', () => {
       '',
     );
   });
+
+  test('does not paint a thinking chain that quotes code as ghost text', () => {
+    // Reasoning chains mention code constantly; an incidental `()` or `=` must
+    // not buy the whole monologue a pass into the editor.
+    const chain = [
+      'The user is editing handleSubmit() and wants validation.',
+      'I should check whether `form.value` is already trimmed = probably not.',
+      'So the completion needs to call validate(form) before submitting.',
+    ].join('\n');
+    assert.equal(extractEditorCodeFromReasoning(chain), '');
+  });
+
+  test('does not paint an unfenced monologue that trails off mid-sentence', () => {
+    const truncated =
+      'Let me look at the surrounding scope. The function returns a Promise, so I need to';
+    assert.equal(extractEditorCodeFromReasoning(truncated), '');
+  });
+
+  test('still accepts an unfenced body that is code end to end', () => {
+    const reasoning = 'const total = a + b;\nreturn total;';
+    assert.equal(extractEditorCodeFromReasoning(reasoning), reasoning);
+  });
+
+  test('still recovers trailing code after narration', () => {
+    const reasoning = 'I need to sum the inputs.\n\nconst total = a + b;';
+    assert.equal(extractEditorCodeFromReasoning(reasoning), 'const total = a + b;');
+  });
 });
 
 describe('resolveEditorCompletionDisplayText', () => {

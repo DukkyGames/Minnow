@@ -11,6 +11,11 @@
  * - `anthropic-v1`: `providerOptions.anthropic.thinking` (`enabled` + `budgetTokens`,
  *   `adaptive` + `effort`, or omit when off) per model family.
  * - `llama-cpp-local`: per-request `thinking_budget_tokens` (never CLI `--reasoning-budget`).
+ * - llama.cpp / mlx_lm servers ignore `thinking.type` and `reasoning_effort` entirely;
+ *   the only switch they honor is `chat_template_kwargs.enable_thinking`, which is
+ *   forwarded to the model's Jinja template. Hosted `openai-v1` providers reject
+ *   unknown fields, so `sanitizeCompletionBodyForProvider` strips it everywhere
+ *   except the local runtime providers.
  */
 
 import type { ApiKind } from '../providers/types';
@@ -37,6 +42,14 @@ const LM_STUDIO_BEST_EFFORT: ThinkingBodyHint = {
 };
 
 const ANTHROPIC_BUDGET_FLOOR = 1024;
+
+/**
+ * Template-level thinking switch for local OpenAI-compatible runtimes.
+ * Sanitization drops it for every provider that is not a local serve.
+ */
+const LOCAL_TEMPLATE_THINKING_OFF = {
+  chat_template_kwargs: { enable_thinking: false },
+} as const;
 
 let lmStudioHintShown = false;
 
@@ -174,7 +187,9 @@ export function reasoningEffortToCompletionBody(
 
   if (apiKind === 'openai-v1') {
     if (effort === 'off') {
-      return { body: { thinking: { type: 'disabled' } } };
+      return {
+        body: { thinking: { type: 'disabled' }, ...LOCAL_TEMPLATE_THINKING_OFF },
+      };
     }
 
     const body: Record<string, unknown> = {};
@@ -273,7 +288,9 @@ export function thinkingToCompletionBody(
 
   if (apiKind === 'openai-v1') {
     if (resolved === 'off') {
-      return { body: { thinking: { type: 'disabled' } } };
+      return {
+        body: { thinking: { type: 'disabled' }, ...LOCAL_TEMPLATE_THINKING_OFF },
+      };
     }
     const enabledValue = modelCapabilities?.reasoningThinkingEnabledValue ?? 'enabled';
     const body: Record<string, unknown> = { thinking: { type: enabledValue } };
