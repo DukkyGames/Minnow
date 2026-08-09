@@ -812,6 +812,25 @@ export function wireSidebarNewGroupButton(): void {
 }
 
 /** Rebuild the session list in the left sidebar (workspace-scoped + Unassigned). */
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Update draft-only chat row labels without rebuilding the sidebar (composer typing). */
+export function syncComposerDraftSidebarLabels(chat: Chat): void {
+  if (getChatMessageCount(chat) !== 0 || !hasComposerDraft(chat)) return;
+  const displayName = formatDraftChatSidebarName(chat);
+  const modelLabel = chat.modelId || 'No model selected';
+  const rows = document.querySelectorAll<HTMLElement>(
+    `.chat-item-row[data-chat-id="${chat.id}"]`,
+  );
+  for (const row of rows) {
+    const nameSpan = row.querySelector('.chat-item-name');
+    if (nameSpan) nameSpan.textContent = displayName;
+    row.classList.add('chat-item-row--draft');
+    row.setAttribute('aria-label', `${displayName}, ${modelLabel}`);
+    row.title = [displayName, modelLabel].filter(Boolean).join('\n');
+  }
+}
+
 export function renderSidebar(): void {
   if (isExpertScopeActive() && sessionState) {
     const expertId = getExpertScopeId();

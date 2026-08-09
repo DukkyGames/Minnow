@@ -4,6 +4,7 @@
 
 import {
   getActiveChat,
+  getChatMessageCount,
   isEphemeralEmptyChat,
   scheduleSaveSessions,
   sessionState,
@@ -17,6 +18,19 @@ import { clearComposerInput, getActiveComposerSurface } from './composer-surface
 import { autoResize } from './input';
 
 let draftRestoreSuspended = false;
+
+/** Debounce draft-only sidebar title tweaks (full rebuild only when list membership changes). */
+let draftSidebarLabelTimer: ReturnType<typeof setTimeout> | null = null;
+const DRAFT_SIDEBAR_LABEL_DEBOUNCE_MS = 200;
+
+function scheduleComposerDraftSidebarLabelSync(chat: Chat): void {
+  if (getChatMessageCount(chat) !== 0 || !hasComposerDraft(chat)) return;
+  if (draftSidebarLabelTimer) clearTimeout(draftSidebarLabelTimer);
+  draftSidebarLabelTimer = setTimeout(() => {
+    draftSidebarLabelTimer = null;
+    void import('./sidebar').then((m) => m.syncComposerDraftSidebarLabels(chat));
+  }, DRAFT_SIDEBAR_LABEL_DEBOUNCE_MS);
+}
 
 /** True while programmatically restoring draft text into the composer. */
 export function isComposerDraftRestoreSuspended(): boolean {
@@ -92,9 +106,17 @@ export function handleComposerDraftInput(): void {
   if (!visibilityChanged && !hasComposerDraft(chat)) return;
 
   scheduleSaveSessions({ chatId: chat.id });
-  void import('./sidebar').then((m) => m.renderSidebar());
-  void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
-  void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
+
+  // Rebuilding the sidebar on every keystroke made typing feel stuck once a draft
+  // existed (`hasComposerDraft` stayed true). Full rebuild only when a row appears
+  // or disappears; draft-only titles get a cheap debounced label sync.
+  if (visibilityChanged) {
+    void import('./sidebar').then((m) => m.renderSidebar());
+    void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
+    void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
+  } else {
+    scheduleComposerDraftSidebarLabelSync(chat);
+  }
 }
 
 /** Wire draft persistence for one composer textarea. */

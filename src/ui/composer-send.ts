@@ -212,7 +212,6 @@ export function initComposerSteerInputListener(inputEl?: HTMLTextAreaElement | n
   input.dataset.steerListener = '1';
   input.addEventListener('input', () => {
     if (streaming) refreshComposerStreamingAffordance();
-    void import('./composer-draft').then((m) => m.handleComposerDraftInput());
   });
 }
 
