@@ -39,7 +39,7 @@ export async function retrieveCodeMapBlock(
     focus: options.focus,
     focusFiles: options.focusFiles,
     tokenBudget: options.tokenBudget ?? defaultBudget,
-    ensureIndexed: options.ensureIndexed !== false,
+    ensureIndexed: options.ensureIndexed === true,
     profile,
   });
 

@@ -228,6 +228,7 @@ export async function handleCodeIndexRequest(req, res, pathname) {
           tokenBudget: tokenBudget > 0 ? tokenBudget : undefined,
           focusFiles: Array.isArray(body.focusFiles) ? body.focusFiles.map(String) : undefined,
           profile,
+          skipStalenessCheck: ensureIndexed,
         });
       });
       sendJson(res, 200, map);

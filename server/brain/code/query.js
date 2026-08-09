@@ -14,6 +14,7 @@ import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
 import { prepareRepoMapSymbols, prepareRepoMapSymbolsForInjection } from './repo-map-symbols.js';
 import { ensureIndexFreshForQuery, runCascade } from './cascade.js';
+import { getIndexProgress } from './index-progress.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
 /** Load merged config.brain.code settings. */
@@ -72,10 +73,12 @@ export async function queryCodeStatus() {
   const repo = activeRepoKey();
   const db = getCodeDb(repo);
   const stats = getIndexStats(db, repo);
+  const progress = getIndexProgress(repo);
   return {
     enabled: code.enabled,
     repo,
     ...stats,
+    ...progress,
     repoMapTokenBudget: code.repoMapTokenBudget,
     repoMapInjectionTokenBudget: code.repoMapInjectionTokenBudget,
     reindexCadence: code.reindexCadence,
@@ -114,7 +117,7 @@ function searchSymbolsFts(db, repo, ftsQuery, max) {
       .prepare(
         `SELECT s.id, s.repo, s.kind, s.name, s.file, s.line_start, s.line_end, s.signature
          FROM symbols_fts f
-         JOIN symbols s ON s.id = f.symbol_id
+         JOIN symbols s ON s.rowid = f.rowid
          WHERE s.repo = ? AND symbols_fts MATCH ?
          ORDER BY bm25(symbols_fts)
          LIMIT ?`,
@@ -350,7 +353,9 @@ export async function readSymbol(symbolRef) {
  * @param {{ repo?: string, focus?: string, tokenBudget?: number, focusFiles?: string[], profile?: 'default' | 'injection' }} [opts]
  */
 export async function repoMap(opts = {}) {
-  await ensureIndexFreshForQuery();
+  if (!opts.skipStalenessCheck) {
+    await ensureIndexFreshForQuery();
+  }
   const code = await loadBrainCodeConfig();
   const repo = resolveRepoKey(opts.repo);
   const db = getCodeDb(repo);
@@ -365,15 +370,17 @@ export async function repoMap(opts = {}) {
           opts.tokenBudget ?? code.repoMapInjectionTokenBudget,
         )
       : clampRepoMapTokenBudget(opts.tokenBudget ?? code.repoMapTokenBudget);
+  const sqlLimit = Math.max(800, Math.min(80_000, Math.ceil(budget * 4)));
   const rows =
     db
       .prepare(
         `SELECT id, file, signature, kind, pagerank, usage_count, line_start
        FROM symbols
        WHERE repo = ?
-       ORDER BY pagerank DESC, usage_count DESC, file, line_start`,
+       ORDER BY pagerank DESC, usage_count DESC, file, line_start
+       LIMIT ?`,
       )
-      .all(repo) ?? [];
+      .all(repo, sqlLimit) ?? [];
 
   /** @type {typeof rows} */
   let symbolRows = rows;

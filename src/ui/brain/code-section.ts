@@ -36,6 +36,7 @@ let focusTimer: ReturnType<typeof setTimeout> | null = null;
 let lastStatus: BrainCodeStatus | null = null;
 let selectedSymbolId: string | null = null;
 let codeGraphApi: ForceGraphApi | null = null;
+let indexProgressPoll: ReturnType<typeof setInterval> | null = null;
 
 type ActionStatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -54,8 +55,28 @@ function codeIndexRequestContext(): { workspaceRoot?: string; repo?: string } {
   return { workspaceRoot, repo };
 }
 
+function stopIndexProgressPoll(): void {
+  if (indexProgressPoll) {
+    clearInterval(indexProgressPoll);
+    indexProgressPoll = null;
+  }
+}
+
+function startIndexProgressPoll(): void {
+  stopIndexProgressPoll();
+  indexProgressPoll = setInterval(() => {
+    void refreshCodeStatus();
+  }, 1500);
+}
+
 /** Format index stats for the toolbar line. */
 function formatStatusLine(status: BrainCodeStatus): string {
+  if (status.indexing) {
+    const done = status.filesDone ?? 0;
+    const total = status.filesTotal ?? 0;
+    const phase = status.phase && status.phase !== 'idle' ? status.phase : 'indexing';
+    return `${status.repo} · ${phase} · ${done}/${total} files`;
+  }
   const when = status.lastIndexedAt
     ? new Date(status.lastIndexedAt).toLocaleString()
     : 'never';
@@ -197,6 +218,9 @@ async function refreshCodeStatus(): Promise<void> {
   }
 
   line.textContent = formatStatusLine(status);
+  if (status.indexing) {
+    setActionStatus('spin', formatStatusLine(status));
+  }
 }
 
 /** Build a clickable edge list (callers or callees). */
@@ -533,8 +557,10 @@ async function runReindex(): Promise<void> {
   const btn = document.getElementById('brainCodeReindex') as HTMLButtonElement | null;
   if (btn) btn.disabled = true;
   setActionStatus('spin', 'Reindexing workspace…');
+  startIndexProgressPoll();
 
   const result = await reindexBrainCode(codeIndexRequestContext());
+  stopIndexProgressPoll();
   if (btn) btn.disabled = false;
 
   if (!result?.ok) {

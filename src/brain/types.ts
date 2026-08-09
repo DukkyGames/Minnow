@@ -195,6 +195,10 @@ export interface BrainCodeStatus extends BrainCodeConfig {
   edgeCount: number;
   fileCount: number;
   lastIndexedAt: string | null;
+  indexing?: boolean;
+  filesDone?: number;
+  filesTotal?: number;
+  phase?: string;
 }
 
 /** Symbol row from find_symbol / graph queries. */

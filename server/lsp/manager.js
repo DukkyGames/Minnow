@@ -30,9 +30,10 @@ import { normalizeFileUri } from './file-uri.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '../..');
 
-/** Editor scope — live buffer / UI; agent scope — saved-disk tool diagnostics. */
+/** Editor scope — live buffer / UI; agent scope — saved-disk tool diagnostics; index — Brain code indexer. */
 const LSP_SCOPE_EDITOR = 'editor';
 const LSP_SCOPE_AGENT = 'agent';
+export const LSP_SCOPE_INDEX = 'index';
 
 const DEFAULT_DIAG_QUIET_PERIOD_MS = 150;
 const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
@@ -63,6 +64,12 @@ const scopeStores = {
     diagnosticSnapshots: new Map(),
   },
   [LSP_SCOPE_AGENT]: {
+    processes: new Map(),
+    pendingConnections: new Map(),
+    documentSync: new Map(),
+    diagnosticSnapshots: new Map(),
+  },
+  [LSP_SCOPE_INDEX]: {
     processes: new Map(),
     pendingConnections: new Map(),
     documentSync: new Map(),
@@ -997,9 +1004,9 @@ async function getConnection(scope, serverId, config) {
 
 /**
  * Sync document lifecycle with LSP servers (didOpen / didChange / didClose).
- * @param {string} scope - {@link LSP_SCOPE_EDITOR} or {@link LSP_SCOPE_AGENT}
+ * @param {string} scope - {@link LSP_SCOPE_EDITOR}, {@link LSP_SCOPE_AGENT}, or {@link LSP_SCOPE_INDEX}
  */
-async function notifyLspDocumentForScope(scope, relativePath, event, text) {
+export async function notifyLspDocumentForScope(scope, relativePath, event, text) {
   const merged = await loadMergedLspConfig();
   if (merged.enabled === false) {
     return { ok: false, error: 'LSP is disabled' };
@@ -1127,6 +1134,22 @@ async function ensureDocumentSyncedForScope(scope, relativePath, options = {}) {
  */
 async function ensureDocumentSynced(relativePath, options = {}) {
   return ensureDocumentSyncedForScope(LSP_SCOPE_EDITOR, relativePath, options);
+}
+
+async function withLspMatchersForScope(scope, relativePath, handler, options = {}) {
+  const merged = await loadMergedLspConfig();
+  if (merged.enabled === false) {
+    return { ok: false, error: 'LSP is disabled' };
+  }
+  if (!relativePath || relativePath.includes('..')) {
+    return { ok: false, error: 'Invalid path' };
+  }
+  const matchers = matchServersForPath(merged, relativePath);
+  if (matchers.length === 0) {
+    return { ok: false, error: `No LSP server configured for ${relativePath}` };
+  }
+  const fileUri = await ensureDocumentSyncedForScope(scope, relativePath, options);
+  return handler({ merged, matchers, fileUri });
 }
 
 async function withLspMatchers(relativePath, handler, options = {}) {
@@ -1511,7 +1534,16 @@ export async function getLspSignatureHelp(relativePath, line, character) {
  * Document symbol tree for a project-relative path (textDocument/documentSymbol).
  */
 export async function getLspDocumentSymbols(relativePath) {
-  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+  return getLspDocumentSymbolsForScope(LSP_SCOPE_EDITOR, relativePath);
+}
+
+/**
+ * Document symbol tree for a project-relative path (scoped tsserver instance).
+ * @param {string} scope
+ * @param {string} relativePath
+ */
+export async function getLspDocumentSymbolsForScope(scope, relativePath) {
+  const ctx = await withLspMatchersForScope(scope, relativePath, async ({ matchers, fileUri }) => ({
     ok: true,
     matchers,
     fileUri,
@@ -1522,7 +1554,7 @@ export async function getLspDocumentSymbols(relativePath) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
+      const state = await getConnection(scope, id, config);
       const result = await sendLspRequest(
         state.connection,
         'textDocument/documentSymbol',
@@ -1590,9 +1622,15 @@ export async function getLspWorkspaceSymbols(query) {
 
 /**
  * Call hierarchy at a 0-based position — prepare + incoming + outgoing calls.
+ * @param {string} relativePath
+ * @param {number} line
+ * @param {number} character
+ * @param {{ scope?: string, includeIncoming?: boolean }} [options]
  */
-export async function getLspCallHierarchy(relativePath, line, character) {
-  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+export async function getLspCallHierarchy(relativePath, line, character, options = {}) {
+  const scope = options.scope ?? LSP_SCOPE_EDITOR;
+  const includeIncoming = options.includeIncoming !== false;
+  const ctx = await withLspMatchersForScope(scope, relativePath, async ({ matchers, fileUri }) => ({
     ok: true,
     matchers,
     fileUri,
@@ -1608,7 +1646,7 @@ export async function getLspCallHierarchy(relativePath, line, character) {
 
   for (const { id, config } of ctx.matchers) {
     try {
-      const state = await getConnection(LSP_SCOPE_EDITOR, id, config);
+      const state = await getConnection(scope, id, config);
       const prepared = await sendLspRequest(
         state.connection,
         'textDocument/prepareCallHierarchy',
@@ -1623,20 +1661,21 @@ export async function getLspCallHierarchy(relativePath, line, character) {
         return { item: null, incomingCalls: [], outgoingCalls: [] };
       }
       const rawItem = items[0];
-      const [incomingRaw, outgoingRaw] = await Promise.all([
-        sendLspRequest(
+      const outgoingRaw = await sendLspRequest(
+        state.connection,
+        'callHierarchy/outgoingCalls',
+        { item: rawItem },
+        LSP_DEFINITION_TIMEOUT_MS,
+      );
+      let incomingRaw = [];
+      if (includeIncoming) {
+        incomingRaw = await sendLspRequest(
           state.connection,
           'callHierarchy/incomingCalls',
           { item: rawItem },
           LSP_DEFINITION_TIMEOUT_MS,
-        ),
-        sendLspRequest(
-          state.connection,
-          'callHierarchy/outgoingCalls',
-          { item: rawItem },
-          LSP_DEFINITION_TIMEOUT_MS,
-        ),
-      ]);
+        );
+      }
       return {
         item: normalizeCallHierarchyItem(rawItem),
         incomingCalls: normalizeIncomingCalls(incomingRaw),
@@ -1915,7 +1954,7 @@ function matchesServerProcessKey(processKey, serverId) {
 
 export function shutdownLspServers(serverIds) {
   const ids = new Set(serverIds.map((id) => String(id)));
-  for (const scope of [LSP_SCOPE_EDITOR, LSP_SCOPE_AGENT]) {
+  for (const scope of [LSP_SCOPE_EDITOR, LSP_SCOPE_AGENT, LSP_SCOPE_INDEX]) {
     const store = getScopeStore(scope);
     for (const id of ids) {
       for (const key of [...store.pendingConnections.keys()]) {
@@ -1935,7 +1974,7 @@ export function shutdownLspServers(serverIds) {
 
 export function shutdownAllLsp() {
   cancelAllDiagnosticWaiters();
-  for (const scope of [LSP_SCOPE_EDITOR, LSP_SCOPE_AGENT]) {
+  for (const scope of [LSP_SCOPE_EDITOR, LSP_SCOPE_AGENT, LSP_SCOPE_INDEX]) {
     const store = getScopeStore(scope);
     store.pendingConnections.clear();
     for (const [id, state] of store.processes) {

@@ -230,12 +230,12 @@ describe('code index integration', () => {
 
     const db = getCodeDb(repo);
     const version = db.pragma('user_version', { simple: true });
-    assert.ok(version >= 1);
+    assert.ok(version >= 2);
 
     const byFile = db
       .prepare(
         `SELECT s.file FROM symbols_fts f
-         JOIN symbols s ON s.id = f.symbol_id
+         JOIN symbols s ON s.rowid = f.rowid
          WHERE s.repo = ? AND symbols_fts MATCH ?
          LIMIT 5`,
       )
@@ -248,7 +248,7 @@ describe('code index integration', () => {
     const bySig = db
       .prepare(
         `SELECT s.name FROM symbols_fts f
-         JOIN symbols s ON s.id = f.symbol_id
+         JOIN symbols s ON s.rowid = f.rowid
          WHERE s.repo = ? AND symbols_fts MATCH ?
          LIMIT 5`,
       )

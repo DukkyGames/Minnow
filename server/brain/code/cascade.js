@@ -18,9 +18,10 @@ import { normalizeBrainCodeConfig } from './config.js';
 import {
   listIndexableFiles,
   normalizeIndexableRelPath,
-  reindexCode,
 } from './indexer.js';
 import { getCodeDb } from './schema.js';
+import { runBrainCodeReindex } from './index-host.js';
+import { runBoundedPool } from './indexer.js';
 
 /** Load merged config.brain.code settings (avoids circular import with query.js). */
 async function loadBrainCodeConfig() {
@@ -44,6 +45,11 @@ let wikiResynthesisTimer = null;
 
 /** @type {Promise<unknown> | null} */
 let lazyRefreshInFlight = null;
+
+/** @type {Map<string, Promise<unknown>>} */
+const cascadeInFlightByRepo = new Map();
+
+const STALE_STAT_CONCURRENCY = 32;
 
 /**
  * Hash one Merkle leaf from a workspace-relative file path and content hash.
@@ -191,29 +197,33 @@ export async function detectStaleFiles(opts = {}) {
   /** @type {string[]} */
   const changedFiles = [];
 
-  for (const row of indexed) {
-    const relFile = String(row.file);
-    const abs = path.join(root, relFile);
-    try {
-      const stat = await fs.stat(abs);
-      if (!stat.isFile()) {
+  await runBoundedPool(
+    indexed,
+    STALE_STAT_CONCURRENCY,
+    async (row) => {
+      const relFile = String(row.file);
+      const abs = path.join(root, relFile);
+      try {
+        const stat = await fs.stat(abs);
+        if (!stat.isFile()) {
+          changedFiles.push(relFile);
+          return;
+        }
+        const stored = indexedByFile.get(relFile);
+        if (stored && stored.mtimeMs === stat.mtimeMs) {
+          diskEntries.push({ file: relFile, hash: stored.hash });
+          return;
+        }
+        const { hash, mtimeMs } = await hashFileOnDisk(root, relFile);
+        diskEntries.push({ file: relFile, hash });
+        if (!stored || stored.hash !== hash || stored.mtimeMs !== mtimeMs) {
+          changedFiles.push(relFile);
+        }
+      } catch {
         changedFiles.push(relFile);
-        continue;
       }
-      const stored = indexedByFile.get(relFile);
-      if (stored && stored.mtimeMs === stat.mtimeMs) {
-        diskEntries.push({ file: relFile, hash: stored.hash });
-        continue;
-      }
-      const { hash, mtimeMs } = await hashFileOnDisk(root, relFile);
-      diskEntries.push({ file: relFile, hash });
-      if (!stored || stored.hash !== hash || stored.mtimeMs !== mtimeMs) {
-        changedFiles.push(relFile);
-      }
-    } catch {
-      changedFiles.push(relFile);
-    }
-  }
+    },
+  );
 
   if (discoverNewFiles) {
     const indexable = await listIndexableFiles(root, codeConfig.includeGlobs, codeConfig.excludeGlobs);
@@ -303,7 +313,7 @@ export async function propagateCodeChanges(opts = {}) {
   const codeConfig = opts.codeConfig ?? normalizeBrainCodeConfig(null);
   const files = opts.files?.map((f) => normalizeIndexableRelPath(root, f)).filter(Boolean);
 
-  const reindexResult = await reindexCode({
+  const reindexResult = await runBrainCodeReindex({
     files: files?.length ? files : undefined,
     focusFiles: opts.focusFiles ?? files ?? [],
     codeConfig,
@@ -431,24 +441,40 @@ export async function runCascade(opts = {}) {
     return { skipped: true, reason: 'cadence', trigger, reindexCadence: codeConfig.reindexCadence };
   }
 
-  let files = opts.files?.map((f) => String(f).trim()).filter(Boolean);
-  if (!files?.length && trigger !== 'manual') {
-    const stale = await detectStaleFiles({ codeConfig, discoverNewFiles: true });
-    if (!stale.stale) {
-      return { skipped: true, reason: 'fresh', trigger, merkleRoot: stale.merkleRoot };
-    }
-    files = stale.changedFiles;
+  const root = getEffectiveWorkspaceRoot();
+  const repo = brainWorkspaceKeyFromPath(root) || 'workspace';
+  const inFlight = cascadeInFlightByRepo.get(repo);
+  if (inFlight) {
+    return inFlight;
   }
 
-  const result = await propagateCodeChanges({
-    files: files?.length ? files : null,
-    focusFiles: files ?? [],
-    codeConfig,
-    trigger,
-  });
+  const run = (async () => {
+    let files = opts.files?.map((f) => String(f).trim()).filter(Boolean);
+    if (!files?.length && trigger !== 'manual') {
+      const stale = await detectStaleFiles({ codeConfig, discoverNewFiles: true });
+      if (!stale.stale) {
+        return { skipped: true, reason: 'fresh', trigger, merkleRoot: stale.merkleRoot };
+      }
+      files = stale.changedFiles;
+    }
 
-  scheduleWikiResynthesis();
-  return { ok: true, skipped: false, ...result };
+    const result = await propagateCodeChanges({
+      files: files?.length ? files : null,
+      focusFiles: files ?? [],
+      codeConfig,
+      trigger,
+    });
+
+    scheduleWikiResynthesis();
+    return { ok: true, skipped: false, ...result };
+  })();
+
+  cascadeInFlightByRepo.set(repo, run);
+  try {
+    return await run;
+  } finally {
+    cascadeInFlightByRepo.delete(repo);
+  }
 }
 
 /**

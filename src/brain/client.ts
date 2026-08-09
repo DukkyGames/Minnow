@@ -29,14 +29,24 @@ import type {
 
 const API_BASE = '';
 
+/** Default timeout for Brain API calls (ms). */
+const BRAIN_FETCH_TIMEOUT_MS = 120_000;
+
 async function brainFetch<T>(
   path: string,
   init?: RequestInit,
+  timeoutMs: number = BRAIN_FETCH_TIMEOUT_MS,
 ): Promise<T | null> {
   if (!isLocalServerAvailable()) return null;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
+      signal,
       headers: {
         'Content-Type': 'application/json',
         ...(init?.headers ?? {}),
@@ -46,6 +56,8 @@ async function brainFetch<T>(
     return (await res.json()) as T;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

@@ -142,9 +142,16 @@ export async function buildComposeContext(
         tokenBudget: codeConfig?.repoMapInjectionTokenBudget ?? codeConfig?.repoMapTokenBudget,
         focus: focusHints.focus,
         focusFiles: focusHints.focusFiles.length ? focusHints.focusFiles : undefined,
-        ensureIndexed: true,
+        ensureIndexed: false,
         profile: 'injection',
       })) || null;
+    if (injectCodeMap && codeConfig?.enabled) {
+      void fetch('/api/brain/code/cascade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: false, trigger: 'lazy-query' }),
+      }).catch(() => undefined);
+    }
   }
 
   let contextDocumentsBlock: string | null = null;

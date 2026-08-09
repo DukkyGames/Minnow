@@ -134,6 +134,7 @@ function buildChatToolExecuteContext(
   chat: Chat,
   toolCallId: string,
   toolLoopModeId: ReturnType<typeof normalizeModeId>,
+  signal: AbortSignal,
 ): ExecuteToolContext {
   const scopedWorkspaceRoot = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
   const boardWorktreeRoots = boardWorktreesRootsFromState(sessionState?.groups);
@@ -142,6 +143,7 @@ function buildChatToolExecuteContext(
     toolCallId,
     modeId: toolLoopModeId,
     workAgentId: chat.workAgentId ?? null,
+    signal,
     ...(scopedWorkspaceRoot ? { workspaceRoot: scopedWorkspaceRoot } : {}),
     ...(boardWorktreeRoots.length ? { extraPathRoots: boardWorktreeRoots } : {}),
   };
@@ -323,7 +325,7 @@ export async function runChatToolBatch(
       return executeTool(
         toolName,
         args as Record<string, unknown>,
-        buildChatToolExecuteContext(chat, ctx.toolCallId, toolLoopModeId),
+        buildChatToolExecuteContext(chat, ctx.toolCallId, toolLoopModeId, signal),
       );
     },
     onToolDone: (outcome) => {

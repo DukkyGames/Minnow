@@ -10,8 +10,9 @@ import { promisify } from 'node:util';
 import { getRipgrepPath } from '../../lib/ripgrep-path.js';
 import {
   getLspCallHierarchy,
-  getLspDocumentSymbols,
-  notifyLspDocument,
+  getLspDocumentSymbolsForScope,
+  LSP_SCOPE_INDEX,
+  notifyLspDocumentForScope,
 } from '../../lsp/manager.js';
 import { getWorkspaceRoot } from '../../workspace/root.js';
 import { brainWorkspaceKeyFromPath } from '../paths.js';
@@ -23,7 +24,7 @@ import {
   purgeFileFromIndex,
   upsertEdge,
   upsertFileHash,
-  upsertSymbol,
+  writeFileSymbols,
   writePageRanks,
 } from './schema.js';
 import {
@@ -31,8 +32,8 @@ import {
   buildPersonalizationVector,
   personalizedPageRank,
 } from './rank.js';
-import { runGrepSearch } from '../../tools/grep.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
+import { reportIndexProgress } from './index-progress.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -255,31 +256,36 @@ export async function indexSingleFile(db, repo, relFile, absFile, globalByFileLi
   const stat = await fs.stat(absFile);
   const fileHash = createHash('sha256').update(text, 'utf8').digest('hex');
 
-  await notifyLspDocument(relFile, 'open', text);
-  const { symbols: tree, error } = await getLspDocumentSymbols(relFile);
+  await notifyLspDocumentForScope(LSP_SCOPE_INDEX, relFile, 'open', text);
+  const { symbols: tree, error } = await getLspDocumentSymbolsForScope(
+    LSP_SCOPE_INDEX,
+    relFile,
+  );
   if (error) {
+    upsertFileHash(db, repo, relFile, fileHash, stat.mtimeMs, error);
+    await notifyLspDocumentForScope(LSP_SCOPE_INDEX, relFile, 'close');
     return { file: relFile, symbols: 0, edges: 0, error };
   }
 
   const flat = flattenDocumentSymbols(tree, repo, relFile, lines);
-  deleteSymbolsForFile(db, repo, relFile);
+  const symbolRows = flat.map((row) => ({
+    id: row.id,
+    repo: row.repo,
+    kind: row.kind,
+    name: row.name,
+    file: row.file,
+    line_start: row.line_start,
+    line_end: row.line_end,
+    signature: row.signature,
+    doc: row.doc,
+    content_hash: row.content_hash,
+    pagerank: 0,
+    usage_count: 0,
+  }));
+  writeFileSymbols(db, repo, relFile, symbolRows);
 
   const byFileLine = new Map();
   for (const row of flat) {
-    upsertSymbol(db, {
-      id: row.id,
-      repo: row.repo,
-      kind: row.kind,
-      name: row.name,
-      file: row.file,
-      line_start: row.line_start,
-      line_end: row.line_end,
-      signature: row.signature,
-      doc: row.doc,
-      content_hash: row.content_hash,
-      pagerank: 0,
-      usage_count: 0,
-    });
     byFileLine.set(`${relFile}:${row.line_start}`, {
       id: row.id,
       line_start: row.line_start,
@@ -299,7 +305,10 @@ export async function indexSingleFile(db, repo, relFile, absFile, globalByFileLi
     const sel = row.selection ?? { start: { line: row.line_start - 1, character: 0 } };
     const line = sel.start?.line ?? row.line_start - 1;
     const character = sel.start?.character ?? 0;
-    const hierarchy = await getLspCallHierarchy(relFile, line, character);
+    const hierarchy = await getLspCallHierarchy(relFile, line, character, {
+      scope: LSP_SCOPE_INDEX,
+      includeIncoming: false,
+    });
     if (!hierarchy.item) continue;
 
     for (const out of hierarchy.outgoingCalls ?? []) {
@@ -308,25 +317,15 @@ export async function indexSingleFile(db, repo, relFile, absFile, globalByFileLi
       upsertEdge(db, row.id, dst, 'calls');
       edgeCount += 1;
     }
-    for (const inc of hierarchy.incomingCalls ?? []) {
-      const src = resolveCallItemToSymbolId(globalByFileLine, repo, inc.from ?? {});
-      if (!src) continue;
-      upsertEdge(db, src, row.id, 'calls');
-      edgeCount += 1;
-    }
   }
 
-  upsertFileHash(db, repo, relFile, fileHash, stat.mtimeMs);
-  await notifyLspDocument(relFile, 'close');
+  upsertFileHash(db, repo, relFile, fileHash, stat.mtimeMs, null);
+  await notifyLspDocumentForScope(LSP_SCOPE_INDEX, relFile, 'close');
   return { file: relFile, symbols: flat.length, edges: edgeCount };
 }
 
-/** Max symbols to grep for usage_count augmentation per reindex pass. */
-const USAGE_AUGMENT_MAX_SYMBOLS = 1500;
-/** Concurrent ripgrep workers during usage_count augmentation. */
-const USAGE_AUGMENT_CONCURRENCY = 8;
-/** Wall-clock budget for usage_count augmentation (ms). */
-const USAGE_AUGMENT_TIME_BUDGET_MS = 30_000;
+/** Max symbols to grep for usage_count augmentation per full reindex pass. */
+const USAGE_AUGMENT_MAX_SYMBOLS = 50_000;
 
 /**
  * Run async work over items with bounded concurrency.
@@ -334,9 +333,9 @@ const USAGE_AUGMENT_TIME_BUDGET_MS = 30_000;
  * @param {T[]} items
  * @param {number} concurrency
  * @param {(item: T) => Promise<void>} fn
- * @param {() => boolean} shouldContinue
+ * @param {() => boolean} [shouldContinue]
  */
-async function runBoundedPool(items, concurrency, fn, shouldContinue) {
+export async function runBoundedPool(items, concurrency, fn, shouldContinue = () => true) {
   let nextIdx = 0;
   async function worker() {
     while (nextIdx < items.length && shouldContinue()) {
@@ -349,8 +348,7 @@ async function runBoundedPool(items, concurrency, fn, shouldContinue) {
 }
 
 /**
- * Augment usage_count via ripgrep name hits (ranking input).
- * Bounded by symbol cap, concurrency pool, and wall-clock budget.
+ * Augment usage_count via one ripgrep --json pass (full reindex only).
  * @param {import('better-sqlite3').Database} db
  * @param {string} repo
  * @param {ReturnType<typeof getWorkspaceRoot>} root
@@ -363,32 +361,69 @@ async function augmentUsageCounts(db, repo, root) {
        LIMIT ?`,
     )
     .all(repo, USAGE_AUGMENT_MAX_SYMBOLS);
-  const deps = {
-    resolveSafePath: (p) => path.resolve(root, p),
-    toRelativePath: (abs) => path.relative(root, abs).replace(/\\/g, '/'),
-    getWorkspaceRoot: () => root,
-  };
-  const started = Date.now();
-  const shouldContinue = () => Date.now() - started < USAGE_AUGMENT_TIME_BUDGET_MS;
-  const updateStmt = db.prepare('UPDATE symbols SET usage_count = ? WHERE id = ?');
 
-  await runBoundedPool(
-    symbols,
-    USAGE_AUGMENT_CONCURRENCY,
-    async (sym) => {
-      if (!shouldContinue()) return;
-      const name = String(sym.name ?? '');
-      if (!name || name.length < 3) return;
-      const out = await runGrepSearch(
-        { pattern: `\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, head_limit: 50, literal: false },
-        deps,
-      );
-      if (out.startsWith('Error:')) return;
-      const count = out.split(/\r?\n/).filter((line) => /:\d+:/.test(line)).length;
-      updateStmt.run(count, sym.id);
-    },
-    shouldContinue,
-  );
+  /** @type {Map<string, string[]>} */
+  const idsByName = new Map();
+  for (const sym of symbols) {
+    const name = String(sym.name ?? '');
+    if (!name || name.length < 3) continue;
+    const bucket = idsByName.get(name);
+    if (bucket) bucket.push(sym.id);
+    else idsByName.set(name, [sym.id]);
+  }
+  if (idsByName.size === 0) return;
+
+  const args = [
+    '--json',
+    '--no-messages',
+    '-e',
+    '\\b[A-Za-z_][A-Za-z0-9_]{2,}\\b',
+    root,
+  ];
+  let stdout = '';
+  try {
+    const result = await execFileAsync(rgExecutable, args, {
+      cwd: root,
+      maxBuffer: 64 * 1024 * 1024,
+      windowsHide: true,
+    });
+    stdout = result.stdout ?? '';
+  } catch (err) {
+    const code = err && typeof err === 'object' ? err.code : undefined;
+    if (code === 1) return;
+    throw err;
+  }
+
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (parsed?.type !== 'match' || !parsed.data) continue;
+    const submatches = Array.isArray(parsed.data.submatches) ? parsed.data.submatches : [];
+    for (const sub of submatches) {
+      const token = String(sub?.match?.text ?? '').trim();
+      if (!token || !idsByName.has(token)) continue;
+      counts.set(token, (counts.get(token) ?? 0) + 1);
+    }
+  }
+
+  const stmts = db.prepare('UPDATE symbols SET usage_count = ? WHERE id = ?');
+  const tx = db.transaction((entries) => {
+    for (const [name, hitCount] of entries) {
+      const ids = idsByName.get(name);
+      if (!ids) continue;
+      for (const id of ids) {
+        stmts.run(hitCount, id);
+      }
+    }
+  });
+  tx([...counts.entries()]);
 }
 
 /**
@@ -427,19 +462,39 @@ export async function reindexCode(opts = {}) {
 
   const globalByFileLine = new Map();
   const results = [];
+  const isIncremental = Boolean(opts.files?.length);
+  const filesToProcess = [];
+
   for (const relFile of files) {
     const absFile = path.join(root, relFile);
     try {
       const stat = await fs.stat(absFile);
       if (!stat.isFile()) continue;
       const existing = db
-        .prepare('SELECT sha256 FROM file_hashes WHERE repo = ? AND file = ?')
+        .prepare('SELECT sha256, index_error FROM file_hashes WHERE repo = ? AND file = ?')
         .get(repo, relFile);
       const text = await fs.readFile(absFile, 'utf8');
       const hash = createHash('sha256').update(text, 'utf8').digest('hex');
-      if (existing?.sha256 === hash && !opts.files) {
+      if (existing?.sha256 === hash && !opts.files && !existing.index_error) {
         continue;
       }
+      filesToProcess.push({ relFile, absFile });
+    } catch {
+      /* unreadable — handled in main loop */
+      filesToProcess.push({ relFile, absFile: path.join(root, relFile) });
+    }
+  }
+
+  reportIndexProgress(repo, {
+    indexing: true,
+    filesDone: 0,
+    filesTotal: filesToProcess.length,
+    phase: 'symbols',
+  });
+
+  let filesDone = 0;
+  for (const { relFile, absFile } of filesToProcess) {
+    try {
       const result = await indexSingleFile(db, repo, relFile, absFile, globalByFileLine);
       results.push(result);
     } catch (err) {
@@ -447,7 +502,21 @@ export async function reindexCode(opts = {}) {
       const message = err instanceof Error ? err.message : String(err);
       results.push({ file: relFile, symbols: 0, edges: 0, error: message });
     }
+    filesDone += 1;
+    reportIndexProgress(repo, {
+      indexing: true,
+      filesDone,
+      filesTotal: filesToProcess.length,
+      phase: 'symbols',
+    });
   }
+
+  reportIndexProgress(repo, {
+    indexing: true,
+    filesDone: filesToProcess.length,
+    filesTotal: filesToProcess.length,
+    phase: 'rank',
+  });
 
   if (!opts.files) {
     const liveFiles = new Set(files);
@@ -461,8 +530,17 @@ export async function reindexCode(opts = {}) {
     }
   }
 
-  await augmentUsageCounts(db, repo, root);
+  if (!isIncremental) {
+    await augmentUsageCounts(db, repo, root);
+  }
   recomputePageRank(db, new Set(opts.focusFiles ?? []));
+
+  reportIndexProgress(repo, {
+    indexing: false,
+    filesDone: filesToProcess.length,
+    filesTotal: filesToProcess.length,
+    phase: 'idle',
+  });
 
   return {
     repo,

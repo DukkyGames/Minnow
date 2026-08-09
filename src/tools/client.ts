@@ -144,6 +144,8 @@ export interface ExecuteToolContext {
   extraPathRoots?: string[];
   /** Benchmark runs bypass Ask permission modals and path-ack prompts. */
   benchmarkAutonomous?: boolean;
+  /** Abort when the user stops the chat turn (server tools). */
+  signal?: AbortSignal;
 }
 
 // run_python is intentionally excluded: the streaming path can only spawn a single
@@ -760,6 +762,8 @@ async function resolveToolWorkspaceRoot(
 }
 
 /** POST { name, args, modeId?, workspaceRoot? } to the Node tools middleware. */
+const SERVER_TOOL_TIMEOUT_MS = 600_000;
+
 async function executeServerTool(
   name: string,
   args: Record<string, unknown>,
@@ -781,15 +785,26 @@ async function executeServerTool(
   if (workspaceRoot) {
     payload.workspaceRoot = workspaceRoot;
   }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SERVER_TOOL_TIMEOUT_MS);
+  const signal = context?.signal
+    ? AbortSignal.any([context.signal, controller.signal])
+    : controller.signal;
   try {
     response = await fetch('/api/tools', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (context?.signal?.aborted) {
+      return { content: 'Error: tool call cancelled' };
+    }
     return { content: `Error: failed to reach Minnow (${message})` };
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   let responsePayload: {

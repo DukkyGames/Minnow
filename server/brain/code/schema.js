@@ -20,7 +20,7 @@ const dbCacheLru = [];
 export const MAX_OPEN_CODE_DBS = 8;
 
 /** Bump when schema migrations require FTS rebuild or similar (stored in PRAGMA user_version). */
-export const CODE_SCHEMA_VERSION = 1;
+export const CODE_SCHEMA_VERSION = 2;
 
 /** Absolute path for a workspace code-index database file. */
 export function codeDbPath(workspaceKey) {
@@ -61,6 +61,7 @@ function initSchema(database) {
       file TEXT NOT NULL,
       sha256 TEXT NOT NULL,
       mtime_ms INTEGER NOT NULL,
+      index_error TEXT,
       PRIMARY KEY (repo, file)
     );
 
@@ -79,48 +80,95 @@ function initSchema(database) {
     CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_symbol);
   `);
 
-  migrateSymbolsFts(database);
+  migrateCodeSchema(database);
 }
 
-/** Create the FTS5 mirror with name, file path, signature, and doc columns. */
+/** FTS5 external-content table — triggers on symbols keep the index in sync. */
 function createSymbolsFtsTable(database) {
   database.exec(`
     CREATE VIRTUAL TABLE symbols_fts USING fts5(
-      symbol_id UNINDEXED,
       name,
       file,
       signature,
       doc,
+      content='symbols',
+      content_rowid='rowid',
       tokenize='porter unicode61'
     );
   `);
 }
 
+/** Sync triggers for external-content FTS5 (delete row carries old values on update). */
+function createSymbolsFtsTriggers(database) {
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS symbols_fts_ai AFTER INSERT ON symbols BEGIN
+      INSERT INTO symbols_fts(rowid, name, file, signature, doc)
+      VALUES (new.rowid, new.name, new.file, new.signature, new.doc);
+    END;
+    CREATE TRIGGER IF NOT EXISTS symbols_fts_ad AFTER DELETE ON symbols BEGIN
+      INSERT INTO symbols_fts(symbols_fts, rowid, name, file, signature, doc)
+      VALUES('delete', old.rowid, old.name, old.file, old.signature, old.doc);
+    END;
+    CREATE TRIGGER IF NOT EXISTS symbols_fts_au AFTER UPDATE ON symbols BEGIN
+      INSERT INTO symbols_fts(symbols_fts, rowid, name, file, signature, doc)
+      VALUES('delete', old.rowid, old.name, old.file, old.signature, old.doc);
+      INSERT INTO symbols_fts(rowid, name, file, signature, doc)
+      VALUES (new.rowid, new.name, new.file, new.signature, new.doc);
+    END;
+  `);
+}
+
+/** Drop legacy FTS triggers before replacing the virtual table. */
+function dropSymbolsFtsTriggers(database) {
+  for (const name of ['symbols_fts_ai', 'symbols_fts_ad', 'symbols_fts_au']) {
+    database.exec(`DROP TRIGGER IF EXISTS ${name}`);
+  }
+}
+
 /**
- * Migrate legacy 2-column symbols_fts to the 5-column layout via user_version.
- * Repopulates from the persistent symbols table — no full reindex required.
+ * Rebuild external-content FTS from symbols (in-place migration, no reindex).
  * @param {import('better-sqlite3').Database} database
  */
-function migrateSymbolsFts(database) {
-  const version = database.pragma('user_version', { simple: true });
+function rebuildSymbolsFtsExternal(database) {
+  dropSymbolsFtsTriggers(database);
+  database.exec('DROP TABLE IF EXISTS symbols_fts');
+  createSymbolsFtsTable(database);
+  createSymbolsFtsTriggers(database);
+  database.exec(`INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')`);
+}
+
+/** Add file_hashes.index_error when upgrading from v1. */
+function migrateFileHashesColumns(database) {
+  const cols = database.prepare('PRAGMA table_info(file_hashes)').all();
+  const hasError = cols.some((c) => c.name === 'index_error');
+  if (!hasError) {
+    database.exec('ALTER TABLE file_hashes ADD COLUMN index_error TEXT');
+  }
+}
+
+/**
+ * Schema migrations via PRAGMA user_version (FTS layout, file_hashes columns).
+ * @param {import('better-sqlite3').Database} database
+ */
+function migrateCodeSchema(database) {
   const ftsExists = database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='symbols_fts'")
     .get();
+  const version = Number(database.pragma('user_version', { simple: true }) ?? 0);
 
   if (version >= CODE_SCHEMA_VERSION) {
-    if (!ftsExists) createSymbolsFtsTable(database);
+    if (!ftsExists) {
+      rebuildSymbolsFtsExternal(database);
+    } else {
+      createSymbolsFtsTriggers(database);
+    }
+    migrateFileHashesColumns(database);
     return;
   }
 
   const tx = database.transaction(() => {
-    if (ftsExists) {
-      database.exec('DROP TABLE symbols_fts');
-    }
-    createSymbolsFtsTable(database);
-    database.exec(`
-      INSERT INTO symbols_fts (symbol_id, name, file, signature, doc)
-      SELECT id, name, file, signature, doc FROM symbols;
-    `);
+    migrateFileHashesColumns(database);
+    rebuildSymbolsFtsExternal(database);
     database.pragma(`user_version = ${CODE_SCHEMA_VERSION}`);
   });
   tx();
@@ -176,6 +224,7 @@ export function getCodeDb(workspaceKey) {
   const db = new Database(codeDbPath(key));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
   initSchema(db);
   dbByWorkspaceKey.set(cacheKey, db);
   touchCodeDbCache(cacheKey);
@@ -265,75 +314,127 @@ export function purgeFileFromIndex(db, repo, file) {
   db.prepare('DELETE FROM file_hashes WHERE repo = ? AND file = ?').run(repo, relFile);
 }
 
-/** Remove symbols and FTS rows for one file before re-indexing it. */
+/** Cached prepared statements per open DB handle (avoid recompile in hot loops). */
+/** @type {WeakMap<import('better-sqlite3').Database, Record<string, import('better-sqlite3').Statement>>} */
+const writeStmtsByDb = new WeakMap();
+
+/**
+ * @param {import('better-sqlite3').Database} db
+ */
+function getWriteStmts(db) {
+  let stmts = writeStmtsByDb.get(db);
+  if (!stmts) {
+    stmts = {
+      selectSymbolIdsForFile: db.prepare(
+        'SELECT id FROM symbols WHERE repo = ? AND file = ?',
+      ),
+      delEdge: db.prepare(
+        'DELETE FROM edges WHERE src_symbol = ? OR dst_symbol = ?',
+      ),
+      delSym: db.prepare('DELETE FROM symbols WHERE id = ?'),
+      upsertSymbol: db.prepare(
+        `INSERT INTO symbols (
+          id, repo, kind, name, file, line_start, line_end,
+          signature, doc, content_hash, pagerank, usage_count
+        ) VALUES (
+          @id, @repo, @kind, @name, @file, @line_start, @line_end,
+          @signature, @doc, @content_hash, @pagerank, @usage_count
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          repo = excluded.repo,
+          kind = excluded.kind,
+          name = excluded.name,
+          file = excluded.file,
+          line_start = excluded.line_start,
+          line_end = excluded.line_end,
+          signature = excluded.signature,
+          doc = excluded.doc,
+          content_hash = excluded.content_hash,
+          usage_count = excluded.usage_count`,
+      ),
+      upsertEdge: db.prepare(
+        `INSERT INTO edges (src_symbol, dst_symbol, kind)
+         VALUES (?, ?, ?)
+         ON CONFLICT(src_symbol, dst_symbol, kind) DO NOTHING`,
+      ),
+      upsertFileHash: db.prepare(
+        `INSERT INTO file_hashes (repo, file, sha256, mtime_ms, index_error)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(repo, file) DO UPDATE SET
+           sha256 = excluded.sha256,
+           mtime_ms = excluded.mtime_ms,
+           index_error = excluded.index_error`,
+      ),
+      updateUsageCount: db.prepare('UPDATE symbols SET usage_count = ? WHERE id = ?'),
+    };
+    writeStmtsByDb.set(db, stmts);
+  }
+  return stmts;
+}
+
+/** Remove symbols (and edges) for one file before re-indexing it. FTS syncs via triggers. */
 export function deleteSymbolsForFile(db, repo, file) {
-  const ids = db
-    .prepare('SELECT id FROM symbols WHERE repo = ? AND file = ?')
+  const stmts = getWriteStmts(db);
+  const ids = stmts.selectSymbolIdsForFile
     .all(repo, file)
     .map((row) => row.id);
   if (ids.length === 0) return;
-  const delEdge = db.prepare(
-    'DELETE FROM edges WHERE src_symbol = ? OR dst_symbol = ?',
-  );
-  const delSym = db.prepare('DELETE FROM symbols WHERE id = ?');
-  const delFts = db.prepare('DELETE FROM symbols_fts WHERE symbol_id = ?');
   const tx = db.transaction((symbolIds) => {
     for (const id of symbolIds) {
-      delEdge.run(id, id);
-      delFts.run(id);
-      delSym.run(id);
+      stmts.delEdge.run(id, id);
+      stmts.delSym.run(id);
     }
   });
   tx(ids);
 }
 
-/** Upsert one symbol row and its FTS mirror. */
+/**
+ * Replace all symbols for one file in a single transaction (cached statements).
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} repo
+ * @param {string} relFile
+ * @param {Array<Record<string, unknown>>} rows
+ */
+export function writeFileSymbols(db, repo, relFile, rows) {
+  const stmts = getWriteStmts(db);
+  const tx = db.transaction((symbolRows) => {
+    const ids = stmts.selectSymbolIdsForFile
+      .all(repo, relFile)
+      .map((row) => row.id);
+    for (const id of ids) {
+      stmts.delEdge.run(id, id);
+      stmts.delSym.run(id);
+    }
+    for (const row of symbolRows) {
+      stmts.upsertSymbol.run(row);
+    }
+  });
+  tx(rows);
+}
+
+/** Upsert one symbol row (FTS maintained by triggers). */
 export function upsertSymbol(db, row) {
-  db.prepare(
-    `INSERT INTO symbols (
-      id, repo, kind, name, file, line_start, line_end,
-      signature, doc, content_hash, pagerank, usage_count
-    ) VALUES (
-      @id, @repo, @kind, @name, @file, @line_start, @line_end,
-      @signature, @doc, @content_hash, @pagerank, @usage_count
-    )
-    ON CONFLICT(id) DO UPDATE SET
-      repo = excluded.repo,
-      kind = excluded.kind,
-      name = excluded.name,
-      file = excluded.file,
-      line_start = excluded.line_start,
-      line_end = excluded.line_end,
-      signature = excluded.signature,
-      doc = excluded.doc,
-      content_hash = excluded.content_hash,
-      usage_count = excluded.usage_count`,
-  ).run(row);
-  db.prepare('DELETE FROM symbols_fts WHERE symbol_id = ?').run(row.id);
-  db.prepare(
-    'INSERT INTO symbols_fts (symbol_id, name, file, signature, doc) VALUES (?, ?, ?, ?, ?)',
-  ).run(row.id, row.name, row.file, row.signature ?? '', row.doc ?? '');
+  getWriteStmts(db).upsertSymbol.run(row);
 }
 
 /** Upsert a directed graph edge (calls, imports, extends, uses). */
 export function upsertEdge(db, srcSymbol, dstSymbol, kind) {
   if (!srcSymbol || !dstSymbol || srcSymbol === dstSymbol) return;
-  db.prepare(
-    `INSERT INTO edges (src_symbol, dst_symbol, kind)
-     VALUES (?, ?, ?)
-     ON CONFLICT(src_symbol, dst_symbol, kind) DO NOTHING`,
-  ).run(srcSymbol, dstSymbol, kind);
+  getWriteStmts(db).upsertEdge.run(srcSymbol, dstSymbol, kind);
 }
 
-/** Record file content hash after a successful index pass. */
-export function upsertFileHash(db, repo, file, sha256, mtimeMs) {
-  db.prepare(
-    `INSERT INTO file_hashes (repo, file, sha256, mtime_ms)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(repo, file) DO UPDATE SET
-       sha256 = excluded.sha256,
-       mtime_ms = excluded.mtime_ms`,
-  ).run(repo, file, sha256, mtimeMs);
+/**
+ * Record file content hash after an index pass (success or recorded failure).
+ * @param {string | null | undefined} indexError — set when LSP/index failed for this file
+ */
+export function upsertFileHash(db, repo, file, sha256, mtimeMs, indexError = null) {
+  getWriteStmts(db).upsertFileHash.run(
+    repo,
+    file,
+    sha256,
+    mtimeMs,
+    indexError ?? null,
+  );
 }
 
 /** Persist computed PageRank scores. */
