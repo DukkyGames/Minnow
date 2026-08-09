@@ -34,6 +34,12 @@ export function isFullscreenOverlayObscuringWorkspace(): boolean {
   return false;
 }
 
+/** True when the Minnow wiki overlay (#/wiki) covers the workspace. */
+export function isProductWikiOverlayVisible(): boolean {
+  const el = document.getElementById('productWikiOverlay');
+  return Boolean(el && !el.classList.contains('hidden'));
+}
+
 /** Open menubar/chrome popovers that overlap the preview pane (native layer wins). */
 let chromePopoverOpenCount = 0;
 
@@ -119,6 +125,7 @@ export function shouldShowElectronPreviewHost(): boolean {
   // Native guest is a window-level overlay — hide when Code main-column overlays cover the workspace.
   if (isMainColumnOverlaySuppressingChatDom()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
+  if (isProductWikiOverlayVisible()) return false;
   if (isChromePopoverOpen()) return false;
   const body = document.getElementById('previewBody');
   if (!body) return false;

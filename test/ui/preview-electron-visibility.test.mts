@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import {
   isFullscreenOverlayObscuringWorkspace,
+  isProductWikiOverlayVisible,
   isPreviewPaneDomVisible,
   isChromePopoverOpen,
   registerChromePopover,
@@ -159,6 +160,26 @@ describe('preview-electron-visibility', () => {
     assert.equal(isFullscreenOverlayObscuringWorkspace(), false);
     elements.get('issuesView')!.classList.add('is-open');
     assert.equal(isFullscreenOverlayObscuringWorkspace(), true);
+  });
+
+  test('isProductWikiOverlayVisible detects wiki overlay open', () => {
+    assert.equal(isProductWikiOverlayVisible(), false);
+    elements.set('productWikiOverlay', { classList: new Set(['hidden']) });
+    assert.equal(isProductWikiOverlayVisible(), false);
+    elements.get('productWikiOverlay')!.classList.delete('hidden');
+    assert.equal(isProductWikiOverlayVisible(), true);
+  });
+
+  test('shouldShowElectronPreviewHost is false when product wiki overlay is open', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    elements.set('productWikiOverlay', { classList: new Set() });
+    assert.equal(shouldShowElectronPreviewHost(), false);
   });
 
   test('shouldShowElectronPreviewHost is false when Issues app is open', () => {

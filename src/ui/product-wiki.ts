@@ -352,9 +352,11 @@ async function syncProductWikiFromHash(): Promise<void> {
   const root = ensureProductWikiRoot();
   if (!path) {
     root.classList.add('hidden');
+    void import('./preview-electron-visibility').then((m) => m.scheduleElectronPreviewHostVisibilitySync());
     return;
   }
   root.classList.remove('hidden');
+  void import('./preview-electron-visibility').then((m) => m.scheduleElectronPreviewHostVisibilitySync());
   if (!catalog.length) {
     try {
       catalog = await fetchProductWikiCatalog();
