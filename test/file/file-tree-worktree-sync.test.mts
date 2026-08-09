@@ -244,7 +244,7 @@ describe('file tree tool context merge', () => {
 });
 
 describe('resolvePanelBrowseCwd', () => {
-  test('board view prefers integration worktree over task chat worktree', () => {
+  test('board view prefers integration worktree over planner chat worktree', () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
     const boardDir = `${MAIN_WS}/.minnow/worktrees/minnow-abc/board-1`;
     const integrationPath = `${boardDir}/integration`;
@@ -294,6 +294,67 @@ describe('resolvePanelBrowseCwd', () => {
       }),
       integrationPath,
     );
+  });
+
+  test('embedded board task chat follows task worktree while board view is active', async () => {
+    const { setOpenBoardChatId } = await import(
+      '../../src/ui/orchestrate-board-chat-state.ts'
+    );
+    setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
+    const boardDir = `${MAIN_WS}/.minnow/worktrees/minnow-abc/board-1`;
+    const integrationPath = `${boardDir}/integration`;
+    const taskPath = `${boardDir}/task-T1`;
+    const integrationBranch = 'minnow/board/board-1/integration';
+    const group = {
+      id: 'board-1',
+      name: 'Board',
+      workspacePath: MAIN_WS,
+      collapsed: false,
+      order: 0,
+      createdAt: 0,
+      viewMode: 'board' as const,
+      orchestrateBoard: {
+        planPath: 'documentation/plans/p.md',
+        executionMode: 'auto' as const,
+        integrationBranch,
+        tasks: [
+          {
+            id: 'T1',
+            title: 'Task',
+            wave: 1,
+            category: 'code' as const,
+            status: 'in_progress' as const,
+            worktreePath: taskPath,
+          },
+        ],
+        waves: [{ id: 1, status: 'in_progress' as const }],
+        startedAt: 0,
+        lastUpdatedAt: 0,
+      },
+    };
+    const chat = {
+      id: 'task-chat',
+      model: 'model',
+      history: [],
+      boardGroupId: 'board-1',
+      boardTaskId: 'T1',
+      worktreeRoot: taskPath,
+    };
+    setOpenBoardChatId('task-chat');
+    try {
+      assert.equal(
+        resolvePanelBrowseCwd({
+          chat,
+          groups: [group],
+          activeBoardGroup: group,
+          chats: [chat],
+        }),
+        taskPath,
+      );
+      assert.notEqual(integrationPath, taskPath);
+    } finally {
+      setOpenBoardChatId(null);
+    }
   });
 
   test('chat view follows active chat worktree', () => {

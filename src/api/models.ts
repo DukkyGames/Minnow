@@ -153,7 +153,13 @@ export function syncModelOptionLoadUnloadButtonElement(btn: HTMLButtonElement): 
   }
 
   btn.hidden = false;
-  const row = getModelRowForSelectOrCanonicalId(raw);
+  const directRow = modelCache.get(raw);
+  const decoded = decodeModelSelectKey(raw);
+  const row =
+    directRow ??
+    (decoded
+      ? modelCache.get(encodeModelSelectKey(decoded.providerId, decoded.modelId))
+      : undefined);
   const loaded = row ? isModelLoaded(row.state) : false;
   setModelLoadUnloadButtonIdle(btn, loaded, true);
   btn.disabled = isModelLoadUnloadBusy();

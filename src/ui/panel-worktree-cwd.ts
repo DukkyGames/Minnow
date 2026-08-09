@@ -8,6 +8,7 @@ import {
 } from '../state/worktree-isolation';
 import { getWorkspacePath } from '../state/workspace';
 import type { Chat, ChatGroup } from '../types';
+import { isBoardChatEmbedOpenForChat } from './orchestrate-board-chat-state';
 
 /** Normalize path separators and trailing slashes for panel comparisons. */
 export function normalizePanelPath(p: string): string {
@@ -62,7 +63,8 @@ export function resolvePanelBrowseRunTargetSeed(
 
 /**
  * Resolve git-panel browse cwd from the active chat and optional board view context.
- * Board view with isolation prefers the integration worktree (MIN-464).
+ * Board view with isolation prefers the integration worktree (MIN-464). When a board
+ * task chat is open inside the orchestrate pane, follow that chat's task worktree.
  */
 export function resolvePanelBrowseCwd(input: {
   chat: Chat;
@@ -73,7 +75,10 @@ export function resolvePanelBrowseCwd(input: {
   const { chat, groups, activeBoardGroup, chats } = input;
   let worktreeRoot: string | undefined;
 
-  if (activeBoardGroup?.viewMode === 'board') {
+  const boardViewActive = activeBoardGroup?.viewMode === 'board';
+  const boardChatEmbedForActiveChat = isBoardChatEmbedOpenForChat(chat.id);
+
+  if (boardViewActive && !boardChatEmbedForActiveChat) {
     worktreeRoot = resolveBoardIntegrationWorktreePath(activeBoardGroup, chats);
   }
 

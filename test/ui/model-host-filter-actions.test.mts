@@ -216,6 +216,8 @@ describe('model host filter actions', () => {
     try {
       const { setStorageModeForTests } = await import('../../src/config/storage-mode.ts');
       setStorageModeForTests('server');
+      const { modelCache } = await import('../../src/app-state.ts');
+      modelCache.clear();
       const { syncModelOptionLoadUnloadButtonElement } = await import('../../src/api/models.ts');
       const btn = doc.querySelector('.model-select-option-load-unload') as HTMLButtonElement;
 

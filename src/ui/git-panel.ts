@@ -2211,7 +2211,7 @@ export function toggleGitSidePanel(): void {
 /**
  * Sync git panel browse cwd + file tree from the active chat's composer run-target.
  * On orchestrate board view with worktree isolation, browse roots follow the board
- * integration worktree instead of per-task chat worktrees (MIN-464).
+ * integration worktree; embedded board task chats use that chat's task worktree (MIN-464).
  * Skips when the user manually picked a worktree (browse override).
  */
 export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): void {

@@ -3532,6 +3532,9 @@ export function openBoardChatInOrchestrate(chatId: string): void {
       refreshBoardChatHeader();
       remountBoardChatStreamDom(chatId);
     });
+    void import('./git-panel').then((m) =>
+      m.syncPanelFromActiveChat({ forceFileTree: true }),
+    );
     return;
   }
 
@@ -3557,6 +3560,7 @@ export function closeBoardChatInOrchestrate(): void {
     return;
   }
   if (group) renderBoardView(group);
+  void import('./git-panel').then((m) => m.syncPanelFromActiveChat({ forceFileTree: true }));
 }
 
 /** Open another board from the run-pane rail without bouncing through the hub. */
