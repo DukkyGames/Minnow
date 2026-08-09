@@ -147,6 +147,13 @@ export default defineConfig({
     include: [...CODE_MIRROR_OPTIMIZE_INCLUDE, 'highlight.js'],
   },
   server: {
+    // chokidar opens one fs.watch handle per *file*, not per directory, and on Windows
+    // each handle costs ~100 KB of native memory. Agent worktrees under .claude/ (4.7k
+    // files) plus packaged release output pushed the dev server to ~11k watchers and
+    // ~1.1 GB resident outside the V8 heap. Neither tree is a dev-server input.
+    watch: {
+      ignored: ['**/.claude/**', '**/release/**'],
+    },
     warmup: {
       clientFiles: [...EDITOR_WARMUP_FILES],
     },

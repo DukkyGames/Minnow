@@ -41,6 +41,11 @@ import {
 } from './terminal-tabs';
 import { stripAnsi } from '../lib/strip-ansi';
 import {
+  capTextOutput,
+  DEFAULT_MAX_OUTPUT_CHARS,
+  PROCESS_MAX_ACCUMULATE_BYTES,
+} from '../../server/tools/output-cap.js';
+import {
   focusTerminalXterm,
   initTerminalXterm,
   isTerminalXtermReady,
@@ -824,7 +829,22 @@ export async function runCommandWithTerminalStream(
   let stopped = false;
   let stdoutAcc = '';
   let stderrAcc = '';
+  let accTruncated = false;
   let aborted = false;
+
+  // Mirror the server's appendBuffer ceiling: a chatty process (e.g. a per-frame
+  // console warning in a test harness) can otherwise stream tens of MB into these
+  // strings, which then land verbatim in the persisted tool result.
+  const accumulate = (current: string, text: string): string => {
+    if (current.length >= PROCESS_MAX_ACCUMULATE_BYTES) {
+      accTruncated = true;
+      return current;
+    }
+    const room = PROCESS_MAX_ACCUMULATE_BYTES - current.length;
+    if (text.length <= room) return current + text;
+    accTruncated = true;
+    return current + text.slice(0, room);
+  };
 
   const onAbort = () => {
     aborted = true;
@@ -837,11 +857,11 @@ export async function runCommandWithTerminalStream(
       runId,
       (ev) => {
         if (ev.type === 'stdout') {
-          stdoutAcc += ev.text;
+          stdoutAcc = accumulate(stdoutAcc, ev.text);
           appendTerminalOutput(runId, 'stdout', ev.text);
           options.hooks?.onChunk?.(runId, 'stdout', ev.text);
         } else if (ev.type === 'stderr') {
-          stderrAcc += ev.text;
+          stderrAcc = accumulate(stderrAcc, ev.text);
           appendTerminalOutput(runId, 'stderr', ev.text);
           options.hooks?.onChunk?.(runId, 'stderr', ev.text);
         } else if (ev.type === 'exit') {
@@ -897,11 +917,27 @@ export async function runCommandWithTerminalStream(
           ? `${label} (timed out after ${timeoutSecs}s)`
           : `${label} (exit ${exitCode ?? 1})`,
   ];
+  if (accTruncated) {
+    parts.push(
+      `(subprocess output exceeded ${PROCESS_MAX_ACCUMULATE_BYTES} bytes and was cut during capture)`,
+    );
+  }
+  // Same ceiling as the blocking /api/tools path (formatProcessOutput): the result
+  // string is persisted into messages.payload_json, so an uncapped one bloats the
+  // sessions store permanently.
   if (stdoutAcc.trim()) {
-    parts.push(`stdout:\n${stdoutAcc.trimEnd()}`);
+    const { text } = capTextOutput(stdoutAcc.trimEnd(), {
+      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
+      footerHint: 'narrow the command scope or paginate follow-up reads',
+    });
+    parts.push(`stdout:\n${text}`);
   }
   if (stderrAcc.trim()) {
-    parts.push(`stderr:\n${stderrAcc.trimEnd()}`);
+    const { text } = capTextOutput(stderrAcc.trimEnd(), {
+      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
+      footerHint: 'narrow the command scope or paginate follow-up reads',
+    });
+    parts.push(`stderr:\n${text}`);
   }
   if (!stdoutAcc.trim() && !stderrAcc.trim()) {
     parts.push('(no output)');
