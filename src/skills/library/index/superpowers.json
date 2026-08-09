@@ -1,91 +1,91 @@
-{
-  "packId": "superpowers",
-  "commit": "3dcbd5c4b48e02263fbf4a3c01e3fe4f81d584d9",
-  "generatedAt": "2026-08-08T18:54:42.626Z",
-  "skills": [
-    {
-      "skillId": "brainstorming",
-      "label": "Brainstorming",
-      "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation.",
-      "subpath": "skills/brainstorming"
-    },
-    {
-      "skillId": "dispatching-parallel-agents",
-      "label": "Dispatching Parallel Agents",
-      "description": "Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies",
-      "subpath": "skills/dispatching-parallel-agents"
-    },
-    {
-      "skillId": "executing-plans",
-      "label": "Executing Plans",
-      "description": "Use when you have a written implementation plan to execute in a separate session with review checkpoints",
-      "subpath": "skills/executing-plans"
-    },
-    {
-      "skillId": "finishing-a-development-branch",
-      "label": "Finishing A Development Branch",
-      "description": "Use when implementation is complete, all tests pass, and you need to decide how to integrate the work",
-      "subpath": "skills/finishing-a-development-branch"
-    },
-    {
-      "skillId": "receiving-code-review",
-      "label": "Receiving Code Review",
-      "description": "Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation",
-      "subpath": "skills/receiving-code-review"
-    },
-    {
-      "skillId": "requesting-code-review",
-      "label": "Requesting Code Review",
-      "description": "Use when completing tasks, implementing major features, or before merging to verify work meets requirements",
-      "subpath": "skills/requesting-code-review"
-    },
-    {
-      "skillId": "subagent-driven-development",
-      "label": "Subagent Driven Development",
-      "description": "Use when executing implementation plans with independent tasks in the current session",
-      "subpath": "skills/subagent-driven-development"
-    },
-    {
-      "skillId": "systematic-debugging",
-      "label": "Systematic Debugging",
-      "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes",
-      "subpath": "skills/systematic-debugging"
-    },
-    {
-      "skillId": "test-driven-development",
-      "label": "Test Driven Development",
-      "description": "Use when implementing any feature or bugfix, before writing implementation code",
-      "subpath": "skills/test-driven-development"
-    },
-    {
-      "skillId": "using-git-worktrees",
-      "label": "Using Git Worktrees",
-      "description": "Use when starting feature work that needs isolation from current workspace or before executing implementation plans - ensures an isolated workspace exists via native tools or git worktree fallback",
-      "subpath": "skills/using-git-worktrees"
-    },
-    {
-      "skillId": "using-superpowers",
-      "label": "Using Superpowers",
-      "description": "Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions",
-      "subpath": "skills/using-superpowers"
-    },
-    {
-      "skillId": "verification-before-completion",
-      "label": "Verification Before Completion",
-      "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always",
-      "subpath": "skills/verification-before-completion"
-    },
-    {
-      "skillId": "writing-plans",
-      "label": "Writing Plans",
-      "description": "Use when you have a spec or requirements for a multi-step task, before touching code",
-      "subpath": "skills/writing-plans"
-    },
-    {
-      "skillId": "writing-skills",
-      "label": "Writing Skills",
-      "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment",
-      "subpath": "skills/writing-skills"
-    }
-  ]
-}
+{
+  "packId": "superpowers",
+  "commit": "3dcbd5c4b48e02263fbf4a3c01e3fe4f81d584d9",
+  "generatedAt": "2026-08-09T09:26:09.691Z",
+  "skills": [
+    {
+      "skillId": "brainstorming",
+      "label": "Brainstorming",
+      "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation.",
+      "subpath": "skills/brainstorming"
+    },
+    {
+      "skillId": "dispatching-parallel-agents",
+      "label": "Dispatching Parallel Agents",
+      "description": "Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies",
+      "subpath": "skills/dispatching-parallel-agents"
+    },
+    {
+      "skillId": "executing-plans",
+      "label": "Executing Plans",
+      "description": "Use when you have a written implementation plan to execute in a separate session with review checkpoints",
+      "subpath": "skills/executing-plans"
+    },
+    {
+      "skillId": "finishing-a-development-branch",
+      "label": "Finishing A Development Branch",
+      "description": "Use when implementation is complete, all tests pass, and you need to decide how to integrate the work",
+      "subpath": "skills/finishing-a-development-branch"
+    },
+    {
+      "skillId": "receiving-code-review",
+      "label": "Receiving Code Review",
+      "description": "Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation",
+      "subpath": "skills/receiving-code-review"
+    },
+    {
+      "skillId": "requesting-code-review",
+      "label": "Requesting Code Review",
+      "description": "Use when completing tasks, implementing major features, or before merging to verify work meets requirements",
+      "subpath": "skills/requesting-code-review"
+    },
+    {
+      "skillId": "subagent-driven-development",
+      "label": "Subagent Driven Development",
+      "description": "Use when executing implementation plans with independent tasks in the current session",
+      "subpath": "skills/subagent-driven-development"
+    },
+    {
+      "skillId": "systematic-debugging",
+      "label": "Systematic Debugging",
+      "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes",
+      "subpath": "skills/systematic-debugging"
+    },
+    {
+      "skillId": "test-driven-development",
+      "label": "Test Driven Development",
+      "description": "Use when implementing any feature or bugfix, before writing implementation code",
+      "subpath": "skills/test-driven-development"
+    },
+    {
+      "skillId": "using-git-worktrees",
+      "label": "Using Git Worktrees",
+      "description": "Use when starting feature work that needs isolation from current workspace or before executing implementation plans - ensures an isolated workspace exists via native tools or git worktree fallback",
+      "subpath": "skills/using-git-worktrees"
+    },
+    {
+      "skillId": "using-superpowers",
+      "label": "Using Superpowers",
+      "description": "Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions",
+      "subpath": "skills/using-superpowers"
+    },
+    {
+      "skillId": "verification-before-completion",
+      "label": "Verification Before Completion",
+      "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always",
+      "subpath": "skills/verification-before-completion"
+    },
+    {
+      "skillId": "writing-plans",
+      "label": "Writing Plans",
+      "description": "Use when you have a spec or requirements for a multi-step task, before touching code",
+      "subpath": "skills/writing-plans"
+    },
+    {
+      "skillId": "writing-skills",
+      "label": "Writing Skills",
+      "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment",
+      "subpath": "skills/writing-skills"
+    }
+  ]
+}
