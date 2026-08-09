@@ -160,6 +160,49 @@ let hubRequestSeq = 0;
 /** Bundled catalog rows — loaded on first Discover catalog paint (keeps JSON off boot). */
 let bundledCatalog: CatalogModel[] | null = null;
 
+/** Discover full render is expensive (catalog rank); download bytes alone patch the download strip. */
+const DISCOVER_DOWNLOADS_CLASS = 'models-discover-downloads';
+let discoverStoreFingerprint = '';
+
+function discoverStoreFingerprintValue(): string {
+  const state = getModelsState();
+  return `${state.scanning}|${state.library.length}|${state.serves.length}|${state.hardware?.backend ?? ''}`;
+}
+
+function paintDownloadCards(list: HTMLElement, jobs: DownloadJob[]): void {
+  list.replaceChildren();
+  for (const job of jobs) list.appendChild(downloadCard(job));
+}
+
+/** Update only the in-flight download cards without rebuilding catalog / Hub results. */
+function syncDiscoverDownloads(): void {
+  const host = mount();
+  if (!host) return;
+  const downloads = activeDownloads();
+  const existing = host.querySelector(`.${DISCOVER_DOWNLOADS_CLASS}`);
+  if (!downloads.length) {
+    existing?.remove();
+    return;
+  }
+
+  let block = existing as HTMLElement | null;
+  if (!block) {
+    block = el('section', `models-block ${DISCOVER_DOWNLOADS_CLASS}`);
+    block.appendChild(el('h3', 'models-block__label', 'Downloading'));
+    const list = el('div', 'models-loaded-list');
+    block.appendChild(list);
+    const hardwareStrip = host.querySelector('.models-hardware-strip');
+    if (hardwareStrip?.parentElement === host) {
+      hardwareStrip.insertAdjacentElement('afterend', block);
+    } else {
+      host.prepend(block);
+    }
+  }
+
+  const list = block.querySelector('.models-loaded-list');
+  if (list instanceof HTMLElement) paintDownloadCards(list, downloads);
+}
+
 function mount(): HTMLElement | null {
   return document.getElementById('modelsRecommendBody');
 }
@@ -799,10 +842,10 @@ export function render(): void {
 
   const downloads = activeDownloads();
   if (downloads.length) {
-    const block = el('section', 'models-block');
+    const block = el('section', `models-block ${DISCOVER_DOWNLOADS_CLASS}`);
     block.appendChild(el('h3', 'models-block__label', 'Downloading'));
     const list = el('div', 'models-loaded-list');
-    for (const job of downloads) list.appendChild(downloadCard(job));
+    paintDownloadCards(list, downloads);
     block.appendChild(list);
     fragment.appendChild(block);
   }
@@ -884,9 +927,15 @@ export function mountDiscoverSection(): void {
   if (!bound) {
     bound = true;
     subscribeModelsStore(() => {
-      if (isActive()) render();
+      if (!isActive()) return;
+      syncDiscoverDownloads();
+      const fp = discoverStoreFingerprintValue();
+      if (fp === discoverStoreFingerprint) return;
+      discoverStoreFingerprint = fp;
+      render();
     });
   }
+  discoverStoreFingerprint = discoverStoreFingerprintValue();
   render();
   void refreshModels();
 }

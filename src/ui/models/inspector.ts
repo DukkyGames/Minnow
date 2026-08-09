@@ -58,6 +58,7 @@ const TAB_LABELS: Record<InspectorTab, { label: string; glyph: string }> = {
 
 let activeTab: InspectorTab = 'info';
 let bound = false;
+let inspectorRenderRaf: number | null = null;
 /** Per-model launch settings, kept while the app is open. */
 const draftSettings = new Map<string, LlamaServeSettings>();
 
@@ -622,7 +623,13 @@ export function initInspector(): void {
     return;
   }
   bound = true;
-  subscribeModelsStore(() => render());
+  subscribeModelsStore(() => {
+    if (inspectorRenderRaf != null) return;
+    inspectorRenderRaf = window.requestAnimationFrame(() => {
+      inspectorRenderRaf = null;
+      render();
+    });
+  });
   render();
 }
 

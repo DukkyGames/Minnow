@@ -6,6 +6,7 @@ import { describe, test } from 'node:test';
  */
 const {
   previewExecJs,
+  wrapPreviewGuestUserCode,
   previewCapturePageBase64,
   previewClearGuest,
   previewGetGuestInfo,
@@ -62,7 +63,22 @@ describe('preview guest actions', () => {
     assert.equal(val, 42);
     assert.equal(wc._state.execCalls.length, 1);
     assert.equal(wc._state.execCalls[0].userGesture, true);
-    assert.match(wc._state.execCalls[0].code, /try \{ return \(1 \+ 1\)/);
+    assert.match(wc._state.execCalls[0].code, /\(0, eval\)\("1 \+ 1"\)/);
+  });
+
+  test('wrapPreviewGuestUserCode supports multi-statement scripts', () => {
+    const wrapped = wrapPreviewGuestUserCode('const n = 2; n + 2');
+    assert.match(wrapped, /\(0, eval\)\("const n = 2; n \+ 2"\)/);
+  });
+
+  test('previewExecJs maps executeJavaScript rejection to __execError', async () => {
+    const wc = createMockWebContents();
+    wc.executeJavaScript = async () => {
+      throw new Error('Script failed to execute, this normally means an error was thrown.');
+    };
+    const val = await previewExecJs(wc, '1 + 1');
+    assert.ok(val && typeof val === 'object' && '__execError' in val);
+    assert.match(String(val.__execError), /Script failed to execute/);
   });
 
   test('previewExecJs returns guest JS errors instead of throwing', async () => {

@@ -20,6 +20,9 @@ import { validateJobId, validateRepoId } from './validate.js';
 /** Minimum free bytes required before starting a download (500 MB). */
 const MIN_FREE_BYTES = 500 * 1024 * 1024;
 
+/** Cap download SSE frequency — per-chunk progress can arrive thousands of times per second. */
+const DOWNLOAD_PROGRESS_EMIT_MS = 200;
+
 /** Error message for jobs left active when the tool server restarts. */
 const INTERRUPTED_DOWNLOAD_ERROR = 'Download interrupted (server restarted)';
 
@@ -189,9 +192,13 @@ async function runDownloadJob(job) {
 
   // Identical shape for both formats, so the SSE payload and subscribeDownload
   // need no MLX-specific handling.
+  let lastProgressEmitAt = 0;
   const onProgress = (bytes, total) => {
     job.bytesReceived = bytes;
     if (total != null) job.totalBytes = total;
+    const now = Date.now();
+    if (now - lastProgressEmitAt < DOWNLOAD_PROGRESS_EMIT_MS) return;
+    lastProgressEmitAt = now;
     emit(job.id, {
       jobId: job.id,
       status: job.status,

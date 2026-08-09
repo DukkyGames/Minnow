@@ -52,10 +52,45 @@ export async function waitForPreviewGuestDoubleRaf(wc: WebContents): Promise<voi
   }
 }
 
+function formatGuestThrownValue(err: unknown): string {
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as Error).message === 'string') {
+    const message = (err as Error).message;
+    const stack = 'stack' in err && typeof (err as Error).stack === 'string' ? (err as Error).stack : '';
+    if (stack && stack.includes(message)) return stack;
+    if (stack) return `${message}\n${stack}`;
+    return message;
+  }
+  return String(err);
+}
+
+/**
+ * Wrap user code for `executeJavaScript`. Uses `eval` on a JSON-encoded string so statements,
+ * quotes, and newlines do not break the host wrapper; async results and rejections are awaited.
+ */
+export function wrapPreviewGuestUserCode(code: string): string {
+  const encoded = JSON.stringify(code);
+  return `(async function(){
+    try {
+      const __v = await (0, eval)(${encoded});
+      return __v;
+    } catch (e) {
+      var msg = e && e.message ? e.message : String(e);
+      if (e && e.stack && typeof e.stack === 'string') {
+        if (e.stack.indexOf(msg) !== -1) return { __execError: e.stack };
+        return { __execError: msg + '\\n' + e.stack };
+      }
+      return { __execError: msg };
+    }
+  })()`;
+}
+
 /** Run JavaScript in the preview guest page context. */
 export async function previewExecJs(wc: WebContents, code: string): Promise<unknown> {
-  const wrapped = `(function(){ try { return (${code}); } catch(e) { return { __execError: e && e.message ? e.message : String(e) }; } })()`;
-  return wc.executeJavaScript(wrapped, true);
+  try {
+    return await wc.executeJavaScript(wrapPreviewGuestUserCode(code), true);
+  } catch (err) {
+    return { __execError: formatGuestThrownValue(err) };
+  }
 }
 
 /** Capture the preview guest as a base64-encoded PNG (waits for load, retries empty frames). */

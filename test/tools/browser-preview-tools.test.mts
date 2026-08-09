@@ -268,6 +268,22 @@ describe('browser-preview-tools', () => {
     assert.match(result.content ?? '', /Error: DOM access denied/);
   });
 
+  test('browser_eval returns guest script errors to the model', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/config/meta')) return metaFetchResponse();
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+
+    mockElectronPreview(async () => ({ __execError: 'ReferenceError: missingVar is not defined' }));
+
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    const result = await mod.executeBrowserPreviewTool('browser_eval', {
+      expression: 'missingVar',
+    });
+    assert.match(result.content ?? '', /Error: ReferenceError: missingVar is not defined/);
+  });
+
   test('browser_snapshot returns hint when no interactive elements found', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);

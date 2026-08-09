@@ -41,8 +41,17 @@ let installJob = null;
 /** @type {Set<(job: LlamaInstallJob) => void>} */
 const installListeners = new Set();
 
+/** Avoid flooding SSE while llama.cpp release archives stream in. */
+const LLAMA_INSTALL_EMIT_MS = 200;
+let lastInstallEmitAt = 0;
+
 function emitInstallJob() {
   if (!installJob) return;
+  const now = Date.now();
+  if (installJob.phase === 'installing' && now - lastInstallEmitAt < LLAMA_INSTALL_EMIT_MS) {
+    return;
+  }
+  lastInstallEmitAt = now;
   for (const listener of installListeners) {
     try {
       listener(installJob);

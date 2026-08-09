@@ -79,6 +79,24 @@ const logUnsubs = new Map<string, () => void>();
 const pollTimers = new Map<string, number>();
 const downloadUnsubs = new Map<string, () => void>();
 let refreshInFlight: Promise<void> | null = null;
+/** Batches high-frequency download byte updates to one store notification per frame. */
+let emitRaf: number | null = null;
+
+function scheduleEmit(): void {
+  if (emitRaf != null) return;
+  emitRaf = window.requestAnimationFrame(() => {
+    emitRaf = null;
+    emit();
+  });
+}
+
+function emitNow(): void {
+  if (emitRaf != null) {
+    window.cancelAnimationFrame(emitRaf);
+    emitRaf = null;
+  }
+  emit();
+}
 
 /** Current snapshot. Treat as read-only. */
 export function getModelsState(): ModelsState {
@@ -427,13 +445,16 @@ function trackDownload(job: DownloadJob): void {
         downloadUnsubs.delete(job.id);
         // New weights on disk — rescan so My Models picks them up.
         void refreshModels({ fresh: true, hardware: false });
+        emitNow();
         return;
       }
       if (event.status === 'failed' || event.status === 'cancelled') {
         downloadUnsubs.get(job.id)?.();
         downloadUnsubs.delete(job.id);
+        emitNow();
+        return;
       }
-      emit();
+      scheduleEmit();
     }),
   );
 }
