@@ -20,7 +20,11 @@ import {
   getMainTurnActivity,
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
-import { isOrchestrateBoardFinished, isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
+import {
+  canAccessOrchestrateFinishDashboard,
+  isOrchestratePlanComplete,
+  shouldShowOrchestrateFinishDashboard,
+} from '../chat/orchestrate/plan-complete';
 import {
   getKanbanColumnDefs,
   getWaveCompactLaneDefs,
@@ -737,7 +741,7 @@ function mountKanbanInMain(
 
 /** True when the finish dashboard should replace the kanban (MIN-208). */
 function shouldShowFinishDashboard(board: BoardState): boolean {
-  return isOrchestrateBoardFinished(board) && board.dashboardDismissed !== true;
+  return shouldShowOrchestrateFinishDashboard(board);
 }
 
 function mountFinishDashboardInMain(
@@ -1425,7 +1429,7 @@ function wireBoardHeaderControls(
   controls.appendChild(timelineBtn);
   controls.appendChild(openPlan);
 
-  if (isOrchestrateBoardFinished(board)) {
+  if (canAccessOrchestrateFinishDashboard(board)) {
     const dashToggle = document.createElement('button');
     dashToggle.type = 'button';
     dashToggle.className = 'board-btn board-btn--compact board-header__dashboard-toggle';

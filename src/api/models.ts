@@ -32,10 +32,6 @@ import {
   isModelLoadUnloadBusy,
   setModelLoadUnloadButtonBusy,
   setModelLoadUnloadButtonIdle,
-  setModelLoadUnloadButtonUnsupported,
-  setModelLoadUnloadIconButtonBusy,
-  setModelLoadUnloadIconButtonIdle,
-  setModelLoadUnloadIconButtonUnsupported,
 } from '../ui/model-load-unload-button';
 import { updateModelStateDot } from '../ui/model-state-dot';
 import {
@@ -44,7 +40,6 @@ import {
   mergeCapabilitiesIntoModelCache,
 } from '../providers/model-capabilities';
 import { syncComposerReasoningEffortFromActiveChat } from '../ui/composer-reasoning-effort';
-import { resolveModelHostFilterLoadUnloadValue } from '../ui/model-host-filter-context';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import {
   persistDefaultModelValue,
@@ -121,7 +116,8 @@ function optionForModelSelectValue(
   return [...sel.options].find((o) => o.value === key);
 }
 
-function supportsLoadUnloadForSelectValue(
+/** True when load/unload is available for this catalog row (server mode + provider). */
+export function supportsLoadUnloadForSelectValue(
   sel: HTMLSelectElement,
   selectValue: string,
 ): boolean {
@@ -132,71 +128,42 @@ function supportsLoadUnloadForSelectValue(
   return opt?.getAttribute('data-supports-load-unload') === '1';
 }
 
-/** Sync one Load/Unload button from selection + in-flight state. */
-export function syncModelLoadUnloadButtonElement(btn: HTMLButtonElement): void {
-  if (isModelLoadUnloadBusy()) {
+/** Sync one inline Load/Unload control on a model menu row. */
+export function syncModelOptionLoadUnloadButtonElement(btn: HTMLButtonElement): void {
+  const raw = btn.dataset.selectValue?.trim() ?? '';
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
+  if (!sel || !raw) {
+    btn.hidden = true;
+    return;
+  }
+
+  const busyTarget = getModelLoadUnloadTargetSelectValue();
+  const isThisRowBusy = isModelLoadUnloadBusy() && busyTarget === raw;
+
+  if (isThisRowBusy) {
     btn.hidden = false;
     setModelLoadUnloadButtonBusy(btn, getModelLoadUnloadPhase());
     return;
   }
 
-  const serverMode = isServerStorageMode();
-  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
-  if (!sel) return;
-
-  const hostFilter = btn.closest('.model-select-host-filter');
-  // closest() is Element | null; host-filter nodes are always HTMLElements in the DOM.
-  const raw = resolveModelHostFilterLoadUnloadValue(
-    hostFilter ? (hostFilter as HTMLElement) : null,
-  );
-  const supportsUnload = supportsLoadUnloadForSelectValue(sel, raw);
-
-  if (!supportsUnload) {
-    setModelLoadUnloadButtonUnsupported(btn, serverMode);
+  if (!supportsLoadUnloadForSelectValue(sel, raw)) {
+    btn.hidden = true;
     return;
   }
 
   btn.hidden = false;
-  const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
+  const row = getModelRowForSelectOrCanonicalId(raw);
   const loaded = row ? isModelLoaded(row.state) : false;
-  setModelLoadUnloadButtonIdle(btn, loaded, Boolean(raw));
+  setModelLoadUnloadButtonIdle(btn, loaded, true);
+  btn.disabled = isModelLoadUnloadBusy();
 }
 
-/** Sync one icon-only Load/Unload control from selection + in-flight state. */
-export function syncModelLoadUnloadIconButtonElement(btn: HTMLButtonElement): void {
-  if (isModelLoadUnloadBusy()) {
-    setModelLoadUnloadIconButtonBusy(btn, getModelLoadUnloadPhase());
-    return;
-  }
-
-  const serverMode = isServerStorageMode();
-  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
-  if (!sel) return;
-
-  const hostFilter = btn.closest('.model-select-host-filter');
-  const raw = resolveModelHostFilterLoadUnloadValue(
-    hostFilter ? (hostFilter as HTMLElement) : null,
-  );
-  const supportsUnload = supportsLoadUnloadForSelectValue(sel, raw);
-
-  if (!supportsUnload) {
-    setModelLoadUnloadIconButtonUnsupported(btn, serverMode);
-    return;
-  }
-
-  const row = raw ? getModelRowForSelectOrCanonicalId(raw) : undefined;
-  const loaded = row ? isModelLoaded(row.state) : false;
-  setModelLoadUnloadIconButtonIdle(btn, loaded, Boolean(raw));
-}
-
-/** Update the combined Load/Unload button from selection + provider. */
+/** Update every inline Load/Unload control in open model menus. */
 export function updateModelLoadUnloadButtons(): void {
-  const btn = document.getElementById('btnModelLoadUnload') as HTMLButtonElement | null;
-  if (btn) syncModelLoadUnloadButtonElement(btn);
-  for (const iconBtn of document.querySelectorAll<HTMLButtonElement>(
-    '.model-host-filter-action--load-unload',
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(
+    '.model-select-option-load-unload',
   )) {
-    syncModelLoadUnloadIconButtonElement(iconBtn);
+    syncModelOptionLoadUnloadButtonElement(btn);
   }
 }
 
@@ -274,7 +241,7 @@ export async function loadModelForSelectValue(selectValue: string): Promise<void
 
   const libraryId = decodeLibraryModelSelectKey(raw);
   if (libraryId) {
-    beginModelLoadUnload('load');
+    beginModelLoadUnload('load', raw);
     updateModelLoadUnloadButtons();
     updateModelStateDot(raw);
     syncModelSelectPicker();
@@ -301,7 +268,7 @@ export async function loadModelForSelectValue(selectValue: string): Promise<void
   const providerId = decoded?.providerId ?? chat.providerId;
   if (!providerId) return;
 
-  beginModelLoadUnload('load');
+  beginModelLoadUnload('load', raw);
   updateModelLoadUnloadButtons();
   updateModelStateDot(raw);
   syncModelSelectPicker();
@@ -334,7 +301,7 @@ export async function unloadModelForSelectValue(selectValue: string): Promise<vo
 
   const libraryId = decodeLibraryModelSelectKey(raw);
   if (libraryId) {
-    beginModelLoadUnload('unload');
+    beginModelLoadUnload('unload', raw);
     updateModelLoadUnloadButtons();
     updateModelStateDot(raw);
     syncModelSelectPicker();
@@ -361,7 +328,7 @@ export async function unloadModelForSelectValue(selectValue: string): Promise<vo
   const providerId = decoded?.providerId ?? chat.providerId;
   if (!providerId) return;
 
-  beginModelLoadUnload('unload');
+  beginModelLoadUnload('unload', raw);
   updateModelLoadUnloadButtons();
   updateModelStateDot(raw);
   syncModelSelectPicker();

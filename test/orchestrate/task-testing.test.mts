@@ -595,6 +595,23 @@ describe('final integration test', () => {
     assert.match(last!.content as string, /no failing task ids/i);
   });
 
+  test('final fail with all tasks complete emits blocked completion report', () => {
+    const group = makeGroup({ 'W1-A': 'complete', 'W1-B': 'complete' });
+    const planner = makePlanner();
+    group.orchestrateBoard!.finalTest = {
+      status: 'in_progress',
+      recordedVerdict: 'fail',
+      summary: 'regression in checkout',
+      failingTaskIds: [],
+    };
+    finalizeFinalTestOnStreamEnd(group, planner);
+    assert.equal(group.orchestrateBoard!.finalTest?.status, 'failed');
+    assert.ok(
+      group.orchestrateBoard!.completionShownAt != null,
+      'completion report should surface when final test fails with all tasks complete',
+    );
+  });
+
   test('final integration prose without VERDICT nudges instead of passing', async () => {
     const prevMinnowTest = process.env.MINNOW_TEST;
     process.env.MINNOW_TEST = '1';

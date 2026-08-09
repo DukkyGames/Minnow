@@ -5,6 +5,7 @@
 import {
   buildOrchestrateCompletionMessage,
   buildOrchestratePlanCompleteWrapUpSeed,
+  isOrchestrateFinalTestFailedWithAllTasksComplete,
   isOrchestratePlanComplete,
 } from './plan-complete.ts';
 import { buildDeterministicFinishReport } from './finish-stats.ts';
@@ -141,9 +142,13 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
   const board = group?.orchestrateBoard;
   const planner = group ? getPlannerChatForGroup(group) : undefined;
   if (!group || !board || !planner || !isOrchestratePlanComplete(board)) return;
-  // Emit when the final test passed, or when no task completed (all-quarantined, final test not applicable).
+  // Emit when the final test passed, when all tasks are quarantined (no final test), or when
+  // every task is complete but the final integration test failed (blocked finish report).
   const hasAnyComplete = board.tasks.some((t) => t.status === 'complete');
-  if (hasAnyComplete && board.finalTest?.status !== 'passed') return;
+  const finalFailedAllComplete = isOrchestrateFinalTestFailedWithAllTasksComplete(board);
+  if (hasAnyComplete && board.finalTest?.status !== 'passed' && !finalFailedAllComplete) {
+    return;
+  }
 
   if (board.completionShownAt != null) return;
   board.completionShownAt = Date.now();
@@ -155,20 +160,25 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
   const allQuarantined =
     board.tasks.length > 0 &&
     board.tasks.every((t) => t.status === 'quarantined');
+  const blocked = allQuarantined || finalFailedAllComplete;
   logBoardTerminal(
     group,
-    allQuarantined ? 'blocked' : 'passed',
-    allQuarantined ? 'all tasks quarantined' : 'final integration passed',
+    blocked ? 'blocked' : 'passed',
+    allQuarantined
+      ? 'all tasks quarantined'
+      : finalFailedAllComplete
+        ? 'final integration failed'
+        : 'final integration passed',
   );
   logPlannerReport(
     group,
     `${group.id}:completion-report`,
-    allQuarantined ? 'Plan blocked' : 'Plan complete',
+    blocked ? 'Plan blocked' : 'Plan complete',
   );
   logCompletionNotification(
     group,
     `${group.id}:completion-notification`,
-    allQuarantined ? 'blocked' : 'passed',
+    blocked ? 'blocked' : 'passed',
   );
   void enrichFinishReportWithRecommendations(groupId, planner, board);
   emitBoardChange(groupId);
@@ -187,7 +197,7 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
     }
   }
   showPlanCompleteToast(
-    allQuarantined ? 'Orchestrate plan blocked' : 'Orchestrate plan complete',
+    blocked ? 'Orchestrate plan blocked' : 'Orchestrate plan complete',
   );
 
   // Issues app: board finish → linked issue status `review` (MIN-261 Phase 3).

@@ -24,6 +24,36 @@ export function isOrchestrateBoardFinished(board: OrchestrateBoardState): boolea
   return isOrchestratePlanComplete(board) && board.finalTest?.status === 'passed';
 }
 
+/** Task statuses the user (or AFK) can reset back to `planned` for another run. */
+export function isBoardTaskRecoverableStatus(status: string): boolean {
+  return status === 'quarantined' || status === 'failed' || status === 'blocked';
+}
+
+export function boardHasRecoverableTasks(board: OrchestrateBoardState): boolean {
+  return board.tasks.some((t) => isBoardTaskRecoverableStatus(t.status));
+}
+
+/** Every task is `complete` but the full-board integration test recorded `failed`. */
+export function isOrchestrateFinalTestFailedWithAllTasksComplete(
+  board: OrchestrateBoardState,
+): boolean {
+  if (board.finalTest?.status !== 'failed') return false;
+  return board.tasks.length > 0 && board.tasks.every((t) => t.status === 'complete');
+}
+
+/** Finish dashboard is available (passed final test, all-quarantined blocked, or final-test fail). */
+export function canAccessOrchestrateFinishDashboard(board: OrchestrateBoardState): boolean {
+  if (isOrchestrateBoardFinished(board)) return true;
+  if (board.completionShownAt == null) return false;
+  if (board.terminalBlocked === true) return true;
+  return isOrchestrateFinalTestFailedWithAllTasksComplete(board);
+}
+
+/** True when the finish dashboard should replace the kanban (MIN-208). */
+export function shouldShowOrchestrateFinishDashboard(board: OrchestrateBoardState): boolean {
+  return canAccessOrchestrateFinishDashboard(board) && board.dashboardDismissed !== true;
+}
+
 /** True when orchestration still has non-terminal tasks. */
 export function hasIncompleteOrchestrateWork(board: OrchestrateBoardState): boolean {
   return board.tasks.some((t) => !isTerminalStatus(t.status));
@@ -64,9 +94,13 @@ export function buildOrchestrateCompletionMessage(
   const elapsed = formatElapsedMs(board.startedAt, endedAtMs);
 
   const allQuarantined = completeCount === 0 && quarantinedCount > 0;
+  const finalTestFailed =
+    board.finalTest?.status === 'failed' && completeCount === total && total > 0;
   const headline = allQuarantined
     ? `**Orchestrate plan blocked** — ${planName}`
-    : `**Orchestrate plan complete** — ${planName}`;
+    : finalTestFailed
+      ? `**Orchestrate plan blocked** — final integration test failed — ${planName}`
+      : `**Orchestrate plan complete** — ${planName}`;
 
   const lines = [
     headline,
@@ -77,11 +111,15 @@ export function buildOrchestrateCompletionMessage(
     '',
     allQuarantined
       ? `All remaining tasks are quarantined (${quarantinedCount}). Requeue cards after addressing resolution steps.`
-      : 'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
+      : finalTestFailed
+        ? 'All tasks merged, but the final integration test failed. Use **Rerun failed tasks** on the finish dashboard or re-run the final test from the board header.'
+        : 'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
     '',
     allQuarantined
       ? '**Next steps:** review quarantined tasks on the board, fix blockers, then Requeue to retry.'
-      : '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
+      : finalTestFailed
+        ? '**Next steps:** open the finish dashboard, rerun failed work, or fix issues manually and re-run the final integration test.'
+        : '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
   ];
 
   const issues = board.unresolvedIssues;

@@ -3,7 +3,7 @@
  * Transitional module — surfaces migrate into render*() owners over time.
  */
 
-import { fetchModels, toggleSelectedModelLoad } from '../api/models';
+import { fetchModels } from '../api/models';
 import {
   closeDrawer,
   onDrawerKeydown,
@@ -46,7 +46,6 @@ export function initShellHandlers(): void {
 
   // Top bar — model controls
   wireClick('btnRefreshModels', () => fetchModels());
-  wireClick('btnModelLoadUnload', () => toggleSelectedModelLoad());
 
   const modelSelect = document.getElementById('modelSelect');
   if (modelSelect && modelSelect.dataset.shellWired !== '1') {

@@ -21,18 +21,20 @@ import {
   resolveModelProducer,
 } from '../providers/model-producer';
 import { isModelLoaded, resolveModelState, type ModelLoadState } from './model-state-dot';
-import { isModelLoadUnloadBusy, setModelLoadUnloadIconButtonIdle, setModelLoadUnloadIconButtonUnsupported } from './model-load-unload-button';
+import {
+  getModelLoadUnloadTargetSelectValue,
+  isModelLoadUnloadBusy,
+} from '../ui/model-load-unload-button';
 import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
 import { iconHtml } from './icon';
-import {
-  resolveModelHostFilterLoadUnloadValue,
-  setModelHostFilterLoadUnloadResolver,
-} from './model-host-filter-context';
 import { MINNOW_GLYPH_HEADER_HTML } from './minnow-glyph';
-import { isLibraryModelProviderId } from '../models/model-select-library';
+import {
+  decodeLibraryModelSelectKey,
+  isLibraryModelProviderId,
+} from '../models/model-select-library';
 
 /** Refresh icon reused for compact refresh controls in model picker filter bars. */
 const MODEL_REFRESH_ICON_HTML = iconHtml('refresh');
@@ -452,13 +454,10 @@ function emptyFilterMessage(
   return 'No models';
 }
 
-/** Optional hooks after refresh or load/unload from a host-filter action row. */
+/** Optional hooks after refresh from a host-filter action row. */
 export interface ModelHostFilterBarOptions {
   onFilterChange: () => void;
   onAfterRefresh?: () => void;
-  onAfterLoadUnload?: () => void;
-  /** When set, load/unload targets this value instead of the global #modelSelect default. */
-  resolveLoadUnloadValue?: () => string;
 }
 
 function normalizeHostFilterBarOptions(
@@ -482,19 +481,7 @@ async function refreshModelsFromHostFilterBar(
   }
 }
 
-async function toggleLoadUnloadFromHostFilterBar(
-  bar: HTMLDivElement,
-  onAfterLoadUnload?: () => void,
-): Promise<void> {
-  if (isModelLoadUnloadBusy()) return;
-  const { toggleModelLoadForSelectValue } = await import('../api/models');
-  const selectValue = resolveModelHostFilterLoadUnloadValue(bar);
-  await toggleModelLoadForSelectValue(selectValue);
-  onAfterLoadUnload?.();
-}
-
 function mountModelHostFilterActions(
-  bar: HTMLDivElement,
   toolbarEnd: HTMLDivElement,
   options: ModelHostFilterBarOptions,
 ): void {
@@ -515,24 +502,8 @@ function mountModelHostFilterActions(
     await refreshModelsFromHostFilterBar(refreshBtn, options.onAfterRefresh);
   });
 
-  const loadUnloadBtn = document.createElement('button');
-  loadUnloadBtn.type = 'button';
-  loadUnloadBtn.className =
-    'model-host-filter-action model-host-filter-action--load-unload';
-  loadUnloadBtn.addEventListener('mousedown', (e) => e.preventDefault());
-  loadUnloadBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    await toggleLoadUnloadFromHostFilterBar(bar, options.onAfterLoadUnload);
-  });
-
-  actions.append(refreshBtn, loadUnloadBtn);
+  actions.append(refreshBtn);
   toolbarEnd.appendChild(actions);
-
-  if (!isServerStorageMode()) {
-    setModelLoadUnloadIconButtonUnsupported(loadUnloadBtn, false);
-  } else {
-    setModelLoadUnloadIconButtonIdle(loadUnloadBtn, false, false);
-  }
 }
 
 function scheduleModelSearchRerender(onFilterChange: () => void): void {
@@ -634,10 +605,6 @@ export function mountModelHostFilterBar(
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Model filters');
 
-  if (options.resolveLoadUnloadValue) {
-    setModelHostFilterLoadUnloadResolver(bar, options.resolveLoadUnloadValue);
-  }
-
   mountModelHostFilterSearch(bar, options.onFilterChange);
 
   const controls = document.createElement('div');
@@ -670,7 +637,7 @@ export function mountModelHostFilterBar(
   controls.appendChild(toolbarEnd);
   mountModelHostFilterLibraryToggle(toolbarEnd, options.onFilterChange);
   mountModelHostFilterLoadedToggle(toolbarEnd, options.onFilterChange);
-  mountModelHostFilterActions(bar, toolbarEnd, options);
+  mountModelHostFilterActions(toolbarEnd, options);
   bar.appendChild(controls);
   parent.appendChild(bar);
   syncAllModelHostFilterBars();
@@ -948,6 +915,16 @@ function createProducerLogoSpan(modelId: string): HTMLSpanElement | null {
   return logo;
 }
 
+/** Local catalog rows that support VRAM load/unload get an inline action in the menu. */
+function optionShowsInlineLoadUnload(opt: HTMLOptionElement): boolean {
+  if (!isServerStorageMode()) return false;
+  const id = opt.value.trim();
+  if (!id) return false;
+  if (decodeLibraryModelSelectKey(id)) return true;
+  if (opt.getAttribute('data-supports-load-unload') !== '1') return false;
+  return isLocalProviderId(providerIdForOption(opt), opt);
+}
+
 /** Append one selectable row for an <option> (shared by flat options and optgroup children). */
 function appendModelOptionRow(
   menu: HTMLUListElement,
@@ -961,7 +938,7 @@ function appendModelOptionRow(
 
   const cached = modelCache.get(id);
   let loadState: ModelLoadState = cached ? resolveModelState(cached) : 'unknown';
-  if (isModelLoadUnloadBusy() && id === selectedValue) {
+  if (isModelLoadUnloadBusy() && id === getModelLoadUnloadTargetSelectValue()) {
     loadState = 'loading';
   }
   const canonicalModelId = tooltipModelIdForOptionValue(id);
@@ -1017,6 +994,26 @@ function appendModelOptionRow(
     li.appendChild(dot);
     li.appendChild(label);
   }
+
+  if (optionShowsInlineLoadUnload(opt)) {
+    const actionBtn = document.createElement('button');
+    actionBtn.type = 'button';
+    actionBtn.className = 'model-select-option-load-unload model-select-option-action';
+    actionBtn.dataset.selectValue = id;
+    actionBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+    actionBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const rowLoaded = loadState === 'loaded';
+      void (async () => {
+        const api = await import('../api/models');
+        if (rowLoaded) await api.unloadModelForSelectValue(id);
+        else await api.loadModelForSelectValue(id);
+      })();
+    });
+    li.appendChild(actionBtn);
+  }
+
   li.addEventListener('mousedown', (e) => {
     e.preventDefault();
     if (onSelect) onSelect(id);
@@ -1154,6 +1151,7 @@ export function renderModelSelectMenuRows(
     for (const opt of options) {
       appendModelOptionRow(menu, opt, selectedValue, false, onSelect);
     }
+    void import('../api/models').then((m) => m.updateModelLoadUnloadButtons());
     return;
   }
 
@@ -1181,6 +1179,7 @@ export function renderModelSelectMenuRows(
       }
     }
   }
+  void import('../api/models').then((m) => m.updateModelLoadUnloadButtons());
 }
 
 /** Rebuild menu rows and trigger label from the native select + model cache. */
@@ -1224,10 +1223,6 @@ function ensureTopBarHostFilterBar(): void {
       if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
     },
     onAfterRefresh: () => {
-      const { sel, menu: menuEl } = getElements();
-      if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
-    },
-    onAfterLoadUnload: () => {
       const { sel, menu: menuEl } = getElements();
       if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
     },

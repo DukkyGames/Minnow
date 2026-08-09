@@ -14,6 +14,8 @@ const UNLOAD_ICON_HTML = iconHtml('upload');
 
 let inFlight = false;
 let phase: ModelLoadUnloadPhase | null = null;
+/** #modelSelect option value for the row currently loading or unloading. */
+let targetSelectValue: string | null = null;
 
 /** True while a model load or unload request is running. */
 export function isModelLoadUnloadBusy(): boolean {
@@ -25,6 +27,11 @@ export function getModelLoadUnloadPhase(): ModelLoadUnloadPhase | null {
   return phase;
 }
 
+/** Option value for the in-flight load/unload action, when {@link isModelLoadUnloadBusy}. */
+export function getModelLoadUnloadTargetSelectValue(): string | null {
+  return targetSelectValue;
+}
+
 function emitModelLoadUnloadChanged(): void {
   if (typeof document === 'undefined') return;
   const CustomEventCtor = (document.defaultView ?? globalThis).CustomEvent;
@@ -32,9 +39,14 @@ function emitModelLoadUnloadChanged(): void {
 }
 
 /** Mark the start of a load/unload action. */
-export function beginModelLoadUnload(nextPhase: ModelLoadUnloadPhase): void {
+export function beginModelLoadUnload(
+  nextPhase: ModelLoadUnloadPhase,
+  selectValue?: string,
+): void {
   inFlight = true;
   phase = nextPhase;
+  const trimmed = selectValue?.trim();
+  targetSelectValue = trimmed || null;
   emitModelLoadUnloadChanged();
 }
 
@@ -42,6 +54,7 @@ export function beginModelLoadUnload(nextPhase: ModelLoadUnloadPhase): void {
 export function endModelLoadUnload(): void {
   inFlight = false;
   phase = null;
+  targetSelectValue = null;
   emitModelLoadUnloadChanged();
 }
 

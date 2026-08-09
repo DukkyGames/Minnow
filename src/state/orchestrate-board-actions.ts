@@ -4053,6 +4053,25 @@ export function onTasksQuarantined(
 ): void {
   const board = group.orchestrateBoard;
   if (!board) return;
+
+  // AFK: immediately requeue root quarantines instead of parking until the finish report.
+  if (getBoardExecutionMode(board) === 'afk' && isBoardRunning(group)) {
+    const rootIds = taskIds.filter((id) => {
+      const task = board.tasks.find((t) => t.id === id);
+      if (!task || task.status !== 'quarantined') return false;
+      return !task.quarantine?.summary?.startsWith('blocked by quarantined');
+    });
+    if (rootIds.length > 0) {
+      void (async () => {
+        for (const id of rootIds) {
+          await requeueBoardTask(group, id, plannerChat);
+        }
+        await autoDelegateNext(group, plannerChat);
+      })().catch((err) => reportBackgroundError('afk-quarantine-requeue', err));
+      return;
+    }
+  }
+
   if (isBoardRunning(group)) {
     for (const taskId of taskIds) {
       const task = board.tasks.find((t) => t.id === taskId);
@@ -4349,10 +4368,23 @@ export function finalizeFinalTestOnStreamEnd(
         `${attempts}/${resolveMaxFinalTestAttempts()} rounds completed. Review failing areas manually.`,
       ].join('\n'),
     );
+    if (board.tasks.every((t) => t.status === 'complete')) {
+      void maybeEmitOrchestratePlanComplete(group.id);
+    }
     return;
   }
 
   if (!failingIds.length) {
+    const allTasksComplete = board.tasks.every((t) => t.status === 'complete');
+    if (
+      allTasksComplete &&
+      getBoardExecutionMode(board) === 'afk' &&
+      isBoardRunning(group) &&
+      attempts < resolveMaxFinalTestAttempts()
+    ) {
+      void startFinalIntegrationTest(group, plannerChat);
+      return;
+    }
     postPlannerBoardMessage(
       plannerChat,
       [
@@ -4363,6 +4395,9 @@ export function finalizeFinalTestOnStreamEnd(
         'The Tester did not name responsible tasks — reopen tasks manually or re-run the final test.',
       ].join('\n'),
     );
+    if (allTasksComplete) {
+      void maybeEmitOrchestratePlanComplete(group.id);
+    }
     return;
   }
 
@@ -4457,7 +4492,7 @@ export function moveTaskStatus(
 }
 
 /**
- * Reset a quarantined task to `planned`, clear its quarantine payload,
+ * Reset a quarantined, failed, or blocked task to `planned`, clear recovery payload,
  * and re-drive the board if it is running.
  */
 export async function requeueBoardTask(
@@ -4468,22 +4503,44 @@ export async function requeueBoardTask(
   const board = group.orchestrateBoard;
   if (!board) return;
   const task = board.tasks.find((t) => t.id === taskId);
-  if (!task || task.status !== 'quarantined') return;
+  if (
+    !task ||
+    (task.status !== 'quarantined' && task.status !== 'failed' && task.status !== 'blocked')
+  ) {
+    return;
+  }
   const requeuedIds = new Set<string>([taskId]);
   logTaskStatus(group, taskId, task.status, 'planned');
-  updateTask(group, taskId, { status: 'planned', quarantine: undefined, stopRetries: undefined }, plannerChat);
-  const blockedByRootSummary = `blocked by quarantined ${taskId}`;
-  for (const dependent of board.tasks) {
-    if (dependent.id === taskId || dependent.status !== 'quarantined') continue;
-    if (dependent.quarantine?.summary !== blockedByRootSummary) continue;
-    requeuedIds.add(dependent.id);
-    logTaskStatus(group, dependent.id, dependent.status, 'planned');
-    updateTask(
-      group,
-      dependent.id,
-      { status: 'planned', quarantine: undefined, stopRetries: undefined },
-      plannerChat,
-    );
+  updateTask(
+    group,
+    taskId,
+    {
+      status: 'planned',
+      quarantine: undefined,
+      stopRetries: undefined,
+      error: undefined,
+    },
+    plannerChat,
+  );
+  if (task.status === 'quarantined') {
+    const blockedByRootSummary = `blocked by quarantined ${taskId}`;
+    for (const dependent of board.tasks) {
+      if (dependent.id === taskId || dependent.status !== 'quarantined') continue;
+      if (dependent.quarantine?.summary !== blockedByRootSummary) continue;
+      requeuedIds.add(dependent.id);
+      logTaskStatus(group, dependent.id, dependent.status, 'planned');
+      updateTask(
+        group,
+        dependent.id,
+        {
+          status: 'planned',
+          quarantine: undefined,
+          stopRetries: undefined,
+          error: undefined,
+        },
+        plannerChat,
+      );
+    }
   }
 
   delete board.completionShownAt;
@@ -4517,6 +4574,78 @@ export async function requeueBoardTask(
 
   if (isBoardRunning(group)) {
     await autoDelegateNext(group, plannerChat);
+  }
+}
+
+/** Root quarantine / failed / blocked tasks eligible for bulk requeue. */
+export function listRecoverableBoardTaskRootIds(board: OrchestrateBoardState): string[] {
+  return board.tasks
+    .filter((task) => {
+      if (task.status === 'failed' || task.status === 'blocked') return true;
+      if (task.status !== 'quarantined') return false;
+      return !task.quarantine?.summary?.startsWith('blocked by quarantined');
+    })
+    .map((t) => t.id);
+}
+
+/** Requeue every recoverable task (finish dashboard / auto-sequential restart). */
+export async function requeueAllFailedBoardTasks(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<string[]> {
+  const board = group.orchestrateBoard;
+  if (!board) return [];
+  const rootIds = listRecoverableBoardTaskRootIds(board);
+  for (const id of rootIds) {
+    await requeueBoardTask(group, id, plannerChat);
+  }
+  return rootIds;
+}
+
+/**
+ * Requeue failed work, reset final-test gating, return to the kanban, and resume auto run.
+ */
+export async function restartBoardAfterRequeueFailures(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  await requeueAllFailedBoardTasks(group, plannerChat);
+  const allTasksComplete =
+    board.tasks.length > 0 && board.tasks.every((t) => t.status === 'complete');
+  const failingIds = board.finalTest?.failingTaskIds ?? [];
+  if (allTasksComplete && failingIds.length > 0) {
+    const summary =
+      board.finalTest?.summary?.trim() || 'Final integration test failed';
+    for (const taskId of failingIds) {
+      const task = board.tasks.find((t) => t.id === taskId);
+      if (!task) continue;
+      applyFinalTestFailureReopens(group, plannerChat, [taskId], summary);
+      const seed = buildRetryBuilderSeedMessage(task, 1, `Final integration test: ${summary}`);
+      updateTask(group, taskId, { pendingBuildSeed: seed }, plannerChat);
+    }
+  }
+  if (board.finalTest) {
+    const chatId = board.finalTest.chatId;
+    const attempts = board.finalTest.attempts;
+    board.finalTest = {
+      ...(chatId ? { chatId } : {}),
+      ...(attempts != null ? { attempts } : {}),
+      status: 'pending',
+      recordedVerdict: undefined,
+      summary: undefined,
+      failingTaskIds: undefined,
+    };
+  }
+  board.dashboardDismissed = true;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+  if (!isBoardAutoMode(group)) return;
+  startBoardAutoRun(group, plannerChat);
+  if (allTasksComplete && board.tasks.every((t) => t.status === 'complete')) {
+    await startFinalIntegrationTest(group, plannerChat);
   }
 }
 

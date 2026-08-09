@@ -8,13 +8,20 @@ import {
   fetchGitFinishStats,
   type FinishBoardStats,
 } from '../chat/orchestrate/finish-stats.ts';
+import {
+  boardHasRecoverableTasks,
+  isOrchestrateBoardFinished,
+  isOrchestrateFinalTestFailedWithAllTasksComplete,
+} from '../chat/orchestrate/plan-complete.ts';
 import { enrichFinishReportWithRecommendations } from '../chat/orchestrate/finish-recommendations.ts';
 import { setAssistantBubbleContent } from '../markdown/renderer.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
 import {
   clearBoardWorktreesAfterLanding,
   markBoardIntegrationLanded,
+  restartBoardAfterRequeueFailures,
 } from '../state/orchestrate-board-actions.ts';
+import { getBoardExecutionMode } from '../state/orchestrate-board-store.ts';
 import {
   mergeIntegrationIntoWorkspace,
   openWorkspacePr,
@@ -83,6 +90,19 @@ function collectBoardIssues(
   const issues: Array<{ task: BoardTask; reason: string }> = [];
 
   for (const task of board.tasks) {
+    if (task.status === 'quarantined') {
+      const summary =
+        task.quarantine?.summary?.trim() || task.error?.trim() || 'Quarantined';
+      issues.push({ task, reason: summary });
+      continue;
+    }
+    if (task.status === 'failed' || task.status === 'blocked') {
+      issues.push({
+        task,
+        reason: task.error?.trim() || `Task ${task.status}`,
+      });
+      continue;
+    }
     if (task.error?.trim()) {
       issues.push({ task, reason: task.error.trim() });
       continue;
@@ -682,21 +702,32 @@ export function renderFinishDashboard(
   const panel = document.createElement('div');
   panel.className = 'board-finish-dashboard__panel';
 
+  const passedFinal = isOrchestrateBoardFinished(board);
+  const finalFailed = isOrchestrateFinalTestFailedWithAllTasksComplete(board);
+  const blockedRun = board.terminalBlocked === true || finalFailed;
+
   const hero = document.createElement('div');
   hero.className = 'board-finish-dashboard__hero';
   const badge = document.createElement('div');
   badge.className = 'board-finish-dashboard__badge';
   badge.setAttribute('aria-hidden', 'true');
-  badge.textContent = '✓';
+  badge.textContent = passedFinal ? '✓' : '!';
   const heroCopy = document.createElement('div');
   heroCopy.className = 'board-finish-dashboard__hero-copy';
   const title = document.createElement('h3');
   title.className = 'board-finish-dashboard__title';
-  title.textContent = 'Board complete';
+  title.textContent = passedFinal
+    ? 'Board complete'
+    : blockedRun
+      ? 'Board blocked'
+      : 'Board finished';
   const subtitle = document.createElement('p');
   subtitle.className = 'board-finish-dashboard__subtitle';
-  subtitle.textContent =
-    'All tasks passed the final integration test. Review the summary below, merge into your branch, or start a follow-up chat.';
+  subtitle.textContent = passedFinal
+    ? 'All tasks passed the final integration test. Review the summary below, merge into your branch, or start a follow-up chat.'
+    : finalFailed
+      ? 'Tasks merged, but the final integration test failed. Rerun failed tasks to reopen work, or use the board header to re-run the final test.'
+      : 'Some tasks are quarantined or blocked. Rerun failed tasks to put them back on the board and resume auto run.';
   heroCopy.appendChild(title);
   heroCopy.appendChild(subtitle);
   hero.appendChild(badge);
@@ -783,6 +814,27 @@ export function renderFinishDashboard(
     emitBoardChange(group.id);
   });
 
+  const execMode = getBoardExecutionMode(board);
+  const showRerunFailed =
+    (execMode === 'auto' || execMode === 'sequential') &&
+    (boardHasRecoverableTasks(board) || finalFailed);
+  let rerunBtn: HTMLButtonElement | null = null;
+  if (showRerunFailed) {
+    rerunBtn = document.createElement('button');
+    rerunBtn.type = 'button';
+    rerunBtn.className = 'board-btn board-btn--compact board-btn--primary';
+    rerunBtn.textContent = 'Rerun failed tasks';
+    rerunBtn.title = 'Requeue failed, blocked, or quarantined tasks and restart the board';
+    rerunBtn.addEventListener('click', () => {
+      rerunBtn!.disabled = true;
+      void restartBoardAfterRequeueFailures(group, plannerChat)
+        .then(() => emitBoardChange(group.id))
+        .finally(() => {
+          rerunBtn!.disabled = false;
+        });
+    });
+  }
+
   const followUpBtn = document.createElement('button');
   followUpBtn.type = 'button';
   followUpBtn.className = 'board-btn board-btn--compact';
@@ -813,6 +865,7 @@ export function renderFinishDashboard(
   const commitWrap = buildFinishGitAction(group, board, plannerChat, null, gitStatus);
 
   actions.appendChild(backBtn);
+  if (rerunBtn) actions.appendChild(rerunBtn);
   actions.appendChild(followUpBtn);
   actions.appendChild(commitWrap);
   footer.appendChild(actions);

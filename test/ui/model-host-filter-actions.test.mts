@@ -1,5 +1,5 @@
 /**
- * Model host filter bar: refresh + load/unload icon actions, search, local load filter.
+ * Model host filter bar: refresh action, search, local load filter.
  */
 
 import assert from 'node:assert/strict';
@@ -45,11 +45,9 @@ describe('model host filter actions', () => {
       assert.ok(loadedToggle?.hasAttribute('hidden'));
 
       const refreshBtn = host.querySelector('.model-host-filter-action--refresh');
-      const loadUnloadBtn = host.querySelector('.model-host-filter-action--load-unload');
       assert.ok(refreshBtn);
-      assert.ok(loadUnloadBtn);
       assert.ok(refreshBtn?.querySelector('.icon-svg'));
-      assert.ok(loadUnloadBtn?.querySelector('.icon-svg'));
+      assert.equal(host.querySelector('.model-host-filter-action--load-unload'), null);
     } finally {
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;
@@ -143,15 +141,16 @@ describe('model host filter actions', () => {
     }
   });
 
-  test('syncModelLoadUnloadIconButtonElement toggles load vs unload icon', async () => {
+  test('renderModelSelectMenuRows adds inline load/unload on local models', async () => {
     const { Window } = await import('happy-dom');
     const win = new Window();
     const doc = win.document;
     doc.body.innerHTML = `
       <select id="modelSelect">
-        <option value="lmstudio::qwen/qwen2.5-7b" data-supports-load-unload="1" selected>Qwen</option>
+        <option value="lmstudio::qwen/qwen2.5-7b" data-supports-load-unload="1" data-provider-host="local">Qwen 2.5 7B</option>
+        <option value="openai::gpt-4o" data-provider-host="cloud">GPT-4o</option>
       </select>
-      <button type="button" class="model-host-filter-action--load-unload"></button>
+      <ul id="menu" class="model-select-menu"></ul>
     `;
 
     const prevDocument = globalThis.document;
@@ -160,12 +159,58 @@ describe('model host filter actions', () => {
     (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
 
     try {
-      const { syncModelLoadUnloadIconButtonElement } = await import('../../src/api/models.ts');
-      const btn = doc.querySelector('.model-host-filter-action--load-unload') as HTMLButtonElement;
+      const { setStorageModeForTests } = await import('../../src/config/storage-mode.ts');
+      setStorageModeForTests('server');
+      const { modelCache } = await import('../../src/app-state.ts');
+      const { renderModelSelectMenuRows } = await import('../../src/ui/model-select-picker.ts');
+      const { syncModelOptionLoadUnloadButtonElement } = await import('../../src/api/models.ts');
 
-      syncModelLoadUnloadIconButtonElement(btn);
+      modelCache.clear();
+      modelCache.set('lmstudio::qwen/qwen2.5-7b', { id: 'qwen/qwen2.5-7b', state: 'loaded' });
+
+      const sel = doc.getElementById('modelSelect') as HTMLSelectElement;
+      const menu = doc.getElementById('menu') as HTMLUListElement;
+      renderModelSelectMenuRows(menu, sel);
+
+      const localRow = menu.querySelector('.model-select-option[data-value="lmstudio::qwen/qwen2.5-7b"]');
+      const cloudRow = menu.querySelector('.model-select-option[data-value="openai::gpt-4o"]');
+      assert.ok(localRow?.querySelector('.model-select-option-load-unload'));
+      assert.equal(cloudRow?.querySelector('.model-select-option-load-unload'), null);
+
+      const btn = localRow?.querySelector('.model-select-option-load-unload') as HTMLButtonElement;
+      syncModelOptionLoadUnloadButtonElement(btn);
+      assert.equal(btn.textContent, 'Unload');
+    } finally {
+      (globalThis as { document: Document }).document = prevDocument;
+      (globalThis as { window: Window }).window = prevWindow;
+    }
+  });
+
+  test('syncModelOptionLoadUnloadButtonElement toggles load vs unload label', async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const doc = win.document;
+    doc.body.innerHTML = `
+      <select id="modelSelect">
+        <option value="lmstudio::qwen/qwen2.5-7b" data-supports-load-unload="1" selected>Qwen</option>
+      </select>
+      <button type="button" class="model-select-option-load-unload" data-select-value="lmstudio::qwen/qwen2.5-7b"></button>
+    `;
+
+    const prevDocument = globalThis.document;
+    const prevWindow = globalThis.window;
+    (globalThis as { document: Document }).document = doc as unknown as Document;
+    (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+
+    try {
+      const { setStorageModeForTests } = await import('../../src/config/storage-mode.ts');
+      setStorageModeForTests('server');
+      const { syncModelOptionLoadUnloadButtonElement } = await import('../../src/api/models.ts');
+      const btn = doc.querySelector('.model-select-option-load-unload') as HTMLButtonElement;
+
+      syncModelOptionLoadUnloadButtonElement(btn);
       assert.equal(btn.getAttribute('aria-label'), 'Load model');
-      assert.ok(btn.querySelector('.icon-svg.fi-rr-download'));
+      assert.equal(btn.textContent, 'Load');
     } finally {
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;

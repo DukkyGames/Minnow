@@ -644,24 +644,7 @@ function ensureGlobals(): void {
   }
 }
 
-function resolveResearchLoadUnloadValue(): string {
-  const trigger = findResearchModelTrigger();
-  return trigger ? resolveTriggerSelectValue(trigger) : '';
-}
-
-function resolveComposerLoadUnloadValue(): string {
-  const sel = getModelSelect();
-  if (!sel) return '';
-  return resolveModelSelectValueForChat(getActiveChat(), [...sel.options].map((o) => o.value));
-}
-
-function resolveMenubarLoadUnloadValue(): string {
-  return getModelSelect()?.value.trim() ?? '';
-}
-
-function createModelMenuPanel(
-  resolveLoadUnloadValue: () => string,
-): { panel: HTMLDivElement; menu: HTMLUListElement } {
+function createModelMenuPanel(): { panel: HTMLDivElement; menu: HTMLUListElement } {
   const panel = document.createElement('div');
   panel.className = 'composer-model-menu hidden';
   panel.setAttribute('role', 'presentation');
@@ -671,11 +654,6 @@ function createModelMenuPanel(
     {
       onFilterChange: () => rebuildOpenMenu(),
       onAfterRefresh: () => rebuildOpenMenu(),
-      onAfterLoadUnload: () => {
-        rebuildOpenMenu();
-        syncComposerModelTriggers();
-      },
-      resolveLoadUnloadValue,
     },
     'composer-model-menu__filter',
   );
@@ -687,11 +665,6 @@ function createModelMenuPanel(
   panel.appendChild(menu);
   document.body.appendChild(panel);
   return { panel, menu };
-}
-
-function resolveBoardLoadUnloadValue(): string {
-  const trigger = findBoardModelTrigger();
-  return trigger ? resolveTriggerSelectValue(trigger) : '';
 }
 
 function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTrigger {
@@ -759,9 +732,7 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   }
   document.body.appendChild(expandEl);
 
-  const resolveLoadUnload =
-    variant === 'board' ? resolveBoardLoadUnloadValue : resolveMenubarLoadUnloadValue;
-  const { panel, menu } = createModelMenuPanel(resolveLoadUnload);
+  const { panel, menu } = createModelMenuPanel();
 
   const entry: ComposerModelTrigger = {
     variant,
@@ -782,14 +753,6 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   triggers.push(entry);
   syncTrigger(entry);
   return entry;
-}
-
-function resolveLoadUnloadForVariant(variant: ComposerModelVariant): () => string {
-  if (variant === 'research') return resolveResearchLoadUnloadValue;
-  if (isMenubarStyleVariant(variant)) {
-    return variant === 'board' ? resolveBoardLoadUnloadValue : resolveMenubarLoadUnloadValue;
-  }
-  return resolveComposerLoadUnloadValue;
 }
 
 function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
@@ -826,7 +789,7 @@ function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
   triggerBtn.append(logoEl, labelEl, chevronEl);
   root.appendChild(triggerBtn);
 
-  const { panel, menu } = createModelMenuPanel(resolveLoadUnloadForVariant(variant));
+  const { panel, menu } = createModelMenuPanel();
 
   const entry: ComposerModelTrigger = {
     variant,
