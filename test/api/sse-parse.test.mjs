@@ -12,6 +12,32 @@ import {
   parseCompletionResponseBody,
   parseSseEventBlock,
 } from '../../src/api/sse-parse.ts';
+import { extractStreamErrorMessage } from '../../src/api/chat.ts';
+
+describe('extractStreamErrorMessage', () => {
+  it('reads string error payloads', () => {
+    assert.equal(
+      extractStreamErrorMessage({ error: 'rate limited' }),
+      'rate limited',
+    );
+  });
+
+  it('reads object error payloads', () => {
+    assert.equal(
+      extractStreamErrorMessage({ error: { message: 'bad key', code: 401 } }),
+      'bad key',
+    );
+  });
+
+  it('maps finish_reason error to a generic message', () => {
+    assert.equal(
+      extractStreamErrorMessage({
+        choices: [{ finish_reason: 'error', delta: {} }],
+      }),
+      'The provider reported a stream error.',
+    );
+  });
+});
 
 describe('parseSseEventBlock', () => {
   it('parses a standard OpenAI SSE event', () => {

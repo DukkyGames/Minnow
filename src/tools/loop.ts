@@ -51,16 +51,15 @@ import { designRefHistoryBlock, isDesignRefAttachment } from '../attachments/des
 import { linkSentAttachmentsToTurn } from '../design/annotation-store';
 import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
 import {
-  extractMessageText,
   extractStreamDelta,
   finalizeResponseMeta,
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
   parseSsePayloads,
-  tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { applyClassifiedStreamEnd, classifyStreamEnd } from '../api/stream-end';
 import { getLatestStreamingToolName } from '../api/tool-call-stream.ts';
 import { foldLeadingAssistantPreamble } from '../api/provider-message-normalize';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
@@ -71,7 +70,7 @@ import {
   modelLikelyUsesInlineThinking,
   type RoutedContentPart,
 } from '../api/inline-thinking';
-import { extractReasoningDelta, extractReasoningMessage, extractReasoningSignatureDelta, outboundReasoningReplayFields } from '../api/reasoning';
+import { extractReasoningDelta, extractReasoningSignatureDelta, outboundReasoningReplayFields } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
 import {
   chatTurnNeedsModelLoad,
@@ -147,6 +146,7 @@ import type {
   UserMessage,
 } from '../types';
 import { markMessageStopped } from '../ui/stopped-affordance';
+import { markMessageTruncated } from '../ui/truncated-affordance';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
   refreshComposerStreamingAffordance,
@@ -327,6 +327,7 @@ import {
   clearPostToolTailBeforeSend,
   repairSessionHistoryTail,
   rollbackFailedTurnHistory,
+  turnProducedOutput,
 } from '../chat/history';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
@@ -662,6 +663,8 @@ export interface RunChatTurnOptions {
   composerSurface?: Partial<ComposerSurface>;
   /** Surface-owned context reused across every round of this turn only. */
   ephemeralContext?: string;
+  /** First model round only: ephemeral user line for API (not stored in history). */
+  ephemeralContinueInstruction?: string;
 }
 
 /**
@@ -756,6 +759,7 @@ interface StreamTurnResult {
   toolCalls: ReturnType<typeof finalizeToolCalls>;
   thinkingBudgetExceeded?: boolean;
   partialThinkingText?: string;
+  endStatus?: 'complete' | 'error' | 'cancelled';
 }
 
 interface StreamCompletionTurnOptions {
@@ -823,6 +827,7 @@ async function streamCompletionTurn(
   const thinkingBudgetTracker = streamOptions?.thinkingBudgetTracker ?? null;
   let prefillEchoPartial = streamOptions?.prefillEchoPartial?.trim() ?? '';
   let budgetTripped = false;
+  let generationEndStatus: 'complete' | 'error' | 'cancelled' | undefined;
 
   function feedThinkingBudget(delta: string): void {
     if (!thinkingBudgetTracker || !delta) return;
@@ -987,6 +992,9 @@ async function streamCompletionTurn(
         onStreamOpen: onStreamConnected,
         onChunk: handleChunkWithSteerCheck,
         onEnd: (event) => {
+          if (event?.status) {
+            generationEndStatus = event.status;
+          }
           if (event?.status === 'error') {
             const message = event.errorMessage ?? '';
             if (isGenerationTimeoutError(message)) {
@@ -997,6 +1005,10 @@ async function streamCompletionTurn(
             finish(() =>
               reject(new Error(event.errorMessage ?? 'Generation failed')),
             );
+            return;
+          }
+          if (event?.status === 'cancelled') {
+            finish(() => reject(new DOMException('Aborted', 'AbortError')));
             return;
           }
           if (event?.fallbackUsed && event.chosenProviderId) {
@@ -1010,6 +1022,9 @@ async function streamCompletionTurn(
         },
         onTransportError: (err) => {
           finish(() => reject(err instanceof Error ? err : new Error(String(err))));
+        },
+        onAbort: () => {
+          finish(() => reject(new DOMException('Aborted', 'AbortError')));
         },
       });
 
@@ -1071,6 +1086,7 @@ async function streamCompletionTurn(
     toolCalls,
     thinkingBudgetExceeded: budgetTripped,
     partialThinkingText: budgetTripped ? thinkingBudgetTracker?.sessionText : undefined,
+    endStatus: generationEndStatus,
   };
 }
 
@@ -1164,6 +1180,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     superPlanStage,
     goalDriven = false,
     ephemeralContext,
+    ephemeralContinueInstruction,
   } = options;
 
   const hideUserEcho = suppressUserEcho || Boolean(superPlanStage);
@@ -1738,7 +1755,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const activeModeId = normalizeModeId(chat.modeId);
     let emptyPostToolRetries = 0;
     let proseQuestionRetries = 0;
-    let ephemeralPostToolInstruction: string | undefined;
+    let ephemeralPostToolInstruction: string | undefined = ephemeralContinueInstruction;
     const workAgentBudget = activeWorkAgent
       ? agentContextBudgetFromWorkAgent(
           activeWorkAgent,
@@ -2121,14 +2138,41 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         turnResult.finishReason ||
         (turnResult.toolCalls.length > 0 ? 'tool_calls' : undefined);
 
+      const streamEnd = classifyStreamEnd({
+        finishReason,
+        toolCallsCount: turnResult.toolCalls.length,
+        textLength: turnResult.fullText.trim().length,
+        streamError: turnResult.streamMeta.error,
+        endStatus: turnResult.endStatus,
+      });
+
       const lastHistoryRole = chat.history[chat.history.length - 1]?.role;
       logTurnDebug({
         turn,
+        endKind: streamEnd.kind,
         finishReason: finishReason ?? null,
         toolCalls: turnResult.toolCalls.length,
         fullTextLen: turnResult.fullText.length,
         lastHistoryRole: lastHistoryRole ?? null,
         emptyPostToolRetries,
+      });
+
+      if (streamEnd.kind !== 'complete' && streamEnd.kind !== 'truncated') {
+        void import('../boot/report-background-error.js').then((mod) => {
+          mod.reportBackgroundError('stream-end-abnormal', {
+            kind: streamEnd.kind,
+            providerId: sendProviderId,
+            modelId: sendModelId,
+            finishReason: finishReason ?? null,
+            textLength: turnResult.fullText.trim().length,
+            round: turn,
+          });
+        });
+      }
+
+      const { truncated: streamTruncated } = applyClassifiedStreamEnd(streamEnd, {
+        hasPostToolTail: hasPostToolTail(chat.history),
+        textLength: turnResult.fullText.trim().length,
       });
 
       if (finishReason === 'tool_calls' && turnResult.toolCalls.length === 0) {
@@ -2240,48 +2284,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       let fullText = turnResult.fullText;
-      let streamMeta = turnResult.streamMeta;
-
-      if (!fullText.trim()) {
-        const fallbackBody = applySamplerToBody(
-          {
-            model: sendModelId || undefined,
-            messages,
-          },
-          resolvedSampler.preset,
-          resolvedSampler.maxTokens,
-        ) as ChatCompletionBody;
-        mergeThinkingIntoCompletionBody(
-          fallbackBody as unknown as Record<string, unknown>,
-          replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
-          provider,
-          sendCaps,
-          replaySnapshot?.reasoningEffort ?? turnReasoningEffort,
-          undefined,
-          resolvedThinkingBudget.budgetTokens,
-          {
-            llamaSupportsThinkingBudget:
-              provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID &&
-              providerCapabilities?.supportsThinkingBudget === true,
-          },
-        );
-        if (enabledTools.length > 0) {
-          fallbackBody.tools = enabledTools;
-          fallbackBody.tool_choice = 'auto';
-        }
-        const fallback = await tryNonStreamingFallback(
-          fallbackBody,
-          chatSignal,
-          sendProviderId,
-        );
-        const fbMsg = fallback.choices?.[0]?.message;
-        fullText = extractMessageText(fbMsg);
-        const fbReason = extractReasoningMessage(fbMsg);
-        if (fbReason) {
-          thoughtController?.ingestCompletedReasoning(fbReason);
-        }
-        streamMeta = mergeStreamMeta(streamMeta, fallback);
-      }
+      const streamMeta = turnResult.streamMeta;
 
       const continuation = resolveTurnContinuation({
         finishReason,
@@ -2506,6 +2509,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             assistantMsg.thinkingDurationMs = thinkingDurationMs;
           }
         }
+        if (streamTruncated) {
+          assistantMsg.truncated = true;
+        }
         chat.history.push(assistantMsg);
         trackRunHistoryPush(chat, turnRunId);
         syncTurnContextUsage(chat.id, '', thoughtController);
@@ -2522,6 +2528,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             turnKind: 'assistant',
           });
           attachVoicePlayButton(lastWrap, finalContent);
+          if (streamTruncated) {
+            markMessageTruncated(lastWrap, chat);
+          }
           updateStrip(displayMeta.stats, displayMeta.usage, modelInfo);
           setStatus('ok', 'Ready');
         }
@@ -2612,6 +2621,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const failedForkIndex =
       failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
     let rolledBack = false;
+    let preservedTurnOutput = false;
     if (isBoardTaskChat) {
       const repaired = repairSessionHistoryTail(chat);
       if (repaired) {
@@ -2621,6 +2631,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         if (isStreamDomVisible(chat.id)) {
           renderChatFromHistory(chat);
         }
+      }
+    } else if (turnProducedOutput(chat.history, failedForkIndex)) {
+      preservedTurnOutput = true;
+      repairSessionHistoryTail(chat);
+      recordChatMessage(chat);
+      scheduleSaveSessions();
+      renderSidebar();
+      if (isStreamDomVisible(chat.id)) {
+        removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
+        renderChatFromHistory(chat);
       }
     } else {
       rolledBack = rollbackFailedTurnHistory(chat, failedForkIndex);
@@ -2659,12 +2679,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     });
     if (isStreamDomVisible(chat.id)) {
       if (!rolledBack) {
-        if (cursor.parentElement) cursor.remove();
-        revealProse();
-        setAssistantErrorBubbleWithRecovery(bubble, lost, {
-          chatId: chat.id,
-          forkHistoryIndex: failedForkIndex,
-        });
+        if (preservedTurnOutput) {
+          const { bubble: errorBubble } = appendBubble('assistant', '', {
+            historyIndex: chat.history.length,
+            turnKind: 'assistant',
+            chatId: chat.id,
+            modeId: chat.modeId,
+          });
+          setAssistantErrorBubbleWithRecovery(errorBubble, lost, {
+            chatId: chat.id,
+            forkHistoryIndex: failedForkIndex,
+          });
+        } else {
+          if (cursor.parentElement) cursor.remove();
+          revealProse();
+          setAssistantErrorBubbleWithRecovery(bubble, lost, {
+            chatId: chat.id,
+            forkHistoryIndex: failedForkIndex,
+          });
+        }
       }
       const msg = e.message ?? '';
       const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;

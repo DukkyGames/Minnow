@@ -204,6 +204,38 @@
   margin-bottom: 4px;
 }
 
+.msg.assistant.msg--truncated .msg-truncated-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  margin-bottom: 4px;
+}
+
+.msg-truncated-continue-btn {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  padding: 2px 8px;
+  border-radius: var(--mn-radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg-elevated);
+  color: var(--mn-fg);
+  cursor: pointer;
+}
+
+.msg-truncated-continue-btn:hover:not(:disabled) {
+  background: var(--mn-bg-hover);
+}
+
+.msg-truncated-continue-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .msg.user.msg--steered .msg-steer-chip {
   font-size: 11px;
   letter-spacing: 0.04em;

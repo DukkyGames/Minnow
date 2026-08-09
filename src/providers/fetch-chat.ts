@@ -47,6 +47,13 @@ export async function postChatCompletions(
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
+      let sawBytes = false;
+
+      const failStream = (err: unknown): void => {
+        if (closed) return;
+        closed = true;
+        controller.error(err);
+      };
 
       const closeStream = (): void => {
         if (closed) return;
@@ -63,23 +70,29 @@ export async function postChatCompletions(
         {
           onChunk: (text) => {
             if (closed) return;
+            sawBytes = true;
             controller.enqueue(new TextEncoder().encode(text));
           },
           onEnd: (event?: GenerationEndEvent) => {
             if (event?.status === 'error') {
-              if (closed) return;
-              closed = true;
-              controller.error(
-                new Error(event.errorMessage ?? 'Generation failed'),
-              );
+              failStream(new Error(event.errorMessage ?? 'Generation failed'));
+              return;
+            }
+            if (event?.status === 'cancelled') {
+              failStream(new DOMException('Aborted', 'AbortError'));
+              return;
+            }
+            if (event?.status === 'complete' && !sawBytes) {
+              failStream(new Error('The provider returned an empty response.'));
               return;
             }
             closeStream();
           },
           onTransportError: (err) => {
-            if (closed) return;
-            closed = true;
-            controller.error(err);
+            failStream(err);
+          },
+          onAbort: () => {
+            failStream(new DOMException('Aborted', 'AbortError'));
           },
         },
         signal,
@@ -89,7 +102,7 @@ export async function postChatCompletions(
         'abort',
         () => {
           unsubscribe();
-          closeStream();
+          failStream(new DOMException('Aborted', 'AbortError'));
           void cancelGeneration(generationId).catch(() => {
             /* best-effort; matches chat stopGeneration */
           });

@@ -17,6 +17,17 @@ export function copyHistoryForOutboundApi(history: Message[]): Message[] {
  * Revert partial assistant/tool rows after a failed turn.
  * Keeps the user prompt at `forkHistoryIndex` and drops everything after it.
  */
+/** True when the turn appended any assistant/tool row after the forked user message. */
+export function turnProducedOutput(history: Message[], forkHistoryIndex: number): boolean {
+  if (forkHistoryIndex < 0 || forkHistoryIndex >= history.length) {
+    return false;
+  }
+  if (history[forkHistoryIndex]?.role !== 'user') {
+    return false;
+  }
+  return history.length > forkHistoryIndex + 1;
+}
+
 export function rollbackFailedTurnHistory(chat: Chat, forkHistoryIndex: number): boolean {
   if (forkHistoryIndex < 0 || forkHistoryIndex >= chat.history.length) {
     return false;

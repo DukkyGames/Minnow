@@ -123,6 +123,7 @@ export interface SubscribeToGenerationOptions {
   onChunk: (chunk: ChatCompletionChunk) => void;
   onEnd?: (event?: GenerationEndEvent) => void;
   onTransportError?: (err: unknown) => void;
+  onAbort?: () => void;
 }
 
 /**
@@ -204,6 +205,7 @@ export function subscribeToGeneration(
     } catch (err) {
       if (cancelled) return;
       if (err instanceof DOMException && err.name === 'AbortError') {
+        options.onAbort?.();
         return;
       }
       options.onTransportError?.(err);
@@ -220,6 +222,7 @@ export interface SubscribeToGenerationRawHandlers {
   onChunk: (text: string) => void;
   onEnd?: (event?: GenerationEndEvent) => void;
   onTransportError?: (err: unknown) => void;
+  onAbort?: () => void;
 }
 
 /**
@@ -299,6 +302,7 @@ export function subscribeToGenerationRaw(
     } catch (err) {
       if (cancelled) return;
       if (err instanceof DOMException && err.name === 'AbortError') {
+        handlers.onAbort?.();
         return;
       }
       handlers.onTransportError?.(err);

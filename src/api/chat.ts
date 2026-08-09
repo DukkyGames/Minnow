@@ -98,6 +98,7 @@ export interface StreamMetaAccumulator {
   model_info?: ModelInfo;
   model?: string;
   finish_reason?: string;
+  error?: string;
 }
 
 /** Non-streaming completion body (multimodal messages + optional tools). */
@@ -133,6 +134,25 @@ export {
   extractReasoningMessage,
   splitThinkingSegments,
 } from './reasoning';
+
+/** Provider error payload on an SSE chunk (OpenAI-style `error` or `finish_reason: error`). */
+export function extractStreamErrorMessage(chunk: ChatCompletionChunk): string | undefined {
+  const raw = chunk.error;
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim();
+  }
+  if (raw && typeof raw === 'object') {
+    const message = raw.message;
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim();
+    }
+  }
+  const finish = chunk.choices?.[0]?.finish_reason;
+  if (finish === 'error') {
+    return 'The provider reported a stream error.';
+  }
+  return undefined;
+}
 
 /** Pull visible assistant text from one SSE JSON chunk. */
 export function extractStreamDelta(chunk: ChatCompletionChunk): string {
@@ -256,6 +276,8 @@ export function mergeStreamMeta(
   if (chunk.model) next.model = chunk.model;
   const finish = chunk.choices?.[0]?.finish_reason;
   if (finish) next.finish_reason = finish;
+  const streamError = extractStreamErrorMessage(chunk);
+  if (streamError) next.error = streamError;
   return next;
 }
 

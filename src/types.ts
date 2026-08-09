@@ -136,6 +136,8 @@ export interface AssistantMessage {
   thinkingDurationMs?: number;
   /** User stopped generation before the model finished. */
   stopped?: boolean;
+  /** Model hit max_tokens; user can continue the reply. */
+  truncated?: true;
   stats?: Stats;
   usage?: Usage;
 }
@@ -1283,6 +1285,7 @@ export interface ChatCompletionChunk {
   usage?: Usage;
   model_info?: ModelInfo;
   model?: string;
+  error?: string | { message?: string; code?: string | number; type?: string };
 }
 
 /** Partial tool calls keyed by stream `index` while merging SSE deltas. */

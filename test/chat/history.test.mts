@@ -5,6 +5,7 @@ import {
   copyHistoryForOutboundApi,
   repairSessionHistoryTail,
   rollbackFailedTurnHistory,
+  turnProducedOutput,
 } from '../../src/chat/history.ts';
 import { hasPostToolTail } from '../../src/tools/turn-continuation.ts';
 import type { Chat, Message } from '../../src/types.ts';
@@ -107,5 +108,23 @@ describe('chat/history (MIN-184)', () => {
     assert.equal(clearPostToolTailBeforeSend(chat), true);
     assert.equal(chat.history.length, 1);
     assert.equal(hasPostToolTail(chat.history), false);
+  });
+
+  test('turnProducedOutput is true when assistant or tool rows exist after user fork', () => {
+    const chat = poisonedChat();
+    assert.equal(turnProducedOutput(chat.history, 0), true);
+  });
+
+  test('turnProducedOutput is false for user-only history at fork', () => {
+    const chat = poisonedChat();
+    chat.history = chat.history.slice(0, 1);
+    assert.equal(turnProducedOutput(chat.history, 0), false);
+  });
+
+  test('rollback still drops partial tool loop when no output was produced', () => {
+    const chat = poisonedChat();
+    const ok = rollbackFailedTurnHistory(chat, 0);
+    assert.equal(ok, true);
+    assert.equal(chat.history.length, 1);
   });
 });

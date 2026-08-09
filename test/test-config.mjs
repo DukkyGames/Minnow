@@ -104,6 +104,7 @@ export const PATH_RUNNER_RULES = [
   // Parity imports src/state/sessions.ts (CSS/@xterm via UI); other config tests stay on tsx-mocks.
   { pattern: 'test/config/session-shape-parity.test.js', runner: 'tsx-mocks-loader' },
   { pattern: 'test/config/*.test.js', runner: 'tsx-mocks' },
+  { pattern: 'test/providers/fetch-chat-shim.test.mjs', runner: 'tsx-mocks' },
   // Both use mock.module and transitively pull in UI code that imports CSS.
   { pattern: 'test/chat/super-plan/stages.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/super-plan/controller-lifecycle.test.mts', runner: 'tsx-mocks-loader' },

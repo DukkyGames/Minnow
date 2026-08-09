@@ -11,6 +11,8 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { applyClassifiedStreamEnd, classifyStreamEnd } from '../api/stream-end';
+import { reportBackgroundError } from '../boot/report-background-error.ts';
 import {
   extractInlineThinkingFromContent,
   HarmonyChannelRouter,
@@ -1028,6 +1030,30 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
       turnResult = await runSubTurnWithThinkingBudget();
+
+      const subFinishReason =
+        turnResult.finishReason ||
+        (turnResult.toolCalls.length > 0 ? 'tool_calls' : undefined);
+      const subStreamEnd = classifyStreamEnd({
+        finishReason: subFinishReason,
+        toolCallsCount: turnResult.toolCalls.length,
+        textLength: turnResult.fullText.trim().length,
+        streamError: turnResult.streamMeta.error,
+      });
+      if (subStreamEnd.kind !== 'complete' && subStreamEnd.kind !== 'truncated') {
+        reportBackgroundError('stream-end-abnormal', {
+          kind: subStreamEnd.kind,
+          providerId: input.providerId,
+          modelId: input.modelId,
+          finishReason: subFinishReason ?? null,
+          textLength: turnResult.fullText.trim().length,
+          round: turn,
+        });
+      }
+      applyClassifiedStreamEnd(subStreamEnd, {
+        hasPostToolTail: hasPostToolTail(messages as Message[]),
+        textLength: turnResult.fullText.trim().length,
+      });
 
       await ledgerSubAgentTurn(input, turnResult);
 

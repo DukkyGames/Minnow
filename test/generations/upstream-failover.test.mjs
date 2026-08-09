@@ -179,4 +179,41 @@ describe('upstream failover', () => {
     assert.ok(terminal.totalBytes > 0);
     mock.restoreAll();
   });
+
+  test('zero-byte upstream marks error instead of complete', async () => {
+    resetHostCooldownForTests();
+    const emptyServer = http.createServer((req, res) => {
+      if (req.method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('');
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => emptyServer.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (emptyServer.address()).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    await createProvider({
+      id: 'empty-upstream',
+      label: 'Empty',
+      baseUrl,
+      apiKind: 'openai-v1',
+    });
+
+    const state = createGenerationState({
+      providerId: 'empty-upstream',
+      body: { model: 'test-model', messages: [{ role: 'user', content: 'hi' }] },
+      candidates: [{ providerId: 'empty-upstream', modelId: 'test-model' }],
+    });
+
+    pumpUpstream({ state });
+    const terminal = await waitForTerminal(state.id);
+
+    assert.equal(terminal.status, 'error');
+    assert.match(terminal.errorMessage ?? '', /empty response/i);
+    assert.equal(terminal.totalBytes, 0);
+
+    await new Promise((resolve) => emptyServer.close(resolve));
+  });
 });

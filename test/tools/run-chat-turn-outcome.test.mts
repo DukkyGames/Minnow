@@ -1,9 +1,13 @@
 /**
- * Pure turn-continuation helpers (post-tool empty completion, finalize content).
+ * classifyStreamEnd — stream termination reasons for the tool loop.
  */
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import {
+  applyClassifiedStreamEnd,
+  classifyStreamEnd,
+} from '../../src/api/stream-end.ts';
 import {
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
   hasPostToolTail,
@@ -12,6 +16,78 @@ import {
   resolveTurnContinuation,
 } from '../../src/tools/turn-continuation.ts';
 import type { Message } from '../../src/types.ts';
+
+describe('classifyStreamEnd', () => {
+  test('provider_error when streamError is set', () => {
+    const out = classifyStreamEnd({
+      finishReason: undefined,
+      toolCallsCount: 0,
+      textLength: 0,
+      streamError: 'upstream blew up',
+    });
+    assert.equal(out.kind, 'provider_error');
+    assert.equal(out.message, 'upstream blew up');
+  });
+
+  test('aborted when endStatus is cancelled', () => {
+    const out = classifyStreamEnd({
+      finishReason: 'stop',
+      toolCallsCount: 0,
+      textLength: 10,
+      endStatus: 'cancelled',
+    });
+    assert.equal(out.kind, 'aborted');
+  });
+
+  test('truncated when finish_reason is length', () => {
+    const out = classifyStreamEnd({
+      finishReason: 'length',
+      toolCallsCount: 0,
+      textLength: 50,
+    });
+    assert.equal(out.kind, 'truncated');
+  });
+
+  test('complete when finish_reason is stop', () => {
+    const out = classifyStreamEnd({
+      finishReason: 'stop',
+      toolCallsCount: 0,
+      textLength: 3,
+    });
+    assert.equal(out.kind, 'complete');
+  });
+
+  test('incomplete when stream ends with no reason and no tools', () => {
+    const out = classifyStreamEnd({
+      finishReason: undefined,
+      toolCallsCount: 0,
+      textLength: 0,
+      endStatus: 'complete',
+    });
+    assert.equal(out.kind, 'incomplete');
+  });
+});
+
+describe('applyClassifiedStreamEnd', () => {
+  test('throws on incomplete empty stream without post-tool tail', () => {
+    assert.throws(
+      () =>
+        applyClassifiedStreamEnd(
+          { kind: 'incomplete' },
+          { hasPostToolTail: false, textLength: 0 },
+        ),
+      /no output/,
+    );
+  });
+
+  test('allows incomplete empty when post-tool tail remains', () => {
+    const out = applyClassifiedStreamEnd(
+      { kind: 'incomplete' },
+      { hasPostToolTail: true, textLength: 0 },
+    );
+    assert.equal(out.truncated, false);
+  });
+});
 
 describe('resolveTurnContinuation', () => {
   test('continueTools when finish_reason is tool_calls with calls', () => {

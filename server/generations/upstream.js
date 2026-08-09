@@ -346,7 +346,11 @@ async function attemptCandidateStream({
         appendChunk(state, Buffer.from(text, 'utf8'));
       }
       if (state.status !== 'error' && state.status !== 'cancelled') {
-        markComplete(state);
+        if (bytesEmitted) {
+          markComplete(state);
+        } else {
+          markError(state, 'Provider returned an empty response');
+        }
       }
       return { outcome: 'complete' };
     }
@@ -371,7 +375,11 @@ async function attemptCandidateStream({
     }
 
     if (state.status !== 'error' && state.status !== 'cancelled') {
-      markComplete(state);
+      if (bytesEmitted) {
+        markComplete(state);
+      } else {
+        markError(state, 'Provider returned an empty response');
+      }
     }
     return { outcome: 'complete' };
   } catch (err) {

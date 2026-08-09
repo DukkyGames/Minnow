@@ -15,6 +15,10 @@ export const MAX_EMPTY_POST_TOOL_RETRIES = 1;
 export const EMPTY_POST_TOOL_CONTINUE_INSTRUCTION =
   'You have tool results above. Reply to the user in plain language; do not call more tools unless necessary.';
 
+/** Ephemeral API-only line after max_tokens truncation (not stored in session history). */
+export const CONTINUE_AFTER_TRUNCATION_INSTRUCTION =
+  'Your previous reply was cut off because of the output token limit. Continue exactly where you left off without repeating what you already wrote.';
+
 /** Max extra model rounds when prose looks like multiple-choice but `ask_question` was not called. */
 export const MAX_PROSE_QUESTION_RETRIES = 1;
 

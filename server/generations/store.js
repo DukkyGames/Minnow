@@ -155,7 +155,7 @@ function flushSubscriberQueue(state, res, opts = {}) {
           w.draining = true;
           res.once('drain', () => {
             w.draining = false;
-            flushSubscriberQueue(state, res, opts);
+            flushSubscriberQueue(state, res, w.endAfterFlush ? { terminal: true } : {});
           });
         }
         return;
