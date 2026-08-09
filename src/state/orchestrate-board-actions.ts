@@ -652,8 +652,35 @@ function recordFixerStallStopForTests(taskId: string, chatId: string): void {
   fixerStallStopsForTests?.push({ taskId, chatId });
 }
 
-/** Per-task guard: only one merge-fixer finalize may run at a time (stream-end races). */
-const fixerFinalizeInFlight = new Set<string>();
+/** Per board task: coalesce concurrent merge/env fixer finalizers (stream-end races). */
+const fixerFinalizeInFlight = new Map<string, Promise<void>>();
+
+function fixerFinalizeInflightKey(groupId: string, taskId: string): string {
+  return `${groupId}\u0000${taskId}`;
+}
+
+/** Run one finalize at a time per board task; parallel callers await the same work. */
+async function withFixerFinalizeInflight(
+  group: ChatGroup,
+  taskId: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  const key = fixerFinalizeInflightKey(group.id, taskId);
+  const existing = fixerFinalizeInFlight.get(key);
+  if (existing) {
+    await existing;
+    return;
+  }
+  const promise = run();
+  fixerFinalizeInFlight.set(key, promise);
+  try {
+    await promise;
+  } finally {
+    if (fixerFinalizeInFlight.get(key) === promise) {
+      fixerFinalizeInFlight.delete(key);
+    }
+  }
+}
 
 function refreshHeartbeatThresholds(): void {
   // Shared singleton with the sub-agent watchdog — both sides must resolve identically.
@@ -2090,7 +2117,8 @@ export async function recoverMergingBoardTask(
   const fixerId = task.fixerChatId?.trim();
   if (fixerId) {
     stopTaskChatSupervision(fixerId);
-    stopGeneration(fixerId);
+    // System recovery — must not mark the fixer as a user stop (neutral-stop path).
+    stopGeneration(fixerId, 'system');
     releaseLaunchSlot(fixerId);
   }
   releasePipelineHoldsForTask(board, taskId);
@@ -2888,8 +2916,7 @@ async function finalizeMergeFixerOnStreamEnd(
   endedChatId?: string,
 ): Promise<void> {
   if (task.status !== 'merging') return;
-  if (fixerFinalizeInFlight.has(task.id)) return;
-  fixerFinalizeInFlight.add(task.id);
+  await withFixerFinalizeInflight(group, task.id, async () => {
   const hold = acquireBoardPipelineHold(group, task.id, 'merge-fixer-finalize');
   try {
     const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
@@ -3110,8 +3137,8 @@ async function finalizeMergeFixerOnStreamEnd(
     ).catch((err) => reportBackgroundError('self-heal-fixer-terminal', err));
   } finally {
     releasePipelineHold(hold);
-    fixerFinalizeInFlight.delete(task.id);
   }
+  });
 }
 
 /** Seed for an environment/setup fixer chat (runs in the task's own worktree). */
@@ -3245,8 +3272,7 @@ async function finalizeEnvFixerOnStreamEnd(
   endedChatId?: string,
 ): Promise<void> {
   if (task.fixerKind !== 'env') return;
-  if (fixerFinalizeInFlight.has(task.id)) return;
-  fixerFinalizeInFlight.add(task.id);
+  await withFixerFinalizeInflight(group, task.id, async () => {
   const hold = acquireBoardPipelineHold(group, task.id, 'env-fixer-finalize');
   try {
     const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
@@ -3370,8 +3396,8 @@ async function finalizeEnvFixerOnStreamEnd(
     reportBackgroundError('finalize-env-fixer', err);
   } finally {
     releasePipelineHold(hold);
-    fixerFinalizeInFlight.delete(task.id);
   }
+  });
 }
 
 /**
@@ -4959,22 +4985,22 @@ export function stopBoardAutoRun(
   for (const task of board.tasks) {
     if (task.chatId) {
       stopTaskChatSupervision(task.chatId);
-      stopGeneration(task.chatId);
+      stopGeneration(task.chatId, reason);
     }
     if (task.testChatId) {
       stopTaskChatSupervision(task.testChatId);
-      stopGeneration(task.testChatId);
+      stopGeneration(task.testChatId, reason);
     }
     if (task.fixerChatId) {
       stopTaskChatSupervision(task.fixerChatId);
-      stopGeneration(task.fixerChatId);
+      stopGeneration(task.fixerChatId, reason);
     }
   }
   if (board.finalTest?.chatId) {
     stopTaskChatSupervision(board.finalTest.chatId);
-    stopGeneration(board.finalTest.chatId);
+    stopGeneration(board.finalTest.chatId, reason);
   }
-  stopGeneration(plannerChat.id);
+  stopGeneration(plannerChat.id, reason);
   // Freeze the header timer now (close the open segment) instead of waiting for
   // the next live tick, so the elapsed value stops the instant Stop is pressed.
   syncOrchestrateBoardTimer(group, plannerChat, {
