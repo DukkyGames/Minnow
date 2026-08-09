@@ -6,6 +6,7 @@
  * input and output tucked behind a single disclosure.
  */
 
+import { withSessionToken } from '../api/session-token.ts';
 import type { CodeChangeDiffLine, CodeChangeStats, ToolImageAttachment } from '../types';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
@@ -871,12 +872,21 @@ export function renderToolResult(
   if (attachments?.length) {
     for (const att of attachments) {
       if (att.type !== 'image' || !att.url) continue;
+      // img/src cannot send X-Minnow-Token; auth middleware accepts ?token= instead.
+      const authenticatedUrl = withSessionToken(att.url);
+      const link = document.createElement('a');
+      link.className = 'tool-call-screenshot-link';
+      link.href = authenticatedUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.title = 'Open screenshot in a new tab';
       const img = document.createElement('img');
       img.className = 'tool-call-screenshot';
       img.loading = 'lazy';
       img.alt = att.alt ?? 'Browser screenshot';
-      img.src = att.url;
-      body.appendChild(img);
+      img.src = authenticatedUrl;
+      link.appendChild(img);
+      body.appendChild(link);
     }
   }
 

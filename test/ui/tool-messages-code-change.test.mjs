@@ -10,6 +10,7 @@ const { renderToolCall, renderToolResult } = await import('../../src/ui/tool-mes
 
 function setupDom() {
   const window = new Window();
+  globalThis.window = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
@@ -226,5 +227,25 @@ describe('renderToolCall row zones', () => {
     const badge = wrap.querySelector('.tool-call-code-change');
     assert.equal(badge?.querySelector('.tool-call-code-change__add')?.textContent, '+2');
     assert.equal(badge?.querySelector('.tool-call-code-change__del')?.textContent, '−1');
+  });
+
+  test('browser screenshot attachment uses session token on img and link', () => {
+    window = setupDom();
+    window.__MINNOW_SESSION_TOKEN__ = 'test-session-token';
+    const wrap = renderToolCall('browser_screenshot', {});
+    renderToolResult(wrap, 'Screenshot saved: abc.png', [
+      {
+        type: 'image',
+        url: '/api/browser/screenshot/abc',
+        mime: 'image/png',
+        alt: 'Browser screenshot',
+      },
+    ]);
+    const link = wrap.querySelector('.tool-call-screenshot-link');
+    const img = wrap.querySelector('.tool-call-screenshot');
+    assert.ok(link);
+    assert.ok(img);
+    assert.match(link.getAttribute('href') ?? '', /token=test-session-token/);
+    assert.match(img.getAttribute('src') ?? '', /token=test-session-token/);
   });
 });
