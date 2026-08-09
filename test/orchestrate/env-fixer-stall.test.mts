@@ -135,7 +135,7 @@ function makeEnvFixerChat(options?: {
   return chat;
 }
 
-function makeGroup(): ChatGroup {
+function makeGroup(executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'afk'): ChatGroup {
   const group: ChatGroup = {
     id: GROUP_ID,
     name: 'Board',
@@ -162,7 +162,7 @@ function makeGroup(): ChatGroup {
     ],
     waves: [{ id: 'W1', status: 'in_progress' }],
   });
-  group.orchestrateBoard!.executionMode = 'afk';
+  group.orchestrateBoard!.executionMode = executionMode;
   group.orchestrateBoard!.autoRunning = true;
   return group;
 }
@@ -433,7 +433,8 @@ describe('task-chat launch failure recovery', () => {
   });
 
   test('build launch failure with self-heal exhausted quarantines, never a silent board', async () => {
-    const group = makeGroup();
+    // AFK immediately requeues root quarantines (onTasksQuarantined); auto keeps terminal quarantine.
+    const group = makeGroup('auto');
     const { planner } = seedEnvFixerTask(group, makeEnvFixerChat(), {
       fixerChatId: undefined,
       fixerKind: undefined,

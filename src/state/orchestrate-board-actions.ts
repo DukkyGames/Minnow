@@ -1035,6 +1035,14 @@ export function finalizeBoardTaskOnStreamEnd(
   if (outcome === 'stopped') {
     const board = group.orchestrateBoard;
     const stopReason = resolveTaskChatStopReason(chat, board);
+    if (
+      stopReason === 'system' &&
+      (taskChatStallRestarts.get(chatId) ?? 0) > 0
+    ) {
+      // Stall supervision killed the turn; nudge/self-heal owns recovery — do not
+      // park the task or burn stopRetries from this stream-end.
+      return;
+    }
     logBuildVerdict(group, task.id, 'stopped');
     teardownBoardTaskChatResources(chat, sessionState?.groups);
 
@@ -1437,10 +1445,22 @@ function ensureStreamEndSubscription(): void {
       // board terminal. The runner's `.finally` release remains an idempotent
       // fallback for setup failures that never emit stream-end.
       releaseLaunchSlot(endedChatId);
-      if (stallStoppedChatIds.delete(endedChatId)) {
+      const hadStallStop = stallStoppedChatIds.delete(endedChatId);
+      const stallRestarts = taskChatStallRestarts.get(endedChatId) ?? 0;
+      if (hadStallStop) {
         // Stall-kill stream-end: keep the restart counter so the next stall
         // escalates (nudge → self-heal → cap) instead of nudging forever.
         stopHeartbeat(chatTaskRunId(endedChatId));
+      } else if (stallRestarts > 0) {
+        const endedChat = findChatById(endedChatId);
+        const endedOutcome = endedChat ? resolveTaskChatStreamOutcome(endedChat) : 'failed';
+        if (endedOutcome === 'completed') {
+          stopTaskChatSupervision(endedChatId);
+        } else {
+          // Duplicate stall-stop end (e.g. flushStoppedChatPresentation after
+          // stopGeneration) — keep the restart budget until a natural completion.
+          stopHeartbeat(chatTaskRunId(endedChatId));
+        }
       } else {
         stopTaskChatSupervision(endedChatId);
       }

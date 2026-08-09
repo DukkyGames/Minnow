@@ -333,6 +333,7 @@ describe('board task-chat stall detection', () => {
     // Next turn ends naturally (no stall tick) → full supervision teardown.
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     bumpProgress(runId);
+    taskChat.history.push({ role: 'assistant', content: 'Done.' });
     await simulateUnmatchedFixerStreamEndForTests(group, planner, TASK_CHAT_ID);
     assert.equal(
       getTaskChatStallRestartCountForTests(TASK_CHAT_ID),
