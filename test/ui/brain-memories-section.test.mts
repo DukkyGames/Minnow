@@ -15,6 +15,7 @@ describe('brain memories section', () => {
     assert.match(html, /id="brainSection-memories"/);
     assert.match(html, /id="brainMemoryEnabled"/);
     assert.match(html, /id="brainMemoryAddOpen"/);
+    assert.match(html, /id="brainMemoryAddSubmit"/);
     assert.match(html, /brain-section--memories/);
   });
 

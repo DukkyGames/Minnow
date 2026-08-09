@@ -225,6 +225,26 @@ export async function createMemoryEntry(input: {
   return data?.entry ?? null;
 }
 
+/** Update an existing memory entry by id. */
+export async function updateMemoryEntry(
+  id: string,
+  input: {
+    title?: string;
+    body?: string;
+    tags?: string[];
+    pinned?: boolean;
+  },
+): Promise<MemoryEntryMeta | null> {
+  const data = await memoryFetch<{ entry: MemoryEntryMeta }>(
+    `/api/memory/entries/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    },
+  );
+  return data?.entry ?? null;
+}
+
 /** Clear all memory entries. */
 export async function clearMemory(archive = true): Promise<boolean> {
   const data = await memoryFetch<{ removed: number }>('/api/memory/clear', {

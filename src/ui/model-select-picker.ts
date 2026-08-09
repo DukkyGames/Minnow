@@ -24,7 +24,7 @@ import { isModelLoaded, resolveModelState, type ModelLoadState } from './model-s
 import {
   getModelLoadUnloadTargetSelectValue,
   isModelLoadUnloadBusy,
-} from '../ui/model-load-unload-button';
+} from './model-load-unload-button';
 import {
   registerChromePopover,
   unregisterChromePopover,

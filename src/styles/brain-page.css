@@ -1201,6 +1201,14 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
   border-bottom: 1px solid var(--mn-border);
 }
 
+.brain-memory-detail__actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .brain-memory-detail__title {
   margin: 0;
   font-size: 16px;

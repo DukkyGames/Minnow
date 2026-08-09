@@ -10,6 +10,7 @@ import {
   fetchMemoryEnabled,
   fetchMemoryEntries,
   fetchMemoryStatus,
+  updateMemoryEntry,
 } from '../../memory/client';
 import { appConfirm } from '../app-dialog';
 import { parseMemoryTagsInput } from '../../memory/parse-tags';
@@ -28,6 +29,10 @@ let addFormBound = false;
 let memoryListRefreshGen = 0;
 let selectedMemoryId: string | null = null;
 let cachedEntries: MemoryEntryWithBody[] = [];
+/** When set, the compose form updates this entry instead of creating one. */
+let editingMemoryId: string | null = null;
+
+type MemoryComposeMode = 'add' | 'edit';
 
 const MEMORY_BODY_MAX_BYTES = 32 * 1024;
 
@@ -65,6 +70,26 @@ function clearMemoryAddForm(): void {
   const err = document.getElementById('brainMemoryAddError');
   err?.classList.add('hidden');
   if (err) err.textContent = '';
+  editingMemoryId = null;
+}
+
+function formatMemoryTagsForInput(tags: string[]): string {
+  return tags.join(', ');
+}
+
+function setMemoryComposeChrome(mode: MemoryComposeMode): void {
+  const eyebrow = document.querySelector('#brainMemoryAddPanel .brain-memory-compose__eyebrow');
+  const submitBtn = document.getElementById('brainMemoryAddSubmit');
+  const resetBtn = document.getElementById('brainMemoryAddReset');
+  if (eyebrow) {
+    eyebrow.textContent = mode === 'edit' ? 'Edit memory' : 'New memory';
+  }
+  if (submitBtn) {
+    submitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save memory';
+  }
+  resetBtn?.classList.toggle('hidden', mode === 'edit');
+  if (mode === 'edit') resetBtn?.setAttribute('hidden', '');
+  else resetBtn?.removeAttribute('hidden');
 }
 
 function sortMemoryEntries(entries: MemoryEntryWithBody[]): MemoryEntryWithBody[] {
@@ -100,12 +125,27 @@ function showMemoryEmptyPane(): void {
   setPaneVisible('brainMemoryAddPanel', false);
 }
 
-function showMemoryComposePane(): void {
+function showMemoryComposePane(mode: MemoryComposeMode = 'add'): void {
   setPaneVisible('brainMemoryEmptyState', false);
   setPaneVisible('brainMemoryDetail', false);
   setPaneVisible('brainMemoryAddPanel', true);
+  setMemoryComposeChrome(mode);
   const titleInput = document.getElementById('brainMemoryAddTitle') as HTMLInputElement | null;
   titleInput?.focus();
+}
+
+function showMemoryEditPane(entry: MemoryEntryWithBody): void {
+  editingMemoryId = entry.id;
+  const titleInput = document.getElementById('brainMemoryAddTitle') as HTMLInputElement | null;
+  const bodyInput = document.getElementById('brainMemoryAddBody') as HTMLTextAreaElement | null;
+  const tagsInput = document.getElementById('brainMemoryAddTags') as HTMLInputElement | null;
+  const errEl = document.getElementById('brainMemoryAddError');
+  if (titleInput) titleInput.value = entry.title || '';
+  if (bodyInput) bodyInput.value = entry.body ?? '';
+  if (tagsInput) tagsInput.value = formatMemoryTagsForInput(entry.tags);
+  errEl?.classList.add('hidden');
+  if (errEl) errEl.textContent = '';
+  showMemoryComposePane('edit');
 }
 
 function showMemoryDetailPane(): void {
@@ -166,13 +206,26 @@ function renderMemoryDetail(entry: MemoryEntryWithBody): void {
   titleWrap.append(meta);
   head.append(titleWrap);
 
+  const actions = document.createElement('div');
+  actions.className = 'brain-memory-detail__actions';
+
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.className = 'brain-action-btn';
+  editBtn.textContent = 'Edit';
+  editBtn.setAttribute('aria-label', `Edit memory ${entry.title}`);
+  editBtn.dataset.memoryEdit = entry.id;
+  actions.append(editBtn);
+
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'brain-action-btn brain-action-btn--danger';
   removeBtn.textContent = 'Delete';
   removeBtn.setAttribute('aria-label', `Delete memory ${entry.title}`);
   removeBtn.dataset.memoryRemove = entry.id;
-  head.append(removeBtn);
+  actions.append(removeBtn);
+
+  head.append(actions);
 
   const body = document.createElement('pre');
   body.className = 'brain-memory-detail__body';
@@ -194,6 +247,7 @@ function selectMemoryEntry(id: string | null): void {
     showMemoryEmptyPane();
     return;
   }
+  editingMemoryId = null;
   renderMemoryDetail(entry);
 }
 
@@ -237,6 +291,15 @@ function bindMemoryListActions(): void {
       return;
     }
 
+    const editBtn = (ev.target as HTMLElement).closest(
+      '[data-memory-edit]',
+    ) as HTMLButtonElement | null;
+    if (editBtn?.dataset.memoryEdit) {
+      const entry = cachedEntries.find((e) => e.id === editBtn.dataset.memoryEdit);
+      if (entry) showMemoryEditPane(entry);
+      return;
+    }
+
     const target = (ev.target as HTMLElement).closest(
       '[data-memory-remove]',
     ) as HTMLButtonElement | null;
@@ -274,8 +337,9 @@ function bindMemoryAddForm(): void {
   resetBtn?.addEventListener('click', () => clearMemoryAddForm());
 
   cancelBtn?.addEventListener('click', () => {
+    const resumeId = editingMemoryId ?? selectedMemoryId;
     clearMemoryAddForm();
-    if (selectedMemoryId) selectMemoryEntry(selectedMemoryId);
+    if (resumeId) selectMemoryEntry(resumeId);
     else if (cachedEntries.length) selectMemoryEntry(cachedEntries[0].id);
     else showMemoryEmptyPane();
   });
@@ -310,6 +374,31 @@ function bindMemoryAddForm(): void {
       }
 
       const tags = parseMemoryTagsInput(tagsInput?.value ?? '');
+
+      if (editingMemoryId) {
+        const updated = await updateMemoryEntry(editingMemoryId, {
+          title,
+          body,
+          tags,
+        });
+        if (!updated) {
+          if (errEl) {
+            errEl.textContent = 'Save failed. Open or restart Minnow and try again.';
+            errEl.classList.remove('hidden');
+          }
+          setStatus('err', 'Could not save. Open or restart Minnow and try again.');
+          return;
+        }
+
+        if (errEl) errEl.classList.add('hidden');
+        const savedId = editingMemoryId;
+        clearMemoryAddForm();
+        selectedMemoryId = savedId;
+        setStatus('ok', `Updated memory “${updated.title}”`);
+        await refreshMemoryEntriesList();
+        return;
+      }
+
       const entry = await createMemoryEntry({
         title,
         body,
@@ -374,7 +463,7 @@ function bindMemoriesSection(): void {
 
   document.getElementById('brainMemoryAddOpen')?.addEventListener('click', () => {
     clearMemoryAddForm();
-    showMemoryComposePane();
+    showMemoryComposePane('add');
   });
 
   const enableEl = document.getElementById('brainMemoryEnabled') as HTMLInputElement | null;
