@@ -31,6 +31,7 @@ import {
   groupPlanLibraryEntries,
   listSuperPlanLibrary,
   planLibraryStateLabel,
+  resolveSuperPlanDisplayTitle,
   titleFromPlanPath,
   type PlanLibraryEntry,
 } from '../chat/super-plan/plan-library';
@@ -1203,9 +1204,10 @@ class SuperPlanPage {
 
   private paintHead(chat: Chat, sp: SuperPlanState, state: RunState): void {
     if (this.headTitle) {
-      const prompt = sp.prompt.trim() || 'Untitled plan';
-      if (this.headTitle.textContent !== prompt) {
-        this.headTitle.textContent = prompt;
+      const path = planPathOf(sp) || specPathOf(sp);
+      const title = resolveSuperPlanDisplayTitle(sp, path);
+      if (this.headTitle.textContent !== title) {
+        this.headTitle.textContent = title;
       }
       this.syncTitleOverflow();
     }

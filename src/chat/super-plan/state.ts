@@ -2,10 +2,23 @@
  * Super Plan state persistence helpers — read/write {@link Chat.superPlan}.
  */
 
-import { ORCHESTRATE_PLANS_PREFIX } from '../orchestrate/plan-path';
+import { normalizeOrchestratePlanPath } from '../orchestrate/plan-path';
+import { findGroupById } from '../../state/chat-groups';
 import { findChatById, scheduleSaveSessions, touchChat } from '../../state/sessions';
 import type { Chat } from '../../types';
+import { executeTool } from '../../tools/client';
 import { planInvolvesUi } from './review-helpers';
+import {
+  createInterimPlanSlug,
+  ensureUniquePlanSlug,
+  extractPlanMarkdownTitle,
+  slugFromPlanTitle,
+} from './plan-slug';
+import {
+  superPlanPlanPath,
+  superPlanResearchPath,
+  superPlanSpecPath,
+} from './state-paths';
 import {
   SUPER_PLAN_STAGE_ORDER,
   type SuperPlanStageId,
@@ -14,8 +27,13 @@ import {
   type SuperPlanState,
 } from './types';
 
-const REFERENCES_PREFIX = `${ORCHESTRATE_PLANS_PREFIX}references/`;
+export {
+  superPlanPlanPath,
+  superPlanResearchPath,
+  superPlanSpecPath,
+} from './state-paths';
 
+/** @deprecated Prompt-derived slugs; tests only — use {@link createInterimPlanSlug}. */
 export function slugFromSuperPlanPrompt(prompt: string): string {
   const slug = prompt
     .toLowerCase()
@@ -23,18 +41,6 @@ export function slugFromSuperPlanPrompt(prompt: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
   return slug || 'super-plan';
-}
-
-export function superPlanSpecPath(slug: string): string {
-  return `${REFERENCES_PREFIX}${slug}-spec.md`;
-}
-
-export function superPlanResearchPath(slug: string): string {
-  return `${REFERENCES_PREFIX}${slug}-research.md`;
-}
-
-export function superPlanPlanPath(slug: string): string {
-  return `${ORCHESTRATE_PLANS_PREFIX}${slug}.md`;
 }
 
 function createPendingStageRecord(): SuperPlanStageRecord {
@@ -53,7 +59,7 @@ export function createInitialSuperPlanStages(): Record<
 }
 
 export function createSuperPlanState(prompt: string): SuperPlanState {
-  const slug = slugFromSuperPlanPrompt(prompt);
+  const slug = createInterimPlanSlug();
   return {
     slug,
     prompt: prompt.trim(),
@@ -104,6 +110,95 @@ export function patchSuperPlanState(
   touchChat(chat);
   scheduleSaveSessions();
   return chat.superPlan;
+}
+
+async function readWorkspaceFile(path: string): Promise<string> {
+  try {
+    const result = await executeTool('read_file', { path });
+    return result.content?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+async function workspaceFileExists(path: string): Promise<boolean> {
+  try {
+    const result = await executeTool('get_file_metadata', { path });
+    const content = typeof result.content === 'string' ? result.content : '';
+    return !content.trim().startsWith('Error:');
+  } catch {
+    return false;
+  }
+}
+
+async function probePlanFileExists(planPath: string): Promise<boolean> {
+  return workspaceFileExists(planPath);
+}
+
+/**
+ * After the build spec is confirmed, rename artifacts from the interim slug to a title-based slug.
+ */
+export async function reconcileSuperPlanSlugFromSpec(chat: Chat): Promise<void> {
+  const state = chat.superPlan;
+  if (!state?.specPath?.trim()) return;
+
+  const specContent = await readWorkspaceFile(state.specPath);
+  const title = extractPlanMarkdownTitle(specContent, '');
+  if (!title) return;
+
+  const oldSlug = state.slug;
+  const oldPlan = state.planPath ?? superPlanPlanPath(oldSlug);
+  const oldSpec = state.specPath;
+  const oldResearch = state.researchPath ?? superPlanResearchPath(oldSlug);
+
+  const nextSlug = await ensureUniquePlanSlug(title, [oldPlan, oldSpec, oldResearch], probePlanFileExists);
+  const newPlan = superPlanPlanPath(nextSlug);
+  const newSpec = superPlanSpecPath(nextSlug);
+  const newResearch = superPlanResearchPath(nextSlug);
+
+  if (nextSlug !== oldSlug) {
+    const moves: Array<{ from: string; to: string }> = [
+      { from: oldSpec, to: newSpec },
+      { from: oldResearch, to: newResearch },
+      { from: oldPlan, to: newPlan },
+    ];
+    for (const { from, to } of moves) {
+      if (from === to) continue;
+      if (!(await workspaceFileExists(from))) continue;
+      await executeTool('move_file', { source: from, destination: to });
+    }
+  }
+
+  patchSuperPlanState(chat, {
+    slug: nextSlug,
+    displayTitle: title,
+    specPath: newSpec,
+    researchPath: newResearch,
+    planPath: newPlan,
+  });
+
+  const normalizedOldPlan = normalizeOrchestratePlanPath(oldPlan);
+  const fromChat = normalizeOrchestratePlanPath(chat.orchestratePlanPath ?? '');
+  if (normalizedOldPlan && fromChat === normalizedOldPlan) {
+    chat.orchestratePlanPath = newPlan;
+    touchChat(chat);
+  }
+  const groupId = chat.groupId?.trim();
+  if (groupId && normalizedOldPlan) {
+    const group = findGroupById(groupId);
+    const fromGroup = group
+      ? normalizeOrchestratePlanPath(group.orchestratePlanPath ?? '')
+      : undefined;
+    if (group && fromGroup === normalizedOldPlan) {
+      group.orchestratePlanPath = newPlan;
+      scheduleSaveSessions({ groupId: group.id });
+    }
+  }
+
+  const specRecord = chat.superPlan?.stages.spec_confirm;
+  if (specRecord?.artifactPath && specRecord.artifactPath === oldSpec) {
+    patchSuperPlanStage(chat, 'spec_confirm', { artifactPath: newSpec });
+  }
 }
 
 export function setSuperPlanActiveStage(
@@ -211,3 +306,5 @@ export function rewindSuperPlanStages(chat: Chat, stageId: SuperPlanStageId): Su
   scheduleSaveSessions();
   return chat.superPlan;
 }
+
+export { slugFromPlanTitle };

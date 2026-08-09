@@ -76,10 +76,24 @@ export function titleFromPlanPath(path: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** First line of the run prompt, for rows that have a live run behind them. */
-function titleFromPrompt(prompt: string): string {
-  const line = prompt.split('\n').find((l) => l.trim().length > 0)?.trim() ?? '';
-  return line.length > 140 ? `${line.slice(0, 140)}…` : line;
+/** UI label for a Super Plan run — never the full opening prompt. */
+export function resolveSuperPlanDisplayTitle(
+  sp: SuperPlanState,
+  path?: string,
+): string {
+  const display = sp.displayTitle?.trim();
+  if (display) return display;
+  const planPath =
+    path?.trim() ||
+    sp.stages.present?.artifactPath?.trim() ||
+    sp.planPath?.trim() ||
+    '';
+  if (planPath) return titleFromPlanPath(planPath);
+  if (sp.specPath?.trim()) {
+    const base = sp.specPath.split('/').pop()?.replace(/-spec\.md$/i, '') ?? '';
+    if (base && !base.startsWith('plan-')) return titleFromPlanPath(`${base}.md`);
+  }
+  return 'Untitled plan';
 }
 
 export function planLibraryStateLabel(state: PlanLibraryState): string {
@@ -150,7 +164,7 @@ export function collectSuperPlanRuns(workspacePath = getWorkspacePath()): PlanLi
     rows.push({
       key: path || chat.id,
       path,
-      title: titleFromPrompt(sp.prompt) || titleFromPlanPath(path) || 'Untitled plan',
+      title: resolveSuperPlanDisplayTitle(sp, path),
       chatId: chat.id,
       state,
       stageLabel: SUPER_PLAN_STAGE_LABELS[sp.activeStage],

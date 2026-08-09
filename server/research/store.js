@@ -17,6 +17,7 @@ import { runWithToolContext } from '../runtime/path-access.js';
 import { validateWorkspacePath } from '../workspace/root.js';
 import { DeepResearcher, normalizeResearchScope } from './engine.js';
 import { stripThinking, isLowQuality } from './strip-thinking.js';
+import { extractReportTitle } from './visual-report.js';
 
 /** Composite #modelSelect value separator (see src/lib/model-select-key.ts). */
 const MODEL_SELECT_KEY_SEP = '\u001f';
@@ -32,6 +33,7 @@ export const RESEARCH_ID_RE = /^rs-[a-f0-9]{12}$/;
  * @typedef {object} ResearchTaskState
  * @property {string} id
  * @property {string} query
+ * @property {string} [title]
  * @property {ResearchStatus} status
  * @property {Record<string, unknown>} progress
  * @property {string | null} result
@@ -543,6 +545,7 @@ async function persistResearch(state) {
   const data = {
     id: state.id,
     query: state.query,
+    title: resolveResearchTitle(state) || undefined,
     status: state.status,
     result: state.result,
     raw_report: state.rawReport,
@@ -622,6 +625,20 @@ export function removeSubscriber(state, res) {
   detachSubscriber(state, res);
 }
 
+function resolveResearchTitle(state) {
+  const existing = typeof state.title === 'string' ? state.title.trim() : '';
+  if (existing) return existing;
+  const report =
+    typeof state.result === 'string' && state.result.trim()
+      ? state.result
+      : typeof state.rawReport === 'string'
+        ? state.rawReport
+        : '';
+  if (!report) return '';
+  const { title } = extractReportTitle(report, state.query);
+  return typeof title === 'string' ? title.trim() : '';
+}
+
 /**
  * @param {ResearchTaskState} state
  */
@@ -631,6 +648,10 @@ function markDone(state) {
   }
   state.status = 'done';
   state.completedAt = new Date().toISOString();
+  const title = resolveResearchTitle(state);
+  if (title) {
+    state.title = title;
+  }
   broadcastTerminal(state);
 }
 
@@ -1026,6 +1047,7 @@ export async function getResearchDetail(id) {
     return {
       id: live.id,
       query: live.query,
+      title: resolveResearchTitle(live) || undefined,
       status: live.status,
       result: live.result,
       raw_report: live.rawReport,
@@ -1144,7 +1166,16 @@ export async function listResearchLibrary(opts = {}) {
         continue;
       }
       const q = typeof d.query === 'string' ? d.query : '';
-      if (search && !q.toLowerCase().includes(search)) {
+      const storedTitle = typeof d.title === 'string' ? d.title.trim() : '';
+      const backfillTitle =
+        storedTitle ||
+        (typeof d.result === 'string' && d.result.trim()
+          ? extractReportTitle(d.result, q).title
+          : '');
+      const title =
+        typeof backfillTitle === 'string' ? backfillTitle.trim() : '';
+      const searchHaystack = `${title} ${q}`.toLowerCase();
+      if (search && !searchHaystack.includes(search)) {
         continue;
       }
       const sources = Array.isArray(d.sources) ? d.sources : [];
@@ -1155,6 +1186,7 @@ export async function listResearchLibrary(opts = {}) {
       items.push({
         id: stem,
         query: q,
+        title: title || undefined,
         category: typeof d.category === 'string' ? d.category : '',
         source_count: sources.length,
         status: typeof d.status === 'string' ? d.status : 'done',
