@@ -902,6 +902,26 @@
     ]
   },
   {
+    "key": "models.routing.promptExpander",
+    "label": "Prompt expander",
+    "description": "Model for the composer Expand button (draft → fuller prompt).",
+    "keywords": [
+      "expand",
+      "composer",
+      "sparkles",
+      "rewrite prompt"
+    ],
+    "category": "models",
+    "area": "model-routing",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "model-routing"
+    ]
+  },
+  {
     "key": "models.sampler",
     "label": "Sampler defaults",
     "keywords": [

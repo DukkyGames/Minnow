@@ -58,6 +58,14 @@ export function computeEffectiveGoalEvalBinding(
   return { providerId, modelId, usesChatDefault };
 }
 
+/** Pure composer expand binding (matches resolveExpandPromptBinding). */
+export function computeEffectivePromptExpanderBinding(
+  promptExpander: { providerId: string; modelId: string },
+  chat: ChatBindingContext,
+): { providerId: string; modelId: string; usesChatDefault: boolean } {
+  return computeEffectiveGoalEvalBinding(promptExpander, chat);
+}
+
 /** Pure editor AI binding (matches resolveEditorAiBinding when useChatModel is set). */
 export function computeEffectiveEditorCompletionBinding(
   editor: {

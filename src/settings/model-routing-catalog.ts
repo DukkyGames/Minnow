@@ -7,6 +7,7 @@
  * - UI Designer: config.json uiDesigner → resolveUiDesignerModel
  * - Chat titles: config.json titles → resolveTitleGenerationOptions (schedule.ts)
  * - Goal evaluator: config.json goalEval → evaluateGoal (goal/evaluate.ts)
+ * - Prompt expander: config.json promptExpander → resolveExpandPromptBinding
  */
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
@@ -15,6 +16,7 @@ import { loadUiDesignerConfig } from '../agents/ui-designer/config';
 import type { WorkAgentDefinition } from '../agents/work-agent-types';
 import {
   computeEffectiveGoalEvalBinding,
+  computeEffectivePromptExpanderBinding,
   computeEffectiveTitleBinding,
   computeEffectiveWorkAgentBinding,
   computeEffectiveEditorCompletionBinding,
@@ -23,6 +25,7 @@ import {
 } from './model-routing-effective';
 import { loadTitlesConfig } from '../config/titles-meta';
 import { loadGoalEvalConfig } from '../config/goal-eval-meta';
+import { loadPromptExpanderConfig } from '../config/prompt-expander-meta';
 import { loadEditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { loadSamplerMeta } from '../config/sampler-meta';
 import { detectConfigServer, isConfigServerMode } from '../config/storage-mode';
@@ -48,6 +51,7 @@ export type ModelRoutingPersistKind =
   | 'ui-designer'
   | 'titles'
   | 'goal-eval'
+  | 'prompt-expander'
   | 'editor-completion';
 
 /**
@@ -144,12 +148,13 @@ export async function loadModelRoutingCatalog(
     return { rows: [], offline: true, activeChat, activeChatName };
   }
 
-  const [workAgentsRes, subAgentConfig, titlesConfig, goalEvalConfig, uiDesignerConfig, samplerMeta, editorAiConfig] =
+  const [workAgentsRes, subAgentConfig, titlesConfig, goalEvalConfig, promptExpanderConfig, uiDesignerConfig, samplerMeta, editorAiConfig] =
     await Promise.all([
       fetchWorkAgentsList(),
       loadSubAgentConfig(),
       loadTitlesConfig(),
       loadGoalEvalConfig(),
+      loadPromptExpanderConfig(),
       loadUiDesignerConfig(),
       loadSamplerMeta(),
       loadEditorAiCompletionConfig(),
@@ -257,6 +262,24 @@ export async function loadModelRoutingCatalog(
     advancedSettingsHash: '#/settings/model-routing',
     effectiveProviderId: goalEvalEffective.providerId,
     effectiveModelId: goalEvalEffective.modelId,
+  });
+
+  const promptExpanderEffective = computeEffectivePromptExpanderBinding(
+    promptExpanderConfig,
+    chatCtx,
+  );
+  rows.push({
+    id: 'prompt-expander',
+    group: 'background',
+    label: 'Prompt expander',
+    description: 'Composer sparkles control — rewrites a rough draft into a fuller prompt.',
+    providerId: promptExpanderConfig.providerId,
+    modelId: promptExpanderConfig.modelId,
+    usesChatDefault: promptExpanderEffective.usesChatDefault,
+    persistKind: 'prompt-expander',
+    advancedSettingsHash: '#/settings/model-routing',
+    effectiveProviderId: promptExpanderEffective.providerId,
+    effectiveModelId: promptExpanderEffective.modelId,
   });
 
   const editorEffective = computeEffectiveEditorCompletionBinding(editorAiConfig, chatCtx);

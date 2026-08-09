@@ -12,6 +12,7 @@ import { buildThinkingBudgetFieldInputs } from './settings-thinking-budget-field
 import { saveUiDesignerConfig } from '../agents/ui-designer/config';
 import { saveTitlesConfig } from '../config/titles-meta';
 import { saveGoalEvalConfig } from '../config/goal-eval-meta';
+import { savePromptExpanderConfig } from '../config/prompt-expander-meta';
 import {
   getFallbackCandidatesForKey,
   getGlobalFallbackCandidates,
@@ -381,6 +382,16 @@ async function saveRow(controls: RowControls, options?: RoutingPersistOptions): 
         modelId,
       });
       setStatus('ok', 'Goal evaluator binding updated');
+      if (refresh) void refreshModelRoutingSectionMount();
+      else syncRowBindingFromControls(controls);
+      break;
+    }
+    case 'prompt-expander': {
+      await savePromptExpanderConfig({
+        providerId,
+        modelId,
+      });
+      setStatus('ok', 'Prompt expander binding updated');
       if (refresh) void refreshModelRoutingSectionMount();
       else syncRowBindingFromControls(controls);
       break;
@@ -768,6 +779,7 @@ function renderGroup(
       controls,
       row.persistKind === 'titles' ||
         row.persistKind === 'goal-eval' ||
+        row.persistKind === 'prompt-expander' ||
         row.persistKind === 'editor-completion' ||
         row.persistKind === 'main-chat' ||
         row.persistKind === 'work-agent' ||

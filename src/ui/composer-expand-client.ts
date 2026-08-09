@@ -18,15 +18,16 @@ import {
   buildExpandPromptMessages,
   sanitizeExpandedPrompt,
 } from '../chat/prompts/expand-prompt';
-import { encodeModelSelectKey, decodeModelSelectKey } from '../lib/model-select-key';
+import { encodeModelSelectKey } from '../lib/model-select-key';
 import { ensureChatModelLoadedForTurn } from '../api/ensure-chat-model-loaded';
 import { resolveLibraryRequestBinding } from '../models/library-request-binding';
 import { LIBRARY_MODEL_PROVIDER_ID } from '../models/model-select-library';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
+import { loadPromptExpanderConfig } from '../config/prompt-expander-meta';
 import { resolveProvider } from '../providers/store';
 import { getActiveChat } from '../state/sessions';
+import { resolveExpandPromptBindingFromChat, type ExpandPromptBinding } from './composer-expand-binding';
 import { setStatus } from './status';
-import { getActiveModelIdFromDom } from './editor-ai-binding';
 import type { Attachment } from '../attachments/types';
 
 /** Room for a paragraph or a short bullet list — not an essay. */
@@ -41,10 +42,7 @@ export const EXPAND_EMPTY_MESSAGE = 'Model returned no expanded prompt.';
 export const EXPAND_MODEL_LOAD_FAILED_MESSAGE =
   'Could not start the selected model — load it in Models and try again.';
 
-export interface ExpandPromptBinding {
-  providerId: string;
-  modelId: string;
-}
+export type { ExpandPromptBinding };
 
 export interface ExpandPromptRequest {
   draft: string;
@@ -61,19 +59,14 @@ export interface ExpandPromptResult {
 }
 
 /**
- * Follow whatever the user is already sending with: the top-bar model select
- * when set, else the active chat's binding, else the default provider.
+ * Settings override when set, else the active chat's composer model (per-chat
+ * picker), else the default provider.
  */
 export async function resolveExpandPromptBinding(): Promise<ExpandPromptBinding> {
-  const raw = getActiveModelIdFromDom();
-  const parsed = decodeModelSelectKey(raw);
+  const config = await loadPromptExpanderConfig();
   const chat = getActiveChat();
-  const modelId = (parsed?.modelId ?? raw).trim() || chat.modelId?.trim() || '';
-  const providerId =
-    parsed?.providerId?.trim() ||
-    chat.providerId?.trim() ||
-    (await resolveProvider()).id;
-  return { providerId, modelId };
+  const fallbackProviderId = (await resolveProvider()).id;
+  return resolveExpandPromptBindingFromChat(config, chat, fallbackProviderId);
 }
 
 /**

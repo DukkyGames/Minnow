@@ -289,6 +289,10 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['goal', '/goal', 'evaluator', 'completion judge'],
     description: 'Model for /goal loop evaluation after each turn.',
   }),
+  field('models.routing.promptExpander', 'Prompt expander', 'models', 'model-routing', {
+    keywords: ['expand', 'composer', 'sparkles', 'rewrite prompt'],
+    description: 'Model for the composer Expand button (draft → fuller prompt).',
+  }),
   field('models.sampler', 'Sampler defaults', 'models', 'sampler', {
     keywords: ['temperature', 'top p', 'penalties'],
   }),
