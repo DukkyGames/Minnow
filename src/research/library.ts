@@ -14,6 +14,16 @@ import { formatRunDuration } from './run-summary';
 import { iconHtml } from '../ui/icon';
 import type { ResearchLibraryItem } from './types';
 
+/** Prefer persisted report title over the original research query. */
+export function researchDisplayTitle(
+  item: Pick<ResearchLibraryItem, 'title' | 'query'>,
+): string {
+  const title = item.title?.trim();
+  if (title) return title;
+  const query = item.query?.trim();
+  return query || 'Untitled run';
+}
+
 export interface ResearchRailHandlers {
   onSelect: (id: string) => void;
   onOpenReport: (id: string) => void;
@@ -183,7 +193,7 @@ function buildRow(
 
   const title = document.createElement('span');
   title.className = 'rs-row__title';
-  title.textContent = item.query?.trim() || 'Untitled run';
+  title.textContent = researchDisplayTitle(item);
 
   const meta = document.createElement('span');
   meta.className = 'rs-row__meta';
@@ -208,7 +218,7 @@ function buildRow(
   const menuBtn = document.createElement('button');
   menuBtn.type = 'button';
   menuBtn.className = 'rs-row__menu';
-  menuBtn.setAttribute('aria-label', `Actions for ${item.query?.trim() || 'this run'}`);
+  menuBtn.setAttribute('aria-label', `Actions for ${researchDisplayTitle(item)}`);
   menuBtn.innerHTML = iconHtml('more', { size: 14 });
   menuBtn.addEventListener('click', (ev) => {
     ev.preventDefault();
@@ -270,7 +280,7 @@ function openRowMenu(
     () => {
       void (async () => {
         const ok = await appConfirm(
-          `Delete this run permanently?\n\n${item.query?.trim() || 'Untitled run'}`,
+          `Delete this run permanently?\n\n${researchDisplayTitle(item)}`,
         );
         if (!ok) {
           return;
@@ -341,7 +351,12 @@ export async function renderResearchRail(
   const term = search?.trim().toLowerCase() ?? '';
   const live = archived
     ? []
-    : liveRuns.filter((item) => !term || item.query.toLowerCase().includes(term));
+    : liveRuns.filter(
+        (item) =>
+          !term ||
+          item.query.toLowerCase().includes(term) ||
+          (item.title?.toLowerCase().includes(term) ?? false),
+      );
   const runs = mergeResearchRuns(persisted, live);
 
   mount.replaceChildren();

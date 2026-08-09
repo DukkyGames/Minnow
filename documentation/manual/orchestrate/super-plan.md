@@ -69,6 +69,8 @@ Three documents in your workspace:
 | `documentation/plans/references/<slug>-spec.md` | The spec from the interview |
 | `documentation/plans/references/<slug>-research.md` | The research report |
 
+`<slug>` comes from the **build spec title** (the first `#` heading in the spec), not from your opening prompt. Until you confirm the spec, files use a short interim name (`plan-xxxxxxxx`); after confirmation they are renamed to match the spec title (for example `oauth-login-flow`).
+
 They are ordinary markdown in your repository. Commit them, review them in a pull request, edit them by hand.
 
 The plan is directly executable by an [orchestrate board](boards.md) — that hand-off is what the whole pipeline is aiming at.

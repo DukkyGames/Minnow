@@ -121,6 +121,8 @@ export interface ResearchStats {
 export interface ResearchLibraryItem {
   id: string;
   query: string;
+  /** Report hero title when available (preferred over query in the UI). */
+  title?: string;
   status: ResearchStatus;
   category?: string;
   archived?: boolean;
@@ -141,6 +143,7 @@ export interface ResearchLibraryResponse {
 export interface ResearchDetailResponse extends ResearchResultResponse {
   id: string;
   query: string;
+  title?: string;
   status: ResearchStatus;
   archived?: boolean;
   rawReport?: string;

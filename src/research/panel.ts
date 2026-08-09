@@ -28,7 +28,7 @@ import {
   persistActiveResearchRunId,
   readPersistedActiveResearchRunId,
 } from './active-run-persist';
-import { renderResearchRail, setActiveResearchRow } from './library';
+import { renderResearchRail, researchDisplayTitle, setActiveResearchRow } from './library';
 import {
   initResearchOptionChips,
   setResearchOptionChipsDisabled,
@@ -536,7 +536,7 @@ async function selectRun(researchId: string): Promise<void> {
 
   // The run streaming right now is already painted; rehydrate evidence if the UI remounted.
   if (running && liveRun?.id === researchId) {
-    setRunHeader({ title: liveRun.query, status: 'running' });
+    setRunHeader({ title: researchDisplayTitle(liveRun), status: 'running' });
     renderRunActions(researchId, 'running', liveRun.query);
     setBriefTabVisible(false);
     setRunView('evidence');
@@ -546,7 +546,7 @@ async function selectRun(researchId: string): Promise<void> {
 
   const known = findRun(researchId);
   setRunHeader({
-    title: known?.query ?? '',
+    title: researchDisplayTitle(known ?? { query: '' }),
     status: known?.status ?? 'done',
     stats: '',
   });
@@ -561,10 +561,14 @@ async function selectRun(researchId: string): Promise<void> {
       return;
     }
     const query = data.query?.trim() || known?.query || '';
+    const headerTitle = researchDisplayTitle({
+      title: typeof data.title === 'string' ? data.title : known?.title,
+      query,
+    });
     const status = data.status ?? 'done';
 
     setRunHeader({
-      title: query,
+      title: headerTitle,
       status,
       stats: statsLine(data.stats, data.sources?.length ?? 0),
     });
@@ -643,7 +647,7 @@ async function selectRun(researchId: string): Promise<void> {
       return;
     }
     const msg = err instanceof Error ? err.message : 'Could not load this run';
-    setRunHeader({ title: known?.query ?? '', status: 'error', stats: '' });
+    setRunHeader({ title: researchDisplayTitle(known ?? { query: '' }), status: 'error', stats: '' });
     setBriefTabVisible(false);
     setRunView('evidence');
     showBriefNotice('Could not load', msg, true);
@@ -814,7 +818,7 @@ async function resumeActiveResearchIfNeeded(): Promise<void> {
     if (!activeId) {
       activeId = liveRun.id;
       showRunPane();
-      setRunHeader({ title: liveRun.query, status: 'running' });
+      setRunHeader({ title: researchDisplayTitle(liveRun), status: 'running' });
       renderRunActions(liveRun.id, 'running', liveRun.query);
       setBriefTabVisible(false);
       setRunView('evidence');

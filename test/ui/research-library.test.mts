@@ -72,6 +72,29 @@ describe('research rail', () => {
     document.body.innerHTML = '';
   });
 
+  test('prefers report title over query in the rail', async () => {
+    const mount = mountRail();
+    const titled: ResearchLibraryItem = {
+      ...DONE,
+      title: 'Widget Market Analysis',
+      query: 'long original research question about widgets',
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/research/library')) {
+        return new Response(JSON.stringify({ items: [titled] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return originalFetch(input);
+    }) as typeof fetch;
+
+    await renderResearchRail({ mount, ...NOOP });
+    const title = mount.querySelector('.rs-row__title');
+    assert.equal(title?.textContent, 'Widget Market Analysis');
+  });
+
   test('renders runs as rows grouped by recency', async () => {
     const mount = mountRail();
     await renderResearchRail({ mount, ...NOOP });

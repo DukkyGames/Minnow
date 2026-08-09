@@ -16,6 +16,7 @@ import {
   cancelSuperPlanState,
   initSuperPlanState,
   markSuperPlanStageStatus,
+  reconcileSuperPlanSlugFromSpec,
   resetSuperPlanStage,
   rewindSuperPlanStages,
   setSuperPlanActiveStage,
@@ -369,8 +370,9 @@ export async function resumeSuperPlanAfterUser(
       await advanceSuperPlan(chat);
       return;
     }
+    await reconcileSuperPlanSlugFromSpec(chat);
     markSuperPlanStageStatus(chat, 'spec_confirm', 'done', {
-      artifactPath: chat.superPlan.specPath,
+      artifactPath: chat.superPlan!.specPath,
     });
     const config = getSuperPlanConfigSync();
     const next = nextRunnableSuperPlanStage('spec_confirm', config);

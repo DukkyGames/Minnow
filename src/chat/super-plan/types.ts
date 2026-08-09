@@ -56,6 +56,8 @@ export type SuperPlanCheckpointAction = 'confirm' | 'revise';
 export interface SuperPlanState {
   /** Kebab-case basename shared by spec, research, and plan artifacts. */
   slug: string;
+  /** Human title from the build spec (or plan) after slug reconciliation. */
+  displayTitle?: string;
   /** Original user prompt that started the pipeline. */
   prompt: string;
   /** Stage currently executing or awaiting user input. */

@@ -168,6 +168,7 @@ function normalizeLibraryItem(row: Record<string, unknown>): import('./types').R
   return {
     id: String(row.id ?? ''),
     query: String(row.query ?? ''),
+    title: typeof row.title === 'string' && row.title.trim() ? row.title.trim() : undefined,
     status: (row.status as import('./types').ResearchStatus) ?? 'done',
     category: typeof row.category === 'string' ? row.category : undefined,
     archived: Boolean(row.archived),

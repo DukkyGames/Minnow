@@ -45,7 +45,7 @@ describe('Super Plan state helpers', () => {
     const state = createSuperPlanState('Build a Kanban UI');
     assert.equal(state.activeStage, 'grill');
     assert.equal(state.stages.grill.status, 'pending');
-    assert.match(state.slug, /kanban/);
+    assert.match(state.slug, /^plan-[a-f0-9]{8}$/);
     assert.equal(
       state.specPath,
       `documentation/plans/references/${state.slug}-spec.md`,
