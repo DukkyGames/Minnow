@@ -31,6 +31,7 @@ import {
 } from './preview-electron-visibility';
 import { iconHtml } from './icon';
 import { MINNOW_GLYPH_HEADER_HTML } from './minnow-glyph';
+import { setModelHostFilterLoadUnloadResolver } from './model-host-filter-context';
 import {
   decodeLibraryModelSelectKey,
   isLibraryModelProviderId,
@@ -458,6 +459,8 @@ function emptyFilterMessage(
 export interface ModelHostFilterBarOptions {
   onFilterChange: () => void;
   onAfterRefresh?: () => void;
+  /** When set, Load/Unload in this bar targets this value instead of #modelSelect. */
+  resolveLoadUnloadValue?: () => string;
 }
 
 function normalizeHostFilterBarOptions(
@@ -639,6 +642,9 @@ export function mountModelHostFilterBar(
   mountModelHostFilterLoadedToggle(toolbarEnd, options.onFilterChange);
   mountModelHostFilterActions(toolbarEnd, options);
   bar.appendChild(controls);
+  if (options.resolveLoadUnloadValue) {
+    setModelHostFilterLoadUnloadResolver(bar, options.resolveLoadUnloadValue);
+  }
   parent.appendChild(bar);
   syncAllModelHostFilterBars();
   return bar;

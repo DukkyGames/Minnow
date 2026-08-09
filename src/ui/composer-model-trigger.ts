@@ -654,6 +654,15 @@ function createModelMenuPanel(): { panel: HTMLDivElement; menu: HTMLUListElement
     {
       onFilterChange: () => rebuildOpenMenu(),
       onAfterRefresh: () => rebuildOpenMenu(),
+      resolveLoadUnloadValue: () => {
+        const trigger = openTrigger;
+        const sel = getModelSelect();
+        if (!sel) return '';
+        if (!trigger || trigger.variant === 'menubar') {
+          return sel.value.trim();
+        }
+        return resolveTriggerSelectValue(trigger);
+      },
     },
     'composer-model-menu__filter',
   );

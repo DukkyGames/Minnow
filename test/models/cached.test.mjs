@@ -71,7 +71,11 @@ describe('HF hub cache dir for mlx_lm.server', () => {
     const parent = path.join(tmpHub, 'default-cache-parent');
     const expected = path.join(parent, '.cache', 'huggingface', 'hub');
     const prevHome = process.env.HOME;
+    const prevUserProfile = process.env.USERPROFILE;
     process.env.HOME = parent;
+    if (process.platform === 'win32') {
+      process.env.USERPROFILE = parent;
+    }
 
     try {
       const resolved = resolveHfHubCacheDir();
@@ -83,6 +87,10 @@ describe('HF hub cache dir for mlx_lm.server', () => {
     } finally {
       if (prevHome === undefined) delete process.env.HOME;
       else process.env.HOME = prevHome;
+      if (process.platform === 'win32') {
+        if (prevUserProfile === undefined) delete process.env.USERPROFILE;
+        else process.env.USERPROFILE = prevUserProfile;
+      }
     }
   });
 
