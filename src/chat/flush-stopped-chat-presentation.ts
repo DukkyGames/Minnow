@@ -1,0 +1,86 @@
+/**
+ * Clear client-side streaming/activity state for chats that were just stopped.
+ *
+ * A chat can hold a persisted `currentGenerationId` with no local turn behind it
+ * (boot resume declined, transport error, swallowed abort). The agent activity
+ * panel renders those as `main:<chatId>` rows, so without an explicit clear the
+ * row — and its elapsed timer — keeps running forever even after Stop.
+ */
+
+import { setChatAbort, setStreaming } from '../app-state';
+import { clearMainTurnActivity } from './main-turn-activity';
+import { notifyChatStreamEnded } from './streaming-state';
+import { findChatById, scheduleSaveSessions, touchChat } from '../state/sessions';
+
+export interface FlushStoppedChatPresentationOptions {
+  /** Also clear the global streaming flag (stop-all only). */
+  clearGlobalStreaming?: boolean;
+  /** Keep `currentGenerationId` when the backend generation may still be resumable. */
+  keepGenerationId?: boolean;
+}
+
+/** Drop activity rows, abort handles and generation ids for the given chats. */
+export function flushStoppedChatPresentation(
+  chatIds: Iterable<string>,
+  options: FlushStoppedChatPresentationOptions = {},
+): void {
+  const ids = [...new Set(chatIds)].filter((id) => id.trim().length > 0);
+  if (ids.length === 0 && !options.clearGlobalStreaming) return;
+
+  let sessionsDirty = false;
+  for (const chatId of ids) {
+    clearMainTurnActivity(chatId);
+    setChatAbort(chatId, null);
+    notifyChatStreamEnded(chatId);
+    setStreaming(false, chatId);
+    if (options.keepGenerationId) continue;
+    const chat = findChatById(chatId);
+    if (chat?.currentGenerationId?.trim()) {
+      chat.currentGenerationId = undefined;
+      touchChat(chat);
+      sessionsDirty = true;
+    }
+  }
+
+  if (options.clearGlobalStreaming) setStreaming(false);
+  if (sessionsDirty) scheduleSaveSessions();
+
+  scheduleStoppedChatRepaint(ids);
+}
+
+/*
+ * Board teardown stops every task chat in a loop, so the repaint is coalesced
+ * into one pass instead of one sidebar render per chat.
+ */
+const pendingRepaintChatIds = new Set<string>();
+let repaintScheduled = false;
+
+function scheduleStoppedChatRepaint(chatIds: readonly string[]): void {
+  for (const chatId of chatIds) pendingRepaintChatIds.add(chatId);
+  if (repaintScheduled) return;
+  repaintScheduled = true;
+  queueMicrotask(() => {
+    repaintScheduled = false;
+    const ids = [...pendingRepaintChatIds];
+    pendingRepaintChatIds.clear();
+    void runStoppedChatRepaint(ids);
+  });
+}
+
+async function runStoppedChatRepaint(chatIds: readonly string[]): Promise<void> {
+  try {
+    const [dots, sidebar, composer] = await Promise.all([
+      import('../ui/chat-item-dot'),
+      import('../ui/sidebar'),
+      import('../ui/composer-send'),
+    ]);
+    for (const chatId of chatIds) {
+      dots.setSidebarStreamPhase(null, chatId);
+    }
+    dots.syncChatItemDotsInDom();
+    sidebar.renderSidebar();
+    composer.syncComposerFromStreamingState();
+  } catch {
+    /* state is already clear; a missed repaint self-heals on the next render */
+  }
+}

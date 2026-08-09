@@ -17,6 +17,7 @@ import {
   notifyChatStreamEnded,
   notifyChatStreamActivity,
 } from '../chat/streaming-state';
+import { flushStoppedChatPresentation } from '../chat/flush-stopped-chat-presentation';
 import { flushPendingMode } from '../chat/pending-mode';
 import { hiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
 import {
@@ -1048,7 +1049,12 @@ async function streamCompletionTurn(
     }
     const e = err as { name?: string };
     if (e?.name === 'AbortError') {
-      await cancelGeneration(generationId!);
+      // A failed cancel must not mask the abort: the caller's AbortError branch
+      // is what clears `currentGenerationId`, so swallowing it here would leave
+      // the chat stuck as "running" in the agent activity panel.
+      await cancelGeneration(generationId!).catch(() => {
+        /* best-effort; the stream reader is already torn down */
+      });
       throw err;
     }
     throw err;
@@ -1199,6 +1205,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnEndReason: 'max_tool_turns' | undefined;
   let turnErrorMessage: string | undefined;
   let turnMountPinned = false;
+  let turnTeardownRan = false;
 
   try {
     if (skillId === GIT_SETUP_SKILL_ID && !resumeGenerationId) {
@@ -2709,6 +2716,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setStatus('err', statusMsg);
     }
   } finally {
+    turnTeardownRan = true;
     streamingStatsPublisher.reset();
     setContextInFlightOverlay(null);
     scheduleContextUsageRefresh();
@@ -2856,6 +2864,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setTurnChatMount(null);
     }
     endChatTurnSetup(chat.id);
+    if (!turnTeardownRan) {
+      /*
+       * Setup threw before the streaming try/finally, so the activity row, abort
+       * handle and streaming flag registered above were never released. Left
+       * behind they show the chat as running forever in the agent activity panel,
+       * and Stop cannot help — it aborts a controller with no listener.
+       * The generation id is kept: the backend turn may still be resumable.
+       */
+      flushStoppedChatPresentation([chat.id], { keepGenerationId: true });
+    }
   }
 }
 

@@ -2,12 +2,13 @@
  * Stop all in-flight agent work (boards, chats, sub-agents, titles, desktop research).
  */
 
-import { abortByChatId, setChatAbort, setStreaming, streamingChatIds } from '../app-state';
+import { abortByChatId, streamingChatIds } from '../app-state';
 import { listActiveSubAgentRuns } from '../agents/orchestrator';
 import { cancelSubAgent } from '../agents/controller/controller';
-import { clearMainTurnActivity, listMainTurnActivity } from './main-turn-activity';
-import { isChatStreaming, notifyChatStreamEnded } from './streaming-state';
+import { listMainTurnActivity } from './main-turn-activity';
+import { isChatStreaming } from './streaming-state';
 import { cancelSuperPlan, isSuperPlanAdvancing } from './super-plan/controller';
+import { flushStoppedChatPresentation } from './flush-stopped-chat-presentation';
 import { stopGeneration } from './stop-generation';
 import {
   abortChatTitleGeneration,
@@ -17,7 +18,7 @@ import { getPlannerChatForGroup } from '../state/chat-groups';
 import { buildAgentActivitySnapshot } from '../state/agent-activity-registry';
 import { countRunningTaskChats, stopBoardAutoRun } from '../state/orchestrate-board-actions';
 import { isBoardRunning } from '../state/orchestrate-board-store';
-import { findChatById, scheduleSaveSessions, sessionState, touchChat } from '../state/sessions';
+import { sessionState } from '../state/sessions';
 import {
   cancelResearchRunForShell,
   isResearchRunningForShell,
@@ -91,32 +92,9 @@ function collectPresentationChatIds(extra?: ReadonlySet<string>): Set<string> {
  * keep showing running chats or agent-activity rows.
  */
 function flushStoppedAgentPresentation(extraChatIds?: ReadonlySet<string>): void {
-  const chatIds = collectPresentationChatIds(extraChatIds);
-  let sessionsDirty = false;
-
-  for (const chatId of chatIds) {
-    clearMainTurnActivity(chatId);
-    setChatAbort(chatId, null);
-    notifyChatStreamEnded(chatId);
-    const chat = findChatById(chatId);
-    if (chat?.currentGenerationId?.trim()) {
-      chat.currentGenerationId = undefined;
-      touchChat(chat);
-      sessionsDirty = true;
-    }
-  }
-
-  setStreaming(false);
-  if (sessionsDirty) scheduleSaveSessions();
-
-  void import('../ui/chat-item-dot').then((mod) => {
-    for (const chatId of chatIds) {
-      mod.setSidebarStreamPhase(null, chatId);
-    }
-    mod.syncChatItemDotsInDom();
+  flushStoppedChatPresentation(collectPresentationChatIds(extraChatIds), {
+    clearGlobalStreaming: true,
   });
-  void import('../ui/sidebar').then((mod) => mod.renderSidebar());
-  void import('../ui/composer-send').then((mod) => mod.syncComposerFromStreamingState());
 }
 
 /** Best-effort halt of all agent activity; does not pause /loop schedules. */

@@ -8,10 +8,10 @@ import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import { AGENT_ACTIVITY_OPEN_KEY } from '../constants';
 import { getContextBudget } from '../chat/context-usage';
 import {
-  clearMainTurnActivity,
   listMainTurnActivity,
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
+import { subscribeChatStreamEnd } from '../chat/streaming-state';
 import {
   listTitleJobActivity,
   subscribeTitleJobActivity,
@@ -489,6 +489,9 @@ function bindActivitySubscriptions(): void {
   subscribeSubAgentRuns(() => scheduleRefresh());
   subscribeMainTurnActivity(() => scheduleRefresh());
   subscribeTitleJobActivity(() => scheduleRefresh());
+  // Rows built from `chat.currentGenerationId` alone emit no main-turn event,
+  // so stream end is the only signal that clears them.
+  subscribeChatStreamEnd(() => scheduleRefresh());
 }
 
 const STOP_ALL_CONFIRM_MESSAGE =

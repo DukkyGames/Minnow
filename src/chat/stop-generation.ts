@@ -2,6 +2,7 @@ import { getChatAbort, setChatStopReason } from '../app-state';
 import type { ChatStopReason } from '../types';
 import { clearPendingSteer } from './steer-message';
 import { cancelGeneration } from '../api/generations';
+import { flushStoppedChatPresentation } from './flush-stopped-chat-presentation';
 import { findChatById, getActiveChat } from '../state/sessions';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 
@@ -24,5 +25,17 @@ export function stopGeneration(chatId?: string, reason: ChatStopReason = 'user')
 
   clearPendingSteer(chat);
 
-  getChatAbort(chat.id)?.abort();
+  const abort = getChatAbort(chat.id);
+  if (abort) {
+    // A live turn owns teardown: its `finally` clears activity and the generation id.
+    abort.abort();
+    return;
+  }
+
+  /*
+   * No local turn to abort — the chat is only "running" because it still holds a
+   * persisted `currentGenerationId`. Nothing else will ever clear it, so the
+   * agent activity row would keep ticking after the user pressed Stop.
+   */
+  flushStoppedChatPresentation([chat.id]);
 }
