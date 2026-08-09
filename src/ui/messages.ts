@@ -191,7 +191,10 @@ function buildChatHistoryPendingMarker(): HTMLElement {
 export function paintChatTranscriptHistoryPending(mount?: string | HTMLElement): void {
   // An open board chat owns the pending marker too, or the previous task's
   // transcript lingers in `.ob-main` during the history GET.
-  const boardChatHost = mount == null ? queryBoardChatTranscriptHost() : null;
+  const boardChatHost =
+    mount == null && isBoardChatEmbedOpenForChat(getActiveChat().id)
+      ? queryBoardChatTranscriptHost()
+      : null;
   const area = boardChatHost ?? resolveChatMount(mount);
   const codeMount = boardChatHost != null || isCodeChatMount(mount);
 
@@ -615,7 +618,10 @@ export interface AppendUserBubbleOptions extends UserBubbleRenderOptions {
 }
 
 /** True when board view should suppress chat bubbles (user can jump to Chat view). */
-function shouldStubOrchestrateBoardStreamDom(_chat: Chat): boolean {
+function shouldStubOrchestrateBoardStreamDom(chat: Chat): boolean {
+  // The embed paints *inside* the board page, not over it — board view stays
+  // "active" the whole time it is open (see openBoardChatInOrchestrate).
+  if (isBoardChatEmbedOpenForChat(chat.id)) return false;
   return isBoardViewActive();
 }
 

@@ -13,6 +13,7 @@ import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { Chat, PersistedSubAgentRun } from '../types';
 import { getActiveChatMountElement } from './chat-mount';
+import { isBoardChatEmbedOpenForChat } from './orchestrate-board-chat-state';
 import { isHubMounted } from './hub';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 import { isOrchestrateHubMounted } from './orchestrate-hub';
@@ -140,7 +141,9 @@ export function upsertSubAgentCardForRun(
   ) {
     return null;
   }
-  if (isMainColumnOverlaySuppressingChatDom()) return null;
+  if (!isBoardChatEmbedOpenForChat(chatId) && isMainColumnOverlaySuppressingChatDom()) {
+    return null;
+  }
   // Background sub-agents still run, but cards belong in the transcript — not on hub.
   if (isEmptyChatLandingMounted()) return null;
 

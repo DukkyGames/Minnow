@@ -9,6 +9,7 @@ import {
   listBoardGroupChatIds,
 } from '../../state/chat-groups';
 import { findChatById, sessionState } from '../../state/sessions';
+import { isBoardChatEmbedOpen } from '../../ui/orchestrate-board-chat-state';
 import { isBoardViewActive } from '../../ui/view-mode-toggle';
 import { updateStrip } from '../../ui/stats';
 import type { Chat, ChatGroup, Stats, Usage } from '../../types';
@@ -124,6 +125,7 @@ export function aggregateBoardMetrics(group: ChatGroup): BoardAggregateMetrics {
 
 /** True when the metrics strip should show board-wide rollups instead of one chat. */
 export function shouldUseBoardAggregateStats(): boolean {
+  if (isBoardChatEmbedOpen()) return false;
   if (!isBoardViewActive()) return false;
   const group = getActiveBoardGroup();
   return Boolean(group?.orchestrateBoard);

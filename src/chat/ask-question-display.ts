@@ -10,6 +10,7 @@ import {
   isEmailAssistantForeground,
 } from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
+import { isBoardChatEmbedOpenForChat } from '../ui/orchestrate-board-chat-state';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
 
 type AskQuestionDisplayContextSync = () => void;
@@ -84,6 +85,7 @@ export function isAskQuestionDomVisible(chatId: string): boolean {
   if (getForegroundAppId() === 'email') {
     return active.appScope === 'email' && isEmailAssistantForeground();
   }
+  if (isBoardChatEmbedOpenForChat(trimmed)) return true;
   if (planScreenHooks.isSuppressingChatDom?.(trimmed)) return false;
   if (isMainColumnOverlaySuppressingChatDom()) return false;
   if (active.kind === 'expert-lab' && expertsPageOpen) return false;
