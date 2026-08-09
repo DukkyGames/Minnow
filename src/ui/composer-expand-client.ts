@@ -18,11 +18,12 @@ import {
   buildExpandPromptMessages,
   sanitizeExpandedPrompt,
 } from '../chat/prompts/expand-prompt';
-import { encodeModelSelectKey, decodeModelSelectKey } from '../lib/model-select-key';
+import { encodeModelSelectKey } from '../lib/model-select-key';
+import { prepareChatCompletionsBinding } from '../api/resolve-chat-completions-binding';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { resolveProvider } from '../providers/store';
 import { getActiveChat } from '../state/sessions';
-import { getActiveModelIdFromDom } from './editor-ai-binding';
+import { resolveEffectiveChatModelBinding } from './default-model';
 import type { Attachment } from '../attachments/types';
 
 /** Room for a paragraph or a short bullet list — not an essay. */
@@ -55,16 +56,15 @@ export interface ExpandPromptResult {
 }
 
 /**
- * Follow whatever the user is already sending with: the top-bar model select
- * when set, else the active chat's binding, else the default provider.
+ * Same priority as chat send: per-chat composer model, then global default — not the
+ * menubar #modelSelect alone when the chat has its own binding.
  */
 export async function resolveExpandPromptBinding(): Promise<ExpandPromptBinding> {
-  const raw = getActiveModelIdFromDom();
-  const parsed = decodeModelSelectKey(raw);
   const chat = getActiveChat();
-  const modelId = (parsed?.modelId ?? raw).trim() || chat.modelId?.trim() || '';
+  const effective = resolveEffectiveChatModelBinding(chat);
+  const modelId = effective.modelId.trim();
   const providerId =
-    parsed?.providerId?.trim() ||
+    effective.providerId?.trim() ||
     chat.providerId?.trim() ||
     (await resolveProvider()).id;
   return { providerId, modelId };
@@ -107,9 +107,20 @@ export async function fetchExpandedPrompt(
   // Attachments enrich the draft; they never stand in for one.
   const attachments = input.attachments ?? getPendingAttachments();
 
-  const binding = await resolveExpandPromptBinding();
-  if (!binding.modelId.trim()) {
+  const rawBinding = await resolveExpandPromptBinding();
+  if (!rawBinding.modelId.trim()) {
     return { text: null, error: EXPAND_NO_MODEL_MESSAGE };
+  }
+
+  let binding: ExpandPromptBinding;
+  try {
+    binding = await prepareChatCompletionsBinding(
+      rawBinding.providerId,
+      rawBinding.modelId,
+      input.signal,
+    );
+  } catch (err) {
+    return { text: null, error: errorMessageFrom(err) };
   }
 
   const provider = await resolveProvider(binding.providerId);
