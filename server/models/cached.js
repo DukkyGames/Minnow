@@ -2,6 +2,7 @@
  * Local model cache scan — HF hub, Minnow artifacts, and custom dirs.
  */
 
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -172,6 +173,7 @@ export function hfCachePaths() {
     if (!candidates.includes(expanded)) candidates.push(expanded);
   };
 
+  add(process.env.HF_HUB_CACHE);
   add(process.env.HUGGINGFACE_HUB_CACHE);
   const hfHome = process.env.HF_HOME;
   if (hfHome) add(path.join(hfHome, 'hub'));
@@ -180,6 +182,50 @@ export function hfCachePaths() {
     add(path.join(os.homedir(), '.cache', 'huggingface', 'hub'));
   }
   return candidates;
+}
+
+/**
+ * Expand a hub-cache path (tilde → homedir).
+ * @param {string | undefined} raw
+ * @returns {string}
+ */
+function expandHubCachePath(raw) {
+  if (!raw?.trim()) return '';
+  const trimmed = raw.trim();
+  return trimmed.startsWith('~') ? path.join(os.homedir(), trimmed.slice(1)) : trimmed;
+}
+
+/**
+ * Directory huggingface_hub should scan (matches mlx_lm.server / cached.js).
+ * Prefers explicit env, then the first existing candidate, else the default layout.
+ * @returns {string}
+ */
+export function resolveHfHubCacheDir() {
+  const explicit =
+    expandHubCachePath(process.env.HF_HUB_CACHE) ||
+    expandHubCachePath(process.env.HUGGINGFACE_HUB_CACHE);
+  if (explicit) return explicit;
+
+  for (const candidate of hfCachePaths()) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* unreadable path */
+    }
+  }
+
+  return path.join(os.homedir(), '.cache', 'huggingface', 'hub');
+}
+
+/**
+ * Ensure the Hugging Face hub cache directory exists (mlx_lm.server's scan_cache_dir
+ * raises CacheNotFound when the path is missing).
+ * @param {string} [dir]
+ * @returns {Promise<string>}
+ */
+export async function ensureHfHubCacheDir(dir = resolveHfHubCacheDir()) {
+  await fsp.mkdir(dir, { recursive: true });
+  return dir;
 }
 
 /**

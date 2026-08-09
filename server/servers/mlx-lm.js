@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { ensureHfHubCacheDir, resolveHfHubCacheDir } from '../models/cached.js';
 import { resolveHfTokenAsync } from '../models/hf-client.js';
 import {
   getServerDir,
@@ -185,6 +186,22 @@ export function buildMlxServerArgs(port) {
 }
 
 /**
+ * Environment variables for the managed mlx-lm process (exported for tests).
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function buildMlxServerEnv() {
+  /** @type {Record<string, string>} */
+  const env = {};
+  const hubCache = await ensureHfHubCacheDir(resolveHfHubCacheDir());
+  env.HF_HUB_CACHE = hubCache;
+  env.HUGGINGFACE_HUB_CACHE = hubCache;
+  if (process.env.HF_HOME) env.HF_HOME = process.env.HF_HOME;
+  const token = await resolveHfTokenAsync().catch(() => '');
+  if (token) env.HF_TOKEN = token;
+  return env;
+}
+
+/**
  * @param {number} port
  * @returns {Promise<{ command: string, args: string[], env: Record<string, string>, cwd: string }>}
  */
@@ -199,16 +216,7 @@ export async function getSpawnSpec(port) {
     );
   }
 
-  /** @type {Record<string, string>} */
-  const env = {};
-  // Point the server at the same cache cached.js scans, so a model already in
-  // ~/.cache/huggingface resolves by repo id without a second copy on disk.
-  if (process.env.HF_HOME) env.HF_HOME = process.env.HF_HOME;
-  if (process.env.HUGGINGFACE_HUB_CACHE) {
-    env.HUGGINGFACE_HUB_CACHE = process.env.HUGGINGFACE_HUB_CACHE;
-  }
-  const token = await resolveHfTokenAsync().catch(() => '');
-  if (token) env.HF_TOKEN = token;
+  const env = await buildMlxServerEnv();
 
   return {
     command: venvPythonExe(venvDir),

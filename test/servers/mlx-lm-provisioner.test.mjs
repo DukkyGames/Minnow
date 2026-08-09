@@ -12,6 +12,7 @@ import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { getServerDef } from '../../server/servers/catalog.js';
 import {
   buildMlxServerArgs,
+  buildMlxServerEnv,
   getInstallStatus,
   isMlxSupported,
   MLX_LM_VERSION,
@@ -47,6 +48,31 @@ describe('mlx-lm spawn arguments', () => {
   test('renders the port as a string argument', () => {
     const args = buildMlxServerArgs(9999);
     assert.equal(args[args.indexOf('--port') + 1], '9999');
+  });
+});
+
+describe('mlx-lm spawn environment', () => {
+  /** @type {string | undefined} */
+  let prevHub;
+  /** @type {string} */
+  let hubDir;
+
+  before(async () => {
+    prevHub = process.env.HF_HUB_CACHE;
+    hubDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-mlx-env-'));
+    process.env.HF_HUB_CACHE = hubDir;
+  });
+
+  after(async () => {
+    if (prevHub === undefined) delete process.env.HF_HUB_CACHE;
+    else process.env.HF_HUB_CACHE = prevHub;
+    await fsp.rm(hubDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  });
+
+  test('sets HF_HUB_CACHE and HUGGINGFACE_HUB_CACHE for huggingface_hub', async () => {
+    const env = await buildMlxServerEnv();
+    assert.equal(env.HF_HUB_CACHE, hubDir);
+    assert.equal(env.HUGGINGFACE_HUB_CACHE, hubDir);
   });
 });
 
