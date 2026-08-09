@@ -360,6 +360,14 @@ export async function loadModel(
       }).catch(() => undefined);
     }
     emit();
+    try {
+      const { invalidateProviderCache } = await import('../../providers/store');
+      invalidateProviderCache();
+      const { fetchModels } = await import('../../api/models');
+      await fetchModels();
+    } catch {
+      /* mlx-lm-local may not be in the client registry until refresh */
+    }
     return serve;
   }
 
