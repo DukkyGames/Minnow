@@ -11,11 +11,7 @@ import {
   type GenerationEndEvent,
 } from '../api/generations';
 import { StreamingContentAccumulator } from '../api/message-content';
-import { applyUtilityThinkingOff } from '../agents/merge-thinking-body';
-import {
-  BenchmarkStreamReasoningAccumulator,
-  resolveBenchmarkCompletionText,
-} from '../benchmark/stream-text';
+import { thinkingToCompletionBody } from '../agents/thinking-to-body';
 import { modelCache } from '../app-state';
 import { getPendingAttachments } from '../attachments/store';
 import {
@@ -25,11 +21,10 @@ import {
 import { encodeModelSelectKey } from '../lib/model-select-key';
 import { prepareChatCompletionsBinding } from '../api/resolve-chat-completions-binding';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
-import { invalidateProviderCache, resolveProvider } from '../providers/store';
+import { resolveProvider } from '../providers/store';
 import { getActiveChat } from '../state/sessions';
 import { resolveEffectiveChatModelBinding } from './default-model';
 import type { Attachment } from '../attachments/types';
-import type { ChatCompletionChunk } from '../types';
 
 /** Room for a paragraph or a short bullet list — not an essay. */
 const EXPAND_MAX_TOKENS = 700;
@@ -87,29 +82,20 @@ function endErrorMessage(event?: GenerationEndEvent): string {
   return raw ? formatGenerationErrorMessage(raw) : EXPAND_FAILED_MESSAGE;
 }
 
-function ingestExpandChunk(
-  contentAcc: StreamingContentAccumulator,
-  reasoningAcc: BenchmarkStreamReasoningAccumulator,
-  chunk: ChatCompletionChunk,
-): void {
-  contentAcc.ingestChoice(chunk.choices?.[0]);
-  reasoningAcc.ingestChunk(chunk);
-}
-
-/**
- * Prefer sanitized main content; on completion, accept reasoning-only streams
- * (common when thinking-off is ignored or reasoning lands outside `content`).
- */
-function resolveExpandedDisplayText(
-  contentText: string,
-  reasoningText: string,
-  options: { reasoningFallback?: boolean; partial?: boolean } = {},
-): string {
-  const fromContent = sanitizeExpandedPrompt(contentText, { partial: options.partial });
-  if (fromContent) return fromContent;
-  if (!options.reasoningFallback) return '';
-  const merged = resolveBenchmarkCompletionText(contentText, reasoningText);
-  return sanitizeExpandedPrompt(merged, { partial: options.partial });
+/** Thinking is dead weight here — the answer is prose in `content`. */
+function thinkingOffPatch(
+  providerApiKind: Parameters<typeof thinkingToCompletionBody>[1],
+  providerId: string,
+  modelId: string,
+): Record<string, unknown> {
+  const modelRow = modelId
+    ? modelCache.get(encodeModelSelectKey(providerId, modelId))
+    : undefined;
+  const capabilities =
+    modelRow?.capabilities ??
+    (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
+  const { body } = thinkingToCompletionBody('off', providerApiKind, capabilities);
+  return body as Record<string, unknown>;
 }
 
 /** Stream one expansion of `draft`; resolves with the final sanitized prompt. */
@@ -137,27 +123,19 @@ export async function fetchExpandedPrompt(
     return { text: null, error: errorMessageFrom(err) };
   }
 
-  invalidateProviderCache();
   const provider = await resolveProvider(binding.providerId);
-  const modelRow = binding.modelId
-    ? modelCache.get(encodeModelSelectKey(binding.providerId, binding.modelId))
-    : undefined;
-  const modelCaps =
-    modelRow?.capabilities ??
-    (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
-
   const body: Record<string, unknown> = {
     model: binding.modelId,
     messages: buildExpandPromptMessages(draft, attachments),
     temperature: EXPAND_TEMPERATURE,
     max_tokens: EXPAND_MAX_TOKENS,
     stream: true,
+    ...thinkingOffPatch(provider.apiKind, provider.id, binding.modelId),
   };
-  applyUtilityThinkingOff(body, provider, modelCaps);
 
   let generationId: string;
   try {
-    ({ generationId } = await createGeneration(binding.providerId, body, {
+    ({ generationId } = await createGeneration(provider.id, body, {
       persist: false,
       fallbackRole: 'utility',
     }));
@@ -165,8 +143,7 @@ export async function fetchExpandedPrompt(
     return { text: null, error: errorMessageFrom(err) };
   }
 
-  const contentAcc = new StreamingContentAccumulator();
-  const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
+  const acc = new StreamingContentAccumulator();
 
   return new Promise<ExpandPromptResult>((resolve) => {
     let settled = false;
@@ -179,12 +156,8 @@ export async function fetchExpandedPrompt(
     const unsubscribe = subscribeToGeneration(generationId, {
       signal: input.signal,
       onChunk: (chunk) => {
-        ingestExpandChunk(contentAcc, reasoningAcc, chunk);
-        const partial = resolveExpandedDisplayText(
-          contentAcc.getText(),
-          reasoningAcc.getText(),
-          { partial: true },
-        );
+        acc.ingestChoice(chunk.choices?.[0]);
+        const partial = sanitizeExpandedPrompt(acc.getText(), { partial: true });
         if (partial) input.onPartial?.(partial);
       },
       onEnd: (event?: GenerationEndEvent) => {
@@ -197,11 +170,7 @@ export async function fetchExpandedPrompt(
           finish(null);
           return;
         }
-        const text = resolveExpandedDisplayText(
-          contentAcc.getText(),
-          reasoningAcc.getText(),
-          { reasoningFallback: true },
-        );
+        const text = sanitizeExpandedPrompt(acc.getText());
         finish(text || null, text ? undefined : EXPAND_EMPTY_MESSAGE);
       },
       onTransportError: (err) => {

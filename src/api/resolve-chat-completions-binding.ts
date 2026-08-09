@@ -4,7 +4,6 @@
  */
 
 import { modelCache } from '../app-state';
-import { fetchModels } from './models';
 import {
   fetchCachedModels,
   listModelServes,
@@ -19,14 +18,7 @@ import {
   resolveLibrarySendBinding,
   resolveUpstreamProviderId,
 } from '../models/model-select-library';
-import {
-  getActiveProvider,
-  invalidateProviderCache,
-} from '../providers/store';
-import {
-  LLAMA_CPP_LOCAL_PROVIDER_ID,
-  MLX_LM_LOCAL_PROVIDER_ID,
-} from '../providers/types';
+import { getActiveProvider } from '../providers/store';
 import {
   chatTurnNeedsModelLoad,
   ensureChatModelLoadedForTurn,
@@ -92,20 +84,6 @@ export async function resolveChatCompletionsBinding(
   return resolveChatCompletionsBindingFromCatalog(providerId, modelId, library, serves);
 }
 
-/** Local serve providers are upserted on the server during load — refresh client caches. */
-async function refreshLocalServeProviderCatalog(
-  binding: ChatCompletionsBinding,
-): Promise<void> {
-  const pid = binding.providerId.trim();
-  if (pid !== MLX_LM_LOCAL_PROVIDER_ID && pid !== LLAMA_CPP_LOCAL_PROVIDER_ID) return;
-  invalidateProviderCache();
-  try {
-    await fetchModels();
-  } catch {
-    /* picker refresh is best-effort; listProviders will refetch on next resolve */
-  }
-}
-
 /**
  * Ensure the model is loaded (My Models serve or provider load-unload) and return upstream ids.
  */
@@ -143,12 +121,9 @@ export async function prepareChatCompletionsBinding(
       if (!served) {
         throw new Error('Failed to load My Models model — no running serve after load');
       }
-      await refreshLocalServeProviderCatalog(served);
       return served;
     }
-    const binding = { providerId: resolved.providerId, modelId: resolved.modelId };
-    await refreshLocalServeProviderCatalog(binding);
-    return binding;
+    return { providerId: resolved.providerId, modelId: resolved.modelId };
   }
 
   const provider = await getActiveProvider(resolved.providerId);
@@ -159,7 +134,5 @@ export async function prepareChatCompletionsBinding(
       signal,
     );
   }
-  const binding = { providerId: resolved.providerId, modelId: resolved.modelId };
-  await refreshLocalServeProviderCatalog(binding);
-  return binding;
+  return { providerId: resolved.providerId, modelId: resolved.modelId };
 }
