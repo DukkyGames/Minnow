@@ -78,6 +78,7 @@
     "test:terminal-pty": "node test/terminal/pty-session.test.mjs",
     "test:memory": "node test/run-all.mjs --suite memory",
     "test:brain": "node test/run-all.mjs --suite brain",
+    "test:product-wiki": "node test/run-all.mjs --suite product-wiki",
     "test:onboarding": "node test/run-all.mjs --suite onboarding",
     "test:issues": "node test/run-all.mjs --suite issues",
     "test:scheduler": "node test/run-all.mjs --suite scheduler",

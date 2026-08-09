@@ -138,6 +138,10 @@ export const PATH_RUNNER_RULES = [
  */
 export const EXCLUDED_TESTS = [
   {
+    path: 'test/product-wiki/product-wiki.test.mjs',
+    reason: 'catalog + manual copy gate (use npm run test:product-wiki; CI job product wiki)',
+  },
+  {
     path: 'test/terminal/pty-session.test.mjs',
     reason: 'integration script (requires live server; use npm run test:terminal-pty)',
   },
@@ -200,6 +204,9 @@ export const SCOPED_SUITES = {
   },
   brain: {
     patterns: ['test/brain/**/*.test.mjs', 'test/brain/**/*.test.mts'],
+  },
+  'product-wiki': {
+    patterns: ['test/product-wiki/**/*.test.mjs'],
   },
   settings: {
     patterns: ['test/settings/**/*.test.mjs', 'test/settings/**/*.test.mts'],

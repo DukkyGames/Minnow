@@ -35,6 +35,13 @@ describe('test discovery', () => {
     assert.ok(files.length > 0);
     assert.ok(files.every((f) => f.startsWith('test/memory/')));
   });
+
+  test('excluded tests run in scoped suites but not in the full suite', () => {
+    const full = listTestsForSuite(null);
+    const wiki = listTestsForSuite('product-wiki');
+    assert.ok(!full.includes('test/product-wiki/product-wiki.test.mjs'));
+    assert.ok(wiki.includes('test/product-wiki/product-wiki.test.mjs'));
+  });
 });
 
 describe('resolveTestConcurrency', () => {

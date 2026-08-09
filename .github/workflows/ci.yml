@@ -13,6 +13,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  product-wiki:
+    name: product wiki
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Product wiki catalog and manual copy gates
+        run: npm run test:product-wiki
+
   board-scenario-contract:
     name: board scenario contract
     runs-on: ubuntu-latest

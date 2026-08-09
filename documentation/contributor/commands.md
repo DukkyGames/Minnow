@@ -29,6 +29,7 @@ For UI key bindings (composer, editor, file tree, terminal), see [Keyboard short
 | Command | Regenerates |
 |---------|-------------|
 | `npm run wiki:generate` | `server/product-wiki/catalog.json` from `documentation/` — **run after editing any wiki page** |
+| `npm run test:product-wiki` | Catalog sync + manual copy gates (also CI job **product wiki**; not part of `npm test`) |
 | `npm run wiki:stage` | Stages the GitHub Wiki tree (see [wiki-publishing](../maintainer/wiki-publishing.md)) |
 | `npm run settings-registry:generate` | `server/settings/registry-manifest.json` from the settings catalog |
 | `npm run skills-library:index` | Skills Library index |

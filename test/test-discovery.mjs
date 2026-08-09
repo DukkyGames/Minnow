@@ -71,16 +71,20 @@ export function discoverTestFiles() {
  * @param {string | null} suiteName
  */
 export function listTestsForSuite(suiteName) {
-  const all = discoverTestFiles().filter((file) => !excludedPaths.has(file));
+  const discovered = discoverTestFiles();
 
-  if (!suiteName) return all;
+  if (!suiteName) {
+    return discovered.filter((file) => !excludedPaths.has(file));
+  }
 
   const suite = SCOPED_SUITES[suiteName];
   if (!suite) {
     throw new Error(`Unknown test suite "${suiteName}". Known: ${Object.keys(SCOPED_SUITES).join(', ')}`);
   }
 
-  return all.filter((file) => suite.patterns.some((pattern) => matchesPattern(file, pattern)));
+  return discovered.filter((file) =>
+    suite.patterns.some((pattern) => matchesPattern(file, pattern)),
+  );
 }
 
 /**
