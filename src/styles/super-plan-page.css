@@ -359,7 +359,8 @@ html.mn-super-plan-open #sidebarBackdrop {
 
 .sp-ask {
   width: 100%;
-  max-width: 720px;
+  /* Room for option chips + model label on one toolbar row at typical pane widths. */
+  max-width: min(100%, 960px);
   margin: 0 auto;
 }
 
@@ -380,6 +381,9 @@ html.mn-super-plan-open #sidebarBackdrop {
 }
 
 .sp-composer {
+  container-type: inline-size;
+  container-name: sp-composer;
+
   border: 1px solid var(--mn-border-strong);
   border-radius: var(--radius-md);
   background: var(--mn-surface-0, var(--mn-bg));
@@ -415,19 +419,22 @@ html.mn-super-plan-open #sidebarBackdrop {
 
 .sp-composer__bar {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   padding: 8px 8px 8px 10px;
 }
 
 .sp-composer__spacer {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .sp-model-anchor {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: min(220px, 42%);
+  max-width: min(16rem, 38%);
 }
 
 .sp-model-anchor .composer-model-trigger-wrap {
@@ -454,18 +461,50 @@ html.mn-super-plan-open #sidebarBackdrop {
   text-align: left;
 }
 
+/* Composer toolbar: chips on their own row when the box is tight; model + send share the next. */
+@container sp-composer (max-width: 560px) {
+  .sp-composer__bar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .sp-opts {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .sp-composer__spacer {
+    display: none;
+  }
+
+  .sp-model-anchor {
+    flex: 1 1 0;
+    max-width: none;
+  }
+}
+
 /* ── Option chips ──────────────────────────────────────────────────────── */
 
 .sp-opts {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
   gap: 5px;
   min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sp-opts::-webkit-scrollbar {
+  display: none;
 }
 
 .sp-opt {
   position: relative;
+  flex-shrink: 0;
 }
 
 .sp-chip {
