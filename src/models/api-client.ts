@@ -3,6 +3,9 @@
  */
 
 import { withSessionToken } from '../api/session-token.ts';
+import type { GgufGeometryFacts } from './serve-memory-estimate.ts';
+
+export type { GgufGeometryFacts };
 
 /** GGUF fetches one file; MLX fetches a whole repo snapshot into a directory. */
 export type ModelDownloadFormat = 'gguf' | 'mlx';
@@ -285,6 +288,18 @@ export async function fetchInstalledModels(): Promise<{
 export async function fetchRuntimes(): Promise<RuntimeDetection> {
   const res = await fetch('/api/models/runtimes');
   return parseJson(res);
+}
+
+/**
+ * Attention geometry read from a local GGUF header.
+ * Resolves to null when the file is gone or is not a GGUF Minnow can parse.
+ */
+export async function fetchGgufGeometry(
+  filePath: string,
+): Promise<GgufGeometryFacts | null> {
+  const res = await fetch(`/api/models/gguf-meta?path=${encodeURIComponent(filePath)}`);
+  if (!res.ok) return null;
+  return parseJson<GgufGeometryFacts>(res);
 }
 
 export async function fetchCachedModels(): Promise<CachedModelRow[]> {

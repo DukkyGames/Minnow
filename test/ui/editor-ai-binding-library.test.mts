@@ -64,6 +64,7 @@ mock.module('../../src/models/api-client.ts', {
     listModelDownloads: async () => [],
     fetchInstalledModels: async () => [],
     fetchRuntimes: async () => ({}),
+    fetchGgufGeometry: async () => null,
     fetchModelsConfig: async () => ({}),
     saveModelsConfig: async () => ({}),
     fetchServeProfiles: async () => [],

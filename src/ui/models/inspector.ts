@@ -11,7 +11,11 @@ import {
   loadLibraryInferencePrefs,
   saveLibraryInferenceSampler,
 } from '../../config/library-inference-meta';
-import type { LlamaServeSettings } from '../../models/api-client';
+import {
+  fetchGgufGeometry,
+  type GgufGeometryFacts,
+  type LlamaServeSettings,
+} from '../../models/api-client';
 import { buildSamplerFieldInputs } from '../settings-sampler-fields';
 import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
 import {
@@ -61,6 +65,47 @@ let bound = false;
 let inspectorRenderRaf: number | null = null;
 /** Per-model launch settings, kept while the app is open. */
 const draftSettings = new Map<string, LlamaServeSettings>();
+
+/**
+ * GGUF headers by file path — exact layer count and attention geometry for models already on
+ * disk. `null` records a file we tried and could not parse, so we do not retry every render.
+ */
+const ggufGeometry = new Map<string, GgufGeometryFacts | null>();
+const ggufGeometryPending = new Set<string>();
+
+/**
+ * Read the header for a model's weights, re-rendering once it lands.
+ * Until it does, the estimate falls back to architecture + parameter count.
+ */
+function ensureGgufGeometry(model: LibraryModel): GgufGeometryFacts | null {
+  const filePath = model.path;
+  if (!filePath || model.format !== 'GGUF') return null;
+  if (ggufGeometry.has(filePath)) return ggufGeometry.get(filePath) ?? null;
+  if (ggufGeometryPending.has(filePath)) return null;
+
+  ggufGeometryPending.add(filePath);
+  void fetchGgufGeometry(filePath)
+    .catch(() => null)
+    .then((facts) => {
+      ggufGeometryPending.delete(filePath);
+      ggufGeometry.set(filePath, facts);
+      scheduleInspectorRender();
+    });
+  return null;
+}
+
+/** Geometry hints for the estimator: exact header first, catalog fields as the fallback. */
+function memoryHints(model: LibraryModel): {
+  gguf: GgufGeometryFacts | null;
+  arch: string | null;
+  name: string | null;
+} {
+  return {
+    gguf: ensureGgufGeometry(model),
+    arch: model.arch || null,
+    name: model.name || null,
+  };
+}
 
 function root(): HTMLElement | null {
   return document.getElementById('modelsInspector');
@@ -243,7 +288,7 @@ function gpuLayersSlider(
   nGpuLayers: number | undefined,
   onChange: (nGpuLayers: number) => void,
 ): HTMLElement {
-  const maxLayers = estimateTransformerLayerCount(model.paramsB);
+  const maxLayers = estimateTransformerLayerCount(model.paramsB, memoryHints(model));
   const sliderValue = sliderValueFromNGpu(nGpuLayers, maxLayers);
   const wrap = el('label', 'models-field');
   const head = el('div', 'models-field__range-head');
@@ -278,27 +323,35 @@ function gpuLayersSlider(
 
 function launchMemoryHint(model: LibraryModel, settings: LlamaServeSettings): HTMLElement {
   const weightsGb = model.sizeBytes > 0 ? model.sizeBytes / 1024 ** 3 : 0;
+  const hw = getModelsState().hardware;
   const estimate = estimateServeMemory({
     weightsGb,
     paramsB: model.paramsB,
     ctx: settings.ctx ?? DEFAULT_CONTEXT_TOKENS,
     cacheType: settings.cache_type ?? 'f16',
     nGpuLayers: settings.n_gpu_layers,
+    backend: hw?.backend ?? null,
+    deviceCount: hw?.gpuCount ?? 1,
+    ...memoryHints(model),
   });
   const line = formatServeMemoryEstimate(estimate);
-  const hw = getModelsState().hardware;
   const budgetVram = hw?.gpuVramGb ?? 0;
   const budgetRam = hw?.availableRamGb ?? hw?.totalRamGb ?? 0;
   const tight =
     (estimate.vramGb > 0 && budgetVram > 0 && estimate.vramGb > budgetVram * 0.92) ||
     (estimate.ramGb > 0 && budgetRam > 0 && estimate.ramGb > budgetRam * 0.55);
+
+  const suffix = estimate.kvGbPer1kTokens > 0 ? ` (${estimate.kvGbPer1kTokens} GB per 1k ctx)` : '';
   const hint = el(
     'p',
     tight ? 'models-hint models-hint--warn' : 'models-hint',
-    `Estimated memory at launch: ${line}`,
+    `Estimated memory at launch: ${line}${suffix}`,
   );
   if (tight) {
     hint.title = 'This configuration may exceed the memory Minnow measured on this machine.';
+  } else if (estimate.geometrySource !== 'gguf') {
+    hint.title =
+      "Estimated from this model's architecture and size — exact numbers need the weights on disk.";
   }
   return hint;
 }
@@ -615,6 +668,15 @@ export function render(): void {
   if (footer.childElementCount) host.appendChild(footer);
 }
 
+/** Coalesce re-renders onto the next frame. */
+function scheduleInspectorRender(): void {
+  if (inspectorRenderRaf != null) return;
+  inspectorRenderRaf = window.requestAnimationFrame(() => {
+    inspectorRenderRaf = null;
+    render();
+  });
+}
+
 /** Wire the inspector to the store (idempotent). */
 export function initInspector(): void {
   void loadLibraryInferencePrefs();
@@ -623,13 +685,7 @@ export function initInspector(): void {
     return;
   }
   bound = true;
-  subscribeModelsStore(() => {
-    if (inspectorRenderRaf != null) return;
-    inspectorRenderRaf = window.requestAnimationFrame(() => {
-      inspectorRenderRaf = null;
-      render();
-    });
-  });
+  subscribeModelsStore(scheduleInspectorRender);
   render();
 }
 
