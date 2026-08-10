@@ -437,15 +437,29 @@ export function upsertFileHash(db, repo, file, sha256, mtimeMs, indexError = nul
   );
 }
 
-/** Persist computed PageRank scores. */
+/**
+ * Persist computed PageRank scores.
+ *
+ * `personalizedPageRank` returns a Map. `Object.entries(map)` is always `[]`, so the
+ * previous version silently wrote nothing and every symbol kept pagerank 0.
+ * @param {import('better-sqlite3').Database} db
+ * @param {Map<string, number> | Record<string, number>} scores
+ * @returns {number} rows updated
+ */
 export function writePageRanks(db, scores) {
+  const entries =
+    scores instanceof Map ? [...scores.entries()] : Object.entries(scores ?? {});
+  if (entries.length === 0) return 0;
+
   const stmt = db.prepare('UPDATE symbols SET pagerank = ? WHERE id = ?');
-  const tx = db.transaction((entries) => {
-    for (const [id, score] of entries) {
-      stmt.run(score, id);
+  const tx = db.transaction((rows) => {
+    let updated = 0;
+    for (const [id, score] of rows) {
+      updated += stmt.run(Number(score) || 0, id).changes;
     }
+    return updated;
   });
-  tx(Object.entries(scores));
+  return tx(entries);
 }
 
 /** Aggregate index stats for status endpoints (scoped to one repo key when provided). */

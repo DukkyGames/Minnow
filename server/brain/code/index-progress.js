@@ -23,6 +23,28 @@ export function reportIndexProgress(repo, snapshot) {
   progressForwarder?.(key, snapshot);
 }
 
+/**
+ * Outcome of the most recent reindex job per repo. Reindex is fire-and-forget over HTTP,
+ * so this is how the UI learns how the run ended after polling sees `indexing: false`.
+ * @type {Map<string, Record<string, unknown>>}
+ */
+const lastRunByRepo = new Map();
+
+/**
+ * @param {string} repo
+ * @param {Record<string, unknown>} run
+ */
+export function recordIndexRun(repo, run) {
+  const key = String(repo ?? '').trim() || 'workspace';
+  lastRunByRepo.set(key, run);
+}
+
+/** @param {string} repo */
+export function getIndexRun(repo) {
+  const key = String(repo ?? '').trim() || 'workspace';
+  return lastRunByRepo.get(key) ?? null;
+}
+
 /** @param {string} repo */
 export function getIndexProgress(repo) {
   const key = String(repo ?? '').trim() || 'workspace';
@@ -40,4 +62,5 @@ export function getIndexProgress(repo) {
 export function clearIndexProgress(repo) {
   const key = String(repo ?? '').trim() || 'workspace';
   progressByRepo.delete(key);
+  lastRunByRepo.delete(key);
 }

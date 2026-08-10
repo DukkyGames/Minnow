@@ -12,6 +12,21 @@ setIndexProgressForwarder((repo, snapshot) => {
   process.stdout.write(`${JSON.stringify({ type: 'progress', repo, ...snapshot })}\n`);
 });
 
+/**
+ * Write one framed message and exit only once it has drained. `process.exit` does not
+ * flush pending async pipe writes, so exiting straight after a write can truncate it.
+ * @param {Record<string, unknown>} msg
+ * @param {number} code
+ */
+function emitAndExit(msg, code) {
+  const flushed = process.stdout.write(`${JSON.stringify(msg)}\n`);
+  if (flushed) {
+    process.exit(code);
+    return;
+  }
+  process.stdout.once('drain', () => process.exit(code));
+}
+
 const rl = createInterface({ input: process.stdin, terminal: false });
 
 rl.once('line', async (line) => {
@@ -25,12 +40,12 @@ rl.once('line', async (line) => {
     if (msg.workspaceRoot) {
       await setWorkspaceRoot(String(msg.workspaceRoot));
     }
-    const result = await reindexCode(msg.opts ?? {});
-    process.stdout.write(`${JSON.stringify({ type: 'done', result })}\n`);
-    process.exit(0);
+    // Drop the per-file `results` array: it grows with the repo (~160KB here) and no
+    // caller reads it across the process boundary — the summary fields cover reporting.
+    const { results, ...summary } = await reindexCode(msg.opts ?? {});
+    emitAndExit({ type: 'done', result: summary }, 0);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    process.stdout.write(`${JSON.stringify({ type: 'error', message })}\n`);
-    process.exit(1);
+    emitAndExit({ type: 'error', message }, 1);
   }
 });

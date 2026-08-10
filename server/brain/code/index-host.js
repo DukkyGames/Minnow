@@ -14,6 +14,36 @@ import { reportIndexProgress } from './index-progress.js';
 
 const WORKER_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index-worker.js');
 
+/**
+ * Reassemble newline-delimited JSON from stream chunks.
+ *
+ * Pipe chunks are not line-aligned. The worker's `done` frame spans several chunks on any
+ * real repo, and parsing each chunk on its own dropped every fragment — the reindex then
+ * failed with "Index worker closed without a result" after doing all the work.
+ * @param {(line: string) => void} onLine
+ */
+export function createNdjsonFramer(onLine) {
+  let residual = '';
+  return {
+    /** @param {string} chunk */
+    push(chunk) {
+      residual += chunk;
+      const lines = residual.split(/\r?\n/);
+      // The trailing element is an incomplete line — hold it for the next chunk.
+      residual = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line) onLine(line);
+      }
+    },
+    /** Deliver a final unterminated line, if any. */
+    flush() {
+      const tail = residual;
+      residual = '';
+      if (tail) onLine(tail);
+    },
+  };
+}
+
 /** Tests and MINNOW_BRAIN_INDEX_IN_PROCESS=1 keep indexing on the main thread. */
 export function shouldRunBrainIndexInProcess() {
   return (
@@ -56,31 +86,35 @@ function runBrainCodeReindexChild(opts) {
       stderr += String(chunk);
     });
 
-    child.stdout?.on('data', (chunk) => {
-      const lines = String(chunk).split(/\r?\n/).filter(Boolean);
-      for (const line of lines) {
-        let msg;
-        try {
-          msg = JSON.parse(line);
-        } catch {
-          continue;
-        }
-        if (msg.type === 'progress' && msg.repo) {
-          reportIndexProgress(msg.repo, {
-            indexing: Boolean(msg.indexing),
-            filesDone: Number(msg.filesDone) || 0,
-            filesTotal: Number(msg.filesTotal) || 0,
-            phase: String(msg.phase ?? 'idle'),
-          });
-        } else if (msg.type === 'done' && !settled) {
-          settled = true;
-          resolve(msg.result);
-        } else if (msg.type === 'error' && !settled) {
-          settled = true;
-          reject(new Error(String(msg.message ?? 'Index worker failed')));
-        }
+    /** @param {string} line */
+    const handleLine = (line) => {
+      if (!line) return;
+      let msg;
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        return;
       }
-    });
+      if (msg.type === 'progress' && msg.repo) {
+        reportIndexProgress(msg.repo, {
+          indexing: Boolean(msg.indexing),
+          filesDone: Number(msg.filesDone) || 0,
+          filesTotal: Number(msg.filesTotal) || 0,
+          phase: String(msg.phase ?? 'idle'),
+        });
+      } else if (msg.type === 'done' && !settled) {
+        settled = true;
+        resolve(msg.result);
+      } else if (msg.type === 'error' && !settled) {
+        settled = true;
+        reject(new Error(String(msg.message ?? 'Index worker failed')));
+      }
+    };
+
+    const framer = createNdjsonFramer(handleLine);
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk) => framer.push(chunk));
+    child.stdout?.on('end', () => framer.flush());
 
     child.on('error', (err) => {
       if (!settled) {

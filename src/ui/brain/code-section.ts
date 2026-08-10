@@ -15,6 +15,7 @@ import {
   reindexBrainCode,
 } from '../../brain/client';
 import type {
+  BrainCodeIndexRun,
   BrainCodeStatus,
   BrainCodeRepoMap,
   BrainCodeRepoMapEntry,
@@ -36,7 +37,6 @@ let focusTimer: ReturnType<typeof setTimeout> | null = null;
 let lastStatus: BrainCodeStatus | null = null;
 let selectedSymbolId: string | null = null;
 let codeGraphApi: ForceGraphApi | null = null;
-let indexProgressPoll: ReturnType<typeof setInterval> | null = null;
 
 type ActionStatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -53,20 +53,6 @@ function codeIndexRequestContext(): { workspaceRoot?: string; repo?: string } {
   if (!workspaceRoot) return {};
   const repo = brainWorkspaceKeyFromPath(workspaceRoot) || undefined;
   return { workspaceRoot, repo };
-}
-
-function stopIndexProgressPoll(): void {
-  if (indexProgressPoll) {
-    clearInterval(indexProgressPoll);
-    indexProgressPoll = null;
-  }
-}
-
-function startIndexProgressPoll(): void {
-  stopIndexProgressPoll();
-  indexProgressPoll = setInterval(() => {
-    void refreshCodeStatus();
-  }, 1500);
 }
 
 /** Format index stats for the toolbar line. */
@@ -220,6 +206,14 @@ async function refreshCodeStatus(): Promise<void> {
   line.textContent = formatStatusLine(status);
   if (status.indexing) {
     setActionStatus('spin', formatStatusLine(status));
+    return;
+  }
+
+  // An empty index with a failed run behind it should say why, not just read "0 symbols".
+  const run = status.lastRun;
+  if (run && !run.running && status.symbolCount === 0) {
+    const outcome = describeReindexRun(run, status.repo);
+    if (outcome.kind === 'err') setActionStatus('err', outcome.text);
   }
 }
 
@@ -552,28 +546,74 @@ async function runSymbolSearch(query: string): Promise<void> {
   }
 }
 
-/** Full workspace reindex. */
+/** Give up waiting on a reindex job after this long (the job itself keeps running). */
+const REINDEX_WAIT_TIMEOUT_MS = 45 * 60 * 1000;
+
+/** Poll status until the background reindex job finishes; null means it outlasted the wait. */
+async function waitForReindexRun(startedAt?: string): Promise<BrainCodeIndexRun | null> {
+  const deadline = Date.now() + REINDEX_WAIT_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await refreshCodeStatus();
+    const run = lastStatus?.lastRun;
+    if (run && !run.running && (!startedAt || run.startedAt === startedAt)) {
+      return run;
+    }
+  }
+  return null;
+}
+
+/** Human-readable outcome for a finished reindex job. */
+function describeReindexRun(run: BrainCodeIndexRun, repo: string): { kind: 'ok' | 'err'; text: string } {
+  if (run.ok === false) {
+    return { kind: 'err', text: `Reindex failed: ${run.error ?? 'unknown error'}` };
+  }
+  if (run.skipped) {
+    return { kind: 'ok', text: `Reindex skipped in ${repo} (${run.reason ?? 'nothing to do'})` };
+  }
+
+  const indexed = run.indexedFiles ?? 0;
+  const parts = [`Indexed ${indexed} file${indexed === 1 ? '' : 's'} in ${repo}`];
+  const symbols = run.symbolCount ?? run.symbolsIndexed;
+  if (symbols) parts.push(`${symbols.toLocaleString()} symbols`);
+
+  const failed = run.failedFiles ?? 0;
+  if (failed > 0) {
+    const top = run.errorSummary?.[0];
+    parts.push(`${failed} file${failed === 1 ? '' : 's'} skipped${top ? `: ${top.message}` : ''}`);
+  }
+  if (run.usageAugmentError) parts.push(`usage scan skipped (${run.usageAugmentError})`);
+  if (run.scaffold?.created) parts.push(`created ${run.scaffold.path}`);
+
+  // Nothing indexed and everything failed is a failure, however cleanly it exited.
+  const kind = indexed === 0 && failed > 0 ? 'err' : 'ok';
+  return { kind, text: parts.join(' · ') };
+}
+
+/** Full workspace reindex — starts a background job, then tracks it via status polling. */
 async function runReindex(): Promise<void> {
   const btn = document.getElementById('brainCodeReindex') as HTMLButtonElement | null;
   if (btn) btn.disabled = true;
-  setActionStatus('spin', 'Reindexing workspace…');
-  startIndexProgressPoll();
+  setActionStatus('spin', 'Starting reindex…');
 
-  const result = await reindexBrainCode(codeIndexRequestContext());
-  stopIndexProgressPoll();
-  if (btn) btn.disabled = false;
-
-  if (!result?.ok) {
-    setActionStatus('err', 'Reindex failed');
+  const ack = await reindexBrainCode(codeIndexRequestContext());
+  if (!ack?.ok) {
+    if (btn) btn.disabled = false;
+    setActionStatus('err', 'Could not start reindex. Is Minnow running?');
     return;
   }
 
-  setActionStatus(
-    'ok',
-    `Indexed ${result.indexedFiles} changed file${result.indexedFiles === 1 ? '' : 's'} in ${result.repo}${
-      result.scaffold?.created ? ` · created ${result.scaffold.path}` : ''
-    }`,
-  );
+  setActionStatus('spin', ack.alreadyRunning ? 'Reindex already running…' : 'Reindexing workspace…');
+  const run = await waitForReindexRun(ack.startedAt);
+  if (btn) btn.disabled = false;
+
+  if (!run) {
+    setActionStatus('err', 'Reindex is still running — check back shortly.');
+    return;
+  }
+
+  const outcome = describeReindexRun(run, ack.repo);
+  setActionStatus(outcome.kind, outcome.text);
   await refreshCodeStatus();
   await refreshRepoMap();
 }
