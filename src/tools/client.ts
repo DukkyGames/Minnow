@@ -26,6 +26,10 @@ import {
   applyOrchestrateAutoToolFilter,
   injectBoardMemberSubsetTools,
 } from '../chat/modes/orchestrate-tool-filter';
+import {
+  GIT_SETUP_SKILL_ID,
+  injectGitSetupSkillTools,
+} from '../skills/git-setup-client';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { filterToolsByExpertSnapshot } from '../chat/experts/expert-tool-policy';
 import type { Chat } from '../types';
@@ -593,6 +597,7 @@ export function getEnabledToolDefinitionsForMode(
  */
 export function getEnabledToolDefinitionsForChat(
   chat: Chat,
+  options?: { skillId?: string | null },
 ): OpenAIFunctionDefinition[] {
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
@@ -602,9 +607,13 @@ export function getEnabledToolDefinitionsForChat(
     defs = injectBoardMemberSubsetTools(defs);
   }
   defs = applyBoardMemberToolFilter(defs, chat, executionMode);
-  if (normalized !== 'orchestrate') return defs;
-
-  return applyOrchestrateAutoToolFilter(defs, executionMode);
+  if (normalized === 'orchestrate') {
+    defs = applyOrchestrateAutoToolFilter(defs, executionMode);
+  }
+  if (options?.skillId === GIT_SETUP_SKILL_ID) {
+    defs = injectGitSetupSkillTools(defs);
+  }
+  return defs;
 }
 
 /** Alias for send path — built-in, MCP, and plugin tools after mode + permission filters. */

@@ -1697,7 +1697,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const userRow = chat.history[forkHistoryIndex] as UserMessage | undefined;
     const userContent = userRow?.content ?? historyContent;
     const activeModeId = normalizeModeId(chat.modeId);
-    let snapTools = getEnabledToolDefinitionsForChat(chat);
+    let snapTools = getEnabledToolDefinitionsForChat(chat, { skillId });
     if (activeWorkAgent?.allowedTools?.length) {
       const allow = new Set(activeWorkAgent.allowedTools);
       snapTools = snapTools.filter((t) => allow.has(t.function.name));
@@ -1845,7 +1845,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         syncComposerMessageQueue();
       }
 
-      let enabledTools = getEnabledToolDefinitionsForChat(chat);
+      let enabledTools = getEnabledToolDefinitionsForChat(chat, { skillId });
       if (activeWorkAgent?.allowedTools?.length) {
         const allow = new Set(activeWorkAgent.allowedTools);
         enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
