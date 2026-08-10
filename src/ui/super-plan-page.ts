@@ -20,6 +20,10 @@ import {
   isSuperPlanStalled,
 } from '../chat/super-plan/controller';
 import {
+  mountComposerModelTrigger,
+  unmountSuperPlanComposerModelTrigger,
+} from './composer-model-trigger';
+import {
   SUPER_PLAN_STAGE_LABELS,
   SUPER_PLAN_STAGE_ORDER,
   type SuperPlanStageId,
@@ -682,6 +686,8 @@ class SuperPlanPage {
 
     const bar = el('div', 'sp-composer__bar');
     const opts = this.buildOptionChips();
+    const modelAnchor = el('div', 'sp-model-anchor composer-model-trigger-anchor');
+    modelAnchor.id = 'superPlanComposerModelAnchor';
     const spacer = el('div', 'sp-composer__spacer');
 
     const send = el('button', 'sp-send');
@@ -710,8 +716,9 @@ class SuperPlanPage {
       }
     });
 
-    bar.append(opts, spacer, send);
+    bar.append(opts, modelAnchor, spacer, send);
     composer.append(field, bar);
+    mountComposerModelTrigger(modelAnchor, 'super-plan');
 
     const seeds = el('div', 'sp-seeds');
     seeds.appendChild(el('span', 'sp-seeds__label', 'Try'));
@@ -1731,6 +1738,7 @@ export function seedSuperPlanLedgerForTests(entries: ActivityLogEntry[]): void {
 }
 
 export function teardownSuperPlanPage(): void {
+  unmountSuperPlanComposerModelTrigger();
   page?.destroy();
   page = null;
 }

@@ -18,8 +18,8 @@ Then set the run up:
 | **Scope** | **Web**, **Codebase**, or **Web + Codebase** |
 | **Workspace** | Which repository to search, when the scope includes code |
 | **Category** | Auto, Technical, Academic, News, Market, General — shapes source selection |
-| **Search** | Override the search provider for this run |
-| **Provider / Model override** | Use a different model for this run than your configured default |
+| **Search** | Override the search provider for this run (engine chip) |
+| **Model** | On the composer bar: same picker as Code — binds the **active chat** for this run (Settings → Deep Research model applies when unset) |
 
 Press **Research**. A progress stepper shows each round as it happens; **Cancel** stops it.
 

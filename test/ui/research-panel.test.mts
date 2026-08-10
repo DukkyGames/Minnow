@@ -25,6 +25,7 @@ function buildResearchPageHtml(): string {
           <div class="rs-ask">
             <div class="rs-composer">
               <textarea id="researchQuery"></textarea>
+              <div class="rs-composer__bar">
               <div class="rs-opts">
                 <div class="rs-opt">
                   <button type="button" id="chipResearchScope" aria-expanded="false">
@@ -53,18 +54,16 @@ function buildResearchPageHtml(): string {
                 </div>
                 <div class="rs-opt">
                   <button type="button" id="chipResearchEngine" aria-expanded="false"></button>
-                  <div class="rs-pop" id="popResearchEngine" hidden>
+                  <div class="rs-pop rs-pop--wide" id="popResearchEngine" hidden>
                     <select id="researchSearchProvider"><option value=""></option><option value="brave">Brave</option></select>
-                    <div id="researchComposerModelAnchor" class="rs-model-anchor"></div>
-                    <button type="button" id="btnResearchClearModel" hidden>Use default</button>
-                    <input type="hidden" id="researchProviderOverride" value="" />
-                    <input type="hidden" id="researchModelOverride" value="" />
                   </div>
                 </div>
                 <span id="researchEngineDot" hidden></span>
               </div>
+              <div id="researchComposerModelAnchor" class="rs-model-anchor rs-composer__model"></div>
               <button type="button" id="btnResearchCancel" hidden>Stop</button>
               <button type="button" id="btnResearchStart" aria-label="Start research"></button>
+              </div>
             </div>
           </div>
         </div>

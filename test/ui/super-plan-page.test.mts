@@ -297,6 +297,23 @@ describe('super plan page', () => {
     assert.deepEqual(calls, ['onStart:Add offline queueing']);
   });
 
+  test('compose surface mounts a per-chat model picker', () => {
+    installTestWindow();
+    document.body.innerHTML =
+      '<select id="modelSelect"><option value="lm/qwen">Qwen — LM Studio</option></select>';
+    const chat = makeRunChat('sp-model', 'grill');
+    chat.superPlan = undefined;
+    const root = mountPage(chat, 'compose');
+
+    const anchor = root.querySelector('#superPlanComposerModelAnchor');
+    assert.ok(anchor, 'model anchor');
+    assert.ok(
+      anchor?.querySelector('.composer-model-trigger-wrap--super-plan'),
+      'super-plan model trigger',
+    );
+    teardownSuperPlanPage();
+  });
+
   test('chip popovers open one at a time', () => {
     installTestWindow();
     const chat = makeRunChat('sp8', 'grill');

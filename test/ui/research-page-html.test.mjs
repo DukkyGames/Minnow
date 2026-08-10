@@ -29,9 +29,6 @@ const RESEARCH_IDS = [
   'researchCategory',
   'researchSearchProvider',
   'researchComposerModelAnchor',
-  'btnResearchClearModel',
-  'researchProviderOverride',
-  'researchModelOverride',
   // Chips
   'chipResearchScope',
   'chipResearchRounds',

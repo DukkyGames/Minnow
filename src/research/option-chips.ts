@@ -51,11 +51,7 @@ function scopeLabel(): string {
 }
 
 function engineOverridden(): boolean {
-  return Boolean(
-    el<HTMLSelectElement>('researchSearchProvider')?.value?.trim() ||
-      el<HTMLInputElement>('researchProviderOverride')?.value?.trim() ||
-      el<HTMLInputElement>('researchModelOverride')?.value?.trim(),
-  );
+  return Boolean(el<HTMLSelectElement>('researchSearchProvider')?.value?.trim());
 }
 
 const CHIPS: ChipSpec[] = [

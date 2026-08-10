@@ -999,8 +999,8 @@
                     id="chipResearchEngine"
                     aria-expanded="false"
                     aria-controls="popResearchEngine"
-                    aria-label="Search and model overrides"
-                    title="Search and model overrides"
+                    aria-label="Search overrides"
+                    title="Search overrides"
                   >
                     <i class="fi fi-rr-settings-sliders icon-svg" aria-hidden="true" style="--mn-icon-size:14px"></i>
                     <span class="rs-chip__dot" id="researchEngineDot" hidden aria-hidden="true"></span>
@@ -1017,27 +1017,16 @@
                           <option value="duckduckgo">DuckDuckGo</option>
                         </select>
                       </div>
+                      <span class="rs-field__hint">Override search backend for this run only.</span>
                     </label>
-                    <div class="rs-field">
-                      <span class="rs-field__label">Model</span>
-                      <div id="researchComposerModelAnchor" class="rs-model-anchor"></div>
-                      <button
-                        type="button"
-                        class="rs-field__btn rs-field__btn--ghost"
-                        id="btnResearchClearModel"
-                        hidden
-                      >
-                        Use default
-                      </button>
-                      <p class="rs-field__hint">
-                        Override for this run only. Otherwise Settings or your active chat model applies.
-                      </p>
-                      <input type="hidden" id="researchProviderOverride" value="" />
-                      <input type="hidden" id="researchModelOverride" value="" />
-                    </div>
                   </div>
                 </div>
               </div>
+
+              <div
+                id="researchComposerModelAnchor"
+                class="rs-model-anchor rs-composer__model composer-model-trigger-anchor"
+              ></div>
 
               <span class="rs-composer__spacer" aria-hidden="true"></span>
               <button type="button" class="rs-cancel" id="btnResearchCancel" hidden>Stop</button>

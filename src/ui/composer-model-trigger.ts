@@ -30,8 +30,6 @@ import {
   unregisterChromePopover,
 } from './preview-electron-visibility';
 
-import { syncResearchOptionChips } from '../research/option-chips';
-import { resolveResearchModelBindingSync } from '../research/resolve-binding';
 import type { Chat, ChatGroup } from '../types';
 import { iconHtml } from './icon';
 
@@ -39,7 +37,14 @@ const CHEVRON_SVG = iconHtml('chevronDown', { size: 10 });
 
 const MODEL_FALLBACK_ICON_SVG = iconHtml('appModels', { className: 'mn-os-mb-model-fallback-icon' });
 
-type ComposerModelVariant = 'desktop' | 'code' | 'chat' | 'menubar' | 'board' | 'research';
+type ComposerModelVariant =
+  | 'desktop'
+  | 'code'
+  | 'chat'
+  | 'menubar'
+  | 'board'
+  | 'research'
+  | 'super-plan';
 
 type ComposerModelSurfaceVariant = Exclude<ComposerModelVariant, 'menubar' | 'board'>;
 
@@ -96,6 +101,12 @@ function resolveChatModelTriggerVariant(): ComposerModelSurfaceVariant | null {
   const desktopInput = document.getElementById('desktopInput');
   if (desktopInput && isElementVisible(desktopInput)) return 'desktop';
 
+  const superPlanAnchor = document.getElementById('superPlanComposerModelAnchor');
+  if (superPlanAnchor && isElementVisible(superPlanAnchor)) return 'super-plan';
+
+  const researchAnchor = document.getElementById('researchComposerModelAnchor');
+  if (researchAnchor && isElementVisible(researchAnchor)) return 'research';
+
   const codeAnchor = document.getElementById('codeComposerModelAnchor');
   if (codeAnchor && isElementVisible(codeAnchor)) return 'code';
 
@@ -118,42 +129,6 @@ function findBoardModelTrigger(): ComposerModelTrigger | undefined {
 
 function findResearchModelTrigger(): ComposerModelTrigger | undefined {
   return triggers.find((trigger) => trigger.variant === 'research');
-}
-
-function readResearchOverrideFields(): { providerId: string; modelId: string } {
-  const providerId =
-    (document.getElementById('researchProviderOverride') as HTMLInputElement | null)?.value?.trim() ??
-    '';
-  const modelId =
-    (document.getElementById('researchModelOverride') as HTMLInputElement | null)?.value?.trim() ??
-    '';
-  return { providerId, modelId };
-}
-
-function writeResearchOverrideFields(providerId: string, modelId: string): void {
-  const providerEl = document.getElementById('researchProviderOverride') as HTMLInputElement | null;
-  const modelEl = document.getElementById('researchModelOverride') as HTMLInputElement | null;
-  if (providerEl) {
-    providerEl.value = providerId;
-  }
-  if (modelEl) {
-    modelEl.value = modelId;
-  }
-  const clearBtn = document.getElementById('btnResearchClearModel');
-  const hasOverride = Boolean(providerId.trim() && modelId.trim());
-  if (clearBtn) {
-    clearBtn.hidden = !hasOverride;
-  }
-}
-
-/** Clear per-run model override (Research composer engine popover). */
-export function clearResearchModelOverride(): void {
-  writeResearchOverrideFields('', '');
-  const researchTrigger = findResearchModelTrigger();
-  if (researchTrigger) {
-    syncTrigger(researchTrigger);
-  }
-  syncResearchOptionChips();
 }
 
 function isMenubarStyleVariant(variant: ComposerModelVariant): variant is MenubarStyleVariant {
@@ -209,15 +184,7 @@ function resolveTriggerSelectValue(trigger: ComposerModelTrigger): string {
   }
   if (trigger.variant === 'research') {
     const values = [...sel.options].map((o) => o.value);
-    const override = readResearchOverrideFields();
-    if (override.providerId && override.modelId) {
-      return resolveModelSelectValueForChat(override, values);
-    }
-    const effective = resolveResearchModelBindingSync();
-    return resolveModelSelectValueForChat(
-      { providerId: effective.providerId, modelId: effective.model },
-      values,
-    );
+    return resolveModelSelectValueForChat(getActiveChat(), values);
   }
   const values = [...sel.options].map((o) => o.value);
   return resolveModelSelectValueForChat(getActiveChat(), values);
@@ -349,13 +316,7 @@ function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string)
     return;
   }
   if (trigger.variant === 'research') {
-    const decoded = decodeModelSelectKey(modelId);
-    const canonicalModelId = decoded?.modelId ?? modelId.trim();
-    const providerId = decoded?.providerId?.trim() ?? '';
-    if (!canonicalModelId || !providerId) return;
-    writeResearchOverrideFields(providerId, canonicalModelId);
-    syncTrigger(trigger);
-    syncResearchOptionChips();
+    onActiveChatModelChange(modelId);
     return;
   }
   onActiveChatModelChange(modelId);
@@ -777,10 +738,13 @@ function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
   triggerBtn.className = 'composer-model-trigger';
   triggerBtn.setAttribute('aria-haspopup', 'listbox');
   triggerBtn.setAttribute('aria-expanded', 'false');
-  triggerBtn.setAttribute(
-    'aria-label',
-    variant === 'research' ? 'Research run model' : 'Active model',
-  );
+  const ariaLabel =
+    variant === 'research'
+      ? 'Research model'
+      : variant === 'super-plan'
+        ? 'Super Plan model'
+        : 'Active model';
+  triggerBtn.setAttribute('aria-label', ariaLabel);
 
   const logoEl = document.createElement('span');
   logoEl.className = 'composer-model-trigger__logo hidden';
@@ -880,6 +844,17 @@ export function mountResearchComposerModelTrigger(): void {
   }
   const entry = buildTrigger('research');
   anchor.appendChild(entry.root);
+}
+
+/** Tear down Super Plan model picker when the planning surface closes. */
+export function unmountSuperPlanComposerModelTrigger(): void {
+  const idx = triggers.findIndex((trigger) => trigger.variant === 'super-plan');
+  if (idx === -1) return;
+  const entry = triggers[idx];
+  if (openTrigger === entry) closeComposerModelMenu();
+  entry.panel.remove();
+  entry.root.remove();
+  triggers.splice(idx, 1);
 }
 
 /** Wire desktop + Code + Chat composer model triggers (idempotent). */

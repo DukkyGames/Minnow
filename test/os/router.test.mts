@@ -254,8 +254,6 @@ describe('os router navigation', () => {
           <select id="researchCategory"><option value=""></option></select>
           <select id="researchSearchProvider"><option value=""></option></select>
           <div id="researchComposerModelAnchor"></div>
-          <input type="hidden" id="researchProviderOverride" value="" />
-          <input type="hidden" id="researchModelOverride" value="" />
           <button id="btnResearchStart"></button><button id="btnResearchCancel" hidden></button>
         </div>
         <div id="researchRunPane" hidden>

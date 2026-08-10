@@ -501,6 +501,36 @@
   flex: 1;
 }
 
+.rs-composer__model {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(220px, 42%);
+}
+
+.rs-composer__model .composer-model-trigger-wrap {
+  display: block;
+  width: 100%;
+  max-width: none;
+}
+
+.rs-composer__model .composer-model-trigger {
+  width: 100%;
+  max-width: none;
+  justify-content: flex-start;
+  height: 27px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+}
+
+.rs-composer__model .composer-model-trigger__label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
 /* ── Option chips ──────────────────────────────────────────────────────── */
 
 .rs-opts {

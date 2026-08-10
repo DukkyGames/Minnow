@@ -359,7 +359,7 @@ html.mn-super-plan-open #sidebarBackdrop {
 
 .sp-ask {
   width: 100%;
-  max-width: 640px;
+  max-width: 720px;
   margin: 0 auto;
 }
 
@@ -422,6 +422,36 @@ html.mn-super-plan-open #sidebarBackdrop {
 
 .sp-composer__spacer {
   flex: 1;
+}
+
+.sp-model-anchor {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(220px, 42%);
+}
+
+.sp-model-anchor .composer-model-trigger-wrap {
+  display: block;
+  width: 100%;
+  max-width: none;
+}
+
+.sp-model-anchor .composer-model-trigger {
+  width: 100%;
+  max-width: none;
+  justify-content: flex-start;
+  height: 27px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+}
+
+.sp-model-anchor .composer-model-trigger__label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
 }
 
 /* ── Option chips ──────────────────────────────────────────────────────── */

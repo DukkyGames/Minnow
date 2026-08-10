@@ -56,7 +56,6 @@ import { closeSettings } from '../ui/settings-page';
 import { renderSidebar } from '../ui/sidebar';
 import { setStatus } from '../ui/status';
 import {
-  clearResearchModelOverride,
   mountResearchComposerModelTrigger,
   syncComposerModelTriggers,
 } from '../ui/composer-model-trigger';
@@ -441,9 +440,7 @@ function renderResearchStartButton(): void {
 // ── Options ─────────────────────────────────────────────────────────────────
 
 async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
-  const overrideProvider = el<HTMLInputElement>('researchProviderOverride')?.value?.trim();
-  const overrideModel = el<HTMLInputElement>('researchModelOverride')?.value?.trim();
-  return resolveResearchModelBinding({ overrideProvider, overrideModel });
+  return resolveResearchModelBinding();
 }
 
 function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'> {
@@ -1231,11 +1228,6 @@ function bindStaticControls(): void {
 
   el('btnResearchSettingsLink')?.addEventListener('click', () => {
     void import('../ui/settings-page').then((m) => m.openSettings('deep-research'));
-  });
-
-  el('btnResearchClearModel')?.addEventListener('click', () => {
-    clearResearchModelOverride();
-    syncComposerModelTriggers();
   });
 
   const scopeSelect = el<HTMLSelectElement>('researchScope');
