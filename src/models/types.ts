@@ -1,3 +1,5 @@
+import type { GeometrySource } from './model-geometry.d.mts';
+
 /** Catalog model entry — hwfit catalog JSON shape. */
 export interface CatalogModel {
   name: string;
@@ -16,6 +18,8 @@ export interface CatalogModel {
   architecture?: string;
   release_date?: string;
   is_moe?: boolean;
+  num_experts?: number;
+  active_experts?: number;
   is_gguf?: boolean;
   gguf_sources?: Array<{ repo: string; provider?: string }>;
   format?: string;
@@ -74,4 +78,6 @@ export interface ModelFitResult {
   release_date?: string;
   target_context?: number | null;
   is_image_gen?: boolean;
+  /** Where the attention geometry behind `required_gb` came from. */
+  geometry_source?: GeometrySource;
 }

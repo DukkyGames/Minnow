@@ -4,6 +4,8 @@
  */
 
 import { DEFAULT_CONTEXT_TOKENS } from './default-context-tokens.js';
+import { estimateRunMemory, GIB, weightsBytesFor } from '../../src/models/memory-model.mjs';
+import { geometryFromGgufMetadata, resolveGeometry } from '../../src/models/model-geometry.mjs';
 
 /**
  * @typedef {object} ServeProfile
@@ -15,20 +17,10 @@ import { DEFAULT_CONTEXT_TOKENS } from './default-context-tokens.js';
  * @property {string} cache_type
  * @property {number} ctx
  * @property {number} est_vram_gb
+ * @property {import('../../src/models/model-geometry.d.mts').GeometrySource} geometry_source
  * @property {boolean} fits
  * @property {string} note
  */
-
-const QUANT_BPP = {
-  Q8_0: 1.0,
-  Q6_K: 0.75,
-  Q5_K_M: 0.65,
-  Q4_K_M: 0.58,
-  Q3_K_M: 0.45,
-  Q2_K: 0.35,
-};
-
-const KV_FACTOR = { q4_0: 0.5, q8_0: 1.0, f16: 2.0 };
 
 /**
  * @param {Record<string, unknown>} model
@@ -45,22 +37,32 @@ function paramsB(model) {
 
 /**
  * @param {Record<string, unknown>} model
- * @param {number} ctx
- * @param {string} kvType
- */
-function kvGb(model, ctx, kvType) {
-  const active = Number(model.active_parameters ?? paramsB(model));
-  return 0.000008 * active * ctx * (KV_FACTOR[kvType] ?? 1.0);
-}
-
-/**
- * @param {Record<string, unknown>} model
  * @param {string} quant
  * @param {number} [fixedGb]
  */
-function weightsGb(model, quant, fixedGb) {
-  if (fixedGb && fixedGb > 0) return fixedGb;
-  return paramsB(model) * (QUANT_BPP[quant] ?? 0.58);
+function weightsBytes(model, quant, fixedGb) {
+  if (fixedGb && fixedGb > 0) return fixedGb * GIB;
+  return weightsBytesFor(paramsB(model), quant);
+}
+
+/**
+ * Attention geometry for a profile request. Exact when the caller passed a GGUF header we
+ * already parsed; otherwise resolved from architecture and parameter count.
+ * @param {Record<string, unknown>} model
+ * @param {Record<string, unknown> | null} [ggufMeta]
+ */
+function geometryFor(model, ggufMeta) {
+  const exact = ggufMeta ? geometryFromGgufMetadata(ggufMeta) : null;
+  if (exact) return exact;
+  const total = paramsB(model);
+  const active = Number(model.active_parameters);
+  return resolveGeometry({
+    architecture: typeof model.architecture === 'string' ? model.architecture : undefined,
+    name: typeof model.name === 'string' ? model.name : undefined,
+    paramsB: total,
+    activeParamsB: active > 0 ? active : total,
+    nExperts: Number(model.num_experts) || 0,
+  });
 }
 
 /**
@@ -77,12 +79,15 @@ function vramBudgetGb(system) {
  * Build serve profiles for a model on the given hardware snapshot.
  * @param {Record<string, unknown>} system — hardware probe row
  * @param {Record<string, unknown>} model — catalog or cached model metadata
- * @param {{ serveWeightsGb?: number, serveQuant?: string }} [opts]
+ * @param {{ serveWeightsGb?: number, serveQuant?: string, ggufMeta?: Record<string, unknown> | null }} [opts]
  * @returns {ServeProfile[]}
  */
 export function computeServeProfiles(system, model, opts = {}) {
   const budget = vramBudgetGb(system);
   const fixedGb = opts.serveWeightsGb;
+  const geometry = geometryFor(model, opts.ggufMeta ?? null);
+  const onGpu = Number(system.gpuVramGb ?? system.gpu_vram_gb ?? 0) > 0;
+  const backend = onGpu ? String(system.backend || 'cuda') : 'cpu';
   const baseQuant = (opts.serveQuant || model.quantization || model.quant || 'Q4_K_M')
     .toString()
     .toUpperCase();
@@ -104,10 +109,18 @@ export function computeServeProfiles(system, model, opts = {}) {
   const profiles = [];
   for (const t of templates) {
     const quant = fixedGb ? baseQuant : t.quant;
-    const w = weightsGb(model, quant, fixedGb);
-    const kv = kvGb(model, t.ctx, t.cache);
-    const est = w + kv + 0.6;
+    const estimate = estimateRunMemory({
+      geometry,
+      weightsBytes: weightsBytes(model, quant, fixedGb),
+      ctx: t.ctx,
+      cacheType: t.cache,
+      nGpuLayers: onGpu ? undefined : 0,
+      backend,
+      deviceCount: Number(system.gpuCount) || 1,
+    });
+    const est = estimate.totalGb;
     const fits = est <= budget;
+    const unit = onGpu ? 'VRAM' : 'RAM';
     profiles.push({
       key: t.key,
       label: t.label,
@@ -116,11 +129,12 @@ export function computeServeProfiles(system, model, opts = {}) {
       n_cpu_moe: 0,
       cache_type: t.cache,
       ctx: t.ctx,
-      est_vram_gb: Math.round(est * 10) / 10,
+      est_vram_gb: est,
+      geometry_source: geometry.source,
       fits,
       note: fits
-        ? `Est. ${Math.round(est * 10) / 10} GB VRAM at ${t.ctx} ctx`
-        : `Needs ~${Math.round(est * 10) / 10} GB; budget ~${Math.round(budget * 10) / 10} GB`,
+        ? `Est. ${est} GB ${unit} at ${t.ctx} ctx`
+        : `Needs ~${est} GB; budget ~${Math.round(budget * 10) / 10} GB`,
     });
   }
 

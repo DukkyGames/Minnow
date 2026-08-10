@@ -22,6 +22,7 @@ import {
 import { getCodeDb } from './schema.js';
 import { runBrainCodeReindex } from './index-host.js';
 import { runBoundedPool } from './indexer.js';
+import { getIndexProgress, getIndexRun, recordIndexRun, reportIndexProgress } from './index-progress.js';
 
 /** Load merged config.brain.code settings (avoids circular import with query.js). */
 async function loadBrainCodeConfig() {
@@ -48,6 +49,10 @@ let lazyRefreshInFlight = null;
 
 /** @type {Map<string, Promise<unknown>>} */
 const cascadeInFlightByRepo = new Map();
+
+/** Detached reindex jobs started by the HTTP layer, keyed by repo. */
+/** @type {Map<string, Promise<unknown>>} */
+const reindexJobByRepo = new Map();
 
 const STALE_STAT_CONCURRENCY = 32;
 
@@ -475,6 +480,102 @@ export async function runCascade(opts = {}) {
   } finally {
     cascadeInFlightByRepo.delete(repo);
   }
+}
+
+/** Fields of a cascade result worth replaying to the UI after the job ends. */
+function pickRunSummary(result) {
+  const src = result && typeof result === 'object' ? result : {};
+  const keys = [
+    'indexedFiles',
+    'filesProcessed',
+    'failedFiles',
+    'symbolsIndexed',
+    'symbolCount',
+    'rankedSymbols',
+    'edgesIndexed',
+    'errors',
+    'errorSummary',
+    'usageAugmentError',
+    'scaffold',
+    'skipped',
+    'reason',
+  ];
+  const out = {};
+  for (const key of keys) {
+    if (src[key] !== undefined) out[key] = src[key];
+  }
+  return out;
+}
+
+/**
+ * Start a reindex in the background and return immediately.
+ *
+ * A full index runs for minutes; holding the HTTP response open for it meant the client
+ * timed out and reported failure while the work was still going. Callers poll
+ * /api/brain/code/status for progress and the final `lastRun` outcome instead.
+ * @param {Parameters<typeof runCascade>[0]} [opts]
+ */
+export function startReindexJob(opts = {}) {
+  const root = getEffectiveWorkspaceRoot();
+  const repo = brainWorkspaceKeyFromPath(root) || 'workspace';
+  const existing = reindexJobByRepo.get(repo);
+  if (existing) {
+    const run = getIndexRun(repo);
+    return {
+      started: false,
+      alreadyRunning: true,
+      repo,
+      run,
+      ...(run?.startedAt ? { startedAt: String(run.startedAt) } : {}),
+    };
+  }
+
+  const startedAt = new Date().toISOString();
+  reportIndexProgress(repo, {
+    indexing: true,
+    filesDone: 0,
+    filesTotal: 0,
+    phase: 'starting',
+  });
+  recordIndexRun(repo, { startedAt, finishedAt: null, running: true, ok: null });
+
+  const job = runCascade(opts)
+    .then((result) => {
+      recordIndexRun(repo, {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        running: false,
+        ok: true,
+        ...pickRunSummary(result),
+      });
+    })
+    .catch((err) => {
+      recordIndexRun(repo, {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        running: false,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    })
+    .finally(() => {
+      reindexJobByRepo.delete(repo);
+      // A crashed worker never sends its closing progress frame — clear it here so the
+      // status line cannot stay stuck on "indexing" forever.
+      const progress = getIndexProgress(repo);
+      if (progress.indexing) {
+        reportIndexProgress(repo, { ...progress, indexing: false, phase: 'idle' });
+      }
+    });
+
+  reindexJobByRepo.set(repo, job);
+  return { started: true, repo, startedAt };
+}
+
+/** Test helper — await the detached job for a repo, if one is running. */
+export async function awaitReindexJobForTests(repo) {
+  const job = reindexJobByRepo.get(String(repo ?? '').trim() || 'workspace');
+  if (job) await job;
 }
 
 /**

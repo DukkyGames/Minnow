@@ -3,7 +3,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -328,6 +328,18 @@ export async function indexSingleFile(db, repo, relFile, absFile, globalByFileLi
 const USAGE_AUGMENT_MAX_SYMBOLS = 50_000;
 
 /**
+ * Cap on identifier occurrences read from the usage scan. The scan streams, so this is a
+ * runaway guard (generated/vendored trees), not a buffer limit.
+ */
+const USAGE_SCAN_MAX_MATCHES = 5_000_000;
+
+/** Max per-file index errors echoed back to callers (full list stays in file_hashes). */
+const MAX_REPORTED_INDEX_ERRORS = 50;
+
+/** Max distinct error messages grouped into the summary. */
+const MAX_ERROR_SUMMARY_GROUPS = 8;
+
+/**
  * Run async work over items with bounded concurrency.
  * @template T
  * @param {T[]} items
@@ -373,45 +385,65 @@ async function augmentUsageCounts(db, repo, root) {
   }
   if (idsByName.size === 0) return;
 
+  // Stream `rg --only-matching` (one bare identifier per line) instead of buffering
+  // `rg --json`: on a mid-size repo the JSON form blows any fixed execFile maxBuffer in
+  // well under a second, which used to abort the whole reindex before PageRank ran.
   const args = [
-    '--json',
+    '--only-matching',
+    '--no-filename',
+    '--no-line-number',
     '--no-messages',
     '-e',
     '\\b[A-Za-z_][A-Za-z0-9_]{2,}\\b',
     root,
   ];
-  let stdout = '';
-  try {
-    const result = await execFileAsync(rgExecutable, args, {
-      cwd: root,
-      maxBuffer: 64 * 1024 * 1024,
-      windowsHide: true,
-    });
-    stdout = result.stdout ?? '';
-  } catch (err) {
-    const code = err && typeof err === 'object' ? err.code : undefined;
-    if (code === 1) return;
-    throw err;
-  }
 
   /** @type {Map<string, number>} */
   const counts = new Map();
-  for (const line of stdout.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    let parsed;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (parsed?.type !== 'match' || !parsed.data) continue;
-    const submatches = Array.isArray(parsed.data.submatches) ? parsed.data.submatches : [];
-    for (const sub of submatches) {
-      const token = String(sub?.match?.text ?? '').trim();
-      if (!token || !idsByName.has(token)) continue;
-      counts.set(token, (counts.get(token) ?? 0) + 1);
-    }
-  }
+
+  await new Promise((resolve, reject) => {
+    const child = spawn(rgExecutable, args, { cwd: root, windowsHide: true });
+    let residual = '';
+    let matches = 0;
+    let capped = false;
+    let settled = false;
+
+    /** @param {string} token */
+    const tally = (token) => {
+      const name = token.trim();
+      if (!name || !idsByName.has(name)) return;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    };
+
+    const settle = (err) => {
+      if (settled) return;
+      settled = true;
+      if (err) reject(err);
+      else resolve();
+    };
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      if (capped) return;
+      residual += chunk;
+      const lines = residual.split(/\r?\n/);
+      // Last element is an incomplete line (or '') — carry it to the next chunk.
+      residual = lines.pop() ?? '';
+      for (const line of lines) tally(line);
+      matches += lines.length;
+      if (matches >= USAGE_SCAN_MAX_MATCHES) {
+        capped = true;
+        residual = '';
+        child.kill();
+      }
+    });
+    // Ripgrep exits 1 with no matches and is killed once capped — neither is an error here.
+    child.on('close', () => {
+      if (!capped && residual) tally(residual);
+      settle();
+    });
+    child.on('error', settle);
+  });
 
   const stmts = db.prepare('UPDATE symbols SET usage_count = ? WHERE id = ?');
   const tx = db.transaction((entries) => {
@@ -434,11 +466,11 @@ async function augmentUsageCounts(db, repo, root) {
 export function recomputePageRank(db, focusFiles = new Set()) {
   const edges = db.prepare('SELECT src_symbol, dst_symbol FROM edges').all();
   const { out, nodes } = buildAdjacency(edges);
-  if (nodes.size === 0) return;
+  if (nodes.size === 0) return 0;
   const symbols = db.prepare('SELECT id, file, usage_count FROM symbols').all();
   const personal = buildPersonalizationVector(nodes, symbols, focusFiles);
   const ranks = personalizedPageRank(out, nodes, personal);
-  writePageRanks(db, ranks);
+  return writePageRanks(db, ranks);
 }
 
 /**
@@ -530,10 +562,17 @@ export async function reindexCode(opts = {}) {
     }
   }
 
+  // usage_count is a ranking hint. A failure here must never cost the caller PageRank or
+  // the whole index pass, so it is reported rather than thrown.
+  let usageAugmentError = null;
   if (!isIncremental) {
-    await augmentUsageCounts(db, repo, root);
+    try {
+      await augmentUsageCounts(db, repo, root);
+    } catch (err) {
+      usageAugmentError = err instanceof Error ? err.message : String(err);
+    }
   }
-  recomputePageRank(db, new Set(opts.focusFiles ?? []));
+  const rankedSymbols = recomputePageRank(db, new Set(opts.focusFiles ?? []));
 
   reportIndexProgress(repo, {
     indexing: false,
@@ -542,10 +581,68 @@ export async function reindexCode(opts = {}) {
     phase: 'idle',
   });
 
+  // Symbol ids are qualified names, so same-named symbols in different files collapse.
+  // Report what the index actually holds rather than the sum of per-file counts.
+  const symbolCount =
+    db.prepare('SELECT COUNT(*) AS n FROM symbols WHERE repo = ?').get(repo)?.n ?? 0;
+
   return {
     repo,
-    indexedFiles: results.filter((r) => !r.error).length,
+    ...summarizeIndexResults(results),
+    symbolCount,
+    rankedSymbols,
     results,
     scaffold,
+    ...(usageAugmentError ? { usageAugmentError } : {}),
+  };
+}
+
+/**
+ * Replace a file's own path (and basename) inside its error message, so messages that
+ * differ only by which file failed collapse into one group.
+ * @param {string} message
+ * @param {string} file
+ */
+function redactFilePath(message, file) {
+  if (!file) return message.trim();
+  const variants = new Set([file, file.replace(/\//g, '\\'), file.split('/').pop() ?? '']);
+  let out = message;
+  for (const variant of variants) {
+    // Literal replace — file paths contain regex metacharacters.
+    if (variant) out = out.split(variant).join('…');
+  }
+  return out.trim();
+}
+
+/**
+ * Roll per-file results into the counts and grouped errors callers report to users.
+ * Kept separate from `results` so the child-process IPC payload stays a fixed size.
+ * @param {Array<{ file: string, symbols: number, edges: number, error?: string }>} results
+ */
+export function summarizeIndexResults(results) {
+  const failed = results.filter((r) => r.error);
+  /** @type {Map<string, { count: number, sample: string }>} */
+  const groups = new Map();
+  for (const row of failed) {
+    // Group by message shape so "No LSP server configured for <path>" collapses to one row.
+    const key = redactFilePath(String(row.error), String(row.file ?? ''));
+    const hit = groups.get(key);
+    if (hit) hit.count += 1;
+    else groups.set(key, { count: 1, sample: row.file });
+  }
+
+  return {
+    indexedFiles: results.length - failed.length,
+    filesProcessed: results.length,
+    failedFiles: failed.length,
+    symbolsIndexed: results.reduce((sum, r) => sum + (r.symbols ?? 0), 0),
+    edgesIndexed: results.reduce((sum, r) => sum + (r.edges ?? 0), 0),
+    errors: failed
+      .slice(0, MAX_REPORTED_INDEX_ERRORS)
+      .map((r) => ({ file: r.file, error: String(r.error) })),
+    errorSummary: [...groups.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, MAX_ERROR_SUMMARY_GROUPS)
+      .map(([message, { count, sample }]) => ({ message, count, sample })),
   };
 }

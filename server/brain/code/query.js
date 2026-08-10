@@ -13,8 +13,8 @@ import { getCodeDb, getIndexStats } from './schema.js';
 import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
 import { prepareRepoMapSymbols, prepareRepoMapSymbolsForInjection } from './repo-map-symbols.js';
-import { ensureIndexFreshForQuery, runCascade } from './cascade.js';
-import { getIndexProgress } from './index-progress.js';
+import { ensureIndexFreshForQuery, startReindexJob } from './cascade.js';
+import { getIndexProgress, getIndexRun } from './index-progress.js';
 import { ensureBrainLspProjectReady } from './project-scaffold.js';
 
 /** Load merged config.brain.code settings. */
@@ -53,16 +53,20 @@ export function resolveRepoKey(repoParam) {
 export async function ensureWarmCodeIndex(repo) {
   const key = resolveRepoKey(repo);
   const db = getCodeDb(key);
-  let stats = getIndexStats(db, key);
-  if (!stats.symbolCount && key === activeRepoKey()) {
-    const reindex = await runCascade({ trigger: 'manual', force: true });
-    if (!reindex.indexedFiles && !reindex.skipped) {
-      stats = getIndexStats(db, key);
-      return { repo: key, symbolCount: stats.symbolCount ?? 0 };
-    }
-    stats = getIndexStats(db, key);
+  const stats = getIndexStats(db, key);
+  if (stats.symbolCount || key !== activeRepoKey()) {
+    return { repo: key, symbolCount: stats.symbolCount ?? 0, warming: false };
   }
-  return { repo: key, symbolCount: stats.symbolCount ?? 0 };
+
+  // A cold index takes minutes to build. Kick the job off and answer from what exists now
+  // rather than holding the caller open until it finishes.
+  const job = startReindexJob({ trigger: 'manual', force: true });
+  return {
+    repo: key,
+    symbolCount: stats.symbolCount ?? 0,
+    warming: true,
+    startedAt: job.startedAt,
+  };
 }
 
 /**
@@ -74,11 +78,13 @@ export async function queryCodeStatus() {
   const db = getCodeDb(repo);
   const stats = getIndexStats(db, repo);
   const progress = getIndexProgress(repo);
+  const lastRun = getIndexRun(repo);
   return {
     enabled: code.enabled,
     repo,
     ...stats,
     ...progress,
+    ...(lastRun ? { lastRun } : {}),
     repoMapTokenBudget: code.repoMapTokenBudget,
     repoMapInjectionTokenBudget: code.repoMapInjectionTokenBudget,
     reindexCadence: code.reindexCadence,

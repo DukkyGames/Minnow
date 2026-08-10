@@ -1,15 +1,25 @@
 import { getModels } from './catalog';
 import {
+  DEFAULT_WEIGHT_GIB_PER_BILLION,
+  estimateRunMemory,
+  GIB,
+  maxContextForBudget,
+  weightsBytesFor,
+  WEIGHT_GIB_PER_BILLION,
+} from './memory-model.mjs';
+import { GEOMETRY_UNCERTAINTY } from './model-geometry.mjs';
+import {
   activeParamsB,
   estimateMemoryGb,
   estimateFileSizeGb,
+  geometryForModel,
   inferUseCase,
   isPrequantized,
   paramsB,
-  QUANT_BYTES_PER_PARAM,
   QUANT_QUALITY_PENALTY,
   QUANT_SPEED_MULT,
 } from './quant';
+import type { GeometrySource } from './model-geometry.d.mts';
 import type { CatalogModel, HardwareSnapshot, ModelFitResult } from './types';
 
 export const GPU_BANDWIDTH: Record<string, number> = {
@@ -172,7 +182,9 @@ function estimateSpeed(
   const backend = system.backend || 'cpu_x86';
 
   if (bw && (runMode === 'gpu' || runMode === 'cpu_offload')) {
-    const bpp = QUANT_BYTES_PER_PARAM[quant] ?? 0.5;
+    // Streaming the weights once per token is what sets the ceiling, so this is the real
+    // file size, not the quant's nominal bit width.
+    const bpp = WEIGHT_GIB_PER_BILLION[quant] ?? DEFAULT_WEIGHT_GIB_PER_BILLION;
     const modelGb = pb * bpp;
     if (modelGb <= 0) return 0.0;
     const efficiency = 0.55;
@@ -260,26 +272,72 @@ function contextScore(ctx: number, useCase: string): number {
   return 30;
 }
 
+interface QuantFit {
+  runMode: string;
+  quant: string;
+  ctx: number;
+  requiredGb: number;
+  geometrySource: GeometrySource;
+}
+
+/**
+ * Largest configuration of `quant` that fits, preferring VRAM and then falling back to RAM.
+ *
+ * Weights, compute graph, and backend overhead are fixed once the quant is chosen, so the
+ * context that fits a budget is solved directly. The previous halve-until-it-fits loop could
+ * only ever report ctx, ctx/2, ctx/4 …, so a model that had room for 30k context was listed
+ * at 16k, and one needing a 5% trim was cut in half.
+ */
 function tryQuantAt(
   model: CatalogModel,
   quant: string,
   ctx: number,
   gpuVram: number,
   availableRam: number,
-): [string, string, number, number] | null {
-  let mem = estimateMemoryGb(model, quant, ctx);
-  if (gpuVram > 0 && mem <= gpuVram) return ['gpu', quant, ctx, mem];
-  if (gpuVram > 0 && mem <= availableRam) return ['cpu_offload', quant, ctx, mem];
-  if (gpuVram <= 0 && mem <= availableRam) return ['cpu_only', quant, ctx, mem];
+): QuantFit | null {
+  const geometry = geometryForModel(model);
+  const weightsBytes = weightsBytesFor(paramsB(model), quant);
+  // Guessed geometry earns a margin; a confident-looking number that OOMs is worse than a
+  // conservative one. See GEOMETRY_UNCERTAINTY.
+  const headroom = GEOMETRY_UNCERTAINTY[geometry.source] ?? 1;
 
-  let curCtx = Math.floor(ctx / 2);
-  while (curCtx >= 1024) {
-    mem = estimateMemoryGb(model, quant, curCtx);
-    if (gpuVram > 0 && mem <= gpuVram) return ['gpu', quant, curCtx, mem];
-    if (mem <= availableRam) {
-      return [gpuVram > 0 ? 'cpu_offload' : 'cpu_only', quant, curCtx, mem];
-    }
-    curCtx = Math.floor(curCtx / 2);
+  const estimateAt = (context: number, onGpu: boolean) =>
+    estimateRunMemory({
+      geometry,
+      weightsBytes,
+      ctx: context,
+      backend: onGpu ? 'cuda' : 'cpu',
+      nGpuLayers: onGpu ? undefined : 0,
+    });
+
+  const bestContextFor = (budgetGb: number, onGpu: boolean): number => {
+    if (budgetGb <= 0) return 0;
+    const budgetBytes = (budgetGb * GIB) / headroom;
+    if (estimateAt(ctx, onGpu).totalBytes <= budgetBytes) return ctx;
+    const kvBudget = budgetBytes - estimateAt(0, onGpu).totalBytes;
+    return Math.min(ctx, maxContextForBudget(geometry, kvBudget, 'f16'));
+  };
+
+  const gpuCtx = gpuVram > 0 ? bestContextFor(gpuVram, true) : 0;
+  if (gpuCtx > 0) {
+    return {
+      runMode: 'gpu',
+      quant,
+      ctx: gpuCtx,
+      requiredGb: estimateAt(gpuCtx, true).totalGb,
+      geometrySource: geometry.source,
+    };
+  }
+
+  const cpuCtx = bestContextFor(availableRam, false);
+  if (cpuCtx > 0) {
+    return {
+      runMode: gpuVram > 0 ? 'cpu_offload' : 'cpu_only',
+      quant,
+      ctx: cpuCtx,
+      requiredGb: estimateAt(cpuCtx, false).totalGb,
+      geometrySource: geometry.source,
+    };
   }
   return null;
 }
@@ -438,6 +496,7 @@ export function analyzeModel(
   if (result === null) {
     const oversizedRequired = estimateMemoryGb(model, quantToTry, ctx);
     return {
+      geometry_source: geometryForModel(model).source,
       name: model.name,
       provider: model.provider,
       parameter_count: model.parameter_count,
@@ -459,7 +518,7 @@ export function analyzeModel(
     };
   }
 
-  const [runMode, quant, fitCtx, requiredGb] = result;
+  const { runMode, quant, ctx: fitCtx, requiredGb } = result;
 
   const budget = runMode === 'gpu' ? effectiveVram : availableRam;
   if (requiredGb > budget) return null;
@@ -515,6 +574,7 @@ export function analyzeModel(
     context_length: modelCtx,
     release_date: model.release_date ?? '',
     target_context: parsedTargetContext || null,
+    geometry_source: result.geometrySource,
   };
 }
 

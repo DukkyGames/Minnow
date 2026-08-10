@@ -1,39 +1,10 @@
+import { estimateRunMemory, GIB, weightsBytesFor } from './memory-model.mjs';
+import { resolveGeometry } from './model-geometry.mjs';
+import type { ModelGeometry } from './model-geometry.d.mts';
 import type { CatalogModel } from './types';
 
 /** GGUF quant tiers ordered best-quality first. */
 export const QUANT_HIERARCHY = ['Q8_0', 'Q6_K', 'Q5_K_M', 'Q4_K_M', 'Q3_K_M', 'Q2_K'] as const;
-
-export const QUANT_BPP: Record<string, number> = {
-  F32: 4.0,
-  F16: 2.0,
-  BF16: 2.0,
-  FP8: 1.0,
-  FP4: 0.5,
-  NVFP4: 0.5,
-  MXFP4: 0.5,
-  NF4: 0.5,
-  INT4: 0.5,
-  INT8: 1.0,
-  W4A16: 0.5,
-  W8A8: 1.0,
-  W8A16: 1.0,
-  Q8_0: 1.05,
-  Q6_K: 0.8,
-  Q5_K_M: 0.68,
-  Q4_K_M: 0.58,
-  Q4_0: 0.58,
-  Q3_K_M: 0.48,
-  Q2_K: 0.37,
-  'AWQ-4bit': 0.5,
-  'AWQ-8bit': 1.0,
-  'GPTQ-Int4': 0.5,
-  'GPTQ-Int8': 1.0,
-  'mlx-4bit': 0.55,
-  'mlx-8bit': 1.0,
-  'mlx-6bit': 0.75,
-  'FP4-MoE-Mixed': 0.55,
-  'FP8-Mixed': 1.0,
-};
 
 export const QUANT_SPEED_MULT: Record<string, number> = {
   F16: 0.6,
@@ -99,36 +70,6 @@ export const QUANT_QUALITY_PENALTY: Record<string, number> = {
   'FP8-Mixed': 0.0,
 };
 
-export const QUANT_BYTES_PER_PARAM: Record<string, number> = {
-  F16: 2.0,
-  BF16: 2.0,
-  FP8: 1.0,
-  FP4: 0.5,
-  NVFP4: 0.5,
-  MXFP4: 0.5,
-  NF4: 0.5,
-  INT4: 0.5,
-  INT8: 1.0,
-  W4A16: 0.5,
-  W8A8: 1.0,
-  W8A16: 1.0,
-  Q8_0: 1.0,
-  Q6_K: 0.75,
-  Q5_K_M: 0.625,
-  Q4_K_M: 0.5,
-  Q4_0: 0.5,
-  Q3_K_M: 0.375,
-  Q2_K: 0.25,
-  'AWQ-4bit': 0.5,
-  'AWQ-8bit': 1.0,
-  'GPTQ-Int4': 0.5,
-  'GPTQ-Int8': 1.0,
-  'mlx-4bit': 0.5,
-  'mlx-8bit': 1.0,
-  'mlx-6bit': 0.75,
-  'FP4-MoE-Mixed': 0.55,
-  'FP8-Mixed': 1.0,
-};
 
 /** Pre-quantized formats that should NOT go through the GGUF quant hierarchy. */
 export const PREQUANTIZED_PREFIXES = [
@@ -222,17 +163,36 @@ export function activeParamsB(model: CatalogModel): number {
   return paramsB(model);
 }
 
+/** Attention geometry for a catalog row, resolved from architecture + parameter count. */
+export function geometryForModel(model: CatalogModel): ModelGeometry {
+  return resolveGeometry({
+    architecture: model.architecture,
+    name: model.name,
+    paramsB: paramsB(model),
+    activeParamsB: activeParamsB(model),
+    nExperts: model.num_experts,
+  });
+}
+
+/**
+ * Memory a model needs to run, all layers on GPU.
+ *
+ * Delegates to the shared physical model in memory-model.mjs. The previous formula here was
+ * `pb * bpp + 0.000008 * activeParams * ctx + 0.5`, whose KV term scaled with parameter count
+ * — a relationship that does not exist — and landed anywhere from 17x low (Qwen3-0.6B) to
+ * 1.9x high (Llama-3.3-70B).
+ */
 export function estimateMemoryGb(model: CatalogModel, quant: string, ctx: number): number {
-  const pb = paramsB(model);
-  const bpp = QUANT_BPP[quant] ?? 0.58;
-  const kvParams = activeParamsB(model);
-  return pb * bpp + 0.000008 * kvParams * ctx + 0.5;
+  return estimateRunMemory({
+    geometry: geometryForModel(model),
+    weightsBytes: weightsBytesFor(paramsB(model), quant),
+    ctx,
+  }).totalGb;
 }
 
 /** Approximate on-disk GGUF / weights size from parameter count and quant tier. */
 export function estimateFileSizeGb(paramsBillion: number, quant: string): number {
-  const bpp = QUANT_BYTES_PER_PARAM[quant] ?? 0.5;
-  return Math.round(paramsBillion * bpp * 10) / 10;
+  return Math.round((weightsBytesFor(paramsBillion, quant) / GIB) * 10) / 10;
 }
 
 export function bestQuantForBudget(

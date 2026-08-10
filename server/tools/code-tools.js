@@ -31,6 +31,9 @@ export async function toolRepoMap(args) {
 
   const warm = await ensureWarmCodeIndex();
   if (!warm.symbolCount) {
+    if (warm.warming) {
+      return 'Code index is cold; indexing just started in the background (this takes a few minutes on a large repo). Use `grep` for now and retry repo_map later.';
+    }
     return 'Code index is cold. Reindex failed or workspace has no indexable files. Use `grep` as fallback.';
   }
 

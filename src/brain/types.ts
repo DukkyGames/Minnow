@@ -188,6 +188,49 @@ export interface BrainCodeConfig {
   autoScaffoldIndexConfig: boolean;
 }
 
+/** One file the indexer could not process (usually a missing language server). */
+export interface BrainCodeIndexError {
+  file: string;
+  error: string;
+}
+
+/** Per-file errors grouped by message shape, so N identical failures read as one row. */
+export interface BrainCodeIndexErrorGroup {
+  message: string;
+  count: number;
+  sample: string;
+}
+
+/** Outcome of the most recent reindex job, replayed through the status endpoint. */
+export interface BrainCodeIndexRun {
+  startedAt: string;
+  finishedAt: string | null;
+  running: boolean;
+  ok: boolean | null;
+  error?: string;
+  indexedFiles?: number;
+  filesProcessed?: number;
+  failedFiles?: number;
+  /** Symbols parsed this pass (sums per-file counts; ids collapse across files). */
+  symbolsIndexed?: number;
+  /** Distinct symbol rows the index holds for this repo after the pass. */
+  symbolCount?: number;
+  /** Rows PageRank actually updated — 0 here means ranking silently did nothing. */
+  rankedSymbols?: number;
+  edgesIndexed?: number;
+  errors?: BrainCodeIndexError[];
+  errorSummary?: BrainCodeIndexErrorGroup[];
+  usageAugmentError?: string;
+  skipped?: boolean;
+  reason?: string;
+  scaffold?: {
+    created: boolean;
+    path?: string;
+    skipped?: boolean;
+    reason?: string;
+  };
+}
+
 /** GET /api/brain/code/status. */
 export interface BrainCodeStatus extends BrainCodeConfig {
   repo: string;
@@ -199,6 +242,7 @@ export interface BrainCodeStatus extends BrainCodeConfig {
   filesDone?: number;
   filesTotal?: number;
   phase?: string;
+  lastRun?: BrainCodeIndexRun;
 }
 
 /** Symbol row from find_symbol / graph queries. */
@@ -285,18 +329,17 @@ export interface BrainCodeGitHookInstallResult {
   error?: string;
 }
 
-/** POST /api/brain/code/reindex. */
+/**
+ * POST /api/brain/code/reindex — 202 acknowledgement only. The job runs in the background;
+ * poll /api/brain/code/status and read `lastRun` for the outcome.
+ */
 export interface BrainCodeReindexResult {
   ok: boolean;
   repo: string;
-  indexedFiles: number;
-  results?: Array<{ file: string; symbols: number; edges: number; error?: string }>;
-  scaffold?: {
-    created: boolean;
-    path?: string;
-    skipped?: boolean;
-    reason?: string;
-  };
+  started: boolean;
+  alreadyRunning?: boolean;
+  startedAt?: string;
+  run?: BrainCodeIndexRun | null;
 }
 
 /** Wiki page anchored to a symbol (explain_symbol). */

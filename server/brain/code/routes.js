@@ -20,6 +20,7 @@ import {
   getGitHookStatus,
   installGitHook,
   runCascade,
+  startReindexJob,
   uninstallGitHook,
 } from './cascade.js';
 import { runWithToolContext } from '../../runtime/path-access.js';
@@ -118,15 +119,17 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const files = Array.isArray(body.files)
         ? body.files.map((f) => String(f))
         : undefined;
-      const result = await withCodeWorkspace(req, body, () =>
-        runCascade({
+      // Fire-and-forget: a full index runs for minutes. Progress and the final outcome
+      // come back through /api/brain/code/status.
+      const result = await withCodeWorkspace(req, body, async () =>
+        startReindexJob({
           trigger: 'manual',
           files,
           codeConfig: code,
           force: true,
         }),
       );
-      sendJson(res, 200, { ok: true, ...result });
+      sendJson(res, 202, { ok: true, ...result });
       return true;
     }
 

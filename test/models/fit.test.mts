@@ -43,9 +43,12 @@ describe('models quant', () => {
     assert.equal(paramsB({ parameter_count: '355' }), 0.355);
   });
 
-  test('estimateFileSizeGb uses quant bytes-per-param', () => {
-    assert.equal(estimateFileSizeGb(7, 'Q4_K_M'), 3.5);
-    assert.equal(estimateFileSizeGb(8, 'Q8_0'), 8);
+  test('estimateFileSizeGb matches measured GGUF file sizes', () => {
+    // Mistral-7B Q4_K_M is 4.07 GiB on disk, Llama-3.1-8B Q8_0 is 7.95 GiB. The nominal
+    // bit width predicts 3.5 and 8.0 — k-quants keep embeddings at higher precision, and a
+    // byte per weight is 0.93 GiB per billion, not 1.
+    assert.equal(estimateFileSizeGb(7, 'Q4_K_M'), 4.0);
+    assert.equal(estimateFileSizeGb(8, 'Q8_0'), 7.9);
   });
 });
 

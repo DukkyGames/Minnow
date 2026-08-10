@@ -8,6 +8,7 @@ import { listCachedModels } from './cached.js';
 import { listInstalled } from './installed.js';
 import { getModelsConfig, patchModelsConfig } from './models-config.js';
 import { getInferencePrefs, setLibraryInferenceSampler } from './inference-prefs.js';
+import { readGgufMetadata } from './gguf-metadata.js';
 import { computeServeProfiles } from './profiles.js';
 import { detectRuntimes } from './runtime-detect.js';
 import { getServe, listServes, startServe, stopServe } from './serve.js';
@@ -145,6 +146,20 @@ export async function handleModelsRequest(req, res, pathname) {
     return true;
   }
 
+  // Attention geometry read out of a local GGUF header, so the inspector can show exact
+  // memory numbers and a real layer count instead of guessing from parameter count.
+  if (pathname === '/api/models/gguf-meta' && req.method === 'GET') {
+    const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const filePath = parsed.searchParams.get('path') || '';
+    const meta = await readGgufMetadata(filePath);
+    if (!meta) {
+      sendJson(res, 404, { error: 'No readable GGUF header at that path' });
+      return true;
+    }
+    sendJson(res, 200, meta);
+    return true;
+  }
+
   if (pathname === '/api/models/config' && req.method === 'GET') {
     const models = await getModelsConfig();
     const hfToken = typeof models.hfToken === 'string' ? models.hfToken : '';
@@ -223,6 +238,7 @@ export async function handleModelsRequest(req, res, pathname) {
       const hardware = await detectHardware({ fresh });
       const model = {
         name: modelName,
+        architecture: parsed.searchParams.get('arch') || undefined,
         parameter_count: parsed.searchParams.get('params') || undefined,
         parameters_raw: parsed.searchParams.get('params_b')
           ? Number(parsed.searchParams.get('params_b'))
@@ -233,9 +249,13 @@ export async function handleModelsRequest(req, res, pathname) {
           : undefined,
         is_moe: parsed.searchParams.get('is_moe') === '1',
       };
+      // When the weights are already on disk their header beats every heuristic.
+      const modelPath = parsed.searchParams.get('model_path') || '';
+      const ggufMeta = modelPath ? await readGgufMetadata(modelPath) : null;
       const profiles = computeServeProfiles(hardware, model, {
         serveWeightsGb: weightsGb ? Number(weightsGb) : undefined,
         serveQuant: quant,
+        ggufMeta,
       });
       const variant = (await getInstalledLlamaVariant()) ?? 'cpu';
       const profilesWithArgs = profiles.map((p) => ({
