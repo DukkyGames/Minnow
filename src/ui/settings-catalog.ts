@@ -47,7 +47,7 @@ export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> 
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',
   integrations: 'Web search, dev tools, permissions, skills, and external hooks.',
-  advanced: 'Local health probes and diagnostics.',
+  advanced: 'Local health probes, capability matrix, and diagnostics.',
 };
 
 /** Category → ordered areas (render units). */
@@ -73,7 +73,11 @@ export const SETTINGS_CATEGORY_AREAS: Record<
     'editor',
     'webhooks',
   ],
-  advanced: ['diagnostics', 'board-testing'],
+  advanced: [
+    'diagnostics',
+    'capability-matrix',
+    ...(isBoardTestingSettingsVisible() ? (['board-testing'] as const) : []),
+  ],
 };
 
 /** Flat category list in sidebar order. */
@@ -493,6 +497,36 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
         'When enabled, uncaught renderer errors create bug cards in the Issues app (off by default).',
     },
   ),
+
+  field('advanced.capabilityMatrix', 'Capability matrix', 'advanced', 'capability-matrix', {
+    keywords: ['benchmark', 'capabilities', 'spreadsheet', 'model matrix', 'roster'],
+    description:
+      '67-capability grid with manual verdicts, auto probe results, and run history.',
+  }),
+  field('advanced.capabilityMatrix.roster', 'Matrix roster', 'advanced', 'capability-matrix', {
+    keywords: ['models', 'cloud', 'lm studio', 'hosting'],
+  }),
+  field('advanced.capabilityMatrix.grid', 'Capability grid', 'advanced', 'capability-matrix', {
+    keywords: ['verdict', 'pass', 'fail', 'manual', 'auto'],
+  }),
+  field('advanced.capabilityMatrix.run', 'Run capability matrix', 'advanced', 'capability-matrix', {
+    keywords: ['campaign', 'benchmark run', 'probes'],
+  }),
+  field('advanced.capabilityMatrix.history', 'Matrix run history', 'advanced', 'capability-matrix', {
+    keywords: ['campaign history', 'sweep'],
+  }),
+  field('advanced.capabilityMatrix.cell', 'Manual cell editor', 'advanced', 'capability-matrix', {
+    keywords: ['verdict', 'note', 'override', 'manual cell'],
+  }),
+  field('advanced.capabilityMatrix.export', 'Export capability matrix', 'advanced', 'capability-matrix', {
+    keywords: ['xlsx', 'spreadsheet', 'download', 'export'],
+  }),
+  field('advanced.capabilityMatrix.import', 'Import capability matrix', 'advanced', 'capability-matrix', {
+    keywords: ['xlsx', 'spreadsheet', 'upload', 'import', 'merge'],
+  }),
+  field('advanced.capabilityMatrix.danger', 'Clear manual verdicts', 'advanced', 'capability-matrix', {
+    keywords: ['reset', 'clear manual', 'danger'],
+  }),
 
   field('advanced.boardTesting', 'Board testing', 'advanced', 'board-testing', {
     keywords: ['orchestrate', 'fake model', 'seed board', 'board log', 'kanban', 'test board'],

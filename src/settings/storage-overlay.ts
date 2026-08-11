@@ -239,6 +239,15 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'advanced.diagnostics.fileErrorsToIssues': browser('fileErrorsToIssues', 'boolean', {
     refreshAreas: ['diagnostics'],
   }),
+  'advanced.capabilityMatrix': section(['capability-matrix']),
+  'advanced.capabilityMatrix.roster': section(['capability-matrix']),
+  'advanced.capabilityMatrix.grid': section(['capability-matrix']),
+  'advanced.capabilityMatrix.run': section(['capability-matrix']),
+  'advanced.capabilityMatrix.history': section(['capability-matrix']),
+  'advanced.capabilityMatrix.cell': section(['capability-matrix']),
+  'advanced.capabilityMatrix.export': section(['capability-matrix']),
+  'advanced.capabilityMatrix.import': section(['capability-matrix']),
+  'advanced.capabilityMatrix.danger': section(['capability-matrix']),
 };
 
 /** Default overlay for keys without explicit mapping. */

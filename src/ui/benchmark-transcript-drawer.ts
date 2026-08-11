@@ -23,12 +23,14 @@ export function closeBenchmarkTranscriptDrawer(): void {
 
 function statusBadgeClass(result: TestResult): string {
   if (result.skipped) return 'benchmark-transcript-drawer__badge--skip';
+  if (result.verdict === 'partial') return 'benchmark-transcript-drawer__badge--partial';
   if (result.passed) return 'benchmark-transcript-drawer__badge--pass';
   return 'benchmark-transcript-drawer__badge--fail';
 }
 
 function statusBadgeLabel(result: TestResult): string {
   if (result.skipped) return 'Skipped';
+  if (result.verdict === 'partial') return 'Partial';
   if (result.passed) return 'Pass';
   return 'Fail';
 }
@@ -67,7 +69,7 @@ export function openBenchmarkTranscriptDrawer(
 ): void {
   closeBenchmarkTranscriptDrawer();
 
-  const root = document.getElementById('benchmarkView');
+  const root = document.getElementById('benchmarkView') ?? document.body;
   if (!root) return;
 
   const backdrop = document.createElement('div');

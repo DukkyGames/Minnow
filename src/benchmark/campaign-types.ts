@@ -4,7 +4,13 @@
 
 import type { ApiMessage } from '../types.ts';
 import type { EvalCellResult } from '../evals/types.ts';
-import type { BenchmarkPreset, BenchmarkRun, SuiteId, TestResult } from './types.ts';
+import type {
+  BenchmarkPreset,
+  BenchmarkRun,
+  CapabilityMatrixRunOptions,
+  SuiteId,
+  TestResult,
+} from './types.ts';
 
 /** High-level suite families in the unified benchmark app. */
 export type SuiteFamily = 'integration' | 'standard' | 'custom';
@@ -64,6 +70,18 @@ export interface BenchmarkCellResult {
   evalResult?: EvalCellResult;
 }
 
+/** Target omitted from aggregates because model load failed (not a scored zero). */
+export interface BenchmarkSkippedTarget {
+  targetKey: string;
+  providerId: string;
+  modelId: string;
+  label: string;
+  skipReason: string;
+}
+
+/** Distinguish capability-matrix sweeps in run history. */
+export type BenchmarkCampaignKind = 'integration' | 'capability-matrix';
+
 export interface BenchmarkCampaign {
   id: string;
   startedAt: string;
@@ -77,6 +95,10 @@ export interface BenchmarkCampaign {
   aggregates: ModelAggregate[];
   /** Legacy single-target runs embedded for drill-down. */
   runs: BenchmarkRun[];
+  /** Load failures — excluded from {@link aggregates}. */
+  skippedTargets?: BenchmarkSkippedTarget[];
+  /** Set for Settings capability-matrix campaigns. */
+  kind?: BenchmarkCampaignKind;
 }
 
 export interface BenchmarkCampaignSummary {
@@ -87,6 +109,8 @@ export interface BenchmarkCampaignSummary {
   targetCount: number;
   preset: BenchmarkPreset;
   topScore: number;
+  /** Present for capability-matrix sweeps (Settings history filter). */
+  kind?: BenchmarkCampaignKind;
 }
 
 export interface ModelScoreIndexRow {
@@ -110,6 +134,15 @@ export interface RunCampaignOptions {
   preset?: BenchmarkPreset;
   signal?: AbortSignal;
   maxConcurrency?: number;
+  /** Auto load/unload per target (capability matrix). Default false. */
+  manageModelLifecycle?: boolean;
+  /** Concurrency for local-host targets when lifecycle management is on. Default 1. */
+  localConcurrency?: number;
+  capabilityMatrix?: CapabilityMatrixRunOptions;
+  /** Per-target capability-matrix options (merged over {@link capabilityMatrix}). */
+  resolveCapabilityMatrixForTarget?: (
+    target: BenchmarkTarget,
+  ) => CapabilityMatrixRunOptions | undefined;
   persistPartialOnCancel?: boolean;
   onProgress?: (event: CampaignProgressEvent) => void;
 }
@@ -118,6 +151,15 @@ export type CampaignProgressEvent =
   | { type: 'campaign-start'; campaignId: string; targetCount: number }
   | { type: 'phase'; phase: CampaignPhase; label: string }
   | { type: 'target-start'; targetKey: string; label: string }
+  | { type: 'target-load-start'; targetKey: string; label: string }
+  | { type: 'target-load-done'; targetKey: string }
+  | {
+      type: 'target-load-skipped';
+      targetKey: string;
+      label: string;
+      skipReason: string;
+    }
+  | { type: 'target-unload'; targetKey: string }
   | { type: 'target-done'; targetKey: string; aggregate: ModelAggregate }
   | { type: 'metric-sample'; targetKey: string; tokPerSec?: number; ttftMs?: number }
   | { type: 'integration-progress'; targetKey: string; event: import('./types.ts').BenchmarkProgressEvent }

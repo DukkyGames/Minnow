@@ -26,12 +26,6 @@ function visionFromRow(row: LmModelRecord): boolean | null {
 export function isVisionModel(modelId: string | undefined, catalog?: LmModelRecord[]): boolean {
   if (!modelId) return false;
 
-  const cached = getModelRowForSelectOrCanonicalId(modelId);
-  if (cached) {
-    const fromCache = visionFromRow(cached);
-    if (fromCache !== null) return fromCache;
-  }
-
   if (catalog !== undefined) {
     const row = catalog.find((m) => m.id === modelId);
     if (row) {
@@ -39,6 +33,12 @@ export function isVisionModel(modelId: string | undefined, catalog?: LmModelReco
       if (fromCatalog !== null) return fromCatalog;
     }
     return VISION_ID_FALLBACK.test(modelId);
+  }
+
+  const cached = getModelRowForSelectOrCanonicalId(modelId);
+  if (cached) {
+    const fromCache = visionFromRow(cached);
+    if (fromCache !== null) return fromCache;
   }
 
   return false;

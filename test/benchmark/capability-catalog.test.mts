@@ -1,0 +1,59 @@
+/**
+ * Capability matrix catalog shape and metadata tests.
+ */
+
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import { CAPABILITY_CATALOG, getCapabilityById } from '../../src/benchmark/capabilities/catalog.ts';
+import {
+  CAPABILITY_GROUP_COUNTS,
+  CAPABILITY_GROUP_ORDER,
+  countCapabilitiesInGroup,
+} from '../../src/benchmark/capabilities/groups.ts';
+
+describe('capability catalog', () => {
+  test('has 67 capabilities in spreadsheet order', () => {
+    assert.equal(CAPABILITY_CATALOG.length, 67);
+    const ids = CAPABILITY_CATALOG.map((c) => c.id);
+    assert.deepEqual(new Set(ids).size, ids.length);
+  });
+
+  test('per-group counts match the 14 bands', () => {
+    for (const groupId of CAPABILITY_GROUP_ORDER) {
+      assert.equal(
+        countCapabilitiesInGroup(CAPABILITY_CATALOG, groupId),
+        CAPABILITY_GROUP_COUNTS[groupId],
+        groupId,
+      );
+    }
+  });
+
+  test('has 18 tier-1 capabilities', () => {
+    assert.equal(CAPABILITY_CATALOG.filter((c) => c.tier === 1).length, 18);
+  });
+
+  test('auto capabilities have probe specs; manual have reasons', () => {
+    const auto = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'auto');
+    const manual = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'manual');
+    assert.equal(auto.length, 44);
+    assert.equal(manual.length, 23);
+    for (const cap of auto) {
+      assert.ok(cap.probe, `${cap.id}: missing probe`);
+    }
+    for (const cap of manual) {
+      assert.ok(cap.manualReason?.trim(), `${cap.id}: missing manualReason`);
+      assert.equal(cap.probe, undefined, `${cap.id}: manual must not have probe`);
+    }
+  });
+
+  test('stable ids resolve from catalog', () => {
+    assert.ok(getCapabilityById('files-replace-text'));
+    assert.ok(getCapabilityById('core-streaming'));
+    assert.equal(getCapabilityById('not-a-cap'), undefined);
+  });
+
+  test('first and last entries match spreadsheet columns', () => {
+    assert.equal(CAPABILITY_CATALOG[0].id, 'core-streaming');
+    assert.equal(CAPABILITY_CATALOG[66].id, 'features-markdown');
+  });
+});

@@ -23,6 +23,13 @@ function datasetsDir() {
   return path.join(benchmarksDir(), 'datasets');
 }
 
+function capabilityMatrixDir() {
+  return path.join(benchmarksDir(), 'capability-matrix');
+}
+
+const CAP_MATRIX_ROSTER_FILE = 'roster.json';
+const CAP_MATRIX_VERDICTS_FILE = 'verdicts.json';
+
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -175,6 +182,7 @@ function campaignSummary(campaign) {
     targetCount: Array.isArray(campaign.targets) ? campaign.targets.length : 0,
     preset: campaign.preset ?? 'custom',
     topScore,
+    kind: campaign.kind,
   };
 }
 
@@ -333,6 +341,99 @@ async function handlePostDataset(body, res) {
   sendJson(res, 201, { ok: true, id: packId });
 }
 
+async function readCapabilityMatrixJson(fileName, fallback) {
+  const filePath = path.join(capabilityMatrixDir(), fileName);
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeCapabilityMatrixJson(fileName, payload) {
+  await fs.mkdir(capabilityMatrixDir(), { recursive: true });
+  await fs.writeFile(
+    path.join(capabilityMatrixDir(), fileName),
+    JSON.stringify(payload, null, 2),
+    'utf8',
+  );
+}
+
+async function handleGetCapabilityMatrixRoster(_req, res) {
+  await ensureMinnowLayout();
+  const roster = await readCapabilityMatrixJson(CAP_MATRIX_ROSTER_FILE, { targets: [] });
+  sendJson(res, 200, roster);
+}
+
+async function handlePutCapabilityMatrixRoster(body, res) {
+  await ensureMinnowLayout();
+  const targets = Array.isArray(body?.targets) ? body.targets : [];
+  const roster = {
+    targets,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeCapabilityMatrixJson(CAP_MATRIX_ROSTER_FILE, roster);
+  sendJson(res, 200, { ok: true });
+}
+
+async function handleGetCapabilityMatrixVerdicts(_req, res) {
+  await ensureMinnowLayout();
+  const verdicts = await readCapabilityMatrixJson(CAP_MATRIX_VERDICTS_FILE, {});
+  sendJson(res, 200, { verdicts });
+}
+
+async function handlePostCapabilityMatrixVerdict(body, res) {
+  await ensureMinnowLayout();
+  const targetKey = typeof body?.targetKey === 'string' ? body.targetKey.trim() : '';
+  const capabilityId =
+    typeof body?.capabilityId === 'string' ? body.capabilityId.trim() : '';
+  const verdict = typeof body?.verdict === 'string' ? body.verdict.trim() : '';
+  if (!targetKey || !capabilityId || !verdict) {
+    sendJson(res, 400, { error: 'targetKey, capabilityId, and verdict are required' });
+    return;
+  }
+  const store = await readCapabilityMatrixJson(CAP_MATRIX_VERDICTS_FILE, {});
+  const key = `${targetKey}::${capabilityId}`;
+  store[key] = {
+    targetKey,
+    capabilityId,
+    verdict,
+    note: typeof body?.note === 'string' ? body.note : undefined,
+    updatedAt:
+      typeof body?.updatedAt === 'string' && body.updatedAt.trim()
+        ? body.updatedAt.trim()
+        : new Date().toISOString(),
+  };
+  await writeCapabilityMatrixJson(CAP_MATRIX_VERDICTS_FILE, store);
+  sendJson(res, 200, { ok: true, key });
+}
+
+async function handlePutCapabilityMatrixImport(body, res) {
+  await ensureMinnowLayout();
+  if (Array.isArray(body?.verdicts)) {
+    const store = {};
+    for (const row of body.verdicts) {
+      if (!row || typeof row !== 'object') continue;
+      const targetKey =
+        typeof row.targetKey === 'string' ? row.targetKey.trim() : '';
+      const capabilityId =
+        typeof row.capabilityId === 'string' ? row.capabilityId.trim() : '';
+      if (!targetKey || !capabilityId) continue;
+      const key = `${targetKey}::${capabilityId}`;
+      store[key] = row;
+    }
+    await writeCapabilityMatrixJson(CAP_MATRIX_VERDICTS_FILE, store);
+  }
+  if (Array.isArray(body?.targets)) {
+    await writeCapabilityMatrixJson(CAP_MATRIX_ROSTER_FILE, {
+      targets: body.targets,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  sendJson(res, 200, { ok: true });
+}
+
 export function createBenchmarksMiddleware() {
   return async (req, res, next) => {
     const url = req.url?.split('?')[0] ?? '';
@@ -359,8 +460,36 @@ export function createBenchmarksMiddleware() {
       }
 
       if (url === '/api/benchmarks/campaigns' && req.method === 'POST') {
-        const body = await readJsonBody(req);
+        const body = await readJsonBody(req, MAX_DATASET_BYTES);
         await handlePostCampaign(body, res);
+        return;
+      }
+
+      if (url === '/api/benchmarks/capability-matrix/roster' && req.method === 'GET') {
+        await handleGetCapabilityMatrixRoster(req, res);
+        return;
+      }
+
+      if (url === '/api/benchmarks/capability-matrix/roster' && req.method === 'PUT') {
+        const body = await readJsonBody(req);
+        await handlePutCapabilityMatrixRoster(body, res);
+        return;
+      }
+
+      if (url === '/api/benchmarks/capability-matrix/verdicts' && req.method === 'GET') {
+        await handleGetCapabilityMatrixVerdicts(req, res);
+        return;
+      }
+
+      if (url === '/api/benchmarks/capability-matrix/verdicts' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        await handlePostCapabilityMatrixVerdict(body, res);
+        return;
+      }
+
+      if (url === '/api/benchmarks/capability-matrix/import' && req.method === 'PUT') {
+        const body = await readJsonBody(req, MAX_DATASET_BYTES);
+        await handlePutCapabilityMatrixImport(body, res);
         return;
       }
 
@@ -406,6 +535,10 @@ export function createBenchmarksMiddleware() {
       sendJson(res, 404, { error: 'Not found' });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (message === 'Body too large') {
+        sendJson(res, 413, { error: message });
+        return;
+      }
       sendJson(res, 500, { error: message });
     }
   };

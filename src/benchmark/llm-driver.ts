@@ -30,6 +30,7 @@ import type { ExecuteToolContext } from '../tools/client';
 import { executeTool } from '../tools/client';
 import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import { assertNotAborted, raceWithAbort } from './abort.ts';
+import type { CapabilityRoundTelemetry } from './capabilities/types.ts';
 import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
@@ -62,6 +63,8 @@ export interface OneShotResult {
 export interface ToolLoopInput extends OneShotInput {
   maxToolRounds?: number;
   modeId?: string;
+  /** Per completion round (capability matrix tool-chain probes). */
+  onRound?: (round: CapabilityRoundTelemetry) => void;
   executeToolFn?: (
     name: string,
     args: Record<string, unknown>,
@@ -93,6 +96,7 @@ function timingFromStream(
   tFirst: number | null,
   tEnd: number,
   streamMeta: StreamMetaAccumulator,
+  streamChunkCount: number,
 ): LlmTurnTiming {
   const meta = finalizeResponseMeta(streamMeta, t0, tFirst, tEnd);
   const stats = meta.stats;
@@ -107,6 +111,19 @@ function timingFromStream(
     usage,
     stats,
     finishReason: streamMeta.finish_reason,
+    streamChunkCount,
+  };
+}
+
+function capabilityRoundFromToolCalls(
+  round: number,
+  toolCalls: ToolCall[],
+): CapabilityRoundTelemetry {
+  return {
+    round,
+    toolCalls: toolCalls.map((tc) => ({
+      function: { name: tc.function.name, arguments: tc.function.arguments },
+    })),
   };
 }
 
@@ -158,6 +175,7 @@ async function streamTurn(
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
+  let streamChunkCount = 0;
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -171,6 +189,7 @@ async function streamTurn(
   signal.addEventListener('abort', cancelReader, { once: true });
 
   function handleChunk(chunk: ChatCompletionChunk): void {
+    streamChunkCount += 1;
     if (tFirst == null && chunk.choices?.length) {
       tFirst = performance.now();
     }
@@ -207,7 +226,7 @@ async function streamTurn(
     toolCalls,
     finishReason,
     streamMeta,
-    timing: timingFromStream(t0, tFirst, tEnd, streamMeta),
+    timing: timingFromStream(t0, tFirst, tEnd, streamMeta, streamChunkCount),
   };
 }
 
@@ -379,6 +398,7 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
     lastReasoningText = turn.reasoningText.trim();
     lastToolCalls = preserveLastToolCalls(lastToolCalls, turn.toolCalls);
     lastFinish = turn.finishReason;
+    input.onRound?.(capabilityRoundFromToolCalls(round, turn.toolCalls));
 
     if (turn.toolCalls.length > 0) {
       messages.push({

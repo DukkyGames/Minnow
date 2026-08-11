@@ -27,6 +27,17 @@ function accumulateFromSseBytes(sse: string): string {
   return resolveBenchmarkCompletionText(textAcc.getText(), reasoningAcc.getText());
 }
 
+function countStreamChunksFromSseBytes(sse: string): number {
+  const buffer = createSseEventBuffer();
+  let streamChunkCount = 0;
+  const handleChunk = (): void => {
+    streamChunkCount += 1;
+  };
+  feedSseEventBuffer(buffer, sse, handleChunk);
+  flushSseEventBuffer(buffer, handleChunk);
+  return streamChunkCount;
+}
+
 describe('benchmark SSE accumulation (streamTurn pattern)', () => {
   test('reasoning-only stream uses reasoning as completion text', () => {
     const sse =
@@ -41,5 +52,13 @@ describe('benchmark SSE accumulation (streamTurn pattern)', () => {
       'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n' +
       'data: [DONE]\n\n';
     assert.equal(accumulateFromSseBytes(sse), 'hi');
+  });
+
+  test('counts one handleChunk per SSE data event (streamTurn telemetry)', () => {
+    const sse =
+      'data: {"choices":[{"delta":{"content":"a"}}]}\n\n' +
+      'data: {"choices":[{"delta":{"content":"b"}}]}\n\n' +
+      'data: [DONE]\n\n';
+    assert.equal(countStreamChunksFromSseBytes(sse), 2);
   });
 });

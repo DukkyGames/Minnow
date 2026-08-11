@@ -2205,6 +2205,177 @@
     ]
   },
   {
+    "key": "advanced.capabilityMatrix",
+    "label": "Capability matrix",
+    "description": "67-capability grid with manual verdicts, auto probe results, and run history.",
+    "keywords": [
+      "benchmark",
+      "capabilities",
+      "spreadsheet",
+      "model matrix",
+      "roster"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.roster",
+    "label": "Matrix roster",
+    "keywords": [
+      "models",
+      "cloud",
+      "lm studio",
+      "hosting"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.grid",
+    "label": "Capability grid",
+    "keywords": [
+      "verdict",
+      "pass",
+      "fail",
+      "manual",
+      "auto"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.run",
+    "label": "Run capability matrix",
+    "keywords": [
+      "campaign",
+      "benchmark run",
+      "probes"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.history",
+    "label": "Matrix run history",
+    "keywords": [
+      "campaign history",
+      "sweep"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.cell",
+    "label": "Manual cell editor",
+    "keywords": [
+      "verdict",
+      "note",
+      "override",
+      "manual cell"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.export",
+    "label": "Export capability matrix",
+    "keywords": [
+      "xlsx",
+      "spreadsheet",
+      "download",
+      "export"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.import",
+    "label": "Import capability matrix",
+    "keywords": [
+      "xlsx",
+      "spreadsheet",
+      "upload",
+      "import",
+      "merge"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
+    "key": "advanced.capabilityMatrix.danger",
+    "label": "Clear manual verdicts",
+    "keywords": [
+      "reset",
+      "clear manual",
+      "danger"
+    ],
+    "category": "advanced",
+    "area": "capability-matrix",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "capability-matrix"
+    ]
+  },
+  {
     "key": "about.info",
     "label": "Build info",
     "keywords": [
