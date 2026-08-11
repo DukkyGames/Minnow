@@ -59,17 +59,27 @@ function readSelectedWaves(root: HTMLElement): CapabilityMatrixProbeWave[] {
   return [...boxes].map((box) => box.dataset.capMatrixWave as CapabilityMatrixProbeWave);
 }
 
+function setAllChecked(
+  root: HTMLElement,
+  selector: string,
+  checked: boolean,
+): void {
+  for (const input of root.querySelectorAll<HTMLInputElement>(selector)) {
+    input.checked = checked;
+  }
+}
+
 function renderTargetChips(container: HTMLElement, chips: MatrixTargetChip[]): void {
   container.replaceChildren();
   if (!chips.length) return;
-  const list = el('ul', 'cap-matrix-run__chips');
+  const list = el('ul', 'cap-matrix-run__targets');
   for (const chip of chips) {
-    const item = el('li', `cap-matrix-run__chip cap-matrix-run__chip--${chip.state}`);
-    const label = el('span', 'cap-matrix-run__chip-label', chip.label);
+    const item = el('li', `cap-matrix-run__target cap-matrix-run__target--${chip.state}`);
+    const label = el('span', '', chip.label);
     item.appendChild(label);
     if (chip.state === 'skipped' && chip.detail) {
       item.title = chip.detail;
-      item.appendChild(el('span', 'cap-matrix-run__chip-detail', 'load failed'));
+      item.appendChild(el('span', 'cap-matrix-run__target-detail', 'load failed'));
     }
     list.appendChild(item);
   }
@@ -88,7 +98,7 @@ function paintResumeBanner(
     return;
   }
   if (!banner) {
-    banner = el('div', 'cap-matrix-run__resume');
+    banner = el('div', 'cap-matrix-run__resume settings-server-banner');
     banner.setAttribute('role', 'status');
     root.prepend(banner);
   }
@@ -96,16 +106,23 @@ function paintResumeBanner(
   const text = el(
     'p',
     'cap-matrix-run__resume-text',
-    `Interrupted sweep (${summary.campaignId}): ${summary.remainingTargetCount} model(s) and ${summary.completedProbeCount} finished probe(s) can be resumed.`,
+    `Interrupted sweep (${summary.campaignId}): ${summary.remainingTargetCount} model(s), ${summary.completedProbeCount} probe(s) done.`,
   );
-  const actions = el('div', 'cap-matrix-run__resume-actions');
-  const resumeBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Resume sweep');
-  resumeBtn.type = 'button';
-  resumeBtn.addEventListener('click', onResume);
-  const dismissBtn = el('button', 'settings-action-btn', 'Dismiss');
-  dismissBtn.type = 'button';
-  dismissBtn.addEventListener('click', onDismiss);
-  actions.append(resumeBtn, dismissBtn);
+  const actions = createSettingsActionsRow(
+    [
+      {
+        label: 'Resume sweep',
+        variant: 'primary',
+        onClick: onResume,
+      },
+      {
+        label: 'Dismiss',
+        variant: 'default',
+        onClick: onDismiss,
+      },
+    ],
+    { searchKey: 'advanced.capabilityMatrix.run.action' },
+  );
   banner.append(text, actions);
 }
 
@@ -141,7 +158,7 @@ function paintRunState(root: HTMLElement, state: MatrixRunUiState): void {
   const phase = root.querySelector<HTMLElement>('.cap-matrix-run__phase');
   const fill = root.querySelector<HTMLElement>('.cap-matrix-run__progress-fill');
   const detail = root.querySelector<HTMLElement>('.cap-matrix-run__progress-detail');
-  const chipsHost = root.querySelector<HTMLElement>('.cap-matrix-run__chips-host');
+  const chipsHost = root.querySelector<HTMLElement>('.cap-matrix-run__targets-host');
   const runBtn = root.querySelector<HTMLButtonElement>('[data-cap-matrix-run]');
   const stopBtn = root.querySelector<HTMLButtonElement>('[data-cap-matrix-stop]');
 
@@ -166,50 +183,89 @@ function paintRunState(root: HTMLElement, state: MatrixRunUiState): void {
   }
 }
 
+function buildChecklistBlock(
+  title: string,
+  items: Array<{ id: string; label: string; datasetKey: 'capMatrixGroup' | 'capMatrixWave' }>,
+  host: HTMLElement,
+): HTMLElement {
+  const block = el('div', 'cap-matrix-run__filter-block');
+  const head = el('div', 'cap-matrix-run__filter-head');
+  head.appendChild(el('span', 'settings-field-stack__label', title));
+
+  const actions = el('div', 'cap-matrix-run__filter-actions');
+  const allBtn = el('button', 'settings-inline-link', 'All');
+  allBtn.type = 'button';
+  const noneBtn = el('button', 'settings-inline-link', 'None');
+  noneBtn.type = 'button';
+  const selector =
+    items[0]?.datasetKey === 'capMatrixGroup'
+      ? 'input[data-cap-matrix-group]'
+      : 'input[data-cap-matrix-wave]';
+  allBtn.addEventListener('click', () => setAllChecked(host, selector, true));
+  noneBtn.addEventListener('click', () => setAllChecked(host, selector, false));
+  actions.append(allBtn, noneBtn);
+  head.appendChild(actions);
+  block.appendChild(head);
+
+  const checklist = el('div', 'settings-checklist cap-matrix-run__checklist');
+  for (const item of items) {
+    const label = el('label', 'settings-checklist__option');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = true;
+    if (item.datasetKey === 'capMatrixGroup') {
+      input.dataset.capMatrixGroup = item.id;
+    } else {
+      input.dataset.capMatrixWave = item.id;
+    }
+    label.append(
+      input,
+      el('span', 'settings-checklist__label-text', item.label),
+    );
+    checklist.appendChild(label);
+  }
+  block.appendChild(checklist);
+  return block;
+}
+
 /** Mount run filters, actions, and live progress (subscribes to singleton controller). */
 export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () => void {
   const { host, getRoster, getViewModel, onRunSettled } = options;
   host.replaceChildren();
-  host.className = 'cap-matrix-run';
+  host.className = 'cap-matrix-run settings-group__body';
 
   const filters = el('div', 'cap-matrix-run__filters');
 
-  const groupFieldset = el('fieldset', 'cap-matrix-run__fieldset');
-  groupFieldset.appendChild(el('legend', '', 'Capability groups'));
-  const groupGrid = el('div', 'cap-matrix-run__checkbox-grid');
-  for (const groupId of CAPABILITY_GROUP_ORDER) {
-    const label = el('label', 'cap-matrix-run__check');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = true;
-    input.dataset.capMatrixGroup = groupId;
-    label.append(input, document.createTextNode(CAPABILITY_GROUP_LABELS[groupId]));
-    groupGrid.appendChild(label);
-  }
-  groupFieldset.appendChild(groupGrid);
-  filters.appendChild(groupFieldset);
+  filters.appendChild(
+    buildChecklistBlock(
+      'Capability groups',
+      CAPABILITY_GROUP_ORDER.map((groupId) => ({
+        id: groupId,
+        label: CAPABILITY_GROUP_LABELS[groupId],
+        datasetKey: 'capMatrixGroup' as const,
+      })),
+      host,
+    ),
+  );
 
-  const waveFieldset = el('fieldset', 'cap-matrix-run__fieldset');
-  waveFieldset.appendChild(el('legend', '', 'Probe waves (tier)'));
-  const waveGrid = el('div', 'cap-matrix-run__checkbox-grid');
-  for (const wave of CAPABILITY_MATRIX_PROBE_WAVES) {
-    const label = el('label', 'cap-matrix-run__check');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = true;
-    input.dataset.capMatrixWave = wave;
-    label.append(input, document.createTextNode(CAPABILITY_MATRIX_PROBE_WAVE_LABELS[wave]));
-    waveGrid.appendChild(label);
-  }
-  waveFieldset.appendChild(waveGrid);
-  filters.appendChild(waveFieldset);
+  filters.appendChild(
+    buildChecklistBlock(
+      'Probe waves',
+      CAPABILITY_MATRIX_PROBE_WAVES.map((wave) => ({
+        id: wave,
+        label: CAPABILITY_MATRIX_PROBE_WAVE_LABELS[wave],
+        datasetKey: 'capMatrixWave' as const,
+      })),
+      host,
+    ),
+  );
 
   const { row: sideEffectsRow, input: sideEffectsInput } = createSettingsToggleRow(
     'Allow side-effect tools',
     {
       searchKey: 'advanced.capabilityMatrix.run.sideEffects',
       description:
-        'When off, destructive tools are stubbed (default). Turn on only for smoke tests in a sandbox workspace.',
+        'Stub destructive tools by default. Enable only for sandbox smoke tests.',
       checked: false,
     },
   );
@@ -217,10 +273,10 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
   filters.appendChild(sideEffectsRow);
 
   const { row: skipScoredRow, input: skipScoredInput } = createSettingsToggleRow(
-    'Skip already-scored cells',
+    'Skip scored cells',
     {
       searchKey: 'advanced.capabilityMatrix.run.skipScored',
-      description: 'Do not re-run auto probes where the grid already shows pass, partial, or fail.',
+      description: 'Skip auto probes where the grid already shows pass, partial, or fail.',
       checked: true,
     },
   );
@@ -228,11 +284,10 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
   filters.appendChild(skipScoredRow);
 
   const { row: lifecycleRow, input: lifecycleInput } = createSettingsToggleRow(
-    'Manage model lifecycle (smoke)',
+    'Manage model lifecycle',
     {
       searchKey: 'advanced.capabilityMatrix.run.lifecycle',
-      description:
-        'Auto load/unload local models between targets. Default off; enable for LM Studio / hosting smoke runs.',
+      description: 'Auto load/unload local models between targets (LM Studio smoke runs).',
       checked: false,
     },
   );
@@ -250,15 +305,15 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
   const fill = el('div', 'cap-matrix-run__progress-fill');
   track.appendChild(fill);
   progress.append(track);
-  const phase = el('p', 'cap-matrix-run__phase');
-  const detail = el('p', 'cap-matrix-run__progress-detail');
-  const chipsHost = el('div', 'cap-matrix-run__chips-host');
+  const phase = el('p', 'cap-matrix-run__phase settings-field-hint');
+  const detail = el('p', 'cap-matrix-run__progress-detail settings-field-hint');
+  const chipsHost = el('div', 'cap-matrix-run__targets-host');
   host.append(progress, phase, detail, chipsHost);
 
   const actions = createSettingsActionsRow(
     [
       {
-        label: 'Run capability matrix',
+        label: 'Run matrix',
         variant: 'primary',
         onClick: () => {
           const roster = getRoster().filter((row) => row.enabled !== false);

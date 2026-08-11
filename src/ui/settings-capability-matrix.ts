@@ -1,5 +1,5 @@
 /**
- * Settings → Advanced → Capability matrix (roster, grid, manual cells, history).
+ * Settings → Advanced → Capability matrix (workbench inside settings panels).
  */
 
 import '../styles/settings-general.css';
@@ -22,10 +22,10 @@ import {
   beginAsyncSectionRender,
   isAsyncSectionRenderStale,
 } from './settings-section-render-guard';
-import { appendSettingsGroup } from './settings-layout';
 import {
   appendSettingsDangerZone,
   appendSettingsOfflineHint,
+  createSettingsActionsRow,
 } from './settings-controls';
 import { appConfirm } from './app-dialog';
 import { downloadCapabilityMatrixXlsx } from './capability-matrix/export-xlsx.ts';
@@ -33,6 +33,11 @@ import { importCapabilityMatrixXlsxFile } from './capability-matrix/import-xlsx.
 import { mountCapabilityCellEditor } from './capability-matrix/cell-editor.ts';
 import { openCapabilityCellTranscript } from './capability-matrix/cell-transcript.ts';
 import { renderCapabilityMatrixGrid } from './capability-matrix/grid.ts';
+import {
+  createDefaultGridFilter,
+  mountCapabilityGridToolbar,
+  type CapabilityGridFilter,
+} from './capability-matrix/grid-toolbar.ts';
 import {
   loadCapabilityMatrixCampaignSummaries,
   renderCapabilityMatrixHistory,
@@ -46,6 +51,8 @@ const disposers: Array<() => void> = [];
 let disposeCellEditor: (() => void) | null = null;
 let disposeRunPanel: (() => void) | null = null;
 let disposeGridNav: (() => void) | null = null;
+let disposeGridToolbar: (() => void) | null = null;
+let gridFilter: CapabilityGridFilter = createDefaultGridFilter();
 
 /** Tear down listeners and child editors before re-render or navigation. */
 export function disposeCapabilityMatrix(): void {
@@ -55,6 +62,8 @@ export function disposeCapabilityMatrix(): void {
   disposeRunPanel = null;
   disposeGridNav?.();
   disposeGridNav = null;
+  disposeGridToolbar?.();
+  disposeGridToolbar = null;
   closeBenchmarkTranscriptDrawer();
   disposeCapabilityMatrixRunView();
   while (disposers.length) {
@@ -91,21 +100,62 @@ async function loadCampaignBodies(
   return campaigns;
 }
 
-/** Load data, merge grid, and mount panels. */
+/** Load data, merge grid, and mount the workbench layout. */
 export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   disposeCapabilityMatrix();
+  gridFilter = createDefaultGridFilter();
   const generation = beginAsyncSectionRender('capability-matrix');
 
   const mount = clearMount('settingsCapabilityMatrixBody');
   if (!mount) return;
 
-  const shell = el('div', 'settings-general cap-matrix-shell');
+  const shell = el('div', 'settings-general settings-general--wide cap-matrix-shell');
   mount.appendChild(shell);
 
   const lead = el('p', 'settings-section-lead');
   lead.textContent =
-    'Spreadsheet-style capability grid for your model roster. Run auto probes from the controls below; manual cells save in the grid.';
+    'Compare model capability across your roster. Run auto probes, edit manual cells, and export results.';
   shell.appendChild(lead);
+
+  const headerActions = createSettingsActionsRow(
+    [
+      {
+        label: 'Export .xlsx',
+        variant: 'default',
+        onClick: () => {
+          try {
+            downloadCapabilityMatrixXlsx(viewModel, roster, latestManualStore);
+            setStatus('ok', 'Workbook downloaded');
+          } catch (err) {
+            setStatus('err', err instanceof Error ? err.message : 'Export failed');
+          }
+        },
+      },
+    ],
+    { searchKey: 'advanced.capabilityMatrix.export' },
+  );
+  const exportBtn = headerActions.querySelector('button');
+  if (exportBtn) {
+    exportBtn.dataset.settingsSearchKey = 'advanced.capabilityMatrix.export';
+  }
+
+  const importLabel = el('label', 'settings-action-btn settings-action-btn--secondary');
+  importLabel.textContent = 'Import .xlsx';
+  importLabel.dataset.settingsSearchKey = 'advanced.capabilityMatrix.import';
+  const importInput = document.createElement('input');
+  importInput.type = 'file';
+  importInput.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  importInput.hidden = true;
+  importLabel.appendChild(importInput);
+  headerActions.appendChild(importLabel);
+
+  const xlsxNote = el('p', 'settings-field-hint cap-matrix-xlsx-note');
+  xlsxNote.textContent =
+    'Export uses SheetJS in the browser. Only cell values and catalog headers are included.';
+
+  const headerRow = el('div', 'cap-matrix-header-row');
+  headerRow.append(headerActions, xlsxNote);
+  shell.appendChild(headerRow);
 
   const serverUp = (await detectConfigServer()) === 'server';
   if (isAsyncSectionRenderStale('capability-matrix', generation)) return;
@@ -117,14 +167,52 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     );
   }
 
-  const content = el('div', 'settings-general__content cap-matrix-layout');
+  const content = el('div', 'settings-general__content cap-matrix-workbench');
   shell.appendChild(content);
 
+  const body = el('div', 'cap-matrix-workbench__body');
+
+  const rail = el('aside', 'cap-matrix-rail settings-group settings-group--emphasis');
+  rail.dataset.settingsSearchKey = 'advanced.capabilityMatrix.roster';
+
+  const rosterSection = el('section', 'cap-matrix-rail__section');
+  const rosterTitle = el('h3', 'settings-group__title', 'Models');
+  rosterSection.appendChild(rosterTitle);
+  rosterSection.appendChild(
+    el('p', 'settings-group__lead', 'Grouped by Cloud, LM Studio, or Minnow Hosting.'),
+  );
   const rosterHost = el('div', 'cap-matrix-roster-host');
+  rosterSection.appendChild(rosterHost);
+
+  const runSection = el('section', 'cap-matrix-rail__section');
+  runSection.dataset.settingsSearchKey = 'advanced.capabilityMatrix.run';
+  runSection.appendChild(el('h3', 'settings-group__title', 'Run probes'));
+  runSection.appendChild(
+    el(
+      'p',
+      'settings-group__lead',
+      'Pick capability groups and probe waves, then run auto probes across the roster.',
+    ),
+  );
+  const runHost = el('div', 'cap-matrix-run-host');
+  runSection.appendChild(runHost);
+
+  const historyHost = el('div', 'cap-matrix-history-host');
+  const railFooter = el('div', 'cap-matrix-rail__footer');
+  railFooter.appendChild(historyHost);
+
+  rail.append(rosterSection, runSection, railFooter);
+
+  const main = el('main', 'cap-matrix-main settings-group settings-group--emphasis');
+  main.dataset.settingsSearchKey = 'advanced.capabilityMatrix.grid';
+  const gridToolbarHost = el('div', 'cap-matrix-grid-toolbar-host');
   const gridHost = el('div', 'cap-matrix-grid-host');
   const editorHost = el('div', 'cap-matrix-cell-editor-host');
   editorHost.hidden = true;
-  const historyHost = el('div', 'cap-matrix-history-host');
+  main.append(gridToolbarHost, gridHost, editorHost);
+
+  body.append(rail, main);
+  content.appendChild(body);
 
   const [rosterData, manualStore, summaries] = await Promise.all([
     loadCapabilityMatrixRoster(),
@@ -146,6 +234,40 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   });
   let latestManualStore = manualStore;
   let campaignBodies = campaigns;
+
+  function paintGrid(): void {
+    disposeGridNav?.();
+    disposeGridNav = renderCapabilityMatrixGrid({
+      host: gridHost,
+      model: viewModel,
+      campaigns: campaignBodies,
+      filter: gridFilter,
+      onSelectCell: (selection) => {
+        disposeCellEditor?.();
+        const cell = viewModel.cellByKey.get(
+          `${selection.targetKey}::${selection.capabilityId}`,
+        );
+        if (!cell) return;
+        disposeCellEditor = mountCapabilityCellEditor(cell, {
+          host: editorHost,
+          targetLabel: viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
+          campaigns: campaignBodies,
+          onSaved: refreshView,
+        });
+      },
+      onOpenTranscript: (selection) => {
+        const cell = viewModel.cellByKey.get(
+          `${selection.targetKey}::${selection.capabilityId}`,
+        );
+        if (!cell) return;
+        openCapabilityCellTranscript(
+          cell,
+          campaignBodies,
+          viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
+        );
+      },
+    });
+  }
 
   async function persistRoster(next: CapabilityMatrixRosterEntry[]): Promise<void> {
     roster = next;
@@ -181,100 +303,16 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
       roster,
       onRosterChange: persistRoster,
     });
-    disposeGridNav?.();
-    disposeGridNav = renderCapabilityMatrixGrid({
-      host: gridHost,
-      model: viewModel,
-      campaigns: campaignBodies,
-      onSelectCell: (selection) => {
-        disposeCellEditor?.();
-        const cell = viewModel.cellByKey.get(
-          `${selection.targetKey}::${selection.capabilityId}`,
-        );
-        if (!cell) return;
-        disposeCellEditor = mountCapabilityCellEditor(cell, {
-          host: editorHost,
-          targetLabel: viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
-          campaigns: campaignBodies,
-          onSaved: refreshView,
-        });
-      },
-      onOpenTranscript: (selection) => {
-        const cell = viewModel.cellByKey.get(
-          `${selection.targetKey}::${selection.capabilityId}`,
-        );
-        if (!cell) return;
-        openCapabilityCellTranscript(
-          cell,
-          campaignBodies,
-          viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
-        );
-      },
-    });
+    paintGrid();
     renderCapabilityMatrixHistory(historyHost, history);
   }
 
-  const runHost = el('div', 'cap-matrix-run-host');
-
-  const runGroup = appendSettingsGroup(
-    content,
-    'Run matrix',
-    'Filter capability groups and probe waves, then run auto probes across the roster.',
-    'advanced.capabilityMatrix.run',
-    { emphasis: true },
-  );
-  runGroup.appendChild(runHost);
-
-  appendSettingsGroup(
-    content,
-    'Roster',
-    'Models grouped by Cloud, LM Studio, or Minnow Hosting.',
-    'advanced.capabilityMatrix.roster',
-    { emphasis: true },
-  ).appendChild(rosterHost);
-
-  appendSettingsGroup(
-    content,
-    'Grid',
-    'Glyphs: ✓ pass · ◐ partial · ✗ fail · — n/a · · untested. Hatched cells mean manual overrides auto.',
-    'advanced.capabilityMatrix.grid',
-    { emphasis: true },
-  ).appendChild(gridHost);
-
-  content.appendChild(editorHost);
-
-  appendSettingsGroup(
-    content,
-    'Run history',
-    'Completed capability-matrix campaigns (newest first).',
-    'advanced.capabilityMatrix.history',
-    { emphasis: true },
-  ).appendChild(historyHost);
-
-  const exportImportNote = el('p', 'settings-section-lead cap-matrix-xlsx-note');
-  exportImportNote.textContent =
-    'Exports use SheetJS in the browser. Dropdown validation, header comments, and Excel formulas from the template workbook are not included — only cell values and catalog column headers.';
-
-  const exportImportActions = el('div', 'settings-actions');
-  const exportBtn = el('button', 'settings-action-btn', 'Export .xlsx');
-  exportBtn.type = 'button';
-  exportBtn.dataset.settingsSearchKey = 'advanced.capabilityMatrix.export';
-  const importLabel = el('label', 'settings-action-btn settings-action-btn--secondary');
-  importLabel.textContent = 'Import .xlsx';
-  importLabel.dataset.settingsSearchKey = 'advanced.capabilityMatrix.import';
-  const importInput = document.createElement('input');
-  importInput.type = 'file';
-  importInput.accept = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  importInput.hidden = true;
-  importLabel.appendChild(importInput);
-
-  exportBtn.addEventListener('click', () => {
-    try {
-      downloadCapabilityMatrixXlsx(viewModel, roster, latestManualStore);
-      setStatus('ok', 'Workbook downloaded');
-    } catch (err) {
-      setStatus('err', err instanceof Error ? err.message : 'Export failed');
-    }
+  disposeGridToolbar = mountCapabilityGridToolbar({
+    host: gridToolbarHost,
+    onFilterChange: (next) => {
+      gridFilter = next;
+      paintGrid();
+    },
   });
 
   importInput.addEventListener('change', () => {
@@ -301,20 +339,11 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     })();
   });
 
-  exportImportActions.append(exportBtn, importLabel, importInput);
-
-  const exportImportBody = el('div', 'cap-matrix-export-import');
-  exportImportBody.append(exportImportNote, exportImportActions);
-
-  appendSettingsGroup(
-    content,
-    'Export / import',
-    'Download the matrix as .xlsx or merge manual cells from a spreadsheet.',
-    'advanced.capabilityMatrix.export',
-    { emphasis: true },
-  ).appendChild(exportImportBody);
-
-  const clearManualBtn = el('button', 'settings-action-btn settings-action-btn--danger', 'Clear manual verdicts');
+  const clearManualBtn = el(
+    'button',
+    'settings-action-btn settings-action-btn--danger',
+    'Clear manual verdicts',
+  );
   clearManualBtn.type = 'button';
   clearManualBtn.dataset.settingsSearchKey = 'advanced.capabilityMatrix.danger';
   clearManualBtn.addEventListener('click', () => {

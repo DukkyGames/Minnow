@@ -3,10 +3,7 @@
  */
 
 import type { CapabilityMatrixRosterEntry } from '../../benchmark/capabilities/roster-store.ts';
-import {
-  groupRosterByHost,
-  type CapabilityMatrixViewModel,
-} from '../../benchmark/capabilities/view-model.ts';
+import { groupRosterByHost } from '../../benchmark/capabilities/view-model.ts';
 import { fillModelSelect, fillProviderSelect } from '../settings-model-binding.ts';
 import { mountAuxiliaryModelSelectCombobox } from '../model-select-picker.ts';
 import { fetchModelsForAllProviders } from '../../providers/fetch-all-models.ts';
@@ -37,23 +34,23 @@ export function renderCapabilityRosterPanel(options: CapabilityRosterPanelOption
   const { host, roster, onRosterChange } = options;
   host.replaceChildren();
   host.className = 'cap-matrix-roster';
+  host.dataset.settingsSearchKey = 'advanced.capabilityMatrix.roster';
 
   const groups = groupRosterByHost(roster);
   if (!groups.length) {
-    host.appendChild(el('p', 'cap-matrix-roster__empty', 'No models in the roster yet.'));
+    host.appendChild(el('p', 'cap-matrix-roster__empty', 'No models yet. Add one below.'));
   } else {
+    const bands = el('div', 'cap-matrix-roster__bands');
     for (const group of groups) {
-      const section = el('details', 'cap-matrix-roster__group');
-      section.open = true;
-      const heading = el('summary', 'cap-matrix-roster__group-title', group.label);
-      section.appendChild(heading);
+      const band = el('div', 'cap-matrix-roster__band');
+      band.appendChild(el('p', 'cap-matrix-roster__band-label', group.label));
 
-      const list = el('ul', 'cap-matrix-roster__list');
+      const list = el('ul', 'cap-matrix-roster__chips');
       for (const entry of group.entries) {
-        const item = el('li', 'cap-matrix-roster__item');
+        const item = el('li', 'cap-matrix-roster__chip');
         const label = entry.label?.trim() || `${entry.providerId} / ${entry.modelId}`;
-        const name = el('span', 'cap-matrix-roster__label', label);
-        const remove = el('button', 'cap-matrix-roster__remove', 'Remove');
+        const name = el('span', 'cap-matrix-roster__chip-label', label);
+        const remove = el('button', 'cap-matrix-roster__chip-remove', '×');
         remove.type = 'button';
         remove.setAttribute('aria-label', `Remove ${label}`);
         remove.addEventListener('click', () => {
@@ -64,20 +61,21 @@ export function renderCapabilityRosterPanel(options: CapabilityRosterPanelOption
         item.append(name, remove);
         list.appendChild(item);
       }
-      section.appendChild(list);
-      host.appendChild(section);
+      band.appendChild(list);
+      bands.appendChild(band);
     }
+    host.appendChild(bands);
   }
 
   const addRow = el('div', 'cap-matrix-roster__add');
-  const providerSelect = el('select', 'cap-matrix-roster__provider');
+  const providerSelect = el('select', 'settings-select cap-matrix-roster__provider');
   providerSelect.id = 'capMatrixRosterProvider';
-  const modelSelect = el('select', 'cap-matrix-roster__model');
+  const modelSelect = el('select', 'settings-select cap-matrix-roster__model');
   modelSelect.id = 'capMatrixRosterModel';
 
-  const providerWrap = el('label', 'cap-matrix-roster__field');
+  const providerWrap = el('label', 'settings-field-stack__label cap-matrix-roster__field');
   providerWrap.append('Provider', providerSelect);
-  const modelWrap = el('label', 'cap-matrix-roster__field');
+  const modelWrap = el('label', 'settings-field-stack__label cap-matrix-roster__field');
   modelWrap.append('Model', modelSelect);
   addRow.append(providerWrap, modelWrap);
 
@@ -119,7 +117,7 @@ export function renderCapabilityRosterPanel(options: CapabilityRosterPanelOption
         },
       },
       {
-        label: 'Add all catalog models',
+        label: 'Add all catalog',
         variant: 'default',
         onClick: () => {
           void (async () => {
@@ -159,6 +157,7 @@ export function renderCapabilityRosterPanel(options: CapabilityRosterPanelOption
     ],
     { searchKey: 'advanced.capabilityMatrix.roster.add' },
   );
+  actions.classList.add('cap-matrix-roster__actions');
 
   host.append(addRow, actions);
 }
@@ -168,5 +167,3 @@ export function formatColumnScore(score: number | null): string {
   if (score == null) return '—';
   return `${Math.round(score * 100)}%`;
 }
-
-export type { CapabilityMatrixViewModel };
