@@ -29,20 +29,24 @@ const {
   CAP_MATRIX_REPO_DIR,
   CAP_MATRIX_SAMPLE_PATH,
   CAP_MATRIX_GREP_TOKEN,
+  CAP_MATRIX_HAYSTACK_NEEDLE,
   CAPABILITY_MATRIX_FIXTURE_DIR,
-  CAPABILITY_FIXTURE_PROBE_PROMPTS,
-  PHASE_2C_WORKSPACE_CAPABILITY_IDS,
-  PHASE_2E_FIXTURE_PROBE_PROMPTS,
   seedCapabilityMatrixFixtures,
   isCapabilityMatrixGitFixtureReady,
 } = await import('../../src/benchmark/capabilities/fixtures-workspace.ts');
 
+const { getCapabilityProbePrompt } = await import(
+  '../../src/benchmark/capabilities/probe-prompts.ts'
+);
+const { PHASE_2C_WORKSPACE_CAPABILITY_IDS } = await import(
+  '../../src/benchmark/capabilities/probe-wave-ids.ts'
+);
+
 describe('capability matrix fixtures-workspace', () => {
-  test('phase 2c id list covers 14 workspace bands', () => {
+  test('phase 2c workspace probes prompt against seeded fixtures', () => {
     assert.equal(PHASE_2C_WORKSPACE_CAPABILITY_IDS.length, 14);
-    assert.equal(Object.keys(CAPABILITY_FIXTURE_PROBE_PROMPTS).length, 14);
     for (const id of PHASE_2C_WORKSPACE_CAPABILITY_IDS) {
-      const prompt = CAPABILITY_FIXTURE_PROBE_PROMPTS[id];
+      const prompt = getCapabilityProbePrompt(id);
       assert.ok(prompt, id);
       assert.ok(!prompt.includes('BUILT_IN_TOOLS'), id);
       assert.ok(!prompt.includes('package.json'), id);
@@ -52,15 +56,6 @@ describe('capability matrix fixtures-workspace', () => {
           prompt.includes('node'),
         id,
       );
-    }
-  });
-
-  test('phase 2e fixture prompts cover conditional workspace/LSP probes', () => {
-    assert.equal(Object.keys(PHASE_2E_FIXTURE_PROBE_PROMPTS).length, 4);
-    for (const id of Object.keys(PHASE_2E_FIXTURE_PROBE_PROMPTS)) {
-      const prompt = PHASE_2E_FIXTURE_PROBE_PROMPTS[id];
-      assert.ok(prompt.length >= 24, id);
-      assert.ok(!prompt.includes('BUILT_IN_TOOLS'), id);
     }
   });
 
@@ -94,7 +89,11 @@ describe('capability matrix fixtures-workspace', () => {
     );
     const haystackSave = toolCalls.find((c) => c.name === 'save_file' && String(c.args.path).includes('haystack'));
     assert.ok(haystackSave);
-    assert.ok(String(haystackSave?.args.content).includes(CAP_MATRIX_GREP_TOKEN));
+    const haystack = String(haystackSave?.args.content);
+    assert.ok(haystack.includes(CAP_MATRIX_GREP_TOKEN));
+    // The needle must sit mid-file, not on line 1 where a head-only read would find it.
+    const needleLine = haystack.split('\n').findIndex((l) => l.includes(CAP_MATRIX_HAYSTACK_NEEDLE));
+    assert.ok(needleLine > 10, `needle too near the head (line ${needleLine})`);
 
     assert.equal(await isCapabilityMatrixGitFixtureReady(root), true);
   });

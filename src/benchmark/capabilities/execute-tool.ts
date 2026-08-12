@@ -10,6 +10,7 @@ import {
   type BenchmarkExecuteToolOptions,
 } from '../execute-tool-sandbox.ts';
 import { CAPABILITY_PROBE_BY_ID } from './probes.ts';
+import { capabilityStubPayload } from './stub-fixtures.ts';
 import type { CapabilityProbeSpecBase } from './types.ts';
 
 function collectEmitOnlyProbeToolIds(): string[] {
@@ -46,6 +47,21 @@ function stubCapabilitySideEffectTool(name: string): ToolExecutionResult {
     };
   }
 
+  // Chain probes (snapshot → click, list mail → open thread) need ids to act on; the
+  // generic ok-stub left them nothing to reference and they stalled after one round.
+  const payload = capabilityStubPayload(name);
+  if (payload !== null) {
+    return {
+      content: JSON.stringify({
+        ok: true,
+        benchmark: true,
+        capabilityEmitOnly: true,
+        stubbed: name,
+        ...(payload as Record<string, unknown>),
+      }),
+    };
+  }
+
   return {
     content: JSON.stringify({
       ok: true,
@@ -61,19 +77,34 @@ export function isCapabilitySideEffectTool(name: string): boolean {
   return CAPABILITY_SIDE_EFFECT_TOOL_IDS.has(name);
 }
 
+export interface CapabilityExecuteToolOptions extends BenchmarkExecuteToolOptions {
+  /**
+   * Extra tool ids this probe run must never execute — the probe's own emit-only tools
+   * and its trap tools. Kept per-run because a tool that is emit-only for one row
+   * (a Plan-mode `save_file` trap) is executed for real by another (`files-save-append`).
+   */
+  stubToolIds?: readonly string[];
+}
+
 /**
  * `executeToolFn` for capability-matrix `runToolLoop` — stubs side-effect tools when
  * `allowSideEffects` is false; otherwise delegates to `executeBenchmarkTool`.
  */
 export function createCapabilityExecuteToolFn(
   allowSideEffects: boolean,
-  opts: BenchmarkExecuteToolOptions = {},
+  opts: CapabilityExecuteToolOptions = {},
 ): (
   name: string,
   args: Record<string, unknown>,
   context?: ExecuteToolContext,
 ) => ReturnType<typeof executeBenchmarkTool> {
+  const perRunStubs = new Set(opts.stubToolIds ?? []);
   return (name, args, context) => {
+    // Trap tools stay stubbed even with side effects allowed: the row measures whether
+    // the model reaches for a tool its mode denies, never the write itself.
+    if (perRunStubs.has(name)) {
+      return Promise.resolve(stubCapabilitySideEffectTool(name));
+    }
     if (!allowSideEffects && CAPABILITY_SIDE_EFFECT_TOOL_IDS.has(name)) {
       return Promise.resolve(stubCapabilitySideEffectTool(name));
     }

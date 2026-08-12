@@ -4,28 +4,24 @@
  */
 
 import { executeBenchmarkTool } from '../execute-tool-sandbox.ts';
+import {
+  CAP_MATRIX_BUGGY_FN,
+  CAP_MATRIX_BUGGY_PATH,
+  CAP_MATRIX_GREP_TOKEN,
+  CAP_MATRIX_HAYSTACK_LABEL,
+  CAP_MATRIX_HAYSTACK_NEEDLE,
+  CAP_MATRIX_HAYSTACK_PATH,
+  CAP_MATRIX_JSON_KEY,
+  CAP_MATRIX_JSON_PATH,
+  CAP_MATRIX_NOTES_PATH,
+  CAP_MATRIX_PDF_PATH,
+  CAP_MATRIX_REPO_DIR,
+  CAP_MATRIX_SAMPLE_FN,
+  CAP_MATRIX_SAMPLE_PATH,
+  CAPABILITY_MATRIX_FIXTURE_DIR,
+} from './fixture-paths.ts';
 
-/** Root folder for all capability-matrix fixtures (relative to benchmark workspace). */
-export const CAPABILITY_MATRIX_FIXTURE_DIR = 'matrix';
-
-export const CAP_MATRIX_NOTES_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/notes.md`;
-export const CAP_MATRIX_SAMPLE_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/sample.ts`;
-export const CAP_MATRIX_HAYSTACK_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/haystack.txt`;
-export const CAP_MATRIX_JSON_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/a/b/c.json`;
-export const CAP_MATRIX_PDF_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/fixture.pdf`;
-export const CAP_MATRIX_REPO_DIR = `${CAPABILITY_MATRIX_FIXTURE_DIR}/repo`;
-
-/** Grep probe token — only present in seeded fixture files. */
-export const CAP_MATRIX_GREP_TOKEN = 'cap-matrix-grep-token-42';
-
-/** JSON value probes can ask the model to read back. */
-export const CAP_MATRIX_JSON_KEY = 'bench-alpha-7';
-
-/** Symbol name in sample.ts for code-intel probes. */
-export const CAP_MATRIX_SAMPLE_FN = 'capMatrixSampleFn';
-
-/** Long-context needle (core-long-context when enabled). */
-export const CAP_MATRIX_HAYSTACK_NEEDLE = 'needle-marker-cap-matrix';
+export * from './fixture-paths.ts';
 
 const NOTES_INITIAL = `- alpha item
 - beta item
@@ -45,48 +41,40 @@ function buildSampleTs(): string {
   return `${lines.join('\n')}\n`;
 }
 
+/**
+ * Debug-mode fixture: the loop starts at 1 and silently drops the first value, so the
+ * Debug probe has a real defect to find rather than a fabricated stack trace.
+ */
+function buildBuggyTs(): string {
+  return [
+    '// Capability matrix fixture with a seeded off-by-one.',
+    `export function ${CAP_MATRIX_BUGGY_FN}(values: number[]): number {`,
+    '  let total = 0;',
+    '  for (let i = 1; i < values.length; i += 1) {',
+    '    total += values[i];',
+    '  }',
+    '  return total;',
+    '}',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Haystack fixture: the needle sits mid-file behind its label so a probe that only
+ * reads the head (or the 32k `read_file` cap) cannot stumble onto it.
+ */
 function buildHaystackTxt(): string {
-  const head = `${CAP_MATRIX_HAYSTACK_NEEDLE}\n`;
   const filler = 'filler '.repeat(80);
-  const body = Array.from({ length: 120 }, (_, i) => `line-${i + 1} ${filler}`).join('\n');
-  return `${head}${body}\n`;
+  const lines = Array.from({ length: 120 }, (_, i) => `line-${i + 1} ${filler}`);
+  lines.splice(60, 0, `${CAP_MATRIX_HAYSTACK_LABEL}: ${CAP_MATRIX_HAYSTACK_NEEDLE}`);
+  return `${lines.join('\n')}\n`;
 }
 
-/** User messages for phase-2c workspace probes (override spreadsheet drift). */
-export const CAPABILITY_FIXTURE_PROBE_PROMPTS: Record<string, string> = {
-  'files-list-read': `List the files in ${CAPABILITY_MATRIX_FIXTURE_DIR} and read ${CAP_MATRIX_JSON_PATH}.`,
-  'files-read-document': `Use read_document on ${CAP_MATRIX_PDF_PATH} and summarize the body in one sentence.`,
-  'files-save-append': `Create ${CAP_MATRIX_NOTES_PATH} with three markdown bullets (- one, - two, - three), then append a fourth bullet (- four).`,
-  'files-replace-text': `In ${CAP_MATRIX_NOTES_PATH}, replace the exact line "- beta item" with "- BETA item" using replace_text_in_file.`,
-  'files-insert-range': `Read lines 40-60 of ${CAP_MATRIX_SAMPLE_PATH}, then insert "// cap-matrix probe" at line 41.`,
-  'files-grep': `Find every file under ${CAPABILITY_MATRIX_FIXTURE_DIR} that mentions ${CAP_MATRIX_GREP_TOKEN}.`,
-  'docs-create-office': `Create a spreadsheet at ${CAPABILITY_MATRIX_FIXTURE_DIR}/commits.xlsx listing the last 3 commits (sha and message) from ${CAP_MATRIX_REPO_DIR}.`,
-  'git-read': `In ${CAP_MATRIX_REPO_DIR}, what has changed on the current branch?`,
-  'git-write': `Commit the current changes in ${CAP_MATRIX_REPO_DIR} on a new branch named cap-matrix-probe.`,
-  'code-execute-command': 'Run `node -e "console.log(9*7)"` and report the printed number.',
-  'code-background-cmds':
-    'Start `node -e "setInterval(()=>console.log(\'cap-matrix-heartbeat\'),400)"` in the background, confirm cap-matrix-heartbeat appears in the log, then stop the run.',
-  'code-run-js-py':
-    'Use run_python to compute the mean of: 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33.',
-  'code-command-log':
-    'Start a background node process that prints cap-matrix-log-line every 300ms, read its command log, then stop it.',
-  'code-repo-intel': `In ${CAP_MATRIX_SAMPLE_PATH}, where is ${CAP_MATRIX_SAMPLE_FN} defined and who calls it?`,
-};
-
-/** Phase 2e probes that use matrix fixture paths in user messages. */
-export const PHASE_2E_FIXTURE_PROBE_PROMPTS: Record<string, string> = {
-  'core-parallel-tools': `Read these three files in one turn if your host allows parallel tool calls: ${CAP_MATRIX_JSON_PATH}, ${CAP_MATRIX_NOTES_PATH}, and ${CAP_MATRIX_SAMPLE_PATH}.`,
-  'core-tool-loop': `In ${CAP_MATRIX_REPO_DIR}, list changed files, read the diff for the first changed file, then summarize the change in one sentence.`,
-  'core-long-context': `The needle ${CAP_MATRIX_HAYSTACK_NEEDLE} appears at the start of ${CAP_MATRIX_HAYSTACK_PATH}. What is the needle string?`,
-  'lsp-diagnostics': `Call list_lsp_servers, then get_lsp_diagnostics for ${CAP_MATRIX_SAMPLE_PATH} if a TypeScript server is available.`,
-};
-
-export function getCapabilityFixtureProbePrompt(capabilityId: string): string | undefined {
-  return (
-    CAPABILITY_FIXTURE_PROBE_PROMPTS[capabilityId] ??
-    PHASE_2E_FIXTURE_PROBE_PROMPTS[capabilityId]
-  );
-}
+/** Probe user messages live in `probe-prompts.ts` (no tool-sandbox import). */
+export {
+  CAPABILITY_PROBE_PROMPTS,
+  getCapabilityProbePrompt,
+} from './probe-prompts.ts';
 
 /** Phase 2c capability ids (re-export for fixture helpers). */
 export { PHASE_2C_WORKSPACE_CAPABILITY_IDS } from './probe-wave-ids.ts';
@@ -165,6 +153,7 @@ export async function seedCapabilityMatrixFixtures(workspaceRoot: string): Promi
   await saveText(workspaceRoot, CAP_MATRIX_JSON_PATH, `${jsonBody}\n`);
   await saveText(workspaceRoot, CAP_MATRIX_NOTES_PATH, NOTES_INITIAL);
   await saveText(workspaceRoot, CAP_MATRIX_SAMPLE_PATH, buildSampleTs());
+  await saveText(workspaceRoot, CAP_MATRIX_BUGGY_PATH, buildBuggyTs());
   await saveText(
     workspaceRoot,
     CAP_MATRIX_HAYSTACK_PATH,

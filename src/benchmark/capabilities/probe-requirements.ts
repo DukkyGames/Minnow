@@ -2,6 +2,7 @@
  * Gate capability matrix probes on environment requirements (n-a when unmet — never fail).
  */
 
+import { loadModePromptBody } from '../../chat/modes/registry.ts';
 import { getBenchmarkWorkspacePath } from '../../lib/benchmark-workspace.ts';
 import { isVisionModel } from '../../providers/vision-model.ts';
 import type { LmModelRecord } from '../../types.ts';
@@ -15,6 +16,7 @@ import {
   PHASE_2D_ID_SET,
   PHASE_2E_ID_SET,
   PHASE_2F_ID_SET,
+  PHASE_2G_ID_SET,
 } from './probe-wave-ids.ts';
 import { resolveLspProbeSkipReason } from './probe-lsp-ready.ts';
 import type { CapabilityDefinition, CapabilityProbeRequirement } from './types.ts';
@@ -33,13 +35,26 @@ export interface CapabilityProbeEnvironment {
    * When true, treat LSP as ready (skip live `/api/config/lsp` poll).
    */
   lspEnvironmentReady?: boolean;
+  /**
+   * Mode-prompt gate override for tests — the built-in prompt registry is Vite-only, so
+   * Node suites set this rather than loading prompt markdown.
+   */
+  modePromptsReady?: boolean;
 }
 
 async function requirementSkipReason(
   req: CapabilityProbeRequirement,
   env: CapabilityProbeEnvironment,
+  cap: CapabilityDefinition,
 ): Promise<string | null> {
   const { ctx } = env;
+  if (req === 'mode-prompt') {
+    const modeId = cap.probe && cap.probe.kind !== 'delegated' ? cap.probe.modeId : undefined;
+    if (!modeId) return 'probe declares mode-prompt without a modeId';
+    if (env.modePromptsReady === false) return 'mode prompts unavailable';
+    if (env.modePromptsReady === true) return null;
+    return loadModePromptBody(modeId, 'lite') ? null : `mode prompt unavailable: ${modeId}`;
+  }
   if (req === 'tool-server' && !ctx.localServer) {
     return 'needs npm start (tool server)';
   }
@@ -95,7 +110,7 @@ export async function resolveCapabilityProbeSkip(
   const requires = cap.probe.requires;
   if (requires?.length) {
     for (const req of requires) {
-      const reason = await requirementSkipReason(req, env);
+      const reason = await requirementSkipReason(req, env, cap);
       if (reason) return reason;
     }
   }
@@ -111,6 +126,7 @@ export {
   PHASE_2D_EMIT_ONLY_CAPABILITY_IDS,
   PHASE_2E_CONDITIONAL_CAPABILITY_IDS,
   PHASE_2F_DELEGATED_DERIVED_CAPABILITY_IDS,
+  PHASE_2G_MODE_PROMPT_CAPABILITY_IDS,
 } from './probe-wave-ids.ts';
 
 /** Whether this auto row is wired in the current probe wave (phases 2b–2f allowlist). */
@@ -120,7 +136,8 @@ export function isCapabilityProbeWaveEnabled(cap: CapabilityDefinition): boolean
     PHASE_2C_ID_SET.has(cap.id) ||
     PHASE_2D_ID_SET.has(cap.id) ||
     PHASE_2E_ID_SET.has(cap.id) ||
-    PHASE_2F_ID_SET.has(cap.id)
+    PHASE_2F_ID_SET.has(cap.id) ||
+    PHASE_2G_ID_SET.has(cap.id)
   );
 }
 

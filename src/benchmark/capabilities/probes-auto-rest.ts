@@ -2,7 +2,15 @@
  * Auto probe specs — code, web, agents, knowledge, apps, modes, features.
  */
 
-import { hasTool, pass, partial, fail } from './probe-helpers.ts';
+import {
+  argsTextFor,
+  fail,
+  firstRoundWithTool,
+  hasAnyTool,
+  hasTool,
+  partial,
+  pass,
+} from './probe-helpers.ts';
 import type { CapabilityProbeSpec } from './types.ts';
 
 export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
@@ -10,45 +18,74 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
     kind: 'tool-call',
     toolIds: ['execute_command'],
     requires: ['workspace', 'tool-server'],
-    verdict: (out) =>
-      hasTool(out.toolCalls, 'execute_command') ? pass('execute_command called') : fail('No execute_command'),
+    verdict: (out) => {
+      if (!hasTool(out.toolCalls, 'execute_command')) return fail('No execute_command');
+      // The prompt asks for `node -e "console.log(9*7)"`, so the run really printed 63.
+      if (out.executedResults.some((r) => r.includes('63'))) {
+        return pass('execute_command ran and returned the expected output');
+      }
+      return partial('execute_command called but 63 never came back');
+    },
   },
   'code-background-cmds': {
-    kind: 'tool-call',
-    toolIds: ['execute_command'],
+    kind: 'tool-chain',
+    maxToolRounds: 5,
+    toolIds: [
+      'start_background_command',
+      'stop_background_command',
+      'list_running_commands',
+      'execute_command',
+    ],
     requires: ['workspace', 'tool-server'],
     verdict: (out) => {
-      const bg = out.toolCalls.some((c) => {
-        if (c.function.name !== 'execute_command') return false;
-        try {
-          const args = JSON.parse(c.function.arguments) as { background?: boolean };
-          return args.background === true;
-        } catch {
-          return false;
-        }
-      });
-      return bg ? pass('Background execute_command') : partial('execute_command without background flag');
+      const started =
+        hasTool(out.toolCalls, 'start_background_command') ||
+        /"background"\s*:\s*true/.test(argsTextFor(out, 'execute_command'));
+      const stopped =
+        hasTool(out.toolCalls, 'stop_background_command') ||
+        /"stop"\s*:\s*true/.test(argsTextFor(out, 'execute_command'));
+      if (started && stopped) return pass('Background run started and stopped');
+      if (started) return partial('Started a background run but never stopped it');
+      if (hasTool(out.toolCalls, 'execute_command')) {
+        return partial('Ran in the foreground instead of detaching');
+      }
+      return fail('No background command tools called');
     },
   },
   'code-run-js-py': {
     kind: 'tool-call',
     toolIds: ['run_python', 'run_javascript'],
     requires: ['workspace', 'tool-server'],
-    verdict: (out) =>
-      hasTool(out.toolCalls, 'run_python') || hasTool(out.toolCalls, 'run_javascript')
-        ? pass('run_python or run_javascript called')
-        : fail('Expected run_python/javascript'),
+    verdict: (out) => {
+      if (!hasAnyTool(out.toolCalls, ['run_python', 'run_javascript'])) {
+        return fail('Expected run_python/javascript');
+      }
+      // Mean of the 20 seeded values is 22.5.
+      if (out.executedResults.some((r) => r.includes('22.5'))) {
+        return pass('Interpreter ran and returned the expected mean');
+      }
+      return partial('Interpreter called but 22.5 never came back');
+    },
   },
   'code-command-log': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
-    toolIds: ['read_command_log', 'stop_command'],
+    maxToolRounds: 5,
+    toolIds: [
+      'start_background_command',
+      'read_command_log',
+      'list_running_commands',
+      'stop_background_command',
+      'stop_command',
+    ],
     requires: ['workspace', 'tool-server'],
     verdict: (out) => {
       const log = hasTool(out.toolCalls, 'read_command_log');
-      const stop = hasTool(out.toolCalls, 'stop_command');
-      if (log && stop) return pass('read_command_log and stop_command');
-      if (log) return partial('read_command_log without stop');
+      const stop = hasAnyTool(out.toolCalls, ['stop_command', 'stop_background_command']);
+      if (log && stop) return pass('Read the command log, then stopped the run');
+      if (log) return partial('Read the command log but never stopped the run');
+      if (hasTool(out.toolCalls, 'list_running_commands')) {
+        return partial('Listed running commands without reading the log');
+      }
       return fail('Expected command log tools');
     },
   },
@@ -96,11 +133,15 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   'agents-todo-write': {
     kind: 'derived',
     maxToolRounds: 6,
-    toolIds: ['todo_write'],
+    // Needs real work tools alongside todo_write, otherwise there is no second round in
+    // which to update the list.
+    toolIds: ['todo_write', 'list_directory', 'read_file', 'get_datetime'],
     verdict: (out) => {
-      const rounds = out.rounds.filter((r) => r.toolCalls.some((c) => c.function.name === 'todo_write')).length;
+      const rounds = out.rounds.filter((r) =>
+        r.toolCalls.some((c) => c.function.name === 'todo_write'),
+      ).length;
       if (rounds >= 2) return pass('todo_write updated across rounds');
-      if (rounds === 1) return partial('todo_write once only');
+      if (rounds === 1) return partial('Wrote the list once and never updated it');
       return fail('No todo_write calls');
     },
   },
@@ -119,35 +160,40 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
       hasTool(out.toolCalls, 'delegate_tasks') ? pass('delegate_tasks emitted') : fail('No delegate_tasks'),
   },
   'agents-issue-tools': {
-    kind: 'tool-call',
-    toolIds: ['issue_create', 'issue_update', 'issue_list'],
+    kind: 'tool-chain',
+    maxToolRounds: 3,
+    // `issue_create` / `issue_list` are not catalog ids — the old spec offered nothing
+    // the model could call and never stubbed the real write tools.
+    toolIds: ['issue_add', 'issue_update', 'issue_link', 'issue_get_state'],
     emitOnly: true,
     verdict: (out) => {
-      const issue = out.toolCalls.some((c) => c.function.name.startsWith('issue_'));
-      return issue ? pass('issue_* tool emitted') : fail('No issue_* emit');
+      const added = hasTool(out.toolCalls, 'issue_add');
+      const linked = hasTool(out.toolCalls, 'issue_link');
+      if (added && linked) return pass('Filed an issue and linked it');
+      if (added) return partial('Filed an issue but never linked it');
+      if (hasAnyTool(out.toolCalls, ['issue_update', 'issue_get_state'])) {
+        return partial('Touched issue tools without filing one');
+      }
+      return fail('No issue_* emit');
     },
   },
   'knowledge-brain-read': {
     kind: 'tool-call',
-    toolIds: ['brain_search', 'brain_read_page', 'brain_list_pages'],
+    toolIds: ['brain_search', 'brain_read_page', 'brain_list'],
     emitOnly: true,
-    verdict: (out) => {
-      const brain = out.toolCalls.some((c) =>
-        ['brain_search', 'brain_read_page', 'brain_list_pages'].includes(c.function.name),
-      );
-      return brain ? pass('Brain read tool emitted') : fail('No brain read tool');
-    },
+    verdict: (out) =>
+      hasAnyTool(out.toolCalls, ['brain_search', 'brain_read_page', 'brain_list'])
+        ? pass('Brain read tool emitted')
+        : fail('No brain read tool'),
   },
   'knowledge-brain-write': {
     kind: 'tool-call',
-    toolIds: ['brain_write_page', 'brain_append_log', 'brain_ingest'],
+    toolIds: ['brain_write_page', 'brain_append_log', 'brain_ingest_source'],
     emitOnly: true,
-    verdict: (out) => {
-      const write = out.toolCalls.some((c) =>
-        ['brain_write_page', 'brain_append_log', 'brain_ingest'].includes(c.function.name),
-      );
-      return write ? pass('Brain write tool emitted') : fail('No brain write tool');
-    },
+    verdict: (out) =>
+      hasAnyTool(out.toolCalls, ['brain_write_page', 'brain_append_log', 'brain_ingest_source'])
+        ? pass('Brain write tool emitted')
+        : fail('No brain write tool'),
   },
   'knowledge-minnow-docs': {
     kind: 'tool-call',
@@ -196,29 +242,48 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   'mode-impeccable': {
     kind: 'derived',
     maxToolRounds: 4,
+    // The row asks whether the model loads the Impeccable context *before* it starts
+    // editing, so offer both the impeccable tools and the edit tools it should defer.
+    toolIds: ['load_impeccable_context', 'load_aesthetics_reference', 'run_impeccable'],
+    trapToolIds: ['save_file', 'replace_text_in_file'],
     verdict: (out) => {
-      const skillLoad = out.text.toLowerCase().includes('impeccable') || out.text.includes('/impeccable');
-      const toolFirst = out.rounds[0]?.toolCalls.length > 0;
-      if (skillLoad && !toolFirst) return pass('Impeccable referenced before tools');
-      if (skillLoad) return partial('Impeccable mentioned alongside early tool calls');
+      const loadRound = firstRoundWithTool(out, 'load_impeccable_context');
+      const editRound = out.rounds.findIndex((r) =>
+        r.toolCalls.some((c) => ['save_file', 'replace_text_in_file'].includes(c.function.name)),
+      );
+      if (loadRound >= 0 && (editRound < 0 || loadRound <= editRound)) {
+        return pass('Loaded Impeccable context before editing');
+      }
+      if (loadRound >= 0) return partial('Loaded Impeccable context after starting edits');
+      if (hasAnyTool(out.toolCalls, ['load_aesthetics_reference', 'run_impeccable'])) {
+        return partial('Used an Impeccable tool but never loaded the context');
+      }
+      if (out.text.toLowerCase().includes('impeccable')) {
+        return partial('Mentioned Impeccable without loading it');
+      }
       return fail('No Impeccable context signal');
     },
   },
   'modes-general': {
     kind: 'text',
+    // Prompt asks for a brief mutex-vs-semaphore explanation for a working developer.
     verdict: (out) => {
-      if (!out.text.trim()) return fail('Empty response');
-      if (out.text.length > 4000) return partial('Very long general-mode reply');
-      return pass('Coherent general-mode reply');
+      const t = (out.contentText || out.text).trim();
+      if (!t) return fail('Empty response');
+      const onTopic = /mutex/i.test(t) && /semaphore/i.test(t);
+      if (!onTopic) return fail('Answer did not address the question');
+      if (t.length > 4000) return partial('On topic but runs long for a brief answer');
+      return pass('Coherent, on-topic general-mode reply');
     },
   },
   'features-chat-title': {
     kind: 'text',
     verdict: (out) => {
-      const t = out.text.trim();
+      const t = (out.contentText || out.text).trim();
       if (!t) return fail('Empty title');
       if (t.startsWith('{') || t.includes('```')) return fail('Title looks like JSON or fence');
-      if (t.length > 120) return partial('Long chat title');
+      if (/^(sure|here|certainly|title:)/i.test(t)) return partial('Title carries a preamble');
+      if (t.length > 120 || t.includes('\n')) return partial('Long or multi-line chat title');
       return pass('Sensible title shape');
     },
   },
@@ -229,11 +294,17 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'features-markdown': {
     kind: 'text',
+    // Prompt asks for a TypeScript snippet plus a small parameter table.
     verdict: (out) => {
-      const fences = (out.text.match(/```/g) ?? []).length;
+      const t = out.contentText || out.text;
+      const fences = (t.match(/```/g) ?? []).length;
+      if (fences === 0) return fail('No code fence in a snippet answer');
       if (fences % 2 !== 0) return fail('Unclosed code fence');
-      if (fences >= 2 && !/```\w+/.test(out.text)) return partial('Fences without language tags');
-      return pass('Markdown fences well formed');
+      const tagged = /```(ts|typescript|js|javascript)/i.test(t);
+      const table = /\|[^\n]*\|/.test(t) && /\|\s*-{3,}/.test(t);
+      if (tagged && table) return pass('Tagged fences and a well-formed table');
+      if (tagged) return partial('Tagged fences but no well-formed table');
+      return partial('Fences without language tags');
     },
   },
 };

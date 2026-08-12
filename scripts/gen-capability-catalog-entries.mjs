@@ -155,26 +155,16 @@ const ID_BY_HEADER = {
   'Markdown & code fences': 'features-markdown',
 };
 
+/**
+ * Rows with no automatable model-side signal. Everything else that once lived here —
+ * browser, sub-agent control, board, recall, email, calendar, and the rest of the modes
+ * band — now runs as an emit-only or mode-prompt probe (src/benchmark/capabilities/probes-auto-*).
+ *
+ * `modes-desktop` is a retired feature rather than a hard-to-automate one: the column
+ * stays so spreadsheet order holds, but nothing scores it.
+ */
 const MANUAL_IDS = new Set([
-  'browser-navigate',
-  'browser-snapshot',
-  'browser-eval',
-  'agents-sub-agent-control',
-  'agents-board-init',
-  'agents-board-report',
-  'knowledge-recall',
-  'apps-email-list',
-  'apps-email-draft',
-  'apps-email-summarize',
-  'apps-calendar',
-  'modes-build',
-  'modes-plan',
-  'modes-super-plan',
-  'modes-orchestrate',
-  'modes-debug',
   'modes-desktop',
-  'modes-email',
-  'modes-onboarding',
   'features-research',
   'features-compare',
   'features-mcp',
@@ -182,29 +172,40 @@ const MANUAL_IDS = new Set([
 ]);
 
 const MANUAL_REASONS = {
-  'browser-navigate': 'Needs the Electron browser pane; headless driver cannot drive tabs.',
-  'browser-snapshot': 'Needs live browser automation and snapshot refs in the Electron shell.',
-  'browser-eval': 'Screenshot and eval probes require the embedded browser surface.',
-  'agents-sub-agent-control': 'Requires an active sub-agent run to list, inspect, or cancel.',
-  'agents-board-init': 'Orchestrate board seeding is a multi-turn UI workflow, not a one-shot probe.',
-  'agents-board-report': 'Board completion reporting needs a live orchestration session.',
-  'knowledge-recall': 'Needs a real chat session with many prior turns; headless driver has no session history.',
-  'apps-email-list': 'Requires a connected email account and live mailbox data.',
-  'apps-email-draft': 'Requires connected email; sending must stay manual-verified.',
-  'apps-email-summarize': 'Requires connected email with enough threads to summarize.',
-  'apps-calendar': 'Requires a connected calendar provider with real events.',
-  'modes-build': 'Full Build mode task needs interactive review across many tool rounds.',
-  'modes-plan': 'Plan mode guard behavior needs human judgment across a planning session.',
-  'modes-super-plan': 'Super Plan pipeline stages need UI pause/resume/retry verification.',
-  'modes-orchestrate': 'Board-driven orchestration cannot be scored in a single headless turn.',
-  'modes-debug': 'Debug loop quality needs a failing test scenario and human follow-up.',
-  'modes-desktop': 'Desktop tools require OS-level automation outside the benchmark sandbox.',
-  'modes-email': 'Email mode is a full triage session, not a single prompt.',
-  'modes-onboarding': 'Onboarding is a guided multi-step chat that must be walked end to end.',
+  'modes-desktop':
+    'Desktop mode was removed from Minnow; the column stays for spreadsheet order — mark it not applicable.',
   'features-research': 'Research runs are long-lived jobs with sources to inspect manually.',
   'features-compare': 'Compare sessions need two models side by side in the Compare app.',
-  'features-mcp': 'MCP connectivity depends on user-configured servers and credentials.',
+  'features-mcp': 'MCP servers are user-configured, so there is no built-in tool to probe.',
   'features-voice': 'Voice round trip needs microphone hardware and UI capture.',
+};
+
+/**
+ * Rows whose automated probe is narrower than the human test the spreadsheet describes.
+ * The note is appended to `passCriteria` so the Settings grid says what the score covers.
+ */
+const AUTO_SCOPE_NOTES = {
+  'browser-navigate': 'Probe scores the tool calls the model emits; the browser pane is stubbed.',
+  'browser-snapshot':
+    'Probe scores snapshot-then-act ordering and ref reuse against a stubbed page.',
+  'browser-eval': 'Probe scores the emitted screenshot/eval calls; the browser pane is stubbed.',
+  'agents-sub-agent-control': 'Probe scores list-then-cancel against a stubbed running agent.',
+  'agents-board-init': 'Probe scores board seeding and task moves; the board itself is stubbed.',
+  'agents-board-report': 'Probe scores whether the model reports completion against a stubbed board.',
+  'knowledge-recall': 'Probe scores whether the model calls a recall tool instead of guessing.',
+  'apps-email-list': 'Probe scores list-then-open against a stubbed mailbox.',
+  'apps-email-draft': 'Probe scores drafting and the never-send rule against a stubbed mailbox.',
+  'apps-email-summarize': 'Probe scores the summary and reply-variant calls against a stubbed mailbox.',
+  'apps-calendar': 'Probe scores the emitted manage_calendar call; the provider is stubbed.',
+  'modes-build': 'Probe runs the real Build prompt over the fixture workspace for one task.',
+  'modes-plan': 'Probe runs the real Plan prompt and offers denied write tools as a guard trap.',
+  'modes-super-plan':
+    'Probe scores research and staged-plan output under the real Super Plan prompt; pipeline stage control is Minnow-side.',
+  'modes-orchestrate':
+    'Probe scores board seeding and fan-out under the real Orchestrate prompt; live scheduling is Minnow-side.',
+  'modes-debug': 'Probe runs the real Debug prompt over a seeded failure in the fixture workspace.',
+  'modes-email': 'Probe runs the real Email prompt over a stubbed mailbox.',
+  'modes-onboarding': 'Probe scores the first onboarding turn, not the full guided walkthrough.',
 };
 
 function parseTier(comment) {
@@ -225,12 +226,25 @@ function inferGroup(header) {
   throw new Error(`no group for ${header}`);
 }
 
-function buildPrompt(howToTest, header) {
+/**
+ * Human-readable test instruction for the Settings grid and the xlsx test guide.
+ *
+ * This is documentation, not the probe input — auto probes send the authored message in
+ * `src/benchmark/capabilities/probe-prompts.ts`. The old rules sliced `howToTest` on
+ * "Ask " and "->" and produced fragments ("a task needing 4+ chained calls (grep"), so
+ * anything that does not reduce to a clean sentence keeps `howToTest` verbatim.
+ */
+function buildPrompt(howToTest) {
   const quoted = howToTest.match(/^'([^']+)'/);
   if (quoted) return quoted[1];
-  if (howToTest.includes('->')) return howToTest.split('->')[0].trim().replace(/^Ask /i, '');
-  if (howToTest.startsWith('Ask ')) return howToTest.slice(4).replace(/\.$/, '');
-  return `Exercise: ${header}. ${howToTest}`;
+  const asked = howToTest.match(/^Ask ('([^']+)'|[^.]+?)\s*(?:->|\.|$)/i);
+  if (asked) {
+    const body = (asked[2] ?? asked[1]).trim().replace(/\.$/, '');
+    // "for a plan", "a task needing 4+ chained calls (grep" — fragments, not instructions.
+    if (/^(for|a|an|the|it)\b/i.test(body) || /[([]$/.test(body)) return howToTest;
+    return body.charAt(0).toUpperCase() + body.slice(1);
+  }
+  return howToTest;
 }
 
 const wb = XLSX.readFile(xlsxPath, { cellComments: true });
@@ -251,15 +265,16 @@ for (let C = 10; C <= range.e.c; C++) {
   if (!id) throw new Error(`missing id for ${header}`);
   const group = inferGroup(header);
   const scoreMode = MANUAL_IDS.has(id) ? 'manual' : 'auto';
-  const prompt = buildPrompt(howToTest, header);
+  const prompt = buildPrompt(howToTest);
   const setup =
     scoreMode === 'manual'
       ? 'Open Minnow with the target model active; use the capability matrix manual test path.'
       : 'Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.';
+  const scopeNote = AUTO_SCOPE_NOTES[id] ? ` ${AUTO_SCOPE_NOTES[id]}` : '';
   const passCriteria =
     scoreMode === 'manual'
       ? 'Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.'
-      : 'Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing.';
+      : `Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing.${scopeNote}`;
 
   entries.push({
     id,
@@ -277,7 +292,7 @@ for (let C = 10; C <= range.e.c; C++) {
 
 if (entries.length !== 67) throw new Error(`expected 67 entries, got ${entries.length}`);
 const autoCount = entries.filter((e) => e.scoreMode === 'auto').length;
-if (autoCount !== 44) throw new Error(`expected 44 auto, got ${autoCount}`);
+if (autoCount !== 62) throw new Error(`expected 62 auto, got ${autoCount}`);
 
 const lines = [
   '/**',

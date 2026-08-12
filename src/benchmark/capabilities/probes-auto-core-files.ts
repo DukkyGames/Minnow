@@ -2,8 +2,10 @@
  * Auto probe specs — core protocol and files/git/docs bands.
  */
 
+import { CAP_MATRIX_HAYSTACK_NEEDLE } from './fixture-paths.ts';
 import {
   fail,
+  hallucinatedToolNames,
   hasTool,
   maxRoundBatchSize,
   parseToolArgs,
@@ -22,11 +24,10 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   'core-tool-calling': {
     kind: 'tool-call',
     toolIds: ['get_datetime'],
-    expectTools: ['get_datetime'],
     verdict: (out) =>
       hasTool(out.toolCalls, 'get_datetime')
         ? pass('Emitted get_datetime')
-        : fail('Expected get_datetime tool call'),
+        : fail('Answered in prose instead of calling get_datetime'),
   },
   'core-parallel-tools': {
     kind: 'derived',
@@ -46,6 +47,9 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   'core-tool-loop': {
     kind: 'tool-chain',
     maxToolRounds: 8,
+    // Without an explicit list the loop was offered `get_datetime` alone, so no model
+    // could ever chain four rounds on a git task.
+    toolIds: ['git_status', 'git_diff', 'git_log', 'list_directory', 'read_file'],
     requires: ['workspace', 'git-fixture'],
     verdict: (out) => {
       const rounds = totalToolRounds(out);
@@ -57,43 +61,67 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   'core-json-args': {
     kind: 'derived',
     maxToolRounds: 3,
+    // Tools with several typed arguments — a single no-arg tool proves nothing.
+    toolIds: ['grep', 'get_datetime'],
     verdict: (out) => {
-      for (const round of out.rounds) {
-        for (const call of round.toolCalls) {
-          if (parseToolArgs(call) === null) {
-            return fail(`Invalid JSON args for ${call.function.name}`);
+      const calls = out.rounds.flatMap((r) => r.toolCalls);
+      for (const call of calls) {
+        const args = parseToolArgs(call);
+        if (args === null) return fail(`Invalid JSON args for ${call.function.name}`);
+        for (const [key, value] of Object.entries(args)) {
+          // A stringified object ("{\"path\":…}") parses at the top level but breaks
+          // every executor that expects a real value.
+          if (typeof value === 'string' && /^\s*[{[]/.test(value)) {
+            return partial(`Stringified object in ${call.function.name}.${key}`);
           }
         }
       }
-      if (out.toolCalls.length === 0) return fail('No tool calls to validate');
-      return pass('Tool arguments parsed as JSON');
+      if (calls.length === 0) return fail('No tool calls to validate');
+      return pass(`${calls.length} tool call(s) with well-formed JSON args`);
     },
   },
   'core-no-hallucinated-tools': {
     kind: 'derived',
     maxToolRounds: 2,
+    // The prompt asks for Slack and reminders, which Minnow has no tool for.
+    toolIds: ['get_datetime', 'save_memory'],
     verdict: (out) => {
-      if (out.toolCalls.length === 0) return partial('No tool calls emitted');
-      return pass('Tool calls emitted without runtime catalog validation');
+      const invented = hallucinatedToolNames(out);
+      if (invented.length > 0) {
+        return fail(`Invented tool name(s): ${invented.join(', ')}`);
+      }
+      if (out.toolCalls.length === 0) {
+        return partial('Declined without calling any offered tool');
+      }
+      return pass('Stayed inside the offered tool catalog');
     },
   },
   'core-system-prompt': {
     kind: 'text',
+    // Prompt asks for exactly three lowercase colour words, comma-separated, nothing else.
     verdict: (out) => {
-      const t = out.text.trim();
+      const t = (out.contentText || out.text).trim();
       if (!t) return fail('Empty response');
-      if (/^(sure|here is|as an ai)/i.test(t)) return partial('Preamble detected');
-      return pass('Response without obvious preamble');
+      const words = t.replace(/[.]$/, '').split(/\s*,\s*/);
+      const shapeOk = words.length === 3 && words.every((w) => /^[a-z]+$/.test(w));
+      if (shapeOk) return pass('Followed the exact output shape');
+      if (words.some((w) => /red|green|blue/i.test(w))) {
+        return partial('Right answer, wrong output shape (preamble or formatting)');
+      }
+      return fail('Ignored the requested output shape');
     },
   },
   'core-long-context': {
     kind: 'text',
-    requires: ['workspace'],
+    // The needle rides in the prompt (~34k tokens), so this measures the model's context
+    // window rather than the host's read_file cap.
     verdict: (out) => {
-      const t = out.text.toLowerCase();
-      if (t.includes('needle-marker-cap-matrix')) return pass('Recalled haystack needle');
-      if (t.includes('truncat') || t.includes('too long')) return partial('Model reported context limits');
-      return fail('Did not recall long-context needle');
+      const t = (out.contentText || out.text).toLowerCase();
+      if (t.includes(CAP_MATRIX_HAYSTACK_NEEDLE)) return pass('Recalled the buried needle');
+      if (/truncat|too long|context (window|length|limit)|exceed/i.test(t)) {
+        return partial('Model reported a context limit');
+      }
+      return fail('Did not recall the needle from a >32k-token prompt');
     },
   },
   'core-vision': {
@@ -103,12 +131,16 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
     requires: ['vision'],
   },
   'core-reasoning': {
-    kind: 'derived',
+    kind: 'text',
+    // The old regex `/|<think|.../` had an empty leading alternative, so it matched every
+    // string and this row always scored partial.
     verdict: (out) => {
-      if (/|<think|\[thinking\]/i.test(out.text)) {
-        return partial('Thinking markup visible in answer text');
-      }
-      return pass('No leaked thinking markup in visible text');
+      const leaked = /<think>|<\/think>|\[thinking\]|◁think▷/i.test(out.contentText);
+      const answered = /(^|\D)0?\.0?5\b|5 cents|five cents/i.test(out.contentText || out.text);
+      if (leaked) return partial('Thinking markup leaked into the visible answer');
+      if (!answered) return fail('Wrong answer on the reasoning trap question');
+      if (out.reasoningText.trim()) return pass('Reasoning channel parsed and answer correct');
+      return pass('Correct answer with no leaked thinking markup');
     },
   },
   'files-list-read': {

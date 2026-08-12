@@ -35,14 +35,37 @@ describe('capability catalog', () => {
   test('auto capabilities have probe specs; manual have reasons', () => {
     const auto = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'auto');
     const manual = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'manual');
-    assert.equal(auto.length, 44);
-    assert.equal(manual.length, 23);
+    assert.equal(auto.length, 62);
+    assert.equal(manual.length, 5);
     for (const cap of auto) {
       assert.ok(cap.probe, `${cap.id}: missing probe`);
     }
     for (const cap of manual) {
       assert.ok(cap.manualReason?.trim(), `${cap.id}: missing manualReason`);
       assert.equal(cap.probe, undefined, `${cap.id}: manual must not have probe`);
+    }
+  });
+
+  test('only retired rows and rows with no model-side signal stay manual', () => {
+    const manualIds = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'manual').map((c) => c.id);
+    assert.deepEqual(manualIds.sort(), [
+      'features-compare',
+      'features-mcp',
+      'features-research',
+      'features-voice',
+      // Desktop mode was stripped out of Minnow — the column stays for spreadsheet order.
+      'modes-desktop',
+    ]);
+  });
+
+  test('catalog prompts read as instructions, not generated fragments', () => {
+    for (const cap of CAPABILITY_CATALOG) {
+      assert.ok(cap.prompt.trim().length >= 12, `${cap.id}: prompt too short`);
+      assert.ok(
+        !/^(Exercise:|for a |a task|it )/i.test(cap.prompt),
+        `${cap.id}: generated fragment "${cap.prompt}"`,
+      );
+      assert.ok(!/[([]$/.test(cap.prompt.trim()), `${cap.id}: truncated prompt`);
     }
   });
 

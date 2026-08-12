@@ -33,6 +33,47 @@ export function hasTool(calls: CapabilityToolCall[], name: string): boolean {
   return toolNameMatch(calls, name);
 }
 
+/** True when any of `names` was called. */
+export function hasAnyTool(calls: CapabilityToolCall[], names: string[]): boolean {
+  return names.some((name) => toolNameMatch(calls, name));
+}
+
+/** Count how many of `names` were called at least once. */
+export function countTools(calls: CapabilityToolCall[], names: string[]): number {
+  return names.filter((name) => toolNameMatch(calls, name)).length;
+}
+
+/** Distinct called tool names that were never offered to the model. */
+export function hallucinatedToolNames(out: CapabilityProbeRunOutput): string[] {
+  const offered = new Set(out.offeredToolNames);
+  const invented = new Set<string>();
+  for (const call of out.toolCalls) {
+    const name = call.function.name;
+    if (name && !offered.has(name)) invented.add(name);
+  }
+  for (const round of out.rounds) {
+    for (const call of round.toolCalls) {
+      const name = call.function.name;
+      if (name && !offered.has(name)) invented.add(name);
+    }
+  }
+  return [...invented];
+}
+
+/** Concatenated arguments JSON for every call to `name` (empty when never called). */
+export function argsTextFor(out: CapabilityProbeRunOutput, name: string): string {
+  const calls = [...out.toolCalls, ...out.rounds.flatMap((r) => r.toolCalls)];
+  return calls
+    .filter((c) => c.function.name === name)
+    .map((c) => c.function.arguments)
+    .join(' ');
+}
+
+/** Round index (0-based) of the first call to `name`; -1 when never called. */
+export function firstRoundWithTool(out: CapabilityProbeRunOutput, name: string): number {
+  return out.rounds.findIndex((r) => r.toolCalls.some((c) => c.function.name === name));
+}
+
 export function maxRoundBatchSize(out: CapabilityProbeRunOutput): number {
   let max = 0;
   for (const round of out.rounds) {

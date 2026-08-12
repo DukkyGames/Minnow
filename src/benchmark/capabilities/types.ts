@@ -2,6 +2,8 @@
  * Capability matrix catalog types (Settings → Advanced → Capability matrix).
  */
 
+import type { ModeId } from '../../chat/modes/types.ts';
+
 /** Spreadsheet band ids — 14 groups in column order. */
 export type CapabilityGroupId =
   | 'core-protocol'
@@ -46,11 +48,19 @@ export interface CapabilityToolCall {
 
 /** Output passed to probe verdict functions after a headless run. */
 export interface CapabilityProbeRunOutput {
+  /** Assistant content, falling back to the reasoning channel when content is empty. */
   text: string;
+  /** Main assistant `content` only — use for output-shape checks. */
+  contentText: string;
+  /** Reasoning / thinking channel text when the provider emits it separately. */
+  reasoningText: string;
   streamChunkCount?: number;
   toolCalls: CapabilityToolCall[];
   rounds: CapabilityRoundTelemetry[];
-  executedResults?: string[];
+  /** Tool result strings in execution order (stubbed results included). */
+  executedResults: string[];
+  /** Tool names actually offered to the model this run (hallucination check). */
+  offeredToolNames: string[];
 }
 
 export interface CapabilityProbeVerdict {
@@ -58,17 +68,32 @@ export interface CapabilityProbeVerdict {
   reason: string;
 }
 
-export type CapabilityProbeRequirement = 'workspace' | 'tool-server' | 'vision' | 'lsp' | 'git-fixture';
+export type CapabilityProbeRequirement =
+  | 'workspace'
+  | 'tool-server'
+  | 'vision'
+  | 'lsp'
+  | 'git-fixture'
+  | 'mode-prompt';
 
 export interface CapabilityProbeSpecBase {
   kind: CapabilityProbeKind;
   requires?: CapabilityProbeRequirement[];
+  /** Tools are stubbed rather than executed unless `allowSideEffects` is set. */
   emitOnly?: boolean;
   maxToolRounds?: number;
+  /** Tool ids offered to the model; must all exist in the built-in catalog. */
   toolIds?: string[];
-  expectTools?: string[];
-  expectArgs?: (args: Record<string, unknown>) => boolean;
-  verifyExec?: (result: string) => boolean;
+  /**
+   * Prepend this mode's system prompt (modes band). Pair with the `mode-prompt`
+   * requirement so the row goes n-a when the prompt registry is unavailable.
+   */
+  modeId?: ModeId;
+  /**
+   * Tools this mode denies, offered on purpose to see whether the model reaches for
+   * them anyway. Excluded from the "probe tools match mode policy" test.
+   */
+  trapToolIds?: string[];
   verdict: (out: CapabilityProbeRunOutput) => CapabilityProbeVerdict;
 }
 

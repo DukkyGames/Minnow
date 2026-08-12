@@ -2,13 +2,14 @@
  * Execute a single capability-matrix auto probe via the headless LLM driver.
  */
 
+import { loadModePromptBody } from '../../chat/modes/registry.ts';
 import { getToolById, type OpenAIFunctionDefinition } from '../../tools/definitions.ts';
-import type { ToolCall } from '../../types.ts';
+import type { ApiMessage, ToolCall } from '../../types.ts';
 import { runDelegatedCapabilityProbe } from './delegated-probes.ts';
 import { createCapabilityExecuteToolFn } from './execute-tool.ts';
 import { runOneShot, runToolLoop, type OneShotResult } from '../llm-driver.ts';
 import type { BenchmarkRunContext } from '../types.ts';
-import { getCapabilityFixtureProbePrompt } from './fixtures-workspace.ts';
+import { getCapabilityProbePrompt } from './probe-prompts.ts';
 import type {
   CapabilityDefinition,
   CapabilityProbeRunOutput,
@@ -40,11 +41,16 @@ function isRunnableSpec(spec: CapabilityProbeSpec): spec is CapabilityProbeSpecB
   return spec.kind !== 'delegated';
 }
 
+/**
+ * Authored prompt when the row has one. The spreadsheet `prompt` column holds test
+ * *descriptions* ("Exercise: Valid JSON args. Watch the tool console for…"), so it is
+ * only a last resort for rows that slipped through the completeness test.
+ */
 function buildUserMessage(cap: CapabilityDefinition): string {
-  const fixturePrompt = getCapabilityFixtureProbePrompt(cap.id);
-  if (fixturePrompt) return fixturePrompt;
+  const authored = getCapabilityProbePrompt(cap.id);
+  if (authored) return authored;
   const prompt = cap.prompt.trim();
-  if (prompt.length >= 24 && !/^for a /i.test(prompt)) return prompt;
+  if (prompt.length >= 24 && !/^(for a |Exercise: )/i.test(prompt)) return prompt;
   return cap.howToTest.trim() || prompt;
 }
 
@@ -57,38 +63,49 @@ function mapToolCalls(toolCalls: ToolCall[]): CapabilityProbeRunOutput['toolCall
 function probeOutputFromOneShot(
   out: OneShotResult,
   rounds: CapabilityRoundTelemetry[],
+  executedResults: string[],
+  offeredToolNames: string[],
 ): CapabilityProbeRunOutput {
   return {
     text: out.text,
+    contentText: out.contentText,
+    reasoningText: out.reasoningText,
     streamChunkCount: out.timing.streamChunkCount,
     toolCalls: mapToolCalls(out.toolCalls),
     rounds,
+    executedResults,
+    offeredToolNames,
   };
 }
 
 function resolveProbeToolIds(spec: CapabilityProbeSpecBase): string[] {
-  if (spec.toolIds?.length) return spec.toolIds;
-  if (spec.kind === 'derived' || spec.kind === 'tool-call' || spec.kind === 'tool-chain') {
-    return ['get_datetime'];
-  }
-  return [];
+  return [...(spec.toolIds ?? []), ...(spec.trapToolIds ?? [])];
 }
 
-function resolveOpenAiTools(toolIds: string[]): OpenAIFunctionDefinition[] {
+/**
+ * Resolve tool schemas, reporting ids missing from the catalog instead of dropping them.
+ * A silently dropped id means the model is scored on a tool it was never offered.
+ */
+function resolveOpenAiTools(toolIds: string[]): {
+  defs: OpenAIFunctionDefinition[];
+  missing: string[];
+} {
   const defs: OpenAIFunctionDefinition[] = [];
+  const missing: string[] = [];
   for (const id of toolIds) {
     const tool = getToolById(id);
     if (tool) defs.push(tool.definition);
+    else missing.push(id);
   }
-  return defs;
+  return { defs, missing };
 }
 
-function usesToolLoop(spec: CapabilityProbeSpecBase): boolean {
+function usesToolLoop(spec: CapabilityProbeSpecBase, toolIds: string[]): boolean {
   return (
     spec.kind === 'tool-call' ||
     spec.kind === 'tool-chain' ||
     spec.kind === 'derived' ||
-    (spec.kind === 'stream' && Boolean(spec.toolIds?.length))
+    (spec.kind === 'stream' && toolIds.length > 0)
   );
 }
 
@@ -139,39 +156,73 @@ export async function runCapabilityProbe(
     };
   }
 
-  const userMessage = buildUserMessage(cap);
+  const toolIds = resolveProbeToolIds(probe);
+  const { defs: tools, missing } = resolveOpenAiTools(toolIds);
+  if (missing.length > 0) {
+    const reason = `probe references unknown tool ids: ${missing.join(', ')}`;
+    return { skipped: true, skipReason: reason, verdict: 'n-a', reason };
+  }
+
+  const messages: ApiMessage[] = [];
+  if (probe.modeId) {
+    const modePrompt = loadModePromptBody(probe.modeId, 'lite');
+    if (!modePrompt) {
+      const reason = `mode prompt unavailable: ${probe.modeId}`;
+      return { skipped: true, skipReason: reason, verdict: 'n-a', reason };
+    }
+    messages.push({ role: 'system', content: modePrompt });
+  }
+  messages.push({ role: 'user', content: buildUserMessage(cap) });
+
   const rounds: CapabilityRoundTelemetry[] = [];
+  const executedResults: string[] = [];
   const allowSideEffects = ctx.capabilityMatrix?.allowSideEffects === true;
-  const executeToolFn = createCapabilityExecuteToolFn(allowSideEffects, {
+  const baseExecuteToolFn = createCapabilityExecuteToolFn(allowSideEffects, {
     workspaceRoot: options.workspaceRoot,
+    stubToolIds: [
+      ...(probe.emitOnly ? (probe.toolIds ?? []) : []),
+      ...(probe.trapToolIds ?? []),
+    ],
   });
+  const executeToolFn: typeof baseExecuteToolFn = async (name, args, context) => {
+    try {
+      const result = await baseExecuteToolFn(name, args, context);
+      executedResults.push(result.content);
+      return result;
+    } catch (err) {
+      // `runHeadlessToolBatch` turns this into a tool message for the model; record it
+      // too so a verdict reading `executedResults` sees the failure rather than a gap.
+      executedResults.push(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
+  };
 
   try {
     let oneShot: OneShotResult;
-    if (usesToolLoop(probe)) {
-      const toolIds = resolveProbeToolIds(probe);
+    if (usesToolLoop(probe, toolIds)) {
       oneShot = await runToolLoop({
         providerId: ctx.providerId,
         modelId: ctx.modelId,
         signal: ctx.signal,
-        messages: [{ role: 'user', content: userMessage }],
-        tools: resolveOpenAiTools(toolIds),
+        messages,
+        tools,
         maxToolRounds: probe.maxToolRounds ?? 3,
+        ...(probe.modeId ? { modeId: probe.modeId } : {}),
         executeToolFn,
         onRound: (round) => rounds.push(round),
       });
     } else {
-      const toolIds = probe.toolIds ?? [];
       oneShot = await runOneShot({
         providerId: ctx.providerId,
         modelId: ctx.modelId,
         signal: ctx.signal,
-        messages: [{ role: 'user', content: userMessage }],
-        ...(toolIds.length ? { tools: resolveOpenAiTools(toolIds) } : {}),
+        messages,
+        ...(tools.length ? { tools } : {}),
       });
     }
 
-    const out = probeOutputFromOneShot(oneShot, rounds);
+    const offeredToolNames = tools.map((t) => t.function.name);
+    const out = probeOutputFromOneShot(oneShot, rounds, executedResults, offeredToolNames);
     const judged = probe.verdict(out);
     return {
       skipped: false,

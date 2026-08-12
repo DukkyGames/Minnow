@@ -28,8 +28,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Ask for a 200-word answer. Tokens must stream, not arrive in one block.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "for a 200-word answer. Tokens must stream, not arrive in one block",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Ask for a 200-word answer. Tokens must stream, not arrive in one block.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-tool-calling",
@@ -39,8 +39,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Ask 'what time is it?' -> must emit a get_datetime tool call, not prose.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "'what time is it?'",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "What time is it?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-parallel-tools",
@@ -50,8 +50,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Ask to read three named files at once. Does it emit 3 calls in one batch, or serialise?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "to read three named files at once. Does it emit 3 calls in one batch, or serialise?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "To read three named files at once",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-tool-loop",
@@ -61,8 +61,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Ask a task needing 4+ chained calls (grep -> read -> edit -> verify). Does it keep going after each result?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "a task needing 4+ chained calls (grep",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Ask a task needing 4+ chained calls (grep -> read -> edit -> verify). Does it keep going after each result?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-json-args",
@@ -72,8 +72,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Watch the tool console for parse failures, trailing commas, stringified objects, missing required args.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: Valid JSON args. Watch the tool console for parse failures, trailing commas, stringified objects, missing required args.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Watch the tool console for parse failures, trailing commas, stringified objects, missing required args.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-no-hallucinated-tools",
@@ -83,8 +83,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Does it ever invent a tool name that is not in the catalog, or call a tool disabled in this mode?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: No hallucinated tools. Does it ever invent a tool name that is not in the catalog, or call a tool disabled in this mode?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Does it ever invent a tool name that is not in the catalog, or call a tool disabled in this mode?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-system-prompt",
@@ -94,8 +94,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Does it follow the mode prompt (no preamble, correct output shape, respects guardrails)?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: System prompt adherence. Does it follow the mode prompt (no preamble, correct output shape, respects guardrails)?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Does it follow the mode prompt (no preamble, correct output shape, respects guardrails)?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-long-context",
@@ -105,8 +105,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Load a big file / long chat, then ask about something from the start. Check for silent truncation.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: Long context >32k. Load a big file / long chat, then ask about something from the start. Check for silent truncation.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Load a big file / long chat, then ask about something from the start. Check for silent truncation.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-vision",
@@ -116,8 +116,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Paste a screenshot and ask what is in it.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: Vision / image input. Paste a screenshot and ask what is in it.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Paste a screenshot and ask what is in it.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "core-reasoning",
@@ -127,8 +127,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Does the thinking block parse and render, without leaking into the visible answer or breaking tool calls?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: Reasoning / thinking. Does the thinking block parse and render, without leaking into the visible answer or breaking tool calls?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Does the thinking block parse and render, without leaking into the visible answer or breaking tool calls?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "files-list-read",
@@ -139,7 +139,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'List the files in src and read package.json.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "List the files in src and read package.json.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "files-read-document",
@@ -149,8 +149,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Point it at a PDF/DOCX in the workspace and ask for a summary.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: read_document. Point it at a PDF/DOCX in the workspace and ask for a summary.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Point it at a PDF/DOCX in the workspace and ask for a summary.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "files-save-append",
@@ -161,7 +161,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Create notes.md with three bullets, then append a fourth.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Create notes.md with three bullets, then append a fourth.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "files-replace-text",
@@ -171,8 +171,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Ask for a precise edit. The old_string must match exactly - this is where weak models fail hardest.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "for a precise edit. The old_string must match exactly - this is where weak models fail hardest",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Ask for a precise edit. The old_string must match exactly - this is where weak models fail hardest.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "files-insert-range",
@@ -183,7 +183,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Read lines 40-60 of X, then insert a comment at line 41.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Read lines 40-60 of X, then insert a comment at line 41.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "files-grep",
@@ -194,7 +194,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Find every file that mentions BUILT_IN_TOOLS.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Find every file that mentions BUILT_IN_TOOLS.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "docs-create-office",
@@ -205,7 +205,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Make me a spreadsheet of the last 5 commits.' Check the file actually opens.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Make me a spreadsheet of the last 5 commits.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "git-read",
@@ -216,7 +216,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'What has changed on this branch?'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "What has changed on this branch?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "git-write",
@@ -227,7 +227,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Commit the current changes on a new branch.' Check the message quality and that it does not force anything.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Commit the current changes on a new branch.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "code-execute-command",
@@ -238,7 +238,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Run npm run typecheck and tell me what broke.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Run npm run typecheck and tell me what broke.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "code-background-cmds",
@@ -249,7 +249,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Start the dev server and tell me when it is listening.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Start the dev server and tell me when it is listening.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "code-run-js-py",
@@ -260,7 +260,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Work out the mean of these 20 numbers with run_python.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Work out the mean of these 20 numbers with run_python.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "code-command-log",
@@ -270,8 +270,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "After a long command: 'What is it printing? Now stop it.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: read_command_log / stop_command. After a long command: 'What is it printing? Now stop it.'",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "After a long command: 'What is it printing? Now stop it.'",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "code-repo-intel",
@@ -282,7 +282,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Where is formatCapabilityBadges defined and who calls it?'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Where is formatCapabilityBadges defined and who calls it?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "lsp-diagnostics",
@@ -292,8 +292,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Break a type on purpose, then: 'Any diagnostics in this file?'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: get_lsp_diagnostics / list_lsp_servers. Break a type on purpose, then: 'Any diagnostics in this file?'",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Break a type on purpose, then: 'Any diagnostics in this file?'",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "web-search",
@@ -304,7 +304,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Search the web for the latest llama.cpp release.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Search the web for the latest llama.cpp release.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "web-fetch",
@@ -314,8 +314,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Give it a URL and ask for a summary of that page.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: fetch_web_content / rag_web_content. Give it a URL and ask for a summary of that page.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Give it a URL and ask for a summary of that page.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "web-wikipedia",
@@ -326,43 +326,40 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Look up the Mariana Trench on Wikipedia.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Look up the Mariana Trench on Wikipedia.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "browser-navigate",
     "group": "browser",
     "header": "navigate / tabs",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "'Open example.com in a new tab, then list my tabs.'",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Open example.com in a new tab, then list my tabs.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Needs the Electron browser pane; headless driver cannot drive tabs."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores the tool calls the model emits; the browser pane is stubbed."
   },
   {
     "id": "browser-snapshot",
     "group": "browser",
     "header": "snapshot / click / fill",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "'Snapshot the page, fill the search box with foo and submit.' Does it use the returned refs correctly?",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Snapshot the page, fill the search box with foo and submit.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Needs live browser automation and snapshot refs in the Electron shell."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores snapshot-then-act ordering and ref reuse against a stubbed page."
   },
   {
     "id": "browser-eval",
     "group": "browser",
     "header": "eval / screenshot",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "'Screenshot the page and tell me the computed background colour.'",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Screenshot the page and tell me the computed background colour.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Screenshot and eval probes require the embedded browser surface."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores the emitted screenshot/eval calls; the browser pane is stubbed."
   },
   {
     "id": "agents-todo-write",
@@ -372,8 +369,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Give a 5-step task. Does it build a todo list and keep it current, or write it once and forget?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: todo_write. Give a 5-step task. Does it build a todo list and keep it current, or write it once and forget?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Give a 5-step task. Does it build a todo list and keep it current, or write it once and forget?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "agents-spawn-sub-agent",
@@ -384,19 +381,18 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Spawn a sub-agent to audit src/tools and report back.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Spawn a sub-agent to audit src/tools and report back.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "agents-sub-agent-control",
     "group": "agents-tasks",
     "header": "list / get / cancel sub-agents",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "While one is running: 'What are my sub-agents doing? Cancel it.'",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: list / get / cancel sub-agents. While one is running: 'What are my sub-agents doing? Cancel it.'",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Requires an active sub-agent run to list, inspect, or cancel."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "While one is running: 'What are my sub-agents doing? Cancel it.'",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores list-then-cancel against a stubbed running agent."
   },
   {
     "id": "agents-delegate-tasks",
@@ -406,32 +402,30 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Give three independent chunks of work and ask it to fan them out.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: delegate_tasks. Give three independent chunks of work and ask it to fan them out.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Give three independent chunks of work and ask it to fan them out.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "agents-board-init",
     "group": "agents-tasks",
     "header": "board_init / board_update_task",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "In Orchestrate mode: does it seed the board and keep task states moving?",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: board_init / board_update_task. In Orchestrate mode: does it seed the board and keep task states moving?",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Orchestrate board seeding is a multi-turn UI workflow, not a one-shot probe."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "In Orchestrate mode: does it seed the board and keep task states moving?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores board seeding and task moves; the board itself is stubbed."
   },
   {
     "id": "agents-board-report",
     "group": "agents-tasks",
     "header": "board_report / board_get_state",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Does the worker report back on completion instead of going quiet? (known weak spot)",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: board_report / board_get_state. Does the worker report back on completion instead of going quiet? (known weak spot)",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Board completion reporting needs a live orchestration session."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Does the worker report back on completion instead of going quiet? (known weak spot)",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores whether the model reports completion against a stubbed board."
   },
   {
     "id": "agents-issue-tools",
@@ -442,7 +436,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Log an issue for this bug, then link it to the previous one.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Log an issue for this bug, then link it to the previous one.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "knowledge-brain-read",
@@ -453,7 +447,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'What does the Brain say about the session engine?'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "What does the Brain say about the session engine?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "knowledge-brain-write",
@@ -464,7 +458,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Write what we just learned to a Brain page.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Write what we just learned to a Brain page.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "knowledge-minnow-docs",
@@ -475,7 +469,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'How do Minnow modes work? Check the docs.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "How do Minnow modes work? Check the docs.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "knowledge-save-memory",
@@ -486,67 +480,62 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Remember that I always want tests run before commits.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Remember that I always want tests run before commits.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "knowledge-recall",
     "group": "knowledge",
     "header": "recall_chat_context / recall_turn_full",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Deep into a long chat: 'What did I ask you in the third message?'",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: recall_chat_context / recall_turn_full. Deep into a long chat: 'What did I ask you in the third message?'",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Needs a real chat session with many prior turns; headless driver has no session history."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Deep into a long chat: 'What did I ask you in the third message?'",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores whether the model calls a recall tool instead of guessing."
   },
   {
     "id": "apps-email-list",
     "group": "apps",
     "header": "Email: list / search / get_thread",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "'Show me unread mail from this week.'",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Show me unread mail from this week.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Requires a connected email account and live mailbox data."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores list-then-open against a stubbed mailbox."
   },
   {
     "id": "apps-email-draft",
     "group": "apps",
     "header": "Email: draft_reply / email_action",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "'Draft a reply to the top thread.' Must draft, never send.",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Draft a reply to the top thread.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Requires connected email; sending must stay manual-verified."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores drafting and the never-send rule against a stubbed mailbox."
   },
   {
     "id": "apps-email-summarize",
     "group": "apps",
     "header": "summarize_inbox / reply_variants",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "'Summarise my inbox and give me three reply options.'",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Summarise my inbox and give me three reply options.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Requires connected email with enough threads to summarize."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores the summary and reply-variant calls against a stubbed mailbox."
   },
   {
     "id": "apps-calendar",
     "group": "apps",
     "header": "manage_calendar",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "'What is on my calendar tomorrow?'",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "What is on my calendar tomorrow?",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Requires a connected calendar provider with real events."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores the emitted manage_calendar call; the provider is stubbed."
   },
   {
     "id": "apps-settings-appearance",
@@ -557,7 +546,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Switch me to the dark theme and raise the font size.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Switch me to the dark theme and raise the font size.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "mode-set-chat-mode",
@@ -568,7 +557,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'This is turning into a build job - switch modes.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "This is turning into a build job - switch modes.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "mode-create-chat",
@@ -579,7 +568,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Open a new Plan chat about the release.'",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Open a new Plan chat about the release.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "mode-impeccable",
@@ -590,7 +579,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "howToTest": "'Make this page look better' - does it load the Impeccable context first?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
     "prompt": "Make this page look better",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "modes-general",
@@ -600,68 +589,63 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Plain chat. Sane answers, correct formatting, no runaway loops.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: General. Plain chat. Sane answers, correct formatting, no runaway loops.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Plain chat. Sane answers, correct formatting, no runaway loops.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "modes-build",
     "group": "modes",
     "header": "Build",
     tier: 1,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "A real multi-file code change, start to finish.",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Build. A real multi-file code change, start to finish.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Full Build mode task needs interactive review across many tool rounds."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "A real multi-file code change, start to finish.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe runs the real Build prompt over the fixture workspace for one task."
   },
   {
     "id": "modes-plan",
     "group": "modes",
     "header": "Plan",
     tier: 1,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Ask for a plan. Does it respect the plan-write guard and not start editing?",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "for a plan. Does it respect the plan-write guard and not start editing?",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Plan mode guard behavior needs human judgment across a planning session."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Ask for a plan. Does it respect the plan-write guard and not start editing?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe runs the real Plan prompt and offers denied write tools as a guard trap."
   },
   {
     "id": "modes-super-plan",
     "group": "modes",
     "header": "Super Plan",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Run the full pipeline. Do all stages advance, and do pause/resume/retry/rewind survive?",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Super Plan. Run the full pipeline. Do all stages advance, and do pause/resume/retry/rewind survive?",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Super Plan pipeline stages need UI pause/resume/retry verification."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Run the full pipeline. Do all stages advance, and do pause/resume/retry/rewind survive?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores research and staged-plan output under the real Super Plan prompt; pipeline stage control is Minnow-side."
   },
   {
     "id": "modes-orchestrate",
     "group": "modes",
     "header": "Orchestrate",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Board-driven multi-agent run. Watch for silent stalls and missed completion reports.",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Orchestrate. Board-driven multi-agent run. Watch for silent stalls and missed completion reports.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Board-driven orchestration cannot be scored in a single headless turn."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Board-driven multi-agent run. Watch for silent stalls and missed completion reports.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores board seeding and fan-out under the real Orchestrate prompt; live scheduling is Minnow-side."
   },
   {
     "id": "modes-debug",
     "group": "modes",
     "header": "Debug",
     tier: 2,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Hand it a failing test and let it work the loop.",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Debug. Hand it a failing test and let it work the loop.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Debug loop quality needs a failing test scenario and human follow-up."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Hand it a failing test and let it work the loop.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe runs the real Debug prompt over a seeded failure in the fixture workspace."
   },
   {
     "id": "modes-desktop",
@@ -671,33 +655,31 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "manual",
     "howToTest": "OS-level task via the desktop tools.",
     "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Desktop. OS-level task via the desktop tools.",
+    "prompt": "OS-level task via the desktop tools.",
     "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Desktop tools require OS-level automation outside the benchmark sandbox."
+    "manualReason": "Desktop mode was removed from Minnow; the column stays for spreadsheet order — mark it not applicable."
   },
   {
     "id": "modes-email",
     "group": "modes",
     "header": "Email",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Full email triage session.",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Email. Full email triage session.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Email mode is a full triage session, not a single prompt."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Full email triage session.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe runs the real Email prompt over a stubbed mailbox."
   },
   {
     "id": "modes-onboarding",
     "group": "modes",
     "header": "Onboarding",
     tier: 3,
-    "scoreMode": "manual",
+    "scoreMode": "auto",
     "howToTest": "Run the onboarding guide chat end to end.",
-    "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Onboarding. Run the onboarding guide chat end to end.",
-    "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "Onboarding is a guided multi-step chat that must be walked end to end."
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Run the onboarding guide chat end to end.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores the first onboarding turn, not the full guided walkthrough."
   },
   {
     "id": "features-research",
@@ -707,7 +689,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "manual",
     "howToTest": "Kick off a research run and check the sources and the write-up.",
     "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Research. Kick off a research run and check the sources and the write-up.",
+    "prompt": "Kick off a research run and check the sources and the write-up.",
     "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
     "manualReason": "Research runs are long-lived jobs with sources to inspect manually."
   },
@@ -719,7 +701,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "manual",
     "howToTest": "Run this model inside a Compare session against another.",
     "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Compare. Run this model inside a Compare session against another.",
+    "prompt": "Run this model inside a Compare session against another.",
     "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
     "manualReason": "Compare sessions need two models side by side in the Compare app."
   },
@@ -731,8 +713,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Does it title new chats sensibly, or emit JSON/preamble into the title?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: Chat title generation. Does it title new chats sensibly, or emit JSON/preamble into the title?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Does it title new chats sensibly, or emit JSON/preamble into the title?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "features-skills",
@@ -742,8 +724,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Invoke a skill and confirm it loads and is followed.",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: Skills / plugins. Invoke a skill and confirm it loads and is followed.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Invoke a skill and confirm it loads and is followed.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
     "id": "features-mcp",
@@ -753,9 +735,9 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "manual",
     "howToTest": "Connect an MCP server and call one of its tools.",
     "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: MCP servers. Connect an MCP server and call one of its tools.",
+    "prompt": "Connect an MCP server and call one of its tools.",
     "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
-    "manualReason": "MCP connectivity depends on user-configured servers and credentials."
+    "manualReason": "MCP servers are user-configured, so there is no built-in tool to probe."
   },
   {
     "id": "features-voice",
@@ -765,7 +747,7 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "manual",
     "howToTest": "Dictate a request and check the round trip.",
     "setup": "Open Minnow with the target model active; use the capability matrix manual test path.",
-    "prompt": "Exercise: Voice. Dictate a request and check the round trip.",
+    "prompt": "Dictate a request and check the round trip.",
     "passCriteria": "Human marks ✅ works, ⚠️ partial, ❌ broken, or ➖ not applicable per the matrix legend.",
     "manualReason": "Voice round trip needs microphone hardware and UI capture."
   },
@@ -777,8 +759,8 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "scoreMode": "auto",
     "howToTest": "Are fences closed, languages tagged, tables well formed? Do file paths render as links?",
     "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Exercise: Markdown & code fences. Are fences closed, languages tagged, tables well formed? Do file paths render as links?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace) are missing."
+    "prompt": "Are fences closed, languages tagged, tables well formed? Do file paths render as links?",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   }
 ]
 ;

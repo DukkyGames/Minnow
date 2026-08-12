@@ -55,7 +55,7 @@ const { runDelegatedCapabilityProbe } = await import(
 const { runCapabilityProbe } = await import('../../src/benchmark/capabilities/run-probe.ts');
 
 describe('delegated capability probes (phase 2f)', () => {
-  test('all 44 auto capabilities are assigned to a probe wave', () => {
+  test('every auto capability is assigned to a probe wave', () => {
     assert.doesNotThrow(() => assertAllAutoCapabilitiesWired(CAPABILITY_CATALOG));
   });
 
