@@ -3,10 +3,8 @@
  */
 
 import {
-  CAPABILITY_MATRIX_PROBE_WAVE_LABELS,
   CAPABILITY_MATRIX_PROBE_WAVES,
   allCapabilityGroupIds,
-  type CapabilityMatrixProbeWave,
 } from '../../benchmark/capabilities/matrix-run-filters.ts';
 import {
   abortCapabilityMatrixRun,
@@ -50,13 +48,6 @@ function readSelectedGroups(root: HTMLElement): CapabilityGroupId[] {
     'input[data-cap-matrix-group]:checked',
   );
   return [...boxes].map((box) => box.dataset.capMatrixGroup as CapabilityGroupId);
-}
-
-function readSelectedWaves(root: HTMLElement): CapabilityMatrixProbeWave[] {
-  const boxes = root.querySelectorAll<HTMLInputElement>(
-    'input[data-cap-matrix-wave]:checked',
-  );
-  return [...boxes].map((box) => box.dataset.capMatrixWave as CapabilityMatrixProbeWave);
 }
 
 function setAllChecked(
@@ -143,9 +134,7 @@ function buildRunParams(
     groupIds: readSelectedGroups(host).length
       ? readSelectedGroups(host)
       : allCapabilityGroupIds(),
-    probeWaves: readSelectedWaves(host).length
-      ? readSelectedWaves(host)
-      : [...CAPABILITY_MATRIX_PROBE_WAVES],
+    probeWaves: [...CAPABILITY_MATRIX_PROBE_WAVES],
     manageModelLifecycle: lifecycleInput.checked,
     onSettled: () => {
       void onSettled();
@@ -176,16 +165,16 @@ function paintRunState(root: HTMLElement, state: MatrixRunUiState): void {
   if (stopBtn) stopBtn.disabled = !running;
 
   const toggles = root.querySelectorAll<HTMLInputElement>(
-    'input[data-cap-matrix-filter], input[data-cap-matrix-group], input[data-cap-matrix-wave]',
+    'input[data-cap-matrix-filter], input[data-cap-matrix-group]',
   );
   for (const input of toggles) {
     input.disabled = running;
   }
 }
 
-function buildChecklistBlock(
+function buildGroupChecklistBlock(
   title: string,
-  items: Array<{ id: string; label: string; datasetKey: 'capMatrixGroup' | 'capMatrixWave' }>,
+  items: Array<{ id: string; label: string }>,
   host: HTMLElement,
 ): HTMLElement {
   const block = el('div', 'cap-matrix-run__filter-block');
@@ -197,12 +186,12 @@ function buildChecklistBlock(
   allBtn.type = 'button';
   const noneBtn = el('button', 'settings-inline-link', 'None');
   noneBtn.type = 'button';
-  const selector =
-    items[0]?.datasetKey === 'capMatrixGroup'
-      ? 'input[data-cap-matrix-group]'
-      : 'input[data-cap-matrix-wave]';
-  allBtn.addEventListener('click', () => setAllChecked(host, selector, true));
-  noneBtn.addEventListener('click', () => setAllChecked(host, selector, false));
+  allBtn.addEventListener('click', () =>
+    setAllChecked(host, 'input[data-cap-matrix-group]', true),
+  );
+  noneBtn.addEventListener('click', () =>
+    setAllChecked(host, 'input[data-cap-matrix-group]', false),
+  );
   actions.append(allBtn, noneBtn);
   head.appendChild(actions);
   block.appendChild(head);
@@ -213,11 +202,7 @@ function buildChecklistBlock(
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.checked = true;
-    if (item.datasetKey === 'capMatrixGroup') {
-      input.dataset.capMatrixGroup = item.id;
-    } else {
-      input.dataset.capMatrixWave = item.id;
-    }
+    input.dataset.capMatrixGroup = item.id;
     label.append(
       input,
       el('span', 'cap-matrix-run__checklist-label', item.label),
@@ -237,24 +222,11 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
   const filters = el('div', 'cap-matrix-run__filters');
 
   filters.appendChild(
-    buildChecklistBlock(
+    buildGroupChecklistBlock(
       'Capability groups',
       CAPABILITY_GROUP_ORDER.map((groupId) => ({
         id: groupId,
         label: CAPABILITY_GROUP_LABELS[groupId],
-        datasetKey: 'capMatrixGroup' as const,
-      })),
-      host,
-    ),
-  );
-
-  filters.appendChild(
-    buildChecklistBlock(
-      'Probe waves',
-      CAPABILITY_MATRIX_PROBE_WAVES.map((wave) => ({
-        id: wave,
-        label: CAPABILITY_MATRIX_PROBE_WAVE_LABELS[wave],
-        datasetKey: 'capMatrixWave' as const,
       })),
       host,
     ),
@@ -321,14 +293,13 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
           const roster = getRoster().filter((row) => row.enabled !== false);
           if (!roster.length) return;
           const groupIds = readSelectedGroups(host);
-          const probeWaves = readSelectedWaves(host);
           void startCapabilityMatrixRun({
             roster: getRoster(),
             viewModel: getViewModel(),
             allowSideEffects: sideEffectsInput.checked,
             skipScored: skipScoredInput.checked,
             groupIds: groupIds.length ? groupIds : allCapabilityGroupIds(),
-            probeWaves: probeWaves.length ? probeWaves : [...CAPABILITY_MATRIX_PROBE_WAVES],
+            probeWaves: [...CAPABILITY_MATRIX_PROBE_WAVES],
             manageModelLifecycle: lifecycleInput.checked,
             onSettled: () => {
               void onRunSettled();

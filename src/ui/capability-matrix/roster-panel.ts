@@ -4,10 +4,9 @@
 
 import type { CapabilityMatrixRosterEntry } from '../../benchmark/capabilities/roster-store.ts';
 import { groupRosterByHost } from '../../benchmark/capabilities/view-model.ts';
-import { fillModelSelect, fillProviderSelect } from '../settings-model-binding.ts';
+import { fillModelSelect, fillProviderSelect, fetchAllCatalogRosterTargets } from '../settings-model-binding.ts';
 import { mountAuxiliaryModelSelectCombobox } from '../model-select-picker.ts';
-import { fetchModelsForAllProviders } from '../../providers/fetch-all-models.ts';
-import { listProviders } from '../../providers/store.ts';
+import { LIBRARY_MODEL_PROVIDER_ID } from '../../models/model-select-library.ts';
 import { targetKeyFromTarget } from '../../benchmark/model-key.ts';
 import { createSettingsActionsRow } from '../settings-controls';
 import { setStatus } from '../status';
@@ -79,7 +78,10 @@ export function renderCapabilityRosterPanel(options: CapabilityRosterPanelOption
   modelWrap.append('Model', modelSelect);
   addRow.append(providerWrap, modelWrap);
 
-  void fillProviderSelect(providerSelect, '', { includeEmptyOption: false }).then(() => {
+  void fillProviderSelect(providerSelect, '', {
+    includeEmptyOption: false,
+    includeLibraryProvider: true,
+  }).then(() => {
     const providerId = providerSelect.value;
     if (providerId) {
       void fillModelSelect(modelSelect, providerId, '', { includeEmptyOption: false }).then(() => {
@@ -123,31 +125,31 @@ export function renderCapabilityRosterPanel(options: CapabilityRosterPanelOption
           void (async () => {
             try {
               setStatus('spin', 'Loading provider catalogs…');
-              const { providers } = await listProviders();
-              const enabled = providers.filter((p) => p.enabled !== false);
-              const controller = new AbortController();
-              const results = await fetchModelsForAllProviders(enabled, controller.signal);
+              const catalog = await fetchAllCatalogRosterTargets();
               const existing = new Set(roster.map((row) => targetKeyFromTarget(row)));
               const additions: CapabilityMatrixRosterEntry[] = [];
-              for (const result of results) {
-                for (const model of result.models) {
-                  const entry: CapabilityMatrixRosterEntry = {
-                    providerId: result.provider.id,
-                    modelId: model.id,
-                    enabled: true,
-                  };
-                  const key = targetKeyFromTarget(entry);
-                  if (existing.has(key)) continue;
-                  existing.add(key);
-                  additions.push(entry);
-                }
+              for (const entry of catalog) {
+                const row: CapabilityMatrixRosterEntry = {
+                  providerId: entry.providerId,
+                  modelId: entry.modelId,
+                  enabled: true,
+                };
+                const key = targetKeyFromTarget(row);
+                if (existing.has(key)) continue;
+                existing.add(key);
+                additions.push(row);
               }
               if (!additions.length) {
                 setStatus('ok', 'Roster already includes all catalog models');
                 return;
               }
               await onRosterChange([...roster, ...additions]);
-              setStatus('ok', `Added ${additions.length} model(s) to roster`);
+              const libraryCount = additions.filter(
+                (row) => row.providerId === LIBRARY_MODEL_PROVIDER_ID,
+              ).length;
+              const suffix =
+                libraryCount > 0 ? ` (${libraryCount} My Models)` : '';
+              setStatus('ok', `Added ${additions.length} model(s) to roster${suffix}`);
             } catch (err) {
               setStatus('err', err instanceof Error ? err.message : 'Bulk add failed');
             }
