@@ -69,6 +69,26 @@ export function argsTextFor(out: CapabilityProbeRunOutput, name: string): string
     .join(' ');
 }
 
+/**
+ * True when some call to `name` passed one of `uids` as its element uid.
+ *
+ * Substring matching on the raw arguments JSON (as `argsTextFor` does) is unsafe for
+ * numeric ids — "7" matches a coordinate or a length just as happily.
+ */
+export function usedStubUid(
+  out: CapabilityProbeRunOutput,
+  name: string,
+  uids: readonly number[],
+): boolean {
+  return out.toolCalls
+    .filter((c) => c.function.name === name)
+    .some((c) => {
+      const raw = parseToolArgs(c)?.uid;
+      const uid = typeof raw === 'string' ? Number(raw) : raw;
+      return typeof uid === 'number' && uids.includes(uid);
+    });
+}
+
 /** Round index (0-based) of the first call to `name`; -1 when never called. */
 export function firstRoundWithTool(out: CapabilityProbeRunOutput, name: string): number {
   return out.rounds.findIndex((r) => r.toolCalls.some((c) => c.function.name === name));

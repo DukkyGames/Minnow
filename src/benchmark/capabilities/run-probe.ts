@@ -60,6 +60,22 @@ function mapToolCalls(toolCalls: ToolCall[]): CapabilityProbeRunOutput['toolCall
   }));
 }
 
+/**
+ * Every call the model emitted, across all rounds.
+ *
+ * `OneShotResult.toolCalls` only carries the *last* batch (`preserveLastToolCalls` keeps
+ * the final non-empty turn), so a two-round chain like save→append handed the verdict the
+ * append alone and scored `fail`. Round telemetry has the full history; fall back to the
+ * one-shot batch for probes that never run the loop and so emit no rounds.
+ */
+function allProbeToolCalls(
+  out: OneShotResult,
+  rounds: CapabilityRoundTelemetry[],
+): CapabilityProbeRunOutput['toolCalls'] {
+  const fromRounds = rounds.flatMap((r) => r.toolCalls);
+  return fromRounds.length > 0 ? fromRounds : mapToolCalls(out.toolCalls);
+}
+
 function probeOutputFromOneShot(
   out: OneShotResult,
   rounds: CapabilityRoundTelemetry[],
@@ -71,7 +87,7 @@ function probeOutputFromOneShot(
     contentText: out.contentText,
     reasoningText: out.reasoningText,
     streamChunkCount: out.timing.streamChunkCount,
-    toolCalls: mapToolCalls(out.toolCalls),
+    toolCalls: allProbeToolCalls(out, rounds),
     rounds,
     executedResults,
     offeredToolNames,

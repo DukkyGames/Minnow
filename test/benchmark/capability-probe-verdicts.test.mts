@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { CAPABILITY_PROBE_BY_ID } from '../../src/benchmark/capabilities/probes.ts';
 import {
-  CAP_STUB_SNAPSHOT_REFS,
+  CAP_STUB_SNAPSHOT_UIDS,
   CAP_STUB_SUB_AGENT_ID,
   CAP_STUB_THREAD_ID,
 } from '../../src/benchmark/capabilities/stub-fixtures.ts';
@@ -132,24 +132,31 @@ describe('capability probe verdicts', () => {
     assert.equal(verdictOf('code-execute-command', out()), 'fail');
   });
 
-  test('browser-snapshot requires the refs the snapshot handed back', () => {
-    const withRef = out({
+  test('browser-snapshot requires the uids the snapshot handed back', () => {
+    const withUid = out({
       toolCalls: [
         call('browser_snapshot'),
-        call('browser_fill', { ref: CAP_STUB_SNAPSHOT_REFS[0], value: 'foo' }),
+        call('browser_fill', { uid: CAP_STUB_SNAPSHOT_UIDS[0], value: 'foo' }),
       ],
     });
-    assert.equal(verdictOf('browser-snapshot', withRef), 'pass');
+    assert.equal(verdictOf('browser-snapshot', withUid), 'pass');
 
-    const guessedRef = out({
+    const guessedTarget = out({
       toolCalls: [call('browser_snapshot'), call('browser_fill', { selector: '#search' })],
     });
-    assert.equal(verdictOf('browser-snapshot', guessedRef), 'partial');
+    assert.equal(verdictOf('browser-snapshot', guessedTarget), 'partial');
+
+    // A uid that isn't one the snapshot returned must not pass just because the
+    // digits appear somewhere in the arguments JSON.
+    const wrongUid = out({
+      toolCalls: [call('browser_snapshot'), call('browser_fill', { uid: 1, value: '7' })],
+    });
+    assert.equal(verdictOf('browser-snapshot', wrongUid), 'partial');
 
     const snapshotOnly = out({ toolCalls: [call('browser_snapshot')] });
     assert.equal(verdictOf('browser-snapshot', snapshotOnly), 'partial');
 
-    const blindClick = out({ toolCalls: [call('browser_click', { ref: 'ref_1' })] });
+    const blindClick = out({ toolCalls: [call('browser_click', { uid: 1 })] });
     assert.equal(verdictOf('browser-snapshot', blindClick), 'fail');
   });
 

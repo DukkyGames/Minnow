@@ -53,7 +53,10 @@ mock.module('../../src/benchmark/llm-driver.ts', {
     ) => {
       lastDriverCall = { messages: input.messages, tools: input.tools ?? [] };
       executedContents = [];
-      const emitted: ToolCall[] = [];
+      // The real loop returns only the *last* batch (`preserveLastToolCalls`); the full
+      // history lives in the round telemetry. Mirror that, or probes that lose an early
+      // call keep passing here while failing in a live run.
+      let lastBatch: ToolCall[] = [];
       let round = 0;
       for (const scripted of scriptedCalls) {
         const toolCall: ToolCall = {
@@ -61,7 +64,7 @@ mock.module('../../src/benchmark/llm-driver.ts', {
           type: 'function',
           function: { name: scripted.name, arguments: JSON.stringify(scripted.args) },
         };
-        emitted.push(toolCall);
+        lastBatch = [toolCall];
         input.onRound?.({ round, toolCalls: [{ function: toolCall.function }] });
         // `runHeadlessToolBatch` turns a throwing tool into a tool message rather than
         // aborting the loop — model that here so probes are scored, not error-failed.
@@ -73,7 +76,7 @@ mock.module('../../src/benchmark/llm-driver.ts', {
         }
         round += 1;
       }
-      return baseOneShot({ toolCalls: emitted });
+      return baseOneShot({ toolCalls: lastBatch });
     },
     preserveLastToolCalls: (prev: ToolCall[], next: ToolCall[]) =>
       next.length > 0 ? next : prev,
@@ -82,7 +85,7 @@ mock.module('../../src/benchmark/llm-driver.ts', {
 
 const { getCapabilityById } = await import('../../src/benchmark/capabilities/catalog.ts');
 const { runCapabilityProbe } = await import('../../src/benchmark/capabilities/run-probe.ts');
-const { CAP_STUB_SNAPSHOT_REFS, CAP_STUB_THREAD_ID } = await import(
+const { CAP_STUB_SNAPSHOT_UIDS, CAP_STUB_THREAD_ID } = await import(
   '../../src/benchmark/capabilities/stub-fixtures.ts'
 );
 
@@ -112,12 +115,26 @@ describe('runCapabilityProbe execution plumbing', () => {
     const result = await runCapabilityProbe(ctx, cap!);
     assert.equal(result.skipped, false);
     assert.equal(executedContents.length, 1);
-    const stub = JSON.parse(executedContents[0]!) as { stubbed: string; nodes: { ref: string }[] };
+    const stub = JSON.parse(executedContents[0]!) as { stubbed: string; nodes: { uid: number }[] };
     assert.equal(stub.stubbed, 'browser_snapshot');
+    // uids, not `ref_N`: browser_click / browser_fill only accept `uid: number`, so a
+    // stub that hands back anything else can never be replayed into the next call.
     assert.deepEqual(
-      stub.nodes.map((n) => n.ref),
-      [...CAP_STUB_SNAPSHOT_REFS],
+      stub.nodes.map((n) => n.uid),
+      [...CAP_STUB_SNAPSHOT_UIDS],
     );
+  });
+
+  test('the snapshot stub hands back uids the fill tool actually accepts', async () => {
+    const cap = getCapabilityById('browser-snapshot');
+    assert.ok(cap);
+    scriptedCalls = [
+      { name: 'browser_snapshot', args: {} },
+      { name: 'browser_fill', args: { uid: CAP_STUB_SNAPSHOT_UIDS[0], value: 'foo' } },
+      { name: 'browser_click', args: { uid: CAP_STUB_SNAPSHOT_UIDS[1] } },
+    ];
+    const result = await runCapabilityProbe(ctx, cap!);
+    assert.equal(result.verdict, 'pass');
   });
 
   test('a probe that reuses the stubbed id scores above one that guesses', async () => {
@@ -135,6 +152,26 @@ describe('runCapabilityProbe execution plumbing', () => {
       { name: 'get_thread', args: { threadId: 'invented-id' } },
     ];
     assert.equal((await runCapabilityProbe(ctx, cap!)).verdict, 'partial');
+  });
+
+  test('a chain split across rounds is scored on every call, not the last batch', async () => {
+    const cap = getCapabilityById('files-save-append');
+    assert.ok(cap);
+    scriptedCalls = [
+      { name: 'save_file', args: { path: 'matrix/notes.md', content: '- one\n- two\n- three\n' } },
+      { name: 'append_file', args: { path: 'matrix/notes.md', content: '- four\n' } },
+    ];
+    const result = await runCapabilityProbe(ctx, cap!);
+    assert.equal(result.skipped, false);
+    assert.equal(result.verdict, 'pass');
+
+    const browser = getCapabilityById('browser-navigate');
+    assert.ok(browser);
+    scriptedCalls = [
+      { name: 'browser_new_tab', args: { url: 'https://example.com' } },
+      { name: 'browser_list', args: {} },
+    ];
+    assert.equal((await runCapabilityProbe(ctx, browser!)).verdict, 'pass');
   });
 
   test('tool results reach the verdict via executedResults', async () => {

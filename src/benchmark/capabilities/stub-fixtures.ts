@@ -6,8 +6,14 @@
  * tool would, with stable ids the verdicts check the model actually reused.
  */
 
-/** Refs the browser snapshot stub hands back (browser-snapshot probe). */
-export const CAP_STUB_SNAPSHOT_REFS = ['ref_7', 'ref_8'] as const;
+/**
+ * Element uids the browser snapshot stub hands back (browser-snapshot probe).
+ *
+ * Numbers, not `ref_N` strings: the real snapshot stamps numeric `data-mn-uid`s and
+ * `browser_click` / `browser_fill` take `uid: number`. A stub speaking a shape the
+ * schema rejects forced the model to invent a translation and scored it down for it.
+ */
+export const CAP_STUB_SNAPSHOT_UIDS = [7, 8] as const;
 
 /** Sub-agent id returned as still running (agents-sub-agent-control probe). */
 export const CAP_STUB_SUB_AGENT_ID = 'sub-agent-cap-42';
@@ -19,14 +25,23 @@ export const CAP_STUB_BOARD_TASK_ID = 'task-1';
 export const CAP_STUB_THREAD_ID = 'thread-cap-9001';
 
 const STUB_BY_TOOL: Record<string, unknown> = {
+  // Two tabs, the newly opened one active: a listing that still showed only
+  // `about:blank` after the model had just opened a tab read as a broken environment,
+  // and models burned their answer explaining the contradiction.
   browser_list: {
-    tabs: [{ tabId: 'tab_1', url: 'about:blank', active: true }],
+    tabs: [
+      { tabId: 'tab_1', url: 'about:blank', active: false },
+      { tabId: 'tab_2', url: 'https://example.com/', active: true },
+    ],
   },
   browser_snapshot: {
     url: 'https://example.com/',
+    // `text` mirrors what the real tool renders (`[uid] role "name"`), so the uid the
+    // model must pass back to browser_fill / browser_click is unmistakable.
+    text: `[${CAP_STUB_SNAPSHOT_UIDS[0]}] textbox "Search"\n[${CAP_STUB_SNAPSHOT_UIDS[1]}] button "Submit"`,
     nodes: [
-      { ref: CAP_STUB_SNAPSHOT_REFS[0], role: 'textbox', name: 'Search' },
-      { ref: CAP_STUB_SNAPSHOT_REFS[1], role: 'button', name: 'Submit' },
+      { uid: CAP_STUB_SNAPSHOT_UIDS[0], role: 'textbox', name: 'Search' },
+      { uid: CAP_STUB_SNAPSHOT_UIDS[1], role: 'button', name: 'Submit' },
     ],
   },
   browser_eval: { result: 'rgb(255, 255, 255)' },

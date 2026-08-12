@@ -16,10 +16,11 @@ import {
   hasTool,
   partial,
   pass,
+  usedStubUid,
 } from './probe-helpers.ts';
 import {
   CAP_STUB_BOARD_TASK_ID,
-  CAP_STUB_SNAPSHOT_REFS,
+  CAP_STUB_SNAPSHOT_UIDS,
   CAP_STUB_SUB_AGENT_ID,
   CAP_STUB_THREAD_ID,
 } from './stub-fixtures.ts';
@@ -72,12 +73,12 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
       }
       const acted = hasAnyTool(out.toolCalls, ['browser_fill', 'browser_click']);
       if (!acted) return partial('Snapshotted but never acted on the page');
-      const refOk =
-        usedStubId(out, 'browser_fill', CAP_STUB_SNAPSHOT_REFS) ||
-        usedStubId(out, 'browser_click', CAP_STUB_SNAPSHOT_REFS);
-      return refOk
-        ? pass('Snapshotted, then used the returned refs')
-        : partial('Acted on the page without the refs the snapshot returned');
+      const uidOk =
+        usedStubUid(out, 'browser_fill', CAP_STUB_SNAPSHOT_UIDS) ||
+        usedStubUid(out, 'browser_click', CAP_STUB_SNAPSHOT_UIDS);
+      return uidOk
+        ? pass('Snapshotted, then acted on the uids it returned')
+        : partial('Acted on the page without the uids the snapshot returned');
     },
   },
   'browser-eval': {
