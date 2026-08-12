@@ -112,10 +112,22 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   const shell = el('div', 'settings-general settings-general--wide cap-matrix-shell');
   mount.appendChild(shell);
 
-  const lead = el('p', 'settings-section-lead');
-  lead.textContent =
-    'Compare model capability across your roster. Run auto probes, edit manual cells, and export results.';
-  shell.appendChild(lead);
+  const commandBar = el('div', 'cap-matrix-command-bar');
+  const commandCopy = el('div', 'cap-matrix-command-bar__copy');
+  commandCopy.appendChild(
+    el(
+      'p',
+      'settings-section-lead cap-matrix-command-bar__lead',
+      'Compare model capability across your roster. Run auto probes, edit manual cells, and export results.',
+    ),
+  );
+  commandCopy.appendChild(
+    el(
+      'p',
+      'settings-field-hint cap-matrix-command-bar__hint',
+      'Export uses SheetJS in the browser. Only cell values and catalog headers are included.',
+    ),
+  );
 
   const headerActions = createSettingsActionsRow(
     [
@@ -134,6 +146,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     ],
     { searchKey: 'advanced.capabilityMatrix.export' },
   );
+  headerActions.classList.add('cap-matrix-command-bar__actions');
   const exportBtn = headerActions.querySelector('button');
   if (exportBtn) {
     exportBtn.dataset.settingsSearchKey = 'advanced.capabilityMatrix.export';
@@ -149,13 +162,8 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   importLabel.appendChild(importInput);
   headerActions.appendChild(importLabel);
 
-  const xlsxNote = el('p', 'settings-field-hint cap-matrix-xlsx-note');
-  xlsxNote.textContent =
-    'Export uses SheetJS in the browser. Only cell values and catalog headers are included.';
-
-  const headerRow = el('div', 'cap-matrix-header-row');
-  headerRow.append(headerActions, xlsxNote);
-  shell.appendChild(headerRow);
+  commandBar.append(commandCopy, headerActions);
+  shell.appendChild(commandBar);
 
   const serverUp = (await detectConfigServer()) === 'server';
   if (isAsyncSectionRenderStale('capability-matrix', generation)) return;
@@ -172,38 +180,43 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
 
   const body = el('div', 'cap-matrix-workbench__body');
 
-  const rail = el('aside', 'cap-matrix-rail settings-group settings-group--emphasis');
+  const rail = el('aside', 'cap-matrix-rail');
   rail.dataset.settingsSearchKey = 'advanced.capabilityMatrix.roster';
 
-  const rosterSection = el('section', 'cap-matrix-rail__section');
-  const rosterTitle = el('h3', 'settings-group__title', 'Models');
-  rosterSection.appendChild(rosterTitle);
-  rosterSection.appendChild(
-    el('p', 'settings-group__lead', 'Grouped by Cloud, LM Studio, or Minnow Hosting.'),
+  const rosterDrawer = el('details', 'cap-matrix-rail__drawer');
+  rosterDrawer.open = true;
+  const rosterSummary = el('summary', 'cap-matrix-rail__drawer-summary', 'Models');
+  rosterSummary.appendChild(
+    el('span', 'cap-matrix-rail__drawer-hint', 'Cloud, LM Studio, or Minnow Hosting'),
   );
+  const rosterBody = el('div', 'cap-matrix-rail__drawer-body');
   const rosterHost = el('div', 'cap-matrix-roster-host');
-  rosterSection.appendChild(rosterHost);
+  rosterBody.appendChild(rosterHost);
+  rosterDrawer.append(rosterSummary, rosterBody);
 
-  const runSection = el('section', 'cap-matrix-rail__section');
-  runSection.dataset.settingsSearchKey = 'advanced.capabilityMatrix.run';
-  runSection.appendChild(el('h3', 'settings-group__title', 'Run probes'));
-  runSection.appendChild(
+  const runDrawer = el('details', 'cap-matrix-rail__drawer');
+  runDrawer.open = true;
+  runDrawer.dataset.settingsSearchKey = 'advanced.capabilityMatrix.run';
+  const runSummary = el('summary', 'cap-matrix-rail__drawer-summary', 'Run probes');
+  runSummary.appendChild(
     el(
-      'p',
-      'settings-group__lead',
-      'Pick capability groups and probe waves, then run auto probes across the roster.',
+      'span',
+      'cap-matrix-rail__drawer-hint',
+      'Groups, waves, and sweep options',
     ),
   );
+  const runBody = el('div', 'cap-matrix-rail__drawer-body');
   const runHost = el('div', 'cap-matrix-run-host');
-  runSection.appendChild(runHost);
+  runBody.appendChild(runHost);
+  runDrawer.append(runSummary, runBody);
 
   const historyHost = el('div', 'cap-matrix-history-host');
   const railFooter = el('div', 'cap-matrix-rail__footer');
   railFooter.appendChild(historyHost);
 
-  rail.append(rosterSection, runSection, railFooter);
+  rail.append(rosterDrawer, runDrawer, railFooter);
 
-  const main = el('main', 'cap-matrix-main settings-group settings-group--emphasis');
+  const main = el('main', 'cap-matrix-main');
   main.dataset.settingsSearchKey = 'advanced.capabilityMatrix.grid';
   const gridToolbarHost = el('div', 'cap-matrix-grid-toolbar-host');
   const gridHost = el('div', 'cap-matrix-grid-host');

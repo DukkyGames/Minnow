@@ -1,5 +1,5 @@
 /**
- * Capability matrix — grid toolbar (search, group filter, verdict legend).
+ * Capability matrix — grid toolbar (search, group filter chips, verdict legend).
  */
 
 import { CAPABILITY_GROUP_LABELS, CAPABILITY_GROUP_ORDER } from '../../benchmark/capabilities/groups.ts';
@@ -50,13 +50,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Mount search, group checklist, and inline verdict legend above the grid. */
+/** Mount search, group chips, and inline verdict legend above the grid. */
 export function mountCapabilityGridToolbar(
   options: CapabilityGridToolbarOptions,
 ): () => void {
   const { host, onFilterChange } = options;
   host.replaceChildren();
-  host.className = 'cap-matrix-grid-toolbar settings-group__body';
+  host.className = 'cap-matrix-grid-toolbar';
 
   const filter: CapabilityGridFilter = createDefaultGridFilter();
 
@@ -64,62 +64,16 @@ export function mountCapabilityGridToolbar(
     onFilterChange({ ...filter, groupIds: new Set(filter.groupIds) });
   };
 
-  const searchRow = el('div', 'settings-row settings-row--control-only');
-  const searchControl = el('div', 'settings-row__control');
+  const head = el('div', 'cap-matrix-grid-toolbar__head');
+
+  const searchWrap = el('div', 'cap-matrix-grid-toolbar__search');
   const searchInput = document.createElement('input');
   searchInput.type = 'search';
-  searchInput.className = 'settings-input';
+  searchInput.className = 'settings-input cap-matrix-grid-toolbar__search-input';
   searchInput.placeholder = 'Filter capabilities by name or id…';
   searchInput.autocomplete = 'off';
   searchInput.setAttribute('aria-label', 'Filter capabilities');
-  searchControl.appendChild(searchInput);
-  searchRow.appendChild(searchControl);
-
-  const groupBlock = el('div', 'cap-matrix-grid-toolbar__groups-block');
-  const groupHead = el('div', 'cap-matrix-run__filter-head');
-  groupHead.appendChild(el('span', 'settings-field-stack__label', 'Show groups'));
-  const groupActions = el('div', 'cap-matrix-run__filter-actions');
-  const showAllBtn = el('button', 'settings-inline-link', 'All');
-  showAllBtn.type = 'button';
-  const clearGroupsBtn = el('button', 'settings-inline-link', 'None');
-  clearGroupsBtn.type = 'button';
-  groupActions.append(showAllBtn, clearGroupsBtn);
-  groupHead.appendChild(groupActions);
-  groupBlock.appendChild(groupHead);
-
-  const checklist = el('div', 'settings-checklist cap-matrix-grid-toolbar__checklist');
-  for (const groupId of CAPABILITY_GROUP_ORDER) {
-    const chipLabel = el('label', 'settings-checklist__option');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.dataset.capGridGroup = groupId;
-    chipLabel.append(input, el('span', 'settings-checklist__label-text', CAPABILITY_GROUP_LABELS[groupId]));
-    input.addEventListener('change', () => {
-      if (input.checked) {
-        filter.groupIds.add(groupId);
-      } else {
-        filter.groupIds.delete(groupId);
-      }
-      notify();
-    });
-    checklist.appendChild(chipLabel);
-  }
-  groupBlock.appendChild(checklist);
-
-  showAllBtn.addEventListener('click', () => {
-    for (const input of checklist.querySelectorAll<HTMLInputElement>('input')) {
-      input.checked = true;
-      filter.groupIds.add(input.dataset.capGridGroup as CapabilityGroupId);
-    }
-    notify();
-  });
-  clearGroupsBtn.addEventListener('click', () => {
-    for (const input of checklist.querySelectorAll<HTMLInputElement>('input')) {
-      input.checked = false;
-    }
-    filter.groupIds.clear();
-    notify();
-  });
+  searchWrap.appendChild(searchInput);
 
   const legend = el('div', 'cap-matrix-grid-toolbar__legend');
   legend.setAttribute('aria-label', 'Verdict legend');
@@ -131,17 +85,84 @@ export function mountCapabilityGridToolbar(
     { glyph: capabilityVerdictGlyph('untested'), label: 'Untested', verdict: 'untested' },
   ];
   for (const item of legendItems) {
-    const span = el('span', `cap-matrix-grid-toolbar__legend-item cap-matrix-grid-toolbar__legend-item--${item.verdict}`);
-    span.append(el('span', 'cap-matrix-grid-toolbar__legend-glyph', item.glyph), document.createTextNode(item.label));
+    const span = el(
+      'span',
+      `cap-matrix-grid-toolbar__legend-item cap-matrix-grid-toolbar__legend-item--${item.verdict}`,
+    );
+    span.append(
+      el('span', 'cap-matrix-grid-toolbar__legend-glyph', item.glyph),
+      document.createTextNode(item.label),
+    );
     legend.appendChild(span);
   }
+
+  head.append(searchWrap, legend);
+
+  const groupBlock = el('div', 'cap-matrix-grid-toolbar__groups');
+  const groupHead = el('div', 'cap-matrix-grid-toolbar__groups-head');
+  groupHead.appendChild(el('span', 'cap-matrix-grid-toolbar__groups-label', 'Show groups'));
+  const groupActions = el('div', 'cap-matrix-run__filter-actions');
+  const showAllBtn = el('button', 'settings-inline-link', 'All');
+  showAllBtn.type = 'button';
+  const clearGroupsBtn = el('button', 'settings-inline-link', 'None');
+  clearGroupsBtn.type = 'button';
+  groupActions.append(showAllBtn, clearGroupsBtn);
+  groupHead.appendChild(groupActions);
+  groupBlock.appendChild(groupHead);
+
+  const chips = el('div', 'cap-matrix-grid-toolbar__chips');
+  chips.setAttribute('role', 'group');
+  chips.setAttribute('aria-label', 'Capability group filters');
+
+  const chipInputs: HTMLInputElement[] = [];
+
+  for (const groupId of CAPABILITY_GROUP_ORDER) {
+    const chipLabel = el('label', 'cap-matrix-filter-chip');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.className = 'cap-matrix-filter-chip__input';
+    input.dataset.capGridGroup = groupId;
+    chipLabel.append(
+      input,
+      el('span', 'cap-matrix-filter-chip__text', CAPABILITY_GROUP_LABELS[groupId]),
+    );
+    input.addEventListener('change', () => {
+      if (input.checked) {
+        filter.groupIds.add(groupId);
+      } else {
+        filter.groupIds.delete(groupId);
+      }
+      chipLabel.classList.toggle('is-active', input.checked);
+      notify();
+    });
+    chipInputs.push(input);
+    chips.appendChild(chipLabel);
+  }
+  groupBlock.appendChild(chips);
+
+  showAllBtn.addEventListener('click', () => {
+    for (const input of chipInputs) {
+      input.checked = true;
+      filter.groupIds.add(input.dataset.capGridGroup as CapabilityGroupId);
+      input.closest('.cap-matrix-filter-chip')?.classList.add('is-active');
+    }
+    notify();
+  });
+  clearGroupsBtn.addEventListener('click', () => {
+    for (const input of chipInputs) {
+      input.checked = false;
+      input.closest('.cap-matrix-filter-chip')?.classList.remove('is-active');
+    }
+    filter.groupIds.clear();
+    notify();
+  });
 
   searchInput.addEventListener('input', () => {
     filter.search = searchInput.value;
     notify();
   });
 
-  host.append(searchRow, groupBlock, legend);
+  host.append(head, groupBlock);
 
   return () => {
     searchInput.removeEventListener('input', notify);

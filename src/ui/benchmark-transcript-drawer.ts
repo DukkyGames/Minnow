@@ -69,8 +69,8 @@ export function openBenchmarkTranscriptDrawer(
 ): void {
   closeBenchmarkTranscriptDrawer();
 
-  const root = document.getElementById('benchmarkView') ?? document.body;
-  if (!root) return;
+  // Always mount on body so the drawer is visible from Settings (Bench view is hidden).
+  const root = document.body;
 
   const backdrop = document.createElement('div');
   backdrop.className = 'benchmark-transcript-drawer-backdrop';

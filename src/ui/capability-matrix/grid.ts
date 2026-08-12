@@ -111,6 +111,9 @@ function renderCellButton(
   return btn;
 }
 
+/** Model columns at or below this count expand to fill the grid pane. */
+const SPARSE_COLUMN_THRESHOLD = 8;
+
 /** Render sticky-header grid for the current view-model. */
 export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () => void {
   const { host, model, campaigns, onSelectCell, onOpenTranscript } = options;
@@ -141,7 +144,13 @@ export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () =
   const table = el('div', 'cap-matrix-grid');
   table.setAttribute('role', 'grid');
   table.setAttribute('aria-label', 'Capability matrix');
-  table.style.setProperty('--cap-matrix-cols', String(model.targetKeys.length));
+  const colCount = model.targetKeys.length;
+  table.style.setProperty('--cap-matrix-cols', String(colCount));
+  if (colCount <= SPARSE_COLUMN_THRESHOLD) {
+    table.classList.add('cap-matrix-grid--sparse');
+  } else {
+    table.classList.add('cap-matrix-grid--dense');
+  }
 
   const headerRow = el('div', 'cap-matrix-grid__row cap-matrix-grid__row--header');
   const corner = el('div', 'cap-matrix-grid__corner', 'Capability');
@@ -150,6 +159,7 @@ export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () =
   for (const targetKey of model.targetKeys) {
     const col = el('div', 'cap-matrix-grid__col-head');
     const label = el('span', 'cap-matrix-grid__col-label', model.targetLabels[targetKey] ?? targetKey);
+    label.title = model.targetLabels[targetKey] ?? targetKey;
     const scoreValue = model.columnScores[targetKey] ?? null;
     const score = el('span', 'cap-matrix-grid__col-score', formatColumnScore(scoreValue));
     const tier = scoreTier(scoreValue);
@@ -196,6 +206,11 @@ export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () =
   }
 
   scroll.appendChild(table);
+  if (colCount <= SPARSE_COLUMN_THRESHOLD) {
+    scroll.classList.add('cap-matrix-grid__scroll--sparse');
+  } else {
+    scroll.classList.add('cap-matrix-grid__scroll--dense');
+  }
   host.appendChild(scroll);
 
   return attachCapabilityGridKeyboardNav(table);

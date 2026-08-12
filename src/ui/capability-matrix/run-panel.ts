@@ -207,9 +207,9 @@ function buildChecklistBlock(
   head.appendChild(actions);
   block.appendChild(head);
 
-  const checklist = el('div', 'settings-checklist cap-matrix-run__checklist');
+  const checklist = el('div', 'cap-matrix-run__checklist');
   for (const item of items) {
-    const label = el('label', 'settings-checklist__option');
+    const label = el('label', 'cap-matrix-run__checklist-option');
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.checked = true;
@@ -220,7 +220,7 @@ function buildChecklistBlock(
     }
     label.append(
       input,
-      el('span', 'settings-checklist__label-text', item.label),
+      el('span', 'cap-matrix-run__checklist-label', item.label),
     );
     checklist.appendChild(label);
   }
@@ -232,7 +232,7 @@ function buildChecklistBlock(
 export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () => void {
   const { host, getRoster, getViewModel, onRunSettled } = options;
   host.replaceChildren();
-  host.className = 'cap-matrix-run settings-group__body';
+  host.className = 'cap-matrix-run';
 
   const filters = el('div', 'cap-matrix-run__filters');
 
@@ -296,6 +296,8 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
 
   host.appendChild(filters);
 
+  const dock = el('div', 'cap-matrix-run__dock');
+
   const progress = el('div', 'cap-matrix-run__progress');
   progress.setAttribute('role', 'progressbar');
   progress.setAttribute('aria-valuemin', '0');
@@ -308,7 +310,7 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
   const phase = el('p', 'cap-matrix-run__phase settings-field-hint');
   const detail = el('p', 'cap-matrix-run__progress-detail settings-field-hint');
   const chipsHost = el('div', 'cap-matrix-run__targets-host');
-  host.append(progress, phase, detail, chipsHost);
+  dock.append(progress, phase, detail, chipsHost);
 
   const actions = createSettingsActionsRow(
     [
@@ -351,7 +353,8 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
   const stopBtn = actions.querySelectorAll<HTMLButtonElement>('button')[1];
   if (stopBtn) stopBtn.dataset.capMatrixStop = '1';
 
-  host.appendChild(actions);
+  dock.appendChild(actions);
+  host.appendChild(dock);
 
   const refreshResume = (): void => {
     paintResumeBanner(
