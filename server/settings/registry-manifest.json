@@ -2301,12 +2301,14 @@
   },
   {
     "key": "advanced.capabilityMatrix.cell",
-    "label": "Manual cell editor",
+    "label": "Cell transcript",
     "keywords": [
       "verdict",
       "note",
       "override",
-      "manual cell"
+      "manual cell",
+      "transcript",
+      "drawer"
     ],
     "category": "advanced",
     "area": "capability-matrix",

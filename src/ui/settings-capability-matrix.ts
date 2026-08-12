@@ -35,7 +35,6 @@ import {
 import { appConfirm } from './app-dialog';
 import { downloadCapabilityMatrixXlsx } from './capability-matrix/export-xlsx.ts';
 import { importCapabilityMatrixXlsxFile } from './capability-matrix/import-xlsx.ts';
-import { mountCapabilityCellEditor } from './capability-matrix/cell-editor.ts';
 import { openCapabilityCellTranscript } from './capability-matrix/cell-transcript.ts';
 import { renderCapabilityMatrixGrid } from './capability-matrix/grid.ts';
 import {
@@ -53,7 +52,6 @@ import { setStatus } from './status';
 import { closeBenchmarkTranscriptDrawer } from './benchmark-transcript-drawer.ts';
 
 const disposers: Array<() => void> = [];
-let disposeCellEditor: (() => void) | null = null;
 let disposeRunPanel: (() => void) | null = null;
 let disposeGridNav: (() => void) | null = null;
 let disposeGridToolbar: (() => void) | null = null;
@@ -62,8 +60,6 @@ let gridFilter: CapabilityGridFilter = createDefaultGridFilter();
 
 /** Tear down listeners and child editors before re-render or navigation. */
 export function disposeCapabilityMatrix(): void {
-  disposeCellEditor?.();
-  disposeCellEditor = null;
   disposeRunPanel?.();
   disposeRunPanel = null;
   disposeGridNav?.();
@@ -126,7 +122,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     el(
       'p',
       'settings-section-lead cap-matrix-command-bar__lead',
-      'Compare model capability across your roster. Run auto probes, edit manual cells, and export results.',
+      'Compare model capability across your roster. Click a cell for the probe transcript and a manual verdict.',
     ),
   );
   commandCopy.appendChild(
@@ -228,9 +224,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   main.dataset.settingsSearchKey = 'advanced.capabilityMatrix.grid';
   const gridToolbarHost = el('div', 'cap-matrix-grid-toolbar-host');
   const gridHost = el('div', 'cap-matrix-grid-host');
-  const editorHost = el('div', 'cap-matrix-cell-editor-host');
-  editorHost.hidden = true;
-  main.append(gridToolbarHost, gridHost, editorHost);
+  main.append(gridToolbarHost, gridHost);
 
   body.append(rail, main);
   content.appendChild(body);
@@ -257,6 +251,8 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   let latestManualStore = manualStore;
   let campaignBodies = campaigns;
 
+  let openSelection: { targetKey: string; capabilityId: string } | null = null;
+
   function rebuildViewModel(): void {
     viewModel = buildCapabilityMatrixViewModel({
       roster,
@@ -273,32 +269,34 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
       model: viewModel,
       campaigns: campaignBodies,
       filter: gridFilter,
+      openCell: openSelection,
       getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
       onSelectCell: (selection) => {
-        disposeCellEditor?.();
         const cell = viewModel.cellByKey.get(
           `${selection.targetKey}::${selection.capabilityId}`,
         );
         if (!cell) return;
-        disposeCellEditor = mountCapabilityCellEditor(cell, {
-          host: editorHost,
-          targetLabel: viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
+        // Click opens the transcript panel; the former bottom editor lives there.
+        openSelection = selection;
+        openCapabilityCellTranscript(cell, {
           campaigns: campaignBodies,
+          targetLabel: viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
           getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
           onSaved: refreshView,
+          onClose: () => {
+            if (
+              openSelection?.targetKey !== selection.targetKey ||
+              openSelection.capabilityId !== selection.capabilityId
+            ) {
+              return;
+            }
+            openSelection = null;
+            const openBtn = gridHost.querySelector('.cap-matrix-grid__cell.is-open');
+            openBtn?.classList.remove('is-open');
+            openBtn?.setAttribute('aria-pressed', 'false');
+          },
         });
-      },
-      onOpenTranscript: (selection) => {
-        const cell = viewModel.cellByKey.get(
-          `${selection.targetKey}::${selection.capabilityId}`,
-        );
-        if (!cell) return;
-        openCapabilityCellTranscript(
-          cell,
-          campaignBodies,
-          viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
-          findInFlightCapabilityProbeLookup,
-        );
+        paintGrid();
       },
     });
   }

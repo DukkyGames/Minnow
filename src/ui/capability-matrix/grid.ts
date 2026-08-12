@@ -43,12 +43,13 @@ export type CapabilityGridOptions = {
   model: CapabilityMatrixViewModel;
   campaigns: BenchmarkCampaign[];
   filter?: CapabilityGridFilter;
+  /** Cell whose transcript panel is currently open. */
+  openCell?: CapabilityGridSelection | null;
   getInFlightProbeLookup?: (
     targetKey: string,
     capabilityId: string,
   ) => CapabilityProbeLookup | null;
   onSelectCell: (selection: CapabilityGridSelection) => void;
-  onOpenTranscript?: (selection: CapabilityGridSelection) => void;
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -83,7 +84,7 @@ function renderCellButton(
   campaigns: BenchmarkCampaign[],
   getInFlightProbeLookup: CapabilityGridOptions['getInFlightProbeLookup'],
   onSelectCell: (selection: CapabilityGridSelection) => void,
-  onOpenTranscript: ((selection: CapabilityGridSelection) => void) | undefined,
+  openCell: CapabilityGridSelection | null | undefined,
 ): HTMLButtonElement {
   const cell = row.cells[index];
   const btn = el('button', 'cap-matrix-grid__cell');
@@ -95,6 +96,10 @@ function renderCellButton(
   btn.dataset.capCol = String(colIndex);
   if (cell?.overridesAuto) btn.classList.add('cap-matrix-grid__cell--conflict');
   if (row.scoreMode === 'manual') btn.classList.add('cap-matrix-grid__cell--manual-row');
+  const isOpen =
+    openCell?.targetKey === targetKey && openCell.capabilityId === row.capabilityId;
+  if (isOpen) btn.classList.add('is-open');
+  btn.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
   btn.textContent = capabilityVerdictGlyph(verdict);
   const lookup = resolveCapabilityProbeLookup(
     campaigns,
@@ -104,21 +109,13 @@ function renderCellButton(
   );
   const canTranscript = capabilityCellHasTranscriptDrillDown(lookup);
   if (canTranscript) btn.dataset.capTranscript = '1';
-  let title = cellTitle(row, targetKey, index);
-  if (canTranscript) title += ' · Alt+Enter: probe transcript';
+  const title = `${cellTitle(row, targetKey, index)} · Opens probe transcript`;
   btn.title = title;
   btn.setAttribute('aria-label', title);
+  btn.setAttribute('aria-haspopup', 'dialog');
   btn.addEventListener('click', () => {
     onSelectCell({ targetKey, capabilityId: row.capabilityId });
   });
-  if (onOpenTranscript && canTranscript) {
-    btn.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' && ev.altKey) {
-        ev.preventDefault();
-        onOpenTranscript({ targetKey, capabilityId: row.capabilityId });
-      }
-    });
-  }
   return btn;
 }
 
@@ -127,7 +124,7 @@ const SPARSE_COLUMN_THRESHOLD = 8;
 
 /** Render sticky-header grid for the current view-model. */
 export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () => void {
-  const { host, model, campaigns, onSelectCell, onOpenTranscript, getInFlightProbeLookup } =
+  const { host, model, campaigns, onSelectCell, getInFlightProbeLookup, openCell } =
     options;
   const filter = options.filter ?? createDefaultGridFilter();
   host.replaceChildren();
@@ -210,7 +207,7 @@ export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () =
           campaigns,
           getInFlightProbeLookup,
           onSelectCell,
-          onOpenTranscript,
+          openCell,
         ),
       );
     });

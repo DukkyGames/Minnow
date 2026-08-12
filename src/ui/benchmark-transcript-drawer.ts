@@ -12,16 +12,26 @@ export interface BenchmarkTranscriptRunMeta {
   startedAt: string;
 }
 
-let openLayer: { backdrop: HTMLElement; onKey: (e: KeyboardEvent) => void } | null = null;
+let openLayer: {
+  backdrop: HTMLElement;
+  onKey: (e: KeyboardEvent) => void;
+  disposeExtra?: () => void;
+  onClose?: () => void;
+} | null = null;
 
 export function closeBenchmarkTranscriptDrawer(): void {
   if (!openLayer) return;
   document.removeEventListener('keydown', openLayer.onKey);
+  openLayer.disposeExtra?.();
+  const onClose = openLayer.onClose;
   openLayer.backdrop.remove();
   openLayer = null;
+  // Fire after teardown so callers can clear selection without seeing a stale layer.
+  onClose?.();
 }
 
 function statusBadgeClass(result: TestResult): string {
+  if (result.verdict === 'untested') return 'benchmark-transcript-drawer__badge--skip';
   if (result.skipped) return 'benchmark-transcript-drawer__badge--skip';
   if (result.verdict === 'partial') return 'benchmark-transcript-drawer__badge--partial';
   if (result.passed) return 'benchmark-transcript-drawer__badge--pass';
@@ -29,6 +39,7 @@ function statusBadgeClass(result: TestResult): string {
 }
 
 function statusBadgeLabel(result: TestResult): string {
+  if (result.verdict === 'untested') return 'Untested';
   if (result.skipped) return 'Skipped';
   if (result.verdict === 'partial') return 'Partial';
   if (result.passed) return 'Pass';
@@ -59,13 +70,21 @@ function renderEmptyState(root: HTMLElement, test: TestResult): void {
   }
 }
 
+export type BenchmarkTranscriptDrawerOptions = {
+  suiteLabel?: string;
+  /** Optional chrome pinned below the transcript (capability-matrix cell editor). */
+  mountExtra?: (host: HTMLElement) => () => void;
+  /** Called after the drawer is removed (Escape, backdrop, Close). */
+  onClose?: () => void;
+};
+
 /**
  * Opens the transcript drawer for one benchmark test result.
  */
 export function openBenchmarkTranscriptDrawer(
   test: TestResult,
   runMeta: BenchmarkTranscriptRunMeta,
-  options?: { suiteLabel?: string },
+  options?: BenchmarkTranscriptDrawerOptions,
 ): void {
   closeBenchmarkTranscriptDrawer();
 
@@ -158,6 +177,14 @@ export function openBenchmarkTranscriptDrawer(
   if (footer.textContent) panel.appendChild(footer);
   panel.appendChild(scroll);
 
+  let disposeExtra: (() => void) | undefined;
+  if (options?.mountExtra) {
+    const extra = document.createElement('div');
+    extra.className = 'benchmark-transcript-drawer__extra';
+    disposeExtra = options.mountExtra(extra);
+    panel.appendChild(extra);
+  }
+
   backdrop.appendChild(panel);
   root.appendChild(backdrop);
 
@@ -168,7 +195,7 @@ export function openBenchmarkTranscriptDrawer(
     }
   };
   document.addEventListener('keydown', onKey);
-  openLayer = { backdrop, onKey };
+  openLayer = { backdrop, onKey, disposeExtra, onClose: options?.onClose };
 
   backdrop.addEventListener('click', (ev) => {
     if (ev.target === backdrop) closeBenchmarkTranscriptDrawer();

@@ -1057,6 +1057,14 @@
   padding: 16px;
 }
 
+.benchmark-transcript-drawer__extra {
+  flex-shrink: 0;
+  max-height: 42%;
+  overflow: auto;
+  border-top: 1px solid var(--mn-border);
+  background: color-mix(in srgb, var(--mn-fg) 2.5%, var(--mn-bg));
+}
+
 .benchmark-transcript-drawer__empty {
   margin: 0 0 12px;
   color: var(--mn-fg-muted);

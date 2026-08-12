@@ -6,27 +6,20 @@ import { upsertManualVerdict } from '../../benchmark/capabilities/manual-verdict
 import type { CapabilityVerdict } from '../../benchmark/capabilities/types.ts';
 import { getCapabilityById } from '../../benchmark/capabilities/catalog.ts';
 import type { MergedCapabilityCell } from '../../benchmark/capabilities/merge.ts';
-import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
 import { createSettingsSelectRow, createSettingsTextareaRow } from '../settings-controls';
 import { setStatus } from '../status';
-import { openCapabilityCellTranscript } from './cell-transcript.ts';
-import {
-  capabilityCellHasTranscriptDrillDown,
-  resolveCapabilityProbeLookup,
-  type CapabilityProbeLookup,
-} from '../../benchmark/capabilities/cell-transcript.ts';
 
 export type CapabilityCellEditorDispose = () => void;
 
 export type CapabilityCellEditorOptions = {
   host: HTMLElement;
   targetLabel: string;
-  campaigns: BenchmarkCampaign[];
-  getInFlightProbeLookup?: (
-    targetKey: string,
-    capabilityId: string,
-  ) => CapabilityProbeLookup | null;
   onSaved: () => void | Promise<void>;
+  /**
+   * When true, the editor sits inside the transcript drawer: drop duplicate
+   * title / close / transcript actions and do not steal focus.
+   */
+  embedded?: boolean;
 };
 
 const VERDICT_OPTIONS: { value: CapabilityVerdict; label: string }[] = [
@@ -53,18 +46,27 @@ export function mountCapabilityCellEditor(
   cell: MergedCapabilityCell,
   options: CapabilityCellEditorOptions,
 ): CapabilityCellEditorDispose {
-  const { host, targetLabel, campaigns, getInFlightProbeLookup, onSaved } = options;
+  const { host, targetLabel, onSaved, embedded } = options;
   host.replaceChildren();
-  host.className = 'cap-matrix-cell-editor';
   host.hidden = false;
+  // Keep any host class (drawer extra slot) and add editor chrome on top.
+  host.classList.add('cap-matrix-cell-editor');
+  if (embedded) host.classList.add('cap-matrix-cell-editor--embedded');
+  else host.classList.remove('cap-matrix-cell-editor--embedded');
+  host.dataset.settingsSearchKey = 'advanced.capabilityMatrix.cell';
 
   const def = getCapabilityById(cell.capabilityId);
-  const title = el(
-    'h4',
-    'cap-matrix-cell-editor__title',
-    def?.header ?? cell.capabilityId,
-  );
-  host.appendChild(title);
+  if (!embedded) {
+    const title = el(
+      'h4',
+      'cap-matrix-cell-editor__title',
+      def?.header ?? cell.capabilityId,
+    );
+    host.appendChild(title);
+  } else {
+    const heading = el('h3', 'cap-matrix-cell-editor__heading', 'Manual verdict');
+    host.appendChild(heading);
+  }
 
   const meta = el('p', 'cap-matrix-cell-editor__meta');
   meta.textContent = `${targetLabel} · ${def?.scoreMode === 'manual' ? 'Manual row' : 'Auto row (manual override)'}`;
@@ -91,8 +93,9 @@ export function mountCapabilityCellEditor(
   });
   host.appendChild(verdictRow);
 
-  const { row: noteRow, textarea: noteArea } = createSettingsTextareaRow('Note', {
+  const { row: noteRow } = createSettingsTextareaRow('Note', {
     value: note,
+    rows: embedded ? 2 : undefined,
     searchKey: 'advanced.capabilityMatrix.cell.note',
     onChange: (value) => {
       note = value;
@@ -100,26 +103,20 @@ export function mountCapabilityCellEditor(
   });
   host.appendChild(noteRow);
 
-  const probeLookup = resolveCapabilityProbeLookup(
-    campaigns,
-    cell.targetKey,
-    cell.capabilityId,
-    getInFlightProbeLookup?.(cell.targetKey, cell.capabilityId) ?? null,
-  );
-  const showTranscript = capabilityCellHasTranscriptDrillDown(probeLookup);
-
   const actions = el('div', 'cap-matrix-cell-editor__actions');
-  const transcriptBtn = el('button', 'settings-action-btn', 'View probe transcript');
-  transcriptBtn.type = 'button';
-  transcriptBtn.hidden = !showTranscript;
-  transcriptBtn.addEventListener('click', () => {
-    openCapabilityCellTranscript(cell, campaigns, targetLabel, getInFlightProbeLookup);
-  });
-
   const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save manual verdict');
   saveBtn.type = 'button';
-  const clearBtn = el('button', 'settings-action-btn', 'Close');
-  clearBtn.type = 'button';
+  actions.appendChild(saveBtn);
+
+  if (!embedded) {
+    const clearBtn = el('button', 'settings-action-btn', 'Close');
+    clearBtn.type = 'button';
+    clearBtn.addEventListener('click', () => {
+      host.hidden = true;
+      host.replaceChildren();
+    });
+    actions.appendChild(clearBtn);
+  }
 
   saveBtn.addEventListener('click', () => {
     void (async () => {
@@ -140,15 +137,11 @@ export function mountCapabilityCellEditor(
     })();
   });
 
-  clearBtn.addEventListener('click', () => {
-    host.hidden = true;
-    host.replaceChildren();
-  });
-
-  actions.append(transcriptBtn, saveBtn, clearBtn);
   host.appendChild(actions);
 
-  verdictSelect.focus();
+  if (!embedded) {
+    verdictSelect.focus();
+  }
 
   return () => {
     host.replaceChildren();

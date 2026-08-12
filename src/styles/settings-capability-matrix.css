@@ -188,10 +188,6 @@
   overflow: hidden;
 }
 
-.cap-matrix-cell-editor-host:not([hidden]) {
-  flex-shrink: 0;
-}
-
 /* Roster */
 
 .cap-matrix-roster__empty {
@@ -850,6 +846,13 @@
   z-index: 1;
 }
 
+.cap-matrix-grid__cell.is-open {
+  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-bg));
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -1px;
+  z-index: 1;
+}
+
 .cap-matrix-grid__cell[data-verdict='pass'] {
   color: var(--mn-success);
 }
@@ -895,6 +898,23 @@
   background: var(--mn-bg);
 }
 
+.cap-matrix-cell-editor--embedded {
+  margin: 0;
+  padding: 12px 16px 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.cap-matrix-cell-editor__heading {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
+}
+
 .cap-matrix-cell-editor__title {
   margin: 0 0 6px;
   font-size: 14px;
@@ -908,11 +928,48 @@
   color: var(--mn-fg-muted);
 }
 
+.cap-matrix-cell-editor--embedded .cap-matrix-cell-editor__meta,
+.cap-matrix-cell-editor--embedded .cap-matrix-cell-editor__auto {
+  margin-bottom: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* Drawer is too narrow for the Settings label+control row; stack so labels do not sit under the select. */
+.cap-matrix-cell-editor--embedded .settings-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.cap-matrix-cell-editor--embedded .settings-row__label {
+  flex: none;
+}
+
+.cap-matrix-cell-editor--embedded .settings-row__control {
+  max-width: none;
+  width: 100%;
+}
+
+.cap-matrix-cell-editor--embedded .settings-row__control .settings-select,
+.cap-matrix-cell-editor--embedded .settings-row__control .settings-textarea {
+  max-width: none;
+}
+
+.cap-matrix-cell-editor--embedded .settings-row:hover {
+  background: transparent;
+}
+
 .cap-matrix-cell-editor__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.cap-matrix-cell-editor--embedded .cap-matrix-cell-editor__actions {
+  margin-top: 8px;
 }
 
 /* History */
@@ -1095,6 +1152,8 @@
 .benchmark-transcript-drawer-panel {
   width: min(32rem, 100%);
   max-width: 100%;
+  height: 100%;
+  min-height: 0;
   background: var(--mn-surface-1);
   border-inline-start: 1px solid var(--mn-border);
   display: flex;
@@ -1160,8 +1219,17 @@
 
 .benchmark-transcript-drawer__scroll {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 16px;
+}
+
+.benchmark-transcript-drawer__extra {
+  flex-shrink: 0;
+  max-height: 42%;
+  overflow: auto;
+  border-top: 1px solid var(--mn-border);
+  background: color-mix(in srgb, var(--mn-fg) 2.5%, var(--mn-bg));
 }
 
 .benchmark-transcript-drawer__empty,

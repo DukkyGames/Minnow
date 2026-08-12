@@ -515,8 +515,8 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('advanced.capabilityMatrix.history', 'Matrix run history', 'advanced', 'capability-matrix', {
     keywords: ['campaign history', 'sweep'],
   }),
-  field('advanced.capabilityMatrix.cell', 'Manual cell editor', 'advanced', 'capability-matrix', {
-    keywords: ['verdict', 'note', 'override', 'manual cell'],
+  field('advanced.capabilityMatrix.cell', 'Cell transcript', 'advanced', 'capability-matrix', {
+    keywords: ['verdict', 'note', 'override', 'manual cell', 'transcript', 'drawer'],
   }),
   field('advanced.capabilityMatrix.export', 'Export capability matrix', 'advanced', 'capability-matrix', {
     keywords: ['xlsx', 'spreadsheet', 'download', 'export'],
