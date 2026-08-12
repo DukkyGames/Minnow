@@ -31,6 +31,22 @@ import {
 const LONG_CONTEXT_FILLER_LINES = 2600;
 
 /**
+ * Values `code-run-js-py` asks the model to average, with the answer derived from them.
+ *
+ * The prompt and the verdict used to hardcode their own numbers and drifted: the list
+ * below averages 23.25, the verdict looked for 22.5, and every correct model scored
+ * partial. Both sides now read the same array.
+ */
+export const CAP_MATRIX_MEAN_VALUES = [
+  12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+] as const;
+
+/** Mean of `CAP_MATRIX_MEAN_VALUES`, as the model would print it. */
+export const CAP_MATRIX_MEAN_EXPECTED = String(
+  CAP_MATRIX_MEAN_VALUES.reduce((sum, n) => sum + n, 0) / CAP_MATRIX_MEAN_VALUES.length,
+);
+
+/**
  * Build the `core-long-context` message: ~34k tokens of filler with one labelled needle
  * roughly 60% in. The haystack rides in the prompt (not a file) so the row measures the
  * model's context window rather than the host's `read_file` cap.
@@ -69,8 +85,7 @@ const WORKSPACE_PROBE_PROMPTS: Record<string, string> = {
   'code-execute-command': 'Run `node -e "console.log(9*7)"` and report the printed number.',
   'code-background-cmds':
     'Start `node -e "setInterval(()=>console.log(\'cap-matrix-heartbeat\'),400)"` as a background process, then stop it once it is running.',
-  'code-run-js-py':
-    'Use run_python to compute the mean of: 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33.',
+  'code-run-js-py': `Use run_python to compute the mean of: ${CAP_MATRIX_MEAN_VALUES.join(', ')}.`,
   'code-command-log':
     'Start a background node process that prints cap-matrix-log-line every 300ms, read the tail of its log, then stop it.',
   'code-repo-intel': `In ${CAP_MATRIX_SAMPLE_PATH}, where is ${CAP_MATRIX_SAMPLE_FN} defined and who calls it?`,

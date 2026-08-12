@@ -25,6 +25,9 @@ export interface RunCapabilityProbeOptions {
   workspaceRoot?: string;
 }
 
+/** Rounds a probe gets when its spec declares none. */
+const DEFAULT_PROBE_TOOL_ROUNDS = 3;
+
 export interface RunCapabilityProbeResult {
   skipped: boolean;
   skipReason?: string;
@@ -114,6 +117,33 @@ function resolveOpenAiTools(toolIds: string[]): {
     else missing.push(id);
   }
   return { defs, missing };
+}
+
+/**
+ * Rounds a chain gets before the loop is cut off.
+ *
+ * The declared caps were sized for the ideal path, so a single detour — a model checking
+ * that its background run really started before stopping it — exhausted the budget and
+ * the loop ended mid-chain. The row then read as if the model had refused to finish.
+ * Floor a chain at one round per offered tool plus headroom for a detour, a recovery, and
+ * the closing answer. Unused rounds cost nothing: the loop exits on the first text-only
+ * turn.
+ */
+const CHAIN_ROUND_HEADROOM = 3;
+
+export function resolveMaxToolRounds(spec: CapabilityProbeSpecBase): number {
+  const declared = spec.maxToolRounds ?? DEFAULT_PROBE_TOOL_ROUNDS;
+  if (spec.kind !== 'tool-chain') return declared;
+  return Math.max(declared, (spec.toolIds?.length ?? 0) + CHAIN_ROUND_HEADROOM);
+}
+
+/**
+ * True when the loop stopped because it ran out of rounds rather than because the model
+ * finished. The driver only leaves tool calls in the final round when the cap cut it off.
+ */
+export function hitRoundCap(rounds: CapabilityRoundTelemetry[], maxRounds: number): boolean {
+  if (rounds.length < maxRounds) return false;
+  return (rounds[rounds.length - 1]?.toolCalls.length ?? 0) > 0;
 }
 
 function usesToolLoop(spec: CapabilityProbeSpecBase, toolIds: string[]): boolean {
@@ -213,6 +243,8 @@ export async function runCapabilityProbe(
     }
   };
 
+  const maxRounds = resolveMaxToolRounds(probe);
+
   try {
     let oneShot: OneShotResult;
     if (usesToolLoop(probe, toolIds)) {
@@ -222,7 +254,7 @@ export async function runCapabilityProbe(
         signal: ctx.signal,
         messages,
         tools,
-        maxToolRounds: probe.maxToolRounds ?? 3,
+        maxToolRounds: maxRounds,
         ...(probe.modeId ? { modeId: probe.modeId } : {}),
         executeToolFn,
         onRound: (round) => rounds.push(round),
@@ -240,10 +272,14 @@ export async function runCapabilityProbe(
     const offeredToolNames = tools.map((t) => t.function.name);
     const out = probeOutputFromOneShot(oneShot, rounds, executedResults, offeredToolNames);
     const judged = probe.verdict(out);
+    // Say when the transcript ends mid-chain. Without this the cell reports "started a
+    // background run but never stopped it" for a model that was cut off on its way to
+    // the stop call, and the transcript just stops with no explanation.
+    const cutOff = judged.verdict !== 'pass' && hitRoundCap(rounds, maxRounds);
     return {
       skipped: false,
       verdict: judged.verdict,
-      reason: judged.reason,
+      reason: cutOff ? `${judged.reason} — cut off at the ${maxRounds}-round cap` : judged.reason,
       oneShot,
     };
   } catch (err) {

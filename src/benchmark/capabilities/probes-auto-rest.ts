@@ -11,6 +11,7 @@ import {
   partial,
   pass,
 } from './probe-helpers.ts';
+import { CAP_MATRIX_MEAN_EXPECTED } from './probe-prompts.ts';
 import type { CapabilityProbeSpec } from './types.ts';
 
 export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
@@ -34,6 +35,10 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
       'start_background_command',
       'stop_background_command',
       'list_running_commands',
+      // The prompt asks the model to stop the run "once it is running", so it needs a
+      // supported way to check. The returned log path is relative to the tool server's
+      // root, not the probe workspace, so shelling out to read it always failed.
+      'read_command_log',
       'execute_command',
     ],
     requires: ['workspace', 'tool-server'],
@@ -60,11 +65,11 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
       if (!hasAnyTool(out.toolCalls, ['run_python', 'run_javascript'])) {
         return fail('Expected run_python/javascript');
       }
-      // Mean of the 20 seeded values is 22.5.
-      if (out.executedResults.some((r) => r.includes('22.5'))) {
+      // Expected mean is derived from the same array the prompt lists, never retyped.
+      if (out.executedResults.some((r) => r.includes(CAP_MATRIX_MEAN_EXPECTED))) {
         return pass('Interpreter ran and returned the expected mean');
       }
-      return partial('Interpreter called but 22.5 never came back');
+      return partial(`Interpreter called but ${CAP_MATRIX_MEAN_EXPECTED} never came back`);
     },
   },
   'code-command-log': {

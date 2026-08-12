@@ -16,6 +16,7 @@ import {
   CAP_STUB_THREAD_ID,
 } from '../../src/benchmark/capabilities/stub-fixtures.ts';
 import { CAP_MATRIX_HAYSTACK_NEEDLE } from '../../src/benchmark/capabilities/fixture-paths.ts';
+import { getCapabilityProbePrompt } from '../../src/benchmark/capabilities/probe-prompts.ts';
 import type {
   CapabilityProbeRunOutput,
   CapabilityProbeSpecBase,
@@ -130,6 +131,25 @@ describe('capability probe verdicts', () => {
     assert.equal(verdictOf('code-execute-command', { ...ran, executedResults: ['63\n'] }), 'pass');
     assert.equal(verdictOf('code-execute-command', { ...ran, executedResults: ['error'] }), 'partial');
     assert.equal(verdictOf('code-execute-command', out()), 'fail');
+  });
+
+  test('code-run-js-py accepts the mean of the numbers its prompt actually lists', () => {
+    // The prompt and the verdict drifted apart once (list averaged 23.25, verdict wanted
+    // 22.5) and every correct model scored partial. Recompute from the prompt text.
+    const prompt = getCapabilityProbePrompt('code-run-js-py') ?? '';
+    const numbers = (prompt.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+    assert.ok(numbers.length >= 2, 'prompt should list the numbers to average');
+    const mean = numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
+
+    const ran = out({ toolCalls: [call('run_python', { code: 'statistics.mean(data)' })] });
+    assert.equal(
+      verdictOf('code-run-js-py', { ...ran, executedResults: [`${mean}\n`] }),
+      'pass',
+    );
+    assert.equal(
+      verdictOf('code-run-js-py', { ...ran, executedResults: ['nan\n'] }),
+      'partial',
+    );
   });
 
   test('browser-snapshot requires the uids the snapshot handed back', () => {

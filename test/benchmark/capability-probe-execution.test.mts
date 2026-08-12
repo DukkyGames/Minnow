@@ -16,6 +16,7 @@ import type { OpenAIFunctionDefinition } from '../../src/tools/definitions.ts';
 interface DriverCall {
   messages: { role: string; content: unknown }[];
   tools: OpenAIFunctionDefinition[];
+  maxToolRounds?: number;
 }
 
 let lastDriverCall: DriverCall | null = null;
@@ -51,14 +52,20 @@ mock.module('../../src/benchmark/llm-driver.ts', {
         ) => Promise<{ content: string }>;
       },
     ) => {
-      lastDriverCall = { messages: input.messages, tools: input.tools ?? [] };
+      lastDriverCall = {
+        messages: input.messages,
+        tools: input.tools ?? [],
+        maxToolRounds: input.maxToolRounds,
+      };
       executedContents = [];
       // The real loop returns only the *last* batch (`preserveLastToolCalls`); the full
       // history lives in the round telemetry. Mirror that, or probes that lose an early
       // call keep passing here while failing in a live run.
       let lastBatch: ToolCall[] = [];
       let round = 0;
-      for (const scripted of scriptedCalls) {
+      // The loop stops at the cap with its last batch still pending — that truncation is
+      // what makes a transcript end mid-chain, so the mock has to honour it.
+      for (const scripted of scriptedCalls.slice(0, input.maxToolRounds ?? scriptedCalls.length)) {
         const toolCall: ToolCall = {
           id: `call-${round}`,
           type: 'function',
@@ -172,6 +179,42 @@ describe('runCapabilityProbe execution plumbing', () => {
       { name: 'browser_list', args: {} },
     ];
     assert.equal((await runCapabilityProbe(ctx, browser!)).verdict, 'pass');
+  });
+
+  test('a chain gets a round per offered tool plus headroom for a detour', async () => {
+    scriptedCalls = [];
+    const cap = getCapabilityById('code-background-cmds');
+    assert.ok(cap);
+    await runCapabilityProbe(ctx, cap!);
+    // Four offered tools: start → verify → recover → stop → answer must all fit.
+    assert.ok(
+      (lastDriverCall?.maxToolRounds ?? 0) >= 7,
+      `expected headroom above the declared cap, got ${lastDriverCall?.maxToolRounds}`,
+    );
+  });
+
+  test('a run that ends at the round cap says so instead of blaming the model', async () => {
+    const cap = getCapabilityById('code-background-cmds');
+    assert.ok(cap);
+    // Start, then burn every remaining round verifying — the stop call never lands.
+    scriptedCalls = [
+      { name: 'start_background_command', args: { command: 'node -e "setInterval(()=>{},400)"' } },
+      ...Array.from({ length: 12 }, () => ({ name: 'list_running_commands', args: {} })),
+    ];
+    const result = await runCapabilityProbe(ctx, cap!);
+    assert.equal(result.verdict, 'partial');
+    assert.match(result.reason, /cut off at the \d+-round cap/);
+  });
+
+  test('a run the model finishes itself is not labelled as cut off', async () => {
+    const cap = getCapabilityById('code-background-cmds');
+    assert.ok(cap);
+    scriptedCalls = [
+      { name: 'start_background_command', args: { command: 'node -e "setInterval(()=>{},400)"' } },
+    ];
+    const result = await runCapabilityProbe(ctx, cap!);
+    assert.equal(result.verdict, 'partial');
+    assert.doesNotMatch(result.reason, /cut off/);
   });
 
   test('tool results reach the verdict via executedResults', async () => {

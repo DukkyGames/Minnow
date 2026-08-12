@@ -915,7 +915,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         chat_id: {
           type: 'string',
-          description: 'Optional chat id to filter runs for the current conversation',
+          description:
+            'Optional chat id to filter by. Omit it unless you have a real id — a placeholder like "current" matches nothing and returns an empty list.',
         },
       },
       [],
