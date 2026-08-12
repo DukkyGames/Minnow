@@ -5,8 +5,10 @@ import type { BenchmarkCampaign } from '../../src/benchmark/campaign-types.ts';
 import type { BenchmarkRun } from '../../src/benchmark/types.ts';
 import {
   extractAutoVerdictsFromCampaign,
+  extractAutoVerdictsFromProbeResults,
   mergeCapabilityCell,
   mergeCapabilityMatrix,
+  parseCapabilityProbeKey,
 } from '../../src/benchmark/capabilities/merge.ts';
 import type { ManualVerdictStore } from '../../src/benchmark/capabilities/manual-verdicts.ts';
 
@@ -146,5 +148,38 @@ describe('capability merge', () => {
     assert.equal(autos.length, 1);
     assert.equal(autos[0]?.capabilityId, CAP_ID);
     assert.equal(autos[0]?.targetKey, TARGET_KEY);
+  });
+
+  test('extraAutos merge in-flight probes before campaign save', () => {
+    const merged = mergeCapabilityMatrix({
+      targetKeys: [TARGET_KEY],
+      capabilityIds: [CAP_ID],
+      manualStore: {},
+      campaigns: [],
+      extraAutos: extractAutoVerdictsFromProbeResults([
+        {
+          targetKey: TARGET_KEY,
+          result: {
+            testId: `cap-matrix/${CAP_ID}`,
+            suite: 'capability-matrix',
+            label: CAP_ID,
+            passed: true,
+            skipped: false,
+            durationMs: 1,
+            score: 1,
+            verdict: 'pass',
+          },
+          campaignId: 'in-flight',
+          ranAt: '2026-06-04T00:00:00.000Z',
+        },
+      ]),
+    });
+    assert.equal(merged[0]?.verdict, 'pass');
+    assert.equal(merged[0]?.source, 'auto');
+  });
+
+  test('parseCapabilityProbeKey splits target and capability id', () => {
+    const parsed = parseCapabilityProbeKey(`${TARGET_KEY}::${CAP_ID}`);
+    assert.deepEqual(parsed, { targetKey: TARGET_KEY, capabilityId: CAP_ID });
   });
 });

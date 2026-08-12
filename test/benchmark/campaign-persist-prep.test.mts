@@ -77,10 +77,10 @@ function baseCampaign(): BenchmarkCampaign {
 }
 
 describe('prepareCampaignForPersistence', () => {
-  test('drops transcripts for pass cells, trims fail/partial', () => {
+  test('keeps trimmed transcripts for pass and fail cells', () => {
     const prepared = prepareCampaignForPersistence(baseCampaign());
     const tests = prepared.runs[0]!.suites[0]!.tests;
-    assert.equal(tests[0]?.transcript, undefined);
+    assert.ok(tests[0]?.transcript);
     assert.ok(tests[1]?.transcript);
     const size = JSON.stringify(tests[1]?.transcript).length;
     assert.ok(size <= CAMPAIGN_CELL_TRANSCRIPT_MAX_BYTES);

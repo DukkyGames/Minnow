@@ -29,7 +29,36 @@ function testMatchesCell(
   return resolveRunTargetKey(campaign, run) === targetKey;
 }
 
-/** Newest campaign run test row for one matrix cell (for fail/partial transcript UI). */
+/** Build a transcript lookup from an in-flight probe (before campaign save). */
+export function capabilityProbeLookupFromTest(
+  test: TestResult,
+  campaignId: string,
+  campaignEndedAt?: string,
+): CapabilityProbeLookup {
+  const endedAt = campaignEndedAt ?? new Date().toISOString();
+  return {
+    test,
+    run: {
+      id: 'in-flight',
+      startedAt: endedAt,
+      durationMs: test.durationMs,
+      preset: 'custom',
+      provider: { id: 'in-flight', baseUrl: '' },
+      model: { id: 'in-flight' },
+      totalScore: 0,
+      headlineTokPerSec: 0,
+      headlineTtftMs: 0,
+      modeMatrixPassed: 0,
+      toolsPassed: 0,
+      skillsPassed: 0,
+      suites: [],
+    },
+    campaignId,
+    campaignEndedAt: endedAt,
+  };
+}
+
+/** Newest campaign run test row for one matrix cell (transcript drill-down). */
 export function findLatestCapabilityProbeResult(
   campaigns: BenchmarkCampaign[],
   targetKey: string,
@@ -58,16 +87,20 @@ export function findLatestCapabilityProbeResult(
   return null;
 }
 
+/** Prefer in-flight probe data (active sweep) over the latest saved campaign row. */
+export function resolveCapabilityProbeLookup(
+  campaigns: BenchmarkCampaign[],
+  targetKey: string,
+  capabilityId: string,
+  inFlight?: CapabilityProbeLookup | null,
+): CapabilityProbeLookup | null {
+  if (inFlight) return inFlight;
+  return findLatestCapabilityProbeResult(campaigns, targetKey, capabilityId);
+}
+
 /** Whether the merged cell should offer probe transcript drill-down. */
 export function capabilityCellHasTranscriptDrillDown(
-  verdict: string,
   lookup: CapabilityProbeLookup | null,
 ): boolean {
-  if (!lookup) return false;
-  if (verdict !== 'fail' && verdict !== 'partial') return false;
-  return Boolean(
-    lookup.test.transcript?.length ||
-      lookup.test.details?.trim() ||
-      lookup.test.transcriptMeta?.error,
-  );
+  return lookup != null;
 }

@@ -5,7 +5,8 @@
 import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
 import {
   capabilityCellHasTranscriptDrillDown,
-  findLatestCapabilityProbeResult,
+  resolveCapabilityProbeLookup,
+  type CapabilityProbeLookup,
 } from '../../benchmark/capabilities/cell-transcript.ts';
 import type { MergedCapabilityCell } from '../../benchmark/capabilities/merge.ts';
 import { getCapabilityById } from '../../benchmark/capabilities/catalog.ts';
@@ -14,19 +15,23 @@ import {
   type BenchmarkTranscriptRunMeta,
 } from '../benchmark-transcript-drawer.ts';
 
-/** Open the shared transcript drawer when a fail/partial cell has probe data. */
+/** Open the shared transcript drawer when a cell has probe data. */
 export function openCapabilityCellTranscript(
   cell: MergedCapabilityCell,
   campaigns: BenchmarkCampaign[],
   targetLabel: string,
+  getInFlightProbeLookup?: (
+    targetKey: string,
+    capabilityId: string,
+  ) => CapabilityProbeLookup | null,
 ): boolean {
-  const lookup = findLatestCapabilityProbeResult(
+  const lookup = resolveCapabilityProbeLookup(
     campaigns,
     cell.targetKey,
     cell.capabilityId,
+    getInFlightProbeLookup?.(cell.targetKey, cell.capabilityId) ?? null,
   );
-  if (!capabilityCellHasTranscriptDrillDown(cell.verdict, lookup)) return false;
-  if (!lookup) return false;
+  if (!capabilityCellHasTranscriptDrillDown(lookup) || !lookup) return false;
 
   const def = getCapabilityById(cell.capabilityId);
   const runMeta: BenchmarkTranscriptRunMeta = {

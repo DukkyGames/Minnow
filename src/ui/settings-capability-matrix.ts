@@ -16,7 +16,12 @@ import {
   type CapabilityMatrixRosterEntry,
 } from '../benchmark/capabilities/roster-store.ts';
 import { buildCapabilityMatrixViewModel } from '../benchmark/capabilities/view-model.ts';
-import { disposeCapabilityMatrixRunView } from '../benchmark/capabilities/matrix-run-controller.ts';
+import {
+  disposeCapabilityMatrixRunView,
+  findInFlightCapabilityProbeLookup,
+  getCapabilityMatrixInFlightAutos,
+  subscribeCapabilityMatrixProbeUpdates,
+} from '../benchmark/capabilities/matrix-run-controller.ts';
 import type { BenchmarkCampaign } from '../benchmark/campaign-types.ts';
 import {
   beginAsyncSectionRender,
@@ -52,6 +57,7 @@ let disposeCellEditor: (() => void) | null = null;
 let disposeRunPanel: (() => void) | null = null;
 let disposeGridNav: (() => void) | null = null;
 let disposeGridToolbar: (() => void) | null = null;
+let disposeProbeUpdates: (() => void) | null = null;
 let gridFilter: CapabilityGridFilter = createDefaultGridFilter();
 
 /** Tear down listeners and child editors before re-render or navigation. */
@@ -64,6 +70,8 @@ export function disposeCapabilityMatrix(): void {
   disposeGridNav = null;
   disposeGridToolbar?.();
   disposeGridToolbar = null;
+  disposeProbeUpdates?.();
+  disposeProbeUpdates = null;
   closeBenchmarkTranscriptDrawer();
   disposeCapabilityMatrixRunView();
   while (disposers.length) {
@@ -244,9 +252,19 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     roster,
     manualStore,
     campaigns,
+    inFlightAutos: getCapabilityMatrixInFlightAutos(),
   });
   let latestManualStore = manualStore;
   let campaignBodies = campaigns;
+
+  function rebuildViewModel(): void {
+    viewModel = buildCapabilityMatrixViewModel({
+      roster,
+      manualStore: latestManualStore,
+      campaigns: campaignBodies,
+      inFlightAutos: getCapabilityMatrixInFlightAutos(),
+    });
+  }
 
   function paintGrid(): void {
     disposeGridNav?.();
@@ -255,6 +273,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
       model: viewModel,
       campaigns: campaignBodies,
       filter: gridFilter,
+      getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
       onSelectCell: (selection) => {
         disposeCellEditor?.();
         const cell = viewModel.cellByKey.get(
@@ -265,6 +284,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
           host: editorHost,
           targetLabel: viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
           campaigns: campaignBodies,
+          getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
           onSaved: refreshView,
         });
       },
@@ -277,6 +297,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
           cell,
           campaignBodies,
           viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
+          findInFlightCapabilityProbeLookup,
         );
       },
     });
@@ -304,12 +325,8 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     if (isAsyncSectionRenderStale('capability-matrix', generation)) return;
 
     campaignBodies = bodies;
-    viewModel = buildCapabilityMatrixViewModel({
-      roster,
-      manualStore: manual,
-      campaigns: bodies,
-    });
     latestManualStore = manual;
+    rebuildViewModel();
 
     renderCapabilityRosterPanel({
       host: rosterHost,
@@ -385,6 +402,12 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   });
 
   await refreshView();
+
+  disposeProbeUpdates = subscribeCapabilityMatrixProbeUpdates(() => {
+    if (isAsyncSectionRenderStale('capability-matrix', generation)) return;
+    rebuildViewModel();
+    paintGrid();
+  });
 
   disposeRunPanel = mountCapabilityRunPanel({
     host: runHost,

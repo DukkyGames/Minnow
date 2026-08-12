@@ -15,6 +15,7 @@ import {
 } from './host-group.ts';
 import {
   mergeCapabilityMatrix,
+  type AutoCapabilityVerdict,
   type MergedCapabilityCell,
 } from './merge.ts';
 import type { ManualVerdictStore } from './manual-verdicts.ts';
@@ -103,6 +104,8 @@ export function buildCapabilityMatrixViewModel(input: {
   roster: CapabilityMatrixRosterEntry[];
   manualStore: ManualVerdictStore;
   campaigns: BenchmarkCampaign[];
+  /** Auto verdicts from probes still in flight (before campaign save). */
+  inFlightAutos?: AutoCapabilityVerdict[];
 }): CapabilityMatrixViewModel {
   const enabled = input.roster.filter((t) => t.enabled !== false);
   const targetKeys = enabled.map((t) => targetKeyFromTarget(t));
@@ -113,6 +116,7 @@ export function buildCapabilityMatrixViewModel(input: {
     capabilityIds,
     manualStore: input.manualStore,
     campaigns: input.campaigns,
+    extraAutos: input.inFlightAutos,
   });
 
   const cellByKey = new Map<string, MergedCapabilityCell>();

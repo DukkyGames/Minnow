@@ -6,6 +6,7 @@ import type { BenchmarkRun } from '../../src/benchmark/types.ts';
 import {
   capabilityCellHasTranscriptDrillDown,
   findLatestCapabilityProbeResult,
+  resolveCapabilityProbeLookup,
 } from '../../src/benchmark/capabilities/cell-transcript.ts';
 
 const TARGET_KEY = 'openai::gpt-test';
@@ -90,13 +91,34 @@ describe('capability cell transcript lookup', () => {
     assert.equal(lookup.test.verdict, 'fail');
   });
 
-  test('capabilityCellHasTranscriptDrillDown for fail with details', () => {
+  test('capabilityCellHasTranscriptDrillDown when probe data exists', () => {
     const lookup = findLatestCapabilityProbeResult(
       [campaignWithRuns([matrixRun('fail', '2026-06-01T00:00:00.000Z')], 'c1', '2026-06-02T00:00:00.000Z')],
       TARGET_KEY,
       CAP_ID,
     );
-    assert.equal(capabilityCellHasTranscriptDrillDown('fail', lookup), true);
-    assert.equal(capabilityCellHasTranscriptDrillDown('pass', lookup), false);
+    assert.equal(capabilityCellHasTranscriptDrillDown(lookup), true);
+    assert.equal(capabilityCellHasTranscriptDrillDown(null), false);
+  });
+
+  test('resolveCapabilityProbeLookup prefers in-flight probe', () => {
+    const passLookup = findLatestCapabilityProbeResult(
+      [campaignWithRuns([matrixRun('pass', '2026-06-01T00:00:00.000Z')], 'c1', '2026-06-02T00:00:00.000Z')],
+      TARGET_KEY,
+      CAP_ID,
+    );
+    const failLookup = findLatestCapabilityProbeResult(
+      [campaignWithRuns([matrixRun('fail', '2026-06-01T00:00:00.000Z')], 'c2', '2026-06-03T00:00:00.000Z')],
+      TARGET_KEY,
+      CAP_ID,
+    );
+    const resolved = resolveCapabilityProbeLookup(
+      [campaignWithRuns([matrixRun('pass', '2026-06-01T00:00:00.000Z')], 'c1', '2026-06-02T00:00:00.000Z')],
+      TARGET_KEY,
+      CAP_ID,
+      failLookup,
+    );
+    assert.equal(resolved?.test.verdict, 'fail');
+    assert.equal(passLookup?.test.verdict, 'pass');
   });
 });

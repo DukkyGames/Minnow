@@ -5,7 +5,8 @@
 import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
 import {
   capabilityCellHasTranscriptDrillDown,
-  findLatestCapabilityProbeResult,
+  resolveCapabilityProbeLookup,
+  type CapabilityProbeLookup,
 } from '../../benchmark/capabilities/cell-transcript.ts';
 import type { CapabilityMatrixViewModel } from '../../benchmark/capabilities/view-model.ts';
 import {
@@ -42,6 +43,10 @@ export type CapabilityGridOptions = {
   model: CapabilityMatrixViewModel;
   campaigns: BenchmarkCampaign[];
   filter?: CapabilityGridFilter;
+  getInFlightProbeLookup?: (
+    targetKey: string,
+    capabilityId: string,
+  ) => CapabilityProbeLookup | null;
   onSelectCell: (selection: CapabilityGridSelection) => void;
   onOpenTranscript?: (selection: CapabilityGridSelection) => void;
 };
@@ -76,6 +81,7 @@ function renderCellButton(
   rowIndex: number,
   colIndex: number,
   campaigns: BenchmarkCampaign[],
+  getInFlightProbeLookup: CapabilityGridOptions['getInFlightProbeLookup'],
   onSelectCell: (selection: CapabilityGridSelection) => void,
   onOpenTranscript: ((selection: CapabilityGridSelection) => void) | undefined,
 ): HTMLButtonElement {
@@ -90,8 +96,13 @@ function renderCellButton(
   if (cell?.overridesAuto) btn.classList.add('cap-matrix-grid__cell--conflict');
   if (row.scoreMode === 'manual') btn.classList.add('cap-matrix-grid__cell--manual-row');
   btn.textContent = capabilityVerdictGlyph(verdict);
-  const lookup = findLatestCapabilityProbeResult(campaigns, targetKey, row.capabilityId);
-  const canTranscript = capabilityCellHasTranscriptDrillDown(verdict, lookup);
+  const lookup = resolveCapabilityProbeLookup(
+    campaigns,
+    targetKey,
+    row.capabilityId,
+    getInFlightProbeLookup?.(targetKey, row.capabilityId) ?? null,
+  );
+  const canTranscript = capabilityCellHasTranscriptDrillDown(lookup);
   if (canTranscript) btn.dataset.capTranscript = '1';
   let title = cellTitle(row, targetKey, index);
   if (canTranscript) title += ' · Alt+Enter: probe transcript';
@@ -116,7 +127,8 @@ const SPARSE_COLUMN_THRESHOLD = 8;
 
 /** Render sticky-header grid for the current view-model. */
 export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () => void {
-  const { host, model, campaigns, onSelectCell, onOpenTranscript } = options;
+  const { host, model, campaigns, onSelectCell, onOpenTranscript, getInFlightProbeLookup } =
+    options;
   const filter = options.filter ?? createDefaultGridFilter();
   host.replaceChildren();
   host.className = 'cap-matrix-grid-wrap';
@@ -196,6 +208,7 @@ export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () =
           rowIndex,
           colIndex,
           campaigns,
+          getInFlightProbeLookup,
           onSelectCell,
           onOpenTranscript,
         ),

@@ -9,7 +9,16 @@ import {
   type ActiveCapabilityMatrixRunPayload,
 } from '../active-run-session.ts';
 import type { TestResult } from '../types.ts';
-import { parseCapabilityIdFromTestId } from './merge.ts';
+import {
+  extractAutoVerdictsFromProbeResults,
+  parseCapabilityIdFromTestId,
+  parseCapabilityProbeKey,
+  type AutoCapabilityVerdict,
+} from './merge.ts';
+import {
+  capabilityProbeLookupFromTest,
+  type CapabilityProbeLookup,
+} from './cell-transcript.ts';
 import { isAbortError } from '../abort.ts';
 import { runBenchmarkCampaign } from '../campaign-runner.ts';
 import type {
@@ -62,8 +71,15 @@ export interface StartCapabilityMatrixRunParams {
 }
 
 type Listener = (state: MatrixRunUiState) => void;
+type ProbeListener = () => void;
 
 const listeners = new Set<Listener>();
+const probeListeners = new Set<ProbeListener>();
+
+interface CompletedProbeRecord {
+  targetKey: string;
+  result: TestResult;
+}
 
 let abortController: AbortController | null = null;
 let runGeneration = 0;
@@ -71,6 +87,7 @@ let uiState: MatrixRunUiState = emptyUiState();
 
 let activeRunPayload: ActiveCapabilityMatrixRunPayload | null = null;
 let sessionCompletedTests: TestResult[] = [];
+let sessionCompletedProbes: CompletedProbeRecord[] = [];
 let testsDone = 0;
 let testsTotal = 0;
 
@@ -89,6 +106,41 @@ function emit(): void {
   for (const listener of listeners) {
     listener(uiState);
   }
+}
+
+function emitProbeUpdate(): void {
+  for (const listener of probeListeners) {
+    listener();
+  }
+}
+
+function rebuildCompletedProbesFromSession(
+  tests: TestResult[],
+  probeKeys: string[] | undefined,
+): CompletedProbeRecord[] {
+  if (!tests.length || !probeKeys?.length) return [];
+  const out: CompletedProbeRecord[] = [];
+  const usedTestIdx = new Set<number>();
+  for (const probeKey of probeKeys) {
+    const parsed = parseCapabilityProbeKey(probeKey);
+    if (!parsed) continue;
+    const idx = tests.findIndex(
+      (test, i) =>
+        !usedTestIdx.has(i) &&
+        test.suite === 'capability-matrix' &&
+        parseCapabilityIdFromTestId(test.testId) === parsed.capabilityId,
+    );
+    if (idx === -1) continue;
+    usedTestIdx.add(idx);
+    out.push({ targetKey: parsed.targetKey, result: tests[idx]! });
+  }
+  return out;
+}
+
+function clearSessionProbeState(): void {
+  sessionCompletedTests = [];
+  sessionCompletedProbes = [];
+  emitProbeUpdate();
 }
 
 function setUiState(patch: Partial<MatrixRunUiState>): void {
@@ -223,6 +275,44 @@ export function subscribeCapabilityMatrixRun(listener: Listener): () => void {
   };
 }
 
+/** Subscribe to per-probe grid updates while a run is active. */
+export function subscribeCapabilityMatrixProbeUpdates(listener: ProbeListener): () => void {
+  probeListeners.add(listener);
+  listener();
+  return () => {
+    probeListeners.delete(listener);
+  };
+}
+
+/** Auto verdicts from probes finished in the current (or resuming) run. */
+export function getCapabilityMatrixInFlightAutos(): AutoCapabilityVerdict[] {
+  if (!sessionCompletedProbes.length) return [];
+  const campaignId = uiState.campaignId ?? 'in-flight';
+  return extractAutoVerdictsFromProbeResults(
+    sessionCompletedProbes.map((probe) => ({
+      targetKey: probe.targetKey,
+      result: probe.result,
+      campaignId,
+    })),
+  );
+}
+
+/** Latest in-flight probe result for transcript drill-down during an active sweep. */
+export function findInFlightCapabilityProbeLookup(
+  targetKey: string,
+  capabilityId: string,
+): CapabilityProbeLookup | null {
+  for (let i = sessionCompletedProbes.length - 1; i >= 0; i--) {
+    const probe = sessionCompletedProbes[i]!;
+    if (probe.targetKey !== targetKey) continue;
+    const capId = parseCapabilityIdFromTestId(probe.result.testId);
+    if (capId !== capabilityId) continue;
+    const campaignId = uiState.campaignId ?? 'in-flight';
+    return capabilityProbeLookupFromTest(probe.result, campaignId);
+  }
+  return null;
+}
+
 export function getCapabilityMatrixRunState(): MatrixRunUiState {
   return uiState;
 }
@@ -234,6 +324,7 @@ export function isCapabilityMatrixRunActive(): boolean {
 /** Detach all view listeners when leaving Settings (does not abort the run). */
 export function disposeCapabilityMatrixRunView(): void {
   listeners.clear();
+  probeListeners.clear();
 }
 
 export function abortCapabilityMatrixRun(): void {
@@ -241,6 +332,7 @@ export function abortCapabilityMatrixRun(): void {
   abortController?.abort();
   abortController = null;
   clearActiveMatrixSession();
+  clearSessionProbeState();
   setUiState({
     running: false,
     phaseLabel: 'Cancelled',
@@ -279,6 +371,11 @@ function handleCampaignProgress(
         }
         if (activeRunPayload && result.suite === 'capability-matrix') {
           sessionCompletedTests = [...sessionCompletedTests, result];
+          sessionCompletedProbes = [
+            ...sessionCompletedProbes,
+            { targetKey: event.targetKey, result },
+          ];
+          emitProbeUpdate();
           const capId = parseCapabilityIdFromTestId(result.testId);
           if (capId) {
             const probeKey = `${event.targetKey}::${capId}`;
@@ -356,10 +453,17 @@ export async function startCapabilityMatrixRun(
   const campaignId = resume?.campaignId ?? `cap-matrix-${Date.now()}`;
 
   const resumeSession = loadActiveBenchmarkSession();
-  sessionCompletedTests =
-    resume && resumeSession?.capabilityMatrixRun?.campaignId === campaignId
-      ? [...(resumeSession.completedTests ?? [])]
-      : [];
+  if (resume && resumeSession?.capabilityMatrixRun?.campaignId === campaignId) {
+    sessionCompletedTests = [...(resumeSession.completedTests ?? [])];
+    sessionCompletedProbes = rebuildCompletedProbesFromSession(
+      sessionCompletedTests,
+      resume.completedProbeKeys,
+    );
+  } else {
+    sessionCompletedTests = [];
+    sessionCompletedProbes = [];
+  }
+  emitProbeUpdate();
 
   activeRunPayload = {
     campaignId,
@@ -453,10 +557,15 @@ export async function startCapabilityMatrixRun(
       });
     }
     clearActiveMatrixSession();
+    clearSessionProbeState();
   } finally {
     if (generation !== runGeneration) return;
     abortController = null;
-    params.onSettled?.();
+    try {
+      await Promise.resolve(params.onSettled?.());
+    } finally {
+      clearSessionProbeState();
+    }
   }
 }
 

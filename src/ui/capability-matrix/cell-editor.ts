@@ -12,7 +12,8 @@ import { setStatus } from '../status';
 import { openCapabilityCellTranscript } from './cell-transcript.ts';
 import {
   capabilityCellHasTranscriptDrillDown,
-  findLatestCapabilityProbeResult,
+  resolveCapabilityProbeLookup,
+  type CapabilityProbeLookup,
 } from '../../benchmark/capabilities/cell-transcript.ts';
 
 export type CapabilityCellEditorDispose = () => void;
@@ -21,6 +22,10 @@ export type CapabilityCellEditorOptions = {
   host: HTMLElement;
   targetLabel: string;
   campaigns: BenchmarkCampaign[];
+  getInFlightProbeLookup?: (
+    targetKey: string,
+    capabilityId: string,
+  ) => CapabilityProbeLookup | null;
   onSaved: () => void | Promise<void>;
 };
 
@@ -48,7 +53,7 @@ export function mountCapabilityCellEditor(
   cell: MergedCapabilityCell,
   options: CapabilityCellEditorOptions,
 ): CapabilityCellEditorDispose {
-  const { host, targetLabel, campaigns, onSaved } = options;
+  const { host, targetLabel, campaigns, getInFlightProbeLookup, onSaved } = options;
   host.replaceChildren();
   host.className = 'cap-matrix-cell-editor';
   host.hidden = false;
@@ -95,19 +100,20 @@ export function mountCapabilityCellEditor(
   });
   host.appendChild(noteRow);
 
-  const probeLookup = findLatestCapabilityProbeResult(
+  const probeLookup = resolveCapabilityProbeLookup(
     campaigns,
     cell.targetKey,
     cell.capabilityId,
+    getInFlightProbeLookup?.(cell.targetKey, cell.capabilityId) ?? null,
   );
-  const showTranscript = capabilityCellHasTranscriptDrillDown(cell.verdict, probeLookup);
+  const showTranscript = capabilityCellHasTranscriptDrillDown(probeLookup);
 
   const actions = el('div', 'cap-matrix-cell-editor__actions');
   const transcriptBtn = el('button', 'settings-action-btn', 'View probe transcript');
   transcriptBtn.type = 'button';
   transcriptBtn.hidden = !showTranscript;
   transcriptBtn.addEventListener('click', () => {
-    openCapabilityCellTranscript(cell, campaigns, targetLabel);
+    openCapabilityCellTranscript(cell, campaigns, targetLabel, getInFlightProbeLookup);
   });
 
   const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save manual verdict');

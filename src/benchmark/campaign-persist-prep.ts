@@ -6,18 +6,11 @@ import type { BenchmarkCampaign } from './campaign-types.ts';
 import type { TestResult } from './types.ts';
 import { truncateTranscriptForPersistence } from './test-result.ts';
 
-/** Per capability-matrix cell transcript budget after fail/partial trim. */
+/** Per capability-matrix cell transcript budget after trim. */
 export const CAMPAIGN_CELL_TRANSCRIPT_MAX_BYTES = 32 * 1024;
 
 /** Approximate max serialized campaign size before stripping all transcripts. */
 export const CAMPAIGN_PERSIST_SOFT_CAP = 58 * 1024 * 1024;
-
-function isFailOrPartialCell(test: TestResult): boolean {
-  if (test.verdict === 'fail' || test.verdict === 'partial') return true;
-  if (test.verdict === 'pass' || test.verdict === 'n-a') return false;
-  if (test.skipped) return false;
-  return !test.passed;
-}
 
 /** Keep roughly the last two tool-loop rounds (assistant + tool pairs). */
 function trimToLastRounds(messages: import('../types.ts').ApiMessage[]): import('../types.ts').ApiMessage[] {
@@ -52,10 +45,7 @@ function capTranscriptBytes(test: TestResult): void {
 function trimRunTranscripts(run: import('./types.ts').BenchmarkRun): void {
   for (const suite of run.suites) {
     for (const test of suite.tests) {
-      if (!isFailOrPartialCell(test)) {
-        delete test.transcript;
-        continue;
-      }
+      if (!test.transcript?.length) continue;
       capTranscriptBytes(test);
     }
   }
@@ -110,10 +100,6 @@ export function prepareCampaignForPersistence(
       transcript: cell.transcript,
       transcriptMeta: cell.transcriptMeta,
     };
-    if (!isFailOrPartialCell(pseudo)) {
-      delete cell.transcript;
-      continue;
-    }
     capTranscriptBytes(pseudo);
     cell.transcript = pseudo.transcript;
     cell.transcriptMeta = pseudo.transcriptMeta;
