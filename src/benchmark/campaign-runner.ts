@@ -274,7 +274,7 @@ export async function runBenchmarkCampaign(
 
   const signal = options.signal ?? new AbortController().signal;
   const onProgress = options.onProgress;
-  const campaignId = newCampaignId();
+  const campaignId = options.campaignId?.trim() || newCampaignId();
   const startedAt = new Date().toISOString();
   const t0 = performance.now();
   const integrationSuites = options.integrationSuites ?? suitesForPreset(options.preset ?? 'quick');

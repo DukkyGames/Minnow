@@ -37,6 +37,10 @@ import {
 import type { CapabilityMatrixRosterEntry } from './roster-store.ts';
 import type { CapabilityGroupId } from './types.ts';
 import type { CapabilityMatrixViewModel } from './view-model.ts';
+import {
+  buildResumePayloadFromCampaign,
+} from './resume-from-campaign.ts';
+import type { BenchmarkCampaign } from '../campaign-types.ts';
 
 export type MatrixTargetChipState = 'pending' | 'running' | 'done' | 'skipped';
 
@@ -90,6 +94,10 @@ let sessionCompletedTests: TestResult[] = [];
 let sessionCompletedProbes: CompletedProbeRecord[] = [];
 let testsDone = 0;
 let testsTotal = 0;
+
+function newCapabilityMatrixCampaignId(): string {
+  return `campaign-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+}
 
 function emptyUiState(): MatrixRunUiState {
   return {
@@ -450,7 +458,7 @@ export async function startCapabilityMatrixRun(
   testsDone = 0;
 
   let chips = initTargetChips(rosterTargets);
-  const campaignId = resume?.campaignId ?? `cap-matrix-${Date.now()}`;
+  const campaignId = resume?.campaignId ?? newCapabilityMatrixCampaignId();
 
   const resumeSession = loadActiveBenchmarkSession();
   if (resume && resumeSession?.capabilityMatrixRun?.campaignId === campaignId) {
@@ -499,6 +507,7 @@ export async function startCapabilityMatrixRun(
 
   try {
     await runBenchmarkCampaign({
+      campaignId,
       targets: rosterTargets,
       integrationSuites: ['capability-matrix'],
       preset: 'custom',
@@ -615,6 +624,20 @@ export function resumeCapabilityMatrixRunFromSession(
     ...params,
     resumePayload: summary.payload,
   });
+}
+
+/** Resume a cancelled capability-matrix campaign from run history. */
+export function resumeCapabilityMatrixRunFromCampaign(
+  campaign: BenchmarkCampaign,
+  params: Omit<StartCapabilityMatrixRunParams, 'resumePayload'>,
+): boolean {
+  const payload = buildResumePayloadFromCampaign(campaign);
+  if (!payload) return false;
+  void startCapabilityMatrixRun({
+    ...params,
+    resumePayload: payload,
+  });
+  return true;
 }
 
 /** @deprecated Auto-resume removed — use resume UI + {@link resumeCapabilityMatrixRunFromSession}. */

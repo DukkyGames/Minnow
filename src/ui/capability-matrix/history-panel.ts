@@ -5,6 +5,17 @@
 import type { BenchmarkCampaignSummary } from '../../benchmark/campaign-types.ts';
 import { listCampaignSummaries } from '../../benchmark/campaign-persistence.ts';
 
+export type CapabilityMatrixHistoryOptions = {
+  /** Highlight the run currently shown in the grid. */
+  selectedId?: string | null;
+  /** Toggle selection when a run row is clicked. */
+  onSelect?: (summary: BenchmarkCampaignSummary | null) => void;
+  /** Whether a history row can be continued (cancelled with remaining work). */
+  canResume?: (summary: BenchmarkCampaignSummary) => boolean;
+  /** Continue a cancelled sweep from run history. */
+  onContinue?: (summary: BenchmarkCampaignSummary) => void;
+};
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -37,7 +48,10 @@ export async function loadCapabilityMatrixCampaignSummaries(): Promise<
 export function renderCapabilityMatrixHistory(
   host: HTMLElement,
   summaries: BenchmarkCampaignSummary[],
+  options: CapabilityMatrixHistoryOptions = {},
 ): void {
+  const { selectedId = null, onSelect, canResume, onContinue } = options;
+
   host.replaceChildren();
   host.className = 'cap-matrix-history';
   host.dataset.settingsSearchKey = 'advanced.capabilityMatrix.history';
@@ -73,13 +87,43 @@ export function renderCapabilityMatrixHistory(
     for (const row of summaries) {
       const item = el('li', 'cap-matrix-history__item');
       item.setAttribute('role', 'listitem');
+      item.dataset.campaignId = row.id;
+
+      const selectBtn = el('button', 'cap-matrix-history__select');
+      selectBtn.type = 'button';
+      selectBtn.title = 'View probe results from this run';
+
+      if (selectedId === row.id) {
+        item.classList.add('is-selected');
+        selectBtn.setAttribute('aria-pressed', 'true');
+      } else {
+        selectBtn.setAttribute('aria-pressed', 'false');
+      }
 
       const title = el('span', 'cap-matrix-history__id', row.id);
       const when = el('span', 'cap-matrix-history__when', formatWhen(row.startedAt));
       const meta = el('span', 'cap-matrix-history__meta');
       meta.textContent = `${row.status} · ${row.targetCount} model${row.targetCount === 1 ? '' : 's'}`;
 
-      item.append(title, when, meta);
+      selectBtn.append(title, when, meta);
+
+      selectBtn.addEventListener('click', () => {
+        if (!onSelect) return;
+        onSelect(selectedId === row.id ? null : row);
+      });
+
+      item.appendChild(selectBtn);
+
+      if (canResume?.(row) && onContinue) {
+        item.classList.add('cap-matrix-history__item--resumable');
+        const continueBtn = el('button', 'cap-matrix-history__continue', 'Continue');
+        continueBtn.type = 'button';
+        continueBtn.addEventListener('click', () => {
+          onContinue(row);
+        });
+        item.appendChild(continueBtn);
+      }
+
       list.appendChild(item);
     }
 

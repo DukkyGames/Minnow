@@ -12,12 +12,16 @@ import {
   getCapabilityMatrixResumeSummary,
   getCapabilityMatrixRunState,
   isCapabilityMatrixRunActive,
+  resumeCapabilityMatrixRunFromCampaign,
   resumeCapabilityMatrixRunFromSession,
   startCapabilityMatrixRun,
   subscribeCapabilityMatrixRun,
   type MatrixRunUiState,
   type MatrixTargetChip,
 } from '../../benchmark/capabilities/matrix-run-controller.ts';
+import { buildResumePayloadFromCampaign } from '../../benchmark/capabilities/resume-from-campaign.ts';
+import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
+import { targetKeyFromTarget } from '../../benchmark/model-key.ts';
 import type { CapabilityMatrixRosterEntry } from '../../benchmark/capabilities/roster-store.ts';
 import type { CapabilityMatrixViewModel } from '../../benchmark/capabilities/view-model.ts';
 import { CAPABILITY_GROUP_LABELS, CAPABILITY_GROUP_ORDER } from '../../benchmark/capabilities/groups.ts';
@@ -29,6 +33,7 @@ export type CapabilityRunPanelOptions = {
   host: HTMLElement;
   getRoster: () => CapabilityMatrixRosterEntry[];
   getViewModel: () => CapabilityMatrixViewModel;
+  getSelectedHistoryCampaign?: () => BenchmarkCampaign | null;
   onRunSettled: () => void | Promise<void>;
 };
 
@@ -75,6 +80,54 @@ function renderTargetChips(container: HTMLElement, chips: MatrixTargetChip[]): v
     list.appendChild(item);
   }
   container.appendChild(list);
+}
+
+function paintHistoryResumeBanner(
+  root: HTMLElement,
+  getSelectedHistoryCampaign: (() => BenchmarkCampaign | null) | undefined,
+  onResume: () => void,
+): void {
+  let banner = root.querySelector<HTMLElement>('.cap-matrix-run__history-resume');
+  const campaign = getSelectedHistoryCampaign?.() ?? null;
+  const payload = campaign ? buildResumePayloadFromCampaign(campaign) : null;
+  if (!payload || !campaign) {
+    banner?.remove();
+    return;
+  }
+  const remaining = payload.targets.filter(
+    (target) =>
+      !payload.completedTargetKeys.includes(targetKeyFromTarget(target)),
+  ).length;
+
+  if (!banner) {
+    banner = el('div', 'cap-matrix-run__history-resume settings-server-banner');
+    banner.setAttribute('role', 'status');
+    const sessionBanner = root.querySelector('.cap-matrix-run__resume');
+    if (sessionBanner?.nextSibling) {
+      root.insertBefore(banner, sessionBanner.nextSibling);
+    } else if (sessionBanner) {
+      sessionBanner.after(banner);
+    } else {
+      root.prepend(banner);
+    }
+  }
+  banner.replaceChildren();
+  const text = el(
+    'p',
+    'cap-matrix-run__resume-text',
+    `Selected run (${campaign.id}) was cancelled with ${remaining} model(s) remaining · ${payload.completedProbeKeys?.length ?? 0} probe(s) done.`,
+  );
+  const actions = createSettingsActionsRow(
+    [
+      {
+        label: 'Continue run',
+        variant: 'primary',
+        onClick: onResume,
+      },
+    ],
+    { searchKey: 'advanced.capabilityMatrix.run.action' },
+  );
+  banner.append(text, actions);
 }
 
 function paintResumeBanner(
@@ -214,8 +267,10 @@ function buildGroupChecklistBlock(
 }
 
 /** Mount run filters, actions, and live progress (subscribes to singleton controller). */
-export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () => void {
-  const { host, getRoster, getViewModel, onRunSettled } = options;
+export function mountCapabilityRunPanel(
+  options: CapabilityRunPanelOptions,
+): { dispose: () => void; refreshBanners: () => void } {
+  const { host, getRoster, getViewModel, getSelectedHistoryCampaign, onRunSettled } = options;
   host.replaceChildren();
   host.className = 'cap-matrix-run';
 
@@ -348,6 +403,26 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
         refreshResume();
       },
     );
+    paintHistoryResumeBanner(
+      host,
+      getSelectedHistoryCampaign,
+      () => {
+        const campaign = getSelectedHistoryCampaign?.() ?? null;
+        if (!campaign) return;
+        resumeCapabilityMatrixRunFromCampaign(
+          campaign,
+          buildRunParams(
+            host,
+            getRoster,
+            getViewModel,
+            sideEffectsInput,
+            skipScoredInput,
+            lifecycleInput,
+            onRunSettled,
+          ),
+        );
+      },
+    );
   };
 
   refreshResume();
@@ -359,8 +434,11 @@ export function mountCapabilityRunPanel(options: CapabilityRunPanelOptions): () 
 
   paintRunState(host, getCapabilityMatrixRunState());
 
-  return () => {
-    unsubscribe();
+  return {
+    dispose: () => {
+      unsubscribe();
+    },
+    refreshBanners: refreshResume,
   };
 }
 

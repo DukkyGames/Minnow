@@ -17,12 +17,18 @@ import {
 } from '../benchmark/capabilities/roster-store.ts';
 import { buildCapabilityMatrixViewModel } from '../benchmark/capabilities/view-model.ts';
 import {
+  CAPABILITY_MATRIX_PROBE_WAVES,
+  allCapabilityGroupIds,
+} from '../benchmark/capabilities/matrix-run-filters.ts';
+import {
   disposeCapabilityMatrixRunView,
   findInFlightCapabilityProbeLookup,
   getCapabilityMatrixInFlightAutos,
+  resumeCapabilityMatrixRunFromCampaign,
   subscribeCapabilityMatrixProbeUpdates,
 } from '../benchmark/capabilities/matrix-run-controller.ts';
-import type { BenchmarkCampaign } from '../benchmark/campaign-types.ts';
+import type { BenchmarkCampaign, BenchmarkCampaignSummary } from '../benchmark/campaign-types.ts';
+import { canResumeCapabilityMatrixCampaign } from '../benchmark/capabilities/resume-from-campaign.ts';
 import {
   beginAsyncSectionRender,
   isAsyncSectionRenderStale,
@@ -53,6 +59,7 @@ import { closeBenchmarkTranscriptDrawer } from './benchmark-transcript-drawer.ts
 
 const disposers: Array<() => void> = [];
 let disposeRunPanel: (() => void) | null = null;
+let refreshRunPanelBanners: (() => void) | null = null;
 let disposeGridNav: (() => void) | null = null;
 let disposeGridToolbar: (() => void) | null = null;
 let disposeProbeUpdates: (() => void) | null = null;
@@ -62,6 +69,7 @@ let gridFilter: CapabilityGridFilter = createDefaultGridFilter();
 export function disposeCapabilityMatrix(): void {
   disposeRunPanel?.();
   disposeRunPanel = null;
+  refreshRunPanelBanners = null;
   disposeGridNav?.();
   disposeGridNav = null;
   disposeGridToolbar?.();
@@ -224,7 +232,9 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   main.dataset.settingsSearchKey = 'advanced.capabilityMatrix.grid';
   const gridToolbarHost = el('div', 'cap-matrix-grid-toolbar-host');
   const gridHost = el('div', 'cap-matrix-grid-host');
-  main.append(gridToolbarHost, gridHost);
+  const viewBannerHostEl = el('div', 'cap-matrix-view-banner-host');
+  viewBannerHostEl.hidden = true;
+  main.append(viewBannerHostEl, gridToolbarHost, gridHost);
 
   body.append(rail, main);
   content.appendChild(body);
@@ -250,14 +260,105 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
   });
   let latestManualStore = manualStore;
   let campaignBodies = campaigns;
+  let historySummaries: BenchmarkCampaignSummary[] = summaries;
+  let selectedHistoryCampaignId: string | null = null;
+  let viewBannerHost: HTMLElement | null = viewBannerHostEl;
 
   let openSelection: { targetKey: string; capabilityId: string } | null = null;
+
+  function campaignsForGridView(): BenchmarkCampaign[] {
+    if (!selectedHistoryCampaignId) return campaignBodies;
+    const match = campaignBodies.filter((row) => row.id === selectedHistoryCampaignId);
+    return match.length ? match : campaignBodies;
+  }
+
+  function selectedHistoryCampaign(): BenchmarkCampaign | null {
+    if (!selectedHistoryCampaignId) return null;
+    return campaignBodies.find((row) => row.id === selectedHistoryCampaignId) ?? null;
+  }
+
+  function paintHistoryViewBanner(): void {
+    if (!viewBannerHost) return;
+    viewBannerHost.replaceChildren();
+    if (!selectedHistoryCampaignId) {
+      viewBannerHost.hidden = true;
+      return;
+    }
+    const summary = historySummaries.find((row) => row.id === selectedHistoryCampaignId);
+    viewBannerHost.hidden = false;
+    viewBannerHost.className = 'cap-matrix-view-banner';
+    viewBannerHost.setAttribute('role', 'status');
+
+    const copy = el('p', 'cap-matrix-view-banner__text');
+    copy.textContent = summary
+      ? `Viewing run ${summary.id} (${summary.status})`
+      : `Viewing run ${selectedHistoryCampaignId}`;
+
+    const clearBtn = el('button', 'settings-inline-link cap-matrix-view-banner__clear', 'Show all runs');
+    clearBtn.type = 'button';
+    clearBtn.addEventListener('click', () => {
+      selectedHistoryCampaignId = null;
+      openSelection = null;
+      closeBenchmarkTranscriptDrawer();
+      rebuildViewModel();
+      paintGrid();
+      paintHistoryViewBanner();
+      renderCapabilityMatrixHistory(historyHost, historySummaries, historyPanelOptions());
+      refreshRunPanelBanners?.();
+    });
+
+    viewBannerHost.append(copy, clearBtn);
+  }
+
+  function historyPanelOptions() {
+    return {
+      selectedId: selectedHistoryCampaignId,
+      onSelect: (summary: BenchmarkCampaignSummary | null) => {
+        selectedHistoryCampaignId = summary?.id ?? null;
+        openSelection = null;
+        closeBenchmarkTranscriptDrawer();
+        rebuildViewModel();
+        paintGrid();
+        paintHistoryViewBanner();
+        renderCapabilityMatrixHistory(historyHost, historySummaries, historyPanelOptions());
+        refreshRunPanelBanners?.();
+      },
+      canResume: (summary: BenchmarkCampaignSummary) => {
+        if (summary.status !== 'cancelled') return false;
+        const body = campaignBodies.find((row) => row.id === summary.id);
+        return body ? canResumeCapabilityMatrixCampaign(body) : false;
+      },
+      onContinue: (summary: BenchmarkCampaignSummary) => {
+        selectedHistoryCampaignId = summary.id;
+        openSelection = null;
+        closeBenchmarkTranscriptDrawer();
+        rebuildViewModel();
+        paintGrid();
+        paintHistoryViewBanner();
+        renderCapabilityMatrixHistory(historyHost, historySummaries, historyPanelOptions());
+        refreshRunPanelBanners?.();
+        const campaign = campaignBodies.find((row) => row.id === summary.id);
+        if (!campaign) return;
+        runDrawer.open = true;
+        resumeCapabilityMatrixRunFromCampaign(campaign, {
+          roster,
+          viewModel,
+          allowSideEffects: false,
+          skipScored: true,
+          groupIds: allCapabilityGroupIds(),
+          probeWaves: [...CAPABILITY_MATRIX_PROBE_WAVES],
+          manageModelLifecycle: false,
+          onSettled: refreshView,
+        });
+      },
+    };
+  }
 
   function rebuildViewModel(): void {
     viewModel = buildCapabilityMatrixViewModel({
       roster,
       manualStore: latestManualStore,
-      campaigns: campaignBodies,
+      campaigns: campaignsForGridView(),
       inFlightAutos: getCapabilityMatrixInFlightAutos(),
     });
   }
@@ -267,7 +368,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     disposeGridNav = renderCapabilityMatrixGrid({
       host: gridHost,
       model: viewModel,
-      campaigns: campaignBodies,
+      campaigns: campaignsForGridView(),
       filter: gridFilter,
       openCell: openSelection,
       getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
@@ -279,7 +380,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
         // Click opens the transcript panel; the former bottom editor lives there.
         openSelection = selection;
         openCapabilityCellTranscript(cell, {
-          campaigns: campaignBodies,
+          campaigns: campaignsForGridView(),
           targetLabel: viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
           getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
           onSaved: refreshView,
@@ -323,7 +424,14 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     if (isAsyncSectionRenderStale('capability-matrix', generation)) return;
 
     campaignBodies = bodies;
+    historySummaries = history;
     latestManualStore = manual;
+    if (
+      selectedHistoryCampaignId &&
+      !history.some((row) => row.id === selectedHistoryCampaignId)
+    ) {
+      selectedHistoryCampaignId = null;
+    }
     rebuildViewModel();
 
     renderCapabilityRosterPanel({
@@ -332,7 +440,8 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
       onRosterChange: persistRoster,
     });
     paintGrid();
-    renderCapabilityMatrixHistory(historyHost, history);
+    renderCapabilityMatrixHistory(historyHost, historySummaries, historyPanelOptions());
+    paintHistoryViewBanner();
   }
 
   disposeGridToolbar = mountCapabilityGridToolbar({
@@ -407,10 +516,15 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     paintGrid();
   });
 
-  disposeRunPanel = mountCapabilityRunPanel({
-    host: runHost,
-    getRoster: () => roster,
-    getViewModel: () => viewModel,
-    onRunSettled: refreshView,
-  });
+  disposeRunPanel = (() => {
+    const panel = mountCapabilityRunPanel({
+      host: runHost,
+      getRoster: () => roster,
+      getViewModel: () => viewModel,
+      getSelectedHistoryCampaign: selectedHistoryCampaign,
+      onRunSettled: refreshView,
+    });
+    refreshRunPanelBanners = panel.refreshBanners;
+    return panel.dispose;
+  })();
 }

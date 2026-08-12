@@ -127,6 +127,8 @@ export interface ModelScoreIndexRow {
 
 export interface RunCampaignOptions {
   targets: BenchmarkTarget[];
+  /** Reuse an existing campaign id when resuming a partial sweep. */
+  campaignId?: string;
   integrationSuites?: SuiteId[];
   standardPackIds?: string[];
   standardTier?: BenchmarkTier;
