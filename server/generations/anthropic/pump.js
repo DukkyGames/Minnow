@@ -5,7 +5,7 @@
 import { APICallError } from '@ai-sdk/provider';
 import { generateText as defaultGenerateText, streamText as defaultStreamText } from 'ai';
 import { classifyUpstreamError } from '../fallback.js';
-import { isHostDead, markHostDead, originFromUrl } from '../host-cooldown.js';
+import { isHostDead, originFromUrl } from '../host-cooldown.js';
 import {
   appendChunk,
   markComplete,
@@ -177,7 +177,12 @@ function buildGenerationCallOptions(body, provider, abortSignal) {
 
 /**
  * @param {unknown} err
- * @returns {{ kind: 'retryable' | 'fatal', message: string }}
+ * @returns {{
+ *   kind: 'retryable' | 'fatal',
+ *   message: string,
+ *   rateLimited?: boolean,
+ *   retryAfterMs?: number,
+ * }}
  */
 function classifySdkError(err) {
   if (err instanceof APICallError || (err && typeof err === 'object' && err.name === 'APICallError')) {
@@ -187,8 +192,18 @@ function classifySdkError(err) {
       status || 500,
       typeof apiErr.responseBody === 'string' ? apiErr.responseBody : apiErr.message,
     );
-    const classified = classifyUpstreamError(err, typeof status === 'number' ? { status } : undefined);
-    return { kind: classified.kind, message };
+    const classified = classifyUpstreamError(
+      err,
+      typeof status === 'number'
+        ? { status, headers: apiErr.responseHeaders }
+        : undefined,
+    );
+    return {
+      kind: classified.kind,
+      message,
+      rateLimited: classified.rateLimited,
+      retryAfterMs: classified.retryAfterMs,
+    };
   }
   const classified = classifyUpstreamError(err);
   return { kind: classified.kind, message: classified.reason };
@@ -221,10 +236,15 @@ function parseOpenAiRequestBody(requestBody) {
  *   index: number,
  *   idleMs: number,
  *   maxMs: number,
- *   cooldownSeconds: number,
  *   canFailover: boolean,
  * }} params
- * @returns {Promise<{ outcome: 'complete' | 'retry' | 'fatal', message?: string }>}
+ * @returns {Promise<{
+ *   outcome: 'complete' | 'retry' | 'fatal',
+ *   message?: string,
+ *   retrySameCandidate?: boolean,
+ *   retryAfterMs?: number,
+ *   hostSuspect?: boolean,
+ * }>}
  */
 export async function pumpAnthropicUpstream({
   state,
@@ -233,7 +253,6 @@ export async function pumpAnthropicUpstream({
   index,
   idleMs,
   maxMs,
-  cooldownSeconds,
   canFailover,
 }) {
   const controller = new AbortController();
@@ -270,7 +289,9 @@ export async function pumpAnthropicUpstream({
 
     if (isHostDead(origin)) {
       const message = `Host in cooldown: ${origin}`;
-      if (canFailover) return { outcome: 'retry', message };
+      if (canFailover) {
+        return { outcome: 'retry', message, retrySameCandidate: false };
+      }
       return { outcome: 'fatal', message };
     }
 
@@ -409,17 +430,22 @@ export async function pumpAnthropicUpstream({
 
     if (timeoutKind) {
       const message = generationTimeoutMessage({ idleMs, maxMs }, timeoutKind);
-      if (!bytesEmitted && canFailover) {
-        markHostDead(origin, cooldownSeconds);
-        return { outcome: 'retry', message };
+      if (!bytesEmitted) {
+        // Same-candidate retry after a stall costs the full timeout budget again.
+        return { outcome: 'retry', message, retrySameCandidate: false, hostSuspect: true };
       }
       return { outcome: 'fatal', message };
     }
 
     const classified = classifySdkError(err);
-    if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
-      markHostDead(origin, cooldownSeconds);
-      return { outcome: 'retry', message: classified.message };
+    if (!bytesEmitted && classified.kind === 'retryable') {
+      return {
+        outcome: 'retry',
+        message: classified.message,
+        retrySameCandidate: classified.rateLimited === true || !canFailover,
+        retryAfterMs: classified.retryAfterMs,
+        hostSuspect: classified.rateLimited !== true,
+      };
     }
 
     if (!bytesEmitted) {

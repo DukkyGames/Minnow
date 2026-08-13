@@ -15,6 +15,8 @@ import { sanitizeCompletionBodyForProvider } from '../providers/sanitize-complet
 import {
   buildCandidateRequestBody,
   classifyUpstreamError,
+  computeRetryDelayMs,
+  MAX_SAME_CANDIDATE_ATTEMPTS,
   readFallbackChainsConfig,
 } from './fallback.js';
 import { isHostDead, markHostDead, originFromUrl } from './host-cooldown.js';
@@ -127,6 +129,47 @@ export function pumpUpstream({ state }) {
 }
 
 /**
+ * Sleep, unless the generation is cancelled first.
+ *
+ * @param {import('./store.js').GenerationState} state
+ * @param {number} ms
+ * @returns {Promise<boolean>} false when the wait ended because of cancellation.
+ */
+function delayUnlessCancelled(state, ms) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const tick = () => {
+      if (state.status === 'cancelled') {
+        resolve(false);
+        return;
+      }
+      const remaining = ms - (Date.now() - started);
+      if (remaining <= 0) {
+        resolve(true);
+        return;
+      }
+      setTimeout(tick, Math.min(remaining, 250));
+    };
+    tick();
+  });
+}
+
+/**
+ * Whether a retryable failure is worth re-running against the same candidate.
+ * Rate limits always are — the model is busy, not wrong. Other transient errors
+ * only when there is no other candidate to fall through to, so a configured
+ * fallback chain still switches immediately the way it always did.
+ *
+ * @param {{ kind: string, rateLimited?: boolean }} classified
+ * @param {boolean} canFailover
+ * @returns {boolean}
+ */
+function shouldRetrySameCandidate(classified, canFailover) {
+  if (classified.kind !== 'retryable') return false;
+  return classified.rateLimited === true || !canFailover;
+}
+
+/**
  * @param {{ state: import('./store.js').GenerationState }} params
  */
 async function pumpUpstreamAsync({ state }) {
@@ -197,19 +240,18 @@ async function pumpUpstreamAsync({ state }) {
             },
           }
         : runtime;
-    const result =
+    const runAttempt = () =>
       resolvedApi === 'anthropic-v1'
-        ? await pumpAnthropicUpstream({
+        ? pumpAnthropicUpstream({
             state,
             runtime: anthropicRuntime,
             candidate,
             index,
             idleMs,
             maxMs,
-            cooldownSeconds: fallbackConfig.cooldownSeconds,
             canFailover,
           })
-        : await attemptCandidateStream({
+        : attemptCandidateStream({
             state,
             candidate,
             index,
@@ -224,15 +266,45 @@ async function pumpUpstreamAsync({ state }) {
             ),
             idleMs,
             maxMs,
-            cooldownSeconds: fallbackConfig.cooldownSeconds,
             origin,
             canFailover,
           });
 
+    let result = await runAttempt();
+
+    // Re-run the *same* candidate before falling through. A 429/529 means this
+    // model is busy, not wrong — switching candidates silently swaps the user's
+    // model, and with fallback chains disabled (the default) there is nothing to
+    // switch to, so the turn used to die outright.
+    for (
+      let attempt = 1;
+      result.outcome === 'retry' &&
+      result.retrySameCandidate === true &&
+      attempt < MAX_SAME_CANDIDATE_ATTEMPTS &&
+      state.status !== 'cancelled';
+      attempt += 1
+    ) {
+      const delayMs = computeRetryDelayMs(attempt, result.retryAfterMs);
+      console.warn(
+        `[generations] ${result.message ?? 'upstream retryable failure'} — retrying ${candidate.providerId}/${candidate.modelId} in ${Math.round(delayMs / 1000)}s (attempt ${attempt + 1}/${MAX_SAME_CANDIDATE_ATTEMPTS})`,
+      );
+      if (!(await delayUnlessCancelled(state, delayMs))) {
+        return;
+      }
+      result = await runAttempt();
+    }
+
     if (result.outcome === 'complete') {
       return;
     }
-    if (result.outcome === 'fatal') {
+    // Cooldown belongs to giving up on the candidate: marking it during a retry
+    // would trip the isHostDead pre-flight above on our own next attempt. Only
+    // cool a host off when there is somewhere else to go — locking out the sole
+    // provider would break the next turn too.
+    if (result.hostSuspect && canFailover) {
+      markHostDead(origin, fallbackConfig.cooldownSeconds);
+    }
+    if (result.outcome === 'fatal' || !canFailover) {
       markError(state, result.message ?? 'Generation failed');
       return;
     }
@@ -252,11 +324,16 @@ async function pumpUpstreamAsync({ state }) {
  *   requestBody: Buffer,
  *   idleMs: number,
  *   maxMs: number,
- *   cooldownSeconds: number,
  *   origin: string,
  *   canFailover: boolean,
  * }} params
- * @returns {Promise<{ outcome: 'complete' | 'retry' | 'fatal', message?: string }>}
+ * @returns {Promise<{
+ *   outcome: 'complete' | 'retry' | 'fatal',
+ *   message?: string,
+ *   retrySameCandidate?: boolean,
+ *   retryAfterMs?: number,
+ *   hostSuspect?: boolean,
+ * }>}
  */
 async function attemptCandidateStream({
   state,
@@ -267,7 +344,6 @@ async function attemptCandidateStream({
   requestBody,
   idleMs,
   maxMs,
-  cooldownSeconds,
   origin,
   canFailover,
 }) {
@@ -325,11 +401,15 @@ async function attemptCandidateStream({
         responseText: rawBody,
       });
       const classified = classifyUpstreamError(null, upstream);
-      if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
-        if (upstream.status >= 500 || [502, 503, 504].includes(upstream.status)) {
-          markHostDead(origin, cooldownSeconds);
-        }
-        return { outcome: 'retry', message };
+      if (!bytesEmitted && classified.kind === 'retryable') {
+        return {
+          outcome: 'retry',
+          message,
+          retrySameCandidate: shouldRetrySameCandidate(classified, canFailover),
+          retryAfterMs: classified.retryAfterMs,
+          // A rate limit is the host behaving correctly — do not cool it off.
+          hostSuspect: classified.rateLimited !== true && upstream.status >= 500,
+        };
       }
       return { outcome: 'fatal', message };
     }
@@ -388,16 +468,21 @@ async function attemptCandidateStream({
     }
     if (timeoutKind) {
       const message = generationTimeoutMessage({ idleMs, maxMs }, timeoutKind);
-      if (!bytesEmitted && canFailover) {
-        markHostDead(origin, cooldownSeconds);
-        return { outcome: 'retry', message };
+      if (!bytesEmitted) {
+        // Never re-run the same candidate after a stall: each attempt costs the
+        // full timeout budget and a wedged host will not unwedge in seconds.
+        return { outcome: 'retry', message, retrySameCandidate: false, hostSuspect: true };
       }
       return { outcome: 'fatal', message };
     }
     const classified = classifyUpstreamError(err);
-    if (!bytesEmitted && classified.kind === 'retryable' && canFailover) {
-      markHostDead(origin, cooldownSeconds);
-      return { outcome: 'retry', message: classified.reason };
+    if (!bytesEmitted && classified.kind === 'retryable') {
+      return {
+        outcome: 'retry',
+        message: classified.reason,
+        retrySameCandidate: shouldRetrySameCandidate(classified, canFailover),
+        hostSuspect: true,
+      };
     }
     return { outcome: 'fatal', message: classified.reason };
   } finally {

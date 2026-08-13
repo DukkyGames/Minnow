@@ -58,7 +58,90 @@ const RETRYABLE_NODE_CODES = new Set([
   'UND_ERR_BODY_TIMEOUT',
 ]);
 
-const RETRYABLE_HTTP_STATUSES = new Set([502, 503, 504]);
+/**
+ * Statuses that mean "the same request would succeed later": the model is busy,
+ * not wrong. Retrying the same candidate is the right move — failing over swaps
+ * the user onto a different model, and dying loses the turn outright.
+ * 529 is Anthropic's "overloaded"; 425 is Too Early; 408 is a server-side timeout.
+ */
+const RATE_LIMIT_HTTP_STATUSES = new Set([408, 425, 429, 529]);
+
+const RETRYABLE_HTTP_STATUSES = new Set([502, 503, 504, ...RATE_LIMIT_HTTP_STATUSES]);
+
+/** Attempts against one candidate before falling through to the next. */
+export const MAX_SAME_CANDIDATE_ATTEMPTS = 3;
+
+/** Base backoff for same-candidate retries. */
+const RETRY_BASE_DELAY_MS = 1_000;
+
+/** Never stall a turn longer than this, whatever `Retry-After` claims. */
+const RETRY_MAX_DELAY_MS = 30_000;
+
+/**
+ * Parse a `Retry-After` header (delta-seconds or HTTP-date) into milliseconds.
+ * Returns null when absent or unparseable so the caller falls back to backoff.
+ *
+ * @param {string | null | undefined} value
+ * @param {number} [nowMs]
+ * @returns {number | null}
+ */
+export function parseRetryAfterMs(value, nowMs = Date.now()) {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const seconds = Number(raw);
+    if (!Number.isFinite(seconds) || seconds < 0) return null;
+    return Math.min(Math.round(seconds * 1000), RETRY_MAX_DELAY_MS);
+  }
+
+  // Date.parse is lenient enough to read "-4" as a year, so require the weekday
+  // and month names an HTTP-date always carries before trusting it.
+  if (!/[a-z]/i.test(raw)) return null;
+  const at = Date.parse(raw);
+  if (Number.isNaN(at)) return null;
+  return Math.min(Math.max(at - nowMs, 0), RETRY_MAX_DELAY_MS);
+}
+
+/**
+ * Delay before re-running the same candidate: honour `Retry-After` when the
+ * provider sent one, otherwise exponential backoff with jitter so a fleet of
+ * clients does not resynchronize onto the same retry instant.
+ *
+ * @param {number} attempt 1 for the first retry.
+ * @param {number | null | undefined} [retryAfterMs]
+ * @returns {number}
+ */
+export function computeRetryDelayMs(attempt, retryAfterMs) {
+  if (typeof retryAfterMs === 'number' && retryAfterMs >= 0) {
+    return Math.min(retryAfterMs, RETRY_MAX_DELAY_MS);
+  }
+  const exponential = RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1);
+  const jitter = Math.random() * RETRY_BASE_DELAY_MS;
+  return Math.min(Math.round(exponential + jitter), RETRY_MAX_DELAY_MS);
+}
+
+/**
+ * Read `Retry-After` off anything response-shaped (undici Response, or the
+ * `{ status }` literals the Anthropic bridge hands us).
+ *
+ * @param {unknown} response
+ * @returns {string | null}
+ */
+function readRetryAfterHeader(response) {
+  if (!response || typeof response !== 'object') return null;
+  const headers = /** @type {{ headers?: unknown }} */ (response).headers;
+  if (headers && typeof (/** @type {Headers} */ (headers).get) === 'function') {
+    return /** @type {Headers} */ (headers).get('retry-after');
+  }
+  if (headers && typeof headers === 'object') {
+    const record = /** @type {Record<string, unknown>} */ (headers);
+    const value = record['retry-after'] ?? record['Retry-After'];
+    return typeof value === 'string' ? value : null;
+  }
+  return null;
+}
 
 /**
  * @param {unknown} config
@@ -202,8 +285,8 @@ function toEnabledSet(enabledProviderIds) {
 
 /**
  * @param {unknown} err
- * @param {{ status?: number } | null | undefined} [response]
- * @returns {{ kind: 'retryable' | 'fatal', reason: string }}
+ * @param {{ status?: number, headers?: unknown } | null | undefined} [response]
+ * @returns {{ kind: 'retryable' | 'fatal', reason: string, rateLimited?: boolean, retryAfterMs?: number }}
  */
 export function classifyUpstreamError(err, response) {
   const status = response?.status;
@@ -217,6 +300,15 @@ export function classifyUpstreamError(err, response) {
     }
     if (status === 422) {
       return { kind: 'fatal', reason: 'Upstream HTTP 422 (validation)' };
+    }
+    if (RATE_LIMIT_HTTP_STATUSES.has(status)) {
+      const retryAfterMs = parseRetryAfterMs(readRetryAfterHeader(response));
+      return {
+        kind: 'retryable',
+        reason: `Upstream HTTP ${status}`,
+        rateLimited: true,
+        ...(retryAfterMs == null ? {} : { retryAfterMs }),
+      };
     }
     if (RETRYABLE_HTTP_STATUSES.has(status)) {
       return { kind: 'retryable', reason: `Upstream HTTP ${status}` };

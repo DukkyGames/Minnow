@@ -100,6 +100,35 @@ const saveFileInvalidation: InvalidationRule = {
   pathFromArgs: (_, args) => pathKeysFromArgs(args, PATH_WRITE_KEYS),
 };
 
+/**
+ * Shell and extension tools write files without going through a Minnow file tool,
+ * so nothing in {@link INVALIDATION_MAP} can name the paths they touched. Reads are
+ * cached with an indefinite TTL, so without this a `prettier --write` (or any MCP
+ * server that edits files) leaves the model reading pre-write content for the rest
+ * of the session. Bust everything path-scoped rather than guess.
+ */
+const opaqueWriteInvalidation: InvalidationRule = {
+  invalidateTools: FILE_AND_GIT_READ_INVALIDATION_TARGETS,
+  pathFromArgs: () => ['**'],
+};
+
+/** Tools that run arbitrary user code and may touch any file in the workspace. */
+const OPAQUE_WRITE_TOOLS = new Set([
+  'execute_command',
+  'run_javascript',
+  'run_python',
+  'start_background_command',
+]);
+
+/** True when a tool can mutate the workspace in ways its args do not describe. */
+function isOpaqueWriteTool(name: string): boolean {
+  return (
+    OPAQUE_WRITE_TOOLS.has(name) ||
+    name.startsWith('mcp__') ||
+    name.startsWith('plugin__')
+  );
+}
+
 const INVALIDATION_MAP: Record<string, InvalidationRule> = {
   save_file: saveFileInvalidation,
   create_pdf: saveFileInvalidation,
@@ -473,6 +502,9 @@ export function invalidateAfterTool(
   let rule = INVALIDATION_MAP[name];
   if (!rule && FILE_TREE_MUTATING_TOOLS.has(name)) {
     rule = saveFileInvalidation;
+  }
+  if (!rule && isOpaqueWriteTool(name)) {
+    rule = opaqueWriteInvalidation;
   }
   if (!rule) return;
 

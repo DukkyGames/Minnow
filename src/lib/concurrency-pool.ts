@@ -21,13 +21,27 @@ export interface RunWithConcurrencyOptions<T, R> {
   worker: (ctx: PoolWorkerContext<T, R>) => Promise<R>;
 }
 
-/** Run work items with a bounded worker pool; results preserve input order. */
+export interface PoolRunResult<R> {
+  /**
+   * Results for the items that ran, in input order. Always dense — never
+   * positionally aligned with `items`, because an abort leaves gaps.
+   */
+  results: R[];
+  /** True when the signal aborted before every item ran, so `results` is short. */
+  aborted: boolean;
+}
+
+/**
+ * Run work items with a bounded worker pool. Results preserve input order but
+ * only cover items that actually ran: workers bail on abort, so aligning the
+ * output positionally with `items` would hand callers a sparse array.
+ */
 export async function runWithConcurrency<T, R>(
   options: RunWithConcurrencyOptions<T, R>,
-): Promise<R[]> {
+): Promise<PoolRunResult<R>> {
   const signal = options.signal ?? new AbortController().signal;
   const concurrency = Math.max(1, options.concurrency);
-  const results: R[] = new Array(options.items.length);
+  const byIndex = new Map<number, R>();
   let index = 0;
 
   async function workerLoop(): Promise<void> {
@@ -39,11 +53,18 @@ export async function runWithConcurrency<T, R>(
       const item = options.items[i]!;
       options.onItemStart?.(item);
       const result = await options.worker({ item, signal });
-      results[i] = result;
+      byIndex.set(i, result);
       options.onItemDone?.(item, result);
     }
   }
 
   await Promise.all(Array.from({ length: concurrency }, () => workerLoop()));
-  return results;
+
+  const results: R[] = [];
+  for (let i = 0; i < options.items.length; i += 1) {
+    if (byIndex.has(i)) {
+      results.push(byIndex.get(i)!);
+    }
+  }
+  return { results, aborted: results.length < options.items.length };
 }
