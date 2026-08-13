@@ -5,6 +5,7 @@
 import { CAP_MATRIX_HAYSTACK_NEEDLE } from './fixture-paths.ts';
 import {
   fail,
+  firstRoundWithTool,
   hallucinatedToolNames,
   hasTool,
   maxRoundBatchSize,
@@ -54,8 +55,26 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
     requires: ['workspace'],
     verdict: (out) => {
       const rounds = totalToolRounds(out);
+      const callCount = out.rounds.reduce((n, r) => n + r.toolCalls.length, 0);
+      const listRound = firstRoundWithTool(out, 'list_directory');
+      const readRound = firstRoundWithTool(out, 'read_file');
+      const grepRound = firstRoundWithTool(out, 'grep');
+      const sequentialChain =
+        listRound >= 0 &&
+        readRound > listRound &&
+        grepRound > readRound &&
+        rounds >= 3;
+
+      if (sequentialChain && rounds >= 4) {
+        return pass('Sequential discovery chain across four or more rounds');
+      }
+      if (sequentialChain) return pass('Sequential list → read → grep chain');
       if (rounds >= 4) return pass('Four or more tool rounds');
       if (rounds >= 2) return partial('Short tool chain');
+      if (rounds === 1 && callCount >= 4) {
+        return partial('One batched round (parallel, not a sequential loop)');
+      }
+      if (callCount >= 2) return partial('Multiple tools but loop stopped early');
       return fail('Tool loop did not continue');
     },
   },

@@ -241,4 +241,49 @@ describe('capability probe verdicts', () => {
 
     assert.equal(verdictOf('mode-impeccable', out({ toolCalls: [call('save_file', {})] })), 'fail');
   });
+
+  test('core-tool-loop rewards sequential chains and does not fail parallel batches', () => {
+    const parallelBatch = out({
+      toolCalls: [
+        call('list_directory', { path: 'matrix' }),
+        call('read_file', { path: 'matrix/notes.md' }),
+        call('read_file', { path: 'matrix/a/b/c.json' }),
+        call('grep', { pattern: 'cap-matrix-grep-token-42', path: 'matrix' }),
+      ],
+      rounds: [
+        {
+          round: 0,
+          toolCalls: [
+            call('list_directory', { path: 'matrix' }),
+            call('read_file', { path: 'matrix/notes.md' }),
+            call('read_file', { path: 'matrix/a/b/c.json' }),
+            call('grep', { pattern: 'cap-matrix-grep-token-42', path: 'matrix' }),
+          ],
+        },
+      ],
+      contentText: 'Done.',
+    });
+    assert.equal(verdictOf('core-tool-loop', parallelBatch), 'partial');
+
+    const sequential = out({
+      toolCalls: [
+        call('list_directory', { path: 'matrix/a' }),
+        call('list_directory', { path: 'matrix/a/b' }),
+        call('read_file', { path: 'matrix/a/b/c.json' }),
+        call('grep', { pattern: 'cap-matrix-grep-token-42', path: 'matrix' }),
+        call('read_file', { path: 'matrix/haystack.txt' }),
+      ],
+      rounds: [
+        { round: 0, toolCalls: [call('list_directory', { path: 'matrix/a' })] },
+        { round: 1, toolCalls: [call('list_directory', { path: 'matrix/a/b' })] },
+        { round: 2, toolCalls: [call('read_file', { path: 'matrix/a/b/c.json' })] },
+        { round: 3, toolCalls: [call('grep', { pattern: 'cap-matrix-grep-token-42', path: 'matrix' })] },
+        { round: 4, toolCalls: [call('read_file', { path: 'matrix/haystack.txt' })] },
+      ],
+      contentText: 'Done.',
+    });
+    assert.equal(verdictOf('core-tool-loop', sequential), 'pass');
+
+    assert.equal(verdictOf('core-tool-loop', out({ toolCalls: [call('list_directory', {})] })), 'fail');
+  });
 });
