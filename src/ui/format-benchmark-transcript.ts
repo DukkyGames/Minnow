@@ -4,7 +4,7 @@
 
 import { apiMessageContentToText } from '../api/message-content.ts';
 import type { BenchmarkRun, TestResult } from '../benchmark/types.ts';
-import type { ApiMessage, ApiMessageContent } from '../types.ts';
+import type { ApiAssistantMessage, ApiMessage, ApiMessageContent } from '../types.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 
 export type BenchmarkTranscriptRunMeta = {
@@ -51,7 +51,7 @@ function formatUserContent(content: ApiMessageContent): string {
   return lines.join('\n').trim() || apiMessageContentToText(content);
 }
 
-function formatAssistantContent(msg: ApiMessage): string {
+function formatAssistantContent(msg: ApiAssistantMessage): string {
   const chunks: string[] = [];
   const prose = apiMessageContentToText(msg.content).trim();
   if (prose) chunks.push(prose);
@@ -79,7 +79,7 @@ function prettyJson(raw: string): string {
   }
 }
 
-function formatToolCalls(msg: ApiMessage): string[] {
+function formatToolCalls(msg: ApiAssistantMessage): string[] {
   if (!msg.tool_calls?.length) return [];
   const lines: string[] = ['[assistant — tool_calls]'];
   for (const call of msg.tool_calls) {
