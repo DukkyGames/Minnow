@@ -1,1 +1,0 @@
-{"ts":"2026-08-11T00:30:37.945Z","pid":64916,"source":"server","kind":"lsp-exit","message":"LSP server graphql exited on signal SIGTERM","extra":{"serverId":"graphql","signal":"SIGTERM","scope":"editor"}}

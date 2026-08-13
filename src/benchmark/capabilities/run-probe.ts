@@ -11,7 +11,10 @@ import { runOneShot, runToolLoop, type OneShotResult } from '../llm-driver.ts';
 import { rethrowIfAborted, withBenchmarkTimeout } from '../abort.ts';
 import type { BenchmarkRunContext } from '../types.ts';
 import { DEFAULT_PROBE_TIMEOUT_MS } from '../types.ts';
-import { getCapabilityProbePrompt } from './probe-prompts.ts';
+import {
+  CAPABILITY_PROBE_SYSTEM_PROMPT,
+  getCapabilityProbePrompt,
+} from './probe-prompts.ts';
 import type {
   CapabilityDefinition,
   CapabilityProbeRunOutput,
@@ -211,16 +214,21 @@ export async function runCapabilityProbe(
     return { skipped: true, skipReason: reason, verdict: 'n-a', reason };
   }
 
-  const messages: ApiMessage[] = [];
+  // Every probe gets the baseline prompt; a mode row appends its lite body below it, the
+  // same layering `composeSystemPrompt` gives a chat turn.
+  const systemParts: string[] = [CAPABILITY_PROBE_SYSTEM_PROMPT];
   if (probe.modeId) {
     const modePrompt = loadModePromptBody(probe.modeId, 'lite');
     if (!modePrompt) {
       const reason = `mode prompt unavailable: ${probe.modeId}`;
       return { skipped: true, skipReason: reason, verdict: 'n-a', reason };
     }
-    messages.push({ role: 'system', content: modePrompt });
+    systemParts.push(modePrompt);
   }
-  messages.push({ role: 'user', content: buildUserMessage(cap) });
+  const messages: ApiMessage[] = [
+    { role: 'system', content: systemParts.join('\n\n') },
+    { role: 'user', content: buildUserMessage(cap) },
+  ];
 
   const rounds: CapabilityRoundTelemetry[] = [];
   const executedResults: string[] = [];
@@ -248,6 +256,12 @@ export async function runCapabilityProbe(
   const maxRounds = resolveMaxToolRounds(probe);
   const timeoutMs = ctx.perTestTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
 
+  const offeredToolNames = tools.map((t) => t.function.name);
+  // Whatever the driver had produced when the clock ran out. Without this a timeout
+  // discards the run and the cell shows `fail` over an empty transcript, hiding both the
+  // work the model did and the reason it was too slow.
+  let partial: OneShotResult | undefined;
+
   try {
     let oneShot!: OneShotResult;
 
@@ -260,9 +274,13 @@ export async function runCapabilityProbe(
           messages,
           tools,
           maxToolRounds: maxRounds,
+          timeoutMs,
           ...(probe.modeId ? { modeId: probe.modeId } : {}),
           executeToolFn,
           onRound: (round) => rounds.push(round),
+          onPartial: (snapshot) => {
+            partial = snapshot;
+          },
         });
       } else {
         oneShot = await runOneShot({
@@ -270,27 +288,44 @@ export async function runCapabilityProbe(
           modelId: ctx.modelId,
           signal: probeSignal,
           messages,
+          timeoutMs,
           ...(tools.length ? { tools } : {}),
+          onPartial: (snapshot) => {
+            partial = snapshot;
+          },
         });
       }
     });
 
-    const offeredToolNames = tools.map((t) => t.function.name);
     const out = probeOutputFromOneShot(oneShot, rounds, executedResults, offeredToolNames);
     const judged = probe.verdict(out);
     // Say when the transcript ends mid-chain. Without this the cell reports "started a
     // background run but never stopped it" for a model that was cut off on its way to
     // the stop call, and the transcript just stops with no explanation.
     const cutOff = judged.verdict !== 'pass' && hitRoundCap(rounds, maxRounds);
+    const notes: string[] = [];
+    if (cutOff) notes.push(`cut off at the ${maxRounds}-round cap`);
+    if (oneShot.thinkingBudgetExceeded) notes.push('answered after the thinking budget tripped');
     return {
       skipped: false,
       verdict: judged.verdict,
-      reason: cutOff ? `${judged.reason} — cut off at the ${maxRounds}-round cap` : judged.reason,
+      reason: notes.length ? `${judged.reason} — ${notes.join('; ')}` : judged.reason,
       oneShot,
     };
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
     const message = err instanceof Error ? err.message : String(err);
+    if (partial) {
+      // Score what the model actually produced, then say why it was cut short.
+      const out = probeOutputFromOneShot(partial, rounds, executedResults, offeredToolNames);
+      const judged = probe.verdict(out);
+      return {
+        skipped: false,
+        verdict: judged.verdict,
+        reason: `${judged.reason} — ${message}`,
+        oneShot: partial,
+      };
+    }
     return {
       skipped: false,
       verdict: 'fail',

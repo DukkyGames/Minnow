@@ -11,7 +11,12 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { CAPABILITY_CATALOG } from '../../src/benchmark/capabilities/catalog.ts';
 import { CAPABILITY_PROBE_BY_ID } from '../../src/benchmark/capabilities/probes.ts';
-import { hasCapabilityProbePrompt } from '../../src/benchmark/capabilities/probe-prompts.ts';
+import {
+  CAPABILITY_PROBE_SYSTEM_PROMPT,
+  buildLongContextPrompt,
+  hasCapabilityProbePrompt,
+} from '../../src/benchmark/capabilities/probe-prompts.ts';
+import { estimateTokensFromText } from '../../src/chat/prompts/token-estimate-core.ts';
 import { probeWaveForCapabilityId } from '../../src/benchmark/capabilities/probe-wave-ids.ts';
 import type {
   CapabilityProbeSpec,
@@ -24,6 +29,30 @@ function runnableSpecs(): [string, CapabilityProbeSpecBase][] {
     .filter(([, spec]: [string, CapabilityProbeSpec]) => spec.kind !== 'delegated')
     .map(([id, spec]) => [id, spec as CapabilityProbeSpecBase]);
 }
+
+describe('capability probe prompt sizing', () => {
+  /**
+   * `core-long-context` is meant to clear a 32k-token bar. It had drifted to ~95k tokens,
+   * so it spent 273s of a 300s probe budget on prompt processing and measured the host
+   * rather than the model's recall.
+   */
+  test('core-long-context stays near the 32k-token bar it tests', () => {
+    const tokens = estimateTokensFromText(buildLongContextPrompt());
+    assert.ok(tokens > 32_000, `haystack must clear 32k tokens, got ~${tokens}`);
+    assert.ok(tokens < 40_000, `haystack must stay near the bar it tests, got ~${tokens}`);
+  });
+
+  test('the baseline system prompt carries no verdict hints', () => {
+    assert.ok(CAPABILITY_PROBE_SYSTEM_PROMPT.includes('Minnow'));
+    // Naming a specific tool or answer here would make rows pass on the prompt, not the model.
+    for (const leak of ['get_datetime', 'read_file(', 'must call', 'always call']) {
+      assert.ok(
+        !CAPABILITY_PROBE_SYSTEM_PROMPT.includes(leak),
+        `baseline prompt must not steer verdicts: found "${leak}"`,
+      );
+    }
+  });
+});
 
 describe('capability probe specs', () => {
   test('every offered tool id exists in the built-in catalog', () => {

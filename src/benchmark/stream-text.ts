@@ -57,13 +57,23 @@ export class BenchmarkStreamContentRouter {
 
   private readonly thinkingBudgetTracker: ThinkingBudgetTracker | null;
 
+  private readonly cumulativeBudget: boolean;
+
   private budgetTripped = false;
 
-  constructor(modelId: string, thinkingBudgetTracker?: ThinkingBudgetTracker | null) {
+  constructor(
+    modelId: string,
+    thinkingBudgetTracker?: ThinkingBudgetTracker | null,
+    options: { cumulativeBudget?: boolean } = {},
+  ) {
     this.inlineRouter = new InlineContentThinkingRouter({
       thinkingModel: modelLikelyUsesInlineThinking(modelId),
     });
     this.thinkingBudgetTracker = thinkingBudgetTracker ?? null;
+    // Chat resets the count when prose starts, because a human is watching each block.
+    // A probe's budget spans the whole probe, so a model that alternates think→text→think
+    // must not win a fresh allowance per block.
+    this.cumulativeBudget = options.cumulativeBudget === true;
   }
 
   get thinkingBudgetExceeded(): boolean {
@@ -134,7 +144,7 @@ export class BenchmarkStreamContentRouter {
         continue;
       }
       if (!text) continue;
-      this.thinkingBudgetTracker?.endSession();
+      if (!this.cumulativeBudget) this.thinkingBudgetTracker?.endSession();
       this.proseText += text;
     }
   }

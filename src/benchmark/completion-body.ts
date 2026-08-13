@@ -32,7 +32,12 @@ export const BENCHMARK_MAX_TOKENS = DEFAULT_SAMPLER_GLOBAL.maxTokens ?? 32768;
 /** Pinned thinking effort for every capability-matrix target. */
 export const BENCHMARK_THINKING_EFFORT: ReasoningEffortOption = 'medium';
 
-/** Explicit per-request thinking budget (llama.cpp and client-side watchdog). */
+/**
+ * Fallback per-request thinking budget when the caller resolves none.
+ *
+ * Prefer passing a wall-clock-derived budget (see `thinking-budget-policy.ts`) — this flat
+ * figure is chat's, and on a slow local target it is larger than a probe timeout allows.
+ */
 export const BENCHMARK_THINKING_BUDGET_TOKENS = DEFAULT_LLAMA_THINKING_BUDGET_TOKENS;
 
 export interface BuildBenchmarkCompletionBodyInput {
@@ -47,6 +52,14 @@ export interface BuildBenchmarkCompletionBodyInput {
   maxTokens?: number;
   /** Caller override — wins over {@link BENCHMARK_SAMPLER}.temperature. */
   temperature?: number;
+  /**
+   * Effort override — wins over {@link BENCHMARK_THINKING_EFFORT}. `'off'` is how the
+   * watchdog's commit retry disables thinking: on local runtimes it is the only switch
+   * that reliably lands, since it carries `chat_template_kwargs.enable_thinking: false`.
+   */
+  thinkingEffort?: ReasoningEffortOption;
+  /** Wall-clock-derived budget — wins over {@link BENCHMARK_THINKING_BUDGET_TOKENS}. */
+  thinkingBudgetTokens?: number;
 }
 
 export interface BuildBenchmarkCompletionBodyResult {
@@ -82,14 +95,17 @@ export function buildBenchmarkCompletionBody(
     input.provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID &&
     input.providerCapabilities?.supportsThinkingBudget === true;
 
+  const effort = input.thinkingEffort ?? BENCHMARK_THINKING_EFFORT;
+  const budgetTokens = input.thinkingBudgetTokens ?? BENCHMARK_THINKING_BUDGET_TOKENS;
+
   const { nativeBudgetApplied } = mergeThinkingIntoCompletionBody(
     body as unknown as Record<string, unknown>,
-    'on',
+    effort === 'off' ? 'off' : 'on',
     input.provider,
     input.capabilities ?? undefined,
-    BENCHMARK_THINKING_EFFORT,
+    effort,
     undefined,
-    BENCHMARK_THINKING_BUDGET_TOKENS,
+    effort === 'off' ? null : budgetTokens,
     { llamaSupportsThinkingBudget },
   );
 

@@ -14,11 +14,16 @@ import {
 } from '../api/chat';
 import { extractReasoningDelta } from '../api/reasoning.ts';
 import { extractInlineThinkingFromContent } from '../api/inline-thinking.ts';
-import { ThinkingBudgetTracker } from '../agents/thinking-budget.ts';
 import {
-  buildBenchmarkCompletionBody,
-  BENCHMARK_THINKING_BUDGET_TOKENS,
-} from './completion-body.ts';
+  ThinkingBudgetTracker,
+  THINKING_BUDGET_EPHEMERAL_RETRY_INSTRUCTION,
+} from '../agents/thinking-budget.ts';
+import { buildBenchmarkCompletionBody } from './completion-body.ts';
+import {
+  getBenchmarkThroughput,
+  recordBenchmarkThroughput,
+  resolveBenchmarkThinkingBudgetTokens,
+} from './thinking-budget-policy.ts';
 import { applyBenchmarkSystemPrompt } from './completion-messages.ts';
 import {
   BenchmarkStreamContentRouter,
@@ -40,7 +45,13 @@ import {
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content.ts';
 import { resolveSendCapabilities } from '../providers/model-capabilities.ts';
 import { getActiveProvider } from '../providers/store';
-import type { ApiMessage, ChatCompletionChunk, ToolCall, ToolCallAccumulator } from '../types';
+import type {
+  ApiMessage,
+  ChatCompletionChunk,
+  ReasoningEffortOption,
+  ToolCall,
+  ToolCallAccumulator,
+} from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { ExecuteToolContext } from '../tools/client';
 import { executeTool } from '../tools/client';
@@ -51,6 +62,15 @@ import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 
+/** Placeholder timing for partial results, which never completed a turn. */
+const EMPTY_TURN_TIMING: LlmTurnTiming = {
+  ttftMs: null,
+  totalMs: 0,
+  tokPerSec: null,
+  usage: {},
+  stats: {},
+};
+
 export interface OneShotInput {
   providerId: string;
   modelId: string;
@@ -59,6 +79,13 @@ export interface OneShotInput {
   tools?: OpenAIFunctionDefinition[];
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Probe wall-clock budget. Sizes the thinking watchdog so it trips before the timeout
+   * rather than well after it; omit only for callers that run without a timeout.
+   */
+  timeoutMs?: number;
+  /** Latest usable result while the call is still running (survives a timeout). */
+  onPartial?: (partial: OneShotResult) => void;
 }
 
 export interface OneShotResult {
@@ -136,6 +163,22 @@ interface StreamTurnInput {
   tools?: OpenAIFunctionDefinition[];
   maxTokens?: number;
   temperature?: number;
+  /** Probe-level watchdog, shared across every turn of one probe. */
+  thinkingBudgetTracker?: ThinkingBudgetTracker | null;
+  /**
+   * Skip thinking outright. Set for every round after the probe's budget is spent, so a
+   * chain does not pay a truncated stream plus a retry on each remaining round.
+   */
+  forceThinkingOff?: boolean;
+  /** Emitted whenever the stream is cut short, so callers keep a partial transcript. */
+  onPartial?: (partial: PartialTurnSnapshot) => void;
+}
+
+/** What a turn had produced when it was cut short (timeout or cancel). */
+export interface PartialTurnSnapshot {
+  contentText: string;
+  reasoningText: string;
+  toolCalls: ToolCall[];
 }
 
 interface StreamTurnResult {
@@ -161,40 +204,116 @@ async function streamTurn(input: StreamTurnInput): Promise<StreamTurnResult> {
     provider.apiKind,
   );
 
-  const { body: initialBody, usedConstrained: initialConstrained, nativeBudgetApplied } =
+  const buildBody = (
+    messages: ApiMessage[],
+    thinkingEffort?: ReasoningEffortOption,
+  ): ReturnType<typeof buildBenchmarkCompletionBody> =>
     buildBenchmarkCompletionBody({
-    provider,
-    modelId: input.modelId,
-    messages: input.messages,
-    tools: input.tools,
-    capabilities,
-    providerCapabilities,
-    toolCallsMeta,
-    maxTokens: input.maxTokens,
-    temperature: input.temperature,
-  });
+      provider,
+      modelId: input.modelId,
+      messages,
+      tools: input.tools,
+      capabilities,
+      providerCapabilities,
+      toolCallsMeta,
+      maxTokens: input.maxTokens,
+      temperature: input.temperature,
+      ...(thinkingEffort ? { thinkingEffort } : {}),
+      ...(input.thinkingBudgetTracker
+        ? { thinkingBudgetTokens: input.thinkingBudgetTracker.limitTokens }
+        : {}),
+    });
 
-  let thinkingBudgetTracker: ThinkingBudgetTracker | null = null;
-  if (BENCHMARK_THINKING_BUDGET_TOKENS > 0 && !nativeBudgetApplied) {
-    thinkingBudgetTracker = new ThinkingBudgetTracker(BENCHMARK_THINKING_BUDGET_TOKENS);
-  }
+  const { body: initialBody, usedConstrained: initialConstrained } = buildBody(
+    input.messages,
+    input.forceThinkingOff ? 'off' : undefined,
+  );
 
   let usedConstrained = initialConstrained;
   let body: ChatCompletionBody & { stream: true; stream_options: { include_usage: boolean } } =
     initialBody;
 
   const runOnce = (): Promise<StreamTurnResult> =>
-    streamTurnWithBody(input, provider, body, thinkingBudgetTracker);
+    streamTurnWithBody(
+      input,
+      provider,
+      body,
+      input.forceThinkingOff ? null : (input.thinkingBudgetTracker ?? null),
+    );
 
+  let turn: StreamTurnResult;
   try {
-    return await runOnce();
+    turn = await runOnce();
   } catch (err) {
     if (usedConstrained && isResponseFormatRejectionError(err)) {
       usedConstrained = false;
       body = stripResponseFormatFromBody(body) as typeof body;
-      return runOnce();
+      turn = await runOnce();
+    } else {
+      throw err;
     }
-    throw err;
+  }
+
+  recordBenchmarkThroughput(input.providerId, input.modelId, turn.timing.tokPerSec);
+
+  if (needsThinkingCommitRetry(turn)) {
+    return commitAfterThinkingBudget(input, provider, buildBody, turn);
+  }
+  return turn;
+}
+
+/**
+ * True when the watchdog cut the stream before the model committed to anything usable.
+ * Without the retry below this is a dead probe: reasoning only, no answer, no tool call.
+ */
+export function needsThinkingCommitRetry(
+  turn: Pick<StreamTurnResult, 'thinkingBudgetExceeded' | 'contentText' | 'toolCalls'>,
+): boolean {
+  if (!turn.thinkingBudgetExceeded) return false;
+  return !turn.contentText.trim() && turn.toolCalls.length === 0;
+}
+
+/**
+ * Re-ask with thinking disabled after the watchdog trips, so a long deliberation still
+ * yields an answer to score. Chat prefills the partial thinking and continues; a probe has
+ * a hard wall-clock budget, so it takes the cheaper path — one direct retry with
+ * `enable_thinking: false`, which is the switch local runtimes actually honor.
+ */
+async function commitAfterThinkingBudget(
+  input: StreamTurnInput,
+  provider: Awaited<ReturnType<typeof getActiveProvider>>,
+  buildBody: (
+    messages: ApiMessage[],
+    thinkingEffort?: ReasoningEffortOption,
+  ) => ReturnType<typeof buildBenchmarkCompletionBody>,
+  tripped: StreamTurnResult,
+): Promise<StreamTurnResult> {
+  if (input.signal.aborted) return tripped;
+
+  const retryMessages: ApiMessage[] = [
+    ...input.messages,
+    { role: 'user', content: THINKING_BUDGET_EPHEMERAL_RETRY_INSTRUCTION },
+  ];
+  const { body: retryBody } = buildBody(retryMessages, 'off');
+
+  try {
+    const retry = await streamTurnWithBody(
+      { ...input, messages: retryMessages, thinkingBudgetTracker: null },
+      provider,
+      retryBody,
+      null,
+    );
+    recordBenchmarkThroughput(input.providerId, input.modelId, retry.timing.tokPerSec);
+    if (!retry.contentText.trim() && retry.toolCalls.length === 0) return tripped;
+    return {
+      ...retry,
+      // Keep the reasoning the watchdog cut off: it is the evidence for why this row is slow.
+      reasoningText: tripped.reasoningText || retry.reasoningText,
+      thinkingBudgetExceeded: true,
+    };
+  } catch {
+    // A failed retry must not lose the tripped turn — the caller still scores what it has.
+    return tripped;
   }
 }
 
@@ -226,6 +345,7 @@ async function streamTurnWithBody(
   const contentRouter = new BenchmarkStreamContentRouter(
     input.modelId,
     thinkingBudgetTracker,
+    { cumulativeBudget: true },
   );
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
@@ -280,6 +400,14 @@ async function streamTurnWithBody(
   } catch (err) {
     const e = err as { name?: string };
     if (e?.name !== 'AbortError' || !contentRouter.thinkingBudgetExceeded) {
+      // Timeout or cancel: hand back whatever streamed so the cell shows the model's
+      // partial work instead of an empty transcript.
+      contentRouter.flush();
+      input.onPartial?.({
+        contentText: contentRouter.getProseText(),
+        reasoningText: contentRouter.getReasoningText(),
+        toolCalls: finalizeToolCalls(toolAcc),
+      });
       throw err;
     }
     flushSseEventBuffer(sseBuffer, handleChunk);
@@ -363,6 +491,19 @@ async function buildStreamBodyForMessages(
   return body;
 }
 
+/**
+ * Watchdog for one probe. Sized from the probe's wall clock and the rate this run has
+ * measured for the target, so it can actually trip before the timeout kills the probe.
+ */
+function createProbeThinkingBudget(input: OneShotInput): ThinkingBudgetTracker {
+  return new ThinkingBudgetTracker(
+    resolveBenchmarkThinkingBudgetTokens({
+      timeoutMs: input.timeoutMs,
+      tokPerSec: getBenchmarkThroughput(input.providerId, input.modelId),
+    }),
+  );
+}
+
 async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
   const messages = applyBenchmarkSystemPrompt([...input.messages]);
 
@@ -374,6 +515,17 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
     tools: input.tools,
     maxTokens: input.maxTokens,
     temperature: input.temperature,
+    thinkingBudgetTracker: createProbeThinkingBudget(input),
+    onPartial: (partial) => {
+      input.onPartial?.({
+        text: resolveBenchmarkCompletionText(partial.contentText, partial.reasoningText),
+        contentText: partial.contentText,
+        reasoningText: partial.reasoningText,
+        toolCalls: partial.toolCalls,
+        timing: EMPTY_TURN_TIMING,
+        messages,
+      });
+    },
   });
   let text = turn.fullText.trim();
   let contentText = turn.contentText.trim();
@@ -432,19 +584,38 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
     input.executeToolFn ??
     ((name, args, ctx) => executeTool(name, args, { ...ctx, modeId: input.modeId }));
 
-  let lastTiming: LlmTurnTiming = {
-    ttftMs: null,
-    totalMs: 0,
-    tokPerSec: null,
-    usage: {},
-    stats: {},
-  };
+  // One watchdog for the whole probe: a chain that thinks hard in every round must not win
+  // a fresh allowance per round when the timeout that kills it is probe-wide.
+  const thinkingBudgetTracker = createProbeThinkingBudget(input);
+  let lastTiming: LlmTurnTiming = EMPTY_TURN_TIMING;
   let lastText = '';
   let lastContentText = '';
   let lastReasoningText = '';
   let lastToolCalls: ToolCall[] = [];
   let lastFinish: string | undefined;
   let lastThinkingBudgetExceeded: boolean | undefined;
+
+  /** Snapshot of everything the loop has produced so far (survives a timeout). */
+  const publishPartial = (
+    contentText: string,
+    reasoningText: string,
+    toolCalls: ToolCall[],
+  ): void => {
+    input.onPartial?.({
+      text: resolveBenchmarkCompletionText(contentText, reasoningText),
+      contentText,
+      reasoningText,
+      toolCalls,
+      timing: lastTiming,
+      messages,
+      thinkingBudgetExceeded: lastThinkingBudgetExceeded,
+    });
+  };
+
+  // Once the probe's reasoning allowance is gone it is gone: the tracker latches
+  // `exceeded`, so later rounds must run with thinking off rather than trip on their first
+  // delta and pay a retry each time.
+  let thinkingSpent = false;
 
   for (let round = 0; round < maxRounds; round++) {
     assertNotAborted(input.signal);
@@ -456,6 +627,14 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
       tools: input.tools,
       maxTokens: input.maxTokens,
       temperature: input.temperature,
+      thinkingBudgetTracker,
+      forceThinkingOff: thinkingSpent,
+      onPartial: (partial) =>
+        publishPartial(
+          partial.contentText || lastContentText,
+          partial.reasoningText || lastReasoningText,
+          partial.toolCalls.length > 0 ? partial.toolCalls : lastToolCalls,
+        ),
     });
 
     lastTiming = turn.timing;
@@ -464,8 +643,12 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
     lastReasoningText = turn.reasoningText.trim();
     lastToolCalls = preserveLastToolCalls(lastToolCalls, turn.toolCalls);
     lastFinish = turn.finishReason;
-    lastThinkingBudgetExceeded = turn.thinkingBudgetExceeded;
+    if (turn.thinkingBudgetExceeded) {
+      lastThinkingBudgetExceeded = true;
+      thinkingSpent = true;
+    }
     input.onRound?.(capabilityRoundFromToolCalls(round, turn.toolCalls));
+    publishPartial(lastContentText, lastReasoningText, lastToolCalls);
 
     if (turn.toolCalls.length > 0) {
       messages.push({

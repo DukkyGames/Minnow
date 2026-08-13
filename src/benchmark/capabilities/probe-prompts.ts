@@ -25,8 +25,37 @@ import {
   CAPABILITY_MATRIX_FIXTURE_DIR,
 } from './fixture-paths.ts';
 
-/** Inline haystack size — comfortably past the 32k-token bar the row is named for. */
-const LONG_CONTEXT_FILLER_LINES = 2600;
+/**
+ * Baseline system prompt for every auto probe.
+ *
+ * Probes used to send a bare user message with no system message at all, while a real chat
+ * turn always carries a composed prompt. A reasoning model handed a context-free
+ * instruction deliberates about what is even being asked, which is what made the slowest
+ * rows time out. This is a faithful subset of what chat sends — the neutral lines from
+ * `chat/prompts/base/default.lite.md` and `chat/prompts/tool-usage/default.lite.md` — and
+ * nothing else. Do not add guidance here that hints at what any verdict checks for.
+ */
+export const CAPABILITY_PROBE_SYSTEM_PROMPT = [
+  'You are **Minnow**, a local-first AI assistant.',
+  '',
+  '- Be concise. No preamble, no closing summary.',
+  '- Be honest about uncertainty.',
+  '- Never invent tool results. Report actual errors.',
+  '- Read before write. Search before claiming something exists.',
+  '- Most specific tool wins (e.g. `read_file` > `cat`).',
+  '- Independent calls in parallel; dependent calls sequential.',
+  '- One-line summary after a tool sequence, not a transcript.',
+].join('\n');
+
+/**
+ * Inline haystack size — comfortably past the 32k-token bar the row is named for.
+ *
+ * At 146 chars/line this is ~34k estimated tokens. It was 2600 lines (~95k tokens), nearly
+ * three times what this row claims to test: `core-long-context` then spent 273s of a 300s
+ * budget on prompt processing alone and measured the host's patience, not the model's
+ * recall. Keep the arithmetic in view when changing this.
+ */
+const LONG_CONTEXT_FILLER_LINES = 930;
 
 /**
  * Values `code-run-js-py` asks the model to average, with the answer derived from them.

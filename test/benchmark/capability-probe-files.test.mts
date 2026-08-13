@@ -47,7 +47,7 @@ mock.module('../../src/benchmark/llm-driver.ts', {
   namedExports: {
     runOneShot: async () => baseOneShot(),
     runToolLoop: async (input: {
-      messages: Array<{ content: string }>;
+      messages: Array<{ role: string; content: string }>;
       onRound?: (round: CapabilityRoundTelemetry) => void;
     }) => {
       const round: CapabilityRoundTelemetry = {
@@ -55,7 +55,8 @@ mock.module('../../src/benchmark/llm-driver.ts', {
         toolCalls: [LIST_CALL, READ_CALL].map((c) => ({ function: c.function })),
       };
       input.onRound?.(round);
-      assert.match(String(input.messages[0]?.content), /matrix\/a\/b\/c\.json/);
+      const userMessage = input.messages.find((m) => m.role === 'user');
+      assert.match(String(userMessage?.content), /matrix\/a\/b\/c\.json/);
       return baseOneShot();
     },
     preserveLastToolCalls: (prev: ToolCall[], next: ToolCall[]) =>
