@@ -7,6 +7,8 @@
 export const CAPABILITY_MATRIX_FIXTURE_DIR = 'matrix';
 
 export const CAP_MATRIX_NOTES_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/notes.md`;
+/** Dedicated replace probe target — not touched by `files-save-append`. */
+export const CAP_MATRIX_REPLACE_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/replace.md`;
 export const CAP_MATRIX_SAMPLE_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/sample.ts`;
 export const CAP_MATRIX_HAYSTACK_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/haystack.txt`;
 export const CAP_MATRIX_JSON_PATH = `${CAPABILITY_MATRIX_FIXTURE_DIR}/a/b/c.json`;

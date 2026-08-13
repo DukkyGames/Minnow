@@ -50,7 +50,6 @@ const GROUP_BY_HEADER_PREFIX = [
   { prefix: 'todo_write', group: 'agents-tasks' },
   { prefix: 'spawn_sub_agent', group: 'agents-tasks' },
   { prefix: 'list / get / cancel sub-agents', group: 'agents-tasks' },
-  { prefix: 'delegate_tasks', group: 'agents-tasks' },
   { prefix: 'board_init', group: 'agents-tasks' },
   { prefix: 'board_report', group: 'agents-tasks' },
   { prefix: 'issue_*', group: 'agents-tasks' },
@@ -120,7 +119,6 @@ const ID_BY_HEADER = {
   'todo_write': 'agents-todo-write',
   'spawn_sub_agent': 'agents-spawn-sub-agent',
   'list / get / cancel sub-agents': 'agents-sub-agent-control',
-  'delegate_tasks': 'agents-delegate-tasks',
   'board_init / board_update_task': 'agents-board-init',
   'board_report / board_get_state': 'agents-board-report',
   'issue_* tools': 'agents-issue-tools',
@@ -199,6 +197,9 @@ const AUTO_SCOPE_NOTES = {
 /** Spreadsheet columns we intentionally omit from the shipped catalog. */
 const SKIP_GROUP = 'modes';
 
+/** Retired spreadsheet columns — omitted from the shipped catalog. */
+const SKIP_CAPABILITY_IDS = new Set(['agents-delegate-tasks']);
+
 function parseTier(comment) {
   const m = comment.match(/Tier (\d)/);
   return m ? Number(m[1]) : 2;
@@ -254,6 +255,7 @@ for (let C = 10; C <= range.e.c; C++) {
   const howToTest = parseHowToTest(comment);
   const id = ID_BY_HEADER[header];
   if (!id) throw new Error(`missing id for ${header}`);
+  if (SKIP_CAPABILITY_IDS.has(id)) continue;
   const group = inferGroup(header);
   if (group === SKIP_GROUP) continue;
   const scoreMode = MANUAL_IDS.has(id) ? 'manual' : 'auto';
@@ -282,9 +284,9 @@ for (let C = 10; C <= range.e.c; C++) {
   });
 }
 
-if (entries.length !== 58) throw new Error(`expected 58 entries, got ${entries.length}`);
+if (entries.length !== 57) throw new Error(`expected 57 entries, got ${entries.length}`);
 const autoCount = entries.filter((e) => e.scoreMode === 'auto').length;
-if (autoCount !== 54) throw new Error(`expected 54 auto, got ${autoCount}`);
+if (autoCount !== 53) throw new Error(`expected 53 auto, got ${autoCount}`);
 
 const lines = [
   '/**',

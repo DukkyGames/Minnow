@@ -14,6 +14,7 @@ import {
   CAP_MATRIX_JSON_KEY,
   CAP_MATRIX_JSON_PATH,
   CAP_MATRIX_NOTES_PATH,
+  CAP_MATRIX_REPLACE_PATH,
   CAP_MATRIX_PDF_PATH,
   CAP_MATRIX_REPO_DIR,
   CAP_MATRIX_SAMPLE_FN,
@@ -27,6 +28,9 @@ const NOTES_INITIAL = `- alpha item
 - beta item
 - gamma item
 `;
+
+/** Seeded only for `files-replace-text`; save/append probes use `notes.md` instead. */
+const REPLACE_INITIAL = NOTES_INITIAL;
 
 function buildSampleTs(): string {
   const lines = [
@@ -153,6 +157,7 @@ export async function seedCapabilityMatrixFixtures(workspaceRoot: string): Promi
   const jsonBody = JSON.stringify({ capMatrixFixtureKey: CAP_MATRIX_JSON_KEY }, null, 2);
   await saveText(workspaceRoot, CAP_MATRIX_JSON_PATH, `${jsonBody}\n`);
   await saveText(workspaceRoot, CAP_MATRIX_NOTES_PATH, NOTES_INITIAL);
+  await saveText(workspaceRoot, CAP_MATRIX_REPLACE_PATH, REPLACE_INITIAL);
   await saveText(workspaceRoot, CAP_MATRIX_SAMPLE_PATH, buildSampleTs());
   await saveText(workspaceRoot, CAP_MATRIX_BUGGY_PATH, buildBuggyTs());
   await saveText(

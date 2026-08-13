@@ -26,6 +26,7 @@ mock.module('../../src/benchmark/execute-tool-sandbox.ts', {
 const {
   CAP_MATRIX_JSON_PATH,
   CAP_MATRIX_NOTES_PATH,
+  CAP_MATRIX_REPLACE_PATH,
   CAP_MATRIX_REPO_DIR,
   CAP_MATRIX_SAMPLE_PATH,
   CAP_MATRIX_GREP_TOKEN,
@@ -59,6 +60,14 @@ describe('capability matrix fixtures-workspace', () => {
     }
   });
 
+  test('save-append and replace-text probes target different files', () => {
+    const saveAppend = getCapabilityProbePrompt('files-save-append');
+    const replaceText = getCapabilityProbePrompt('files-replace-text');
+    assert.ok(saveAppend?.includes(CAP_MATRIX_NOTES_PATH));
+    assert.ok(replaceText?.includes(CAP_MATRIX_REPLACE_PATH));
+    assert.ok(!replaceText?.includes(CAP_MATRIX_NOTES_PATH));
+  });
+
   test('seedCapabilityMatrixFixtures writes matrix tree and git repo', async () => {
     toolCalls.length = 0;
     const root = '/tmp/fake-bench-workspace';
@@ -75,6 +84,13 @@ describe('capability matrix fixtures-workspace', () => {
     assert.ok(
       toolCalls.some((c) => c.name === 'save_file' && c.args.path === CAP_MATRIX_NOTES_PATH),
     );
+    assert.ok(
+      toolCalls.some((c) => c.name === 'save_file' && c.args.path === CAP_MATRIX_REPLACE_PATH),
+    );
+    const replaceSave = toolCalls.find(
+      (c) => c.name === 'save_file' && c.args.path === CAP_MATRIX_REPLACE_PATH,
+    );
+    assert.ok(String(replaceSave?.args.content).includes('- beta item'));
     assert.ok(
       toolCalls.some((c) => c.name === 'save_file' && c.args.path === CAP_MATRIX_SAMPLE_PATH),
     );

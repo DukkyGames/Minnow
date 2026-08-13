@@ -18,6 +18,7 @@ import {
   CAP_MATRIX_HAYSTACK_NEEDLE,
   CAP_MATRIX_JSON_PATH,
   CAP_MATRIX_NOTES_PATH,
+  CAP_MATRIX_REPLACE_PATH,
   CAP_MATRIX_PDF_PATH,
   CAP_MATRIX_REPO_DIR,
   CAP_MATRIX_SAMPLE_FN,
@@ -103,7 +104,7 @@ const WORKSPACE_PROBE_PROMPTS: Record<string, string> = {
   'files-list-read': `List the files in ${CAPABILITY_MATRIX_FIXTURE_DIR} and read ${CAP_MATRIX_JSON_PATH}.`,
   'files-read-document': `Use read_document on ${CAP_MATRIX_PDF_PATH} and summarize the body in one sentence.`,
   'files-save-append': `Create ${CAP_MATRIX_NOTES_PATH} with three markdown bullets (- one, - two, - three), then append a fourth bullet (- four).`,
-  'files-replace-text': `In ${CAP_MATRIX_NOTES_PATH}, replace the exact line "- beta item" with "- BETA item" using replace_text_in_file.`,
+  'files-replace-text': `In ${CAP_MATRIX_REPLACE_PATH}, replace the exact line "- beta item" with "- BETA item" using replace_text_in_file.`,
   'files-insert-range': `Read lines 40-60 of ${CAP_MATRIX_SAMPLE_PATH}, then insert "// cap-matrix probe" at line 41.`,
   'files-grep': `Find every file under ${CAPABILITY_MATRIX_FIXTURE_DIR} that mentions ${CAP_MATRIX_GREP_TOKEN}.`,
   'docs-create-office': `Create a spreadsheet at ${CAPABILITY_MATRIX_FIXTURE_DIR}/fruit.xlsx with one row per fruit: apple 3, pear 5, plum 2.`,
@@ -147,8 +148,6 @@ const STANDALONE_PROBE_PROMPTS: Record<string, string> = {
     'I need five things done: audit the config loader, write a migration, update the docs, add tests, then tag a release. Track this work as a checklist and keep it current as you go, starting the first item now.',
   'agents-spawn-sub-agent':
     'Spawn a sub-agent to audit the tool catalog and report back with what it finds.',
-  'agents-delegate-tasks':
-    'Fan these three independent chunks of work out to separate workers: (1) audit the tool catalog, (2) write the release notes, (3) file follow-up issues.',
   'agents-issue-tools':
     'Log an issue titled "Grid header overlaps on narrow panes", then link it to issue ISS-1.',
 

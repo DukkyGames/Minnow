@@ -39,7 +39,7 @@ export const SUITE_INTROS: Record<SuiteId, string> = {
   capability:
     'Provider wiring, streaming, usage metadata, tool schema acceptance, model catalog, and optional vision probes.',
   'capability-matrix':
-    'Sixty-seven spreadsheet capabilities (auto probes and manual rows); hybrid scoring with pass, partial, fail, and n-a cells.',
+    'Fifty-seven spreadsheet capabilities (auto probes and manual rows); hybrid scoring with pass, partial, fail, and n-a cells.',
   speed:
     'Median time-to-first-token and tokens-per-second from fixed prompts; pass means a non-empty completion, not answer quality.',
   tools:

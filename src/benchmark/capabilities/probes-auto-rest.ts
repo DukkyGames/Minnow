@@ -157,13 +157,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
     verdict: (out) =>
       hasTool(out.toolCalls, 'spawn_sub_agent') ? pass('spawn_sub_agent emitted') : fail('No spawn_sub_agent'),
   },
-  'agents-delegate-tasks': {
-    kind: 'tool-call',
-    toolIds: ['delegate_tasks'],
-    emitOnly: true,
-    verdict: (out) =>
-      hasTool(out.toolCalls, 'delegate_tasks') ? pass('delegate_tasks emitted') : fail('No delegate_tasks'),
-  },
   'agents-issue-tools': {
     kind: 'tool-chain',
     maxToolRounds: 3,
