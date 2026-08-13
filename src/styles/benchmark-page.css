@@ -1034,8 +1034,15 @@
   color: var(--mn-fg-muted);
 }
 
-.benchmark-transcript-drawer__close {
+.benchmark-transcript-drawer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
+}
+
+.benchmark-transcript-drawer__copy,
+.benchmark-transcript-drawer__close {
   font: inherit;
   font-size: 13px;
   padding: 6px 12px;
@@ -1043,6 +1050,22 @@
   border-radius: var(--radius-sm);
   background: var(--mn-bg);
   cursor: pointer;
+}
+
+.benchmark-transcript-drawer__copy {
+  color: var(--mn-fg);
+}
+
+.benchmark-transcript-drawer__close {
+  margin-top: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .benchmark-transcript-drawer__copy:hover,
+  .benchmark-transcript-drawer__close:hover {
+    border-color: var(--mn-border-strong);
+    background: var(--mn-surface-elevated);
+  }
 }
 
 .benchmark-transcript-drawer__footer {

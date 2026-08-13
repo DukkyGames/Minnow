@@ -4,13 +4,14 @@
 
 import type { BenchmarkRun, TestResult } from '../benchmark/types.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
+import {
+  formatBenchmarkTranscriptForCopy,
+  type BenchmarkTranscriptRunMeta,
+} from './format-benchmark-transcript.ts';
+import { setStatus } from './status.ts';
 import { renderTranscriptView } from './transcript-view.ts';
 
-export interface BenchmarkTranscriptRunMeta {
-  preset: BenchmarkRun['preset'];
-  modelId: string;
-  startedAt: string;
-}
+export type { BenchmarkTranscriptRunMeta };
 
 let openLayer: {
   backdrop: HTMLElement;
@@ -125,16 +126,36 @@ export function openBenchmarkTranscriptDrawer(
   sub.className = 'benchmark-transcript-drawer__sub';
   sub.textContent = `${runMeta.preset} · ${runMeta.modelId} · ${runMeta.startedAt}`;
 
+  const actions = document.createElement('div');
+  actions.className = 'benchmark-transcript-drawer__actions';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'benchmark-transcript-drawer__copy';
+  copyBtn.textContent = 'Copy transcript';
+  copyBtn.setAttribute('aria-label', 'Copy full probe transcript to clipboard');
+  copyBtn.addEventListener('click', () => {
+    const text = formatBenchmarkTranscriptForCopy(test, runMeta, {
+      suiteLabel: options?.suiteLabel,
+    });
+    void navigator.clipboard.writeText(text).then(
+      () => setStatus('ok', 'Transcript copied'),
+      () => setStatus('err', 'Could not copy transcript'),
+    );
+  });
+
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'benchmark-transcript-drawer__close';
   closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => closeBenchmarkTranscriptDrawer());
 
+  actions.append(copyBtn, closeBtn);
+
   header.appendChild(title);
   header.appendChild(meta);
   header.appendChild(sub);
-  header.appendChild(closeBtn);
+  header.appendChild(actions);
 
   const scroll = document.createElement('div');
   scroll.className = 'benchmark-transcript-drawer__scroll';

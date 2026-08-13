@@ -1329,8 +1329,16 @@
   color: var(--mn-fg-muted);
 }
 
-.benchmark-transcript-drawer__close {
+.benchmark-transcript-drawer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 10px;
+}
+
+.benchmark-transcript-drawer__copy,
+.benchmark-transcript-drawer__close {
+  margin-top: 0;
 }
 
 .benchmark-transcript-drawer__scroll {

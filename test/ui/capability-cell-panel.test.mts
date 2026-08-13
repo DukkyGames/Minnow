@@ -118,6 +118,7 @@ describe('capability cell transcript panel', () => {
       /No probe has run/,
     );
     assert.ok(document.querySelector('.benchmark-transcript-drawer__extra'));
+    assert.ok(document.querySelector('.benchmark-transcript-drawer__copy'));
   });
 
   test('shows probe messages and keeps the editor in the extra slot', () => {
