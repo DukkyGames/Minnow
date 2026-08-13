@@ -124,8 +124,14 @@ const STANDALONE_PROBE_PROMPTS: Record<string, string> = {
     'Log an issue titled "Grid header overlaps on narrow panes", then link it to issue ISS-1.',
 
   'knowledge-brain-read': 'What does the Brain say about the session engine?',
-  'knowledge-brain-write':
-    'Write what we just worked out about the session engine to a Brain page called Session Engine Notes.',
+  'knowledge-brain-write': [
+    'We just finished reviewing the session engine. Save these notes to a Brain page titled "Session Engine Notes":',
+    '',
+    '- Sessions are keyed by conversation id; resuming replays stored turns from local storage, not the provider context window.',
+    '- Partial assistant messages during stream abort are marked incomplete so the UI can offer retry.',
+    '- Tool call results are persisted as structured JSON alongside each assistant turn.',
+    '- Edge case: switching models mid-session keeps history but drops provider-specific reasoning channels.',
+  ].join('\n'),
   'knowledge-minnow-docs': 'How do Minnow modes work? Check the Minnow docs.',
   'knowledge-save-memory': 'Remember that I always want tests run before commits.',
   'knowledge-recall':

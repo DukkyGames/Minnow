@@ -340,12 +340,13 @@ export function abortCapabilityMatrixRun(): void {
   abortController?.abort();
   abortController = null;
   clearActiveMatrixSession();
-  clearSessionProbeState();
+  // Keep completed probes on the grid until the user starts a new run.
   setUiState({
     running: false,
     phaseLabel: 'Cancelled',
     progressPct: uiState.progressPct,
   });
+  emitProbeUpdate();
 }
 
 function handleCampaignProgress(
@@ -566,15 +567,10 @@ export async function startCapabilityMatrixRun(
       });
     }
     clearActiveMatrixSession();
-    clearSessionProbeState();
   } finally {
     if (generation !== runGeneration) return;
     abortController = null;
-    try {
-      await Promise.resolve(params.onSettled?.());
-    } finally {
-      clearSessionProbeState();
-    }
+    await Promise.resolve(params.onSettled?.());
   }
 }
 
@@ -652,4 +648,26 @@ export function setCapabilityMatrixAbortControllerForTests(
   controller: AbortController | null,
 ): void {
   abortController = controller;
+}
+
+/** Test hook: reset singleton run state between cases. */
+export function resetCapabilityMatrixRunControllerForTests(): void {
+  runGeneration = 0;
+  abortController = null;
+  uiState = emptyUiState();
+  activeRunPayload = null;
+  testsDone = 0;
+  testsTotal = 0;
+  clearSessionProbeState();
+  listeners.clear();
+  probeListeners.clear();
+}
+
+/** Test hook: seed in-flight probe results without running a campaign. */
+export function seedCapabilityMatrixSessionProbesForTests(
+  probes: CompletedProbeRecord[],
+): void {
+  sessionCompletedProbes = [...probes];
+  sessionCompletedTests = probes.map((probe) => probe.result);
+  emitProbeUpdate();
 }
