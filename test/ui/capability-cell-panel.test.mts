@@ -137,4 +137,36 @@ describe('capability cell transcript panel', () => {
     assert.ok(document.querySelector('.cap-matrix-cell-editor--embedded'));
     assert.ok(document.querySelector('button.settings-action-btn--primary'));
   });
+
+  test('shows reasoning in the transcript when stored on assistant messages', () => {
+    setupDom();
+    const campaign = campaignWithRun();
+    const test = campaign.runs![0]!.suites[0]!.tests[0]!;
+    test.transcript = [
+      { role: 'user', content: 'Solve the bat-and-ball puzzle.' },
+      {
+        role: 'assistant',
+        content: 'The ball costs $0.05.',
+        reasoning_content: '1.10 - 1.00 = 0.10',
+      },
+    ];
+
+    openCapabilityCellTranscript(
+      { ...CELL, verdict: 'pass', source: 'auto', autoVerdict: 'pass' },
+      {
+        campaigns: [campaign],
+        targetLabel: 'gpt-test',
+        onSaved: () => {},
+      },
+    );
+
+    assert.equal(
+      document.querySelector('.transcript-view__assistant')?.textContent,
+      'The ball costs $0.05.',
+    );
+    assert.equal(
+      document.querySelector('.transcript-view__thinking-body')?.textContent,
+      '1.10 - 1.00 = 0.10',
+    );
+  });
 });

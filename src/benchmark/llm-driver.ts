@@ -553,7 +553,12 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
     toolCalls,
     finishReason,
     timing: turn.timing,
-    messages: appendAssistantToMessages(messages, text, toolCalls),
+    messages: appendAssistantToMessages(
+      messages,
+      contentText || text,
+      toolCalls,
+      reasoningText,
+    ),
     thinkingBudgetExceeded,
   };
 }
@@ -566,12 +571,16 @@ export async function runOneShot(input: OneShotInput): Promise<OneShotResult> {
 /** Append the assistant turn (unit-tested; shared by one-shot completion). */
 export function appendAssistantToMessages(
   messages: ApiMessage[],
-  text: string,
+  contentText: string,
   toolCalls: ToolCall[],
+  reasoningText?: string,
 ): ApiMessage[] {
+  const prose = contentText.trim();
+  const reasoning = reasoningText?.trim() ?? '';
   messages.push({
     role: 'assistant',
-    content: text || null,
+    content: prose || null,
+    ...(reasoning ? { reasoning_content: reasoning } : {}),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
   });
   return messages;
@@ -651,10 +660,12 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
     publishPartial(lastContentText, lastReasoningText, lastToolCalls);
 
     if (turn.toolCalls.length > 0) {
+      const roundReasoning = turn.reasoningText.trim();
       messages.push({
         role: 'assistant',
-        content: turn.fullText || null,
+        content: turn.contentText.trim() || null,
         tool_calls: turn.toolCalls,
+        ...(roundReasoning ? { reasoning_content: roundReasoning } : {}),
       });
       const outcomes = await runHeadlessToolBatch({
         toolCalls: turn.toolCalls,
@@ -687,7 +698,11 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
       lastText = fb.text.trim();
     }
 
-    messages.push({ role: 'assistant', content: lastText });
+    messages.push({
+      role: 'assistant',
+      content: lastContentText || null,
+      ...(lastReasoningText ? { reasoning_content: lastReasoningText } : {}),
+    });
     break;
   }
 
