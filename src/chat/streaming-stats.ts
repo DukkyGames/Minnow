@@ -9,7 +9,10 @@ import {
   type StreamMetaAccumulator,
 } from '../api/chat';
 import { resolveModelInfo } from '../api/models';
-import { aggregateTurnUsageSegments } from './orchestrate/stats-math';
+import {
+  aggregateTurnUsageSegments,
+  averageStatsSegments,
+} from './orchestrate/stats-math';
 import { estimateTokensFromText } from './prompts/token-estimate-core';
 import { getActiveChat } from '../state/sessions';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
@@ -26,6 +29,8 @@ export interface StreamingStatsSnapshot {
   partialThinking?: string;
   /** Completed usage from earlier tool-loop rounds in the same user turn. */
   priorSegments?: Usage[];
+  /** Completed stats + usage from earlier tool-loop rounds (weighted live tok/s). */
+  priorStatsSegments?: Array<{ stats: Stats; usage: Usage }>;
   modelId?: string;
   modelInfo?: ModelInfo;
 }
@@ -37,6 +42,32 @@ function hasLiveCompletionUsage(usage: Usage | undefined): boolean {
     Number.isFinite(usage.completion_tokens) &&
     usage.completion_tokens > 0
   );
+}
+
+/** Usage for the in-flight API round only (no prior tool-loop rollup). */
+export function buildCurrentRoundUsage(
+  input: StreamingStatsSnapshot,
+  _now = performance.now(),
+): Usage {
+  const { streamMeta, partialText } = input;
+  const roundEstimate = estimateTokensFromText(partialText);
+  const live = streamMeta.usage;
+
+  if (hasLiveCompletionUsage(live)) {
+    return { ...live! };
+  }
+
+  const out: Usage = {};
+  if (live?.prompt_tokens != null && Number.isFinite(live.prompt_tokens)) {
+    out.prompt_tokens = live.prompt_tokens;
+  }
+  if (roundEstimate > 0) {
+    out.completion_tokens = roundEstimate;
+  }
+  if (out.prompt_tokens != null || out.completion_tokens != null) {
+    out.total_tokens = (out.prompt_tokens ?? 0) + (out.completion_tokens ?? 0);
+  }
+  return out;
 }
 
 /** Usage for an in-progress stream: provider chunk usage when present, else char estimate. */
@@ -76,13 +107,18 @@ export function buildLiveStreamUsage(
 /** Timing stats (TTFT, generation time, tok/s) for a stream still in flight. */
 export function buildLiveStreamStats(
   input: StreamingStatsSnapshot,
-  usage: Usage,
   now = performance.now(),
 ): Stats {
-  const { streamMeta, t0, tFirst } = input;
-  const clientStats = buildClientStats(t0, tFirst, now, usage, undefined);
+  const { streamMeta, t0, tFirst, priorStatsSegments } = input;
+  const roundUsage = buildCurrentRoundUsage(input, now);
+  const clientStats = buildClientStats(t0, tFirst, now, roundUsage, undefined);
   const serverStats = streamMeta.stats ?? {};
-  return reconcileCompletionStats(clientStats, serverStats, usage);
+  const roundStats = reconcileCompletionStats(clientStats, serverStats, roundUsage);
+
+  const priorList = priorStatsSegments ?? [];
+  if (!priorList.length) return roundStats;
+
+  return averageStatsSegments([...priorList, { stats: roundStats, usage: roundUsage }]);
 }
 
 /** Combined live stats + usage for the metrics strip. */
@@ -91,7 +127,7 @@ export function buildLiveStreamMeta(
   now = performance.now(),
 ): { stats: Stats; usage: Usage } {
   const usage = buildLiveStreamUsage(input, now);
-  const stats = buildLiveStreamStats(input, usage, now);
+  const stats = buildLiveStreamStats(input, now);
   return { stats, usage };
 }
 

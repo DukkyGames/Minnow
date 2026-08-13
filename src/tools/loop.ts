@@ -117,6 +117,7 @@ import {
 } from '../synthesis/post-turn';
 import { buildTurnSnapshot, resolveForkHistoryIndex } from '../chat/turn-snapshot';
 import { createStreamingStatsPublisher } from '../chat/streaming-stats';
+import { aggregateTurnMetaSegments } from '../chat/orchestrate/stats-math';
 import type { ForkOverrides } from '../chat/fork-from-run';
 import {
   createRun,
@@ -143,6 +144,7 @@ import type {
   ToolCallAccumulator,
   TurnRunId,
   TurnSnapshot,
+  Stats,
   Usage,
   UserMessage,
 } from '../types';
@@ -837,6 +839,7 @@ async function streamCompletionTurn(
 
   function processRoutedParts(parts: RoutedContentPart[]): void {
     for (const [text, isThinking] of parts) {
+      if (text && tFirst == null) tFirst = performance.now();
       if (isThinking) {
         if (text) {
           feedThinkingBudget(text);
@@ -851,7 +854,6 @@ async function streamCompletionTurn(
       thinkingBudgetTracker?.endSession();
       thoughtController?.endReasoningPhase();
       onFirstProseDelta?.();
-      if (tFirst == null) tFirst = performance.now();
       fullText += text;
       onPartialText?.(fullText);
       onStreamContextActivity?.();
@@ -908,6 +910,7 @@ async function streamCompletionTurn(
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
     const reasoning = extractReasoningDelta(chunk);
     if (reasoning) {
+      if (tFirst == null) tFirst = performance.now();
       feedThinkingBudget(reasoning);
       thoughtController?.appendReasoningDelta(reasoning);
       onStreamContextActivity?.();
@@ -1530,6 +1533,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let livePartialText = '';
   const streamingStatsPublisher = createStreamingStatsPublisher(chat);
   const turnUsageSegments: Usage[] = [];
+  const turnStatsSegments: Array<{ stats: Stats; usage: Usage }> = [];
   const pushLiveStreamingStats = (state: {
     streamMeta: StreamMetaAccumulator;
     t0: number;
@@ -1540,6 +1544,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     streamingStatsPublisher.schedule({
       ...state,
       priorSegments: turnUsageSegments,
+      priorStatsSegments: turnStatsSegments,
       modelId: sendModelId,
       modelInfo: chat.modelInfo ?? undefined,
     });
@@ -2204,6 +2209,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         );
         if (toolRoundMeta.usage && Object.keys(toolRoundMeta.usage).length > 0) {
           turnUsageSegments.push(toolRoundMeta.usage);
+          turnStatsSegments.push({
+            stats: toolRoundMeta.stats,
+            usage: toolRoundMeta.usage,
+          });
           streamingStatsPublisher.schedule({
             streamMeta: {},
             t0: turnResult.t0,
@@ -2211,6 +2220,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             partialText: '',
             partialThinking: '',
             priorSegments: turnUsageSegments,
+            priorStatsSegments: turnStatsSegments,
             modelId: sendModelId,
             modelInfo: chat.modelInfo ?? undefined,
           });
@@ -2461,12 +2471,22 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         });
       }
 
-      const meta = finalizeResponseMeta(
+      const roundMeta = finalizeResponseMeta(
         streamMeta,
         turnResult.t0,
         turnResult.tFirst ?? turnResult.tEnd,
         turnResult.tEnd,
       );
+      const meta =
+        turnStatsSegments.length > 0
+          ? {
+              ...aggregateTurnMetaSegments([
+                ...turnStatsSegments,
+                { stats: roundMeta.stats, usage: roundMeta.usage },
+              ]),
+              model_info: roundMeta.model_info,
+            }
+          : roundMeta;
       void recordMainChatTurnUsage(chat, {
         providerId: sendProviderId,
         modelId: sendModelId,

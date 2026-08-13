@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   aggregateOrchestrateTurnMeta,
+  aggregateTurnMetaSegments,
   averageStatsSegments,
   sumUsageSegments,
 } from '../../src/chat/orchestrate/stats-math.ts';
@@ -38,6 +39,29 @@ describe('orchestrate stats math (MIN-36)', () => {
     ]);
     assert.ok(out.time_to_first_token != null && Math.abs(out.time_to_first_token - 0.3) < 1e-9);
     assert.equal(out.generation_time, 2);
+  });
+
+  test('aggregateTurnMetaSegments rolls up usage and weighted tok/s', () => {
+    const aggregated = aggregateTurnMetaSegments([
+      {
+        stats: { tokens_per_second: 10, generation_time: 10, time_to_first_token: 0.2 },
+        usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
+      },
+      {
+        stats: { tokens_per_second: 20, generation_time: 5, time_to_first_token: 0.4 },
+        usage: { prompt_tokens: 2000, completion_tokens: 100, total_tokens: 2100 },
+      },
+    ]);
+
+    assert.equal(aggregated.usage.prompt_tokens, 2000);
+    assert.equal(aggregated.usage.completion_tokens, 200);
+    assert.equal(aggregated.usage.total_tokens, 2200);
+    assert.equal(aggregated.stats.tokens_per_second, 15);
+    assert.equal(aggregated.stats.generation_time, 7.5);
+    assert.ok(
+      aggregated.stats.time_to_first_token != null &&
+        Math.abs(aggregated.stats.time_to_first_token - 0.3) < 1e-9,
+    );
   });
 
   test('aggregateOrchestrateTurnMeta sums tokens and preserves parent stop_reason', () => {

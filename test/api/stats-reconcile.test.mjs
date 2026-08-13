@@ -67,4 +67,20 @@ describe('reconcileCompletionStats', () => {
     assert.ok(meta.stats.generation_time > 1);
     assert.ok(meta.stats.tokens_per_second < 500);
   });
+
+  test('partial trust keeps server decode timing when client prose window is shorter', () => {
+    // Reasoning model: server measured full decode; client tFirst was prose-only.
+    const client = buildClientStats(0, 8_000, 10_000, { completion_tokens: 500 }, 'stop');
+    const server = {
+      tokens_per_second: 72_709,
+      time_to_first_token: 0.5,
+      generation_time: 5,
+    };
+
+    const stats = reconcileCompletionStats(client, server, { completion_tokens: 500 });
+
+    assert.equal(stats.generation_time, 5);
+    assert.equal(stats.time_to_first_token, 0.5);
+    assert.ok(Math.abs(stats.tokens_per_second - 100) < 0.01);
+  });
 });

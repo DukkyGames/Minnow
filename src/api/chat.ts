@@ -347,6 +347,15 @@ function serverTimingMatchesUsage(server: Stats, usage: Usage | undefined): bool
   return Math.abs(implied - completion) / completion <= USAGE_TIMING_TOLERANCE;
 }
 
+/** Whether server decode time yields a plausible tok/s for reported completion tokens. */
+function serverGenerationTimeMatchesUsage(server: Stats, usage: Usage | undefined): boolean {
+  const completion = usage?.completion_tokens;
+  const gen = server.generation_time;
+  if (completion == null || completion <= 0) return false;
+  if (gen == null || !Number.isFinite(gen) || gen <= 0) return false;
+  return completion / gen <= MAX_PLAUSIBLE_TOKENS_PER_SECOND;
+}
+
 function serverTimingMatchesClientWallClock(server: Stats, client: Stats): boolean {
   const serverGen = server.generation_time;
   const clientGen = client.generation_time;
@@ -363,8 +372,24 @@ function serverTimingMatchesClientWallClock(server: Stats, client: Stats): boole
   return serverGen >= clientGen * 0.2;
 }
 
+function applyServerTimingFields(out: Stats, serverStats: Stats): void {
+  if (serverStats.time_to_first_token != null) {
+    out.time_to_first_token = serverStats.time_to_first_token;
+  }
+  if (serverStats.generation_time != null) out.generation_time = serverStats.generation_time;
+  if (serverStats.tokens_per_second != null) out.tokens_per_second = serverStats.tokens_per_second;
+}
+
+function recomputeTokensPerSecond(out: Stats, usage: Usage | undefined): void {
+  const completion = usage?.completion_tokens;
+  const gen = out.generation_time;
+  if (completion != null && gen != null && gen > 0) {
+    out.tokens_per_second = completion / gen;
+  }
+}
+
 /**
- * Prefer provider timing when it agrees with usage and browser wall clock; otherwise
+ * Prefer provider timing when usage-coherent (full or partial trust); otherwise
  * keep client timings and recompute tok/s from completion_tokens.
  */
 export function reconcileCompletionStats(
@@ -381,24 +406,27 @@ export function reconcileCompletionStats(
     serverStats.time_to_first_token != null;
   if (!hasServerTiming) return out;
 
-  const trustServer =
+  const fullTrust =
     serverTimingMatchesUsage(serverStats, usage) &&
     serverTimingMatchesClientWallClock(serverStats, clientStats);
 
-  if (trustServer) {
+  if (fullTrust) {
+    applyServerTimingFields(out, serverStats);
+    return out;
+  }
+
+  // Partial trust: engine decode window fits usage even when client prose-only tFirst disagrees.
+  if (serverGenerationTimeMatchesUsage(serverStats, usage)) {
     if (serverStats.time_to_first_token != null) {
       out.time_to_first_token = serverStats.time_to_first_token;
     }
     if (serverStats.generation_time != null) out.generation_time = serverStats.generation_time;
-    if (serverStats.tokens_per_second != null) out.tokens_per_second = serverStats.tokens_per_second;
+    recomputeTokensPerSecond(out, usage);
     return out;
   }
 
-  const completion = usage?.completion_tokens;
-  const gen = out.generation_time;
-  if (completion != null && gen != null && gen > 0) {
-    out.tokens_per_second = completion / gen;
-  }
+  // Client fallback when server timing is not usage-coherent.
+  recomputeTokensPerSecond(out, usage);
   return out;
 }
 
@@ -589,6 +617,7 @@ export async function sendMessage(): Promise<void> {
 
   function processRoutedParts(parts: RoutedContentPart[]): void {
     for (const [text, isThinking] of parts) {
+      if (text && tFirst == null) tFirst = performance.now();
       if (isThinking) {
         if (text) {
           thoughtController.appendReasoningDelta(text);
@@ -600,7 +629,6 @@ export async function sendMessage(): Promise<void> {
       }
       thoughtController.endReasoningPhase();
       revealProse();
-      if (tFirst == null) tFirst = performance.now();
       fullText += text;
       if (isStreamDomVisible(chat.id)) {
         scheduleAssistantBubbleRender(bubble, fullText, cursor);
@@ -654,6 +682,7 @@ export async function sendMessage(): Promise<void> {
       streamMeta = mergeStreamMeta(streamMeta, chunk);
       const reasoning = extractReasoningDelta(chunk);
       if (reasoning) {
+        if (tFirst == null) tFirst = performance.now();
         thoughtController.appendReasoningDelta(reasoning);
       }
       const contentDelta = extractStreamDelta(chunk);
