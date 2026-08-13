@@ -298,8 +298,9 @@ import { mergeThinkingIntoCompletionBody } from '../agents/merge-thinking-body';
 import { resolveThinkingMode, resolveThinkingBudgetTokens } from '../agents/resolve-thinking';
 import {
   ThinkingBudgetTracker,
-  THINKING_BUDGET_EPHEMERAL_RETRY_INSTRUCTION,
+  buildBudgetContinuationMessages,
   buildThinkingPrefillAssistantMessage,
+  stripCarriedTextEcho,
   stripPrefillEchoFromDelta,
 } from '../agents/thinking-budget';
 import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../providers/types';
@@ -760,6 +761,8 @@ interface StreamTurnResult {
   toolCalls: ReturnType<typeof finalizeToolCalls>;
   thinkingBudgetExceeded?: boolean;
   partialThinkingText?: string;
+  /** Channel the reasoning actually arrived on, when any was seen. */
+  thinkingChannel?: 'native' | 'inline';
   endStatus?: 'complete' | 'error' | 'cancelled';
 }
 
@@ -767,6 +770,8 @@ interface StreamCompletionTurnOptions {
   thinkingBudgetTracker?: ThinkingBudgetTracker | null;
   /** Strip provider echo of prefilled thinking on the first content delta. */
   prefillEchoPartial?: string;
+  /** Prose already streamed before a budget continuation — seeds `fullText` so it isn't lost. */
+  carriedText?: string;
   /** Fired on each SSE chunk so metrics can update mid-stream (MIN-413). */
   onStreamProgress?: (state: {
     streamMeta: StreamMetaAccumulator;
@@ -814,7 +819,8 @@ async function streamCompletionTurn(
     scheduleSaveSessions();
   }
 
-  let fullText = '';
+  const carriedText = streamOptions?.carriedText ?? '';
+  let fullText = carriedText;
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
   let lastAnnouncedToolName = '';
@@ -827,18 +833,35 @@ async function streamCompletionTurn(
   const harmonyRouter = new HarmonyChannelRouter();
   const thinkingBudgetTracker = streamOptions?.thinkingBudgetTracker ?? null;
   let prefillEchoPartial = streamOptions?.prefillEchoPartial?.trim() ?? '';
+  let carriedEchoPending = carriedText.trim().length > 0;
+  let toolCallPhaseStarted = false;
   let budgetTripped = false;
+  let thinkingChannel: 'native' | 'inline' | undefined;
   let generationEndStatus: 'complete' | 'error' | 'cancelled' | undefined;
+
+  if (carriedText) {
+    // Re-render what the aborted attempt already showed so the bubble never blanks.
+    onFirstProseDelta?.();
+    onPartialText?.(fullText);
+    if (domVisible) {
+      scheduleAssistantBubbleRender(bubble, fullText, cursor);
+    }
+  }
 
   function feedThinkingBudget(delta: string): void {
     if (!thinkingBudgetTracker || !delta) return;
     thinkingBudgetTracker.feed(delta);
   }
 
+  function noteThinkingChannel(channel: 'native' | 'inline'): void {
+    thinkingChannel ??= channel;
+  }
+
   function processRoutedParts(parts: RoutedContentPart[]): void {
     for (const [text, isThinking] of parts) {
       if (isThinking) {
         if (text) {
+          noteThinkingChannel('inline');
           feedThinkingBudget(text);
           thoughtController?.appendReasoningDelta(text);
           onStreamContextActivity?.();
@@ -868,6 +891,7 @@ async function streamCompletionTurn(
     for (const [harmonyText, isHarmonyThinking] of harmonyRouter.feed(delta)) {
       if (isHarmonyThinking) {
         if (harmonyText) {
+          noteThinkingChannel('inline');
           feedThinkingBudget(harmonyText);
           thoughtController?.appendReasoningDelta(harmonyText);
           onStreamContextActivity?.();
@@ -882,6 +906,7 @@ async function streamCompletionTurn(
     for (const [harmonyText, isHarmonyThinking] of harmonyRouter.flush()) {
       if (isHarmonyThinking) {
         if (harmonyText) {
+          noteThinkingChannel('inline');
           feedThinkingBudget(harmonyText);
           thoughtController?.appendReasoningDelta(harmonyText);
           onStreamContextActivity?.();
@@ -908,6 +933,7 @@ async function streamCompletionTurn(
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
     const reasoning = extractReasoningDelta(chunk);
     if (reasoning) {
+      noteThinkingChannel('native');
       feedThinkingBudget(reasoning);
       thoughtController?.appendReasoningDelta(reasoning);
       onStreamContextActivity?.();
@@ -924,10 +950,19 @@ async function streamCompletionTurn(
         routedDelta = stripPrefillEchoFromDelta(routedDelta, prefillEchoPartial);
         prefillEchoPartial = '';
       }
+      if (carriedEchoPending) {
+        routedDelta = stripCarriedTextEcho(routedDelta, carriedText);
+        carriedEchoPending = false;
+      }
       routeContentDelta(routedDelta);
     }
     // Reasoning ends before tool_calls JSON streams; stop the thinking timer here (MIN-467).
     if (Object.keys(toolAcc).length > 0) {
+      if (!toolCallPhaseStarted) {
+        toolCallPhaseStarted = true;
+        // Bank the phase once, at the boundary — later chunks must not clear a fresh trip.
+        thinkingBudgetTracker?.endSession();
+      }
       thoughtController?.endReasoningPhase();
     }
     if (domVisible && onToolCallStreaming) {
@@ -1092,6 +1127,7 @@ async function streamCompletionTurn(
     toolCalls,
     thinkingBudgetExceeded: budgetTripped,
     partialThinkingText: budgetTripped ? thinkingBudgetTracker?.sessionText : undefined,
+    thinkingChannel,
     endStatus: generationEndStatus,
   };
 }
@@ -1796,6 +1832,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     };
 
     let modelLoadDone = !pendingModelLoad;
+    // Budget is per user turn, not per tool-loop iteration — one tracker for the whole loop.
+    let turnThinkingBudgetTracker: ThinkingBudgetTracker | null = null;
+    let turnBudgetContinuationAttempts = 0;
 
     for (let turn = 0; ; turn++) {
       if (chatSignal.aborted) {
@@ -1948,9 +1987,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         !nativeBudgetApplied &&
         thinkingModeForSend === 'on'
       ) {
-        thinkingBudgetTracker = new ThinkingBudgetTracker(
+        turnThinkingBudgetTracker ??= new ThinkingBudgetTracker(
           resolvedThinkingBudget.budgetTokens,
         );
+        thinkingBudgetTracker = turnThinkingBudgetTracker;
       }
       if (enabledTools.length > 0) {
         body.tools = enabledTools;
@@ -2028,19 +2068,22 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         );
 
       const runStreamTurnWithThinkingBudget = async (): Promise<StreamTurnResult> => {
-        let attempts = 0;
         let currentBody = body;
-        let tracker = thinkingBudgetTracker;
+        const tracker = thinkingBudgetTracker;
         let prefillPartial = '';
+        let carriedText = '';
+        let carriedThinking = '';
         const maxContinuations = 2;
+        const streamOpts = (): StreamCompletionTurnOptions => ({
+          thinkingBudgetTracker: tracker,
+          prefillEchoPartial: prefillPartial || undefined,
+          carriedText: carriedText || undefined,
+        });
 
         while (true) {
           let turnResult: StreamTurnResult;
           try {
-            turnResult = await runStreamTurn(currentBody, {
-              thinkingBudgetTracker: tracker,
-              prefillEchoPartial: prefillPartial || undefined,
-            });
+            turnResult = await runStreamTurn(currentBody, streamOpts());
           } catch (streamErr) {
             const streamMessage =
               streamErr instanceof Error ? streamErr.message : String(streamErr);
@@ -2048,60 +2091,71 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               streamErr instanceof TypeError && streamMessage.includes('Failed to fetch');
             if (transientFetch) {
               await new Promise((r) => setTimeout(r, 400));
-              turnResult = await runStreamTurn(currentBody, {
-                thinkingBudgetTracker: tracker,
-                prefillEchoPartial: prefillPartial || undefined,
-              });
+              turnResult = await runStreamTurn(currentBody, streamOpts());
             } else if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
               logConstrainedDebug('strip_retry', { providerId: provider.id });
               usedConstrained = false;
               currentBody = stripResponseFormatFromBody(currentBody);
-              turnResult = await runStreamTurn(currentBody, {
-                thinkingBudgetTracker: tracker,
-                prefillEchoPartial: prefillPartial || undefined,
-              });
+              turnResult = await runStreamTurn(currentBody, streamOpts());
             } else {
               throw streamErr;
             }
           }
 
-          if (!turnResult.thinkingBudgetExceeded || attempts >= maxContinuations) {
+          if (
+            !turnResult.thinkingBudgetExceeded ||
+            !tracker ||
+            turnBudgetContinuationAttempts >= maxContinuations
+          ) {
+            // The escalation only runs once per turn — later rounds must not be cut again.
+            if (turnBudgetContinuationAttempts > 0) tracker?.disarm();
             return turnResult;
           }
 
-          attempts += 1;
-          const partial = turnResult.partialThinkingText ?? '';
-          if (attempts === 1) {
+          turnBudgetContinuationAttempts += 1;
+          // The cut generation is cancelled; a continuation must POST a new one, not resume it.
+          activeResumeGenerationId = undefined;
+          // The tracker holds the tripping phase only — keep earlier phases from this turn too.
+          const partialThinking = [carriedThinking, turnResult.partialThinkingText ?? '']
+            .filter((part) => part.trim())
+            .join('\n\n');
+          carriedThinking = partialThinking;
+          // `carriedText` was seeded into the stream, so `fullText` is already cumulative.
+          const partialText = turnResult.fullText;
+          const isFinalAttempt = turnBudgetContinuationAttempts >= maxContinuations;
+
+          if (!isFinalAttempt) {
+            // Trust the channel the reasoning actually arrived on; guess only when none was seen.
             const canPrefill =
-              modelLikelyUsesInlineThinking(sendModelId) ||
-              (provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID && !llamaSupportsThinkingBudget);
-            if (canPrefill) {
-              try {
-                currentBody = {
-                  ...body,
-                  messages: [
-                    ...messages,
-                    buildThinkingPrefillAssistantMessage(partial),
-                  ],
-                };
-                prefillPartial = partial;
-                if (resolvedThinkingBudget.budgetTokens != null) {
-                  tracker = new ThinkingBudgetTracker(resolvedThinkingBudget.budgetTokens);
-                }
-                setStatus('ok', 'Thinking budget reached — continuing to answer');
-                continue;
-              } catch {
-                /* fall through to ephemeral retry */
-              }
-            }
+              turnResult.thinkingChannel === 'inline' ||
+              (turnResult.thinkingChannel == null &&
+                (modelLikelyUsesInlineThinking(sendModelId) ||
+                  (provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID &&
+                    !llamaSupportsThinkingBudget)));
+            // Prefill carries thinking only, so prose has to go through the payload builder.
+            const usePrefill = canPrefill && !partialText.trim();
+            currentBody = {
+              ...body,
+              messages: [
+                ...messages,
+                ...(usePrefill
+                  ? [buildThinkingPrefillAssistantMessage(partialThinking)]
+                  : buildBudgetContinuationMessages({ partialThinking, partialText })),
+              ],
+            };
+            prefillPartial = usePrefill ? partialThinking : '';
+            carriedText = partialText;
+            tracker.beginContinuation();
+            setStatus('ok', 'Thinking budget reached — continuing to answer');
+            continue;
           }
 
-          const ephemeralBody = applySamplerToBody(
+          const continuationBody = applySamplerToBody(
             {
               model: sendModelId || undefined,
               messages: [
                 ...messages,
-                { role: 'user', content: THINKING_BUDGET_EPHEMERAL_RETRY_INSTRUCTION },
+                ...buildBudgetContinuationMessages({ partialThinking, partialText }),
               ],
               stream: true,
               stream_options: { include_usage: true },
@@ -2110,23 +2164,21 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             resolvedSampler.maxTokens,
           ) as ChatCompletionBody;
           mergeThinkingIntoCompletionBody(
-            ephemeralBody as unknown as Record<string, unknown>,
+            continuationBody as unknown as Record<string, unknown>,
             'off',
             provider,
             sendCaps,
             replaySnapshot?.reasoningEffort ?? turnReasoningEffort,
           );
           if (enabledTools.length > 0) {
-            ephemeralBody.tools = enabledTools;
-            ephemeralBody.tool_choice = 'auto';
+            continuationBody.tools = enabledTools;
+            continuationBody.tool_choice = 'auto';
           }
-          currentBody = ephemeralBody;
-          tracker = null;
+          currentBody = continuationBody;
           prefillPartial = '';
+          carriedText = partialText;
+          tracker.disarm();
           setStatus('ok', 'Thinking budget reached — answering without extended reasoning');
-          if (attempts >= maxContinuations) {
-            return await runStreamTurn(currentBody);
-          }
         }
       };
 
