@@ -23,9 +23,11 @@ import {
 import {
   disposeCapabilityMatrixRunView,
   findInFlightCapabilityProbeLookup,
+  getCapabilityMatrixCurrentProbe,
   getCapabilityMatrixInFlightAutos,
   resumeCapabilityMatrixRunFromCampaign,
   subscribeCapabilityMatrixProbeUpdates,
+  subscribeCapabilityMatrixRun,
 } from '../benchmark/capabilities/matrix-run-controller.ts';
 import type { BenchmarkCampaign, BenchmarkCampaignSummary } from '../benchmark/campaign-types.ts';
 import { canResumeCapabilityMatrixCampaign } from '../benchmark/capabilities/resume-from-campaign.ts';
@@ -41,7 +43,7 @@ import {
 import { appConfirm } from './app-dialog';
 import { downloadCapabilityMatrixXlsx } from './capability-matrix/export-xlsx.ts';
 import { importCapabilityMatrixXlsxFile } from './capability-matrix/import-xlsx.ts';
-import { openCapabilityCellTranscript } from './capability-matrix/cell-transcript.ts';
+import { openCapabilityCellTranscript, refreshCapabilityCellTranscript } from './capability-matrix/cell-transcript.ts';
 import { renderCapabilityMatrixGrid } from './capability-matrix/grid.ts';
 import {
   createDefaultGridFilter,
@@ -55,7 +57,7 @@ import {
 import { renderCapabilityRosterPanel } from './capability-matrix/roster-panel.ts';
 import { mountCapabilityRunPanel } from './capability-matrix/run-panel.ts';
 import { setStatus } from './status';
-import { closeBenchmarkTranscriptDrawer } from './benchmark-transcript-drawer.ts';
+import { closeBenchmarkTranscriptDrawer, isBenchmarkTranscriptDrawerOpen } from './benchmark-transcript-drawer.ts';
 
 const disposers: Array<() => void> = [];
 let disposeRunPanel: (() => void) | null = null;
@@ -63,6 +65,7 @@ let refreshRunPanelBanners: (() => void) | null = null;
 let disposeGridNav: (() => void) | null = null;
 let disposeGridToolbar: (() => void) | null = null;
 let disposeProbeUpdates: (() => void) | null = null;
+let disposeRunSubscription: (() => void) | null = null;
 let gridFilter: CapabilityGridFilter = createDefaultGridFilter();
 
 /** Tear down listeners and child editors before re-render or navigation. */
@@ -76,6 +79,8 @@ export function disposeCapabilityMatrix(): void {
   disposeGridToolbar = null;
   disposeProbeUpdates?.();
   disposeProbeUpdates = null;
+  disposeRunSubscription?.();
+  disposeRunSubscription = null;
   closeBenchmarkTranscriptDrawer();
   disposeCapabilityMatrixRunView();
   while (disposers.length) {
@@ -363,6 +368,40 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     });
   }
 
+  function cellTranscriptOptions() {
+    return {
+      campaigns: campaignsForGridView(),
+      getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
+      getCurrentProbe: getCapabilityMatrixCurrentProbe,
+      onSaved: refreshView,
+    };
+  }
+
+  function refreshOpenTranscriptIfNeeded(sweepCancelled = false): void {
+    if (!openSelection || !isBenchmarkTranscriptDrawerOpen()) return;
+    const cell = viewModel.cellByKey.get(
+      `${openSelection.targetKey}::${openSelection.capabilityId}`,
+    );
+    if (!cell) return;
+    refreshCapabilityCellTranscript(cell, {
+      ...cellTranscriptOptions(),
+      targetLabel: viewModel.targetLabels[openSelection.targetKey] ?? openSelection.targetKey,
+      sweepCancelled,
+      onClose: () => {
+        if (
+          openSelection?.targetKey !== cell.targetKey ||
+          openSelection.capabilityId !== cell.capabilityId
+        ) {
+          return;
+        }
+        openSelection = null;
+        const openBtn = gridHost.querySelector('.cap-matrix-grid__cell.is-open');
+        openBtn?.classList.remove('is-open');
+        openBtn?.setAttribute('aria-pressed', 'false');
+      },
+    });
+  }
+
   function paintGrid(): void {
     disposeGridNav?.();
     disposeGridNav = renderCapabilityMatrixGrid({
@@ -371,6 +410,7 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
       campaigns: campaignsForGridView(),
       filter: gridFilter,
       openCell: openSelection,
+      currentProbe: getCapabilityMatrixCurrentProbe(),
       getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
       onSelectCell: (selection) => {
         const cell = viewModel.cellByKey.get(
@@ -380,10 +420,8 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
         // Click opens the transcript panel; the former bottom editor lives there.
         openSelection = selection;
         openCapabilityCellTranscript(cell, {
-          campaigns: campaignsForGridView(),
+          ...cellTranscriptOptions(),
           targetLabel: viewModel.targetLabels[selection.targetKey] ?? selection.targetKey,
-          getInFlightProbeLookup: findInFlightCapabilityProbeLookup,
-          onSaved: refreshView,
           onClose: () => {
             if (
               openSelection?.targetKey !== selection.targetKey ||
@@ -514,6 +552,15 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
     if (isAsyncSectionRenderStale('capability-matrix', generation)) return;
     rebuildViewModel();
     paintGrid();
+    refreshOpenTranscriptIfNeeded();
+  });
+
+  disposeRunSubscription = subscribeCapabilityMatrixRun((state) => {
+    if (isAsyncSectionRenderStale('capability-matrix', generation)) return;
+    paintGrid();
+    if (!state.running && state.phaseLabel === 'Cancelled') {
+      refreshOpenTranscriptIfNeeded(true);
+    }
   });
 
   disposeRunPanel = (() => {

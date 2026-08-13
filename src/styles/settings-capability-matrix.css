@@ -884,6 +884,17 @@
   z-index: 1;
 }
 
+.cap-matrix-grid__cell--running {
+  background: color-mix(in srgb, var(--mn-accent) 8%, var(--mn-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mn-accent) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cap-matrix-grid__cell--running {
+    animation: none;
+  }
+}
+
 .cap-matrix-grid__cell[data-verdict='pass'] {
   color: var(--mn-success);
 }
@@ -1321,6 +1332,11 @@
 .benchmark-transcript-drawer__badge--skip {
   background: var(--mn-surface-2);
   color: var(--mn-fg-muted);
+}
+
+.benchmark-transcript-drawer__badge--running {
+  background: color-mix(in srgb, var(--mn-accent) 14%, var(--mn-bg));
+  color: var(--mn-accent);
 }
 
 .benchmark-transcript-drawer__sub {

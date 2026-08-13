@@ -2,23 +2,40 @@
  * Read-only benchmark test transcript drawer (messages, tool calls, results).
  */
 
-import type { BenchmarkRun, TestResult } from '../benchmark/types.ts';
+import type { TestResult } from '../benchmark/types.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import {
   formatBenchmarkTranscriptForCopy,
   type BenchmarkTranscriptRunMeta,
 } from './format-benchmark-transcript.ts';
 import { setStatus } from './status.ts';
-import { renderTranscriptView } from './transcript-view.ts';
+import { createTranscriptStreamStatus, renderTranscriptView } from './transcript-view.ts';
 
 export type { BenchmarkTranscriptRunMeta };
 
-let openLayer: {
+type OpenDrawerLayer = {
   backdrop: HTMLElement;
+  panel: HTMLElement;
+  badge: HTMLElement;
+  duration: HTMLElement;
+  footer: HTMLElement;
+  body: HTMLElement;
+  extra: HTMLElement | null;
+  copyBtn: HTMLButtonElement;
   onKey: (e: KeyboardEvent) => void;
   disposeExtra?: () => void;
   onClose?: () => void;
-} | null = null;
+  suiteLabel?: string;
+  runMeta: BenchmarkTranscriptRunMeta;
+  test: TestResult;
+  running: boolean;
+};
+
+let openLayer: OpenDrawerLayer | null = null;
+
+export function isBenchmarkTranscriptDrawerOpen(): boolean {
+  return openLayer != null;
+}
 
 export function closeBenchmarkTranscriptDrawer(): void {
   if (!openLayer) return;
@@ -31,7 +48,8 @@ export function closeBenchmarkTranscriptDrawer(): void {
   onClose?.();
 }
 
-function statusBadgeClass(result: TestResult): string {
+function statusBadgeClass(result: TestResult, running?: boolean): string {
+  if (running) return 'benchmark-transcript-drawer__badge--running';
   if (result.verdict === 'untested') return 'benchmark-transcript-drawer__badge--skip';
   if (result.skipped) return 'benchmark-transcript-drawer__badge--skip';
   if (result.verdict === 'partial') return 'benchmark-transcript-drawer__badge--partial';
@@ -39,7 +57,8 @@ function statusBadgeClass(result: TestResult): string {
   return 'benchmark-transcript-drawer__badge--fail';
 }
 
-function statusBadgeLabel(result: TestResult): string {
+function statusBadgeLabel(result: TestResult, running?: boolean): string {
+  if (running) return 'Running';
   if (result.verdict === 'untested') return 'Untested';
   if (result.skipped) return 'Skipped';
   if (result.verdict === 'partial') return 'Partial';
@@ -53,7 +72,32 @@ function formatDurationMs(ms: number): string {
   return `${(ms / 1000).toFixed(1)} s`;
 }
 
-function renderEmptyState(root: HTMLElement, test: TestResult): void {
+function buildFooterText(test: TestResult): string {
+  const parts: string[] = [];
+  if (test.details?.trim()) parts.push(test.details.trim());
+  if (test.transcriptMeta?.finishReason) {
+    parts.push(`finish: ${test.transcriptMeta.finishReason}`);
+  }
+  if (test.ttftMs != null) parts.push(`TTFT ${Math.round(test.ttftMs)} ms`);
+  if (test.tokPerSec != null) parts.push(`${Math.round(test.tokPerSec)} tok/s`);
+  return parts.join(' · ');
+}
+
+function renderDrawerBody(
+  body: HTMLElement,
+  test: TestResult,
+  options?: { running?: boolean },
+): void {
+  body.replaceChildren();
+  if (test.transcript?.length) {
+    renderTranscriptView(body, test.transcript as unknown[]);
+    return;
+  }
+
+  if (options?.running) {
+    body.appendChild(createTranscriptStreamStatus('generating'));
+  }
+
   const p = document.createElement('p');
   p.className = 'benchmark-transcript-drawer__empty';
   if (test.transcriptMeta?.error) {
@@ -62,17 +106,58 @@ function renderEmptyState(root: HTMLElement, test: TestResult): void {
     p.textContent =
       'This check did not run a model completion, or no transcript was captured for this run.';
   }
-  root.appendChild(p);
+  body.appendChild(p);
+
   if (test.details?.trim()) {
     const details = document.createElement('pre');
     details.className = 'benchmark-transcript-drawer__details';
     details.textContent = test.details;
-    root.appendChild(details);
+    body.appendChild(details);
+  }
+}
+
+function paintDrawerContent(
+  layer: OpenDrawerLayer,
+  test: TestResult,
+  runMeta: BenchmarkTranscriptRunMeta,
+  options?: BenchmarkTranscriptDrawerOptions,
+): void {
+  const running = options?.running === true;
+  layer.running = running;
+  layer.runMeta = runMeta;
+  layer.test = test;
+  layer.suiteLabel = options?.suiteLabel;
+
+  layer.panel.setAttribute('aria-label', `Benchmark transcript · ${test.label}`);
+  layer.panel.setAttribute('aria-busy', running ? 'true' : 'false');
+
+  layer.badge.className = `benchmark-transcript-drawer__badge ${statusBadgeClass(test, running)}`;
+  layer.badge.textContent = statusBadgeLabel(test, running);
+  layer.duration.textContent = running ? '—' : formatDurationMs(test.durationMs);
+
+  const footerText = running ? '' : buildFooterText(test);
+  layer.footer.textContent = footerText;
+  layer.footer.hidden = !footerText;
+
+  renderDrawerBody(layer.body, test, { running });
+  layer.copyBtn.disabled = running || !test.transcript?.length;
+
+  if (options?.mountExtra) {
+    layer.disposeExtra?.();
+    if (!layer.extra) {
+      const extra = document.createElement('div');
+      extra.className = 'benchmark-transcript-drawer__extra';
+      layer.panel.appendChild(extra);
+      layer.extra = extra;
+    }
+    layer.disposeExtra = options.mountExtra(layer.extra);
   }
 }
 
 export type BenchmarkTranscriptDrawerOptions = {
   suiteLabel?: string;
+  /** Probe still in flight — show running badge and spinner empty state. */
+  running?: boolean;
   /** Optional chrome pinned below the transcript (capability-matrix cell editor). */
   mountExtra?: (host: HTMLElement) => () => void;
   /** Called after the drawer is removed (Escape, backdrop, Close). */
@@ -114,10 +199,10 @@ export function openBenchmarkTranscriptDrawer(
   const suiteSpan = document.createElement('span');
   suiteSpan.textContent = options?.suiteLabel ?? SUITE_LABELS[test.suite] ?? test.suite;
   const badge = document.createElement('span');
-  badge.className = `benchmark-transcript-drawer__badge ${statusBadgeClass(test)}`;
-  badge.textContent = statusBadgeLabel(test);
+  badge.className = `benchmark-transcript-drawer__badge ${statusBadgeClass(test, options?.running)}`;
+  badge.textContent = statusBadgeLabel(test, options?.running);
   const duration = document.createElement('span');
-  duration.textContent = formatDurationMs(test.durationMs);
+  duration.textContent = options?.running ? '—' : formatDurationMs(test.durationMs);
   meta.appendChild(suiteSpan);
   meta.appendChild(badge);
   meta.appendChild(duration);
@@ -135,8 +220,9 @@ export function openBenchmarkTranscriptDrawer(
   copyBtn.textContent = 'Copy transcript';
   copyBtn.setAttribute('aria-label', 'Copy full probe transcript to clipboard');
   copyBtn.addEventListener('click', () => {
-    const text = formatBenchmarkTranscriptForCopy(test, runMeta, {
-      suiteLabel: options?.suiteLabel,
+    if (!openLayer) return;
+    const text = formatBenchmarkTranscriptForCopy(openLayer.test, openLayer.runMeta, {
+      suiteLabel: openLayer.suiteLabel,
     });
     void navigator.clipboard.writeText(text).then(
       () => setStatus('ok', 'Transcript copied'),
@@ -162,23 +248,13 @@ export function openBenchmarkTranscriptDrawer(
 
   const footer = document.createElement('div');
   footer.className = 'benchmark-transcript-drawer__footer';
-  const parts: string[] = [];
-  if (test.details?.trim()) parts.push(test.details.trim());
-  if (test.transcriptMeta?.finishReason) {
-    parts.push(`finish: ${test.transcriptMeta.finishReason}`);
-  }
-  if (test.ttftMs != null) parts.push(`TTFT ${Math.round(test.ttftMs)} ms`);
-  if (test.tokPerSec != null) parts.push(`${Math.round(test.tokPerSec)} tok/s`);
-  if (parts.length) footer.textContent = parts.join(' · ');
+  const footerText = options?.running ? '' : buildFooterText(test);
+  if (footerText) footer.textContent = footerText;
+  else footer.hidden = true;
 
   const body = document.createElement('div');
   body.className = 'benchmark-transcript-drawer__body';
-
-  if (test.transcript?.length) {
-    renderTranscriptView(body, test.transcript as unknown[]);
-  } else {
-    renderEmptyState(body, test);
-  }
+  renderDrawerBody(body, test, { running: options?.running });
 
   if (test.transcriptMeta?.judgeRaw) {
     const judge = document.createElement('details');
@@ -199,8 +275,9 @@ export function openBenchmarkTranscriptDrawer(
   panel.appendChild(scroll);
 
   let disposeExtra: (() => void) | undefined;
+  let extra: HTMLElement | null = null;
   if (options?.mountExtra) {
-    const extra = document.createElement('div');
+    extra = document.createElement('div');
     extra.className = 'benchmark-transcript-drawer__extra';
     disposeExtra = options.mountExtra(extra);
     panel.appendChild(extra);
@@ -216,11 +293,39 @@ export function openBenchmarkTranscriptDrawer(
     }
   };
   document.addEventListener('keydown', onKey);
-  openLayer = { backdrop, onKey, disposeExtra, onClose: options?.onClose };
+  openLayer = {
+    backdrop,
+    panel,
+    badge,
+    duration,
+    footer,
+    body,
+    extra,
+    copyBtn,
+    onKey,
+    disposeExtra,
+    onClose: options?.onClose,
+    suiteLabel: options?.suiteLabel,
+    runMeta,
+    test,
+    running: options?.running === true,
+  };
+
+  copyBtn.disabled = options?.running === true || !test.transcript?.length;
 
   backdrop.addEventListener('click', (ev) => {
     if (ev.target === backdrop) closeBenchmarkTranscriptDrawer();
   });
 
   closeBtn.focus();
+}
+
+/** Replace drawer content in place when the same probe finishes (or is cancelled). */
+export function updateBenchmarkTranscriptDrawer(
+  test: TestResult,
+  runMeta: BenchmarkTranscriptRunMeta,
+  options?: BenchmarkTranscriptDrawerOptions,
+): void {
+  if (!openLayer) return;
+  paintDrawerContent(openLayer, test, runMeta, options);
 }

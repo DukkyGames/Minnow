@@ -51,6 +51,14 @@ export interface MatrixTargetChip {
   detail?: string;
 }
 
+/** Active capability-matrix probe while a sweep is in flight. */
+export interface MatrixCurrentProbe {
+  targetKey: string;
+  capabilityId: string;
+  testId: string;
+  label: string;
+}
+
 export interface MatrixRunUiState {
   running: boolean;
   phaseLabel: string;
@@ -58,6 +66,7 @@ export interface MatrixRunUiState {
   progressDetail: string;
   targets: MatrixTargetChip[];
   campaignId: string | null;
+  currentProbe: MatrixCurrentProbe | null;
 }
 
 export interface StartCapabilityMatrixRunParams {
@@ -107,6 +116,7 @@ function emptyUiState(): MatrixRunUiState {
     progressDetail: '',
     targets: [],
     campaignId: null,
+    currentProbe: null,
   };
 }
 
@@ -325,6 +335,11 @@ export function getCapabilityMatrixRunState(): MatrixRunUiState {
   return uiState;
 }
 
+/** Latest in-flight probe (null when idle or between probes). */
+export function getCapabilityMatrixCurrentProbe(): MatrixCurrentProbe | null {
+  return uiState.currentProbe;
+}
+
 export function isCapabilityMatrixRunActive(): boolean {
   return uiState.running;
 }
@@ -345,6 +360,7 @@ export function abortCapabilityMatrixRun(): void {
     running: false,
     phaseLabel: 'Cancelled',
     progressPct: uiState.progressPct,
+    currentProbe: null,
   });
   emitProbeUpdate();
 }
@@ -367,8 +383,32 @@ function handleCampaignProgress(
     case 'target-done':
       return updateChip(chips, event.targetKey, { state: 'done' });
     case 'integration-progress': {
+      if (event.event.type === 'test-start') {
+        const inner = event.event;
+        if (inner.suiteId === 'capability-matrix') {
+          const capabilityId = parseCapabilityIdFromTestId(inner.testId);
+          if (capabilityId) {
+            const chip = chips.find((row) => row.targetKey === event.targetKey);
+            const chipSuffix = chip ? ` · ${chip.label}` : '';
+            setUiState({
+              currentProbe: {
+                targetKey: event.targetKey,
+                capabilityId,
+                testId: inner.testId,
+                label: inner.label,
+              },
+              phaseLabel: `Running: ${inner.label}${chipSuffix}`,
+            });
+            emitProbeUpdate();
+          }
+        }
+        return chips;
+      }
       if (event.event.type === 'test-done') {
         const result = event.event.result;
+        if (result.suite === 'capability-matrix') {
+          setUiState({ currentProbe: null });
+        }
         if (!result.skipped) {
           testsDone += 1;
           const pct =
@@ -493,6 +533,7 @@ export async function startCapabilityMatrixRun(
     progressDetail: testsTotal ? `0 / ${testsTotal} probes` : '',
     targets: chips,
     campaignId,
+    currentProbe: null,
   });
 
   persistActiveMatrixSession(campaignId, activeRunPayload, sessionCompletedTests);
@@ -554,6 +595,7 @@ export async function startCapabilityMatrixRun(
                 ? 'Capability matrix complete'
                 : 'Run cancelled',
             progressPct: event.type === 'campaign-done' ? 100 : uiState.progressPct,
+            currentProbe: null,
           });
         }
       },
@@ -670,4 +712,14 @@ export function seedCapabilityMatrixSessionProbesForTests(
   sessionCompletedProbes = [...probes];
   sessionCompletedTests = probes.map((probe) => probe.result);
   emitProbeUpdate();
+}
+
+/** Test hook: simulate campaign progress without running a campaign. */
+export function simulateCapabilityMatrixProgressForTests(
+  event: CampaignProgressEvent,
+  chips: MatrixTargetChip[] = uiState.targets,
+): MatrixTargetChip[] {
+  const next = handleCampaignProgress(event, chips);
+  setUiState({ targets: next });
+  return next;
 }

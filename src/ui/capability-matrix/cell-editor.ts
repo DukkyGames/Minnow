@@ -20,6 +20,8 @@ export type CapabilityCellEditorOptions = {
    * title / close / transcript actions and do not steal focus.
    */
   embedded?: boolean;
+  /** Disable save while an auto probe is still running. */
+  saveDisabled?: boolean;
 };
 
 const VERDICT_OPTIONS: { value: CapabilityVerdict; label: string }[] = [
@@ -46,7 +48,7 @@ export function mountCapabilityCellEditor(
   cell: MergedCapabilityCell,
   options: CapabilityCellEditorOptions,
 ): CapabilityCellEditorDispose {
-  const { host, targetLabel, onSaved, embedded } = options;
+  const { host, targetLabel, onSaved, embedded, saveDisabled } = options;
   host.replaceChildren();
   host.hidden = false;
   // Keep any host class (drawer extra slot) and add editor chrome on top.
@@ -106,6 +108,10 @@ export function mountCapabilityCellEditor(
   const actions = el('div', 'cap-matrix-cell-editor__actions');
   const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save manual verdict');
   saveBtn.type = 'button';
+  if (saveDisabled) {
+    saveBtn.disabled = true;
+    saveBtn.title = 'Wait for the probe to finish before saving a manual verdict.';
+  }
   actions.appendChild(saveBtn);
 
   if (!embedded) {

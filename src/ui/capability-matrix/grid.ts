@@ -3,6 +3,7 @@
  */
 
 import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
+import type { MatrixCurrentProbe } from '../../benchmark/capabilities/matrix-run-controller.ts';
 import {
   capabilityCellHasTranscriptDrillDown,
   resolveCapabilityProbeLookup,
@@ -45,6 +46,8 @@ export type CapabilityGridOptions = {
   filter?: CapabilityGridFilter;
   /** Cell whose transcript panel is currently open. */
   openCell?: CapabilityGridSelection | null;
+  /** Active probe while a sweep runs (highlights the matching cell). */
+  currentProbe?: MatrixCurrentProbe | null;
   getInFlightProbeLookup?: (
     targetKey: string,
     capabilityId: string,
@@ -85,6 +88,7 @@ function renderCellButton(
   getInFlightProbeLookup: CapabilityGridOptions['getInFlightProbeLookup'],
   onSelectCell: (selection: CapabilityGridSelection) => void,
   openCell: CapabilityGridSelection | null | undefined,
+  currentProbe: MatrixCurrentProbe | null | undefined,
 ): HTMLButtonElement {
   const cell = row.cells[index];
   const btn = el('button', 'cap-matrix-grid__cell');
@@ -99,6 +103,13 @@ function renderCellButton(
   const isOpen =
     openCell?.targetKey === targetKey && openCell.capabilityId === row.capabilityId;
   if (isOpen) btn.classList.add('is-open');
+  const isRunning =
+    currentProbe?.targetKey === targetKey &&
+    currentProbe.capabilityId === row.capabilityId;
+  if (isRunning) {
+    btn.classList.add('cap-matrix-grid__cell--running');
+    btn.setAttribute('aria-busy', 'true');
+  }
   btn.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
   btn.textContent = capabilityVerdictGlyph(verdict);
   const lookup = resolveCapabilityProbeLookup(
@@ -109,7 +120,8 @@ function renderCellButton(
   );
   const canTranscript = capabilityCellHasTranscriptDrillDown(lookup);
   if (canTranscript) btn.dataset.capTranscript = '1';
-  const title = `${cellTitle(row, targetKey, index)} · Opens probe transcript`;
+  const runningSuffix = isRunning ? ' · Running' : '';
+  const title = `${cellTitle(row, targetKey, index)}${runningSuffix} · Opens probe transcript`;
   btn.title = title;
   btn.setAttribute('aria-label', title);
   btn.setAttribute('aria-haspopup', 'dialog');
@@ -124,8 +136,15 @@ const SPARSE_COLUMN_THRESHOLD = 8;
 
 /** Render sticky-header grid for the current view-model. */
 export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () => void {
-  const { host, model, campaigns, onSelectCell, getInFlightProbeLookup, openCell } =
-    options;
+  const {
+    host,
+    model,
+    campaigns,
+    onSelectCell,
+    getInFlightProbeLookup,
+    openCell,
+    currentProbe,
+  } = options;
   const filter = options.filter ?? createDefaultGridFilter();
   host.replaceChildren();
   host.className = 'cap-matrix-grid-wrap';
@@ -208,6 +227,7 @@ export function renderCapabilityMatrixGrid(options: CapabilityGridOptions): () =
           getInFlightProbeLookup,
           onSelectCell,
           openCell,
+          currentProbe,
         ),
       );
     });

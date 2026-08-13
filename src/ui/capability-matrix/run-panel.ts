@@ -204,7 +204,16 @@ function paintRunState(root: HTMLElement, state: MatrixRunUiState): void {
   const runBtn = root.querySelector<HTMLButtonElement>('[data-cap-matrix-run]');
   const stopBtn = root.querySelector<HTMLButtonElement>('[data-cap-matrix-stop]');
 
-  if (phase) phase.textContent = state.phaseLabel;
+  if (phase) {
+    phase.textContent = state.phaseLabel;
+    if (state.running) {
+      phase.setAttribute('aria-live', 'polite');
+      phase.setAttribute('role', 'status');
+    } else {
+      phase.removeAttribute('aria-live');
+      phase.removeAttribute('role');
+    }
+  }
   if (progress) {
     progress.hidden = !state.running && state.progressPct === 0;
     progress.setAttribute('aria-valuenow', String(state.progressPct));

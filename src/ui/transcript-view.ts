@@ -100,7 +100,7 @@ function appendAssistantTranscriptRow(body: HTMLElement, msg: Record<string, unk
 }
 
 /** Build the animated dots + label row used during live sub-agent turns. */
-function createTranscriptStreamStatus(
+export function createTranscriptStreamStatus(
   phase: 'thinking' | 'generating',
 ): HTMLElement {
   const statusEl = document.createElement('div');
