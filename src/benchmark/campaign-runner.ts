@@ -108,8 +108,8 @@ async function runIntegrationForTarget(
   signal: AbortSignal,
   onProgress: RunCampaignOptions['onProgress'],
   capabilityMatrix: RunCampaignOptions['capabilityMatrix'],
+  targetKey: string,
 ): Promise<TargetWorkResult> {
-  const targetKey = targetKeyFromTarget(target);
   const provider = await resolveProvider(target.providerId);
   const run = await runBenchmark({
     suites: suiteIds,
@@ -134,7 +134,9 @@ async function runIntegrationForTarget(
       }
     },
   });
-  return { target, runs: [run], cells: [] };
+  // Stamp the roster identity: a served My Models row runs under a rewritten
+  // provider/model, so the run alone cannot be mapped back to its grid column.
+  return { target, runs: [{ ...run, targetKey }], cells: [] };
 }
 
 async function runStandardForTarget(
@@ -143,12 +145,14 @@ async function runStandardForTarget(
   tier: RunCampaignOptions['standardTier'],
   signal: AbortSignal,
   onProgress: RunCampaignOptions['onProgress'],
+  targetKey: string,
 ): Promise<TargetWorkResult> {
   const cells: BenchmarkCellResult[] = [];
   for (const packId of packIds) {
     if (signal.aborted) break;
     const packCells = await runStandardPackForTarget({
       target,
+      targetKey,
       packId,
       tier: tier ?? 'mini',
       signal,
@@ -169,14 +173,21 @@ async function runStandardForTarget(
   return { target, runs: [], cells };
 }
 
+/**
+ * Run one target's suites. `target` carries the binding to call (rewritten to the
+ * upstream serve for My Models rows); `rosterTarget` stays the roster row every
+ * progress event, cell, and per-target option lookup is keyed by.
+ */
 async function runTargetSuites(
   target: BenchmarkTarget,
   options: RunCampaignOptions,
   workerSignal: AbortSignal,
+  rosterTarget: BenchmarkTarget,
 ): Promise<TargetWorkResult> {
   const integrationSuites = options.integrationSuites ?? suitesForPreset(options.preset ?? 'quick');
   const standardPackIds = options.standardPackIds ?? [];
   const onProgress = options.onProgress;
+  const targetKey = targetKeyFromTarget(rosterTarget);
   const parts: TargetWorkResult[] = [];
 
   if (integrationSuites.length) {
@@ -187,7 +198,8 @@ async function runTargetSuites(
         options.preset,
         workerSignal,
         onProgress,
-        resolveCapabilityMatrixOptions(options, target),
+        resolveCapabilityMatrixOptions(options, rosterTarget),
+        targetKey,
       ),
     );
   }
@@ -200,6 +212,7 @@ async function runTargetSuites(
         options.standardTier,
         workerSignal,
         onProgress,
+        targetKey,
       ),
     );
   }
@@ -215,7 +228,7 @@ async function runTargetWithOptionalLifecycle(
   workerSignal: AbortSignal,
 ): Promise<TargetWorkResult> {
   if (!options.manageModelLifecycle) {
-    return runTargetSuites(target, options, workerSignal);
+    return runTargetSuites(target, options, workerSignal, target);
   }
 
   const targetKey = targetKeyFromTarget(target);
@@ -249,7 +262,7 @@ async function runTargetWithOptionalLifecycle(
   };
 
   try {
-    const work = await runTargetSuites(effectiveTarget, options, workerSignal);
+    const work = await runTargetSuites(effectiveTarget, options, workerSignal, target);
     return { ...work, target };
   } finally {
     if (loadOutcome.unload) {

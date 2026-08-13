@@ -274,5 +274,7 @@ export function setScheduleTogglesDisabled(disabled: boolean): void {
 
 /** Match a saved run to a roster target key. */
 export function targetKeyForRun(run: BenchmarkRun): string {
-  return buildTargetKey(run.provider.id, run.model.id);
+  // Campaign runs carry their roster row; provider/model hold the resolved binding,
+  // which differs from the roster row for served My Models targets.
+  return run.targetKey?.trim() || buildTargetKey(run.provider.id, run.model.id);
 }

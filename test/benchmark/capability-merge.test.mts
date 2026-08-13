@@ -9,6 +9,7 @@ import {
   mergeCapabilityCell,
   mergeCapabilityMatrix,
   parseCapabilityProbeKey,
+  resolveRunTargetKey,
 } from '../../src/benchmark/capabilities/merge.ts';
 import type { ManualVerdictStore } from '../../src/benchmark/capabilities/manual-verdicts.ts';
 
@@ -181,5 +182,24 @@ describe('capability merge', () => {
   test('parseCapabilityProbeKey splits target and capability id', () => {
     const parsed = parseCapabilityProbeKey(`${TARGET_KEY}::${CAP_ID}`);
     assert.deepEqual(parsed, { targetKey: TARGET_KEY, capabilityId: CAP_ID });
+  });
+
+  test('served My Models run maps to its roster row via stamped targetKey', () => {
+    const libraryKey = 'minnow-library::mlx:org/repo';
+    const run: BenchmarkRun = {
+      ...matrixRun('pass', '2026-06-05T00:00:00.000Z'),
+      // Serve rewrites the binding: neither provider nor model matches the roster row.
+      provider: { id: 'mlx-lm-local', baseUrl: 'http://127.0.0.1:8087' },
+      model: { id: '/Users/me/.cache/models/snapshots/abc' },
+      targetKey: libraryKey,
+    };
+    const campaign: BenchmarkCampaign = {
+      ...campaignWithRuns([run]),
+      targets: [{ providerId: 'minnow-library', modelId: 'mlx:org/repo' }],
+    };
+
+    assert.equal(resolveRunTargetKey(campaign, run), libraryKey);
+    const autos = extractAutoVerdictsFromCampaign(campaign);
+    assert.equal(autos[0]?.targetKey, libraryKey);
   });
 });

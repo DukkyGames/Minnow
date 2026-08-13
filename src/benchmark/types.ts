@@ -123,6 +123,12 @@ export interface BenchmarkRun {
   preset: BenchmarkPreset;
   provider: { id: string; baseUrl: string };
   model: { id: string; contextLength?: number };
+  /**
+   * Campaign roster row this run belongs to (`providerId::modelId`). Stamped by the
+   * campaign runner because `provider`/`model` hold the resolved upstream binding,
+   * which no longer matches the roster row for served My Models targets.
+   */
+  targetKey?: string;
   totalScore: number;
   headlineTokPerSec: number;
   headlineTtftMs: number;
