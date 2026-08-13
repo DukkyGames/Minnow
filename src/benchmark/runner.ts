@@ -26,6 +26,7 @@ import type {
   SuiteId,
   SuiteResult,
 } from './types.ts';
+import { DEFAULT_PROBE_TIMEOUT_MS } from './types.ts';
 
 const QUICK_SUITES: SuiteId[] = ['capability', 'speed'];
 const FULL_SUITES: SuiteId[] = [
@@ -110,6 +111,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
     modelId: binding.modelId,
     localServer,
     signal,
+    perTestTimeoutMs: options.perTestTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
     capabilityMatrix: options.capabilityMatrix,
     onTestStart: (meta) => {
       if (signal.aborted) return;

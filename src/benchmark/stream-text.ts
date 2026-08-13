@@ -4,9 +4,16 @@
  * reasoning when the model never emits main content (common on longer prompts).
  */
 
-import { StreamingContentAccumulator } from '../api/message-content.ts';
 import { extractStreamDelta, extractMessageText } from '../api/chat';
 import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning.ts';
+import {
+  HarmonyChannelRouter,
+  InlineContentThinkingRouter,
+  modelLikelyUsesInlineThinking,
+  type RoutedContentPart,
+} from '../api/inline-thinking.ts';
+import { StreamingContentAccumulator } from '../api/message-content.ts';
+import type { ThinkingBudgetTracker } from '../agents/thinking-budget.ts';
 import type { ChatCompletionChunk } from '../types';
 
 /** Merges prose `content` deltas across an SSE stream (indexed parts + string fragments). */
@@ -32,6 +39,104 @@ export class BenchmarkStreamReasoningAccumulator {
 
   getText(): string {
     return this.text;
+  }
+}
+
+/**
+ * Routes inline-thinking and harmony-channel content deltas during benchmark streaming.
+ * Mirrors chat/sub-agent routing so prose and reasoning land in separate buckets.
+ */
+export class BenchmarkStreamContentRouter {
+  private proseText = '';
+
+  private reasoningText = '';
+
+  private readonly inlineRouter: InlineContentThinkingRouter;
+
+  private readonly harmonyRouter = new HarmonyChannelRouter();
+
+  private readonly thinkingBudgetTracker: ThinkingBudgetTracker | null;
+
+  private budgetTripped = false;
+
+  constructor(modelId: string, thinkingBudgetTracker?: ThinkingBudgetTracker | null) {
+    this.inlineRouter = new InlineContentThinkingRouter({
+      thinkingModel: modelLikelyUsesInlineThinking(modelId),
+    });
+    this.thinkingBudgetTracker = thinkingBudgetTracker ?? null;
+  }
+
+  get thinkingBudgetExceeded(): boolean {
+    return this.budgetTripped;
+  }
+
+  getProseText(): string {
+    return this.proseText;
+  }
+
+  getReasoningText(): string {
+    return this.reasoningText;
+  }
+
+  getCommentaryParseText(): string {
+    return this.harmonyRouter.getCommentaryParseText();
+  }
+
+  ingestReasoningDelta(delta: string): void {
+    if (!delta) return;
+    this.feedThinkingBudget(delta);
+    this.reasoningText += delta;
+  }
+
+  ingestContentDelta(delta: string): void {
+    if (!delta) return;
+    for (const [harmonyText, isHarmonyThinking] of this.harmonyRouter.feed(delta)) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          this.feedThinkingBudget(harmonyText);
+          this.reasoningText += harmonyText;
+        }
+        continue;
+      }
+      this.processRoutedParts(this.inlineRouter.feed(harmonyText));
+    }
+  }
+
+  flush(): void {
+    for (const [harmonyText, isHarmonyThinking] of this.harmonyRouter.flush()) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          this.feedThinkingBudget(harmonyText);
+          this.reasoningText += harmonyText;
+        }
+        continue;
+      }
+      this.processRoutedParts(this.inlineRouter.feed(harmonyText));
+    }
+    this.processRoutedParts(this.inlineRouter.flush());
+  }
+
+  private feedThinkingBudget(delta: string): void {
+    if (!this.thinkingBudgetTracker || !delta || this.budgetTripped) return;
+    this.thinkingBudgetTracker.feed(delta);
+    if (this.thinkingBudgetTracker.exceeded) {
+      this.budgetTripped = true;
+    }
+  }
+
+  private processRoutedParts(parts: RoutedContentPart[]): void {
+    for (const [text, isThinking] of parts) {
+      if (isThinking) {
+        if (text) {
+          this.feedThinkingBudget(text);
+          this.reasoningText += text;
+        }
+        continue;
+      }
+      if (!text) continue;
+      this.thinkingBudgetTracker?.endSession();
+      this.proseText += text;
+    }
   }
 }
 

@@ -62,6 +62,16 @@ describe('capability probe verdicts', () => {
     assert.equal(
       verdictOf(
         'core-reasoning',
+        out({
+          contentText: 'The ball costs $0.05.',
+          reasoningText: '1.10 - 1.00',
+        }),
+      ),
+      'pass',
+    );
+    assert.equal(
+      verdictOf(
+        'core-reasoning',
         out({ contentText: '<think>1.10 - 1.00</think> The ball costs $0.05.' }),
       ),
       'partial',

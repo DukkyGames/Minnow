@@ -8,19 +8,32 @@ import { describe, test } from 'node:test';
 import { applyBenchmarkSystemPrompt } from '../../src/benchmark/completion-messages.ts';
 
 describe('applyBenchmarkSystemPrompt', () => {
-  test('prepends system message when none exists', () => {
-    const out = applyBenchmarkSystemPrompt([{ role: 'user', content: 'Hi' }]);
-    assert.equal(out[0]?.role, 'system');
-    assert.match(String(out[0]?.content), /main assistant message content/i);
+  test('returns messages unchanged when no extra system is provided', () => {
+    const input = [{ role: 'user' as const, content: 'Hi' }];
+    const out = applyBenchmarkSystemPrompt(input);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]?.role, 'user');
+    assert.equal(out[0]?.content, 'Hi');
   });
 
-  test('merges with existing system message', () => {
-    const out = applyBenchmarkSystemPrompt([
-      { role: 'system', content: 'Be brief.' },
-      { role: 'user', content: 'Hi' },
-    ]);
-    assert.equal(out.length, 2);
+  test('prepends extra system when none exists', () => {
+    const out = applyBenchmarkSystemPrompt([{ role: 'user', content: 'Hi' }], {
+      extraSystem: 'Be brief.',
+    });
+    assert.equal(out[0]?.role, 'system');
     assert.match(String(out[0]?.content), /Be brief/);
-    assert.match(String(out[0]?.content), /main assistant message content/i);
+  });
+
+  test('merges extra system with existing system message', () => {
+    const out = applyBenchmarkSystemPrompt(
+      [
+        { role: 'system', content: 'Mode prompt.' },
+        { role: 'user', content: 'Hi' },
+      ],
+      { extraSystem: 'Be brief.' },
+    );
+    assert.equal(out.length, 2);
+    assert.match(String(out[0]?.content), /Mode prompt/);
+    assert.match(String(out[0]?.content), /Be brief/);
   });
 });

@@ -53,11 +53,16 @@ export interface CapabilityMatrixRunOptions {
   skipCapabilityIds?: readonly string[];
 }
 
+/** Default per-probe wall-clock budget (capability matrix tool chains share one budget). */
+export const DEFAULT_PROBE_TIMEOUT_MS = 300_000;
+
 export interface BenchmarkRunContext {
   providerId: string;
   modelId: string;
   localServer: boolean;
   signal: AbortSignal;
+  /** Per-probe timeout; defaults to {@link DEFAULT_PROBE_TIMEOUT_MS}. */
+  perTestTimeoutMs?: number;
   capabilityMatrix?: CapabilityMatrixRunOptions;
   /**
    * Set by `runBenchmark` to forward each starting probe to `onProgress` as `{ type: 'test-start' }`.

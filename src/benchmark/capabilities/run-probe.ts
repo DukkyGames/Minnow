@@ -8,7 +8,9 @@ import type { ApiMessage, ToolCall } from '../../types.ts';
 import { runDelegatedCapabilityProbe } from './delegated-probes.ts';
 import { createCapabilityExecuteToolFn } from './execute-tool.ts';
 import { runOneShot, runToolLoop, type OneShotResult } from '../llm-driver.ts';
+import { rethrowIfAborted, withBenchmarkTimeout } from '../abort.ts';
 import type { BenchmarkRunContext } from '../types.ts';
+import { DEFAULT_PROBE_TIMEOUT_MS } from '../types.ts';
 import { getCapabilityProbePrompt } from './probe-prompts.ts';
 import type {
   CapabilityDefinition,
@@ -244,30 +246,34 @@ export async function runCapabilityProbe(
   };
 
   const maxRounds = resolveMaxToolRounds(probe);
+  const timeoutMs = ctx.perTestTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
 
   try {
-    let oneShot: OneShotResult;
-    if (usesToolLoop(probe, toolIds)) {
-      oneShot = await runToolLoop({
-        providerId: ctx.providerId,
-        modelId: ctx.modelId,
-        signal: ctx.signal,
-        messages,
-        tools,
-        maxToolRounds: maxRounds,
-        ...(probe.modeId ? { modeId: probe.modeId } : {}),
-        executeToolFn,
-        onRound: (round) => rounds.push(round),
-      });
-    } else {
-      oneShot = await runOneShot({
-        providerId: ctx.providerId,
-        modelId: ctx.modelId,
-        signal: ctx.signal,
-        messages,
-        ...(tools.length ? { tools } : {}),
-      });
-    }
+    let oneShot!: OneShotResult;
+
+    await withBenchmarkTimeout(ctx.signal, timeoutMs, async (probeSignal) => {
+      if (usesToolLoop(probe, toolIds)) {
+        oneShot = await runToolLoop({
+          providerId: ctx.providerId,
+          modelId: ctx.modelId,
+          signal: probeSignal,
+          messages,
+          tools,
+          maxToolRounds: maxRounds,
+          ...(probe.modeId ? { modeId: probe.modeId } : {}),
+          executeToolFn,
+          onRound: (round) => rounds.push(round),
+        });
+      } else {
+        oneShot = await runOneShot({
+          providerId: ctx.providerId,
+          modelId: ctx.modelId,
+          signal: probeSignal,
+          messages,
+          ...(tools.length ? { tools } : {}),
+        });
+      }
+    });
 
     const offeredToolNames = tools.map((t) => t.function.name);
     const out = probeOutputFromOneShot(oneShot, rounds, executedResults, offeredToolNames);
@@ -283,6 +289,7 @@ export async function runCapabilityProbe(
       oneShot,
     };
   } catch (err) {
+    rethrowIfAborted(err, ctx.signal);
     const message = err instanceof Error ? err.message : String(err);
     return {
       skipped: false,
