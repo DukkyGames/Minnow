@@ -90,7 +90,9 @@ const WORKSPACE_PROBE_PROMPTS: Record<string, string> = {
     'Start a background node process that prints cap-matrix-log-line every 300ms, read the tail of its log, then stop it.',
   'code-repo-intel': `In ${CAP_MATRIX_SAMPLE_PATH}, where is ${CAP_MATRIX_SAMPLE_FN} defined and who calls it?`,
   'core-parallel-tools': `Read these three files in one turn if your host allows parallel tool calls: ${CAP_MATRIX_JSON_PATH}, ${CAP_MATRIX_NOTES_PATH}, and ${CAP_MATRIX_SAMPLE_PATH}.`,
-  'core-tool-loop': `In ${CAP_MATRIX_REPO_DIR}: list the changed files, read the diff for the first one, read that file, then summarize the change in one sentence.`,
+  // File-tool chain only — git tools run at the workspace root, not inside matrix/repo,
+  // so a nested-repo git task sends small models into .git/ exploration loops.
+  'core-tool-loop': `List files in ${CAPABILITY_MATRIX_FIXTURE_DIR}/, read ${CAP_MATRIX_NOTES_PATH} and ${CAP_MATRIX_JSON_PATH}, grep under ${CAPABILITY_MATRIX_FIXTURE_DIR}/ for ${CAP_MATRIX_GREP_TOKEN}, then summarize in one sentence.`,
   'lsp-diagnostics': `Call list_lsp_servers, then get_lsp_diagnostics for ${CAP_MATRIX_SAMPLE_PATH} if a TypeScript server is available.`,
 };
 

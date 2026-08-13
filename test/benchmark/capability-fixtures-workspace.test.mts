@@ -84,7 +84,7 @@ describe('capability matrix fixtures-workspace', () => {
         (c) =>
           c.name === 'execute_command' &&
           String(c.args.command).includes('git init') &&
-          c.args.cwd === CAP_MATRIX_REPO_DIR,
+          c.args.cwd === undefined,
       ),
     );
     const haystackSave = toolCalls.find((c) => c.name === 'save_file' && String(c.args.path).includes('haystack'));

@@ -123,12 +123,13 @@ async function runShell(
 async function seedGitFixture(workspaceRoot: string): Promise<void> {
   const readme = '# cap-matrix fixture repo\n';
   await saveText(workspaceRoot, `${CAP_MATRIX_REPO_DIR}/README.md`, readme);
-  await runShell(workspaceRoot, 'git init -b main', CAP_MATRIX_REPO_DIR);
-  await runShell(workspaceRoot, 'git add -A', CAP_MATRIX_REPO_DIR);
+  // Git tools run at the benchmark workspace root — init here, not inside matrix/repo.
+  await saveText(workspaceRoot, '.gitignore', '.minnow/\n');
+  await runShell(workspaceRoot, 'git init -b main');
+  await runShell(workspaceRoot, 'git add -A');
   await runShell(
     workspaceRoot,
     'git -c user.email=bench@minnow.local -c user.name="Minnow Bench" commit -m "cap-matrix initial"',
-    CAP_MATRIX_REPO_DIR,
   );
   await saveText(
     workspaceRoot,
@@ -178,7 +179,7 @@ export async function isCapabilityMatrixGitFixtureReady(workspaceRoot: string): 
   try {
     const result = await executeBenchmarkTool(
       'read_file',
-      { path: `${CAP_MATRIX_REPO_DIR}/.git/HEAD` },
+      { path: '.git/HEAD' },
       { workspaceRoot },
     );
     return !result.content.startsWith('Error:') && result.content.includes('ref:');

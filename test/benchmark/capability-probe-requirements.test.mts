@@ -180,7 +180,7 @@ describe('resolveCapabilityProbeSkip', () => {
   });
 
   test('git-fixture probe skips when fixture not seeded', async () => {
-    const cap = getCapabilityById('core-tool-loop');
+    const cap = getCapabilityById('git-read');
     assert.ok(cap);
     const reason = await resolveCapabilityProbeSkip(cap!, {
       ctx: {

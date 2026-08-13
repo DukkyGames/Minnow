@@ -48,9 +48,10 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
     kind: 'tool-chain',
     maxToolRounds: 8,
     // Without an explicit list the loop was offered `get_datetime` alone, so no model
-    // could ever chain four rounds on a git task.
-    toolIds: ['git_status', 'git_diff', 'git_log', 'list_directory', 'read_file'],
-    requires: ['workspace', 'git-fixture'],
+    // could ever chain four rounds. Git tools are omitted — they run at workspace root,
+    // not inside matrix/repo, which traps small models in .git/ read loops.
+    toolIds: ['list_directory', 'read_file', 'grep', 'find_files'],
+    requires: ['workspace'],
     verdict: (out) => {
       const rounds = totalToolRounds(out);
       if (rounds >= 4) return pass('Four or more tool rounds');
