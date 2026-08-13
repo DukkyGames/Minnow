@@ -4,7 +4,7 @@
 
 import type { ModeId } from '../../chat/modes/types.ts';
 
-/** Spreadsheet band ids — 14 groups in column order. */
+/** Spreadsheet band ids — 13 groups in column order. */
 export type CapabilityGroupId =
   | 'core-protocol'
   | 'files'
@@ -18,7 +18,6 @@ export type CapabilityGroupId =
   | 'knowledge'
   | 'apps'
   | 'mode-control'
-  | 'modes'
   | 'features';
 
 export type CapabilityScoreMode = 'auto' | 'manual';

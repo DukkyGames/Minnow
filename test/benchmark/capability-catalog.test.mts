@@ -12,13 +12,13 @@ import {
 } from '../../src/benchmark/capabilities/groups.ts';
 
 describe('capability catalog', () => {
-  test('has 67 capabilities in spreadsheet order', () => {
-    assert.equal(CAPABILITY_CATALOG.length, 67);
+  test('has 58 capabilities in spreadsheet order', () => {
+    assert.equal(CAPABILITY_CATALOG.length, 58);
     const ids = CAPABILITY_CATALOG.map((c) => c.id);
     assert.deepEqual(new Set(ids).size, ids.length);
   });
 
-  test('per-group counts match the 14 bands', () => {
+  test('per-group counts match the 13 bands', () => {
     for (const groupId of CAPABILITY_GROUP_ORDER) {
       assert.equal(
         countCapabilitiesInGroup(CAPABILITY_CATALOG, groupId),
@@ -28,15 +28,15 @@ describe('capability catalog', () => {
     }
   });
 
-  test('has 18 tier-1 capabilities', () => {
-    assert.equal(CAPABILITY_CATALOG.filter((c) => c.tier === 1).length, 18);
+  test('has 15 tier-1 capabilities', () => {
+    assert.equal(CAPABILITY_CATALOG.filter((c) => c.tier === 1).length, 15);
   });
 
   test('auto capabilities have probe specs; manual have reasons', () => {
     const auto = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'auto');
     const manual = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'manual');
-    assert.equal(auto.length, 62);
-    assert.equal(manual.length, 5);
+    assert.equal(auto.length, 54);
+    assert.equal(manual.length, 4);
     for (const cap of auto) {
       assert.ok(cap.probe, `${cap.id}: missing probe`);
     }
@@ -53,8 +53,6 @@ describe('capability catalog', () => {
       'features-mcp',
       'features-research',
       'features-voice',
-      // Desktop mode was stripped out of Minnow — the column stays for spreadsheet order.
-      'modes-desktop',
     ]);
   });
 
@@ -77,6 +75,6 @@ describe('capability catalog', () => {
 
   test('first and last entries match spreadsheet columns', () => {
     assert.equal(CAPABILITY_CATALOG[0].id, 'core-streaming');
-    assert.equal(CAPABILITY_CATALOG[66].id, 'features-markdown');
+    assert.equal(CAPABILITY_CATALOG[57].id, 'features-markdown');
   });
 });

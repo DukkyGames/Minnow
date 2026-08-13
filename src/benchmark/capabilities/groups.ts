@@ -18,7 +18,6 @@ export const CAPABILITY_GROUP_ORDER: CapabilityGroupId[] = [
   'knowledge',
   'apps',
   'mode-control',
-  'modes',
   'features',
 ];
 
@@ -36,11 +35,10 @@ export const CAPABILITY_GROUP_LABELS: Record<CapabilityGroupId, string> = {
   knowledge: 'KNOWLEDGE',
   apps: 'APPS',
   'mode-control': 'MODE CONTROL',
-  modes: 'MODES',
   features: 'FEATURES',
 };
 
-/** Expected capability count per band (67 total). */
+/** Expected capability count per band (58 total). */
 export const CAPABILITY_GROUP_COUNTS: Record<CapabilityGroupId, number> = {
   'core-protocol': 10,
   files: 6,
@@ -54,7 +52,6 @@ export const CAPABILITY_GROUP_COUNTS: Record<CapabilityGroupId, number> = {
   knowledge: 5,
   apps: 5,
   'mode-control': 3,
-  modes: 9,
   features: 7,
 };
 

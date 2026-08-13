@@ -1,5 +1,5 @@
 /**
- * Auto probe specs — code, web, agents, knowledge, apps, modes, features.
+ * Auto probe specs — code, web, agents, knowledge, apps, features.
  */
 
 import {
@@ -267,18 +267,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
         return partial('Mentioned Impeccable without loading it');
       }
       return fail('No Impeccable context signal');
-    },
-  },
-  'modes-general': {
-    kind: 'text',
-    // Prompt asks for a brief mutex-vs-semaphore explanation for a working developer.
-    verdict: (out) => {
-      const t = (out.contentText || out.text).trim();
-      if (!t) return fail('Empty response');
-      const onTopic = /mutex/i.test(t) && /semaphore/i.test(t);
-      if (!onTopic) return fail('Answer did not address the question');
-      if (t.length > 4000) return partial('On topic but runs long for a brief answer');
-      return pass('Coherent, on-topic general-mode reply');
     },
   },
   'features-chat-title': {

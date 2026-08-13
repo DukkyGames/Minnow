@@ -1,6 +1,6 @@
 /**
 
- * Capability matrix suite: one row per spreadsheet capability (67 probes).
+ * Capability matrix suite: one row per spreadsheet capability (58 probes).
 
  */
 

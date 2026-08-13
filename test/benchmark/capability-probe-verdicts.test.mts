@@ -206,20 +206,6 @@ describe('capability probe verdicts', () => {
     assert.equal(verdictOf('apps-email-draft', deleted), 'fail');
   });
 
-  test('modes-plan fails a model that edits through the write guard', () => {
-    const plan = `# Plan\n\n1. Add a token bucket\n2. Wire the middleware\n3. Add tests\n\n${'Detail. '.repeat(30)}`;
-    const planned = out({ toolCalls: [call('read_file', { path: 'src/api.ts' })], contentText: plan });
-    assert.equal(verdictOf('modes-plan', planned), 'pass');
-
-    const edited = out({
-      toolCalls: [call('read_file', {}), call('replace_text_in_file', { path: 'src/api.ts' })],
-      contentText: plan,
-    });
-    assert.equal(verdictOf('modes-plan', edited), 'fail');
-
-    assert.equal(verdictOf('modes-plan', out({ contentText: 'Sure, sounds good.' })), 'fail');
-  });
-
   test('mode-impeccable scores load-before-edit ordering', () => {
     const loadFirst = out({
       toolCalls: [call('load_impeccable_context'), call('save_file', {})],

@@ -90,7 +90,6 @@ export const TEST_GUIDE_GROUP_LABELS: Record<(typeof CAPABILITY_GROUP_ORDER)[num
   knowledge: 'Knowledge',
   apps: 'Apps',
   'mode-control': 'Mode control',
-  modes: 'Modes',
   features: 'Features',
 };
 

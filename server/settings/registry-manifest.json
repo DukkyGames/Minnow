@@ -2207,7 +2207,7 @@
   {
     "key": "advanced.capabilityMatrix",
     "label": "Capability matrix",
-    "description": "67-capability grid with manual verdicts, auto probe results, and run history.",
+    "description": "58-capability grid with manual verdicts, auto probe results, and run history.",
     "keywords": [
       "benchmark",
       "capabilities",

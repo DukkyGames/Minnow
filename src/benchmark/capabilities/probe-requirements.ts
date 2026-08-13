@@ -16,7 +16,6 @@ import {
   PHASE_2D_ID_SET,
   PHASE_2E_ID_SET,
   PHASE_2F_ID_SET,
-  PHASE_2G_ID_SET,
 } from './probe-wave-ids.ts';
 import { resolveLspProbeSkipReason } from './probe-lsp-ready.ts';
 import type { CapabilityDefinition, CapabilityProbeRequirement } from './types.ts';
@@ -126,7 +125,6 @@ export {
   PHASE_2D_EMIT_ONLY_CAPABILITY_IDS,
   PHASE_2E_CONDITIONAL_CAPABILITY_IDS,
   PHASE_2F_DELEGATED_DERIVED_CAPABILITY_IDS,
-  PHASE_2G_MODE_PROMPT_CAPABILITY_IDS,
 } from './probe-wave-ids.ts';
 
 /** Whether this auto row is wired in the current probe wave (phases 2b–2f allowlist). */
@@ -136,8 +134,7 @@ export function isCapabilityProbeWaveEnabled(cap: CapabilityDefinition): boolean
     PHASE_2C_ID_SET.has(cap.id) ||
     PHASE_2D_ID_SET.has(cap.id) ||
     PHASE_2E_ID_SET.has(cap.id) ||
-    PHASE_2F_ID_SET.has(cap.id) ||
-    PHASE_2G_ID_SET.has(cap.id)
+    PHASE_2F_ID_SET.has(cap.id)
   );
 }
 

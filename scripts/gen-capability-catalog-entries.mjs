@@ -157,14 +157,13 @@ const ID_BY_HEADER = {
 
 /**
  * Rows with no automatable model-side signal. Everything else that once lived here —
- * browser, sub-agent control, board, recall, email, calendar, and the rest of the modes
- * band — now runs as an emit-only or mode-prompt probe (src/benchmark/capabilities/probes-auto-*).
+ * browser, sub-agent control, board, recall, email, calendar — now runs as an emit-only
+ * probe (src/benchmark/capabilities/probes-auto-*).
  *
- * `modes-desktop` is a retired feature rather than a hard-to-automate one: the column
- * stays so spreadsheet order holds, but nothing scores it.
+ * The spreadsheet still lists a Modes band; those columns are omitted from the shipped
+ * catalog because they duplicate mode-control / feature coverage without useful signal.
  */
 const MANUAL_IDS = new Set([
-  'modes-desktop',
   'features-research',
   'features-compare',
   'features-mcp',
@@ -172,8 +171,6 @@ const MANUAL_IDS = new Set([
 ]);
 
 const MANUAL_REASONS = {
-  'modes-desktop':
-    'Desktop mode was removed from Minnow; the column stays for spreadsheet order — mark it not applicable.',
   'features-research': 'Research runs are long-lived jobs with sources to inspect manually.',
   'features-compare': 'Compare sessions need two models side by side in the Compare app.',
   'features-mcp': 'MCP servers are user-configured, so there is no built-in tool to probe.',
@@ -197,16 +194,10 @@ const AUTO_SCOPE_NOTES = {
   'apps-email-draft': 'Probe scores drafting and the never-send rule against a stubbed mailbox.',
   'apps-email-summarize': 'Probe scores the summary and reply-variant calls against a stubbed mailbox.',
   'apps-calendar': 'Probe scores the emitted manage_calendar call; the provider is stubbed.',
-  'modes-build': 'Probe runs the real Build prompt over the fixture workspace for one task.',
-  'modes-plan': 'Probe runs the real Plan prompt and offers denied write tools as a guard trap.',
-  'modes-super-plan':
-    'Probe scores research and staged-plan output under the real Super Plan prompt; pipeline stage control is Minnow-side.',
-  'modes-orchestrate':
-    'Probe scores board seeding and fan-out under the real Orchestrate prompt; live scheduling is Minnow-side.',
-  'modes-debug': 'Probe runs the real Debug prompt over a seeded failure in the fixture workspace.',
-  'modes-email': 'Probe runs the real Email prompt over a stubbed mailbox.',
-  'modes-onboarding': 'Probe scores the first onboarding turn, not the full guided walkthrough.',
 };
+
+/** Spreadsheet columns we intentionally omit from the shipped catalog. */
+const SKIP_GROUP = 'modes';
 
 function parseTier(comment) {
   const m = comment.match(/Tier (\d)/);
@@ -264,6 +255,7 @@ for (let C = 10; C <= range.e.c; C++) {
   const id = ID_BY_HEADER[header];
   if (!id) throw new Error(`missing id for ${header}`);
   const group = inferGroup(header);
+  if (group === SKIP_GROUP) continue;
   const scoreMode = MANUAL_IDS.has(id) ? 'manual' : 'auto';
   const prompt = buildPrompt(howToTest);
   const setup =
@@ -290,9 +282,9 @@ for (let C = 10; C <= range.e.c; C++) {
   });
 }
 
-if (entries.length !== 67) throw new Error(`expected 67 entries, got ${entries.length}`);
+if (entries.length !== 58) throw new Error(`expected 58 entries, got ${entries.length}`);
 const autoCount = entries.filter((e) => e.scoreMode === 'auto').length;
-if (autoCount !== 62) throw new Error(`expected 62 auto, got ${autoCount}`);
+if (autoCount !== 54) throw new Error(`expected 54 auto, got ${autoCount}`);
 
 const lines = [
   '/**',

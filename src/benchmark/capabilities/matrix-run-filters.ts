@@ -16,7 +16,6 @@ export const CAPABILITY_MATRIX_PROBE_WAVES: CapabilityMatrixProbeWave[] = [
   '2d',
   '2e',
   '2f',
-  '2g',
 ];
 
 export const CAPABILITY_MATRIX_PROBE_WAVE_LABELS: Record<CapabilityMatrixProbeWave, string> = {
@@ -25,7 +24,6 @@ export const CAPABILITY_MATRIX_PROBE_WAVE_LABELS: Record<CapabilityMatrixProbeWa
   '2d': '2d — emit-only tools',
   '2e': '2e — conditional / LSP',
   '2f': '2f — delegated / derived',
-  '2g': '2g — modes (real mode prompt)',
 };
 
 /** Run-time filter fields (subset of {@link CapabilityMatrixRunOptions} without importing types). */
@@ -100,7 +98,6 @@ export function allCapabilityGroupIds(): CapabilityGroupId[] {
     'knowledge',
     'apps',
     'mode-control',
-    'modes',
     'features',
   ];
 }

@@ -8,7 +8,6 @@ import { CAPABILITY_CATALOG, getCapabilityById } from '../../src/benchmark/capab
 import {
   PHASE_2D_EMIT_ONLY_CAPABILITY_IDS,
   PHASE_2E_CONDITIONAL_CAPABILITY_IDS,
-  PHASE_2G_MODE_PROMPT_CAPABILITY_IDS,
   resolveCapabilityProbeSkip,
   isCapabilityProbeWaveEnabled,
 } from '../../src/benchmark/capabilities/probe-requirements.ts';
@@ -208,58 +207,5 @@ describe('resolveCapabilityProbeSkip', () => {
       workspaceRoot: null,
     });
     assert.match(reason ?? '', /workspace unavailable/i);
-  });
-
-  test('mode-prompt rows skip when the prompt registry is unavailable', async () => {
-    for (const id of PHASE_2G_MODE_PROMPT_CAPABILITY_IDS) {
-      const cap = getCapabilityById(id);
-      assert.ok(cap, id);
-      assert.equal(isCapabilityProbeWaveEnabled(cap!), true, id);
-      const reason = await resolveCapabilityProbeSkip(cap!, {
-        ctx: {
-          providerId: 'p',
-          modelId: 'm',
-          localServer: true,
-          signal: new AbortController().signal,
-        },
-        workspaceRoot: '/tmp/cap-matrix-bench',
-        capabilityFixturesSeeded: true,
-        modePromptsReady: false,
-      });
-      assert.match(reason ?? '', /mode prompts unavailable/i, id);
-    }
-  });
-
-  test('mode-prompt rows run once prompts and workspace are ready', async () => {
-    for (const id of PHASE_2G_MODE_PROMPT_CAPABILITY_IDS) {
-      const cap = getCapabilityById(id);
-      assert.ok(cap, id);
-      const reason = await resolveCapabilityProbeSkip(cap!, {
-        ctx: {
-          providerId: 'p',
-          modelId: 'm',
-          localServer: true,
-          signal: new AbortController().signal,
-        },
-        workspaceRoot: '/tmp/cap-matrix-bench',
-        capabilityFixturesSeeded: true,
-        modePromptsReady: true,
-      });
-      assert.equal(reason, null, id);
-    }
-  });
-
-  test('modes-general runs without local server when wave-enabled', async () => {
-    const cap = getCapabilityById('modes-general');
-    assert.ok(cap);
-    const reason = await resolveCapabilityProbeSkip(cap!, {
-      ctx: {
-        providerId: 'p',
-        modelId: 'm',
-        localServer: false,
-        signal: new AbortController().signal,
-      },
-    });
-    assert.equal(reason, null);
   });
 });

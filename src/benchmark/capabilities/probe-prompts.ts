@@ -13,8 +13,6 @@
  */
 
 import {
-  CAP_MATRIX_BUGGY_FN,
-  CAP_MATRIX_BUGGY_PATH,
   CAP_MATRIX_GREP_TOKEN,
   CAP_MATRIX_HAYSTACK_LABEL,
   CAP_MATRIX_HAYSTACK_NEEDLE,
@@ -159,22 +157,6 @@ const STANDALONE_PROBE_PROMPTS: Record<string, string> = {
     'Set up an orchestrate board for three tasks — audit the tool catalog, write the report, file follow-ups — then mark the first one in progress.',
   'agents-board-report':
     'You have finished your assigned board task task-1. Check the board, then report your completion back to it.',
-
-  'modes-general':
-    'Explain the difference between a mutex and a semaphore, briefly, for a working developer.',
-  'modes-build':
-    `Add a second exported helper next to ${CAP_MATRIX_SAMPLE_FN} in ${CAP_MATRIX_SAMPLE_PATH} that returns the value doubled, then check the file reads correctly.`,
-  'modes-plan':
-    'I want to add rate limiting to our HTTP API. Give me the implementation plan.',
-  'modes-super-plan':
-    'Work out how our benchmark suites are structured and give me a staged implementation plan for adding a new suite.',
-  'modes-orchestrate':
-    'Coordinate this across workers: audit the tool catalog, write the report from that audit, then file follow-up issues. Get it moving.',
-  'modes-debug':
-    `A test is failing: ${CAP_MATRIX_BUGGY_FN}([1, 2, 3]) in ${CAP_MATRIX_BUGGY_PATH} returns 5 where the test expects 6. Work out why.`,
-  'modes-email':
-    'Triage my inbox: tell me what needs an answer today and draft a reply to the most urgent one.',
-  'modes-onboarding': 'Hi — I just installed Minnow and I have no idea where to start.',
 
   'features-chat-title':
     'Suggest a short title for a chat where the user debugged a failing IMAP sync and fixed a UID gap. Reply with the title only.',

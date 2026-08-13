@@ -60,17 +60,6 @@ export const PHASE_2D_EMIT_ONLY_CAPABILITY_IDS = [
   'apps-calendar',
 ] as const;
 
-/** Phase 2g — modes band run under the mode's real system prompt. */
-export const PHASE_2G_MODE_PROMPT_CAPABILITY_IDS = [
-  'modes-build',
-  'modes-plan',
-  'modes-super-plan',
-  'modes-orchestrate',
-  'modes-debug',
-  'modes-email',
-  'modes-onboarding',
-] as const;
-
 /** Phase 2e — conditional probes (workspace / git / LSP / vision gates). */
 export const PHASE_2E_CONDITIONAL_CAPABILITY_IDS = [
   'core-parallel-tools',
@@ -78,7 +67,6 @@ export const PHASE_2E_CONDITIONAL_CAPABILITY_IDS = [
   'core-long-context',
   'lsp-diagnostics',
   'agents-todo-write',
-  'modes-general',
   'features-chat-title',
   'features-markdown',
 ] as const;
@@ -95,9 +83,8 @@ export const PHASE_2C_ID_SET = new Set<string>(PHASE_2C_WORKSPACE_CAPABILITY_IDS
 export const PHASE_2D_ID_SET = new Set<string>(PHASE_2D_EMIT_ONLY_CAPABILITY_IDS);
 export const PHASE_2E_ID_SET = new Set<string>(PHASE_2E_CONDITIONAL_CAPABILITY_IDS);
 export const PHASE_2F_ID_SET = new Set<string>(PHASE_2F_DELEGATED_DERIVED_CAPABILITY_IDS);
-export const PHASE_2G_ID_SET = new Set<string>(PHASE_2G_MODE_PROMPT_CAPABILITY_IDS);
 
-export type CapabilityMatrixProbeWave = '2b' | '2c' | '2d' | '2e' | '2f' | '2g';
+export type CapabilityMatrixProbeWave = '2b' | '2c' | '2d' | '2e' | '2f';
 
 /** Resolve rollout wave for an auto capability id. */
 export function probeWaveForCapabilityId(
@@ -108,6 +95,5 @@ export function probeWaveForCapabilityId(
   if (PHASE_2D_ID_SET.has(capabilityId)) return '2d';
   if (PHASE_2E_ID_SET.has(capabilityId)) return '2e';
   if (PHASE_2F_ID_SET.has(capabilityId)) return '2f';
-  if (PHASE_2G_ID_SET.has(capabilityId)) return '2g';
   return null;
 }

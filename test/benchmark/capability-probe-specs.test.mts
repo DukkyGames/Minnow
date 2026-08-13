@@ -18,7 +18,6 @@ import type {
   CapabilityProbeSpecBase,
 } from '../../src/benchmark/capabilities/types.ts';
 import { getToolById } from '../../src/tools/definitions.ts';
-import { isToolAllowedForMode } from '../../src/chat/modes/tool-policy.ts';
 
 function runnableSpecs(): [string, CapabilityProbeSpecBase][] {
   return Object.entries(CAPABILITY_PROBE_BY_ID)
@@ -56,39 +55,6 @@ describe('capability probe specs', () => {
     for (const cap of CAPABILITY_CATALOG) {
       if (cap.scoreMode !== 'auto') continue;
       assert.ok(probeWaveForCapabilityId(cap.id), `${cap.id}: no probe wave`);
-    }
-  });
-
-  test('mode probes offer tools their mode allows and traps it denies', () => {
-    let modeProbes = 0;
-    for (const [id, spec] of runnableSpecs()) {
-      if (!spec.modeId) continue;
-      modeProbes += 1;
-      assert.ok(
-        spec.requires?.includes('mode-prompt'),
-        `${id}: modeId without the mode-prompt requirement`,
-      );
-      for (const toolId of spec.toolIds ?? []) {
-        assert.ok(
-          isToolAllowedForMode(spec.modeId, toolId),
-          `${id}: ${spec.modeId} mode denies offered tool "${toolId}"`,
-        );
-      }
-      for (const toolId of spec.trapToolIds ?? []) {
-        assert.equal(
-          isToolAllowedForMode(spec.modeId, toolId),
-          false,
-          `${id}: trap tool "${toolId}" is actually allowed in ${spec.modeId} mode`,
-        );
-      }
-    }
-    assert.equal(modeProbes, 7);
-  });
-
-  test('probes that declare mode-prompt name a mode', () => {
-    for (const [id, spec] of runnableSpecs()) {
-      if (!spec.requires?.includes('mode-prompt')) continue;
-      assert.ok(spec.modeId, `${id}: mode-prompt requirement without a modeId`);
     }
   });
 

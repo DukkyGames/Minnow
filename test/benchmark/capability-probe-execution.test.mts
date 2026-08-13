@@ -229,21 +229,16 @@ describe('runCapabilityProbe execution plumbing', () => {
   });
 
   test('trap tools stay stubbed even when side effects are allowed', async () => {
-    scriptedCalls = [{ name: 'replace_text_in_file', args: { path: 'src/api.ts' } }];
-    const cap = getCapabilityById('modes-plan');
+    scriptedCalls = [{ name: 'save_file', args: { path: 'src/api.ts' } }];
+    const cap = getCapabilityById('mode-impeccable');
     assert.ok(cap);
     const result = await runCapabilityProbe(
       { ...ctx, capabilityMatrix: { allowSideEffects: true } },
       cap!,
     );
-    // The probe skips without a mode prompt in Node; when it does run, the trap must
-    // never reach the real executor.
-    if (!result.skipped) {
-      const stub = JSON.parse(executedContents[0]!) as { capabilityEmitOnly?: boolean };
-      assert.equal(stub.capabilityEmitOnly, true);
-    } else {
-      assert.match(result.reason, /mode prompt unavailable/i);
-    }
+    assert.equal(result.skipped, false);
+    const stub = JSON.parse(executedContents[0]!) as { capabilityEmitOnly?: boolean };
+    assert.equal(stub.capabilityEmitOnly, true);
   });
 
   test('a probe naming an unknown tool id goes n-a, never fail', async () => {
