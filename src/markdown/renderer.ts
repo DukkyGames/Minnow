@@ -25,8 +25,15 @@ interface RenderState {
   signatures: number[];
   /** DOM nodes produced per token (space tokens may yield zero nodes). */
   nodes: Node[][];
-  /** Per-bubble debounce timer — concurrent board streams must not cancel each other. */
+  /** Trailing flush for the remaining throttle window (not reset on every chunk). */
   timer: ReturnType<typeof setTimeout> | null;
+  /** Guarantees a paint during continuous fast streams (mirrors file-tree max-delay). */
+  maxWaitTimer: ReturnType<typeof setTimeout> | null;
+  /** Latest markdown/cursor to paint on the next flush. */
+  pendingMarkdown: string | null;
+  pendingCursor: HTMLElement | null;
+  /** Wall time of the last scheduled paint (`0` = never painted via scheduler). */
+  lastRenderedAt: number;
 }
 
 const renderStateByBubble = new WeakMap<HTMLElement, RenderState>();
@@ -36,7 +43,15 @@ const bubblesWithActiveTimer = new Set<HTMLElement>();
 function getRenderState(bubble: HTMLElement): RenderState {
   let state = renderStateByBubble.get(bubble);
   if (!state) {
-    state = { signatures: [], nodes: [], timer: null };
+    state = {
+      signatures: [],
+      nodes: [],
+      timer: null,
+      maxWaitTimer: null,
+      pendingMarkdown: null,
+      pendingCursor: null,
+      lastRenderedAt: 0,
+    };
     renderStateByBubble.set(bubble, state);
   }
   return state;
@@ -52,10 +67,17 @@ function fnv1a32(input: string): number {
   return hash >>> 0;
 }
 
-function clearBubbleTimer(bubble: HTMLElement, state: RenderState): void {
+function clearBubbleTimers(bubble: HTMLElement, state: RenderState): void {
   if (state.timer != null) {
+    if (assistantRenderDebounceTimer === state.timer) {
+      setAssistantRenderDebounceTimer(null);
+    }
     clearTimeout(state.timer);
     state.timer = null;
+  }
+  if (state.maxWaitTimer != null) {
+    clearTimeout(state.maxWaitTimer);
+    state.maxWaitTimer = null;
   }
   bubblesWithActiveTimer.delete(bubble);
 }
@@ -68,7 +90,7 @@ function clearBubbleTimer(bubble: HTMLElement, state: RenderState): void {
 export function cancelAssistantBubbleRenderDebounce(bubble?: HTMLElement): void {
   if (bubble) {
     const state = renderStateByBubble.get(bubble);
-    if (state) clearBubbleTimer(bubble, state);
+    if (state) clearBubbleTimers(bubble, state);
     return;
   }
   if (assistantRenderDebounceTimer != null) {
@@ -77,7 +99,7 @@ export function cancelAssistantBubbleRenderDebounce(bubble?: HTMLElement): void 
   }
   for (const b of [...bubblesWithActiveTimer]) {
     const state = renderStateByBubble.get(b);
-    if (state) clearBubbleTimer(b, state);
+    if (state) clearBubbleTimers(b, state);
   }
 }
 
@@ -301,31 +323,65 @@ export function setAssistantBubbleContent(
   renderFull(bubble, raw, false, null);
 }
 
-/** Debounced markdown refresh while the assistant reply is still streaming. */
+/** Paint the latest pending markdown for a streaming assistant bubble. */
+export function flushAssistantBubbleRender(bubble: HTMLElement): void {
+  const state = renderStateByBubble.get(bubble);
+  if (!state || state.pendingMarkdown == null || state.pendingCursor == null) {
+    return;
+  }
+
+  clearBubbleTimers(bubble, state);
+
+  const { pendingMarkdown, pendingCursor } = state;
+  setAssistantBubbleContent(bubble, pendingMarkdown, {
+    streaming: true,
+    streamCursor: pendingCursor,
+  });
+  announceStreamingProse(pendingMarkdown);
+  scrollBottom();
+  state.lastRenderedAt = Date.now();
+}
+
+/**
+ * Throttled markdown refresh while the assistant reply is still streaming.
+ * Paints immediately on first token and at most every ASSISTANT_RENDER_DEBOUNCE_MS;
+ * a max-wait timer guarantees paints during continuous fast SSE delivery.
+ */
 export function scheduleAssistantBubbleRender(
   bubble: HTMLElement,
   markdown: string,
   streamCursor: HTMLElement,
 ): void {
   const state = getRenderState(bubble);
-  clearBubbleTimer(bubble, state);
+  state.pendingMarkdown = markdown;
+  state.pendingCursor = streamCursor;
 
-  const timer = setTimeout(() => {
-    state.timer = null;
-    bubblesWithActiveTimer.delete(bubble);
-    if (assistantRenderDebounceTimer === timer) {
-      setAssistantRenderDebounceTimer(null);
-    }
-    setAssistantBubbleContent(bubble, markdown, { streaming: true, streamCursor });
-    announceStreamingProse(markdown);
-    scrollBottom();
-  }, ASSISTANT_RENDER_DEBOUNCE_MS);
+  const now = Date.now();
+  const neverRendered = state.lastRenderedAt === 0;
+  const throttleElapsed = now - state.lastRenderedAt >= ASSISTANT_RENDER_DEBOUNCE_MS;
 
-  state.timer = timer;
-  bubblesWithActiveTimer.add(bubble);
-  // Legacy global tracks the most recent schedule so cancel-all without a bubble still works
-  // for single-chat streams that never migrated to the bubble param.
-  setAssistantRenderDebounceTimer(timer);
+  if (neverRendered || throttleElapsed) {
+    flushAssistantBubbleRender(bubble);
+    return;
+  }
+
+  if (state.timer == null) {
+    const remaining = ASSISTANT_RENDER_DEBOUNCE_MS - (now - state.lastRenderedAt);
+    const timer = setTimeout(() => {
+      flushAssistantBubbleRender(bubble);
+    }, remaining);
+    state.timer = timer;
+    bubblesWithActiveTimer.add(bubble);
+    // Legacy global tracks the most recent schedule so cancel-all without a bubble still works
+    // for single-chat streams that never migrated to the bubble param.
+    setAssistantRenderDebounceTimer(timer);
+  }
+
+  if (state.maxWaitTimer == null) {
+    state.maxWaitTimer = setTimeout(() => {
+      flushAssistantBubbleRender(bubble);
+    }, ASSISTANT_RENDER_DEBOUNCE_MS);
+  }
 }
 
 /** Test helper — read incremental state for a bubble. */
@@ -333,11 +389,13 @@ export function getAssistantBubbleRenderStateForTests(bubble: HTMLElement): {
   signatureCount: number;
   nodeGroupCount: number;
   firstNode: Node | null;
+  lastRenderedAt: number;
 } {
   const state = renderStateByBubble.get(bubble);
   return {
     signatureCount: state?.signatures.length ?? 0,
     nodeGroupCount: state?.nodes.length ?? 0,
     firstNode: state?.nodes[0]?.[0] ?? null,
+    lastRenderedAt: state?.lastRenderedAt ?? 0,
   };
 }
