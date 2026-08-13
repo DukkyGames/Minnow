@@ -21,9 +21,28 @@ export interface PreviewGuestInfo {
 const PREVIEW_CAPTURE_MAX_RETRIES = 3;
 const PREVIEW_LOAD_POLL_MS = 50;
 const PREVIEW_LOAD_MAX_WAIT_MS = 3_000;
+/** Bound CopyFromSurface so a hung macOS capture cannot stall IPC / the tool loop. */
+export const PREVIEW_CAPTURE_PAGE_TIMEOUT_MS = 3_000;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Reject if `promise` does not settle within `ms`. Does not cancel the underlying work. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }
 
 /** Wait until the guest stops navigating (bounded poll). */
@@ -93,20 +112,55 @@ export async function previewExecJs(wc: WebContents, code: string): Promise<unkn
   }
 }
 
+export interface PreviewCapturePageOptions {
+  /** Override the CopyFromSurface timeout (tests). */
+  captureTimeoutMs?: number;
+}
+
 /** Capture the preview guest as a base64-encoded PNG (waits for load, retries empty frames). */
-export async function previewCapturePageBase64(wc: WebContents): Promise<string> {
+export async function previewCapturePageBase64(
+  wc: WebContents,
+  options?: PreviewCapturePageOptions,
+): Promise<string> {
   if (wc.isDestroyed()) return '';
 
+  const timeoutMs = options?.captureTimeoutMs ?? PREVIEW_CAPTURE_PAGE_TIMEOUT_MS;
+
   await waitForPreviewGuestNotLoading(wc);
-  await waitForPreviewGuestDoubleRaf(wc);
+  try {
+    await withTimeout(
+      waitForPreviewGuestDoubleRaf(wc),
+      timeoutMs,
+      'preview capture rAF timed out',
+    );
+  } catch {
+    /* guest rAF hung — still try one capture attempt */
+  }
 
   for (let attempt = 0; attempt < PREVIEW_CAPTURE_MAX_RETRIES; attempt++) {
-    const image = await wc.capturePage();
-    const png = image.toPNG();
-    const b64 = png.length > 0 ? png.toString('base64') : '';
-    if (b64.trim()) return b64;
+    try {
+      const image = await withTimeout(
+        wc.capturePage(),
+        timeoutMs,
+        'preview capturePage timed out',
+      );
+      const png = image.toPNG();
+      const b64 = png.length > 0 ? png.toString('base64') : '';
+      if (b64.trim()) return b64;
+    } catch {
+      // Hung or failed GPU copy — do not retry (retries would stack CopyFromSurface calls).
+      return '';
+    }
     if (attempt < PREVIEW_CAPTURE_MAX_RETRIES - 1) {
-      await waitForPreviewGuestDoubleRaf(wc);
+      try {
+        await withTimeout(
+          waitForPreviewGuestDoubleRaf(wc),
+          timeoutMs,
+          'preview capture rAF timed out',
+        );
+      } catch {
+        return '';
+      }
       await delay(PREVIEW_LOAD_POLL_MS);
     }
   }

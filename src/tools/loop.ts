@@ -278,6 +278,11 @@ import {
   type ArchivePreResult,
 } from '../chat/archive';
 import { resolveContextLimit } from '../chat/context-usage';
+import {
+  TOOL_IMAGE_NO_VISION_HINT,
+  toolImageFollowUpUserMessage,
+  toolMessageHasImageAttachment,
+} from '../chat/tool-image-follow-up';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
 import {
@@ -370,6 +375,8 @@ import { runChatToolBatch } from './chat-tool-batch';
 export interface BuildApiMessagesOptions {
   /** Active model id (used to detect VLM for multimodal user content). */
   modelId?: string;
+  /** When set, overrides vision detection for screenshot follow-ups. */
+  vision?: boolean;
   /** Raw user text from the composer for the in-flight turn (not history placeholders). */
   pendingUserText?: string;
   /** Pre-composed system prompt (Step 04); overrides legacy sysPrompt when set. */
@@ -674,6 +681,8 @@ export interface RunChatTurnOptions {
  * Serialize session history for LM Studio, including tool_calls and tool results.
  * Pending attachments on the last user turn become multimodal API content (VLM) or
  * inlined file blocks; history stays string-only with `[image: …]` placeholders.
+ * Tool screenshots keep a string tool result (OpenAI pairing) and, on vision models,
+ * a follow-up user message with `image_url` data URLs so the model can see the PNG.
  */
 export function buildApiMessages(
   chat: Chat,
@@ -695,7 +704,7 @@ export function buildApiMessages(
   const outboundHistory = copyHistoryForOutboundApi(chat.history);
   const multimodalUserIdx = indexOfMultimodalUserMessage(outboundHistory, pending);
   const modelId = options?.modelId;
-  const vlm = isVisionModel(modelId);
+  const vlm = options?.vision ?? isVisionModel(modelId);
 
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
@@ -715,11 +724,17 @@ export function buildApiMessages(
     }
 
     if (m.role === 'tool') {
+      const hasImage = toolMessageHasImageAttachment(m);
       messages.push({
         role: 'tool',
         tool_call_id: m.tool_call_id,
-        content: m.content,
+        content:
+          hasImage && !vlm ? `${m.content}${TOOL_IMAGE_NO_VISION_HINT}` : m.content,
       });
+      if (vlm) {
+        const followUp = toolImageFollowUpUserMessage(m);
+        if (followUp) messages.push(followUp);
+      }
       continue;
     }
 

@@ -400,6 +400,8 @@ export async function browserPreviewScreenshot(instance?: string): Promise<ToolE
           url,
           mime: 'image/png',
           alt: 'Browser screenshot',
+          // Keep pixels on the tool row so the next model round can attach them as image_url.
+          dataUrl: `data:image/png;base64,${dataBase64}`,
         },
       ],
     };

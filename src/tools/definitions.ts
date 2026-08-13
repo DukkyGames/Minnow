@@ -1643,7 +1643,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     previewRequired: true,
     definition: toolSchema(
       'browser_screenshot',
-      'Capture a PNG screenshot of the built-in preview browser.',
+      'Capture a PNG screenshot of the built-in preview browser. On a vision model the PNG is attached as image input on the next turn — inspect that image; do not fetch the file URL.',
       {},
     ),
   },

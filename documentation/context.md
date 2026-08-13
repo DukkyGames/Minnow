@@ -182,9 +182,9 @@ Middleware registration: [`server/runtime/middlewares.js`](../server/runtime/mid
 |------|--------|-------|
 | `user` | `{ role, content: string }` | Attachments as `[image: �]` / `<file name="�">` in content |
 | `assistant` | `{ role, content, thinking?, thinkingDurationMs?, tool_calls?, stats? }` | Markdown UI; optional `thinking[]` and wall-clock reasoning duration |
-| `tool` | `{ role, tool_call_id, content }` | Paired to `tool_calls` in UI |
+| `tool` | `{ role, tool_call_id, content, attachments? }` | Paired to `tool_calls` in UI. Screenshot tools store a PNG `dataUrl` on `attachments` for the next model round. |
 
-Wire format may use multimodal `ContentPart[]` for VLMs; built in [`src/tools/loop.ts`](../src/tools/loop.ts) (`buildApiMessages`).
+Wire format may use multimodal `ContentPart[]` for VLMs; built in [`src/tools/loop.ts`](../src/tools/loop.ts) (`buildApiMessages`). OpenAI-compatible tool messages are string-only, so `browser_screenshot` pixels are **not** in the tool result text (that is a localhost `/api/browser/screenshot/:id` URL). On a vision model, `buildApiMessages` injects an ephemeral user follow-up with `image_url` data URLs ([`src/chat/tool-image-follow-up.ts`](../src/chat/tool-image-follow-up.ts)); `toolImageFollowUp` is stripped before the provider POST. Preview `capturePage` is bounded at 3s ([`electron/preview-guest-actions.ts`](../electron/preview-guest-actions.ts)) so a hung macOS CopyFromSurface cannot stall the tool loop.
 
 ### Multi-chat
 
