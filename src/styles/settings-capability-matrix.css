@@ -154,6 +154,7 @@
 
 .cap-matrix-rail__drawer-body {
   padding: 0 14px 14px;
+  min-width: 0;
 }
 
 .cap-matrix-rail__footer {
@@ -270,18 +271,48 @@
   grid-template-columns: 1fr;
   gap: 8px;
   margin-bottom: 10px;
+  min-width: 0;
 }
 
 .cap-matrix-roster__field {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-width: 0;
 }
 
 .cap-matrix-roster__provider,
 .cap-matrix-roster__model {
   width: 100%;
   min-width: 0;
+}
+
+/* Narrow rail: keep the model combobox inside the drawer (long MLX / QAT ids). */
+.cap-matrix-roster__field .model-select-inner {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.cap-matrix-roster__field .model-select-trigger {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.cap-matrix-roster__field .model-select-menu {
+  left: 0;
+  right: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  overflow-x: hidden;
+}
+
+.cap-matrix-roster__field .model-select-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cap-matrix-roster__actions {
