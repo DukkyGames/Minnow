@@ -39,7 +39,7 @@ function usedStubId(
 export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
   'browser-navigate': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: [
       'browser_new_tab',
       'browser_navigate',
@@ -62,7 +62,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'browser-snapshot': {
     kind: 'tool-chain',
-    maxToolRounds: 5,
+    maxToolRounds: 10,
     toolIds: ['browser_snapshot', 'browser_fill', 'browser_click'],
     emitOnly: true,
     verdict: (out) => {
@@ -83,7 +83,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'browser-eval': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['browser_screenshot', 'browser_eval'],
     emitOnly: true,
     verdict: (out) => {
@@ -98,7 +98,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
 
   'agents-sub-agent-control': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['list_sub_agents', 'get_sub_agent_status', 'cancel_sub_agent'],
     emitOnly: true,
     verdict: (out) => {
@@ -116,7 +116,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'agents-board-init': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['board_init', 'board_update_task', 'board_get_state'],
     emitOnly: true,
     verdict: (out) => {
@@ -130,7 +130,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'agents-board-report': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['board_get_state', 'board_report', 'board_update_task'],
     emitOnly: true,
     verdict: (out) => {
@@ -151,7 +151,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
 
   'knowledge-recall': {
     kind: 'tool-call',
-    maxToolRounds: 3,
+    maxToolRounds: 6,
     toolIds: ['recall_chat_context', 'recall_turn_full'],
     emitOnly: true,
     verdict: (out) => {
@@ -169,7 +169,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
 
   'apps-email-list': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['list_mail', 'search_mail', 'get_thread'],
     emitOnly: true,
     verdict: (out) => {
@@ -187,7 +187,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'apps-email-draft': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['list_mail', 'draft_reply', 'email_action'],
     emitOnly: true,
     verdict: (out) => {
@@ -204,7 +204,7 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'apps-email-summarize': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['summarize_inbox', 'generate_reply_variants', 'list_mail'],
     emitOnly: true,
     verdict: (out) => {

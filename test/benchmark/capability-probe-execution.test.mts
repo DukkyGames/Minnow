@@ -188,7 +188,7 @@ describe('runCapabilityProbe execution plumbing', () => {
     await runCapabilityProbe(ctx, cap!);
     // Four offered tools: start → verify → recover → stop → answer must all fit.
     assert.ok(
-      (lastDriverCall?.maxToolRounds ?? 0) >= 7,
+      (lastDriverCall?.maxToolRounds ?? 0) >= 11,
       `expected headroom above the declared cap, got ${lastDriverCall?.maxToolRounds}`,
     );
   });

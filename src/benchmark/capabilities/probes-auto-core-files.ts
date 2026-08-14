@@ -32,7 +32,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'core-parallel-tools': {
     kind: 'derived',
-    maxToolRounds: 2,
+    maxToolRounds: 4,
     toolIds: ['read_file'],
     requires: ['workspace'],
     verdict: (out) => {
@@ -47,7 +47,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'core-tool-loop': {
     kind: 'tool-chain',
-    maxToolRounds: 8,
+    maxToolRounds: 16,
     // Without an explicit list the loop was offered `get_datetime` alone, so no model
     // could ever chain four rounds. Git tools are omitted — they run at workspace root,
     // not inside matrix/repo, which traps small models in .git/ read loops.
@@ -80,7 +80,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'core-json-args': {
     kind: 'derived',
-    maxToolRounds: 3,
+    maxToolRounds: 6,
     // Tools with several typed arguments — a single no-arg tool proves nothing.
     toolIds: ['grep', 'get_datetime'],
     verdict: (out) => {
@@ -102,7 +102,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'core-no-hallucinated-tools': {
     kind: 'derived',
-    maxToolRounds: 2,
+    maxToolRounds: 4,
     // The prompt asks for Slack and reminders, which Minnow has no tool for.
     toolIds: ['get_datetime', 'save_memory'],
     verdict: (out) => {
@@ -165,7 +165,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'files-list-read': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['list_directory', 'read_file'],
     requires: ['workspace'],
     verdict: (out) => {
@@ -185,7 +185,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'files-save-append': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['save_file', 'append_file'],
     requires: ['workspace'],
     verdict: (out) => {
@@ -198,7 +198,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'files-replace-text': {
     kind: 'tool-chain',
-    maxToolRounds: 5,
+    maxToolRounds: 10,
     toolIds: ['replace_text_in_file', 'save_file'],
     requires: ['workspace'],
     verdict: (out) => {
@@ -218,7 +218,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'files-insert-range': {
     kind: 'tool-chain',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     toolIds: ['read_file_range', 'insert_at_line'],
     requires: ['workspace'],
     verdict: (out) => {
@@ -261,7 +261,7 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'git-write': {
     kind: 'tool-chain',
-    maxToolRounds: 6,
+    maxToolRounds: 12,
     toolIds: ['git_add', 'git_commit', 'git_branch'],
     requires: ['workspace', 'git-fixture'],
     emitOnly: true,

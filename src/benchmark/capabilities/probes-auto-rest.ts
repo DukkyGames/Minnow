@@ -30,7 +30,7 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'code-background-cmds': {
     kind: 'tool-chain',
-    maxToolRounds: 5,
+    maxToolRounds: 10,
     toolIds: [
       'start_background_command',
       'stop_background_command',
@@ -74,7 +74,7 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'code-command-log': {
     kind: 'tool-chain',
-    maxToolRounds: 5,
+    maxToolRounds: 10,
     toolIds: [
       'start_background_command',
       'read_command_log',
@@ -137,7 +137,7 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'agents-todo-write': {
     kind: 'derived',
-    maxToolRounds: 6,
+    maxToolRounds: 12,
     // Needs real work tools alongside todo_write, otherwise there is no second round in
     // which to update the list.
     toolIds: ['todo_write', 'list_directory', 'read_file', 'get_datetime'],
@@ -159,7 +159,7 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'agents-issue-tools': {
     kind: 'tool-chain',
-    maxToolRounds: 3,
+    maxToolRounds: 6,
     // `issue_create` / `issue_list` are not catalog ids — the old spec offered nothing
     // the model could call and never stubbed the real write tools.
     toolIds: ['issue_add', 'issue_update', 'issue_link', 'issue_get_state'],
@@ -239,7 +239,7 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'mode-impeccable': {
     kind: 'derived',
-    maxToolRounds: 4,
+    maxToolRounds: 8,
     // The row asks whether the model loads the Impeccable context *before* it starts
     // editing, so offer both the impeccable tools and the edit tools it should defer.
     toolIds: ['load_impeccable_context', 'load_aesthetics_reference', 'run_impeccable'],

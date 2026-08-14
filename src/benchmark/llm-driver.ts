@@ -60,7 +60,7 @@ import { assertNotAborted, raceWithAbort } from './abort.ts';
 import type { CapabilityRoundTelemetry } from './capabilities/types.ts';
 import type { LlmTurnTiming } from './types.ts';
 
-const DEFAULT_MAX_TOOL_ROUNDS = 3;
+const DEFAULT_MAX_TOOL_ROUNDS = 6;
 
 /** Placeholder timing for partial results, which never completed a turn. */
 const EMPTY_TURN_TIMING: LlmTurnTiming = {

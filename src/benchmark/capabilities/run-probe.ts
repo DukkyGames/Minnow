@@ -31,7 +31,7 @@ export interface RunCapabilityProbeOptions {
 }
 
 /** Rounds a probe gets when its spec declares none. */
-const DEFAULT_PROBE_TOOL_ROUNDS = 3;
+const DEFAULT_PROBE_TOOL_ROUNDS = 6;
 
 export interface RunCapabilityProbeResult {
   skipped: boolean;
@@ -134,7 +134,7 @@ function resolveOpenAiTools(toolIds: string[]): {
  * the closing answer. Unused rounds cost nothing: the loop exits on the first text-only
  * turn.
  */
-const CHAIN_ROUND_HEADROOM = 3;
+const CHAIN_ROUND_HEADROOM = 6;
 
 export function resolveMaxToolRounds(spec: CapabilityProbeSpecBase): number {
   const declared = spec.maxToolRounds ?? DEFAULT_PROBE_TOOL_ROUNDS;

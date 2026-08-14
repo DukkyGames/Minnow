@@ -74,7 +74,7 @@ async function runDelegatedSkillProbe(
             signal: ctx.signal,
             messages,
             tools,
-            maxToolRounds: 2,
+            maxToolRounds: 4,
             executeToolFn: createBenchmarkExecuteToolFn(),
           })
         : await runOneShot({
