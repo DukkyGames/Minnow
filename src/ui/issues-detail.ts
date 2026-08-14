@@ -59,7 +59,15 @@ import {
   sortedTypes,
 } from '../issues/taxonomy';
 import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store';
-import type { IssueCard, IssueCodeRef, IssueGitLink, IssuePriority, IssueStatus, IssueType } from '../types';
+import type {
+  IssueCard,
+  IssueCodeRef,
+  IssueGitLink,
+  IssueIssueRef,
+  IssuePriority,
+  IssueStatus,
+  IssueType,
+} from '../types';
 
 /** Issue ids currently expanding via issue-writer. */
 const expandingIds = new Set<string>();
@@ -555,6 +563,9 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   // Git — restrained menu + commits / chips (Phase 4)
   scroll.appendChild(buildGitSection(issue));
 
+  // Related issues (agent-linked via issue_link)
+  scroll.appendChild(buildRelatedIssuesSection(issue));
+
   // Activity + linked chats (compact footer)
   const activitySection = section('Activity');
   const ws = issue.workspacePath || getWorkspacePath();
@@ -771,6 +782,57 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   })();
 
   return gitSection.section;
+}
+
+const ISSUE_RELATION_LABELS: Record<IssueIssueRef['kind'], string> = {
+  related: 'Related',
+  blocks: 'Blocks',
+  'blocked-by': 'Blocked by',
+  'duplicate-of': 'Duplicate of',
+  parent: 'Parent',
+  'sub-issue': 'Sub-issue',
+};
+
+/** Related issue chips with deep links to other cards. */
+function buildRelatedIssuesSection(issue: IssueCard): HTMLElement {
+  const relatedSection = section('Related issues');
+  const refs = issue.issueRefs ?? [];
+  if (refs.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'issues-detail__empty';
+    empty.textContent = 'No related issues yet.';
+    relatedSection.body.appendChild(empty);
+    return relatedSection.section;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'issues-detail__related-list';
+  for (const ref of refs) {
+    list.appendChild(buildRelatedIssueChip(ref));
+  }
+  relatedSection.body.appendChild(list);
+  return relatedSection.section;
+}
+
+/** One clickable related-issue chip. */
+function buildRelatedIssueChip(ref: IssueIssueRef): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = 'issues-detail__related-chip';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'issues-detail__related-chip-btn';
+  const target = findIssueById(ref.issueId);
+  const kindLabel = ISSUE_RELATION_LABELS[ref.kind] ?? ref.kind;
+  const titleBit = target?.title?.trim() ? ` · ${target.title.trim()}` : '';
+  btn.textContent = `${kindLabel} · ${ref.issueId}${titleBit}`;
+  btn.title = `Open ${ref.issueId}`;
+  btn.addEventListener('click', () => {
+    openIssueDetail(ref.issueId);
+    void import('./issues-page').then((m) => m.setIssuesRouteHash(`#/app/issues/${ref.issueId}`));
+  });
+  li.appendChild(btn);
+  return li;
 }
 
 /** One git link chip row with optional Open on GitHub. */

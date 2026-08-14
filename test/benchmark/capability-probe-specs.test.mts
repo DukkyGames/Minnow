@@ -87,6 +87,13 @@ describe('capability probe specs', () => {
     }
   });
 
+  test('issue_link schema documents issue_refs for agents-issue-tools', () => {
+    const tool = getToolById('issue_link');
+    assert.ok(tool);
+    const schemaText = JSON.stringify(tool.definition);
+    assert.match(schemaText, /issue_refs/);
+  });
+
   test('long-context prompt never contains the needle it asks for', async () => {
     const { buildLongContextPrompt } = await import(
       '../../src/benchmark/capabilities/probe-prompts.ts'

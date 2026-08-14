@@ -37,7 +37,10 @@ export const CAPABILITY_SIDE_EFFECT_TOOL_IDS = new Set<string>([
   'request_browser_origin_access',
 ]);
 
-function stubCapabilitySideEffectTool(name: string): ToolExecutionResult {
+function stubCapabilitySideEffectTool(
+  name: string,
+  args?: Record<string, unknown>,
+): ToolExecutionResult {
   if (name === 'ask_question') {
     return {
       content: stringifyAskQuestionResult({
@@ -49,7 +52,7 @@ function stubCapabilitySideEffectTool(name: string): ToolExecutionResult {
 
   // Chain probes (snapshot → click, list mail → open thread) need ids to act on; the
   // generic ok-stub left them nothing to reference and they stalled after one round.
-  const payload = capabilityStubPayload(name);
+  const payload = capabilityStubPayload(name, args);
   if (payload !== null) {
     return {
       content: JSON.stringify({
@@ -103,10 +106,10 @@ export function createCapabilityExecuteToolFn(
     // Trap tools stay stubbed even with side effects allowed: the row measures whether
     // the model reaches for a tool its mode denies, never the write itself.
     if (perRunStubs.has(name)) {
-      return Promise.resolve(stubCapabilitySideEffectTool(name));
+      return Promise.resolve(stubCapabilitySideEffectTool(name, args));
     }
     if (!allowSideEffects && CAPABILITY_SIDE_EFFECT_TOOL_IDS.has(name)) {
-      return Promise.resolve(stubCapabilitySideEffectTool(name));
+      return Promise.resolve(stubCapabilitySideEffectTool(name, args));
     }
     return executeBenchmarkTool(name, args, {
       workspaceRoot: opts.workspaceRoot ?? context?.workspaceRoot,

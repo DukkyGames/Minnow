@@ -17,6 +17,8 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 **Edit** in the detail panel. Click the description to switch from preview to editing; **Ctrl/Cmd+Enter** saves, **Escape** cancels. Labels are editable inline, in the list and in the detail header — Enter or comma adds, the chip **×** removes, and existing workspace labels autocomplete.
 
+Agents can link related, blocking, duplicate, or parent/sub issues with `issue_link`; those links appear under **Related issues** in the detail panel.
+
 ## Handing an issue to an agent
 
 This is what the app is for.

@@ -1355,12 +1355,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'issue_link',
     label: 'Issue link',
-    description: 'Append code refs, git links, or a chat id to an issue (append-only).',
+    description: 'Append code refs, git links, chat id, and/or related issues (append-only).',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
       'issue_link',
-      'Append links to an issue: code_refs (file/line), git_links, and/or chat_id.',
+      'Append links to an issue: code_refs (file/line), git_links, chat_id, and/or issue_refs.',
       {
         issue_id: { type: 'string', description: 'Issue id (KEY-n) or legacy bug id' },
         code_refs: {
@@ -1394,6 +1394,34 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           },
         },
         chat_id: { type: 'string', description: 'Chat id to append to chatIds' },
+        issue_refs: {
+          type: 'array',
+          description:
+            'Related issues to append (string id = related, or { issue_id, kind?, note? })',
+          items: {
+            oneOf: [
+              { type: 'string', description: 'Target issue id (kind defaults to related)' },
+              {
+                type: 'object',
+                properties: {
+                  issue_id: { type: 'string', description: 'Target issue id' },
+                  kind: {
+                    type: 'string',
+                    enum: [
+                      'related',
+                      'blocks',
+                      'blocked-by',
+                      'duplicate-of',
+                      'parent',
+                      'sub-issue',
+                    ],
+                  },
+                  note: { type: 'string' },
+                },
+              },
+            ],
+          },
+        },
       },
       ['issue_id'],
     ),

@@ -6,6 +6,8 @@
  * tool would, with stable ids the verdicts check the model actually reused.
  */
 
+import type { IssueIssueRef } from '../../types.ts';
+
 /**
  * Element uids the browser snapshot stub hands back (browser-snapshot probe).
  *
@@ -102,7 +104,76 @@ const STUB_BY_TOOL: Record<string, unknown> = {
   read_clipboard: { text: '' },
 };
 
+function normalizeStubIssueRefs(raw: unknown): IssueIssueRef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: IssueIssueRef[] = [];
+  for (const item of raw) {
+    if (typeof item === 'string' && item.trim()) {
+      out.push({ issueId: item.trim(), kind: 'related', addedAt: 1 });
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown>;
+    const issueId =
+      typeof obj.issue_id === 'string'
+        ? obj.issue_id.trim()
+        : typeof obj.issueId === 'string'
+          ? obj.issueId.trim()
+          : '';
+    if (!issueId) continue;
+    const kindRaw = typeof obj.kind === 'string' ? obj.kind.trim() : 'related';
+    const kind =
+      kindRaw === 'related' ||
+      kindRaw === 'blocks' ||
+      kindRaw === 'blocked-by' ||
+      kindRaw === 'duplicate-of' ||
+      kindRaw === 'parent' ||
+      kindRaw === 'sub-issue'
+        ? kindRaw
+        : 'related';
+    out.push({
+      issueId,
+      kind,
+      addedAt: 1,
+      ...(typeof obj.note === 'string' && obj.note.trim() ? { note: obj.note.trim() } : {}),
+    });
+  }
+  return out;
+}
+
 /** Realistic stub body for an emit-only tool, or null to use the generic stub. */
-export function capabilityStubPayload(toolName: string): unknown | null {
+export function capabilityStubPayload(
+  toolName: string,
+  args?: Record<string, unknown>,
+): unknown | null {
+  if (toolName === 'issue_add') {
+    const title = typeof args?.title === 'string' ? args.title.trim() : 'New issue';
+    return {
+      id: 'ISS-2',
+      title: title || 'New issue',
+      status: 'triage',
+      type: 'task',
+      priority: 'none',
+      labels: [],
+    };
+  }
+  if (toolName === 'issue_get_state') {
+    return {
+      issues: [{ id: 'ISS-1', title: 'Prior grid bug', status: 'triage' }],
+      nextIssuePreview: 'ISS-2',
+    };
+  }
+  if (toolName === 'issue_link') {
+    const issueId =
+      typeof args?.issue_id === 'string' && args.issue_id.trim()
+        ? args.issue_id.trim()
+        : typeof args?.issueId === 'string' && args.issueId.trim()
+          ? args.issueId.trim()
+          : 'ISS-2';
+    return {
+      id: issueId,
+      issueRefs: normalizeStubIssueRefs(args?.issue_refs ?? args?.issueRefs),
+    };
+  }
   return STUB_BY_TOOL[toolName] ?? null;
 }

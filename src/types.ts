@@ -822,6 +822,23 @@ export interface IssueGitLink {
   addedAt: number;
 }
 
+/** Typed relation between two issues (bidirectional via inverse kind on the target). */
+export type IssueRelationKind =
+  | 'related'
+  | 'blocks'
+  | 'blocked-by'
+  | 'duplicate-of'
+  | 'parent'
+  | 'sub-issue';
+
+/** Link from one issue card to another with a relation kind. */
+export interface IssueIssueRef {
+  issueId: string;
+  kind: IssueRelationKind;
+  note?: string;
+  addedAt: number;
+}
+
 /** One issue card in the Issues app (Linear-style tracker). */
 export interface IssueCard {
   id: string;
@@ -836,6 +853,7 @@ export interface IssueCard {
   updatedAt: number;
   codeRefs?: IssueCodeRef[];
   gitLinks?: IssueGitLink[];
+  issueRefs?: IssueIssueRef[];
   chatIds?: string[];
   planPath?: string;
   boardChatId?: string;
