@@ -162,4 +162,42 @@ describe('incremental assistant markdown render', () => {
     });
     assert.ok(bubble.querySelector('h1') || bubble.textContent?.includes('Title'));
   });
+
+  it('paints during continuous fast chunks (throttle, not trailing debounce)', async () => {
+    installWindow();
+    const {
+      getAssistantBubbleRenderStateForTests,
+      scheduleAssistantBubbleRender,
+    } = await import('../../src/markdown/renderer.ts');
+
+    const bubble = win.document.createElement('div');
+    const cursor = win.document.createElement('span');
+    win.document.body.appendChild(bubble);
+
+    const full = 'Hello world, this is streaming markdown text that grows over time.';
+    let midStreamNonEmpty = false;
+    let paintCount = 0;
+    let prevTextLen = 0;
+
+    for (let t = 0; t < 300; t += 10) {
+      const progress = Math.min(1, (t + 10) / 300);
+      const partial = full.slice(0, Math.ceil(full.length * progress));
+      scheduleAssistantBubbleRender(bubble, partial, cursor);
+
+      const len = bubble.textContent?.replace(/\s/g, '').length ?? 0;
+      if (len > 0 && t < 290) {
+        midStreamNonEmpty = true;
+      }
+      if (len > prevTextLen) {
+        paintCount += 1;
+        prevTextLen = len;
+      }
+      await sleep(10);
+    }
+
+    const state = getAssistantBubbleRenderStateForTests(bubble);
+    assert.ok(midStreamNonEmpty, 'expected non-empty bubble before stream end');
+    assert.ok(paintCount >= 2, 'expected multiple paints during fast stream');
+    assert.ok(state.lastRenderedAt > 0, 'expected scheduler to record at least one paint');
+  });
 });

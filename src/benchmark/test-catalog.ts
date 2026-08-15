@@ -7,9 +7,17 @@
 
 import builtinManifest from '../skills/builtin-manifest.json';
 import { BUILT_IN_TOOLS } from '../tools/definitions.ts';
+import { CAPABILITY_CATALOG, getCapabilityById } from './capabilities/catalog.ts';
 import { formatSkillPassCriteria, getSkillProbe } from './suites/skill-probes.ts';
 import { FILE_TOOL_PROBE_ORDER } from './suites/file-tool-fixtures.ts';
 import type { SuiteId } from './types.ts';
+
+/** Stable benchmark testId prefix for capability matrix rows (`cap-matrix/<capabilityId>`). */
+export const CAPABILITY_TEST_ID_PREFIX = 'cap-matrix/';
+
+export function capabilityMatrixTestId(capabilityId: string): string {
+  return `${CAPABILITY_TEST_ID_PREFIX}${capabilityId}`;
+}
 
 export interface BenchmarkTestDescription {
   testId: string;
@@ -30,6 +38,8 @@ export interface ExpectedBenchmarkTest {
 export const SUITE_INTROS: Record<SuiteId, string> = {
   capability:
     'Provider wiring, streaming, usage metadata, tool schema acceptance, model catalog, and optional vision probes.',
+  'capability-matrix':
+    'Fifty-seven spreadsheet capabilities (auto probes and manual rows); hybrid scoring with pass, partial, fail, and n-a cells.',
   speed:
     'Median time-to-first-token and tokens-per-second from fixed prompts; pass means a non-empty completion, not answer quality.',
   tools:
@@ -196,6 +206,30 @@ function resolveToolDescription(testId: string, label: string): BenchmarkTestDes
   };
 }
 
+function resolveCapabilityMatrixDescription(
+  testId: string,
+  label: string,
+): BenchmarkTestDescription | null {
+  if (!testId.startsWith(CAPABILITY_TEST_ID_PREFIX)) return null;
+  const capabilityId = testId.slice(CAPABILITY_TEST_ID_PREFIX.length);
+  const cap = getCapabilityById(capabilityId);
+  if (!cap) return null;
+
+  const manualNote =
+    cap.scoreMode === 'manual'
+      ? ' Manual rows are recorded in Settings, not executed in this suite.'
+      : '';
+
+  return {
+    testId,
+    suite: 'capability-matrix',
+    label,
+    purpose: cap.header,
+    method: `${cap.howToTest}${manualNote}`,
+    passCriteria: cap.passCriteria,
+  };
+}
+
 function resolveSkillDescription(testId: string, label: string): BenchmarkTestDescription | null {
   const skillId = testId.slice('skill-'.length);
   const skill = (builtinManifest.skills ?? []).find((s) => s.id === skillId);
@@ -244,6 +278,10 @@ export function resolveTestDescription(
   }
   if (testId.startsWith('skill-')) {
     return resolveSkillDescription(testId, label);
+  }
+
+  if (testId.startsWith(CAPABILITY_TEST_ID_PREFIX) || suite === 'capability-matrix') {
+    return resolveCapabilityMatrixDescription(testId, label);
   }
 
   if (suite === 'speed' && testId === 'speed-long-1') {
@@ -311,8 +349,32 @@ function expectedSkillsTests(): ExpectedBenchmarkTest[] {
   }));
 }
 
+function expectedCapabilityMatrixTests(): ExpectedBenchmarkTest[] {
+  return CAPABILITY_CATALOG.map((cap) => ({
+    testId: capabilityMatrixTestId(cap.id),
+    suite: 'capability-matrix' as const,
+    label: cap.header,
+  }));
+}
+
+/** Suites included in quick/full presets (excludes capability-matrix). */
+export const PRESET_BENCHMARK_SUITE_IDS: SuiteId[] = [
+  'capability',
+  'speed',
+  'tools',
+  'skills',
+  'coding',
+];
+
+/** Every registered integration suite (preset suites plus capability-matrix). */
+export const ALL_BENCHMARK_SUITE_IDS: SuiteId[] = [
+  ...PRESET_BENCHMARK_SUITE_IDS,
+  'capability-matrix',
+];
+
 const SUITE_TEST_LISTERS: Record<SuiteId, () => ExpectedBenchmarkTest[]> = {
   capability: expectedCapabilityTests,
+  'capability-matrix': expectedCapabilityMatrixTests,
   speed: expectedSpeedTests,
   tools: expectedToolsTests,
   skills: expectedSkillsTests,
@@ -329,13 +391,7 @@ export function listExpectedTestsForSuites(suiteIds: SuiteId[]): ExpectedBenchma
   return out;
 }
 
-/** Full battery test ids (all five suites). */
+/** Full battery test ids (all registered integration suites). */
 export function listAllExpectedBenchmarkTests(): ExpectedBenchmarkTest[] {
-  return listExpectedTestsForSuites([
-    'capability',
-    'speed',
-    'tools',
-    'skills',
-    'coding',
-  ]);
+  return listExpectedTestsForSuites(ALL_BENCHMARK_SUITE_IDS);
 }

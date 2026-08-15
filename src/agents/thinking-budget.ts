@@ -49,6 +49,11 @@ export class ThinkingBudgetTracker {
     return this._disarmed ? false : this._exceeded;
   }
 
+  /** Configured ceiling, so callers can mirror it into the outbound request body. */
+  get limitTokens(): number {
+    return this.limit;
+  }
+
   /** Text of the current contiguous thinking phase — what a continuation carries forward. */
   get sessionText(): string {
     return this.phaseText;

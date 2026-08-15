@@ -9,6 +9,7 @@ import type {
   BenchmarkCampaignSummary,
   ModelScoreIndexRow,
 } from './campaign-types.ts';
+import { prepareCampaignForPersistence } from './campaign-persist-prep.ts';
 import { registerImportedStandardPack } from './standard/pack-loader.ts';
 import type { StandardBenchmarkPack } from './standard/types.ts';
 
@@ -45,22 +46,35 @@ function summaryFromCampaign(c: BenchmarkCampaign): BenchmarkCampaignSummary {
     targetCount: c.targets.length,
     preset: c.preset,
     topScore,
+    kind: c.kind,
   };
 }
 
 /** Persist a completed or partial campaign. */
 export async function saveCampaign(campaign: BenchmarkCampaign): Promise<void> {
+  const payload = prepareCampaignForPersistence(campaign);
   const local = await detectLocalServer();
   if (local) {
     const res = await fetch('/api/benchmarks/campaigns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(campaign),
+      body: JSON.stringify(payload),
     });
     if (res.ok) return;
+    if (res.status === 413) {
+      const stripped = prepareCampaignForPersistence(campaign, {
+        stripAllTranscripts: true,
+      });
+      const retry = await fetch('/api/benchmarks/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stripped),
+      });
+      if (retry.ok) return;
+    }
   }
   const existing = readLocalCampaigns();
-  writeLocalCampaigns([campaign, ...existing.filter((c) => c.id !== campaign.id)]);
+  writeLocalCampaigns([payload, ...existing.filter((c) => c.id !== campaign.id)]);
 }
 
 /** List campaign summaries (newest first). */

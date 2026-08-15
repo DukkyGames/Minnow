@@ -25,8 +25,11 @@ import {
 } from '../compare/types';
 import { aggregateWinRates, formatCompareWinnerLabel, voteSlotRefs } from '../compare/win-rates';
 import { cancelGeneration } from '../api/generations';
-import { ASSISTANT_RENDER_DEBOUNCE_MS } from '../constants';
-import { setAssistantBubbleContent } from '../markdown/renderer';
+import {
+  cancelAssistantBubbleRenderDebounce,
+  scheduleAssistantBubbleRender,
+  setAssistantBubbleContent,
+} from '../markdown/renderer';
 import { fillModelSelect, fillProviderSelect } from './settings-model-binding';
 import {
   mountAuxiliaryModelSelectCombobox,
@@ -60,8 +63,6 @@ let columns: ColumnState[] = [];
 let runAbort: AbortController | null = null;
 let initialized = false;
 
-/** Per-column debounce timers keyed by screen index. */
-const columnRenderTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const columnStreamCursors = new Map<number, HTMLDivElement>();
 
 function readParallelPref(): boolean {
@@ -103,20 +104,6 @@ function ensureColumnStreamCursor(screenIndex: number): HTMLDivElement {
   return cursor;
 }
 
-function cancelColumnRenderDebounce(screenIndex: number): void {
-  const timer = columnRenderTimers.get(screenIndex);
-  if (timer != null) {
-    clearTimeout(timer);
-    columnRenderTimers.delete(screenIndex);
-  }
-}
-
-function cancelAllColumnRenderDebounces(): void {
-  for (const screenIndex of columnRenderTimers.keys()) {
-    cancelColumnRenderDebounce(screenIndex);
-  }
-}
-
 function renderColumnBodyMarkdown(
   screenIndex: number,
   body: HTMLElement,
@@ -126,22 +113,15 @@ function renderColumnBodyMarkdown(
   body.classList.add('msg-bubble');
   if (streaming) {
     const cursor = ensureColumnStreamCursor(screenIndex);
-    cancelColumnRenderDebounce(screenIndex);
-    columnRenderTimers.set(
-      screenIndex,
-      setTimeout(() => {
-        columnRenderTimers.delete(screenIndex);
-        setAssistantBubbleContent(body, markdown, { streaming: true, streamCursor: cursor });
-      }, ASSISTANT_RENDER_DEBOUNCE_MS),
-    );
+    scheduleAssistantBubbleRender(body, markdown, cursor);
     return;
   }
-  cancelColumnRenderDebounce(screenIndex);
+  cancelAssistantBubbleRenderDebounce(body);
   setAssistantBubbleContent(body, markdown, { streaming: false });
 }
 
 function clearColumnBody(screenIndex: number, body: HTMLElement): void {
-  cancelColumnRenderDebounce(screenIndex);
+  cancelAssistantBubbleRenderDebounce(body);
   body.innerHTML = '';
   body.classList.remove('msg-bubble', 'msg-bubble--md');
 }
@@ -479,7 +459,7 @@ function setSequentialFocus(activeIndex: number | null): void {
 }
 
 function resetRunUi(): void {
-  cancelAllColumnRenderDebounces();
+  cancelAssistantBubbleRenderDebounce();
   for (const col of columns) {
     col.unsubscribe?.();
   }

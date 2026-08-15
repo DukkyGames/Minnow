@@ -11,10 +11,17 @@ import { isAbortError, benchmarkAbortError } from './abort.ts';
 import type {
   BenchmarkCampaign,
   BenchmarkCellResult,
+  BenchmarkCampaignKind,
+  BenchmarkSkippedTarget,
   BenchmarkTarget,
+  ModelAggregate,
   RunCampaignOptions,
   SelectedSuite,
 } from './campaign-types.ts';
+import {
+  ensureBenchmarkTargetLoaded,
+  isLocalBenchmarkTarget,
+} from './model-lifecycle.ts';
 import { runMatrix } from './matrix-scheduler.ts';
 import { buildTargetKey, targetKeyFromTarget, targetLabel } from './model-key.ts';
 import { runBenchmark } from './runner.ts';
@@ -43,6 +50,20 @@ function suitesForPreset(
   return preset === 'full' ? FULL_SUITES : QUICK_SUITES;
 }
 
+function campaignKindFromOptions(
+  options: RunCampaignOptions,
+): BenchmarkCampaignKind | undefined {
+  const integration =
+    options.integrationSuites ?? suitesForPreset(options.preset ?? 'quick');
+  if (
+    options.capabilityMatrix ||
+    (integration.length === 1 && integration[0] === 'capability-matrix')
+  ) {
+    return 'capability-matrix';
+  }
+  return undefined;
+}
+
 function buildSelectedSuites(options: RunCampaignOptions): SelectedSuite[] {
   const suites: SelectedSuite[] = [];
   const integration = options.integrationSuites ?? suitesForPreset(options.preset ?? 'quick');
@@ -66,6 +87,18 @@ interface TargetWorkResult {
   target: BenchmarkTarget;
   runs: import('./types.ts').BenchmarkRun[];
   cells: BenchmarkCellResult[];
+  skipped?: boolean;
+  skipReason?: string;
+}
+
+function resolveCapabilityMatrixOptions(
+  options: RunCampaignOptions,
+  target: BenchmarkTarget,
+): RunCampaignOptions['capabilityMatrix'] {
+  const base = options.capabilityMatrix;
+  const extra = options.resolveCapabilityMatrixForTarget?.(target);
+  if (!base && !extra) return undefined;
+  return { ...base, ...extra };
 }
 
 async function runIntegrationForTarget(
@@ -74,14 +107,16 @@ async function runIntegrationForTarget(
   preset: RunCampaignOptions['preset'],
   signal: AbortSignal,
   onProgress: RunCampaignOptions['onProgress'],
+  capabilityMatrix: RunCampaignOptions['capabilityMatrix'],
+  targetKey: string,
 ): Promise<TargetWorkResult> {
-  const targetKey = targetKeyFromTarget(target);
   const provider = await resolveProvider(target.providerId);
   const run = await runBenchmark({
     suites: suiteIds,
     preset: preset ?? 'custom',
     signal,
     saveToHistory: true,
+    capabilityMatrix,
     binding: {
       providerId: provider.id,
       modelId: target.modelId,
@@ -99,7 +134,9 @@ async function runIntegrationForTarget(
       }
     },
   });
-  return { target, runs: [run], cells: [] };
+  // Stamp the roster identity: a served My Models row runs under a rewritten
+  // provider/model, so the run alone cannot be mapped back to its grid column.
+  return { target, runs: [{ ...run, targetKey }], cells: [] };
 }
 
 async function runStandardForTarget(
@@ -108,12 +145,14 @@ async function runStandardForTarget(
   tier: RunCampaignOptions['standardTier'],
   signal: AbortSignal,
   onProgress: RunCampaignOptions['onProgress'],
+  targetKey: string,
 ): Promise<TargetWorkResult> {
   const cells: BenchmarkCellResult[] = [];
   for (const packId of packIds) {
     if (signal.aborted) break;
     const packCells = await runStandardPackForTarget({
       target,
+      targetKey,
       packId,
       tier: tier ?? 'mini',
       signal,
@@ -134,6 +173,109 @@ async function runStandardForTarget(
   return { target, runs: [], cells };
 }
 
+/**
+ * Run one target's suites. `target` carries the binding to call (rewritten to the
+ * upstream serve for My Models rows); `rosterTarget` stays the roster row every
+ * progress event, cell, and per-target option lookup is keyed by.
+ */
+async function runTargetSuites(
+  target: BenchmarkTarget,
+  options: RunCampaignOptions,
+  workerSignal: AbortSignal,
+  rosterTarget: BenchmarkTarget,
+): Promise<TargetWorkResult> {
+  const integrationSuites = options.integrationSuites ?? suitesForPreset(options.preset ?? 'quick');
+  const standardPackIds = options.standardPackIds ?? [];
+  const onProgress = options.onProgress;
+  const targetKey = targetKeyFromTarget(rosterTarget);
+  const parts: TargetWorkResult[] = [];
+
+  if (integrationSuites.length) {
+    parts.push(
+      await runIntegrationForTarget(
+        target,
+        integrationSuites,
+        options.preset,
+        workerSignal,
+        onProgress,
+        resolveCapabilityMatrixOptions(options, rosterTarget),
+        targetKey,
+      ),
+    );
+  }
+
+  if (standardPackIds.length) {
+    parts.push(
+      await runStandardForTarget(
+        target,
+        standardPackIds,
+        options.standardTier,
+        workerSignal,
+        onProgress,
+        targetKey,
+      ),
+    );
+  }
+
+  const runs = parts.flatMap((p) => p.runs);
+  const cells = parts.flatMap((p) => p.cells);
+  return { target, runs, cells };
+}
+
+async function runTargetWithOptionalLifecycle(
+  target: BenchmarkTarget,
+  options: RunCampaignOptions,
+  workerSignal: AbortSignal,
+): Promise<TargetWorkResult> {
+  if (!options.manageModelLifecycle) {
+    return runTargetSuites(target, options, workerSignal, target);
+  }
+
+  const targetKey = targetKeyFromTarget(target);
+  const label = targetLabel(target);
+  options.onProgress?.({ type: 'target-load-start', targetKey, label });
+
+  const loadOutcome = await ensureBenchmarkTargetLoaded(target, workerSignal);
+  if (!loadOutcome.loaded) {
+    const skipReason = loadOutcome.skipReason?.trim() || 'Failed to load model';
+    options.onProgress?.({
+      type: 'target-load-skipped',
+      targetKey,
+      label,
+      skipReason,
+    });
+    return {
+      target,
+      runs: [],
+      cells: [],
+      skipped: true,
+      skipReason,
+    };
+  }
+
+  options.onProgress?.({ type: 'target-load-done', targetKey });
+
+  const effectiveTarget: BenchmarkTarget = {
+    ...target,
+    providerId: loadOutcome.effective.providerId,
+    modelId: loadOutcome.effective.modelId,
+  };
+
+  try {
+    const work = await runTargetSuites(effectiveTarget, options, workerSignal, target);
+    return { ...work, target };
+  } finally {
+    if (loadOutcome.unload) {
+      try {
+        await loadOutcome.unload();
+        options.onProgress?.({ type: 'target-unload', targetKey });
+      } catch {
+        /* unload failure must not fail the row */
+      }
+    }
+  }
+}
+
 /** Run a multi-model benchmark campaign. */
 export async function runBenchmarkCampaign(
   options: RunCampaignOptions,
@@ -145,7 +287,7 @@ export async function runBenchmarkCampaign(
 
   const signal = options.signal ?? new AbortController().signal;
   const onProgress = options.onProgress;
-  const campaignId = newCampaignId();
+  const campaignId = options.campaignId?.trim() || newCampaignId();
   const startedAt = new Date().toISOString();
   const t0 = performance.now();
   const integrationSuites = options.integrationSuites ?? suitesForPreset(options.preset ?? 'quick');
@@ -155,6 +297,7 @@ export async function runBenchmarkCampaign(
     throw new Error('Select at least one Academic benchmark and/or Minnow test to run.');
   }
   const selectedSuites = buildSelectedSuites(options);
+  const campaignKind = campaignKindFromOptions(options);
 
   let configConcurrency = 2;
   try {
@@ -167,6 +310,8 @@ export async function runBenchmarkCampaign(
     1,
     Math.min(8, options.maxConcurrency ?? configConcurrency),
   );
+  const localConcurrency = Math.max(1, options.localConcurrency ?? 1);
+  const manageModelLifecycle = options.manageModelLifecycle === true;
 
   onProgress?.({
     type: 'campaign-start',
@@ -179,73 +324,83 @@ export async function runBenchmarkCampaign(
 
   const allRuns: import('./types.ts').BenchmarkRun[] = [];
   const allCells: BenchmarkCellResult[] = [];
+  const skippedTargets: BenchmarkSkippedTarget[] = [];
 
   const workItems = targets.map((target) => ({
     id: targetKeyFromTarget(target),
     payload: target,
   }));
 
-  try {
-    await runMatrix<BenchmarkTarget, TargetWorkResult>({
-      items: workItems,
-      concurrency,
-      signal,
-      onItemStart: (item) => {
-        onProgress?.({
-          type: 'target-start',
-          targetKey: item.id,
-          label: targetLabel(item.payload),
-        });
-      },
-      worker: async ({ item, signal: workerSignal }) => {
-        const target = item.payload;
-        const parts: TargetWorkResult[] = [];
-
-        if (integrationSuites.length) {
-          parts.push(
-            await runIntegrationForTarget(
-              target,
-              integrationSuites,
-              options.preset,
-              workerSignal,
-              onProgress,
-            ),
-          );
-        }
-
-        if (standardPackIds.length) {
-          parts.push(
-            await runStandardForTarget(
-              target,
-              standardPackIds,
-              options.standardTier,
-              workerSignal,
-              onProgress,
-            ),
-          );
-        }
-
-        const runs = parts.flatMap((p) => p.runs);
-        const cells = parts.flatMap((p) => p.cells);
-        return { target, runs, cells };
-      },
-      onItemDone: (item, result: TargetWorkResult) => {
-        allRuns.push(...result.runs);
-        allCells.push(...result.cells);
-        const agg = result.runs[0]
-          ? aggregateFromRun(result.target, result.runs[0], result.cells)
-          : computeCampaignAggregates({
-              targets: [result.target],
-              cells: result.cells,
-              runs: [],
-            })[0]!;
-        onProgress?.({
-          type: 'target-done',
-          targetKey: item.id,
-          aggregate: agg,
-        });
-      },
+  const handleItemDone = (item: { id: string; payload: BenchmarkTarget }, result: TargetWorkResult) => {
+    if (result.skipped) {
+      skippedTargets.push({
+        targetKey: item.id,
+        providerId: result.target.providerId,
+        modelId: result.target.modelId,
+        label: targetLabel(result.target),
+        skipReason: result.skipReason?.trim() || 'Failed to load model',
+      });
+      return;
+    }
+    allRuns.push(...result.runs);
+    allCells.push(...result.cells);
+    const agg = aggregateFromTargetWorkResult(result);
+    if (!agg) return;
+    onProgress?.({
+      type: 'target-done',
+      targetKey: item.id,
+      aggregate: agg,
     });
+  };
+
+  const matrixWorker = async ({
+    item,
+    signal: workerSignal,
+  }: {
+    item: { id: string; payload: BenchmarkTarget };
+    signal: AbortSignal;
+  }): Promise<TargetWorkResult> => {
+    onProgress?.({
+      type: 'target-start',
+      targetKey: item.id,
+      label: targetLabel(item.payload),
+    });
+    return runTargetWithOptionalLifecycle(item.payload, options, workerSignal);
+  };
+
+  try {
+    if (manageModelLifecycle) {
+      const localItems = workItems.filter((item) => isLocalBenchmarkTarget(item.payload));
+      const remoteItems = workItems.filter((item) => !isLocalBenchmarkTarget(item.payload));
+
+      if (localItems.length) {
+        await runMatrix<BenchmarkTarget, TargetWorkResult>({
+          items: localItems,
+          concurrency: localConcurrency,
+          signal,
+          worker: matrixWorker,
+          onItemDone: handleItemDone,
+        });
+      }
+
+      if (remoteItems.length) {
+        await runMatrix<BenchmarkTarget, TargetWorkResult>({
+          items: remoteItems,
+          concurrency,
+          signal,
+          worker: matrixWorker,
+          onItemDone: handleItemDone,
+        });
+      }
+    } else {
+      await runMatrix<BenchmarkTarget, TargetWorkResult>({
+        items: workItems,
+        concurrency,
+        signal,
+        worker: matrixWorker,
+        onItemDone: handleItemDone,
+      });
+    }
 
     if (customPackIds.length && !signal.aborted) {
       for (const packId of customPackIds) {
@@ -271,6 +426,10 @@ export async function runBenchmarkCampaign(
 
     onProgress?.({ type: 'phase', phase: 'aggregating', label: 'Aggregating results…' });
 
+    const scoredTargets = targets.filter(
+      (t) => !skippedTargets.some((s) => s.targetKey === targetKeyFromTarget(t)),
+    );
+
     const campaign: BenchmarkCampaign = {
       id: campaignId,
       startedAt,
@@ -282,11 +441,13 @@ export async function runBenchmarkCampaign(
       status: 'completed',
       cells: allCells,
       runs: allRuns,
+      skippedTargets: skippedTargets.length ? skippedTargets : undefined,
       aggregates: computeCampaignAggregates({
-        targets,
+        targets: scoredTargets,
         cells: allCells,
         runs: allRuns,
       }),
+      ...(campaignKind ? { kind: campaignKind } : {}),
     };
 
     await saveCampaign(campaign);
@@ -295,6 +456,9 @@ export async function runBenchmarkCampaign(
     return campaign;
   } catch (err) {
     if (isAbortError(err) || signal.aborted) {
+      const partialScored = targets.filter(
+        (t) => !skippedTargets.some((s) => s.targetKey === targetKeyFromTarget(t)),
+      );
       const partial: BenchmarkCampaign = {
         id: campaignId,
         startedAt,
@@ -306,11 +470,13 @@ export async function runBenchmarkCampaign(
         status: 'cancelled',
         cells: allCells,
         runs: allRuns,
+        skippedTargets: skippedTargets.length ? skippedTargets : undefined,
         aggregates: computeCampaignAggregates({
-          targets,
+          targets: partialScored,
           cells: allCells,
           runs: allRuns,
         }),
+        ...(campaignKind ? { kind: campaignKind } : {}),
       };
       if (options.persistPartialOnCancel) {
         await saveCampaign(partial);
@@ -324,4 +490,26 @@ export async function runBenchmarkCampaign(
 
 export function buildTargetKeyForCampaign(target: BenchmarkTarget): string {
   return buildTargetKey(target.providerId, target.modelId);
+}
+
+/** Whether a per-target work result should contribute to campaign aggregates. */
+export function campaignTargetProducesAggregate(result: TargetWorkResult): boolean {
+  return result.skipped !== true;
+}
+
+/** Build aggregate for a completed target work result (null when skipped). */
+export function aggregateFromTargetWorkResult(
+  result: TargetWorkResult,
+): ModelAggregate | null {
+  if (!campaignTargetProducesAggregate(result)) return null;
+  if (result.runs[0]) {
+    return aggregateFromRun(result.target, result.runs[0], result.cells);
+  }
+  return (
+    computeCampaignAggregates({
+      targets: [result.target],
+      cells: result.cells,
+      runs: [],
+    })[0] ?? null
+  );
 }

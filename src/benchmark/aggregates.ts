@@ -88,7 +88,7 @@ export function computeCampaignAggregates(
   return campaign.targets.map((target) => {
     const key = targetKeyFromTarget(target);
     const run = campaign.runs.find(
-      (r) => buildTargetKey(r.provider.id, r.model.id) === key,
+      (r) => (r.targetKey?.trim() || buildTargetKey(r.provider.id, r.model.id)) === key,
     );
     if (run) return aggregateFromRun(target, run, campaign.cells);
     return aggregateFromCells(target, campaign.cells);

@@ -22,6 +22,7 @@ export interface UnifiedCatalogEntry {
 
 const INTEGRATION_SUITE_CATEGORIES: Record<SuiteId, string> = {
   capability: 'integration',
+  'capability-matrix': 'integration',
   speed: 'integration',
   tools: 'integration',
   skills: 'integration',

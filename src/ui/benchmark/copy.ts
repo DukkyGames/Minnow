@@ -8,6 +8,7 @@ import type { SuiteId } from '../../benchmark/types.ts';
 /** Short names for integration test suites (Run tab + transcript). */
 export const SUITE_LABELS: Record<SuiteId, string> = {
   capability: 'Capability',
+  'capability-matrix': 'Capability matrix',
   speed: 'Speed',
   tools: 'Tools',
   skills: 'Skills',
@@ -17,6 +18,7 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
 /** One-line hint for each integration suite (Run tab tooltips). */
 export const SUITE_HINTS: Record<SuiteId, string> = {
   capability: 'Reasoning, JSON, and multimodal probes',
+  'capability-matrix': 'Spreadsheet capability grid (Settings)',
   speed: 'Time to first token and tokens per second',
   tools: 'Built-in tool calls in an isolated workspace',
   skills: 'Slash-command skill behavior',

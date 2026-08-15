@@ -1931,6 +1931,7 @@ async function resumeBenchmarkFromSession(session: ActiveBenchmarkSession): Prom
 function tryResumeBenchmarkFromSession(): void {
   const session = loadActiveBenchmarkSession();
   if (!session) return;
+  if (session.campaignKind === 'capability-matrix') return;
   if (isBenchmarkRunActive()) return;
   void resumeBenchmarkFromSession(session);
 }

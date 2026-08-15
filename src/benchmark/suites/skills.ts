@@ -100,7 +100,7 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
             signal: ctx.signal,
             messages,
             tools,
-            maxToolRounds: 2,
+            maxToolRounds: 4,
             executeToolFn: createBenchmarkExecuteToolFn(),
           })
         : await runOneShot({

@@ -44,6 +44,8 @@ import type { CompletionBodyWithResponseFormat } from '../providers/completion-t
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { sanitizeCompletionBodyForProvider } from '../providers/sanitize-completion-body';
+import { isVisionModel } from '../providers/vision-model';
+import { toolImageFollowUpFromAttachments } from '../chat/tool-image-follow-up';
 import {
   getToolCallsMetaSync,
   isConstrainedDecodingEnabledForProvider,
@@ -1155,11 +1157,11 @@ export const defaultSubAgentRunner: SubAgentRunner = {
               role: 'tool',
               tool_call_id: tc.id,
               content: toolOut.content,
-              ...(toolOut.attachments?.length
-                ? { attachments: toolOut.attachments }
-                : {}),
-              ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
             });
+            if (isVisionModel(input.modelId)) {
+              const followUp = toolImageFollowUpFromAttachments(toolOut.attachments);
+              if (followUp) messages.push(followUp);
+            }
           }
           emitProgress(undefined, true);
         }

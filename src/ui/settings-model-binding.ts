@@ -2,19 +2,130 @@
  * Shared provider/model &lt;select&gt; helpers for Settings (work agents, sub-agents, model routing).
  */
 
+import { isServerStorageMode } from '../config/storage-mode';
+import { formatModelLabel } from '../lib/format-model-label';
+import {
+  dedupLlamaCppModelsAgainstLibrary,
+  fetchLibraryModelSelectMerge,
+  LIBRARY_MODEL_OPTGROUP_LABEL,
+  LIBRARY_MODEL_PROVIDER_ID,
+  libraryModelLoadState,
+} from '../models/model-select-library';
+import { fetchModelsForAllProviders } from '../providers/fetch-all-models';
 import { fetchModelsForProvider } from '../providers/fetch-models';
 import { listProviders } from '../providers/store';
-import { formatModelLabel } from '../lib/format-model-label';
 
 /** Label for empty model option (inherits active chat model at runtime). */
 export const MODEL_SELECT_EMPTY_LABEL = '(use chat default)';
+
+export type FillProviderSelectOptions = {
+  includeEmptyOption?: boolean;
+  /** Include synthetic My Models (`minnow-library`) for Minnow-hosted weights. */
+  includeLibraryProvider?: boolean;
+};
+
+export type FillModelSelectOptions = {
+  includeEmptyOption?: boolean;
+};
+
+/** Provider + model id pair for roster bulk-add and catalog exports. */
+export interface CatalogRosterTarget {
+  providerId: string;
+  modelId: string;
+}
+
+/** Load every catalog model (registry providers + My Models library rows). */
+export async function fetchAllCatalogRosterTargets(): Promise<CatalogRosterTarget[]> {
+  const { providers } = await listProviders();
+  const enabled = providers.filter((p) => p.enabled !== false);
+  const controller = new AbortController();
+  let results = await fetchModelsForAllProviders(enabled, controller.signal);
+
+  const merge = await fetchLibraryModelSelectMerge().catch(() => null);
+  if (merge?.library.length) {
+    results = dedupLlamaCppModelsAgainstLibrary(results, merge.library, merge.serves);
+  }
+
+  const out: CatalogRosterTarget[] = [];
+  for (const result of results) {
+    for (const model of result.models) {
+      if (model.type !== 'llm' && model.type !== 'vlm') continue;
+      out.push({ providerId: result.provider.id, modelId: model.id });
+    }
+  }
+  if (merge?.library.length) {
+    for (const model of merge.library) {
+      out.push({ providerId: LIBRARY_MODEL_PROVIDER_ID, modelId: model.id });
+    }
+  }
+  return out;
+}
+
+async function fillLibraryModelSelect(
+  select: HTMLSelectElement,
+  selectedModelId: string,
+  includeEmpty: boolean,
+): Promise<void> {
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = MODEL_SELECT_EMPTY_LABEL;
+
+  select.disabled = true;
+  select.innerHTML = '<option value="">Loading models…</option>';
+  try {
+    const merge = await fetchLibraryModelSelectMerge();
+    select.replaceChildren();
+    if (includeEmpty) {
+      select.appendChild(empty);
+    }
+    let added = 0;
+    for (const model of merge?.library ?? []) {
+      const opt = document.createElement('option');
+      opt.value = model.id;
+      const state = libraryModelLoadState(model, merge?.serves ?? []);
+      const { optionText, title } = formatModelLabel({
+        id: model.name,
+        quantization: model.quant || undefined,
+        state,
+      });
+      opt.textContent = optionText;
+      opt.title = title;
+      select.appendChild(opt);
+      added += 1;
+    }
+    if (!includeEmpty && added === 0) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'No models found';
+      select.appendChild(placeholder);
+      select.disabled = true;
+      return;
+    }
+    select.value = selectedModelId || '';
+    if (!select.value && !includeEmpty && select.options.length > 0) {
+      select.selectedIndex = 0;
+    }
+    select.disabled = false;
+  } catch {
+    select.replaceChildren();
+    if (includeEmpty) {
+      select.appendChild(empty);
+    } else {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Could not load models';
+      select.appendChild(placeholder);
+    }
+    select.disabled = !includeEmpty;
+  }
+}
 
 /** Populate model &lt;select&gt; for a provider (empty option = chat default when enabled). */
 export async function fillModelSelect(
   select: HTMLSelectElement,
   providerId: string,
   selectedModelId: string,
-  options?: { includeEmptyOption?: boolean },
+  options?: FillModelSelectOptions,
 ): Promise<void> {
   const includeEmpty = options?.includeEmptyOption !== false;
   select.replaceChildren();
@@ -29,6 +140,11 @@ export async function fillModelSelect(
     placeholder.textContent = 'Select a provider';
     select.appendChild(includeEmpty ? empty : placeholder);
     select.disabled = true;
+    return;
+  }
+
+  if (providerId === LIBRARY_MODEL_PROVIDER_ID) {
+    await fillLibraryModelSelect(select, selectedModelId, includeEmpty);
     return;
   }
 
@@ -98,7 +214,7 @@ export async function fillModelSelect(
 export async function fillProviderSelect(
   select: HTMLSelectElement,
   selectedId: string,
-  options?: { includeEmptyOption?: boolean },
+  options?: FillProviderSelectOptions,
 ): Promise<void> {
   select.replaceChildren();
   if (options?.includeEmptyOption) {
@@ -116,6 +232,13 @@ export async function fillProviderSelect(
     opt.value = p.id;
     opt.textContent = p.label || p.id;
     select.appendChild(opt);
+    added += 1;
+  }
+  if (options?.includeLibraryProvider && isServerStorageMode()) {
+    const libraryOpt = document.createElement('option');
+    libraryOpt.value = LIBRARY_MODEL_PROVIDER_ID;
+    libraryOpt.textContent = LIBRARY_MODEL_OPTGROUP_LABEL;
+    select.appendChild(libraryOpt);
     added += 1;
   }
   if (added === 0) {

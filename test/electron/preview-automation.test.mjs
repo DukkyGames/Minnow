@@ -110,6 +110,21 @@ describe('preview guest actions', () => {
     assert.equal(captureCalls, 2);
   });
 
+  test('previewCapturePageBase64 times out a hung capturePage without retrying', async () => {
+    let captureCalls = 0;
+    const wc = createMockWebContents({
+      capturePage: () => {
+        captureCalls += 1;
+        return new Promise(() => {});
+      },
+    });
+    const started = Date.now();
+    const b64 = await previewCapturePageBase64(wc, { captureTimeoutMs: 50 });
+    assert.equal(b64, '');
+    assert.equal(captureCalls, 1);
+    assert.ok(Date.now() - started < 1000);
+  });
+
   test('previewCapturePageBase64 waits for guest loading to finish', async () => {
     let loading = true;
     const wc = createMockWebContents({

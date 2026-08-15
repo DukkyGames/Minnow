@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   aggregateFromRun,
   buildModelScoreIndex,
+  computeCampaignAggregates,
   pickCampaignInsight,
 } from '../../src/benchmark/aggregates.ts';
 import type { BenchmarkCampaign } from '../../src/benchmark/campaign-types.ts';
@@ -126,5 +127,33 @@ describe('campaign aggregates', () => {
     ]);
     assert.equal(fastest?.label, 'Fast');
     assert.equal(quality?.label, 'Smart');
+  });
+
+  test('computeCampaignAggregates matches a run rewritten by its serve', () => {
+    const aggregates = computeCampaignAggregates({
+      targets: [{ providerId: 'minnow-library', modelId: 'mlx:org/repo' }],
+      cells: [],
+      runs: [
+        {
+          id: 'run-1',
+          startedAt: '2026-01-01T00:00:00.000Z',
+          durationMs: 1000,
+          preset: 'custom',
+          // Provider and model hold the serve binding, not the roster row.
+          provider: { id: 'mlx-lm-local', baseUrl: 'http://127.0.0.1:8087' },
+          model: { id: '/Users/me/.cache/models/snapshots/abc' },
+          targetKey: 'minnow-library::mlx:org/repo',
+          totalScore: 0.6,
+          headlineTokPerSec: 40,
+          headlineTtftMs: 300,
+          modeMatrixPassed: 0,
+          toolsPassed: 0,
+          skillsPassed: 0,
+          suites: [],
+        },
+      ],
+    });
+    assert.equal(aggregates[0]?.totalScore, 0.6);
+    assert.equal(aggregates[0]?.runId, 'run-1');
   });
 });

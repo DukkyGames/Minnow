@@ -74,11 +74,14 @@ describe('ThinkingBudgetTracker turn accounting', () => {
 describe('ThinkingBudgetTracker continuation control', () => {
   test('beginContinuation clears the trip and grants exactly the grace', () => {
     const tracker = new ThinkingBudgetTracker(100);
+    assert.equal(tracker.limitTokens, 100);
     tracker.feed(tokens(100));
     assert.equal(tracker.exceeded, true);
 
     tracker.beginContinuation(40);
     assert.equal(tracker.exceeded, false);
+    // Callers (benchmark driver) read the current ceiling, including continuation grace.
+    assert.equal(tracker.limitTokens, 140);
     assert.equal(tracker.sessionText, '');
     assert.equal(tracker.spentTokens, 100);
 

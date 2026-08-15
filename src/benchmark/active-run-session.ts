@@ -3,6 +3,7 @@
  */
 
 import type { BenchmarkPreset, SuiteId, SuiteResult, TestResult } from './types.ts';
+import type { BenchmarkTarget } from './campaign-types.ts';
 
 const SESSION_KEY = 'minnow.benchmark.activeRun';
 const SESSION_VERSION = 1 as const;
@@ -10,12 +11,33 @@ const SESSION_VERSION = 1 as const;
 /** How the benchmark run bar started the active session (for UI labels on resume). */
 export type ActiveBenchmarkStartMode = 'quick' | 'full' | 'selected';
 
+/** Tags in-flight work (Settings matrix vs legacy bench bar). */
+export type ActiveBenchmarkCampaignKind = 'integration' | 'capability-matrix';
+
+/** Snapshot for resuming a Settings capability-matrix sweep after reload. */
+export interface ActiveCapabilityMatrixRunPayload {
+  campaignId: string;
+  targets: BenchmarkTarget[];
+  completedTargetKeys: string[];
+  allowSideEffects: boolean;
+  skipScored: boolean;
+  groupIds: string[] | null;
+  probeWaves: string[] | null;
+  manageModelLifecycle: boolean;
+  /** `${targetKey}::${capabilityId}` probes finished before reload/cancel. */
+  completedProbeKeys?: string[];
+}
+
 export interface ActiveBenchmarkSession {
   version: typeof SESSION_VERSION;
   runId: string;
   startedAt: string;
   preset: BenchmarkPreset;
   startMode: ActiveBenchmarkStartMode;
+  /** When set, resume UI can filter capability-matrix sweeps. */
+  campaignKind?: ActiveBenchmarkCampaignKind;
+  /** Settings capability matrix multi-target resume payload. */
+  capabilityMatrixRun?: ActiveCapabilityMatrixRunPayload;
   suiteIds: SuiteId[];
   modelId: string;
   /** Fully finished suites (used to skip work on resume). */

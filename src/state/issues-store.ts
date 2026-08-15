@@ -36,6 +36,8 @@ import type {
   IssueCard,
   IssueCodeRef,
   IssueGitLink,
+  IssueIssueRef,
+  IssueRelationKind,
   IssuePriority,
   IssueStatus,
   IssueType,
@@ -342,6 +344,11 @@ function ensureIssueCardShape(raw: unknown): IssueCard | null {
 
   if (Array.isArray(r.codeRefs)) card.codeRefs = r.codeRefs as IssueCard['codeRefs'];
   if (Array.isArray(r.gitLinks)) card.gitLinks = r.gitLinks as IssueCard['gitLinks'];
+  if (Array.isArray(r.issueRefs)) {
+    card.issueRefs = r.issueRefs
+      .map((item) => normalizeIssueIssueRef(item as IssueIssueRef | string))
+      .filter((ref): ref is IssueIssueRef => ref != null);
+  }
   if (Array.isArray(r.chatIds)) {
     card.chatIds = r.chatIds.filter((c): c is string => typeof c === 'string' && c.trim().length > 0);
   }
@@ -751,7 +758,73 @@ export type UpdateIssuePatch = {
   chatIds?: string[];
   codeRefs?: IssueCodeRef[];
   gitLinks?: IssueGitLink[];
+  issueRefs?: IssueIssueRef[];
 };
+
+const ISSUE_RELATION_KINDS: readonly IssueRelationKind[] = [
+  'related',
+  'blocks',
+  'blocked-by',
+  'duplicate-of',
+  'parent',
+  'sub-issue',
+];
+
+/** True when a string is a supported issue-to-issue relation kind. */
+export function isIssueRelationKind(value: string): value is IssueRelationKind {
+  return (ISSUE_RELATION_KINDS as readonly string[]).includes(value);
+}
+
+/** Inverse relation kind written on the target issue when linking bidirectionally. */
+export function inverseIssueRelationKind(kind: IssueRelationKind): IssueRelationKind {
+  switch (kind) {
+    case 'blocks':
+      return 'blocked-by';
+    case 'blocked-by':
+      return 'blocks';
+    case 'parent':
+      return 'sub-issue';
+    case 'sub-issue':
+      return 'parent';
+    default:
+      return kind;
+  }
+}
+
+/** True when two issue refs point at the same target with the same kind. */
+export function issueIssueRefsEqual(a: IssueIssueRef, b: IssueIssueRef): boolean {
+  return a.issueId === b.issueId && a.kind === b.kind;
+}
+
+/** Normalize an issue-to-issue ref for storage (string ids default to related). */
+export function normalizeIssueIssueRef(
+  ref: IssueIssueRef | string | Partial<IssueIssueRef>,
+  addedAt?: number,
+): IssueIssueRef | null {
+  if (typeof ref === 'string') {
+    const issueId = ref.trim();
+    if (!issueId) return null;
+    return { issueId, kind: 'related', addedAt: addedAt ?? issuesNowMs() };
+  }
+  const issueId =
+    typeof ref.issueId === 'string'
+      ? ref.issueId.trim()
+      : typeof (ref as { issue_id?: string }).issue_id === 'string'
+        ? (ref as { issue_id: string }).issue_id.trim()
+        : '';
+  if (!issueId) return null;
+  const kindRaw = typeof ref.kind === 'string' ? ref.kind.trim() : 'related';
+  if (!isIssueRelationKind(kindRaw)) return null;
+  const out: IssueIssueRef = {
+    issueId,
+    kind: kindRaw,
+    addedAt: typeof ref.addedAt === 'number' ? ref.addedAt : addedAt ?? issuesNowMs(),
+  };
+  if (typeof ref.note === 'string' && ref.note.trim()) {
+    out.note = ref.note.trim();
+  }
+  return out;
+}
 
 /** True when two code refs point at the same path + line range. */
 export function issueCodeRefsEqual(a: IssueCodeRef, b: IssueCodeRef): boolean {
@@ -807,11 +880,22 @@ export type AppendIssueLinksInput = {
   codeRefs?: IssueCodeRef[];
   gitLinks?: Array<Omit<IssueGitLink, 'addedAt'> & { addedAt?: number }>;
   chatId?: string;
+  issueRefs?: IssueIssueRef[];
 };
 
+/** Append one normalized issue ref to a card when not already present. */
+function appendIssueIssueRefToCard(issue: IssueCard, ref: IssueIssueRef): boolean {
+  const existing = issue.issueRefs ? [...issue.issueRefs] : [];
+  if (existing.some((entry) => issueIssueRefsEqual(entry, ref))) return false;
+  existing.push(ref);
+  issue.issueRefs = existing;
+  return true;
+}
+
 /**
- * Append-only links for issue_link (code refs, git chips, chat id).
- * Dedupes identical path/line ranges and kind+ref git links.
+ * Append-only links for issue_link (code refs, git chips, chat id, issue refs).
+ * Dedupes identical path/line ranges, kind+ref git links, and issueId+kind issue refs.
+ * Issue refs are written bidirectionally with inverse kinds on the target card.
  */
 export function appendIssueLinks(
   issueId: string,
@@ -852,6 +936,28 @@ export function appendIssueLinks(
       chatIds.push(chatId);
       issue.chatIds = chatIds;
       changed = true;
+    }
+  }
+
+  if (links.issueRefs?.length) {
+    for (const raw of links.issueRefs) {
+      const ref = normalizeIssueIssueRef(raw);
+      if (!ref) continue;
+      if (ref.issueId === issue.id) continue;
+      const target = findIssueById(ref.issueId);
+      if (!target) continue;
+      const sourceAdded = appendIssueIssueRefToCard(issue, ref);
+      const inverseRef: IssueIssueRef = {
+        issueId: issue.id,
+        kind: inverseIssueRelationKind(ref.kind),
+        note: ref.note,
+        addedAt: ref.addedAt,
+      };
+      const targetAdded = appendIssueIssueRefToCard(target, inverseRef);
+      if (sourceAdded || targetAdded) {
+        changed = true;
+        target.updatedAt = issuesNowMs();
+      }
     }
   }
 
@@ -901,6 +1007,11 @@ export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard
     issue.gitLinks = patch.gitLinks
       .map((g) => normalizeIssueGitLink(g))
       .filter((g): g is IssueGitLink => g != null);
+  }
+  if (patch.issueRefs) {
+    issue.issueRefs = patch.issueRefs
+      .map((ref) => normalizeIssueIssueRef(ref))
+      .filter((ref): ref is IssueIssueRef => ref != null);
   }
   issue.updatedAt = nowMs;
   touchIssuesStore();

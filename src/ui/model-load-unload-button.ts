@@ -2,9 +2,19 @@
  * Shared Load/Unload button UI — spinner + label while a model action is in flight.
  */
 
+import {
+  beginModelLoadLock,
+  endModelLoadLock,
+  getModelLoadLockOwner,
+  getModelLoadLockPhase,
+  getModelLoadLockTargetSelectValue,
+  isModelLoadLockBusy,
+  modelLoadLockHeldLabel,
+  type ModelLoadUnloadPhase,
+} from '../models/load-lock';
 import { iconHtml } from './icon';
 
-export type ModelLoadUnloadPhase = 'load' | 'unload';
+export type { ModelLoadUnloadPhase };
 
 /** Download-into-tray icon for compact Load affordances. */
 const LOAD_ICON_HTML = iconHtml('download');
@@ -12,24 +22,24 @@ const LOAD_ICON_HTML = iconHtml('download');
 /** Eject-from-tray icon for compact Unload affordances. */
 const UNLOAD_ICON_HTML = iconHtml('upload');
 
-let inFlight = false;
-let phase: ModelLoadUnloadPhase | null = null;
-/** #modelSelect option value for the row currently loading or unloading. */
-let targetSelectValue: string | null = null;
-
 /** True while a model load or unload request is running. */
 export function isModelLoadUnloadBusy(): boolean {
-  return inFlight;
+  return isModelLoadLockBusy();
 }
 
 /** Current load/unload phase when {@link isModelLoadUnloadBusy} is true. */
 export function getModelLoadUnloadPhase(): ModelLoadUnloadPhase | null {
-  return phase;
+  return getModelLoadLockPhase();
 }
 
 /** Option value for the in-flight load/unload action, when {@link isModelLoadUnloadBusy}. */
 export function getModelLoadUnloadTargetSelectValue(): string | null {
-  return targetSelectValue;
+  return getModelLoadLockTargetSelectValue();
+}
+
+/** Label when another subsystem holds the load lock (e.g. capability matrix). */
+export function getModelLoadUnloadHeldLabel(): string | null {
+  return modelLoadLockHeldLabel();
 }
 
 function emitModelLoadUnloadChanged(): void {
@@ -38,27 +48,29 @@ function emitModelLoadUnloadChanged(): void {
   document.dispatchEvent(new CustomEventCtor('minnow:model-load-unload-changed'));
 }
 
-/** Mark the start of a load/unload action. */
+/** Mark the start of a load/unload action from the model picker. */
 export function beginModelLoadUnload(
   nextPhase: ModelLoadUnloadPhase,
   selectValue?: string,
 ): void {
-  inFlight = true;
-  phase = nextPhase;
-  const trimmed = selectValue?.trim();
-  targetSelectValue = trimmed || null;
+  beginModelLoadLock('ui', nextPhase, selectValue);
   emitModelLoadUnloadChanged();
 }
 
-/** Mark the end of a load/unload action. */
+/** Mark the end of a load/unload action from the model picker. */
 export function endModelLoadUnload(): void {
-  inFlight = false;
-  phase = null;
-  targetSelectValue = null;
+  endModelLoadLock('ui');
   emitModelLoadUnloadChanged();
+}
+
+/** Which subsystem owns the load lock (for disabled-state copy). */
+export function getModelLoadUnloadLockOwner(): ReturnType<typeof getModelLoadLockOwner> {
+  return getModelLoadLockOwner();
 }
 
 function busyLabel(nextPhase: ModelLoadUnloadPhase | null): string {
+  const held = modelLoadLockHeldLabel();
+  if (held) return held;
   return nextPhase === 'unload' ? 'Unloading…' : 'Loading…';
 }
 
@@ -75,7 +87,7 @@ export function setModelLoadUnloadButtonBusy(
     '<span class="model-load-unload-spinner" aria-hidden="true"></span>' +
     `<span class="model-load-unload-label">${label}</span>`;
   btn.setAttribute('aria-label', label);
-  btn.title = 'Model action in progress…';
+  btn.title = modelLoadLockHeldLabel() ?? 'Model action in progress…';
 }
 
 /** Restore idle Load/Unload label and enabled state. */
@@ -127,7 +139,7 @@ export function setModelLoadUnloadIconButtonBusy(
   btn.setAttribute('aria-busy', 'true');
   btn.innerHTML = '<span class="model-load-unload-spinner" aria-hidden="true"></span>';
   btn.setAttribute('aria-label', label);
-  btn.title = 'Model action in progress…';
+  btn.title = modelLoadLockHeldLabel() ?? 'Model action in progress…';
 }
 
 /** Restore idle load/unload icon on a compact control. */

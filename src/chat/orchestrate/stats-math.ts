@@ -147,6 +147,17 @@ export function averageStatsSegments(pairs: StatsUsagePair[]): Stats {
   return out;
 }
 
+/** Roll up stats + usage across tool-loop rounds in one user turn. */
+export function aggregateTurnMetaSegments(
+  segments: StatsUsagePair[],
+): { stats: Stats; usage: Usage } {
+  if (segments.length === 0) return { stats: {}, usage: {} };
+  return {
+    stats: averageStatsSegments(segments),
+    usage: aggregateTurnUsageSegments(segments.map((segment) => segment.usage)),
+  };
+}
+
 /** Merge parent completion meta with sub-agent usage/stats slices. */
 export function aggregateOrchestrateTurnMeta(
   parent: FinalizedResponseMeta,
