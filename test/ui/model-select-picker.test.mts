@@ -366,4 +366,23 @@ describe('model picker truncation CSS (BUG-017)', () => {
     assert.ok(wrapBlock, 'expected .model-wrap rule');
     assert.match(wrapBlock[0], /max-width:\s*420px/);
   });
+
+  test('capability matrix rail constrains auxiliary model menu to field width', () => {
+    const capMatrixCss = readFileSync(
+      join(root, 'src/styles/settings-capability-matrix.css'),
+      'utf8',
+    );
+    const menuBlock = capMatrixCss.match(
+      /\.cap-matrix-roster__field \.model-select-menu\s*\{[^}]+\}/s,
+    );
+    assert.ok(menuBlock, 'expected scoped cap-matrix model menu rule');
+    assert.match(menuBlock[0], /width:\s*100%/);
+    assert.match(menuBlock[0], /max-width:\s*none/);
+
+    const labelBlock = capMatrixCss.match(
+      /\.cap-matrix-roster__field \.model-select-option-label\s*\{[^}]+\}/s,
+    );
+    assert.ok(labelBlock, 'expected scoped cap-matrix option label rule');
+    assert.match(labelBlock[0], /text-overflow:\s*ellipsis/);
+  });
 });

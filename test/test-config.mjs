@@ -268,6 +268,7 @@ export const SCOPED_SUITES = {
       'test/ui/benchmark-nav-persistence.test.mts',
       'test/ui/benchmark-suite-toggles.test.mts',
       'test/ui/benchmark-transcript-resolve.test.mts',
+      'test/ui/capability-cell-panel.test.mts',
       'test/ui/transcript-view.test.mts',
       'test/ui/benchmark-page-html.test.mjs',
       'test/benchmark-workspace/**/*.test.mjs',

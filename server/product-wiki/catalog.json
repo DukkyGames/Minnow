@@ -230,7 +230,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "0e0e0df55378d9a9831fa1c7d65337277106de128f6e20eb1bf7256679536dee"
+      "hash": "2612ef4a76510b8f00a29c9c3034f91381fe354de8341148d90f363bc346aa40"
     },
     {
       "path": "documentation/manual/apps/brain.md",
@@ -358,7 +358,7 @@
         "Related"
       ],
       "section": "Orchestrate",
-      "hash": "3da33119726a412cdc640ffcb239c218513b2be96a278785ea371549daf01994"
+      "hash": "dc410f79aa4080281ee325eeeb25a86b0e23eef2d0590ca15204be95516c37a1"
     },
     {
       "path": "documentation/manual/orchestrate/agents.md",

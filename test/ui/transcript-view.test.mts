@@ -62,6 +62,28 @@ describe('renderTranscriptView', () => {
     assert.equal(body.textContent?.includes('(empty assistant message)'), false);
   });
 
+  test('shows collapsible reasoning when prose and reasoning both exist', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+    renderTranscriptView(body, [
+      { role: 'user', content: 'Solve the bat-and-ball puzzle.' },
+      {
+        role: 'assistant',
+        content: 'The ball costs $0.05.',
+        reasoning_content: '1.10 - 1.00 = 0.10',
+      },
+    ]);
+
+    assert.equal(
+      body.querySelector('.transcript-view__assistant')?.textContent,
+      'The ball costs $0.05.',
+    );
+    assert.equal(
+      body.querySelector('.transcript-view__thinking-body')?.textContent,
+      '1.10 - 1.00 = 0.10',
+    );
+  });
+
   test('shows full multimodal user prompt text, not a single token', () => {
     setupDom();
     const body = document.getElementById('transcriptBody')!;

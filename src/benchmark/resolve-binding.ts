@@ -13,10 +13,26 @@ export interface BenchmarkBinding {
   provider: ProviderPublic;
 }
 
-/** Active top-bar model select value, matching tools/loop send path. */
-export function getActiveModelIdFromDom(): string {
+function readModelSelectFromDom(): string {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   return sel?.value?.trim() ?? '';
+}
+
+let benchmarkModelSource: () => string = readModelSelectFromDom;
+
+/** Override DOM read (Settings capability matrix / tests). */
+export function setBenchmarkModelSource(source: () => string): void {
+  benchmarkModelSource = source;
+}
+
+/** Reset to the default top-bar model select. */
+export function resetBenchmarkModelSource(): void {
+  benchmarkModelSource = readModelSelectFromDom;
+}
+
+/** Active top-bar model select value, matching tools/loop send path. */
+export function getActiveModelIdFromDom(): string {
+  return benchmarkModelSource();
 }
 
 /** Provider + model used for the next benchmark completion. */

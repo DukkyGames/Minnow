@@ -37,6 +37,7 @@ const SETTINGS_SECTION_IDS = [
   'editor',
   'webhooks',
   'diagnostics',
+  'capability-matrix',
   'board-testing',
 ];
 
@@ -64,6 +65,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsProvidersBody',
   'settingsEditorBody',
   'settingsDiagnosticsBody',
+  'settingsCapabilityMatrixBody',
   'settingsBoardTestingBody',
 ];
 
@@ -125,7 +127,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 29);
+    assert.equal(SETTINGS_SECTION_IDS.length, 30);
   });
 
   test('agents center mount exists in index.html', () => {
@@ -162,6 +164,14 @@ describe('settings page HTML', () => {
     assert.match(html, /data-area="diagnostics"/);
     assert.match(html, /data-settings-nav-area="diagnostics"/);
     assert.match(html, /Health &amp; diagnostics/);
+  });
+
+  test('capability matrix section exists under advanced in index.html', () => {
+    assert.match(html, /id="settingsSection-capability-matrix"/);
+    assert.match(html, /id="settingsCapabilityMatrixBody"/);
+    assert.match(html, /data-area="capability-matrix"/);
+    assert.match(html, /data-settings-nav-area="capability-matrix"/);
+    assert.match(html, /Capability matrix/);
   });
 
   test('board testing section exists under advanced in index.html', () => {

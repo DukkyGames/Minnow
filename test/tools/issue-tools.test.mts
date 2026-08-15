@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
-import { setIssuesStateForTests } from '../../src/state/issues-store.ts';
+import { setIssuesStateForTests, findIssueById } from '../../src/state/issues-store.ts';
 import {
   executeIssueTool,
   validateIssueAddArgs,
@@ -113,6 +113,58 @@ describe('issue-tools', () => {
     });
     const parsed = JSON.parse(again) as { codeRefs?: unknown[] };
     assert.equal(parsed.codeRefs?.length, 1);
+  });
+
+  test('issue_link validates and appends issue_refs bidirectionally', async () => {
+    await executeIssueTool('issue_add', { title: 'Prior grid bug', issue_id: 'ISS-1' });
+    await executeIssueTool('issue_add', { title: 'Grid header overlaps', issue_id: 'ISS-2' });
+
+    const badKind = validateIssueLinkArgs({
+      issue_id: 'ISS-2',
+      issue_refs: [{ issue_id: 'ISS-1', kind: 'depends-on' }],
+    });
+    assert.equal(badKind.ok, false);
+
+    const emptyRefs = validateIssueLinkArgs({
+      issue_id: 'ISS-2',
+      issue_refs: [],
+    });
+    assert.equal(emptyRefs.ok, false);
+
+    const stringRef = validateIssueLinkArgs({
+      issue_id: 'ISS-2',
+      issue_refs: ['ISS-1'],
+    });
+    assert.equal(stringRef.ok, true);
+
+    const linked = await executeIssueTool('issue_link', {
+      issue_id: 'ISS-2',
+      issue_refs: [{ issue_id: 'ISS-1', kind: 'blocks' }],
+    });
+    assert.match(linked, /"kind": "blocks"/);
+    assert.match(linked, /"issueId": "ISS-1"/);
+
+    const iss1 = findIssueById('ISS-1');
+    assert.ok(iss1?.issueRefs?.some((ref) => ref.issueId === 'ISS-2' && ref.kind === 'blocked-by'));
+
+    const duplicate = await executeIssueTool('issue_link', {
+      issue_id: 'ISS-2',
+      issue_refs: [{ issue_id: 'ISS-1', kind: 'blocks' }],
+    });
+    const parsedDuplicate = JSON.parse(duplicate) as { issueRefs?: unknown[] };
+    assert.equal(parsedDuplicate.issueRefs?.length, 1);
+
+    const selfLink = await executeIssueTool('issue_link', {
+      issue_id: 'ISS-2',
+      issue_refs: [{ issue_id: 'ISS-2', kind: 'related' }],
+    });
+    assert.match(selfLink, /no valid issue_refs/);
+
+    const unknown = await executeIssueTool('issue_link', {
+      issue_id: 'ISS-2',
+      issue_refs: [{ issue_id: 'ISS-999', kind: 'related' }],
+    });
+    assert.match(unknown, /no valid issue_refs/);
   });
 
   test('issue_delete removes one or many issues', async () => {

@@ -16,6 +16,7 @@ import { runSpeedSuite } from './suites/speed.ts';
 import { runToolsSuite } from './suites/tools.ts';
 import { runSkillsSuite } from './suites/skills.ts';
 import { runCodingSuite } from './suites/coding.ts';
+import { runCapabilityMatrixSuite } from './suites/capability-matrix.ts';
 import type {
   BenchmarkPreset,
   BenchmarkProgressEvent,
@@ -25,6 +26,7 @@ import type {
   SuiteId,
   SuiteResult,
 } from './types.ts';
+import { DEFAULT_PROBE_TIMEOUT_MS } from './types.ts';
 
 const QUICK_SUITES: SuiteId[] = ['capability', 'speed'];
 const FULL_SUITES: SuiteId[] = [
@@ -79,6 +81,7 @@ function headlineSpeedFromPriorSuites(priorSuites: SuiteResult[]): {
 
 function suiteLabel(suiteId: SuiteId): string {
   if (suiteId === 'capability') return 'Capability';
+  if (suiteId === 'capability-matrix') return 'Capability matrix';
   if (suiteId === 'speed') return 'Speed';
   if (suiteId === 'tools') return 'Tools';
   if (suiteId === 'skills') return 'Skills';
@@ -108,6 +111,8 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
     modelId: binding.modelId,
     localServer,
     signal,
+    perTestTimeoutMs: options.perTestTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
+    capabilityMatrix: options.capabilityMatrix,
     onTestStart: (meta) => {
       if (signal.aborted) return;
       onProgress?.({
@@ -141,6 +146,13 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
 
       if (suiteId === 'capability') {
         const suite = await runCapabilitySuite(ctx);
+        suiteResults.push(suite);
+        if (signal.aborted) break;
+        continue;
+      }
+
+      if (suiteId === 'capability-matrix') {
+        const suite = await runCapabilityMatrixSuite(ctx);
         suiteResults.push(suite);
         if (signal.aborted) break;
         continue;

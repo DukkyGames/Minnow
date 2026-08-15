@@ -49,6 +49,7 @@ import {
   getInstanceSnapshot,
 } from '../os/instances';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
+import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 import { fieldByKey } from './settings-catalog';
 import { resolveBrainMemoryRoute } from './brain-memory-routing';
 import { getCurrentRoute, launchApp, navigateToDesktop } from '../os/router';
@@ -300,9 +301,22 @@ export function setActiveSection(section: SettingsSectionId): void {
   setActiveArea(section);
 }
 
+function syncDevOnlySettingsNav(): void {
+  const showBoard = isBoardTestingSettingsVisible();
+  document
+    .querySelectorAll<HTMLElement>('[data-settings-nav-area="board-testing"]')
+    .forEach((el) => {
+      el.hidden = !showBoard;
+    });
+  const boardSection = document.getElementById('settingsSection-board-testing');
+  if (boardSection) boardSection.hidden = !showBoard;
+}
+
 function bindStaticSections(): void {
   if (staticBindingsDone) return;
   staticBindingsDone = true;
+
+  syncDevOnlySettingsNav();
 
   const tabs = document.querySelectorAll('[data-profile-tab]');
   tabs.forEach((tab) => {

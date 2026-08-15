@@ -61,6 +61,7 @@ export type SettingsSectionId =
   | 'webhooks'
   | 'voice'
   | 'diagnostics'
+  | 'capability-matrix'
   | 'board-testing'
   | 'about';
 
@@ -99,6 +100,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   webhooks: 'Webhooks',
   voice: 'Voice',
   diagnostics: 'Health & diagnostics',
+  'capability-matrix': 'Capability matrix',
   'board-testing': 'Board testing',
   about: 'About',
 };
@@ -139,9 +141,11 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    sections: isBoardTestingSettingsVisible()
-      ? ['diagnostics', 'board-testing']
-      : ['diagnostics'],
+    sections: [
+      'diagnostics',
+      'capability-matrix',
+      ...(isBoardTestingSettingsVisible() ? (['board-testing'] as const) : []),
+    ],
   },
 ];
 

@@ -6,8 +6,8 @@ import { getActiveProvider } from '../../providers/store';
 import { fetchModelsForProvider } from '../../providers/fetch-models';
 import { isVisionModel } from '../../providers/vision-model.ts';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
-import { buildMultimodalProbeMessages } from '../fixtures/multimodal-probe.ts';
 import { hasNonEmptyCompletion, streamCompletionTestDetails } from '../completion-valid.ts';
+import { runCapMultimodalProbe } from './cap-multimodal-probe.ts';
 import { computeSuiteResultStats } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
@@ -301,14 +301,8 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   } else {
     try {
-      const stream = await runOneShot({
-        providerId: ctx.providerId,
-        modelId: ctx.modelId,
-        signal: ctx.signal,
-        messages: buildMultimodalProbeMessages(),
-      });
+      const { oneShot: stream, scored } = await runCapMultimodalProbe(ctx);
       const multimodalPassed = hasNonEmptyCompletion(stream.text);
-      const scored = scoreMultimodalProbe(stream.text);
       reportTest(ctx, tests,
         buildTestResult(
           result(

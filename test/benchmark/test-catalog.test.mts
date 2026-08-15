@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  ALL_BENCHMARK_SUITE_IDS,
   formatTestCardDescription,
   resolveTestDescription,
   SUITE_INTROS,
@@ -46,6 +47,18 @@ describe('resolveTestDescription', () => {
     assert.ok(text.length > desc.purpose.length);
   });
 
+  test('cap-matrix entry resolves from catalog metadata', () => {
+    const desc = resolveTestDescription(
+      'cap-matrix/core-streaming',
+      'capability-matrix',
+      'Streaming',
+    );
+    assert.ok(desc);
+    assert.equal(desc.suite, 'capability-matrix');
+    assert.match(desc.purpose, /streaming/i);
+    assert.ok(desc.passCriteria.trim().length > 10);
+  });
+
   test('unknown testId returns null', () => {
     assert.equal(resolveTestDescription('not-a-real-test', 'capability', 'Nope'), null);
   });
@@ -53,8 +66,7 @@ describe('resolveTestDescription', () => {
 
 describe('SUITE_INTROS', () => {
   test('every suite has intro copy', () => {
-    const suites = ['capability', 'speed', 'tools', 'skills', 'coding'] as const;
-    for (const id of suites) {
+    for (const id of ALL_BENCHMARK_SUITE_IDS) {
       assert.ok(SUITE_INTROS[id].trim().length > 20, id);
     }
   });

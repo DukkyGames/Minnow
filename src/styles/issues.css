@@ -1379,6 +1379,40 @@ button.issues-detail__activity-chip {
   min-height: 28px;
 }
 
+.issues-detail__related-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issues-detail__related-chip {
+  display: flex;
+  align-items: center;
+}
+
+.issues-detail__related-chip-btn {
+  appearance: none;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: var(--mn-bg-subtle);
+  color: var(--mn-accent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.3;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.issues-detail__related-chip-btn:hover {
+  background: var(--mn-bg-hover);
+}
+
 .issues-detail__git-commit-btn {
   display: flex;
   gap: 8px;
