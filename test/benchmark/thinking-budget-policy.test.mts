@@ -164,7 +164,9 @@ describe('cumulative probe budget', () => {
     assert.equal(router.thinkingBudgetExceeded, true);
   });
 
-  test('chat-style routing still resets per thinking block', () => {
+  test('chat-style routing also spends the turn total across think→prose→think', () => {
+    // endSession banks the phase instead of wiping the count, so a second block
+    // that would fit on its own still trips the probe-wide ceiling.
     const tracker = new ThinkingBudgetTracker(1000);
     const router = new BenchmarkStreamContentRouter(MODEL, tracker);
 
@@ -172,6 +174,6 @@ describe('cumulative probe budget', () => {
     router.ingestContentDelta('a partial answer');
     router.ingestReasoningDelta(reasoning(600, 'bravo'));
 
-    assert.equal(router.thinkingBudgetExceeded, false);
+    assert.equal(router.thinkingBudgetExceeded, true);
   });
 });

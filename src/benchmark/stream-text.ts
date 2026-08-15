@@ -70,9 +70,8 @@ export class BenchmarkStreamContentRouter {
       thinkingModel: modelLikelyUsesInlineThinking(modelId),
     });
     this.thinkingBudgetTracker = thinkingBudgetTracker ?? null;
-    // Chat resets the count when prose starts, because a human is watching each block.
-    // A probe's budget spans the whole probe, so a model that alternates think→text→think
-    // must not win a fresh allowance per block.
+    // The tracker already banks across phases (one budget per turn/probe). Skipping
+    // endSession keeps the tripped flag set across prose instead of starting a new phase.
     this.cumulativeBudget = options.cumulativeBudget === true;
   }
 
