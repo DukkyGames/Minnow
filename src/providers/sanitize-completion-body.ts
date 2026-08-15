@@ -52,6 +52,22 @@ function modelRejectsTemperature(modelId: string): boolean {
   return id.includes('gpt-5');
 }
 
+/** Drop Minnow-only message fields that providers reject as unknown. */
+function stripInternalApiMessageFields(
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(body.messages)) return body;
+  return {
+    ...body,
+    messages: body.messages.map((raw) => {
+      if (!raw || typeof raw !== 'object') return raw;
+      const msg = { ...(raw as Record<string, unknown>) };
+      delete msg.toolImageFollowUp;
+      return msg;
+    }),
+  };
+}
+
 /**
  * Normalize a chat completion body for the target provider.
  * openai-v1: drop LM Studio sampler fields, optional thinking, map max_tokens when needed.
@@ -65,7 +81,7 @@ export function sanitizeCompletionBodyForProvider(
 ): Record<string, unknown> {
   const apiKind = modelApi ?? modelCapabilities?.api ?? resolvedApiForModel(provider);
   if (apiKind === 'anthropic-v1') {
-    const next = { ...body };
+    const next = stripInternalApiMessageFields({ ...body });
     if (anthropicThinkingEnabled(next)) {
       delete next.temperature;
       delete next.top_p;
@@ -75,10 +91,10 @@ export function sanitizeCompletionBodyForProvider(
   }
 
   if (apiKind !== 'openai-v1') {
-    return body;
+    return stripInternalApiMessageFields(body);
   }
 
-  const next = { ...body };
+  const next = stripInternalApiMessageFields({ ...body });
   delete next.top_k;
   delete next.min_p;
   delete next.repetition_penalty;

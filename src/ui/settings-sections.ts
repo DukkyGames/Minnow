@@ -109,6 +109,11 @@ import { renderAboutSettingsSection } from './settings-about';
 import { renderDiagnosticsSettingsSection } from './settings-diagnostics';
 import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 import { renderBoardTestingSettingsSection } from './settings-board-testing';
+import { renderCapabilityMatrixSettingsSection } from './settings-capability-matrix';
+import {
+  beginAsyncSectionRender,
+  isAsyncSectionRenderStale,
+} from './settings-section-render-guard';
 import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderAppsSettingsSection } from './settings-apps';
 import { renderAgentCenterPanel } from './settings-agent-center';
@@ -1401,22 +1406,6 @@ async function renderWatchdogSection(): Promise<void> {
 
 let toolsSectionInitialized = false;
 
-const asyncSectionRenderGeneration: Partial<Record<SettingsSectionId, number>> =
-  {};
-
-function beginAsyncSectionRender(section: SettingsSectionId): number {
-  const next = (asyncSectionRenderGeneration[section] ?? 0) + 1;
-  asyncSectionRenderGeneration[section] = next;
-  return next;
-}
-
-function isAsyncSectionRenderStale(
-  section: SettingsSectionId,
-  generation: number,
-): boolean {
-  return asyncSectionRenderGeneration[section] !== generation;
-}
-
 async function renderToolsSection(): Promise<void> {
   const generation = beginAsyncSectionRender('tools');
   const mount = clearMount('settingsToolsBody');
@@ -2321,6 +2310,9 @@ export async function refreshSettingsSection(
       }
       await renderBoardTestingSettingsSection();
       break;
+    case 'capability-matrix':
+      await renderCapabilityMatrixSettingsSection();
+      break;
     case 'providers':
       refreshProvidersBanner();
       await listProviders();
@@ -2396,3 +2388,5 @@ export async function refreshSettingsSection(
       break;
   }
 }
+
+export { beginAsyncSectionRender, isAsyncSectionRenderStale } from './settings-section-render-guard';

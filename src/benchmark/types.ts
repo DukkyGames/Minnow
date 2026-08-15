@@ -3,11 +3,14 @@
  */
 
 import type { ApiMessage, Stats, Usage } from '../types.ts';
+import type { CapabilityVerdict, CapabilityGroupId } from './capabilities/types.ts';
+import type { CapabilityMatrixProbeWave } from './capabilities/probe-wave-ids.ts';
 import type { BenchmarkBinding } from './resolve-binding.ts';
 
 /** Suite identifiers for the benchmark runner. */
 export type SuiteId =
   | 'capability'
+  | 'capability-matrix'
   | 'speed'
   | 'tools'
   | 'skills'
@@ -36,11 +39,31 @@ export interface TestCase {
   skipWhen?: (ctx: BenchmarkRunContext) => string | null;
 }
 
+/** Capability-matrix suite options (Settings bench / future campaign hooks). */
+export interface CapabilityMatrixRunOptions {
+  /** When true, side-effect tools execute via the benchmark sandbox; default false (emit-only stubs). */
+  allowSideEffects?: boolean;
+  /** When set, only capabilities in these spreadsheet group bands run. */
+  groupIds?: CapabilityGroupId[];
+  /** When set, only auto probes in these rollout waves run (2b–2f). */
+  probeWaves?: CapabilityMatrixProbeWave[];
+  /** Skip auto rows that already have pass/partial/fail on this target (see skipCapabilityIds). */
+  skipScored?: boolean;
+  /** Capability ids to skip for the current target when skipScored is true. */
+  skipCapabilityIds?: readonly string[];
+}
+
+/** Default per-probe wall-clock budget (capability matrix tool chains share one budget). */
+export const DEFAULT_PROBE_TIMEOUT_MS = 300_000;
+
 export interface BenchmarkRunContext {
   providerId: string;
   modelId: string;
   localServer: boolean;
   signal: AbortSignal;
+  /** Per-probe timeout; defaults to {@link DEFAULT_PROBE_TIMEOUT_MS}. */
+  perTestTimeoutMs?: number;
+  capabilityMatrix?: CapabilityMatrixRunOptions;
   /**
    * Set by `runBenchmark` to forward each starting probe to `onProgress` as `{ type: 'test-start' }`.
    * Suites should call `announceTestStart` immediately before async work on a probe.
@@ -65,6 +88,8 @@ export interface TestResult {
   ttftMs?: number;
   tokPerSec?: number;
   score: number;
+  /** Capability matrix cell verdict (pass / partial / fail / n-a / untested). */
+  verdict?: CapabilityVerdict;
   details?: string;
   /** Optional full conversation for this probe (API message shape). */
   transcript?: ApiMessage[];
@@ -103,6 +128,12 @@ export interface BenchmarkRun {
   preset: BenchmarkPreset;
   provider: { id: string; baseUrl: string };
   model: { id: string; contextLength?: number };
+  /**
+   * Campaign roster row this run belongs to (`providerId::modelId`). Stamped by the
+   * campaign runner because `provider`/`model` hold the resolved upstream binding,
+   * which no longer matches the roster row for served My Models targets.
+   */
+  targetKey?: string;
   totalScore: number;
   headlineTokPerSec: number;
   headlineTtftMs: number;
@@ -119,6 +150,8 @@ export interface LlmTurnTiming {
   usage: Usage;
   stats: Stats;
   finishReason?: string;
+  /** Number of SSE/stream chunks parsed for this turn (capability streaming probes). */
+  streamChunkCount?: number;
 }
 
 export type BenchmarkProgressEvent =
@@ -153,4 +186,5 @@ export interface RunBenchmarkOptions {
   saveToHistory?: boolean;
   /** Per-test timeout for tools suite (BUG-006 mitigation). */
   perTestTimeoutMs?: number;
+  capabilityMatrix?: CapabilityMatrixRunOptions;
 }

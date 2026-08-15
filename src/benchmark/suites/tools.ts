@@ -61,7 +61,7 @@ async function runSingleToolProbe(
       signal: ctx.signal,
       messages: [{ role: 'user', content: fixture.prompt }],
       tools: [tool.definition],
-      maxToolRounds: 2,
+      maxToolRounds: 4,
       executeToolFn,
     });
 

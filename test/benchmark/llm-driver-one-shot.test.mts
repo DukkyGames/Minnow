@@ -29,4 +29,30 @@ describe('appendAssistantToMessages', () => {
     assert.ok(assistant && 'tool_calls' in assistant);
     assert.equal(assistant.tool_calls?.[0]?.function.name, 'read_file');
   });
+
+  test('stores reasoning_content separately from prose', () => {
+    const messages = appendAssistantToMessages(
+      [{ role: 'user', content: 'Solve it.' }],
+      'The ball costs $0.05.',
+      [],
+      '1.10 - 1.00 = 0.10',
+    );
+
+    const assistant = messages[1];
+    assert.equal(assistant?.content, 'The ball costs $0.05.');
+    assert.equal(assistant?.reasoning_content, '1.10 - 1.00 = 0.10');
+  });
+
+  test('uses reasoning_content alone when prose is empty', () => {
+    const messages = appendAssistantToMessages(
+      [{ role: 'user', content: 'Count to three.' }],
+      '',
+      [],
+      'One, two, three.',
+    );
+
+    const assistant = messages[1];
+    assert.equal(assistant?.content, null);
+    assert.equal(assistant?.reasoning_content, 'One, two, three.');
+  });
 });

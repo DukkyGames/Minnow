@@ -1,31 +1,27 @@
 /**
- * Benchmark completion prompts — steer models to answer in `content`, not reasoning.
+ * Benchmark completion message helpers.
  */
 
 import { apiMessageContentToText } from '../api/message-content.ts';
 import type { ApiMessage } from '../types.ts';
 
-const BENCHMARK_DIRECT_REPLY_SYSTEM =
-  'Put your complete final answer in the main assistant message content only. ' +
-  'Do not use a separate reasoning, thinking, or chain-of-thought channel.';
-
 export interface ApplyBenchmarkSystemPromptOptions {
-  /** Extra system line (e.g. one-shot retry after reasoning-only stream). */
+  /** Optional extra system line merged into the first system message. */
   extraSystem?: string;
 }
 
 /**
- * Prepend/merge benchmark system instructions so scoring sees `content`, not thoughts.
+ * Merge optional extra system text into messages. No default benchmark preamble —
+ * capability probes use mode lite prompts only.
  */
 export function applyBenchmarkSystemPrompt(
   messages: ApiMessage[],
   options: ApplyBenchmarkSystemPromptOptions = {},
 ): ApiMessage[] {
-  const lines = [BENCHMARK_DIRECT_REPLY_SYSTEM];
-  if (options.extraSystem?.trim()) {
-    lines.push(options.extraSystem.trim());
+  const extra = options.extraSystem?.trim();
+  if (!extra) {
+    return messages.map((m) => ({ ...m }));
   }
-  const prefix = lines.join('\n\n');
 
   const out = messages.map((m) => ({ ...m }));
   const systemIdx = out.findIndex((m) => m.role === 'system');
@@ -33,11 +29,11 @@ export function applyBenchmarkSystemPrompt(
     const existing = apiMessageContentToText(out[systemIdx]!.content);
     out[systemIdx] = {
       role: 'system',
-      content: existing ? `${prefix}\n\n${existing}` : prefix,
+      content: existing ? `${extra}\n\n${existing}` : extra,
     };
     return out;
   }
 
-  out.unshift({ role: 'system', content: prefix });
+  out.unshift({ role: 'system', content: extra });
   return out;
 }

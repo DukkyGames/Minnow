@@ -9,20 +9,30 @@ import {
   collectIssues,
   deleteIssue,
   deleteIssues,
+  findIssueById,
   getIssuesSnapshot,
   getNextIssueIdPreview,
   getWorkspaceProjectKey,
   isIssuePriority,
+  isIssueRelationKind,
   isIssueStatus,
   isIssueType,
   normalizeIssueCodeRef,
   normalizeIssueGitLink,
+  normalizeIssueIssueRef,
   updateIssue,
 } from '../state/issues-store.ts';
 import { formatAllowedIds } from '../issues/taxonomy.ts';
 import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
-import type { IssueCodeRef, IssueGitLink, IssuePriority, IssueStatus, IssueType } from '../types.ts';
+import type {
+  IssueCodeRef,
+  IssueGitLink,
+  IssueIssueRef,
+  IssuePriority,
+  IssueStatus,
+  IssueType,
+} from '../types.ts';
 
 export type ValidateIssueAddResult =
   | {
@@ -176,6 +186,7 @@ export type ValidateIssueLinkResult =
       codeRefs: IssueCodeRef[];
       gitLinks: Array<Omit<IssueGitLink, 'addedAt'> & { addedAt?: number }>;
       chatId?: string;
+      issueRefs: IssueIssueRef[];
     }
   | { ok: false; error: string };
 
@@ -220,6 +231,39 @@ function parseGitLinkArg(
     title: typeof obj.title === 'string' ? obj.title : undefined,
   });
   return normalized;
+}
+
+function parseIssueRefArg(raw: unknown): IssueIssueRef | null {
+  if (typeof raw === 'string') {
+    return normalizeIssueIssueRef(raw);
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const issueId =
+    typeof obj.issue_id === 'string'
+      ? obj.issue_id
+      : typeof obj.issueId === 'string'
+        ? obj.issueId
+        : '';
+  if (!issueId.trim()) return null;
+  const kindRaw = typeof obj.kind === 'string' ? obj.kind.trim() : 'related';
+  if (!isIssueRelationKind(kindRaw)) return null;
+  return normalizeIssueIssueRef({
+    issueId: issueId.trim(),
+    kind: kindRaw,
+    note: typeof obj.note === 'string' ? obj.note : undefined,
+  });
+}
+
+/** Count issue refs that can be applied (target exists, not a self-link). */
+function countApplicableIssueRefs(sourceId: string, refs: IssueIssueRef[]): number {
+  let count = 0;
+  for (const ref of refs) {
+    if (ref.issueId === sourceId) continue;
+    if (!findIssueById(ref.issueId)) continue;
+    count += 1;
+  }
+  return count;
 }
 
 /** Validate issue_link arguments (append-only; exported for tests). */
@@ -276,10 +320,53 @@ export function validateIssueLinkArgs(args: Record<string, unknown>): ValidateIs
         ? args.chatId.trim()
         : '';
 
-  if (codeRefs.length === 0 && gitLinks.length === 0 && !chatId) {
+  const issueRefs: IssueIssueRef[] = [];
+  const issueRaw = args.issue_refs ?? args.issueRefs;
+  if (issueRaw !== undefined) {
+    if (!Array.isArray(issueRaw)) {
+      return { ok: false, error: 'Error: issue_refs must be an array' };
+    }
+    for (const item of issueRaw) {
+      if (typeof item === 'string') {
+        const ref = normalizeIssueIssueRef(item);
+        if (!ref) {
+          return { ok: false, error: 'Error: each issue_ref must be an issue id or object' };
+        }
+        issueRefs.push(ref);
+        continue;
+      }
+      if (!item || typeof item !== 'object') {
+        return { ok: false, error: 'Error: each issue_ref must be an issue id or object' };
+      }
+      const obj = item as Record<string, unknown>;
+      const targetId =
+        typeof obj.issue_id === 'string'
+          ? obj.issue_id.trim()
+          : typeof obj.issueId === 'string'
+            ? obj.issueId.trim()
+            : '';
+      if (!targetId) {
+        return { ok: false, error: 'Error: each issue_ref object needs issue_id' };
+      }
+      const kindRaw = typeof obj.kind === 'string' ? obj.kind.trim() : 'related';
+      if (typeof obj.kind === 'string' && obj.kind.trim() && !isIssueRelationKind(kindRaw)) {
+        return {
+          ok: false,
+          error: `Error: issue_ref kind must be one of: related, blocks, blocked-by, duplicate-of, parent, sub-issue`,
+        };
+      }
+      const ref = parseIssueRefArg(item);
+      if (!ref) {
+        return { ok: false, error: 'Error: each issue_ref must be an issue id or object' };
+      }
+      issueRefs.push(ref);
+    }
+  }
+
+  if (codeRefs.length === 0 && gitLinks.length === 0 && !chatId && issueRefs.length === 0) {
     return {
       ok: false,
-      error: 'Error: issue_link requires code_refs, git_links, and/or chat_id',
+      error: 'Error: issue_link requires code_refs, git_links, chat_id, and/or issue_refs',
     };
   }
 
@@ -289,6 +376,7 @@ export function validateIssueLinkArgs(args: Record<string, unknown>): ValidateIs
     codeRefs,
     gitLinks,
     chatId: chatId || undefined,
+    issueRefs,
   };
 }
 
@@ -329,10 +417,17 @@ export async function executeIssueTool(
   if (name === 'issue_link') {
     const validated = validateIssueLinkArgs(args);
     if (validated.ok === false) return validated.error;
+    if (
+      validated.issueRefs.length > 0 &&
+      countApplicableIssueRefs(validated.issueId, validated.issueRefs) === 0
+    ) {
+      return `Error: no valid issue_refs for "${validated.issueId}" (unknown target or self-link)`;
+    }
     const updated = appendIssueLinks(validated.issueId, {
       codeRefs: validated.codeRefs,
       gitLinks: validated.gitLinks,
       chatId: validated.chatId,
+      issueRefs: validated.issueRefs,
     });
     if (!updated) return `Error: unknown issue_id "${validated.issueId}"`;
     return JSON.stringify(updated, null, 2);

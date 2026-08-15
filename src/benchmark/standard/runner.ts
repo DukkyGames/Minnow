@@ -31,6 +31,8 @@ function responseTextForScoring(turn: {
 
 export interface RunStandardPackOptions {
   target: BenchmarkTarget;
+  /** Roster identity for cells — defaults to `target` (differs once a My Models row is served). */
+  targetKey?: string;
   packId: string;
   tier: BenchmarkTier;
   signal: AbortSignal;
@@ -43,9 +45,10 @@ async function runOneStandardItem(
   tier: BenchmarkTier,
   item: StandardBenchmarkItem,
   signal: AbortSignal,
+  targetKeyOverride?: string,
 ): Promise<BenchmarkCellResult> {
   const pack = getStandardPack(packId, tier);
-  const targetKey = targetKeyFromTarget(target);
+  const targetKey = targetKeyOverride?.trim() || targetKeyFromTarget(target);
   const t0 = performance.now();
   let response = '';
   let ttftMs: number | undefined;
@@ -153,6 +156,7 @@ export async function runStandardPackForTarget(
       options.tier,
       item,
       options.signal,
+      options.targetKey,
     );
     results.push(cell);
     options.onItemDone?.(cell);

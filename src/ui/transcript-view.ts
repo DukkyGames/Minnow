@@ -76,10 +76,8 @@ function appendUserTranscriptRow(body: HTMLElement, content: ApiMessageContent):
   body.appendChild(wrap);
 }
 
-/** Assistant display text from `content` or provider reasoning fields. */
-function assistantTranscriptProse(msg: Record<string, unknown>): string {
-  const fromContent = apiMessageContentToText(msg.content as ApiMessageContent).trim();
-  if (fromContent) return fromContent;
+/** Reasoning channel text stored on an assistant message. */
+function assistantTranscriptReasoning(msg: Record<string, unknown>): string {
   if (typeof msg.reasoning === 'string' && msg.reasoning.trim()) {
     return msg.reasoning.trim();
   }
@@ -89,18 +87,53 @@ function assistantTranscriptProse(msg: Record<string, unknown>): string {
   return '';
 }
 
+/** Assistant display text from `content` or provider reasoning fields. */
+function assistantTranscriptProse(msg: Record<string, unknown>): string {
+  const fromContent = apiMessageContentToText(msg.content as ApiMessageContent).trim();
+  if (fromContent) return fromContent;
+  return assistantTranscriptReasoning(msg);
+}
+
+/** Collapsible reasoning block below assistant prose. */
+function appendAssistantReasoningBlock(body: HTMLElement, reasoning: string): void {
+  const thoughts = document.createElement('details');
+  thoughts.className = 'transcript-view__thinking';
+  const summary = document.createElement('summary');
+  summary.textContent = STREAM_LABEL_THINKING;
+  const pre = document.createElement('pre');
+  pre.className = 'transcript-view__thinking-body';
+  pre.textContent = reasoning;
+  thoughts.appendChild(summary);
+  thoughts.appendChild(pre);
+  body.appendChild(thoughts);
+}
+
 /** Render assistant prose (string or multimodal-shaped content). */
 function appendAssistantTranscriptRow(body: HTMLElement, msg: Record<string, unknown>): void {
-  const prose = assistantTranscriptProse(msg);
-  if (!prose) return;
-  const row = document.createElement('div');
-  row.className = 'transcript-view__assistant';
-  row.textContent = prose;
-  body.appendChild(row);
+  const prose = apiMessageContentToText(msg.content as ApiMessageContent).trim();
+  const reasoning = assistantTranscriptReasoning(msg);
+
+  if (prose) {
+    const row = document.createElement('div');
+    row.className = 'transcript-view__assistant';
+    row.textContent = prose;
+    body.appendChild(row);
+    if (reasoning && reasoning !== prose) {
+      appendAssistantReasoningBlock(body, reasoning);
+    }
+    return;
+  }
+
+  if (reasoning) {
+    const row = document.createElement('div');
+    row.className = 'transcript-view__assistant';
+    row.textContent = reasoning;
+    body.appendChild(row);
+  }
 }
 
 /** Build the animated dots + label row used during live sub-agent turns. */
-function createTranscriptStreamStatus(
+export function createTranscriptStreamStatus(
   phase: 'thinking' | 'generating',
 ): HTMLElement {
   const statusEl = document.createElement('div');

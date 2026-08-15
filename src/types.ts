@@ -166,6 +166,8 @@ export interface ToolImageAttachment {
   url: string;
   mime: 'image/png';
   alt?: string;
+  /** PNG data URL so VLMs can see the pixels (the `url` path is UI-only). */
+  dataUrl?: string;
 }
 
 /** How line stats were produced (UI tooltips / backfill accuracy). */
@@ -271,6 +273,11 @@ export interface ApiSystemMessage {
 export interface ApiUserMessage {
   role: 'user';
   content: ApiMessageContent;
+  /**
+   * Ephemeral screenshot bytes after a tool result (not a history row).
+   * Stripped before the provider POST.
+   */
+  toolImageFollowUp?: true;
 }
 
 export interface ApiAssistantMessage {
@@ -822,6 +829,23 @@ export interface IssueGitLink {
   addedAt: number;
 }
 
+/** Typed relation between two issues (bidirectional via inverse kind on the target). */
+export type IssueRelationKind =
+  | 'related'
+  | 'blocks'
+  | 'blocked-by'
+  | 'duplicate-of'
+  | 'parent'
+  | 'sub-issue';
+
+/** Link from one issue card to another with a relation kind. */
+export interface IssueIssueRef {
+  issueId: string;
+  kind: IssueRelationKind;
+  note?: string;
+  addedAt: number;
+}
+
 /** One issue card in the Issues app (Linear-style tracker). */
 export interface IssueCard {
   id: string;
@@ -836,6 +860,7 @@ export interface IssueCard {
   updatedAt: number;
   codeRefs?: IssueCodeRef[];
   gitLinks?: IssueGitLink[];
+  issueRefs?: IssueIssueRef[];
   chatIds?: string[];
   planPath?: string;
   boardChatId?: string;

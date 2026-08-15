@@ -9,6 +9,7 @@ import {
   estimateTokensFromText,
 } from './prompts/token-estimate-core';
 import type { ApiMessage, ContentPart } from '../types';
+import { isToolImageFollowUpMessage } from './tool-image-follow-up';
 
 import type { ArchiveConfig } from './archive/types';
 
@@ -162,7 +163,8 @@ export function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnS
   const turns: TurnSlice[] = [];
   let i = systemEnd;
   while (i < messages.length) {
-    if (messages[i].role !== 'user') {
+    // Screenshot follow-ups are user-shaped but belong to the preceding tool unit.
+    if (messages[i].role !== 'user' || isToolImageFollowUpMessage(messages[i])) {
       const end = unitEndAt(messages, i);
       turns.push({ start: i, end });
       i = end;
@@ -172,7 +174,10 @@ export function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnS
     // tool loop (orchestrate board tasks, sub-agents, headless runs).
     turns.push({ start: i, end: i + 1 });
     i += 1;
-    while (i < messages.length && messages[i].role !== 'user') {
+    while (
+      i < messages.length &&
+      (messages[i].role !== 'user' || isToolImageFollowUpMessage(messages[i]))
+    ) {
       const end = unitEndAt(messages, i);
       turns.push({ start: i, end });
       i = end;
@@ -204,6 +209,8 @@ function unitEndAt(messages: ApiMessage[], start: number): number {
   if (msg.role === 'assistant' && msg.tool_calls?.length) {
     let end = start + 1;
     while (end < messages.length && messages[end].role === 'tool') end += 1;
+    // Keep screenshot pixels bound to the tool-call/tool-result pair.
+    while (end < messages.length && isToolImageFollowUpMessage(messages[end])) end += 1;
     return end;
   }
   return start + 1;
@@ -239,6 +246,12 @@ function sanitizeToolPairing(messages: ApiMessage[]): ApiMessage[] {
     }
     if (msg.role === 'tool') {
       if (!requestedIds.has(msg.tool_call_id)) continue;
+      out.push(msg);
+      continue;
+    }
+    if (isToolImageFollowUpMessage(msg)) {
+      const prev = out[out.length - 1];
+      if (prev?.role !== 'tool') continue;
       out.push(msg);
       continue;
     }

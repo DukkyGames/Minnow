@@ -31,7 +31,10 @@ export async function refreshBenchmarkRosterPicker(): Promise<void> {
   const previousProvider = providerSelect.value || active?.providerId || '';
   const previousModel = modelSelect.value || active?.modelId || '';
 
-  await fillProviderSelect(providerSelect, previousProvider, { includeEmptyOption: false });
+  await fillProviderSelect(providerSelect, previousProvider, {
+    includeEmptyOption: false,
+    includeLibraryProvider: true,
+  });
 
   const providerId =
     providerSelect.value || providerSelect.options[0]?.value?.trim() || '';

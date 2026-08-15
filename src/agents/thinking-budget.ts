@@ -31,6 +31,11 @@ export class ThinkingBudgetTracker {
     return this._exceeded;
   }
 
+  /** Configured ceiling, so callers can mirror it into the outbound request body. */
+  get limitTokens(): number {
+    return this.limit;
+  }
+
   get sessionText(): string {
     return this.accumulatedText;
   }

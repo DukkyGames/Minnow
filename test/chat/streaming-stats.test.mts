@@ -86,7 +86,6 @@ describe('buildLiveStreamUsage', () => {
 
 describe('buildLiveStreamStats', () => {
   test('computes tok/s during an in-flight stream', () => {
-    const usage = { completion_tokens: 100 };
     const stats = buildLiveStreamStats(
       {
         streamMeta: {},
@@ -94,7 +93,6 @@ describe('buildLiveStreamStats', () => {
         tFirst: 0,
         partialText: 'x'.repeat(400),
       },
-      usage,
       2000,
     );
 
@@ -102,6 +100,30 @@ describe('buildLiveStreamStats', () => {
     assert.ok(stats.generation_time != null && stats.generation_time > 0);
     assert.ok(stats.tokens_per_second != null && stats.tokens_per_second > 0);
     assert.ok(stats.tokens_per_second! < 200);
+  });
+
+  test('prior segments increase token totals but do not inflate live tok/s', () => {
+    const stats = buildLiveStreamStats(
+      {
+        streamMeta: {
+          usage: { completion_tokens: 40 },
+        },
+        t0: 0,
+        tFirst: 0,
+        partialText: '',
+        priorSegments: [{ completion_tokens: 200 }],
+        priorStatsSegments: [
+          {
+            stats: { tokens_per_second: 10, generation_time: 20 },
+            usage: { completion_tokens: 200 },
+          },
+        ],
+      },
+      4000,
+    );
+
+    assert.ok(stats.tokens_per_second != null && stats.tokens_per_second < 15);
+    assert.ok(stats.tokens_per_second! > 8);
   });
 });
 

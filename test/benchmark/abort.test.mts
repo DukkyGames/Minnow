@@ -6,6 +6,7 @@ import {
   isAbortError,
   raceWithAbort,
   rethrowIfAborted,
+  withBenchmarkTimeout,
 } from '../../src/benchmark/abort.ts';
 
 describe('benchmark abort helpers', () => {
@@ -44,5 +45,24 @@ describe('benchmark abort helpers', () => {
     const raced = raceWithAbort(controller.signal, pending);
     controller.abort();
     await assert.rejects(raced, (err: unknown) => isAbortError(err));
+  });
+
+  test('withBenchmarkTimeout rejects with timeout message when work hangs', async () => {
+    const controller = new AbortController();
+    const pending = withBenchmarkTimeout(controller.signal, 50, () => new Promise(() => {
+      /* never settles */
+    }));
+    await assert.rejects(pending, (err: unknown) => {
+      return err instanceof Error && /timed out after 0s/i.test(err.message);
+    });
+  });
+
+  test('withBenchmarkTimeout propagates user abort', async () => {
+    const controller = new AbortController();
+    const pending = withBenchmarkTimeout(controller.signal, 5000, () => new Promise(() => {
+      /* never settles */
+    }));
+    controller.abort();
+    await assert.rejects(pending, (err: unknown) => isAbortError(err));
   });
 });
