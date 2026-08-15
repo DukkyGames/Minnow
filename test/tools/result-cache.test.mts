@@ -113,6 +113,88 @@ describe('invalidation', () => {
     assert.equal(getCachedResult(scope, key), undefined);
   });
 
+  test('execute_command busts cached file and git reads', () => {
+    const scope = testScope();
+    const readKey = buildCacheKey(
+      'read_file',
+      normalizeToolArgs('read_file', { path: 'src/foo.ts' }),
+    );
+    const gitKey = buildCacheKey('git_status', normalizeToolArgs('git_status', {}));
+    setCachedResult(scope, readKey, { content: 'pre-format' }, getCachePolicyForTool('read_file'));
+    setCachedResult(scope, gitKey, { content: 'stale' }, getCachePolicyForTool('git_status'));
+
+    invalidateAfterTool(
+      scope,
+      'execute_command',
+      { command: 'npx prettier --write src/foo.ts' },
+      { content: 'done' },
+    );
+
+    assert.equal(getCachedResult(scope, readKey), undefined);
+    assert.equal(getCachedResult(scope, gitKey), undefined);
+  });
+
+  for (const shellTool of ['run_javascript', 'run_python', 'start_background_command']) {
+    test(`${shellTool} busts cached reads`, () => {
+      const scope = testScope();
+      const readKey = buildCacheKey(
+        'read_file',
+        normalizeToolArgs('read_file', { path: 'src/foo.ts' }),
+      );
+      setCachedResult(scope, readKey, { content: 'stale' }, getCachePolicyForTool('read_file'));
+
+      invalidateAfterTool(scope, shellTool, {}, { content: 'ok' });
+
+      assert.equal(getCachedResult(scope, readKey), undefined);
+    });
+  }
+
+  test('mcp and plugin tools bust cached reads', () => {
+    for (const toolName of ['mcp__server__write_thing', 'plugin__pkg__edit']) {
+      const scope = testScope();
+      const readKey = buildCacheKey(
+        'read_file',
+        normalizeToolArgs('read_file', { path: 'src/foo.ts' }),
+      );
+      setCachedResult(scope, readKey, { content: 'stale' }, getCachePolicyForTool('read_file'));
+
+      invalidateAfterTool(scope, toolName, {}, { content: 'ok' });
+
+      assert.equal(getCachedResult(scope, readKey), undefined, toolName);
+    }
+  });
+
+  test('a failed shell command leaves the cache intact', () => {
+    const scope = testScope();
+    const readKey = buildCacheKey(
+      'read_file',
+      normalizeToolArgs('read_file', { path: 'src/foo.ts' }),
+    );
+    setCachedResult(scope, readKey, { content: 'body' }, getCachePolicyForTool('read_file'));
+
+    invalidateAfterTool(
+      scope,
+      'execute_command',
+      { command: 'nope' },
+      { content: 'Error: command not found' },
+    );
+
+    assert.equal(getCachedResult(scope, readKey)?.content, 'body');
+  });
+
+  test('read-only shell tools do not bust the cache', () => {
+    const scope = testScope();
+    const readKey = buildCacheKey(
+      'read_file',
+      normalizeToolArgs('read_file', { path: 'src/foo.ts' }),
+    );
+    setCachedResult(scope, readKey, { content: 'body' }, getCachePolicyForTool('read_file'));
+
+    invalidateAfterTool(scope, 'list_running_commands', {}, { content: 'none' });
+
+    assert.equal(getCachedResult(scope, readKey)?.content, 'body');
+  });
+
   test('save_file busts cached git_status', () => {
     const policy = getCachePolicyForTool('git_status');
     const gitKey = buildCacheKey('git_status', normalizeToolArgs('git_status', {}));

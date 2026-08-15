@@ -8,6 +8,8 @@ import {
   buildCandidateRequestBody,
   candidateKey,
   classifyUpstreamError,
+  computeRetryDelayMs,
+  parseRetryAfterMs,
   resolveFallbackChain,
 } from '../../server/generations/fallback.js';
 import {
@@ -156,6 +158,92 @@ describe('classifyUpstreamError', () => {
 
   test('abort is fatal', () => {
     assert.equal(classifyUpstreamError({ name: 'AbortError' }).kind, 'fatal');
+  });
+
+  test('rate limit and overload statuses are retryable, not fatal', () => {
+    for (const status of [408, 425, 429, 529]) {
+      const classified = classifyUpstreamError(null, { status });
+      assert.equal(classified.kind, 'retryable', `HTTP ${status}`);
+      assert.equal(classified.rateLimited, true, `HTTP ${status}`);
+    }
+  });
+
+  test('502/503/504 are retryable but not rate limits', () => {
+    for (const status of [502, 503, 504]) {
+      const classified = classifyUpstreamError(null, { status });
+      assert.equal(classified.kind, 'retryable');
+      assert.notEqual(classified.rateLimited, true);
+    }
+  });
+
+  test('Retry-After seconds are carried on the classification', () => {
+    const classified = classifyUpstreamError(null, {
+      status: 429,
+      headers: new Headers({ 'retry-after': '12' }),
+    });
+    assert.equal(classified.retryAfterMs, 12_000);
+  });
+
+  test('Retry-After survives a plain header object', () => {
+    const classified = classifyUpstreamError(null, {
+      status: 429,
+      headers: { 'retry-after': '3' },
+    });
+    assert.equal(classified.retryAfterMs, 3_000);
+  });
+
+  test('a 429 without Retry-After leaves the delay to backoff', () => {
+    const classified = classifyUpstreamError(null, { status: 429 });
+    assert.equal(classified.retryAfterMs, undefined);
+  });
+});
+
+describe('parseRetryAfterMs', () => {
+  test('parses delta-seconds', () => {
+    assert.equal(parseRetryAfterMs('5'), 5_000);
+    assert.equal(parseRetryAfterMs(' 0 '), 0);
+  });
+
+  test('parses an HTTP-date relative to now', () => {
+    const now = Date.parse('2026-01-01T00:00:00Z');
+    const at = new Date(now + 8_000).toUTCString();
+    assert.equal(parseRetryAfterMs(at, now), 8_000);
+  });
+
+  test('a past HTTP-date clamps to zero', () => {
+    const now = Date.parse('2026-01-01T00:00:00Z');
+    const at = new Date(now - 60_000).toUTCString();
+    assert.equal(parseRetryAfterMs(at, now), 0);
+  });
+
+  test('an absurd wait is capped so a turn cannot stall indefinitely', () => {
+    assert.equal(parseRetryAfterMs('86400'), 30_000);
+  });
+
+  test('missing or unparseable values yield null', () => {
+    assert.equal(parseRetryAfterMs(undefined), null);
+    assert.equal(parseRetryAfterMs(''), null);
+    assert.equal(parseRetryAfterMs('soon'), null);
+    assert.equal(parseRetryAfterMs('-4'), null);
+  });
+});
+
+describe('computeRetryDelayMs', () => {
+  test('honours Retry-After over backoff', () => {
+    assert.equal(computeRetryDelayMs(1, 7_000), 7_000);
+    assert.equal(computeRetryDelayMs(3, 250), 250);
+  });
+
+  test('backs off exponentially with jitter when no Retry-After', () => {
+    const first = computeRetryDelayMs(1);
+    const second = computeRetryDelayMs(2);
+    assert.ok(first >= 1_000 && first <= 2_000, `first=${first}`);
+    assert.ok(second >= 2_000 && second <= 3_000, `second=${second}`);
+  });
+
+  test('never exceeds the cap', () => {
+    assert.equal(computeRetryDelayMs(20, 10 ** 9), 30_000);
+    assert.ok(computeRetryDelayMs(20) <= 30_000);
   });
 });
 

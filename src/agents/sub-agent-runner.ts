@@ -12,6 +12,7 @@ import {
   type StreamMetaAccumulator,
 } from '../api/chat';
 import { applyClassifiedStreamEnd, classifyStreamEnd } from '../api/stream-end';
+import { repairUnpairedToolCalls } from '../api/provider-message-normalize';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
 import {
   extractInlineThinkingFromContent,
@@ -873,6 +874,13 @@ export const defaultSubAgentRunner: SubAgentRunner = {
           stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
         };
       }
+
+      // Context trimming can drop a tool result while keeping its assistant row;
+      // repair in place so every send this round (and the transcript we return)
+      // carries paired tool calls.
+      const repaired = repairUnpairedToolCalls(messages);
+      messages.length = 0;
+      messages.push(...repaired);
 
       const body = applySamplerToBody(
         {

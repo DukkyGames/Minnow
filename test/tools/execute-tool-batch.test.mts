@@ -115,6 +115,58 @@ describe('executeToolCallBatch', () => {
     assert.equal(outcomes[2]!.result?.content, STOPPED_TOOL_MSG);
   });
 
+  test('abort past the pool worker cap leaves no gaps', async () => {
+    // The pool runs min(6, n) workers, so >6 parallel-safe calls means an abort
+    // leaves calls the pool never picked up.
+    const controller = new AbortController();
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+    const calls = ids.map((id) => tc('read_file', id));
+    const done: string[] = [];
+
+    const outcomes = await executeToolCallBatch({
+      toolCalls: calls,
+      signal: controller.signal,
+      execute: async (name) => {
+        controller.abort();
+        await delay(5);
+        return { content: name };
+      },
+      onToolDone: (outcome) => done.push(outcome.toolCall.id),
+    });
+
+    assert.equal(outcomes.length, ids.length);
+    assert.deepEqual(
+      outcomes.map((o) => o.toolCall.id),
+      ids,
+    );
+    for (const outcome of outcomes) {
+      assert.ok(outcome.result || outcome.parseError, `no result for ${outcome.toolCall.id}`);
+    }
+    // Every call must report exactly once or its tool_call_id is left unpaired.
+    assert.deepEqual([...done].sort(), [...ids].sort());
+    assert.equal(done.length, ids.length);
+  });
+
+  test('abort part-way through mutating calls still reports every call', async () => {
+    const controller = new AbortController();
+    const calls = [tc('save_file', 'a'), tc('save_file', 'b'), tc('save_file', 'c')];
+    const done: string[] = [];
+
+    const outcomes = await executeToolCallBatch({
+      toolCalls: calls,
+      signal: controller.signal,
+      execute: async (name) => {
+        controller.abort();
+        return { content: name };
+      },
+      onToolDone: (outcome) => done.push(outcome.toolCall.id),
+    });
+
+    assert.deepEqual(done, ['a', 'b', 'c']);
+    assert.equal(outcomes[1]!.result?.content, STOPPED_TOOL_MSG);
+    assert.equal(outcomes[2]!.result?.content, STOPPED_TOOL_MSG);
+  });
+
   test('onToolStart and onToolDone fire for each call', async () => {
     const starts: string[] = [];
     const done: string[] = [];

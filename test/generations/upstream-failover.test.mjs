@@ -217,3 +217,120 @@ describe('upstream failover', () => {
     await new Promise((resolve) => emptyServer.close(resolve));
   });
 });
+
+describe('rate limit retries', () => {
+  /**
+   * Stand up an upstream that 429s a fixed number of times before streaming.
+   * @param {{ failures: number, retryAfter?: string }} options
+   */
+  async function startRateLimitedServer({ failures, retryAfter }) {
+    let calls = 0;
+    const server = http.createServer((req, res) => {
+      if (req.method !== 'POST') {
+        res.statusCode = 404;
+        res.end('not found');
+        return;
+      }
+      calls += 1;
+      if (calls <= failures) {
+        const headers = { 'Content-Type': 'text/plain' };
+        if (retryAfter) headers['Retry-After'] = retryAfter;
+        res.writeHead(429, headers);
+        res.end('rate limited');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.end('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (server.address()).port;
+    return { server, baseUrl: `http://127.0.0.1:${port}`, calls: () => calls };
+  }
+
+  test('retries the same candidate through 429s instead of failing the turn', async () => {
+    resetHostCooldownForTests();
+    const upstream = await startRateLimitedServer({ failures: 2, retryAfter: '0' });
+    await createProvider({
+      id: 'rate-limited',
+      label: 'Rate limited',
+      baseUrl: upstream.baseUrl,
+      apiKind: 'openai-v1',
+    });
+
+    const state = createGenerationState({
+      providerId: 'rate-limited',
+      body: { model: 'test-model', messages: [{ role: 'user', content: 'hi' }] },
+      candidates: [{ providerId: 'rate-limited', modelId: 'test-model' }],
+    });
+
+    pumpUpstream({ state });
+    const terminal = await waitForTerminal(state.id, 15_000);
+
+    assert.equal(terminal.status, 'complete');
+    assert.equal(terminal.fallbackUsed, false);
+    assert.equal(terminal.chosenProviderId, 'rate-limited');
+    assert.equal(upstream.calls(), 3, 'one initial attempt plus two retries');
+
+    await new Promise((resolve) => upstream.server.close(resolve));
+  });
+
+  test('a persistently rate-limited candidate errors after the attempt cap', async () => {
+    resetHostCooldownForTests();
+    const upstream = await startRateLimitedServer({
+      failures: Number.MAX_SAFE_INTEGER,
+      retryAfter: '0',
+    });
+    await createProvider({
+      id: 'always-limited',
+      label: 'Always limited',
+      baseUrl: upstream.baseUrl,
+      apiKind: 'openai-v1',
+    });
+
+    const state = createGenerationState({
+      providerId: 'always-limited',
+      body: { model: 'test-model', messages: [{ role: 'user', content: 'hi' }] },
+      candidates: [{ providerId: 'always-limited', modelId: 'test-model' }],
+    });
+
+    pumpUpstream({ state });
+    const terminal = await waitForTerminal(state.id, 15_000);
+
+    assert.equal(terminal.status, 'error');
+    assert.match(terminal.errorMessage ?? '', /429/);
+    assert.equal(upstream.calls(), 3, 'capped at MAX_SAME_CANDIDATE_ATTEMPTS');
+
+    await new Promise((resolve) => upstream.server.close(resolve));
+  });
+
+  test('a rate-limited host is not put into cooldown', async () => {
+    resetHostCooldownForTests();
+    const upstream = await startRateLimitedServer({ failures: 1, retryAfter: '0' });
+    await createProvider({
+      id: 'limited-once',
+      label: 'Limited once',
+      baseUrl: upstream.baseUrl,
+      apiKind: 'openai-v1',
+    });
+
+    const first = createGenerationState({
+      providerId: 'limited-once',
+      body: { model: 'test-model', messages: [{ role: 'user', content: 'hi' }] },
+      candidates: [{ providerId: 'limited-once', modelId: 'test-model' }],
+    });
+    pumpUpstream({ state: first });
+    assert.equal((await waitForTerminal(first.id, 15_000)).status, 'complete');
+
+    const second = createGenerationState({
+      providerId: 'limited-once',
+      body: { model: 'test-model', messages: [{ role: 'user', content: 'hi' }] },
+      candidates: [{ providerId: 'limited-once', modelId: 'test-model' }],
+    });
+    pumpUpstream({ state: second });
+    const terminal = await waitForTerminal(second.id, 15_000);
+
+    assert.equal(terminal.status, 'complete', 'host must not be in cooldown');
+
+    await new Promise((resolve) => upstream.server.close(resolve));
+  });
+});

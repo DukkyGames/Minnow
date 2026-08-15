@@ -2,6 +2,7 @@
  * Minimal ApiMessage builder for headless runs (no attachments / VLM).
  */
 
+import { repairUnpairedToolCalls } from '../api/provider-message-normalize';
 import type { ApiMessage, AssistantToolCallMessage, Chat } from '../types';
 
 /** Serialize chat history for the generations API (headless). */
@@ -48,5 +49,5 @@ export function buildHeadlessApiMessages(
     }
   }
 
-  return messages;
+  return repairUnpairedToolCalls(messages);
 }

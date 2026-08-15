@@ -62,7 +62,10 @@ import {
 } from '../api/chat';
 import { applyClassifiedStreamEnd, classifyStreamEnd } from '../api/stream-end';
 import { getLatestStreamingToolName } from '../api/tool-call-stream.ts';
-import { foldLeadingAssistantPreamble } from '../api/provider-message-normalize';
+import {
+  foldLeadingAssistantPreamble,
+  repairUnpairedToolCalls,
+} from '../api/provider-message-normalize';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
 import {
   extractInlineThinkingFromContent,
@@ -765,7 +768,7 @@ export function buildApiMessages(
     messages.push({ role: 'user', content: continueLine });
   }
 
-  return foldLeadingAssistantPreamble(messages);
+  return repairUnpairedToolCalls(foldLeadingAssistantPreamble(messages));
 }
 
 interface StreamTurnResult {

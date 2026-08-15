@@ -2,7 +2,7 @@
  * Generic concurrency pool for target×work matrices.
  */
 
-import { runWithConcurrency } from '../lib/concurrency-pool.ts';
+import { runWithConcurrency, type PoolRunResult } from '../lib/concurrency-pool.ts';
 
 export interface MatrixWorkItem<T> {
   id: string;
@@ -23,8 +23,10 @@ export interface RunMatrixOptions<T, R> {
   worker: (ctx: MatrixWorkerContext<T, R>) => Promise<R>;
 }
 
-/** Run work items with a bounded worker pool. */
-export async function runMatrix<T, R>(options: RunMatrixOptions<T, R>): Promise<R[]> {
+/** Run work items with a bounded worker pool; `results` covers only items that ran. */
+export async function runMatrix<T, R>(
+  options: RunMatrixOptions<T, R>,
+): Promise<PoolRunResult<R>> {
   const concurrency = Math.max(1, Math.min(8, options.concurrency));
   return runWithConcurrency({
     items: options.items,

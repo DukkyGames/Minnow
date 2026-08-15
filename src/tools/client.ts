@@ -3,6 +3,7 @@
  * Browser tools run in TS; server tools POST to /api/tools when the local server is up.
  */
 
+import { STOPPED_TOOL_MSG } from './execute-tool-batch';
 import { executeBrowserTool } from './browser-executor';
 import { executeBoardTool } from './board-tools';
 import { executeTodoWrite } from './todo-tools';
@@ -197,17 +198,35 @@ export async function refreshPluginToolCache(): Promise<void> {
   }
 }
 
+function isAbortError(err: unknown): boolean {
+  return (
+    err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')
+  );
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown> = {},
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
-  return runWithFileTreeAutoRefresh(
-    name,
-    () => executeToolInner(name, args, context),
-    context,
-    args,
-  );
+  try {
+    return await runWithFileTreeAutoRefresh(
+      name,
+      () => executeToolInner(name, args, context),
+      context,
+      args,
+    );
+  } catch (err) {
+    // A throwing executor used to unwind the whole tool batch, leaving the
+    // assistant `tool_calls` row unanswered and the chat unsendable. Every tool
+    // failure has to come back as a result instead. The "Error: " prefix is
+    // protocol — callers branch on it and the result cache refuses to store it.
+    if (isAbortError(err)) {
+      return { content: STOPPED_TOOL_MSG };
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return { content: `Error: ${message || 'tool execution failed'}` };
+  }
 }
 
 async function executeToolInner(
@@ -325,7 +344,11 @@ async function executeToolInner(
     }
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
-    return executeServerTool(name, args, context.modeId, context);
+    // MCP/plugin tools are never cacheable, but they can write files the file
+    // tools cached reads for — route through the wrapper for its invalidation.
+    return executeWithResultCache(name, args, context, () =>
+      executeServerTool(name, args, context.modeId, context),
+    );
   }
 
   if (
