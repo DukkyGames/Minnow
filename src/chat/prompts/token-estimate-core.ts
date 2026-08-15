@@ -5,6 +5,7 @@
 import type { ApiMessage, AssistantToolCallMessage, Message } from '../../types';
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
 import { isUiOnlyTranscriptMessage } from '../context/injection-notice';
+import { toolImageFollowUpUserMessage } from '../tool-image-follow-up';
 
 /** Rough token proxy for English-ish text; not model-accurate. */
 export function estimateTokensFromText(text: string): number {
@@ -49,6 +50,8 @@ export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[
         tool_call_id: m.tool_call_id,
         content: m.content,
       });
+      const followUp = toolImageFollowUpUserMessage(m);
+      if (followUp) messages.push(followUp);
       continue;
     }
     if (m.role === 'assistant') {

@@ -8,6 +8,7 @@ import {
   applyContextBudget,
   estimateApiMessagesTokens,
   formatContextTrimStatus,
+  partitionTurns,
   resolveContextBudget,
 } from '../../src/chat/context-budget.ts';
 import type { ApiMessage, ToolCall } from '../../src/types.ts';
@@ -343,6 +344,34 @@ describe('applyContextBudget preserves tool-call pairing (sub-agent single turn)
       (m) => m.role === 'tool' && m.tool_call_id === 'call_9',
     );
     assert.equal(hasAssistant, hasTool);
+  });
+});
+
+describe('partitionTurns tool screenshot follow-ups', () => {
+  test('binds an image follow-up to the assistant tool-call unit', () => {
+    const messages: ApiMessage[] = [
+      system('sys'),
+      user('check ui'),
+      assistantWithTools('', [
+        { id: 'c1', type: 'function', function: { name: 'browser_screenshot', arguments: '{}' } },
+      ]),
+      toolResult('c1', 'saved'),
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '[tool screenshot]' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,aaa' } },
+        ],
+        toolImageFollowUp: true,
+      },
+      assistant('looks fine'),
+    ];
+    const turns = partitionTurns(messages, 1);
+    assert.deepEqual(turns, [
+      { start: 1, end: 2 },
+      { start: 2, end: 5 },
+      { start: 5, end: 6 },
+    ]);
   });
 });
 

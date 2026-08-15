@@ -34,6 +34,20 @@ function modelRejectsTemperature(modelId) {
   return id.includes('gpt-5');
 }
 
+/** Drop Minnow-only message fields that providers reject as unknown. */
+function stripInternalApiMessageFields(body) {
+  if (!Array.isArray(body.messages)) return body;
+  return {
+    ...body,
+    messages: body.messages.map((raw) => {
+      if (!raw || typeof raw !== 'object') return raw;
+      const msg = { ...raw };
+      delete msg.toolImageFollowUp;
+      return msg;
+    }),
+  };
+}
+
 /**
  * Normalize a chat completion body for the target provider.
  * @param {Record<string, unknown>} body
@@ -44,10 +58,10 @@ function modelRejectsTemperature(modelId) {
 export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilities) {
   const providerId = typeof provider.id === 'string' ? provider.id : '';
   if (provider.apiKind !== 'openai-v1') {
-    return body;
+    return stripInternalApiMessageFields(body);
   }
 
-  const next = { ...body };
+  const next = stripInternalApiMessageFields({ ...body });
   delete next.top_k;
   delete next.min_p;
   delete next.repetition_penalty;

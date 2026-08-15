@@ -846,13 +846,27 @@ async function executeServerTool(
   }
 
   const attachments = Array.isArray(responsePayload.attachments)
-    ? responsePayload.attachments.filter(
-        (a): a is NonNullable<ToolExecutionResult['attachments']>[number] =>
-          a != null &&
-          a.type === 'image' &&
-          typeof a.url === 'string' &&
-          a.mime === 'image/png',
-      )
+    ? responsePayload.attachments
+        .filter(
+          (a): a is NonNullable<ToolExecutionResult['attachments']>[number] =>
+            a != null &&
+            a.type === 'image' &&
+            typeof a.url === 'string' &&
+            a.mime === 'image/png',
+        )
+        .map((a) => {
+          const dataUrl =
+            typeof a.dataUrl === 'string' && a.dataUrl.startsWith('data:image/')
+              ? a.dataUrl
+              : undefined;
+          return {
+            type: 'image' as const,
+            url: a.url,
+            mime: a.mime,
+            ...(typeof a.alt === 'string' ? { alt: a.alt } : {}),
+            ...(dataUrl ? { dataUrl } : {}),
+          };
+        })
     : undefined;
 
   const codeChange = normalizeCodeChangePayload(responsePayload.codeChange);

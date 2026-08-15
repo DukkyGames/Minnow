@@ -166,6 +166,8 @@ export interface ToolImageAttachment {
   url: string;
   mime: 'image/png';
   alt?: string;
+  /** PNG data URL so VLMs can see the pixels (the `url` path is UI-only). */
+  dataUrl?: string;
 }
 
 /** How line stats were produced (UI tooltips / backfill accuracy). */
@@ -271,6 +273,11 @@ export interface ApiSystemMessage {
 export interface ApiUserMessage {
   role: 'user';
   content: ApiMessageContent;
+  /**
+   * Ephemeral screenshot bytes after a tool result (not a history row).
+   * Stripped before the provider POST.
+   */
+  toolImageFollowUp?: true;
 }
 
 export interface ApiAssistantMessage {

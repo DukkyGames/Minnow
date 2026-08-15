@@ -390,6 +390,7 @@ describe('browser-preview-tools', () => {
     assert.match(result.content ?? '', /shot1\.png/);
     assert.equal(result.attachments?.[0]?.url, '/api/browser/screenshot/shot1');
     assert.equal(result.attachments?.[0]?.mime, 'image/png');
+    assert.ok(result.attachments?.[0]?.dataUrl?.startsWith('data:image/png;base64,'));
   });
 
   test('browser_screenshot returns friendly message when capturePage is empty', async () => {

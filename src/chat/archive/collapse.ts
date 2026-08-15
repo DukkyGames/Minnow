@@ -4,6 +4,7 @@
 
 import type { ApiMessage } from '../../types';
 import type { ArchiveHistoryRange, ArchivePreResult } from './types';
+import { isToolImageFollowUpMessage } from '../tool-image-follow-up';
 
 const PLACEHOLDER_RE =
   /^<archived_context turns="(\d+)-(\d+)" \/>$/;
@@ -35,7 +36,8 @@ function isArchivedPlaceholder(msg: ApiMessage): boolean {
 
 /**
  * Replace API messages for archived history ranges with synthetic system placeholders.
- * History index i maps to API index systemEnd + i (buildApiMessages 1:1 mapping).
+ * History index i maps to API index systemEnd + i except ephemeral screenshot
+ * follow-ups (`toolImageFollowUp`), which do not consume a history index.
  */
 export function replaceArchivedRangesWithPlaceholder(
   messages: ApiMessage[],
@@ -70,6 +72,15 @@ export function replaceArchivedRangesWithPlaceholder(
       continue;
     }
 
+    // Screenshot follow-ups are not history rows — drop them with a collapsed tool, else keep.
+    if (isToolImageFollowUpMessage(messages[apiIdx])) {
+      if (!collapsedHist.has(histIdx - 1)) {
+        out.push(messages[apiIdx]);
+      }
+      apiIdx += 1;
+      continue;
+    }
+
     if (collapsedHist.has(histIdx)) {
       const range = ranges.find(
         (r) => histIdx >= r.startIndex && histIdx < r.endIndex,
@@ -81,6 +92,12 @@ export function replaceArchivedRangesWithPlaceholder(
         while (histIdx < skipTo && apiIdx < messages.length) {
           histIdx += 1;
           apiIdx += 1;
+          while (
+            apiIdx < messages.length &&
+            isToolImageFollowUpMessage(messages[apiIdx])
+          ) {
+            apiIdx += 1;
+          }
         }
         continue;
       }

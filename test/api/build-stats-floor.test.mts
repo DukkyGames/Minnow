@@ -27,6 +27,14 @@ test('buildClientStats matches chat-style burst correction', () => {
   assert.ok(Math.abs(stats.tokens_per_second! - 172 / 46) < 0.1);
 });
 
+test('buildClientStats uses first output token timing for reasoning-heavy streams', () => {
+  const stats = buildClientStats(0, 100, 10_000, { completion_tokens: 500 }, 'stop');
+
+  assert.equal(stats.time_to_first_token, 0.1);
+  assert.ok(stats.generation_time != null && stats.generation_time > 9);
+  assert.ok(stats.tokens_per_second != null && stats.tokens_per_second < 60);
+});
+
 test('reconcileCompletionStats does not pin tok/s to 2000', () => {
   const client = buildClientStats(0, 45999, 46000, { completion_tokens: 172 }, 'stop');
   const stats = reconcileCompletionStats(client, {}, { completion_tokens: 172 });

@@ -189,6 +189,30 @@ describe('sanitizeCompletionBodyForProvider', () => {
     assert.equal(stripped.thinking_budget_tokens, undefined);
   });
 
+  test('strips toolImageFollowUp from messages for every api kind', () => {
+    const body = {
+      model: 'qwen',
+      messages: [
+        { role: 'user', content: 'hi' },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: '[tool screenshot]' }],
+          toolImageFollowUp: true,
+        },
+      ],
+    };
+    const openaiOut = sanitizeCompletionBodyForProvider(body, OPENAI);
+    const followUp = (openaiOut.messages as Record<string, unknown>[])[1];
+    assert.equal(followUp.toolImageFollowUp, undefined);
+    assert.equal(followUp.role, 'user');
+
+    const lmOut = sanitizeCompletionBodyForProvider(body, LM_STUDIO);
+    assert.equal(
+      (lmOut.messages as Record<string, unknown>[])[1].toolImageFollowUp,
+      undefined,
+    );
+  });
+
   test('keeps chat_template_kwargs only for local runtime providers', () => {
     const body = () => ({
       model: 'qwen3',
