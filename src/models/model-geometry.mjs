@@ -106,6 +106,16 @@ export const GEOMETRY_FAMILIES = {
     swaPeriod: 4,
     sizes: [{ paramsB: 80, nLayers: 48, nEmbd: 2048, nExperts: 512 }],
   },
+  // Qwen3.5 / 3.8 hybrid (Gated DeltaNet 3:1). HF model_type is qwen3_5; GGUF arch is qwen35.
+  // 16 of 64 layers are full attention (swaPeriod 4); linear layers hold a constant-size state.
+  qwen3_5: {
+    nKvHeads: 4,
+    headDim: 256,
+    nVocab: 248320,
+    swaWindow: 0,
+    swaPeriod: 4,
+    sizes: [{ paramsB: 27.78, nLayers: 64, nEmbd: 5120, nKvHeads: 4, headDim: 256 }],
+  },
   qwen2: {
     nKvHeads: 4,
     headDim: 128,
@@ -300,6 +310,9 @@ const ARCH_ALIASES = {
   qwen3_moe: 'qwen3_moe',
   qwen3next: 'qwen3_next',
   qwen3_next: 'qwen3_next',
+  qwen3_5: 'qwen3_5',
+  qwen35: 'qwen3_5',
+  qwen3_8: 'qwen3_5',
   qwen3: 'qwen3',
   qwen2: 'qwen2',
   qwen2_5: 'qwen2',
@@ -340,6 +353,11 @@ const ARCH_ALIASES = {
 
 /** Ordered name probes for catalog rows with no usable `architecture`. */
 const NAME_TO_FAMILY = [
+  ['qwen3.8', 'qwen3_5'],
+  // Underscore ids (GGUF / some providers) — keep ahead of generic `qwen3`.
+  ['qwen3_8', 'qwen3_5'],
+  ['qwen3.5', 'qwen3_5'],
+  ['qwen3.6', 'qwen3_5'],
   ['qwen3-next', 'qwen3_next'],
   ['qwen3-coder', 'qwen3_moe'],
   ['a3b', 'qwen3_moe'],

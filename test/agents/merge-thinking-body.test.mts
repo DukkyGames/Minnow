@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { mergeThinkingIntoCompletionBody } from '../../src/agents/merge-thinking-body.ts';
+import {
+  markLmStudioThinkingHintShown,
+  resetLmStudioThinkingHint,
+} from '../../src/agents/thinking-to-body.ts';
 import { LLAMA_CPP_LOCAL_PROVIDER_ID } from '../../src/providers/types.ts';
 import type { ModelCapabilities } from '../../src/types.ts';
 
@@ -80,5 +84,31 @@ describe('mergeThinkingIntoCompletionBody', () => {
     );
     assert.equal(body.thinking_budget_tokens, 8192);
     assert.equal(nativeBudgetApplied, true);
+  });
+
+  test('Qwen3.8 high on LM Studio sends xhigh and preserve_thinking', () => {
+    // Skip the one-shot LM Studio status pill (needs a DOM) so this stays a body-shape test.
+    markLmStudioThinkingHintShown();
+    const body: Record<string, unknown> = { model: 'qwen/qwen3.8-27b' };
+    mergeThinkingIntoCompletionBody(
+      body,
+      'on',
+      {
+        id: 'lm-studio-local',
+        apiKind: 'lm-studio-v0',
+        autoApi: false,
+        modelApiOverrides: {},
+      },
+      {
+        ...levelCaps,
+        reasoningDefault: 'high',
+      },
+      'high',
+      'lm-studio-v0',
+    );
+    assert.equal(body.enable_thinking, true);
+    assert.equal(body.reasoning_effort, 'xhigh');
+    assert.equal(body.preserve_thinking, true);
+    resetLmStudioThinkingHint();
   });
 });

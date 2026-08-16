@@ -8,12 +8,14 @@ import {
   defaultComposerReasoningLevel,
   getComposerReasoningLevelOptions,
   inferReasoningOptionsFromModelId,
+  isQwen38ModelId,
   modelHasSelectableReasoningEffort,
   modelShowsComposerBrainToggle,
   modelUsesComposerReasoningBinaryDropdown,
   modelUsesComposerReasoningDropdown,
   modelUsesComposerThinkingToggle,
   normalizeReasoningAllowedOptions,
+  normalizeReasoningCatalogValue,
   resolveEffectiveReasoningEffort,
 } from '../../src/lib/reasoning-effort.ts';
 
@@ -36,6 +38,13 @@ describe('normalizeReasoningAllowedOptions', () => {
 
   test('returns empty array when nothing is valid', () => {
     assert.deepEqual(normalizeReasoningAllowedOptions(['x', 1, null]), []);
+  });
+
+  test('maps xhigh onto high so the composer can show High', () => {
+    assert.deepEqual(
+      normalizeReasoningAllowedOptions(['xhigh', 'medium', 'low', 'off']),
+      ['off', 'low', 'medium', 'high'],
+    );
   });
 });
 
@@ -146,6 +155,18 @@ describe('inferReasoningOptionsFromModelId', () => {
       [],
     );
   });
+
+  test('infers off/low/medium/high for Qwen3.8 on any api kind', () => {
+    const expected = ['off', 'low', 'medium', 'high'];
+    assert.deepEqual(
+      inferReasoningOptionsFromModelId('qwen/qwen3.8-27b', 'lm-studio-v0'),
+      expected,
+    );
+    assert.deepEqual(
+      inferReasoningOptionsFromModelId('Qwen/Qwen3.8-27B', 'openai-v1'),
+      expected,
+    );
+  });
 });
 
 describe('resolveEffectiveReasoningEffort', () => {
@@ -199,6 +220,20 @@ describe('resolveEffectiveReasoningEffort', () => {
     );
   });
 
+  test('inherited on uses catalog default high when present', () => {
+    assert.equal(
+      resolveEffectiveReasoningEffort(
+        {},
+        {
+          reasoningAllowedOptions: ['off', 'low', 'medium', 'high'],
+          reasoningDefault: 'high',
+        },
+        'on',
+      ),
+      'high',
+    );
+  });
+
   test('maps resolved brain off to off when catalog default is absent', () => {
     const effortOnly = { reasoningAllowedOptions: ['off', 'low', 'medium', 'high'] };
     assert.equal(resolveEffectiveReasoningEffort({}, effortOnly, 'off'), 'off');
@@ -212,5 +247,23 @@ describe('resolveEffectiveReasoningEffort', () => {
   test('returns undefined when model exposes no allowed options', () => {
     assert.equal(resolveEffectiveReasoningEffort({}, {}, 'on'), undefined);
     assert.equal(resolveEffectiveReasoningEffort({}, {}, 'off'), undefined);
+  });
+});
+
+describe('isQwen38ModelId', () => {
+  test('matches dotted and underscored 3.8 ids, not Qwen3-8B', () => {
+    assert.equal(isQwen38ModelId('qwen/qwen3.8-27b'), true);
+    assert.equal(isQwen38ModelId('qwen3.8-27b'), true);
+    assert.equal(isQwen38ModelId('Qwen/Qwen3.8-27B'), true);
+    assert.equal(isQwen38ModelId('qwen3_8-27b'), true);
+    assert.equal(isQwen38ModelId('Qwen/Qwen3-8B'), false);
+    assert.equal(isQwen38ModelId('qwen/qwen3-32b'), false);
+    assert.equal(isQwen38ModelId('qwen3.5-27b'), false);
+  });
+
+  test('normalizeReasoningCatalogValue maps xhigh to high', () => {
+    assert.equal(normalizeReasoningCatalogValue('xhigh'), 'high');
+    assert.equal(normalizeReasoningCatalogValue('medium'), 'medium');
+    assert.equal(normalizeReasoningCatalogValue('nope'), undefined);
   });
 });

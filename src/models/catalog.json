@@ -8884,6 +8884,34 @@
   ]
  },
  {
+  "name": "Qwen/Qwen3.8-27B",
+  "provider": "Alibaba",
+  "parameter_count": "27.8B",
+  "parameters_raw": 27781427952,
+  "min_ram_gb": 15.5,
+  "recommended_ram_gb": 25.9,
+  "min_vram_gb": 14.2,
+  "quantization": "Q4_K_M",
+  "context_length": 262144,
+  "use_case": "General purpose, coding",
+  "capabilities": [
+   "vision",
+   "tool_use"
+  ],
+  "pipeline_tag": "image-text-to-text",
+  "architecture": "qwen3_5",
+  "hf_downloads": 91917,
+  "hf_likes": 9812,
+  "release_date": "2026-08-05",
+  "gguf_sources": [
+   {
+    "repo": "unsloth/Qwen3.8-27B-GGUF",
+    "provider": "unsloth",
+    "file": "Qwen3.8-27B-Q4_K_M.gguf"
+   }
+  ]
+ },
+ {
   "name": "lmstudio-community/GLM-4.7-Flash-MLX-8bit",
   "provider": "lmstudio-community",
   "parameter_count": "29.9B",

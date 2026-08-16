@@ -32,6 +32,7 @@ import { detectRuntimes } from './runtime-detect.js';
 import {
   buildLlamaServerArgs,
   buildLlamaServerSpawnEnv,
+  findSiblingMmproj,
   readLlamaCppConfig,
   warnIfReasoningBudgetCliFlag,
 } from './llama-args.js';
@@ -600,6 +601,7 @@ export async function startServe(body) {
   const llamaConfig = await readLlamaCppConfig();
   const userSettings =
     body.llama && typeof body.llama === 'object' ? body.llama : undefined;
+  const mmprojPath = await findSiblingMmproj(modelPath);
 
   const args = buildLlamaServerArgs({
     modelPath,
@@ -617,6 +619,7 @@ export async function startServe(body) {
     settings: userSettings,
     defaults: llamaConfig.defaults,
     variant: llamaVariant,
+    mmprojPath: mmprojPath ?? undefined,
   });
 
   const row = /** @type {ServeRecord} */ ({

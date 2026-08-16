@@ -38,4 +38,15 @@ describe('lookupKnownContextLength', () => {
   test('unknown model returns undefined', () => {
     assert.equal(lookupKnownContextLength('totally-unknown-model-xyz'), undefined);
   });
+
+  test('qwen3.8 ids resolve 262144 not generic qwen3 131072', () => {
+    assert.equal(lookupKnownContextLength('qwen/qwen3.8-27b'), 262_144);
+    assert.equal(lookupKnownContextLength('qwen3.8-27b'), 262_144);
+    assert.equal(lookupKnownContextLength('qwen3_8-27b'), 262_144);
+  });
+
+  test('qwen3.5 and qwen3.6 ids also resolve 262144', () => {
+    assert.equal(lookupKnownContextLength('qwen/qwen3.5-27b'), 262_144);
+    assert.equal(lookupKnownContextLength('qwen3.6-27b'), 262_144);
+  });
 });

@@ -16,8 +16,11 @@
  *   forwarded to the model's Jinja template. Hosted `openai-v1` providers reject
  *   unknown fields, so `sanitizeCompletionBodyForProvider` strips it everywhere
  *   except the local runtime providers.
+ * - Qwen3.8: composer High maps to wire `xhigh`; thinking-on also sends
+ *   `preserve_thinking` (LM Studio custom field, or `chat_template_kwargs` on local).
  */
 
+import { isQwen38ModelId } from '../lib/reasoning-effort';
 import type { ApiKind } from '../providers/types';
 import type { ModelCapabilities, ReasoningEffortOption } from '../types';
 import type { ThinkingResolvedMode } from './thinking-types';
@@ -50,6 +53,37 @@ const ANTHROPIC_BUDGET_FLOOR = 1024;
 const LOCAL_TEMPLATE_THINKING_OFF = {
   chat_template_kwargs: { enable_thinking: false },
 } as const;
+
+/** Composer `high` is wire `xhigh` on Qwen3.8 (official Jinja rejects `high`). */
+function mapHighEffortForQwen38(effort: string, modelId?: string | null): string {
+  if (effort === 'high' && isQwen38ModelId(modelId)) return 'xhigh';
+  return effort;
+}
+
+/** LM Studio custom field + local Jinja kwargs when Qwen3.8 thinking is on. */
+function applyQwen38ThinkingOnFields(
+  body: Record<string, unknown>,
+  apiKind: ApiKind,
+  wireEffort: string,
+  modelId?: string | null,
+): void {
+  if (!isQwen38ModelId(modelId)) return;
+  if (apiKind === 'lm-studio-v0') {
+    body.preserve_thinking = true;
+    return;
+  }
+  if (apiKind !== 'openai-v1') return;
+  const prev =
+    body.chat_template_kwargs && typeof body.chat_template_kwargs === 'object'
+      ? { ...(body.chat_template_kwargs as Record<string, unknown>) }
+      : {};
+  body.chat_template_kwargs = {
+    ...prev,
+    enable_thinking: true,
+    preserve_thinking: true,
+    reasoning_effort: wireEffort,
+  };
+}
 
 let lmStudioHintShown = false;
 
@@ -148,6 +182,7 @@ export function reasoningEffortToCompletionBody(
   apiKind: ApiKind,
   modelCapabilities?: ModelCapabilities | null,
   budgetTokens?: number | null,
+  modelId?: string | null,
 ): ThinkingCompletionPatch {
   if (reasoningBlocked(effort, modelCapabilities)) {
     return { body: {} };
@@ -198,18 +233,25 @@ export function reasoningEffortToCompletionBody(
     }
 
     if (isLevelEffort(effort)) {
-      body.reasoning_effort = effort;
+      const wireEffort = mapHighEffortForQwen38(effort, modelId);
+      body.reasoning_effort = wireEffort;
       const allowed = modelCapabilities?.reasoningAllowedOptions;
       if (allowed?.some((option) => isLevelEffort(option))) {
-        body.reasoning = { effort };
+        body.reasoning = { effort: wireEffort };
       }
       if (enabledValue === 'adaptive') {
         body.thinking = { type: 'adaptive' };
       }
+      applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
       return { body };
     }
 
     body.thinking = { type: enabledValue };
+    if (isQwen38ModelId(modelId)) {
+      const wireEffort = 'xhigh';
+      body.reasoning_effort = wireEffort;
+      applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
+    }
     return { body };
   }
 
@@ -224,24 +266,24 @@ export function reasoningEffortToCompletionBody(
   }
 
   if (effort === 'on') {
-    return {
-      body: {
-        enable_thinking: true,
-        reasoning_effort: 'medium',
-        reasoning: { effort: 'medium' },
-      },
-      hint: LM_STUDIO_BEST_EFFORT,
+    const wireEffort = isQwen38ModelId(modelId) ? 'xhigh' : 'medium';
+    const body: Record<string, unknown> = {
+      enable_thinking: true,
+      reasoning_effort: wireEffort,
+      reasoning: { effort: wireEffort },
     };
+    applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
+    return { body, hint: LM_STUDIO_BEST_EFFORT };
   }
 
-  return {
-    body: {
-      enable_thinking: true,
-      reasoning_effort: effort,
-      reasoning: { effort },
-    },
-    hint: LM_STUDIO_BEST_EFFORT,
+  const wireEffort = mapHighEffortForQwen38(effort, modelId);
+  const body: Record<string, unknown> = {
+    enable_thinking: true,
+    reasoning_effort: wireEffort,
+    reasoning: { effort: wireEffort },
   };
+  applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
+  return { body, hint: LM_STUDIO_BEST_EFFORT };
 }
 
 /**
@@ -253,6 +295,7 @@ export function thinkingToCompletionBody(
   apiKind: ApiKind,
   modelCapabilities?: ModelCapabilities | null,
   budgetTokens?: number | null,
+  modelId?: string | null,
 ): ThinkingCompletionPatch {
   const allowed = modelCapabilities?.reasoningAllowedOptions;
   if (allowed && allowed.length > 0) {
@@ -263,10 +306,23 @@ export function thinkingToCompletionBody(
         (option) => option === 'low' || option === 'medium' || option === 'high',
       );
       if (target === 'on' && hasLevels) {
-        return reasoningEffortToCompletionBody('medium', apiKind, modelCapabilities, budgetTokens);
+        const fallback: ReasoningEffortOption = isQwen38ModelId(modelId) ? 'high' : 'medium';
+        return reasoningEffortToCompletionBody(
+          fallback,
+          apiKind,
+          modelCapabilities,
+          budgetTokens,
+          modelId,
+        );
       }
       if (target === 'off' && allowed.includes('off')) {
-        return reasoningEffortToCompletionBody('off', apiKind, modelCapabilities, budgetTokens);
+        return reasoningEffortToCompletionBody(
+          'off',
+          apiKind,
+          modelCapabilities,
+          budgetTokens,
+          modelId,
+        );
       }
       return { body: {} };
     }
@@ -297,15 +353,23 @@ export function thinkingToCompletionBody(
     if (budgetTokens != null && budgetTokens > 0) {
       body.thinking_budget_tokens = budgetTokens;
     }
+    if (isQwen38ModelId(modelId)) {
+      applyQwen38ThinkingOnFields(body, apiKind, 'xhigh', modelId);
+      body.reasoning_effort = 'xhigh';
+    }
     return { body };
   }
 
-  const effort = effortForResolved(resolved);
+  const effort =
+    resolved === 'on' && isQwen38ModelId(modelId) ? 'xhigh' : effortForResolved(resolved);
   const body: Record<string, unknown> = {
     reasoning_effort: effort,
     reasoning: { effort },
     enable_thinking: resolved === 'on',
   };
+  if (resolved === 'on') {
+    applyQwen38ThinkingOnFields(body, apiKind, effort, modelId);
+  }
 
   return { body, hint: LM_STUDIO_BEST_EFFORT };
 }

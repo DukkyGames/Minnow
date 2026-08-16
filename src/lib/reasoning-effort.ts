@@ -19,6 +19,21 @@ export const REASONING_EFFORT_OPTIONS: readonly ReasoningEffortOption[] = [
 
 const EFFORT_SET = new Set<ReasoningEffortOption>(REASONING_EFFORT_OPTIONS);
 
+/**
+ * Qwen3.8 ids (`qwen3.8` / `qwen3_8`) — not Qwen3-8B (`qwen3-8b`).
+ * Used for 262K defaults, wire `xhigh`, and `preserve_thinking`.
+ */
+export function isQwen38ModelId(modelId: string | null | undefined): boolean {
+  if (!modelId) return false;
+  return /(?:^|[^a-z0-9])qwen3[._]8(?![0-9])/i.test(modelId);
+}
+
+/** Map LM Studio / Qwen `xhigh` onto the composer `high` option. */
+export function normalizeReasoningCatalogValue(value: unknown): ReasoningEffortOption | undefined {
+  if (value === 'xhigh') return 'high';
+  return isReasoningEffortOption(value) ? value : undefined;
+}
+
 /** Type guard for upstream catalog / session values. */
 export function isReasoningEffortOption(value: unknown): value is ReasoningEffortOption {
   return typeof value === 'string' && EFFORT_SET.has(value as ReasoningEffortOption);
@@ -28,7 +43,9 @@ export function isReasoningEffortOption(value: unknown): value is ReasoningEffor
 export function normalizeReasoningAllowedOptions(raw: unknown[]): ReasoningEffortOption[] {
   const seen = new Set<string>();
   for (const value of raw) {
-    if (typeof value === 'string') seen.add(value);
+    if (typeof value !== 'string') continue;
+    // Qwen3.8 / LM Studio report `xhigh`; the composer only has High.
+    seen.add(value === 'xhigh' ? 'high' : value);
   }
   return REASONING_EFFORT_OPTIONS.filter((option) => seen.has(option));
 }
@@ -150,6 +167,10 @@ export function inferReasoningOptionsFromModelId(
   modelId: string,
   apiKind: ApiKind,
 ): ReasoningEffortOption[] {
+  // Qwen3.8 exposes off/low/medium/high on every provider; default effort is high (wire xhigh).
+  if (isQwen38ModelId(modelId)) {
+    return ['off', 'low', 'medium', 'high'];
+  }
   if (apiKind !== 'openai-v1') return [];
   if (isThinkingTypeOnlyOpenAiModel(modelId)) {
     return ['off', 'on'];
@@ -180,6 +201,11 @@ export function resolveEffectiveReasoningEffort(
 
   // Inherited thinking on must win over catalog defaults such as `off` on some models.
   if (inheritedResolved === 'on') {
+    const catalogDefault = caps?.reasoningDefault;
+    // Prefer a non-off catalog default (Qwen3.8 → high) over a hardcoded medium.
+    if (catalogDefault && catalogDefault !== 'off' && allowed.includes(catalogDefault)) {
+      return catalogDefault;
+    }
     if (allowed.includes('medium')) return 'medium';
     if (allowed.includes('on')) return 'on';
   }

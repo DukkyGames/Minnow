@@ -40,6 +40,11 @@ describe('llama runtime', () => {
     assert.fail(`unexpected platform ${process.platform}`);
   });
 
+  test('pinned llama.cpp release is new enough for Qwen3.8 qwen35 GGUFs', () => {
+    const build = Number(String(LLAMA_CPP_RELEASE_TAG).replace(/^b/, ''));
+    assert.ok(build >= 10430, `expected b10430+, got ${LLAMA_CPP_RELEASE_TAG}`);
+  });
+
   test('copyFlattenedExtractContents merges cudart-style trees without llama-server', async () => {
     const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-llama-test-'));
     const extractDir = path.join(tmp, 'extract');

@@ -21,8 +21,8 @@ import {
   resolveLlamaAssets,
 } from './llama-variant.js';
 
-/** Pinned release — update when validating a newer llama.cpp build. */
-export const LLAMA_CPP_RELEASE_TAG = 'b9628';
+/** Pinned release — Qwen3.8 GGUF arch `qwen35` needs ggml-org b10430 or newer. */
+export const LLAMA_CPP_RELEASE_TAG = 'b10448';
 
 const GITHUB_OWNER = 'ggml-org';
 const GITHUB_REPO = 'llama.cpp';

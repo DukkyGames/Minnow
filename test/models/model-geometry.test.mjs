@@ -15,12 +15,19 @@ describe('family resolution', () => {
     assert.equal(resolveFamilyKey({ architecture: 'Qwen2.5' }), 'qwen2');
     assert.equal(resolveFamilyKey({ architecture: 'gemma3_text' }), 'gemma3');
     assert.equal(resolveFamilyKey({ architecture: 'LlamaForCausalLM' }), 'llama');
+    assert.equal(resolveFamilyKey({ architecture: 'qwen3_5' }), 'qwen3_5');
+    assert.equal(resolveFamilyKey({ architecture: 'qwen35' }), 'qwen3_5');
+    assert.equal(resolveFamilyKey({ architecture: 'qwen3_8' }), 'qwen3_5');
   });
 
   it('falls back to the model name when architecture is missing', () => {
     assert.equal(resolveFamilyKey({ name: 'Qwen3-30B-A3B-Instruct' }), 'qwen3_moe');
     assert.equal(resolveFamilyKey({ name: 'gpt-oss-20b' }), 'gpt_oss');
     assert.equal(resolveFamilyKey({ name: 'something-unheard-of' }), null);
+    assert.equal(resolveFamilyKey({ name: 'Qwen/Qwen3.8-27B' }), 'qwen3_5');
+    assert.equal(resolveFamilyKey({ name: 'qwen3_8-27b' }), 'qwen3_5');
+    assert.equal(resolveFamilyKey({ name: 'qwen3.5-27b' }), 'qwen3_5');
+    assert.equal(resolveFamilyKey({ name: 'qwen3.6-27b' }), 'qwen3_5');
   });
 });
 
@@ -46,6 +53,18 @@ describe('resolveGeometry', () => {
     const oss = resolveGeometry({ architecture: 'gpt_oss', paramsB: 20.9 });
     assert.equal(oss.swaPeriod, 2);
     assert.equal(oss.nLayers, 24);
+  });
+
+  it('uses qwen3_5 hybrid geometry for the 27B size', () => {
+    const g = resolveGeometry({ architecture: 'qwen3_5', paramsB: 27.78 });
+    assert.equal(g.source, 'family');
+    assert.equal(g.nLayers, 64);
+    assert.equal(g.nKvHeads, 4);
+    assert.equal(g.headDim, 256);
+    assert.equal(g.nEmbd, 5120);
+    assert.equal(g.nVocab, 248320);
+    assert.equal(g.swaWindow, 0);
+    assert.equal(g.swaPeriod, 4);
   });
 
   it('falls back to the heuristic when the size is far from any shipped variant', () => {

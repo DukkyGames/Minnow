@@ -64,6 +64,28 @@ describe('catalogCapabilitiesFromRow', () => {
     assert.equal(caps.vision, true);
     assert.equal(catalogRowHasVision({ id: 'qwen', type: 'llm', catalogVision: true }), true);
   });
+
+  test('Qwen3.8 defaults thinking on at high (wire xhigh)', () => {
+    const caps = catalogCapabilitiesFromRow(
+      { id: 'qwen/qwen3.8-27b', type: 'vlm' },
+      'openai-v1',
+    );
+    assert.deepEqual(caps.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
+    assert.equal(caps.reasoningDefault, 'high');
+  });
+
+  test('maps LM Studio xhigh catalog default onto high', () => {
+    const caps = catalogCapabilitiesFromRow({
+      id: 'qwen/qwen3.8-27b',
+      type: 'vlm',
+      reasoning: {
+        allowed_options: ['xhigh', 'medium', 'low', 'off'],
+        default: 'xhigh',
+      },
+    });
+    assert.deepEqual(caps.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
+    assert.equal(caps.reasoningDefault, 'high');
+  });
 });
 
 describe('prioritizeModelIdsForProbe', () => {

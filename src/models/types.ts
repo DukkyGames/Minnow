@@ -21,7 +21,7 @@ export interface CatalogModel {
   num_experts?: number;
   active_experts?: number;
   is_gguf?: boolean;
-  gguf_sources?: Array<{ repo: string; provider?: string }>;
+  gguf_sources?: Array<{ repo: string; provider?: string; file?: string }>;
   format?: string;
   _discovered?: boolean;
 }
@@ -73,7 +73,7 @@ export interface ModelFitResult {
   speed_tps: number;
   score: number;
   scores: { quality: number; speed: number; fit: number; context: number };
-  gguf_sources: string[] | Array<{ repo: string; provider?: string }>;
+  gguf_sources: string[] | Array<{ repo: string; provider?: string; file?: string }>;
   context_length: number;
   release_date?: string;
   target_context?: number | null;
