@@ -85,6 +85,11 @@ describe('file-tree-path helpers', () => {
   test('joinTreePath for create under nested parent', () => {
     assert.equal(joinTreePath('src/ui', 'widget.ts'), 'src/ui/widget.ts');
   });
+
+  test('joinTreePath keeps nested drop relative paths', () => {
+    assert.equal(joinTreePath('src', 'pkg/index.ts'), 'src/pkg/index.ts');
+    assert.equal(joinTreePath('.', 'pkg/index.ts'), 'pkg/index.ts');
+  });
 });
 
 describe('file tree clipboard', () => {

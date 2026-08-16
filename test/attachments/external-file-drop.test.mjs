@@ -80,5 +80,10 @@ describe('external-file-drop', () => {
   test('isLikelyDirectoryDrop flags extensionless names', () => {
     assert.equal(isLikelyDirectoryDrop(new File([], 'my-folder')), true);
     assert.equal(isLikelyDirectoryDrop(new File(['x'], 'readme.md')), false);
+    assert.equal(isLikelyDirectoryDrop(new File(['all:'], 'Makefile')), false);
+    assert.equal(
+      isLikelyDirectoryDrop(new File([], 'src', { type: 'application/x-directory' })),
+      true,
+    );
   });
 });
