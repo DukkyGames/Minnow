@@ -634,9 +634,15 @@ const IMPORT_WORKSPACE_FILE_MAX_BYTES = 10 * 1024 * 1024;
 /**
  * Write binary file bytes from a base64 payload (OS drag-import into workspace).
  * UI-only — not registered in the LLM tool catalog.
+ * `kind: 'dir'` creates an empty directory (folder drops that have no files).
  */
 async function toolImportWorkspaceFile(args) {
   const filePath = resolveSafePath(args?.path, { write: true });
+  const kind = String(args?.kind ?? 'file').toLowerCase();
+  if (kind === 'dir' || kind === 'directory') {
+    await fs.mkdir(filePath, { recursive: true });
+    return `Imported directory ${toRelativePath(filePath)}`;
+  }
   if (args?.content === undefined || args?.content === null) {
     return 'Error: content (base64 file bytes) is required';
   }
