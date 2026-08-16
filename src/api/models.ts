@@ -476,7 +476,13 @@ export async function populateMultiProviderModelSelect(
     }
     if (libraryMerge) {
       for (const { key, row } of libraryMerge.cacheEntries) {
-        modelCache.set(key, row);
+        // Stamp catalog caps so Qwen3.8 (and other id-inferred models) get
+        // the composer effort dropdown. Do not force openai-v1 — that would
+        // show Low/Medium/High on every GGUF, including non-reasoning models.
+        modelCache.set(key, {
+          ...row,
+          capabilities: catalogCapabilitiesFromRow(row),
+        });
       }
     }
 

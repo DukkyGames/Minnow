@@ -8,10 +8,13 @@ import { isServerStorageMode } from '../config/storage-mode';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { anthropicModelUsesAdaptiveThinking } from '../lib/anthropic-thinking-style';
 import {
+  ensureQwen38ReasoningAllowedOptions,
   inferReasoningOptionsFromModelId,
   isQwen38ModelId,
+  modelHasReasoningEffortLevels,
   normalizeReasoningAllowedOptions,
   normalizeReasoningCatalogValue,
+  QWEN38_REASONING_OPTIONS,
 } from '../lib/reasoning-effort';
 import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
 import type { ApiKind } from './types';
@@ -121,6 +124,27 @@ export function catalogRowHasVision(row: LmModelRecord): boolean {
   return row.type === 'vlm' || row.catalogVision === true;
 }
 
+/** Catalog default: Qwen3.8 prefers High; ignore off/on when levels exist. */
+function resolveCatalogReasoningDefault(
+  modelId: string,
+  allowed: ModelCapabilities['reasoningAllowedOptions'],
+  catalogDefault: ModelCapabilities['reasoningDefault'],
+): ModelCapabilities['reasoningDefault'] {
+  const options = allowed ?? [];
+  // Level defaults (low/medium/high) win; off/on are toggle states, not effort.
+  if (
+    catalogDefault &&
+    options.includes(catalogDefault) &&
+    catalogDefault !== 'off' &&
+    catalogDefault !== 'on'
+  ) {
+    return catalogDefault;
+  }
+  if (isQwen38ModelId(modelId) && options.includes('high')) return 'high';
+  if (options.includes('medium')) return 'medium';
+  return catalogDefault;
+}
+
 /** Build catalog-derived capabilities from a models-list row. */
 export function catalogCapabilitiesFromRow(
   row: LmModelRecord,
@@ -131,11 +155,19 @@ export function catalogCapabilitiesFromRow(
   const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
   let reasoningAllowedOptions = reasoningCaps.reasoningAllowedOptions;
-  if ((!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) && resolvedApi) {
+  // Infer when catalog is empty. Qwen3.8 does not need apiKind (My Models / llama.cpp rows).
+  if (!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) {
     const inferred = inferReasoningOptionsFromModelId(row.id, resolvedApi);
     if (inferred.length > 0) {
       reasoningAllowedOptions = inferred;
     }
+  }
+  // LM Studio often advertises Qwen3.8 as off/on; still expose Low/Medium/High.
+  if (isQwen38ModelId(row.id)) {
+    reasoningAllowedOptions = ensureQwen38ReasoningAllowedOptions(
+      row.id,
+      reasoningAllowedOptions ?? [],
+    );
   }
   const isMiniMax = /minimax/i.test(row.id);
   const usesAdaptiveAnthropicThinking =
@@ -152,13 +184,11 @@ export function catalogCapabilitiesFromRow(
         : usesAdaptiveAnthropicThinking
           ? (['off', 'low', 'medium', 'high'] as const)
           : reasoningAllowedOptions,
-    reasoningDefault:
-      reasoningCaps.reasoningDefault ??
-      (isQwen38ModelId(row.id) && reasoningAllowedOptions?.includes('high')
-        ? 'high'
-        : reasoningAllowedOptions?.includes('medium')
-          ? 'medium'
-          : undefined),
+    reasoningDefault: resolveCatalogReasoningDefault(
+      row.id,
+      reasoningAllowedOptions,
+      reasoningCaps.reasoningDefault,
+    ),
     ...(isMiniMax ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     ...(usesAdaptiveAnthropicThinking ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     contextLength,
@@ -176,6 +206,45 @@ export function catalogCapabilitiesFromRow(
   };
 }
 
+/** Empty capability shell used when Qwen3.8 is selected but not in modelCache. */
+function qwen38AssumedCapabilities(): ModelCapabilities {
+  return {
+    vision: null,
+    tools: null,
+    streaming: null,
+    grammar: null,
+    reasoning: true,
+    reasoningAllowedOptions: [...QWEN38_REASONING_OPTIONS],
+    reasoningDefault: 'high',
+    contextLength: null,
+    loadState: null,
+    sources: { reasoning: 'assumed' },
+    probeErrors: {},
+  };
+}
+
+/** Force Qwen3.8 Low/Medium/High onto a capability object (composer dropdown). */
+function withQwen38ReasoningLevels(
+  modelId: string,
+  caps: ModelCapabilities,
+): ModelCapabilities {
+  if (!isQwen38ModelId(modelId)) return caps;
+  const reasoningAllowedOptions = ensureQwen38ReasoningAllowedOptions(
+    modelId,
+    caps.reasoningAllowedOptions ?? [],
+  );
+  return {
+    ...caps,
+    reasoning: true,
+    reasoningAllowedOptions,
+    reasoningDefault: resolveCatalogReasoningDefault(
+      modelId,
+      reasoningAllowedOptions,
+      caps.reasoningDefault,
+    ),
+  };
+}
+
 /**
  * Resolve send-time capabilities for a provider-bound model row.
  * Re-applies openai-v1 inference when cached caps lack selectable reasoning options.
@@ -190,36 +259,44 @@ export function resolveSendCapabilities(
   if (!pid || !mid) return undefined;
 
   const row = findModelCacheRow(pid, mid);
-  if (!row) return undefined;
+  // My Models / llama.cpp may rebind to a label that is no longer in modelCache.
+  if (!row) {
+    return isQwen38ModelId(mid) ? qwen38AssumedCapabilities() : undefined;
+  }
 
   const kind =
     apiKind ?? getCachedProviderList()?.providers.find((p) => p.id === pid)?.apiKind;
   const fromCatalog = catalogCapabilitiesFromRow(row, kind);
   const cached = row.capabilities;
+  const qwen38Id = isQwen38ModelId(mid) ? mid : row.id;
 
-  if (!cached) return fromCatalog;
+  if (!cached) return withQwen38ReasoningLevels(qwen38Id, fromCatalog);
 
+  const cachedHasLevels = modelHasReasoningEffortLevels(cached);
+  const catalogHasLevels = modelHasReasoningEffortLevels(fromCatalog);
   const cachedAllowed = cached.reasoningAllowedOptions?.length ?? 0;
   const catalogAllowed = fromCatalog.reasoningAllowedOptions?.length ?? 0;
-  if (catalogAllowed >= 2 && cachedAllowed < 2) {
-    return {
+  // Prefer catalog when it has selectable options the probe/cache lacks, or
+  // when catalog has effort levels and cache only has off/on.
+  if ((catalogAllowed >= 2 && cachedAllowed < 2) || (catalogHasLevels && !cachedHasLevels)) {
+    return withQwen38ReasoningLevels(qwen38Id, {
       ...cached,
       reasoning: fromCatalog.reasoning ?? cached.reasoning,
       reasoningAllowedOptions: fromCatalog.reasoningAllowedOptions,
       reasoningDefault: fromCatalog.reasoningDefault ?? cached.reasoningDefault,
       reasoningThinkingEnabledValue:
         cached.reasoningThinkingEnabledValue ?? fromCatalog.reasoningThinkingEnabledValue,
-    };
+    });
   }
 
   if (!cached.reasoningThinkingEnabledValue && fromCatalog.reasoningThinkingEnabledValue) {
-    return {
+    return withQwen38ReasoningLevels(qwen38Id, {
       ...cached,
       reasoningThinkingEnabledValue: fromCatalog.reasoningThinkingEnabledValue,
-    };
+    });
   }
 
-  return cached;
+  return withQwen38ReasoningLevels(qwen38Id, cached);
 }
 
 /**
@@ -285,7 +362,7 @@ export function mergeModelCapabilities(
     merged.api = catalog.api;
   }
 
-  return merged;
+  return withQwen38ReasoningLevels(row.id, merged);
 }
 
 /** Attach merged capabilities to every row in modelCache for a provider file. */
