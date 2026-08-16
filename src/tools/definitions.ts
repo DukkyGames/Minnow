@@ -373,7 +373,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_file',
-      'Read a UTF-8 text file from the project. Large files are truncated (~32k chars) with line counts and a pointer to read_file_range for the remainder — prefer read_file_range when you know you only need part of a file.',
+      'Read a UTF-8 text file from the project. PDF, Excel (.xlsx/.xls), Word, PowerPoint, and OpenDocument files are extracted to plain text automatically (same as read_document) — do not treat ZIP/PK bytes as file contents. Large text files are truncated (~32k chars) with line counts and a pointer to read_file_range for the remainder — prefer read_file_range when you know you only need part of a file.',
       {
         path: { type: 'string', description: 'Relative file path' },
       },
@@ -388,7 +388,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_document',
-      'Extract plain text from a PDF or office document (Excel, Word, PowerPoint, OpenDocument, RTF). Prefer path for files already in the workspace; use content (base64 bytes) only for attachment-style payloads.',
+      'Extract plain text from a PDF or office document (Excel, Word, PowerPoint, OpenDocument, RTF). Prefer this over read_file for spreadsheets and office files. Prefer path for files already in the workspace; use content (base64 bytes) only for attachment-style payloads.',
       {
         path: {
           type: 'string',
@@ -414,7 +414,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_file_range',
-      'Read a range of lines from a text file (inclusive, 1-based).',
+      'Read a range of lines from a text file (inclusive, 1-based). For PDF/Excel/Word, line numbers refer to the extracted text, not the binary file.',
       {
         path: { type: 'string', description: 'Relative file path' },
         start_line: { type: 'integer', description: 'First line number (1-based)' },

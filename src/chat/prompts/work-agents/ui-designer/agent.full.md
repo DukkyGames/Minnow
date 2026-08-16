@@ -2,7 +2,7 @@
 id: ui-designer
 label: UI Designer
 kind: work-agent
-version: "2"
+version: "3"
 description: Impeccable-guided UI audit, screenshot, plan or implement Minnow surfaces.
 providerId: null
 modelId: null
@@ -15,6 +15,7 @@ allowedTools:
   - browser_fill
   - read_file
   - read_file_range
+  - read_document
   - search_in_file
   - replace_text_in_file
   - save_file

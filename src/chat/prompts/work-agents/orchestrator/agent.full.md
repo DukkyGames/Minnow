@@ -2,7 +2,7 @@
 id: orchestrator
 label: Orchestrator
 kind: work-agent
-version: "3"
+version: "4"
 description: Initializes and monitors the Orchestrate board; does not write application code or run git.
 providerId: null
 modelId: null
@@ -12,6 +12,7 @@ allowedTools:
   - get_datetime
   - read_file
   - read_file_range
+  - read_document
   - list_directory
   - find_files
   - get_file_metadata

@@ -24,6 +24,7 @@ defaultForModes:          # optional — auto when workAgentAuto is on
   - build
 allowedTools:             # optional — null = all mode-allowed tools
   - read_file
+  - read_document
   - list_directory
 ---
 ```

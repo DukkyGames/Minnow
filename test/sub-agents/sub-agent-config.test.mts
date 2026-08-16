@@ -68,6 +68,7 @@ describe('sub-agent config', () => {
     assert.ok(r.allowedTools?.includes('brain_search'));
     assert.ok(r.allowedTools?.includes('repo_map'));
     assert.ok(r.allowedTools?.includes('recall_chat_context'));
+    assert.ok(r.allowedTools?.includes('read_document'));
     assert.ok(r.deniedTools.includes('save_file'));
     assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });
@@ -78,6 +79,7 @@ describe('sub-agent config', () => {
     assert.ok(e.allowedTools?.includes('rag_web_content'));
     assert.ok(e.allowedTools?.includes('brain_read_page'));
     assert.ok(e.allowedTools?.includes('repo_map'));
+    assert.ok(e.allowedTools?.includes('read_document'));
   });
 
   test('plan-reviewer type is registered with read-only allow list', () => {

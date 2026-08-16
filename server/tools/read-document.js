@@ -299,6 +299,64 @@ function decodeDocumentContent(contentB64, filename) {
 }
 
 /**
+ * @param {string} filename
+ * @param {Buffer} buffer
+ * @returns {boolean}
+ */
+function isSupportedDocument(filename, buffer) {
+  const ext = extensionOf(filename);
+  return looksLikePdf(filename, buffer) || ext === 'pdf' || OFFICE_EXTENSIONS.has(ext);
+}
+
+/**
+ * Cap extracted document text and wrap it as untrusted source data.
+ *
+ * @param {string} text
+ * @param {string} filename
+ * @returns {string}
+ */
+function capAndWrapDocumentText(text, filename) {
+  const { text: capped } = capTextOutput(text, {
+    footerHint: 'narrow the document scope or read a smaller section',
+  });
+  return wrapUntrusted(capped, { source: `document:${path.basename(filename)}` });
+}
+
+/**
+ * Extract workspace document text without the output cap or untrusted wrap.
+ * Used by read_file_range so line numbers apply to sheet/PDF text, not ZIP bytes.
+ *
+ * @param {string} relPath
+ * @param {string} [filenameOverride]
+ * @returns {Promise<{ filename: string, text: string } | string>}
+ */
+export async function extractWorkspaceDocumentText(relPath, filenameOverride) {
+  const loaded = await loadDocumentFromPath(relPath, filenameOverride);
+  if (typeof loaded === 'string') {
+    return loaded;
+  }
+
+  const { buffer, filename } = loaded;
+  if (!isSupportedDocument(filename, buffer)) {
+    return (
+      `Error: read_document supports PDF and office formats ` +
+      `(Excel, Word, PowerPoint, OpenDocument, RTF). Got "${filename}".`
+    );
+  }
+
+  try {
+    const text = await extractDocumentText(buffer, filename);
+    return { filename, text };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith('Error:')) {
+      return message;
+    }
+    return `Error: failed to parse "${filename}": ${message}`;
+  }
+}
+
+/**
  * read_document tool handler — workspace path or base64 attachment bytes.
  *
  * @param {{ path?: string, filename?: string, content?: string }} args
@@ -314,43 +372,35 @@ export async function toolReadDocument(args) {
     return 'Error: path (workspace-relative) or content (base64 file bytes) is required';
   }
 
-  let loaded;
   if (relPath) {
-    loaded = await loadDocumentFromPath(relPath, filenameArg || undefined);
-  } else {
-    const filename = filenameArg || 'document.bin';
-    loaded = decodeDocumentContent(contentB64, filename);
+    const extracted = await extractWorkspaceDocumentText(relPath, filenameArg || undefined);
+    if (typeof extracted === 'string') {
+      return extracted;
+    }
+    return capAndWrapDocumentText(extracted.text, extracted.filename);
   }
 
+  const filename = filenameArg || 'document.bin';
+  const loaded = decodeDocumentContent(contentB64, filename);
   if (typeof loaded === 'string') {
     return loaded;
   }
 
-  const { buffer, filename } = loaded;
-  const ext = extensionOf(filename);
-  const supported =
-    looksLikePdf(filename, buffer) ||
-    ext === 'pdf' ||
-    OFFICE_EXTENSIONS.has(ext);
-
-  if (!supported) {
+  if (!isSupportedDocument(loaded.filename, loaded.buffer)) {
     return (
       `Error: read_document supports PDF and office formats ` +
-      `(Excel, Word, PowerPoint, OpenDocument, RTF). Got "${filename}".`
+      `(Excel, Word, PowerPoint, OpenDocument, RTF). Got "${loaded.filename}".`
     );
   }
 
   try {
-    const text = await extractDocumentText(buffer, filename);
-    const { text: capped } = capTextOutput(text, {
-      footerHint: 'narrow the document scope or read a smaller section',
-    });
-    return wrapUntrusted(capped, { source: `document:${path.basename(filename)}` });
+    const text = await extractDocumentText(loaded.buffer, loaded.filename);
+    return capAndWrapDocumentText(text, loaded.filename);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.startsWith('Error:')) {
       return message;
     }
-    return `Error: failed to parse "${filename}": ${message}`;
+    return `Error: failed to parse "${loaded.filename}": ${message}`;
   }
 }

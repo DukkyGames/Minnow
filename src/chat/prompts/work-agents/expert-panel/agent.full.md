@@ -2,7 +2,7 @@
 id: expert-panel
 label: Expert Panel
 kind: work-agent
-version: "1"
+version: "2"
 description: Three-expert panel-of-experts discussion that delivers a single unified answer.
 providerId: null
 modelId: null
@@ -10,6 +10,7 @@ allowedTools:
   - get_datetime
   - read_file
   - read_file_range
+  - read_document
   - list_directory
   - find_files
   - search_in_file

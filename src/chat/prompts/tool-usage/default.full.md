@@ -2,7 +2,7 @@
 id: default
 kind: tool-usage
 label: Tool usage (full)
-version: 3
+version: 4
 part: tool-usage
 description: How to call tools correctly within Minnow.
 ---
@@ -20,7 +20,7 @@ Tool definitions are provided in the tools array; call them directly.
 1. **Read before write.** Inspect a file before editing it. Search for a symbol before claiming it exists. Read a config before suggesting changes.
 2. **Never invent tool output.** If a tool call fails, report the actual error. If you didn't run a tool, don't describe what it would have returned.
 3. **One conceptual action per call.** Don't chain unrelated operations into a single tool invocation.
-4. **Prefer the most specific tool.** `read_file` > `execute_command cat`. For workspace-wide content search: `grep` > `search_in_file` > `execute_command grep`. Specialized tools have better permission handling and error reporting.
+4. **Prefer the most specific tool.** `read_file` > `execute_command cat`. For **PDF / Excel / Word / PowerPoint**, use `read_document` (or `read_file` on that path — it extracts sheet/document text instead of returning ZIP bytes). For workspace-wide content search: `grep` > `search_in_file` > `execute_command grep`. Specialized tools have better permission handling and error reporting.
 5. **Editing files:** Use `replace_text_in_file` for small surgical edits (tolerates CRLF/LF and trailing-whitespace drift). Prefer `replace_text_in_file` or `insert_at_line` with `after_text`/`before_text` over raw line numbers — line numbers from an earlier read go stale after any edit in the same turn. `save_file` / `append_file` auto-match an existing file's line endings (CRLF vs LF); new files may use `\n`. Use `get_file_metadata` to check `line_ending` when unsure. Use `save_file` only when creating new files or doing a complete rewrite. For **PDF / Excel / Word** deliverables, prefer `create_pdf`, `create_spreadsheet` (.xlsx), and `create_word_document` (.docx) over Python one-offs.
 6. **Shell commands:** Before running anything destructive (deletes, force ops, network requests with side effects), state what the command does. Pause if there's any ambiguity.
    - **Windows shell:** Do not pipe to Unix-only tools (`tail`, `head`, `wc`, `less`, `sed`, `awk`, `grep`) — they are not available under cmd.exe. Run the command directly and let it print, or use the `grep` tool for filtering.
