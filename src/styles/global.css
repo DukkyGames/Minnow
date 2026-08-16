@@ -94,6 +94,7 @@ textarea,
 .tool-approval-host,
 .question-host,
 .benchmark-page-body,
+.models-logs__body,
 .composer-tools-popover .tools-list--composer,
 .kanban-column__list {
   scrollbar-gutter: stable;
