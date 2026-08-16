@@ -175,7 +175,6 @@ async function startRecommendedServe(
   const llama = profile
     ? {
         ctx: profile.ctx,
-        n_gpu_layers: profile.n_gpu_layers,
         cache_type: profile.cache_type,
         fit: true,
       }

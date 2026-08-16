@@ -22,7 +22,7 @@ describe('llama args', () => {
     assert.equal(args[nglIdx + 1], '0');
   });
 
-  test('buildLlamaServerArgs defaults ngl=999 on GPU variant', () => {
+  test('buildLlamaServerArgs defaults ngl=999 on GPU variant with fit off', () => {
     const args = buildLlamaServerArgs({
       modelPath: '/tmp/model.gguf',
       port: 8085,
@@ -31,6 +31,34 @@ describe('llama args', () => {
     });
     const nglIdx = args.indexOf('-ngl');
     assert.equal(args[nglIdx + 1], '999');
+    const fitIdx = args.indexOf('--fit');
+    assert.ok(fitIdx >= 0);
+    assert.equal(args[fitIdx + 1], 'off');
+  });
+
+  test('buildLlamaServerArgs omits ngl when fit is on', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      settings: { fit: true, n_gpu_layers: 999, ctx: 4096 },
+    });
+    assert.equal(args.indexOf('-ngl'), -1);
+    const fitIdx = args.indexOf('--fit');
+    assert.equal(args[fitIdx + 1], 'on');
+  });
+
+  test('buildLlamaServerArgs passes explicit partial ngl with fit off', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      settings: { n_gpu_layers: 32, ctx: 4096 },
+    });
+    const nglIdx = args.indexOf('-ngl');
+    assert.equal(args[nglIdx + 1], '32');
+    const fitIdx = args.indexOf('--fit');
+    assert.equal(args[fitIdx + 1], 'off');
   });
 
   test('buildLlamaServerArgs passes fit as on|off value', () => {
