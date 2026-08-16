@@ -299,6 +299,7 @@
 
 #msgInput {
   width: 100%;
+  box-sizing: border-box;
   background: var(--mn-bg);
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
@@ -312,9 +313,14 @@
   line-height: 1.55;
   min-height: 44px;
   max-height: 40vh;
-  overflow-y: hidden;
+  /* Grow with content in the compositor — JS height:auto lagged glyph paint on macOS. */
+  field-sizing: content;
+  overflow-y: auto;
   scrollbar-width: none;
-  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+  /* Ligatures + theme transitions on the focused field delay caret/glyph paint. */
+  text-rendering: auto;
+  font-variant-ligatures: none;
+  transition: none;
   display: block;
 }
 

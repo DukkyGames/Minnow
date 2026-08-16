@@ -539,14 +539,25 @@
   outline: none;
   background: transparent;
   color: var(--mn-fg);
+  caret-color: var(--mn-fg);
   font-family: inherit;
   font-size: 14px;
   line-height: 1.5;
   padding: 9px 4px;
+  field-sizing: content;
+  overflow-y: auto;
+  scrollbar-width: none;
+  text-rendering: auto;
+  font-variant-ligatures: none;
+  transition: none;
 }
 
 .chat-app-field::placeholder {
   color: var(--mn-fg-muted);
+}
+
+.chat-app-field::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-app-send {

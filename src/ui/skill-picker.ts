@@ -637,6 +637,12 @@ export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): voi
     if (storedSkill && !new RegExp(`(?:^|\\s)/${storedSkill}(?:\\s|$)`).test(composerInput.value)) {
       pickerApplied.delete(composerInput);
     }
+    // Skip picker work until a slash token is in play so ordinary typing stays cheap.
+    if (!open) {
+      const pos = composerInput.selectionStart ?? composerInput.value.length;
+      const before = composerInput.value.slice(0, pos);
+      if (!/(?:^|\s)\/[a-z0-9-]*$/.test(before)) return;
+    }
     detectSlashContext();
   });
 

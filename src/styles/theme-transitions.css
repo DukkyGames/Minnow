@@ -10,18 +10,16 @@ html.theme-ready:not(.theme-no-transition) body * {
 }
 
 /*
- * Do not animate `color` on text-entry controls. Chromium can stop painting the
- * insertion caret when `color` transitions while caret-color is still `auto`
- * (MIN-168 — caret missing until reload).
+ * No transitions on text-entry controls. Chromium on macOS delays caret and
+ * glyph paint when the focused field participates in any CSS transition
+ * (MIN-168 — missing caret; composer keystroke lag).
  */
 html.theme-ready:not(.theme-no-transition) body input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
 html.theme-ready:not(.theme-no-transition) body textarea,
 html.theme-ready:not(.theme-no-transition) body select,
 html.theme-ready:not(.theme-no-transition) body [contenteditable='true'],
 html.theme-ready:not(.theme-no-transition) body .cm-content {
-  transition:
-    background-color 160ms ease,
-    border-color 160ms ease;
+  transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

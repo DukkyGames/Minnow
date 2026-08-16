@@ -91,11 +91,6 @@ function resizeComposerInput(input: HTMLTextAreaElement): void {
     autoResizeDesktopComposer(input);
     return;
   }
-  if (input.id === 'chatAppInput') {
-    input.style.height = 'auto';
-    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
-    return;
-  }
   void import('./input').then((m) => m.autoResize(input));
 }
 

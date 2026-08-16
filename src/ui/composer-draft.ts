@@ -23,6 +23,14 @@ let draftRestoreSuspended = false;
 let draftSidebarLabelTimer: ReturnType<typeof setTimeout> | null = null;
 const DRAFT_SIDEBAR_LABEL_DEBOUNCE_MS = 200;
 
+/**
+ * Session PATCH after a typing pause stringified the whole chat (and in DEV every
+ * chat) on the main thread — glyphs froze, then caught up. Flush on idle / blur / switch.
+ */
+const DRAFT_SESSION_SAVE_IDLE_MS = 2500;
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let draftSaveChatId: string | null = null;
+
 function scheduleComposerDraftSidebarLabelSync(chat: Chat): void {
   if (getChatMessageCount(chat) !== 0 || !hasComposerDraft(chat)) return;
   if (draftSidebarLabelTimer) clearTimeout(draftSidebarLabelTimer);
@@ -49,6 +57,28 @@ export function persistComposerDraftOnChat(chat: Chat, rawText: string): boolean
   return hadDraft !== hasComposerDraft(chat);
 }
 
+/** Write a pending draft flush now (blur, chat switch, send). */
+export function flushComposerDraftSessionSave(chatId?: string): void {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+  const id = chatId ?? draftSaveChatId;
+  draftSaveChatId = null;
+  if (id) scheduleSaveSessions({ chatId: id });
+}
+
+function scheduleIdleComposerDraftSave(chatId: string): void {
+  draftSaveChatId = chatId;
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null;
+    const id = draftSaveChatId;
+    draftSaveChatId = null;
+    if (id) scheduleSaveSessions({ chatId: id });
+  }, DRAFT_SESSION_SAVE_IDLE_MS);
+}
+
 /** Remove persisted draft text after a user message is committed. */
 export function clearComposerDraftOnChat(chat: Chat): void {
   delete chat.composerDraft;
@@ -62,6 +92,11 @@ export function clearComposerAfterSend(
   const hadDraft = hasComposerDraft(chat);
   clearComposerDraftOnChat(chat);
   clearComposerInput(inputEl ?? getActiveComposerSurface().inputEl);
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+  draftSaveChatId = null;
   if (!hadDraft) return;
   scheduleSaveSessions({ chatId: chat.id });
   void import('./sidebar').then((m) => m.renderSidebar());
@@ -74,8 +109,13 @@ export function persistComposerDraftForChatId(chatId: string): boolean {
   if (!sessionState) return false;
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return false;
+  cancelScheduledDraftInput();
   const text = getActiveComposerSurface().inputEl?.value ?? '';
-  return persistComposerDraftOnChat(chat, text);
+  const changed = persistComposerDraftOnChat(chat, text);
+  if (draftSaveChatId === chatId || changed || text.trim()) {
+    flushComposerDraftSessionSave(chatId);
+  }
+  return changed;
 }
 
 /** Load a chat's draft into the active composer (or clear when none). */
@@ -105,7 +145,7 @@ export function handleComposerDraftInput(): void {
   const visibilityChanged = persistComposerDraftOnChat(chat, text);
   if (!visibilityChanged && !hasComposerDraft(chat)) return;
 
-  scheduleSaveSessions({ chatId: chat.id });
+  scheduleIdleComposerDraftSave(chat.id);
 
   // Rebuilding the sidebar on every keystroke made typing feel stuck once a draft
   // existed (`hasComposerDraft` stayed true). Full rebuild only when a row appears
@@ -119,14 +159,48 @@ export function handleComposerDraftInput(): void {
   }
 }
 
+let draftInputFrame = 0;
+
+function cancelScheduledDraftInput(): void {
+  if (!draftInputFrame) return;
+  if (typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(draftInputFrame);
+  } else {
+    clearTimeout(draftInputFrame);
+  }
+  draftInputFrame = 0;
+}
+
+/** Run draft persist after the browser paints the new glyph (macOS input lag). */
+function scheduleComposerDraftInput(): void {
+  if (draftInputFrame) return;
+  const run = (): void => {
+    draftInputFrame = 0;
+    handleComposerDraftInput();
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    draftInputFrame = requestAnimationFrame(run);
+    return;
+  }
+  draftInputFrame = setTimeout(run, 0) as unknown as number;
+}
+
 /** Wire draft persistence for one composer textarea. */
 export function initComposerDraftListener(inputEl?: HTMLTextAreaElement | null): void {
   const input = inputEl ?? getActiveComposerSurface().inputEl;
   if (!input || input.dataset.draftListener === '1') return;
   input.dataset.draftListener = '1';
   input.addEventListener('input', () => {
-    handleComposerDraftInput();
+    scheduleComposerDraftInput();
   });
+  if (!input.dataset.draftBlurListener) {
+    input.dataset.draftBlurListener = '1';
+    input.addEventListener('blur', () => {
+      cancelScheduledDraftInput();
+      handleComposerDraftInput();
+      flushComposerDraftSessionSave();
+    });
+  }
 }
 
 /** Flush the active composer, then clear it for a fresh ephemeral chat. */

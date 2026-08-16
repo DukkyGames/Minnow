@@ -34,7 +34,7 @@ Legacy values (`light`, `dark`, `system`, pre-rename families like `sage`→`swa
 1. **FOUC boot** — inline script in [`index.html`](../../index.html) sets `data-theme` before paint.
 2. **`applyTheme()`** — [`src/theme.ts`](../../src/theme.ts) sets `data-theme`, updates `theme-color` meta.
 3. **`initTheme()`** — [`src/ui/theme.ts`](../../src/ui/theme.ts) wires hljs, xterm, custom tokens, fonts; adds `theme-ready`.
-4. **Transitions** — [`theme-transitions.css`](../../src/styles/theme-transitions.css) guards first paint; caret-safe (no `color` transition on text inputs).
+4. **Transitions** — [`theme-transitions.css`](../../src/styles/theme-transitions.css) guards first paint; text-entry controls use `transition: none` (MIN-168 caret + macOS composer glyph lag).
 
 ## Custom appearance
 

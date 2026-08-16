@@ -28,8 +28,12 @@ import {
   type ContextUsageSurface,
 } from './context-usage-surface';
 
-const COMPOSER_REFRESH_DEBOUNCE_MS = 200;
+const COMPOSER_REFRESH_DEBOUNCE_MS = 450;
 const STREAMING_CONTEXT_REFRESH_DEBOUNCE_MS = 1000;
+/** Skip history re-tokenizing while the composer is being edited (macOS glyph lag). */
+const COMPOSER_TYPING_QUIET_MS = 2000;
+
+let lastComposerInputAt = 0;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> | null = null;
@@ -142,14 +146,21 @@ export function refreshContextUsageRing(): void {
   });
 }
 
-/** Debounced refresh (composer typing, tool toggles). */
+/** True when a composer keystroke landed recently enough to skip idle token work. */
+function composerTypingIsHot(): boolean {
+  return lastComposerInputAt > 0 && Date.now() - lastComposerInputAt < COMPOSER_TYPING_QUIET_MS;
+}
+
+/** Debounced refresh (tool toggles, stream ticks). Composer typing must not start this. */
 export function scheduleContextUsageRefresh(options?: { duringStream?: boolean }): void {
+  if (composerTypingIsHot()) return;
   if (debounceTimer) clearTimeout(debounceTimer);
   const delay = options?.duringStream
     ? STREAMING_CONTEXT_REFRESH_DEBOUNCE_MS
     : COMPOSER_REFRESH_DEBOUNCE_MS;
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
+    if (composerTypingIsHot()) return;
     refreshContextUsageRing();
   }, delay);
 }
@@ -212,7 +223,16 @@ export function initContextUsageRing(): void {
     { inputId: 'chatAppInput' },
     { inputId: 'desktopInput' },
   ]) {
-    document.getElementById(inputId)?.addEventListener('input', () => scheduleContextUsageRefresh());
+    // Do not re-estimate history on composer input. After a pause that work
+    // froze glyph paint (especially backspace). Record typing so stream/tool
+    // refreshes wait until the composer is quiet.
+    document.getElementById(inputId)?.addEventListener('input', () => {
+      lastComposerInputAt = Date.now();
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+    });
   }
 
   const modelSelect = document.getElementById('modelSelect');
@@ -237,4 +257,5 @@ export function resetContextUsageRingForTests(): void {
   inFlight = null;
   lastBudget = null;
   refreshGeneration = 0;
+  lastComposerInputAt = 0;
 }

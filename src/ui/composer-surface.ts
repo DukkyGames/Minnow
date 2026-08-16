@@ -64,7 +64,9 @@ export function resolveComposerSurface(
 export function clearComposerInput(input: HTMLTextAreaElement | null | undefined): void {
   if (!input) return;
   input.value = '';
-  input.style.height = '0px';
+  // Drop inline height so CSS field-sizing / min-height can restore the floor.
+  input.style.height = '';
   input.style.overflowY = 'hidden';
+  void import('./input').then((m) => m.autoResize(input));
   void import('./composer-prompt-history').then((m) => m.resetComposerPromptHistory());
 }

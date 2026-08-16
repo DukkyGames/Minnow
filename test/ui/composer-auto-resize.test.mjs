@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
-const { autoResize } = await import('../../src/ui/input.ts');
+const {
+  autoResize,
+  setComposerFieldSizingSupportedForTests,
+} = await import('../../src/ui/input.ts');
 
 function setupTextarea() {
   const window = new Window({ innerHeight: 800 });
@@ -22,7 +25,12 @@ function setupTextarea() {
 }
 
 describe('autoResize', () => {
+  afterEach(() => {
+    setComposerFieldSizingSupportedForTests(null);
+  });
+
   test('short content stays hidden overflow under 40vh cap', () => {
+    setComposerFieldSizingSupportedForTests(false);
     const el = setupTextarea();
     el.value = 'Hello';
     autoResize(el);
@@ -33,6 +41,7 @@ describe('autoResize', () => {
   });
 
   test('cleared value resets to minimum height', () => {
+    setComposerFieldSizingSupportedForTests(false);
     const el = setupTextarea();
     el.value = 'Line one\nLine two\nLine three';
     autoResize(el);
@@ -41,5 +50,28 @@ describe('autoResize', () => {
 
     assert.equal(el.style.overflowY, 'hidden');
     assert.equal(el.style.height, '44px');
+  });
+
+  test('single-line typing does not collapse height to auto', () => {
+    setComposerFieldSizingSupportedForTests(false);
+    const el = setupTextarea();
+    el.value = 'Hello';
+    autoResize(el);
+    const firstHeight = el.style.height;
+    el.value = 'Hello world';
+    autoResize(el);
+
+    assert.equal(el.style.height, firstHeight);
+    assert.notEqual(el.style.height, 'auto');
+  });
+
+  test('field-sizing path clears leftover inline height', () => {
+    setComposerFieldSizingSupportedForTests(true);
+    const el = setupTextarea();
+    el.style.height = '120px';
+    el.value = 'Hello';
+    autoResize(el);
+
+    assert.equal(el.style.height, '');
   });
 });

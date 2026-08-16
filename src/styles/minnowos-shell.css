@@ -17,6 +17,13 @@
   text-rendering: optimizeLegibility;
 }
 
+/* optimizeLegibility enables CoreText ligatures; that lags composer glyph paint. */
+.mn-os textarea,
+.mn-os input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']) {
+  text-rendering: auto;
+  font-variant-ligatures: none;
+}
+
 /* Shared OS safe-area + dock reveal metrics (chat app + desktop composer reserve). */
 html.minnow-os-enabled {
   --os-safe-bottom: env(safe-area-inset-bottom, 0px);

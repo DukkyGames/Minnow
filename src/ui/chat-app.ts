@@ -42,6 +42,7 @@ import {
   syncComposerFromStreamingState,
 } from './composer-send';
 import { handleComposerPromptHistoryKeydown } from './composer-prompt-history';
+import { autoResize, composerFieldSizingSupported } from './input';
 import { handleSkillPickerKeydown, initComposerSlashPicker, isSkillPickerOpen } from './skill-picker';
 import { renderChatFromHistory } from './messages';
 import { closeSettings } from './settings-page';
@@ -451,8 +452,7 @@ function onHashChange(): void {
 }
 
 function autoResizeComposer(textarea: HTMLTextAreaElement): void {
-  textarea.style.height = 'auto';
-  textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  autoResize(textarea);
 }
 
 function bindStaticControls(): void {
@@ -469,7 +469,7 @@ function bindStaticControls(): void {
   initComposerDraftListener(input);
   if (input) initComposerSlashPicker(input);
   input?.addEventListener('input', () => {
-    autoResizeComposer(input);
+    if (!composerFieldSizingSupported()) autoResizeComposer(input);
     syncComposerSendState();
   });
   input?.addEventListener('keydown', (e) => {

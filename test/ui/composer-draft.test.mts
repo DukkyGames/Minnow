@@ -7,6 +7,7 @@ const { setSessionStateForTests, createEmptyChatObject } = await import(
 );
 const {
   clearComposerAfterSend,
+  handleComposerDraftInput,
   persistComposerDraftOnChat,
 } = await import('../../src/ui/composer-draft.ts');
 
@@ -46,5 +47,29 @@ describe('clearComposerAfterSend', () => {
 
     assert.equal(chat.composerDraft, undefined);
     assert.equal(input.value, '');
+  });
+});
+
+describe('handleComposerDraftInput', () => {
+  afterEach(() => {
+    setSessionStateForTests(null);
+    document.body.replaceChildren();
+  });
+
+  test('stores draft text in memory without requiring a session flush first', () => {
+    const chat = createEmptyChatObject(FIXED_CHAT_ID);
+    const input = setupComposerInput();
+    input.value = 'hello from composer';
+
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    handleComposerDraftInput();
+
+    assert.equal(chat.composerDraft, 'hello from composer');
   });
 });
