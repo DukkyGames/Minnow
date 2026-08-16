@@ -26,6 +26,7 @@ import {
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
 import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 import { normalizeFileUri } from './file-uri.js';
+import { hashTypeScriptProjectFingerprint } from './project-fingerprint.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '../..');
@@ -55,7 +56,7 @@ const MAX_DIAGNOSTIC_SNAPSHOT_ENTRIES = 128;
 /** Last client-visible LSP bridge failure (timeouts, spawn, request errors). */
 let lastLspBridgeError = null;
 
-/** @type {Record<string, { processes: Map<string, object>, pendingConnections: Map<string, Promise<object>>, documentSync: Map<string, { version: number, text: string }>, diagnosticSnapshots: Map<string, { revision: string, formatted: string }> }>} */
+/** @type {Record<string, { processes: Map<string, object>, pendingConnections: Map<string, Promise<object>>, documentSync: Map<string, { version: number, text: string }>, diagnosticSnapshots: Map<string, { revision: string, projectRevision: string, formatted: string }> }>} */
 const scopeStores = {
   [LSP_SCOPE_EDITOR]: {
     processes: new Map(),
@@ -655,6 +656,43 @@ function trimDiagnosticSnapshotsLru(store) {
     if (oldest === undefined) break;
     store.diagnosticSnapshots.delete(oldest);
   }
+}
+
+/**
+ * Drop agent/editor sync so the next diagnostic pass didOpens on a fresh
+ * tsserver. Required when tsconfig.node.json or @types/node appear after the
+ * file was already opened — tsserver keeps the inferred-project "Cannot find
+ * name 'process'" until the process restarts (MIN-616).
+ */
+function invalidateScopeLanguageServer(scope, serverId) {
+  const store = getScopeStore(scope);
+  store.diagnosticSnapshots.clear();
+  store.documentSync.clear();
+  for (const key of [...store.pendingConnections.keys()]) {
+    if (matchesServerProcessKey(key, serverId)) {
+      store.pendingConnections.delete(key);
+    }
+  }
+  for (const key of [...store.processes.keys()]) {
+    if (matchesServerProcessKey(key, serverId)) {
+      const state = store.processes.get(key);
+      if (state) discardLspState(scope, key, state);
+    }
+  }
+}
+
+/**
+ * Restart agent-scoped TypeScript when the project fingerprint changed since
+ * this connection was opened (new tsconfig / @types/node).
+ */
+function restartAgentTypescriptIfProjectChanged(projectRevision) {
+  if (!projectRevision) return;
+  const store = getScopeStore(LSP_SCOPE_AGENT);
+  const processKey = connectionProcessKey(LSP_SCOPE_AGENT, 'typescript');
+  const existing = store.processes.get(processKey);
+  if (!existing?.projectRevision) return;
+  if (existing.projectRevision === projectRevision) return;
+  invalidateScopeLanguageServer(LSP_SCOPE_AGENT, 'typescript');
 }
 
 /** Default workspace/configuration sections when lsp.json has no overrides. */
@@ -1306,17 +1344,34 @@ export async function getLspDiagnostics(relativePath) {
   }
 
   const revision = contentRevision(diskText);
+  // tsconfig.node.json / @types/node can appear without the file bytes changing
+  // (Vite configs). Include them so we do not replay a stale "process" error.
+  const usesTypescript = matchers.some((m) => m.id === 'typescript');
+  const projectRevision = usesTypescript
+    ? await hashTypeScriptProjectFingerprint(relativePath, workspaceRoot)
+    : '';
   const fileUri = toFileUri(relativePath, workspaceRoot);
   const agentStore = getScopeStore(LSP_SCOPE_AGENT);
   const cached = agentStore.diagnosticSnapshots.get(fileUri);
-  if (cached && cached.revision === revision) {
+  if (
+    cached &&
+    cached.revision === revision &&
+    cached.projectRevision === projectRevision
+  ) {
     return cached.formatted;
+  }
+
+  if (usesTypescript) {
+    restartAgentTypescriptIfProjectChanged(projectRevision);
   }
 
   const parts = [];
   for (const { id, config } of matchers) {
     try {
-      await getConnection(LSP_SCOPE_AGENT, id, config);
+      const state = await getConnection(LSP_SCOPE_AGENT, id, config);
+      if (id === 'typescript') {
+        state.projectRevision = projectRevision;
+      }
 
       const waitAfterSync = async () => {
         const { promise, cancel, startTotalTimer } = createDiagnosticWaiter(
@@ -1343,11 +1398,11 @@ export async function getLspDiagnostics(relativePath) {
         settled = await waitAfterSync();
       }
 
-      const state = await getConnection(LSP_SCOPE_AGENT, id, config);
+      const liveState = await getConnection(LSP_SCOPE_AGENT, id, config);
       const diags =
         settled.receivedAny === true
           ? settled.diagnostics
-          : (state.diagnostics.get(fileUri) ?? []);
+          : (liveState.diagnostics.get(fileUri) ?? []);
       if (diags.length === 0) {
         parts.push(`No LSP diagnostics for ${relativePath} (${id}).`);
       } else {
@@ -1360,7 +1415,11 @@ export async function getLspDiagnostics(relativePath) {
   }
 
   const formatted = parts.join('\n\n');
-  agentStore.diagnosticSnapshots.set(fileUri, { revision, formatted });
+  agentStore.diagnosticSnapshots.set(fileUri, {
+    revision,
+    projectRevision,
+    formatted,
+  });
   trimDiagnosticSnapshotsLru(agentStore);
   return formatted;
 }
