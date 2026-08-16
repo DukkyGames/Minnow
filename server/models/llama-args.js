@@ -89,6 +89,7 @@ function mergeSettings(...layers) {
  * @param {LlamaServeSettings} [opts.settings]
  * @param {LlamaServeSettings} [opts.defaults]
  * @param {LlamaVariant} [opts.variant]
+ * @param {string} [opts.mmprojPath] Sibling vision projector (mmproj*.gguf).
  * @returns {string[]}
  */
 export function buildLlamaServerArgs(opts) {
@@ -101,6 +102,7 @@ export function buildLlamaServerArgs(opts) {
     settings,
     defaults,
     variant = 'cpu',
+    mmprojPath,
   } = opts;
 
   /** @type {LlamaServeSettings} */
@@ -131,6 +133,9 @@ export function buildLlamaServerArgs(opts) {
     merged.n_gpu_layers = 999;
   }
 
+  const extraArgs = Array.isArray(merged.extra_args) ? merged.extra_args : [];
+  const extraHasFlag = (flag) => extraArgs.some((token) => token === flag);
+
   const args = [
     '-m',
     modelPath,
@@ -139,6 +144,16 @@ export function buildLlamaServerArgs(opts) {
     '--port',
     String(port),
   ];
+
+  // GGUF-embedded Jinja templates (Qwen3.8 thinking/tools) need --jinja on llama-server.
+  if (!extraHasFlag('--jinja')) {
+    args.push('--jinja');
+  }
+
+  // VLM projector living next to the weights — llama-server will not auto-discover it.
+  if (mmprojPath && !extraHasFlag('--mmproj')) {
+    args.push('--mmproj', mmprojPath);
+  }
 
   if (merged.ctx != null) {
     args.push('-c', String(merged.ctx));
@@ -194,11 +209,9 @@ export function buildLlamaServerArgs(opts) {
   // Do NOT pass `--reasoning-budget` here — it overrides and disables per-request
   // `thinking_budget_tokens` on the OpenAI-compatible API (llama.cpp PR #20297).
 
-  if (Array.isArray(merged.extra_args)) {
-    for (const token of merged.extra_args) {
-      if (typeof token === 'string' && token.trim()) {
-        args.push(token.trim());
-      }
+  for (const token of extraArgs) {
+    if (typeof token === 'string' && token.trim()) {
+      args.push(token.trim());
     }
   }
 
@@ -220,6 +233,30 @@ export function warnIfReasoningBudgetCliFlag(settings, defaults) {
       '[llama-cpp] --reasoning-budget in serve extra_args disables per-request thinking_budget_tokens',
     );
   }
+}
+
+/**
+ * Find a sibling mmproj*.gguf next to the weight file (vision projector).
+ * Prefers mmproj-F16 when several projectors exist in the same directory.
+ * @param {string} modelPath
+ * @returns {Promise<string | null>}
+ */
+export async function findSiblingMmproj(modelPath) {
+  if (!modelPath || typeof modelPath !== 'string') return null;
+  const dir = path.dirname(modelPath);
+  let names;
+  try {
+    names = await fsp.readdir(dir);
+  } catch {
+    return null;
+  }
+  const hits = names.filter((name) => {
+    const n = name.toLowerCase();
+    return n.endsWith('.gguf') && n.includes('mmproj');
+  });
+  if (!hits.length) return null;
+  const preferred = hits.find((name) => /mmproj-f16\.gguf$/i.test(name));
+  return path.join(dir, preferred ?? hits.sort((a, b) => a.localeCompare(b))[0]);
 }
 
 /**

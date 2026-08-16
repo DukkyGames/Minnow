@@ -3,8 +3,11 @@
  */
 
 import assert from 'node:assert/strict';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, test } from 'node:test';
-import { buildLlamaServerArgs } from '../../server/models/llama-args.js';
+import { buildLlamaServerArgs, findSiblingMmproj } from '../../server/models/llama-args.js';
 
 describe('llama args', () => {
   test('buildLlamaServerArgs forces ngl=0 on CPU variant', () => {
@@ -72,5 +75,39 @@ describe('llama args', () => {
     assert.ok(args.includes('-b'));
     assert.ok(args.includes('512'));
     assert.ok(args.includes('--no-mmap'));
+    assert.ok(args.includes('--jinja'));
+  });
+
+  test('buildLlamaServerArgs passes --mmproj when a projector path is set', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/Qwen3.8-27B-Q4_K_M.gguf',
+      port: 8085,
+      variant: 'cpu',
+      mmprojPath: '/tmp/mmproj-F16.gguf',
+    });
+    const idx = args.indexOf('--mmproj');
+    assert.ok(idx >= 0);
+    assert.equal(args[idx + 1], '/tmp/mmproj-F16.gguf');
+    assert.ok(args.includes('--jinja'));
+  });
+
+  test('buildLlamaServerArgs does not duplicate --jinja from extra_args', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cpu',
+      settings: { extra_args: ['--jinja'] },
+    });
+    assert.equal(args.filter((token) => token === '--jinja').length, 1);
+  });
+
+  test('findSiblingMmproj prefers mmproj-F16 next to the weights', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-mmproj-'));
+    await fsp.writeFile(path.join(dir, 'Qwen3.8-27B-Q4_K_M.gguf'), '');
+    await fsp.writeFile(path.join(dir, 'mmproj-BF16.gguf'), '');
+    await fsp.writeFile(path.join(dir, 'mmproj-F16.gguf'), '');
+    const found = await findSiblingMmproj(path.join(dir, 'Qwen3.8-27B-Q4_K_M.gguf'));
+    assert.equal(found, path.join(dir, 'mmproj-F16.gguf'));
+    await fsp.rm(dir, { recursive: true, force: true });
   });
 });

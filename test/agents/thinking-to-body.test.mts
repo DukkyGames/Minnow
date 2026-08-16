@@ -230,4 +230,55 @@ describe('reasoningEffortToCompletionBody', () => {
       assert.equal(patch.body.enable_thinking, true);
     }
   });
+
+  test('Qwen3.8 LM Studio high maps to xhigh with preserve_thinking', () => {
+    const patch = reasoningEffortToCompletionBody(
+      'high',
+      'lm-studio-v0',
+      reasoningCaps,
+      null,
+      'qwen/qwen3.8-27b',
+    );
+    assert.equal(patch.body.enable_thinking, true);
+    assert.equal(patch.body.reasoning_effort, 'xhigh');
+    assert.deepEqual(patch.body.reasoning, { effort: 'xhigh' });
+    assert.equal(patch.body.preserve_thinking, true);
+  });
+
+  test('Qwen3.8 LM Studio off disables thinking without preserve_thinking', () => {
+    const patch = reasoningEffortToCompletionBody(
+      'off',
+      'lm-studio-v0',
+      reasoningCaps,
+      null,
+      'qwen/qwen3.8-27b',
+    );
+    assert.equal(patch.body.enable_thinking, false);
+    assert.equal(patch.body.reasoning_effort, 'none');
+    assert.equal(patch.body.preserve_thinking, undefined);
+  });
+
+  test('Qwen3.8 openai-v1 high maps to xhigh and local Jinja kwargs', () => {
+    const patch = reasoningEffortToCompletionBody(
+      'high',
+      'openai-v1',
+      reasoningCaps,
+      null,
+      'Qwen/Qwen3.8-27B',
+    );
+    assert.equal(patch.body.reasoning_effort, 'xhigh');
+    assert.deepEqual(patch.body.reasoning, { effort: 'xhigh' });
+    assert.deepEqual(patch.body.chat_template_kwargs, {
+      enable_thinking: true,
+      preserve_thinking: true,
+      reasoning_effort: 'xhigh',
+    });
+  });
+
+  test('non-Qwen3.8 openai-v1 high stays high without preserve_thinking kwargs', () => {
+    const patch = reasoningEffortToCompletionBody('high', 'openai-v1', reasoningCaps);
+    assert.equal(patch.body.reasoning_effort, 'high');
+    assert.equal(patch.body.chat_template_kwargs, undefined);
+    assert.equal(patch.body.preserve_thinking, undefined);
+  });
 });

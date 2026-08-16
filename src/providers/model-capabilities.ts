@@ -9,8 +9,9 @@ import { contextLengthFromModelRow } from '../lib/context-length';
 import { anthropicModelUsesAdaptiveThinking } from '../lib/anthropic-thinking-style';
 import {
   inferReasoningOptionsFromModelId,
-  isReasoningEffortOption,
+  isQwen38ModelId,
   normalizeReasoningAllowedOptions,
+  normalizeReasoningCatalogValue,
 } from '../lib/reasoning-effort';
 import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
 import type { ApiKind } from './types';
@@ -103,7 +104,7 @@ function reasoningCatalogFromRow(
     ? block.allowed_options
     : [];
   const allowed = normalizeReasoningAllowedOptions(allowedRaw);
-  const def = isReasoningEffortOption(block.default) ? block.default : undefined;
+  const def = normalizeReasoningCatalogValue(block.default);
   const reasoningOnDefault =
     def === 'on' || def === 'low' || def === 'medium' || def === 'high';
   const reasoning =
@@ -151,7 +152,13 @@ export function catalogCapabilitiesFromRow(
         : usesAdaptiveAnthropicThinking
           ? (['off', 'low', 'medium', 'high'] as const)
           : reasoningAllowedOptions,
-    reasoningDefault: reasoningCaps.reasoningDefault ?? (reasoningAllowedOptions?.includes('medium') ? 'medium' : undefined),
+    reasoningDefault:
+      reasoningCaps.reasoningDefault ??
+      (isQwen38ModelId(row.id) && reasoningAllowedOptions?.includes('high')
+        ? 'high'
+        : reasoningAllowedOptions?.includes('medium')
+          ? 'medium'
+          : undefined),
     ...(isMiniMax ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     ...(usesAdaptiveAnthropicThinking ? { reasoningThinkingEnabledValue: 'adaptive' as const } : {}),
     contextLength,

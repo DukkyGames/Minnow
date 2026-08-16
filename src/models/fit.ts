@@ -206,11 +206,12 @@ function estimateSpeed(
   return (k / pb) * sm;
 }
 
-function architectureBonus(model: CatalogModel): number {
+export function architectureBonus(model: CatalogModel): number {
   const name = (model.name || '').toLowerCase();
   const arch = (model.architecture || '').toLowerCase();
   const text = `${name} ${arch}`;
 
+  if (text.includes('qwen3.8') || text.includes('qwen3_8')) return 10;
   if (text.includes('qwen3.6') || text.includes('qwen3_6')) return 9;
   if (text.includes('qwen3.5') || text.includes('qwen3_5')) return 8;
   if (text.includes('qwen3-next') || text.includes('qwen3_next')) return 6;

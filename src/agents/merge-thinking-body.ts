@@ -53,9 +53,11 @@ export function mergeThinkingIntoCompletionBody<T extends Record<string, unknown
   reasoningEffort?: ReasoningEffortOption | null,
   modelApi?: ApiKind,
   budgetTokens?: number | null,
-  options?: { llamaSupportsThinkingBudget?: boolean },
+  options?: { llamaSupportsThinkingBudget?: boolean; modelId?: string },
 ): MergeThinkingResult<T> {
   const apiKind = modelApi ?? modelCapabilities?.api ?? provider.apiKind;
+  const modelId =
+    options?.modelId ?? (typeof body.model === 'string' ? body.model : undefined);
   const useEffortDropdown = modelUsesComposerReasoningDropdown(modelCapabilities);
   let effortForSend = reasoningEffort ?? undefined;
   if (useEffortDropdown) {
@@ -77,8 +79,9 @@ export function mergeThinkingIntoCompletionBody<T extends Record<string, unknown
           apiKind,
           modelCapabilities,
           budgetTokens,
+          modelId,
         )
-      : thinkingToCompletionBody(resolved, apiKind, modelCapabilities, budgetTokens);
+      : thinkingToCompletionBody(resolved, apiKind, modelCapabilities, budgetTokens, modelId);
   Object.assign(body, patch.body);
 
   let nativeBudgetApplied = patch.nativeBudgetApplied === true;

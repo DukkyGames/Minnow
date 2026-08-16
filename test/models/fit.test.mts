@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { getModels } from '../../src/models/catalog.ts';
 import {
+  architectureBonus,
   defaultGpuGroupIndex,
   hardwareForGpuBudget,
   rankModels,
@@ -55,6 +56,24 @@ describe('models quant', () => {
 describe('models catalog', () => {
   test('bundled catalog loads', async () => {
     assert.ok((await getModels()).length > 100);
+  });
+
+  test('includes Qwen3.8-27B as a 262K vision GGUF row', async () => {
+    const row = (await getModels()).find((m) => m.name === 'Qwen/Qwen3.8-27B');
+    assert.ok(row);
+    assert.equal(row.architecture, 'qwen3_5');
+    assert.equal(row.context_length, 262144);
+    assert.equal(row.pipeline_tag, 'image-text-to-text');
+    assert.ok(row.capabilities?.includes('vision'));
+    assert.ok(row.capabilities?.includes('tool_use'));
+    assert.equal(row.gguf_sources?.[0]?.repo, 'unsloth/Qwen3.8-27B-GGUF');
+    assert.equal(row.gguf_sources?.[0]?.file, 'Qwen3.8-27B-Q4_K_M.gguf');
+  });
+
+  test('architecture bonus ranks Qwen3.8 above 3.6 and 3.5', () => {
+    assert.equal(architectureBonus({ name: 'Qwen/Qwen3.8-27B', provider: 'Alibaba' }), 10);
+    assert.equal(architectureBonus({ name: 'Qwen/Qwen3.6-27B', provider: 'Qwen' }), 9);
+    assert.equal(architectureBonus({ name: 'Qwen/Qwen3.5-27B', provider: 'Alibaba' }), 8);
   });
 });
 

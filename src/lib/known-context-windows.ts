@@ -81,7 +81,11 @@ export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   'llama-3.1': 131_072,
   'llama-3': 131_072,
 
-  // Qwen
+  // Qwen — longer keys win substring lookup, so 3.5/3.6/3.8 must precede generic qwen3.
+  'qwen3.8': 262_144,
+  qwen3_8: 262_144,
+  'qwen3.5': 262_144,
+  'qwen3.6': 262_144,
   qwen3: 131_072,
   'qwen2.5': 131_072,
   qwen2: 32_768,
