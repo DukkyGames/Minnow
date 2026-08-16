@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 
 import {
@@ -21,7 +24,6 @@ import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/
 import { resetWorkspaceStateForTests, setWorkspaceFromServer } from '../../src/state/workspace.ts';
 import type { Chat } from '../../src/types.ts';
 import { streamingChatIds } from '../../src/app-state.ts';
-import type { Chat } from '../../src/types.ts';
 
 let activeWindow: Window | undefined;
 
@@ -29,6 +31,7 @@ function installTestWindow(): void {
   activeWindow?.close();
   const window = new Window();
   activeWindow = window;
+  globalThis.window = window as unknown as Window & typeof globalThis.window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
 }
@@ -295,6 +298,32 @@ describe('super plan page', () => {
     assert.equal(send.disabled, false);
     send.click();
     assert.deepEqual(calls, ['onStart:Add offline queueing']);
+    assert.equal(field.dataset.composerAutoResizeWired, '1');
+    assert.equal(field.spellcheck, false);
+  });
+
+  test('composer CSS grows with content like the chat composer', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../src/styles/super-plan-page.css'),
+      'utf8',
+    );
+    assert.match(css, /\.sp-composer__field\s*\{[^}]*field-sizing:\s*content/);
+    assert.match(css, /\.sp-composer__field\s*\{[^}]*max-height:\s*min\(40vh,\s*320px\)/);
+  });
+
+  test('seed chips fill the composer through the input event', () => {
+    installTestWindow();
+    const chat = makeRunChat('sp-seed', 'grill');
+    chat.superPlan = undefined;
+    const root = mountPage(chat, 'compose');
+
+    const field = root.querySelector('.sp-composer__field') as HTMLTextAreaElement;
+    const send = root.querySelector('.sp-send') as HTMLButtonElement;
+    const seed = root.querySelector('.sp-seed') as HTMLButtonElement;
+    assert.equal(send.disabled, true);
+    seed.click();
+    assert.equal(field.value, seed.textContent);
+    assert.equal(send.disabled, false);
   });
 
   test('compose surface mounts a per-chat model picker', () => {

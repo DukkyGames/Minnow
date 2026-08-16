@@ -24,8 +24,30 @@ const COMPOSER_MAX_HEIGHT_VH = 40;
 /** Test override: null uses CSS.supports, boolean forces the JS or CSS path. */
 let fieldSizingSupportOverride: boolean | null = null;
 
-function composerMaxHeightPx(): number {
-  return Math.floor(window.innerHeight * (COMPOSER_MAX_HEIGHT_VH / 100));
+/** Parse a computed px length; `none` / keywords / `min()` strings yield null. */
+function parsePositivePx(value: string): number | null {
+  if (!value || value === 'none' || value === 'auto') return null;
+  const n = parseFloat(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Floor for the JS resize path. Prefer the field's CSS min-height so Super Plan
+ * (96px) is not collapsed to the chat composer's 44px.
+ */
+function composerMinHeightPx(el: HTMLTextAreaElement): number {
+  const fromCss = parsePositivePx(getComputedStyle(el).minHeight);
+  return fromCss != null ? Math.max(COMPOSER_MIN_HEIGHT_PX, fromCss) : COMPOSER_MIN_HEIGHT_PX;
+}
+
+/**
+ * Cap for the JS resize path. Prefer the field's CSS max-height when it is a
+ * resolved px value, never exceeding the 40vh chat budget.
+ */
+function composerMaxHeightPx(el: HTMLTextAreaElement): number {
+  const vhCap = Math.floor(window.innerHeight * (COMPOSER_MAX_HEIGHT_VH / 100));
+  const fromCss = parsePositivePx(getComputedStyle(el).maxHeight);
+  return fromCss != null ? Math.min(vhCap, fromCss) : vhCap;
 }
 
 /** True when CSS `field-sizing: content` can grow the composer without JS layout. */
@@ -49,7 +71,7 @@ function clearInlineComposerHeight(el: HTMLTextAreaElement): void {
 }
 
 /**
- * Grow #msgInput to fit lines.
+ * Grow a composer textarea to fit lines.
  * Electron 43+ uses CSS field-sizing, so this is a no-op (avoids height:auto
  * reflow on every keystroke, which lagged glyph paint on macOS).
  * Fallback engines skip height:auto unless the box must shrink.
@@ -60,8 +82,8 @@ export function autoResize(el: HTMLTextAreaElement): void {
     return;
   }
 
-  const maxPx = composerMaxHeightPx();
-  const minPx = COMPOSER_MIN_HEIGHT_PX;
+  const maxPx = composerMaxHeightPx(el);
+  const minPx = composerMinHeightPx(el);
   const current = el.offsetHeight;
 
   // Growing: overflowing content — set the new height without collapsing first.
@@ -95,18 +117,28 @@ export function autoResize(el: HTMLTextAreaElement): void {
   el.style.overflowY = 'auto';
 }
 
+/**
+ * Wire JS auto-resize when CSS field-sizing is unavailable (idempotent).
+ * Used by Code, Chat, and Super Plan composers.
+ */
+export function bindComposerAutoResize(el: HTMLTextAreaElement): void {
+  autoResize(el);
+  if (el.dataset.composerAutoResizeWired === '1') return;
+  el.dataset.composerAutoResizeWired = '1';
+  // field-sizing: content grows the box in the compositor; skip JS on input.
+  if (!composerFieldSizingSupported()) {
+    el.addEventListener('input', () => autoResize(el));
+    window.addEventListener('resize', () => autoResize(el));
+  }
+}
+
 /** Wire Code composer keydown, resize, steer, and draft listeners (idempotent). */
 export function initComposerInput(el: HTMLTextAreaElement): void {
-  autoResize(el);
+  bindComposerAutoResize(el);
   initComposerSteerInputListener(el);
   if (el.dataset.composerKeydownWired !== '1') {
     el.dataset.composerKeydownWired = '1';
     el.addEventListener('keydown', handleKey);
-    // field-sizing: content grows the box in the compositor; skip JS on input.
-    if (!composerFieldSizingSupported()) {
-      el.addEventListener('input', () => autoResize(el));
-      window.addEventListener('resize', () => autoResize(el));
-    }
   }
   void import('./composer-draft').then((m) => m.initComposerDraftListener(el));
 }

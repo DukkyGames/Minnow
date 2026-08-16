@@ -53,6 +53,7 @@ import {
 } from '../chat/orchestrate/plan-preview';
 import { findChatById } from '../state/sessions';
 import type { Chat } from '../types';
+import { bindComposerAutoResize } from './input';
 
 export const SUPER_PLAN_PAGE_ROOT_ID = 'superPlanPage';
 export const SUPER_PLAN_PAGE_QUESTIONS_ID = 'orchestratePlanScreenQuestions';
@@ -679,6 +680,10 @@ class SuperPlanPage {
     const field = el('textarea', 'sp-composer__field');
     field.id = 'superPlanPrompt';
     field.rows = 4;
+    field.spellcheck = false;
+    field.setAttribute('autocomplete', 'off');
+    field.setAttribute('autocorrect', 'off');
+    field.setAttribute('autocapitalize', 'off');
     field.placeholder =
       'What should this plan cover? Goals, constraints, and how you want the work grouped.';
     field.setAttribute('aria-label', 'What should this plan cover?');
@@ -715,6 +720,8 @@ class SuperPlanPage {
         submit();
       }
     });
+    // Grow with extra lines the same way Code/Chat do (CSS field-sizing + JS fallback).
+    bindComposerAutoResize(field);
 
     bar.append(opts, modelAnchor, spacer, send);
     composer.append(field, bar);
@@ -727,7 +734,8 @@ class SuperPlanPage {
       btn.type = 'button';
       btn.addEventListener('click', () => {
         field.value = seed;
-        send.disabled = false;
+        // `input` enables send and runs the auto-resize fallback when field-sizing is off.
+        field.dispatchEvent(new Event('input', { bubbles: true }));
         field.focus();
       });
       seeds.appendChild(btn);

@@ -4,6 +4,7 @@ import { Window } from 'happy-dom';
 
 const {
   autoResize,
+  bindComposerAutoResize,
   setComposerFieldSizingSupportedForTests,
 } = await import('../../src/ui/input.ts');
 
@@ -72,6 +73,27 @@ describe('autoResize', () => {
     el.value = 'Hello';
     autoResize(el);
 
+    assert.equal(el.style.height, '');
+  });
+
+  test('JS fallback honors a taller CSS min-height (Super Plan floor)', () => {
+    setComposerFieldSizingSupportedForTests(false);
+    const el = setupTextarea();
+    el.style.minHeight = '96px';
+    el.value = '';
+    autoResize(el);
+
+    assert.equal(el.style.height, '96px');
+    assert.equal(el.style.overflowY, 'hidden');
+  });
+
+  test('bindComposerAutoResize is idempotent and skips JS when field-sizing works', () => {
+    setComposerFieldSizingSupportedForTests(true);
+    const el = setupTextarea();
+    bindComposerAutoResize(el);
+    bindComposerAutoResize(el);
+
+    assert.equal(el.dataset.composerAutoResizeWired, '1');
     assert.equal(el.style.height, '');
   });
 });
