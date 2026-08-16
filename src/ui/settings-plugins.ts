@@ -9,7 +9,7 @@ import {
   setToolPermission,
 } from '../tools/config';
 import type { PluginListItem } from '../tools/plugin-settings-types';
-import { bindToolsListChange } from './tools-list';
+import { bindToolsListChange, createDynamicToolGroup } from './tools-list';
 
 /** Fetch plugin metadata for settings rows. */
 export async function fetchPluginList(): Promise<PluginListItem[]> {
@@ -105,59 +105,16 @@ export async function appendPluginToolsToList(
     bodyNodes.push(row);
   }
 
-  if (isSettingsList) {
-    const details = document.createElement('details');
-    details.className = 'tool-group tool-group--collapsible';
-    details.setAttribute('data-tool-category', 'plugins');
-    details.dataset.settingsSearchKey = 'tools.category.plugins';
-
-    const summary = document.createElement('summary');
-    summary.className = 'tool-group-summary';
-
-    const main = document.createElement('span');
-    main.className = 'tool-group-summary__main';
-
-    const chevron = document.createElement('span');
-    chevron.className = 'tool-group-summary__chevron';
-    chevron.setAttribute('aria-hidden', 'true');
-
-    const title = document.createElement('span');
-    title.className = 'tool-group-header';
-    title.textContent = 'Plugins';
-
-    main.append(chevron, title);
-
-    const count = document.createElement('span');
-    count.className = 'tool-group-count';
-    count.textContent = `${plugins.length} tool${plugins.length === 1 ? '' : 's'}`;
-
-    summary.append(main, count);
-    details.append(summary);
-
-    const body = document.createElement('div');
-    body.className = 'tool-group-body';
-    for (const node of bodyNodes) body.appendChild(node);
-    details.appendChild(body);
-    container.appendChild(details);
-    bindToolsListChange(container);
-    return;
-  }
-
-  const group = document.createElement('section');
-  group.className = 'tool-group';
-  group.setAttribute('data-tool-category', 'plugins');
-
-  const head = document.createElement('div');
-  head.className = 'tool-group-head';
-  const header = document.createElement('h3');
-  header.className = 'tool-group-header';
-  header.textContent = 'Plugins';
-  head.appendChild(header);
-  group.appendChild(head);
-
-  for (const node of bodyNodes) group.appendChild(node);
-
-  container.appendChild(group);
+  container.appendChild(
+    createDynamicToolGroup({
+      category: 'plugins',
+      title: 'Plugins',
+      count: `${plugins.length} tool${plugins.length === 1 ? '' : 's'}`,
+      searchKey: 'tools.category.plugins',
+      collapsible: isSettingsList,
+      bodyNodes,
+    }),
+  );
   bindToolsListChange(container);
 }
 

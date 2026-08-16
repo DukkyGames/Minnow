@@ -323,6 +323,22 @@
   min-width: 0;
 }
 
+/* MCP tool names are the literal ids the agent calls, so they read as code. */
+.tool-label--code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* Server-supplied descriptions are model-facing prose; keep rows scannable. */
+.tool-desc--clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
 .tool-desc {
   margin: 0 0 0 24px;
   font-size: 11px;

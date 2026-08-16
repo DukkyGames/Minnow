@@ -65,6 +65,35 @@ function createFixtureClient() {
   };
 }
 
+/**
+ * Cache namespaced id → the server's own tool name, so dispatch never has to
+ * guess it back out of the lossy encoding.
+ * @param {string} serverId
+ * @param {Array<{ name: string }>} tools
+ */
+function rememberTools(serverId, tools) {
+  const map = new Map();
+  for (const tool of tools ?? []) {
+    const key = toNamespacedName(serverId, tool.name);
+    // `get-docs` and `get_docs` encode to the same id; the first listing wins.
+    if (!map.has(key)) map.set(key, tool.name);
+  }
+  toolMaps.set(serverId, map);
+  return map;
+}
+
+/**
+ * Real tool name for a namespaced id, preferring the live listing over the
+ * lossy decode. Returns `null` when the server does not expose the tool.
+ * @param {string} namespacedName
+ * @param {{ serverId: string, toolName: string }} parsed
+ */
+function resolveMcpToolName(namespacedName, parsed) {
+  const map = toolMaps.get(parsed.serverId);
+  if (!map) return { toolName: parsed.toolName, known: [] };
+  return { toolName: map.get(namespacedName) ?? null, known: [...map.values()] };
+}
+
 async function connectServer(serverId, config) {
   if (clients.has(serverId)) {
     return clients.get(serverId);
@@ -72,13 +101,9 @@ async function connectServer(serverId, config) {
 
   if (serverId === 'fixture') {
     const client = createFixtureClient();
-    const map = new Map();
-    map.set(toNamespacedName('fixture', 'echo'), {
-      serverId: 'fixture',
-      toolName: 'echo',
-    });
+    const listed = await client.listTools();
+    rememberTools(serverId, listed.tools ?? []);
     clients.set(serverId, client);
-    toolMaps.set(serverId, map);
     return client;
   }
 
@@ -102,16 +127,8 @@ async function connectServer(serverId, config) {
   );
   await client.connect(transport);
   const listed = await client.listTools();
-  const tools = listed.tools ?? [];
-  const map = new Map();
-  for (const tool of tools) {
-    map.set(toNamespacedName(serverId, tool.name), {
-      serverId,
-      toolName: tool.name,
-    });
-  }
+  rememberTools(serverId, listed.tools ?? []);
   clients.set(serverId, client);
-  toolMaps.set(serverId, map);
   return client;
 }
 
@@ -192,23 +209,62 @@ export async function listServers() {
   return out;
 }
 
-export async function listEnabledMcpTools() {
+/**
+ * Connect every enabled server and collect its live tool listing.
+ * Servers that fail to start are returned with `error` set rather than dropped,
+ * so callers can tell "no tools" apart from "never connected".
+ */
+async function collectEnabledServerTools() {
   const index = await loadIndex();
-  const defs = [];
+  const out = [];
   for (const [serverId, meta] of Object.entries(index.servers ?? {})) {
     if (meta.enabled === false) continue;
+    const entry = { id: serverId, label: serverId, tools: [], error: null };
     try {
       const config = await loadServerConfig(serverId);
+      entry.label = config.label ?? serverId;
       if (config.enabled === false) continue;
       const client = await connectServer(serverId, config);
       const listed = await client.listTools();
-      defs.push(...toOpenAIDefinitions(serverId, listed.tools ?? []));
+      entry.tools = listed.tools ?? [];
+      // Re-listing can differ from connect time; keep the dispatch map current.
+      rememberTools(serverId, entry.tools);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`MCP server ${serverId} skipped: ${message}`);
+      entry.error = err instanceof Error ? err.message : String(err);
     }
+    out.push(entry);
+  }
+  return out;
+}
+
+export async function listEnabledMcpTools() {
+  const defs = [];
+  for (const server of await collectEnabledServerTools()) {
+    if (server.error) {
+      console.warn(`MCP server ${server.id} skipped: ${server.error}`);
+      continue;
+    }
+    defs.push(...toOpenAIDefinitions(server.id, server.tools));
   }
   return defs;
+}
+
+/**
+ * Per-server tool listing for Settings → Tools: namespaced ids for permission
+ * rows, without the JSON schemas the model-facing definitions carry.
+ */
+export async function listMcpToolCatalog() {
+  const servers = await collectEnabledServerTools();
+  return servers.map((server) => ({
+    id: server.id,
+    label: server.label,
+    error: server.error,
+    tools: server.tools.map((tool) => ({
+      name: tool.name,
+      namespacedName: toNamespacedName(server.id, tool.name),
+      description: tool.description ?? '',
+    })),
+  }));
 }
 
 export async function callMcpTool(namespacedName, args) {
@@ -227,8 +283,14 @@ export async function callMcpTool(namespacedName, args) {
 
   await connectServer(parsed.serverId, config);
   const client = clients.get(parsed.serverId);
+  const { toolName, known } = resolveMcpToolName(namespacedName, parsed);
+  if (!toolName) {
+    const available = known.length > 0 ? known.join(', ') : 'none';
+    return `Error: MCP server "${parsed.serverId}" has no tool "${parsed.toolName}". Available tools: ${available}`;
+  }
+
   const result = await client.callTool({
-    name: parsed.toolName,
+    name: toolName,
     arguments: args ?? {},
   });
 
