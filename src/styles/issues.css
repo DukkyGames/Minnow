@@ -1823,3 +1823,119 @@ button.issues-detail__activity-chip {
 }
 
 /* Row/card context menu now uses the shared primitive: styles/context-menu.css */
+
+/* ── Attachments (Phase 2) ─────────────────────────────────────────────────
+ *
+ * Images get a thumbnail because an unopened screenshot is an unread bug
+ * report. Everything else is a name, a size, and the on-disk path, which is
+ * the thing an agent is actually handed.
+ */
+
+.issues-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issues-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--mn-border);
+  border-radius: 4px;
+}
+
+.issues-attachment__thumb {
+  flex: none;
+  display: block;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+}
+
+.issues-attachment__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.issues-attachment__meta {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.issues-attachment__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  color: var(--mn-fg);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.issues-attachment__name:hover {
+  text-decoration: underline;
+}
+
+.issues-attachment__size {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-attachment__path {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.issues-attachment__path:hover {
+  color: var(--mn-fg);
+}
+
+.issues-attachment__remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-attachment__remove:hover {
+    background: color-mix(in oklch, var(--mn-danger) 14%, transparent);
+    color: var(--mn-danger-ink, var(--mn-fg));
+  }
+}
+
+.issues-detail__section-body.is-drop-target {
+  outline: 2px dashed var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Capture drop feedback on list rows and board cards. */
+.issues-row.is-capture-target,
+.issues-card.is-capture-target {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}

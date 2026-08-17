@@ -25,6 +25,11 @@ import type {
 import { getMode } from '../chat/modes/registry';
 import { createAppIcon } from '../os/icons';
 import { iconHtml } from './icon';
+import {
+  capturePayloadFromDataTransfer,
+  dataTransferLooksCapturable,
+} from './capture-drag';
+import { attachCaptureToIssue } from './issue-capture';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
@@ -1309,6 +1314,7 @@ function buildIssueRow(
   row.addEventListener('dragend', () => {
     activeIssueDrag = null;
   });
+  bindIssueCaptureDrop(row, issue.id);
   return row;
 }
 
@@ -1444,6 +1450,39 @@ function persistRanksAfterReorder(
   }
 }
 
+/**
+ * Rows, cards and the peek panel accept a dropped capture directly.
+ *
+ * Dropping on a specific issue means "attach to this one" — no popover, no
+ * confirmation. The popover exists for when you have not decided where it goes;
+ * dropping on a row *is* the decision.
+ */
+function bindIssueCaptureDrop(el: HTMLElement, issueId: string): void {
+  el.addEventListener('dragover', (event) => {
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'link';
+    el.classList.add('is-capture-target');
+  });
+  el.addEventListener('dragleave', (event) => {
+    const related = asElement(event.relatedTarget as EventTarget | null);
+    if (related && el.contains(related)) return;
+    el.classList.remove('is-capture-target');
+  });
+  el.addEventListener('drop', (event) => {
+    el.classList.remove('is-capture-target');
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const payload = capturePayloadFromDataTransfer(event.dataTransfer);
+    if (!payload) return;
+    void attachCaptureToIssue(issueId, payload).then((ok) => {
+      if (ok) renderIssuesPanel();
+    });
+  });
+}
+
 function bindCardDrag(card: HTMLElement, issueId: string): void {
   card.draggable = true;
   card.addEventListener('dragstart', (event) => {
@@ -1461,6 +1500,7 @@ function bindCardDrag(card: HTMLElement, issueId: string): void {
   card.addEventListener('dragend', () => {
     activeIssueDrag = null;
   });
+  bindIssueCaptureDrop(card, issueId);
 }
 
 function bindColumnDrop(columnEl: HTMLElement, status: IssueStatus): void {

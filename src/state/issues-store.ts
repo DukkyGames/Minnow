@@ -44,6 +44,7 @@ import type {
   IssueAgentPhase,
   IssueAgentRun,
   IssueAssignee,
+  IssueAttachment,
   IssueCard,
   IssueCodeRef,
   IssueGitLink,
@@ -357,7 +358,7 @@ const NORMALIZED_ISSUE_CARD_KEYS: ReadonlySet<string> = new Set([
   'legacyBugId',
   'severity',
   // v3 fields this revision models. Anything else on a card (comments,
-  // activity, attachments, githubSync, future keys) still pass through
+  // activity, githubSync, future keys) still passes through
   // preserveUnknownKeys — do not add those here unless ensureIssueCardShape
   // parses them, or a save will strip them.
   'assignee',
@@ -367,6 +368,8 @@ const NORMALIZED_ISSUE_CARD_KEYS: ReadonlySet<string> = new Set([
   'projectId',
   'source',
   'triagedAt',
+  // Phase 2: parsed by parseIssueAttachments, so safe to normalize.
+  'attachments',
 ]);
 
 /** Top-level state keys this revision normalizes (see above). */
@@ -511,6 +514,51 @@ function applyIssueCardV3Fields(card: IssueCard, raw: Record<string, unknown>): 
   if (typeof raw.triagedAt === 'number' && Number.isFinite(raw.triagedAt)) {
     card.triagedAt = raw.triagedAt;
   }
+  const attachments = parseIssueAttachments(raw.attachments);
+  if (attachments) card.attachments = attachments;
+}
+
+/** Keys of {@link IssueAttachment} this revision models. */
+const NORMALIZED_ATTACHMENT_KEYS: ReadonlySet<string> = new Set([
+  'id',
+  'name',
+  'path',
+  'mime',
+  'bytes',
+  'addedAt',
+]);
+
+function parseIssueAttachment(raw: unknown): IssueAttachment | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  const storedPath = typeof row.path === 'string' ? row.path.trim() : '';
+  if (!id || !name || !storedPath) return null;
+  const out: IssueAttachment = {
+    id,
+    name,
+    path: storedPath,
+    addedAt:
+      typeof row.addedAt === 'number' && Number.isFinite(row.addedAt)
+        ? row.addedAt
+        : issuesNowMs(),
+  };
+  if (typeof row.mime === 'string' && row.mime.trim()) out.mime = row.mime.trim();
+  if (typeof row.bytes === 'number' && Number.isFinite(row.bytes) && row.bytes >= 0) {
+    out.bytes = Math.floor(row.bytes);
+  }
+  return preserveUnknownKeys(row, out, NORMALIZED_ATTACHMENT_KEYS);
+}
+
+function parseIssueAttachments(raw: unknown): IssueAttachment[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: IssueAttachment[] = [];
+  for (const item of raw) {
+    const attachment = parseIssueAttachment(item);
+    if (attachment) out.push(attachment);
+  }
+  return out;
 }
 
 function parseIssueProject(raw: unknown): IssueProject | null {
@@ -1604,6 +1652,54 @@ export function issueProjectProgress(projectId: string): { done: number; total: 
     if (isClosedStatus(taxonomy, issue.status)) done += 1;
   }
   return { done, total };
+}
+
+/**
+ * Attach a stored file to an issue.
+ *
+ * The bytes are already on disk by the time this runs — the upload happens over
+ * `/api/issues/attachments`, and this only records where they landed. Splitting
+ * it that way keeps the debounced state write free of binary payloads, which is
+ * the failure shape MIN-354 v1 hit.
+ */
+export function addIssueAttachment(
+  issueId: string,
+  attachment: Omit<IssueAttachment, 'id' | 'addedAt'> & { id?: string; addedAt?: number },
+): IssueAttachment | null {
+  const issue = findIssueById(issueId);
+  if (!issue) return null;
+  const nowMs = issuesNowMs();
+  const entry: IssueAttachment = {
+    id: attachment.id?.trim() || `att-${nowMs.toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name: attachment.name.trim(),
+    path: attachment.path.trim(),
+    addedAt: attachment.addedAt ?? nowMs,
+  };
+  if (attachment.mime?.trim()) entry.mime = attachment.mime.trim();
+  if (typeof attachment.bytes === 'number' && attachment.bytes >= 0) {
+    entry.bytes = Math.floor(attachment.bytes);
+  }
+  if (!entry.name || !entry.path) return null;
+
+  const existing = issue.attachments ? [...issue.attachments] : [];
+  if (existing.some((item) => item.path === entry.path)) return existing.find((i) => i.path === entry.path) ?? null;
+  existing.push(entry);
+  issue.attachments = existing;
+  issue.updatedAt = nowMs;
+  touchIssuesStore();
+  return entry;
+}
+
+/** Drop an attachment record. Removing the bytes is the caller's job. */
+export function removeIssueAttachment(issueId: string, attachmentId: string): boolean {
+  const issue = findIssueById(issueId);
+  if (!issue?.attachments?.length) return false;
+  const next = issue.attachments.filter((item) => item.id !== attachmentId);
+  if (next.length === issue.attachments.length) return false;
+  issue.attachments = next;
+  issue.updatedAt = issuesNowMs();
+  touchIssuesStore();
+  return true;
 }
 
 /** Accept an unreviewed auto-filed issue: backlog-role status + triagedAt now. */

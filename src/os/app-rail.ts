@@ -13,6 +13,10 @@ import {
   getOsView,
   subscribeInstances,
 } from './instances';
+import {
+  dataTransferLooksCapturable,
+  subscribeCaptureDrag,
+} from '../ui/capture-drag';
 import { isCoarsePointer } from '../ui/mobile-layout';
 import { isResearchPanelOpen, subscribeResearchPanel } from '../ui/research-panel';
 import { launchApp } from './router';
@@ -153,7 +157,55 @@ function handleRailClick(appId: AppId): void {
   launchApp(appId);
 }
 
-function buildRailButton(appId: AppId, label: string): HTMLButtonElement {
+const RAIL_DROP_CLASS = 'is-drop-target';
+
+/**
+ * The Issues tile doubles as a capture drop target.
+ *
+ * `dragover` cannot read the transfer payload (see `file-tree-dnd.ts`), so the
+ * decision is made from `DataTransfer.types` alone and the "something is in
+ * flight" highlight comes from the shell drag layer's module-level descriptor.
+ */
+function bindRailCaptureDrop(btn: HTMLButtonElement): () => void {
+  const onDragOver = (event: DragEvent): void => {
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'link';
+    btn.classList.add(RAIL_DROP_CLASS);
+  };
+  const onDragLeave = (): void => btn.classList.remove(RAIL_DROP_CLASS);
+  const onDrop = (event: DragEvent): void => {
+    btn.classList.remove(RAIL_DROP_CLASS);
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void import('../ui/issue-capture').then((m) => {
+      m.openCaptureFromDrop(event.dataTransfer, { anchor: btn });
+    });
+  };
+
+  btn.addEventListener('dragover', onDragOver);
+  btn.addEventListener('dragleave', onDragLeave);
+  btn.addEventListener('drop', onDrop);
+
+  const unsubscribe = subscribeCaptureDrag((payload) => {
+    btn.classList.toggle('is-drop-armed', payload !== null);
+    if (!payload) btn.classList.remove(RAIL_DROP_CLASS);
+  });
+
+  return () => {
+    unsubscribe();
+    btn.removeEventListener('dragover', onDragOver);
+    btn.removeEventListener('dragleave', onDragLeave);
+    btn.removeEventListener('drop', onDrop);
+  };
+}
+
+function buildRailButton(
+  appId: AppId,
+  label: string,
+  disposers: Array<() => void>,
+): HTMLButtonElement {
   const def = getAppById(appId);
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -164,6 +216,10 @@ function buildRailButton(appId: AppId, label: string): HTMLButtonElement {
   btn.appendChild(icon);
   bindRailTooltip(btn, () => label);
   btn.addEventListener('click', () => handleRailClick(appId));
+  if (appId === 'issues') {
+    btn.classList.add('mn-capture-target');
+    disposers.push(bindRailCaptureDrop(btn));
+  }
   return btn;
 }
 
@@ -200,9 +256,13 @@ export function initAppRail(root: HTMLElement): () => void {
   nav.className = 'mn-os-app-rail__nav';
 
   const tileByAppId = new Map<AppId, HTMLButtonElement>();
+  /** Per-tile listener disposers; cleared on every rebuild. */
+  let tileDisposers: Array<() => void> = [];
 
   function rebuild(): void {
     hideRailTooltip();
+    for (const dispose of tileDisposers) dispose();
+    tileDisposers = [];
     nav.replaceChildren();
     tileByAppId.clear();
     if (tooltipEl) {
@@ -211,7 +271,7 @@ export function initAppRail(root: HTMLElement): () => void {
     }
 
     for (const app of listRailApps()) {
-      const btn = buildRailButton(app.id, app.name);
+      const btn = buildRailButton(app.id, app.name, tileDisposers);
       tileByAppId.set(app.id, btn);
       nav.appendChild(btn);
     }
@@ -254,6 +314,8 @@ export function initAppRail(root: HTMLElement): () => void {
     unsubInstances();
     unsubPrefs();
     unsubResearch();
+    for (const dispose of tileDisposers) dispose();
+    tileDisposers = [];
     hideRailTooltip();
     tooltipEl?.remove();
     tooltipEl = null;

@@ -1,11 +1,11 @@
 # Issues app v2
 
-Design brief plus the as-built record for Phases 0–1. Phases 2–5 are unbuilt.
+Design brief plus the as-built record for Phases 0–2. Phases 3–5 are unbuilt.
 
 The brief (§1–14) is the confirmed output of `/impeccable shape`. Section 15 records
-what Phase 0 actually landed; section 16 records Phase 1. Read both before starting
-Phase 2 — some open questions are now closed and some of the brief's assumptions
-about the codebase turned out to be wrong.
+what Phase 0 landed; §16 Phase 1; §17 Phase 2. Read those before starting Phase 3 —
+some open questions are now closed and some of the brief's assumptions about the
+codebase turned out to be wrong.
 
 ---
 
@@ -184,7 +184,7 @@ Each phase ends shippable.
 |---|---|---|
 | **0 — Foundations** ✅ | Schema v3 + guarded migration + backup. Shared context-menu primitive with real submenus. Global command + menu registry. Global `Ctrl+K` palette. Fix the `NaN` taxonomy sort bug. Resolve the dead embed entry points. | **Done — see §15.** |
 | **1 — The list** ✅ | Grouping, ranking, inline property editing, keyboard model, multi-select bulk ops, saved views + filter chips, Triage lane, sub-issue hierarchy + rollups, projects, board reorder with drop indicators, container queries, peek widening. | **Done — see §16.** |
-| **2 — Capture and linking** | Menubar quick-issue popover (context-aware, drop target). Shell drag layer + rail icon target. "Create issue" / "Add to issue ▸" registered on all target surfaces. Live link chips. Attachments. | You can file an issue about anything, from anywhere, without typing where it is. |
+| **2 — Capture and linking** ✅ | Menubar quick-issue popover (context-aware, drop target). Shell drag layer + rail icon target. "Create issue" / "Add to issue ▸" registered on target surfaces. Attachments. | **Done — see §17.** |
 | **3 — Editor** | WYSIWYG over constrained markdown, toolbar, slash commands, `#`/`@` mentions writing real refs, stateful checklists, paste intelligence, CodeMirror code blocks. | Round-trip is lossless against agent-authored markdown; test with adversarial input. |
 | **4 — Agent workflow** | `agent` slot; assign → single-task board group; worktree; Builder/Tester; PR and stop. `issue_*` notification kinds; OS notification when unfocused; rail dock badge. Pending `ask_question` surfaced on the issue. Improved agent tools (§10). | Assign → walk away → get pinged → review a PR. Complete round trip, no Orchestrator visit. |
 | **5 — GitHub** | `gh issue` ops in `forge-ops.js`. Settings mode Off / Link+push / Two-way mirror. Per-issue sync flag. Import, push, and mirror with explicit conflict resolution. | A GitHub issue chip is live, and mirror mode never silently loses an edit. |
@@ -370,3 +370,92 @@ First verify **FAIL**d on empty-state wrap and unranked Alt+↓; one retry fixed
 - **Expand with agent** still keys off taxonomy triage-role *status* (`canExpandIssueWithAgent`). Agent-filed cards now default to backlog-role status and enter the Triage *view* via `source` + unset `triagedAt`, so Expand is off until someone moves status to triage. Crashes still file with status `triage`, so Expand still shows for those.
 - Project progress is a count of cards with that `projectId`, not a walk of sub-issue trees.
 
+
+---
+
+## 17. Phase 2 — as built
+
+`tsc` clean, `vite build` clean. Suites green: `--suite issues` 133/133, `--suite a11y` 67/67.
+Live check on the worktree full stack: menubar button mounted, popover opens with ambient
+context, Enter files a real card with its chat link attached (`PUT /api/config/issues` 200),
+destination menu lists recent issues, Escape unwinds menu-then-popover.
+
+### 17.1 What landed
+
+**One payload type, one popover.** `src/issues/capture-payload.ts` is the whole contract:
+a surface says what it has (`CaptureItem` = code / git / chat / issue / file / text) and
+never learns the issue schema. `src/ui/issue-capture-popover.ts` is the single component
+behind every entry point — menubar button, right-click, drop on the rail, drop on the
+button. It is a popover, not a dialog, per the brief's ban on modal-first flows.
+
+**Shell drag layer.** `src/ui/capture-drag.ts` holds a module-level active-drag descriptor
+and binds `dragstart` in the capture phase. This is the documented `file-tree-dnd.ts`
+gotcha taken seriously: `dragover` cannot call `getData`, so drop targets ask
+`dataTransferLooksCapturable()` (types only) and the "something is in flight" highlight
+comes from the descriptor, never from the event.
+
+It also reads drags it did not start. `capturePayloadFromDataTransfer` understands
+`CODE_SELECTION_MIME` and `WORKSPACE_FILE_MIME`, so editor selections and file-tree rows
+became droppable on Issues **without editing either surface**.
+
+**Entry points.** Menubar button beside the bell (`src/os/menubar-capture.ts`), global
+chord **`Alt + C`**, palette command "New issue from here", the Issues rail tile as a drop
+target, and list rows / board cards as direct drop targets (drop on a row attaches straight
+to it — no popover, because dropping on a row *is* the decision).
+
+**Menu registry, used for the first time.** `initIssueCaptureMenus()` registers
+"Create issue…" / "Add to issue ▸" once against `CAPTURE_MENU_KINDS`. Two new surfaces got
+a context menu they never had: chat messages and terminal selections
+(`src/ui/capture-surface-menus.ts`, delegated on `document` so they survive re-render).
+
+**Attachments.** `server/issues/attachments-routes.js` + `src/state/issue-attachments-api.ts`
++ a section in the peek panel. Bytes go over `/api/issues/attachments`; only the record
+goes in `state.json`. Three ways in: button, paste, drop. Images render as thumbnails, and
+the absolute path is a visible **Copy path** button because that path is what an agent gets.
+
+### 17.2 Decisions worth keeping
+
+- **Ambient context never seeds a title.** The first cut titled issues "Current chat".
+  `captureTitleSeed` now only promotes a label from `TITLE_BEARING_KINDS`
+  (code/file/git/issue); a chat is context, not a subject. Caught in live verify.
+- **Chat chips show no id.** A truncated UUID at 11px is noise; it lives on the `title`
+  attribute.
+- **Never overwrite an attachment.** A second `screenshot.png` becomes `screenshot-2.png`.
+  Silent replacement would lose data with no undo.
+- **Attachment paths are rebuilt server-side, always.** `sanitizeAttachmentSegment` +
+  `issuesAttachmentPath` in `config/paths.js`, deliberately outside `ALLOWED_CONFIG_FILES`
+  (same reasoning as the schema backups). Pinned by `test/issues/attachment-paths.test.mts`,
+  which is the security-critical test in this phase.
+- **`attachments` is now in `NORMALIZED_ISSUE_CARD_KEYS`** — safe only because
+  `parseIssueAttachments` exists. §16.4's trap still applies to `comments` and `activity`.
+- **Legacy menu adapter, not a 13-file rewrite.** The file tree, file viewer and git graph
+  each render their own `{ label, action }` menu. `legacyCaptureMenuItems()` splices the
+  registry's rows into those with one line per surface instead of rewriting three bespoke
+  renderers in a capture phase.
+
+### 17.3 Divergences
+
+- **"Live link chips" is partial.** A commit chip carries its subject and a PR chip its
+  title when the surface supplies one, but nothing calls `gh` to resolve a pasted GitHub
+  URL — that is Phase 5's `forge-ops.js` work, and building a second resolver here would
+  be thrown away.
+- **Surfaces still without capture rows:** SCC pull-request/check rows, browser preview,
+  orchestrate board cards, research library rows. The target kinds
+  (`pull-request`, `browser-page`, `board-card`, `research-entry`) are defined and handled
+  in `capturePayloadFromMenuTarget`, so each is a one-line registration when that surface
+  is next touched.
+- **Issues' own row menu was not converted** to `openRegisteredMenu`. An issue row already
+  carries every issue action; adding "Create issue…" there is confusing, not useful.
+
+### 17.4 Traps for Phase 3
+
+- Menubar buttons are not programmatically focusable in this shell (the bell is not either
+  — pre-existing, not a capture defect). Do not build focus-restore assertions against them.
+- `issue-capture-context.ts` must keep importing neither the editor nor the session store;
+  `issue-capture-wiring.ts` hands both over at boot. A static import there pulls CodeMirror
+  into the menubar's first paint.
+- `issuesStoreSync()` in `issue-capture.ts` returns null until something else has loaded the
+  store. Menus must build synchronously, so this is a cache, not a promise — if a new
+  surface can open a menu before the Issues app has ever loaded, it gets "Issues not loaded".
+- Capture writes `description` as fenced text blocks. Phase 3's editor must round-trip those
+  fences untouched; they are the first agent-shaped markdown the editor will meet.

@@ -16,6 +16,7 @@ import './styles/shell-keyboard-help.css';
 // paints unstyled (same failure the settings page hit with a lazy stylesheet).
 import './styles/command-palette.css';
 import './styles/context-menu.css';
+import './styles/issue-capture.css';
 import './styles/sidebar.css';
 import './styles/code-chrome.css';
 import './styles/chat-search.css';
@@ -502,6 +503,17 @@ async function startApp(): Promise<void> {
   const { initCommandPalette } = await import('./ui/command-palette');
   initShellCommands();
   initCommandPalette();
+  // Capture infrastructure: the drag layer must be listening before the first
+  // dragstart, and the menu rows must be registered before the first
+  // right-click, so both go up with the rest of the shell chrome.
+  const { initCaptureDragLayer } = await import('./ui/capture-drag');
+  const { initIssueCaptureMenus } = await import('./ui/issue-capture');
+  const { wireCaptureAccessors } = await import('./ui/issue-capture-wiring');
+  const { initCaptureSurfaceMenus } = await import('./ui/capture-surface-menus');
+  initCaptureDragLayer();
+  initIssueCaptureMenus();
+  initCaptureSurfaceMenus();
+  wireCaptureAccessors();
   installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
     initOsPageBridge();

@@ -50,6 +50,7 @@ import {
   resolveGitLinkOpenUrl,
 } from '../chat/issues/git-actions';
 import { createCodeRefLinkButton } from './code-ref-link';
+import { renderIssueAttachments } from './issues-attachments-section';
 import { createIssuesLabelsField } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
@@ -524,6 +525,11 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   addRow.append(pasteInput, addBtn);
   codeSection.body.appendChild(addRow);
   scroll.appendChild(codeSection.section);
+
+  // Attachments
+  const attachmentsSection = section('Attachments');
+  renderIssueAttachments(attachmentsSection.body, issue, () => refreshIssueDetailIfOpen());
+  scroll.appendChild(attachmentsSection.section);
 
   // Plan — Send to board lives here when a plan exists
   const planSection = section('Plan');

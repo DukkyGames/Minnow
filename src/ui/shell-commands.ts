@@ -49,6 +49,16 @@ function appCommands(): Command[] {
 function shellCommands(): Command[] {
   return [
     {
+      id: 'shell.capture-issue',
+      title: 'New issue from here',
+      group: 'Shell',
+      keywords: 'issue capture file bug report quick',
+      shortcut: 'Alt+C',
+      run: () => {
+        void import('./issue-capture').then((m) => m.openQuickCapture());
+      },
+    },
+    {
       id: 'shell.keyboard-help',
       title: 'Keyboard shortcuts',
       group: 'Shell',
