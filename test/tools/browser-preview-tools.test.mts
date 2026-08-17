@@ -284,6 +284,72 @@ describe('browser-preview-tools', () => {
     assert.match(result.content ?? '', /Error: ReferenceError: missingVar is not defined/);
   });
 
+  test('racePreviewExecJs times out a hung promise', async () => {
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    const started = Date.now();
+    await assert.rejects(
+      () => mod.racePreviewExecJs(new Promise(() => {}), { timeoutMs: 50 }),
+      /timed out after 50ms/,
+    );
+    assert.ok(Date.now() - started < 1000);
+  });
+
+  test('racePreviewExecJs rejects when the chat abort signal fires', async () => {
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    const controller = new AbortController();
+    const pending = mod.racePreviewExecJs(new Promise(() => {}), {
+      timeoutMs: 5_000,
+      signal: controller.signal,
+    });
+    queueMicrotask(() => controller.abort());
+    await assert.rejects(pending, (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.equal(err.name, 'AbortError');
+      return true;
+    });
+  });
+
+  test('browser_eval times out hung execJs instead of stalling', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/config/meta')) return metaFetchResponse();
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+
+    mockElectronPreview(() => new Promise(() => {}));
+
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    const started = Date.now();
+    const result = await mod.browserPreviewEval('new Promise(() => {})', undefined, undefined, 50);
+    assert.match(result, /timed out after 50ms/);
+    assert.match(result, /browser_snapshot/);
+    assert.ok(Date.now() - started < 1000);
+  });
+
+  test('browser_eval aborts hung execJs when the chat is stopped', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/config/meta')) return metaFetchResponse();
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+
+    mockElectronPreview(() => new Promise(() => {}));
+
+    const mod = await import('../../src/tools/browser-preview-tools.ts');
+    const controller = new AbortController();
+    const pending = mod.executeBrowserPreviewTool(
+      'browser_eval',
+      { expression: 'new Promise(() => {})' },
+      controller.signal,
+    );
+    queueMicrotask(() => controller.abort());
+    await assert.rejects(pending, (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.equal(err.name, 'AbortError');
+      return true;
+    });
+  });
+
   test('browser_snapshot returns hint when no interactive elements found', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);

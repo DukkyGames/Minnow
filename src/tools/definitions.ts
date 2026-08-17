@@ -1656,7 +1656,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     previewRequired: true,
     definition: toolSchema(
       'browser_eval',
-      'Run JavaScript in the built-in preview page (full page context).',
+      'Run JavaScript in the built-in preview page (full page context). Times out after 30s — do not wait forever on Promises or loops; prefer browser_snapshot for DOM inspection.',
       {
         expression: { type: 'string', description: 'JavaScript expression to evaluate' },
       },
