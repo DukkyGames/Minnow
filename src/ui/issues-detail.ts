@@ -14,6 +14,7 @@ import {
   appendIssueLinks,
   deleteIssue,
   findIssueById,
+  scheduleSaveIssues,
   updateIssue,
 } from '../state/issues-store';
 import { parseIssueCodeRefPaste } from '../state/issue-code-ref-parse';
@@ -50,6 +51,8 @@ import {
   resolveGitLinkOpenUrl,
 } from '../chat/issues/git-actions';
 import { createCodeRefLinkButton } from './code-ref-link';
+import { createIssueEditor } from './issue-editor';
+import { collectInlineRefs } from '../issues/markdown-inline';
 import { renderIssueAttachments } from './issues-attachments-section';
 import { createIssuesLabelsField } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
@@ -257,107 +260,58 @@ function section(title: string): { section: HTMLElement; body: HTMLElement } {
   return { section: sectionEl, body };
 }
 
-/** Click-to-edit description: markdown preview when idle, textarea on focus. */
+/**
+ * Description: the WYSIWYG editor over canonical markdown.
+ *
+ * Always live rather than click-to-edit. The Phase 1 surface swapped a rendered
+ * preview for a raw textarea on click, which meant every edit started by
+ * looking at markdown source — the opposite of what the editor is for. The
+ * editor renders and edits in the same place, and writes markdown on commit.
+ *
+ * Mentions written in the body become real links (`issueRefs`, `codeRefs`) so
+ * `#KEY-12` and `@src/foo.ts:12` are data, not text.
+ */
 function buildDescriptionSection(issue: IssueCard): HTMLElement {
   const descSection = section('Description');
-  const descWrap = document.createElement('div');
-  descWrap.className = 'issues-detail__desc-wrap';
-  descWrap.setAttribute('role', 'button');
-  descWrap.tabIndex = 0;
-  descWrap.setAttribute('aria-label', 'Issue description. Click to edit.');
+  const host = document.createElement('div');
+  host.className = 'issues-detail__desc-wrap';
 
-  let editing = false;
+  let lastCommitted = findIssueById(issue.id)?.description ?? issue.description;
 
-  const renderDisplay = (): void => {
-    editing = false;
-    descWrap.classList.remove('is-editing');
-    descWrap.setAttribute('role', 'button');
-    descWrap.tabIndex = 0;
-    descWrap.innerHTML = '';
-
-    const current = findIssueById(issue.id)?.description ?? issue.description;
-    const desc = document.createElement('div');
-    if (current.trim()) {
-      desc.className = 'issues-detail__markdown msg-bubble msg-bubble--md';
-      setAssistantBubbleContent(desc, current);
-    } else {
-      desc.className = 'issues-detail__empty';
-      desc.textContent = 'No description yet. Click to add.';
-    }
-    descWrap.appendChild(desc);
-  };
-
-  const enterEdit = (): void => {
-    if (editing) return;
-    editing = true;
-    descWrap.classList.add('is-editing');
-    descWrap.removeAttribute('role');
-    descWrap.tabIndex = -1;
-    descWrap.innerHTML = '';
-
-    const current = findIssueById(issue.id)?.description ?? issue.description;
-    const textarea = document.createElement('textarea');
-    textarea.className = 'issues-detail__desc-input';
-    textarea.value = current;
-    textarea.setAttribute('aria-label', 'Issue description');
-    textarea.rows = 8;
-    textarea.spellcheck = true;
-
-    const commit = (): void => {
-      const next = textarea.value.trim();
-      const prev = (findIssueById(issue.id)?.description ?? issue.description).trim();
-      if (next !== prev) {
-        updateIssue(issue.id, { description: next });
-      }
-      renderDisplay();
-    };
-
-    const cancel = (): void => {
-      renderDisplay();
-    };
-
-    textarea.addEventListener('blur', () => {
-      commit();
-    });
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        cancel();
-        return;
-      }
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        textarea.blur();
-      }
-    });
-
-    descWrap.appendChild(textarea);
-    textarea.focus();
-    const end = textarea.value.length;
-    textarea.setSelectionRange(end, end);
-  };
-
-  const openEdit = (e?: Event): void => {
-    if (editing) return;
-    const target = e?.target;
-    if (target instanceof HTMLElement && target.closest('a, button')) return;
-    enterEdit();
-  };
-
-  descWrap.addEventListener('click', (e) => {
-    openEdit(e);
-  });
-  descWrap.addEventListener('keydown', (e) => {
-    if (editing) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      enterEdit();
-    }
+  createIssueEditor(host, {
+    value: lastCommitted,
+    issueId: issue.id,
+    placeholder: 'Describe the problem. / for blocks, # for issues, @ for files.',
+    onChange: (markdown) => {
+      if (markdown === lastCommitted) return;
+      lastCommitted = markdown;
+      updateIssue(issue.id, { description: markdown });
+      syncDescriptionRefs(issue.id, markdown);
+      scheduleSaveIssues();
+    },
   });
 
-  renderDisplay();
-  descSection.body.appendChild(descWrap);
+  descSection.body.appendChild(host);
   return descSection.section;
+}
+
+/**
+ * Turn `#KEY-12` and `@path:12-34` in the body into real links.
+ *
+ * Append-only, and it never removes a link when a mention is deleted: a link
+ * may also have been added by capture, an agent, or the Git section, and this
+ * has no way to tell which. Removing a link stays an explicit action.
+ */
+function syncDescriptionRefs(issueId: string, markdown: string): void {
+  const refs = collectInlineRefs(markdown);
+  if (refs.issueIds.length === 0 && refs.codeRefs.length === 0) return;
+
+  appendIssueLinks(issueId, {
+    issueRefs: refs.issueIds
+      .filter((id) => id !== issueId && findIssueById(id))
+      .map((id) => ({ issueId: id, kind: 'related' as const, addedAt: Date.now() })),
+    codeRefs: refs.codeRefs,
+  });
 }
 
 /** Build the detail panel DOM for one issue. */

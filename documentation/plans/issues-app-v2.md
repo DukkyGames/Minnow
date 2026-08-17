@@ -1,9 +1,9 @@
 # Issues app v2
 
-Design brief plus the as-built record for Phases 0–2. Phases 3–5 are unbuilt.
+Design brief plus the as-built record for Phases 0–3. Phases 4–5 are unbuilt.
 
 The brief (§1–14) is the confirmed output of `/impeccable shape`. Section 15 records
-what Phase 0 landed; §16 Phase 1; §17 Phase 2. Read those before starting Phase 3 —
+what Phase 0 landed; §16 Phase 1; §17 Phase 2; §18 Phase 3. Read those before Phase 4 —
 some open questions are now closed and some of the brief's assumptions about the
 codebase turned out to be wrong.
 
@@ -185,7 +185,7 @@ Each phase ends shippable.
 | **0 — Foundations** ✅ | Schema v3 + guarded migration + backup. Shared context-menu primitive with real submenus. Global command + menu registry. Global `Ctrl+K` palette. Fix the `NaN` taxonomy sort bug. Resolve the dead embed entry points. | **Done — see §15.** |
 | **1 — The list** ✅ | Grouping, ranking, inline property editing, keyboard model, multi-select bulk ops, saved views + filter chips, Triage lane, sub-issue hierarchy + rollups, projects, board reorder with drop indicators, container queries, peek widening. | **Done — see §16.** |
 | **2 — Capture and linking** ✅ | Menubar quick-issue popover (context-aware, drop target). Shell drag layer + rail icon target. "Create issue" / "Add to issue ▸" registered on target surfaces. Attachments. | **Done — see §17.** |
-| **3 — Editor** | WYSIWYG over constrained markdown, toolbar, slash commands, `#`/`@` mentions writing real refs, stateful checklists, paste intelligence, CodeMirror code blocks. | Round-trip is lossless against agent-authored markdown; test with adversarial input. |
+| **3 — Editor** ✅ | WYSIWYG over constrained markdown, toolbar, slash commands, `#`/`@` mentions writing real refs, stateful checklists, paste intelligence, highlighted code blocks. | **Done — see §18.** |
 | **4 — Agent workflow** | `agent` slot; assign → single-task board group; worktree; Builder/Tester; PR and stop. `issue_*` notification kinds; OS notification when unfocused; rail dock badge. Pending `ask_question` surfaced on the issue. Improved agent tools (§10). | Assign → walk away → get pinged → review a PR. Complete round trip, no Orchestrator visit. |
 | **5 — GitHub** | `gh issue` ops in `forge-ops.js`. Settings mode Off / Link+push / Two-way mirror. Per-issue sync flag. Import, push, and mirror with explicit conflict resolution. | A GitHub issue chip is live, and mirror mode never silently loses an edit. |
 
@@ -459,3 +459,93 @@ the absolute path is a visible **Copy path** button because that path is what an
   surface can open a menu before the Issues app has ever loaded, it gets "Issues not loaded".
 - Capture writes `description` as fenced text blocks. Phase 3's editor must round-trip those
   fences untouched; they are the first agent-shaped markdown the editor will meet.
+
+---
+
+## 18. Phase 3 — as built
+
+`tsc` clean, `vite build` clean. Suites green: `--suite issues` 208/208 (was 134),
+`--suite a11y` 67/67. Live check on the worktree full stack against a fixture description
+containing front matter, an HTML block, indented code, a footnote, a link definition, a
+checklist, a fenced `ts` block and both mention kinds.
+
+### 18.1 The round-trip guarantee is structural, not careful
+
+`src/issues/markdown-blocks.ts` splits the document into blocks, each holding its **exact
+source**. On save, a block the user never touched is emitted from `source` verbatim — not
+re-serialized. Only dirty blocks are rebuilt from the DOM.
+
+That makes §13's blocking gate pass by construction rather than by diligence:
+`parse → serialize` is the identity function for any input, pinned by 24 adversarial
+fixtures in `test/issues/markdown-blocks.test.mts` (front matter, unclosed fences, nested
+fences, tilde fences, setext headings, footnotes, link definitions, indented code, CRLF,
+emoji), and again end-to-end through the real editor in
+`test/ui/issues-editor-roundtrip.test.mts`.
+
+**Classification is deliberately pessimistic.** A false `raw` costs one inline edit; a
+false *editable* costs the user their content. So nested lists, indented code, unclosed
+fences, HTML, footnotes and link definitions are all `raw`: read-only, labelled with why,
+emitted verbatim.
+
+Live proof: toggling one checkbox changed **exactly one character** at offset 158 and
+nothing else, with the front matter, HTML block, indented code and footnote byte-identical.
+
+### 18.2 Decisions worth keeping
+
+- **Typed markdown stays markdown.** `escapeMarkdownText` is the identity function.
+  Escaping a typed `**bold**` into `\*\*bold\*\*` would mean the editor refuses the
+  notation its own file format is made of. Verified live: typing `**third**` renders bold
+  on commit and writes `**third**` to disk with no backslashes.
+- **Code blocks are a textarea while editing.** Highlighted and read-only at rest (via the
+  existing `markdown/highlighter.ts`), a plain textarea on click. Editing code inside
+  `contenteditable` is where WYSIWYG editors leak smart quotes and stray `<div>`s into the
+  user's source. This is a divergence from the brief's "CodeMirror node view" — same
+  outcome (real highlighting, exact characters), far less surface.
+- **Dirty tracking has two signals.** The caret (catches formatting-only changes where
+  the text is unchanged) *and* a per-block rendered-text fingerprint (catches edits where
+  the caret cannot be resolved — IME, drop, programmatic). A missed block is a silently
+  dropped edit; both are narrow enough that untouched blocks are still never re-serialized.
+- **Structure comes from re-parsing, not input rules.** After each commit the document is
+  re-parsed, so typing `## ` at the start of a paragraph makes a heading without a second
+  set of rules that could disagree with the parser.
+- **Blank runs are blocks.** They carry the document's original spacing so serialization
+  reproduces it exactly; they render as zero-height and are `aria-hidden`.
+- **Paste classification is synchronous.** `preventDefault` cannot wait on an upload, so
+  `classifyPaste` is a pure function over the clipboard and `applyPaste` does the async
+  work afterwards. `issue-editor-paste` is a **static** import in the editor for this
+  reason — a dynamic one resolves too late.
+- **Mentions are data.** `#KEY-12` writes a real `issueRefs` entry and `@src/a.ts:12-34` a
+  `codeRefs` entry, on commit, via `collectInlineRefs`. Confirmed live. The sync is
+  append-only: a link may also have come from capture, the Git section or an agent, so
+  removing a mention never removes a link.
+- **Mentions inside code are not mentions.** `collectInlineRefs` strips fenced and inline
+  code first, so `#MIN-9` in a shell transcript stays text.
+- **Checklist rollup fills the row's rollup column** when an issue has no sub-issues, so a
+  leaf issue with a task list shows `2/2` instead of a dash.
+- **The click-to-edit textarea is gone.** Phase 1's description surface swapped a rendered
+  preview for raw markdown on click, so every edit began by looking at source. The editor
+  renders and edits in the same place.
+
+### 18.3 Divergences
+
+- **No CodeMirror node view** — see above.
+- **`#` / `@` have no as-you-type autocomplete popup.** They render as chips on commit,
+  and the slash menu offers "Issue reference" and "Code reference" pickers. A live
+  typeahead inside `contenteditable` is a caret-management problem worth its own pass.
+- **Sub-issue insert requires an `issueId`**, so it is only offered from the peek panel,
+  not from a detached editor instance.
+
+### 18.4 Traps for Phase 4
+
+- **Vite in this worktree serves stale transforms.** File edits are not picked up by the
+  watcher under `.claude/worktrees/…`; `preview_start` must be restarted to see a change.
+  Two live-verify results were wrong before this was spotted — always confirm with
+  `curl <origin>/src/<path>.ts | grep` before trusting a live check.
+- `document.execCommand` is what applies inline formatting to a `contenteditable`
+  selection. Deprecated, still the only cross-browser option, and safe here because
+  `htmlToInline` normalizes whatever it emits before anything reaches disk.
+- The editor commits on blur and on `Ctrl/Cmd+Enter`. An agent writing `description`
+  through `issue_update` while the panel is open must call `setValue`, or the next commit
+  will write the stale document back.
+- `taskProgress()` parses the whole description on every row render. Fine at Phase 1's
+  scale; if the list is ever virtualized, memoize it per `updatedAt`.

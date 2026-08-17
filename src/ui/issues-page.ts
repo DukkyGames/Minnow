@@ -30,6 +30,7 @@ import {
   dataTransferLooksCapturable,
 } from './capture-drag';
 import { attachCaptureToIssue } from './issue-capture';
+import { taskProgress } from '../issues/markdown-blocks';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
@@ -1244,10 +1245,19 @@ function buildIssueRow(
     agent.textContent = '—';
   }
 
+  // Sub-issue progress wins the column; a checklist rollup fills it for a card
+  // that has no children, so one glance answers "how far along is this" either
+  // way rather than leaving a dash on every leaf issue with a task list.
   const rollup = document.createElement('span');
   rollup.className = 'issues-row__rollup';
+  const tasks = taskProgress(issue.description);
   if (options?.rollup && options.rollup.total > 0) {
     rollup.textContent = `${options.rollup.done}/${options.rollup.total}`;
+    rollup.title = 'Sub-issues done / total';
+  } else if (tasks.total > 0) {
+    rollup.textContent = `${tasks.done}/${tasks.total}`;
+    rollup.classList.add('is-tasks');
+    rollup.title = 'Checklist items done / total';
   } else {
     rollup.textContent = '—';
   }
