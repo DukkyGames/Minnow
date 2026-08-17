@@ -9,7 +9,7 @@ The Super Plan compose textarea (`.sp-composer__field`) is a fixed-height box (`
 Reuse the chat composer path, not a Super Plan-only height hack:
 
 1. CSS `field-sizing: content` so Electron 43+ grows in the compositor (no per-keystroke `height: auto`).
-2. JS `autoResize` fallback when `field-sizing` is unsupported, wired through `bindComposerAutoResize`.
+2. JS `autoResize` fallback when `field-sizing` is unsupported, wired through `bindComposerAutoResize` in [`composer-auto-resize.ts`](../src/ui/composer-auto-resize.ts) so Super Plan does not import the Code send graph.
 3. Keep Super Plan’s taller floor (`96px`) and cap (`min(40vh, 320px)`). `autoResize` reads computed min/max height so the fallback does not collapse the field to the chat 44px floor.
 
 ## Todos

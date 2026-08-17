@@ -6,7 +6,7 @@ const {
   autoResize,
   bindComposerAutoResize,
   setComposerFieldSizingSupportedForTests,
-} = await import('../../src/ui/input.ts');
+} = await import('../../src/ui/composer-auto-resize.ts');
 
 function setupTextarea() {
   const window = new Window({ innerHeight: 800 });
@@ -90,10 +90,12 @@ describe('autoResize', () => {
   test('bindComposerAutoResize is idempotent and skips JS when field-sizing works', () => {
     setComposerFieldSizingSupportedForTests(true);
     const el = setupTextarea();
-    bindComposerAutoResize(el);
+    const unbind = bindComposerAutoResize(el);
     bindComposerAutoResize(el);
 
     assert.equal(el.dataset.composerAutoResizeWired, '1');
     assert.equal(el.style.height, '');
+    unbind();
+    assert.equal(el.dataset.composerAutoResizeWired, undefined);
   });
 });

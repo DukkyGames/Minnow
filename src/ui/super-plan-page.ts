@@ -53,7 +53,7 @@ import {
 } from '../chat/orchestrate/plan-preview';
 import { findChatById } from '../state/sessions';
 import type { Chat } from '../types';
-import { bindComposerAutoResize } from './input';
+import { bindComposerAutoResize } from './composer-auto-resize';
 
 export const SUPER_PLAN_PAGE_ROOT_ID = 'superPlanPage';
 export const SUPER_PLAN_PAGE_QUESTIONS_ID = 'orchestratePlanScreenQuestions';
@@ -283,6 +283,8 @@ class SuperPlanPage {
   private firstLedgerPaint = true;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private railObserver: ResizeObserver | null = null;
+  /** Drops Super Plan composer auto-resize listeners when the page unmounts. */
+  private unbindComposerResize: (() => void) | null = null;
 
   private libraryEntries: PlanLibraryEntry[] = [];
   private libraryError?: string;
@@ -366,6 +368,8 @@ class SuperPlanPage {
   }
 
   destroy(): void {
+    this.unbindComposerResize?.();
+    this.unbindComposerResize = null;
     this.railObserver?.disconnect();
     this.railObserver = null;
     this.collector?.stop();
@@ -721,7 +725,7 @@ class SuperPlanPage {
       }
     });
     // Grow with extra lines the same way Code/Chat do (CSS field-sizing + JS fallback).
-    bindComposerAutoResize(field);
+    this.unbindComposerResize = bindComposerAutoResize(field);
 
     bar.append(opts, modelAnchor, spacer, send);
     composer.append(field, bar);
@@ -734,8 +738,10 @@ class SuperPlanPage {
       btn.type = 'button';
       btn.addEventListener('click', () => {
         field.value = seed;
-        // `input` enables send and runs the auto-resize fallback when field-sizing is off.
-        field.dispatchEvent(new Event('input', { bubbles: true }));
+        send.disabled = !field.value.trim();
+        // Dispatch on the field's window so happy-dom tests see the same Event as the browser.
+        const WinEvent = field.ownerDocument.defaultView?.Event;
+        if (WinEvent) field.dispatchEvent(new WinEvent('input', { bubbles: true }));
         field.focus();
       });
       seeds.appendChild(btn);

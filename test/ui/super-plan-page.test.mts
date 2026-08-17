@@ -31,7 +31,6 @@ function installTestWindow(): void {
   activeWindow?.close();
   const window = new Window();
   activeWindow = window;
-  globalThis.window = window as unknown as Window & typeof globalThis.window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
 }
