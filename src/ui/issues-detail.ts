@@ -114,6 +114,13 @@ export function isIssueExpanding(issueId: string): boolean {
   return expandingIds.has(issueId);
 }
 
+function syncDetailLayoutClass(open: boolean): void {
+  const root = document.getElementById('issuesView');
+  root?.classList.toggle('has-detail', open);
+  // @container rules match descendants of .issues-page, not the page itself.
+  root?.querySelector('.issues-shell')?.classList.toggle('is-detail', open);
+}
+
 /** Close the detail panel and clear selection. */
 export function closeIssueDetail(): void {
   selectedIssueId = undefined;
@@ -122,7 +129,7 @@ export function closeIssueDetail(): void {
     host.classList.remove('is-open');
     host.innerHTML = '';
   }
-  document.getElementById('issuesView')?.classList.remove('has-detail');
+  syncDetailLayoutClass(false);
 }
 
 /** Delete the open issue after confirmation. */
@@ -150,7 +157,7 @@ export function openIssueDetail(issueId: string): void {
   selectedIssueId = issue.id;
   const host = ensureDetailHost();
   if (!host) return;
-  document.getElementById('issuesView')?.classList.add('has-detail');
+  syncDetailLayoutClass(true);
   host.classList.add('is-open');
   renderIssueDetail(host, issue);
 }

@@ -63,6 +63,23 @@ const BOARD_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Orchestrate board', keys: 'Arrow keys (exec mode)', label: 'Change execution mode when a segment is focused' },
 ];
 
+const ISSUES_SHORTCUTS: ShortcutDoc[] = [
+  { section: 'Issues', keys: 'j / k / Arrow keys', label: 'Move the focused issue' },
+  { section: 'Issues', keys: 'Enter', label: 'Open peek for the focused issue' },
+  { section: 'Issues', keys: 'Escape', label: 'Close peek, or clear the multi-select' },
+  { section: 'Issues', keys: 's', label: 'Change status' },
+  { section: 'Issues', keys: 'p', label: 'Change priority' },
+  { section: 'Issues', keys: 'u', label: 'Change assignee' },
+  { section: 'Issues', keys: 'l', label: 'Change labels' },
+  { section: 'Issues', keys: 'g', label: 'Change project' },
+  { section: 'Issues', keys: 'A', label: 'Queue an agent on the focused issue' },
+  { section: 'Issues', keys: 'Y', label: 'Accept a triage issue (backlog)' },
+  { section: 'Issues', keys: 'N / Backspace', label: 'Decline a triage issue (canceled)' },
+  { section: 'Issues', keys: 'C', label: 'New issue' },
+  { section: 'Issues', keys: 'Alt + ArrowUp / ArrowDown', label: 'Move rank within the group or column' },
+  { section: 'Issues', keys: 'Shift + ArrowLeft / ArrowRight', label: 'Move the card to the neighbouring board column' },
+];
+
 const MAIL_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Email', appId: 'email', keys: 'j / k', label: 'Next / previous conversation' },
   { section: 'Email', appId: 'email', keys: 'e', label: 'Archive' },
@@ -81,6 +98,7 @@ const ALL_KEYBOARD_SHORTCUTS: ShortcutDoc[] = [
   ...CHAT_SHORTCUTS,
   ...CODE_SHORTCUTS,
   ...BOARD_SHORTCUTS,
+  ...ISSUES_SHORTCUTS,
   ...MAIL_SHORTCUTS,
 ];
 

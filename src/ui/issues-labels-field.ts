@@ -19,7 +19,8 @@ export type IssuesLabelsFieldOptions = {
 /** True when focus is inside a labels field (skip detail re-render while editing). */
 export function isIssuesLabelsFieldFocused(): boolean {
   const active = document.activeElement;
-  return active instanceof HTMLElement && Boolean(active.closest('.issues-labels-field'));
+  if (!active || typeof (active as { closest?: unknown }).closest !== 'function') return false;
+  return Boolean((active as { closest: (s: string) => Element | null }).closest('.issues-labels-field'));
 }
 
 /** Deduplicate labels case-insensitively while preserving first-seen casing. */

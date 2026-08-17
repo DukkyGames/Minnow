@@ -6,16 +6,22 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 ## Views
 
-- **List** — a sortable table. Click a column header to sort by ID, type, title, status, priority, labels or updated time.
-- **Board** — kanban lanes by status, all on one row, scrolling horizontally when there are many.
+- **List** — one dense row per issue, grouped (status by default). Click a column header to sort inside a group when ranks are equal or missing; drag or **Alt+↑/↓** writes a manual rank that then sticks. Click a status, priority, assignee, or project cell to edit it in place.
+- **Board** — kanban lanes by status. Drop a card to change status and rank; a line shows the insert point. **Shift+←/→** moves the focused card across columns.
+- **Triage** — a saved view of issues that arrived from an agent, a crash, or GitHub and have not been reviewed yet. **Y** accepts (backlog), **N** or **Backspace** declines (canceled).
+- **Assigned to agents** / **My open** — the other built-in tabs. Hide-done is a chip under the tabs.
 
 ## Working with issues
 
-**Capture** with the quick-capture field in the header, or **New issue** for the full form.
+**Capture** with the quick-capture field in the header, or **New issue** (**C**) for the full form. New issues start in **Backlog**.
 
-**Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**, then act on them together. **Shift+F10** or right-click opens the context menu: open, copy ID, expand with an agent, send to chat or to a background agent, change status, delete.
+**Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**. The selection bar can change status, priority, assignee, labels, and project, or delete. **Shift+F10** or right-click opens the row menu: open, copy ID, expand with an agent, send to chat or to a background agent, change status, delete.
 
-**Edit** in the detail panel. Click the description to switch from preview to editing; **Ctrl/Cmd+Enter** saves, **Escape** cancels. Labels are editable inline, in the list and in the detail header — Enter or comma adds, the chip **×** removes, and existing workspace labels autocomplete.
+**j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field.
+
+**Edit** labels inline on the row (Enter or comma adds, the chip **×** removes). Click the description in peek to switch from preview to editing; **Ctrl/Cmd+Enter** saves, **Escape** cancels.
+
+**Projects** group and filter issues inside this app. They are not Orchestrator boards. The Group control can bucket the list by project, and each project shows a closed/open count.
 
 Agents can link related, blocking, duplicate, or parent/sub issues with `issue_link`; those links appear under **Related issues** in the detail panel.
 

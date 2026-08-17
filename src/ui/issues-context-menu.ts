@@ -31,8 +31,10 @@ export interface IssuesContextMenuItem {
 
 export interface OpenIssuesContextMenuOptions {
   /** Viewport coordinates for the menu origin. */
-  clientX: number;
-  clientY: number;
+  clientX?: number;
+  clientY?: number;
+  /** Anchor element for inline property editing; wins over x/y. */
+  anchor?: HTMLElement | null;
   items: IssuesContextMenuItem[];
   /** Element that opened the menu; receives focus on close. */
   restoreFocus?: HTMLElement | null;
@@ -89,6 +91,7 @@ export function openIssuesContextMenu(
     label: options.label ?? 'Issue actions',
     clientX: options.clientX,
     clientY: options.clientY,
+    anchor: options.anchor,
     restoreFocus: options.restoreFocus,
     mount: options.mount,
   });

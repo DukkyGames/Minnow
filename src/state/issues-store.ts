@@ -28,6 +28,9 @@ import {
 import { emitIssuesChange } from './issues-events.ts';
 import { getIssuesTaxonomySync } from './issues-taxonomy-store.ts';
 import { getWorkspaceLabel, getWorkspacePath } from './workspace.ts';
+import { validateParentLink } from '../issues/hierarchy.ts';
+import { builtInIssueViews, LOCAL_ASSIGNEE_ID } from '../issues/saved-views.ts';
+import { isUnreviewedTriageIssue } from '../issues/triage.ts';
 import {
   ISSUES_COMPAT_VERSION,
   ISSUES_SCHEMA_VERSION,
@@ -38,12 +41,18 @@ import type {
   BugColumn,
   BugSeverity,
   Chat,
+  IssueAgentPhase,
+  IssueAgentRun,
+  IssueAssignee,
   IssueCard,
   IssueCodeRef,
   IssueGitLink,
   IssueIssueRef,
-  IssueRelationKind,
   IssuePriority,
+  IssueProject,
+  IssueRelationKind,
+  IssueSavedView,
+  IssueSource,
   IssueStatus,
   IssueType,
   IssuesState,
@@ -347,6 +356,17 @@ const NORMALIZED_ISSUE_CARD_KEYS: ReadonlySet<string> = new Set([
   'notes',
   'legacyBugId',
   'severity',
+  // v3 fields this revision models. Anything else on a card (comments,
+  // activity, attachments, githubSync, future keys) still pass through
+  // preserveUnknownKeys — do not add those here unless ensureIssueCardShape
+  // parses them, or a save will strip them.
+  'assignee',
+  'agent',
+  'parentId',
+  'rank',
+  'projectId',
+  'source',
+  'triagedAt',
 ]);
 
 /** Top-level state keys this revision normalizes (see above). */
@@ -356,6 +376,8 @@ const NORMALIZED_ISSUES_STATE_KEYS: ReadonlySet<string> = new Set([
   'nextId',
   'issues',
   'workspaces',
+  'projects',
+  'views',
 ]);
 
 /**
@@ -376,6 +398,180 @@ function preserveUnknownKeys<T extends object>(
     (target as Record<string, unknown>)[key] = source[key];
   }
   return target;
+}
+
+const ISSUE_AGENT_PHASES = new Set<IssueAgentPhase>([
+  'queued',
+  'running',
+  'awaiting_input',
+  'review',
+  'failed',
+  'canceled',
+  'done',
+]);
+
+const ISSUE_SOURCES = new Set<IssueSource>(['user', 'agent', 'crash', 'github']);
+
+const NORMALIZED_ASSIGNEE_KEYS = new Set(['id', 'label', 'assignedAt']);
+const NORMALIZED_AGENT_KEYS = new Set([
+  'agentId',
+  'phase',
+  'step',
+  'startedAt',
+  'updatedAt',
+  'boardGroupId',
+  'boardTaskId',
+  'chatId',
+  'worktreePath',
+  'branch',
+  'prNumber',
+  'prUrl',
+  'pendingQuestionId',
+  'error',
+  'envBlocked',
+]);
+const NORMALIZED_PROJECT_KEYS = new Set([
+  'id',
+  'name',
+  'description',
+  'color',
+  'archivedAt',
+  'createdAt',
+  'updatedAt',
+]);
+const NORMALIZED_VIEW_KEYS = new Set(['id', 'name', 'filters', 'groupBy', 'order', 'builtIn']);
+
+function parseIssueAssignee(raw: unknown): IssueAssignee | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  if (!id) return undefined;
+  const assignedAt =
+    typeof row.assignedAt === 'number' && Number.isFinite(row.assignedAt) ? row.assignedAt : 0;
+  const out: IssueAssignee = { id, assignedAt };
+  if (typeof row.label === 'string' && row.label.trim()) out.label = row.label.trim();
+  return preserveUnknownKeys(row, out, NORMALIZED_ASSIGNEE_KEYS);
+}
+
+function parseIssueAgent(raw: unknown): IssueAgentRun | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = raw as Record<string, unknown>;
+  const agentId = typeof row.agentId === 'string' ? row.agentId.trim() : '';
+  const phase = typeof row.phase === 'string' ? row.phase.trim() : '';
+  if (!agentId || !ISSUE_AGENT_PHASES.has(phase as IssueAgentPhase)) return undefined;
+  const startedAt =
+    typeof row.startedAt === 'number' && Number.isFinite(row.startedAt) ? row.startedAt : 0;
+  const updatedAt =
+    typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt) ? row.updatedAt : startedAt;
+  const out: IssueAgentRun = {
+    agentId,
+    phase: phase as IssueAgentPhase,
+    startedAt,
+    updatedAt,
+  };
+  if (typeof row.step === 'string' && row.step.trim()) out.step = row.step.trim();
+  if (typeof row.boardGroupId === 'string' && row.boardGroupId.trim()) {
+    out.boardGroupId = row.boardGroupId.trim();
+  }
+  if (typeof row.boardTaskId === 'string' && row.boardTaskId.trim()) {
+    out.boardTaskId = row.boardTaskId.trim();
+  }
+  if (typeof row.chatId === 'string' && row.chatId.trim()) out.chatId = row.chatId.trim();
+  if (typeof row.worktreePath === 'string' && row.worktreePath.trim()) {
+    out.worktreePath = row.worktreePath.trim();
+  }
+  if (typeof row.branch === 'string' && row.branch.trim()) out.branch = row.branch.trim();
+  if (typeof row.prNumber === 'number' && Number.isFinite(row.prNumber)) {
+    out.prNumber = Math.floor(row.prNumber);
+  }
+  if (typeof row.prUrl === 'string' && row.prUrl.trim()) out.prUrl = row.prUrl.trim();
+  if (typeof row.pendingQuestionId === 'string' && row.pendingQuestionId.trim()) {
+    out.pendingQuestionId = row.pendingQuestionId.trim();
+  }
+  if (typeof row.error === 'string' && row.error.trim()) out.error = row.error.trim();
+  if (typeof row.envBlocked === 'boolean') out.envBlocked = row.envBlocked;
+  return preserveUnknownKeys(row, out, NORMALIZED_AGENT_KEYS);
+}
+
+function applyIssueCardV3Fields(card: IssueCard, raw: Record<string, unknown>): void {
+  const assignee = parseIssueAssignee(raw.assignee);
+  if (assignee) card.assignee = assignee;
+  const agent = parseIssueAgent(raw.agent);
+  if (agent) card.agent = agent;
+  if (typeof raw.parentId === 'string' && raw.parentId.trim()) {
+    card.parentId = raw.parentId.trim();
+  }
+  if (typeof raw.rank === 'string' && raw.rank.trim()) card.rank = raw.rank.trim();
+  if (typeof raw.projectId === 'string' && raw.projectId.trim()) {
+    card.projectId = raw.projectId.trim();
+  }
+  if (typeof raw.source === 'string' && ISSUE_SOURCES.has(raw.source as IssueSource)) {
+    card.source = raw.source as IssueSource;
+  }
+  if (typeof raw.triagedAt === 'number' && Number.isFinite(raw.triagedAt)) {
+    card.triagedAt = raw.triagedAt;
+  }
+}
+
+function parseIssueProject(raw: unknown): IssueProject | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  if (!id || !name) return null;
+  const createdAt =
+    typeof row.createdAt === 'number' && Number.isFinite(row.createdAt)
+      ? row.createdAt
+      : issuesNowMs();
+  const updatedAt =
+    typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt) ? row.updatedAt : createdAt;
+  const out: IssueProject = { id, name, createdAt, updatedAt };
+  if (typeof row.description === 'string' && row.description.trim()) {
+    out.description = row.description.trim();
+  }
+  if (typeof row.color === 'string' && row.color.trim()) out.color = row.color.trim();
+  if (typeof row.archivedAt === 'number' && Number.isFinite(row.archivedAt)) {
+    out.archivedAt = row.archivedAt;
+  }
+  return preserveUnknownKeys(row, out, NORMALIZED_PROJECT_KEYS);
+}
+
+function parseIssueSavedView(raw: unknown): IssueSavedView | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  if (!id || !name) return null;
+  const filters =
+    row.filters && typeof row.filters === 'object' && !Array.isArray(row.filters)
+      ? (row.filters as IssueSavedView['filters'])
+      : {};
+  const order =
+    typeof row.order === 'number' && Number.isFinite(row.order) ? Math.floor(row.order) : 0;
+  const out: IssueSavedView = { id, name, filters, order };
+  if (typeof row.groupBy === 'string' && row.groupBy.trim()) out.groupBy = row.groupBy.trim();
+  if (typeof row.builtIn === 'boolean') out.builtIn = row.builtIn;
+  return preserveUnknownKeys(row, out, NORMALIZED_VIEW_KEYS);
+}
+
+function parseIssueProjects(raw: unknown): IssueProject[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: IssueProject[] = [];
+  for (const item of raw) {
+    const project = parseIssueProject(item);
+    if (project) out.push(project);
+  }
+  return out;
+}
+
+function parseIssueViews(raw: unknown): IssueSavedView[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: IssueSavedView[] = [];
+  for (const item of raw) {
+    const view = parseIssueSavedView(item);
+    if (view) out.push(view);
+  }
+  return out;
 }
 
 function ensureIssueCardShape(raw: unknown): IssueCard | null {
@@ -443,6 +639,7 @@ function ensureIssueCardShape(raw: unknown): IssueCard | null {
   ) {
     card.severity = r.severity;
   }
+  applyIssueCardV3Fields(card, raw as Record<string, unknown>);
   return preserveUnknownKeys(
     raw as Record<string, unknown>,
     card,
@@ -466,6 +663,8 @@ export function parseIssuesState(raw: unknown): IssuesState {
     nextId?: number;
     issues?: unknown;
     workspaces?: unknown;
+    projects?: unknown;
+    views?: unknown;
   };
   if (!Array.isArray(row.issues)) {
     return defaultIssuesState();
@@ -496,6 +695,9 @@ export function parseIssuesState(raw: unknown): IssuesState {
     }
   }
 
+  const projects = parseIssueProjects(row.projects);
+  const views = parseIssueViews(row.views);
+
   // Never write back a lower revision than the file already carried.
   const state: IssuesState = {
     version: ISSUES_COMPAT_VERSION,
@@ -504,6 +706,8 @@ export function parseIssuesState(raw: unknown): IssuesState {
     issues,
     workspaces,
   };
+  if (projects) state.projects = projects;
+  if (views) state.views = views;
   return preserveUnknownKeys(
     raw as Record<string, unknown>,
     state,
@@ -794,9 +998,12 @@ export type AddIssueInput = {
   /** Preserved when migrating / bug_* alias. */
   severity?: BugSeverity;
   legacyBugId?: string;
+  source?: IssueSource;
+  parentId?: string;
+  projectId?: string;
 };
 
-/** Add an issue card (defaults: task / triage / none). */
+/** Add an issue card (defaults: task / backlog-role status / none / source user). */
 export function addIssue(input: AddIssueInput, issueId?: string): IssueCard {
   const nowMs = issuesNowMs();
   const workspacePath = normalizeWorkspacePath(
@@ -805,34 +1012,45 @@ export function addIssue(input: AddIssueInput, issueId?: string): IssueCard {
   const id = issueId?.trim() || allocateIssueId(workspacePath);
   bumpCountersForExplicitIssueId(id, workspacePath);
   const taxonomy = getIssuesTaxonomySync();
+  if (input.parentId) {
+    const parentCheck = validateParentLink(id, input.parentId, requireIssuesState().issues);
+    if (!parentCheck.ok) throw new Error(parentCheck.error);
+  }
   const card: IssueCard = {
     id,
     type: input.type ?? defaultIssueTypeId(taxonomy),
     title: input.title.trim(),
     description: (input.description ?? '').trim(),
-    status: input.status ?? defaultIssueStatusId(taxonomy),
+    // User-created issues go to the backlog-role status so they never enter
+    // the Triage view (that lane keys off source + triagedAt, but new work
+    // still should not look like an unreviewed crash).
+    status: input.status ?? requireIssueStatusForRole('backlog'),
     priority: input.priority ?? defaultIssuePriorityId(taxonomy),
     labels: input.labels ? [...input.labels] : [],
     workspacePath,
     createdAt: nowMs,
     updatedAt: nowMs,
+    source: input.source ?? 'user',
   };
   if (input.severity) card.severity = input.severity;
   if (input.legacyBugId) card.legacyBugId = input.legacyBugId;
+  if (input.parentId) card.parentId = input.parentId;
+  if (input.projectId) card.projectId = input.projectId;
   requireIssuesState().issues.push(card);
   touchIssuesStore();
   return card;
 }
 
-/** Quick-capture helper: note in triage role status. */
+/** Quick-capture helper: note in backlog-role status, filed by the user. */
 export function quickCaptureIssue(title: string, workspacePath?: string): IssueCard {
   const taxonomy = getIssuesTaxonomySync();
   return addIssue({
     title,
     description: '',
     type: findNoteTypeId(taxonomy),
-    status: defaultIssueStatusId(taxonomy),
+    status: requireIssueStatusForRole('backlog'),
     priority: defaultIssuePriorityId(taxonomy),
+    source: 'user',
     workspacePath,
   });
 }
@@ -858,6 +1076,19 @@ export type UpdateIssuePatch = {
   codeRefs?: IssueCodeRef[];
   gitLinks?: IssueGitLink[];
   issueRefs?: IssueIssueRef[];
+  /** Pass null to unassign. */
+  assignee?: IssueAssignee | null;
+  /** Pass null to clear the agent slot. */
+  agent?: IssueAgentRun | null;
+  /** Pass null to unparent. */
+  parentId?: string | null;
+  /** Pass null to drop a manual rank (session sort then applies). */
+  rank?: string | null;
+  /** Pass null to remove from a project. */
+  projectId?: string | null;
+  source?: IssueSource;
+  /** Pass null to return the card to the unreviewed Triage lane. */
+  triagedAt?: number | null;
 };
 
 const ISSUE_RELATION_KINDS: readonly IssueRelationKind[] = [
@@ -1112,6 +1343,40 @@ export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard
       .map((ref) => normalizeIssueIssueRef(ref))
       .filter((ref): ref is IssueIssueRef => ref != null);
   }
+  if (patch.assignee !== undefined) {
+    if (patch.assignee === null) delete issue.assignee;
+    else issue.assignee = { ...patch.assignee };
+  }
+  if (patch.agent !== undefined) {
+    if (patch.agent === null) delete issue.agent;
+    else issue.agent = { ...patch.agent };
+  }
+  if (patch.parentId !== undefined) {
+    if (patch.parentId === null) {
+      delete issue.parentId;
+    } else {
+      const parentCheck = validateParentLink(
+        issue.id,
+        patch.parentId,
+        requireIssuesState().issues,
+      );
+      if (!parentCheck.ok) throw new Error(parentCheck.error);
+      issue.parentId = patch.parentId;
+    }
+  }
+  if (patch.rank !== undefined) {
+    if (patch.rank === null) delete issue.rank;
+    else issue.rank = patch.rank;
+  }
+  if (patch.projectId !== undefined) {
+    if (patch.projectId === null) delete issue.projectId;
+    else issue.projectId = patch.projectId;
+  }
+  if (patch.source !== undefined) issue.source = patch.source;
+  if (patch.triagedAt !== undefined) {
+    if (patch.triagedAt === null) delete issue.triagedAt;
+    else issue.triagedAt = patch.triagedAt;
+  }
   issue.updatedAt = nowMs;
   touchIssuesStore();
   return issue;
@@ -1226,6 +1491,154 @@ export function setWorkspaceProjectKey(
   return { ok: true };
 }
 
+function ensureProjectsList(state: IssuesState): IssueProject[] {
+  if (!state.projects) state.projects = [];
+  return state.projects;
+}
+
+function ensureViewsList(state: IssuesState): IssueSavedView[] {
+  if (!state.views) state.views = [];
+  return state.views;
+}
+
+/** Seed Triage / Assigned to agents / My open when the file has no views yet. */
+export function ensureIssueViews(): IssueSavedView[] {
+  const state = requireIssuesState();
+  const existing = state.views;
+  if (existing && existing.length > 0) return existing;
+  state.views = builtInIssueViews();
+  touchIssuesStore();
+  return state.views;
+}
+
+export function listIssueViews(): IssueSavedView[] {
+  return [...ensureIssueViews()].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+}
+
+export function addIssueView(input: {
+  name: string;
+  filters: IssueSavedView['filters'];
+  groupBy?: string;
+}): IssueSavedView {
+  const views = ensureIssueViews();
+  const nowOrder = views.reduce((max, view) => Math.max(max, view.order), 0) + 1;
+  const view: IssueSavedView = {
+    id: `view-${issuesNowMs().toString(36)}`,
+    name: input.name.trim() || 'Untitled view',
+    filters: { ...input.filters },
+    order: nowOrder,
+  };
+  if (input.groupBy) view.groupBy = input.groupBy;
+  views.push(view);
+  touchIssuesStore();
+  return view;
+}
+
+export function deleteIssueView(viewId: string): boolean {
+  const state = requireIssuesState();
+  const views = state.views;
+  if (!views) return false;
+  const idx = views.findIndex((view) => view.id === viewId);
+  if (idx < 0) return false;
+  if (views[idx].builtIn) return false;
+  views.splice(idx, 1);
+  touchIssuesStore();
+  return true;
+}
+
+export function listIssueProjects(options?: { includeArchived?: boolean }): IssueProject[] {
+  const projects = requireIssuesState().projects ?? [];
+  const rows = options?.includeArchived ? projects : projects.filter((project) => !project.archivedAt);
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+export function findIssueProject(projectId: string): IssueProject | undefined {
+  return requireIssuesState().projects?.find((project) => project.id === projectId);
+}
+
+export function addIssueProject(name: string, extras?: { description?: string; color?: string }): IssueProject {
+  const nowMs = issuesNowMs();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Project name is required.');
+  const project: IssueProject = {
+    id: `proj-${nowMs.toString(36)}`,
+    name: trimmed,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  };
+  if (extras?.description?.trim()) project.description = extras.description.trim();
+  if (extras?.color?.trim()) project.color = extras.color.trim();
+  ensureProjectsList(requireIssuesState()).push(project);
+  touchIssuesStore();
+  return project;
+}
+
+export function renameIssueProject(projectId: string, name: string): IssueProject | null {
+  const project = findIssueProject(projectId);
+  if (!project) return null;
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Project name is required.');
+  project.name = trimmed;
+  project.updatedAt = issuesNowMs();
+  touchIssuesStore();
+  return project;
+}
+
+export function archiveIssueProject(projectId: string): IssueProject | null {
+  const project = findIssueProject(projectId);
+  if (!project) return null;
+  project.archivedAt = issuesNowMs();
+  project.updatedAt = project.archivedAt;
+  touchIssuesStore();
+  return project;
+}
+
+/** Closed vs open counts for issues in this project (not nested projects). */
+export function issueProjectProgress(projectId: string): { done: number; total: number } {
+  const taxonomy = getIssuesTaxonomySync();
+  let done = 0;
+  let total = 0;
+  for (const issue of requireIssuesState().issues) {
+    if (issue.projectId !== projectId) continue;
+    total += 1;
+    if (isClosedStatus(taxonomy, issue.status)) done += 1;
+  }
+  return { done, total };
+}
+
+/** Accept an unreviewed auto-filed issue: backlog-role status + triagedAt now. */
+export function acceptTriageIssue(issueId: string): IssueCard | null {
+  return updateIssue(issueId, {
+    status: requireIssueStatusForRole('backlog'),
+    triagedAt: issuesNowMs(),
+  });
+}
+
+/** Decline an unreviewed auto-filed issue: canceled-role status + triagedAt now. */
+export function declineTriageIssue(issueId: string): IssueCard | null {
+  return updateIssue(issueId, {
+    status: requireIssueStatusForRole('canceled'),
+    triagedAt: issuesNowMs(),
+  });
+}
+
+/**
+ * Queue a work agent on the issue. Phase 1 writes the slot only — it does not
+ * spin a board, worktree, or PR (Phase 4 owns the runtime).
+ */
+export function queueIssueAgent(issueId: string, agentId = 'builder'): IssueCard | null {
+  const nowMs = issuesNowMs();
+  return updateIssue(issueId, {
+    agent: { agentId, phase: 'queued', startedAt: nowMs, updatedAt: nowMs },
+  });
+}
+
+export function assignIssueToMe(issueId: string): IssueCard | null {
+  return updateIssue(issueId, {
+    assignee: { id: LOCAL_ASSIGNEE_ID, label: 'Me', assignedAt: issuesNowMs() },
+  });
+}
+
 export type CollectIssuesOptions = {
   workspacePath?: string;
   scope?: 'all' | 'current_workspace';
@@ -1235,6 +1648,12 @@ export type CollectIssuesOptions = {
   label?: string;
   hideDone?: boolean;
   search?: string;
+  projectId?: string | null;
+  unreviewed?: boolean;
+  hasAgent?: boolean;
+  /** Assignee is me, or the card has no assignee yet. */
+  mine?: boolean;
+  assigneeId?: string | null;
 };
 
 /** Trim and collapse whitespace for a single issue label. */
@@ -1285,6 +1704,22 @@ export function collectIssues(options: CollectIssuesOptions = {}): IssueCard[] {
     if (typeFilter !== 'all' && issue.type !== typeFilter) continue;
     if (priorityFilter !== 'all' && issue.priority !== priorityFilter) continue;
     if (labelFilter && !issue.labels.some((l) => l.toLowerCase() === labelFilter)) continue;
+    if (options.projectId === null) {
+      if (issue.projectId) continue;
+    } else if (options.projectId && issue.projectId !== options.projectId) {
+      continue;
+    }
+    if (options.unreviewed && !isUnreviewedTriageIssue(issue)) continue;
+    if (options.hasAgent && !issue.agent) continue;
+    if (options.mine) {
+      const assigneeId = issue.assignee?.id;
+      if (assigneeId && assigneeId !== LOCAL_ASSIGNEE_ID) continue;
+    }
+    if (options.assigneeId === null) {
+      if (issue.assignee) continue;
+    } else if (options.assigneeId && issue.assignee?.id !== options.assigneeId) {
+      continue;
+    }
     if (search) {
       const hay = `${issue.id} ${issue.title} ${issue.description} ${issue.labels.join(' ')}`.toLowerCase();
       if (!hay.includes(search)) continue;

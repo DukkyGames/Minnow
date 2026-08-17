@@ -1,11 +1,11 @@
 # Issues app v2
 
-Design brief plus the as-built record for Phase 0. Phases 1–5 are unbuilt.
+Design brief plus the as-built record for Phases 0–1. Phases 2–5 are unbuilt.
 
 The brief (§1–14) is the confirmed output of `/impeccable shape`. Section 15 records
-what Phase 0 actually landed, including the two places the build diverged from the
-brief and why. Read §15 before starting Phase 1 — some open questions are now closed
-and some of the brief's assumptions about the codebase turned out to be wrong.
+what Phase 0 actually landed; section 16 records Phase 1. Read both before starting
+Phase 2 — some open questions are now closed and some of the brief's assumptions
+about the codebase turned out to be wrong.
 
 ---
 
@@ -183,7 +183,7 @@ Each phase ends shippable.
 | Phase | Contents | Ends when |
 |---|---|---|
 | **0 — Foundations** ✅ | Schema v3 + guarded migration + backup. Shared context-menu primitive with real submenus. Global command + menu registry. Global `Ctrl+K` palette. Fix the `NaN` taxonomy sort bug. Resolve the dead embed entry points. | **Done — see §15.** |
-| **1 — The list** | Grouping, ranking, inline property editing, keyboard model, multi-select bulk ops, saved views + filter chips, Triage lane, sub-issue hierarchy + rollups, projects, board reorder with drop indicators, container queries, peek widening. | Issues is usable at Linear's standard without touching anything outside the app. |
+| **1 — The list** ✅ | Grouping, ranking, inline property editing, keyboard model, multi-select bulk ops, saved views + filter chips, Triage lane, sub-issue hierarchy + rollups, projects, board reorder with drop indicators, container queries, peek widening. | **Done — see §16.** |
 | **2 — Capture and linking** | Menubar quick-issue popover (context-aware, drop target). Shell drag layer + rail icon target. "Create issue" / "Add to issue ▸" registered on all target surfaces. Live link chips. Attachments. | You can file an issue about anything, from anywhere, without typing where it is. |
 | **3 — Editor** | WYSIWYG over constrained markdown, toolbar, slash commands, `#`/`@` mentions writing real refs, stateful checklists, paste intelligence, CodeMirror code blocks. | Round-trip is lossless against agent-authored markdown; test with adversarial input. |
 | **4 — Agent workflow** | `agent` slot; assign → single-task board group; worktree; Builder/Tester; PR and stop. `issue_*` notification kinds; OS notification when unfocused; rail dock badge. Pending `ask_question` surfaced on the issue. Improved agent tools (§10). | Assign → walk away → get pinged → review a PR. Complete round trip, no Orchestrator visit. |
@@ -221,7 +221,7 @@ Per phase, plus these epic-wide gates:
 ## 14. Open questions
 
 1. **Board coupling boundary.** A single-task board group per issue is the runtime, but the board store keeps a 100-entry log cap and assumes a planner chat. Does each issue get its own group, or do all agent-assigned issues share one long-lived "Issues" group? Shared is cheaper; per-issue is cleaner to cancel and clean up. **Still open — Phase 4.**
-2. **Projects vs. Orchestrator boards.** Both group work with progress rollups. Decide in Phase 1 whether an Issues project can *be* a board, or whether they stay deliberately separate concepts. **Still open — Phase 1.**
+2. **Projects vs. Orchestrator boards.** **Closed in Phase 1 — see §15.9 / §16.** They stay deliberately separate: `IssueProject` groups, filters, and rollups inside Issues only. No Orchestrator board coupling.
 3. **`state.json` at scale.** **Closed in Phase 0 — see §15.**
 4. **Palette ownership.** **Closed in Phase 0 — see §15.**
 5. **OS notification permission and packaging.** Native notifications on Windows need an `appUserModelId`; confirm this doesn't disturb the frozen `build.appId`. **Still open — Phase 4.** Note `build.appId` is frozen and must not change.
@@ -311,3 +311,62 @@ src/ui/shell-commands.ts        test/issues/schema-forward-compat.test.mts
 ```
 
 Deleted: `src/ui/scc-palette.ts`.
+
+---
+
+## 15.9 Phase 1 — locked build decisions (this session)
+
+Confirmed before implementation. Do not relitigate.
+
+| Decision | Choice |
+|---|---|
+| **Projects vs boards (§14.2)** | Separate concepts. `IssueProject` groups, filters, and rollups inside Issues only. No Orchestrator board coupling. |
+| **Agent-assign** | The `A` keystroke and row chip set `agent` to `{ phase: 'queued' }`. Do **not** spin a single-task board, worktree, or PR. Phase 4 owns the runtime. |
+| **Virtualization** | Deferred. Grouping + collapse is enough. |
+| **Triage lane identity** | Unreviewed = `source ∈ {crash, agent, github}` **and** `triagedAt` unset. Status is independent. |
+| **New-issue default status** | Backlog-role status (not triage). User-created issues do not enter the Triage view. |
+| **Schema** | Keep `ISSUES_COMPAT_VERSION = 2` and `ISSUES_SCHEMA_VERSION = 3`. Fill in already-migrated fields; do not bump either constant. |
+| **Out of this session** | Phases 2–5. Menubar capture, shell drag layer, WYSIWYG editor, agent runtime, GitHub sync, rail dock badge / OS notifications. |
+
+## 16. Phase 1 — as built
+
+Landed on worktree `issues-v2-p1-a3f8c2e1` (detached from `claude/issues-app-v2-design-dd7dac`, Phase 0 uncommitted plus this phase). `tsc` clean. Suites green: `node test/run-all.mjs --suite issues` 92/92, `--suite a11y` 67/67 (includes `theme-contrast`), chat `issues-*.test.mts` 35/35. Live check on the worktree full stack (`MINNOW_HEADLESS=1 npm start`, `#/app/issues`): container-query peek, inline menus, triage identity, empty-state line, Alt+↓ reorder.
+
+First verify **FAIL**d on empty-state wrap and unranked Alt+↓; one retry fixed both. Second verify **PASS**.
+
+### 16.1 What landed
+
+- Store writes for v3 card fields (`assignee`, `agent`, `parentId`, `rank`, `projectId`, `source`, `triagedAt`) plus project CRUD and saved-view seeding. Disk `version` stays **2**; `schemaRevision` stays **3**. Both parsers still `preserveUnknownKeys`.
+- List chrome: saved-view tabs (Triage / Assigned to agents / My open / All), filter chips, one-line rows denser than Linear, inline cell menus via `openContextMenu({ anchor })`. `#issuesView` is a thin mount; chrome is rendered.
+- Grouping (status default) with sticky collapsible headers. Rank wins inside a group; session column sort is the fallback when ranks are equal or missing. Drag and Alt+↑/↓ write ranks. The first move in a peer set materializes ranks for **all current visual peers** (then inserts), because `compareIssueRank` sorts ranked before unranked — a lone `rankBetween(null, null)` (`"h"`) would stay above an unranked neighbour.
+- Triage empty copy is one 13px line (no `max-width: 65ch`): `Crashes, agents, and GitHub land here — Y accept, N/Backspace decline, C to file.` The Triage tab shows `Triage` with no count when the queue is empty, and `Triage N` when N are unreviewed.
+- Sub-issues: one level. If the parent is also visible, the child nests under it even when statuses differ; if the parent is filtered out, the child is a top-level row.
+- Keyboard map (suppressed by `isTypingTarget`): j/k, Enter/Escape, s/p/u/l/g, A (queue only), Y accept, N/Backspace decline, C new issue, Alt+↑/↓ rank, Shift+←/→ board column. Command source `issues` while the app is open. `?` help lists the real chords.
+- Triage view keyed off `source ∈ {crash, agent, github}` + unset `triagedAt`. Accept → backlog-role + `triagedAt`. Decline → canceled-role + `triagedAt`. Diagnostics file `source: 'crash'` without `triagedAt`. `issue_add` files `source: 'agent'` into backlog-role status.
+- Board: drop indicator, status+rank on drop, multi-card drag, assignee / agent queued chip / labels / sub-issue rollup on cards.
+- Peek: `--issues-peek-cols: minmax(0, 1fr) minmax(380px, 520px)` on `.issues-shell`; `@container issues (max-width: 900px)` replaces the list. Width `@media` rules converted to container queries. `.issues-list-head` uses `--mn-fg-muted`.
+
+### 16.2 Divergences and why
+
+- **Triage empty is one line, not the §8 paragraph.** The glance surface cannot wrap; copy names sources (crashes, agents, GitHub) and the chords (Y / N/Backspace / C) instead of spelling Quick capture and New issue separately. C still opens new-issue; Quick capture remains the field in chrome.
+- **New-issue shortcut is C, not N.** Decline is N/Backspace when the focused row is unreviewed; C opens the new-issue form so the two do not collide.
+- **Assignee key is `u`.** The brief left the assignee chord unnamed; `a` is taken by agent-queue (`A`).
+- **Hide-done is a session chip.** Built-in views copy their `hideDone` default into session filters on tab change; the chip then toggles that copy so it is not a no-op on Triage.
+- **Backlog is not a board column** in the default taxonomy (`boardVisible: false`). New and accepted issues therefore show in the list until their status is a board-visible lane. Status is independent of the Triage view, as locked.
+- Visual-direction-by-generation was skipped because this harness lacks native image generation. Implementation followed the confirmed §1–14 brief (density tighter than Linear; accent on selected/focused row, focus rings, primary action, and agent-running only).
+
+### 16.3 Open questions closed
+
+- **§14.2 Projects vs boards** — separate concepts (locked §15.9). Not reopened.
+
+### 16.4 Traps for Phase 2
+
+- Do not add `comments` / `activity` / `attachments` to `NORMALIZED_ISSUE_CARD_KEYS` until `ensureIssueCardShape` parses them, or a save will strip them.
+- Never write `version: 3`. Capture/linking/attachments upload, shell drag, and the menubar button are Phase 2 — the row already shows `attachments/links` counts as zeros.
+- Built-in views seed only when `views` is empty. A file that lost its builtins will not get them back on next open.
+- Group drop currently ranks mixed parent+child visual rows. Sibling-only child ranking is still rough.
+- `registerCommandSource('issues')` unregisters on close; a Code embed that tears down without `closeIssues` must still call `unbindIssuesCommands`.
+- Container queries match descendants of `.issues-page`, never the page itself. Peek/layout vars stay on `.issues-shell`.
+- **Expand with agent** still keys off taxonomy triage-role *status* (`canExpandIssueWithAgent`). Agent-filed cards now default to backlog-role status and enter the Triage *view* via `source` + unset `triagedAt`, so Expand is off until someone moves status to triage. Crashes still file with status `triage`, so Expand still shows for those.
+- Project progress is a count of cards with that `projectId`, not a walk of sub-issue trees.
+

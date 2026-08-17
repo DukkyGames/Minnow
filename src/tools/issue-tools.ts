@@ -400,6 +400,8 @@ export async function executeIssueTool(
         priority: validated.priority,
         labels: validated.labels,
         workspacePath: getWorkspacePath(),
+        // Agent-filed cards enter the Triage view until a human accepts or declines.
+        source: 'agent',
       },
       issueId,
     );

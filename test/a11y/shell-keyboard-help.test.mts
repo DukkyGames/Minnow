@@ -17,6 +17,7 @@ describe('shell keyboard help', () => {
     assert.ok(sections.has('Shell'));
     assert.ok(sections.has('Chat'));
     assert.ok(sections.has('Orchestrate board'));
+    assert.ok(sections.has('Issues'));
   });
 
   test('visible catalog omits release-gated apps', () => {

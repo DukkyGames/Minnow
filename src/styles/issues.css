@@ -1,6 +1,9 @@
 /**
- * Issues app — Linear-density list + status kanban (MIN-261).
+ * Issues app — denser-than-Linear list + status kanban.
  * Flat Minnow chrome; --mn-* tokens only.
+ *
+ * Apps render inside MinnowOS windows, so width rules use @container, never
+ * @media — a media query measures the viewport and never matches app width.
  */
 
 .issues-page {
@@ -11,7 +14,10 @@
   background: var(--mn-bg);
   color: var(--mn-fg);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 13px;
+
+  container-type: inline-size;
+  container-name: issues;
 }
 
 .issues-page.is-open,
@@ -19,6 +25,28 @@
 .mn-os-app-layer.is-active.issues-page,
 #issuesView.mn-os-app-layer.is-active {
   display: flex;
+}
+
+/*
+ * Sizing vars live on .issues-shell, one level below the container, because
+ * @container rules never match the container element itself.
+ */
+.issues-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  /* Wide peek; @container below narrows this because the page itself cannot match. */
+  --issues-peek-cols: minmax(0, 1fr) minmax(380px, 520px);
+  --issues-row-h: 28px;
+}
+
+.issues-header,
+.issues-view-bar,
+.issues-chip-bar,
+.issues-new-form {
+  flex-shrink: 0;
 }
 
 /* Code sidebar embed — Issues fills #chatArea inside the Code window. */
@@ -75,9 +103,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 16px;
-  min-height: 52px;
-  padding: 10px 16px;
+  gap: 8px 12px;
+  min-height: 44px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
   background: var(--mn-surface-1, var(--mn-bg));
@@ -94,9 +122,9 @@
 .issues-header__icon {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   background: color-mix(in oklch, var(--mn-accent) 14%, var(--mn-bg));
   color: var(--mn-accent);
   flex-shrink: 0;
@@ -130,6 +158,90 @@
   flex: 1 1 auto;
   justify-content: flex-end;
   min-width: 0;
+}
+
+/* ---------- view tabs + filter chips ---------- */
+
+.issues-view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--mn-border);
+  min-height: 32px;
+}
+
+.issues-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.issues-view-tab {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.issues-view-tab.is-active {
+  color: var(--mn-fg);
+  border-bottom-color: var(--mn-accent);
+}
+
+.issues-view-tab:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.issues-view-tabs__search {
+  flex: 0 1 16rem;
+  min-width: 8rem;
+}
+
+.issues-chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.issues-filter-chip {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.issues-filter-chip.is-on {
+  border-color: color-mix(in oklch, var(--mn-accent) 40%, var(--mn-border));
+  color: var(--mn-fg);
+}
+
+.issues-filter-chip--add {
+  color: var(--mn-fg-muted);
+}
+
+.issues-filter-chip:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
 }
 
 /* ---------- filter bar ---------- */
@@ -254,8 +366,8 @@
 }
 
 .issues-btn--danger {
-  border-color: color-mix(in oklch, var(--mn-danger) 45%, var(--mn-border));
-  color: var(--mn-danger);
+  border-color: color-mix(in oklch, var(--mn-danger-ink) 45%, var(--mn-border));
+  color: var(--mn-danger-ink);
   background: color-mix(in oklch, var(--mn-danger) 8%, var(--mn-bg));
 }
 
@@ -314,7 +426,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   min-width: 0;
 }
 
@@ -370,14 +482,21 @@
 }
 
 .issues-empty {
-  margin: 32px 16px;
-  padding: 24px 20px;
-  text-align: center;
+  margin: 16px 12px;
+  padding: 8px 12px;
+  text-align: left;
   color: var(--mn-fg-muted);
-  border: 1px dashed var(--mn-border);
-  border-radius: var(--radius-md);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
+  /* Glance copy, not a marketing block — do not cap width at 65 characters. */
+}
+
+/* Triage empty is a single 13px line at normal Issues width — not a stacked blurb. */
+.issues-empty--triage {
+  margin: 8px 12px;
+  padding: 0;
+  line-height: 13px;
+  white-space: nowrap;
 }
 
 .issues-empty.hidden {
@@ -387,12 +506,13 @@
 /* Shared list grid columns (header + rows stay aligned). */
 .issues-list-head,
 .issues-row {
-  --issues-list-cols: 4.25rem 2.25rem minmax(0, 1fr) minmax(4.5rem, max-content) 4.5rem 5.5rem 4.5rem;
+  /* id type title status priority assignee project agent rollup counts labels updated */
+  --issues-list-cols: 4rem 1.6rem minmax(0, 1fr) minmax(4.25rem, max-content) 3.5rem 4rem 4.5rem 3.5rem 2.5rem 2.4rem 5rem 3.5rem;
   display: grid;
   grid-template-columns: var(--issues-list-cols);
-  gap: 8px 10px;
+  gap: 4px 8px;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 12px;
 }
 
 /* ---------- multiselect ---------- */
@@ -430,10 +550,10 @@
 .issues-list-head {
   position: sticky;
   top: 0;
-  z-index: 1;
-  min-height: 32px;
-  padding-top: 8px;
-  padding-bottom: 6px;
+  z-index: 2;
+  min-height: 24px;
+  padding-top: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--mn-border);
   background: var(--mn-surface-1, var(--mn-bg));
   flex-shrink: 0;
@@ -441,7 +561,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
 }
 
 .issues-list-head[hidden] {
@@ -467,8 +587,10 @@
   min-width: 0;
 }
 
-.issues-list-head__sort:hover {
-  color: var(--mn-fg);
+@media (hover: hover) {
+  .issues-list-head__sort:hover {
+    color: var(--mn-fg);
+  }
 }
 
 .issues-list-head__sort:focus-visible {
@@ -510,15 +632,25 @@
 }
 
 .issues-row {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 2px;
+  padding-bottom: 2px;
   border-bottom: 1px solid var(--mn-border);
   cursor: pointer;
-  min-height: 40px;
+  min-height: var(--issues-row-h);
 }
 
-.issues-row:hover {
-  background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 4%, transparent));
+.issues-row.is-child {
+  padding-left: 24px;
+}
+
+.issues-row.is-child .issues-row__id {
+  padding-left: 8px;
+}
+
+@media (hover: hover) {
+  .issues-row:hover {
+    background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 4%, transparent));
+  }
 }
 
 .issues-row.is-selected,
@@ -539,8 +671,14 @@
   outline: 1px solid color-mix(in oklch, var(--mn-accent) 50%, var(--mn-border));
 }
 
+.issues-row.is-focused {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
 .issues-row:focus-visible,
-.issues-card:focus-visible {
+.issues-card:focus-visible,
+.issues-row.is-focused {
   outline: 2px solid var(--mn-accent);
   outline-offset: -2px;
 }
@@ -587,6 +725,82 @@
   justify-self: start;
   width: max-content;
   max-width: 100%;
+}
+
+.issues-row__assignee,
+.issues-row__project,
+.issues-row__agent,
+.issues-row__rollup,
+.issues-row__counts {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.issues-row__agent.is-queued {
+  color: var(--mn-fg);
+}
+
+.issues-row__agent.is-running {
+  color: var(--mn-accent);
+}
+
+.issues-row__rollup,
+.issues-row__counts {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.issues-group__head {
+  position: sticky;
+  top: 24px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 24px;
+  padding: 4px 12px;
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.issues-group__head:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.issues-group__count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.issues-drop-indicator {
+  height: 2px;
+  margin: 0 12px;
+  background: var(--mn-accent);
+  border-radius: 1px;
+  pointer-events: none;
 }
 
 /* ---------- chips & badges ---------- */
@@ -640,7 +854,7 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -681,7 +895,7 @@
 }
 
 .issues-labels-field__input::placeholder {
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   opacity: 0.9;
 }
 
@@ -824,7 +1038,7 @@
 }
 
 .issues-priority-chip--none {
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   font-weight: 500;
 }
 
@@ -863,7 +1077,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   border-bottom: 1px solid var(--mn-border);
 }
 
@@ -913,31 +1127,44 @@
   margin: 6px 0 0;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   font-size: 11px;
   color: var(--mn-fg-muted);
 }
 
+.issues-card__agent {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg);
+}
+
+.issues-card__agent.is-running {
+  color: var(--mn-accent);
+}
+
 /* ---------- detail slide-over ---------- */
 
-.issues-page.has-detail .issues-body {
+.issues-shell.is-detail .issues-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  grid-template-columns: var(--issues-peek-cols);
   grid-template-rows: auto 1fr;
 }
 
-.issues-page.has-detail .issues-selection-bar {
+.issues-shell.is-detail .issues-selection-bar {
   grid-column: 1;
   grid-row: 1;
 }
 
-.issues-page.has-detail .issues-list-pane {
+.issues-shell.is-detail .issues-list-pane {
   grid-column: 1;
   grid-row: 2;
   min-height: 0;
 }
 
-.issues-page.has-detail .issues-list-head {
+.issues-shell.is-detail .issues-list-head {
   grid-column: auto;
   grid-row: auto;
 }
@@ -955,7 +1182,7 @@
   display: flex;
 }
 
-.issues-page.has-detail .issues-detail-host {
+.issues-shell.is-detail .issues-detail-host {
   grid-column: 2;
   grid-row: 1 / span 2;
 }
@@ -1185,7 +1412,7 @@ button.issues-detail__activity-chip {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
 }
 
 .issues-detail__section-body {
@@ -1457,18 +1684,23 @@ button.issues-detail__activity-chip {
   white-space: pre-wrap;
 }
 
-/* ---------- responsive ---------- */
+/* ---------- responsive (container, not viewport) ---------- */
 
-@media (max-width: 900px) {
-  .issues-page.has-detail .issues-body {
-    grid-template-columns: 1fr;
+/*
+ * @container matches descendants of .issues-page, never the page itself.
+ * Vars and hide/show rules therefore live on .issues-shell and below.
+ */
+@container issues (max-width: 900px) {
+  .issues-shell {
+    --issues-peek-cols: minmax(0, 1fr);
   }
 
-  .issues-page.has-detail .issues-list-pane {
+  .issues-shell.is-detail .issues-list-pane,
+  .issues-shell.is-detail .issues-selection-bar {
     display: none;
   }
 
-  .issues-page.has-detail .issues-detail-host {
+  .issues-shell.is-detail .issues-detail-host {
     grid-column: 1;
     grid-row: 1 / span 2;
     border-left: none;
@@ -1481,12 +1713,22 @@ button.issues-detail__activity-chip {
 
   .issues-list-head__type,
   .issues-list-head__priority,
+  .issues-list-head__assignee,
+  .issues-list-head__project,
+  .issues-list-head__agent,
+  .issues-list-head__rollup,
+  .issues-list-head__counts,
   .issues-list-head__labels,
   .issues-list-head__updated,
   .issues-row__type,
   .issues-row__labels,
   .issues-row__updated,
-  .issues-row__priority {
+  .issues-row__priority,
+  .issues-row__assignee,
+  .issues-row__project,
+  .issues-row__agent,
+  .issues-row__rollup,
+  .issues-row__counts {
     display: none;
   }
 
@@ -1501,8 +1743,7 @@ button.issues-detail__activity-chip {
   }
 }
 
-/* Phone: one column of chrome, thumb-sized controls, swipeable board. */
-@media (max-width: 640px) {
+@container issues (max-width: 640px) {
   .issues-header {
     gap: 8px 12px;
     padding: 10px var(--mn-phone-pad-right, 14px) 10px var(--mn-phone-pad-left, 14px);
@@ -1513,33 +1754,17 @@ button.issues-detail__activity-chip {
     justify-content: flex-start;
   }
 
-  .issues-filter-bar {
-    gap: 8px;
-    padding: 8px var(--mn-phone-pad-right, 14px) 10px var(--mn-phone-pad-left, 14px);
+  .issues-view-bar,
+  .issues-chip-bar {
+    padding-inline: var(--mn-phone-pad-left, 14px) var(--mn-phone-pad-right, 14px);
   }
 
-  /* Search and quick capture own a full row; the pickers share the one above. */
-  .issues-search,
+  .issues-view-tabs__search,
   .issues-quick-capture {
     flex: 1 1 100%;
     max-width: none;
   }
 
-  .issues-filter {
-    flex: 1 1 8rem;
-    min-width: 0;
-  }
-
-  .issues-view-toggle button,
-  .issues-filter,
-  .issues-search,
-  .issues-hide-done,
-  .issues-quick-capture input,
-  .issues-btn {
-    min-height: var(--touch-min);
-  }
-
-  /* Board columns become swipeable cards instead of 2.5 squeezed lanes. */
   .issues-kanban {
     padding: 12px var(--mn-phone-pad-right, 14px) 24px var(--mn-phone-pad-left, 14px);
     scroll-snap-type: x mandatory;
@@ -1548,7 +1773,7 @@ button.issues-detail__activity-chip {
   }
 
   .issues-column {
-    flex: 0 0 min(80vw, 300px);
+    flex: 0 0 min(80cqi, 300px);
     min-width: 0;
     scroll-snap-align: start;
   }
@@ -1565,7 +1790,6 @@ button.issues-detail__activity-chip {
     flex: 1 1 8rem;
   }
 
-  /* Detail replaces the list on phones — give the escape hatch real weight. */
   .issues-detail__close {
     min-width: var(--touch-min);
     min-height: var(--touch-min);
@@ -1573,6 +1797,18 @@ button.issues-detail__activity-chip {
 
   .issues-detail__header {
     padding-inline: var(--mn-phone-pad-left, 14px) var(--mn-phone-pad-right, 14px);
+  }
+}
+
+@media (pointer: coarse) {
+  .issues-view-toggle button,
+  .issues-filter,
+  .issues-search,
+  .issues-quick-capture input,
+  .issues-btn,
+  .issues-view-tab,
+  .issues-filter-chip {
+    min-height: var(--touch-min);
   }
 }
 

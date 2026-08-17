@@ -349,6 +349,13 @@ const NORMALIZED_ISSUE_CARD_KEYS = new Set([
   'chatIds',
   'codeRefs',
   'gitLinks',
+  'assignee',
+  'agent',
+  'parentId',
+  'rank',
+  'projectId',
+  'source',
+  'triagedAt',
 ]);
 
 /** Top-level state keys this revision normalizes. */
@@ -358,6 +365,8 @@ const NORMALIZED_ISSUES_STATE_KEYS = new Set([
   'nextId',
   'issues',
   'workspaces',
+  'projects',
+  'views',
 ]);
 
 /**
@@ -380,6 +389,165 @@ function preserveUnknownKeys(source, target, normalized) {
     target[key] = source[key];
   }
   return target;
+}
+
+const ISSUE_AGENT_PHASES = new Set([
+  'queued',
+  'running',
+  'awaiting_input',
+  'review',
+  'failed',
+  'canceled',
+  'done',
+]);
+const ISSUE_SOURCES = new Set(['user', 'agent', 'crash', 'github']);
+const NORMALIZED_ASSIGNEE_KEYS = new Set(['id', 'label', 'assignedAt']);
+const NORMALIZED_AGENT_KEYS = new Set([
+  'agentId',
+  'phase',
+  'step',
+  'startedAt',
+  'updatedAt',
+  'boardGroupId',
+  'boardTaskId',
+  'chatId',
+  'worktreePath',
+  'branch',
+  'prNumber',
+  'prUrl',
+  'pendingQuestionId',
+  'error',
+  'envBlocked',
+]);
+const NORMALIZED_PROJECT_KEYS = new Set([
+  'id',
+  'name',
+  'description',
+  'color',
+  'archivedAt',
+  'createdAt',
+  'updatedAt',
+]);
+const NORMALIZED_VIEW_KEYS = new Set(['id', 'name', 'filters', 'groupBy', 'order', 'builtIn']);
+
+function parseIssueAssignee(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  if (!id) return undefined;
+  const assignedAt =
+    typeof row.assignedAt === 'number' && Number.isFinite(row.assignedAt) ? row.assignedAt : 0;
+  const out = { id, assignedAt };
+  if (typeof row.label === 'string' && row.label.trim()) out.label = row.label.trim();
+  return preserveUnknownKeys(row, out, NORMALIZED_ASSIGNEE_KEYS);
+}
+
+function parseIssueAgent(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const agentId = typeof row.agentId === 'string' ? row.agentId.trim() : '';
+  const phase = typeof row.phase === 'string' ? row.phase.trim() : '';
+  if (!agentId || !ISSUE_AGENT_PHASES.has(phase)) return undefined;
+  const startedAt =
+    typeof row.startedAt === 'number' && Number.isFinite(row.startedAt) ? row.startedAt : 0;
+  const updatedAt =
+    typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt) ? row.updatedAt : startedAt;
+  const out = { agentId, phase, startedAt, updatedAt };
+  if (typeof row.step === 'string' && row.step.trim()) out.step = row.step.trim();
+  if (typeof row.boardGroupId === 'string' && row.boardGroupId.trim()) {
+    out.boardGroupId = row.boardGroupId.trim();
+  }
+  if (typeof row.boardTaskId === 'string' && row.boardTaskId.trim()) {
+    out.boardTaskId = row.boardTaskId.trim();
+  }
+  if (typeof row.chatId === 'string' && row.chatId.trim()) out.chatId = row.chatId.trim();
+  if (typeof row.worktreePath === 'string' && row.worktreePath.trim()) {
+    out.worktreePath = row.worktreePath.trim();
+  }
+  if (typeof row.branch === 'string' && row.branch.trim()) out.branch = row.branch.trim();
+  if (typeof row.prNumber === 'number' && Number.isFinite(row.prNumber)) {
+    out.prNumber = Math.floor(row.prNumber);
+  }
+  if (typeof row.prUrl === 'string' && row.prUrl.trim()) out.prUrl = row.prUrl.trim();
+  if (typeof row.pendingQuestionId === 'string' && row.pendingQuestionId.trim()) {
+    out.pendingQuestionId = row.pendingQuestionId.trim();
+  }
+  if (typeof row.error === 'string' && row.error.trim()) out.error = row.error.trim();
+  if (typeof row.envBlocked === 'boolean') out.envBlocked = row.envBlocked;
+  return preserveUnknownKeys(row, out, NORMALIZED_AGENT_KEYS);
+}
+
+function applyIssueCardV3Fields(out, r) {
+  const assignee = parseIssueAssignee(r.assignee);
+  if (assignee) out.assignee = assignee;
+  const agent = parseIssueAgent(r.agent);
+  if (agent) out.agent = agent;
+  if (typeof r.parentId === 'string' && r.parentId.trim()) out.parentId = r.parentId.trim();
+  if (typeof r.rank === 'string' && r.rank.trim()) out.rank = r.rank.trim();
+  if (typeof r.projectId === 'string' && r.projectId.trim()) out.projectId = r.projectId.trim();
+  if (typeof r.source === 'string' && ISSUE_SOURCES.has(r.source)) out.source = r.source;
+  if (typeof r.triagedAt === 'number' && Number.isFinite(r.triagedAt)) out.triagedAt = r.triagedAt;
+}
+
+function parseIssueProject(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  if (!id || !name) return null;
+  const createdAt =
+    typeof row.createdAt === 'number' && Number.isFinite(row.createdAt)
+      ? row.createdAt
+      : Date.now();
+  const updatedAt =
+    typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt) ? row.updatedAt : createdAt;
+  const out = { id, name, createdAt, updatedAt };
+  if (typeof row.description === 'string' && row.description.trim()) {
+    out.description = row.description.trim();
+  }
+  if (typeof row.color === 'string' && row.color.trim()) out.color = row.color.trim();
+  if (typeof row.archivedAt === 'number' && Number.isFinite(row.archivedAt)) {
+    out.archivedAt = row.archivedAt;
+  }
+  return preserveUnknownKeys(row, out, NORMALIZED_PROJECT_KEYS);
+}
+
+function parseIssueSavedView(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  if (!id || !name) return null;
+  const filters =
+    row.filters && typeof row.filters === 'object' && !Array.isArray(row.filters)
+      ? row.filters
+      : {};
+  const order =
+    typeof row.order === 'number' && Number.isFinite(row.order) ? Math.floor(row.order) : 0;
+  const out = { id, name, filters, order };
+  if (typeof row.groupBy === 'string' && row.groupBy.trim()) out.groupBy = row.groupBy.trim();
+  if (typeof row.builtIn === 'boolean') out.builtIn = row.builtIn;
+  return preserveUnknownKeys(row, out, NORMALIZED_VIEW_KEYS);
+}
+
+function parseIssueProjects(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  for (const item of raw) {
+    const project = parseIssueProject(item);
+    if (project) out.push(project);
+  }
+  return out;
+}
+
+function parseIssueViews(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  for (const item of raw) {
+    const view = parseIssueSavedView(item);
+    if (view) out.push(view);
+  }
+  return out;
 }
 
 function ensureIssueCard(raw) {
@@ -435,6 +603,7 @@ function ensureIssueCard(raw) {
   }
   if (Array.isArray(r.codeRefs)) out.codeRefs = r.codeRefs;
   if (Array.isArray(r.gitLinks)) out.gitLinks = r.gitLinks;
+  applyIssueCardV3Fields(out, r);
   return preserveUnknownKeys(r, out, NORMALIZED_ISSUE_CARD_KEYS);
 }
 
@@ -504,6 +673,8 @@ export function validateIssuesState(raw) {
   }
 
   // Never write back a lower revision than the payload carried.
+  const projects = parseIssueProjects(row.projects);
+  const views = parseIssueViews(row.views);
   const state = {
     version: ISSUES_COMPAT_VERSION,
     schemaRevision: Math.max(readRevision, ISSUES_SCHEMA_VERSION),
@@ -511,6 +682,8 @@ export function validateIssuesState(raw) {
     issues,
     workspaces,
   };
+  if (projects) state.projects = projects;
+  if (views) state.views = views;
   return preserveUnknownKeys(row, state, NORMALIZED_ISSUES_STATE_KEYS);
 }
 

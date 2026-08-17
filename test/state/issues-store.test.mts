@@ -39,8 +39,9 @@ describe('issues-store', () => {
     const b = addIssue({ title: 'Second', workspacePath: '/proj/Minnow' });
     assert.equal(a.id, 'MIN-1');
     assert.equal(b.id, 'MIN-2');
-    assert.equal(a.status, 'triage');
+    assert.equal(a.status, 'backlog');
     assert.equal(a.type, 'task');
+    assert.equal(a.source, 'user');
   });
 
   test('legacy ISS cards coexist with new MIN ids in same workspace', () => {
@@ -79,8 +80,9 @@ describe('issues-store', () => {
     const b = addIssue({ title: 'Second', workspacePath: '/w' });
     assert.equal(a.id, 'ISS-1');
     assert.equal(b.id, 'ISS-2');
-    assert.equal(a.status, 'triage');
+    assert.equal(a.status, 'backlog');
     assert.equal(a.type, 'task');
+    assert.equal(a.source, 'user');
   });
 
   test('updateIssue patches status and notes', () => {
