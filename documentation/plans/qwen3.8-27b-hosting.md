@@ -15,10 +15,12 @@ Official model: [Qwen/Qwen3.8-27B](https://huggingface.co/Qwen/Qwen3.8-27B). Nat
 - [x] Add qwen3.8 262K lookup, fit bonus, `qwen3_5` geometry + name aliases
 - [x] Map `xhigh` ingest/send, `preserve_thinking`, Qwen3.8 default high; LM Studio + local + hosted openai-v1
 - [x] Tests, `documentation/context.md`, this plan file
+- [x] Composer reasoning-effort dropdown for Qwen3.8 when catalog is off/on, My Models has no apiKind, or cache row is missing
 
 ## Implementation notes
 
 - Composer stays **off / low / medium / high**. Ingest maps LM Studio `xhigh` → `high`. Send maps Minnow `high` → wire `xhigh` for Qwen3.8 ids (`qwen3.8` / `qwen3_8`, not `Qwen3-8B`).
+- Dropdown visibility: `ensureQwen38ReasoningAllowedOptions` upgrades empty / off-on catalogs to levels; `resolveSendCapabilities` infers from the model id when the cache row is missing; `fetchModels()` stamps My Models rows with `catalogCapabilitiesFromRow` (no forced `openai-v1`, so non-reasoning GGUFs stay brain-toggle-only).
 - Local llama.cpp serve: `--jinja` always; `--mmproj` when a sibling `mmproj*.gguf` exists (prefers `mmproj-F16.gguf`).
 - llama.cpp pin `b10448` (asset names unchanged vs `b9628` for CPU / macOS / Windows CUDA 12.4 / Vulkan). Ubuntu CUDA/ROCm zips are not published on this release; those variants simply are not installable from the manifest.
 - Context fallback also keys `qwen3_8` so underscore ids do not inherit generic `qwen3` 131K.

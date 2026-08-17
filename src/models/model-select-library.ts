@@ -5,6 +5,7 @@
 
 import { isServerStorageMode } from '../config/storage-mode';
 import { buildTopBarModelOptionHtml } from '../lib/format-model-label';
+import { MODEL_LOAD_TIMEOUT_MS } from './serve-timeouts';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from '../providers/types';
 import type { ProviderModelsResult } from '../providers/fetch-all-models';
@@ -334,7 +335,6 @@ export async function fetchLibraryModelSelectMerge(
 }
 
 const SERVE_POLL_MS = 400;
-const SERVE_POLL_MAX_MS = 120_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -359,10 +359,11 @@ export async function loadLibraryModelFromPicker(libraryId: string): Promise<voi
   if (existing?.status === 'running') return;
 
   const { loadModel } = await import('../ui/models/store');
+  // Same inspector drafts as My Models Load — omitting settings used to spawn at 125k.
   await loadModel(model);
 
   const started = Date.now();
-  while (Date.now() - started < SERVE_POLL_MAX_MS) {
+  while (Date.now() - started < MODEL_LOAD_TIMEOUT_MS) {
     const nextServes = await listModelServes().catch(() => [] as ServeRecord[]);
     const serve = activeServeFor(model, nextServes);
     if (serve?.status === 'running') return;

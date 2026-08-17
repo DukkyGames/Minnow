@@ -1,5 +1,11 @@
 /**
  * MCP tool namespacing and OpenAI function definition mapping.
+ *
+ * Encoding folds `-` into `_` to stay inside the function-name charset, so it is
+ * lossy: `browser_navigate` and `browser-navigate` both encode to the same id.
+ * Decoding therefore cannot recover the server's own spelling — dispatch must
+ * resolve against the live tool listing (see `resolveMcpToolName` in registry.js)
+ * and treat this parse as a hint only.
  */
 
 /** mcp__<serverId>__<toolName> */
@@ -8,13 +14,23 @@ export function toNamespacedName(serverId, toolName) {
   return `mcp__${serverId}__${safeTool}`;
 }
 
+/**
+ * Split `mcp__<serverId>__<toolName>`.
+ * `toolName` keeps the encoded spelling; `toolNameCandidates` holds every
+ * spelling that could have produced it, most likely first.
+ */
 export function parseNamespacedName(name) {
-  if (!name.startsWith('mcp__')) return null;
+  if (typeof name !== 'string' || !name.startsWith('mcp__')) return null;
   const parts = name.slice(5).split('__');
   if (parts.length < 2) return null;
   const serverId = parts[0];
-  const toolName = parts.slice(1).join('__').replace(/_/g, '-');
-  return { serverId, toolName };
+  const encoded = parts.slice(1).join('__');
+  const dashed = encoded.replace(/_/g, '-');
+  return {
+    serverId,
+    toolName: encoded,
+    toolNameCandidates: dashed === encoded ? [encoded] : [encoded, dashed],
+  };
 }
 
 /**

@@ -2,7 +2,7 @@
 id: verifier
 label: Verifier
 kind: work-agent
-version: "2"
+version: "3"
 description: Verifies a Builder's completed task against the plan's Test spec.
 providerId: null
 modelId: null
@@ -12,6 +12,7 @@ allowedTools:
   - get_datetime
   - read_file
   - read_file_range
+  - read_document
   - list_directory
   - find_files
   - get_file_metadata

@@ -55,7 +55,13 @@ describe('resolveGeometry', () => {
     assert.equal(oss.nLayers, 24);
   });
 
-  it('uses qwen3_5 hybrid geometry for the 27B size', () => {
+  it('uses qwen3_5 hybrid geometry for the 9B and 27B sizes', () => {
+    const nine = resolveGeometry({ architecture: 'qwen35', paramsB: 9 });
+    assert.equal(nine.source, 'family');
+    assert.equal(nine.nLayers, 32);
+    assert.equal(nine.nEmbd, 4096);
+    assert.equal(nine.swaPeriod, 4);
+
     const g = resolveGeometry({ architecture: 'qwen3_5', paramsB: 27.78 });
     assert.equal(g.source, 'family');
     assert.equal(g.nLayers, 64);
@@ -138,6 +144,19 @@ describe('geometryFromGgufMetadata', () => {
       swaPeriod: 0,
     });
     assert.equal(g.swaPeriod, 6);
+  });
+
+  it('applies the Qwen3.5 hybrid period when the header omits a sliding window', () => {
+    const g = geometryFromGgufMetadata({
+      arch: 'qwen35',
+      nLayers: 32,
+      nKvHeads: 4,
+      headDim: 256,
+      nEmbd: 4096,
+      swaWindow: 0,
+      swaPeriod: 0,
+    });
+    assert.equal(g.swaPeriod, 4);
   });
 
   it('assumes no windowing when neither the header nor the table knows', () => {

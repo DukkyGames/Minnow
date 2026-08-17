@@ -11,6 +11,7 @@ import {
   type ServeRecord,
 } from '../models/api-client.ts';
 import { activeServeFor, type LibraryModel } from '../models/library.ts';
+import { MODEL_LOAD_TIMEOUT_MS } from '../models/serve-timeouts.ts';
 import {
   isLibraryModelBinding,
   libraryBindingNeedsServeLoad,
@@ -36,7 +37,6 @@ import { classifyProviderHost } from './capabilities/host-group.ts';
 import type { BenchmarkTarget } from './campaign-types.ts';
 
 const POLL_MS = 400;
-const SERVE_POLL_MAX_MS = 120_000;
 
 export type BenchmarkTargetLoadKind = 'none' | 'lm-studio' | 'library' | 'skipped';
 
@@ -136,7 +136,7 @@ async function waitForLibraryServeRunning(
   signal?: AbortSignal,
 ): Promise<ServeRecord> {
   const started = Date.now();
-  while (Date.now() - started < SERVE_POLL_MAX_MS) {
+  while (Date.now() - started < MODEL_LOAD_TIMEOUT_MS) {
     if (signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
@@ -191,7 +191,7 @@ async function loadLibraryModelHeadless(
   });
 
   const started = Date.now();
-  while (Date.now() - started < SERVE_POLL_MAX_MS) {
+  while (Date.now() - started < MODEL_LOAD_TIMEOUT_MS) {
     if (signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }

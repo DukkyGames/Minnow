@@ -174,6 +174,8 @@ export const SCOPED_SUITES = {
       'test/attachments/**/*.test.mts',
       'test/attachments/**/*.test.ts',
       'test/server/read-document.test.mjs',
+      'test/server/read-file-document.test.mjs',
+      'test/server/binary-sniff.test.mjs',
       'test/server/create-document.test.mjs',
       'test/server/document-html.test.mjs',
       'test/workspace-ref.test.ts',

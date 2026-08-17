@@ -78,7 +78,12 @@ import {
   toolWhoCalls,
 } from '../tools/code-tools.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
-import { toolReadDocument } from '../tools/read-document.js';
+import {
+  extractWorkspaceDocumentText,
+  toolReadDocument,
+} from '../tools/read-document.js';
+import { looksLikeBinaryBuffer } from '../tools/binary-sniff.js';
+import { isDocumentFilePath } from '../../src/attachments/document-extensions.mjs';
 import {
   toolCreatePdf,
   toolCreateSpreadsheet,
@@ -116,7 +121,7 @@ import {
 import { runFindFilesSearch, runGrepSearch } from '../tools/grep.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
-import { wrapServerToolResult } from '../security/untrusted.js';
+import { wrapServerToolResult, wrapUntrusted } from '../security/untrusted.js';
 import {
   getEffectiveWorkspaceRoot,
   resolveSafePath,
@@ -259,17 +264,42 @@ function formatMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(0)}MB`;
 }
 
+/**
+ * True when this path should go through read_document (Excel/PDF/Word), not UTF-8.
+ *
+ * @param {string} filePath
+ * @param {unknown} requestedPath
+ */
+function shouldExtractAsDocument(filePath, requestedPath) {
+  const requested = typeof requestedPath === 'string' ? requestedPath : '';
+  return isDocumentFilePath(requested) || isDocumentFilePath(filePath);
+}
+
 async function toolReadFile(args) {
   const filePath = resolveSafePath(args?.path);
   const stat = await fs.stat(filePath);
   if (!stat.isFile()) {
     return `Error: "${args.path}" is not a file`;
   }
+  const rel = toRelativePath(filePath);
+
+  // Agents (and workspace chips) call read_file on .xlsx; decoding ZIP as UTF-8
+  // produced the PK… garbage reported in MIN-614. Extract sheet/PDF text instead.
+  if (shouldExtractAsDocument(filePath, args?.path)) {
+    return toolReadDocument({ path: args.path });
+  }
+
   if (stat.size > MAX_READ_FILE_BYTES) {
     return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to search it or read_file_range for a bounded line range.`;
   }
-  const content = await fs.readFile(filePath, 'utf8');
-  const rel = toRelativePath(filePath);
+  const buffer = await fs.readFile(filePath);
+  if (looksLikeBinaryBuffer(buffer)) {
+    return (
+      `Error: "${rel}" looks like a binary file and cannot be read as UTF-8 text. ` +
+      `Use read_document for PDF, Excel, Word, and other office files.`
+    );
+  }
+  const content = buffer.toString('utf8');
   const { text } = capReadFileOutput(content, rel);
   return text;
 }
@@ -340,18 +370,14 @@ function purgeBrainCodeIndexAfterDelete(relPath, isDirectory) {
   }
 }
 
-async function toolReadFileRange(args) {
-  const filePath = resolveSafePath(args?.path);
-  const startLine = Number(args?.start_line);
-  const endLine = Number(args?.end_line);
-  if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 1 || endLine < startLine) {
-    return 'Error: start_line and end_line must be valid integers (1-based, start <= end)';
-  }
-  const stat = await fs.stat(filePath);
-  if (stat.size > MAX_READ_FILE_BYTES) {
-    return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to locate specific content instead.`;
-  }
-  const content = await fs.readFile(filePath, 'utf8');
+/**
+ * Render a 1-based inclusive line slice with prefixed line numbers.
+ *
+ * @param {string} content
+ * @param {number} startLine
+ * @param {number} endLine
+ */
+function renderNumberedLineRange(content, startLine, endLine) {
   const lines = content.split(/\r?\n/);
   const slice = lines.slice(startLine - 1, endLine);
   const rendered = slice.map((line, idx) => `${startLine + idx}: ${line}`).join('\n');
@@ -362,6 +388,41 @@ async function toolReadFileRange(args) {
     footerHint: 'request a smaller line range',
   });
   return text;
+}
+
+async function toolReadFileRange(args) {
+  const filePath = resolveSafePath(args?.path);
+  const startLine = Number(args?.start_line);
+  const endLine = Number(args?.end_line);
+  if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 1 || endLine < startLine) {
+    return 'Error: start_line and end_line must be valid integers (1-based, start <= end)';
+  }
+
+  // Line numbers apply to extracted sheet/PDF text, not the binary container.
+  if (shouldExtractAsDocument(filePath, args?.path)) {
+    const extracted = await extractWorkspaceDocumentText(args.path);
+    if (typeof extracted === 'string') {
+      return extracted;
+    }
+    const numbered = renderNumberedLineRange(extracted.text, startLine, endLine);
+    return wrapUntrusted(numbered, {
+      source: `document:${path.basename(extracted.filename)}`,
+    });
+  }
+
+  const stat = await fs.stat(filePath);
+  if (stat.size > MAX_READ_FILE_BYTES) {
+    return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to locate specific content instead.`;
+  }
+  const buffer = await fs.readFile(filePath);
+  const rel = toRelativePath(filePath);
+  if (looksLikeBinaryBuffer(buffer)) {
+    return (
+      `Error: "${rel}" looks like a binary file and cannot be read as UTF-8 text. ` +
+      `Use read_document for PDF, Excel, Word, and other office files.`
+    );
+  }
+  return renderNumberedLineRange(buffer.toString('utf8'), startLine, endLine);
 }
 
 async function toolSaveFile(args) {
@@ -634,9 +695,15 @@ const IMPORT_WORKSPACE_FILE_MAX_BYTES = 10 * 1024 * 1024;
 /**
  * Write binary file bytes from a base64 payload (OS drag-import into workspace).
  * UI-only — not registered in the LLM tool catalog.
+ * `kind: 'dir'` creates an empty directory (folder drops that have no files).
  */
 async function toolImportWorkspaceFile(args) {
   const filePath = resolveSafePath(args?.path, { write: true });
+  const kind = String(args?.kind ?? 'file').toLowerCase();
+  if (kind === 'dir' || kind === 'directory') {
+    await fs.mkdir(filePath, { recursive: true });
+    return `Imported directory ${toRelativePath(filePath)}`;
+  }
   if (args?.content === undefined || args?.content === null) {
     return 'Error: content (base64 file bytes) is required';
   }

@@ -73,7 +73,7 @@ Full file operations, keyboard-driven when the tree has focus:
 
 Right-click for the context menu, including **Open in System Explorer** and **Copy path** (workspace-relative path on the system clipboard).
 
-Drag a file into the composer to attach it as a workspace reference the model can read with tools. Drag a file or folder into the terminal to insert its path at the shell prompt.
+Drag a file or folder from Explorer or Finder into the tree to copy it into the project — onto a folder to import there, or onto empty space for the workspace root. Drag a file into the composer to attach it as a workspace reference the model can read with tools. Drag a file or folder into the terminal to insert its path at the shell prompt.
 
 When an agent writes files, the tree patches only the affected folders instead of rebuilding. Your scroll position, keyboard focus and expanded folders survive.
 

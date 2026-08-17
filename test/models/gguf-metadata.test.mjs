@@ -6,6 +6,7 @@ import { after, before, describe, it } from 'node:test';
 
 import {
   clearGgufMetadataCache,
+  countHybridFullAttentionLayers,
   parseGgufHeader,
   readGgufMetadata,
 } from '../../server/models/gguf-metadata.js';
@@ -192,6 +193,77 @@ describe('gguf metadata', () => {
     const meta = await parseGgufHeader(filePath);
     assert.equal(meta.swaPeriod, 6);
     assert.equal(meta.nFullAttentionLayers, 0);
+  });
+
+  it('reads Qwen3.5 full_attention_interval as a hybrid period', async () => {
+    const filePath = await writeGguf('qwen35-9b.gguf', {
+      kv: [
+        kvString('general.architecture', 'qwen35'),
+        kvU32('qwen35.block_count', 32),
+        kvU32('qwen35.embedding_length', 4096),
+        kvU32('qwen35.attention.head_count', 16),
+        kvU32('qwen35.attention.head_count_kv', 4),
+        kvU32('qwen35.attention.key_length', 256),
+        kvU32('qwen35.context_length', 262144),
+        kvU32('qwen35.full_attention_interval', 4),
+      ],
+      tensors: [tensor('token_embd.weight', [4096, 248320], GGML_Q4_K)],
+    });
+
+    const meta = await parseGgufHeader(filePath);
+    assert.equal(meta.arch, 'qwen35');
+    assert.equal(meta.fullAttentionInterval, 4);
+    assert.equal(meta.swaPeriod, 4);
+    // 32-layer 3:1 hybrid: layers 3,7,...,31 are full attention.
+    assert.equal(meta.nFullAttentionLayers, 8);
+  });
+
+  it('counts the MTP block as full attention on top of the hybrid trunk', async () => {
+    const filePath = await writeGguf('qwen35-27b-mtp.gguf', {
+      kv: [
+        kvString('general.architecture', 'qwen35'),
+        kvU32('qwen35.block_count', 65),
+        kvU32('qwen35.embedding_length', 5120),
+        kvU32('qwen35.attention.head_count', 24),
+        kvU32('qwen35.attention.head_count_kv', 4),
+        kvU32('qwen35.attention.key_length', 256),
+        kvU32('qwen35.full_attention_interval', 4),
+        kvU32('qwen35.nextn_predict_layers', 1),
+      ],
+      tensors: [],
+    });
+
+    const meta = await parseGgufHeader(filePath);
+    // 16 full-attention layers in the 64-block trunk plus one dense MTP block.
+    assert.equal(meta.nFullAttentionLayers, 17);
+  });
+
+  it('counts linear-attention layers from ssm tensors when the interval key is missing', async () => {
+    const filePath = await writeGguf('qwen35-ssm-probe.gguf', {
+      kv: [
+        kvString('general.architecture', 'qwen35'),
+        kvU32('qwen35.block_count', 4),
+        kvU32('qwen35.embedding_length', 4096),
+        kvU32('qwen35.attention.head_count', 16),
+        kvU32('qwen35.attention.head_count_kv', 4),
+        kvU32('qwen35.attention.key_length', 256),
+      ],
+      tensors: [
+        tensor('blk.0.ssm_conv1d.weight', [4, 4], GGML_F32),
+        tensor('blk.1.ssm_conv1d.weight', [4, 4], GGML_F32),
+        tensor('blk.2.ssm_conv1d.weight', [4, 4], GGML_F32),
+        tensor('blk.3.attn_q.weight', [4096, 4096], GGML_Q4_K),
+      ],
+    });
+
+    const meta = await parseGgufHeader(filePath);
+    assert.equal(meta.nFullAttentionLayers, 1);
+  });
+
+  it('matches llama.cpp hybrid counting for trunk + MTP', () => {
+    assert.equal(countHybridFullAttentionLayers(32, 4), 8);
+    assert.equal(countHybridFullAttentionLayers(64, 4), 16);
+    assert.equal(countHybridFullAttentionLayers(65, 4, 1), 17);
   });
 
   it('returns null for a file that is not GGUF instead of throwing', async () => {

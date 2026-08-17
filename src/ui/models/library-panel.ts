@@ -247,6 +247,7 @@ function startLoad(model: LibraryModel, trigger: HTMLButtonElement): void {
         trigger.disabled = false;
         return;
       }
+      // Drafts come from the inspector Load tab via resolveLlamaServeSettings in loadModel.
       await loadModel(model);
     } catch (err) {
       setStatus('err', err instanceof Error ? err.message : 'Load failed');

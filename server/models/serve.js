@@ -39,6 +39,7 @@ import {
 import { setProviderThinkingBudgetSupport } from '../providers/capabilities-store.js';
 import { getServesIndexPath, modelsLogDir } from './paths.js';
 import { validatePort, validateRuntime, validateServeId } from './validate.js';
+import { MODEL_LOAD_TIMEOUT_MS } from './timeouts.js';
 import {
   buildLlamaServerEnv,
   getInstalledLlamaVariant,
@@ -256,7 +257,7 @@ function summarizeLlamaLogTail(tail) {
  * @param {string} [runId]
  * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
  */
-async function waitForHealth(baseUrl, timeoutMs = 60_000, runId) {
+async function waitForHealth(baseUrl, timeoutMs = MODEL_LOAD_TIMEOUT_MS, runId) {
   if (waitForHealthOverrideForTests) {
     const ok = await waitForHealthOverrideForTests(baseUrl);
     if (ok) return { ok: true };
@@ -664,7 +665,7 @@ export async function startServe(body) {
 
   /** Wait for health, then promote the row and register the provider. */
   const settle = async () => {
-    const healthy = await waitForHealth(baseUrl, 60_000, run.runId);
+    const healthy = await waitForHealth(baseUrl, MODEL_LOAD_TIMEOUT_MS, run.runId);
     if (!healthy.ok) {
       await stopActiveRun(run.runId);
       row.status = 'error';

@@ -214,4 +214,36 @@ describe('syncComposerReasoningEffortFromActiveChat', () => {
     assert.equal(select.value, 'medium');
     assert.equal(brainBtn.getAttribute('aria-pressed'), 'true');
   });
+
+  test('shows brain and level dropdown for Qwen3.8 My Models rows without catalog caps', () => {
+    setupDom();
+    seedChat({
+      providerId: 'minnow-library',
+      modelId: 'gguf:unsloth/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf',
+    });
+
+    modelCache.set(
+      encodeModelSelectKey(
+        'minnow-library',
+        'gguf:unsloth/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf',
+      ),
+      {
+        id: 'gguf:unsloth/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf',
+        type: 'llm',
+      },
+    );
+
+    initThinkingControl();
+    initComposerReasoningEffort();
+    syncComposerReasoningEffortFromActiveChat();
+
+    const dropdownWrap = document.getElementById('composerReasoningEffortWrap');
+    const select = document.getElementById('composerReasoningEffortSelect') as HTMLSelectElement;
+    const thinkingControl = document.getElementById('composerThinkingControl');
+
+    assert.ok(!dropdownWrap?.classList.contains('hidden'));
+    assert.equal(select.options.length, 3);
+    assert.equal(select.value, 'high');
+    assert.ok(!thinkingControl?.classList.contains('hidden'));
+  });
 });

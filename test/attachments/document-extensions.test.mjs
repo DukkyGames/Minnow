@@ -7,6 +7,7 @@ import {
   getDocumentPreviewKind,
   isOfficeExtension,
   isPdfFilePath,
+  isDocumentFilePath,
   isSpreadsheetFilePath,
   isWordFilePath,
   OFFICE_EXTENSIONS,
@@ -28,6 +29,10 @@ describe('document-extensions', () => {
 
   it('classifies document preview kinds', () => {
     assert.equal(isPdfFilePath('report.pdf'), true);
+    assert.equal(isDocumentFilePath('budget.xlsx'), true);
+    assert.equal(isDocumentFilePath('notes.pdf'), true);
+    assert.equal(isDocumentFilePath('readme.md'), false);
+    assert.equal(isDocumentFilePath('data.csv'), false);
     assert.equal(isSpreadsheetFilePath('budget.xlsx'), true);
     assert.equal(isSpreadsheetFilePath('data.csv'), false);
     assert.equal(isWordFilePath('memo.docx'), true);

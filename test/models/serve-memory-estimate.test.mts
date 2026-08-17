@@ -85,6 +85,33 @@ describe('serve memory estimate', () => {
     assert.ok(gemma.vramGb < asIfDense.vramGb / 3);
   });
 
+  it('does not charge every Qwen3.5 layer for a growing KV cache', () => {
+    // Qwen3.5-9B Q8_0 on disk is ~8.87 GiB. The old header path treated all 32 layers
+    // as full attention and reported 25 GB at 125k ctx; nvidia-smi after load is ~14 GB.
+    const qwen35_9b = {
+      arch: 'qwen35',
+      nLayers: 32,
+      nKvHeads: 4,
+      headDim: 256,
+      nEmbd: 4096,
+      nVocab: 248320,
+      nFullAttentionLayers: 8,
+      swaPeriod: 4,
+      swaWindow: 0,
+    };
+    const est = estimateServeMemory({
+      weightsGb: 8.87,
+      paramsB: 9,
+      ctx: 125_000,
+      cacheType: 'f16',
+      nGpuLayers: 999,
+      backend: 'cuda',
+      gguf: qwen35_9b,
+    });
+    assert.equal(est.kvGbPer1kTokens, 0.03);
+    assert.ok(est.vramGb > 12 && est.vramGb < 16, `expected ~14 GB, got ${est.vramGb}`);
+  });
+
   it('puts everything on RAM when ngl is 0', () => {
     const est = estimateServeMemory({
       weightsGb: 4.58,

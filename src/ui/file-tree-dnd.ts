@@ -1,17 +1,14 @@
 /**
- * File-tree drag-and-drop: internal moves + OS file import into workspace folders.
+ * File-tree drag-and-drop: internal moves + OS file/folder import into workspace folders.
  */
 
-import {
-  classifyFileDrag,
-  filesFromDataTransfer,
-  isLikelyDirectoryDrop,
-} from '../attachments/external-file-drop';
+import { collectDroppedTreeEntries } from '../attachments/directory-drop';
+import { classifyFileDrag } from '../attachments/external-file-drop';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import { basename, computeMoveDestination } from './file-tree-path';
 import { getLocalServerAvailable } from '../tools/client';
 import { expandDir } from './file-tree';
-import { importExternalFilesToWorkspace } from './import-external-files';
+import { importDroppedEntriesToWorkspace } from './import-external-files';
 import { movePath } from './file-tree-ops';
 import { showMoveConfirmDialog } from './file-tree-move-dialog';
 import { setStatus } from './status';
@@ -105,10 +102,6 @@ async function handleTreeDrop(
   }
 }
 
-function importableFiles(dataTransfer: DataTransfer): File[] {
-  return filesFromDataTransfer(dataTransfer).filter((file) => !isLikelyDirectoryDrop(file));
-}
-
 async function handleExternalTreeDrop(
   event: DragEvent,
   destDir: string,
@@ -116,16 +109,17 @@ async function handleExternalTreeDrop(
   const dataTransfer = event.dataTransfer;
   if (!dataTransfer) return;
 
-  const files = importableFiles(dataTransfer);
-  if (!files.length) {
-    setStatus('err', 'Drop files to import — folders are not supported yet.');
+  // collectDroppedTreeEntries captures webkitGetAsEntry before its first await.
+  const { entries, error } = await collectDroppedTreeEntries(dataTransfer);
+  if (!entries.length) {
+    setStatus('err', error ?? 'Nothing to import from this drop.');
     return;
   }
 
   moveInFlight = true;
   try {
-    const result = await importExternalFilesToWorkspace(files, destDir);
-    if (result.imported > 0) {
+    const result = await importDroppedEntriesToWorkspace(entries, destDir);
+    if (result.imported > 0 || result.directories > 0) {
       void expandDir(destDir);
     }
   } finally {

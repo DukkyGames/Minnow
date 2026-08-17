@@ -34,6 +34,7 @@ import {
   type ServeRecord,
 } from '../../models/api-client';
 import { fetchHardware } from '../../models/hardware-client';
+import { resolveLlamaServeSettings } from '../../models/launch-settings';
 import { activeServeFor, buildLibrary, type LibraryModel } from '../../models/library';
 import { describeLoadPhase, parseLoadProgress } from '../../models/serve-log';
 import type { HardwareSnapshot } from '../../models/types';
@@ -375,7 +376,8 @@ export async function loadModel(
     isMoe: model.isMoe,
     weightsGb: model.sizeBytes / 1024 ** 3,
     hardware: (state.hardware as unknown as Record<string, unknown>) ?? undefined,
-    llama: settings,
+    // Inspector drafts apply even when the caller is the library row or picker.
+    llama: resolveLlamaServeSettings(model, settings),
     async: true,
   });
 

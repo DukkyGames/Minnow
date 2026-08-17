@@ -529,7 +529,7 @@ async function executeToolBodyAfterGates(
         context.modeId,
       );
     }
-    return executeBrowserPreviewTool(name, enrichedArgs);
+    return executeBrowserPreviewTool(name, enrichedArgs, context.signal);
   }
 
   if (tool.serverRequired) {

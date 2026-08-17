@@ -126,11 +126,22 @@ export function buildLlamaServerArgs(opts) {
 
   const merged = mergeSettings(profileSettings, defaults, settings);
 
-  // GPU layers: force CPU when variant is CPU-only; default all layers on GPU builds.
+  // llama.cpp b10430+ enables --fit by default. Auto-fit refuses to change -ngl when the user
+  // (or Minnow's slider) set it explicitly — pass --fit off in that case. When fit is requested
+  // (onboarding), omit -ngl so llama can pick a layer count that fits VRAM.
+  const fitRequested = merged.fit === true;
   if (!isGpuCapableVariant(variant)) {
     merged.n_gpu_layers = 0;
-  } else if (merged.n_gpu_layers === undefined || merged.n_gpu_layers === null) {
-    merged.n_gpu_layers = 999;
+    merged.fit = false;
+  } else if (fitRequested) {
+    delete merged.n_gpu_layers;
+  } else {
+    if (merged.n_gpu_layers === undefined || merged.n_gpu_layers === null) {
+      merged.n_gpu_layers = 999;
+    }
+    if (merged.fit !== true) {
+      merged.fit = false;
+    }
   }
 
   const extraArgs = Array.isArray(merged.extra_args) ? merged.extra_args : [];
