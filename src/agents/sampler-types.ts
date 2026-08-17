@@ -20,6 +20,11 @@ export interface SamplerPreset {
   presencePenalty?: number;
   /** Sub-agent output cap when set on type defaults or user override. */
   maxTokens?: number;
+  /**
+   * OpenAI-style stop sequences. Accepts a string or string[] on input;
+   * clamp/normalize always stores a trimmed string[] (max 8).
+   */
+  stop?: string | string[];
 }
 
 /** OpenAI-compatible sampler fields merged into a completion body. */
@@ -31,6 +36,7 @@ export interface SamplerCompletionFields {
   min_p?: number;
   repetition_penalty?: number;
   presence_penalty?: number;
+  stop?: string[];
 }
 
 const TEMP_MIN = 0;
@@ -47,6 +53,8 @@ const TOP_K_MIN = 1;
 const TOP_K_MAX = 200;
 const MAX_TOKENS_MIN = 1;
 const MAX_TOKENS_MAX = 131072;
+/** Same cap Anthropic mapping uses — enough for chat, not a dump of the prompt. */
+const MAX_STOP_SEQUENCES = 8;
 
 /** Provider-neutral values shown in Settings and omitted from completion bodies. */
 export const SAMPLER_NEUTRAL = {
@@ -73,6 +81,7 @@ export function mergeSamplerLayers(
       out.presencePenalty = layer.presencePenalty;
     }
     if (layer.maxTokens !== undefined) out.maxTokens = layer.maxTokens;
+    if (layer.stop !== undefined) out.stop = layer.stop;
   }
   return out;
 }
@@ -119,6 +128,24 @@ function clampMaxTokens(value: unknown): number | undefined {
   return Math.min(MAX_TOKENS_MAX, Math.floor(n));
 }
 
+/**
+ * Accept a string or string[], trim, drop empties, cap at 8.
+ * Why 8: Anthropic's stop_sequences mapping uses the same ceiling.
+ */
+function clampStopSequences(value: unknown): string[] | undefined {
+  const raw = typeof value === 'string' ? [value] : Array.isArray(value) ? value : null;
+  if (!raw) return undefined;
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    out.push(trimmed);
+    if (out.length >= MAX_STOP_SEQUENCES) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** Normalize and clamp a partial preset (strips invalid fields). */
 export function clampSamplerPreset(raw: SamplerPreset | null | undefined): SamplerPreset {
   if (!raw || typeof raw !== 'object') return {};
@@ -137,6 +164,8 @@ export function clampSamplerPreset(raw: SamplerPreset | null | undefined): Sampl
   if (presencePenalty !== undefined) out.presencePenalty = presencePenalty;
   const maxTokens = clampMaxTokens(raw.maxTokens);
   if (maxTokens !== undefined) out.maxTokens = maxTokens;
+  const stop = clampStopSequences(raw.stop);
+  if (stop !== undefined) out.stop = stop;
   return out;
 }
 
@@ -169,6 +198,9 @@ export function samplerToCompletionFields(
     preset.presencePenalty !== SAMPLER_NEUTRAL.presencePenalty
   ) {
     fields.presence_penalty = preset.presencePenalty;
+  }
+  if (Array.isArray(preset.stop) && preset.stop.length > 0) {
+    fields.stop = preset.stop;
   }
   return fields;
 }

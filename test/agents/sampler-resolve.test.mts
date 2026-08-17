@@ -140,4 +140,19 @@ describe('sampler preset merge', () => {
     );
     assert.equal(merged.presencePenalty, 1.5);
   });
+
+  test('clampSamplerPreset and samplerToCompletionFields keep stop sequences', () => {
+    const clamped = clampSamplerPreset({
+      stop: ['  END  ', '', 'USER:'],
+    });
+    assert.deepEqual(clamped.stop, ['END', 'USER:']);
+    const fields = samplerToCompletionFields(clamped, 2048);
+    assert.deepEqual(fields.stop, ['END', 'USER:']);
+    const fromString = clampSamplerPreset({ stop: 'STOP' });
+    assert.deepEqual(fromString.stop, ['STOP']);
+    const capped = clampSamplerPreset({
+      stop: ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+    });
+    assert.deepEqual(capped.stop, ['1', '2', '3', '4', '5', '6', '7', '8']);
+  });
 });

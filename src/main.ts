@@ -99,6 +99,7 @@ import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
 import { loadChatMeta } from './config/chat-meta';
 import { loadLibraryInferencePrefs } from './config/library-inference-meta';
+import { loadLibraryLaunchPrefs } from './config/library-launch-meta';
 import { applySamplerMetaToDrawer, loadSamplerMeta } from './config/sampler-meta';
 import { loadAutopilotMeta } from './config/autopilot-meta';
 import {
@@ -355,6 +356,7 @@ export async function initApp(): Promise<void> {
       .then(applySamplerMetaToDrawer)
       .catch(() => undefined),
     loadLibraryInferencePrefs().catch(() => undefined),
+    loadLibraryLaunchPrefs().catch(() => undefined),
     loadAutopilotMeta().catch(() => undefined),
     loadThinkingMeta().catch(() => undefined),
   ]);

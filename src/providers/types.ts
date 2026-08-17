@@ -8,11 +8,11 @@ export type ApiKind = 'lm-studio-v0' | 'openai-v1' | 'anthropic-v1';
 export type AuthStyle = 'bearer' | 'api-key' | 'x-api-key';
 export type ProviderId = string;
 
-/** Stable id for llama.cpp local serve (must match server/providers/store.js). */
-export const LLAMA_CPP_LOCAL_PROVIDER_ID = 'llama-cpp-local';
-
-/** Stable id for mlx-lm local serve (must match server/providers/store.js). */
-export const MLX_LM_LOCAL_PROVIDER_ID = 'mlx-lm-local';
+/** Same strings as server/providers/store.js — sourced from runtime-ids.mjs. */
+export {
+  LLAMA_CPP_LOCAL_ID as LLAMA_CPP_LOCAL_PROVIDER_ID,
+  MLX_LM_LOCAL_ID as MLX_LM_LOCAL_PROVIDER_ID,
+} from '../models/runtime-ids.mjs';
 
 /** Provider metadata returned by GET /api/providers (secrets redacted). */
 export interface ProviderPublic {
@@ -32,6 +32,11 @@ export interface ProviderPublic {
   modelApiOverrides?: Record<string, ApiKind>;
   /** LM Studio v1 load/unload; default true for lm-studio-v0. */
   supportsModelLoadUnload?: boolean;
+  /**
+   * Local llama.cpp / mlx-lm keep `top_k` / `min_p` / `repetition_penalty` /
+   * `enable_thinking`. Hosted OpenAI-compatible APIs reject those fields.
+   */
+  supportsExtendedSamplers?: boolean;
   modelsLoadPath?: string;
   modelsUnloadPath?: string;
   customHeaders?: Record<string, string>;

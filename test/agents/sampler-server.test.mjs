@@ -30,4 +30,17 @@ describe('server sampler normalization', () => {
     assert.equal(config.types.explore.sampler.temperature, 2);
     assert.equal(config.types.explore.sampler.topK, 80);
   });
+
+  test('normalizeSamplerPreset accepts stop as string or string[] and caps at 8', () => {
+    const fromString = normalizeSamplerPreset({ stop: '  END  ' });
+    assert.deepEqual(fromString.stop, ['END']);
+
+    const fromArray = normalizeSamplerPreset({
+      stop: [' a ', '', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'],
+    });
+    assert.deepEqual(fromArray.stop, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+
+    const empty = normalizeSamplerPreset({ stop: ['  ', ''] });
+    assert.equal(empty.stop, undefined);
+  });
 });

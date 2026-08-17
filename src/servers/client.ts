@@ -38,6 +38,12 @@ export interface ManagedServerSummary {
   running: boolean;
   phase: ServerRuntimePhase;
   job: ServerInstallJob | null;
+  /** Host can run this runtime (mlx-lm is Apple Silicon only). */
+  supported?: boolean;
+  /** Settings may offer Install when true; false hides a working Install button. */
+  installable?: boolean;
+  /** Why Install is unavailable (e.g. MLX off-platform). */
+  reason?: string | null;
 }
 
 /** Whether the Servers API is reachable (npm start). */

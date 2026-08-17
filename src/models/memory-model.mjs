@@ -337,19 +337,26 @@ export function estimateRunMemory(input) {
 }
 
 /**
- * Largest context that fits a byte budget, rounded down to a power of two.
+ * Largest context that fits a byte budget.
  *
  * Solves for context directly instead of the old halve-and-retry loop, which could only ever
  * report ctx/2, ctx/4, ... and so under-reported what a machine can actually hold.
+ *
+ * Default `opts.snap` is `'power2'` so Discover ranking (`fit.ts`) keeps the values it has
+ * always shown. Launch planning needs the raw token count (`snap: 'none'`) so it can snap
+ * to CONTEXT_LADDER rungs that are not powers of two (6144, 12288, 24576, …). Changing the
+ * default would silently drop those rungs out of every fit() display string.
  * @param {ModelGeometry} geometry
  * @param {number} budgetBytes bytes left after weights, compute, and overhead
  * @param {string} [cacheType]
- * @param {{ ubatch?: number, minCtx?: number, maxCtx?: number }} [opts]
+ * @param {{ ubatch?: number, minCtx?: number, maxCtx?: number, snap?: 'power2' | 'none' }} [opts]
  * @returns {number} 0 when even the minimum does not fit
  */
 export function maxContextForBudget(geometry, budgetBytes, cacheType = 'f16', opts = {}) {
   const minCtx = opts.minCtx ?? 1024;
   const maxCtx = opts.maxCtx ?? 1_048_576;
+  // Keep the historical default: Discover/fit.ts depend on power-of-two display values.
+  const snap = opts.snap ?? 'power2';
   if (budgetBytes <= 0) return 0;
 
   const perToken = kvBytesPerToken(geometry, cacheType);
@@ -363,6 +370,10 @@ export function maxContextForBudget(geometry, budgetBytes, cacheType = 'f16', op
   const raw = Math.floor(usable / perToken);
   if (raw < minCtx) return 0;
 
+  if (snap === 'none') return Math.min(maxCtx, raw);
+
+  // Snap the *raw* fit, then cap. Snapping after min(maxCtx, raw) would turn a 40k fit
+  // with maxCtx 24576 into 16384 instead of 24576 — a silent Discover regression.
   const power = 2 ** Math.floor(Math.log2(raw));
   return Math.min(maxCtx, power);
 }

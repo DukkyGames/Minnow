@@ -502,6 +502,15 @@ function renderToolbar(hw: HardwareSnapshot | null): HTMLElement {
   return bar;
 }
 
+function formatEtaMs(etaMs: number | null | undefined): string {
+  if (etaMs == null || !Number.isFinite(etaMs) || etaMs < 0) return '';
+  const total = Math.max(0, Math.round(etaMs / 1000));
+  if (total < 60) return `${total}s left`;
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return secs ? `${mins}m ${secs}s left` : `${mins}m left`;
+}
+
 function downloadCard(job: DownloadJob): HTMLElement {
   const card = el('article', 'models-loaded is-loading');
   const head = el('div', 'models-loaded__head');
@@ -514,6 +523,12 @@ function downloadCard(job: DownloadJob): HTMLElement {
   if (job.status === 'failed' || job.status === 'cancelled') {
     state.classList.add('is-error');
     state.textContent = job.status === 'failed' ? 'Failed' : 'Cancelled';
+  } else if (job.status === 'queued') {
+    state.textContent = job.interrupted ? 'Resuming' : 'Queued';
+    state.appendChild(el('span', 'models-spinner'));
+  } else if (job.status === 'interrupted' || job.interrupted) {
+    state.textContent = pct != null ? `${pct.toFixed(1)}%` : 'Resuming';
+    state.appendChild(el('span', 'models-spinner'));
   } else {
     state.textContent = pct != null ? `${pct.toFixed(1)}%` : 'Downloading';
     state.appendChild(el('span', 'models-spinner'));
@@ -525,7 +540,7 @@ function downloadCard(job: DownloadJob): HTMLElement {
     el('span', 'models-loaded__name', artifact ? `${job.repoId} · ${artifact}` : job.repoId),
   );
 
-  if (job.status === 'queued' || job.status === 'running') {
+  if (job.status === 'queued' || job.status === 'running' || job.status === 'interrupted') {
     const actions = el('div', 'models-loaded__actions');
     actions.appendChild(
       textButton('Cancel', () => {
@@ -538,16 +553,20 @@ function downloadCard(job: DownloadJob): HTMLElement {
   }
   card.appendChild(head);
 
+  const eta = formatEtaMs(job.etaMs);
+  const speed =
+    job.bytesPerSec && job.bytesPerSec > 0 ? `${formatBytes(job.bytesPerSec)}/s` : '';
+  const progressBits = [speed, eta].filter(Boolean).join(' · ');
   card.appendChild(
     el(
       'p',
       'models-loaded__meta',
       job.error ??
-        `${formatBytes(job.bytesReceived)}${job.totalBytes ? ` of ${formatBytes(job.totalBytes)}` : ''}`,
+        `${formatBytes(job.bytesReceived)}${job.totalBytes ? ` of ${formatBytes(job.totalBytes)}` : ''}${progressBits ? ` · ${progressBits}` : ''}`,
     ),
   );
 
-  if (job.status === 'queued' || job.status === 'running') {
+  if (job.status === 'queued' || job.status === 'running' || job.status === 'interrupted') {
     const track = el('div', 'models-progress');
     const fill = el('div', 'models-progress__fill');
     if (pct != null) fill.style.width = `${pct}%`;

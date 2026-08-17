@@ -154,6 +154,12 @@ function createLlamaCppServerRow(
   runtimeInfo.dataset.llamaRuntimeInfo = server.id;
   body.append(runtimeInfo);
 
+  // Upgrade is opt-in: never force a download on model load; this hint + button is the offer.
+  const upgradeHint = el('p', 'settings-mcp-hint settings-mcp-hint--upgrade hidden');
+  upgradeHint.dataset.llamaUpgradeHint = server.id;
+  upgradeHint.setAttribute('role', 'status');
+  body.append(upgradeHint);
+
   const toolbar = el('div', 'settings-server-toolbar');
   const variantLabel = el('span', 'settings-server-toolbar__label', 'Variant');
   const variantSelect = el('select', 'settings-select settings-server-variant-select') as HTMLSelectElement;
@@ -180,11 +186,25 @@ function createLlamaCppServerRow(
       installPill.textContent = installed ? 'Installed' : 'Not installed';
       installPill.classList.toggle('settings-lsp-pill--running', installed);
       installPill.classList.toggle('settings-lsp-pill--off', !installed);
-      installBtn.textContent = installed ? 'Reinstall' : 'Install';
 
       runtimeInfo.textContent = runtime.path
         ? `${runtime.variant ?? 'cpu'} · ${runtime.version} · ${runtime.path}`
         : `Recommended variant: ${runtime.preferredVariant}`;
+
+      // Relabel Reinstall as Upgrade when the managed tree is behind the pin.
+      if (runtime.upgradeAvailable) {
+        const installedTag = runtime.installedVersion ?? runtime.version;
+        const pinnedTag = runtime.pinnedVersion;
+        upgradeHint.textContent = `Installed ${installedTag}; pinned ${pinnedTag} is available.`;
+        upgradeHint.classList.remove('hidden');
+        installBtn.textContent = 'Upgrade';
+        installBtn.title = `Download llama.cpp ${pinnedTag}`;
+      } else {
+        upgradeHint.textContent = '';
+        upgradeHint.classList.add('hidden');
+        installBtn.textContent = installed ? 'Reinstall' : 'Install';
+        installBtn.removeAttribute('title');
+      }
 
       variantSelect.replaceChildren();
       for (const v of runtime.installableVariants) {
@@ -231,14 +251,16 @@ function createLlamaCppServerRow(
 
   installBtn.addEventListener('click', () => {
     void (async () => {
+      const upgrading = installBtn.textContent === 'Upgrade';
       installBtn.disabled = true;
-      runtimeInfo.textContent = 'Installing…';
+      runtimeInfo.textContent = upgrading ? 'Upgrading…' : 'Installing…';
       try {
         await installLlamaRuntime({
           variant: variantSelect.value || undefined,
-          reinstall: server.installed,
+          // Upgrade uses the existing reinstall path so the pin replaces the old tree.
+          reinstall: upgrading || server.installed,
         });
-        setStatus('ok', 'llama.cpp runtime installed');
+        setStatus('ok', upgrading ? 'llama.cpp runtime upgraded' : 'llama.cpp runtime installed');
         await refreshRuntime();
         onRefresh();
       } catch (err) {
@@ -329,11 +351,22 @@ function createServerRow(
   toolbar.append(portInline);
 
   const actions = el('div', 'settings-server-actions');
+  /** Shown under the toolbar when this host cannot install the runtime. */
+  let installUnavailableHint: HTMLParagraphElement | null = null;
   if (!server.installed) {
-    const installBtn = el('button', 'settings-action-btn', 'Install');
-    installBtn.type = 'button';
-    installBtn.dataset.serverInstall = server.id;
-    actions.append(installBtn);
+    // installable === false means this host cannot run the runtime (MLX on Windows/Linux).
+    // Hide Install rather than leaving a working button that would fail at provision.
+    if (server.installable === false) {
+      if (server.reason) {
+        installUnavailableHint = el('p', 'settings-mcp-hint', server.reason);
+        installUnavailableHint.dataset.serverInstallReason = server.id;
+      }
+    } else {
+      const installBtn = el('button', 'settings-action-btn', 'Install');
+      installBtn.type = 'button';
+      installBtn.dataset.serverInstall = server.id;
+      actions.append(installBtn);
+    }
   } else {
     if (!server.running) {
       const startBtn = el('button', 'settings-action-btn', 'Start');
@@ -357,6 +390,9 @@ function createServerRow(
   }
   toolbar.append(actions);
   body.append(toolbar);
+  if (installUnavailableHint) {
+    body.append(installUnavailableHint);
+  }
 
   const logsPanel = document.createElement('details');
   logsPanel.className = 'settings-server-logs';

@@ -140,21 +140,26 @@ export async function getInstallStatus() {
   const meta = await readMeta();
   const venvDir = getServerVenvDir(SERVER_ID);
   const installed = Boolean(meta?.installedAt) && (await isVenvHealthy(venvDir));
+  const supported = isMlxSupported();
+  // Same string Settings shows when Install is hidden off Apple Silicon.
+  const reason = supported ? null : MLX_UNSUPPORTED_MESSAGE;
   if (!installed) {
     return {
       installed: false,
       version: null,
       sizeBytes: 0,
-      supported: isMlxSupported(),
-      installable: isMlxSupported(),
+      supported,
+      installable: supported,
+      reason,
     };
   }
   return {
     installed: true,
     version: typeof meta?.version === 'string' ? meta.version : null,
     sizeBytes: typeof meta?.sizeBytes === 'number' ? meta.sizeBytes : 0,
-    supported: isMlxSupported(),
-    installable: isMlxSupported(),
+    supported,
+    installable: supported,
+    reason,
   };
 }
 
@@ -238,7 +243,6 @@ export async function getExtendedStatus() {
   return {
     ...status,
     venvPath: fs.existsSync(venvDir) ? venvDir : null,
-    reason: isMlxSupported() ? null : MLX_UNSUPPORTED_MESSAGE,
   };
 }
 

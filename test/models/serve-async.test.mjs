@@ -99,6 +99,83 @@ describe('async serve start', () => {
     assert.match(settled.error, /healthy/i);
   });
 
+  test('port_conflict on load retries once on a fresh port', async () => {
+    let calls = 0;
+    setServeHealthOverrideForTests(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: false,
+          error: 'exited',
+          logTail: 'error binding to 127.0.0.1:8085: EADDRINUSE',
+          exitCode: 1,
+        };
+      }
+      return true;
+    });
+
+    const serve = await startServe({ modelPath, runtime: 'llama-cpp', async: true });
+    const settled = await waitForStatus(serve.id, 8_000);
+    assert.equal(settled.status, 'running');
+    assert.equal(calls, 2, 'health probed twice: fail then retry');
+    assert.ok(settled.port > 0);
+    await stopServe(serve.id);
+  });
+
+  test('bad_template on load retries once without --jinja', async () => {
+    const argLists = [];
+    setServeBackgroundRunOverrideForTests(async (opts) => {
+      argLists.push(opts.args ?? []);
+      return { runId: `jinja-run-${argLists.length}`, pid: 12345 };
+    });
+    let calls = 0;
+    setServeHealthOverrideForTests(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: false,
+          error: 'exited',
+          logTail: 'minja error: Failed to parse chat template: unexpected token',
+          exitCode: 1,
+        };
+      }
+      return true;
+    });
+
+    try {
+      const serve = await startServe({ modelPath, runtime: 'llama-cpp', async: true });
+      const settled = await waitForStatus(serve.id, 8_000);
+      assert.equal(settled.status, 'running');
+      assert.ok(argLists.length >= 2, 'expected a second spawn without --jinja');
+      assert.ok(argLists[0].includes('--jinja'));
+      assert.equal(argLists[1].includes('--jinja'), false);
+      await stopServe(serve.id);
+    } finally {
+      setServeBackgroundRunOverrideForTests(async () => ({ runId: 'test-run', pid: 12345 }));
+    }
+  });
+
+  test('oom_vram on load stores failure.title and does not retry-loop', async () => {
+    let calls = 0;
+    setServeHealthOverrideForTests(async () => {
+      calls += 1;
+      return {
+        ok: false,
+        error: 'exited',
+        logTail: 'cudaMalloc failed: out of memory',
+        exitCode: 1,
+      };
+    });
+
+    const serve = await startServe({ modelPath, runtime: 'llama-cpp', async: true });
+    const settled = await waitForStatus(serve.id, 8_000);
+    assert.equal(settled.status, 'error');
+    assert.equal(settled.failure?.code, 'oom_vram');
+    assert.equal(settled.failure?.title, 'Needs more VRAM');
+    assert.match(settled.error, /VRAM/i);
+    assert.equal(calls, 1, 'OOM must not auto-retry the same load');
+  });
+
   test('the blocking path still throws for callers that did not opt in', async () => {
     setServeHealthOverrideForTests(async () => false);
     await assert.rejects(

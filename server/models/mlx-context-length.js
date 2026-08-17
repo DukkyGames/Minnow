@@ -68,6 +68,8 @@ export function contextLengthFromTransformersConfig(config) {
 
 /**
  * Attach max_context_length to mlx-lm-local /v1/models rows from cached MLX scans.
+ * Uses `listCachedModels` (30s TTL) — do not walk the library on every proxy request.
+ * Context itself was parsed at scan time onto `mlx_context_length`.
  * @param {{ data: Array<Record<string, unknown>> }} normalized
  */
 export async function enrichMlxLmModelsWithCachedContext(normalized) {

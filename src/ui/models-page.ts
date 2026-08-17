@@ -57,13 +57,25 @@ function renderHeaderStatus(): void {
   const serves = runningServes();
   const running = serves.filter((s) => s.status === 'running');
   const loads = getModelsState().loads;
+  const crashed = getModelsState().serves.filter((s) => s.status === 'crashed');
+  const unhealthy = serves.filter((s) => s.status === 'unhealthy');
   // A failed load stays on screen until dismissed; it must not read as busy.
-  const loading = loads.some((l) => !l.error) || serves.length > running.length;
+  const loading = loads.some((l) => !l.error) || serves.some((s) => s.status === 'starting');
   const failed = !loading && loads.some((l) => l.error);
 
   host.replaceChildren();
   const dot = document.createElement('span');
-  const tone = running.length ? 'running' : loading ? 'starting' : failed ? 'error' : 'stopped';
+  const tone = running.length
+    ? 'running'
+    : loading
+      ? 'starting'
+      : unhealthy.length
+        ? 'unhealthy'
+        : crashed.length
+          ? 'crashed'
+          : failed
+            ? 'error'
+            : 'stopped';
   dot.className = `models-dot models-dot--${tone}`;
   const label = document.createElement('span');
   label.className = 'models-header-status__label';
@@ -75,6 +87,10 @@ function renderHeaderStatus(): void {
         : `${running.length} models serving`;
   } else if (loading) {
     label.textContent = 'Loading a model…';
+  } else if (unhealthy.length) {
+    label.textContent = 'Runtime unhealthy';
+  } else if (crashed.length) {
+    label.textContent = crashed.length === 1 ? `${crashed[0].modelLabel} crashed` : 'Runtime crashed';
   } else if (failed) {
     label.textContent = 'Load failed';
   } else {

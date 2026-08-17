@@ -3,6 +3,8 @@
  * Server mirror of src/providers/sanitize-completion-body.ts.
  */
 
+import { LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID } from '../../src/models/runtime-ids.mjs';
+
 /**
  * True when OpenAI o-series / gpt-5 models expect max_completion_tokens.
  * @param {string} modelId
@@ -49,9 +51,21 @@ function stripInternalApiMessageFields(body) {
 }
 
 /**
+ * llama.cpp / mlx-lm accept min_p / top_k / repetition_penalty / enable_thinking.
+ * Prefer the persisted flag; fall back to the stable local ids so in-memory
+ * tests and generations that only pass `{ id }` still keep those fields.
+ * @param {{ id?: string, supportsExtendedSamplers?: boolean }} provider
+ */
+function providerKeepsExtendedSamplers(provider) {
+  if (provider?.supportsExtendedSamplers === true) return true;
+  const id = typeof provider?.id === 'string' ? provider.id : '';
+  return id === LLAMA_CPP_LOCAL_ID || id === MLX_LM_LOCAL_ID;
+}
+
+/**
  * Normalize a chat completion body for the target provider.
  * @param {Record<string, unknown>} body
- * @param {{ apiKind?: string, id?: string }} provider
+ * @param {{ apiKind?: string, id?: string, supportsExtendedSamplers?: boolean }} provider
  * @param {{ reasoning?: boolean, reasoningAllowedOptions?: string[] } | null | undefined} [modelCapabilities]
  * @returns {Record<string, unknown>}
  */
@@ -62,10 +76,14 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
   }
 
   const next = stripInternalApiMessageFields({ ...body });
-  delete next.top_k;
-  delete next.min_p;
-  delete next.repetition_penalty;
-  delete next.enable_thinking;
+  // Hosted OpenAI rejects LM Studio / llama.cpp sampler fields. Local llama.cpp
+  // and mlx-lm keep them so min_p actually reaches the serve.
+  if (!providerKeepsExtendedSamplers(provider)) {
+    delete next.top_k;
+    delete next.min_p;
+    delete next.repetition_penalty;
+    delete next.enable_thinking;
+  }
 
   const reasoningSupported =
     modelCapabilities?.reasoning === true ||
@@ -105,13 +123,13 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     delete next.top_p;
   }
 
-  if (providerId !== 'llama-cpp-local') {
+  if (providerId !== LLAMA_CPP_LOCAL_ID) {
     delete next.thinking_budget_tokens;
   }
 
   // Jinja template kwargs reach the model only on local runtimes; hosted
   // OpenAI-compatible APIs reject the unknown field with a 400.
-  if (providerId !== 'llama-cpp-local' && providerId !== 'mlx-lm-local') {
+  if (providerId !== LLAMA_CPP_LOCAL_ID && providerId !== MLX_LM_LOCAL_ID) {
     delete next.chat_template_kwargs;
   }
 

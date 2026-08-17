@@ -18,13 +18,21 @@ export interface DownloadJob {
   quant: string;
   /** Absent on jobs persisted before MLX support; treat as 'gguf'. */
   format?: ModelDownloadFormat;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   bytesReceived: number;
   totalBytes: number | null;
   destPath: string;
   error: string | null;
   createdAt: number;
   finishedAt: number | null;
+  /** Byte offset to resume from (`.partial` size). */
+  resumeAt?: number | null;
+  /** EWMA download speed from progress ticks. */
+  bytesPerSec?: number | null;
+  /** Remaining time from EWMA speed; 0 when complete. */
+  etaMs?: number | null;
+  /** True after a tool-server restart requeued this job. */
+  interrupted?: boolean;
 }
 
 export interface InstalledArtifact {
@@ -35,6 +43,23 @@ export interface InstalledArtifact {
   mtimeMs: number;
 }
 
+export interface ServeFailure {
+  code: string;
+  title?: string;
+  detail?: string;
+  remediation?: string;
+  retryable?: boolean;
+  /** Manual load payload for one-click Retry (ctx / cache_type / extra_args). */
+  suggestedSettings?: LlamaServeSettings;
+  /**
+   * bad_template: first-class LlamaServeSettings keys the UI can point at
+   * (`--chat-template` / `--chat-template-file`). Values are omitted — we do
+   * not invent a template string llama-server would try to parse.
+   */
+  chatTemplateFields?: string[];
+  exitCode?: number | null;
+}
+
 export interface ServeRecord {
   id: string;
   runtime: string;
@@ -43,13 +68,15 @@ export interface ServeRecord {
   port: number;
   baseUrl: string;
   providerId: string;
-  status: 'starting' | 'running' | 'stopped' | 'error';
+  status: 'starting' | 'running' | 'stopped' | 'error' | 'crashed' | 'unhealthy';
   runId: string | null;
   pid: number | null;
   error: string | null;
   startedAt: number;
   stoppedAt: number | null;
   llamaSettings?: Record<string, unknown> | null;
+  exitCode?: number | null;
+  failure?: ServeFailure | null;
 }
 
 export interface LlamaServeSettings {
@@ -64,7 +91,24 @@ export interface LlamaServeSettings {
   tensor_split?: string;
   main_gpu?: number;
   fit?: boolean;
+  /**
+   * `auto` (default) — server `planLlamaLaunch` owns ctx / n_gpu_layers / cache_type.
+   * `manual` — those three pass through unclamped. `fit: true` is not manual.
+   */
+  fit_mode?: 'auto' | 'manual';
   no_warmup?: boolean;
+  /**
+   * Omit `--jinja` (Phase 3 retry after a bad chat template). Not a llama-server flag.
+   */
+  skip_jinja?: boolean;
+  /** `--no-mmap`; default off. mmap_failed retry also uses extra_args. */
+  no_mmap?: boolean;
+  /** `--mlock`; default off. */
+  mlock?: boolean;
+  /** llama-server `--chat-template` (may contain spaces). */
+  chat_template?: string;
+  /** llama-server `--chat-template-file`. */
+  chat_template_file?: string;
   extra_args?: string[];
   env?: Record<string, string>;
 }
@@ -113,7 +157,14 @@ export interface LlamaRuntimeStatus {
   path: string | null;
   source: string | null;
   variant: string | null;
+  /** Installed meta.version when known; otherwise the pinned release tag. */
   version: string;
+  /** ggml-org tag Minnow currently ships (`LLAMA_CPP_RELEASE_TAG`). */
+  pinnedVersion: string;
+  /** meta.json `version` for a managed install, or null when unknown. */
+  installedVersion: string | null;
+  /** True when a managed llama.cpp tree exists and its version differs from the pin. */
+  upgradeAvailable: boolean;
   assetNames: string[];
   installedAt: string | null;
   installable: boolean;
@@ -234,6 +285,10 @@ export function subscribeDownloadProgress(
     status: DownloadJob['status'];
     bytesReceived: number;
     totalBytes: number | null;
+    bytesPerSec?: number | null;
+    etaMs?: number | null;
+    interrupted?: boolean;
+    resumeAt?: number | null;
     error?: string | null;
   }) => void,
 ): () => void {
@@ -256,6 +311,10 @@ export function subscribeDownloadProgress(
             status: job.status,
             bytesReceived: job.bytesReceived,
             totalBytes: job.totalBytes,
+            bytesPerSec: job.bytesPerSec,
+            etaMs: job.etaMs,
+            interrupted: job.interrupted,
+            resumeAt: job.resumeAt,
             error: job.error,
           });
         })
@@ -387,6 +446,8 @@ export async function startModelServe(payload: {
   isMoe?: boolean;
   weightsGb?: number;
   llama?: LlamaServeSettings;
+  /** Library row id so startServe can merge saved models.launch prefs. */
+  libraryId?: string;
   /** Return as soon as the process spawns; poll fetchModelServe for readiness. */
   async?: boolean;
 }): Promise<ServeRecord> {
@@ -438,6 +499,24 @@ export function subscribeServeLog(
   source.onmessage = (msg) => {
     try {
       onChunk(JSON.parse(msg.data));
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  return () => source.close();
+}
+
+/** Live serve-list snapshots from commitServes. 15s poll in the store is the fallback. */
+export function subscribeServeEvents(
+  onEvent: (payload: { serves: ServeRecord[]; reason: string }) => void,
+): () => void {
+  const source = new EventSource(withSessionToken('/api/models/serve/events'));
+  source.onmessage = (msg) => {
+    try {
+      const data = JSON.parse(msg.data) as { serves?: ServeRecord[]; reason?: string };
+      if (data && Array.isArray(data.serves)) {
+        onEvent({ serves: data.serves, reason: data.reason ?? 'update' });
+      }
     } catch {
       /* ignore malformed */
     }

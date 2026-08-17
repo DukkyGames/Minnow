@@ -258,6 +258,11 @@
   color: var(--mn-danger);
 }
 
+/* Planner miss / trainCtx notes — warning tone, not the danger used for tight VRAM. */
+.models-hint--warning {
+  color: var(--mn-warning);
+}
+
 /* ------------------------------------------------------------- inspector */
 
 .models-inspector {
@@ -524,6 +529,19 @@
 
 .models-dot--error {
   background: var(--mn-danger);
+}
+
+.models-dot--crashed {
+  background: var(--mn-danger);
+}
+
+.models-dot--unhealthy {
+  background: var(--mn-warning);
+  animation: models-pulse 1.4s var(--ease-out) infinite;
+}
+
+.models-dot--stopped {
+  background: var(--mn-fg-subtle);
 }
 
 @keyframes models-pulse {
@@ -980,6 +998,17 @@
   border-radius: 999px;
 }
 
+.models-row__loaded-badge.is-crashed,
+.models-row__loaded-badge.is-error {
+  color: var(--mn-danger-ink);
+  background: var(--mn-danger-soft);
+}
+
+.models-row__loaded-badge.is-unhealthy {
+  color: var(--mn-warning);
+  background: var(--mn-warning-soft);
+}
+
 .models-row__warn {
   flex-shrink: 0;
   font-size: 10px;
@@ -1341,6 +1370,16 @@
   background: var(--mn-danger-soft);
 }
 
+.models-loaded__state.is-crashed {
+  color: var(--mn-danger-ink);
+  background: var(--mn-danger-soft);
+}
+
+.models-loaded__state.is-unhealthy {
+  color: var(--mn-warning);
+  background: var(--mn-warning-soft);
+}
+
 .models-loaded__name {
   flex: 1;
   min-width: 0;
@@ -1369,6 +1408,37 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* Classified llama.cpp failure — title + cause + what to do. Full border, no side stripe. */
+.models-serve-failure {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--mn-danger-soft);
+  border: 1px solid var(--mn-danger-border);
+  border-radius: var(--radius-md);
+}
+
+.models-serve-failure__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-danger-ink);
+}
+
+.models-serve-failure__detail,
+.models-serve-failure__fix {
+  margin: 0;
+  max-width: 75ch;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg);
+}
+
+.models-serve-failure__fix {
+  color: var(--mn-fg);
 }
 
 .models-spinner {
@@ -2057,6 +2127,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .models-dot--starting,
+  .models-dot--unhealthy,
   .models-spinner,
   .models-progress__fill.is-indeterminate,
   .models-skeleton__row {

@@ -13,6 +13,7 @@ import { handleModelsRequest } from '../../server/models/routes.js';
 import { modelsLogDir } from '../../server/models/paths.js';
 import {
   MLX_LM_MANAGED_SERVER_ID,
+  appendServeLog,
   readServeLogTail,
   readServeLogTailForServe,
   resolveServeLogPath,
@@ -60,6 +61,16 @@ describe('serve log tail', () => {
 
   test('returns null when the run has no log yet', async () => {
     assert.equal(await readServeLogTail('missing-run'), null);
+  });
+
+  test('appendServeLog creates the spawn log so a fit planner warning is greppable', async () => {
+    await appendServeLog(
+      'run-fit-warn',
+      'warning: you overrode the fit planner; estimate ~20 GB vs ~10 GB budget',
+    );
+    const tail = await readServeLogTail('run-fit-warn');
+    assert.ok(tail);
+    assert.match(tail.text, /fit planner/);
   });
 
   test('reads the trailing bytes of a log', async () => {

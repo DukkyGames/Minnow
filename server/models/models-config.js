@@ -30,5 +30,10 @@ export async function patchModelsConfig(patch) {
       : {};
   config.models = { ...prev, ...patch };
   await writeConfigJson('config.json', config);
+  // Extra folders just changed — drop the 30s library scan TTL.
+  if (Object.prototype.hasOwnProperty.call(patch, 'modelDirs')) {
+    const { invalidateCachedModelsCache } = await import('./cached.js');
+    invalidateCachedModelsCache();
+  }
   return config.models;
 }

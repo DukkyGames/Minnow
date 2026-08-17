@@ -128,6 +128,16 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/terminal/shell-profiles.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/pty-protocol.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/terminal/sandbox/*.test.mjs', runner: 'tsx-mocks' },
+  // mock.module wraps profiles.js / gguf-metadata.js + llama-args.js (Phase 1a GGUF plumbing).
+  { pattern: 'test/models/llama-args-gguf-meta.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/models/serve-gguf-meta.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/models/mlx-serve.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/models/mlx-serve-crash.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/models/serve-crash.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/models/serve-heartbeat.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/models/serve-residency.test.mjs', runner: 'tsx-mocks' },
+  { pattern: 'test/models/admit-serve.test.mjs', runner: 'node' },
+  { pattern: 'test/providers/local-completion-admission.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/settings/**', runner: 'node-tsx' },
   { pattern: 'test/os/email-app.test.mts', runner: 'node-tsx' },
 ];

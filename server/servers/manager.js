@@ -8,6 +8,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { killProcessTree, killProcessTreeAndWait } from '../terminal-runner.js';
 import { readResource, writeResource } from '../config/store.js';
+import { waitForHealth as waitForEndpointHealth } from '../models/wait-for-health.js';
 import { getServerDef, listServerDefs } from './catalog.js';
 import {
   getServerLogPath,
@@ -53,6 +54,10 @@ const installPromises = new Map();
 
 /** @type {Map<string, string[]>} */
 const logRingBuffers = new Map();
+
+/** Listeners for managed-process lifecycle (serve.js watches mlx-lm exits). */
+/** @type {Map<string, Set<(event: object) => void>>} */
+const serverStateListeners = new Map();
 
 const LOG_RING_MAX_LINES = 500;
 
@@ -123,6 +128,44 @@ export function resetManagerStateForTests() {
   jobs.clear();
   installPromises.clear();
   logRingBuffers.clear();
+  serverStateListeners.clear();
+}
+
+/**
+ * Subscribe to managed-server process events (currently `exit` from the child).
+ * serve.js uses this so an mlx-lm death flips MLX serve rows to `crashed`
+ * without polling. Tests stub this export — no Apple Silicon required.
+ * @param {string} serverId
+ * @param {(event: object) => void} listener
+ * @returns {() => void}
+ */
+export function subscribeServerState(serverId, listener) {
+  let set = serverStateListeners.get(serverId);
+  if (!set) {
+    set = new Set();
+    serverStateListeners.set(serverId, set);
+  }
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0) serverStateListeners.delete(serverId);
+  };
+}
+
+/**
+ * @param {string} serverId
+ * @param {object} event
+ */
+function emitServerState(serverId, event) {
+  const set = serverStateListeners.get(serverId);
+  if (!set) return;
+  for (const listener of [...set]) {
+    try {
+      listener(event);
+    } catch {
+      /* listener errors must not break process cleanup */
+    }
+  }
 }
 
 /**
@@ -182,34 +225,24 @@ async function appendServerLog(serverId, chunk) {
 }
 
 /**
+ * Thin wrapper: shared helper returns `{ ok }`; managed-server start still throws.
  * @param {string} serverId
  * @param {number} port
  * @param {string} healthPath
  */
 async function waitForHealth(serverId, port, healthPath, timeoutMs = MODEL_LOAD_TIMEOUT_MS) {
   const url = `http://127.0.0.1:${port}${healthPath}`;
-  const deadline = Date.now() + timeoutMs;
-  let delayMs = 250;
-
-  while (Date.now() < deadline) {
-    try {
-      const fetchImpl = fetchOverrideForTests ?? fetch;
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) break;
-      const res = await fetchImpl(url, {
-        signal: AbortSignal.timeout(Math.min(5_000, remaining)),
-      });
-      if (res.status === 200) return true;
-    } catch {
-      /* retry */
-    }
-    const waitMs = Math.min(delayMs, deadline - Date.now());
-    if (waitMs <= 0) break;
-    await new Promise((r) => setTimeout(r, waitMs));
-    delayMs = Math.min(delayMs * 1.5, 3_000);
+  const result = await waitForEndpointHealth({
+    healthPath,
+    port,
+    timeoutMs,
+    label: serverId,
+    fetchImpl: fetchOverrideForTests ?? fetch,
+  });
+  if (!result.ok) {
+    throw new Error(`Health check timed out for ${serverId} (${url})`);
   }
-
-  throw new Error(`Health check timed out for ${serverId} (${url})`);
+  return true;
 }
 
 /**
@@ -346,53 +379,18 @@ function processCommandMatchesServer(serverId, recordedCommand, liveCommand, pid
 
 /**
  * Kill a PID tree without a ChildProcess handle (orphan reaper).
+ * Goes through `killProcessTree` so ancestor-kill guards still apply — a raw
+ * `taskkill /T /F` here would be able to tear down the tool server.
  * @param {number} pid
  * @param {{ graceMs?: number }} [opts]
  */
 async function killPidTreeAndWait(pid, opts = {}) {
-  const graceMs = opts.graceMs ?? 3000;
   if (!isPidAlive(pid)) return;
-
-  if (process.platform === 'win32') {
-    try {
-      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-      });
-      killer.on('error', () => {});
-      killer.unref();
-    } catch {
-      /* best effort */
-    }
-    await new Promise((r) => setTimeout(r, graceMs));
-    return;
+  const handle = { pid };
+  if (killTreeWaitOverrideForTests) {
+    return killTreeWaitOverrideForTests(handle, opts);
   }
-
-  try {
-    process.kill(-pid, 'SIGTERM');
-  } catch {
-    try {
-      process.kill(pid, 'SIGTERM');
-    } catch {
-      return;
-    }
-  }
-  const deadline = Date.now() + graceMs;
-  while (Date.now() < deadline && isPidAlive(pid)) {
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  if (!isPidAlive(pid)) return;
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      /* gone */
-    }
-  }
-  await new Promise((r) => setTimeout(r, 500));
+  return killProcessTreeAndWait(handle, opts);
 }
 
 /**
@@ -511,6 +509,10 @@ export async function listServers() {
       running: proc?.phase === 'running' && proc?.healthy === true,
       phase: proc?.phase ?? (install.installed ? 'stopped' : 'pending'),
       job: install.job,
+      // Forwarded so Settings can hide MLX Install on Windows/Linux (mlx-lm sets these).
+      supported: install.supported,
+      installable: install.installable,
+      reason: install.reason ?? null,
     });
   }
 
@@ -691,6 +693,13 @@ export async function startServer(serverId) {
       void deleteServerRunRecord(serverId);
       void appendServerLog(serverId, `\n[exit] code=${code ?? 'null'}\n`);
     }
+    // Fire even when the map already dropped this child (startup failure path)
+    // so serve.js can mark MLX rows crashed.
+    emitServerState(serverId, {
+      type: 'exit',
+      code: code ?? null,
+      pid: child.pid ?? null,
+    });
   });
 
   child.on('error', (err) => {

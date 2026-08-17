@@ -144,6 +144,15 @@ describe('maxContextForBudget', () => {
     assert.equal(maxContextForBudget(geom(), 4 * GIB), 32768);
   });
 
+  it('keeps power-of-two snap by default so Discover display strings stay stable', () => {
+    assert.equal(maxContextForBudget(geom(), 3 * GIB, 'f16', { snap: 'power2' }), 16384);
+  });
+
+  it('returns the raw token count when snap is none, so non-pot ladder rungs stay reachable', () => {
+    // Same 3 GiB / 128 KiB = 24576, which is a CONTEXT_LADDER rung but not a power of two.
+    assert.equal(maxContextForBudget(geom(), 3 * GIB, 'f16', { snap: 'none' }), 24576);
+  });
+
   it('reports nothing when even the minimum context does not fit', () => {
     assert.equal(maxContextForBudget(geom(), 0.05 * GIB), 0);
     assert.equal(maxContextForBudget(geom(), -1), 0);

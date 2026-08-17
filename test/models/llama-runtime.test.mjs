@@ -11,6 +11,7 @@ import {
   LLAMA_CPP_RELEASE_TAG,
   copyFlattenedExtractContents,
   isLlamaRuntimeInstallable,
+  llamaReleaseTagsEqual,
   pickLlamaReleaseAssetName,
 } from '../../server/models/llama-runtime.js';
 
@@ -56,5 +57,20 @@ describe('llama runtime', () => {
     const dll = path.join(managedRoot, 'cudart64_12.dll');
     assert.ok(await fsp.stat(dll));
     await fsp.rm(tmp, { recursive: true, force: true });
+  });
+});
+
+describe('llama release tag compare', () => {
+  test('strips a leading b and compares build numbers', () => {
+    // Drift between an older managed install and the current pin.
+    assert.equal(llamaReleaseTagsEqual('b9628', 'b10448'), false);
+    assert.equal(llamaReleaseTagsEqual('b10448', LLAMA_CPP_RELEASE_TAG), true);
+    assert.equal(llamaReleaseTagsEqual('10448', 'b10448'), true);
+  });
+
+  test('falls back to string equality when either tag is not a build number', () => {
+    assert.equal(llamaReleaseTagsEqual('b10448-rc', 'b10448'), false);
+    assert.equal(llamaReleaseTagsEqual('latest', 'latest'), true);
+    assert.equal(llamaReleaseTagsEqual(null, 'b10448'), false);
   });
 });

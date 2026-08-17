@@ -68,6 +68,15 @@ export declare function maxContextForBudget(
   geometry: ModelGeometry,
   budgetBytes: number,
   cacheType?: string,
-  opts?: { ubatch?: number; minCtx?: number; maxCtx?: number },
+  opts?: {
+    ubatch?: number;
+    minCtx?: number;
+    maxCtx?: number;
+    /**
+     * `'power2'` (default) preserves Discover/fit.ts display values.
+     * `'none'` returns the raw token count so launch-plan can snap to CONTEXT_LADDER.
+     */
+    snap?: 'power2' | 'none';
+  },
 ): number;
 export declare function formatMemoryEstimate(estimate: MemoryEstimate): string;

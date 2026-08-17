@@ -20,10 +20,25 @@ const MAX_TAIL_BYTES = 512 * 1024;
 export const MLX_LM_MANAGED_SERVER_ID = 'mlx-lm';
 
 /**
+ * Absolute spawn log for a llama.cpp run (`~/.minnow/logs/models/{runId}.log`).
  * @param {string} runId
  */
-function logPathForRun(runId) {
+export function logPathForRun(runId) {
   return path.join(modelsLogDir(), `${runId}.log`);
+}
+
+/**
+ * Append a line to a serve spawn log. Creates the file when createRun has not yet
+ * written one (tests) so Phase 3 can grep `fit planner` after a manual over-budget load.
+ * @param {string} runId
+ * @param {string} line
+ */
+export async function appendServeLog(runId, line) {
+  if (!runId || typeof runId !== 'string' || !line) return;
+  const logPath = logPathForRun(runId);
+  await fsp.mkdir(path.dirname(logPath), { recursive: true });
+  const text = line.endsWith('\n') ? line : `${line}\n`;
+  await fsp.appendFile(logPath, text, 'utf8');
 }
 
 /**

@@ -32,6 +32,7 @@ mock.module('../../server/servers/manager.js', {
     },
     getManagedServerPort: async () => 8087,
     isManagedServerRunning: () => true,
+    subscribeServerState: () => () => {},
   },
 });
 
@@ -48,6 +49,7 @@ const {
   listServes,
   resetServesForTests,
   setServeBackgroundRunOverrideForTests,
+  setMlxWarmupOverrideForTests,
   startServe,
   stopServe,
 } = await import('../../server/models/serve.js');
@@ -77,6 +79,8 @@ describe('MLX serve', () => {
       backgroundRuns += 1;
       return { runId: 'should-never-happen' };
     });
+    // mlx_lm loads weights on first request — stub the 1-token warmup POST.
+    setMlxWarmupOverrideForTests(async () => {});
   });
 
   beforeEach(async () => {
@@ -90,6 +94,7 @@ describe('MLX serve', () => {
       backgroundRuns += 1;
       return { runId: 'should-never-happen' };
     });
+    setMlxWarmupOverrideForTests(async () => {});
   });
 
   after(async () => {
@@ -205,5 +210,49 @@ describe('MLX serve', () => {
       () => startServe({ modelPath: mlxDir, runtime: 'mlx-lm', modelLabel: mlxDir }),
       /not installed/,
     );
+  });
+
+  test('holds starting until the warmup stub returns', async () => {
+    let releaseWarmup;
+    const warmupGate = new Promise((resolve) => {
+      releaseWarmup = resolve;
+    });
+    setMlxWarmupOverrideForTests(() => warmupGate);
+
+    const pending = startServe({
+      modelPath: mlxDir,
+      runtime: 'mlx-lm',
+      modelLabel: mlxDir,
+    });
+
+    const deadline = Date.now() + 2_000;
+    let starting = null;
+    while (Date.now() < deadline) {
+      const rows = await listServes();
+      if (rows[0]?.status === 'starting') {
+        starting = rows[0];
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    assert.equal(starting?.status, 'starting');
+
+    releaseWarmup();
+    const serve = await pending;
+    assert.equal(serve.status, 'running');
+    assert.equal(serve.id, starting.id);
+  });
+
+  test('warmup failure marks the row error instead of running', async () => {
+    setMlxWarmupOverrideForTests(async () => {
+      throw new Error('MLX model did not finish loading (HTTP 500)');
+    });
+    await assert.rejects(
+      () => startServe({ modelPath: mlxDir, runtime: 'mlx-lm', modelLabel: mlxDir }),
+      /did not finish loading/,
+    );
+    const [row] = await listServes();
+    assert.equal(row.status, 'error');
+    assert.match(row.error, /did not finish loading/);
   });
 });

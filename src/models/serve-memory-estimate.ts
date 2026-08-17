@@ -40,6 +40,8 @@ export interface GgufGeometryFacts {
   swaHeadDim?: number;
   layerBytes?: number;
   fixedBytes?: number;
+  /** Trained context window from the header — hard ceiling for the inspector slider. */
+  trainCtx?: number;
 }
 
 export interface ServeMemoryInput {

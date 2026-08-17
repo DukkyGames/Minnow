@@ -5,6 +5,7 @@
 
 import { subscribeServeLog, type ServeRecord } from '../../models/api-client';
 import { classifyLogLine, toLogLines } from '../../models/serve-log';
+import { isLiveServeStatus, isRetryableServeStatus, retryLabelForServe, serveStatusLabel } from '../../models/serve-status';
 import { setStatus } from '../status';
 import {
   chip,
@@ -12,17 +13,19 @@ import {
   copyText,
   el,
   emptyState,
-  formatBytes,
   formatElapsed,
   icon,
   iconButton,
   textButton,
 } from './dom';
 import { showModelInInspector } from './inspector';
+import { serveFailureBlock } from './serve-failure-view';
 import {
+  attentionServes,
   dismissLoad,
   getModelsState,
   refreshModels,
+  retryServe,
   runningServes,
   subscribeModelsStore,
   unloadServe,
@@ -44,6 +47,17 @@ let logUnsub: (() => void) | null = null;
 let logBuffer = '';
 let autoScroll = true;
 let elapsedTimer: number | null = null;
+
+function dedupeServes(serves: ServeRecord[]): ServeRecord[] {
+  const seen = new Set<string>();
+  const out: ServeRecord[] = [];
+  for (const serve of serves) {
+    if (seen.has(serve.id)) continue;
+    seen.add(serve.id);
+    out.push(serve);
+  }
+  return out;
+}
 
 function mount(): HTMLElement | null {
   return document.getElementById('modelsServerBody');
@@ -86,7 +100,25 @@ function renderLogBody(): void {
 function statusBar(serves: ServeRecord[]): HTMLElement {
   const running = serves.filter((s) => s.status === 'running');
   const starting = serves.filter((s) => s.status === 'starting');
-  const isUp = running.length > 0;
+  const unhealthy = serves.filter((s) => s.status === 'unhealthy');
+  const crashed = getModelsState().serves.filter((s) => s.status === 'crashed');
+  const isUp = running.length > 0 || unhealthy.length > 0;
+
+  let tone: 'running' | 'starting' | 'unhealthy' | 'crashed' | 'stopped' = 'stopped';
+  let label = 'Stopped';
+  if (running.length) {
+    tone = 'running';
+    label = 'Running';
+  } else if (starting.length) {
+    tone = 'starting';
+    label = 'Starting';
+  } else if (unhealthy.length) {
+    tone = 'unhealthy';
+    label = 'Unhealthy';
+  } else if (crashed.length) {
+    tone = 'crashed';
+    label = 'Crashed';
+  }
 
   const bar = el('div', 'models-status-bar');
 
@@ -103,7 +135,8 @@ function statusBar(serves: ServeRecord[]): HTMLElement {
   toggle.addEventListener('click', () => {
     if (isUp) {
       toggle.disabled = true;
-      void Promise.all(running.map((s) => unloadServe(s.id)))
+      const toStop = [...running, ...unhealthy];
+      void Promise.all(toStop.map((s) => unloadServe(s.id)))
         .catch((err: unknown) => {
           setStatus('err', err instanceof Error ? err.message : 'Could not stop the server');
         })
@@ -115,24 +148,27 @@ function statusBar(serves: ServeRecord[]): HTMLElement {
     void import('../models-page').then((m) => m.openModels('installed'));
   });
 
-  const label = el(
-    'span',
-    'models-status-bar__label',
-    isUp ? 'Running' : starting.length ? 'Starting' : 'Stopped',
-  );
-  label.prepend(
-    el('span', `models-dot models-dot--${isUp ? 'running' : starting.length ? 'starting' : 'stopped'}`),
-  );
-  state.append(label, toggle);
+  const labelEl = el('span', 'models-status-bar__label', label);
+  labelEl.prepend(el('span', `models-dot models-dot--${tone}`));
+  state.append(labelEl, toggle);
   bar.appendChild(state);
 
   if (isUp) {
     const reach = el('div', 'models-status-bar__reach');
-    reach.append(el('span', 'models-field-label', 'Reachable at'), copyField(running[0].baseUrl, 'Copy server URL'));
+    reach.append(
+      el('span', 'models-field-label', 'Reachable at'),
+      copyField((running[0] ?? unhealthy[0]).baseUrl, 'Copy server URL'),
+    );
     bar.appendChild(reach);
   } else {
     bar.appendChild(
-      el('p', 'models-status-bar__hint', 'No model is loaded, so nothing is listening yet.'),
+      el(
+        'p',
+        'models-status-bar__hint',
+        crashed.length
+          ? 'The runtime exited. Retry with the suggested settings, or load another model from My Models.'
+          : 'No model is loaded, so nothing is listening yet.',
+      ),
     );
   }
 
@@ -166,6 +202,19 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
 
   const actions = el('div', 'models-loaded__actions');
   if (load.error) {
+    if (serve && isRetryableServeStatus(serve.status)) {
+      actions.appendChild(
+        textButton(
+          retryLabelForServe(serve),
+          () => {
+            void retryServe(serve).catch((err: unknown) => {
+              setStatus('err', err instanceof Error ? err.message : 'Retry failed');
+            });
+          },
+          'primary',
+        ),
+      );
+    }
     actions.appendChild(textButton('Dismiss', () => dismissLoad(load.serveId)));
   } else {
     actions.appendChild(
@@ -179,13 +228,15 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
   head.appendChild(actions);
   card.appendChild(head);
 
-  card.appendChild(
-    el(
-      'p',
-      'models-loaded__meta',
-      load.error ? load.error : `${load.phase} · ${formatElapsed(load.startedAt)}`,
-    ),
-  );
+  if (load.error) {
+    const failure = serve ? serveFailureBlock(serve) : null;
+    if (failure) card.appendChild(failure);
+    else card.appendChild(el('p', 'models-loaded__meta', load.error));
+  } else {
+    card.appendChild(
+      el('p', 'models-loaded__meta', `${load.phase} · ${formatElapsed(load.startedAt)}`),
+    );
+  }
 
   if (!load.error) {
     const track = el('div', 'models-progress');
@@ -255,6 +306,62 @@ function loadedCard(serve: ServeRecord): HTMLElement {
       showModelInInspector(model.id);
     });
     card.classList.add('is-selectable');
+  }
+  return card;
+}
+
+/** Crashed / unhealthy / error — distinct from Stopped (user eject) and load Failed. */
+function attentionCard(serve: ServeRecord): HTMLElement {
+  const card = el('article', `models-loaded is-${serve.status}`);
+  const head = el('div', 'models-loaded__head');
+  const toneClass =
+    serve.status === 'unhealthy'
+      ? 'is-unhealthy'
+      : serve.status === 'crashed'
+        ? 'is-crashed'
+        : 'is-error';
+  head.appendChild(el('span', `models-loaded__state ${toneClass}`, serveStatusLabel(serve.status)));
+  head.appendChild(el('span', 'models-loaded__name', serve.modelLabel));
+
+  const actions = el('div', 'models-loaded__actions');
+  if (isRetryableServeStatus(serve.status)) {
+    actions.appendChild(
+      textButton(
+        retryLabelForServe(serve),
+        () => {
+          void retryServe(serve).catch((err: unknown) => {
+            setStatus('err', err instanceof Error ? err.message : 'Retry failed');
+          });
+        },
+        'primary',
+      ),
+    );
+  }
+  if (serve.status === 'unhealthy') {
+    actions.appendChild(
+      textButton(
+        'Eject',
+        () => {
+          void unloadServe(serve.id).catch((err: unknown) => {
+            setStatus('err', err instanceof Error ? err.message : 'Eject failed');
+          });
+        },
+        'danger',
+      ),
+    );
+  }
+  head.appendChild(actions);
+  card.appendChild(head);
+
+  const failure = serveFailureBlock(serve);
+  if (failure) {
+    card.appendChild(failure);
+  } else {
+    const bits: string[] = [serve.runtime];
+    if (serve.exitCode != null) bits.push(`exit ${serve.exitCode}`);
+    if (serve.failure?.code && serve.failure.code !== 'unknown') bits.push(serve.failure.code);
+    if (serve.error) bits.push(serve.error);
+    card.appendChild(el('p', 'models-loaded__meta', bits.join(' · ')));
   }
   return card;
 }
@@ -348,6 +455,8 @@ export function render(): void {
   const state = getModelsState();
   const serves = runningServes();
   const running = serves.filter((s) => s.status === 'running');
+  const attention = attentionServes();
+  const loadIds = new Set(state.loads.map((l) => l.serveId));
 
   const fragment = document.createDocumentFragment();
   fragment.appendChild(statusBar(serves));
@@ -361,6 +470,18 @@ export function render(): void {
   }
   for (const serve of running) {
     list.appendChild(loadedCard(serve));
+  }
+  for (const serve of attention) {
+    if (serve.status === 'error' && loadIds.has(serve.id)) continue;
+    // A Retry that spawned a new live row supersedes the crashed/error card.
+    if (
+      serves.some(
+        (s) => isLiveServeStatus(s.status) && s.modelPath === serve.modelPath && s.id !== serve.id,
+      )
+    ) {
+      continue;
+    }
+    list.appendChild(attentionCard(serve));
   }
 
   if (!list.childElementCount) {
@@ -382,7 +503,8 @@ export function render(): void {
   fragment.appendChild(loadedBlock);
 
   fragment.appendChild(endpointsBlock(running[0]?.baseUrl ?? null));
-  fragment.appendChild(logsBlock(serves));
+  const logServes = dedupeServes([...serves, ...attention]);
+  fragment.appendChild(logsBlock(logServes));
 
   host.replaceChildren(fragment);
 

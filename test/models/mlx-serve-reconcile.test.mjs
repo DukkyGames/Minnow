@@ -15,6 +15,7 @@ mock.module('../../server/servers/manager.js', {
     stopServer: async () => ({ ok: true, wasRunning: false }),
     getManagedServerPort: async () => 8087,
     isManagedServerRunning: () => managedMlxRunning,
+    subscribeServerState: () => () => {},
   },
 });
 

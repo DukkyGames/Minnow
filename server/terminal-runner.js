@@ -1028,7 +1028,9 @@ function selfAncestorPids() {
 
 /**
  * SIGTERM / taskkill the process tree for a spawned child.
- * @param {import('node:child_process').ChildProcess} child
+ * Also accepts a PID-only `{ pid }` handle (orphan reaper) so ancestor-kill
+ * guards still run — callers must not bypass this with a raw taskkill.
+ * @param {import('node:child_process').ChildProcess | { pid: number }} child
  */
 export function killProcessTree(child) {
   if (!child?.pid) return;
@@ -1037,6 +1039,7 @@ export function killProcessTree(child) {
   // Guard: a stale/reused pid that resolves to our own process or one of our
   // ancestors would let `taskkill /T /F` tear down the dev host (server.js) — the
   // process that exited with code 1 with no handlers running. Refuse those.
+  // PID-only handles (`{ pid }` from the orphan reaper) have no `.kill`.
   const ancestors = selfAncestorPids();
   if (ancestors.has(targetPid)) {
     logKillDebug({
@@ -1045,7 +1048,8 @@ export function killProcessTree(child) {
       ancestors: [...ancestors],
     });
     try {
-      child.kill('SIGTERM');
+      if (typeof child.kill === 'function') child.kill('SIGTERM');
+      else process.kill(targetPid, 'SIGTERM');
     } catch {
       /* already gone */
     }
@@ -1065,21 +1069,32 @@ export function killProcessTree(child) {
       // unhandled 'error' that crashes the host process.
       killer.on('error', () => {
         try {
-          child.kill('SIGTERM');
+          if (typeof child.kill === 'function') child.kill('SIGTERM');
+          else process.kill(targetPid, 'SIGTERM');
         } catch {
           /* process already gone */
         }
       });
       killer.unref();
     } catch {
-      child.kill('SIGTERM');
+      try {
+        if (typeof child.kill === 'function') child.kill('SIGTERM');
+        else process.kill(targetPid, 'SIGTERM');
+      } catch {
+        /* gone */
+      }
     }
     return;
   }
   try {
     process.kill(-targetPid, 'SIGTERM');
   } catch {
-    child.kill('SIGTERM');
+    try {
+      if (typeof child.kill === 'function') child.kill('SIGTERM');
+      else process.kill(targetPid, 'SIGTERM');
+    } catch {
+      /* gone */
+    }
   }
 }
 
@@ -1110,7 +1125,7 @@ function waitForChildExit(child, timeoutMs) {
 
 /**
  * SIGTERM the process tree, wait, then SIGKILL on POSIX if still alive.
- * @param {import('node:child_process').ChildProcess} child
+ * @param {import('node:child_process').ChildProcess | { pid: number }} child
  * @param {{ graceMs?: number }} [opts]
  */
 export async function killProcessTreeAndWait(child, opts = {}) {
@@ -1119,6 +1134,33 @@ export async function killProcessTreeAndWait(child, opts = {}) {
   if (child.exitCode != null || child.signalCode != null) return;
 
   killProcessTree(child);
+
+  // Orphan reaper passes `{ pid }` — no exit events. Still went through
+  // killProcessTree (ancestor guards). Poll liveness instead of sleeping blindly.
+  const hasExitEvents = typeof child.on === 'function';
+  if (!hasExitEvents) {
+    const deadline = Date.now() + graceMs;
+    while (Date.now() < deadline && isPidAlive(child.pid)) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (!isPidAlive(child.pid)) return;
+    if (process.platform === 'win32') {
+      killProcessTree(child);
+    } else {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        try {
+          process.kill(child.pid, 'SIGKILL');
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+    return;
+  }
+
   await waitForChildExit(child, graceMs);
 
   if (child.exitCode == null && child.signalCode == null && child.pid) {

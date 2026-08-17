@@ -140,31 +140,3 @@ export function computeServeProfiles(system, model, opts = {}) {
 
   return profiles;
 }
-
-/**
- * Build llama-server CLI args from a profile.
- * @param {ServeProfile} profile
- * @param {string} modelPath
- * @param {number} port
- */
-export function profileToLlamaArgs(profile, modelPath, port) {
-  const args = [
-    '-m',
-    modelPath,
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(port),
-    '-c',
-    String(profile.ctx),
-    '-ngl',
-    String(profile.n_gpu_layers),
-  ];
-  if (profile.cache_type && profile.cache_type !== 'f16') {
-    args.push('--cache-type-k', profile.cache_type, '--cache-type-v', profile.cache_type);
-  }
-  if (profile.n_cpu_moe > 0) {
-    args.push('--n-cpu-moe', String(profile.n_cpu_moe));
-  }
-  return args;
-}
