@@ -50,16 +50,18 @@ Theme family and mode — 16 themes in total, eight families each with a dark an
 
 **Watchdog** is the setting to reach for when a run hangs and sits there forever. It has two halves.
 
-**Generation timeouts** cover the model stream itself. The idle timeout resets whenever new tokens arrive, so it catches a genuinely stalled stream without cutting off a slow one.
+**Generation timeouts** cover the model stream itself. The idle timeout resets whenever new tokens arrive, so it catches a genuinely stalled stream without cutting off a slow one. Either limit can be set to `0` to turn it off, or use **Enable generation timeouts**.
 
-**Agent supervision** covers agents — both sub-agents and orchestrate task chats:
+**Agent supervision** covers agents — both sub-agents and orchestrate task chats. Use **Enable agent supervision** to turn the whole policy off, or set individual thresholds to `0`:
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
-| **Stall timeout** | 90 sec | How long an agent may go without producing anything visible — streamed text, reasoning, or a tool call — before it counts as stuck |
-| **Unresponsive after** | 30 sec | How long without any heartbeat before the run is treated as dead. Liveness only, not model output |
-| **Heartbeat interval** | 7 sec | How often a running agent reports in |
-| **Repeated tool limit** | 5 | How many identical tool calls (same name and arguments) may occur close together before the run counts as looping. `0` turns it off |
+| **Idle timeout** | 60 min | How long the model may stop sending stream data before the generation is aborted (resets on each chunk) |
+| **Max duration** | 240 min | Hard wall-clock cap on a single generation |
+| **Stall timeout** | 300 sec | How long an agent may go without producing anything visible — streamed text, reasoning, or a tool call — before it counts as stuck |
+| **Unresponsive after** | 90 sec | How long without any heartbeat before the run is treated as dead. Liveness only, not model output |
+| **Heartbeat interval** | 10 sec | How often a running agent reports in |
+| **Repeated tool limit** | 25 | How many identical tool calls (same name and arguments) may occur close together before the run counts as looping. `0` turns it off |
 
 When a run trips one of these, read-only agents are restarted from scratch, bounded by **Max self-heal rounds** under Autopilot. Agents that can write files are not auto-restarted — the task is marked blocked instead.
 

@@ -69,17 +69,17 @@ describe('supervision thresholds', () => {
     assert.equal(resolveSupervisionThresholds().progressStallMs, 600_000);
   });
 
-  test('out-of-range values are clamped, not dropped', () => {
+  test('out-of-range values are preserved; zero disables', () => {
     setRuntimeSubAgentOverrides({
       progressStallMs: 999_999_999,
-      heartbeatDeadMs: 1,
+      heartbeatDeadMs: 0,
       heartbeatIntervalMs: 999_999,
     });
     setAutopilotMetaForTests({});
 
     const resolved = resolveSupervisionThresholds();
-    assert.equal(resolved.progressStallMs, 1_800_000);
-    assert.equal(resolved.heartbeatDeadMs, 5_000);
-    assert.equal(resolved.heartbeatIntervalMs, 60_000);
+    assert.equal(resolved.progressStallMs, 999_999_999);
+    assert.equal(resolved.heartbeatDeadMs, 0);
+    assert.equal(resolved.heartbeatIntervalMs, 999_999);
   });
 });

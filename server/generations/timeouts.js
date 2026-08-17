@@ -5,14 +5,9 @@
 import { readConfigJson } from '../config/store.js';
 
 /** Default: abort when no SSE bytes for this long (timer resets per chunk). */
-export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 25 * 60_000;
+export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 60 * 60_000;
 /** Default: hard wall-clock cap for a single generation. */
-export const DEFAULT_GENERATION_MAX_DURATION_MS = 60 * 60_000;
-
-const MIN_IDLE_MS = 30_000;
-const MAX_IDLE_MS = 30 * 60_000;
-const MIN_MAX_MS = 60_000;
-const MAX_MAX_MS = 4 * 60 * 60_000;
+export const DEFAULT_GENERATION_MAX_DURATION_MS = 240 * 60_000;
 
 /**
  * @param {unknown} value
@@ -21,7 +16,9 @@ const MAX_MAX_MS = 4 * 60 * 60_000;
 export function clampGenerationIdleTimeoutMs(value) {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_GENERATION_IDLE_TIMEOUT_MS;
-  return Math.min(MAX_IDLE_MS, Math.max(MIN_IDLE_MS, Math.round(n)));
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return rounded;
 }
 
 /**
@@ -31,7 +28,17 @@ export function clampGenerationIdleTimeoutMs(value) {
 export function clampGenerationMaxDurationMs(value) {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_GENERATION_MAX_DURATION_MS;
-  return Math.min(MAX_MAX_MS, Math.max(MIN_MAX_MS, Math.round(n)));
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return rounded;
+}
+
+/**
+ * @param {{ idleMs: number, maxMs: number }} timeouts
+ * @returns {boolean}
+ */
+export function isGenerationTimeoutEnabled({ idleMs, maxMs }) {
+  return idleMs > 0 || maxMs > 0;
 }
 
 /**
