@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
-import { Window } from 'happy-dom';
 import { setLocalServerAvailableForTests } from '../../src/tools/config.ts';
 import { workspacePathForDroppedEntry } from '../../src/ui/import-external-files.ts';
 
+/** setStatus queries pills by id; tests only need getElementById to no-op. */
 function ensureStatusDom() {
-  const window = new Window();
-  globalThis.document = window.document;
-  globalThis.window = window;
+  if (typeof globalThis.document?.getElementById === 'function') return;
+  globalThis.document = { getElementById: () => null };
 }
 
 describe('workspacePathForDroppedEntry', () => {
@@ -19,9 +18,11 @@ describe('workspacePathForDroppedEntry', () => {
 });
 
 describe('importDroppedEntriesToWorkspace', () => {
+  const originalFetch = globalThis.fetch;
+
   afterEach(() => {
     setLocalServerAvailableForTests(false);
-    globalThis.fetch = undefined;
+    globalThis.fetch = originalFetch;
   });
 
   test('posts nested files and empty directories', async () => {
