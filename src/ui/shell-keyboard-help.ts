@@ -17,6 +17,11 @@ export interface ShortcutDoc {
 }
 
 const SHELL_SHORTCUTS: ShortcutDoc[] = [
+  {
+    section: 'Shell',
+    keys: 'Ctrl/Cmd + K / Ctrl/Cmd + Shift + P',
+    label: 'Command palette (works from any app)',
+  },
   { section: 'Shell', keys: '?', label: 'Open this keyboard shortcuts list' },
   { section: 'Shell', keys: 'Escape', label: 'Close overlays, popovers, side panels, and Research' },
   { section: 'Shell', keys: 'Ctrl + Scroll wheel', label: 'Zoom the interface in / out' },
@@ -41,10 +46,14 @@ const CHAT_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Chat', keys: '1 / 2 / 3', label: 'Tool approval: allow once, always allow, cancel' },
 ];
 
+// Ctrl/Cmd+P ("Go to file") was listed here for a long time with nothing behind
+// it. The palette is real; a fuzzy file switcher is not, so it is not claimed.
 const CODE_SHORTCUTS: ShortcutDoc[] = [
-  { section: 'Code', keys: 'Ctrl/Cmd + K', label: 'Quick Edit on selection' },
-  { section: 'Code', keys: 'Ctrl/Cmd + P', label: 'Go to file' },
-  { section: 'Code', keys: 'Ctrl/Cmd + Shift + P', label: 'Command palette' },
+  {
+    section: 'Code',
+    keys: 'Ctrl/Cmd + K',
+    label: 'Quick Edit on the editor selection (falls through to the palette with no selection)',
+  },
 ];
 
 const BOARD_SHORTCUTS: ShortcutDoc[] = [

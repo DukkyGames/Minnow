@@ -297,6 +297,91 @@ export function validateIssuesTaxonomy(raw, options = {}) {
   return next;
 }
 
+/**
+ * Value always written to `version` in issues/state.json.
+ *
+ * Frozen at the highest revision every already-shipped reader can parse; those
+ * readers reset to an empty state on an unrecognized `version`. The real
+ * revision travels in `schemaRevision`, which they ignore. Mirrors
+ * ISSUES_COMPAT_VERSION in src/types.ts.
+ */
+export const ISSUES_COMPAT_VERSION = 2;
+
+/** Current schema revision for issues/state.json (mirrors ISSUES_SCHEMA_VERSION). */
+export const ISSUES_SCHEMA_VERSION = 3;
+
+/**
+ * Effective schema revision of a stored blob (`schemaRevision`, else `version`).
+ * @param {Record<string, unknown>} row
+ * @returns {number}
+ */
+export function issuesSchemaRevisionOf(row) {
+  const explicit = row.schemaRevision;
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= 1) {
+    return Math.floor(explicit);
+  }
+  const legacy = row.version;
+  if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy >= 1) {
+    return Math.floor(legacy);
+  }
+  return ISSUES_SCHEMA_VERSION;
+}
+
+/** Card keys this revision normalizes; everything else passes through verbatim. */
+const NORMALIZED_ISSUE_CARD_KEYS = new Set([
+  'id',
+  'type',
+  'title',
+  'description',
+  'status',
+  'priority',
+  'labels',
+  'workspacePath',
+  'createdAt',
+  'updatedAt',
+  'notes',
+  'planPath',
+  'boardChatId',
+  'investigateRunId',
+  'planRunId',
+  'legacyBugId',
+  'severity',
+  'chatIds',
+  'codeRefs',
+  'gitLinks',
+]);
+
+/** Top-level state keys this revision normalizes. */
+const NORMALIZED_ISSUES_STATE_KEYS = new Set([
+  'version',
+  'schemaRevision',
+  'nextId',
+  'issues',
+  'workspaces',
+]);
+
+/**
+ * Copy keys this revision does not model onto the normalized output.
+ *
+ * The config API validates every PUT, so without this a client running a newer
+ * schema would have its new fields stripped by an older server on the way to
+ * disk — silent, per-field data loss with no error anywhere.
+ *
+ * @template {Record<string, unknown>} T
+ * @param {Record<string, unknown>} source
+ * @param {T} target
+ * @param {Set<string>} normalized
+ * @returns {T}
+ */
+function preserveUnknownKeys(source, target, normalized) {
+  for (const key of Object.keys(source)) {
+    if (normalized.has(key)) continue;
+    if (source[key] === undefined) continue;
+    target[key] = source[key];
+  }
+  return target;
+}
+
 function ensureIssueCard(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const r = /** @type {Record<string, unknown>} */ (raw);
@@ -350,18 +435,29 @@ function ensureIssueCard(raw) {
   }
   if (Array.isArray(r.codeRefs)) out.codeRefs = r.codeRefs;
   if (Array.isArray(r.gitLinks)) out.gitLinks = r.gitLinks;
-  return out;
+  return preserveUnknownKeys(r, out, NORMALIZED_ISSUE_CARD_KEYS);
 }
 
-/** Validate ~/.minnow/issues/state.json */
+/**
+ * Validate ~/.minnow/issues/state.json.
+ *
+ * Resetting to an empty state is reserved for a blob with no issues array —
+ * an unreadable file. An unrecognized `version` is read on its own terms and
+ * written back at its own number: this validator sits on the PUT path, so
+ * rejecting a newer revision here would overwrite the user's issues with `[]`.
+ */
 export function validateIssuesState(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return { version: 2, nextId: 1, issues: [], workspaces: {} };
-  }
+  const empty = () => ({
+    version: ISSUES_COMPAT_VERSION,
+    schemaRevision: ISSUES_SCHEMA_VERSION,
+    nextId: 1,
+    issues: [],
+    workspaces: {},
+  });
+  if (!raw || typeof raw !== 'object') return empty();
   const row = /** @type {Record<string, unknown>} */ (raw);
-  if ((row.version !== 1 && row.version !== 2) || !Array.isArray(row.issues)) {
-    return { version: 2, nextId: 1, issues: [], workspaces: {} };
-  }
+  if (!Array.isArray(row.issues)) return empty();
+  const readRevision = issuesSchemaRevisionOf(row);
   const issues = [];
   for (const item of row.issues) {
     const card = ensureIssueCard(item);
@@ -407,7 +503,15 @@ export function validateIssuesState(raw) {
     }
   }
 
-  return { version: 2, nextId, issues, workspaces };
+  // Never write back a lower revision than the payload carried.
+  const state = {
+    version: ISSUES_COMPAT_VERSION,
+    schemaRevision: Math.max(readRevision, ISSUES_SCHEMA_VERSION),
+    nextId,
+    issues,
+    workspaces,
+  };
+  return preserveUnknownKeys(row, state, NORMALIZED_ISSUES_STATE_KEYS);
 }
 
 export function validateSessionState(raw) {

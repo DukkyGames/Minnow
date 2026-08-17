@@ -62,6 +62,38 @@ export function resourceToRelativeKey(resource) {
   }
 }
 
+/** Directory holding pre-migration copies of issues/state.json. */
+export const ISSUES_BACKUP_DIRNAME = 'issues/backups';
+
+/**
+ * Absolute path for one issues-schema backup.
+ *
+ * Not routed through {@link ALLOWED_CONFIG_FILES}: that allowlist gates
+ * client-addressable resources, and backup names are built server-side from a
+ * schema number and a clock. Both inputs are coerced to integers here so the
+ * filename can never carry a path segment.
+ *
+ * @param {number} fromVersion schema revision being replaced
+ * @param {number} stamp epoch milliseconds
+ * @returns {string}
+ */
+export function issuesBackupPath(fromVersion, stamp) {
+  const version = Number.isFinite(fromVersion) ? Math.trunc(Math.abs(fromVersion)) : 0;
+  const at = Number.isFinite(stamp) ? Math.trunc(Math.abs(stamp)) : 0;
+  const home = path.resolve(getMinnowHome());
+  const full = path.resolve(home, ISSUES_BACKUP_DIRNAME, `state.v${version}.${at}.json`);
+  const homeWithSep = home.endsWith(path.sep) ? home : `${home}${path.sep}`;
+  if (!full.startsWith(homeWithSep)) {
+    throw new Error('Invalid config path');
+  }
+  return full;
+}
+
+/** Absolute path of the issues backup directory. */
+export function issuesBackupDir() {
+  return path.resolve(path.resolve(getMinnowHome()), ISSUES_BACKUP_DIRNAME);
+}
+
 /**
  * Resolve a relative config key to an absolute path under home.
  * @param {string} relativeKey

@@ -12,6 +12,7 @@ import {
   sortIssuesForList,
   type IssuesListSort,
 } from '../../src/ui/issues-list-sort.ts';
+import { createDefaultIssuesTaxonomy } from '../../src/issues/taxonomy.ts';
 import type { IssueCard } from '../../src/types.ts';
 
 function makeIssue(partial: Partial<IssueCard> & Pick<IssueCard, 'id' | 'title'>): IssueCard {
@@ -121,6 +122,81 @@ describe('issues-list-sort', () => {
       sorted.map((row) => row.id),
       ['ISS-2', 'ISS-3', 'ISS-1'],
     );
+  });
+
+  test('user-created taxonomy ids sort by catalog order, not NaN', () => {
+    // The rank tables used to be keyed on the seed ids, so anything added in
+    // Settings compared as NaN and the column silently scrambled.
+    const taxonomy = createDefaultIssuesTaxonomy();
+    taxonomy.statuses.push({ id: 'blocked', label: 'Blocked', order: 2.5 });
+    taxonomy.priorities.push({ id: 'critical', label: 'Critical', order: -1 });
+    taxonomy.types.push({ id: 'chore', label: 'Chore', order: 0.5 });
+
+    const byStatus = sortIssuesForList(
+      [
+        makeIssue({ id: 'ISS-1', title: 'a', status: 'review' }),
+        makeIssue({ id: 'ISS-2', title: 'b', status: 'blocked' }),
+        makeIssue({ id: 'ISS-3', title: 'c', status: 'triage' }),
+      ],
+      { key: 'status', direction: 'asc' },
+      taxonomy,
+    );
+    assert.deepEqual(
+      byStatus.map((row) => row.id),
+      ['ISS-3', 'ISS-2', 'ISS-1'],
+      'a custom status lands at its configured position',
+    );
+
+    const byPriority = sortIssuesForList(
+      [
+        makeIssue({ id: 'ISS-1', title: 'a', priority: 'high' }),
+        makeIssue({ id: 'ISS-2', title: 'b', priority: 'critical' }),
+        makeIssue({ id: 'ISS-3', title: 'c', priority: 'low' }),
+      ],
+      { key: 'priority', direction: 'desc' },
+      taxonomy,
+    );
+    assert.deepEqual(
+      byPriority.map((row) => row.id),
+      ['ISS-2', 'ISS-1', 'ISS-3'],
+      'a custom priority above urgent sorts first when descending',
+    );
+
+    const byType = sortIssuesForList(
+      [
+        makeIssue({ id: 'ISS-1', title: 'a', type: 'task' }),
+        makeIssue({ id: 'ISS-2', title: 'b', type: 'chore' }),
+        makeIssue({ id: 'ISS-3', title: 'c', type: 'bug' }),
+      ],
+      { key: 'type', direction: 'asc' },
+      taxonomy,
+    );
+    assert.deepEqual(byType.map((row) => row.id), ['ISS-3', 'ISS-2', 'ISS-1']);
+  });
+
+  test('an id the catalog no longer has sorts last instead of into the middle', () => {
+    const taxonomy = createDefaultIssuesTaxonomy();
+    const sorted = sortIssuesForList(
+      [
+        makeIssue({ id: 'ISS-1', title: 'a', status: 'retired_status' }),
+        makeIssue({ id: 'ISS-2', title: 'b', status: 'done' }),
+        makeIssue({ id: 'ISS-3', title: 'c', status: 'triage' }),
+      ],
+      { key: 'status', direction: 'asc' },
+      taxonomy,
+    );
+    assert.deepEqual(sorted.map((row) => row.id), ['ISS-3', 'ISS-2', 'ISS-1']);
+  });
+
+  test('omitting the taxonomy keeps the seed workflow order', () => {
+    const withSeed = sortIssuesForList(
+      [
+        makeIssue({ id: 'ISS-1', title: 'a', priority: 'low' }),
+        makeIssue({ id: 'ISS-2', title: 'b', priority: 'urgent' }),
+      ],
+      { key: 'priority', direction: 'desc' },
+    );
+    assert.deepEqual(withSeed.map((row) => row.id), ['ISS-2', 'ISS-1']);
   });
 
   test('ariaSortValue marks only the active column', () => {

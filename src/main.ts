@@ -12,6 +12,10 @@ import './styles/motion.css';
 import './styles/topbar.css';
 import './styles/model-select.css';
 import './styles/shell-keyboard-help.css';
+// Palette and context menu load lazily; their CSS must not, or the first open
+// paints unstyled (same failure the settings page hit with a lazy stylesheet).
+import './styles/command-palette.css';
+import './styles/context-menu.css';
 import './styles/sidebar.css';
 import './styles/code-chrome.css';
 import './styles/chat-search.css';
@@ -494,6 +498,10 @@ async function startApp(): Promise<void> {
   initShellHandlers();
   const { initShellKeyboardHelp } = await import('./ui/shell-keyboard-help');
   initShellKeyboardHelp();
+  const { initShellCommands } = await import('./ui/shell-commands');
+  const { initCommandPalette } = await import('./ui/command-palette');
+  initShellCommands();
+  initCommandPalette();
   installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
     initOsPageBridge();

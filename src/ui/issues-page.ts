@@ -270,16 +270,6 @@ function ensureEmbeddedBackButton(): void {
   brand.insertBefore(btn, brand.firstChild);
 }
 
-function syncIssuesSidebarButton(): void {
-  const btn = document.getElementById('btnAllBugs');
-  if (!btn) return;
-  const open = isIssuesEmbeddedInCode();
-  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
-  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  if (open) btn.setAttribute('aria-current', 'page');
-  else btn.removeAttribute('aria-current');
-}
-
 function onEmbedEscape(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || !isIssuesEmbeddedInCode()) return;
   // Detail slide-over owns Escape first when open.
@@ -352,7 +342,6 @@ export function teardownIssuesEmbedBeforeChatPaint(): boolean {
   stripMainColumnOverlayClasses();
   returnChatId = null;
   unbindEmbedEscape();
-  syncIssuesSidebarButton();
   return hadEmbed;
 }
 
@@ -398,7 +387,6 @@ export async function openIssuesEmbeddedInCode(options?: { issueId?: string }): 
   ensureEmbeddedBackButton();
   bindEmbedEscape();
   await openIssues({ issueId: options?.issueId, embedded: true });
-  syncIssuesSidebarButton();
   notifyAskQuestionDisplayContextChanged();
 }
 
@@ -549,7 +537,9 @@ function isIssuesSortKey(value: string): value is IssuesSortKey {
 function collectVisibleIssues(): IssueCard[] {
   const issues = collectIssues(collectOptions());
   if (viewMode !== 'list') return issues;
-  return sortIssuesForList(issues, listSort);
+  // Pass the live catalog: statuses/types/priorities the user added in Settings
+  // have no place in the seed order and would otherwise sort arbitrarily.
+  return sortIssuesForList(issues, listSort, getIssuesTaxonomySync());
 }
 
 /** Drop selection entries that are no longer visible under current filters. */
@@ -743,19 +733,6 @@ async function runIssueWorkflowFromMenu(
   }
 }
 
-function openIssueContextSubmenu(
-  menuAnchor: { clientX: number; clientY: number; restoreFocus: HTMLElement },
-  items: IssuesContextMenuItem[],
-  rowOffset = 0,
-): void {
-  openIssuesContextMenu({
-    clientX: menuAnchor.clientX + 180,
-    clientY: menuAnchor.clientY + rowOffset * 32,
-    restoreFocus: menuAnchor.restoreFocus,
-    items,
-  });
-}
-
 function buildForegroundChatSubmenuItems(issue: IssueCard): IssuesContextMenuItem[] {
   const workflowOk = canRunIssueWorkflow(issue);
   const busy = workflowBusyIds.has(issue.id);
@@ -787,7 +764,6 @@ function buildBackgroundChatSubmenuItems(issue: IssueCard): IssuesContextMenuIte
 function buildIssueRowMenuItems(
   issue: IssueCard,
   targetIds: string[],
-  menuAnchor: { clientX: number; clientY: number; restoreFocus: HTMLElement },
 ): IssuesContextMenuItem[] {
   const singleTarget = targetIds.length === 1;
   const isChecked = selectedIssueIds.has(issue.id);
@@ -825,52 +801,44 @@ function buildIssueRowMenuItems(
   }
 
   if (singleTarget) {
-    const sendToChatIndex = items.length;
     items.push({
       id: 'send-to-chat',
       label: 'Send to chat',
+      separatorBefore: true,
       disabled: !workflowOk || workflowBusy,
-      onSelect: () => {
-        openIssueContextSubmenu(menuAnchor, buildForegroundChatSubmenuItems(issue), sendToChatIndex);
-      },
+      // Resolved on open so a run started from another row is reflected.
+      submenu: () => buildForegroundChatSubmenuItems(issue),
     });
-    const sendToBackgroundIndex = items.length;
     items.push({
       id: 'send-to-background',
       label: 'Send to background',
       disabled: !workflowOk || workflowBusy,
-      onSelect: () => {
-        openIssueContextSubmenu(menuAnchor, buildBackgroundChatSubmenuItems(issue), sendToBackgroundIndex);
-      },
+      submenu: () => buildBackgroundChatSubmenuItems(issue),
     });
   }
 
-  const changeStatusIndex = items.length;
   items.push({
     id: 'change-status',
     label: singleTarget ? 'Change status' : `Change status (${targetIds.length})`,
-    onSelect: () => {
-      openIssueContextSubmenu(
-        menuAnchor,
-        getAllStatusOptions().map((status) => ({
-          id: status.id,
-          label: status.label,
-          onSelect: () => {
-            for (const id of targetIds) {
-              updateIssue(id, { status: status.id });
-            }
-            renderIssuesPanel();
-          },
-        })),
-        changeStatusIndex,
-      );
-    },
+    separatorBefore: true,
+    submenu: () =>
+      getAllStatusOptions().map((status) => ({
+        id: status.id,
+        label: status.label,
+        onSelect: () => {
+          for (const id of targetIds) {
+            updateIssue(id, { status: status.id });
+          }
+          renderIssuesPanel();
+        },
+      })),
   });
 
   items.push({
     id: 'delete',
     label: singleTarget ? 'Delete' : `Delete ${targetIds.length} issues`,
     danger: true,
+    separatorBefore: true,
     onSelect: () => void confirmAndDeleteIssues(targetIds),
   });
 
@@ -885,12 +853,11 @@ function openIssueRowMenu(
   restoreFocus: HTMLElement,
 ): void {
   const targetIds = resolveIssueActionTargetIds(issue.id);
-  const anchor = { clientX, clientY, restoreFocus };
   openIssuesContextMenu({
     clientX,
     clientY,
     restoreFocus,
-    items: buildIssueRowMenuItems(issue, targetIds, anchor),
+    items: buildIssueRowMenuItems(issue, targetIds),
   });
 }
 
@@ -1343,7 +1310,15 @@ function bindStaticControls(): void {
 
 }
 
-/** Open Issues from the chat sidebar footer button. */
+/**
+ * Context-aware Issues entry point.
+ *
+ * With Code in the foreground this embeds Issues in the main column so the
+ * workspace and the open chat stay put; anywhere else it launches the app. It
+ * was written for a chat-sidebar button that never shipped and sat with no
+ * caller — which left the Code embed unreachable outside tests. The global
+ * palette's "Go to Issues" now routes through here.
+ */
 export function openIssuesFromSidebar(): void {
   if (shouldEmbedIssuesFromCodeSidebar()) {
     toggleIssuesFromSidebar();

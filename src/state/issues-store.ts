@@ -28,6 +28,11 @@ import {
 import { emitIssuesChange } from './issues-events.ts';
 import { getIssuesTaxonomySync } from './issues-taxonomy-store.ts';
 import { getWorkspaceLabel, getWorkspacePath } from './workspace.ts';
+import {
+  ISSUES_COMPAT_VERSION,
+  ISSUES_SCHEMA_VERSION,
+  issuesSchemaRevisionOf,
+} from '../types.ts';
 import type {
   BugCard,
   BugColumn,
@@ -123,7 +128,13 @@ export function defaultIssuePlanPath(issueId: string): string {
 }
 
 function defaultIssuesState(): IssuesState {
-  return { version: 2, nextId: 1, issues: [], workspaces: {} };
+  return {
+    version: ISSUES_COMPAT_VERSION,
+    schemaRevision: ISSUES_SCHEMA_VERSION,
+    nextId: 1,
+    issues: [],
+    workspaces: {},
+  };
 }
 
 function workspaceBasenameFromPath(workspacePath: string): string {
@@ -310,6 +321,63 @@ export function issuePriorityToBugSeverity(priority: IssuePriority): BugSeverity
   }
 }
 
+/**
+ * Card keys this revision normalizes. Anything else on a card is copied through
+ * untouched so a newer client's fields survive a round-trip by an older one.
+ */
+const NORMALIZED_ISSUE_CARD_KEYS: ReadonlySet<string> = new Set([
+  'id',
+  'type',
+  'title',
+  'description',
+  'status',
+  'priority',
+  'labels',
+  'workspacePath',
+  'createdAt',
+  'updatedAt',
+  'codeRefs',
+  'gitLinks',
+  'issueRefs',
+  'chatIds',
+  'planPath',
+  'boardChatId',
+  'investigateRunId',
+  'planRunId',
+  'notes',
+  'legacyBugId',
+  'severity',
+]);
+
+/** Top-level state keys this revision normalizes (see above). */
+const NORMALIZED_ISSUES_STATE_KEYS: ReadonlySet<string> = new Set([
+  'version',
+  'schemaRevision',
+  'nextId',
+  'issues',
+  'workspaces',
+]);
+
+/**
+ * Copy keys the current revision does not model onto the normalized output.
+ *
+ * This is the forward-compatibility half of the wipe guard: version tolerance
+ * stops an unknown revision from being discarded wholesale, and this stops a
+ * read-modify-write from quietly stripping its fields one card at a time.
+ */
+function preserveUnknownKeys<T extends object>(
+  source: Record<string, unknown>,
+  target: T,
+  normalized: ReadonlySet<string>,
+): T {
+  for (const key of Object.keys(source)) {
+    if (normalized.has(key)) continue;
+    if (source[key] === undefined) continue;
+    (target as Record<string, unknown>)[key] = source[key];
+  }
+  return target;
+}
+
 function ensureIssueCardShape(raw: unknown): IssueCard | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Partial<IssueCard>;
@@ -375,10 +443,23 @@ function ensureIssueCardShape(raw: unknown): IssueCard | null {
   ) {
     card.severity = r.severity;
   }
-  return card;
+  return preserveUnknownKeys(
+    raw as Record<string, unknown>,
+    card,
+    NORMALIZED_ISSUE_CARD_KEYS,
+  );
 }
 
-function parseIssuesState(raw: unknown): IssuesState {
+/**
+ * Parse a stored state blob.
+ *
+ * Falling back to an empty state is reserved for a blob with no issues array at
+ * all — a genuinely unreadable file. An unrecognized `version` is *not* that:
+ * treating "newer than me" as corrupt is how a rolled-back client erases every
+ * issue written by a newer one, which is what MIN-354 v1 did. A revision we do
+ * not recognize is read on its own terms and written back at its own number.
+ */
+export function parseIssuesState(raw: unknown): IssuesState {
   if (!raw || typeof raw !== 'object') return defaultIssuesState();
   const row = raw as {
     version?: number;
@@ -386,10 +467,10 @@ function parseIssuesState(raw: unknown): IssuesState {
     issues?: unknown;
     workspaces?: unknown;
   };
-  const version = row.version;
-  if ((version !== 1 && version !== 2) || !Array.isArray(row.issues)) {
+  if (!Array.isArray(row.issues)) {
     return defaultIssuesState();
   }
+  const readRevision = issuesSchemaRevisionOf(row);
   const issues: IssueCard[] = [];
   for (const item of row.issues) {
     const card = ensureIssueCardShape(item);
@@ -415,7 +496,19 @@ function parseIssuesState(raw: unknown): IssuesState {
     }
   }
 
-  return { version: 2, nextId, issues, workspaces };
+  // Never write back a lower revision than the file already carried.
+  const state: IssuesState = {
+    version: ISSUES_COMPAT_VERSION,
+    schemaRevision: Math.max(readRevision, ISSUES_SCHEMA_VERSION),
+    nextId,
+    issues,
+    workspaces,
+  };
+  return preserveUnknownKeys(
+    raw as Record<string, unknown>,
+    state,
+    NORMALIZED_ISSUES_STATE_KEYS,
+  );
 }
 
 /** Convert one BugCard into an IssueCard with sequential ISS-n id. */
@@ -514,7 +607,13 @@ export function migrateBugsToIssuesState(bugs: BugCard[]): IssuesState {
     nextId += 1;
     issues.push(migrateBugCardToIssue(bug, id));
   }
-  return { version: 2, nextId, issues, workspaces: {} };
+  return {
+    version: ISSUES_COMPAT_VERSION,
+    schemaRevision: ISSUES_SCHEMA_VERSION,
+    nextId,
+    issues,
+    workspaces: {},
+  };
 }
 
 async function loadBugsForMigration(): Promise<BugCard[]> {
@@ -1063,8 +1162,12 @@ export function getIssuesSnapshot(): IssuesState {
         ]),
       )
     : {};
+  // Spread first: whatever a newer revision left on the state (projects, views,
+  // fields this build never modelled) has to survive the round-trip to disk.
   return {
-    version: 2,
+    ...state,
+    version: ISSUES_COMPAT_VERSION,
+    schemaRevision: state.schemaRevision ?? ISSUES_SCHEMA_VERSION,
     nextId: state.nextId,
     issues: state.issues.map((i) => ({ ...i, labels: [...i.labels] })),
     workspaces,
