@@ -727,7 +727,7 @@ class SuperPlanPage {
     // Grow with extra lines the same way Code/Chat do (CSS field-sizing + JS fallback).
     this.unbindComposerResize = bindComposerAutoResize(field);
 
-    bar.append(opts, modelAnchor, spacer, send);
+    bar.append(opts, spacer, modelAnchor, send);
     composer.append(field, bar);
     mountComposerModelTrigger(modelAnchor, 'super-plan');
 
