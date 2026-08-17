@@ -1,11 +1,13 @@
 /**
- * Orchestrate board kickoff: git preflight, optional /git-setup skill, then board_init message.
+ * Orchestrate board kickoff: git preflight (programmatic init, optional /git-setup
+ * for GitHub remote), then board_init message.
  */
 
-import { GIT_SETUP_SKILL_ID, prepareGitSetupTurn } from '../skills/git-setup-client';
+import { GIT_SETUP_SKILL_ID } from '../skills/git-setup-client';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { formatHistoryWithSkillTag } from '../skills/parse-slash';
 import { getWorkspaceGitStatus } from '../state/git-workspace';
+import { initializeWorkspaceGit } from '../state/initialize-git';
 import { getActiveChat } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import { detectLocalServer } from '../tools/client';
@@ -17,7 +19,6 @@ import {
   setBoardKickoffInProgress,
   setBoardOnboardingAwaitingInit,
   setBoardOnboardingGitSetupActive,
-  type BoardGitPromptKind,
 } from './orchestrate-board-onboarding-state';
 import { setStatus } from './status';
 
@@ -43,12 +44,8 @@ export function shouldSkipDuplicateBoardOnboardingKickoff(chat: {
   return false;
 }
 
-const GIT_SETUP_USER_TEXT: Record<BoardGitPromptKind, string> = {
-  init:
-    'Initialize git in this workspace (init, .gitignore, initial commit). Do not connect a GitHub remote.',
-  remote:
-    'Connect a GitHub remote for this workspace. Skip git init if the repository is already initialized.',
-};
+const GIT_SETUP_REMOTE_USER_TEXT =
+  'Connect a GitHub remote for this workspace. Skip git init if the repository is already initialized.';
 
 /** Posts a user message through the composer and triggers sendMessage. */
 function sendBoardMessage(text: string): void {
@@ -63,19 +60,37 @@ function kickoffAborted(): boolean {
   return getBoardKickoffAbortSignal()?.aborted ?? false;
 }
 
-/** Run /git-setup in the planner chat and wait for the turn to finish. */
-async function runGitSetupSkillTurn(
+/**
+ * Init / .gitignore / first commit without the /git-setup LLM skill (MIN-615).
+ * Returns false when init fails so kickoff can stop before board_init.
+ */
+async function runProgrammaticGitInit(): Promise<boolean> {
+  const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board');
+  setBoardOnboardingGitSetupActive(true);
+  refreshBoardOnboardingIfMounted();
+  try {
+    const result = await initializeWorkspaceGit(getWorkspacePath());
+    void import('./composer-undo').then((m) => m.invalidateComposerUndoGitCache());
+    if (!result.ok) {
+      setStatus('err', result.error ?? 'Could not initialize git in this workspace.');
+      return false;
+    }
+    return true;
+  } finally {
+    setBoardOnboardingGitSetupActive(false);
+    refreshBoardOnboardingIfMounted();
+  }
+}
+
+/** Run /git-setup in the planner chat for GitHub remote only. */
+async function runGitSetupRemoteSkillTurn(
   chat: ReturnType<typeof getActiveChat>,
-  kind: BoardGitPromptKind,
 ): Promise<void> {
   const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board');
   setBoardOnboardingGitSetupActive(true);
   refreshBoardOnboardingIfMounted();
   try {
-    if (kind === 'init') {
-      await prepareGitSetupTurn(getWorkspacePath());
-    }
-    const userText = GIT_SETUP_USER_TEXT[kind];
+    const userText = GIT_SETUP_REMOTE_USER_TEXT;
     const displayText = formatHistoryWithSkillTag(userText, GIT_SETUP_SKILL_ID);
     const historyContent = buildHistoryUserContent(displayText, []);
     await runChatTurn({
@@ -98,7 +113,7 @@ async function runGitSetupSkillTurn(
   }
 }
 
-/** Ensure the tool server is up before a git skill turn; surfaces status on failure. */
+/** Ensure the tool server is up before git init or a remote skill turn. */
 async function ensureToolServerForGitSetup(): Promise<boolean> {
   const serverUp = await detectLocalServer();
   if (!serverUp) {
@@ -108,7 +123,7 @@ async function ensureToolServerForGitSetup(): Promise<boolean> {
 }
 
 /**
- * Git preflight → optional skill turn → board_init kickoff.
+ * Git preflight → programmatic init (MIN-615) → optional remote skill → board_init.
  * Entry points: hub Open board, onboarding Start, plan screen Open board.
  */
 export async function kickoffOrchestrateBoardBuild(): Promise<void> {
@@ -127,8 +142,10 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
 
       if (initAccepted) {
         if (!(await ensureToolServerForGitSetup())) return;
-        await runGitSetupSkillTurn(chat, 'init');
+        // Do not run /git-setup here — the model re-asks via ask_question (MIN-615).
+        const inited = await runProgrammaticGitInit();
         if (kickoffAborted()) return;
+        if (!inited) return;
         gitStatus = await getWorkspaceGitStatus(getWorkspacePath());
       }
     }
@@ -139,7 +156,7 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
 
       if (remoteAccepted) {
         if (!(await ensureToolServerForGitSetup())) return;
-        await runGitSetupSkillTurn(chat, 'remote');
+        await runGitSetupRemoteSkillTurn(chat);
         if (kickoffAborted()) return;
       }
     }

@@ -1,0 +1,151 @@
+/**
+ * Programmatic git init for board onboarding (MIN-615).
+ * Board kickoff already collected consent; do not send this work through the
+ * /git-setup LLM skill (it re-asks via ask_question and can loop).
+ */
+
+import { runProcess } from '../process-runner.js';
+import { isGitRepository } from '../tools/git-change-stats.js';
+import { getWorkspaceRoot } from './root.js';
+import { ensureBaselineGitignore } from './baseline-gitignore.js';
+
+const GIT_TIMEOUT_MS = 120_000;
+/** Conventional message for the first commit on a freshly initialized workspace. */
+export const INITIAL_COMMIT_MESSAGE = 'chore: initial commit';
+/** Used only when the workspace has no git user.name / user.email. */
+const FALLBACK_NAME = 'Minnow';
+const FALLBACK_EMAIL = 'minnow@localhost';
+
+/** Combine stdout/stderr for a failed git process. */
+function processError(result) {
+  const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
+  return text || `git exited with code ${result.code}`;
+}
+
+/** Run git in cwd with the workspace init timeout. */
+function git(args, cwd) {
+  return runProcess('git', args, { cwd, timeout: GIT_TIMEOUT_MS });
+}
+
+/**
+ * `git init -b main`, falling back to `git init` + symbolic-ref for older git.
+ * @param {string} cwd
+ * @returns {Promise<{ ok: true } | { ok: false; error: string }>}
+ */
+async function initRepo(cwd) {
+  const withBranch = await git(['init', '-b', 'main'], cwd);
+  if (withBranch.code === 0) return { ok: true };
+
+  const fallback = await git(['init'], cwd);
+  if (fallback.code !== 0) {
+    return { ok: false, error: processError(fallback) };
+  }
+  // Point HEAD at main before the first commit so the default branch is not master.
+  await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], cwd);
+  return { ok: true };
+}
+
+/** True when the repo has at least one commit. */
+async function hasHead(cwd) {
+  const result = await git(['rev-parse', '--verify', 'HEAD'], cwd);
+  return result.code === 0;
+}
+
+/**
+ * Extra `git -c user.name=… -c user.email=…` args when identity is unset.
+ * Leaves the user's global/local config alone when both name and email exist.
+ * @param {string} cwd
+ * @returns {Promise<{ args: string[]; usedFallback: boolean }>}
+ */
+async function commitIdentity(cwd) {
+  const name = await git(['config', '--get', 'user.name'], cwd);
+  const email = await git(['config', '--get', 'user.email'], cwd);
+  if ((name.stdout ?? '').trim() && (email.stdout ?? '').trim()) {
+    return { args: [], usedFallback: false };
+  }
+  return {
+    args: ['-c', `user.name=${FALLBACK_NAME}`, '-c', `user.email=${FALLBACK_EMAIL}`],
+    usedFallback: true,
+  };
+}
+
+/**
+ * Initialize git in the workspace: init, baseline .gitignore, initial commit.
+ * Idempotent: existing repos skip init; existing HEAD skips the commit.
+ *
+ * @param {string} [workspaceRoot]
+ * @returns {Promise<{
+ *   ok: true;
+ *   alreadyRepo: boolean;
+ *   createdRepo: boolean;
+ *   gitignoreCreated: boolean;
+ *   committed: boolean;
+ *   commitSha?: string;
+ *   usedFallbackIdentity: boolean;
+ * } | { ok: false; error: string }>}
+ */
+export async function initializeWorkspaceGit(workspaceRoot) {
+  const root = workspaceRoot?.trim() || getWorkspaceRoot();
+  if (!root) {
+    return { ok: false, error: 'Workspace root is not set' };
+  }
+
+  const alreadyRepo = await isGitRepository(root);
+  let createdRepo = false;
+  if (!alreadyRepo) {
+    const init = await initRepo(root);
+    if (!init.ok) return init;
+    createdRepo = true;
+  }
+
+  const gitignore = await ensureBaselineGitignore(root);
+  if (!gitignore.ok) {
+    return { ok: false, error: gitignore.error ?? 'Failed to write .gitignore' };
+  }
+
+  if (await hasHead(root)) {
+    return {
+      ok: true,
+      alreadyRepo,
+      createdRepo,
+      gitignoreCreated: Boolean(gitignore.created),
+      committed: false,
+      usedFallbackIdentity: false,
+    };
+  }
+
+  const add = await git(['add', '-A'], root);
+  if (add.code !== 0) {
+    return { ok: false, error: processError(add) };
+  }
+
+  const status = await git(['status', '--porcelain'], root);
+  const empty = !(status.stdout ?? '').trim();
+  const identity = await commitIdentity(root);
+  const commitArgs = [
+    ...identity.args,
+    '-c',
+    'commit.gpgsign=false',
+    'commit',
+    ...(empty ? ['--allow-empty'] : []),
+    '-m',
+    INITIAL_COMMIT_MESSAGE,
+  ];
+  const commit = await git(commitArgs, root);
+  if (commit.code !== 0) {
+    return { ok: false, error: processError(commit) };
+  }
+
+  const shaResult = await git(['rev-parse', 'HEAD'], root);
+  const commitSha = (shaResult.stdout ?? '').trim() || undefined;
+
+  return {
+    ok: true,
+    alreadyRepo,
+    createdRepo,
+    gitignoreCreated: Boolean(gitignore.created),
+    committed: true,
+    commitSha,
+    usedFallbackIdentity: identity.usedFallback,
+  };
+}
