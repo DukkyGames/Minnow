@@ -18,6 +18,8 @@ import {
   enqueueTaskForTests,
   finalizeBoardTaskOnStreamEnd,
   finalizeTaskTestingOnStreamEnd,
+  flushBoardChatContinuationsForTests,
+  awaitBoardChatContinuationsForTests,
   getPipelineHoldsForTests,
   getTaskQueueForTests,
   MAX_STOP_RETRY_ATTEMPTS,
@@ -28,10 +30,16 @@ import {
   trackDrainResumeCallsForTests,
   autoDelegateNext,
   isTaskChatActiveForStallCheck,
+  setBoardChatTurnRunner,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isTaskStalledForRestart, markBoardTaskInProgressFromChat, updateTask } from '../../src/state/orchestrate-board-store.ts';
-import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import {
+  resetSessionPersistenceForTests,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
+import { setStreaming } from '../../src/app-state.ts';
 import { setLocalServerAvailableForTests } from '../../src/tools/config.ts';
+import { resetWrapperState } from '../../src/agents/controller/wrapper.ts';
 import { cleanMergeMocks, mockWorktreeOpsGated } from './_board-flow-helpers.mts';
 import type { Chat, ChatGroup } from '../../src/types.ts';
 
@@ -151,10 +159,18 @@ describe('task stream end finalization', () => {
     resetAutopilotMetaCache();
     clearMissingReportNudgesForTests();
     setAutopilotMetaForTests({ maxBuildAttempts: 1 });
+    setBoardChatTurnRunner(null);
+    setStreaming(false);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    setBoardChatTurnRunner(null);
+    setStreaming(false);
+    await awaitBoardChatContinuationsForTests();
     resetAutopilotMetaCache();
+    resetWrapperState();
+    setSessionStateForTests(null);
+    resetSessionPersistenceForTests();
   });
 
   test('resolveTaskChatStreamOutcome: completed vs stopped', () => {
@@ -453,6 +469,36 @@ describe('task stream end finalization', () => {
       assert.equal(updated.endedAt, undefined);
       assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 1);
     } finally {
+      if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
+      else process.env.MINNOW_TEST = prevMinnowTest;
+    }
+  });
+
+  test('missing-report finalize while streaming does not no-op the nudge forever', async () => {
+    const prevMinnowTest = process.env.MINNOW_TEST;
+    process.env.MINNOW_TEST = '1';
+    const launches: string[] = [];
+    try {
+      setBoardChatTurnRunner(async (input) => {
+        launches.push(input.chat.id);
+      });
+      const group = makeGroup('auto');
+      const planner = makePlanner();
+      const task = group.orchestrateBoard!.tasks[0]!;
+
+      setStreaming(true, TASK_CHAT_ID);
+      finalizeBoardTaskOnStreamEnd(group, task, planner);
+      assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 1);
+      assert.deepEqual(launches, [], 'must not launch while the ended chat is still streaming');
+
+      setStreaming(false, TASK_CHAT_ID);
+      await flushBoardChatContinuationsForTests(TASK_CHAT_ID);
+      assert.deepEqual(launches, [TASK_CHAT_ID], 'deferred missing-report nudge must run after teardown');
+      assert.equal(group.orchestrateBoard!.tasks[0]!.status, 'in_progress');
+    } finally {
+      setBoardChatTurnRunner(null);
+      setStreaming(false);
+      resetWrapperState();
       if (prevMinnowTest === undefined) delete process.env.MINNOW_TEST;
       else process.env.MINNOW_TEST = prevMinnowTest;
     }

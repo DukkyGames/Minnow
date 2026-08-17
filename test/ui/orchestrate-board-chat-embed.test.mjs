@@ -17,7 +17,12 @@ const { setStreaming } = await import('../../src/app-state.ts');
 const { appendBubble, appendStreamingAssistantRow } = await import(
   '../../src/ui/messages.ts'
 );
-const { disposeBoardViewForTests } = await import('../../src/ui/orchestrate-board.ts');
+const { disposeBoardViewForTests, refreshActiveBoardIfMounted } = await import(
+  '../../src/ui/orchestrate-board.ts'
+);
+const { ensureBoardChatComposerChrome } = await import(
+  '../../src/ui/orchestrate-board-chat.ts'
+);
 const { resetOrchestrateInitSplitForTests } = await import(
   '../../src/ui/orchestrate-board-init-split.ts'
 );
@@ -31,6 +36,7 @@ function setupDom() {
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.requestAnimationFrame = (cb) => window.requestAnimationFrame(cb);
+  globalThis.cancelAnimationFrame = (id) => window.cancelAnimationFrame(id);
 
   const area = document.createElement('div');
   area.id = 'chatArea';
@@ -145,5 +151,28 @@ describe('orchestrate board chat embed transcript', () => {
     const { wrap } = appendStreamingAssistantRow(TASK_CHAT_ID);
     assert.equal(wrap.isConnected, false);
     assert.equal(wrap.querySelector('.stream-status'), null);
+  });
+
+  test('ensureBoardChatComposerChrome restores main-column--board-chat while embed is open', () => {
+    setupDom();
+    seedBoardTaskSession();
+    setOpenBoardChatId(TASK_CHAT_ID);
+    const column = document.getElementById('mainColumn');
+    column.classList.remove('main-column--board-chat');
+    assert.equal(column.classList.contains('main-column--board-chat'), false);
+
+    ensureBoardChatComposerChrome();
+    assert.equal(column.classList.contains('main-column--board-chat'), true);
+  });
+
+  test('refreshActiveBoardIfMounted restores board-chat composer class when embed is open', () => {
+    setupDom();
+    seedBoardTaskSession();
+    setOpenBoardChatId(TASK_CHAT_ID);
+    const column = document.getElementById('mainColumn');
+    column.classList.remove('main-column--board-chat');
+
+    refreshActiveBoardIfMounted();
+    assert.equal(column.classList.contains('main-column--board-chat'), true);
   });
 });

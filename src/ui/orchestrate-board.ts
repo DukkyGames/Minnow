@@ -165,6 +165,7 @@ import {
 import {
   boardChatRailCollapsedWaves,
   confirmBoardChatDelete,
+  ensureBoardChatComposerChrome,
   mountBoardChatHost,
   refreshBoardChatHeader,
   toggleBoardChatRailWave,
@@ -3409,17 +3410,23 @@ export async function mountBoardOnboardingPanel(
  */
 export function refreshActiveBoardIfMounted(): void {
   if (isOrchestrateHubMounted()) return;
-  if (isBoardDomRefreshBlockedByOverlay()) return;
   /*
    * A chat is showing in `.ob-main` and the board root is parked off-DOM.
    * Rebuilding here would evict the transcript mid-read, so only the live parts
-   * that stay on screen (rail dots, header state) refresh.
+   * that stay on screen (rail dots, header state, composer chrome) refresh.
+   * Check this before the overlay gate: `#chatArea.chat-area--orchestrate` looks
+   * like a full-column overlay, and skipping here is what dropped the composer
+   * class on stream-end.
    */
   if (isBoardChatEmbedOpen()) {
-    repaintBoardRail?.();
-    refreshBoardChatHeader();
+    ensureBoardChatComposerChrome();
+    if (!isBoardDomRefreshBlockedByOverlay()) {
+      repaintBoardRail?.();
+      refreshBoardChatHeader();
+    }
     return;
   }
+  if (isBoardDomRefreshBlockedByOverlay()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   const group = getActiveBoardGroup();
   if (!group) return;

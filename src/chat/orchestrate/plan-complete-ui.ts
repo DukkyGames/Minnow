@@ -180,13 +180,25 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
     `${group.id}:completion-notification`,
     blocked ? 'blocked' : 'passed',
   );
-  void enrichFinishReportWithRecommendations(groupId, planner, board);
   emitBoardChange(groupId);
 
   const text = buildOrchestrateCompletionMessage(planner, board, board.completionShownAt);
   planner.history.push({ role: 'assistant', content: text });
   touchChat(planner);
   scheduleSaveSessions();
+
+  // Unit tests skip generation / toast / issues — those keep Node alive.
+  // Tests that need the wrap-up turn install `setOrchestratePlanCompleteWrapUpHook`.
+  if (typeof process !== 'undefined' && process.env?.MINNOW_TEST === '1') {
+    if (wrapUpTurnHook) {
+      void firePlanCompleteWrapUpTurn(planner, board).catch((err) =>
+        reportBackgroundError('orchestrate-plan-complete-wrap-up', err),
+      );
+    }
+    return;
+  }
+
+  void enrichFinishReportWithRecommendations(groupId, planner, board);
 
   if (isDomAvailable()) {
     const activeId = sessionState?.activeId;

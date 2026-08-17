@@ -239,6 +239,13 @@ export function startHeartbeat(runId: string, onTick?: () => void): void {
     recordHeartbeat(runId);
     entry.onTick?.();
   }, intervalMs);
+  // node:test will not exit while a ref'd interval is alive. Tests call
+  // resetWrapperState(), but a late board continuation can restart a heartbeat
+  // after teardown — unref so a missed clear cannot hang the runner.
+  if (typeof process !== 'undefined' && process.env?.MINNOW_TEST === '1') {
+    const timer = entry.timer as { unref?: () => void };
+    timer.unref?.();
+  }
 }
 
 /** Stop heartbeat ticks for a run (on settle or stream end). */
