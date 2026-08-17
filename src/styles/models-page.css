@@ -1607,6 +1607,41 @@
   white-space: nowrap;
 }
 
+/* Compact token count next to the context slider — same type as the read-only value. */
+.models-field__range-value-input {
+  width: 10ch;
+  margin: 0;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-muted);
+  text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.models-field__range-value-input::-webkit-outer-spin-button,
+.models-field__range-value-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.models-field__range-value-input:hover,
+.models-field__range-value-input:focus {
+  border-color: var(--mn-border);
+  color: var(--mn-fg);
+  outline: none;
+}
+
+.models-field__range-value-input:focus {
+  border-color: var(--mn-accent);
+}
+
 .models-field__range {
   width: 100%;
   margin: 0;

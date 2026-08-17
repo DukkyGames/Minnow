@@ -359,6 +359,7 @@ export async function loadLibraryModelFromPicker(libraryId: string): Promise<voi
   if (existing?.status === 'running') return;
 
   const { loadModel } = await import('../ui/models/store');
+  // Same inspector drafts as My Models Load — omitting settings used to spawn at 125k.
   await loadModel(model);
 
   const started = Date.now();

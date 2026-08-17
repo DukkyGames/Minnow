@@ -129,6 +129,21 @@ describe('llama args', () => {
     assert.equal(args.filter((token) => token === '--jinja').length, 1);
   });
 
+  test('user ctx 2048 wins over the balanced 125k profile default', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      profileKey: 'balanced',
+      hardware: { gpuVramGb: 12, availableRamGb: 32, totalRamGb: 64, backend: 'cuda' },
+      modelMeta: { name: 'demo', parameters_raw: 7, quantization: 'Q4_K_M' },
+      settings: { ctx: 2048, n_gpu_layers: 999, cache_type: 'f16' },
+    });
+    const cIdx = args.indexOf('-c');
+    assert.ok(cIdx >= 0);
+    assert.equal(args[cIdx + 1], '2048');
+  });
+
   test('findSiblingMmproj prefers mmproj-F16 next to the weights', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-mmproj-'));
     await fsp.writeFile(path.join(dir, 'Qwen3.8-27B-Q4_K_M.gguf'), '');

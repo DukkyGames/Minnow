@@ -259,6 +259,49 @@ function asNumber(value) {
   return 0;
 }
 
+/** @param {unknown} value */
+function countPositiveEntries(value) {
+  if (!Array.isArray(value)) return 0;
+  return value.filter((v) => typeof v === 'number' && Number.isFinite(v) && v > 0).length;
+}
+
+/**
+ * How many layers keep a growing KV cache on a Gated DeltaNet hybrid.
+ *
+ * llama.cpp marks layer `i` recurrent when `(i + 1) % interval !== 0` inside the
+ * main stack, then treats NextN/MTP blocks as dense attention (see qwen35.cpp).
+ * @param {number} nLayers `block_count`, which includes MTP blocks
+ * @param {number} interval `{arch}.full_attention_interval`
+ * @param {number} [nextn] `{arch}.nextn_predict_layers`
+ */
+export function countHybridFullAttentionLayers(nLayers, interval, nextn = 0) {
+  if (!(nLayers > 0)) return 0;
+  if (!(interval > 1)) return nLayers;
+  const extra = Math.max(0, nextn);
+  const trunk = Math.max(0, nLayers - extra);
+  let full = 0;
+  for (let i = 0; i < trunk; i += 1) {
+    if ((i + 1) % interval === 0) full += 1;
+  }
+  return full + extra;
+}
+
+/**
+ * `{arch}.attention.recurrent_layers`: true/1 = linear-attention, false/0 = full attention.
+ * @param {unknown} value
+ * @param {number} nLayers
+ */
+function countNonRecurrentLayers(value, nLayers) {
+  if (!Array.isArray(value) || value.length === 0) return 0;
+  if (value.every((v) => typeof v === 'boolean')) {
+    return Math.max(0, Math.min(nLayers, value.filter((v) => !v).length));
+  }
+  if (value.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+    return Math.max(0, Math.min(nLayers, value.filter((v) => v === 0).length));
+  }
+  return 0;
+}
+
 /**
  * Full-attention layer count from `{arch}.attention.sliding_window_pattern`.
  *
@@ -283,10 +326,59 @@ function readSwaPattern(value, nLayers) {
 }
 
 /**
+ * Growing-KV layer count for hybrid (Gated DeltaNet) GGUFs.
+ *
+ * Qwen3.5 / 3.6 / 3.8 ship `full_attention_interval` instead of a sliding-window
+ * pattern. Without this, every block is charged as full attention and the Load
+ * tab overstates KV by the hybrid ratio (4x on the 3:1 models).
+ * @param {string} arch
+ * @param {number} nLayers
+ * @param {Record<string, unknown>} kv
+ * @param {{ swaPeriod: number, fullLayers: number }} swa
+ * @param {GgufTensorSummary} tensors
+ */
+function resolveHybridAttention(arch, nLayers, kv, swa, tensors) {
+  let fullLayers = swa.fullLayers;
+  let swaPeriod = swa.swaPeriod;
+  const interval = asNumber(kv[`${arch}.full_attention_interval`]);
+  const nextn = asNumber(kv[`${arch}.nextn_predict_layers`]);
+
+  // Per-layer KV width with zeros on linear layers (RYS / some community quants).
+  if (!fullLayers) {
+    const kvHeads = kv[`${arch}.attention.head_count_kv`];
+    const positive = countPositiveEntries(kvHeads);
+    if (Array.isArray(kvHeads) && positive > 0 && positive < nLayers) {
+      fullLayers = positive;
+    }
+  }
+
+  if (!fullLayers) {
+    fullLayers = countNonRecurrentLayers(kv[`${arch}.attention.recurrent_layers`], nLayers);
+  }
+
+  // Tensor probe: linear-attention blocks own `ssm_*` weights; the rest grow a cache.
+  if (!fullLayers && tensors.ssmLayerCount > 0 && tensors.ssmLayerCount < nLayers) {
+    fullLayers = nLayers - tensors.ssmLayerCount;
+  }
+
+  if (interval > 1) {
+    if (!swaPeriod) swaPeriod = interval;
+    if (!fullLayers) fullLayers = countHybridFullAttentionLayers(nLayers, interval, nextn);
+  }
+
+  return {
+    swaPeriod,
+    fullLayers,
+    fullAttentionInterval: interval > 1 ? interval : 0,
+  };
+}
+
+/**
  * @typedef {object} GgufTensorSummary
  * @property {number} layerBytes Bytes in repeating `blk.*` tensors.
  * @property {number} fixedBytes Bytes in embedding / output / norm tensors.
  * @property {number} nVocab Vocabulary size from the token embedding shape, 0 if absent.
+ * @property {number} ssmLayerCount Distinct `blk.N` indices that carry SSM / linear-attention tensors.
  */
 
 /**
@@ -299,6 +391,7 @@ async function readTensorIndex(reader, tensorCount) {
   let layerBytes = 0;
   let fixedBytes = 0;
   let nVocab = 0;
+  const ssmLayers = new Set();
 
   for (let i = 0; i < tensorCount; i += 1) {
     const name = await reader.string();
@@ -313,14 +406,21 @@ async function readTensorIndex(reader, tensorCount) {
     const [blockSize, blockBytes] = GGML_TYPE_SIZES[type] ?? [1, 4];
     const bytes = (elements / blockSize) * blockBytes;
 
-    if (name.startsWith('blk.')) layerBytes += bytes;
-    else fixedBytes += bytes;
+    if (name.startsWith('blk.')) {
+      layerBytes += bytes;
+      // `blk.12.ssm_conv1d.weight` — linear-attention layers have no growing KV cache.
+      const dot = name.indexOf('.', 4);
+      const idx = dot > 4 ? Number(name.slice(4, dot)) : NaN;
+      if (Number.isInteger(idx) && name.includes('.ssm_')) ssmLayers.add(idx);
+    } else {
+      fixedBytes += bytes;
+    }
 
     // ggml stores token_embd.weight as [n_embd, n_vocab].
     if (name === 'token_embd.weight' && dims.length >= 2) nVocab = dims[1];
   }
 
-  return { layerBytes, fixedBytes, nVocab };
+  return { layerBytes, fixedBytes, nVocab, ssmLayerCount: ssmLayers.size };
 }
 
 /**
@@ -336,6 +436,7 @@ async function readTensorIndex(reader, tensorCount) {
  * @property {number} swaWindow
  * @property {number} swaPeriod One full-attention layer every N; 0 when not stated as a scalar.
  * @property {number} nFullAttentionLayers Exact count from a per-layer pattern; 0 when absent.
+ * @property {number} fullAttentionInterval `{arch}.full_attention_interval`; 0 when absent.
  * @property {number} swaHeadDim Head size on sliding-window layers, when it differs; 0 otherwise.
  * @property {number} trainCtx
  * @property {number} layerBytes
@@ -383,6 +484,7 @@ export async function parseGgufHeader(filePath) {
     const headDim = keyLength > 0 ? keyLength : nHead > 0 ? Math.floor(nEmbd / nHead) : 0;
     const swaKeyLength = asNumber(kv[`${arch}.attention.key_length_swa`]);
     const swa = readSwaPattern(kv[`${arch}.attention.sliding_window_pattern`], nLayers);
+    const hybrid = resolveHybridAttention(arch, nLayers, kv, swa, tensors);
 
     const tokens = kv['tokenizer.ggml.tokens'];
     const tokenCount =
@@ -400,8 +502,9 @@ export async function parseGgufHeader(filePath) {
       nVocab: tensors.nVocab || asNumber(kv[`${arch}.vocab_size`]) || tokenCount,
       nExperts: asNumber(kv[`${arch}.expert_count`]),
       swaWindow: asNumber(kv[`${arch}.attention.sliding_window`]),
-      swaPeriod: swa.swaPeriod,
-      nFullAttentionLayers: swa.fullLayers,
+      swaPeriod: hybrid.swaPeriod,
+      nFullAttentionLayers: hybrid.fullLayers,
+      fullAttentionInterval: hybrid.fullAttentionInterval,
       swaHeadDim: swaKeyLength,
       trainCtx: asNumber(kv[`${arch}.context_length`]),
       layerBytes: tensors.layerBytes,
