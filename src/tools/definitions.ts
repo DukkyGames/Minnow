@@ -119,6 +119,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       'Search the web for up-to-date information. Provider is configured in Settings → Tools (Brave API, Tavily API, or DuckDuckGo via local server).',
       {
         query: { type: 'string', description: 'Search query' },
+        deep_read: {
+          type: 'boolean',
+          description:
+            'Also fetch the top 3 results and return the passages most relevant to the query. Slower, but usually avoids a follow-up fetch_web_content call.',
+        },
         api_key: {
           type: 'string',
           description: 'Optional Brave Search API key (overrides saved key when Brave is selected)',

@@ -12,6 +12,7 @@ import { executeIssueTool } from './issue-tools';
 import { executeSubAgentTool } from './sub-agent-executor';
 import {
   ensureToolConfigReady,
+  getToolPermissionForId,
   isLocalServerAvailable,
   isToolEnabled,
   loadToolConfig,
@@ -429,6 +430,12 @@ async function executeToolInner(
       return { content: route.message };
     }
 
+    // deep_read makes the search backend fetch result pages, which is what
+    // fetch_web_content is permissioned for — don't let web_search route around it.
+    const deepRead =
+      enrichedArgs.deep_read === true &&
+      getToolPermissionForId(config, 'fetch_web_content') !== 'off';
+
     return executeWithResultCache('web_search', enrichedArgs, context, async () => {
       if (route.kind === 'brave') {
         return { content: await executeBrowserTool(name, enrichedArgs) };
@@ -436,15 +443,18 @@ async function executeToolInner(
       if (route.kind === 'tavily') {
         return executeServerTool('web_search_tavily', {
           query: enrichedArgs.query,
+          deep_read: deepRead,
         });
       }
       if (route.kind === 'searxng') {
         return executeServerTool('web_search_searxng', {
           query: enrichedArgs.query,
+          deep_read: deepRead,
         });
       }
       return executeServerTool('web_search_ddg', {
         query: enrichedArgs.query,
+        deep_read: deepRead,
       });
     });
   }

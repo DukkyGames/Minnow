@@ -98,8 +98,15 @@ import {
   formatDdgSearchResults,
   searchDdgStructured,
 } from '../tools/web-search-ddg.js';
-import { runTavilySearch } from '../tools/web-search-tavily.js';
-import { runSearxngSearch } from '../tools/web-search-searxng.js';
+import {
+  formatTavilySearchResults,
+  searchTavilyStructured,
+} from '../tools/web-search-tavily.js';
+import {
+  formatSearxngSearchResults,
+  searchSearxngStructured,
+} from '../tools/web-search-searxng.js';
+import { appendResultExcerpts } from '../tools/search-enrich.js';
 import { loadSearchSettings } from '../research/search.js';
 import { getFilesystemAccessFromConfig } from '../config/tool-security.js';
 import { callMcpTool, isMcpToolName } from '../mcp/registry.js';
@@ -208,6 +215,30 @@ async function readTavilyApiKeyFromConfig() {
   return settings.tavilyApiKey;
 }
 
+/** True when the caller asked for ranked page excerpts alongside the snippets. */
+function wantsDeepRead(args) {
+  return args?.deep_read === true || args?.deep_read === 'true';
+}
+
+/**
+ * Shared tail for the web search backends: format, then optionally read the top hits.
+ * @param {string} query
+ * @param {{ results: import('../tools/search-result.js').SearchResult[]; error?: string }} outcome
+ * @param {(query: string, results: import('../tools/search-result.js').SearchResult[]) => string} format
+ * @param {Record<string, unknown>} args
+ * @returns {Promise<string>}
+ */
+async function finishWebSearch(query, outcome, format, args) {
+  if (outcome.error) {
+    return outcome.error;
+  }
+  const formatted = format(query, outcome.results);
+  if (!wantsDeepRead(args)) {
+    return formatted;
+  }
+  return appendResultExcerpts(query, outcome.results, formatted);
+}
+
 /** DuckDuckGo HTML search (no API key); detects bot challenges before parsing. */
 async function toolWebSearchDdg(args) {
   const query = args?.query;
@@ -215,11 +246,8 @@ async function toolWebSearchDdg(args) {
     return 'Error: query is required';
   }
 
-  const { results, error } = await searchDdgStructured(query);
-  if (error) {
-    return error;
-  }
-  return formatDdgSearchResults(query, results);
+  const outcome = await searchDdgStructured(query);
+  return finishWebSearch(query, outcome, formatDdgSearchResults, args);
 }
 
 /** Tavily Search API (requires tavilyApiKey in search.json or tools.json). */
@@ -234,7 +262,8 @@ async function toolWebSearchTavily(args) {
     return 'Error: Tavily API key not configured. Add one in Settings → Tools.';
   }
 
-  return runTavilySearch(query, apiKey);
+  const outcome = await searchTavilyStructured(query, apiKey);
+  return finishWebSearch(query, outcome, formatTavilySearchResults, args);
 }
 
 /** SearXNG JSON search (requires searxngUrl in search.json). */
@@ -245,7 +274,8 @@ async function toolWebSearchSearxng(args) {
   }
 
   const settings = await loadSearchSettings();
-  return runSearxngSearch(query, settings.searxngUrl);
+  const outcome = await searchSearxngStructured(query, settings.searxngUrl);
+  return finishWebSearch(query, outcome, formatSearxngSearchResults, args);
 }
 
 // --- File tools ---

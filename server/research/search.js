@@ -9,6 +9,7 @@ import { searchBraveStructured } from '../tools/web-search-brave.js';
 import { searchDdgStructured } from '../tools/web-search-ddg.js';
 import { searchSearxngStructured } from '../tools/web-search-searxng.js';
 import { searchTavilyStructured } from '../tools/web-search-tavily.js';
+import { looksUnrelated } from '../tools/search-result.js';
 import { getSearch, setSearch } from './cache.js';
 
 /** @typedef {'searxng' | 'tavily' | 'brave' | 'duckduckgo' | 'disabled'} SearchProviderId */
@@ -18,6 +19,9 @@ let lastSearchError = null;
 
 /** @type {SearchProviderId | null} */
 let lastSearchProvider = null;
+
+/** True when the last search discarded a result set as unrelated (not merely empty). */
+let lastSearchDiscardedUnrelated = false;
 
 const DEFAULT_FALLBACK_CHAIN = ['tavily', 'brave', 'duckduckgo'];
 const DEFAULT_SEARXNG_URL = 'http://localhost:8899';
@@ -37,6 +41,16 @@ export function getLastSearchError() {
  */
 export function getLastSearchProvider() {
   return lastSearchProvider;
+}
+
+/**
+ * True when at least one provider returned results that were discarded as unrelated to
+ * the query. Distinguishes "nothing found" from "the engine answered with junk", which
+ * point at different fixes.
+ * @returns {boolean}
+ */
+export function getLastSearchDiscardedUnrelated() {
+  return lastSearchDiscardedUnrelated;
 }
 
 /**
@@ -201,6 +215,7 @@ async function callProvider(providerId, query, settings) {
 export async function searchStructured(query, opts = {}) {
   lastSearchError = null;
   lastSearchProvider = null;
+  lastSearchDiscardedUnrelated = false;
 
   const trimmed = String(query ?? '').trim();
   if (!trimmed) {
@@ -222,7 +237,9 @@ export async function searchStructured(query, opts = {}) {
   const useCache = opts.useCache !== false;
   if (useCache) {
     const cached = await getSearch(cacheKey);
-    if (cached?.length) {
+    // Re-check on read: entries written before the guard existed (or by a provider that
+    // has since started decoying) would otherwise stay pinned for the full 2h TTL.
+    if (cached?.length && !looksUnrelated(trimmed, cached)) {
       lastSearchProvider = primary;
       return cached;
     }
@@ -240,6 +257,9 @@ export async function searchStructured(query, opts = {}) {
       return results;
     }
     if (error) {
+      if (error.includes('unrelated to')) {
+        lastSearchDiscardedUnrelated = true;
+      }
       errors.push(`${providerId}: ${error}`);
     }
   }

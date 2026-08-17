@@ -321,26 +321,66 @@ function venvPythonPath(venvDir) {
 
 /**
  * Engine overrides merged into upstream defaults (see searx settings_loader.update_settings).
- * Bing is disabled in stock SearXNG but tends to stay up on loopback; brave/ddg/startpage
- * rate-limit automated metasearch and can leave general queries with zero hits.
+ *
+ * Bing is disabled in stock SearXNG but tends to stay up on loopback. It is NOT trusted
+ * alone: for queries it has no cached SERP for, Bing answers HTTP 200 with the correct
+ * <title> and searchbox echo but 10 `li.b_algo` blocks belonging to unrelated queries.
+ * That is a fail-open mode no result-count check can catch, so DuckDuckGo is kept on as
+ * a second general engine — it rate-limits to *zero* results, which the provider chain
+ * already handles, and its results corroborate or outrank Bing's junk.
+ *
+ * stackoverflow is promoted into `general` because dev queries are exactly the long-tail
+ * ones Bing decoys on. The rest of the `it` category stays out: mdn and docker hub are
+ * keyword matchers that dilute badly (e.g. "chokidar v4 watch options" -> MDN
+ * Geolocation.watchPosition).
+ *
+ * brave/startpage stay disabled — they rate-limit automated metasearch hard enough to
+ * return nothing useful, so they only cost latency.
  */
 export const SEARXNG_ENGINE_OVERRIDES_YAML = `
 engines:
   - name: bing
     disabled: false
-  - name: brave
-    disabled: true
   - name: duckduckgo
+    disabled: false
+  - name: stackoverflow
+    categories: [general, it, "q&a"]
+    disabled: false
+  - name: brave
     disabled: true
   - name: startpage
     disabled: true
 `;
 
+/** Matches the generated `secret_key: "<64 hex>"` line so it survives a rewrite. */
+const SECRET_KEY_RE = /secret_key:\s*"([0-9a-f]{64})"/;
+
+/**
+ * Reuse the secret key already in settings.yml.
+ *
+ * SearXNG derives its cache hash token from `server.secret_key`, so minting a new key on
+ * every launch made it truncate all cache tables on startup
+ * (`[DATA_CACHE] hash token changed`). Generate once, then keep.
+ * @returns {Promise<string>}
+ */
+async function readOrCreateSecretKey() {
+  try {
+    const existing = await fsp.readFile(getServerSettingsPath(SERVER_ID), 'utf8');
+    const match = SECRET_KEY_RE.exec(existing);
+    if (match) {
+      return match[1];
+    }
+  } catch {
+    /* first write */
+  }
+  return randomBytes(32).toString('hex');
+}
+
 /**
  * @param {number} port
  */
 export async function writeSearxngSettings(port) {
-  const secretKey = randomBytes(32).toString('hex');
+  const secretKey = await readOrCreateSecretKey();
   const yaml = `use_default_settings: true
 
 server:
@@ -351,6 +391,7 @@ server:
   public_instance: false
 
 search:
+  safe_search: 1
   formats:
     - html
     - json
