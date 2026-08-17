@@ -1971,3 +1971,91 @@ button.issues-detail__activity-chip {
   outline: 2px solid var(--mn-accent);
   outline-offset: -2px;
 }
+
+/* ── GitHub sync (Phase 5) ─────────────────────────────────────────────────
+ *
+ * `gh` CLI tone: terse and factual. A conflict is two plain columns and two
+ * buttons — never a resolution wizard, and never a silent winner.
+ */
+
+.issues-github__link {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--mn-accent);
+}
+
+.issues-github__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.issues-github__toggle input {
+  accent-color: var(--mn-accent);
+  margin: 0;
+}
+
+.issues-github__conflict {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--mn-warning);
+  border-radius: 4px;
+}
+
+.issues-github__conflict-head {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-github__conflict-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.issues-github__conflict-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.issues-github__conflict-label {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.issues-github__conflict-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.issues-github__conflict-body {
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+.issues-github__conflict-meta {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--mn-fg-muted);
+}

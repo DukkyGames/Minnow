@@ -1,9 +1,9 @@
 # Issues app v2
 
-Design brief plus the as-built record for Phases 0–4. Phase 5 is unbuilt.
+Design brief plus the as-built record for all six phases (0–5).
 
-The brief (§1–14) is the confirmed output of `/impeccable shape`. Section 15 records
-what Phase 0 landed; §16 Phase 1; §17 Phase 2; §18 Phase 3; §19 Phase 4. Read those before Phase 5 —
+The brief (§1–14) is the confirmed output of `/impeccable shape`. §15 records what
+Phase 0 landed, then §16–§20 for Phases 1–5. Read those first —
 some open questions are now closed and some of the brief's assumptions about the
 codebase turned out to be wrong.
 
@@ -187,7 +187,7 @@ Each phase ends shippable.
 | **2 — Capture and linking** ✅ | Menubar quick-issue popover (context-aware, drop target). Shell drag layer + rail icon target. "Create issue" / "Add to issue ▸" registered on target surfaces. Attachments. | **Done — see §17.** |
 | **3 — Editor** ✅ | WYSIWYG over constrained markdown, toolbar, slash commands, `#`/`@` mentions writing real refs, stateful checklists, paste intelligence, highlighted code blocks. | **Done — see §18.** |
 | **4 — Agent workflow** ✅ | `agent` slot; assign → single-task board group; worktree; Builder/Tester; PR and stop. `issue_*` notification kinds; OS notification when unfocused; rail dock badge. Pending `ask_question` surfaced on the issue. Improved agent tools (§10). | **Done — see §19.** |
-| **5 — GitHub** | `gh issue` ops in `forge-ops.js`. Settings mode Off / Link+push / Two-way mirror. Per-issue sync flag. Import, push, and mirror with explicit conflict resolution. | A GitHub issue chip is live, and mirror mode never silently loses an edit. |
+| **5 — GitHub** ✅ | `gh issue` ops in the forge layer. Settings mode Off / Link+push / Two-way mirror. Per-issue sync flag. Import, push, and mirror with explicit conflict resolution. | **Done — see §20.** |
 
 ## 12. Critical files
 
@@ -643,3 +643,90 @@ from them when Phase 5 wires `gh pr view` into the board completion path.
 - Every `issue_*` notification uses `appId: 'issues'`, so clicking a desktop toast launches
   Issues rather than the chat. Deep-linking to the specific issue needs a router option the
   notification path does not carry yet.
+
+---
+
+## 20. Phase 5 — as built
+
+`tsc` clean, `vite build` clean. Suites green: `--suite issues` 273/273 (was 254),
+`--suite a11y` 67/67. Live check on the worktree full stack: all three modes gate the peek
+panel correctly, the `/api/git` issue ops are routed, and the forge gate reports a
+non-GitHub workspace honestly.
+
+### 20.1 The guarantee, and where it lives
+
+**"Mirror mode never silently loses an edit" is a pure function.**
+`src/issues/github-sync-plan.ts` decides the action for one issue from timestamps and
+content alone — no clock, no network — so every branch is reachable from a test, and
+`test/issues/github-sync-plan.test.mts` walks all of them.
+
+The rule is one sentence: **an edit on both sides since the last watermark is a conflict
+the user resolves, never a race the last writer wins.** Two consequences worth keeping:
+
+- A newer remote does **not** win by being newer. Recency is not authority.
+- Content that differs while *neither* watermark moved is also a conflict, not a guess.
+  Something is diverging that the timestamps do not explain, and asking is the only answer
+  that cannot lose an edit.
+
+`IssueGithubLink.syncedAt` / `localUpdatedAt` / `remoteUpdatedAt` are that watermark.
+Storing only "is this synced" would make the question undecidable, which is why the flag
+and the link are separate fields.
+
+`src/state/issues-github.ts` carries plans out and contains no "who wins" branch by
+construction. If one ever appears there, it belongs in the planner.
+
+### 20.2 What landed
+
+- **`server/git/forge-issue-ops.js`** — `issueList`, `issueView`, `issueCreate`,
+  `issueEdit`, `issueState`, `issueComment`, routed through `/api/git`. Same choke point,
+  same `gh` auth, no stored tokens. `gh`, `requireForge`, `processError` and `parseJson`
+  are now exported from `forge-ops.js` so issues did not need a second copy.
+- **Settings → Issues → GitHub** with Off / Link + push / Two-way mirror, a plain-language
+  description of each, and an Import button.
+- **Per-issue sync flag** (`githubSync`), shown only in Link + push. In mirror mode the
+  mode *is* the opt-in, so a second switch would imply a distinction that does not exist.
+- **Import** files remote issues into the **Triage lane** (`source: 'github'`, no
+  `triagedAt`). This is exactly why Phase 1 keyed Triage off source rather than status: a
+  hundred imported issues must not silently become a hundred backlog items.
+- **Inline conflict resolution** — both versions side by side, two buttons, `gh`-CLI tone.
+
+### 20.3 Decisions worth keeping
+
+- **Absent, not disabled.** With the mode Off the peek panel renders no GitHub section at
+  all. Verified live across all three modes.
+- **A missing label does not fail the push.** `issueCreate` retries without labels and
+  reports `droppedLabels`, because losing an issue over a label that does not exist on the
+  remote is the wrong trade — and the toast says so rather than pretending they landed.
+- **A linked issue whose remote cannot be read is a no-op**, not a re-create. Silently
+  recreating it would duplicate the issue on the remote; that is the user's call.
+- **Link + push never pulls.** Local is the source of truth in that mode, so a remote edit
+  is overwritten on the next push. Stated plainly in the settings description rather than
+  discovered.
+- **Label order and whitespace are not changes.** `syncFieldsEqual` compares as sets and
+  trims, so a reordered label list does not manufacture a conflict.
+- **`github` is additive; the schema revision did not move.** Old readers preserve it
+  through `preserveUnknownKeys`. `version` is still **2**, `ISSUES_SCHEMA_VERSION` still
+  **3**. Do not raise `version`.
+
+### 20.4 Not verified end to end
+
+**No real `gh issue` round trip was executed.** Doing so would create issues on the user's
+actual GitHub repository, which is not something a verification pass should do uninvited.
+What was verified: the ops are routed, the forge gate refuses a non-GitHub workspace with a
+real reason, an unknown op is rejected, and the whole decision layer is covered by tests.
+
+Before calling this done, run once against a scratch repo: push a new issue, edit it on
+GitHub, sync, and confirm the conflict pane appears with both versions rather than either
+side being overwritten.
+
+### 20.5 Known gaps
+
+- `issueComment` exists on the server but nothing calls it. Mirroring the local comment
+  timeline to GitHub comments is the natural next step and was left out rather than
+  half-built.
+- Sync is manual (a button, or Import). There is no poller — a background sync loop that
+  can silently pull needs the conflict surface to be reachable from outside the peek panel
+  first.
+- `IssueAgentRun.prNumber` / `prUrl` are still written by nothing. Phase 4 left them for a
+  `gh pr view` on board completion; that wiring is the one piece connecting Phase 4's
+  handoff to Phase 5's forge layer.

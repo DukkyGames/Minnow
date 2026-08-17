@@ -1,0 +1,223 @@
+/**
+ * `gh issue` operations for /api/git.
+ *
+ * Same choke point and same rules as the pull-request layer in `forge-ops.js`:
+ * the user's own `gh` auth, no tokens in `~/.minnow`, and an honest gate when
+ * the remote is not GitHub or `gh` is missing.
+ *
+ * Nothing here decides *whether* to sync. That is the settings mode and the
+ * per-issue flag, both on the client. These are the primitives the mode drives.
+ *
+ * Phase 5 of `documentation/plans/issues-app-v2.md`.
+ */
+
+import { gh, parseJson, processError, requireForge } from './forge-ops.js';
+
+const ISSUE_FIELDS = [
+  'number',
+  'title',
+  'body',
+  'state',
+  'url',
+  'labels',
+  'assignees',
+  'createdAt',
+  'updatedAt',
+].join(',');
+
+/**
+ * Shape a `gh issue` record into the fields the Issues app models.
+ *
+ * `updatedAt` is parsed to epoch milliseconds here because the whole conflict
+ * story rests on comparing it with the local `updatedAt`, and doing that
+ * comparison against an ISO string somewhere downstream is how mirror modes
+ * silently pick the wrong winner.
+ *
+ * @param {any} raw
+ */
+export function normalizeForgeIssue(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const number = Number(raw.number);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return {
+    number,
+    title: String(raw.title ?? ''),
+    body: String(raw.body ?? ''),
+    state: String(raw.state ?? '').toLowerCase(),
+    url: String(raw.url ?? ''),
+    labels: Array.isArray(raw.labels)
+      ? raw.labels.map((l) => String(l?.name ?? l ?? '')).filter(Boolean)
+      : [],
+    assignees: Array.isArray(raw.assignees)
+      ? raw.assignees.map((a) => String(a?.login ?? a ?? '')).filter(Boolean)
+      : [],
+    createdAt: raw.createdAt ? Date.parse(raw.createdAt) || undefined : undefined,
+    updatedAt: raw.updatedAt ? Date.parse(raw.updatedAt) || undefined : undefined,
+  };
+}
+
+/**
+ * `gh issue create` prints the new issue's URL, not JSON.
+ * @param {string} stdout
+ */
+export function parseIssueCreateOutput(stdout) {
+  const url = String(stdout ?? '')
+    .trim()
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => /^https?:\/\//.test(line));
+  const match = url ? /\/issues\/(\d+)/.exec(url) : null;
+  return { url: url ?? '', number: match ? Number(match[1]) : undefined };
+}
+
+/** List issues on the remote. */
+export async function issueList({ cwd, state = 'open', limit = 100, labels } = {}) {
+  const gate = await requireForge(cwd);
+  if (!gate.ok) return gate;
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  const args = [
+    'issue',
+    'list',
+    '--state',
+    String(state),
+    '--limit',
+    String(safeLimit),
+    '--json',
+    ISSUE_FIELDS,
+  ];
+  if (typeof labels === 'string' && labels.trim()) {
+    args.push('--label', labels.trim());
+  }
+
+  const result = await gh(args, gate.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result, 'Could not list issues') };
+  }
+  const raw = parseJson(result.stdout, []);
+  const issues = (Array.isArray(raw) ? raw : []).map(normalizeForgeIssue).filter(Boolean);
+  return { ok: true, issues };
+}
+
+/** Read one remote issue. */
+export async function issueView({ cwd, number } = {}) {
+  const gate = await requireForge(cwd);
+  if (!gate.ok) return gate;
+
+  const num = Number(number);
+  if (!Number.isFinite(num) || num <= 0) {
+    return { ok: false, error: 'An issue number is required' };
+  }
+
+  const result = await gh(['issue', 'view', String(num), '--json', ISSUE_FIELDS], gate.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result, `Could not read issue #${num}`) };
+  }
+  const issue = normalizeForgeIssue(parseJson(result.stdout, null));
+  if (!issue) return { ok: false, error: `Issue #${num} could not be parsed` };
+  return { ok: true, issue };
+}
+
+/** Create a remote issue. Returns its number and URL for the local link. */
+export async function issueCreate({ cwd, title, body, labels } = {}) {
+  const gate = await requireForge(cwd);
+  if (!gate.ok) return gate;
+
+  const cleanTitle = String(title ?? '').trim();
+  if (!cleanTitle) return { ok: false, error: 'A title is required' };
+
+  const base = ['issue', 'create', '--title', cleanTitle, '--body', String(body ?? '')];
+  const args = [...base];
+  for (const label of Array.isArray(labels) ? labels : []) {
+    const name = String(label ?? '').trim();
+    if (name) args.push('--label', name);
+  }
+
+  const result = await gh(args, gate.cwd);
+  if (result.code === 0) {
+    return { ok: true, ...parseIssueCreateOutput(result.stdout) };
+  }
+
+  // A local label that does not exist on the remote is the most common failure
+  // here. Losing the whole push over a label is the wrong trade, so retry
+  // without them and say so rather than pretending the labels made it.
+  const usedLabels = args.length > base.length;
+  if (usedLabels && /label/i.test(String(result.stderr ?? ''))) {
+    const retry = await gh(base, gate.cwd);
+    if (retry.code === 0) {
+      return { ok: true, ...parseIssueCreateOutput(retry.stdout), droppedLabels: true };
+    }
+  }
+  return { ok: false, error: processError(result, 'Could not create the issue') };
+}
+
+/** Update a remote issue's title, body, or labels. */
+export async function issueEdit({ cwd, number, title, body, addLabels, removeLabels } = {}) {
+  const gate = await requireForge(cwd);
+  if (!gate.ok) return gate;
+
+  const num = Number(number);
+  if (!Number.isFinite(num) || num <= 0) {
+    return { ok: false, error: 'An issue number is required' };
+  }
+
+  const args = ['issue', 'edit', String(num)];
+  if (typeof title === 'string' && title.trim()) args.push('--title', title.trim());
+  if (typeof body === 'string') args.push('--body', body);
+  for (const label of Array.isArray(addLabels) ? addLabels : []) {
+    const name = String(label ?? '').trim();
+    if (name) args.push('--add-label', name);
+  }
+  for (const label of Array.isArray(removeLabels) ? removeLabels : []) {
+    const name = String(label ?? '').trim();
+    if (name) args.push('--remove-label', name);
+  }
+  if (args.length === 3) return { ok: false, error: 'Nothing to update' };
+
+  const result = await gh(args, gate.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result, `Could not update issue #${num}`) };
+  }
+  return { ok: true, number: num };
+}
+
+/** Close or reopen a remote issue. */
+export async function issueState({ cwd, number, state = 'closed', reason } = {}) {
+  const gate = await requireForge(cwd);
+  if (!gate.ok) return gate;
+
+  const num = Number(number);
+  if (!Number.isFinite(num) || num <= 0) {
+    return { ok: false, error: 'An issue number is required' };
+  }
+  const verb = String(state).toLowerCase() === 'open' ? 'reopen' : 'close';
+  const args = ['issue', verb, String(num)];
+  if (verb === 'close' && typeof reason === 'string' && reason.trim()) {
+    args.push('--reason', reason.trim());
+  }
+
+  const result = await gh(args, gate.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result, `Could not ${verb} issue #${num}`) };
+  }
+  return { ok: true, number: num, state: verb === 'close' ? 'closed' : 'open' };
+}
+
+/** Add a comment to a remote issue. */
+export async function issueComment({ cwd, number, body } = {}) {
+  const gate = await requireForge(cwd);
+  if (!gate.ok) return gate;
+
+  const num = Number(number);
+  if (!Number.isFinite(num) || num <= 0) {
+    return { ok: false, error: 'An issue number is required' };
+  }
+  const text = String(body ?? '').trim();
+  if (!text) return { ok: false, error: 'A comment body is required' };
+
+  const result = await gh(['issue', 'comment', String(num), '--body', text], gate.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result, `Could not comment on issue #${num}`) };
+  }
+  return { ok: true, number: num };
+}

@@ -1,0 +1,277 @@
+/**
+ * Sync planning — the "mirror mode never silently loses an edit" gate.
+ *
+ * Every branch is reachable here because the planner is pure: no clock, no
+ * network, only timestamps and content. The case that matters most is the one
+ * that must *refuse* to act.
+ */
+
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+
+import {
+  nextGithubLink,
+  normalizeGithubMode,
+  planIssueSync,
+  syncFieldsEqual,
+  type RemoteIssueSnapshot,
+} from '../../src/issues/github-sync-plan.ts';
+import type { IssueCard, IssueGithubLink } from '../../src/types.ts';
+
+const SYNCED_AT = 1_000;
+
+function issue(partial: Partial<IssueCard> = {}): IssueCard {
+  return {
+    id: 'MIN-1',
+    type: 'task',
+    title: 'Local title',
+    description: 'Local body',
+    status: 'todo',
+    priority: 'none',
+    labels: ['bug'],
+    workspacePath: '/w',
+    createdAt: 0,
+    updatedAt: SYNCED_AT,
+    githubSync: true,
+    ...partial,
+  } as IssueCard;
+}
+
+function link(partial: Partial<IssueGithubLink> = {}): IssueGithubLink {
+  return {
+    number: 7,
+    url: 'https://github.com/o/r/issues/7',
+    syncedAt: SYNCED_AT,
+    localUpdatedAt: SYNCED_AT,
+    remoteUpdatedAt: SYNCED_AT,
+    ...partial,
+  };
+}
+
+function remote(partial: Partial<RemoteIssueSnapshot> = {}): RemoteIssueSnapshot {
+  return {
+    number: 7,
+    title: 'Local title',
+    body: 'Local body',
+    state: 'open',
+    url: 'https://github.com/o/r/issues/7',
+    labels: ['bug'],
+    updatedAt: SYNCED_AT,
+    ...partial,
+  };
+}
+
+describe('mode gating', () => {
+  test('off never contacts anything', () => {
+    const action = planIssueSync({ mode: 'off', issue: issue(), isClosed: false, remote: null });
+    assert.equal(action.kind, 'noop');
+  });
+
+  test('link respects the per-issue opt-in', () => {
+    const action = planIssueSync({
+      mode: 'link',
+      issue: issue({ githubSync: false }),
+      isClosed: false,
+      remote: null,
+    });
+    assert.equal(action.kind, 'noop');
+    assert.match(action.kind === 'noop' ? action.reason : '', /not opted into sync/);
+  });
+
+  test('mirror ignores the per-issue flag — the mode is the opt-in', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ githubSync: false }),
+      isClosed: false,
+      remote: null,
+    });
+    assert.equal(action.kind, 'create');
+  });
+});
+
+describe('first push', () => {
+  test('an unlinked issue is created', () => {
+    assert.equal(
+      planIssueSync({ mode: 'link', issue: issue(), isClosed: false, remote: null }).kind,
+      'create',
+    );
+  });
+
+  test('a linked issue whose remote cannot be read does nothing', () => {
+    // Recreating it would duplicate the issue on the remote; that is the
+    // user's call, not a sync pass's.
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link() }),
+      isClosed: false,
+      remote: null,
+    });
+    assert.equal(action.kind, 'noop');
+    assert.match(action.kind === 'noop' ? action.reason : '', /#7 could not be read/);
+  });
+});
+
+describe('one-sided changes', () => {
+  test('a local edit pushes', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link(), title: 'Changed locally', updatedAt: SYNCED_AT + 10 }),
+      isClosed: false,
+      remote: remote(),
+    });
+    assert.equal(action.kind, 'push');
+    assert.equal(action.kind === 'push' ? action.fields.title : '', 'Changed locally');
+  });
+
+  test('a remote edit pulls in mirror mode', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link() }),
+      isClosed: false,
+      remote: remote({ title: 'Changed remotely', updatedAt: SYNCED_AT + 10 }),
+    });
+    assert.equal(action.kind, 'pull');
+    assert.equal(action.kind === 'pull' ? action.fields.title : '', 'Changed remotely');
+  });
+
+  test('a remote edit never overwrites local in link mode', () => {
+    // Local is the source of truth there; the remote gets pushed over.
+    const action = planIssueSync({
+      mode: 'link',
+      issue: issue({ github: link() }),
+      isClosed: false,
+      remote: remote({ title: 'Changed remotely', updatedAt: SYNCED_AT + 10 }),
+    });
+    assert.equal(action.kind, 'push');
+    assert.equal(action.kind === 'push' ? action.fields.title : '', 'Local title');
+  });
+
+  test('closing locally pushes the closed state', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link(), updatedAt: SYNCED_AT + 10 }),
+      isClosed: true,
+      remote: remote(),
+    });
+    assert.equal(action.kind === 'push' && action.fields.closed, true);
+  });
+});
+
+describe('conflicts', () => {
+  test('both sides edited is a conflict, not a last-writer-wins race', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link(), title: 'Mine', updatedAt: SYNCED_AT + 5 }),
+      isClosed: false,
+      remote: remote({ title: 'Theirs', updatedAt: SYNCED_AT + 9 }),
+    });
+    assert.equal(action.kind, 'conflict');
+    if (action.kind !== 'conflict') return;
+    assert.equal(action.local.title, 'Mine');
+    assert.equal(action.remote.title, 'Theirs');
+  });
+
+  test('a newer remote does not win a conflict just by being newer', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link(), title: 'Mine', updatedAt: SYNCED_AT + 1 }),
+      isClosed: false,
+      remote: remote({ title: 'Theirs', updatedAt: SYNCED_AT + 10_000 }),
+    });
+    assert.equal(action.kind, 'conflict');
+  });
+
+  test('content differing with no timestamp movement is a conflict, not a guess', () => {
+    // Something is diverging that the watermarks do not explain. Asking is the
+    // only answer that cannot lose an edit.
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link() }),
+      isClosed: false,
+      remote: remote({ title: 'Different', updatedAt: SYNCED_AT }),
+    });
+    assert.equal(action.kind, 'conflict');
+  });
+
+  test('a remote with no updatedAt is never treated as changed', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link(), title: 'Mine', updatedAt: SYNCED_AT + 5 }),
+      isClosed: false,
+      remote: remote({ updatedAt: undefined }),
+    });
+    assert.equal(action.kind, 'push');
+  });
+});
+
+describe('no-ops', () => {
+  test('identical content does nothing at all', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link() }),
+      isClosed: false,
+      remote: remote(),
+    });
+    assert.equal(action.kind, 'noop');
+    assert.match(action.kind === 'noop' ? action.reason : '', /Already in sync/);
+  });
+
+  test('label order and whitespace do not count as a change', () => {
+    const action = planIssueSync({
+      mode: 'mirror',
+      issue: issue({ github: link(), labels: ['bug', 'ui'], title: '  Local title  ' }),
+      isClosed: false,
+      remote: remote({ labels: ['ui', 'bug'] }),
+    });
+    assert.equal(action.kind, 'noop');
+  });
+});
+
+describe('syncFieldsEqual', () => {
+  const base = { title: 'a', body: 'b', closed: false, labels: ['x'] };
+  test('compares every synced field', () => {
+    assert.equal(syncFieldsEqual(base, { ...base }), true);
+    assert.equal(syncFieldsEqual(base, { ...base, title: 'z' }), false);
+    assert.equal(syncFieldsEqual(base, { ...base, body: 'z' }), false);
+    assert.equal(syncFieldsEqual(base, { ...base, closed: true }), false);
+    assert.equal(syncFieldsEqual(base, { ...base, labels: ['y'] }), false);
+    assert.equal(syncFieldsEqual(base, { ...base, labels: ['x', 'y'] }), false);
+  });
+});
+
+describe('watermark', () => {
+  test('records both sides so the next pass can tell what moved', () => {
+    const next = nextGithubLink({
+      number: 7,
+      url: 'u',
+      repo: 'o/r',
+      localUpdatedAt: 50,
+      remoteUpdatedAt: 60,
+      now: 100,
+    });
+    assert.deepEqual(next, {
+      number: 7,
+      url: 'u',
+      repo: 'o/r',
+      syncedAt: 100,
+      localUpdatedAt: 50,
+      remoteUpdatedAt: 60,
+    });
+  });
+
+  test('carries the repo forward when a later sync omits it', () => {
+    const previous = nextGithubLink({ number: 7, url: 'u', repo: 'o/r', localUpdatedAt: 1, now: 1 });
+    const next = nextGithubLink({ previous, number: 7, url: 'u', localUpdatedAt: 2, now: 2 });
+    assert.equal(next.repo, 'o/r');
+  });
+});
+
+describe('normalizeGithubMode', () => {
+  test('defaults to off for anything unrecognized', () => {
+    assert.equal(normalizeGithubMode('mirror'), 'mirror');
+    assert.equal(normalizeGithubMode('link'), 'link');
+    assert.equal(normalizeGithubMode('nonsense'), 'off');
+    assert.equal(normalizeGithubMode(undefined), 'off');
+    assert.equal(normalizeGithubMode(3), 'off');
+  });
+});

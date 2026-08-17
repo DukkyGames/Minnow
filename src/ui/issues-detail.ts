@@ -54,6 +54,7 @@ import { createCodeRefLinkButton } from './code-ref-link';
 import { createIssueEditor } from './issue-editor';
 import { collectInlineRefs } from '../issues/markdown-inline';
 import { renderIssueAttachments } from './issues-attachments-section';
+import { renderIssueGithubSection } from './issues-github-section';
 import { createIssuesLabelsField } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
@@ -479,6 +480,12 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   addRow.append(pasteInput, addBtn);
   codeSection.body.appendChild(addRow);
   scroll.appendChild(codeSection.section);
+
+  // GitHub — absent, not disabled, when the sync mode is off.
+  const githubSection = section('GitHub');
+  if (renderIssueGithubSection(githubSection.body, issue, () => refreshIssueDetailIfOpen())) {
+    scroll.appendChild(githubSection.section);
+  }
 
   // Attachments
   const attachmentsSection = section('Attachments');

@@ -51,6 +51,7 @@ import type {
   IssueComment,
   IssueCodeRef,
   IssueGitLink,
+  IssueGithubLink,
   IssueIssueRef,
   IssuePriority,
   IssueProject,
@@ -528,6 +529,45 @@ function applyIssueCardV3Fields(card: IssueCard, raw: Record<string, unknown>): 
   const activity = parseIssueActivity(raw.activity);
   if (activity) card.activity = activity;
   if (typeof raw.githubSync === 'boolean') card.githubSync = raw.githubSync;
+  const github = parseIssueGithubLink(raw.github);
+  if (github) card.github = github;
+}
+
+const NORMALIZED_GITHUB_KEYS: ReadonlySet<string> = new Set([
+  'number',
+  'url',
+  'repo',
+  'syncedAt',
+  'remoteUpdatedAt',
+  'localUpdatedAt',
+]);
+
+/**
+ * Parse the remote link and its sync watermark.
+ *
+ * A link with no usable number is dropped rather than half-kept: a link that
+ * cannot be resolved would make the planner treat the issue as "linked but
+ * unreadable" forever, which blocks it from ever being created remotely.
+ */
+function parseIssueGithubLink(raw: unknown): IssueGithubLink | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const number = Number(row.number);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  const out: IssueGithubLink = {
+    number: Math.floor(number),
+    url: typeof row.url === 'string' ? row.url : '',
+    syncedAt:
+      typeof row.syncedAt === 'number' && Number.isFinite(row.syncedAt) ? row.syncedAt : 0,
+  };
+  if (typeof row.repo === 'string' && row.repo.trim()) out.repo = row.repo.trim();
+  if (typeof row.remoteUpdatedAt === 'number' && Number.isFinite(row.remoteUpdatedAt)) {
+    out.remoteUpdatedAt = row.remoteUpdatedAt;
+  }
+  if (typeof row.localUpdatedAt === 'number' && Number.isFinite(row.localUpdatedAt)) {
+    out.localUpdatedAt = row.localUpdatedAt;
+  }
+  return preserveUnknownKeys(row, out, NORMALIZED_GITHUB_KEYS);
 }
 
 const NORMALIZED_COMMENT_KEYS: ReadonlySet<string> = new Set([
@@ -1238,6 +1278,8 @@ export type UpdateIssuePatch = {
   source?: IssueSource;
   /** Pass null to return the card to the unreviewed Triage lane. */
   triagedAt?: number | null;
+  /** Per-issue opt-in for GitHub sync while the mode is Link + push. */
+  githubSync?: boolean;
 };
 
 const ISSUE_RELATION_KINDS: readonly IssueRelationKind[] = [
@@ -1526,6 +1568,7 @@ export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard
     if (patch.triagedAt === null) delete issue.triagedAt;
     else issue.triagedAt = patch.triagedAt;
   }
+  if (patch.githubSync !== undefined) issue.githubSync = patch.githubSync;
   issue.updatedAt = nowMs;
   touchIssuesStore();
   return issue;

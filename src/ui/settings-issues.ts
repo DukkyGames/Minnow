@@ -38,7 +38,22 @@ import {
   PROJECT_KEY_VALIDATION_MESSAGE,
 } from '../issues/project-key';
 import { appendSettingsGroup } from './settings-layout';
-import { appendSettingsOfflineHint, createSettingsInputRow, createSettingsKvList } from './settings-controls';
+import {
+  ISSUES_GITHUB_MODE_LABELS,
+  ISSUES_GITHUB_MODES,
+  normalizeGithubMode,
+} from '../issues/github-sync-plan';
+import {
+  getIssuesGithubMode,
+  importGithubIssues,
+  setIssuesGithubMode,
+} from '../state/issues-github';
+import {
+  appendSettingsOfflineHint,
+  createSettingsInputRow,
+  createSettingsKvList,
+  createSettingsSelectRow,
+} from './settings-controls';
 import { createIcon } from './icon';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { setStatus } from './status';
@@ -626,8 +641,80 @@ export function renderIssuesSettingsSection(mount: HTMLElement): void {
 
     appendIssuesIntro(content);
     renderIssueIdsPanel(content, refresh);
+    renderIssuesGithubPanel(content, refresh);
     renderIssuesTaxonomyPanels(content, refresh);
   };
 
   refresh();
+}
+
+/**
+ * GitHub sync mode (Phase 5).
+ *
+ * Three modes and a deliberate default of Off. The middle mode exists because
+ * "sync everything" is the wrong first step for a solo developer with a public
+ * repo and a private scratch list — Link + push pushes only the issues you flag,
+ * and Two-way mirror is the explicit opt-in to letting the remote write back.
+ */
+function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void {
+  const body = appendSettingsGroup(
+    mount,
+    'GitHub',
+    'Sync issues with the GitHub repo for this workspace, through your own `gh` login. No tokens are stored.',
+    'apps.issues.github',
+  );
+
+  const hint = el('p', 'settings-field-hint');
+  const describeMode = (): void => {
+    const mode = getIssuesGithubMode();
+    hint.textContent =
+      mode === 'off'
+        ? 'Nothing is sent to or read from GitHub.'
+        : mode === 'link'
+          ? 'Issues you flag are pushed to GitHub. Your copy wins; a change made on GitHub is overwritten on the next push.'
+          : 'Issues sync both ways. When both sides changed, you are asked which to keep — neither is overwritten silently.';
+  };
+  describeMode();
+
+  const { row, select } = createSettingsSelectRow('Mode', {
+    searchKey: 'apps.issues.github.mode',
+    id: 'settingsIssuesGithubMode',
+    value: getIssuesGithubMode(),
+    options: ISSUES_GITHUB_MODES.map((mode) => ({
+      value: mode,
+      label: ISSUES_GITHUB_MODE_LABELS[mode],
+    })),
+  });
+  select.addEventListener('change', () => {
+    setIssuesGithubMode(normalizeGithubMode(select.value));
+    describeMode();
+    onChange();
+  });
+
+  body.appendChild(row);
+  body.appendChild(hint);
+
+  const importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.className = 'settings-btn';
+  importBtn.textContent = 'Import issues from GitHub';
+  importBtn.disabled = getIssuesGithubMode() === 'off';
+  importBtn.addEventListener('click', () => {
+    importBtn.disabled = true;
+    void importGithubIssues()
+      .then((result) => {
+        if (!result.ok) {
+          void appAlert(result.error ?? 'Could not import issues', 'GitHub');
+          return;
+        }
+        void appAlert(
+          `Imported ${result.imported}, skipped ${result.skipped} already linked. Imported issues wait in Triage.`,
+          'GitHub',
+        );
+      })
+      .finally(() => {
+        importBtn.disabled = getIssuesGithubMode() === 'off';
+      });
+  });
+  body.appendChild(importBtn);
 }

@@ -1013,6 +1013,29 @@ export interface IssueCard {
   triagedAt?: number;
   /** Opt this issue into GitHub sync while the mode is Link + push. */
   githubSync?: boolean;
+  /** Remote identity and the watermark conflict detection compares against. */
+  github?: IssueGithubLink;
+}
+
+/**
+ * The remote half of a synced issue.
+ *
+ * `syncedAt` is the watermark, and it is what makes mirror mode safe: an edit
+ * on either side after this timestamp is a change, and a change on *both*
+ * sides is a conflict the user resolves rather than a race the last writer
+ * wins. Storing only "is it synced" would make that undecidable.
+ */
+export interface IssueGithubLink {
+  number: number;
+  url: string;
+  /** `owner/repo` at the time of linking, so a moved remote is visible. */
+  repo?: string;
+  /** Local and remote were last known equal at this moment. */
+  syncedAt: number;
+  /** Remote `updatedAt` observed at the last sync. */
+  remoteUpdatedAt?: number;
+  /** Local `updatedAt` observed at the last sync. */
+  localUpdatedAt?: number;
 }
 
 /** Per-workspace project key + counter for KEY-n allocation. */
