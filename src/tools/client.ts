@@ -9,6 +9,7 @@ import { executeBoardTool } from './board-tools';
 import { executeTodoWrite } from './todo-tools';
 import { executeBugBoardTool } from './bug-board-tools';
 import { executeIssueTool } from './issue-tools';
+import { executeIssueV2Tool, isIssueV2Tool } from './issue-tools-v2';
 import { executeSubAgentTool } from './sub-agent-executor';
 import {
   ensureToolConfigReady,
@@ -396,6 +397,13 @@ async function executeToolInner(
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
     const text = await executeIssueTool(name, args);
+    return { content: text };
+  }
+
+  if (isIssueV2Tool(name)) {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = await executeIssueV2Tool(name, args);
     return { content: text };
   }
 

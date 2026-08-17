@@ -754,6 +754,38 @@
   color: var(--mn-accent);
 }
 
+/*
+ * Agent run state (Phase 4).
+ *
+ * Semantic colour stays confined to agent state per the Metric Color Rule:
+ * these are measurements of a run, not navigation chrome. "Waiting on you" is
+ * the strongest state in the app and the only one that also marks its row.
+ */
+
+.issues-row__agent.is-waiting {
+  color: var(--mn-warning);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.issues-row__agent.is-failed {
+  color: var(--mn-danger-ink, var(--mn-danger));
+  cursor: pointer;
+}
+
+.issues-row__agent.is-review {
+  color: var(--mn-success);
+}
+
+.issues-row__agent[role='button']:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.issues-row.is-agent-waiting {
+  background: color-mix(in oklch, var(--mn-warning) 8%, transparent);
+}
+
 .issues-row__rollup,
 .issues-row__counts {
   font-family: var(--font-mono, ui-monospace, monospace);

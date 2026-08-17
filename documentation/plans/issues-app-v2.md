@@ -1,9 +1,9 @@
 # Issues app v2
 
-Design brief plus the as-built record for Phases 0–3. Phases 4–5 are unbuilt.
+Design brief plus the as-built record for Phases 0–4. Phase 5 is unbuilt.
 
 The brief (§1–14) is the confirmed output of `/impeccable shape`. Section 15 records
-what Phase 0 landed; §16 Phase 1; §17 Phase 2; §18 Phase 3. Read those before Phase 4 —
+what Phase 0 landed; §16 Phase 1; §17 Phase 2; §18 Phase 3; §19 Phase 4. Read those before Phase 5 —
 some open questions are now closed and some of the brief's assumptions about the
 codebase turned out to be wrong.
 
@@ -186,7 +186,7 @@ Each phase ends shippable.
 | **1 — The list** ✅ | Grouping, ranking, inline property editing, keyboard model, multi-select bulk ops, saved views + filter chips, Triage lane, sub-issue hierarchy + rollups, projects, board reorder with drop indicators, container queries, peek widening. | **Done — see §16.** |
 | **2 — Capture and linking** ✅ | Menubar quick-issue popover (context-aware, drop target). Shell drag layer + rail icon target. "Create issue" / "Add to issue ▸" registered on target surfaces. Attachments. | **Done — see §17.** |
 | **3 — Editor** ✅ | WYSIWYG over constrained markdown, toolbar, slash commands, `#`/`@` mentions writing real refs, stateful checklists, paste intelligence, highlighted code blocks. | **Done — see §18.** |
-| **4 — Agent workflow** | `agent` slot; assign → single-task board group; worktree; Builder/Tester; PR and stop. `issue_*` notification kinds; OS notification when unfocused; rail dock badge. Pending `ask_question` surfaced on the issue. Improved agent tools (§10). | Assign → walk away → get pinged → review a PR. Complete round trip, no Orchestrator visit. |
+| **4 — Agent workflow** ✅ | `agent` slot; assign → single-task board group; worktree; Builder/Tester; PR and stop. `issue_*` notification kinds; OS notification when unfocused; rail dock badge. Pending `ask_question` surfaced on the issue. Improved agent tools (§10). | **Done — see §19.** |
 | **5 — GitHub** | `gh issue` ops in `forge-ops.js`. Settings mode Off / Link+push / Two-way mirror. Per-issue sync flag. Import, push, and mirror with explicit conflict resolution. | A GitHub issue chip is live, and mirror mode never silently loses an edit. |
 
 ## 12. Critical files
@@ -220,11 +220,11 @@ Per phase, plus these epic-wide gates:
 
 ## 14. Open questions
 
-1. **Board coupling boundary.** A single-task board group per issue is the runtime, but the board store keeps a 100-entry log cap and assumes a planner chat. Does each issue get its own group, or do all agent-assigned issues share one long-lived "Issues" group? Shared is cheaper; per-issue is cleaner to cancel and clean up. **Still open — Phase 4.**
+1. **Board coupling boundary.** A single-task board group per issue is the runtime, but the board store keeps a 100-entry log cap and assumes a planner chat. Does each issue get its own group, or do all agent-assigned issues share one long-lived "Issues" group? Shared is cheaper; per-issue is cleaner to cancel and clean up. **Closed in Phase 4 — per-issue. See §19.1.**
 2. **Projects vs. Orchestrator boards.** **Closed in Phase 1 — see §15.9 / §16.** They stay deliberately separate: `IssueProject` groups, filters, and rollups inside Issues only. No Orchestrator board coupling.
 3. **`state.json` at scale.** **Closed in Phase 0 — see §15.**
 4. **Palette ownership.** **Closed in Phase 0 — see §15.**
-5. **OS notification permission and packaging.** Native notifications on Windows need an `appUserModelId`; confirm this doesn't disturb the frozen `build.appId`. **Still open — Phase 4.** Note `build.appId` is frozen and must not change.
+5. **OS notification permission and packaging.** Native notifications on Windows need an `appUserModelId`. **Closed in Phase 4 — nothing to change. See §19.1.** `build.appId` stays frozen.
 
 ---
 
@@ -549,3 +549,97 @@ nothing else, with the front matter, HTML block, indented code and footnote byte
   will write the stale document back.
 - `taskProgress()` parses the whole description on every row render. Fine at Phase 1's
   scale; if the list is ever virtualized, memoize it per `updatedAt`.
+
+---
+
+## 19. Phase 4 — as built
+
+`tsc` clean, `vite build` clean. Suites green: `--suite issues` 254/254 (was 208),
+`--suite a11y` 67/67, `test/tools/*` 287/287. Live check on the worktree full stack across
+all four agent row states plus the dock badge draining.
+
+### 19.1 Open questions closed
+
+**§14.1 board coupling — one board group per issue, not a shared one.** Board groups are
+already keyed by plan path, and the plan path is already per-issue
+(`documentation/plans/issues/<ID>.md`), so per-issue groups fall out of the existing design
+rather than being imposed on it. It also makes cancel a single group teardown and keeps
+each issue clear of the board's 100-entry log cap, which one shared "Issues" group would
+burn through in a week.
+
+**§14.5 OS notification packaging — nothing to change.** `electron/main.ts` already calls
+`app.setAppUserModelId('org.grimmedia.minnow')`, matching the frozen `build.appId`. The
+renderer's Web `Notification` API is routed to the OS by Electron under that identity, so
+`os-notification.ts` needs no new IPC and the packaged identity is untouched.
+
+### 19.2 What landed
+
+- **Dispatch (`agent-dispatch.ts`).** `A` on a focused issue writes a one-task plan from the
+  issue, hands it to `launchBoardFromPlan`, and records the resulting group on the `agent`
+  slot. The Orchestrator is the runtime, exactly as locked — Issues writes a plan and then
+  only ever *reads* the board back. An existing `planPath` is reused, never overwritten, so
+  assign cannot destroy real planning work.
+- **Read-back (`agent-watch.ts`).** `subscribeAllBoardChanges` translates board state into
+  the five things Issues is allowed to show. `stepLabelForTask` deliberately renames board
+  vocabulary (`in_progress` → "Building", `merging` → "Merging") so board internals never
+  leak into the list.
+- **Agent slot lifecycle in the store.** `startIssueAgentRun` / `updateIssueAgentRun` /
+  `clearIssueAgentRun`, plus `addIssueComment`, `deleteIssueComment` and
+  `appendIssueActivity`. `comments` and `activity` are now *parsed*, which is what makes
+  §16.4's trap safe to retire — they are in `NORMALIZED_ISSUE_CARD_KEYS` now.
+- **Notifications.** Five `issue_*` kinds, grouped under `tasks` (agent work) and
+  `background` (triage arrivals) so they inherit the existing switches instead of becoming
+  a channel the user has to mute separately. `PushNotificationInput.os` opts a push into a
+  desktop toast; only question / PR / failure set it.
+- **Rail dock badge.** `computeIssuesDockBadge` counts unreviewed Triage **and** agents
+  waiting on you — and deliberately *not* running agents, because a badge that never falls
+  while work is in flight teaches the user to stop reading it.
+- **Pending `ask_question` on the issue.** `ask-question-queue.ts` marks the matching issue
+  `awaiting_input` when a question is shown and clears it on answer. The row paints a
+  distinct state and the agent cell becomes a button that opens the chat, so answering
+  never means hunting for it.
+- **Agent tools.** `issue_search` (query + field selection + paging + attachment paths),
+  `issue_comment`, `issue_assign`, `issue_unlink`, `issue_move`, and `parent_id` /
+  `project_id` on `issue_add`.
+
+### 19.3 Decisions worth keeping
+
+- **A terminal phase clears `step` and `pendingQuestionId`.** A stale "Running tests" chip
+  next to a failure is worse than no chip.
+- **`issue_assign` queues; it does not start a run.** Spinning a worktree and a board is a
+  side effect a tool call should not have. The UI's dispatch path owns that.
+- **`issue_search` rejects an unknown field** rather than ignoring it, so an agent finds out
+  it asked for something that does not exist instead of silently getting less.
+- **`issue_unlink` removes the inverse relation too.** Relations are bidirectional; removing
+  one side only would leave the target pointing at a link that no longer exists.
+- **Dispatch is idempotent against a live run.** Re-pressing `A` on a running issue is a
+  mis-click, and a second worktree for the same card is expensive to undo.
+- **The dock badge subscribes synchronously.** The first cut awaited the store before
+  subscribing, and the rail rebuilds on the first app-preferences change — so the binding
+  created at mount was disposed before its import settled and the surviving badge had no
+  listener. Caught in live verify; the store now resolves lazily *inside* the listener.
+- **`syncRailButtons` preserves `data-badge-label`.** It runs on every instance change and
+  would otherwise erase the badge detail from the tile's accessible name.
+
+### 19.4 Not verified end to end
+
+The full loop — worktree created, branch named, tests run, PR opened via `gh`, issue in
+Review — **was not executed in this environment.** It needs a live model, a repo with a
+remote, and an authenticated `gh`. What was verified: the plan the dispatch writes, the
+board→phase translation, every row state, the notification kinds, the dock badge draining,
+and the `ask_question` hook. §13's Phase 4 gate should be run once against a real repo
+before this is called done.
+
+`prNumber` / `prUrl` on `IssueAgentRun` are written by nothing yet — the PR chip renders
+from them when Phase 5 wires `gh pr view` into the board completion path.
+
+### 19.5 Traps for Phase 5
+
+- Do not raise `version` above 2. Bump `ISSUES_SCHEMA_VERSION`. Still true.
+- `githubSync` is parsed and preserved but nothing sets it. It is the per-issue opt-in flag
+  for Link + push mode.
+- `agent-watch.ts` matches issues by `agent.boardGroupId` **or** `boardChatId`. The second
+  is the pre-Phase-4 link, kept so a board started by "Send to board" still reports.
+- Every `issue_*` notification uses `appId: 'issues'`, so clicking a desktop toast launches
+  Issues rather than the chat. Deep-linking to the specific issue needs a router option the
+  notification path does not carry yet.

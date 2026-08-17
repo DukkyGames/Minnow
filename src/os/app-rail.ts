@@ -17,6 +17,12 @@ import {
   dataTransferLooksCapturable,
   subscribeCaptureDrag,
 } from '../ui/capture-drag';
+import {
+  computeIssuesDockBadge,
+  issuesDockBadgeLabel,
+  issuesDockBadgeText,
+} from '../issues/dock-badge';
+import { subscribeIssuesChanges } from '../state/issues-events';
 import { isCoarsePointer } from '../ui/mobile-layout';
 import { isResearchPanelOpen, subscribeResearchPanel } from '../ui/research-panel';
 import { launchApp } from './router';
@@ -219,9 +225,60 @@ function buildRailButton(
   if (appId === 'issues') {
     btn.classList.add('mn-capture-target');
     disposers.push(bindRailCaptureDrop(btn));
+    disposers.push(bindIssuesDockBadge(btn, label));
   }
   return btn;
 }
+
+/**
+ * Badge the Issues tile with its two draining queues.
+ *
+ * Loaded lazily and failing silently: the rail mounts before the issues store
+ * does, and a rail that throws is a shell with no navigation.
+ */
+function bindIssuesDockBadge(btn: HTMLButtonElement, appLabel: string): () => void {
+  const badge = document.createElement('span');
+  badge.className = 'mn-os-app-rail__badge';
+  badge.hidden = true;
+  btn.appendChild(badge);
+
+  // The subscription is established synchronously and the *store* is resolved
+  // lazily inside it. Awaiting the store first looked tidier and was wrong: the
+  // rail rebuilds on the first app-preferences change, so a binding created at
+  // mount is often disposed before its import settles, and the badge that
+  // survives ends up with no listener at all.
+  const sync = (): void => {
+    const state = computeIssuesDockBadge(issuesStore?.listIssues() ?? []);
+    const text = issuesDockBadgeText(state);
+    badge.hidden = text === '';
+    badge.textContent = text;
+    badge.classList.toggle('is-urgent', state.urgent);
+    const detail = issuesDockBadgeLabel(state);
+    badge.title = detail;
+    btn.dataset.badgeLabel = detail;
+    btn.setAttribute('aria-label', detail ? `${appLabel} — ${detail}` : appLabel);
+  };
+
+  sync();
+  const unsubscribe = subscribeIssuesChanges(sync);
+
+  void import('../state/issues-store')
+    .then((module) => {
+      issuesStore = module;
+      sync();
+    })
+    .catch(() => {
+      /* No badge is a better failure than no rail. */
+    });
+
+  return () => {
+    unsubscribe();
+    badge.remove();
+  };
+}
+
+/** Resolved once, shared by every rebuild of the tile. */
+let issuesStore: typeof import('../state/issues-store') | null = null;
 
 function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
   for (const [appId, btn] of tileByAppId) {
@@ -233,7 +290,10 @@ function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
     btn.setAttribute('aria-current', active ? 'page' : hosting ? 'true' : 'false');
     btn.removeAttribute('aria-expanded');
     const label = getAppById(appId)?.name;
-    if (label) btn.setAttribute('aria-label', label);
+    // Keep a badge's detail ("2 issues to triage") in the accessible name;
+    // this runs on every instance change and would otherwise erase it.
+    const badgeLabel = btn.dataset.badgeLabel;
+    if (label) btn.setAttribute('aria-label', badgeLabel ? `${label} — ${badgeLabel}` : label);
   }
   refreshRailTooltip();
 }

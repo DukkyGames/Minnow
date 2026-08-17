@@ -514,6 +514,11 @@ async function startApp(): Promise<void> {
   initIssueCaptureMenus();
   initCaptureSurfaceMenus();
   wireCaptureAccessors();
+  // Board → issue agent slot. Subscribed at boot so a run started in an
+  // earlier session keeps reporting after a reload, not only while Issues
+  // happens to be open.
+  const { initIssueAgentWatcher } = await import('./chat/issues/agent-watch');
+  initIssueAgentWatcher();
   installScopedSelectAllHandler();
   if (isOsShellEnabled()) {
     initOsPageBridge();

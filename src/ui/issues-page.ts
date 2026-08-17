@@ -1234,16 +1234,34 @@ function buildIssueRow(
   project.textContent = projectName;
   bindCellMenu(project, (anchor) => openProjectMenu(anchor, issue));
 
+  // The agent cell is live state read from the board, not a guess derived from
+  // status. "Waiting on you" is the strongest state in the app, so it is the
+  // only one that gets its own treatment and its own click target.
   const agent = document.createElement('span');
   agent.className = 'issues-row__agent';
   const agentText = agentLabel(issue);
   if (agentText) {
-    agent.textContent = agentText;
-    if (issue.agent?.phase === 'running') agent.classList.add('is-running');
+    agent.textContent = issue.agent?.step ?? agentText;
+    agent.title = issue.agent?.error ?? agentText;
+    const phase = issue.agent?.phase;
+    if (phase === 'running') agent.classList.add('is-running');
+    else if (phase === 'awaiting_input') agent.classList.add('is-waiting');
+    else if (phase === 'failed') agent.classList.add('is-failed');
+    else if (phase === 'review') agent.classList.add('is-review');
     else agent.classList.add('is-queued');
+
+    if (phase === 'awaiting_input' || phase === 'failed') {
+      agent.setAttribute('role', 'button');
+      agent.tabIndex = 0;
+      agent.addEventListener('click', (event) => {
+        event.stopPropagation();
+        void openIssueAgentChat(issue.id);
+      });
+    }
   } else {
     agent.textContent = '—';
   }
+  row.classList.toggle('is-agent-waiting', issue.agent?.phase === 'awaiting_input');
 
   // Sub-issue progress wins the column; a checklist rollup fills it for a card
   // that has no children, so one glance answers "how far along is this" either
@@ -2109,11 +2127,51 @@ function declineFocusedTriage(): void {
   renderIssuesPanel();
 }
 
-function queueFocusedAgent(): void {
+/**
+ * `A` on the focused issue: the whole dispatch loop in one keystroke.
+ *
+ * Phase 1 only filled the slot with `{ phase: 'queued' }` because the runtime
+ * did not exist yet. It does now, so `A` starts it: plan, board, worktree,
+ * Builder/Tester, PR. An agent already working the issue is left alone rather
+ * than spawning a second worktree for the same card.
+ */
+function dispatchFocusedAgent(): void {
   const issue = focusedIssue();
   if (!issue) return;
+
+  if (issue.agent?.phase === 'awaiting_input') {
+    void openIssueAgentChat(issue.id);
+    return;
+  }
+
+  // Fill the slot immediately so the row shows something in the same frame;
+  // the dispatch replaces it with a live run a moment later.
   queueIssueAgent(issue.id);
   renderIssuesPanel();
+
+  void import('../chat/issues/agent-dispatch').then(async (m) => {
+    const result = await m.dispatchIssueToAgent(issue.id);
+    if (!result.ok && result.error) {
+      void import('./toast').then((t) => t.showToast(result.error!, 'error'));
+    }
+    renderIssuesPanel();
+  });
+}
+
+/**
+ * Answer an agent's question from the row.
+ *
+ * §8 asks for this explicitly: when an agent is blocked, answering must be
+ * reachable without hunting for the chat it happens to be running in.
+ */
+async function openIssueAgentChat(issueId: string): Promise<void> {
+  const issue = findIssueById(issueId);
+  const chatId = issue?.agent?.chatId ?? issue?.boardChatId;
+  if (!chatId) return;
+  const { launchApp } = await import('../os/router');
+  launchApp('code', { codeSection: 'chat', workspacePath: issue?.workspacePath });
+  const { switchChat } = await import('./sidebar');
+  switchChat(chatId);
 }
 
 /**
@@ -2121,7 +2179,7 @@ function queueFocusedAgent(): void {
  * j/k or arrows — move selection
  * Enter — peek; Escape — close peek / clear multi-select
  * s status, p priority, u assignee, l labels, g project
- * A — queue agent (slot only)
+ * A — assign an agent (plan, board, worktree, PR); answer it when it is waiting
  * Y — accept triage (backlog + triagedAt)
  * N or Backspace — decline triage when the focused card is unreviewed
  * C — new issue
@@ -2199,7 +2257,7 @@ function onIssuesKeydown(event: KeyboardEvent): void {
   }
   if (event.key === 'A' || (event.key === 'a' && event.shiftKey)) {
     event.preventDefault();
-    queueFocusedAgent();
+    dispatchFocusedAgent();
     return;
   }
   if (event.key === 'Y' || event.key === 'y') {
@@ -2254,7 +2312,7 @@ function bindIssuesCommands(): void {
         },
         acceptTriage: acceptFocusedTriage,
         declineTriage: declineFocusedTriage,
-        queueAgent: queueFocusedAgent,
+        queueAgent: dispatchFocusedAgent,
         listUserViews: () =>
           listIssueViews()
             .filter((view) => !view.builtIn)

@@ -32,6 +32,7 @@ import { validateParentLink } from '../issues/hierarchy.ts';
 import { builtInIssueViews, LOCAL_ASSIGNEE_ID } from '../issues/saved-views.ts';
 import { isUnreviewedTriageIssue } from '../issues/triage.ts';
 import {
+  ISSUE_ACTIVITY_CAP,
   ISSUES_COMPAT_VERSION,
   ISSUES_SCHEMA_VERSION,
   issuesSchemaRevisionOf,
@@ -43,9 +44,11 @@ import type {
   Chat,
   IssueAgentPhase,
   IssueAgentRun,
+  IssueActivityEntry,
   IssueAssignee,
   IssueAttachment,
   IssueCard,
+  IssueComment,
   IssueCodeRef,
   IssueGitLink,
   IssueIssueRef,
@@ -370,6 +373,10 @@ const NORMALIZED_ISSUE_CARD_KEYS: ReadonlySet<string> = new Set([
   'triagedAt',
   // Phase 2: parsed by parseIssueAttachments, so safe to normalize.
   'attachments',
+  // Phase 4: parsed by parseIssueComments / parseIssueActivity.
+  'comments',
+  'activity',
+  'githubSync',
 ]);
 
 /** Top-level state keys this revision normalizes (see above). */
@@ -516,6 +523,100 @@ function applyIssueCardV3Fields(card: IssueCard, raw: Record<string, unknown>): 
   }
   const attachments = parseIssueAttachments(raw.attachments);
   if (attachments) card.attachments = attachments;
+  const comments = parseIssueComments(raw.comments);
+  if (comments) card.comments = comments;
+  const activity = parseIssueActivity(raw.activity);
+  if (activity) card.activity = activity;
+  if (typeof raw.githubSync === 'boolean') card.githubSync = raw.githubSync;
+}
+
+const NORMALIZED_COMMENT_KEYS: ReadonlySet<string> = new Set([
+  'id',
+  'authorKind',
+  'author',
+  'body',
+  'createdAt',
+  'editedAt',
+]);
+
+const AUTHOR_KINDS = new Set(['user', 'agent', 'system']);
+
+function parseIssueComment(raw: unknown): IssueComment | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const body = typeof row.body === 'string' ? row.body : '';
+  if (!id || !body.trim()) return null;
+  const authorKind =
+    typeof row.authorKind === 'string' && AUTHOR_KINDS.has(row.authorKind)
+      ? (row.authorKind as IssueComment['authorKind'])
+      : 'user';
+  const out: IssueComment = {
+    id,
+    authorKind,
+    body,
+    createdAt:
+      typeof row.createdAt === 'number' && Number.isFinite(row.createdAt)
+        ? row.createdAt
+        : issuesNowMs(),
+  };
+  if (typeof row.author === 'string' && row.author.trim()) out.author = row.author.trim();
+  if (typeof row.editedAt === 'number' && Number.isFinite(row.editedAt)) {
+    out.editedAt = row.editedAt;
+  }
+  return preserveUnknownKeys(row, out, NORMALIZED_COMMENT_KEYS);
+}
+
+function parseIssueComments(raw: unknown): IssueComment[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: IssueComment[] = [];
+  for (const item of raw) {
+    const comment = parseIssueComment(item);
+    if (comment) out.push(comment);
+  }
+  return out;
+}
+
+const NORMALIZED_ACTIVITY_KEYS: ReadonlySet<string> = new Set([
+  'id',
+  'kind',
+  'at',
+  'actorKind',
+  'actor',
+  'data',
+]);
+
+function parseIssueActivityEntry(raw: unknown): IssueActivityEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.trim() : '';
+  const kind = typeof row.kind === 'string' ? row.kind.trim() : '';
+  if (!id || !kind) return null;
+  const out: IssueActivityEntry = {
+    id,
+    kind,
+    at: typeof row.at === 'number' && Number.isFinite(row.at) ? row.at : issuesNowMs(),
+  };
+  if (typeof row.actorKind === 'string' && AUTHOR_KINDS.has(row.actorKind)) {
+    out.actorKind = row.actorKind as IssueActivityEntry['actorKind'];
+  }
+  if (typeof row.actor === 'string' && row.actor.trim()) out.actor = row.actor.trim();
+  if (row.data && typeof row.data === 'object' && !Array.isArray(row.data)) {
+    out.data = row.data as IssueActivityEntry['data'];
+  }
+  return preserveUnknownKeys(row, out, NORMALIZED_ACTIVITY_KEYS);
+}
+
+function parseIssueActivity(raw: unknown): IssueActivityEntry[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: IssueActivityEntry[] = [];
+  for (const item of raw) {
+    const entry = parseIssueActivityEntry(item);
+    if (entry) out.push(entry);
+  }
+  // Trim on read as well as on write: a file from a client with a larger cap
+  // must not grow this one's blob without bound.
+  return out.slice(-ISSUE_ACTIVITY_CAP);
 }
 
 /** Keys of {@link IssueAttachment} this revision models. */
@@ -1700,6 +1801,181 @@ export function removeIssueAttachment(issueId: string, attachmentId: string): bo
   issue.updatedAt = issuesNowMs();
   touchIssuesStore();
   return true;
+}
+
+/* ── Comments, activity, and the agent slot (Phase 4) ────────────────────── */
+
+function newIssueSubId(prefix: string): string {
+  return `${prefix}-${issuesNowMs().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/**
+ * Append to the comment timeline.
+ *
+ * Append-only by design: `notes` was a single overwritable string, and an agent
+ * reporting progress by clobbering the user's last note is exactly the failure
+ * §10 calls out.
+ */
+export function addIssueComment(
+  issueId: string,
+  input: { body: string; authorKind?: IssueComment['authorKind']; author?: string },
+): IssueComment | null {
+  const issue = findIssueById(issueId);
+  if (!issue) return null;
+  const body = input.body.trim();
+  if (!body) return null;
+
+  const comment: IssueComment = {
+    id: newIssueSubId('cmt'),
+    authorKind: input.authorKind ?? 'user',
+    body,
+    createdAt: issuesNowMs(),
+  };
+  if (input.author?.trim()) comment.author = input.author.trim();
+
+  issue.comments = [...(issue.comments ?? []), comment];
+  issue.updatedAt = comment.createdAt;
+  touchIssuesStore();
+  return comment;
+}
+
+/** Remove a comment by id. */
+export function deleteIssueComment(issueId: string, commentId: string): boolean {
+  const issue = findIssueById(issueId);
+  if (!issue?.comments?.length) return false;
+  const next = issue.comments.filter((c) => c.id !== commentId);
+  if (next.length === issue.comments.length) return false;
+  issue.comments = next;
+  issue.updatedAt = issuesNowMs();
+  touchIssuesStore();
+  return true;
+}
+
+/**
+ * Append one activity entry, capped at {@link ISSUE_ACTIVITY_CAP}.
+ *
+ * The cap is what lets activity live in the single debounced state file rather
+ * than a second append-only file with its own write path — the shape that broke
+ * MIN-354 v1. Oldest entries drop first.
+ */
+export function appendIssueActivity(
+  issueId: string,
+  entry: Omit<IssueActivityEntry, 'id' | 'at'> & { id?: string; at?: number },
+): IssueActivityEntry | null {
+  const issue = findIssueById(issueId);
+  if (!issue) return null;
+
+  const record: IssueActivityEntry = {
+    id: entry.id ?? newIssueSubId('act'),
+    kind: entry.kind,
+    at: entry.at ?? issuesNowMs(),
+  };
+  if (entry.actorKind) record.actorKind = entry.actorKind;
+  if (entry.actor) record.actor = entry.actor;
+  if (entry.data) record.data = entry.data;
+
+  const next = [...(issue.activity ?? []), record];
+  issue.activity = next.slice(-ISSUE_ACTIVITY_CAP);
+  issue.updatedAt = record.at;
+  touchIssuesStore();
+  return record;
+}
+
+/** Start (or restart) the agent slot on an issue. */
+export function startIssueAgentRun(
+  issueId: string,
+  input: { agentId?: string; step?: string } & Partial<
+    Pick<IssueAgentRun, 'boardGroupId' | 'boardTaskId' | 'chatId' | 'worktreePath' | 'branch'>
+  >,
+): IssueAgentRun | null {
+  const issue = findIssueById(issueId);
+  if (!issue) return null;
+  const nowMs = issuesNowMs();
+
+  const run: IssueAgentRun = {
+    agentId: input.agentId?.trim() || issue.agent?.agentId || 'builder',
+    phase: 'running',
+    startedAt: nowMs,
+    updatedAt: nowMs,
+  };
+  if (input.step) run.step = input.step;
+  if (input.boardGroupId) run.boardGroupId = input.boardGroupId;
+  if (input.boardTaskId) run.boardTaskId = input.boardTaskId;
+  if (input.chatId) run.chatId = input.chatId;
+  if (input.worktreePath) run.worktreePath = input.worktreePath;
+  if (input.branch) run.branch = input.branch;
+
+  issue.agent = run;
+  issue.updatedAt = nowMs;
+  touchIssuesStore();
+  appendIssueActivity(issueId, {
+    kind: 'agent_started',
+    actorKind: 'agent',
+    actor: run.agentId,
+  });
+  return run;
+}
+
+/**
+ * Patch the agent slot.
+ *
+ * Setting a terminal phase clears `step` and `pendingQuestionId`: a run that has
+ * failed or opened its PR is no longer doing anything, and a stale "Running
+ * tests" chip next to a failure is worse than no chip.
+ */
+export function updateIssueAgentRun(
+  issueId: string,
+  patch: Partial<IssueAgentRun>,
+): IssueAgentRun | null {
+  const issue = findIssueById(issueId);
+  if (!issue?.agent) return null;
+
+  const nowMs = issuesNowMs();
+  const next: IssueAgentRun = { ...issue.agent, ...patch, updatedAt: nowMs };
+  if (patch.phase && TERMINAL_AGENT_PHASES.has(patch.phase)) {
+    if (patch.step === undefined) delete next.step;
+    if (patch.pendingQuestionId === undefined) delete next.pendingQuestionId;
+  }
+  issue.agent = next;
+  issue.updatedAt = nowMs;
+  touchIssuesStore();
+
+  if (patch.phase && patch.phase !== issue.agent.phase) {
+    appendIssueActivity(issueId, {
+      kind: `agent_${patch.phase}`,
+      actorKind: 'agent',
+      actor: next.agentId,
+    });
+  }
+  return next;
+}
+
+const TERMINAL_AGENT_PHASES: ReadonlySet<IssueAgentPhase> = new Set<IssueAgentPhase>([
+  'review',
+  'failed',
+  'canceled',
+  'done',
+]);
+
+/** True when the agent slot is doing something the user should see live. */
+export function isIssueAgentActive(issue: IssueCard): boolean {
+  const phase = issue.agent?.phase;
+  return phase === 'queued' || phase === 'running' || phase === 'awaiting_input';
+}
+
+/** Drop the agent slot entirely (unassign). */
+export function clearIssueAgentRun(issueId: string): boolean {
+  const issue = findIssueById(issueId);
+  if (!issue?.agent) return false;
+  delete issue.agent;
+  issue.updatedAt = issuesNowMs();
+  touchIssuesStore();
+  return true;
+}
+
+/** Issues with an agent currently queued, running, or waiting on the user. */
+export function listIssuesWithActiveAgents(): IssueCard[] {
+  return requireIssuesState().issues.filter(isIssueAgentActive);
 }
 
 /** Accept an unreviewed auto-filed issue: backlog-role status + triagedAt now. */

@@ -58,6 +58,11 @@ export const NOTIFICATION_KIND_TO_CUE: Record<NotificationKind, NotificationSoun
   scheduler: 'turn_complete',
   research: 'turn_complete',
   synthesis: 'turn_complete',
+  issue_agent_started: 'tool_turn',
+  issue_agent_question: 'question',
+  issue_agent_pr: 'turn_complete',
+  issue_agent_failed: 'tool_turn',
+  issue_triage: 'tool_turn',
 };
 
 /** Resolve a pack by id. */

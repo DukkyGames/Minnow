@@ -5,6 +5,7 @@
 import { randomUUID } from '../lib/random-id.ts';
 import { noteAgentMessage } from '../os/instances';
 import { shouldNotifyForChatTurn } from './background';
+import { notifyOs } from './os-notification';
 import { isNotificationKindEnabled, loadNotificationPrefs } from './prefs';
 import { playNotificationSound, shouldPlayNotificationSound } from './sound';
 import {
@@ -74,6 +75,20 @@ export function pushNotification(input: PushNotificationInput): NotificationReco
 
   if (shouldPlayNotificationSound(input.kind, input.chatId)) {
     playNotificationSound(input.kind);
+  }
+
+  // Prefs already gated this above, so a desktop toast inherits the same mute
+  // and per-group switches as the bell rather than becoming a second channel
+  // the user has to turn off separately.
+  if (input.os) {
+    notifyOs({
+      title: record.title,
+      body: record.preview,
+      tag: record.dedupeKey ?? record.id,
+      onClick: () => {
+        void import('../os/router').then((m) => m.launchApp(record.appId));
+      },
+    });
   }
 
   return record;

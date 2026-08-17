@@ -72,7 +72,7 @@ const ISSUES_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Issues', keys: 'u', label: 'Change assignee' },
   { section: 'Issues', keys: 'l', label: 'Change labels' },
   { section: 'Issues', keys: 'g', label: 'Change project' },
-  { section: 'Issues', keys: 'A', label: 'Queue an agent on the focused issue' },
+  { section: 'Issues', keys: 'A', label: 'Assign an agent — or answer it when it is waiting on you' },
   { section: 'Issues', keys: 'Y', label: 'Accept a triage issue (backlog)' },
   { section: 'Issues', keys: 'N / Backspace', label: 'Decline a triage issue (canceled)' },
   { section: 'Issues', keys: 'C', label: 'New issue' },
