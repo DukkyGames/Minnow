@@ -1416,7 +1416,9 @@ async function renderToolsSection(): Promise<void> {
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Built-in tool permissions and session cache. Browser automation lives under ',
+    'Permissions for built-in, plugin, and MCP tools, plus the session cache. Servers are added under ',
+    linkToSettingsSection('MCP', 'mcp'),
+    '. Browser automation lives under ',
     linkToSettingsSection('Browser', 'browser'),
     '. Slash commands live under ',
     linkToSettingsSection('Skills', 'skills'),
@@ -1539,6 +1541,8 @@ async function renderToolsSection(): Promise<void> {
   fillToolsSection('settingsToolsList', { variant: 'settings' });
   const { appendPluginToolsToList } = await import('./settings-plugins');
   await appendPluginToolsToList('settingsToolsList');
+  const { appendMcpToolsToList } = await import('./settings-mcp-tools');
+  await appendMcpToolsToList('settingsToolsList');
   if (isAsyncSectionRenderStale('tools', generation)) return;
 
   if (!toolsSectionInitialized) {
@@ -1563,6 +1567,7 @@ async function renderToolsSection(): Promise<void> {
   );
 
   appendSettingsCrosslinks(content, [
+    { label: 'MCP servers', sectionId: 'mcp' },
     { label: 'Browser automation', sectionId: 'browser' },
     { label: 'Skills catalog', sectionId: 'skills' },
     { label: 'Web search', sectionId: 'search' },
@@ -1897,6 +1902,8 @@ function ensureMcpSettingsShell(mount: HTMLElement): {
   lead.append(
     'External MCP integrations connect over stdio and register as ',
     el('code', undefined, 'mcp__server__tool'),
+    '. Each connected server gets its own permission rows under ',
+    linkToSettingsSection('Tools', 'tools'),
     '. Language-server diagnostics live under ',
     linkToSettingsSection('Language servers', 'lsp'),
     '; AI ghost text lives under ',
