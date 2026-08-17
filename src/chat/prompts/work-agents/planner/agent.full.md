@@ -2,7 +2,7 @@
 id: planner
 label: Planner
 kind: work-agent
-version: "5"
+version: "6"
 description: Produces detailed, executable build plans saved as markdown files.
 providerId: null
 modelId: null
@@ -20,6 +20,7 @@ allowedTools:
   - mcp__context7__get-library-docs
   - read_file
   - read_file_range
+  - read_document
   - list_directory
   - find_files
   - get_file_metadata

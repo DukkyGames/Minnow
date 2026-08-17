@@ -39,6 +39,16 @@ export function isPdfFilePath(pathOrName) {
   return fileExtension(pathOrName) === 'pdf';
 }
 
+/**
+ * PDF or office files that must be extracted as text, never UTF-8-decoded as bytes.
+ * CSV is excluded — it is already plain text for read_file.
+ *
+ * @param {string} pathOrName
+ */
+export function isDocumentFilePath(pathOrName) {
+  return isPdfFilePath(pathOrName) || isOfficeExtension(pathOrName);
+}
+
 /** @param {string} pathOrName */
 export function isSpreadsheetFilePath(pathOrName) {
   return SPREADSHEET_EXTENSIONS.has(fileExtension(pathOrName));
