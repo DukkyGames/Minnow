@@ -3,14 +3,16 @@
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
-import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
+import {
+  notifyAskQuestionDisplayContextChanged,
+  subscribeAskQuestionDisplayContext,
+} from '../chat/ask-question-display';
 import { stopGeneration } from '../chat/stop-generation';
 import { describeToolInvocation } from '../tools/describe-invocation';
 import type { Chat } from '../types';
 import { getActiveChat } from '../state/sessions';
 import { formatBoardOnboardingPlanDisplay } from './orchestrate-board-plan-display';
 import { BOARD_ONBOARDING_QUESTIONS_ID } from './orchestrate-board-onboarding-questions';
-import { isAskQuestionModalOpenForChat } from './question-cards-modal';
 import {
   getBoardGitSetupPromptKind,
   isBoardGitSetupPromptActive,
@@ -90,6 +92,7 @@ let statusRotateTimer: ReturnType<typeof setInterval> | null = null;
 let statusRotateIndex = 0;
 let statusRotatePhase: BoardOnboardingBusyPhase = 'idle';
 let onboardingStateUnsubscribe: (() => void) | null = null;
+let askQuestionDisplayUnsubscribe: (() => void) | null = null;
 
 function clearStatusRotateTimer(): void {
   if (statusRotateTimer) {
@@ -327,9 +330,11 @@ export function syncBoardOnboardingBusyUI(
   const planSelect = wrap.querySelector('#boardOnboardingPlanSelect') as HTMLSelectElement | null;
 
   const busy = phase !== 'idle';
-  const questionsActive =
-    isAskQuestionModalOpenForChat(chat.id) &&
-    Boolean(wrap.querySelector(`#${BOARD_ONBOARDING_QUESTIONS_ID} .question-cards-panel`));
+  // Presence of the embedded panel is enough — do not also require the modal
+  // open flag (chat-id mismatch left the spinner stacked on the cards).
+  const questionsActive = Boolean(
+    wrap.querySelector(`#${BOARD_ONBOARDING_QUESTIONS_ID} .question-cards-panel`),
+  );
   let showLoader =
     !questionsActive &&
     (phase === 'plans' || phase === 'git-setup' || phase === 'init');
@@ -338,6 +343,7 @@ export function syncBoardOnboardingBusyUI(
   wrap.dataset.boardOnboardingBusy = phase === 'idle' ? '' : phase;
   panel?.classList.toggle('board-onboarding__panel--busy', busy);
   panel?.classList.toggle('board-onboarding__panel--centered', busy || showGitPrompt);
+  panel?.classList.toggle('board-onboarding__panel--questions', questionsActive);
 
   if (setup instanceof HTMLElement) {
     setup.classList.toggle('hidden', busy || showGitPrompt);
@@ -401,6 +407,7 @@ export function wireBoardOnboardingInteractions(
   onJumpToChat: () => void,
 ): void {
   onboardingStateUnsubscribe?.();
+  askQuestionDisplayUnsubscribe?.();
   wireGitPromptButtons(wrap);
 
   const cancelBtn = wrap.querySelector('[data-board-onboarding-cancel]');
@@ -409,13 +416,19 @@ export function wireBoardOnboardingInteractions(
   const chatBtn = wrap.querySelector('[data-board-onboarding-jump-chat]');
   chatBtn?.addEventListener('click', onJumpToChat);
 
-  onboardingStateUnsubscribe = subscribeBoardOnboardingState(() => {
+  const refreshOnboarding = (): void => {
     void import('./orchestrate-board').then((m) => m.refreshBoardOnboardingIfMounted());
     void import('./orchestrate-board-setup-banner').then((m) =>
       m.syncBoardSetupReturnBanner(),
     );
+  };
+
+  onboardingStateUnsubscribe = subscribeBoardOnboardingState(() => {
+    refreshOnboarding();
     notifyAskQuestionDisplayContextChanged();
   });
+  // Hide the git-setup spinner as soon as ask_question cards mount in this panel.
+  askQuestionDisplayUnsubscribe = subscribeAskQuestionDisplayContext(refreshOnboarding);
 }
 
 /** Tear down rotation timer and state subscription when onboarding unmounts. */
@@ -425,4 +438,6 @@ export function disposeBoardOnboardingUiTimers(): void {
   statusRotateIndex = 0;
   onboardingStateUnsubscribe?.();
   onboardingStateUnsubscribe = null;
+  askQuestionDisplayUnsubscribe?.();
+  askQuestionDisplayUnsubscribe = null;
 }

@@ -3,6 +3,7 @@
  */
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import { describe, test } from 'node:test';
 import { isToolAllowedForMode } from '../../src/chat/modes/tool-policy.ts';
 import { GIT_SETUP_SKILL_ID } from '../../src/skills/git-setup-client.ts';
@@ -33,5 +34,15 @@ describe('git-setup skill tool grant', () => {
     const names = getEnabledToolDefinitionsForChat(chat).map((d) => d.function.name);
     assert.ok(!names.includes('execute_command'));
     assert.ok(!names.includes('git_add'));
+  });
+
+  test('git-setup skill tells the model not to re-confirm init steps', async () => {
+    const skill = await fs.readFile(
+      new URL('../../src/skills/git-setup/SKILL.md', import.meta.url),
+      'utf8',
+    );
+    assert.match(skill, /Do not re-confirm/);
+    assert.match(skill, /ask_question/);
+    assert.match(skill, /programmatically/);
   });
 });

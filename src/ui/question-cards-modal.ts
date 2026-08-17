@@ -3,7 +3,11 @@
  */
 
 import { getChatAbort } from '../app-state';
-import { isAskQuestionDomVisible, registerAskQuestionDisplayContextSync } from '../chat/ask-question-display';
+import {
+  isAskQuestionDomVisible,
+  notifyAskQuestionDisplayContextChanged,
+  registerAskQuestionDisplayContextSync,
+} from '../chat/ask-question-display';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { notifyAskQuestionShown } from '../notifications/ask-question';
 import { getActiveChat } from '../state/sessions';
@@ -496,6 +500,8 @@ export function showQuestionCardsModal(
     footer.append(validation, btnSubmit, hints);
     panel.append(header, cardBody, footer);
     host.appendChild(panel);
+    // Board onboarding hides its loader while this panel is in the DOM.
+    notifyAskQuestionDisplayContextChanged();
 
     let settled = false;
     let trapFocusHandler: ((ev: KeyboardEvent) => void) | null = null;
@@ -529,6 +535,7 @@ export function showQuestionCardsModal(
       }
       (modal?.host ?? host).replaceChildren();
       activeQuestionModal = null;
+      notifyAskQuestionDisplayContextChanged();
       resolve(result);
     };
 

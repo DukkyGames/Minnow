@@ -135,3 +135,32 @@ describe('resolveBoardOnboardingBusyPhase git-prompt', () => {
     setStreaming(false);
   });
 });
+
+describe('syncBoardOnboardingBusyUI git-setup questions', () => {
+  test('hides loader when question cards are present in the board host', () => {
+    mountTestDom();
+
+    const chat = createEmptyChatObject('');
+    const wrap = document.createElement('div');
+    wrap.className = 'board-onboarding';
+    wrap.innerHTML = `
+      <div class="board-onboarding__panel">
+        <div class="board-onboarding__loader" data-board-onboarding-loader>
+          <h2 data-board-onboarding-headline></h2>
+          <p data-board-onboarding-status-message></p>
+        </div>
+        <div id="boardOnboardingQuestions" class="board-onboarding__questions">
+          <div class="question-cards-panel"></div>
+        </div>
+        <div class="board-onboarding__footer" data-board-onboarding-footer></div>
+      </div>
+    `;
+
+    syncBoardOnboardingBusyUI(wrap, 'git-setup', chat);
+
+    const loader = wrap.querySelector('[data-board-onboarding-loader]');
+    const panel = wrap.querySelector('.board-onboarding__panel');
+    assert.equal(loader?.hidden, true);
+    assert.ok(panel?.classList.contains('board-onboarding__panel--questions'));
+  });
+});
