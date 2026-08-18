@@ -54,6 +54,7 @@ import { createCodeRefLinkButton } from './code-ref-link';
 import { createIssueEditor } from './issue-editor';
 import { collectInlineRefs } from '../issues/markdown-inline';
 import { renderIssueAttachments } from './issues-attachments-section';
+import { bindIssueDropTarget } from './issue-drop-target';
 import { renderIssueGithubSection } from './issues-github-section';
 import { createIssuesLabelsField } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
@@ -573,6 +574,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   scroll.appendChild(activitySection.section);
 
   panel.appendChild(scroll);
+  bindIssueDropTarget(panel, issue.id, () => refreshIssueDetailIfOpen());
   host.appendChild(panel);
 }
 

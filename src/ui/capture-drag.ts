@@ -166,26 +166,22 @@ export function dataTransferLooksCapturable(dataTransfer: DataTransfer | null): 
 /**
  * Bind the document-level listeners once.
  *
- * Capture-phase `dragstart` so the descriptor exists before any target's own
- * handler runs; bubble-phase `dragend`/`drop` so it survives until every target
- * has had its turn.
+ * Bubble-phase `dragstart` so file-tree and editor handlers set MIME types
+ * before the descriptor is read; bubble-phase `dragend`/`drop` so it survives
+ * until every target has had its turn.
  */
 export function initCaptureDragLayer(): void {
   if (layerBound || typeof document === 'undefined') return;
   layerBound = true;
 
-  document.addEventListener(
-    'dragstart',
-    (event) => {
-      if (activeDrag) return;
-      const payload = capturePayloadFromDataTransfer(event.dataTransfer);
-      if (!payload) return;
-      activeDrag = payload;
-      document.documentElement.classList.add('mn-capture-dragging');
-      notify();
-    },
-    true,
-  );
+  document.addEventListener('dragstart', (event) => {
+    if (activeDrag) return;
+    const payload = capturePayloadFromDataTransfer(event.dataTransfer);
+    if (!payload) return;
+    activeDrag = payload;
+    document.documentElement.classList.add('mn-capture-dragging');
+    notify();
+  });
 
   const clear = (): void => {
     document.documentElement.classList.remove('mn-capture-dragging');

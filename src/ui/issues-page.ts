@@ -25,11 +25,7 @@ import type {
 import { getMode } from '../chat/modes/registry';
 import { createAppIcon } from '../os/icons';
 import { iconHtml } from './icon';
-import {
-  capturePayloadFromDataTransfer,
-  dataTransferLooksCapturable,
-} from './capture-drag';
-import { attachCaptureToIssue } from './issue-capture';
+import { bindIssueDropTarget } from './issue-drop-target';
 import { taskProgress } from '../issues/markdown-blocks';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
@@ -1342,7 +1338,10 @@ function buildIssueRow(
   row.addEventListener('dragend', () => {
     activeIssueDrag = null;
   });
-  bindIssueCaptureDrop(row, issue.id);
+  bindIssueDropTarget(row, issue.id, () => {
+    renderIssuesPanel();
+    void import('./issues-detail').then((m) => m.refreshIssueDetailIfOpen());
+  });
   return row;
 }
 
@@ -1405,6 +1404,8 @@ function renderList(mount: HTMLElement, _issues: IssueCard[]): void {
 
 function bindGroupDrop(body: HTMLElement, groupIssues: IssueCard[]): void {
   body.addEventListener('dragover', (event) => {
+    const ids = activeIssueDrag?.ids ?? [];
+    if (ids.length === 0) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
     placeDropIndicator(body, event.clientY);
@@ -1415,10 +1416,10 @@ function bindGroupDrop(body: HTMLElement, groupIssues: IssueCard[]): void {
     body.querySelector('.issues-drop-indicator')?.remove();
   });
   body.addEventListener('drop', (event) => {
-    event.preventDefault();
-    body.querySelector('.issues-drop-indicator')?.remove();
     const ids = activeIssueDrag?.ids ?? [];
     if (ids.length === 0) return;
+    event.preventDefault();
+    body.querySelector('.issues-drop-indicator')?.remove();
     const rows = [...body.querySelectorAll('.issues-row')];
     const insertAt = dropIndexFromY(rows, event.clientY);
     persistRanksAfterReorder(
@@ -1479,35 +1480,16 @@ function persistRanksAfterReorder(
 }
 
 /**
- * Rows, cards and the peek panel accept a dropped capture directly.
+ * Rows, cards and the peek panel accept a dropped capture or OS files directly.
  *
  * Dropping on a specific issue means "attach to this one" — no popover, no
  * confirmation. The popover exists for when you have not decided where it goes;
  * dropping on a row *is* the decision.
  */
 function bindIssueCaptureDrop(el: HTMLElement, issueId: string): void {
-  el.addEventListener('dragover', (event) => {
-    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'link';
-    el.classList.add('is-capture-target');
-  });
-  el.addEventListener('dragleave', (event) => {
-    const related = asElement(event.relatedTarget as EventTarget | null);
-    if (related && el.contains(related)) return;
-    el.classList.remove('is-capture-target');
-  });
-  el.addEventListener('drop', (event) => {
-    el.classList.remove('is-capture-target');
-    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const payload = capturePayloadFromDataTransfer(event.dataTransfer);
-    if (!payload) return;
-    void attachCaptureToIssue(issueId, payload).then((ok) => {
-      if (ok) renderIssuesPanel();
-    });
+  bindIssueDropTarget(el, issueId, () => {
+    renderIssuesPanel();
+    void import('./issues-detail').then((m) => m.refreshIssueDetailIfOpen());
   });
 }
 
@@ -1534,6 +1516,8 @@ function bindCardDrag(card: HTMLElement, issueId: string): void {
 function bindColumnDrop(columnEl: HTMLElement, status: IssueStatus): void {
   const list = columnEl.querySelector('.issues-column__list') ?? columnEl;
   columnEl.addEventListener('dragover', (event) => {
+    const ids = activeIssueDrag?.ids ?? [];
+    if (ids.length === 0) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
     columnEl.classList.add('is-drag-over');
@@ -1546,11 +1530,11 @@ function bindColumnDrop(columnEl: HTMLElement, status: IssueStatus): void {
     list.querySelector('.issues-drop-indicator')?.remove();
   });
   columnEl.addEventListener('drop', (event) => {
+    const ids = activeIssueDrag?.ids ?? [];
+    if (ids.length === 0) return;
     event.preventDefault();
     columnEl.classList.remove('is-drag-over');
     list.querySelector('.issues-drop-indicator')?.remove();
-    const ids = activeIssueDrag?.ids ?? [];
-    if (ids.length === 0) return;
     const cards = [...list.querySelectorAll('.issues-card')];
     const insertAt = dropIndexFromY(cards, event.clientY);
     const columnIds = cards
@@ -2001,14 +1985,91 @@ function ensureSubscriptions(): void {
   }
 }
 
+function isNewFormOpen(): boolean {
+  return document.getElementById('issuesNewForm')?.classList.contains('is-open') ?? false;
+}
+
+let newFormOutsideHandler: ((e: PointerEvent) => void) | null = null;
+let newFormEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
+let newFormResizeHandler: (() => void) | null = null;
+
+function detachNewFormListeners(): void {
+  if (newFormOutsideHandler) {
+    document.removeEventListener('pointerdown', newFormOutsideHandler, true);
+    newFormOutsideHandler = null;
+  }
+  if (newFormEscapeHandler) {
+    document.removeEventListener('keydown', newFormEscapeHandler, true);
+    newFormEscapeHandler = null;
+  }
+  if (newFormResizeHandler) {
+    window.removeEventListener('resize', newFormResizeHandler);
+    newFormResizeHandler = null;
+  }
+}
+
+/** Pin the new-issue popover under the header button, right-aligned to the anchor. */
+function positionNewIssuePopover(form: HTMLElement, anchor: HTMLElement): void {
+  const margin = 8;
+  form.style.visibility = 'hidden';
+  form.style.left = '0px';
+  form.style.top = '0px';
+  const box = form.getBoundingClientRect();
+  const rect = anchor.getBoundingClientRect();
+
+  let top = rect.bottom + 6;
+  if (top + box.height > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - box.height - 6);
+  }
+
+  let left = rect.right - box.width;
+  left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
+
+  form.style.top = `${Math.round(top)}px`;
+  form.style.left = `${Math.round(left)}px`;
+  form.style.visibility = '';
+}
+
 function setNewFormOpen(open: boolean): void {
   const form = document.getElementById('issuesNewForm');
-  form?.classList.toggle('is-open', open);
-  if (open) {
-    const title = document.getElementById('issuesNewTitle');
-    if (title && 'focus' in title && typeof (title as { focus?: unknown }).focus === 'function') {
-      (title as { focus: () => void }).focus();
-    }
+  const anchor = document.getElementById('btnIssuesNew');
+  if (!form) return;
+
+  if (!open) {
+    form.classList.remove('is-open');
+    anchor?.setAttribute('aria-expanded', 'false');
+    detachNewFormListeners();
+    return;
+  }
+
+  form.classList.add('is-open');
+  anchor?.setAttribute('aria-expanded', 'true');
+  if (anchor) positionNewIssuePopover(form, anchor);
+
+  detachNewFormListeners();
+  newFormOutsideHandler = (event) => {
+    const target = event.target as Node | null;
+    if (form.contains(target) || anchor?.contains(target ?? null)) return;
+    setNewFormOpen(false);
+  };
+  document.addEventListener('pointerdown', newFormOutsideHandler, true);
+
+  newFormEscapeHandler = (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    setNewFormOpen(false);
+  };
+  document.addEventListener('keydown', newFormEscapeHandler, true);
+
+  newFormResizeHandler = () => {
+    if (anchor && form.classList.contains('is-open')) positionNewIssuePopover(form, anchor);
+  };
+  window.addEventListener('resize', newFormResizeHandler);
+
+  const title = document.getElementById('issuesNewTitle');
+  if (title && 'focus' in title && typeof (title as { focus?: unknown }).focus === 'function') {
+    (title as { focus: () => void }).focus();
   }
 }
 
@@ -2217,6 +2278,11 @@ function onIssuesKeydown(event: KeyboardEvent): void {
     return;
   }
   if (event.key === 'Escape') {
+    if (isNewFormOpen()) {
+      event.preventDefault();
+      setNewFormOpen(false);
+      return;
+    }
     if (getSelectedIssueId()) {
       closeIssueDetail();
       setIssuesRouteHash('#/app/issues');
@@ -2354,7 +2420,7 @@ function bindStaticControls(): void {
       return;
     }
     if (target.closest('#btnIssuesNew')) {
-      setNewFormOpen(true);
+      setNewFormOpen(!isNewFormOpen());
       return;
     }
     if (target.closest('#btnIssuesNewCancel')) {

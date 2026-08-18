@@ -21,6 +21,7 @@ import {
   issueAttachmentUrl,
   uploadIssueAttachment,
 } from '../state/issue-attachments-api';
+import { hasExternalFileDrag } from '../attachments/external-file-drop';
 import type { IssueAttachment, IssueCard } from '../types';
 import { appConfirm } from './app-dialog';
 import { showToast } from './toast';
@@ -28,7 +29,8 @@ import { showToast } from './toast';
 /** Called after any change so the panel re-renders from store state. */
 export type AttachmentsChanged = () => void;
 
-async function ingestFiles(
+/** Upload dropped or picked files and append attachment records on the issue. */
+export async function ingestIssueFiles(
   issueId: string,
   files: File[],
   onChanged: AttachmentsChanged,
@@ -188,7 +190,7 @@ export function renderIssueAttachments(
   picker.addEventListener('change', () => {
     const files = picker.files ? Array.from(picker.files) : [];
     picker.value = '';
-    void ingestFiles(issue.id, files, onChanged);
+    void ingestIssueFiles(issue.id, files, onChanged);
   });
 
   const attachBtn = document.createElement('button');
@@ -206,11 +208,11 @@ export function renderIssueAttachments(
     const files = filesFromClipboard(event as ClipboardEvent);
     if (files.length === 0) return;
     event.preventDefault();
-    void ingestFiles(issue.id, files, onChanged);
+    void ingestIssueFiles(issue.id, files, onChanged);
   });
 
   body.addEventListener('dragover', (event) => {
-    if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return;
+    if (!hasExternalFileDrag(event.dataTransfer)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
     body.classList.add('is-drop-target');
@@ -218,10 +220,11 @@ export function renderIssueAttachments(
   body.addEventListener('dragleave', () => body.classList.remove('is-drop-target'));
   body.addEventListener('drop', (event) => {
     body.classList.remove('is-drop-target');
-    const files = Array.from(event.dataTransfer?.files ?? []);
-    if (files.length === 0) return;
+    if (!hasExternalFileDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
-    void ingestFiles(issue.id, files, onChanged);
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    void ingestIssueFiles(issue.id, files, onChanged);
   });
 }

@@ -39,7 +39,7 @@ export function initMenubarCapture(btn: HTMLButtonElement): () => void {
   btn.classList.add('mn-os-mb-icon', 'mn-os-mb-capture', 'mn-capture-target');
   btn.setAttribute('aria-label', `New issue (${QUICK_CAPTURE_CHORD})`);
   btn.title = `New issue — ${QUICK_CAPTURE_CHORD}. Drop anything here to file it.`;
-  btn.innerHTML = iconHtml('plus', { size: 16 });
+  btn.innerHTML = iconHtml('capture', { size: 16 });
 
   const open = (): void => {
     openQuickCapture({ anchor: btn, restoreFocus: btn });

@@ -44,8 +44,7 @@
 
 .issues-header,
 .issues-view-bar,
-.issues-chip-bar,
-.issues-new-form {
+.issues-chip-bar {
   flex-shrink: 0;
 }
 
@@ -388,19 +387,42 @@
   cursor: not-allowed;
 }
 
-/* ---------- new issue form ---------- */
+/* ---------- new issue popover (anchored to #btnIssuesNew) ---------- */
 
 .issues-new-form {
+  position: fixed;
+  z-index: 95;
   display: none;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--mn-border);
-  background: color-mix(in srgb, var(--mn-fg) 3%, var(--mn-bg));
+  width: min(420px, calc(100vw - 16px));
+  padding: 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  box-shadow: var(--shadow-popover-soft);
+  color: var(--mn-fg);
 }
 
 .issues-new-form.is-open {
   display: flex;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .issues-new-form.is-open {
+    animation: issues-new-form-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes issues-new-form-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .issues-new-form__grid {
@@ -955,6 +977,51 @@
 .issues-labels-field__more:hover {
   border-color: var(--mn-accent);
   color: var(--mn-accent);
+}
+
+.issues-labels-suggestions {
+  position: fixed;
+  z-index: 1200;
+  min-width: 7rem;
+  max-width: min(14rem, calc(100vw - 16px));
+  max-height: min(40vh, 220px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  box-shadow: var(--mn-shadow-popover, 0 8px 24px oklch(0.1 0.02 250 / 0.28));
+}
+
+.issues-labels-suggestions__item {
+  padding: 5px 8px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--mn-fg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-labels-suggestions__item:hover,
+  .issues-labels-suggestions__item.is-active {
+    background: color-mix(in oklch, var(--mn-fg) 7%, transparent);
+  }
+}
+
+.issues-labels-suggestions__item.is-active {
+  color: var(--mn-accent);
+}
+
+.issues-labels-suggestions__item:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
 }
 
 .issues-type-chip {

@@ -24,13 +24,9 @@ export function ensureIssuesChrome(root: HTMLElement): void {
   const shell = document.createElement('div');
   shell.className = 'issues-shell';
 
-  shell.append(
-    buildHeader(),
-    buildViewTabs(),
-    buildChipBar(),
-    buildNewForm(),
-    buildBody(),
-  );
+  shell.append(buildHeader(), buildViewTabs(), buildChipBar(), buildBody());
+  // Portal to document.body so fixed positioning is not clipped by app layers.
+  buildNewForm();
   root.appendChild(shell);
 }
 
@@ -90,6 +86,8 @@ function buildHeader(): HTMLElement {
     type: 'button',
     class: 'issues-btn issues-btn--primary',
     id: 'btnIssuesNew',
+    'aria-haspopup': 'dialog',
+    'aria-expanded': 'false',
     text: 'New issue',
   });
 
@@ -142,6 +140,9 @@ function buildChipBar(): HTMLElement {
 }
 
 function buildNewForm(): HTMLElement {
+  const existing = document.getElementById('issuesNewForm');
+  if (existing) return existing;
+
   const title = el('label', { class: 'issues-new-form__title' }, [
     document.createTextNode('Title'),
     el('input', {
@@ -173,6 +174,7 @@ function buildNewForm(): HTMLElement {
     grid,
     actions,
   ]);
+  document.body.appendChild(form);
   return form;
 }
 
