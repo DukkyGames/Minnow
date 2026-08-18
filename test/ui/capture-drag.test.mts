@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, test, afterEach } from 'node:test';
 
 import { WORKSPACE_FILE_MIME } from '../../src/attachments/workspace-ref';
-import { CHAT_DRAG_MIME } from '../../src/ui/sidebar-chat-dnd';
+import { CHAT_DRAG_MIME } from '../../src/attachments/chat-drag';
 import {
   beginCaptureDrag,
   capturePayloadFromDataTransfer,

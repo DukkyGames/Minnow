@@ -26,7 +26,9 @@ import {
 } from './issue-capture-context';
 import {
   addToOpenIssueCapture,
+  focusOpenIssueCapture,
   isIssueCaptureOpen,
+  mergeIntoOpenIssueCapture,
   openIssueCapture,
 } from './issue-capture-popover';
 import { capturePayloadFromDataTransfer } from './capture-drag';
@@ -404,6 +406,12 @@ export function openQuickCapture(options?: {
   restoreFocus?: HTMLElement | null;
   extra?: CapturePayload;
 }): void {
+  if (isIssueCaptureOpen()) {
+    if (options?.extra) mergeIntoOpenIssueCapture(options.extra);
+    else focusOpenIssueCapture();
+    return;
+  }
+
   let payload = collectAmbientCapture(getWorkspacePath());
   if (options?.extra) payload = mergeCapturePayloads(payload, options.extra);
 
@@ -411,6 +419,7 @@ export function openQuickCapture(options?: {
     payload,
     anchor: options?.anchor ?? null,
     restoreFocus: options?.restoreFocus ?? null,
+    restoreDraft: true,
   });
 
   void collectGitCapture().then((items: CaptureItem[]) => {
@@ -425,6 +434,10 @@ export function openCaptureFromDrop(
 ): boolean {
   const dropped = capturePayloadFromDataTransfer(dataTransfer);
   if (!dropped) return false;
+  if (isIssueCaptureOpen()) {
+    mergeIntoOpenIssueCapture(dropped);
+    return true;
+  }
   openQuickCapture({ anchor: options?.anchor ?? null, extra: dropped });
   return true;
 }

@@ -28,7 +28,7 @@ import {
 } from '../issues/capture-payload';
 import { formatCodeRefLabel } from '../attachments/code-ref-format';
 import { sessionState } from '../state/sessions';
-import { CHAT_DRAG_MIME } from './sidebar-chat-dnd';
+import { CHAT_DRAG_MIME } from '../attachments/chat-drag';
 
 /** Active drag, or null. Read by drop targets during `dragover`. */
 let activeDrag: CapturePayload | null = null;

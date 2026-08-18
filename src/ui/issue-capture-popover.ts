@@ -20,10 +20,19 @@ import {
   captureDescriptionSeed,
   captureTitleSeed,
   capturePayloadToLinks,
+  mergeCapturePayloads,
   type CaptureItem,
   type CapturePayload,
 } from '../issues/capture-payload';
+import { capturePayloadFromDataTransfer, dataTransferLooksCapturable } from './capture-drag';
 import { isTypingTarget } from './a11y/typing-target';
+import {
+  isDraftEmpty,
+  loadIssueCaptureDraft,
+  resetIssueCaptureDraftForTests,
+  saveIssueCaptureDraft,
+  type IssueCaptureDraft,
+} from './issue-capture-draft';
 import { showToast } from './toast';
 
 const EDGE_GAP = 8;
@@ -44,6 +53,8 @@ export interface OpenIssueCaptureOptions {
   restoreFocus?: HTMLElement | null;
   /** Called after a successful file. */
   onFiled?: (result: IssueCaptureResult) => void;
+  /** Restore the last dismissed quick-capture draft for this workspace. */
+  restoreDraft?: boolean;
 }
 
 interface CaptureSession {
@@ -68,10 +79,28 @@ export function isIssueCaptureOpen(): boolean {
   return session !== null;
 }
 
+function draftFromSession(current: CaptureSession): IssueCaptureDraft | null {
+  const draft: IssueCaptureDraft = {
+    title: current.titleInput.value,
+    payload: { ...current.payload, items: [...current.payload.items] },
+    targetIssueId: current.targetIssueId,
+  };
+  return isDraftEmpty(draft) ? null : draft;
+}
+
+function persistSessionDraft(current: CaptureSession): void {
+  saveIssueCaptureDraft(current.payload.workspacePath, draftFromSession(current));
+}
+
 /** Close the popover without filing. */
-export function closeIssueCapture(options?: { restoreFocus?: boolean }): void {
+export function closeIssueCapture(options?: {
+  restoreFocus?: boolean;
+  clearDraft?: boolean;
+}): void {
   const current = session;
   if (!current) return;
+  if (!options?.clearDraft) persistSessionDraft(current);
+  else saveIssueCaptureDraft(current.payload.workspacePath, null);
   session = null;
   unbindGlobalListeners();
   // Restore focus *before* detaching. Removing the focused subtree first drops
@@ -246,7 +275,7 @@ async function submitCapture(current: CaptureSession): Promise<void> {
       }
       store.scheduleSaveIssues();
       const filed = { issueId: updated.id, created: false };
-      closeIssueCapture();
+      closeIssueCapture({ clearDraft: true });
       showToast(`Added to ${updated.id}`, 'success');
       current.onFiled?.(filed);
     } finally {
@@ -283,7 +312,7 @@ async function submitCapture(current: CaptureSession): Promise<void> {
     }
     store.scheduleSaveIssues();
     const filed = { issueId: issue.id, created: true };
-    closeIssueCapture();
+    closeIssueCapture({ clearDraft: true });
     showToast(`Filed ${issue.id}`, 'success');
     current.onFiled?.(filed);
   } finally {
@@ -363,12 +392,71 @@ function unbindGlobalListeners(): void {
   window.removeEventListener('blur', onWindowChange);
 }
 
+function bindPopoverDropTarget(root: HTMLElement): void {
+  const dropClass = 'is-drop-target';
+
+  root.addEventListener('dragover', (event) => {
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'link';
+    root.classList.add(dropClass);
+  });
+
+  root.addEventListener('dragleave', (event) => {
+    const related = event.relatedTarget;
+    if (related instanceof Node && root.contains(related)) return;
+    root.classList.remove(dropClass);
+  });
+
+  root.addEventListener('drop', (event) => {
+    root.classList.remove(dropClass);
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const payload = capturePayloadFromDataTransfer(event.dataTransfer);
+    if (!payload) return;
+    mergeIntoOpenIssueCapture(payload);
+  });
+}
+
+function resolvedOpenState(
+  options: OpenIssueCaptureOptions,
+): { payload: CapturePayload; title: string; targetIssueId: string | null } {
+  let payload = options.payload;
+  let targetIssueId: string | null = null;
+
+  if (options.restoreDraft) {
+    const draft = loadIssueCaptureDraft(payload.workspacePath);
+    if (draft) {
+      payload = mergeCapturePayloads(draft.payload, payload);
+      targetIssueId = draft.targetIssueId;
+      if (draft.title.trim()) {
+        return { payload, title: draft.title, targetIssueId };
+      }
+    }
+  }
+
+  return { payload, title: captureTitleSeed(payload), targetIssueId };
+}
+
+/** Focus the open popover (menubar shortcut while capture is already up). */
+export function focusOpenIssueCapture(): boolean {
+  const current = session;
+  if (!current) return false;
+  current.titleInput.focus();
+  current.titleInput.select();
+  return true;
+}
+
 /**
  * Open the capture popover. Re-opening replaces the current one, so a second
  * press of the shortcut does not stack popovers.
  */
 export function openIssueCapture(options: OpenIssueCaptureOptions): void {
   closeIssueCapture({ restoreFocus: false });
+
+  const { payload, title, targetIssueId } = resolvedOpenState(options);
 
   const root = document.createElement('div');
   root.className = 'mn-capture';
@@ -393,7 +481,7 @@ export function openIssueCapture(options: OpenIssueCaptureOptions): void {
   titleInput.className = 'mn-capture__title';
   titleInput.placeholder = 'What went wrong?';
   titleInput.setAttribute('aria-label', 'Issue title');
-  titleInput.value = captureTitleSeed(options.payload);
+  titleInput.value = title;
   root.appendChild(titleInput);
 
   const chipsHost = document.createElement('div');
@@ -404,7 +492,7 @@ export function openIssueCapture(options: OpenIssueCaptureOptions): void {
   foot.className = 'mn-capture__foot';
   const hint = document.createElement('span');
   hint.className = 'mn-capture__hint';
-  hint.textContent = 'Enter to file · Esc to cancel';
+  hint.textContent = 'Enter to file · Esc to keep draft';
   const submitBtn = document.createElement('button');
   submitBtn.type = 'button';
   submitBtn.className = 'mn-capture__submit';
@@ -413,8 +501,8 @@ export function openIssueCapture(options: OpenIssueCaptureOptions): void {
 
   const current: CaptureSession = {
     root,
-    payload: options.payload,
-    targetIssueId: null,
+    payload,
+    targetIssueId,
     titleInput,
     chipsHost,
     destinationBtn,
@@ -436,6 +524,8 @@ export function openIssueCapture(options: OpenIssueCaptureOptions): void {
   renderChips(current);
   syncDestination(current);
 
+  bindPopoverDropTarget(root);
+
   document.body.appendChild(root);
   positionPopover(root, current.anchor);
   bindGlobalListeners();
@@ -445,13 +535,20 @@ export function openIssueCapture(options: OpenIssueCaptureOptions): void {
 }
 
 /** Merge more context into an already-open popover (a second drop). */
-export function addToOpenIssueCapture(items: CaptureItem[]): boolean {
+export function mergeIntoOpenIssueCapture(extra: CapturePayload): boolean {
   const current = session;
-  if (!current || items.length === 0) return false;
-  current.payload = { ...current.payload, items: [...current.payload.items, ...items] };
+  if (!current) return false;
+  if (extra.items.length === 0 && !extra.title?.trim() && !extra.description?.trim()) return false;
+  current.payload = mergeCapturePayloads(current.payload, extra);
   renderChips(current);
   positionPopover(current.root, current.anchor);
   return true;
+}
+
+/** Merge chip items into an already-open popover (async ambient/git context). */
+export function addToOpenIssueCapture(items: CaptureItem[]): boolean {
+  if (items.length === 0) return false;
+  return mergeIntoOpenIssueCapture({ items });
 }
 
 /** Reset module state (tests). */
@@ -461,4 +558,5 @@ export function resetIssueCaptureForTests(): void {
     session.root.remove();
   }
   session = null;
+  resetIssueCaptureDraftForTests();
 }
