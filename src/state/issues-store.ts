@@ -1528,7 +1528,11 @@ export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard
     }
   }
   if (patch.notes !== undefined) issue.notes = patch.notes;
-  if (patch.planPath !== undefined) issue.planPath = patch.planPath;
+  if (patch.planPath !== undefined) {
+    const trimmed = patch.planPath.trim();
+    if (trimmed) issue.planPath = trimmed;
+    else delete issue.planPath;
+  }
   if (patch.boardChatId !== undefined) issue.boardChatId = patch.boardChatId;
   if (patch.investigateRunId !== undefined) issue.investigateRunId = patch.investigateRunId;
   if (patch.planRunId !== undefined) issue.planRunId = patch.planRunId;

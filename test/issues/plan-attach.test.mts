@@ -1,12 +1,26 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 
+import {
+  addIssue,
+  appendIssueLinks,
+  findIssueById,
+  setIssuesStateForTests,
+} from '../../src/state/issues-store.ts';
 import {
   codeRefsExcludingPlan,
   inferIssuePlanPath,
   isIssuePlanCodeRef,
   normalizeIssuePlanPath,
 } from '../../src/issues/plan-attach.ts';
+
+beforeEach(() => {
+  setIssuesStateForTests({ version: 2, schemaRevision: 3, nextId: 1, issues: [] });
+});
+
+afterEach(() => {
+  setIssuesStateForTests(null);
+});
 
 describe('normalizeIssuePlanPath', () => {
   it('accepts executable plans under documentation/plans/', () => {
@@ -69,10 +83,7 @@ describe('codeRefsExcludingPlan', () => {
 });
 
 describe('appendIssueLinks plan routing', () => {
-  it('sets planPath instead of codeRefs for plan markdown', async () => {
-    const { addIssue, appendIssueLinks, findIssueById } = await import(
-      '../../src/state/issues-store.ts'
-    );
+  it('sets planPath instead of codeRefs for plan markdown', () => {
     const issue = addIssue({ title: 'Plan me' });
     appendIssueLinks(issue.id, {
       codeRefs: [

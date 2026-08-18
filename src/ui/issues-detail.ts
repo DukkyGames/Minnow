@@ -227,6 +227,22 @@ function removeCodeRefFromIssue(issueId: string, ref: IssueCodeRef): void {
   refreshIssueDetailIfOpen();
 }
 
+/** Unlink a plan markdown path from the issue (does not delete the file). */
+function removePlanFromIssue(issueId: string, planPath: string): void {
+  const issue = findIssueById(issueId);
+  if (!issue) return;
+  const hadExplicitPlan = Boolean(issue.planPath?.trim());
+  const nextCodeRefs = codeRefsExcludingPlan(issue.codeRefs ?? [], planPath);
+  const codeRefsChanged = nextCodeRefs.length !== (issue.codeRefs?.length ?? 0);
+  if (!hadExplicitPlan && !codeRefsChanged) return;
+  const patch: Parameters<typeof updateIssue>[1] = {};
+  if (hadExplicitPlan) patch.planPath = '';
+  if (codeRefsChanged) patch.codeRefs = nextCodeRefs;
+  updateIssue(issueId, patch);
+  scheduleSaveIssues();
+  refreshIssueDetailIfOpen();
+}
+
 function fillSelect(
   select: HTMLSelectElement,
   options: Array<{ id: string; label: string }>,
@@ -525,11 +541,26 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
   // Plan — Send to board lives here when a plan exists
   const planSection = section('Plan');
-  const planEl = document.createElement('p');
-  planEl.className = 'issues-detail__empty';
   if (planPath) {
-    planEl.textContent = planPath;
-    planSection.body.appendChild(planEl);
+    const planRow = document.createElement('div');
+    planRow.className = 'issues-detail__plan-row';
+
+    const planText = document.createElement('p');
+    planText.className = 'issues-detail__plan-path';
+    planText.textContent = planPath;
+    planRow.appendChild(planText);
+
+    const removePlan = document.createElement('button');
+    removePlan.type = 'button';
+    removePlan.className = 'issues-detail__code-remove';
+    removePlan.setAttribute('aria-label', `Remove plan ${planPath}`);
+    removePlan.textContent = '×';
+    removePlan.addEventListener('click', () => {
+      removePlanFromIssue(issue.id, planPath);
+    });
+    planRow.appendChild(removePlan);
+
+    planSection.body.appendChild(planRow);
 
     const planActions = document.createElement('div');
     planActions.className = 'issues-detail__plan-actions';
@@ -560,6 +591,8 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
     planSection.body.appendChild(planActions);
   } else {
+    const planEl = document.createElement('p');
+    planEl.className = 'issues-detail__empty';
     planEl.textContent = 'No plan yet. Use Send to chat or Send to background.';
     planSection.body.appendChild(planEl);
   }

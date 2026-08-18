@@ -1542,6 +1542,29 @@ button.issues-detail__activity-chip {
   margin-top: 0;
 }
 
+.issues-detail__plan-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.issues-detail__plan-path {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.issues-detail__plan-row:hover .issues-detail__code-remove,
+.issues-detail__plan-row:focus-within .issues-detail__code-remove {
+  opacity: 1;
+}
+
 .issues-detail__desc-wrap {
   max-height: 16rem;
   overflow: auto;
