@@ -14,6 +14,7 @@ import {
   registerCaptureChatAccessor,
   registerCaptureEditorAccessors,
 } from './issue-capture-context';
+import { registerCaptureChatTitleLookup } from './capture-drag';
 
 let wired = false;
 
@@ -58,6 +59,10 @@ export function wireCaptureAccessors(): void {
   });
   void import('../state/sessions').then((m) => {
     sessions = m;
+    registerCaptureChatTitleLookup((chatId) => {
+      const chat = m.sessionState?.chats.find((entry) => entry.id === chatId);
+      return chat?.name?.trim() ?? null;
+    });
   });
 }
 

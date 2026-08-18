@@ -19,7 +19,6 @@ import {
   parseCodeSelectionDragData,
 } from '../attachments/code-selection-drag';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
-import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import {
   ISSUE_CAPTURE_MIME,
   parseCaptureDragData,
@@ -27,7 +26,6 @@ import {
   type CapturePayload,
 } from '../issues/capture-payload';
 import { formatCodeRefLabel } from '../attachments/code-ref-format';
-import { sessionState } from '../state/sessions';
 import { CHAT_DRAG_MIME } from '../attachments/chat-drag';
 
 /** Active drag, or null. Read by drop targets during `dragover`. */
@@ -88,10 +86,18 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/** Optional chat-title resolver wired at boot (keeps sessions off this import graph). */
+type ChatTitleLookup = (chatId: string) => string | null;
+let chatTitleLookup: ChatTitleLookup | null = null;
+
+/** Wire chat title lookup from the shell after sessions is available. */
+export function registerCaptureChatTitleLookup(lookup: ChatTitleLookup): void {
+  chatTitleLookup = lookup;
+}
+
 function chatLabelForId(chatId: string): string {
-  const chat = sessionState?.chats.find((entry) => entry.id === chatId);
-  const name = chat?.name?.trim();
-  if (name && name !== PLACEHOLDER_CHAT_NAME) return name;
+  const looked = chatTitleLookup?.(chatId)?.trim();
+  if (looked) return looked;
   return 'Chat';
 }
 
@@ -256,4 +262,5 @@ export function resetCaptureDragForTests(): void {
   activeDrag = null;
   layerBound = false;
   listeners.clear();
+  chatTitleLookup = null;
 }

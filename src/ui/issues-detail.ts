@@ -14,6 +14,7 @@ import {
   appendIssueLinks,
   deleteIssue,
   findIssueById,
+  issueCodeRefsEqual,
   scheduleSaveIssues,
   updateIssue,
 } from '../state/issues-store';
@@ -53,6 +54,7 @@ import {
 import { createCodeRefLinkButton } from './code-ref-link';
 import { createIssueEditor } from './issue-editor';
 import { collectInlineRefs } from '../issues/markdown-inline';
+import { codeRefsExcludingPlan, inferIssuePlanPath } from '../issues/plan-attach';
 import { renderIssueAttachments } from './issues-attachments-section';
 import { bindIssueDropTarget } from './issue-drop-target';
 import { renderIssueGithubSection } from './issues-github-section';
@@ -211,6 +213,17 @@ async function addCodeRefFromPaste(issueId: string, paste: string): Promise<void
   const snippet = await captureSnippetForRef(parsed.ref);
   const ref: IssueCodeRef = snippet ? { ...parsed.ref, snippet } : parsed.ref;
   appendIssueLinks(issueId, { codeRefs: [ref] });
+  scheduleSaveIssues();
+  refreshIssueDetailIfOpen();
+}
+
+function removeCodeRefFromIssue(issueId: string, ref: IssueCodeRef): void {
+  const issue = findIssueById(issueId);
+  if (!issue?.codeRefs?.length) return;
+  const next = issue.codeRefs.filter((entry) => !issueCodeRefsEqual(entry, ref));
+  if (next.length === issue.codeRefs.length) return;
+  updateIssue(issueId, { codeRefs: next });
+  scheduleSaveIssues();
   refreshIssueDetailIfOpen();
 }
 
@@ -424,7 +437,8 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
   // Code links
   const codeSection = section('Code links');
-  const refs = issue.codeRefs ?? [];
+  const planPath = inferIssuePlanPath(issue);
+  const refs = codeRefsExcludingPlan(issue.codeRefs ?? [], planPath);
   if (refs.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'issues-detail__empty';
@@ -436,18 +450,34 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     for (const ref of refs) {
       const row = document.createElement('div');
       row.className = 'issues-detail__code-row';
+
+      const main = document.createElement('div');
+      main.className = 'issues-detail__code-row-main';
+
       const btn = createCodeRefLinkButton({
         workspacePath: ref.path,
         startLine: ref.startLine ?? 1,
         endLine: ref.endLine ?? ref.startLine ?? 1,
       });
-      row.appendChild(btn);
+      main.appendChild(btn);
       if (ref.snippet?.trim()) {
         const snip = document.createElement('pre');
         snip.className = 'issues-detail__snippet';
         snip.textContent = ref.snippet.slice(0, 500);
-        row.appendChild(snip);
+        main.appendChild(snip);
       }
+      row.appendChild(main);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'issues-detail__code-remove';
+      remove.setAttribute('aria-label', `Remove link to ${ref.path}`);
+      remove.textContent = '×';
+      remove.addEventListener('click', () => {
+        removeCodeRefFromIssue(issue.id, ref);
+      });
+      row.appendChild(remove);
+
       list.appendChild(row);
     }
     codeSection.body.appendChild(list);
@@ -497,8 +527,8 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const planSection = section('Plan');
   const planEl = document.createElement('p');
   planEl.className = 'issues-detail__empty';
-  if (issue.planPath?.trim()) {
-    planEl.textContent = issue.planPath;
+  if (planPath) {
+    planEl.textContent = planPath;
     planSection.body.appendChild(planEl);
 
     const planActions = document.createElement('div');
@@ -509,7 +539,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     openPlan.className = 'issues-btn';
     openPlan.textContent = 'Open plan';
     openPlan.addEventListener('click', () => {
-      void openIssuePlanInEditor(issue.planPath!, issue.workspacePath);
+      void openIssuePlanInEditor(planPath, issue.workspacePath);
     });
     planActions.appendChild(openPlan);
 

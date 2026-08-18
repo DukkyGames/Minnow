@@ -27,6 +27,7 @@ import {
 } from '../issues/taxonomy.ts';
 import { emitIssuesChange } from './issues-events.ts';
 import { getIssuesTaxonomySync } from './issues-taxonomy-store.ts';
+import { normalizeIssuePlanPath } from '../issues/plan-attach.ts';
 import { getWorkspaceLabel, getWorkspacePath } from './workspace.ts';
 import { validateParentLink } from '../issues/hierarchy.ts';
 import { builtInIssueViews, LOCAL_ASSIGNEE_ID } from '../issues/saved-views.ts';
@@ -1431,11 +1432,24 @@ export function appendIssueLinks(
     for (const raw of links.codeRefs) {
       const ref = normalizeIssueCodeRef(raw);
       if (!ref) continue;
+      const planPath = normalizeIssuePlanPath(ref.path);
+      if (planPath) {
+        if (issue.planPath !== planPath) {
+          issue.planPath = planPath;
+          changed = true;
+        }
+        continue;
+      }
       if (existing.some((e) => issueCodeRefsEqual(e, ref))) continue;
       existing.push(ref);
       changed = true;
     }
     issue.codeRefs = existing;
+    const stripped = existing.filter((entry) => !normalizeIssuePlanPath(entry.path));
+    if (stripped.length !== existing.length) {
+      issue.codeRefs = stripped;
+      changed = true;
+    }
   }
 
   if (links.gitLinks?.length) {
