@@ -13,6 +13,16 @@ import {
   getOsView,
   subscribeInstances,
 } from './instances';
+import {
+  dataTransferLooksCapturable,
+  subscribeCaptureDrag,
+} from '../ui/capture-drag';
+import {
+  computeIssuesDockBadge,
+  issuesDockBadgeLabel,
+  issuesDockBadgeText,
+} from '../issues/dock-badge';
+import { subscribeIssuesChanges } from '../state/issues-events';
 import { isCoarsePointer } from '../ui/mobile-layout';
 import { isResearchPanelOpen, subscribeResearchPanel } from '../ui/research-panel';
 import { launchApp } from './router';
@@ -153,7 +163,55 @@ function handleRailClick(appId: AppId): void {
   launchApp(appId);
 }
 
-function buildRailButton(appId: AppId, label: string): HTMLButtonElement {
+const RAIL_DROP_CLASS = 'is-drop-target';
+
+/**
+ * The Issues tile doubles as a capture drop target.
+ *
+ * `dragover` cannot read the transfer payload (see `file-tree-dnd.ts`), so the
+ * decision is made from `DataTransfer.types` alone and the "something is in
+ * flight" highlight comes from the shell drag layer's module-level descriptor.
+ */
+function bindRailCaptureDrop(btn: HTMLButtonElement): () => void {
+  const onDragOver = (event: DragEvent): void => {
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'link';
+    btn.classList.add(RAIL_DROP_CLASS);
+  };
+  const onDragLeave = (): void => btn.classList.remove(RAIL_DROP_CLASS);
+  const onDrop = (event: DragEvent): void => {
+    btn.classList.remove(RAIL_DROP_CLASS);
+    if (!dataTransferLooksCapturable(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void import('../ui/issue-capture').then((m) => {
+      m.openCaptureFromDrop(event.dataTransfer, { anchor: btn });
+    });
+  };
+
+  btn.addEventListener('dragover', onDragOver);
+  btn.addEventListener('dragleave', onDragLeave);
+  btn.addEventListener('drop', onDrop);
+
+  const unsubscribe = subscribeCaptureDrag((payload) => {
+    btn.classList.toggle('is-drop-armed', payload !== null);
+    if (!payload) btn.classList.remove(RAIL_DROP_CLASS);
+  });
+
+  return () => {
+    unsubscribe();
+    btn.removeEventListener('dragover', onDragOver);
+    btn.removeEventListener('dragleave', onDragLeave);
+    btn.removeEventListener('drop', onDrop);
+  };
+}
+
+function buildRailButton(
+  appId: AppId,
+  label: string,
+  disposers: Array<() => void>,
+): HTMLButtonElement {
   const def = getAppById(appId);
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -164,8 +222,63 @@ function buildRailButton(appId: AppId, label: string): HTMLButtonElement {
   btn.appendChild(icon);
   bindRailTooltip(btn, () => label);
   btn.addEventListener('click', () => handleRailClick(appId));
+  if (appId === 'issues') {
+    btn.classList.add('mn-capture-target');
+    disposers.push(bindRailCaptureDrop(btn));
+    disposers.push(bindIssuesDockBadge(btn, label));
+  }
   return btn;
 }
+
+/**
+ * Badge the Issues tile with its two draining queues.
+ *
+ * Loaded lazily and failing silently: the rail mounts before the issues store
+ * does, and a rail that throws is a shell with no navigation.
+ */
+function bindIssuesDockBadge(btn: HTMLButtonElement, appLabel: string): () => void {
+  const badge = document.createElement('span');
+  badge.className = 'mn-os-app-rail__badge';
+  badge.hidden = true;
+  btn.appendChild(badge);
+
+  // The subscription is established synchronously and the *store* is resolved
+  // lazily inside it. Awaiting the store first looked tidier and was wrong: the
+  // rail rebuilds on the first app-preferences change, so a binding created at
+  // mount is often disposed before its import settles, and the badge that
+  // survives ends up with no listener at all.
+  const sync = (): void => {
+    const state = computeIssuesDockBadge(issuesStore?.listIssues() ?? []);
+    const text = issuesDockBadgeText(state);
+    badge.hidden = text === '';
+    badge.textContent = text;
+    badge.classList.toggle('is-urgent', state.urgent);
+    const detail = issuesDockBadgeLabel(state);
+    badge.title = detail;
+    btn.dataset.badgeLabel = detail;
+    btn.setAttribute('aria-label', detail ? `${appLabel} — ${detail}` : appLabel);
+  };
+
+  sync();
+  const unsubscribe = subscribeIssuesChanges(sync);
+
+  void import('../state/issues-store')
+    .then((module) => {
+      issuesStore = module;
+      sync();
+    })
+    .catch(() => {
+      /* No badge is a better failure than no rail. */
+    });
+
+  return () => {
+    unsubscribe();
+    badge.remove();
+  };
+}
+
+/** Resolved once, shared by every rebuild of the tile. */
+let issuesStore: typeof import('../state/issues-store') | null = null;
 
 function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
   for (const [appId, btn] of tileByAppId) {
@@ -177,7 +290,10 @@ function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
     btn.setAttribute('aria-current', active ? 'page' : hosting ? 'true' : 'false');
     btn.removeAttribute('aria-expanded');
     const label = getAppById(appId)?.name;
-    if (label) btn.setAttribute('aria-label', label);
+    // Keep a badge's detail ("2 issues to triage") in the accessible name;
+    // this runs on every instance change and would otherwise erase it.
+    const badgeLabel = btn.dataset.badgeLabel;
+    if (label) btn.setAttribute('aria-label', badgeLabel ? `${label} — ${badgeLabel}` : label);
   }
   refreshRailTooltip();
 }
@@ -200,9 +316,13 @@ export function initAppRail(root: HTMLElement): () => void {
   nav.className = 'mn-os-app-rail__nav';
 
   const tileByAppId = new Map<AppId, HTMLButtonElement>();
+  /** Per-tile listener disposers; cleared on every rebuild. */
+  let tileDisposers: Array<() => void> = [];
 
   function rebuild(): void {
     hideRailTooltip();
+    for (const dispose of tileDisposers) dispose();
+    tileDisposers = [];
     nav.replaceChildren();
     tileByAppId.clear();
     if (tooltipEl) {
@@ -211,7 +331,7 @@ export function initAppRail(root: HTMLElement): () => void {
     }
 
     for (const app of listRailApps()) {
-      const btn = buildRailButton(app.id, app.name);
+      const btn = buildRailButton(app.id, app.name, tileDisposers);
       tileByAppId.set(app.id, btn);
       nav.appendChild(btn);
     }
@@ -254,6 +374,8 @@ export function initAppRail(root: HTMLElement): () => void {
     unsubInstances();
     unsubPrefs();
     unsubResearch();
+    for (const dispose of tileDisposers) dispose();
+    tileDisposers = [];
     hideRailTooltip();
     tooltipEl?.remove();
     tooltipEl = null;

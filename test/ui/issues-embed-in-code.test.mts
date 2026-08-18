@@ -39,43 +39,7 @@ function setupDom(): void {
 
   document.body.innerHTML = `
     <div id="osAppsLayer">
-      <main id="issuesView" class="issues-page" aria-label="Issues">
-        <header class="issues-header">
-          <div class="issues-header__brand">
-            <span id="issuesPageIcon" class="issues-header__icon"></span>
-            <div class="issues-header__titles">
-              <h1>Issues</h1>
-              <p id="issuesSummary" class="issues-summary"></p>
-            </div>
-          </div>
-          <div class="issues-header__controls">
-            <select id="issuesScope"><option value="current_workspace">Current</option></select>
-            <button type="button" id="issuesViewList">List</button>
-            <button type="button" id="issuesViewBoard">Board</button>
-            <input id="issuesQuickCapture" type="text" />
-            <button type="button" id="btnIssuesNew">New</button>
-          </div>
-        </header>
-        <div class="issues-filter-bar">
-          <select id="issuesType"><option value="all">All</option></select>
-          <select id="issuesStatus"><option value="all">All</option></select>
-          <select id="issuesPriority"><option value="all">All</option></select>
-          <input type="checkbox" id="issuesHideDone" checked />
-          <input type="search" id="issuesSearch" />
-        </div>
-        <form id="issuesNewForm"></form>
-        <div class="issues-body">
-          <div id="issuesSelectionBar" hidden>
-            <span id="issuesSelectionCount"></span>
-            <button type="button" id="btnIssuesDeleteSelected">Delete</button>
-            <button type="button" id="btnIssuesClearSelection">Clear</button>
-          </div>
-          <div class="issues-list-pane">
-            <div id="issuesListHead" hidden></div>
-            <div id="issuesPanelMount"></div>
-          </div>
-        </div>
-      </main>
+      <main id="issuesView" class="issues-page" aria-label="Issues"></main>
     </div>
     <div id="mainColumn">
       <div id="chatArea"><p id="chatPlaceholder">chat</p></div>

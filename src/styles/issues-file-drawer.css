@@ -1,0 +1,43 @@
+/**
+ * File-tree panel while the fullscreen Issues app is foreground.
+ *
+ * Docks on the right like Code's #fileSidebar (border-left, no modal backdrop).
+ */
+
+html.issues-file-drawer-open #fileSidebar.file-sidebar--issues-drawer {
+  position: fixed;
+  top: var(--mn-os-menubar-h, 46px);
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: var(--file-sidebar-w, 350px);
+  max-width: min(420px, calc(100vw - var(--sidebar-rail, 48px) - 16px));
+  z-index: 35;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--mn-border);
+  border-right: none;
+  box-shadow: none;
+}
+
+html.issues-file-drawer-open #fileSidebar.file-sidebar--issues-drawer.collapsed {
+  width: var(--file-sidebar-rail, 48px);
+}
+
+/* Keep Issues content clear of the docked panel. */
+html.issues-file-drawer-open #issuesView .issues-shell {
+  margin-right: var(--file-sidebar-w, 350px);
+  transition: margin-right var(--duration-normal, 0.2s) var(--ease-out, ease-out);
+}
+
+html.issues-file-drawer-open:has(#fileSidebar.file-sidebar--issues-drawer.collapsed) #issuesView .issues-shell {
+  margin-right: var(--file-sidebar-rail, 48px);
+}
+
+/* Preview and git toggles target Code-only panels; hide them in the Issues drawer. */
+html.issues-file-drawer-open #fileSidebar.file-sidebar--issues-drawer .file-sidebar-preview-toggle,
+html.issues-file-drawer-open #fileSidebar.file-sidebar--issues-drawer .git-panel-toggle {
+  display: none;
+}

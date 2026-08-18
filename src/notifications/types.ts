@@ -21,7 +21,15 @@ export type NotificationKind =
   | 'sub_agent_failed'
   | 'scheduler'
   | 'research'
-  | 'synthesis';
+  | 'synthesis'
+  // Issues agent workflow. Deliberately narrow: Issues shows assigned, running,
+  // asked a question, opened a PR, failed — and nothing about waves, slots or
+  // integration branches, which stay the Orchestrator's business.
+  | 'issue_agent_started'
+  | 'issue_agent_question'
+  | 'issue_agent_pr'
+  | 'issue_agent_failed'
+  | 'issue_triage';
 
 /** One row in the session notification inbox. */
 export interface NotificationRecord {
@@ -46,6 +54,14 @@ export type PushNotificationInput = Omit<NotificationRecord, 'id' | 'createdAt' 
   id?: string;
   createdAt?: number;
   dedupeKey?: string;
+  /**
+   * Also raise a native OS notification when the window is unfocused.
+   *
+   * Opt-in per push rather than per kind: only alerts the user genuinely must
+   * not miss (an agent asking a question, a PR landing) earn a desktop toast,
+   * and every existing caller keeps its current behaviour by not setting it.
+   */
+  os?: boolean;
 };
 
 /** Per-kind enable groups for notification prefs. */

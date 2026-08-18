@@ -8,8 +8,7 @@ import { sessionState } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import { renderSidebar } from './sidebar';
 
-export const CHAT_DRAG_MIME = 'application/x-minnow-chat-id';
-
+import { CHAT_DRAG_MIME } from '../attachments/chat-drag';
 const DROP_TARGET_CLASS = 'chat-group-header--drop-target';
 const DRAGGING_ROW_CLASS = 'chat-item-row--dragging';
 

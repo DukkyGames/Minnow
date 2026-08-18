@@ -171,15 +171,6 @@
 }
 
 .scc-head__kbd,
-.scc-palette__shortcut {
-  font-family: var(--font-mono);
-  font-size: var(--scc-label);
-  padding: 1px 5px;
-  border: 1px solid var(--mn-border);
-  border-radius: 4px;
-  color: var(--mn-fg-subtle);
-  line-height: 1.5;
-}
 
 /* ─── Body ───────────────────────────────────────────────────────────────── */
 
@@ -1727,101 +1718,7 @@
   }
 }
 
-/* ─── Command palette ────────────────────────────────────────────────────── */
-
-.scc-palette-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 12vh;
-  background: var(--mn-overlay);
-}
-
-.scc-palette-overlay[hidden] {
-  display: none;
-}
-
-.scc-palette {
-  width: min(560px, calc(100% - 32px));
-  max-height: 62vh;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--mn-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--mn-bg);
-  box-shadow: var(--mn-shadow);
-  overflow: hidden;
-}
-
-.scc-palette__input {
-  padding: 13px 16px;
-  border: none;
-  border-bottom: 1px solid var(--mn-border);
-  background: transparent;
-  color: var(--mn-fg);
-  font-family: inherit;
-  font-size: var(--scc-title-sm);
-}
-
-.scc-palette__input:focus {
-  outline: none;
-}
-
-.scc-palette__list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 6px;
-}
-
-.scc-palette__group {
-  padding: 9px 10px 4px;
-  font-size: var(--scc-label);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--mn-fg-subtle);
-}
-
-.scc-palette__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--scc-text);
-}
-
-.scc-palette__row.is-active {
-  background: var(--mn-accent-soft);
-}
-
-.scc-palette__title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.scc-palette__group-tag {
-  font-size: var(--scc-text-xs);
-  color: var(--mn-fg-subtle);
-  flex-shrink: 0;
-}
-
-.scc-palette__empty {
-  margin: 0;
-  padding: 24px 12px;
-  text-align: center;
-  font-size: var(--scc-text);
-  color: var(--mn-fg-muted);
-}
+/* Command palette lives in styles/command-palette.css (one palette, globally). */
 
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 

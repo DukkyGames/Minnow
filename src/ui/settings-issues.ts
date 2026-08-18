@@ -38,9 +38,26 @@ import {
   PROJECT_KEY_VALIDATION_MESSAGE,
 } from '../issues/project-key';
 import { appendSettingsGroup } from './settings-layout';
-import { appendSettingsOfflineHint, createSettingsInputRow, createSettingsKvList } from './settings-controls';
+import {
+  ISSUES_GITHUB_MODE_LABELS,
+  ISSUES_GITHUB_MODES,
+  normalizeGithubMode,
+} from '../issues/github-sync-plan';
+import {
+  getIssuesGithubMode,
+  importGithubIssues,
+  setIssuesGithubMode,
+} from '../state/issues-github';
+import {
+  appendSettingsOfflineHint,
+  createSettingsInputRow,
+  createSettingsKvList,
+  createSettingsSelectRow,
+} from './settings-controls';
 import { createIcon } from './icon';
+import { createIssueTypeIconPickerButton } from './issue-type-icon-picker';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
+import { resolveIssueTypeIcon } from '../issues/type-icons';
 import { setStatus } from './status';
 
 type TaxonomyKind = 'types' | 'statuses' | 'priorities';
@@ -101,12 +118,14 @@ function moveItem<T extends TaxonomyItem>(items: T[], id: string, delta: -1 | 1)
   return next.sort((a, b) => a.order - b.order).map((item, i) => ({ ...item, order: i }));
 }
 
-function appendTableColgroup(table: HTMLTableElement, withStatusColumns: boolean): void {
+function appendTableColgroup(table: HTMLTableElement, withStatusColumns: boolean, withIconColumn = false): void {
   const colgroup = document.createElement('colgroup');
-  const cols = [
+  const cols = [];
+  if (withIconColumn) cols.push(el('col', 'settings-issues-col-icon'));
+  cols.push(
     el('col', 'settings-issues-col-label'),
     el('col', 'settings-issues-col-id'),
-  ];
+  );
   if (withStatusColumns) {
     cols.push(el('col', 'settings-issues-col-role'), el('col', 'settings-issues-col-options'));
   }
@@ -124,6 +143,7 @@ function renderTaxonomyTable(
   onChange: () => void,
 ): void {
   const withStatusColumns = kind === 'statuses';
+  const withIconColumn = kind === 'types';
   const body = appendSettingsGroup(mount, title, hint, searchKey, { emphasis: true });
   const taxonomy = getIssuesTaxonomySync();
   const items =
@@ -137,11 +157,18 @@ function renderTaxonomyTable(
   const table = document.createElement('table');
   table.className = 'settings-issues-table';
 
-  appendTableColgroup(table, withStatusColumns);
+  appendTableColgroup(table, withStatusColumns, withIconColumn);
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  const headers = ['Label', 'Id', ...(withStatusColumns ? ['Role', 'Options'] : []), 'Order', ''];
+  const headers = [
+    ...(withIconColumn ? ['Icon'] : []),
+    'Label',
+    'Id',
+    ...(withStatusColumns ? ['Role', 'Options'] : []),
+    'Order',
+    '',
+  ];
   for (const label of headers) {
     const th = document.createElement('th');
     th.scope = 'col';
@@ -162,7 +189,7 @@ function renderTaxonomyTable(
     tbody.appendChild(emptyRow);
   } else {
     for (const item of items) {
-      tbody.appendChild(renderTaxonomyRow(kind, item, withStatusColumns, onChange));
+      tbody.appendChild(renderTaxonomyRow(kind, item, withStatusColumns, withIconColumn, onChange));
     }
   }
   table.appendChild(tbody);
@@ -190,11 +217,23 @@ function renderTaxonomyRow(
   kind: TaxonomyKind,
   item: TaxonomyItem | StatusItem,
   withStatusColumns: boolean,
+  withIconColumn: boolean,
   onChange: () => void,
 ): HTMLTableRowElement {
   const row = document.createElement('tr');
   row.className = 'settings-issues-row';
   row.dataset.taxonomyId = item.id;
+
+  if (withIconColumn) {
+    const iconBtn = createIssueTypeIconPickerButton(
+      resolveIssueTypeIcon(item.id, item),
+      item.label,
+      (icon) => {
+        void updateItemIcon(item.id, icon, onChange);
+      },
+    );
+    row.appendChild(labeledCell('Icon', iconBtn));
+  }
 
   const labelInput = document.createElement('input');
   labelInput.type = 'text';
@@ -303,6 +342,18 @@ function renderTaxonomyRow(
   row.appendChild(actionsCell);
 
   return row;
+}
+
+async function updateItemIcon(
+  id: string,
+  icon: string,
+  onChange: () => void,
+): Promise<void> {
+  const next = cloneTaxonomy();
+  const item = next.types.find((row) => row.id === id);
+  if (!item) return;
+  item.icon = icon;
+  if (await persistTaxonomy(next)) onChange();
 }
 
 async function updateItemLabel(
@@ -416,7 +467,12 @@ async function promptAndAddItem(kind: TaxonomyKind, onChange: () => void): Promi
   if (kind === 'statuses') {
     next.statuses.push({ id, label: label.trim(), order, boardVisible: true });
   } else if (kind === 'types') {
-    next.types.push({ id, label: label.trim(), order });
+    next.types.push({
+      id,
+      label: label.trim(),
+      order,
+      icon: resolveIssueTypeIcon(id),
+    });
   } else {
     next.priorities.push({ id, label: label.trim(), order });
   }
@@ -626,8 +682,80 @@ export function renderIssuesSettingsSection(mount: HTMLElement): void {
 
     appendIssuesIntro(content);
     renderIssueIdsPanel(content, refresh);
+    renderIssuesGithubPanel(content, refresh);
     renderIssuesTaxonomyPanels(content, refresh);
   };
 
   refresh();
+}
+
+/**
+ * GitHub sync mode (Phase 5).
+ *
+ * Three modes and a deliberate default of Off. The middle mode exists because
+ * "sync everything" is the wrong first step for a solo developer with a public
+ * repo and a private scratch list — Link + push pushes only the issues you flag,
+ * and Two-way mirror is the explicit opt-in to letting the remote write back.
+ */
+function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void {
+  const body = appendSettingsGroup(
+    mount,
+    'GitHub',
+    'Sync issues with the GitHub repo for this workspace, through your own `gh` login. No tokens are stored.',
+    'apps.issues.github',
+  );
+
+  const hint = el('p', 'settings-field-hint');
+  const describeMode = (): void => {
+    const mode = getIssuesGithubMode();
+    hint.textContent =
+      mode === 'off'
+        ? 'Nothing is sent to or read from GitHub.'
+        : mode === 'link'
+          ? 'Issues you flag are pushed to GitHub. Your copy wins; a change made on GitHub is overwritten on the next push.'
+          : 'Issues sync both ways. When both sides changed, you are asked which to keep — neither is overwritten silently.';
+  };
+  describeMode();
+
+  const { row, select } = createSettingsSelectRow('Mode', {
+    searchKey: 'apps.issues.github.mode',
+    id: 'settingsIssuesGithubMode',
+    value: getIssuesGithubMode(),
+    options: ISSUES_GITHUB_MODES.map((mode) => ({
+      value: mode,
+      label: ISSUES_GITHUB_MODE_LABELS[mode],
+    })),
+  });
+  select.addEventListener('change', () => {
+    setIssuesGithubMode(normalizeGithubMode(select.value));
+    describeMode();
+    onChange();
+  });
+
+  body.appendChild(row);
+  body.appendChild(hint);
+
+  const importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.className = 'settings-btn';
+  importBtn.textContent = 'Import issues from GitHub';
+  importBtn.disabled = getIssuesGithubMode() === 'off';
+  importBtn.addEventListener('click', () => {
+    importBtn.disabled = true;
+    void importGithubIssues()
+      .then((result) => {
+        if (!result.ok) {
+          void appAlert(result.error ?? 'Could not import issues', 'GitHub');
+          return;
+        }
+        void appAlert(
+          `Imported ${result.imported}, skipped ${result.skipped} already linked. Imported issues wait in Triage.`,
+          'GitHub',
+        );
+      })
+      .finally(() => {
+        importBtn.disabled = getIssuesGithubMode() === 'off';
+      });
+  });
+  body.appendChild(importBtn);
 }

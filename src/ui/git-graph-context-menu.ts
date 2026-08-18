@@ -18,6 +18,7 @@ import { confirmDirtyCheckout } from './git-checkout-confirm';
 import { openCherryPickDialog } from './git-advanced-actions';
 import { extractLocalBranchRefs, type CommitVisual } from './git-graph';
 import { openGitPanelNamePopover } from './git-panel-name-popover';
+import { CAPTURE_MENU_KINDS, legacyCaptureMenuItems } from './issue-capture';
 import { showToast } from './toast';
 
 export interface GitGraphContextMenuCtx {
@@ -429,6 +430,12 @@ async function buildMenuItems(
       title: visual.isHead ? 'Already at HEAD' : undefined,
       action: () => void runCherryPick(ctx, sha),
     },
+    { kind: 'sep' },
+    ...legacyCaptureMenuItems({
+      kind: CAPTURE_MENU_KINDS.commit,
+      hash: sha,
+      subject: commit.subject,
+    }).map((row) => ({ kind: 'item' as const, label: row.label, action: row.action })),
     { kind: 'sep' },
     {
       kind: 'item',

@@ -47,10 +47,24 @@ describe('issues router', () => {
 });
 
 describe('issues markup contract', () => {
-  test('index.html defines issuesView shell', () => {
+  test('index.html defines a thin issuesView mount', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="issuesView"/);
-    assert.match(html, /id="issuesPanelMount"/);
-    assert.match(html, /id="issuesQuickCapture"/);
+    assert.doesNotMatch(html, /id="issuesPanelMount"/);
+    assert.doesNotMatch(html, /id="issuesQuickCapture"/);
+  });
+});
+
+describe('issues list CSS contract', () => {
+  test('width rules use a named container query, not viewport media', () => {
+    const css = fs.readFileSync(new URL('../../src/styles/issues.css', import.meta.url), 'utf8');
+    assert.match(css, /container-name:\s*issues/);
+    assert.match(css, /@container issues \(max-width: 900px\)/);
+    assert.match(css, /--issues-peek-cols: minmax\(0, 1fr\) minmax\(380px, 520px\)/);
+    assert.match(css, /\.issues-list-head[\s\S]*color: var\(--mn-fg-muted\)/);
+    assert.doesNotMatch(css, /@media \(max-width: 900px\)/);
+    assert.doesNotMatch(css, /@media \(max-width: 640px\)/);
+    assert.doesNotMatch(css, /^\s*max-width:\s*65ch/m);
+    assert.match(css, /\.issues-empty--triage/);
   });
 });

@@ -17,6 +17,11 @@ export interface ShortcutDoc {
 }
 
 const SHELL_SHORTCUTS: ShortcutDoc[] = [
+  {
+    section: 'Shell',
+    keys: 'Ctrl/Cmd + K / Ctrl/Cmd + Shift + P',
+    label: 'Command palette (works from any app)',
+  },
   { section: 'Shell', keys: '?', label: 'Open this keyboard shortcuts list' },
   { section: 'Shell', keys: 'Escape', label: 'Close overlays, popovers, side panels, and Research' },
   { section: 'Shell', keys: 'Ctrl + Scroll wheel', label: 'Zoom the interface in / out' },
@@ -41,10 +46,14 @@ const CHAT_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Chat', keys: '1 / 2 / 3', label: 'Tool approval: allow once, always allow, cancel' },
 ];
 
+// Ctrl/Cmd+P ("Go to file") was listed here for a long time with nothing behind
+// it. The palette is real; a fuzzy file switcher is not, so it is not claimed.
 const CODE_SHORTCUTS: ShortcutDoc[] = [
-  { section: 'Code', keys: 'Ctrl/Cmd + K', label: 'Quick Edit on selection' },
-  { section: 'Code', keys: 'Ctrl/Cmd + P', label: 'Go to file' },
-  { section: 'Code', keys: 'Ctrl/Cmd + Shift + P', label: 'Command palette' },
+  {
+    section: 'Code',
+    keys: 'Ctrl/Cmd + K',
+    label: 'Quick Edit on the editor selection (falls through to the palette with no selection)',
+  },
 ];
 
 const BOARD_SHORTCUTS: ShortcutDoc[] = [
@@ -52,6 +61,23 @@ const BOARD_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Orchestrate board', keys: 'Arrow keys', label: 'Navigate cards in the kanban grid' },
   { section: 'Orchestrate board', keys: 'Enter / Space', label: 'Open task chat or plan panel' },
   { section: 'Orchestrate board', keys: 'Arrow keys (exec mode)', label: 'Change execution mode when a segment is focused' },
+];
+
+const ISSUES_SHORTCUTS: ShortcutDoc[] = [
+  { section: 'Issues', keys: 'j / k / Arrow keys', label: 'Move the focused issue' },
+  { section: 'Issues', keys: 'Enter', label: 'Open peek for the focused issue' },
+  { section: 'Issues', keys: 'Escape', label: 'Close peek, or clear the multi-select' },
+  { section: 'Issues', keys: 's', label: 'Change status' },
+  { section: 'Issues', keys: 'p', label: 'Change priority' },
+  { section: 'Issues', keys: 'u', label: 'Change assignee' },
+  { section: 'Issues', keys: 'l', label: 'Change labels' },
+  { section: 'Issues', keys: 'g', label: 'Change project' },
+  { section: 'Issues', keys: 'A', label: 'Assign an agent — or answer it when it is waiting on you' },
+  { section: 'Issues', keys: 'Y', label: 'Accept a triage issue (backlog)' },
+  { section: 'Issues', keys: 'N / Backspace', label: 'Decline a triage issue (canceled)' },
+  { section: 'Issues', keys: 'C', label: 'New issue' },
+  { section: 'Issues', keys: 'Alt + ArrowUp / ArrowDown', label: 'Move rank within the group or column' },
+  { section: 'Issues', keys: 'Shift + ArrowLeft / ArrowRight', label: 'Move the card to the neighbouring board column' },
 ];
 
 const MAIL_SHORTCUTS: ShortcutDoc[] = [
@@ -72,6 +98,7 @@ const ALL_KEYBOARD_SHORTCUTS: ShortcutDoc[] = [
   ...CHAT_SHORTCUTS,
   ...CODE_SHORTCUTS,
   ...BOARD_SHORTCUTS,
+  ...ISSUES_SHORTCUTS,
   ...MAIL_SHORTCUTS,
 ];
 

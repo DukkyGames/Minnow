@@ -88,13 +88,28 @@ With the tree focused and the editor not:
 
 ## Issues
 
-| Input | Action |
-|-------|--------|
+Shortcuts apply when Issues is open and you are not typing in a field.
+
+| Keys | Action |
+|------|--------|
+| **j** / **k** / **Arrow keys** | Move the focused issue |
+| **Enter** | Open peek |
+| **Escape** | Close peek, or clear the multi-select |
+| **s** | Change status |
+| **p** | Change priority |
+| **u** | Change assignee |
+| **l** | Change labels |
+| **g** | Change project |
+| **A** | Queue an agent on the focused issue |
+| **Y** | Accept a triage issue |
+| **N** / **Backspace** | Decline a triage issue |
+| **C** | New issue |
+| **Alt+↑** / **Alt+↓** | Move rank within the group or column |
+| **Shift+←** / **Shift+→** | Move the card to the neighbouring board column |
 | **Mod+click** | Toggle row selection |
 | **Shift+click** | Select a range |
 | **Shift+F10** | Context menu |
 | **Mod+Enter** | Save a description edit |
-| **Escape** | Cancel a description edit |
 
 ## Settings
 
