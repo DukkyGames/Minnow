@@ -337,6 +337,10 @@ function bindPropertyChip(
   chip.setAttribute('tabindex', '0');
   chip.setAttribute('aria-haspopup', 'menu');
   chip.setAttribute('aria-label', ariaLabel);
+  // Chevron signals the shared context menu — same affordance as workflow split buttons.
+  chip.appendChild(
+    createIcon('chevronDown', { size: 10, className: 'issues-detail__prop-chevron' }),
+  );
   const show = (): void => open(chip);
   chip.addEventListener('click', (event) => {
     event.preventDefault();
@@ -913,16 +917,16 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     }
   });
 
-  const linkRow = document.createElement('div');
-  linkRow.id = `issues-git-link-fields-${issue.id}`;
-  linkRow.className = 'issues-detail__add-code issues-detail__git-link-row';
-  linkRow.hidden = true;
-  linkRow.append(shaInput, shaBtn, urlInput, urlBtn);
-  body.appendChild(linkRow);
+  const linkFields = document.createElement('div');
+  linkFields.id = `issues-git-link-fields-${issue.id}`;
+  linkFields.className = 'issues-detail__git-link-fields';
+  linkFields.hidden = true;
+  linkFields.append(buildAddRow(shaInput, shaBtn), buildAddRow(urlInput, urlBtn));
+  body.appendChild(linkFields);
 
   linkToggle.addEventListener('click', () => {
-    const next = linkRow.hidden;
-    linkRow.hidden = !next;
+    const next = linkFields.hidden;
+    linkFields.hidden = !next;
     linkToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
     if (next) shaInput.focus();
   });

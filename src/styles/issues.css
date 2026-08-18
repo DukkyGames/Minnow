@@ -569,7 +569,7 @@
 .issues-list-head,
 .issues-row {
   /* id type title status priority assignee project agent rollup counts labels updated */
-  --issues-list-cols: 4rem 1.6rem minmax(0, 1fr) minmax(4.25rem, max-content) 3.5rem 4rem 4.5rem 3.5rem 2.5rem 2.4rem 5rem 3.5rem;
+  --issues-list-cols: 4rem 1.75rem minmax(0, 1fr) minmax(4.25rem, max-content) 3.5rem 4rem 4.5rem 3.5rem 2.5rem 2.4rem 5rem 3.5rem;
   display: grid;
   grid-template-columns: var(--issues-list-cols);
   gap: 4px 8px;
@@ -684,6 +684,36 @@
 
 .issues-list-head__sort[aria-sort='descending'] .issues-list-head__sort-indicator::before {
   content: '▼';
+}
+
+/* Type column matches icon-only row cells — sort control stays in-grid. */
+.issues-list-head__type {
+  position: relative;
+  justify-self: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.issues-list-head__type .issues-list-head__sort-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.issues-list-head__type:not(.is-active) .issues-list-head__sort-indicator {
+  opacity: 0.4;
+}
+
+.issues-list-head__type:not(.is-active) .issues-list-head__sort-indicator::before {
+  content: '↕';
 }
 
 /* ---------- list rows ---------- */
@@ -1126,6 +1156,10 @@
   box-sizing: border-box;
 }
 
+.issues-status-chip--backlog {
+  color: var(--mn-fg-muted);
+}
+
 .issues-status-chip--triage {
   border-color: color-mix(in oklch, var(--mn-warning) 30%, var(--mn-border));
   color: var(--mn-warning);
@@ -1436,19 +1470,81 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
+/*
+ * Detail property controls — one shell for type, status, and priority.
+ * Semantic color lives in the glyph or label text, not full-tint backgrounds,
+ * so the row reads as three equal pickers instead of one loud badge + two grey pills.
+ */
 .issues-detail__prop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 0 7px 0 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
+  box-sizing: border-box;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.issues-detail__prop-chevron {
+  flex-shrink: 0;
+  --mn-icon-size: 10px;
+  margin-left: 1px;
+  opacity: 0.52;
+  color: var(--mn-fg-muted);
+  transition: opacity 0.15s ease;
 }
 
 .issues-detail__prop.issues-type-chip {
   width: auto;
   height: auto;
-  min-height: 1.75rem;
-  padding: 2px 8px 2px 4px;
-  gap: 6px;
+  justify-content: flex-start;
+  padding: 0 6px 0 5px;
+}
+
+/* Neutral shell: type variants only tint the icon in the peek panel. */
+.issues-detail__prop.issues-type-chip.issues-type-chip--bug,
+.issues-detail__prop.issues-type-chip.issues-type-chip--task,
+.issues-detail__prop.issues-type-chip.issues-type-chip--idea,
+.issues-detail__prop.issues-type-chip.issues-type-chip--note {
+  border-color: var(--mn-border);
+  background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+  color: var(--mn-fg);
+}
+
+.issues-detail__prop.issues-type-chip--bug .issues-type-chip__icon {
+  color: var(--mn-danger);
+}
+
+.issues-detail__prop.issues-type-chip--task .issues-type-chip__icon {
+  color: var(--mn-accent);
+}
+
+.issues-detail__prop.issues-type-chip--idea .issues-type-chip__icon {
+  color: var(--mn-warning);
+}
+
+.issues-detail__prop.issues-type-chip--note .issues-type-chip__icon {
+  color: var(--mn-fg-muted);
+}
+
+.issues-detail__prop.issues-type-chip[style*='--issues-chip-color'] .issues-type-chip__icon {
+  color: var(--issues-chip-color);
 }
 
 .issues-type-chip__label {
@@ -1459,22 +1555,41 @@
 
 .issues-detail__prop.issues-status-chip,
 .issues-detail__prop.issues-priority-chip {
-  padding: 3px 8px;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+  width: fit-content;
+  justify-content: flex-start;
+  padding: 0 7px 0 8px;
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+
+.issues-detail__prop.issues-status-chip {
+  font-size: 11px;
+}
+
+.issues-detail__prop.issues-priority-chip--none {
+  color: var(--mn-fg-muted);
+  font-weight: 500;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .issues-detail__prop:hover {
     border-color: color-mix(in oklch, var(--mn-fg) 22%, var(--mn-border));
+    background: color-mix(in oklch, var(--mn-fg) 8%, var(--mn-bg));
     color: var(--mn-fg);
+  }
+
+  .issues-detail__prop:hover .issues-detail__prop-chevron {
+    opacity: 0.88;
   }
 }
 
 .issues-detail__prop:focus-visible {
   outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
+}
+
+.issues-detail__prop:active {
+  background: color-mix(in oklch, var(--mn-fg) 10%, var(--mn-bg));
 }
 
 .issues-detail__labels {
@@ -1626,8 +1741,14 @@ button.issues-detail__activity-chip {
 .issues-detail__section--compact {
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  padding-top: 8px;
+  padding-bottom: 0;
+}
+
+.issues-detail__scroll > .issues-detail__section--compact + .issues-detail__section--compact {
+  border-top: none;
   padding-top: 8px;
 }
 
@@ -1661,9 +1782,16 @@ button.issues-detail__activity-chip {
 
 .issues-detail__section-body {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .issues-detail__section-body .issues-btn {
+  margin-top: 0;
+}
+
+.issues-detail__section-body > .issues-detail__add-code {
   margin-top: 0;
 }
 
@@ -1864,6 +1992,7 @@ button.issues-detail__activity-chip {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .issues-detail__add-code .issues-search {
@@ -2006,8 +2135,14 @@ button.issues-detail__activity-chip {
   flex-shrink: 0;
 }
 
-.issues-detail__git-link-row {
-  margin-top: 10px;
+.issues-detail__git-link-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issues-detail__git-link-fields .issues-detail__add-code {
+  margin-top: 0;
 }
 
 .issues-detail__notes {

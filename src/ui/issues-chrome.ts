@@ -215,7 +215,11 @@ function sortHead(key: string, label: string, extraClass: string, ariaSort = 'no
     'data-sort-key': key,
     'aria-sort': ariaSort,
   });
-  btn.append(label, el('span', { class: 'issues-list-head__sort-indicator', 'aria-hidden': 'true' }));
+  // Label is wrapped so icon-width columns (Type) can hide text without losing a11y names.
+  btn.append(
+    el('span', { class: 'issues-list-head__sort-label', text: label }),
+    el('span', { class: 'issues-list-head__sort-indicator', 'aria-hidden': 'true' }),
+  );
   return btn;
 }
 
