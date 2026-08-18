@@ -54,7 +54,8 @@ export function createGitSourceControlIconImg(
 ): HTMLElement | null {
   const name = gitSourceControlIconName(label);
   if (!name) return null;
-  return createIcon(name, { size: 14, className });
+  // 12px matches the compact git-panel action row (11px labels).
+  return createIcon(name, { size: 12, className });
 }
 
 /** Append icon + label to a source-control action button. */
