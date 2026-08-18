@@ -74,11 +74,11 @@ describe('launch memory meter', () => {
 
   it('marks VRAM warn, tight, and over at the shipped cutoffs', () => {
     const warn = buildLaunchMemoryMeterView({
-      estimate: estimate({ vramGb: 20.4, ramGb: 0.2, totalGb: 20.4 }),
+      estimate: estimate({ vramGb: 20.5, ramGb: 0.2, totalGb: 20.5 }),
       hardware: GPU_24,
     });
     const tight = buildLaunchMemoryMeterView({
-      estimate: estimate({ vramGb: 22.08, ramGb: 0.2, totalGb: 22.08 }),
+      estimate: estimate({ vramGb: 22.1, ramGb: 0.2, totalGb: 22.1 }),
       hardware: GPU_24,
     });
     const over = buildLaunchMemoryMeterView({
@@ -86,7 +86,7 @@ describe('launch memory meter', () => {
       hardware: GPU_24,
     });
     assert.equal(warn.rows[0].tone, 'warn');
-    assert.equal(warn.rows[0].valueText, '20.4 / 24 GB');
+    assert.equal(warn.rows[0].valueText, '20.5 / 24 GB');
     assert.equal(tight.rows[0].tone, 'tight');
     assert.equal(tight.tight, true);
     assert.equal(over.rows[0].tone, 'over');
@@ -99,11 +99,11 @@ describe('launch memory meter', () => {
 
   it('warns on RAM earlier than VRAM because leftover system memory is the budget', () => {
     const warn = buildLaunchMemoryMeterView({
-      estimate: estimate({ vramGb: 0, ramGb: 13.95, totalGb: 13.95, kvGbPer1kTokens: 0 }),
+      estimate: estimate({ vramGb: 0, ramGb: 14, totalGb: 14, kvGbPer1kTokens: 0 }),
       hardware: GPU_24,
     });
     const tight = buildLaunchMemoryMeterView({
-      estimate: estimate({ vramGb: 0, ramGb: 17.05, totalGb: 17.05, kvGbPer1kTokens: 0 }),
+      estimate: estimate({ vramGb: 0, ramGb: 17.1, totalGb: 17.1, kvGbPer1kTokens: 0 }),
       hardware: GPU_24,
     });
     assert.equal(warn.rows[0].valueText, '14 / 31 GB');
