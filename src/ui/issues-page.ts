@@ -74,6 +74,13 @@ import { appConfirm, appPrompt, isAppDialogOpen } from './app-dialog';
 import { registerCommandSource } from './command-registry';
 import { isContextMenuOpen } from './context-menu';
 import { ensureIssuesChrome } from './issues-chrome';
+import {
+  closeIssuesFileDrawer,
+  initIssuesFileDrawer,
+  isIssuesFileDrawerOpen,
+  subscribeIssuesFileDrawer,
+  toggleIssuesFileDrawer,
+} from './issues-file-drawer';
 import { buildIssuesCommands } from './issues-commands';
 import {
   BUILTIN_VIEW_TRIAGE,
@@ -2427,6 +2434,10 @@ function bindStaticControls(): void {
       setNewFormOpen(false);
       return;
     }
+    if (target.closest('#btnIssuesFiles')) {
+      toggleIssuesFileDrawer();
+      return;
+    }
     if (target.closest('#btnIssuesGroupBy')) {
       const btn = document.getElementById('btnIssuesGroupBy');
       if (!btn) return;
@@ -2512,6 +2523,14 @@ export function openIssuesFromSidebar(): void {
   void openIssues();
 }
 
+function syncIssuesFilesButton(): void {
+  const btn = document.getElementById('btnIssuesFiles');
+  if (!btn) return;
+  const open = isIssuesFileDrawerOpen();
+  btn.classList.toggle('is-active', open);
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+}
+
 /** Wire listeners; safe to call on every boot. */
 export function initIssuesPage(): void {
   if (initialized) return;
@@ -2520,6 +2539,8 @@ export function initIssuesPage(): void {
   if (root) ensureIssuesChrome(root);
   mountHeaderIcon();
   bindStaticControls();
+  initIssuesFileDrawer();
+  subscribeIssuesFileDrawer(syncIssuesFilesButton);
   ensureSubscriptions();
   window.addEventListener('hashchange', onHashChange);
   const hash = window.location.hash;
@@ -2579,6 +2600,7 @@ export function closeIssues(options?: { skipNavigate?: boolean }): void {
 
   const root = getRoot();
   if (!root) return;
+  closeIssuesFileDrawer();
   root.classList.remove('is-open');
   pendingIssueId = undefined;
   closeIssueDetail();

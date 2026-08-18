@@ -99,11 +99,21 @@ function buildHeader(): HTMLElement {
     text: 'Group',
   });
 
+  const filesBtn = el('button', {
+    type: 'button',
+    class: 'issues-btn',
+    id: 'btnIssuesFiles',
+    'aria-pressed': 'false',
+    title: 'Project files',
+    text: 'Files',
+  });
+
   const controls = el('div', { class: 'issues-header__controls' }, [
     scopeLabel,
     scope,
     toggle,
     groupBy,
+    filesBtn,
     capture,
     newBtn,
   ]);

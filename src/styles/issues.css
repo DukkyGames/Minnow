@@ -176,7 +176,7 @@
   flex-wrap: wrap;
   gap: 2px;
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
 }
 
 .issues-view-tab {
@@ -203,8 +203,17 @@
 }
 
 .issues-view-tabs__search {
-  flex: 0 1 16rem;
-  min-width: 8rem;
+  flex: 1 1 14rem;
+  min-width: 12rem;
+  max-width: 28rem;
+  margin-left: auto;
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.issues-view-tabs__search .issues-search {
+  width: 100%;
+  max-width: none;
 }
 
 .issues-chip-bar {

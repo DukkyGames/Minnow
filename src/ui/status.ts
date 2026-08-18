@@ -6,6 +6,7 @@ import { closeSubAgentDrawer } from './sub-agent-drawer';
 import { closeGoalEvalDrawer } from './goal-eval-drawer';
 import { closeBoardTimelineDrawer } from './board-timeline-drawer';
 import { closeResearchPanel, isResearchPanelOpen } from './research-panel';
+import { closeIssuesFileDrawer, isIssuesFileDrawerOpen } from './issues-file-drawer';
 import { showToast } from './toast';
 
 /** Legacy settings field; when #serverUrl is absent, default LM Studio port for Vite-only mode. */
@@ -139,6 +140,10 @@ export function dismissOpenLayers(): void {
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
     void import('./settings').then(({ closeDrawer }) => closeDrawer());
+    return;
+  }
+  if (isIssuesFileDrawerOpen()) {
+    closeIssuesFileDrawer();
     return;
   }
   const fileSide = document.getElementById('fileSidebar');

@@ -3,6 +3,10 @@
  */
 
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
+import {
+  beginCaptureDrag,
+  capturePayloadFromDataTransfer,
+} from './capture-drag';
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
 import {
   invalidateCachedDirectoryListings,
@@ -486,6 +490,8 @@ function wireTreeRowDrag(row: HTMLElement, fullPath: string): { consumeClickAfte
     transfer.effectAllowed = 'copyMove';
     transfer.setData(WORKSPACE_FILE_MIME, fullPath);
     transfer.setData('text/plain', fullPath);
+    const payload = capturePayloadFromDataTransfer(transfer);
+    if (payload) beginCaptureDrag(transfer, payload);
   });
 
   row.addEventListener('dragend', () => {

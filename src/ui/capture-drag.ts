@@ -154,6 +154,7 @@ export function capturePayloadFromDataTransfer(
 
 /** True when a drag *might* be capturable, judged from types alone (dragover-safe). */
 export function dataTransferLooksCapturable(dataTransfer: DataTransfer | null): boolean {
+  if (isCaptureDragActive()) return true;
   if (!dataTransfer) return false;
   const types = Array.from(dataTransfer.types);
   return (
