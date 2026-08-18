@@ -6,6 +6,7 @@
 import { decodeModelSelectKey, resolveModelSelectValueForChat } from '../lib/model-select-key';
 import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
 import { setBoardModel } from '../state/orchestrate-board-actions.ts';
+import { syncBoardHeaderReasoning } from './orchestrate-board-reasoning.ts';
 import { getModelRowForSelectOrCanonicalId, updateModelLoadUnloadButtons } from '../api/models';
 import { modelCache } from '../app-state';
 import { getForegroundAppId, getOsView } from '../os/instances';
@@ -313,6 +314,11 @@ function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string)
     );
     boardModelTriggerContext.onChanged();
     syncTrigger(trigger);
+    syncBoardHeaderReasoning(
+      boardModelTriggerContext.group,
+      boardModelTriggerContext.board,
+      boardModelTriggerContext.plannerChat,
+    );
     return;
   }
   if (trigger.variant === 'research') {

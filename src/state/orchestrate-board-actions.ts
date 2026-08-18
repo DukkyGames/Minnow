@@ -4,6 +4,13 @@
 
 import { stopGeneration } from '../chat/stop-generation.ts';
 import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
+import {
+  applyBoardReasoningPatch,
+  applyBoardReasoningToChat,
+  propagateBoardReasoningToChats,
+  sanitizeBoardReasoningForModel,
+  type BoardReasoningPatch,
+} from '../chat/orchestrate/board-reasoning-binding.ts';
 import { isOrchestratePlanComplete, hasIncompleteOrchestrateWork } from '../chat/orchestrate/plan-complete.ts';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
@@ -1373,11 +1380,13 @@ function resolvePlannerModelBinding(
   return resolveBoardModelBinding(plannerChat, resolvedBoard);
 }
 
-/** Keep task/test/final chats aligned with the planner model before launching a turn. */
+/** Keep task/test/final chats aligned with the planner model + reasoning before launching a turn. */
 function syncTaskChatModelFromPlanner(taskChat: Chat, plannerChat: Chat): void {
-  const binding = resolvePlannerModelBinding(plannerChat);
+  const board = getBoardGroupForChat(plannerChat)?.orchestrateBoard ?? null;
+  const binding = resolvePlannerModelBinding(plannerChat, board);
   if (binding.providerId) taskChat.providerId = binding.providerId;
   if (binding.modelId) taskChat.modelId = binding.modelId;
+  if (board) applyBoardReasoningToChat(taskChat, board);
 }
 
 type BoardChatRole = 'build' | 'tester' | 'fixer';
@@ -1435,6 +1444,8 @@ function getOrCreateBoardChat(input: {
     );
   }
   assignChatToGroup(chat.id, folderId);
+  const board = input.group.orchestrateBoard;
+  if (board) applyBoardReasoningToChat(chat, board);
   return chat;
 }
 
@@ -4825,6 +4836,8 @@ export function setBoardModel(
   plannerChat.providerId = pid;
   plannerChat.modelId = mid;
 
+  sanitizeBoardReasoningForModel(board, plannerChat);
+
   for (const task of board.tasks) {
     for (const chatId of [task.chatId, task.testChatId, task.fixerChatId]) {
       const id = chatId?.trim();
@@ -4846,6 +4859,25 @@ export function setBoardModel(
   }
 
   board.lastUpdatedAt = Date.now();
+  touchChat(plannerChat);
+  propagateBoardReasoningToChats(group, board, plannerChat);
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
+/** Set reasoning effort / thinking mode for this board (planner + linked task chats). */
+export function setBoardReasoning(
+  group: ChatGroup,
+  plannerChat: Chat,
+  patch: BoardReasoningPatch,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+
+  applyBoardReasoningPatch(board, patch);
+  sanitizeBoardReasoningForModel(board, plannerChat);
+  board.lastUpdatedAt = Date.now();
+  propagateBoardReasoningToChats(group, board, plannerChat);
   touchChat(plannerChat);
   scheduleSaveSessions();
   emitBoardChange(group.id);

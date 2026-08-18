@@ -219,6 +219,10 @@ import {
   wireBoardHeaderModelSelect,
 } from './orchestrate-board-model-select';
 import {
+  syncBoardHeaderReasoning,
+  wireBoardHeaderReasoning,
+} from './orchestrate-board-reasoning';
+import {
   confirmManualTaskStart,
   confirmManualWaveStart,
 } from './orchestrate-board-manual-start';
@@ -1214,6 +1218,9 @@ function wireBoardHeaderControls(
   boardAfkHintShownForSession = false;
 
   void wireBoardHeaderModelSelect(controls, group, board, plannerChat, () => {
+    refreshActiveBoardIfMounted();
+  });
+  wireBoardHeaderReasoning(controls, group, board, plannerChat, () => {
     refreshActiveBoardIfMounted();
   });
   // Execution mode segments (Manual → Sequential → Auto → AFK)
@@ -2982,6 +2989,7 @@ function refreshBoardDom(
   }
 
   syncBoardHeaderModelSelect(root, group, board, plannerChat);
+  syncBoardHeaderReasoning(group, board, plannerChat);
 
   // Sync Start/Stop button: add if needed, remove when mode switches to manual
   const controls = root.querySelector('.board-header__controls') as HTMLElement | null;

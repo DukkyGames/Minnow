@@ -547,6 +547,10 @@ export interface OrchestrateBoardState {
   modelProviderId?: string;
   /** Model for board orchestration (planner + task chats). */
   modelId?: string;
+  /** Per-board reasoning effort (planner + linked task chats). */
+  reasoningEffort?: ReasoningEffortOption;
+  /** Per-board thinking override for off/on-only models (planner + linked task chats). */
+  thinkingMode?: ThinkingTriState;
   /** Manual board vs auto-pilot delegation (default manual). */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   /** When true, skip per-task Tester; only final integration test runs verification. */
