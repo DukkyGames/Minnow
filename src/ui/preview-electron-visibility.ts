@@ -208,7 +208,7 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
 let layoutSyncChain: Promise<void> = Promise.resolve();
 let previewGuestVisible = false;
 
-async function runElectronPreviewHostLayoutSync(): Promise<void> {
+async function runElectronPreviewHostLayoutSync(tabId?: string | null): Promise<void> {
   const api = window.minnow?.preview;
   if (!api) return;
 
@@ -225,7 +225,7 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
 
   // Always use show(bounds) — tab activate / loadSource can attach the guest at 0×0
   // before layout is ready; setBounds alone is skipped when the guest is not visible.
-  await api.show(bounds);
+  await api.show(bounds, tabId ?? undefined);
   previewGuestVisible = true;
 }
 
@@ -233,8 +233,8 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
  * Show or hide the native preview host and sync bounds when visible.
  * Call after layout changes (Code foreground, split restore, resize).
  */
-export function syncElectronPreviewHostLayout(): Promise<void> {
-  const next = layoutSyncChain.then(() => runElectronPreviewHostLayoutSync());
+export function syncElectronPreviewHostLayout(tabId?: string | null): Promise<void> {
+  const next = layoutSyncChain.then(() => runElectronPreviewHostLayoutSync(tabId));
   layoutSyncChain = next.catch(() => {});
   return next;
 }

@@ -29,7 +29,7 @@ describe('preview-iframe-fallback', () => {
     const second = getOrCreatePreviewIframe('design', host);
     assert.equal(first, second);
     assert.equal(host.querySelectorAll('iframe').length, 1);
-    assert.equal(first.getAttribute('sandbox'), 'allow-scripts allow-forms allow-popups allow-modals');
+    assert.equal(first.getAttribute('sandbox'), 'allow-scripts allow-forms allow-popups allow-modals allow-same-origin');
   });
 
   test('two instances get independent iframes that can hold different URLs', () => {
