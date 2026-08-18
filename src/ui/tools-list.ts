@@ -105,6 +105,72 @@ function wrapCollapsibleToolGroup(
   return details;
 }
 
+/**
+ * Group shell for dynamic tool sources (plugins, MCP servers) so their rows keep
+ * the same shape as built-in categories: collapsible in Settings, plain section
+ * in the drawer.
+ */
+export function createDynamicToolGroup(options: {
+  category: string;
+  title: string;
+  count: string;
+  searchKey: string;
+  collapsible: boolean;
+  bodyNodes: HTMLElement[];
+}): HTMLElement {
+  if (!options.collapsible) {
+    const group = document.createElement('section');
+    group.className = 'tool-group';
+    group.setAttribute('data-tool-category', options.category);
+    group.dataset.settingsSearchKey = options.searchKey;
+
+    const head = document.createElement('div');
+    head.className = 'tool-group-head';
+    const header = document.createElement('h3');
+    header.className = 'tool-group-header';
+    header.textContent = options.title;
+    head.appendChild(header);
+    group.appendChild(head);
+
+    for (const node of options.bodyNodes) group.appendChild(node);
+    return group;
+  }
+
+  const details = document.createElement('details');
+  details.className = 'tool-group tool-group--collapsible';
+  details.setAttribute('data-tool-category', options.category);
+  details.dataset.settingsSearchKey = options.searchKey;
+
+  const summary = document.createElement('summary');
+  summary.className = 'tool-group-summary';
+
+  const main = document.createElement('span');
+  main.className = 'tool-group-summary__main';
+
+  const chevron = document.createElement('span');
+  chevron.className = 'tool-group-summary__chevron';
+  chevron.setAttribute('aria-hidden', 'true');
+
+  const title = document.createElement('span');
+  title.className = 'tool-group-header';
+  title.textContent = options.title;
+
+  main.append(chevron, title);
+
+  const count = document.createElement('span');
+  count.className = 'tool-group-count';
+  count.textContent = options.count;
+
+  summary.append(main, count);
+
+  const body = document.createElement('div');
+  body.className = 'tool-group-body';
+  for (const node of options.bodyNodes) body.appendChild(node);
+
+  details.append(summary, body);
+  return details;
+}
+
 /** Build a per-category or global "select all" control. */
 function createToolSelectAllControl(
   scope: 'global' | ToolCategory,

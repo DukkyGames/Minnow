@@ -1479,17 +1479,23 @@ export function mergeConfigMeta(existing, patch) {
     const clampHeartbeatIntervalMs = (value, fallback) => {
       const n = typeof value === 'number' ? value : Number(value);
       if (!Number.isFinite(n)) return fallback;
-      return Math.min(60_000, Math.max(1_000, Math.round(n)));
+      const rounded = Math.round(n);
+      if (rounded <= 0) return 0;
+      return rounded;
     };
     const clampProgressStallMs = (value, fallback) => {
       const n = typeof value === 'number' ? value : Number(value);
       if (!Number.isFinite(n)) return fallback;
-      return Math.min(1_800_000, Math.max(10_000, Math.round(n)));
+      const rounded = Math.round(n);
+      if (rounded <= 0) return 0;
+      return rounded;
     };
     const clampHeartbeatDeadMs = (value, fallback) => {
       const n = typeof value === 'number' ? value : Number(value);
       if (!Number.isFinite(n)) return fallback;
-      return Math.min(300_000, Math.max(5_000, Math.round(n)));
+      const rounded = Math.round(n);
+      if (rounded <= 0) return 0;
+      return rounded;
     };
 
     const clampSelfHealRounds = (value, fallback) => {
@@ -1511,9 +1517,9 @@ export function mergeConfigMeta(existing, patch) {
       maxBuildAttempts: 2,
       maxFinalTestAttempts: 3,
       continueSmartRoute: 'conservative',
-      heartbeatIntervalMs: 7000,
-      progressStallMs: 90000,
-      heartbeatDeadMs: 30000,
+      heartbeatIntervalMs: 10000,
+      progressStallMs: 300000,
+      heartbeatDeadMs: 90000,
       plannerProviderId: '',
       plannerModelId: '',
       selfHealMaxRounds: 2,

@@ -682,16 +682,21 @@ export async function resetBuiltInToolPermissionsToDefaults(
   refreshAllToolListUis(root);
 }
 
-/** Set one built-in tool permission mode and refresh UI. */
+/** True for MCP and plugin ids: persisted like built-ins, absent from the catalog. */
+function isDynamicToolId(id: string): boolean {
+  return id.startsWith('mcp__') || id.startsWith('plugin__');
+}
+
+/** Set one tool permission mode (built-in, MCP, or plugin) and refresh UI. */
 export function setToolPermission(
   id: string,
   mode: ToolPermissionMode,
   root: ParentNode = document,
 ): void {
   const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
-  if (!tool) return;
+  if (!tool && !isDynamicToolId(id)) return;
 
-  if (mode !== 'off' && tool.previewRequired && !isMinnowElectronShell()) {
+  if (tool && mode !== 'off' && tool.previewRequired && !isMinnowElectronShell()) {
     setStatus(
       'err',
       'Browser tools require the Minnow desktop app window (not a separate browser tab).',
@@ -700,7 +705,7 @@ export function setToolPermission(
     return;
   }
 
-  if (mode !== 'off' && tool.serverRequired && !localServerAvailable) {
+  if (tool && mode !== 'off' && tool.serverRequired && !localServerAvailable) {
     setStatus('err', 'Open Minnow to use file and git tools.');
     refreshAllToolListUis(root);
     return;

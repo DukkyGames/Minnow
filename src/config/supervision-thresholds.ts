@@ -87,6 +87,17 @@ export async function loadSupervisionThresholds(): Promise<SupervisionThresholds
   return resolveSupervisionThresholds();
 }
 
+export function isAgentSupervisionEnabled(
+  thresholds: SupervisionThresholds,
+  duplicateToolCallThreshold: number,
+): boolean {
+  return (
+    thresholds.progressStallMs > 0 ||
+    thresholds.heartbeatDeadMs > 0 ||
+    duplicateToolCallThreshold > 0
+  );
+}
+
 /** Persist thresholds to sub-agents.json (the only writable store). */
 export async function saveSupervisionThresholds(
   patch: Partial<SupervisionThresholds>,

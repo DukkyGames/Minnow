@@ -36,6 +36,7 @@ import { findFreePort, killPortOwner, listListeningPorts } from '../dev-server/p
 import { readDevServerSettings, writeDevServerSettings } from '../dev-server/settings.js';
 import { getWorkspaceGitStatus } from './git-status.js';
 import { ensureBaselineGitignore } from './baseline-gitignore.js';
+import { initializeWorkspaceGit } from './initialize-git.js';
 import { revealInSystemExplorer } from './reveal-in-explorer.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { resolveSafePath, runWithPathAccess, runWithToolContext } from '../runtime/path-access.js';
@@ -139,6 +140,22 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
         return true;
       }
       sendJson(res, 200, { ok: true, created: result.created, path: result.path });
+      return true;
+    }
+
+    // Board onboarding git init (MIN-615) — not the /git-setup LLM skill.
+    if (pathname === '/api/workspace/initialize-git' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const workspaceRoot =
+        typeof body?.workspaceRoot === 'string' && body.workspaceRoot.trim()
+          ? body.workspaceRoot.trim()
+          : undefined;
+      const result = await initializeWorkspaceGit(workspaceRoot);
+      if (!result.ok) {
+        sendJson(res, 400, { ok: false, error: result.error ?? 'failed' });
+        return true;
+      }
+      sendJson(res, 200, result);
       return true;
     }
 

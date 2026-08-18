@@ -265,6 +265,7 @@ export async function pumpAnthropicUpstream({
   let bytesEmitted = false;
 
   const armIdleTimeout = () => {
+    if (idleMs <= 0) return;
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       timeoutKind = 'idle';
@@ -272,10 +273,13 @@ export async function pumpAnthropicUpstream({
     }, idleMs);
   };
 
-  const maxTimer = setTimeout(() => {
-    timeoutKind = 'max';
-    controller.abort();
-  }, maxMs);
+  const maxTimer =
+    maxMs > 0
+      ? setTimeout(() => {
+          timeoutKind = 'max';
+          controller.abort();
+        }, maxMs)
+      : null;
 
   armIdleTimeout();
 
@@ -454,7 +458,7 @@ export async function pumpAnthropicUpstream({
     return { outcome: 'fatal', message: classified.message };
   } finally {
     if (idleTimer) clearTimeout(idleTimer);
-    clearTimeout(maxTimer);
+    if (maxTimer) clearTimeout(maxTimer);
     if (state.upstreamController === controller) {
       state.upstreamController = null;
     }

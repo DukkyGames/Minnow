@@ -1,5 +1,6 @@
 /**
  * Client hooks for /git-setup — programmatic baseline .gitignore before the model runs.
+ * Board onboarding init uses POST /api/workspace/initialize-git instead of this skill (MIN-615).
  */
 
 import { BUILT_IN_TOOLS, type OpenAIFunctionDefinition } from '../tools/definitions';

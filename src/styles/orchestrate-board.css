@@ -1605,6 +1605,10 @@
   max-width: min(26rem, 100%);
 }
 
+.board-onboarding__panel--questions {
+  max-width: min(36rem, 100%);
+}
+
 .board-onboarding__title {
   margin: 0;
   font-size: 0.95rem;

@@ -43,6 +43,12 @@ export async function fetchMcpServers(): Promise<McpServerSummary[] | null> {
   }
 }
 
+export {
+  fetchMcpToolCatalog,
+  type McpCatalogTool,
+  type McpToolCatalogEntry,
+} from './tool-catalog';
+
 /** Payload for POST /api/mcp/servers (stdio transport). */
 export type CreateMcpServerPayload = {
   id: string;

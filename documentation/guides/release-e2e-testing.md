@@ -217,6 +217,7 @@ Open **Code**, select test workspace root.
 - [ ] AI inline ghost + Tab accept; **Mod+→** partial accept
 - [ ] Unified tabs: preview HTML/markdown; **F12** DevTools on preview (Electron)
 - [ ] File tree context: copy path, delete, **Reveal in system explorer**
+- [ ] Drag a file and a folder from the OS into the file tree (imports under the drop folder)
 - [ ] After agent `save_file`, tree refreshes without losing scroll/focus
 
 ### Terminal

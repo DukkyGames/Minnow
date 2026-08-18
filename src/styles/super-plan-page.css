@@ -396,17 +396,30 @@ html.mn-super-plan-open #sidebarBackdrop {
 
 .sp-composer__field {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   min-height: 96px;
-  max-height: 320px;
+  /* Grow with typed lines (same path as #msgInput); cap so title + seeds stay on screen. */
+  max-height: min(40vh, 320px);
   padding: 13px 14px 6px;
   border: 0;
   background: transparent;
   color: var(--mn-fg);
+  caret-color: var(--mn-fg);
   font: inherit;
   font-size: 15px;
   line-height: 1.5;
   resize: none;
+  field-sizing: content;
+  overflow-y: auto;
+  scrollbar-width: none;
+  text-rendering: auto;
+  font-variant-ligatures: none;
+  transition: none;
+}
+
+.sp-composer__field::-webkit-scrollbar {
+  display: none;
 }
 
 .sp-composer__field:focus {

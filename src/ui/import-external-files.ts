@@ -1,7 +1,12 @@
 /**
- * Import OS-dropped files into the workspace via the tool server (binary-safe).
+ * Import OS-dropped files and folders into the workspace via the tool server (binary-safe).
  */
 
+import {
+  emptyDirectoriesToCreate,
+  entriesFromFileList,
+  type DroppedTreeEntry,
+} from '../attachments/directory-drop';
 import { MAX_ATTACHMENT_BYTES } from '../attachments/reader';
 import { getLocalServerAvailable } from '../tools/client';
 import { joinTreePath, normalizeTreePath } from './file-tree-path';
@@ -12,15 +17,14 @@ import { setStatus } from './status';
 /** Server tool name (UI-only; not exposed to the LLM tool list). */
 const IMPORT_TOOL = 'import_workspace_file';
 
+/** Workspace-relative destination for a dropped path under destDir. */
+export function workspacePathForDroppedEntry(destDir: string, relativePath: string): string {
+  return normalizeTreePath(joinTreePath(destDir, relativePath));
+}
+
 /** Read a browser File as a base64 string for POST /api/tools. */
 async function readFileAsBase64(file: File): Promise<string> {
-  const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () =>
-      reject(reader.error ?? new Error('Failed to read file'));
-    reader.readAsArrayBuffer(file);
-  });
+  const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.length; i += 1) {
@@ -29,24 +33,11 @@ async function readFileAsBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-/** POST one file to import_workspace_file on the local tool server. */
-async function importOneFile(file: File, destDir: string): Promise<{ ok: boolean; message: string }> {
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    return {
-      ok: false,
-      message: `${file.name}: exceeds ${MAX_ATTACHMENT_BYTES / (1024 * 1024)}MB limit`,
-    };
-  }
-
-  const destPath = normalizeTreePath(joinTreePath(destDir, file.name));
-  let content: string;
-  try {
-    content = await readFileAsBase64(file);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, message: `${file.name}: ${message}` };
-  }
-
+/** POST import_workspace_file and parse the tool result string. */
+async function postImportTool(
+  args: Record<string, unknown>,
+  label: string,
+): Promise<{ ok: boolean; message: string }> {
   let response: Response;
   try {
     response = await fetch('/api/tools', {
@@ -54,53 +45,107 @@ async function importOneFile(file: File, destDir: string): Promise<{ ok: boolean
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: IMPORT_TOOL,
-        args: { path: destPath, content },
+        args,
       }),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, message: `${file.name}: ${message}` };
+    return { ok: false, message: `${label}: ${message}` };
   }
 
   let payload: { result?: string; error?: string };
   try {
     payload = (await response.json()) as { result?: string; error?: string };
   } catch {
-    return { ok: false, message: `${file.name}: invalid server response` };
+    return { ok: false, message: `${label}: invalid server response` };
   }
 
   if (!response.ok) {
-    return { ok: false, message: payload.error ?? `${file.name}: HTTP ${response.status}` };
+    return { ok: false, message: payload.error ?? `${label}: HTTP ${response.status}` };
   }
 
   return parseToolResult(String(payload.result ?? ''));
 }
 
+/** POST one file to import_workspace_file (nested destPath is mkdir -p'd on the server). */
+async function importOneFile(
+  file: File,
+  destPath: string,
+): Promise<{ ok: boolean; message: string }> {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return {
+      ok: false,
+      message: `${destPath}: exceeds ${MAX_ATTACHMENT_BYTES / (1024 * 1024)}MB limit`,
+    };
+  }
+
+  let content: string;
+  try {
+    content = await readFileAsBase64(file);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `${destPath}: ${message}` };
+  }
+
+  return postImportTool({ path: destPath, content }, destPath);
+}
+
+/** Create an empty directory through the same UI-only import tool. */
+async function importOneDirectory(destPath: string): Promise<{ ok: boolean; message: string }> {
+  return postImportTool({ path: destPath, kind: 'dir' }, destPath);
+}
+
+function destLabel(dir: string): string {
+  return dir === '.' ? 'workspace root' : dir;
+}
+
 /**
- * Copy dropped OS files into a workspace folder (relative path, e.g. `.` or `src/lib`).
- * Refreshes the file tree when at least one file succeeds.
+ * Copy a dropped file/folder tree into a workspace folder (relative path, e.g. `.` or `src/lib`).
+ * Refreshes the file tree when at least one file or empty directory succeeds.
  */
-export async function importExternalFilesToWorkspace(
-  files: File[],
+export async function importDroppedEntriesToWorkspace(
+  entries: DroppedTreeEntry[],
   destDir: string,
-): Promise<{ imported: number; errors: string[] }> {
-  if (!files.length) {
-    return { imported: 0, errors: [] };
+): Promise<{ imported: number; directories: number; errors: string[] }> {
+  if (!entries.length) {
+    return { imported: 0, directories: 0, errors: [] };
   }
 
   if (!getLocalServerAvailable()) {
     setStatus('err', 'Open Minnow to import files into the workspace.');
-    return { imported: 0, errors: ['Tool server unavailable'] };
+    return { imported: 0, directories: 0, errors: ['Tool server unavailable'] };
   }
 
   const dir = normalizeTreePath(destDir === '' ? '.' : destDir);
+  const files = entries.filter((entry) => entry.kind === 'file' && entry.file);
+  const emptyDirs = emptyDirectoriesToCreate(entries);
   let imported = 0;
+  let directories = 0;
   const errors: string[] = [];
 
-  setStatus('spin', `Importing ${files.length} file${files.length === 1 ? '' : 's'}…`);
+  const spinCount = files.length || emptyDirs.length;
+  const spinNoun = files.length ? 'file' : 'folder';
+  setStatus(
+    'spin',
+    `Importing ${spinCount} ${spinNoun}${spinCount === 1 ? '' : 's'}…`,
+  );
 
-  for (const file of files) {
-    const result = await importOneFile(file, dir);
+  // Empty dirs first so a later failed file does not leave the tree missing folders.
+  for (const relativePath of emptyDirs) {
+    const destPath = workspacePathForDroppedEntry(dir, relativePath);
+    const result = await importOneDirectory(destPath);
+    if (result.ok) {
+      directories += 1;
+    } else {
+      errors.push(result.message);
+    }
+  }
+
+  for (const entry of files) {
+    const file = entry.file;
+    if (!file) continue;
+    const destPath = workspacePathForDroppedEntry(dir, entry.relativePath);
+    const result = await importOneFile(file, destPath);
     if (result.ok) {
       imported += 1;
     } else {
@@ -108,17 +153,37 @@ export async function importExternalFilesToWorkspace(
     }
   }
 
-  if (imported > 0) {
+  if (imported > 0 || directories > 0) {
     await refreshFileTreeViaBridge();
-    setStatus(
-      'ok',
-      `Imported ${imported} file${imported === 1 ? '' : 's'} to ${dir === '.' ? 'workspace root' : dir}`,
-    );
+    if (imported > 0) {
+      setStatus(
+        'ok',
+        `Imported ${imported} file${imported === 1 ? '' : 's'} to ${destLabel(dir)}`,
+      );
+    } else {
+      setStatus('ok', `Imported folder to ${destLabel(dir)}`);
+    }
   } else if (errors.length) {
     setStatus('err', errors[0] ?? 'Import failed');
   } else {
     setStatus('err', 'No files imported');
   }
 
-  return { imported, errors };
+  return { imported, directories, errors };
+}
+
+/**
+ * Copy dropped OS files into a workspace folder (flat File list, or webkitRelativePath trees).
+ */
+export async function importExternalFilesToWorkspace(
+  files: File[],
+  destDir: string,
+): Promise<{ imported: number; errors: string[] }> {
+  const { entries, error } = entriesFromFileList(files);
+  if (!entries.length) {
+    if (error) setStatus('err', error);
+    return { imported: 0, errors: error ? [error] : [] };
+  }
+  const result = await importDroppedEntriesToWorkspace(entries, destDir);
+  return { imported: result.imported, errors: result.errors };
 }

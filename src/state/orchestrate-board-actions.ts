@@ -1291,6 +1291,7 @@ function startTaskChatSupervision(chatId: string): void {
     const sup = getRunSupervision(runId);
     if (!sup) return;
     const thresholds = resolveSupervisionThresholds();
+    if (thresholds.progressStallMs <= 0) return;
     const progressAge = getProgressAgeMs(runId);
     if (progressAge == null) return;
 
