@@ -166,12 +166,7 @@ export function renderIssueAttachments(
 ): void {
   const attachments = issue.attachments ?? [];
 
-  if (attachments.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'issues-detail__empty';
-    empty.textContent = 'Drop a file here, paste a screenshot, or use Attach.';
-    body.appendChild(empty);
-  } else {
+  if (attachments.length > 0) {
     const list = document.createElement('div');
     list.className = 'issues-attachments';
     for (const attachment of attachments) {

@@ -79,11 +79,19 @@ export function createIssueTypeIconElement(
   return el;
 }
 
-/** Build the list-row type badge (icon inside a tinted chip). */
-export function createIssueTypeChip(typeId: string, item?: TaxonomyItem): HTMLElement {
+/** Build a type badge (icon inside a tinted chip). */
+export function createIssueTypeChip(
+  typeId: string,
+  item?: TaxonomyItem,
+  options: { labeled?: boolean; className?: string } = {},
+): HTMLElement {
   const chip = document.createElement('span');
-  chip.className = `issues-type-chip issues-type-chip--${typeId} issues-row__type`;
-  chip.title = item?.label ?? `${typeId} (unknown)`;
+  const extra = options.className ? ` ${options.className}` : '';
+  // List rows stay icon-only; the peek adds a label so the type is readable
+  // without hovering the glyph.
+  chip.className = `issues-type-chip issues-type-chip--${typeId}${options.labeled ? '' : ' issues-row__type'}${extra}`;
+  const label = item?.label ?? `${typeId} (unknown)`;
+  chip.title = label;
   if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
   chip.classList.toggle('is-unknown', !item);
   chip.appendChild(
@@ -92,5 +100,11 @@ export function createIssueTypeChip(typeId: string, item?: TaxonomyItem): HTMLEl
       size: 14,
     }),
   );
+  if (options.labeled) {
+    const text = document.createElement('span');
+    text.className = 'issues-type-chip__label';
+    text.textContent = label;
+    chip.appendChild(text);
+  }
   return chip;
 }

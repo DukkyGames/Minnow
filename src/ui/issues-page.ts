@@ -107,10 +107,11 @@ import {
   expandIssueFromUi,
   getSelectedIssueId,
   isIssueExpanding,
+  isIssuesDetailEditing,
   openIssueDetail,
   refreshIssueDetailIfOpen,
 } from './issues-detail';
-import { createIssuesLabelsField, isIssuesLabelsFieldFocused } from './issues-labels-field';
+import { createIssuesLabelsField } from './issues-labels-field';
 import {
   ariaSortValue,
   cycleIssuesListSort,
@@ -1708,7 +1709,7 @@ export function renderIssuesPanel(): void {
     pendingIssueId = undefined;
     focusedIssueId = id;
     openIssueDetail(id);
-  } else if (getSelectedIssueId() && !isIssuesLabelsFieldFocused()) {
+  } else if (getSelectedIssueId() && !isIssuesDetailEditing()) {
     refreshIssueDetailIfOpen();
   }
 }

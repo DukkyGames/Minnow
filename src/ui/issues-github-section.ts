@@ -119,10 +119,10 @@ export function renderIssueGithubSection(
 
   const status = document.createElement('p');
   status.className = 'issues-detail__empty';
-  status.textContent = link
-    ? `Linked to #${link.number}.`
-    : 'Not on GitHub yet.';
-  body.appendChild(status);
+  if (link) {
+    status.textContent = `Linked to #${link.number}.`;
+    body.appendChild(status);
+  }
 
   if (link?.url) {
     const open = document.createElement('a');

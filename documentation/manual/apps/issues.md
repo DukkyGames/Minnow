@@ -19,7 +19,11 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 **j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field.
 
-**Edit** labels inline on the row (Enter or comma adds, the chip **×** removes). Click the description in peek to switch from preview to editing; **Ctrl/Cmd+Enter** saves, **Escape** cancels.
+**Edit** labels inline on the row (Enter or comma adds, the chip **×** removes).
+
+The peek keeps identity, type/status/priority chips, labels, and Send to chat pinned. The description is the page. Empty code links, attachments, and git collapse to one add row each; Plan and Related appear only when they have something to show. Delete lives under the more menu next to Close.
+
+Type in the description to edit it. The formatting toolbar appears while the description is focused. **Ctrl/Cmd+Enter** commits; **Escape** commits and lets the panel close.
 
 **Projects** group and filter issues inside this app. They are not Orchestrator boards. The Group control can bucket the list by project, and each project shows a closed/open count.
 
