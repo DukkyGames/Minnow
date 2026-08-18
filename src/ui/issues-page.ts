@@ -26,7 +26,10 @@ import { getMode } from '../chat/modes/registry';
 import { createAppIcon } from '../os/icons';
 import { iconHtml } from './icon';
 import { bindIssueDropTarget } from './issue-drop-target';
+import { createIssueEditor, type IssueEditorHandle } from './issue-editor';
+import { collectInlineRefs } from '../issues/markdown-inline';
 import { taskProgress } from '../issues/markdown-blocks';
+import { createIssueTypeChip } from '../issues/type-icons';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
@@ -43,6 +46,7 @@ import { subscribeIssuesChanges } from '../state/issues-events';
 import {
   acceptTriageIssue,
   addIssue,
+  appendIssueLinks,
   addIssueProject,
   assignIssueToMe,
   collectIssues,
@@ -574,22 +578,11 @@ function formatUpdated(ts: number): string {
   }
 }
 
-/** Short type label for list chips (B/T/I/N). */
-function typeChipLetter(type: IssueType): string {
-  return type.slice(0, 1).toUpperCase();
-}
-
 /** Build a type badge for list rows. */
 function createTypeChip(type: IssueType): HTMLElement {
   const taxonomy = getIssuesTaxonomySync();
   const item = taxonomy.types.find((t) => t.id === type);
-  const chip = document.createElement('span');
-  chip.className = `issues-type-chip issues-type-chip--${type} issues-row__type`;
-  chip.textContent = typeChipLetter(type);
-  chip.title = item?.label ?? `${type} (unknown)`;
-  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
-  chip.classList.toggle('is-unknown', !item);
-  return chip;
+  return createIssueTypeChip(type, item);
 }
 
 /** Build a status pill for list rows. */
@@ -1998,7 +1991,6 @@ function isNewFormOpen(): boolean {
 
 let newFormOutsideHandler: ((e: PointerEvent) => void) | null = null;
 let newFormEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
-let newFormResizeHandler: (() => void) | null = null;
 
 function detachNewFormListeners(): void {
   if (newFormOutsideHandler) {
@@ -2009,49 +2001,122 @@ function detachNewFormListeners(): void {
     document.removeEventListener('keydown', newFormEscapeHandler, true);
     newFormEscapeHandler = null;
   }
-  if (newFormResizeHandler) {
-    window.removeEventListener('resize', newFormResizeHandler);
-    newFormResizeHandler = null;
-  }
 }
 
-/** Pin the new-issue popover under the header button, right-aligned to the anchor. */
-function positionNewIssuePopover(form: HTMLElement, anchor: HTMLElement): void {
-  const margin = 8;
-  form.style.visibility = 'hidden';
-  form.style.left = '0px';
-  form.style.top = '0px';
-  const box = form.getBoundingClientRect();
-  const rect = anchor.getBoundingClientRect();
-
-  let top = rect.bottom + 6;
-  if (top + box.height > window.innerHeight - margin) {
-    top = Math.max(margin, rect.top - box.height - 6);
-  }
-
-  let left = rect.right - box.width;
-  left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
-
-  form.style.top = `${Math.round(top)}px`;
-  form.style.left = `${Math.round(left)}px`;
+function setNewIssuePanelOpen(open: boolean, form: HTMLElement, backdrop: HTMLElement | null): void {
+  form.classList.toggle('is-open', open);
+  backdrop?.classList.toggle('is-open', open);
+  form.style.left = '';
+  form.style.top = '';
   form.style.visibility = '';
 }
 
-function setNewFormOpen(open: boolean): void {
+let newIssueDescriptionEditor: IssueEditorHandle | null = null;
+
+function getNewIssueDescriptionHost(): HTMLElement | null {
+  let host = document.getElementById('issuesNewDescriptionHost');
+  if (host) {
+    unwrapNewIssueDescriptionLabel(host);
+    return host;
+  }
+
+  const legacy = document.getElementById('issuesNewDescription');
+  if (!(legacy instanceof HTMLTextAreaElement)) return null;
+
+  const migrated = document.createElement('div');
+  migrated.id = 'issuesNewDescriptionHost';
+  migrated.className = 'issues-detail__desc-wrap is-editing';
+  legacy.replaceWith(migrated);
+  unwrapNewIssueDescriptionLabel(migrated);
+  return migrated;
+}
+
+/** `<label>` around the editor steals focus to the toolbar's first button. */
+function unwrapNewIssueDescriptionLabel(host: HTMLElement): void {
+  const label = host.closest('label.issues-new-form__desc');
+  if (!label?.parentElement) return;
+
+  const field = document.createElement('div');
+  field.className = 'issues-new-form__desc';
+  const fieldLabel = document.createElement('span');
+  fieldLabel.className = 'issues-new-form__field-label';
+  fieldLabel.textContent = 'Description';
+  field.append(fieldLabel, host);
+  label.replaceWith(field);
+}
+
+function ensureNewIssueDescriptionEditor(): void {
+  const host = getNewIssueDescriptionHost();
+  if (!host || host.querySelector('.mn-editor')) return;
+
+  newIssueDescriptionEditor = createIssueEditor(host, {
+    value: '',
+    placeholder: 'Describe the problem. / for blocks, # for issues, @ for files.',
+    onChange: () => {
+      // Read on submit; nothing to persist while composing a new issue.
+    },
+  });
+}
+
+function getNewIssueDescription(): string {
+  return newIssueDescriptionEditor?.getValue().trim() ?? '';
+}
+
+function resetNewIssueDescription(): void {
+  newIssueDescriptionEditor?.setValue('');
+}
+
+function syncNewIssueDescriptionRefs(issueId: string, markdown: string): void {
+  const refs = collectInlineRefs(markdown);
+  if (refs.issueIds.length === 0 && refs.codeRefs.length === 0) return;
+
+  appendIssueLinks(issueId, {
+    issueRefs: refs.issueIds
+      .filter((id) => id !== issueId && findIssueById(id))
+      .map((id) => ({ issueId: id, kind: 'related' as const, addedAt: Date.now() })),
+    codeRefs: refs.codeRefs,
+  });
+}
+
+let newIssueFormBindingsDone = false;
+
+/** The new-issue form lives on document.body; bind its controls outside #issuesView. */
+function bindNewIssueFormControls(): void {
+  if (newIssueFormBindingsDone) return;
   const form = document.getElementById('issuesNewForm');
+  if (!form) return;
+  newIssueFormBindingsDone = true;
+
+  ensureNewIssueDescriptionEditor();
+
+  form.addEventListener('submit', submitNewIssue);
+  document.getElementById('btnIssuesNewCancel')?.addEventListener('click', () => {
+    setNewFormOpen(false);
+  });
+  document.getElementById('issuesNewFormBackdrop')?.addEventListener('click', () => {
+    setNewFormOpen(false);
+  });
+}
+
+function setNewFormOpen(open: boolean): void {
+  bindNewIssueFormControls();
+
+  const form = document.getElementById('issuesNewForm');
+  const backdrop = document.getElementById('issuesNewFormBackdrop');
   const anchor = document.getElementById('btnIssuesNew');
   if (!form) return;
 
   if (!open) {
-    form.classList.remove('is-open');
+    setNewIssuePanelOpen(false, form, backdrop);
     anchor?.setAttribute('aria-expanded', 'false');
+    resetNewIssueDescription();
     detachNewFormListeners();
     return;
   }
 
-  form.classList.add('is-open');
+  ensureNewIssueDescriptionEditor();
+  setNewIssuePanelOpen(true, form, backdrop);
   anchor?.setAttribute('aria-expanded', 'true');
-  if (anchor) positionNewIssuePopover(form, anchor);
 
   detachNewFormListeners();
   newFormOutsideHandler = (event) => {
@@ -2069,11 +2134,6 @@ function setNewFormOpen(open: boolean): void {
   };
   document.addEventListener('keydown', newFormEscapeHandler, true);
 
-  newFormResizeHandler = () => {
-    if (anchor && form.classList.contains('is-open')) positionNewIssuePopover(form, anchor);
-  };
-  window.addEventListener('resize', newFormResizeHandler);
-
   const title = document.getElementById('issuesNewTitle');
   if (title && 'focus' in title && typeof (title as { focus?: unknown }).focus === 'function') {
     (title as { focus: () => void }).focus();
@@ -2084,15 +2144,17 @@ function submitNewIssue(event: Event): void {
   event.preventDefault();
   const title = controlValue('issuesNewTitle').trim();
   if (!title) return;
-  addIssue({
+  const description = getNewIssueDescription();
+  const issue = addIssue({
     title,
-    description: controlValue('issuesNewDescription').trim(),
+    description,
     type: (controlValue('issuesNewType') as IssueType) || 'task',
     priority: (controlValue('issuesNewPriority') as IssuePriority) || 'none',
     workspacePath: getWorkspacePath(),
   });
+  syncNewIssueDescriptionRefs(issue.id, description);
   setControlValue('issuesNewTitle', '');
-  setControlValue('issuesNewDescription', '');
+  resetNewIssueDescription();
   setNewFormOpen(false);
   renderIssuesPanel();
 }
@@ -2430,10 +2492,6 @@ function bindStaticControls(): void {
       setNewFormOpen(!isNewFormOpen());
       return;
     }
-    if (target.closest('#btnIssuesNewCancel')) {
-      setNewFormOpen(false);
-      return;
-    }
     if (target.closest('#btnIssuesFiles')) {
       toggleIssuesFileDrawer();
       return;
@@ -2490,10 +2548,7 @@ function bindStaticControls(): void {
       renderIssuesPanel();
     }
   });
-  root.addEventListener('submit', (event) => {
-    const target = asElement(event.target);
-    if (target?.id === 'issuesNewForm') submitNewIssue(event);
-  });
+  bindNewIssueFormControls();
   document.getElementById('issuesQuickCapture')?.addEventListener('keydown', onQuickCaptureKeydown);
 
   if (!issuesKeyHandler) {

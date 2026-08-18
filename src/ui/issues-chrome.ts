@@ -151,7 +151,18 @@ function buildChipBar(): HTMLElement {
 
 function buildNewForm(): HTMLElement {
   const existing = document.getElementById('issuesNewForm');
-  if (existing) return existing;
+  if (existing) {
+    if (!document.getElementById('issuesNewFormBackdrop')) {
+      const backdrop = el('button', {
+        type: 'button',
+        id: 'issuesNewFormBackdrop',
+        class: 'issues-new-form__backdrop',
+        'aria-label': 'Dismiss new issue',
+      });
+      document.body.insertBefore(backdrop, existing);
+    }
+    return existing;
+  }
 
   const title = el('label', { class: 'issues-new-form__title' }, [
     document.createTextNode('Title'),
@@ -171,20 +182,29 @@ function buildNewForm(): HTMLElement {
     document.createTextNode('Priority'),
     el('select', { id: 'issuesNewPriority' }),
   ]);
-  const desc = el('label', { class: 'issues-new-form__desc' }, [
-    document.createTextNode('Description'),
-    el('textarea', { id: 'issuesNewDescription', rows: '2', placeholder: 'Optional details' }),
+  const desc = el('div', { class: 'issues-new-form__desc' }, [
+    el('span', { class: 'issues-new-form__field-label', text: 'Description' }),
+    el('div', {
+      id: 'issuesNewDescriptionHost',
+      class: 'issues-detail__desc-wrap is-editing',
+    }),
   ]);
   const grid = el('div', { class: 'issues-new-form__grid' }, [title, type, priority, desc]);
   const actions = el('div', { class: 'issues-new-form__actions' }, [
     el('button', { type: 'submit', class: 'issues-btn issues-btn--primary', text: 'Create issue' }),
     el('button', { type: 'button', class: 'issues-btn', id: 'btnIssuesNewCancel', text: 'Cancel' }),
   ]);
+  const backdrop = el('button', {
+    type: 'button',
+    id: 'issuesNewFormBackdrop',
+    class: 'issues-new-form__backdrop',
+    'aria-label': 'Dismiss new issue',
+  });
   const form = el('form', { id: 'issuesNewForm', class: 'issues-new-form', 'aria-label': 'New issue' }, [
     grid,
     actions,
   ]);
-  document.body.appendChild(form);
+  document.body.append(backdrop, form);
   return form;
 }
 

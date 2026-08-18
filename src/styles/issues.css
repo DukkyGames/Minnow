@@ -396,41 +396,68 @@
   cursor: not-allowed;
 }
 
-/* ---------- new issue popover (anchored to #btnIssuesNew) ---------- */
+/* ---------- new issue panel (centered over the Issues view) ---------- */
+
+.issues-new-form__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 94;
+  display: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--mn-overlay);
+  cursor: default;
+  appearance: none;
+}
+
+.issues-new-form__backdrop.is-open {
+  display: block;
+}
+
+.issues-new-form__backdrop:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
 
 .issues-new-form {
   position: fixed;
   z-index: 95;
   display: none;
   flex-direction: column;
-  gap: 10px;
-  width: min(420px, calc(100vw - 16px));
-  padding: 12px;
+  gap: 14px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(85vh, calc(100vh - 32px));
+  overflow: auto;
+  padding: 20px;
   border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--mn-bg);
-  box-shadow: var(--shadow-popover-soft);
+  box-shadow: var(--shadow-popover);
   color: var(--mn-fg);
 }
 
 .issues-new-form.is-open {
   display: flex;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .issues-new-form.is-open {
-    animation: issues-new-form-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: issues-new-form-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
 
 @keyframes issues-new-form-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translate(-50%, calc(-50% - 8px));
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, -50%);
   }
 }
 
@@ -449,21 +476,25 @@
   grid-column: 1 / -1;
 }
 
-.issues-new-form label {
+.issues-new-form label,
+.issues-new-form__desc {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+}
+
+.issues-new-form label,
+.issues-new-form__field-label {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mn-fg-muted);
-  min-width: 0;
 }
 
 .issues-new-form input,
-.issues-new-form select,
-.issues-new-form textarea {
+.issues-new-form select {
   font-family: var(--font-ui);
   font-size: 13px;
   padding: 6px 8px;
@@ -474,9 +505,9 @@
   width: 100%;
 }
 
-.issues-new-form textarea {
-  min-height: 2.5rem;
-  resize: vertical;
+.issues-new-form .issues-detail__desc-wrap {
+  min-height: 8rem;
+  max-height: min(20rem, 40vh);
 }
 
 .issues-new-form__actions {
@@ -1037,16 +1068,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 1.75rem;
   height: 1.75rem;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-border);
   color: var(--mn-fg-muted);
   background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+}
+
+.issues-type-chip__icon {
+  --mn-icon-size: 14px;
+  color: currentColor;
 }
 
 .issues-type-chip--bug {
@@ -1065,6 +1098,12 @@
   color: var(--mn-warning);
   border-color: color-mix(in oklch, var(--mn-warning) 35%, var(--mn-border));
   background: color-mix(in oklch, var(--mn-warning) 10%, var(--mn-bg));
+}
+
+.issues-type-chip--note {
+  color: var(--mn-fg-muted);
+  border-color: color-mix(in oklch, var(--mn-fg) 20%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-fg) 6%, var(--mn-bg));
 }
 
 .issues-status-chip {

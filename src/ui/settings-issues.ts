@@ -55,7 +55,9 @@ import {
   createSettingsSelectRow,
 } from './settings-controls';
 import { createIcon } from './icon';
+import { createIssueTypeIconPickerButton } from './issue-type-icon-picker';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
+import { resolveIssueTypeIcon } from '../issues/type-icons';
 import { setStatus } from './status';
 
 type TaxonomyKind = 'types' | 'statuses' | 'priorities';
@@ -116,12 +118,14 @@ function moveItem<T extends TaxonomyItem>(items: T[], id: string, delta: -1 | 1)
   return next.sort((a, b) => a.order - b.order).map((item, i) => ({ ...item, order: i }));
 }
 
-function appendTableColgroup(table: HTMLTableElement, withStatusColumns: boolean): void {
+function appendTableColgroup(table: HTMLTableElement, withStatusColumns: boolean, withIconColumn = false): void {
   const colgroup = document.createElement('colgroup');
-  const cols = [
+  const cols = [];
+  if (withIconColumn) cols.push(el('col', 'settings-issues-col-icon'));
+  cols.push(
     el('col', 'settings-issues-col-label'),
     el('col', 'settings-issues-col-id'),
-  ];
+  );
   if (withStatusColumns) {
     cols.push(el('col', 'settings-issues-col-role'), el('col', 'settings-issues-col-options'));
   }
@@ -139,6 +143,7 @@ function renderTaxonomyTable(
   onChange: () => void,
 ): void {
   const withStatusColumns = kind === 'statuses';
+  const withIconColumn = kind === 'types';
   const body = appendSettingsGroup(mount, title, hint, searchKey, { emphasis: true });
   const taxonomy = getIssuesTaxonomySync();
   const items =
@@ -152,11 +157,18 @@ function renderTaxonomyTable(
   const table = document.createElement('table');
   table.className = 'settings-issues-table';
 
-  appendTableColgroup(table, withStatusColumns);
+  appendTableColgroup(table, withStatusColumns, withIconColumn);
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  const headers = ['Label', 'Id', ...(withStatusColumns ? ['Role', 'Options'] : []), 'Order', ''];
+  const headers = [
+    ...(withIconColumn ? ['Icon'] : []),
+    'Label',
+    'Id',
+    ...(withStatusColumns ? ['Role', 'Options'] : []),
+    'Order',
+    '',
+  ];
   for (const label of headers) {
     const th = document.createElement('th');
     th.scope = 'col';
@@ -177,7 +189,7 @@ function renderTaxonomyTable(
     tbody.appendChild(emptyRow);
   } else {
     for (const item of items) {
-      tbody.appendChild(renderTaxonomyRow(kind, item, withStatusColumns, onChange));
+      tbody.appendChild(renderTaxonomyRow(kind, item, withStatusColumns, withIconColumn, onChange));
     }
   }
   table.appendChild(tbody);
@@ -205,11 +217,23 @@ function renderTaxonomyRow(
   kind: TaxonomyKind,
   item: TaxonomyItem | StatusItem,
   withStatusColumns: boolean,
+  withIconColumn: boolean,
   onChange: () => void,
 ): HTMLTableRowElement {
   const row = document.createElement('tr');
   row.className = 'settings-issues-row';
   row.dataset.taxonomyId = item.id;
+
+  if (withIconColumn) {
+    const iconBtn = createIssueTypeIconPickerButton(
+      resolveIssueTypeIcon(item.id, item),
+      item.label,
+      (icon) => {
+        void updateItemIcon(item.id, icon, onChange);
+      },
+    );
+    row.appendChild(labeledCell('Icon', iconBtn));
+  }
 
   const labelInput = document.createElement('input');
   labelInput.type = 'text';
@@ -318,6 +342,18 @@ function renderTaxonomyRow(
   row.appendChild(actionsCell);
 
   return row;
+}
+
+async function updateItemIcon(
+  id: string,
+  icon: string,
+  onChange: () => void,
+): Promise<void> {
+  const next = cloneTaxonomy();
+  const item = next.types.find((row) => row.id === id);
+  if (!item) return;
+  item.icon = icon;
+  if (await persistTaxonomy(next)) onChange();
 }
 
 async function updateItemLabel(
@@ -431,7 +467,12 @@ async function promptAndAddItem(kind: TaxonomyKind, onChange: () => void): Promi
   if (kind === 'statuses') {
     next.statuses.push({ id, label: label.trim(), order, boardVisible: true });
   } else if (kind === 'types') {
-    next.types.push({ id, label: label.trim(), order });
+    next.types.push({
+      id,
+      label: label.trim(),
+      order,
+      icon: resolveIssueTypeIcon(id),
+    });
   } else {
     next.priorities.push({ id, label: label.trim(), order });
   }
