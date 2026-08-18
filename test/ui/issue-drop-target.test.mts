@@ -48,9 +48,9 @@ describe('dataTransferAcceptsIssueDrop', () => {
     assert.equal(dataTransferAcceptsIssueDrop(transfer), true);
   });
 
-  test('rejects plain text that is not a capture payload', () => {
+  test('accepts plain-text selection drags', () => {
     const transfer = fakeTransfer(['text/plain']);
     transfer.setData('text/plain', 'hello');
-    assert.equal(dataTransferAcceptsIssueDrop(transfer), false);
+    assert.equal(dataTransferAcceptsIssueDrop(transfer), true);
   });
 });

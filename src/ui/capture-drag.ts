@@ -19,6 +19,7 @@ import {
   parseCodeSelectionDragData,
 } from '../attachments/code-selection-drag';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
+import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import {
   ISSUE_CAPTURE_MIME,
   parseCaptureDragData,
@@ -26,6 +27,8 @@ import {
   type CapturePayload,
 } from '../issues/capture-payload';
 import { formatCodeRefLabel } from '../attachments/code-ref-format';
+import { sessionState } from '../state/sessions';
+import { CHAT_DRAG_MIME } from './sidebar-chat-dnd';
 
 /** Active drag, or null. Read by drop targets during `dragover`. */
 let activeDrag: CapturePayload | null = null;
@@ -83,6 +86,33 @@ export function endCaptureDrag(): void {
 function basename(path: string): string {
   const parts = path.replace(/\\/g, '/').split('/');
   return parts[parts.length - 1] || path;
+}
+
+function chatLabelForId(chatId: string): string {
+  const chat = sessionState?.chats.find((entry) => entry.id === chatId);
+  const name = chat?.name?.trim();
+  if (name && name !== PLACEHOLDER_CHAT_NAME) return name;
+  return 'Chat';
+}
+
+/** Plain-text drags Minnow uses internally — not user selections. */
+function isInternalPlainTextPayload(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.startsWith('file:') || trimmed.startsWith('preview:');
+}
+
+/**
+ * `text/plain` can mean a real selection or a filename on an OS file drag.
+ * Only treat it as capturable when no structured MIME already owns the drag.
+ */
+function hasCapturablePlainText(types: readonly string[]): boolean {
+  if (!types.includes('text/plain')) return false;
+  if (types.includes('Files')) return false;
+  if (types.includes(ISSUE_CAPTURE_MIME)) return false;
+  if (types.includes(CODE_SELECTION_MIME)) return false;
+  if (types.includes(WORKSPACE_FILE_MIME)) return false;
+  if (types.includes(CHAT_DRAG_MIME)) return false;
+  return true;
 }
 
 /**
@@ -149,6 +179,33 @@ export function capturePayloadFromDataTransfer(
     }
   }
 
+  if (types.includes(CHAT_DRAG_MIME)) {
+    const chatId = dataTransfer.getData(CHAT_DRAG_MIME).trim();
+    if (chatId) {
+      return {
+        sourceLabel: 'Chat',
+        items: [
+          {
+            kind: 'chat',
+            label: chatLabelForId(chatId),
+            chatId,
+          },
+        ],
+      };
+    }
+  }
+
+  if (hasCapturablePlainText(types)) {
+    const text = dataTransfer.getData('text/plain');
+    if (!text.trim() || isInternalPlainTextPayload(text)) return null;
+    const firstLine = text.split('\n').find((line) => line.trim())?.trim() ?? text.trim();
+    return {
+      sourceLabel: 'Selection',
+      title: firstLine,
+      items: [{ kind: 'text', label: 'Selection', text }],
+    };
+  }
+
   return null;
 }
 
@@ -160,7 +217,9 @@ export function dataTransferLooksCapturable(dataTransfer: DataTransfer | null): 
   return (
     types.includes(ISSUE_CAPTURE_MIME) ||
     types.includes(CODE_SELECTION_MIME) ||
-    types.includes(WORKSPACE_FILE_MIME)
+    types.includes(WORKSPACE_FILE_MIME) ||
+    types.includes(CHAT_DRAG_MIME) ||
+    hasCapturablePlainText(types)
   );
 }
 
