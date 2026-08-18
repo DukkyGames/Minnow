@@ -28,8 +28,8 @@ import { buildSamplerFieldInputs } from '../settings-sampler-fields';
 import {
   estimateServeMemory,
   estimateTransformerLayerCount,
-  formatServeMemoryEstimate,
 } from '../../models/serve-memory-estimate';
+import { renderLaunchMemoryMeter } from './launch-memory-meter';
 import { joinArgv, tokenizeArgv } from '../../models/argv-tokenize.mjs';
 import {
   applyCacheTypeTouch,
@@ -455,6 +455,7 @@ function gpuLayersSlider(
   return wrap;
 }
 
+/** Occupancy meters for the current launch settings vs measured hardware. */
 function launchMemoryHint(model: LibraryModel, displayed: DisplayedLaunch): HTMLElement {
   const weightsGb = model.sizeBytes > 0 ? model.sizeBytes / 1024 ** 3 : 0;
   const hw = getModelsState().hardware;
@@ -468,26 +469,7 @@ function launchMemoryHint(model: LibraryModel, displayed: DisplayedLaunch): HTML
     deviceCount: hw?.gpuCount ?? 1,
     ...memoryHints(model),
   });
-  const line = formatServeMemoryEstimate(estimate);
-  const budgetVram = hw?.gpuVramGb ?? 0;
-  const budgetRam = hw?.availableRamGb ?? hw?.totalRamGb ?? 0;
-  const tight =
-    (estimate.vramGb > 0 && budgetVram > 0 && estimate.vramGb > budgetVram * 0.92) ||
-    (estimate.ramGb > 0 && budgetRam > 0 && estimate.ramGb > budgetRam * 0.55);
-
-  const suffix = estimate.kvGbPer1kTokens > 0 ? ` (${estimate.kvGbPer1kTokens} GB per 1k ctx)` : '';
-  const hint = el(
-    'p',
-    tight ? 'models-hint models-hint--warn' : 'models-hint',
-    `Estimated memory at launch: ${line}${suffix}`,
-  );
-  if (tight) {
-    hint.title = 'This configuration may exceed the memory Minnow measured on this machine.';
-  } else if (estimate.geometrySource !== 'gguf') {
-    hint.title =
-      "Estimated from this model's architecture and size — exact numbers need the weights on disk.";
-  }
-  return hint;
+  return renderLaunchMemoryMeter({ estimate, hardware: hw });
 }
 
 /** Time-based estimate from the last successful load — not a fake percent. */
@@ -552,7 +534,6 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   }
 
   const memoryHint = launchMemoryHint(model, displayed);
-  memoryHint.classList.add('models-launch-memory-hint');
 
   const refreshAfterTouch = (): void => {
     render();

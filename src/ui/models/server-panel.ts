@@ -22,7 +22,6 @@ import { showModelInInspector } from './inspector';
 import { serveFailureBlock } from './serve-failure-view';
 import {
   attentionServes,
-  dismissLoad,
   getModelsState,
   refreshModels,
   retryServe,
@@ -215,7 +214,13 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
         ),
       );
     }
-    actions.appendChild(textButton('Dismiss', () => dismissLoad(load.serveId)));
+    actions.appendChild(
+      textButton('Clear', () => {
+        void unloadServe(load.serveId).catch((err: unknown) => {
+          setStatus('err', err instanceof Error ? err.message : 'Clear failed');
+        });
+      }),
+    );
   } else {
     actions.appendChild(
       textButton('Cancel', () => {
@@ -337,7 +342,15 @@ function attentionCard(serve: ServeRecord): HTMLElement {
       ),
     );
   }
-  if (serve.status === 'unhealthy') {
+  if (serve.status === 'error' || serve.status === 'crashed') {
+    actions.appendChild(
+      textButton('Clear', () => {
+        void unloadServe(serve.id).catch((err: unknown) => {
+          setStatus('err', err instanceof Error ? err.message : 'Clear failed');
+        });
+      }),
+    );
+  } else if (serve.status === 'unhealthy') {
     actions.appendChild(
       textButton(
         'Eject',

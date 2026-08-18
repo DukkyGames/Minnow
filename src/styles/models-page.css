@@ -263,6 +263,88 @@
   color: var(--mn-warning);
 }
 
+/*
+ * Launch memory occupancy — bench gauges above the context / GPU-layer sliders.
+ * Not a card: same surface as the inspector, hairline tracks, mono values.
+ */
+.models-launch-memory {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.models-launch-memory__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: baseline;
+}
+
+.models-launch-memory__kind {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--mn-fg-muted);
+}
+
+.models-launch-memory__value {
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg);
+  white-space: nowrap;
+}
+
+.models-launch-memory__row[data-tone='warn'] .models-launch-memory__value {
+  color: var(--mn-warning);
+}
+
+.models-launch-memory__row[data-tone='tight'] .models-launch-memory__value,
+.models-launch-memory__row[data-tone='over'] .models-launch-memory__value {
+  color: var(--mn-danger);
+}
+
+.models-launch-memory__track {
+  grid-column: 1 / -1;
+  height: 6px;
+  overflow: hidden;
+  background: var(--mn-border);
+  border-radius: 3px;
+}
+
+.models-launch-memory__fill {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in oklch, var(--mn-fg) 48%, transparent);
+  /* Instant: the Load tab rebuilds this node on every slider tick. */
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left center;
+}
+
+.models-launch-memory__row[data-tone='warn'] .models-launch-memory__fill {
+  background: var(--mn-warning);
+}
+
+.models-launch-memory__row[data-tone='tight'] .models-launch-memory__fill,
+.models-launch-memory__row[data-tone='over'] .models-launch-memory__fill {
+  background: var(--mn-danger);
+}
+
+.models-launch-memory__note,
+.models-launch-memory__caption {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.models-launch-memory__caption--warn {
+  color: var(--mn-danger);
+}
+
 /* ------------------------------------------------------------- inspector */
 
 .models-inspector {

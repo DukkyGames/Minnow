@@ -346,11 +346,9 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
   emit();
 }
 
-/** Dismiss a failed load card. */
-export function dismissLoad(serveId: string): void {
-  stopTracking(serveId);
-  state.loads = state.loads.filter((l) => l.serveId !== serveId);
-  emit();
+/** Remove a failed load row and stop the underlying serve session. */
+export async function dismissLoad(serveId: string): Promise<void> {
+  await unloadServe(serveId);
 }
 
 /**

@@ -116,7 +116,7 @@ export function estimateServeMemory(input: ServeMemoryInput): ServeMemoryEstimat
  * Host allocations below this never decide whether a configuration fits, so a fully offloaded
  * run reads as plain "VRAM" rather than dragging a 0.2 GB RAM term through the hint.
  */
-const RAM_TERM_FLOOR_GB = 0.5;
+export const RAM_TERM_FLOOR_GB = 0.5;
 
 /** Human-readable estimate for the Load tab hint line. */
 export function formatServeMemoryEstimate(estimate: ServeMemoryEstimate): string {
