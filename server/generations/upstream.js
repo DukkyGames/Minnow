@@ -94,7 +94,11 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
     if (parsed && typeof parsed === 'object') {
       const sanitized = sanitizeCompletionBodyForProvider(
         /** @type {Record<string, unknown>} */ (parsed),
-        { apiKind, id: providerId ?? profile.id },
+        {
+          apiKind,
+          id: providerId ?? profile.id,
+          baseUrl: profile.baseUrl,
+        },
       );
       body = Buffer.from(JSON.stringify(sanitized), 'utf8');
     }
