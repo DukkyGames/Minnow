@@ -1,16 +1,14 @@
-/* Cumulative file line stats over the chat viewport (+ undo control, MIN-409) */
+/* Cumulative file line stats over the chat viewport (+ undo control, MIN-409).
+   Positioned by .chat-viewport-dock (messages.css) — not independently absolute. */
 
 .code-change-strip-wrap {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: var(--chat-code-change-gap, 12px);
-  z-index: 11;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   margin: 0;
-  max-width: calc(100% - 24px);
+  max-width: 100%;
+  flex-shrink: 0;
   pointer-events: none;
 }
 
@@ -18,50 +16,77 @@
   display: none !important;
 }
 
-/* Keep jump chip above the code-change row when both are visible */
-.chat-viewport:has(.code-change-strip-wrap:not([hidden])) .chat-jump-latest:not(.hidden) {
-  bottom: calc(var(--chat-code-change-gap, 12px) + 38px);
-}
-
-/* Strip pill + undo icon share one centered row. */
+/* One instrument: stats | Commit | Create PR | undo. Never wrap to two lines. */
 .code-change-strip-row {
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  width: max-content;
   max-width: 100%;
   pointer-events: auto;
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .code-change-strip {
   display: inline-flex;
   align-items: center;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 8px;
   padding: 5px 12px;
   margin: 0;
   font-size: 12px;
   line-height: 1.3;
+  white-space: nowrap;
   color: var(--mn-fg-muted);
-  background: var(--mn-surface-1);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--mn-radius-sm, 8px);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    background var(--duration-normal) var(--ease-out);
 }
 
 .code-change-strip.hidden {
   display: none;
 }
 
-/* Commit / Create PR beside the code-change pill */
+@media (prefers-reduced-motion: reduce) {
+  .code-change-strip {
+    transition: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .code-change-strip:hover {
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+}
+
+.code-change-strip:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+/* Commit / Create PR as segments of the same bar */
 .code-change-strip__actions[hidden] {
   display: none;
 }
 
 .code-change-strip__actions {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
   flex-shrink: 0;
 }
 
@@ -79,26 +104,38 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 1.3;
+  white-space: nowrap;
   color: var(--mn-fg-muted);
-  background: var(--mn-surface-1);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--mn-radius-sm, 8px);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
-  transition: border-color var(--duration-normal) var(--ease-out),
+  transition:
     color var(--duration-normal) var(--ease-out),
     background var(--duration-normal) var(--ease-out),
     opacity var(--duration-normal) var(--ease-out);
 }
 
+/* 1px divider, only after a visible preceding segment */
+.code-change-strip:not(.hidden) ~ .code-change-strip__actions:not([hidden]),
+.code-change-strip:not(.hidden) ~ .code-change-strip__undo:not([hidden]),
+.code-change-strip__actions:not([hidden]) ~ .code-change-strip__undo:not([hidden]) {
+  border-inline-start: 1px solid var(--mn-border);
+}
+
+.code-change-strip__action:not([hidden]) + .code-change-strip__action:not([hidden]) {
+  border-inline-start: 1px solid var(--mn-border);
+}
+
 .code-change-strip__action:focus-visible {
   outline: 2px solid var(--mn-accent);
-  outline-offset: 1px;
+  outline-offset: -2px;
+  z-index: 1;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .code-change-strip__action:hover:not(:disabled) {
-    border-color: var(--mn-border-strong);
     color: var(--mn-fg);
     background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
   }
@@ -117,7 +154,7 @@
   }
 }
 
-/* Undo last agent turn — sits beside the Code changes pill (hidden without git). */
+/* Undo last agent turn — last segment of the bar (hidden without git). */
 .code-change-strip__undo[hidden] {
   display: none;
 }
@@ -127,17 +164,17 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 27px;
+  width: 32px;
+  min-height: 27px;
   padding: 0;
   margin: 0;
   color: var(--mn-fg-muted);
-  background: var(--mn-surface-1);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--mn-radius-sm, 8px);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
-  transition: border-color var(--duration-normal) var(--ease-out),
+  transition:
     color var(--duration-normal) var(--ease-out),
     background var(--duration-normal) var(--ease-out),
     opacity var(--duration-normal) var(--ease-out);
@@ -145,12 +182,12 @@
 
 .code-change-strip__undo:focus-visible {
   outline: 2px solid var(--mn-accent);
-  outline-offset: 1px;
+  outline-offset: -2px;
+  z-index: 1;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .code-change-strip__undo:hover:not(:disabled) {
-    border-color: var(--mn-border-strong);
     color: var(--mn-fg);
     background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
   }
@@ -174,26 +211,54 @@
 }
 
 .code-change-strip__label {
+  flex-shrink: 0;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   font-size: 10px;
+  white-space: nowrap;
   color: var(--mn-fg-muted);
 }
 
 .code-change-strip__stats {
   display: inline-flex;
   align-items: baseline;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 6px;
   font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .code-change-strip__files {
   color: var(--mn-fg-muted);
   font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Narrow chat column: drop the redundant label so stats + actions stay on one line. */
+@container chat-float-dock (max-width: 440px) {
+  .code-change-strip__label {
+    display: none;
+  }
+
+  .code-change-strip {
+    padding-inline: 10px;
+    gap: 6px;
+  }
+
+  .code-change-strip__action {
+    padding-inline: 8px;
+  }
+}
+
+@container chat-float-dock (max-width: 320px) {
+  .code-change-strip__stats {
+    gap: 4px;
+  }
 }
 
 .code-change-strip__add {
@@ -206,7 +271,7 @@
 
 .code-change-panel {
   position: absolute;
-  /* Anchor above the strip row (not the full wrap height). */
+  /* Opens upward from the wrap; the jump chip is a dock sibling above. */
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
