@@ -136,6 +136,7 @@ function report(kind: string, message: string, stack?: string): void {
           severity: 'critical',
           legacyBugId: issueId,
           workspacePath: getWorkspacePath(),
+          source: 'crash',
         },
         issueId,
       );
@@ -158,6 +159,7 @@ function report(kind: string, message: string, stack?: string): void {
       severity: 'critical',
       legacyBugId: issueId,
       workspacePath: getWorkspacePath(),
+      source: 'crash',
     },
     issueId,
   );

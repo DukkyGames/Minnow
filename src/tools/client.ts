@@ -9,9 +9,11 @@ import { executeBoardTool } from './board-tools';
 import { executeTodoWrite } from './todo-tools';
 import { executeBugBoardTool } from './bug-board-tools';
 import { executeIssueTool } from './issue-tools';
+import { executeIssueV2Tool, isIssueV2Tool } from './issue-tools-v2';
 import { executeSubAgentTool } from './sub-agent-executor';
 import {
   ensureToolConfigReady,
+  getToolPermissionForId,
   isLocalServerAvailable,
   isToolEnabled,
   loadToolConfig,
@@ -399,6 +401,13 @@ async function executeToolInner(
     return { content: text };
   }
 
+  if (isIssueV2Tool(name)) {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = await executeIssueV2Tool(name, args);
+    return { content: text };
+  }
+
   if (name === 'bug_add' || name === 'bug_update' || name === 'bug_get_state') {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
@@ -429,6 +438,12 @@ async function executeToolInner(
       return { content: route.message };
     }
 
+    // deep_read makes the search backend fetch result pages, which is what
+    // fetch_web_content is permissioned for — don't let web_search route around it.
+    const deepRead =
+      enrichedArgs.deep_read === true &&
+      getToolPermissionForId(config, 'fetch_web_content') !== 'off';
+
     return executeWithResultCache('web_search', enrichedArgs, context, async () => {
       if (route.kind === 'brave') {
         return { content: await executeBrowserTool(name, enrichedArgs) };
@@ -436,15 +451,18 @@ async function executeToolInner(
       if (route.kind === 'tavily') {
         return executeServerTool('web_search_tavily', {
           query: enrichedArgs.query,
+          deep_read: deepRead,
         });
       }
       if (route.kind === 'searxng') {
         return executeServerTool('web_search_searxng', {
           query: enrichedArgs.query,
+          deep_read: deepRead,
         });
       }
       return executeServerTool('web_search_ddg', {
         query: enrichedArgs.query,
+        deep_read: deepRead,
       });
     });
   }
@@ -529,7 +547,7 @@ async function executeToolBodyAfterGates(
         context.modeId,
       );
     }
-    return executeBrowserPreviewTool(name, enrichedArgs);
+    return executeBrowserPreviewTool(name, enrichedArgs, context.signal);
   }
 
   if (tool.serverRequired) {

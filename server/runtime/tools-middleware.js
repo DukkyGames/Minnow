@@ -78,7 +78,12 @@ import {
   toolWhoCalls,
 } from '../tools/code-tools.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
-import { toolReadDocument } from '../tools/read-document.js';
+import {
+  extractWorkspaceDocumentText,
+  toolReadDocument,
+} from '../tools/read-document.js';
+import { looksLikeBinaryBuffer } from '../tools/binary-sniff.js';
+import { isDocumentFilePath } from '../../src/attachments/document-extensions.mjs';
 import {
   toolCreatePdf,
   toolCreateSpreadsheet,
@@ -93,8 +98,15 @@ import {
   formatDdgSearchResults,
   searchDdgStructured,
 } from '../tools/web-search-ddg.js';
-import { runTavilySearch } from '../tools/web-search-tavily.js';
-import { runSearxngSearch } from '../tools/web-search-searxng.js';
+import {
+  formatTavilySearchResults,
+  searchTavilyStructured,
+} from '../tools/web-search-tavily.js';
+import {
+  formatSearxngSearchResults,
+  searchSearxngStructured,
+} from '../tools/web-search-searxng.js';
+import { appendResultExcerpts } from '../tools/search-enrich.js';
 import { loadSearchSettings } from '../research/search.js';
 import { getFilesystemAccessFromConfig } from '../config/tool-security.js';
 import { callMcpTool, isMcpToolName } from '../mcp/registry.js';
@@ -116,7 +128,7 @@ import {
 import { runFindFilesSearch, runGrepSearch } from '../tools/grep.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
-import { wrapServerToolResult } from '../security/untrusted.js';
+import { wrapServerToolResult, wrapUntrusted } from '../security/untrusted.js';
 import {
   getEffectiveWorkspaceRoot,
   resolveSafePath,
@@ -203,6 +215,30 @@ async function readTavilyApiKeyFromConfig() {
   return settings.tavilyApiKey;
 }
 
+/** True when the caller asked for ranked page excerpts alongside the snippets. */
+function wantsDeepRead(args) {
+  return args?.deep_read === true || args?.deep_read === 'true';
+}
+
+/**
+ * Shared tail for the web search backends: format, then optionally read the top hits.
+ * @param {string} query
+ * @param {{ results: import('../tools/search-result.js').SearchResult[]; error?: string }} outcome
+ * @param {(query: string, results: import('../tools/search-result.js').SearchResult[]) => string} format
+ * @param {Record<string, unknown>} args
+ * @returns {Promise<string>}
+ */
+async function finishWebSearch(query, outcome, format, args) {
+  if (outcome.error) {
+    return outcome.error;
+  }
+  const formatted = format(query, outcome.results);
+  if (!wantsDeepRead(args)) {
+    return formatted;
+  }
+  return appendResultExcerpts(query, outcome.results, formatted);
+}
+
 /** DuckDuckGo HTML search (no API key); detects bot challenges before parsing. */
 async function toolWebSearchDdg(args) {
   const query = args?.query;
@@ -210,11 +246,8 @@ async function toolWebSearchDdg(args) {
     return 'Error: query is required';
   }
 
-  const { results, error } = await searchDdgStructured(query);
-  if (error) {
-    return error;
-  }
-  return formatDdgSearchResults(query, results);
+  const outcome = await searchDdgStructured(query);
+  return finishWebSearch(query, outcome, formatDdgSearchResults, args);
 }
 
 /** Tavily Search API (requires tavilyApiKey in search.json or tools.json). */
@@ -229,7 +262,8 @@ async function toolWebSearchTavily(args) {
     return 'Error: Tavily API key not configured. Add one in Settings → Tools.';
   }
 
-  return runTavilySearch(query, apiKey);
+  const outcome = await searchTavilyStructured(query, apiKey);
+  return finishWebSearch(query, outcome, formatTavilySearchResults, args);
 }
 
 /** SearXNG JSON search (requires searxngUrl in search.json). */
@@ -240,7 +274,8 @@ async function toolWebSearchSearxng(args) {
   }
 
   const settings = await loadSearchSettings();
-  return runSearxngSearch(query, settings.searxngUrl);
+  const outcome = await searchSearxngStructured(query, settings.searxngUrl);
+  return finishWebSearch(query, outcome, formatSearxngSearchResults, args);
 }
 
 // --- File tools ---
@@ -259,17 +294,42 @@ function formatMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(0)}MB`;
 }
 
+/**
+ * True when this path should go through read_document (Excel/PDF/Word), not UTF-8.
+ *
+ * @param {string} filePath
+ * @param {unknown} requestedPath
+ */
+function shouldExtractAsDocument(filePath, requestedPath) {
+  const requested = typeof requestedPath === 'string' ? requestedPath : '';
+  return isDocumentFilePath(requested) || isDocumentFilePath(filePath);
+}
+
 async function toolReadFile(args) {
   const filePath = resolveSafePath(args?.path);
   const stat = await fs.stat(filePath);
   if (!stat.isFile()) {
     return `Error: "${args.path}" is not a file`;
   }
+  const rel = toRelativePath(filePath);
+
+  // Agents (and workspace chips) call read_file on .xlsx; decoding ZIP as UTF-8
+  // produced the PK… garbage reported in MIN-614. Extract sheet/PDF text instead.
+  if (shouldExtractAsDocument(filePath, args?.path)) {
+    return toolReadDocument({ path: args.path });
+  }
+
   if (stat.size > MAX_READ_FILE_BYTES) {
     return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to search it or read_file_range for a bounded line range.`;
   }
-  const content = await fs.readFile(filePath, 'utf8');
-  const rel = toRelativePath(filePath);
+  const buffer = await fs.readFile(filePath);
+  if (looksLikeBinaryBuffer(buffer)) {
+    return (
+      `Error: "${rel}" looks like a binary file and cannot be read as UTF-8 text. ` +
+      `Use read_document for PDF, Excel, Word, and other office files.`
+    );
+  }
+  const content = buffer.toString('utf8');
   const { text } = capReadFileOutput(content, rel);
   return text;
 }
@@ -340,18 +400,14 @@ function purgeBrainCodeIndexAfterDelete(relPath, isDirectory) {
   }
 }
 
-async function toolReadFileRange(args) {
-  const filePath = resolveSafePath(args?.path);
-  const startLine = Number(args?.start_line);
-  const endLine = Number(args?.end_line);
-  if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 1 || endLine < startLine) {
-    return 'Error: start_line and end_line must be valid integers (1-based, start <= end)';
-  }
-  const stat = await fs.stat(filePath);
-  if (stat.size > MAX_READ_FILE_BYTES) {
-    return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to locate specific content instead.`;
-  }
-  const content = await fs.readFile(filePath, 'utf8');
+/**
+ * Render a 1-based inclusive line slice with prefixed line numbers.
+ *
+ * @param {string} content
+ * @param {number} startLine
+ * @param {number} endLine
+ */
+function renderNumberedLineRange(content, startLine, endLine) {
   const lines = content.split(/\r?\n/);
   const slice = lines.slice(startLine - 1, endLine);
   const rendered = slice.map((line, idx) => `${startLine + idx}: ${line}`).join('\n');
@@ -362,6 +418,41 @@ async function toolReadFileRange(args) {
     footerHint: 'request a smaller line range',
   });
   return text;
+}
+
+async function toolReadFileRange(args) {
+  const filePath = resolveSafePath(args?.path);
+  const startLine = Number(args?.start_line);
+  const endLine = Number(args?.end_line);
+  if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 1 || endLine < startLine) {
+    return 'Error: start_line and end_line must be valid integers (1-based, start <= end)';
+  }
+
+  // Line numbers apply to extracted sheet/PDF text, not the binary container.
+  if (shouldExtractAsDocument(filePath, args?.path)) {
+    const extracted = await extractWorkspaceDocumentText(args.path);
+    if (typeof extracted === 'string') {
+      return extracted;
+    }
+    const numbered = renderNumberedLineRange(extracted.text, startLine, endLine);
+    return wrapUntrusted(numbered, {
+      source: `document:${path.basename(extracted.filename)}`,
+    });
+  }
+
+  const stat = await fs.stat(filePath);
+  if (stat.size > MAX_READ_FILE_BYTES) {
+    return `Error: file is ${formatMb(stat.size)} (limit ${formatMb(MAX_READ_FILE_BYTES)}). Use grep to locate specific content instead.`;
+  }
+  const buffer = await fs.readFile(filePath);
+  const rel = toRelativePath(filePath);
+  if (looksLikeBinaryBuffer(buffer)) {
+    return (
+      `Error: "${rel}" looks like a binary file and cannot be read as UTF-8 text. ` +
+      `Use read_document for PDF, Excel, Word, and other office files.`
+    );
+  }
+  return renderNumberedLineRange(buffer.toString('utf8'), startLine, endLine);
 }
 
 async function toolSaveFile(args) {
@@ -634,9 +725,15 @@ const IMPORT_WORKSPACE_FILE_MAX_BYTES = 10 * 1024 * 1024;
 /**
  * Write binary file bytes from a base64 payload (OS drag-import into workspace).
  * UI-only — not registered in the LLM tool catalog.
+ * `kind: 'dir'` creates an empty directory (folder drops that have no files).
  */
 async function toolImportWorkspaceFile(args) {
   const filePath = resolveSafePath(args?.path, { write: true });
+  const kind = String(args?.kind ?? 'file').toLowerCase();
+  if (kind === 'dir' || kind === 'directory') {
+    await fs.mkdir(filePath, { recursive: true });
+    return `Imported directory ${toRelativePath(filePath)}`;
+  }
   if (args?.content === undefined || args?.content === null) {
     return 'Error: content (base64 file bytes) is required';
   }

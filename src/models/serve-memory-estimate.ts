@@ -33,6 +33,11 @@ export interface GgufGeometryFacts {
   nExperts?: number;
   swaWindow?: number;
   swaPeriod?: number;
+  /** Exact full-attention layer count (hybrid / SWA pattern). */
+  nFullAttentionLayers?: number;
+  /** `{arch}.full_attention_interval` — Gated DeltaNet hybrids (Qwen3.5 / 3.8). */
+  fullAttentionInterval?: number;
+  swaHeadDim?: number;
   layerBytes?: number;
   fixedBytes?: number;
 }

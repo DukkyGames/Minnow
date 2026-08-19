@@ -117,6 +117,7 @@ export type ChromeIconName =
   | 'more'
   | 'menu'
   | 'plus'
+  | 'capture'
   | 'check'
   | 'help'
   | 'settings'
@@ -191,7 +192,7 @@ export type MetricIconName =
   | 'metricTotal'
   | 'metricCtx';
 
-/** All 133 semantic icon names. */
+/** All 134 semantic icon names. */
 export type IconName =
   | ShellIconName
   | AppIconName
@@ -300,6 +301,7 @@ export const ICON_CLASS: Record<IconName, string> = {
   more: 'fi-rr-menu-dots',
   menu: 'fi-rr-menu-burger',
   plus: 'fi-rr-plus-small',
+  capture: 'fi-rr-album-circle-plus',
   check: 'fi-rr-check',
   help: 'fi-rr-interrogation',
   settings: 'fi-rr-settings-sliders',

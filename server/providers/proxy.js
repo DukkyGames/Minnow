@@ -14,10 +14,9 @@ import { normalizeOpenCodeZenRelativePath } from './opencode-zen.js';
 import { validateProviderId } from './validate.js';
 import { resolveModelApi } from '../generations/resolve-model-api.js';
 import { enrichMlxLmModelsWithCachedContext } from '../models/mlx-context-length.js';
+import { MODEL_LOAD_TIMEOUT_MS } from '../models/timeouts.js';
 
 const MODELS_TIMEOUT_MS = 15_000;
-const MODEL_LOAD_TIMEOUT_MS = 120_000;
-const MODEL_UNLOAD_TIMEOUT_MS = 60_000;
 
 /**
  * @param {string} id
@@ -131,7 +130,7 @@ export async function proxyModelUnload(id, body) {
 
   const url = `${runtime.profile.baseUrl}${unloadPath}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MODEL_UNLOAD_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), MODEL_LOAD_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {

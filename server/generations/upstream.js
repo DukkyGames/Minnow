@@ -94,7 +94,11 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
     if (parsed && typeof parsed === 'object') {
       const sanitized = sanitizeCompletionBodyForProvider(
         /** @type {Record<string, unknown>} */ (parsed),
-        { apiKind, id: providerId ?? profile.id },
+        {
+          apiKind,
+          id: providerId ?? profile.id,
+          baseUrl: profile.baseUrl,
+        },
       );
       body = Buffer.from(JSON.stringify(sanitized), 'utf8');
     }
@@ -356,6 +360,7 @@ async function attemptCandidateStream({
   let bytesEmitted = false;
 
   const armIdleTimeout = () => {
+    if (idleMs <= 0) return;
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       timeoutKind = 'idle';
@@ -363,10 +368,13 @@ async function attemptCandidateStream({
     }, idleMs);
   };
 
-  const maxTimer = setTimeout(() => {
-    timeoutKind = 'max';
-    controller.abort();
-  }, maxMs);
+  const maxTimer =
+    maxMs > 0
+      ? setTimeout(() => {
+          timeoutKind = 'max';
+          controller.abort();
+        }, maxMs)
+      : null;
 
   armIdleTimeout();
 
@@ -487,7 +495,7 @@ async function attemptCandidateStream({
     return { outcome: 'fatal', message: classified.reason };
   } finally {
     if (idleTimer) clearTimeout(idleTimer);
-    clearTimeout(maxTimer);
+    if (maxTimer) clearTimeout(maxTimer);
     if (state.upstreamController === controller) {
       state.upstreamController = null;
     }

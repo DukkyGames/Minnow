@@ -16,6 +16,7 @@ import {
   getServersRoot,
 } from './paths.js';
 import { realpathForBoundaryCheck } from '../workspace/safe-path.js';
+import { MODEL_LOAD_TIMEOUT_MS } from '../models/timeouts.js';
 
 /** @typedef {'pending'|'installing'|'starting'|'running'|'stopped'|'error'} ServerRuntimePhase */
 
@@ -185,21 +186,27 @@ async function appendServerLog(serverId, chunk) {
  * @param {number} port
  * @param {string} healthPath
  */
-async function waitForHealth(serverId, port, healthPath) {
+async function waitForHealth(serverId, port, healthPath, timeoutMs = MODEL_LOAD_TIMEOUT_MS) {
   const url = `http://127.0.0.1:${port}${healthPath}`;
+  const deadline = Date.now() + timeoutMs;
   let delayMs = 250;
-  const maxAttempts = 40;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+  while (Date.now() < deadline) {
     try {
       const fetchImpl = fetchOverrideForTests ?? fetch;
-      const res = await fetchImpl(url, { signal: AbortSignal.timeout(5000) });
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      const res = await fetchImpl(url, {
+        signal: AbortSignal.timeout(Math.min(5_000, remaining)),
+      });
       if (res.status === 200) return true;
     } catch {
       /* retry */
     }
-    await new Promise((r) => setTimeout(r, delayMs));
-    delayMs = Math.min(delayMs * 1.5, 3000);
+    const waitMs = Math.min(delayMs, deadline - Date.now());
+    if (waitMs <= 0) break;
+    await new Promise((r) => setTimeout(r, waitMs));
+    delayMs = Math.min(delayMs * 1.5, 3_000);
   }
 
   throw new Error(`Health check timed out for ${serverId} (${url})`);

@@ -93,6 +93,85 @@ function formatEvalResult(val: unknown): string {
   return String(val);
 }
 
+/**
+ * Renderer-side deadline for preview execJs. Mirrors Electron `PREVIEW_EXEC_JS_TIMEOUT_MS`
+ * so a stale desktop shell (no main-process bound) still cannot pin the tool loop.
+ */
+export const BROWSER_EVAL_TIMEOUT_MS = 30_000;
+
+const PREVIEW_SCRIPT_TIMEOUT_HINT =
+  'The page JavaScript did not finish (infinite loop or a Promise that never settles). ' +
+  'Prefer browser_snapshot for DOM inspection; avoid waiting forever inside browser_eval.';
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
+}
+
+function previewScriptTimeoutMessage(timeoutMs: number): string {
+  return `preview script timed out after ${timeoutMs}ms. ${PREVIEW_SCRIPT_TIMEOUT_HINT}`;
+}
+
+/**
+ * Race guest execJs against a wall-clock timeout and optional chat abort.
+ * Does not cancel Chromium's executeJavaScript; it only unblocks the tool loop.
+ */
+export function racePreviewExecJs<T>(
+  promise: Promise<T>,
+  options?: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<T> {
+  const timeoutMs = options?.timeoutMs ?? BROWSER_EVAL_TIMEOUT_MS;
+  const signal = options?.signal;
+  return new Promise<T>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      reject(new Error(previewScriptTimeoutMessage(timeoutMs)));
+    }, timeoutMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
+function previewExecErrorMessage(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object' || !('__execError' in raw)) return null;
+  return String((raw as { __execError: unknown }).__execError ?? 'Script failed');
+}
+
+async function execPreviewGuestJs(
+  code: string,
+  tabId: string,
+  instance: string | undefined,
+  options?: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<unknown> {
+  if (options?.signal?.aborted) {
+    throw new DOMException('The operation was aborted.', 'AbortError');
+  }
+  try {
+    return await racePreviewExecJs(previewApi().execJs(code, tabId, instance), options);
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return { __execError: message };
+  }
+}
+
 async function uploadScreenshotBase64(dataBase64: string): Promise<{ id: string; sizeBytes: number }> {
   const res = await fetch('/api/browser/screenshot', {
     method: 'POST',
@@ -255,23 +334,22 @@ export async function browserPreviewNavigate(url: string, instance?: string): Pr
 const EMPTY_SNAPSHOT_HINT =
   'Snapshot found no interactive elements. Try browser_eval or browser_screenshot.';
 
-export async function browserPreviewSnapshot(instance?: string): Promise<string> {
+export async function browserPreviewSnapshot(
+  instance?: string,
+  signal?: AbortSignal,
+): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
 
   const tabId = await ensureBrowserPreviewTab(instance);
-  const raw = await previewApi().execJs(PREVIEW_DOM_SNAPSHOT_SCRIPT, tabId, instance);
+  const raw = await execPreviewGuestJs(PREVIEW_DOM_SNAPSHOT_SCRIPT, tabId, instance, { signal });
+  const execError = previewExecErrorMessage(raw);
+  if (execError) return `Error: ${execError}`;
   const payload = raw as {
     text?: string;
     nodes?: PreviewSnapshotNode[];
-    __execError?: unknown;
   };
-
-  if (payload && typeof payload === 'object' && '__execError' in payload) {
-    const message = String(payload.__execError ?? 'Script failed');
-    return `Error: ${message}`;
-  }
 
   if (payload?.nodes?.length) {
     const rendered = renderPreviewSnapshotTree(payload.nodes);
@@ -285,7 +363,11 @@ export async function browserPreviewSnapshot(instance?: string): Promise<string>
   return EMPTY_SNAPSHOT_HINT;
 }
 
-export async function browserPreviewClick(uid: number, instance?: string): Promise<string> {
+export async function browserPreviewClick(
+  uid: number,
+  instance?: string,
+  signal?: AbortSignal,
+): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
@@ -302,7 +384,9 @@ export async function browserPreviewClick(uid: number, instance?: string): Promi
   })()`;
 
   const tabId = await ensureBrowserPreviewTab(instance);
-  const raw = await previewApi().execJs(script, tabId, instance);
+  const raw = await execPreviewGuestJs(script, tabId, instance, { signal });
+  const execError = previewExecErrorMessage(raw);
+  if (execError) return `Error: ${execError}`;
   const result = raw as { missing?: boolean; role?: string; name?: string };
   if (result?.missing) {
     return 'No snapshot cached. Call browser_snapshot first.';
@@ -310,7 +394,12 @@ export async function browserPreviewClick(uid: number, instance?: string): Promi
   return `Clicked [${uid}] ${result.role ?? 'element'} "${result.name ?? ''}"`;
 }
 
-export async function browserPreviewFill(uid: number, value: string, instance?: string): Promise<string> {
+export async function browserPreviewFill(
+  uid: number,
+  value: string,
+  instance?: string,
+  signal?: AbortSignal,
+): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
@@ -332,7 +421,9 @@ export async function browserPreviewFill(uid: number, value: string, instance?: 
   })()`;
 
   const tabId = await ensureBrowserPreviewTab(instance);
-  const raw = await previewApi().execJs(script, tabId, instance);
+  const raw = await execPreviewGuestJs(script, tabId, instance, { signal });
+  const execError = previewExecErrorMessage(raw);
+  if (execError) return `Error: ${execError}`;
   const result = raw as { missing?: boolean };
   if (result?.missing) {
     return 'No snapshot cached. Call browser_snapshot first.';
@@ -340,7 +431,12 @@ export async function browserPreviewFill(uid: number, value: string, instance?: 
   return `Filled [${uid}] with "${value}"`;
 }
 
-export async function browserPreviewEval(expression: string, instance?: string): Promise<string> {
+export async function browserPreviewEval(
+  expression: string,
+  instance?: string,
+  signal?: AbortSignal,
+  timeoutMs: number = BROWSER_EVAL_TIMEOUT_MS,
+): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
   const disabled = await assertBrowserAutomationEnabled();
   if (disabled) return disabled;
@@ -351,10 +447,13 @@ export async function browserPreviewEval(expression: string, instance?: string):
     return 'Error: preview guest is still loading — wait for navigation to finish';
   }
 
-  const val = await previewApi().execJs(expression, tabId, instance);
-  if (val && typeof val === 'object' && val !== null && '__execError' in val) {
-    const message = String((val as { __execError: unknown }).__execError ?? 'Script failed');
-    return `Error: ${message}`;
+  const val = await execPreviewGuestJs(expression, tabId, instance, { signal, timeoutMs });
+  const execError = previewExecErrorMessage(val);
+  if (execError) {
+    if (/timed out/i.test(execError)) {
+      return `Error: ${previewScriptTimeoutMessage(timeoutMs)}`;
+    }
+    return `Error: ${execError}`;
   }
   return formatEvalResult(val);
 }
@@ -415,6 +514,7 @@ export async function browserPreviewScreenshot(instance?: string): Promise<ToolE
 export async function executeBrowserPreviewTool(
   name: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<ToolExecutionResult> {
   // MIN-364: optional instance override (undocumented in tool schemas today — no consumer
   // targets a non-default preview instance yet). Falls back to workspace-preview when absent.
@@ -436,13 +536,13 @@ export async function executeBrowserPreviewTool(
         return { content: await browserPreviewNavigate(url.trim(), instance) };
       }
       case 'browser_snapshot':
-        return { content: await browserPreviewSnapshot(instance) };
+        return { content: await browserPreviewSnapshot(instance, signal) };
       case 'browser_click': {
         const uid = Number(args.uid);
         if (!Number.isFinite(uid)) {
           return { content: 'Error: uid is required' };
         }
-        return { content: await browserPreviewClick(uid, instance) };
+        return { content: await browserPreviewClick(uid, instance, signal) };
       }
       case 'browser_fill': {
         const uid = Number(args.uid);
@@ -450,14 +550,14 @@ export async function executeBrowserPreviewTool(
         if (!Number.isFinite(uid)) {
           return { content: 'Error: uid is required' };
         }
-        return { content: await browserPreviewFill(uid, value, instance) };
+        return { content: await browserPreviewFill(uid, value, instance, signal) };
       }
       case 'browser_eval': {
         const expression = args.expression;
         if (typeof expression !== 'string' || !expression.trim()) {
           return { content: 'Error: expression is required' };
         }
-        return { content: await browserPreviewEval(expression, instance) };
+        return { content: await browserPreviewEval(expression, instance, signal) };
       }
       case 'browser_screenshot':
         return browserPreviewScreenshot(instance);
@@ -483,6 +583,9 @@ export async function executeBrowserPreviewTool(
         return { content: `Error: unknown preview browser tool "${name}"` };
     }
   } catch (err) {
+    // Abort must surface as AbortError so executeTool maps it to Stopped-by-user,
+    // otherwise stall recovery / Stop wait out the hung guest script.
+    if (isAbortError(err)) throw err;
     const message = err instanceof Error ? err.message : String(err);
     return { content: `Error: ${message}` };
   }

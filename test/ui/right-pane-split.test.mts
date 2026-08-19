@@ -304,4 +304,31 @@ describe('unified strip active tab', () => {
     assert.equal(active.viewerPath, null);
     assert.equal(active.previewId, preview.id);
   });
+
+  test('single-pane layout does not show pane focus ring', () => {
+    seedOpenFiles(['src/a.ts'], 'src/a.ts');
+    applyRightPaneSplitDom();
+
+    const primary = document.getElementById('rightPaneSlotPrimary');
+    assert.equal(primary?.classList.contains('is-focused'), false);
+    assert.equal(
+      document.getElementById('rightPaneSplit')?.classList.contains('is-active'),
+      false,
+    );
+  });
+
+  test('split layout shows focus ring on the focused pane only', () => {
+    seedOpenFiles(['src/a.ts', 'src/b.ts'], 'src/b.ts');
+    enableRightPaneSplit();
+    applyRightPaneSplitDom();
+
+    const primary = document.getElementById('rightPaneSlotPrimary');
+    const secondary = document.getElementById('rightPaneSlotSecondary');
+    assert.equal(
+      document.getElementById('rightPaneSplit')?.classList.contains('is-active'),
+      true,
+    );
+    assert.equal(primary?.classList.contains('is-focused'), false);
+    assert.equal(secondary?.classList.contains('is-focused'), true);
+  });
 });

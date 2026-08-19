@@ -116,6 +116,18 @@ describe('models markup contract', () => {
       assert.match(html, new RegExp(`data-models-nav="${id}"`), `nav button for ${id}`);
     }
   });
+
+  test('Minnow OS shell sizes models-page to the app layer, not 100vh', () => {
+    const shellCss = fs.readFileSync(
+      new URL('../../src/styles/minnowos-shell.css', import.meta.url),
+      'utf8',
+    );
+    assert.match(
+      shellCss,
+      /#osAppsLayer \.models-page\.is-open[\s\S]*height:\s*100%/,
+      'models inspector footer must not be clipped by overflow:hidden on the OS app layer',
+    );
+  });
 });
 
 describe('models layout contract', () => {

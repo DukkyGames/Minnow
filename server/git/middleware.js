@@ -52,6 +52,14 @@ import {
   runRerun,
   runView,
 } from './forge-ops.js';
+import {
+  issueComment as forgeIssueComment,
+  issueCreate,
+  issueEdit,
+  issueList,
+  issueState,
+  issueView,
+} from './forge-issue-ops.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -127,6 +135,13 @@ const OPS = {
   runRerun: (a) => runRerun(a),
   runCancel: (a) => runCancel(a),
   runLog: (a) => runLog(a),
+  // Issues mirror (Phase 5) — same gh auth, no stored tokens.
+  issueList: (a) => issueList(a),
+  issueView: (a) => issueView(a),
+  issueCreate: (a) => issueCreate(a),
+  issueEdit: (a) => issueEdit(a),
+  issueState: (a) => issueState(a),
+  issueComment: (a) => forgeIssueComment(a),
 };
 
 export async function handleGitRequest(req, res, pathname) {

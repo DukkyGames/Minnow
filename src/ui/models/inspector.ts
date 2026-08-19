@@ -19,6 +19,13 @@ import {
 import { buildSamplerFieldInputs } from '../settings-sampler-fields';
 import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
 import {
+  CONTEXT_SLIDER_MIN,
+  CONTEXT_SLIDER_STEP,
+  clampContextSlider,
+  contextSliderMax,
+  getLaunchSettings,
+} from '../../models/launch-settings';
+import {
   estimateServeMemory,
   estimateTransformerLayerCount,
   formatServeMemoryEstimate,
@@ -50,10 +57,6 @@ import {
 
 type InspectorTab = 'info' | 'load' | 'inference';
 
-const CONTEXT_SLIDER_MIN = 2_048;
-const CONTEXT_SLIDER_MAX = 262_144;
-const CONTEXT_SLIDER_STEP = 1_000;
-
 const TAB_LABELS: Record<InspectorTab, { label: string; glyph: string }> = {
   info: { label: 'Info', glyph: 'list' },
   load: { label: 'Load', glyph: 'inbox-in' },
@@ -63,8 +66,6 @@ const TAB_LABELS: Record<InspectorTab, { label: string; glyph: string }> = {
 let activeTab: InspectorTab = 'info';
 let bound = false;
 let inspectorRenderRaf: number | null = null;
-/** Per-model launch settings, kept while the app is open. */
-const draftSettings = new Map<string, LlamaServeSettings>();
 
 /**
  * GGUF headers by file path — exact layer count and attention geometry for models already on
@@ -178,39 +179,53 @@ function renderInfoTab(model: LibraryModel, body: HTMLElement): void {
 function contextLengthField(
   value: number | undefined,
   onChange: (value: number) => void,
+  trainCtx?: number | null,
 ): HTMLElement {
-  const ctx = value ?? DEFAULT_CONTEXT_TOKENS;
-  const wrap = el('label', 'models-field');
+  const max = contextSliderMax(trainCtx);
+  const ctx = clampContextSlider(value ?? DEFAULT_CONTEXT_TOKENS, max);
+  const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
   head.append(el('span', 'models-field__label', 'Context length'));
-  const valueEl = el('span', 'models-field__range-value', ctx.toLocaleString());
-  head.appendChild(valueEl);
+
+  // Editable number is the source of truth — a 260k-wide slider cannot pick 2048 vs 125k by eye.
+  const valueInput = el('input', 'models-field__range-value-input') as HTMLInputElement;
+  valueInput.type = 'number';
+  valueInput.inputMode = 'numeric';
+  valueInput.min = String(CONTEXT_SLIDER_MIN);
+  valueInput.max = String(max);
+  valueInput.step = String(CONTEXT_SLIDER_STEP);
+  valueInput.value = String(ctx);
+  valueInput.setAttribute('aria-label', 'Context length in tokens');
+  head.appendChild(valueInput);
   wrap.appendChild(head);
 
   const range = el('input', 'models-field__range') as HTMLInputElement;
   range.type = 'range';
   range.min = String(CONTEXT_SLIDER_MIN);
-  range.max = String(CONTEXT_SLIDER_MAX);
+  range.max = String(max);
   range.step = String(CONTEXT_SLIDER_STEP);
-  range.value = String(clampContextSlider(ctx));
+  range.value = String(ctx);
   range.setAttribute('aria-valuemin', range.min);
   range.setAttribute('aria-valuemax', range.max);
   range.setAttribute('aria-valuenow', range.value);
   range.setAttribute('aria-label', 'Context length in tokens');
-  range.addEventListener('input', () => {
-    const next = Number(range.value);
-    valueEl.textContent = next.toLocaleString();
+
+  const apply = (raw: number): void => {
+    const next = clampContextSlider(raw, max);
+    valueInput.value = String(next);
+    range.value = String(next);
     range.setAttribute('aria-valuenow', String(next));
     onChange(next);
+  };
+
+  valueInput.addEventListener('change', () => {
+    apply(Number(valueInput.value));
+  });
+  range.addEventListener('input', () => {
+    apply(Number(range.value));
   });
   wrap.appendChild(range);
   return wrap;
-}
-
-function clampContextSlider(tokens: number): number {
-  const stepped =
-    Math.round(tokens / CONTEXT_SLIDER_STEP) * CONTEXT_SLIDER_STEP;
-  return Math.min(CONTEXT_SLIDER_MAX, Math.max(CONTEXT_SLIDER_MIN, stepped));
 }
 
 function numberField(
@@ -256,13 +271,7 @@ function selectField(
 
 /** Launch settings for a model (defaults: full GPU offload, f16 KV cache). */
 function settingsFor(model: LibraryModel): LlamaServeSettings {
-  let draft = draftSettings.get(model.id);
-  if (!draft) {
-    draft = { ctx: DEFAULT_CONTEXT_TOKENS, n_gpu_layers: 999, cache_type: 'f16' };
-    draftSettings.set(model.id, draft);
-  }
-  if (!draft.cache_type) draft.cache_type = 'f16';
-  return draft;
+  return getLaunchSettings(model.id);
 }
 
 function sliderValueFromNGpu(nGpuLayers: number | undefined, maxLayers: number): number {
@@ -356,6 +365,28 @@ function launchMemoryHint(model: LibraryModel, settings: LlamaServeSettings): HT
   return hint;
 }
 
+/**
+ * The Load tab edits the next spawn; it does not hot-reload a running llama-server.
+ * Call out when the slider no longer matches the process that is already up.
+ */
+function runningContextMismatchHint(
+  model: LibraryModel,
+  settings: LlamaServeSettings,
+): HTMLElement | null {
+  const serve = serveForModel(model);
+  if (!serve || (serve.status !== 'running' && serve.status !== 'starting')) return null;
+  const launched = serve.llamaSettings as LlamaServeSettings | null | undefined;
+  const liveCtx = launched?.ctx;
+  if (liveCtx == null) return null;
+  const draftCtx = settings.ctx ?? DEFAULT_CONTEXT_TOKENS;
+  if (liveCtx === draftCtx) return null;
+  return el(
+    'p',
+    'models-hint models-hint--warn',
+    `Running at ${liveCtx.toLocaleString()} context. Eject and load again to apply ${draftCtx.toLocaleString()}.`,
+  );
+}
+
 function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   if (!model.servable) {
     body.appendChild(
@@ -397,18 +428,29 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     else memoryHint.removeAttribute('title');
   };
 
+  const mismatchHost = el('div');
+  const refreshMismatchHint = (): void => {
+    const next = runningContextMismatchHint(model, settings);
+    mismatchHost.replaceChildren(...(next ? [next] : []));
+  };
+  refreshMismatchHint();
+
   configBlock.append(
     memoryHint,
-    contextLengthField(settings.ctx, (v) => {
-      settings.ctx = v;
-      refreshMemoryHint();
-    }),
+    contextLengthField(
+      settings.ctx,
+      (v) => {
+        settings.ctx = v;
+        refreshMemoryHint();
+        refreshMismatchHint();
+      },
+      model.contextLength,
+    ),
     gpuLayersSlider(model, settings.n_gpu_layers, (v) => {
       settings.n_gpu_layers = v;
       refreshMemoryHint();
     }),
-  );
-  configBlock.appendChild(
+    mismatchHost,
     selectField(
       'KV cache',
       [

@@ -283,7 +283,7 @@ describe('preview-electron-visibility', () => {
     assert.equal(lastBounds, null);
   });
 
-  test('shouldShowElectronPreviewHost is false when Code main-column overlay is mounted', () => {
+  test('shouldShowElectronPreviewHost stays true when a Code stage view is mounted', () => {
     Object.assign(globalThis.window, {
       minnow: { preview: { show: async () => {}, hide: async () => {} } },
     });
@@ -294,11 +294,12 @@ describe('preview-electron-visibility', () => {
     });
     elements.get('previewPane')!.classList.delete('hidden');
     enableCodeForeground();
+    // Overview (and siblings) replace #chatArea only; #previewPane is a sibling.
     elements.set('codeOverviewRoot', { classList: new Set() });
-    assert.equal(shouldShowElectronPreviewHost(), false);
+    assert.equal(shouldShowElectronPreviewHost(), true);
   });
 
-  test('syncElectronPreviewHostLayout hides when Code main-column overlay is mounted', async () => {
+  test('syncElectronPreviewHostLayout shows when a Code stage view is mounted beside preview', async () => {
     setFilePanelState({
       ...DEFAULT_FILE_PANEL_STATE,
       rightPaneMode: 'preview',
@@ -310,8 +311,9 @@ describe('preview-electron-visibility', () => {
 
     await syncElectronPreviewHostLayout();
 
-    assert.equal(showCalls, 0);
-    assert.equal(hideCalls, 1);
+    assert.equal(showCalls, 1);
+    assert.equal(hideCalls, 0);
+    assert.deepEqual(lastShowBounds, { x: 10, y: 20, width: 400, height: 300 });
   });
 
   test('syncElectronPreviewHostLayout hides when preview pane is closed', async () => {

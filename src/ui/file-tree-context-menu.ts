@@ -9,6 +9,7 @@ import { isMarkdownFilePath } from './file-markdown-path';
 import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
 import * as fileTreeOps from './file-tree-ops';
 import { revealPathInSystemExplorer } from './reveal-in-system-explorer';
+import { CAPTURE_MENU_KINDS, legacyCaptureMenuItems } from './issue-capture';
 type FileTreeEntryKind = 'file' | 'dir';
 
 export interface FileTreeMenuContext {
@@ -182,6 +183,7 @@ export function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
     ...openItems,
     ...previewItem,
     ...orchestrateItem,
+    ...legacyCaptureMenuItems({ kind: CAPTURE_MENU_KINDS.file, path: ctx.path }),
     buildOpenInSystemExplorerItem(ctx.path, offline),
     buildCopyPathItem(ctx.path),
     {

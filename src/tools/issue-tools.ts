@@ -392,17 +392,31 @@ export async function executeIssueTool(
       typeof args.issue_id === 'string' && args.issue_id.trim()
         ? args.issue_id.trim()
         : undefined;
-    const card = addIssue(
-      {
-        title: validated.title,
-        description: validated.description,
-        type: validated.type,
-        priority: validated.priority,
-        labels: validated.labels,
-        workspacePath: getWorkspacePath(),
-      },
-      issueId,
-    );
+    // Sub-issues are in scope, so the tool has to be able to create them
+    // (§10). `addIssue` validates the parent and rejects a cycle or a second
+    // level, so an invalid parent surfaces as an error rather than a bad tree.
+    const parentId = typeof args.parent_id === 'string' ? args.parent_id.trim() : '';
+    const projectId = typeof args.project_id === 'string' ? args.project_id.trim() : '';
+    let card;
+    try {
+      card = addIssue(
+        {
+          title: validated.title,
+          description: validated.description,
+          type: validated.type,
+          priority: validated.priority,
+          labels: validated.labels,
+          workspacePath: getWorkspacePath(),
+          // Agent-filed cards enter the Triage view until a human accepts or declines.
+          source: 'agent',
+          ...(parentId ? { parentId } : {}),
+          ...(projectId ? { projectId } : {}),
+        },
+        issueId,
+      );
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : String(err)}`;
+    }
     return JSON.stringify(card, null, 2);
   }
 

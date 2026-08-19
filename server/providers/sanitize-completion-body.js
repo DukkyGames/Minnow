@@ -3,6 +3,8 @@
  * Server mirror of src/providers/sanitize-completion-body.ts.
  */
 
+import { providerSupportsChatTemplateKwargs } from './provider-host.js';
+
 /**
  * True when OpenAI o-series / gpt-5 models expect max_completion_tokens.
  * @param {string} modelId
@@ -51,7 +53,7 @@ function stripInternalApiMessageFields(body) {
 /**
  * Normalize a chat completion body for the target provider.
  * @param {Record<string, unknown>} body
- * @param {{ apiKind?: string, id?: string }} provider
+ * @param {{ apiKind?: string, id?: string, baseUrl?: string }} provider
  * @param {{ reasoning?: boolean, reasoningAllowedOptions?: string[] } | null | undefined} [modelCapabilities]
  * @returns {Record<string, unknown>}
  */
@@ -62,10 +64,13 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
   }
 
   const next = stripInternalApiMessageFields({ ...body });
+  const templateKwargsReachModel = providerSupportsChatTemplateKwargs(provider);
   delete next.top_k;
   delete next.min_p;
   delete next.repetition_penalty;
-  delete next.enable_thinking;
+  if (!templateKwargsReachModel) {
+    delete next.enable_thinking;
+  }
 
   const reasoningSupported =
     modelCapabilities?.reasoning === true ||
@@ -109,10 +114,11 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     delete next.thinking_budget_tokens;
   }
 
-  // Jinja template kwargs reach the model only on local runtimes; hosted
-  // OpenAI-compatible APIs reject the unknown field with a 400.
-  if (providerId !== 'llama-cpp-local' && providerId !== 'mlx-lm-local') {
+  // Jinja kwargs reach local runtimes and loopback OpenAI-compatible servers
+  // (MTPLX, etc.); hosted cloud APIs reject the unknown field with a 400.
+  if (!templateKwargsReachModel) {
     delete next.chat_template_kwargs;
+    delete next.preserve_thinking;
   }
 
   return next;

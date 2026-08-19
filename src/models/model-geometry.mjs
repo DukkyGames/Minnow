@@ -107,14 +107,17 @@ export const GEOMETRY_FAMILIES = {
     sizes: [{ paramsB: 80, nLayers: 48, nEmbd: 2048, nExperts: 512 }],
   },
   // Qwen3.5 / 3.8 hybrid (Gated DeltaNet 3:1). HF model_type is qwen3_5; GGUF arch is qwen35.
-  // 16 of 64 layers are full attention (swaPeriod 4); linear layers hold a constant-size state.
+  // 1 of every 4 layers is full attention; linear layers hold a constant-size state.
   qwen3_5: {
     nKvHeads: 4,
     headDim: 256,
     nVocab: 248320,
     swaWindow: 0,
     swaPeriod: 4,
-    sizes: [{ paramsB: 27.78, nLayers: 64, nEmbd: 5120, nKvHeads: 4, headDim: 256 }],
+    sizes: [
+      { paramsB: 9.0, nLayers: 32, nEmbd: 4096, nKvHeads: 4, headDim: 256 },
+      { paramsB: 27.78, nLayers: 64, nEmbd: 5120, nKvHeads: 4, headDim: 256 },
+    ],
   },
   qwen2: {
     nKvHeads: 4,
@@ -535,9 +538,19 @@ export function geometryFromGgufMetadata(meta) {
   const swaWindow = Number(meta.swaWindow) > 0 ? Number(meta.swaWindow) : 0;
   const fullLayers = Number(meta.nFullAttentionLayers);
   let swaPeriod = Number(meta.swaPeriod) > 0 ? Number(meta.swaPeriod) : 0;
-  if (swaWindow > 0 && !swaPeriod && !(fullLayers > 0)) {
+  const interval = Number(meta.fullAttentionInterval);
+  if (interval > 1 && !swaPeriod) swaPeriod = interval;
+  if (!swaPeriod && !(fullLayers > 0)) {
     const familyKey = resolveFamilyKey({ architecture: String(meta.arch ?? '') });
-    swaPeriod = (familyKey && GEOMETRY_FAMILIES[familyKey]?.swaPeriod) || 1;
+    const family = familyKey ? GEOMETRY_FAMILIES[familyKey] : undefined;
+    const familyPeriod = family?.swaPeriod ?? 0;
+    if (familyPeriod > 1) {
+      // SWA families (Gemma) need a window before we apply the period; hybrid linear-attention
+      // families (Qwen3.5) publish period without a window. Applying Gemma's period with a
+      // missing window would understate KV.
+      if (swaWindow > 0 || !(family?.swaWindow > 0)) swaPeriod = familyPeriod;
+    }
+    if (swaWindow > 0 && !swaPeriod) swaPeriod = 1;
   }
 
   return {

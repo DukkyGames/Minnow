@@ -53,6 +53,7 @@ import {
 } from '../chat/orchestrate/plan-preview';
 import { findChatById } from '../state/sessions';
 import type { Chat } from '../types';
+import { bindComposerAutoResize } from './composer-auto-resize';
 
 export const SUPER_PLAN_PAGE_ROOT_ID = 'superPlanPage';
 export const SUPER_PLAN_PAGE_QUESTIONS_ID = 'orchestratePlanScreenQuestions';
@@ -282,6 +283,8 @@ class SuperPlanPage {
   private firstLedgerPaint = true;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private railObserver: ResizeObserver | null = null;
+  /** Drops Super Plan composer auto-resize listeners when the page unmounts. */
+  private unbindComposerResize: (() => void) | null = null;
 
   private libraryEntries: PlanLibraryEntry[] = [];
   private libraryError?: string;
@@ -365,6 +368,8 @@ class SuperPlanPage {
   }
 
   destroy(): void {
+    this.unbindComposerResize?.();
+    this.unbindComposerResize = null;
     this.railObserver?.disconnect();
     this.railObserver = null;
     this.collector?.stop();
@@ -679,6 +684,10 @@ class SuperPlanPage {
     const field = el('textarea', 'sp-composer__field');
     field.id = 'superPlanPrompt';
     field.rows = 4;
+    field.spellcheck = false;
+    field.setAttribute('autocomplete', 'off');
+    field.setAttribute('autocorrect', 'off');
+    field.setAttribute('autocapitalize', 'off');
     field.placeholder =
       'What should this plan cover? Goals, constraints, and how you want the work grouped.';
     field.setAttribute('aria-label', 'What should this plan cover?');
@@ -715,8 +724,10 @@ class SuperPlanPage {
         submit();
       }
     });
+    // Grow with extra lines the same way Code/Chat do (CSS field-sizing + JS fallback).
+    this.unbindComposerResize = bindComposerAutoResize(field);
 
-    bar.append(opts, modelAnchor, spacer, send);
+    bar.append(opts, spacer, modelAnchor, send);
     composer.append(field, bar);
     mountComposerModelTrigger(modelAnchor, 'super-plan');
 
@@ -727,7 +738,10 @@ class SuperPlanPage {
       btn.type = 'button';
       btn.addEventListener('click', () => {
         field.value = seed;
-        send.disabled = false;
+        send.disabled = !field.value.trim();
+        // Dispatch on the field's window so happy-dom tests see the same Event as the browser.
+        const WinEvent = field.ownerDocument.defaultView?.Event;
+        if (WinEvent) field.dispatchEvent(new WinEvent('input', { bubbles: true }));
         field.focus();
       });
       seeds.appendChild(btn);

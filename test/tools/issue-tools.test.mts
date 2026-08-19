@@ -62,7 +62,8 @@ describe('issue-tools', () => {
       issue_id: 'ISS-42',
     });
     assert.match(addResult, /"id": "ISS-42"/);
-    assert.match(addResult, /"status": "triage"/);
+    assert.match(addResult, /"status": "backlog"/);
+    assert.match(addResult, /"source": "agent"/);
 
     const state = await executeIssueTool('issue_get_state', {
       workspace_scope: 'all',

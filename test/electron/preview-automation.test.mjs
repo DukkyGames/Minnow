@@ -81,6 +81,38 @@ describe('preview guest actions', () => {
     assert.match(String(val.__execError), /Script failed to execute/);
   });
 
+  test('previewExecJs times out a hung executeJavaScript without waiting forever', async () => {
+    const wc = createMockWebContents();
+    wc.executeJavaScript = () => new Promise(() => {});
+    const started = Date.now();
+    const val = await previewExecJs(wc, 'while (true) {}', { timeoutMs: 50 });
+    assert.ok(val && typeof val === 'object' && '__execError' in val);
+    assert.match(String(val.__execError), /timed out after 50ms/);
+    assert.ok(Date.now() - started < 1000);
+  });
+
+  test('previewExecJs returns destroyed-guest error without calling executeJavaScript', async () => {
+    const wc = createMockWebContents();
+    wc.isDestroyed = () => true;
+    const val = await previewExecJs(wc, '1 + 1');
+    assert.deepEqual(val, { __execError: 'Preview guest is destroyed' });
+    assert.equal(wc._state.execCalls.length, 0);
+  });
+
+  test('wrapPreviewGuestUserCode times out a never-settling Promise', async () => {
+    const wrapped = wrapPreviewGuestUserCode('new Promise(() => {})', 50);
+    const started = Date.now();
+    const result = await eval(wrapped);
+    assert.ok(result && typeof result === 'object' && '__execError' in result);
+    assert.match(String(result.__execError), /timed out after 50ms/);
+    assert.ok(Date.now() - started < 1000);
+  });
+
+  test('wrapPreviewGuestUserCode still returns a resolved eval result', async () => {
+    const wrapped = wrapPreviewGuestUserCode('1 + 1', 500);
+    assert.equal(await eval(wrapped), 2);
+  });
+
   test('previewExecJs returns guest JS errors instead of throwing', async () => {
     const wc = createMockWebContents({
       execReturn: { __execError: 'boom' },

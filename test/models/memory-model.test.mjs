@@ -71,6 +71,14 @@ describe('kv cache sizing', () => {
     const narrow = { ...wide, swaHeadDim: 256 };
     assert.ok(kvCacheBytes(narrow, 32768) < kvCacheBytes(wide, 32768));
   });
+
+  it('charges only the full-attention layers on a linear-attention hybrid', () => {
+    // Qwen3.5-9B: 8 of 32 layers grow a cache; the rest hold a constant-size state.
+    const hybrid = geom({ nLayers: 32, nKvHeads: 4, headDim: 256, swaWindow: 0, swaPeriod: 4 });
+    const dense = geom({ nLayers: 32, nKvHeads: 4, headDim: 256, swaWindow: 0, swaPeriod: 1 });
+    const ratio = kvCacheBytes(dense, 125000) / kvCacheBytes(hybrid, 125000);
+    assert.ok(ratio > 3.5 && ratio < 4.1, `ratio ${ratio}`);
+  });
 });
 
 describe('compute buffer', () => {

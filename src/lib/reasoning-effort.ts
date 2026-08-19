@@ -19,6 +19,14 @@ export const REASONING_EFFORT_OPTIONS: readonly ReasoningEffortOption[] = [
 
 const EFFORT_SET = new Set<ReasoningEffortOption>(REASONING_EFFORT_OPTIONS);
 
+/** Composer / send options for Qwen3.8 (`xhigh` is mapped to High). */
+export const QWEN38_REASONING_OPTIONS: readonly ReasoningEffortOption[] = [
+  'off',
+  'low',
+  'medium',
+  'high',
+] as const;
+
 /**
  * Qwen3.8 ids (`qwen3.8` / `qwen3_8`) — not Qwen3-8B (`qwen3-8b`).
  * Used for 262K defaults, wire `xhigh`, and `preserve_thinking`.
@@ -28,9 +36,10 @@ export function isQwen38ModelId(modelId: string | null | undefined): boolean {
   return /(?:^|[^a-z0-9])qwen3[._]8(?![0-9])/i.test(modelId);
 }
 
-/** Map LM Studio / Qwen `xhigh` onto the composer `high` option. */
+/** Map LM Studio / Qwen `xhigh` onto the composer `high` option; `none` onto Off. */
 export function normalizeReasoningCatalogValue(value: unknown): ReasoningEffortOption | undefined {
   if (value === 'xhigh') return 'high';
+  if (value === 'none') return 'off';
   return isReasoningEffortOption(value) ? value : undefined;
 }
 
@@ -44,8 +53,9 @@ export function normalizeReasoningAllowedOptions(raw: unknown[]): ReasoningEffor
   const seen = new Set<string>();
   for (const value of raw) {
     if (typeof value !== 'string') continue;
-    // Qwen3.8 / LM Studio report `xhigh`; the composer only has High.
-    seen.add(value === 'xhigh' ? 'high' : value);
+    // Qwen3.8 / LM Studio report `xhigh`; some catalogs use `none` for Off.
+    const mapped = value === 'xhigh' ? 'high' : value === 'none' ? 'off' : value;
+    seen.add(mapped);
   }
   return REASONING_EFFORT_OPTIONS.filter((option) => seen.has(option));
 }
@@ -160,22 +170,38 @@ function isThinkingTypeOnlyOpenAiModel(modelId: string): boolean {
 }
 
 /**
- * Fallback allowed options for openai-v1 providers when catalog lacks reasoning metadata.
- * All models on the OpenAI-compatible API get selectable effort; thinking-only vendors use off/on.
+ * Fallback allowed options when catalog lacks reasoning metadata.
+ * Qwen3.8 always gets levels (any provider). Other models only infer on openai-v1.
  */
 export function inferReasoningOptionsFromModelId(
   modelId: string,
-  apiKind: ApiKind,
+  apiKind?: ApiKind,
 ): ReasoningEffortOption[] {
   // Qwen3.8 exposes off/low/medium/high on every provider; default effort is high (wire xhigh).
   if (isQwen38ModelId(modelId)) {
-    return ['off', 'low', 'medium', 'high'];
+    return [...QWEN38_REASONING_OPTIONS];
   }
   if (apiKind !== 'openai-v1') return [];
   if (isThinkingTypeOnlyOpenAiModel(modelId)) {
     return ['off', 'on'];
   }
   return ['off', 'low', 'medium', 'high'];
+}
+
+/**
+ * Qwen3.8 always offers Low/Medium/High even when LM Studio advertises off/on
+ * or My Models rows have no catalog reasoning block.
+ */
+export function ensureQwen38ReasoningAllowedOptions(
+  modelId: string | null | undefined,
+  allowed: ReasoningEffortOption[],
+): ReasoningEffortOption[] {
+  if (!isQwen38ModelId(modelId)) return allowed;
+  const hasLevels = allowed.some((o) => o === 'low' || o === 'medium' || o === 'high');
+  if (hasLevels) {
+    return normalizeReasoningAllowedOptions([...allowed, ...QWEN38_REASONING_OPTIONS]);
+  }
+  return [...QWEN38_REASONING_OPTIONS];
 }
 
 /**

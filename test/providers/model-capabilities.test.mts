@@ -9,8 +9,10 @@ import {
   catalogRowHasVision,
   mergeModelCapabilities,
   prioritizeModelIdsForProbe,
+  resolveSendCapabilities,
 } from '../../src/providers/model-capabilities.ts';
 import { modelCache } from '../../src/app-state.ts';
+import { encodeModelSelectKey } from '../../src/lib/model-select-key.ts';
 
 describe('mergeModelCapabilities', () => {
   test('catalog vision wins for vlm over probe false', () => {
@@ -74,6 +76,28 @@ describe('catalogCapabilitiesFromRow', () => {
     assert.equal(caps.reasoningDefault, 'high');
   });
 
+  test('Qwen3.8 infers levels without apiKind (My Models / llama.cpp rows)', () => {
+    const caps = catalogCapabilitiesFromRow({
+      id: 'gguf:unsloth/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf',
+      type: 'llm',
+    });
+    assert.deepEqual(caps.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
+    assert.equal(caps.reasoningDefault, 'high');
+  });
+
+  test('Qwen3.8 upgrades LM Studio off/on catalog to effort levels', () => {
+    const caps = catalogCapabilitiesFromRow(
+      {
+        id: 'qwen/qwen3.8-27b',
+        type: 'vlm',
+        reasoning: { allowed_options: ['off', 'on'], default: 'on' },
+      },
+      'lm-studio-v0',
+    );
+    assert.deepEqual(caps.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
+    assert.equal(caps.reasoningDefault, 'high');
+  });
+
   test('maps LM Studio xhigh catalog default onto high', () => {
     const caps = catalogCapabilitiesFromRow({
       id: 'qwen/qwen3.8-27b',
@@ -99,5 +123,49 @@ describe('prioritizeModelIdsForProbe', () => {
     );
     assert.equal(out[0], 'zzz');
     assert.equal(out[1], 'loaded-one');
+  });
+});
+
+describe('resolveSendCapabilities', () => {
+  test('Qwen3.8 library row without capabilities still exposes levels', () => {
+    modelCache.clear();
+    const modelId = 'gguf:unsloth/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf';
+    modelCache.set(encodeModelSelectKey('minnow-library', modelId), {
+      id: modelId,
+      type: 'llm',
+    });
+    const caps = resolveSendCapabilities('minnow-library', modelId);
+    assert.deepEqual(caps?.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
+    assert.equal(caps?.reasoningDefault, 'high');
+  });
+
+  test('Qwen3.8 without a cache row still exposes levels for the composer', () => {
+    modelCache.clear();
+    const caps = resolveSendCapabilities('llama-cpp-local', 'Qwen3.8-27B-Q4_K_M');
+    assert.deepEqual(caps?.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
+    assert.equal(caps?.reasoningDefault, 'high');
+  });
+
+  test('cached off/on for Qwen3.8 is upgraded to levels from catalog', () => {
+    modelCache.clear();
+    modelCache.set(encodeModelSelectKey('lmstudio', 'qwen/qwen3.8-27b'), {
+      id: 'qwen/qwen3.8-27b',
+      type: 'vlm',
+      api: 'lm-studio-v0',
+      capabilities: {
+        vision: true,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: true,
+        reasoningAllowedOptions: ['off', 'on'],
+        reasoningDefault: 'on',
+        contextLength: null,
+        loadState: 'loaded',
+      },
+    });
+    const caps = resolveSendCapabilities('lmstudio', 'qwen/qwen3.8-27b', 'lm-studio-v0');
+    assert.deepEqual(caps?.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
+    assert.equal(caps?.reasoningDefault, 'high');
   });
 });

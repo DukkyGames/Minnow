@@ -259,8 +259,8 @@ const DEFAULT_META = {
     },
   },
   chat: {
-    generationIdleTimeoutMs: 25 * 60_000,
-    generationMaxDurationMs: 3_600_000,
+    generationIdleTimeoutMs: 60 * 60_000,
+    generationMaxDurationMs: 240 * 60_000,
   },
   fallbackChains: {
     enabled: false,

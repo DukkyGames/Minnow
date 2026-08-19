@@ -757,6 +757,26 @@
   overflow: visible;
 }
 
+.board-header__reasoning {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  min-height: 32px;
+}
+
+.board-reasoning-control-wrap.hidden {
+  display: none;
+}
+
+.board-reasoning-effort-wrap.hidden {
+  display: none;
+}
+
+.board-reasoning-effort-select {
+  min-height: 28px;
+}
+
 .board-header__run-btn {
   height: 32px;
   padding: 0 14px;
@@ -1603,6 +1623,10 @@
 
 .board-onboarding__panel--busy {
   max-width: min(26rem, 100%);
+}
+
+.board-onboarding__panel--questions {
+  max-width: min(36rem, 100%);
 }
 
 .board-onboarding__title {

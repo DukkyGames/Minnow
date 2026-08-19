@@ -132,6 +132,36 @@ describe('searxng provisioner', () => {
     assert.ok(yaml.includes('name: startpage'));
   });
 
+  it('writeSearxngSettings filters adult content by default', async () => {
+    await writeSearxngSettings(FIXED_PORT);
+    const yaml = await fsp.readFile(getServerSettingsPath('searxng'), 'utf8');
+    assert.match(yaml, /safe_search: 1/);
+  });
+
+  it('writeSearxngSettings keeps a second general engine alongside bing', async () => {
+    await writeSearxngSettings(FIXED_PORT);
+    const yaml = await fsp.readFile(getServerSettingsPath('searxng'), 'utf8');
+
+    // Bing fails open (decoy SERPs), so it must never be the only general engine.
+    assert.match(yaml, /name: duckduckgo\s*\n\s*disabled: false/);
+    assert.match(yaml, /name: stackoverflow\s*\n\s*categories: \[general, it, "q&a"\]\s*\n\s*disabled: false/);
+  });
+
+  it('writeSearxngSettings reuses the existing secret key across rewrites', async () => {
+    await writeSearxngSettings(FIXED_PORT);
+    const first = await fsp.readFile(getServerSettingsPath('searxng'), 'utf8');
+    const firstKey = /secret_key: "([0-9a-f]{64})"/.exec(first)?.[1];
+    assert.ok(firstKey);
+
+    // A port change rewrites settings; the key must survive or SearXNG truncates its cache.
+    await writeSearxngSettings(FIXED_PORT + 1);
+    const second = await fsp.readFile(getServerSettingsPath('searxng'), 'utf8');
+    const secondKey = /secret_key: "([0-9a-f]{64})"/.exec(second)?.[1];
+
+    assert.equal(secondKey, firstKey);
+    assert.match(second, new RegExp(`port: ${FIXED_PORT + 1}`));
+  });
+
   it('getSpawnSpec returns venv python, searx module, settings env, and cwd', async () => {
     await ensureTestVenv();
     const python = venvPythonPath();

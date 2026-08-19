@@ -22,7 +22,7 @@ describe('llama args', () => {
     assert.equal(args[nglIdx + 1], '0');
   });
 
-  test('buildLlamaServerArgs defaults ngl=999 on GPU variant', () => {
+  test('buildLlamaServerArgs defaults ngl=999 on GPU variant with fit off', () => {
     const args = buildLlamaServerArgs({
       modelPath: '/tmp/model.gguf',
       port: 8085,
@@ -31,6 +31,34 @@ describe('llama args', () => {
     });
     const nglIdx = args.indexOf('-ngl');
     assert.equal(args[nglIdx + 1], '999');
+    const fitIdx = args.indexOf('--fit');
+    assert.ok(fitIdx >= 0);
+    assert.equal(args[fitIdx + 1], 'off');
+  });
+
+  test('buildLlamaServerArgs omits ngl when fit is on', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      settings: { fit: true, n_gpu_layers: 999, ctx: 4096 },
+    });
+    assert.equal(args.indexOf('-ngl'), -1);
+    const fitIdx = args.indexOf('--fit');
+    assert.equal(args[fitIdx + 1], 'on');
+  });
+
+  test('buildLlamaServerArgs passes explicit partial ngl with fit off', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      settings: { n_gpu_layers: 32, ctx: 4096 },
+    });
+    const nglIdx = args.indexOf('-ngl');
+    assert.equal(args[nglIdx + 1], '32');
+    const fitIdx = args.indexOf('--fit');
+    assert.equal(args[fitIdx + 1], 'off');
   });
 
   test('buildLlamaServerArgs passes fit as on|off value', () => {
@@ -99,6 +127,21 @@ describe('llama args', () => {
       settings: { extra_args: ['--jinja'] },
     });
     assert.equal(args.filter((token) => token === '--jinja').length, 1);
+  });
+
+  test('user ctx 2048 wins over the balanced 125k profile default', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      profileKey: 'balanced',
+      hardware: { gpuVramGb: 12, availableRamGb: 32, totalRamGb: 64, backend: 'cuda' },
+      modelMeta: { name: 'demo', parameters_raw: 7, quantization: 'Q4_K_M' },
+      settings: { ctx: 2048, n_gpu_layers: 999, cache_type: 'f16' },
+    });
+    const cIdx = args.indexOf('-c');
+    assert.ok(cIdx >= 0);
+    assert.equal(args[cIdx + 1], '2048');
   });
 
   test('findSiblingMmproj prefers mmproj-F16 next to the weights', async () => {

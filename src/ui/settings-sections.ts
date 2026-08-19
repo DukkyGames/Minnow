@@ -157,9 +157,12 @@ function workspaceShellProfileKey(absPath: string): string {
 import {
   clampGenerationIdleTimeoutMs,
   clampGenerationMaxDurationMs,
+  DEFAULT_GENERATION_IDLE_TIMEOUT_MS,
+  DEFAULT_GENERATION_MAX_DURATION_MS,
   generationTimeoutMinutesToMs,
   generationTimeoutMsToMinutes,
   getChatMetaSync,
+  isGenerationTimeoutEnabled,
   loadChatMeta,
   saveChatMeta,
 } from '../config/chat-meta';
@@ -1314,27 +1317,40 @@ async function appendGenerationTimeoutsSection(
   options?: { emphasis?: boolean },
 ): Promise<void> {
   await loadChatMeta();
+  const chatMeta = getChatMetaSync();
 
   const timeoutSection = appendSettingsGroup(
     mount,
     'Generation timeouts',
-    'Server-side limits while streaming from the model. Idle timeout resets when new tokens arrive. Applies to the next generation; no restart needed.',
+    'Server-side limits while streaming from the model. Idle timeout resets when new tokens arrive. Set either limit to 0 to turn it off. Applies to the next generation; no restart needed.',
     'agents.watchdog.generation',
     options?.emphasis ? { emphasis: true } : undefined,
   );
 
+  const syncTimeoutInputsEnabled = (enabled: boolean): void => {
+    idleInput.disabled = !enabled;
+    maxInput.disabled = !enabled;
+  };
+
+  const { row: enabledRow, input: enabledToggle } = createSettingsToggleRow(
+    'Enable generation timeouts',
+    {
+      checked: isGenerationTimeoutEnabled(chatMeta),
+      description: 'When off, generations are not cut off by idle or max-duration limits.',
+      searchKey: 'agents.watchdog.generation.enabled',
+    },
+  );
+  timeoutSection.appendChild(enabledRow);
+
   const idleInput = document.createElement('input');
   idleInput.type = 'number';
   idleInput.className = 'settings-input';
-  idleInput.min = '1';
-  idleInput.max = '30';
+  idleInput.min = '0';
   idleInput.step = '1';
-  idleInput.value = String(
-    generationTimeoutMsToMinutes(getChatMetaSync().generationIdleTimeoutMs),
-  );
+  idleInput.value = String(generationTimeoutMsToMinutes(chatMeta.generationIdleTimeoutMs));
   idleInput.setAttribute(
     'aria-label',
-    'Minutes without model stream data before aborting',
+    'Minutes without model stream data before aborting (0 disables)',
   );
   timeoutSection.appendChild(
     createSettingsInputRow('Idle timeout (minutes)', { input: idleInput }).row,
@@ -1343,22 +1359,62 @@ async function appendGenerationTimeoutsSection(
   const maxInput = document.createElement('input');
   maxInput.type = 'number';
   maxInput.className = 'settings-input';
-  maxInput.min = '1';
-  maxInput.max = '240';
+  maxInput.min = '0';
   maxInput.step = '1';
-  maxInput.value = String(
-    generationTimeoutMsToMinutes(getChatMetaSync().generationMaxDurationMs),
-  );
-  maxInput.setAttribute('aria-label', 'Maximum wall-clock minutes per generation');
+  maxInput.value = String(generationTimeoutMsToMinutes(chatMeta.generationMaxDurationMs));
+  maxInput.setAttribute('aria-label', 'Maximum wall-clock minutes per generation (0 disables)');
   timeoutSection.appendChild(
     createSettingsInputRow('Max duration (minutes)', { input: maxInput }).row,
   );
 
+  syncTimeoutInputsEnabled(enabledToggle.checked);
+
+  enabledToggle.addEventListener('change', () => {
+    void (async () => {
+      if (enabledToggle.checked) {
+        const current = getChatMetaSync();
+        const idleMs =
+          current.generationIdleTimeoutMs > 0
+            ? current.generationIdleTimeoutMs
+            : DEFAULT_GENERATION_IDLE_TIMEOUT_MS;
+        const maxMs =
+          current.generationMaxDurationMs > 0
+            ? current.generationMaxDurationMs
+            : DEFAULT_GENERATION_MAX_DURATION_MS;
+        idleInput.value = String(generationTimeoutMsToMinutes(idleMs));
+        maxInput.value = String(generationTimeoutMsToMinutes(maxMs));
+        syncTimeoutInputsEnabled(true);
+        try {
+          await saveChatMeta({
+            generationIdleTimeoutMs: idleMs,
+            generationMaxDurationMs: maxMs,
+          });
+          setStatus('ok', 'Generation timeouts enabled');
+        } catch {
+          setStatus('err', 'Could not save generation timeouts');
+        }
+        return;
+      }
+
+      syncTimeoutInputsEnabled(false);
+      try {
+        await saveChatMeta({
+          generationIdleTimeoutMs: 0,
+          generationMaxDurationMs: 0,
+        });
+        setStatus('ok', 'Generation timeouts disabled');
+      } catch {
+        setStatus('err', 'Could not save generation timeouts');
+      }
+    })();
+  });
+
   idleInput.addEventListener('change', () => {
     void (async () => {
-      const minutes = Math.min(30, Math.max(1, Math.floor(Number(idleInput.value) || 1)));
+      const minutes = Math.max(0, Math.floor(Number(idleInput.value) || 0));
       idleInput.value = String(minutes);
-      const ms = clampGenerationIdleTimeoutMs(generationTimeoutMinutesToMs(minutes));
+      const ms =
+        minutes === 0 ? 0 : clampGenerationIdleTimeoutMs(generationTimeoutMinutesToMs(minutes));
       try {
         await saveChatMeta({ generationIdleTimeoutMs: ms });
         setStatus('ok', 'Generation idle timeout updated');
@@ -1370,9 +1426,10 @@ async function appendGenerationTimeoutsSection(
 
   maxInput.addEventListener('change', () => {
     void (async () => {
-      const minutes = Math.min(240, Math.max(1, Math.floor(Number(maxInput.value) || 1)));
+      const minutes = Math.max(0, Math.floor(Number(maxInput.value) || 0));
       maxInput.value = String(minutes);
-      const ms = clampGenerationMaxDurationMs(generationTimeoutMinutesToMs(minutes));
+      const ms =
+        minutes === 0 ? 0 : clampGenerationMaxDurationMs(generationTimeoutMinutesToMs(minutes));
       try {
         await saveChatMeta({ generationMaxDurationMs: ms });
         setStatus('ok', 'Generation max duration updated');
@@ -1416,7 +1473,9 @@ async function renderToolsSection(): Promise<void> {
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Built-in tool permissions and session cache. Browser automation lives under ',
+    'Permissions for built-in, plugin, and MCP tools, plus the session cache. Servers are added under ',
+    linkToSettingsSection('MCP', 'mcp'),
+    '. Browser automation lives under ',
     linkToSettingsSection('Browser', 'browser'),
     '. Slash commands live under ',
     linkToSettingsSection('Skills', 'skills'),
@@ -1539,6 +1598,8 @@ async function renderToolsSection(): Promise<void> {
   fillToolsSection('settingsToolsList', { variant: 'settings' });
   const { appendPluginToolsToList } = await import('./settings-plugins');
   await appendPluginToolsToList('settingsToolsList');
+  const { appendMcpToolsToList } = await import('./settings-mcp-tools');
+  await appendMcpToolsToList('settingsToolsList');
   if (isAsyncSectionRenderStale('tools', generation)) return;
 
   if (!toolsSectionInitialized) {
@@ -1563,6 +1624,7 @@ async function renderToolsSection(): Promise<void> {
   );
 
   appendSettingsCrosslinks(content, [
+    { label: 'MCP servers', sectionId: 'mcp' },
     { label: 'Browser automation', sectionId: 'browser' },
     { label: 'Skills catalog', sectionId: 'skills' },
     { label: 'Web search', sectionId: 'search' },
@@ -1897,6 +1959,8 @@ function ensureMcpSettingsShell(mount: HTMLElement): {
   lead.append(
     'External MCP integrations connect over stdio and register as ',
     el('code', undefined, 'mcp__server__tool'),
+    '. Each connected server gets its own permission rows under ',
+    linkToSettingsSection('Tools', 'tools'),
     '. Language-server diagnostics live under ',
     linkToSettingsSection('Language servers', 'lsp'),
     '; AI ghost text lives under ',

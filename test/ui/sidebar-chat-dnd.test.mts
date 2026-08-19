@@ -4,7 +4,8 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
-import { CHAT_DRAG_MIME, resetSidebarChatDnDForTests } from '../../src/ui/sidebar-chat-dnd.ts';
+import { CHAT_DRAG_MIME } from '../../src/attachments/chat-drag.ts';
+import { resetSidebarChatDnDForTests } from '../../src/ui/sidebar-chat-dnd.ts';
 
 afterEach(() => {
   resetSidebarChatDnDForTests();

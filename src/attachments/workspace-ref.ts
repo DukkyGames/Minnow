@@ -1,11 +1,12 @@
 /**
  * Workspace file references from the file tree into the composer.
- * Text paths are inserted into the message (agents use read_file); images stay
- * as attachment chips and resolve via the preview file API on send.
+ * Text paths resolve via read_file; PDF/Excel/Word via read_document; images
+ * stay as attachment chips and resolve via the preview file API on send.
  */
 
 import { executeTool } from '../tools/client';
 import { isImageFilePath } from './image-path';
+import { isDocumentFilePath } from './document-extensions.mjs';
 import {
   getPendingAttachments,
   pushAttachment,
@@ -104,18 +105,28 @@ async function defaultWorkspaceFileReader(path: string): Promise<string> {
   return result.content ?? '';
 }
 
+async function defaultWorkspaceDocumentReader(path: string): Promise<string> {
+  const result = await executeTool('read_document', { path });
+  const content = result.content ?? '';
+  if (content.startsWith('Error:')) {
+    throw new Error(content.slice('Error:'.length).trim() || content);
+  }
+  return content;
+}
+
 async function defaultWorkspaceImageReader(path: string): Promise<WorkspaceImagePayload> {
   return readWorkspaceImage(path);
 }
 
 /**
- * Resolves workspace **image** chips for {@link buildHistoryUserContent}.
- * Legacy text workspace chips still read via read_file; new tree drops use composer paths.
+ * Resolves workspace chips for {@link buildHistoryUserContent}.
+ * Images use the preview file API; PDF/office use read_document; other files use read_file.
  */
 export async function resolveWorkspaceReferences(
   attachments: Attachment[],
   readText: WorkspaceFileReader = defaultWorkspaceFileReader,
   readImage: WorkspaceImageReader = defaultWorkspaceImageReader,
+  readDocument: WorkspaceFileReader = defaultWorkspaceDocumentReader,
 ): Promise<Attachment[]> {
   const resolved: Attachment[] = [];
 
@@ -141,7 +152,10 @@ export async function resolveWorkspaceReferences(
         continue;
       }
 
-      const text = await readText(path);
+      // Excel/PDF/Word: extract sheet/document text instead of dumping ZIP bytes.
+      const text = isDocumentFilePath(path)
+        ? await readDocument(path)
+        : await readText(path);
       resolved.push({
         ...attachment,
         kind: 'text',

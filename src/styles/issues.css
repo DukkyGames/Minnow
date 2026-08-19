@@ -1,6 +1,9 @@
 /**
- * Issues app — Linear-density list + status kanban (MIN-261).
+ * Issues app — denser-than-Linear list + status kanban.
  * Flat Minnow chrome; --mn-* tokens only.
+ *
+ * Apps render inside MinnowOS windows, so width rules use @container, never
+ * @media — a media query measures the viewport and never matches app width.
  */
 
 .issues-page {
@@ -11,7 +14,10 @@
   background: var(--mn-bg);
   color: var(--mn-fg);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 13px;
+
+  container-type: inline-size;
+  container-name: issues;
 }
 
 .issues-page.is-open,
@@ -19,6 +25,27 @@
 .mn-os-app-layer.is-active.issues-page,
 #issuesView.mn-os-app-layer.is-active {
   display: flex;
+}
+
+/*
+ * Sizing vars live on .issues-shell, one level below the container, because
+ * @container rules never match the container element itself.
+ */
+.issues-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  /* Wide peek; @container below narrows this because the page itself cannot match. */
+  --issues-peek-cols: minmax(0, 1fr) minmax(380px, 520px);
+  --issues-row-h: 28px;
+}
+
+.issues-header,
+.issues-view-bar,
+.issues-chip-bar {
+  flex-shrink: 0;
 }
 
 /* Code sidebar embed — Issues fills #chatArea inside the Code window. */
@@ -75,9 +102,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 16px;
-  min-height: 52px;
-  padding: 10px 16px;
+  gap: 8px 12px;
+  min-height: 44px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
   background: var(--mn-surface-1, var(--mn-bg));
@@ -94,9 +121,9 @@
 .issues-header__icon {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   background: color-mix(in oklch, var(--mn-accent) 14%, var(--mn-bg));
   color: var(--mn-accent);
   flex-shrink: 0;
@@ -130,6 +157,99 @@
   flex: 1 1 auto;
   justify-content: flex-end;
   min-width: 0;
+}
+
+/* ---------- view tabs + filter chips ---------- */
+
+.issues-view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--mn-border);
+  min-height: 32px;
+}
+
+.issues-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.issues-view-tab {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.issues-view-tab.is-active {
+  color: var(--mn-fg);
+  border-bottom-color: var(--mn-accent);
+}
+
+.issues-view-tab:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.issues-view-tabs__search {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+  max-width: 28rem;
+  margin-left: auto;
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.issues-view-tabs__search .issues-search {
+  width: 100%;
+  max-width: none;
+}
+
+.issues-chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.issues-filter-chip {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.issues-filter-chip.is-on {
+  border-color: color-mix(in oklch, var(--mn-accent) 40%, var(--mn-border));
+  color: var(--mn-fg);
+}
+
+.issues-filter-chip--add {
+  color: var(--mn-fg-muted);
+}
+
+.issues-filter-chip:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
 }
 
 /* ---------- filter bar ---------- */
@@ -254,8 +374,8 @@
 }
 
 .issues-btn--danger {
-  border-color: color-mix(in oklch, var(--mn-danger) 45%, var(--mn-border));
-  color: var(--mn-danger);
+  border-color: color-mix(in oklch, var(--mn-danger-ink) 45%, var(--mn-border));
+  color: var(--mn-danger-ink);
   background: color-mix(in oklch, var(--mn-danger) 8%, var(--mn-bg));
 }
 
@@ -276,19 +396,69 @@
   cursor: not-allowed;
 }
 
-/* ---------- new issue form ---------- */
+/* ---------- new issue panel (centered over the Issues view) ---------- */
+
+.issues-new-form__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 94;
+  display: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--mn-overlay);
+  cursor: default;
+  appearance: none;
+}
+
+.issues-new-form__backdrop.is-open {
+  display: block;
+}
+
+.issues-new-form__backdrop:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
 
 .issues-new-form {
+  position: fixed;
+  z-index: 95;
   display: none;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--mn-border);
-  background: color-mix(in srgb, var(--mn-fg) 3%, var(--mn-bg));
+  gap: 14px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(85vh, calc(100vh - 32px));
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-bg);
+  box-shadow: var(--shadow-popover);
+  color: var(--mn-fg);
 }
 
 .issues-new-form.is-open {
   display: flex;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .issues-new-form.is-open {
+    animation: issues-new-form-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes issues-new-form-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 8px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
 }
 
 .issues-new-form__grid {
@@ -306,21 +476,25 @@
   grid-column: 1 / -1;
 }
 
-.issues-new-form label {
+.issues-new-form label,
+.issues-new-form__desc {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+}
+
+.issues-new-form label,
+.issues-new-form__field-label {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
-  min-width: 0;
+  color: var(--mn-fg-muted);
 }
 
 .issues-new-form input,
-.issues-new-form select,
-.issues-new-form textarea {
+.issues-new-form select {
   font-family: var(--font-ui);
   font-size: 13px;
   padding: 6px 8px;
@@ -331,9 +505,9 @@
   width: 100%;
 }
 
-.issues-new-form textarea {
-  min-height: 2.5rem;
-  resize: vertical;
+.issues-new-form .issues-detail__desc-wrap {
+  min-height: 8rem;
+  max-height: min(20rem, 40vh);
 }
 
 .issues-new-form__actions {
@@ -370,14 +544,21 @@
 }
 
 .issues-empty {
-  margin: 32px 16px;
-  padding: 24px 20px;
-  text-align: center;
+  margin: 16px 12px;
+  padding: 8px 12px;
+  text-align: left;
   color: var(--mn-fg-muted);
-  border: 1px dashed var(--mn-border);
-  border-radius: var(--radius-md);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
+  /* Glance copy, not a marketing block — do not cap width at 65 characters. */
+}
+
+/* Triage empty is a single 13px line at normal Issues width — not a stacked blurb. */
+.issues-empty--triage {
+  margin: 8px 12px;
+  padding: 0;
+  line-height: 13px;
+  white-space: nowrap;
 }
 
 .issues-empty.hidden {
@@ -387,12 +568,13 @@
 /* Shared list grid columns (header + rows stay aligned). */
 .issues-list-head,
 .issues-row {
-  --issues-list-cols: 4.25rem 2.25rem minmax(0, 1fr) minmax(4.5rem, max-content) 4.5rem 5.5rem 4.5rem;
+  /* id type title status priority assignee project agent rollup counts labels updated */
+  --issues-list-cols: 4rem 1.75rem minmax(0, 1fr) minmax(4.25rem, max-content) 3.5rem 4rem 4.5rem 3.5rem 2.5rem 2.4rem 5rem 3.5rem;
   display: grid;
   grid-template-columns: var(--issues-list-cols);
-  gap: 8px 10px;
+  gap: 4px 8px;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 12px;
 }
 
 /* ---------- multiselect ---------- */
@@ -430,10 +612,10 @@
 .issues-list-head {
   position: sticky;
   top: 0;
-  z-index: 1;
-  min-height: 32px;
-  padding-top: 8px;
-  padding-bottom: 6px;
+  z-index: 2;
+  min-height: 24px;
+  padding-top: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--mn-border);
   background: var(--mn-surface-1, var(--mn-bg));
   flex-shrink: 0;
@@ -441,7 +623,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
 }
 
 .issues-list-head[hidden] {
@@ -467,8 +649,10 @@
   min-width: 0;
 }
 
-.issues-list-head__sort:hover {
-  color: var(--mn-fg);
+@media (hover: hover) {
+  .issues-list-head__sort:hover {
+    color: var(--mn-fg);
+  }
 }
 
 .issues-list-head__sort:focus-visible {
@@ -502,6 +686,36 @@
   content: '▼';
 }
 
+/* Type column matches icon-only row cells — sort control stays in-grid. */
+.issues-list-head__type {
+  position: relative;
+  justify-self: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.issues-list-head__type .issues-list-head__sort-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.issues-list-head__type:not(.is-active) .issues-list-head__sort-indicator {
+  opacity: 0.4;
+}
+
+.issues-list-head__type:not(.is-active) .issues-list-head__sort-indicator::before {
+  content: '↕';
+}
+
 /* ---------- list rows ---------- */
 
 .issues-list {
@@ -510,15 +724,25 @@
 }
 
 .issues-row {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 2px;
+  padding-bottom: 2px;
   border-bottom: 1px solid var(--mn-border);
   cursor: pointer;
-  min-height: 40px;
+  min-height: var(--issues-row-h);
 }
 
-.issues-row:hover {
-  background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 4%, transparent));
+.issues-row.is-child {
+  padding-left: 24px;
+}
+
+.issues-row.is-child .issues-row__id {
+  padding-left: 8px;
+}
+
+@media (hover: hover) {
+  .issues-row:hover {
+    background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 4%, transparent));
+  }
 }
 
 .issues-row.is-selected,
@@ -539,8 +763,14 @@
   outline: 1px solid color-mix(in oklch, var(--mn-accent) 50%, var(--mn-border));
 }
 
+.issues-row.is-focused {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
 .issues-row:focus-visible,
-.issues-card:focus-visible {
+.issues-card:focus-visible,
+.issues-row.is-focused {
   outline: 2px solid var(--mn-accent);
   outline-offset: -2px;
 }
@@ -587,6 +817,114 @@
   justify-self: start;
   width: max-content;
   max-width: 100%;
+}
+
+.issues-row__assignee,
+.issues-row__project,
+.issues-row__agent,
+.issues-row__rollup,
+.issues-row__counts {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.issues-row__agent.is-queued {
+  color: var(--mn-fg);
+}
+
+.issues-row__agent.is-running {
+  color: var(--mn-accent);
+}
+
+/*
+ * Agent run state (Phase 4).
+ *
+ * Semantic colour stays confined to agent state per the Metric Color Rule:
+ * these are measurements of a run, not navigation chrome. "Waiting on you" is
+ * the strongest state in the app and the only one that also marks its row.
+ */
+
+.issues-row__agent.is-waiting {
+  color: var(--mn-warning);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.issues-row__agent.is-failed {
+  color: var(--mn-danger-ink, var(--mn-danger));
+  cursor: pointer;
+}
+
+.issues-row__agent.is-review {
+  color: var(--mn-success);
+}
+
+.issues-row__agent[role='button']:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.issues-row.is-agent-waiting {
+  background: color-mix(in oklch, var(--mn-warning) 8%, transparent);
+}
+
+.issues-row__rollup,
+.issues-row__counts {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.issues-group__head {
+  position: sticky;
+  top: 24px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 24px;
+  padding: 4px 12px;
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.issues-group__head:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.issues-group__count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.issues-drop-indicator {
+  height: 2px;
+  margin: 0 12px;
+  background: var(--mn-accent);
+  border-radius: 1px;
+  pointer-events: none;
 }
 
 /* ---------- chips & badges ---------- */
@@ -640,7 +978,7 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -681,7 +1019,7 @@
 }
 
 .issues-labels-field__input::placeholder {
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   opacity: 0.9;
 }
 
@@ -711,20 +1049,67 @@
   color: var(--mn-accent);
 }
 
+.issues-labels-suggestions {
+  position: fixed;
+  z-index: 1200;
+  min-width: 7rem;
+  max-width: min(14rem, calc(100vw - 16px));
+  max-height: min(40vh, 220px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  box-shadow: var(--mn-shadow-popover, 0 8px 24px oklch(0.1 0.02 250 / 0.28));
+}
+
+.issues-labels-suggestions__item {
+  padding: 5px 8px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--mn-fg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-labels-suggestions__item:hover,
+  .issues-labels-suggestions__item.is-active {
+    background: color-mix(in oklch, var(--mn-fg) 7%, transparent);
+  }
+}
+
+.issues-labels-suggestions__item.is-active {
+  color: var(--mn-accent);
+}
+
+.issues-labels-suggestions__item:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
 .issues-type-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 1.75rem;
   height: 1.75rem;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-border);
   color: var(--mn-fg-muted);
   background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+}
+
+.issues-type-chip__icon {
+  --mn-icon-size: 14px;
+  color: currentColor;
 }
 
 .issues-type-chip--bug {
@@ -745,6 +1130,12 @@
   background: color-mix(in oklch, var(--mn-warning) 10%, var(--mn-bg));
 }
 
+.issues-type-chip--note {
+  color: var(--mn-fg-muted);
+  border-color: color-mix(in oklch, var(--mn-fg) 20%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-fg) 6%, var(--mn-bg));
+}
+
 .issues-status-chip {
   display: inline-flex;
   align-items: center;
@@ -763,6 +1154,10 @@
   background: color-mix(in srgb, var(--mn-fg) 3%, var(--mn-bg));
   white-space: nowrap;
   box-sizing: border-box;
+}
+
+.issues-status-chip--backlog {
+  color: var(--mn-fg-muted);
 }
 
 .issues-status-chip--triage {
@@ -824,7 +1219,7 @@
 }
 
 .issues-priority-chip--none {
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   font-weight: 500;
 }
 
@@ -863,7 +1258,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
   border-bottom: 1px solid var(--mn-border);
 }
 
@@ -913,31 +1308,44 @@
   margin: 6px 0 0;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   font-size: 11px;
   color: var(--mn-fg-muted);
 }
 
+.issues-card__agent {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg);
+}
+
+.issues-card__agent.is-running {
+  color: var(--mn-accent);
+}
+
 /* ---------- detail slide-over ---------- */
 
-.issues-page.has-detail .issues-body {
+.issues-shell.is-detail .issues-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  grid-template-columns: var(--issues-peek-cols);
   grid-template-rows: auto 1fr;
 }
 
-.issues-page.has-detail .issues-selection-bar {
+.issues-shell.is-detail .issues-selection-bar {
   grid-column: 1;
   grid-row: 1;
 }
 
-.issues-page.has-detail .issues-list-pane {
+.issues-shell.is-detail .issues-list-pane {
   grid-column: 1;
   grid-row: 2;
   min-height: 0;
 }
 
-.issues-page.has-detail .issues-list-head {
+.issues-shell.is-detail .issues-list-head {
   grid-column: auto;
   grid-row: auto;
 }
@@ -955,7 +1363,7 @@
   display: flex;
 }
 
-.issues-page.has-detail .issues-detail-host {
+.issues-shell.is-detail .issues-detail-host {
   grid-column: 2;
   grid-row: 1 / span 2;
 }
@@ -972,8 +1380,8 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 10px;
+  gap: 8px;
+  padding: 10px 14px 8px;
   border-bottom: 1px solid var(--mn-border);
   background: var(--mn-surface-1, var(--mn-bg));
 }
@@ -984,8 +1392,8 @@
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 14px 24px;
+  gap: 0;
+  padding: 8px 14px 20px;
 }
 
 .issues-detail__header {
@@ -997,15 +1405,39 @@
 
 .issues-detail__header-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 2px;
   justify-content: flex-end;
 }
 
-.issues-detail__delete,
-.issues-detail__close {
-  min-height: 32px;
-  font-size: 12px;
+.issues-detail__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.issues-detail__icon-btn .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail__icon-btn:hover {
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+}
+
+.issues-detail__icon-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
 }
 
 .issues-detail__id {
@@ -1018,26 +1450,146 @@
 .issues-detail__title {
   width: 100%;
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.3;
-  padding: 8px 10px;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: var(--mn-bg);
+  padding: 2px 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--mn-fg);
 }
 
 .issues-detail__title:focus-visible {
   outline: none;
-  border-color: var(--mn-accent);
+  box-shadow: 0 1px 0 var(--mn-accent);
 }
 
 .issues-detail__props {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+
+/*
+ * Detail property controls — one shell for type, status, and priority.
+ * Semantic color lives in the glyph or label text, not full-tint backgrounds,
+ * so the row reads as three equal pickers instead of one loud badge + two grey pills.
+ */
+.issues-detail__prop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 0 7px 0 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.issues-detail__prop-chevron {
+  flex-shrink: 0;
+  --mn-icon-size: 10px;
+  margin-left: 1px;
+  opacity: 0.52;
+  color: var(--mn-fg-muted);
+  transition: opacity 0.15s ease;
+}
+
+.issues-detail__prop.issues-type-chip {
+  width: auto;
+  height: auto;
+  justify-content: flex-start;
+  padding: 0 6px 0 5px;
+}
+
+/* Neutral shell: type variants only tint the icon in the peek panel. */
+.issues-detail__prop.issues-type-chip.issues-type-chip--bug,
+.issues-detail__prop.issues-type-chip.issues-type-chip--task,
+.issues-detail__prop.issues-type-chip.issues-type-chip--idea,
+.issues-detail__prop.issues-type-chip.issues-type-chip--note {
+  border-color: var(--mn-border);
+  background: color-mix(in oklch, var(--mn-fg) 4%, var(--mn-bg));
+  color: var(--mn-fg);
+}
+
+.issues-detail__prop.issues-type-chip--bug .issues-type-chip__icon {
+  color: var(--mn-danger);
+}
+
+.issues-detail__prop.issues-type-chip--task .issues-type-chip__icon {
+  color: var(--mn-accent);
+}
+
+.issues-detail__prop.issues-type-chip--idea .issues-type-chip__icon {
+  color: var(--mn-warning);
+}
+
+.issues-detail__prop.issues-type-chip--note .issues-type-chip__icon {
+  color: var(--mn-fg-muted);
+}
+
+.issues-detail__prop.issues-type-chip[style*='--issues-chip-color'] .issues-type-chip__icon {
+  color: var(--issues-chip-color);
+}
+
+.issues-type-chip__label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.issues-detail__prop.issues-status-chip,
+.issues-detail__prop.issues-priority-chip {
+  width: fit-content;
+  justify-content: flex-start;
+  padding: 0 7px 0 8px;
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+
+.issues-detail__prop.issues-status-chip {
+  font-size: 11px;
+}
+
+.issues-detail__prop.issues-priority-chip--none {
+  color: var(--mn-fg-muted);
+  font-weight: 500;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail__prop:hover {
+    border-color: color-mix(in oklch, var(--mn-fg) 22%, var(--mn-border));
+    background: color-mix(in oklch, var(--mn-fg) 8%, var(--mn-bg));
+    color: var(--mn-fg);
+  }
+
+  .issues-detail__prop:hover .issues-detail__prop-chevron {
+    opacity: 0.88;
+  }
+}
+
+.issues-detail__prop:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.issues-detail__prop:active {
+  background: color-mix(in oklch, var(--mn-fg) 10%, var(--mn-bg));
 }
 
 .issues-detail__labels {
@@ -1174,9 +1726,45 @@ button.issues-detail__activity-chip {
 .issues-detail__section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 4px;
+  gap: 6px;
+  padding-top: 12px;
   border-top: 1px solid var(--mn-border);
+}
+
+.issues-detail__section--document {
+  border-top: none;
+  padding-top: 4px;
+  padding-bottom: 16px;
+  gap: 0;
+}
+
+.issues-detail__section--compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 8px;
+  padding-bottom: 0;
+}
+
+.issues-detail__scroll > .issues-detail__section--compact + .issues-detail__section--compact {
+  border-top: none;
+  padding-top: 8px;
+}
+
+.issues-detail__section--compact .issues-detail__section-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.issues-detail__section--compact .issues-detail__add-code,
+.issues-detail__section--compact .issues-detail__git-menu {
+  margin: 0;
+}
+
+.issues-detail__section--meta {
+  margin-top: 8px;
+  padding-top: 12px;
 }
 
 .issues-detail__section-title {
@@ -1185,15 +1773,48 @@ button.issues-detail__activity-chip {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mn-fg-subtle);
+  color: var(--mn-fg-muted);
+}
+
+.issues-detail__section-title--inline {
+  flex-shrink: 0;
 }
 
 .issues-detail__section-body {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .issues-detail__section-body .issues-btn {
-  margin-top: 6px;
+  margin-top: 0;
+}
+
+.issues-detail__section-body > .issues-detail__add-code {
+  margin-top: 0;
+}
+
+.issues-detail .issues-detail__desc-wrap {
+  max-height: none;
+  overflow: visible;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.issues-detail .issues-detail__desc-wrap:not(.is-editing) {
+  cursor: text;
+}
+
+.issues-detail .issues-detail__desc-wrap:not(.is-editing):hover {
+  border-color: transparent;
+}
+
+/* Formatting chrome only while the description is the focused task. */
+.issues-detail .mn-editor:not(:focus-within) .mn-editor__toolbar {
+  display: none;
 }
 
 .issues-detail__plan-actions {
@@ -1205,6 +1826,29 @@ button.issues-detail__activity-chip {
 
 .issues-detail__plan-actions .issues-btn {
   margin-top: 0;
+}
+
+.issues-detail__plan-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.issues-detail__plan-path {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.issues-detail__plan-row:hover .issues-detail__code-remove,
+.issues-detail__plan-row:focus-within .issues-detail__code-remove {
+  opacity: 1;
 }
 
 .issues-detail__desc-wrap {
@@ -1279,9 +1923,53 @@ button.issues-detail__activity-chip {
 
 .issues-detail__code-row {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.issues-detail__code-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
+}
+
+.issues-detail__code-remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease-out, color 120ms ease-out, background 120ms ease-out;
+}
+
+.issues-detail__code-row:hover .issues-detail__code-remove,
+.issues-detail__code-row:focus-within .issues-detail__code-remove {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail__code-remove:hover {
+    background: color-mix(in oklch, var(--mn-danger) 14%, transparent);
+    color: var(--mn-danger-ink, var(--mn-fg));
+  }
+}
+
+.issues-detail__code-remove:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: 1px;
 }
 
 .issues-detail__snippet {
@@ -1304,6 +1992,7 @@ button.issues-detail__activity-chip {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .issues-detail__add-code .issues-search {
@@ -1446,8 +2135,14 @@ button.issues-detail__activity-chip {
   flex-shrink: 0;
 }
 
-.issues-detail__git-link-row {
-  margin-top: 10px;
+.issues-detail__git-link-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issues-detail__git-link-fields .issues-detail__add-code {
+  margin-top: 0;
 }
 
 .issues-detail__notes {
@@ -1457,18 +2152,23 @@ button.issues-detail__activity-chip {
   white-space: pre-wrap;
 }
 
-/* ---------- responsive ---------- */
+/* ---------- responsive (container, not viewport) ---------- */
 
-@media (max-width: 900px) {
-  .issues-page.has-detail .issues-body {
-    grid-template-columns: 1fr;
+/*
+ * @container matches descendants of .issues-page, never the page itself.
+ * Vars and hide/show rules therefore live on .issues-shell and below.
+ */
+@container issues (max-width: 900px) {
+  .issues-shell {
+    --issues-peek-cols: minmax(0, 1fr);
   }
 
-  .issues-page.has-detail .issues-list-pane {
+  .issues-shell.is-detail .issues-list-pane,
+  .issues-shell.is-detail .issues-selection-bar {
     display: none;
   }
 
-  .issues-page.has-detail .issues-detail-host {
+  .issues-shell.is-detail .issues-detail-host {
     grid-column: 1;
     grid-row: 1 / span 2;
     border-left: none;
@@ -1481,12 +2181,22 @@ button.issues-detail__activity-chip {
 
   .issues-list-head__type,
   .issues-list-head__priority,
+  .issues-list-head__assignee,
+  .issues-list-head__project,
+  .issues-list-head__agent,
+  .issues-list-head__rollup,
+  .issues-list-head__counts,
   .issues-list-head__labels,
   .issues-list-head__updated,
   .issues-row__type,
   .issues-row__labels,
   .issues-row__updated,
-  .issues-row__priority {
+  .issues-row__priority,
+  .issues-row__assignee,
+  .issues-row__project,
+  .issues-row__agent,
+  .issues-row__rollup,
+  .issues-row__counts {
     display: none;
   }
 
@@ -1501,8 +2211,7 @@ button.issues-detail__activity-chip {
   }
 }
 
-/* Phone: one column of chrome, thumb-sized controls, swipeable board. */
-@media (max-width: 640px) {
+@container issues (max-width: 640px) {
   .issues-header {
     gap: 8px 12px;
     padding: 10px var(--mn-phone-pad-right, 14px) 10px var(--mn-phone-pad-left, 14px);
@@ -1513,33 +2222,17 @@ button.issues-detail__activity-chip {
     justify-content: flex-start;
   }
 
-  .issues-filter-bar {
-    gap: 8px;
-    padding: 8px var(--mn-phone-pad-right, 14px) 10px var(--mn-phone-pad-left, 14px);
+  .issues-view-bar,
+  .issues-chip-bar {
+    padding-inline: var(--mn-phone-pad-left, 14px) var(--mn-phone-pad-right, 14px);
   }
 
-  /* Search and quick capture own a full row; the pickers share the one above. */
-  .issues-search,
+  .issues-view-tabs__search,
   .issues-quick-capture {
     flex: 1 1 100%;
     max-width: none;
   }
 
-  .issues-filter {
-    flex: 1 1 8rem;
-    min-width: 0;
-  }
-
-  .issues-view-toggle button,
-  .issues-filter,
-  .issues-search,
-  .issues-hide-done,
-  .issues-quick-capture input,
-  .issues-btn {
-    min-height: var(--touch-min);
-  }
-
-  /* Board columns become swipeable cards instead of 2.5 squeezed lanes. */
   .issues-kanban {
     padding: 12px var(--mn-phone-pad-right, 14px) 24px var(--mn-phone-pad-left, 14px);
     scroll-snap-type: x mandatory;
@@ -1548,7 +2241,7 @@ button.issues-detail__activity-chip {
   }
 
   .issues-column {
-    flex: 0 0 min(80vw, 300px);
+    flex: 0 0 min(80cqi, 300px);
     min-width: 0;
     scroll-snap-align: start;
   }
@@ -1565,8 +2258,7 @@ button.issues-detail__activity-chip {
     flex: 1 1 8rem;
   }
 
-  /* Detail replaces the list on phones — give the escape hatch real weight. */
-  .issues-detail__close {
+  .issues-detail__icon-btn {
     min-width: var(--touch-min);
     min-height: var(--touch-min);
   }
@@ -1576,95 +2268,231 @@ button.issues-detail__activity-chip {
   }
 }
 
+@media (pointer: coarse) {
+  .issues-view-toggle button,
+  .issues-filter,
+  .issues-search,
+  .issues-quick-capture input,
+  .issues-btn,
+  .issues-view-tab,
+  .issues-filter-chip {
+    min-height: var(--touch-min);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .issues-view-toggle button,
   .issues-btn,
   .issues-card,
   .issues-detail-host,
-  .issues-label-chip__remove {
+  .issues-label-chip__remove,
+  .issues-detail__icon-btn {
     transition: none;
   }
 }
 
-/* Floating row/card context menu */
-.issues-context-menu {
-  position: fixed;
-  z-index: 80;
-  min-width: 180px;
-  max-width: min(280px, calc(100vw - 16px));
+/* Row/card context menu now uses the shared primitive: styles/context-menu.css */
+
+/* ── Attachments (Phase 2) ─────────────────────────────────────────────────
+ *
+ * Images get a thumbnail because an unopened screenshot is an unread bug
+ * report. Everything else is a name, a size, and the on-disk path, which is
+ * the thing an agent is actually handed.
+ */
+
+.issues-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issues-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 4px;
   border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--mn-bg);
-  box-shadow: var(--mn-shadow, 0 8px 24px color-mix(in oklch, var(--mn-fg) 12%, transparent));
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .issues-context-menu {
-    animation: issues-context-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-}
-
-@keyframes issues-context-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.issues-context-menu-item {
-  display: block;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
   border-radius: 4px;
-  background: transparent;
+}
+
+.issues-attachment__thumb {
+  flex: none;
+  display: block;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+}
+
+.issues-attachment__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.issues-attachment__meta {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.issues-attachment__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
   color: var(--mn-fg);
-  font: inherit;
   font-size: 13px;
-  text-align: left;
+  text-decoration: none;
+}
+
+.issues-attachment__name:hover {
+  text-decoration: underline;
+}
+
+.issues-attachment__size {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-attachment__path {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
   cursor: pointer;
 }
 
-.issues-context-menu-item__label {
-  display: block;
+.issues-attachment__path:hover {
+  color: var(--mn-fg);
 }
 
-.issues-context-menu-item__hint {
-  display: block;
-  margin-top: 2px;
+.issues-attachment__remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
   color: var(--mn-fg-muted);
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.issues-context-menu-item:disabled {
-  opacity: 0.5;
-  cursor: default;
+@media (hover: hover) and (pointer: fine) {
+  .issues-attachment__remove:hover {
+    background: color-mix(in oklch, var(--mn-danger) 14%, transparent);
+    color: var(--mn-danger-ink, var(--mn-fg));
+  }
 }
 
-.issues-context-menu-item.is-danger {
-  color: var(--mn-danger);
+.issues-detail__section-body.is-drop-target {
+  outline: 2px dashed var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-.issues-context-menu-item:focus-visible {
+/* Capture drop feedback on list rows and board cards. */
+.issues-row.is-capture-target,
+.issues-card.is-capture-target {
   outline: 2px solid var(--mn-accent);
   outline-offset: -2px;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .issues-context-menu-item:hover:not(:disabled) {
-    background: var(--mn-surface-elevated, color-mix(in oklch, var(--mn-fg) 4%, transparent));
-  }
+/* ── GitHub sync (Phase 5) ─────────────────────────────────────────────────
+ *
+ * `gh` CLI tone: terse and factual. A conflict is two plain columns and two
+ * buttons — never a resolution wizard, and never a silent winner.
+ */
+
+.issues-github__link {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--mn-accent);
 }
 
-.issues-context-menu-empty {
-  margin: 0;
-  padding: 10px;
-  color: var(--mn-fg-muted);
+.issues-github__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.issues-github__toggle input {
+  accent-color: var(--mn-accent);
+  margin: 0;
+}
+
+.issues-github__conflict {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--mn-warning);
+  border-radius: 4px;
+}
+
+.issues-github__conflict-head {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-github__conflict-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.issues-github__conflict-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.issues-github__conflict-label {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.issues-github__conflict-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.issues-github__conflict-body {
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+.issues-github__conflict-meta {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--mn-fg-muted);
 }

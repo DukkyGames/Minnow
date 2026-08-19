@@ -116,4 +116,58 @@ describe('resolveWorkspaceReferences', () => {
     assert.equal(out[0].kind, 'error');
     assert.match(out[0].error ?? '', /HTTP 404/);
   });
+
+  it('routes Excel workspace chips through read_document, not read_file', async () => {
+    const input: Attachment[] = [
+      {
+        id: 'ws-xlsx',
+        name: 'Comission Structure.xlsx',
+        kind: 'workspace',
+        mimeType: 'application/x-minnow-workspace-file',
+        size: 0,
+        workspacePath: 'Comission Structure.xlsx',
+      },
+    ];
+
+    const out = await resolveWorkspaceReferences(
+      input,
+      async () => {
+        throw new Error('read_file should not run for office documents');
+      },
+      async () => {
+        throw new Error('image reader should not run for office documents');
+      },
+      async (path) => `extracted:${path}`,
+    );
+    assert.equal(out.length, 1);
+    assert.equal(out[0].kind, 'text');
+    assert.equal(out[0].name, 'Comission Structure.xlsx');
+    assert.equal(out[0].text, 'extracted:Comission Structure.xlsx');
+  });
+
+  it('routes PDF workspace chips through read_document', async () => {
+    const input: Attachment[] = [
+      {
+        id: 'ws-pdf',
+        name: 'brief.pdf',
+        kind: 'workspace',
+        mimeType: 'application/x-minnow-workspace-file',
+        size: 0,
+        workspacePath: 'docs/brief.pdf',
+      },
+    ];
+
+    const out = await resolveWorkspaceReferences(
+      input,
+      async () => {
+        throw new Error('read_file should not run for PDFs');
+      },
+      async () => {
+        throw new Error('image reader should not run for PDFs');
+      },
+      async () => '--- brief.pdf (1 page(s)) ---\nHello',
+    );
+    assert.equal(out[0].kind, 'text');
+    assert.match(out[0].text ?? '', /Hello/);
+  });
 });

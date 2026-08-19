@@ -17,4 +17,5 @@ test/fixtures/lsp-typescript-home/
 test/fixtures/lsp-workspace-home/
 test/fixtures/lsp-agent-diag-home/
 test/fixtures/lsp-doc-sync-home/
+test/fixtures/lsp-vite-config-home/
 test/fixtures/mcp-secrets-home/

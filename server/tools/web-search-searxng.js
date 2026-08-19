@@ -3,6 +3,7 @@
  */
 
 import {
+  applyRelevanceGuard,
   formatSearchResults,
   normalizeSearchResults,
 } from './search-result.js';
@@ -88,7 +89,7 @@ export async function searchSearxngStructured(query, searxngBaseUrl, count = SEA
     return { results: [], error: `No SearXNG results found for: ${query}${engineHint}` };
   }
 
-  return { results };
+  return applyRelevanceGuard('SearXNG', query, results);
 }
 
 /**

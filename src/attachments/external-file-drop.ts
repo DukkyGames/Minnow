@@ -47,7 +47,7 @@ export function classifyFileDrag(dataTransfer: DataTransfer | null): DragKind | 
   return null;
 }
 
-/** File list from a completed drop event (directories are skipped by callers). */
+/** File list from a completed drop event (folder trees use webkitGetAsEntry instead). */
 export function filesFromDataTransfer(dataTransfer: DataTransfer): File[] {
   const out: File[] = [];
   for (let i = 0; i < dataTransfer.files.length; i += 1) {
@@ -59,7 +59,16 @@ export function filesFromDataTransfer(dataTransfer: DataTransfer): File[] {
 
 /** Skip directory entries when the platform exposes them as zero-byte File items. */
 export function isLikelyDirectoryDrop(file: File): boolean {
-  if (file.type === '') {
+  const type = file.type.toLowerCase();
+  if (
+    type === 'application/x-directory' ||
+    type === 'inode/directory'
+  ) {
+    return true;
+  }
+  // Empty type + no extension is how Chromium often represents a dropped folder.
+  // Require size 0 so named files without an extension (Makefile) still import.
+  if (file.size === 0 && file.type === '') {
     const name = file.name;
     if (!name.includes('.') || name.endsWith('.')) return true;
   }

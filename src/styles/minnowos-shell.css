@@ -869,6 +869,7 @@ html.minnow-os-enabled #minnowOsRoot {
 }
 
 html.minnow-os-enabled #osAppsLayer .settings-page.is-open,
+html.minnow-os-enabled #osAppsLayer .models-page.is-open,
 html.minnow-os-enabled #osAppsLayer .benchmark-page.is-open,
 html.minnow-os-enabled #osAppsLayer .research-page.is-open,
 html.minnow-os-enabled #osAppsLayer .experts-page.is-open,

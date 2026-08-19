@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   defaultComposerReasoningLevel,
   getComposerReasoningLevelOptions,
+  ensureQwen38ReasoningAllowedOptions,
   inferReasoningOptionsFromModelId,
   isQwen38ModelId,
   modelHasSelectableReasoningEffort,
@@ -45,6 +46,14 @@ describe('normalizeReasoningAllowedOptions', () => {
       normalizeReasoningAllowedOptions(['xhigh', 'medium', 'low', 'off']),
       ['off', 'low', 'medium', 'high'],
     );
+  });
+
+  test('maps none onto off', () => {
+    assert.deepEqual(normalizeReasoningAllowedOptions(['none', 'low', 'xhigh']), [
+      'off',
+      'low',
+      'high',
+    ]);
   });
 });
 
@@ -166,6 +175,16 @@ describe('inferReasoningOptionsFromModelId', () => {
       inferReasoningOptionsFromModelId('Qwen/Qwen3.8-27B', 'openai-v1'),
       expected,
     );
+    assert.deepEqual(
+      inferReasoningOptionsFromModelId(
+        'gguf:unsloth/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf',
+      ),
+      expected,
+    );
+  });
+
+  test('returns empty for non-Qwen models when apiKind is missing', () => {
+    assert.deepEqual(inferReasoningOptionsFromModelId('llama-3-8b'), []);
   });
 });
 
@@ -261,8 +280,24 @@ describe('isQwen38ModelId', () => {
     assert.equal(isQwen38ModelId('qwen3.5-27b'), false);
   });
 
+  test('ensureQwen38ReasoningAllowedOptions upgrades off/on catalogs to levels', () => {
+    assert.deepEqual(
+      ensureQwen38ReasoningAllowedOptions('qwen/qwen3.8-27b', ['off', 'on']),
+      ['off', 'low', 'medium', 'high'],
+    );
+    assert.deepEqual(
+      ensureQwen38ReasoningAllowedOptions('qwen/qwen3.8-27b', ['low', 'xhigh']),
+      ['off', 'low', 'medium', 'high'],
+    );
+    assert.deepEqual(
+      ensureQwen38ReasoningAllowedOptions('qwen/qwen3-32b', ['off', 'on']),
+      ['off', 'on'],
+    );
+  });
+
   test('normalizeReasoningCatalogValue maps xhigh to high', () => {
     assert.equal(normalizeReasoningCatalogValue('xhigh'), 'high');
+    assert.equal(normalizeReasoningCatalogValue('none'), 'off');
     assert.equal(normalizeReasoningCatalogValue('medium'), 'medium');
     assert.equal(normalizeReasoningCatalogValue('nope'), undefined);
   });
