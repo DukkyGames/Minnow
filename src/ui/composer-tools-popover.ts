@@ -57,7 +57,23 @@ function openToolsPopover(ids: ToolsPopoverIds): void {
 
   closeOtherToolsPopovers(ids.popoverId);
 
-  // Lazy-build the permission list the first time this popover opens.
+  fillToolsPopover(ids);
+
+  popover.classList.remove('hidden');
+  popoverState.set(ids.popoverId, true);
+  button.setAttribute('aria-expanded', 'true');
+
+  const first = popover.querySelector<HTMLElement>(
+    'select, input, button, [href], [tabindex]:not([tabindex="-1"])',
+  );
+  first?.focus();
+}
+
+/** Build the permission list without opening the floating popover. */
+function fillToolsPopover(ids: ToolsPopoverIds): void {
+  const popover = getPopover(ids);
+  if (!popover) return;
+
   const list = popover.querySelector<HTMLElement>('[id$="ToolsList"], .tools-list');
   const listId =
     list?.id ||
@@ -74,15 +90,11 @@ function openToolsPopover(ids: ToolsPopoverIds): void {
 
   loadToolConfigIntoDrawer(document);
   void syncWebSearchProviderFromSearchConfig();
+}
 
-  popover.classList.remove('hidden');
-  popoverState.set(ids.popoverId, true);
-  button.setAttribute('aria-expanded', 'true');
-
-  const first = popover.querySelector<HTMLElement>(
-    'select, input, button, [href], [tabindex]:not([tabindex="-1"])',
-  );
-  first?.focus();
+/** Fill the Code composer tools list for the compact overflow sheet. */
+export function fillComposerToolsPopover(): void {
+  fillToolsPopover(COMPOSER_POPOVER_IDS);
 }
 
 /** Toggle one tools popover. */
@@ -111,6 +123,13 @@ function initToolsPopover(ids: ToolsPopoverIds): void {
 
   document.addEventListener('click', (event) => {
     if (!isPopoverOpen(ids.popoverId)) return;
+    // Compact overflow inlines this popover; the cog sheet owns dismiss.
+    if (
+      ids.popoverId === 'composerToolsPopover' &&
+      document.getElementById('composerControls')?.classList.contains('composer-controls--compact')
+    ) {
+      return;
+    }
     const target = event.target;
     if (!(target instanceof Node)) return;
     if (button.contains(target) || popover.contains(target)) return;
@@ -119,6 +138,12 @@ function initToolsPopover(ids: ToolsPopoverIds): void {
 
   document.addEventListener('keydown', (event) => {
     if (!isPopoverOpen(ids.popoverId) || event.key !== 'Escape') return;
+    if (
+      ids.popoverId === 'composerToolsPopover' &&
+      document.getElementById('composerControls')?.classList.contains('composer-controls--compact')
+    ) {
+      return;
+    }
     event.stopPropagation();
     closeToolsPopover(ids);
   });

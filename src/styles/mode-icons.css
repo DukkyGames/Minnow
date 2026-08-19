@@ -75,11 +75,3 @@ html[data-theme$='-dark'] .icon-btn .mode-mask-icon--lg {
     opacity: 1;
   }
 }
-
-.hub-intent__icon .mode-mask-icon--lg {
-  opacity: 0.88;
-}
-
-html[data-theme$='-dark'] .hub-intent__icon .mode-mask-icon--lg {
-  opacity: 0.92;
-}

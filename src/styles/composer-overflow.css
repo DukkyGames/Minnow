@@ -1,0 +1,160 @@
+/**
+ * Compact composer overflow: cog + settings sheet, and the compact row itself.
+ * Wide layout stays in mode-selector.css / composer-controls.css.
+ */
+
+.composer-overflow-anchor {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Cog is compact-only; wide trail still uses the Tools sliders button. */
+.composer-controls:not(.composer-controls--compact) .composer-overflow-anchor {
+  display: none;
+}
+
+.composer-overflow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  transition:
+    color 0.12s var(--ease-out),
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
+}
+
+.composer-overflow-btn .icon-svg {
+  --mn-icon-size: 18px;
+}
+
+.composer-overflow-btn:active:not(:disabled) {
+  background: var(--mn-surface-elevated);
+  color: var(--mn-fg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-overflow-btn:hover:not(:disabled) {
+    background: var(--mn-surface-2);
+    border-color: var(--mn-border);
+    color: var(--mn-fg);
+  }
+}
+
+.composer-overflow-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.composer-overflow-btn[aria-expanded='true'] {
+  color: var(--mn-fg);
+  background: var(--mn-surface-2);
+  border-color: var(--mn-border);
+}
+
+.composer-overflow-popover {
+  position: fixed;
+  z-index: 36;
+  box-sizing: border-box;
+  width: min(22rem, calc(100vw - 16px));
+  max-height: min(70vh, 32rem);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: var(--shadow-popover-tall, var(--mn-shadow-popover, 0 8px 24px oklch(0.12 0.02 250 / 0.28)));
+}
+
+.composer-overflow-popover.hidden {
+  display: none;
+}
+
+.composer-overflow-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+/* Parked chips stay in a tight row inside the sheet, not a second toolbar. */
+.composer-overflow-slot .composer-run-target-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: none;
+}
+
+.composer-overflow-slot .composer-run-target-btn {
+  max-width: 100%;
+}
+
+.composer-overflow-slot .thinking-control-wrap {
+  flex: 0 0 auto;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.composer-overflow-slot .composer-control {
+  width: 100%;
+}
+
+/* Tools permissions render as a section, not a nested floating popover. */
+.composer-overflow-slot .composer-tools-anchor {
+  position: static;
+  display: block;
+  width: 100%;
+}
+
+.composer-overflow-slot .composer-tools-btn {
+  display: none;
+}
+
+.composer-overflow-slot .composer-tools-popover {
+  display: flex;
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  max-height: min(40vh, 20rem);
+  box-shadow: none;
+  border: 1px solid var(--mn-border);
+}
+
+/* Compact row: mode dropdown + wheel on the left, model + cog on the right. */
+.composer-controls.composer-controls--compact {
+  flex-wrap: nowrap;
+  overflow: visible;
+  min-width: 0;
+}
+
+.composer-controls--compact .context-usage-anchor {
+  flex-shrink: 0;
+}
+
+.composer-controls--compact .composer-controls__trail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.composer-controls--compact .composer-controls__trail .composer-model-trigger-anchor,
+.composer-controls--compact .composer-controls__trail .composer-model-trigger-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-overflow-btn {
+    transition: none;
+  }
+}

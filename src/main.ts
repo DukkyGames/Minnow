@@ -47,6 +47,7 @@ import './styles/preview-panel.css';
 import './styles/design-mode.css';
 import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
+import './styles/composer-overflow.css';
 import './styles/workspace-menu.css';
 import './styles/workspace-folder-picker.css';
 import './styles/research-panel.css';
@@ -176,6 +177,7 @@ import {
   syncViewModeToggleFromActiveChat,
 } from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
+import { initComposerCompact } from './ui/composer-compact';
 import { initThinkingControl } from './ui/composer-thinking';
 import { initCodeMapInjectionControl } from './ui/composer-code-map';
 import { initBrainNotesInjectionControl } from './ui/composer-brain-notes';
@@ -314,6 +316,7 @@ export async function initApp(): Promise<void> {
   initComposerRunTarget();
   initViewModeToggle();
   initWorkAgentDevUi();
+  initComposerCompact();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
   const { shouldShowOnboardingOnBoot, mountOnboarding } = await import('./onboarding');

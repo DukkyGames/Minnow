@@ -1,6 +1,6 @@
 # CSS file map
 
-96 stylesheets under [`src/styles/`](../../src/styles/). Grouped by surface for audits and scoped Impeccable passes.
+97 stylesheets under [`src/styles/`](../../src/styles/). Grouped by surface for audits and scoped Impeccable passes.
 
 ## Core / global
 
@@ -22,6 +22,7 @@
 | `sidebar.css` | [`sidebar.ts`](../../src/ui/sidebar.ts) |
 | `input.css` | [`input.ts`](../../src/ui/input.ts) |
 | `composer-controls.css` | Composer toolbar |
+| `composer-overflow.css` | Compact overflow cog + settings sheet |
 | `composer-model-trigger.css` | Model chip |
 | `composer-pinned-skill.css` | Pinned slash skill |
 | `composer-message-queue.css` | Queued messages |

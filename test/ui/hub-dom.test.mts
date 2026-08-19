@@ -66,6 +66,24 @@ describe('hub teardown', () => {
     );
   });
 
+  test('hub landing omits mode-intent chips', () => {
+    setupDom();
+    const chat = createEmptyChatObject('test-model');
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      chats: [chat],
+      sidebarCollapsed: false,
+    });
+
+    renderHub(chat);
+    assert.equal(document.querySelector('.hub-intents'), null);
+    assert.equal(document.querySelector('.hub-intent'), null);
+    assert.ok(document.querySelector('.hub-composer-slot'), 'composer slot remains');
+    assert.ok(document.querySelector('.hub-strip'), 'metrics strip remains');
+    assert.ok(document.querySelector('.hub-recent-row'), 'recent threads remain');
+  });
+
   test('teardownHub before chatArea.replaceChildren keeps composer in the document', () => {
     setupDom();
     const chat = createEmptyChatObject('test-model');

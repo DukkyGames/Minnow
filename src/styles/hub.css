@@ -204,6 +204,27 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   max-width: 100%;
 }
 
+.input-bar--hub .composer-controls:not(.composer-controls--compact) .mode-segmented {
+  flex: 0 0 auto;
+  min-width: max-content;
+  max-width: none;
+  overflow: visible;
+}
+
+/* Compact hub: dropdown owns mode; never let the strip steal width and clip. */
+.input-bar--hub .composer-controls--compact .mode-segmented,
+.input-bar--hub .composer-controls--compact #modeSelectorDropdown {
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  overflow: visible;
+}
+
+.input-bar--hub .composer-controls--compact {
+  overflow: visible;
+}
+
 .input-bar--hub .composer-controls .mode-segmented.mode-segmented--compact {
   flex: 0 0 auto;
   width: fit-content;
@@ -467,117 +488,6 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   background: var(--mn-danger, #e85d5d);
 }
 
-.hub-intents {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 22px;
-}
-
-@media (max-width: 720px) {
-  .hub-intents {
-    gap: 8px;
-  }
-
-  .hub-intent {
-    padding: 8px 10px;
-    gap: 8px;
-  }
-}
-
-.hub-intent {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 10px 13px;
-  cursor: pointer;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-md);
-  background: var(--mn-surface-1);
-  min-width: 0;
-  text-align: left;
-  transition:
-    border-color 0.12s var(--ease-out),
-    background 0.12s var(--ease-out);
-}
-
-.hub-intent > span:not(.hub-intent__icon) {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .hub-intent:hover {
-    border-color: var(--mn-accent-border);
-    background: var(--mn-surface-2);
-  }
-}
-
-.hub-intent:active {
-  background: var(--mn-surface-2);
-}
-
-.hub-intent__icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  background: var(--mn-accent-soft);
-  border: 1px solid var(--mn-accent-border);
-  color: var(--mn-accent-ink);
-}
-
-.hub-intent__icon svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.hub-intent__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--mn-fg);
-}
-
-.hub-intent__title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--mn-fg);
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hub-intent__sub {
-  font-size: 10px;
-  color: var(--mn-fg-subtle);
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .hub-intent__title {
-    font-size: 10px;
-  }
-
-  .hub-intent__sub {
-    font-size: 9px;
-  }
-}
-
 .hub-recent-head {
   display: flex;
   align-items: center;
@@ -812,16 +722,6 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
     font-size: 14px;
   }
 
-  .hub-intents {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-bottom: 18px;
-  }
-
-  /* Five intents: last row centers on a single full-width tile */
-  .hub-intent:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-
   .input-bar--hub {
     padding: 8px 8px 8px 10px;
     column-gap: 8px;
@@ -837,6 +737,15 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
     width: auto;
     min-width: 0;
     max-width: 100%;
+  }
+
+  .input-bar--hub .composer-controls--compact .mode-segmented,
+  .input-bar--hub .composer-controls--compact #modeSelectorDropdown {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: max-content;
+    max-width: none;
+    overflow: visible;
   }
 
   .input-bar--hub .composer-run-target-wrap {
@@ -860,7 +769,8 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   }
 
   .input-bar--hub .composer-controls__trail .view-mode-toggle-btn--to-board,
-  .input-bar--hub .composer-controls__trail .composer-tools-btn--toolbar {
+  .input-bar--hub .composer-controls__trail .composer-tools-btn--toolbar,
+  .input-bar--hub .composer-controls__trail .composer-overflow-btn {
     width: var(--touch-min, 44px);
     height: var(--touch-min, 44px);
   }
@@ -875,39 +785,9 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   .hub-root {
     padding: 12px 12px 20px;
   }
-
-  .hub-intent__sub {
-    display: none;
-  }
-
-  .hub-intent {
-    padding: 8px 10px;
-    gap: 8px;
-  }
-
-  .hub-intent__title {
-    font-size: 12px;
-  }
 }
 
 @container hub (max-width: 420px) {
-  .hub-intents {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .hub-intent:last-child:nth-child(odd) {
-    grid-column: auto;
-  }
-
-  .hub-intent {
-    min-height: var(--touch-min, 44px);
-  }
-
-  .hub-intent__sub {
-    display: block;
-    font-size: 10px;
-  }
-
   .hub-recent-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -924,10 +804,6 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
     .hub-strip__cell--server {
       grid-column: 1 / -1;
     }
-
-    .hub-intents {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 }
 
@@ -940,10 +816,6 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 }
 
 @media (pointer: coarse) {
-  .hub-intent {
-    min-height: var(--touch-min, 44px);
-  }
-
   .hub-tile {
     min-height: var(--touch-min, 44px);
   }
@@ -969,9 +841,5 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 
   .hub-status {
     margin-bottom: 10px;
-  }
-
-  .hub-intents {
-    margin-bottom: 12px;
   }
 }

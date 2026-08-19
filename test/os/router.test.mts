@@ -15,8 +15,10 @@ import {
 import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   getCurrentRoute,
+  hashForCodeSection,
   initOsRouter,
   launchApp,
+  navigateToCodeOverview,
   navigateToDesktop,
   parseOsHash,
   resetOsRouterForTests,
@@ -107,6 +109,39 @@ describe('parseOsHash', () => {
     assert.deepEqual(parseOsHash('#/app/chat'), { view: 'workspaces' });
   });
 
+  test('parseOsHash maps every Code view-bar section, including chat', () => {
+    assert.deepEqual(parseOsHash('#/app/code/chat'), {
+      view: 'app',
+      appId: 'code',
+      codeSection: 'chat',
+    });
+    assert.deepEqual(parseOsHash('#/app/code/overview'), {
+      view: 'app',
+      appId: 'code',
+      codeSection: 'overview',
+    });
+    assert.deepEqual(parseOsHash('#/app/code/dev-server'), {
+      view: 'app',
+      appId: 'code',
+      codeSection: 'dev-server',
+    });
+    assert.deepEqual(parseOsHash('#/app/code/super-plan'), {
+      view: 'app',
+      appId: 'code',
+      codeSection: 'super-plan',
+    });
+    assert.deepEqual(parseOsHash('#/app/code/orchestrate'), {
+      view: 'app',
+      appId: 'code',
+      codeSection: 'orchestrate',
+    });
+    assert.deepEqual(parseOsHash('#/app/code/map'), {
+      view: 'app',
+      appId: 'code',
+      codeSection: 'map',
+    });
+  });
+
   test('falls back to workspaces for unknown app ids', () => {
     assert.deepEqual(parseOsHash('#/app/unknown'), { view: 'workspaces' });
   });
@@ -166,6 +201,14 @@ describe('os router navigation', () => {
     const route = getCurrentRoute();
     assert.equal(route.view, 'app');
     assert.equal(route.appId, 'code');
+  });
+
+  test('explicit #/app/code/chat wins over leftover overview pending', () => {
+    navigateToCodeOverview();
+    assert.equal(parseOsHash('#/app/code/chat').codeSection, 'chat');
+    assert.equal(hashForCodeSection('super-plan'), '#/app/code/super-plan');
+    assert.equal(hashForCodeSection('orchestrate'), '#/app/code/orchestrate');
+    assert.equal(hashForCodeSection('map'), '#/app/code/map');
   });
 
   test('launchApp keeps core scheduler available when disable is attempted', () => {

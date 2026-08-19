@@ -422,6 +422,9 @@ function buildOrchestrateHubDom(): HTMLElement {
 
 /** Paint orchestrate hub into #chatArea (replaces current main view). */
 export function renderOrchestrateHub(): void {
+  void import('./main-column-overlay').then((m) => {
+    void m.closeOtherCodeStageViews('orchestrate');
+  });
   teardownOrchestratePlanScreen();
   teardownHub();
   teardownCodeBrainMapBeforeChatPaint();
@@ -451,6 +454,7 @@ export function renderOrchestrateHub(): void {
   syncTopBarOrchestrateButton();
   notifyAskQuestionDisplayContextChanged();
   notifyCodeStageViewChanged();
+  void import('../os/router').then((m) => m.syncCodeSectionHash('orchestrate'));
 }
 
 /** Close hub and restore the chat that was active when the hub opened. */
@@ -458,13 +462,17 @@ export function closeOrchestrateHub(): void {
   if (!isOrchestrateHubMounted()) return;
   const returnId = hubReturnChatId;
   teardownOrchestrateHub();
-  if (!sessionState) return;
+  if (!sessionState) {
+    void import('../os/router').then((m) => m.navigateToCodeChatIfCurrentSection('orchestrate'));
+    return;
+  }
   const targetId =
     returnId && sessionState.chats.some((c) => c.id === returnId)
       ? returnId
       : sessionState.activeId;
   const chat = sessionState.chats.find((c) => c.id === targetId);
   if (chat) renderChatFromHistory(chat);
+  void import('../os/router').then((m) => m.navigateToCodeChatIfCurrentSection('orchestrate'));
 }
 
 /** Toggle orchestrate hub from the top bar. */

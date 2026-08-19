@@ -340,18 +340,8 @@ function syncOverviewNavButtons(): void {
 }
 
 async function closeCompetingMainColumnViews(): Promise<void> {
-  const orchestrate = await import('./orchestrate-hub');
-  if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
-  const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
-  teardownCodeBrainMapBeforeChatPaint();
-  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
-  teardownIssuesEmbedBeforeChatPaint();
-  const { closeDevServerScreen, isDevServerScreenOpen } = await import('./dev-server-screen');
-  if (isDevServerScreenOpen()) {
-    closeDevServerScreen({ skipNavigate: true, restoreChat: false });
-  }
-  const { teardownHub } = await import('./hub');
-  teardownHub();
+  const { closeOtherCodeStageViews } = await import('./main-column-overlay');
+  await closeOtherCodeStageViews('overview');
 }
 
 function stopPolling(): void {
@@ -1058,6 +1048,9 @@ export function closeCodeOverview(options?: {
 
   if (options?.restoreChat === false) {
     notifyCodeStageViewChanged();
+    if (!options?.skipNavigate) {
+      void import('../os/router').then((m) => m.navigateToCodeChatIfCurrentSection('overview'));
+    }
     return;
   }
 
@@ -1078,6 +1071,9 @@ export function closeCodeOverview(options?: {
     m.scheduleElectronPreviewHostVisibilitySync(),
   );
   notifyCodeStageViewChanged();
+  if (!options?.skipNavigate) {
+    void import('../os/router').then((m) => m.navigateToCodeChatIfCurrentSection('overview'));
+  }
 }
 
 const PHONE_LAYOUT_MQ = '(max-width: 600px)';

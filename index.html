@@ -2475,7 +2475,7 @@
             <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
               <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
             </button>
-            <div class="composer-tools-anchor">
+            <div class="composer-tools-anchor" id="composerToolsAnchor">
               <button type="button" class="composer-tools-btn composer-tools-btn--toolbar" id="btnComposerTools"
                 aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
                 aria-controls="composerToolsPopover">
@@ -2510,6 +2510,18 @@
                     <i class="fi fi-rr-angle-right icon-svg" aria-hidden="true"></i>
                   </button>
                 </footer>
+              </div>
+            </div>
+            <!-- Compact overflow: extra composer settings live in this cog sheet -->
+            <div class="composer-overflow-anchor" id="composerOverflowAnchor">
+              <button type="button" class="composer-overflow-btn" id="btnComposerOverflow"
+                aria-label="Composer settings" title="Composer settings"
+                aria-expanded="false" aria-haspopup="dialog"
+                aria-controls="composerOverflowPopover">
+                <i class="fi fi-rr-settings icon-svg" aria-hidden="true"></i>
+              </button>
+              <div id="composerOverflowPopover" class="composer-overflow-popover hidden" role="dialog" aria-label="Composer settings">
+                <div id="composerOverflowSlot" class="composer-overflow-slot"></div>
               </div>
             </div>
           </div>

@@ -79,7 +79,7 @@ export interface LaunchOptions {
   autoRun?: boolean;
   /** Code app: switch to this chat after launch (notification deep-link). */
   chatId?: string;
-  /** Code app section: overview dashboard vs chat workspace. */
+  /** Code app section: chat workspace or a view-bar stage destination. */
   codeSection?: CodeSectionId;
   /** Experts hub: initial step when opening on the desktop surface. */
   step?: 'browse' | 'create' | 'edit';
@@ -91,8 +91,24 @@ export interface LaunchOptions {
   returnToApp?: AppId;
 }
 
-/** Code app sub-routes: instrumentation home, chat workspace, or Dev Servers screen. */
-export type CodeSectionId = 'overview' | 'chat' | 'dev-server';
+/** Code app sub-routes. Every view-bar destination has a hash so they can replace each other. */
+export type CodeSectionId =
+  | 'overview'
+  | 'chat'
+  | 'dev-server'
+  | 'super-plan'
+  | 'orchestrate'
+  | 'map';
+
+/** Hash path segments that map 1:1 onto {@link CodeSectionId}. */
+export const CODE_SECTION_IDS: readonly CodeSectionId[] = [
+  'overview',
+  'chat',
+  'dev-server',
+  'super-plan',
+  'orchestrate',
+  'map',
+];
 
 /** Parsed hash route consumed by the OS shell and page bridge. */
 export interface OsRoute {

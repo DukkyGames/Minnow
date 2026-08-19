@@ -893,26 +893,8 @@ function stopPolling(): void {
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 async function closeCompetingMainColumnViews(): Promise<void> {
-  const overview = await import('./code-overview');
-  if (overview.isCodeOverviewOpen()) overview.closeCodeOverview({ restoreChat: false });
-
-  const orchestrate = await import('./orchestrate-hub');
-  if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
-
-  const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
-  teardownCodeBrainMapBeforeChatPaint();
-
-  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
-  teardownIssuesEmbedBeforeChatPaint();
-
-  const { teardownResearchPanelBeforeChatPaint } = await import('./research-panel');
-  teardownResearchPanelBeforeChatPaint();
-
-  const { closeDevServerScreen, isDevServerScreenOpen } = await import('./dev-server-screen');
-  if (isDevServerScreenOpen()) closeDevServerScreen({ skipNavigate: true, restoreChat: false });
-
-  const { teardownHub } = await import('./hub');
-  teardownHub();
+  const { closeOtherCodeStageViews } = await import('./main-column-overlay');
+  await closeOtherCodeStageViews('source-control');
 }
 
 /** Mount the Source Control Center into the Code main column. */
@@ -967,8 +949,8 @@ export async function openSourceControlCenter(options?: {
   notifyAskQuestionDisplayContextChanged();
 }
 
-/** Tear the center down and hand the main column back to chat. */
-export function closeSourceControlCenter(): void {
+/** Tear the center down. Skip chat restore when another Code view is taking the column. */
+export function closeSourceControlCenter(options?: { restoreChat?: boolean }): void {
   if (!isSourceControlCenterOpen()) return;
 
   stopPolling();
@@ -998,6 +980,11 @@ export function closeSourceControlCenter(): void {
   pushBtn = null;
   forge = null;
   badges.clear();
+
+  if (options?.restoreChat === false) {
+    void import('./main-column-overlay').then((m) => m.notifyCodeStageViewChanged());
+    return;
+  }
 
   void restoreChatColumn();
 }
