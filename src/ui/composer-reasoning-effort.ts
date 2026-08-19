@@ -28,6 +28,7 @@ import { isComposerRecoveryBlocked } from './composer-send';
 
 let selectEl: HTMLSelectElement | null = null;
 let wrapEl: HTMLElement | null = null;
+let segmentsEl: HTMLElement | null = null;
 
 function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> {
   const chat = getActiveChat();
@@ -88,6 +89,33 @@ function populateSelect(options: EffortOption[], display: EffortOption | undefin
   if (display) selectEl.value = display;
 }
 
+/** Compact overflow uses a segmented control; the native select stays for the wide row. */
+function populateSegments(options: EffortOption[], display: EffortOption | undefined): void {
+  if (!segmentsEl) return;
+  segmentsEl.replaceChildren();
+  for (const option of options) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'composer-reasoning-effort-segment';
+    button.dataset.value = option;
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', display === option ? 'true' : 'false');
+    button.textContent = formatReasoningEffortLabel(option);
+    segmentsEl.appendChild(button);
+  }
+}
+
+function onSegmentClick(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  if (!target.classList.contains('composer-reasoning-effort-segment')) return;
+  if (!selectEl || selectEl.disabled) return;
+  const value = target.dataset.value as EffortOption | undefined;
+  if (!value) return;
+  selectEl.value = value;
+  selectEl.dispatchEvent(new Event('change'));
+}
+
 function onSelectChange(): void {
   if (!selectEl || selectEl.disabled) return;
   const levels = getLevelOptions();
@@ -114,7 +142,9 @@ function isLevelDropdownVisible(): boolean {
 export function initComposerReasoningEffort(): void {
   selectEl = document.getElementById('composerReasoningEffortSelect') as HTMLSelectElement | null;
   wrapEl = document.getElementById('composerReasoningEffortWrap');
+  segmentsEl = document.getElementById('composerReasoningEffortSegments');
   selectEl?.addEventListener('change', onSelectChange);
+  segmentsEl?.addEventListener('click', onSegmentClick);
   syncComposerReasoningEffortFromActiveChat();
 }
 
@@ -131,7 +161,14 @@ export function syncComposerReasoningEffortFromActiveChat(): void {
     selectEl.disabled = !visible || disabled;
     if (visible) {
       const levels = getLevelOptions();
-      populateSelect(levels, resolveDisplayEffort(levels));
+      const display = resolveDisplayEffort(levels);
+      populateSelect(levels, display);
+      populateSegments(levels, display);
+    }
+  }
+  if (segmentsEl) {
+    for (const button of segmentsEl.querySelectorAll<HTMLButtonElement>('.composer-reasoning-effort-segment')) {
+      button.disabled = !visible || disabled;
     }
   }
 

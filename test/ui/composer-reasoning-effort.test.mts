@@ -35,6 +35,7 @@ function setupDom(): Window {
       <div id="composerThinkingControl" class="thinking-toggle-host"></div>
       <div id="composerReasoningEffortWrap" class="composer-reasoning-effort-wrap hidden">
         <select id="composerReasoningEffortSelect" class="composer-reasoning-effort-select" disabled></select>
+        <div id="composerReasoningEffortSegments" class="composer-reasoning-effort-segments" role="radiogroup" aria-label="Reasoning effort"></div>
       </div>
     </div>
   `;
@@ -66,6 +67,7 @@ describe('composer reasoning effort HTML', () => {
   test('index.html defines composer reasoning effort wrap and select', () => {
     assert.match(indexHtml, /id="composerReasoningEffortWrap"/);
     assert.match(indexHtml, /id="composerReasoningEffortSelect"/);
+    assert.match(indexHtml, /id="composerReasoningEffortSegments"/);
     assert.match(indexHtml, /composer-reasoning-effort-wrap/);
   });
 });
@@ -139,6 +141,9 @@ describe('syncComposerReasoningEffortFromActiveChat', () => {
     assert.ok(!dropdownWrap?.classList.contains('hidden'));
     assert.equal(select.options.length, 3);
     assert.equal(select.value, 'medium');
+    const segments = document.querySelectorAll('.composer-reasoning-effort-segment');
+    assert.equal(segments.length, 3);
+    assert.equal(segments[1]?.getAttribute('aria-checked'), 'true');
     assert.ok(!thinkingControl?.classList.contains('hidden'));
     assert.equal(brainBtn?.getAttribute('aria-pressed'), 'true');
 

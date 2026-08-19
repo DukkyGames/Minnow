@@ -19,6 +19,7 @@ const {
   disposeComposerCompactForTests,
   initComposerCompact,
   isComposerControlsCompact,
+  isComposerOverflowToolsPageOpen,
   nextComposerCompactState,
   refreshComposerCompactOverflow,
   syncComposerCompactFromWidth,
@@ -54,6 +55,24 @@ function setupComposerDom(): HTMLElement {
   const tools = document.createElement('div');
   tools.id = 'composerToolsAnchor';
   tools.className = 'composer-tools-anchor';
+  const toolsBtn = document.createElement('button');
+  toolsBtn.type = 'button';
+  toolsBtn.id = 'btnComposerTools';
+  const toolsPopover = document.createElement('div');
+  toolsPopover.id = 'composerToolsPopover';
+  toolsPopover.className = 'composer-tools-popover hidden';
+  const toolsFooter = document.createElement('div');
+  toolsFooter.className = 'composer-tools-popover__footer';
+  const webSearch = document.createElement('div');
+  webSearch.className = 'composer-tools-popover__setting';
+  const cacheToggle = document.createElement('label');
+  cacheToggle.className = 'composer-tools-popover__toggle';
+  const settingsLink = document.createElement('button');
+  settingsLink.type = 'button';
+  settingsLink.id = 'composerToolsOpenSettings';
+  toolsFooter.append(webSearch, cacheToggle, settingsLink);
+  toolsPopover.append(toolsFooter);
+  tools.append(toolsBtn, toolsPopover);
 
   const overflowAnchor = document.createElement('div');
   overflowAnchor.className = 'composer-overflow-anchor';
@@ -67,6 +86,38 @@ function setupComposerDom(): HTMLElement {
   const slot = document.createElement('div');
   slot.id = 'composerOverflowSlot';
   slot.className = 'composer-overflow-slot';
+
+  const settingsPage = document.createElement('div');
+  settingsPage.id = 'composerOverflowSettingsPage';
+  settingsPage.className = 'composer-overflow-page composer-overflow-page--settings';
+  const toolsNav = document.createElement('button');
+  toolsNav.type = 'button';
+  toolsNav.id = 'composerOverflowToolsNav';
+  toolsNav.className = 'composer-overflow-tools-nav';
+  toolsNav.textContent = 'Tools';
+  settingsPage.appendChild(toolsNav);
+
+  const toolsPage = document.createElement('div');
+  toolsPage.id = 'composerOverflowToolsPage';
+  toolsPage.className = 'composer-overflow-page composer-overflow-page--tools hidden';
+  toolsPage.hidden = true;
+  const toolsHead = document.createElement('header');
+  toolsHead.className = 'composer-overflow-tools-head';
+  const toolsBack = document.createElement('button');
+  toolsBack.type = 'button';
+  toolsBack.id = 'composerOverflowToolsBack';
+  toolsBack.setAttribute('aria-label', 'Back');
+  const toolsTitle = document.createElement('h2');
+  toolsTitle.id = 'composerOverflowToolsTitle';
+  toolsTitle.textContent = 'Tools';
+  const enableSlot = document.createElement('div');
+  enableSlot.id = 'composerOverflowEnableAllSlot';
+  toolsHead.append(toolsBack, toolsTitle, enableSlot);
+  const toolsBody = document.createElement('div');
+  toolsBody.id = 'composerOverflowToolsBody';
+  toolsPage.append(toolsHead, toolsBody);
+
+  slot.append(settingsPage, toolsPage);
   popover.appendChild(slot);
   overflowAnchor.append(overflowBtn, popover);
 
@@ -99,6 +150,13 @@ afterEach(() => {
 });
 
 describe('composer compact overflow', () => {
+  test('index.html defines the two-page cog sheet', () => {
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+    assert.match(html, /id="composerOverflowSettingsPage"/);
+    assert.match(html, /id="composerOverflowToolsPage"/);
+    assert.match(html, /id="composerOverflowToolsNav"/);
+    assert.match(html, /id="composerOverflowToolsBack"/);
+  });
   test('hysteresis: enter below 880px, leave only above 920px', () => {
     assert.equal(COMPOSER_COMPACT_ENTER_PX, 880);
     assert.equal(COMPOSER_COMPACT_LEAVE_PX, 920);
@@ -124,8 +182,8 @@ describe('composer compact overflow', () => {
     const overflowBtn = document.getElementById('btnComposerOverflow');
 
     assert.equal(isComposerControlsCompact(), true);
-    assert.equal(thinking?.parentElement?.id, 'composerOverflowSlot');
-    assert.equal(tools?.parentElement?.id, 'composerOverflowSlot');
+    assert.equal(thinking?.parentElement?.id, 'composerOverflowSettingsPage');
+    assert.equal(tools?.parentElement?.id, 'composerOverflowToolsBody');
     assert.ok(slot);
     assert.equal(wheel?.parentElement, row);
     assert.equal(dropdown?.hidden, false);
@@ -167,7 +225,7 @@ describe('composer compact overflow', () => {
     row.appendChild(wrap);
     refreshComposerCompactOverflow();
 
-    assert.equal(wrap.parentElement?.id, 'composerOverflowSlot');
+    assert.equal(wrap.parentElement?.id, 'composerOverflowSettingsPage');
   });
 
   test('compact CSS pins mode, cog, model, wheel inside the composer column', () => {
@@ -192,9 +250,16 @@ describe('composer compact overflow', () => {
     );
   });
 
-  test('overflow sheet CSS flattens Tools and labels parked toggles', () => {
+  test('overflow sheet CSS is a two-page sheet with labeled rows', () => {
     const css = readFileSync(new URL('../../src/styles/composer-overflow.css', import.meta.url), 'utf8');
+    assert.match(css, /\.composer-overflow-page--settings/);
+    assert.match(css, /\.composer-overflow-page--tools/);
+    assert.match(css, /\.composer-overflow-tools-nav/);
     assert.match(
+      css,
+      /\.composer-overflow-page--tools \.composer-tools-popover__setting[\s\S]*display:\s*none/,
+    );
+    assert.doesNotMatch(
       css,
       /\.composer-overflow-slot \.composer-tools-popover:not\(\.hidden\)[\s\S]*display:\s*contents/,
     );
@@ -246,5 +311,53 @@ describe('composer compact overflow', () => {
     assert.equal(popover.parentElement, anchor);
     assert.equal(popover.classList.contains('hidden'), true);
     assert.equal(btn.getAttribute('aria-expanded'), 'false');
+  });
+
+  test('cog opens settings page; Tools nav drills in; Back returns; Escape closes', () => {
+    const row = setupComposerDom();
+    initModeSelector();
+    initComposerCompact();
+    syncComposerCompactFromWidth(700);
+
+    const btn = document.getElementById('btnComposerOverflow');
+    const settingsPage = document.getElementById('composerOverflowSettingsPage');
+    const toolsPage = document.getElementById('composerOverflowToolsPage');
+    const nav = document.getElementById('composerOverflowToolsNav');
+    const back = document.getElementById('composerOverflowToolsBack');
+    const popover = document.getElementById('composerOverflowPopover');
+    assert.ok(btn && settingsPage && toolsPage && nav && back && popover);
+
+    btn.click();
+    assert.equal(settingsPage.classList.contains('hidden'), false, 'settings visible on open');
+    assert.equal(toolsPage.classList.contains('hidden'), true, 'tools hidden on open');
+    assert.equal(isComposerOverflowToolsPageOpen(), false, 'tools page flag off on open');
+    assert.equal(
+      document.getElementById('composerToolsPopover')?.classList.contains('hidden'),
+      true,
+      'tools popover stays closed on settings page',
+    );
+
+    nav.click();
+    assert.equal(settingsPage.classList.contains('hidden'), true, 'settings hidden after drill-in');
+    assert.equal(toolsPage.hasAttribute('hidden'), false, 'tools hidden attr cleared');
+    assert.equal(toolsPage.classList.contains('hidden'), false, 'tools visible after drill-in');
+    assert.equal(isComposerOverflowToolsPageOpen(), true, 'tools page flag on');
+    assert.equal(
+      document.getElementById('composerToolsPopover')?.classList.contains('hidden'),
+      false,
+      'tools popover inlined on tools page',
+    );
+
+    back.click();
+    assert.equal(settingsPage.classList.contains('hidden'), false, 'settings visible after back');
+    assert.equal(toolsPage.classList.contains('hidden'), true, 'tools hidden after back');
+    assert.equal(isComposerOverflowToolsPageOpen(), false, 'tools page flag off after back');
+
+    nav.click();
+    const KeyEvent = window.KeyboardEvent;
+    document.dispatchEvent(new KeyEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(popover.classList.contains('hidden'), true, 'escape closes sheet from tools page');
+    assert.equal(isComposerOverflowToolsPageOpen(), false, 'tools page flag off after escape');
+    assert.equal(row.classList.contains('composer-controls--compact'), true, 'still compact');
   });
 });
