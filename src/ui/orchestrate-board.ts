@@ -178,13 +178,13 @@ import {
 } from './orchestrate-board-chat-state';
 import { showChatItemContextMenu } from './sidebar';
 import { setStatus } from './status';
-import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
-import { isCodeOverviewOpen } from './code-overview';
+import { isMainColumnOverlaySuppressingChatDom, isCodeStageOverlayMounted } from './main-column-overlay';
 import { teardownHub } from './hub';
 
 /** Live kanban uses chat-area--orchestrate for layout; that must not block board refresh. */
 function isBoardDomRefreshBlockedByOverlay(): boolean {
-  if (isCodeOverviewOpen()) return true;
+  // View-bar overlays own #chatArea even while the folder stays in board mode.
+  if (isCodeStageOverlayMounted()) return true;
   if (isOrchestrateBoardViewActive() || isOrchestrateInitSplitChromeActive()) {
     return false;
   }

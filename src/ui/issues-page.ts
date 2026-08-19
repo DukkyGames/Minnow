@@ -369,18 +369,8 @@ export function teardownIssuesEmbedBeforeChatPaint(): boolean {
 }
 
 async function closeCompetingMainColumnViews(): Promise<void> {
-  const orchestrate = await import('./orchestrate-hub');
-  if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
-  const overview = await import('./code-overview');
-  if (overview.isCodeOverviewOpen()) {
-    overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
-  }
-  const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
-  teardownCodeBrainMapBeforeChatPaint();
-  const { teardownResearchPanelBeforeChatPaint } = await import('./research-panel');
-  teardownResearchPanelBeforeChatPaint();
-  const { teardownHub } = await import('./hub');
-  teardownHub();
+  const { closeOtherCodeStageViews } = await import('./main-column-overlay');
+  await closeOtherCodeStageViews('issues');
 }
 
 /** Mount Issues inside the Code app #chatArea (does not change the OS foreground app). */

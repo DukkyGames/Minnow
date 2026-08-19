@@ -10,7 +10,7 @@ import {
 } from './instances';
 import { recordAppSurfaceFocus } from './app-focus-cycle';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
-import type { AppId, CodeSectionId, LaunchOptions, OsRoute } from './types';
+import { CODE_SECTION_IDS, type AppId, type CodeSectionId, type LaunchOptions, type OsRoute } from './types';
 
 /** Legacy `#/app/…` target, or workspace gate when that app is unavailable. */
 function legacyHashForApp(appId: AppId): string {
@@ -169,12 +169,11 @@ export function parseOsHash(hash: string): OsRoute {
     }
     if (route.appId === 'code') {
       const seg = appMatch[2];
-      route.codeSection =
-        seg === 'overview'
-          ? 'overview'
-          : seg === 'dev-server'
-            ? 'dev-server'
-            : (pendingCodeSection ?? 'chat');
+      // Honor an explicit segment (including `chat`) so leftover pendingCodeSection
+      // cannot reopen Overview after the hash has already moved.
+      route.codeSection = isCodeSectionId(seg)
+        ? seg
+        : (pendingCodeSection ?? 'chat');
     }
     // Prepare Issues deep-link parse for Phase 2 detail panel.
     if (route.appId === 'issues' && appMatch[2]) {
@@ -194,6 +193,17 @@ export function getCurrentRoute(): OsRoute {
   return parseOsHash(hash);
 }
 
+/** True when `value` is a known Code view-bar / chat section id. */
+function isCodeSectionId(value: string | undefined): value is CodeSectionId {
+  return Boolean(value && (CODE_SECTION_IDS as readonly string[]).includes(value));
+}
+
+/** Hash for a Code app section. Chat is the default workspace. */
+export function hashForCodeSection(section: CodeSectionId): string {
+  if (section === 'chat') return '#/app/code/chat';
+  return `#/app/code/${section}`;
+}
+
 function hashForRoute(route: OsRoute): string {
   if (route.view === 'workspaces') return '#/workspaces';
   if (route.appId === 'models' && route.modelsSection) {
@@ -203,10 +213,7 @@ function hashForRoute(route: OsRoute): string {
     return `#/app/brain/${route.brainSection}`;
   }
   if (route.appId === 'code') {
-    const section = route.codeSection ?? 'chat';
-    if (section === 'overview') return '#/app/code/overview';
-    if (section === 'dev-server') return '#/app/code/dev-server';
-    return '#/app/code/chat';
+    return hashForCodeSection(route.codeSection ?? 'chat');
   }
   if (route.appId === 'issues' && route.issueId) {
     return `#/app/issues/${route.issueId}`;
@@ -375,11 +382,7 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
       : appId === 'brain' && options?.brainSection
         ? `#/app/brain/${options.brainSection}`
         : appId === 'code'
-          ? codeSection === 'chat'
-            ? '#/app/code/chat'
-            : codeSection === 'dev-server'
-              ? '#/app/code/dev-server'
-              : '#/app/code/overview'
+          ? hashForCodeSection(codeSection ?? 'chat')
           : `#/app/${appId}`;
   if (window.location.hash !== next) {
     pendingLaunchOptions = options;
@@ -452,37 +455,71 @@ export function getRouterStateForTests(): {
   };
 }
 
-/** Navigate to the Code app overview dashboard. */
-export function navigateToCodeOverview(): void {
-  const next = '#/app/code/overview';
+/** Navigate to a Code app section. Same-hash calls apply the route immediately. */
+function navigateToCodeSection(section: CodeSectionId): void {
+  const next = hashForCodeSection(section);
   if (window.location.hash !== next) {
-    pendingCodeSection = 'overview';
+    pendingCodeSection = section;
     window.location.hash = next;
     return;
   }
-  applyRoute({ view: 'app', appId: 'code', codeSection: 'overview' });
+  applyRoute({ view: 'app', appId: 'code', codeSection: section });
+}
+
+/** Navigate to the Code app overview dashboard. */
+export function navigateToCodeOverview(): void {
+  navigateToCodeSection('overview');
 }
 
 /** Navigate to the Code app chat workspace. */
 export function navigateToCodeChat(): void {
-  const next = '#/app/code/chat';
-  if (window.location.hash !== next) {
-    pendingCodeSection = 'chat';
-    window.location.hash = next;
-    return;
-  }
-  applyRoute({ view: 'app', appId: 'code', codeSection: 'chat' });
+  navigateToCodeSection('chat');
 }
 
 /** Navigate to the Code app Dev Servers screen. */
 export function navigateToCodeDevServers(): void {
-  const next = '#/app/code/dev-server';
-  if (window.location.hash !== next) {
-    pendingCodeSection = 'dev-server';
-    window.location.hash = next;
-    return;
+  navigateToCodeSection('dev-server');
+}
+
+/** Navigate to Super Plan. */
+export function navigateToCodeSuperPlan(): void {
+  navigateToCodeSection('super-plan');
+}
+
+/** Navigate to the Orchestrate hub. */
+export function navigateToCodeOrchestrate(): void {
+  navigateToCodeSection('orchestrate');
+}
+
+/** Navigate to the Code map. */
+export function navigateToCodeMap(): void {
+  navigateToCodeSection('map');
+}
+
+/** Leave a stage hash for chat so the router cannot revive the overlay. */
+export function navigateToCodeChatIfCurrentSection(section: CodeSectionId): void {
+  if (!initialized) return;
+  if (window.location.hash === hashForCodeSection(section)) {
+    navigateToCodeChat();
   }
-  applyRoute({ view: 'app', appId: 'code', codeSection: 'dev-server' });
+}
+
+/**
+ * Stamp the Code section onto the hash without re-running the router.
+ * Used after a direct mount (tests, in-app callers) so Overview cannot revive
+ * from a stale `#/app/code/overview`.
+ */
+export function syncCodeSectionHash(section: CodeSectionId): void {
+  if (!initialized) return;
+  pendingCodeSection = section;
+  const next = hashForCodeSection(section);
+  if (window.location.hash === next) return;
+  applyingRoute = true;
+  try {
+    window.location.hash = next;
+  } finally {
+    applyingRoute = false;
+  }
 }
 
 export { hashForRoute };

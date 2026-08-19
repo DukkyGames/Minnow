@@ -50,22 +50,8 @@ function isSuperPlanChat(chat: Chat | null | undefined): boolean {
 
 /** Every other full-column Code view stands down before the surface mounts. */
 async function closeCompetingMainColumnViews(): Promise<void> {
-  const orchestrate = await import('./orchestrate-hub');
-  if (orchestrate.isOrchestrateHubMounted()) orchestrate.teardownOrchestrateHub();
-  const overview = await import('./code-overview');
-  if (overview.isCodeOverviewOpen()) {
-    overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
-  }
-  const devServers = await import('./dev-server-screen');
-  if (devServers.isDevServerScreenOpen()) {
-    devServers.closeDevServerScreen({ skipNavigate: true, restoreChat: false });
-  }
-  const brain = await import('./code-brain-map');
-  if (brain.isCodeBrainMapOpen()) brain.closeCodeBrainMap();
-  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
-  teardownIssuesEmbedBeforeChatPaint();
-  const { teardownHub } = await import('./hub');
-  teardownHub();
+  const { closeOtherCodeStageViews } = await import('./main-column-overlay');
+  await closeOtherCodeStageViews('super-plan');
 }
 
 /** Newest super-plan chat whose pipeline has not finished. */
@@ -109,6 +95,11 @@ export interface OpenSuperPlanScreenOptions {
    * Used by Orchestrate hub **Make a plan**.
    */
   preferNew?: boolean;
+  /**
+   * Hash is already `#/app/code/super-plan` (router / app-host). Do not write it
+   * again or the overview listener can fight the mount.
+   */
+  skipNavigate?: boolean;
 }
 
 function resolveSuperPlanTarget(options?: OpenSuperPlanScreenOptions): SuperPlanTarget | null {
@@ -165,6 +156,11 @@ export async function openSuperPlanScreen(options?: OpenSuperPlanScreenOptions):
     chatId: target.chat.id,
     savedPrompt: target.chat.superPlan?.prompt,
   });
+
+  if (!options?.skipNavigate) {
+    const { isOsRouterInitialized, syncCodeSectionHash } = await import('../os/router');
+    if (isOsRouterInitialized()) syncCodeSectionHash('super-plan');
+  }
 }
 
 /**
@@ -194,15 +190,21 @@ export async function closeSuperPlanScreen(): Promise<void> {
   if (!target) {
     document.getElementById('chatArea')?.replaceChildren();
     syncSuperPlanChrome(false);
+    const { navigateToCodeChatIfCurrentSection } = await import('../os/router');
+    navigateToCodeChatIfCurrentSection('super-plan');
     return;
   }
 
   if (sessionState && sessionState.activeId !== target.id) {
     await switchChat(target.id);
+    const { navigateToCodeChatIfCurrentSection } = await import('../os/router');
+    navigateToCodeChatIfCurrentSection('super-plan');
     return;
   }
   const { renderChatFromHistory } = await import('./messages');
   renderChatFromHistory(target);
+  const { navigateToCodeChatIfCurrentSection } = await import('../os/router');
+  navigateToCodeChatIfCurrentSection('super-plan');
 }
 
 /** View-bar toggle: press to open, press again to leave. */
