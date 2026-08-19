@@ -392,6 +392,17 @@ export function setBoardChatTurnRunner(fn: BoardChatTurnRunner | null): void {
 /** Chat ids holding a launch slot until runChatTurn registers streaming/setup. */
 const reservedLaunchChatIds = new Set<string>();
 const pendingChatContinuations = new Map<string, () => Promise<void>>();
+/** In-flight `runAfterChatRelease` work — tests must await these before teardown. */
+const inFlightChatContinuations = new Set<Promise<void>>();
+
+/**
+ * Stall-kill reason keyed by chat id. Written when the heartbeat stops a turn so
+ * stream-end recovery does not need `progressAge` after teardown.
+ */
+const stallStopReasons = new Map<string, string>();
+
+/** Prevents stream-end + `.finally()` from double-launching stall recovery. */
+const stallRecoveryScheduled = new Set<string>();
 
 type LaunchAudit = {
   group: ChatGroup;
@@ -566,40 +577,82 @@ function acquireBoardPipelineHold(
   });
 }
 
+/** Invoke a queued post-release continuation only once the chat is actually idle. */
+function flushChatContinuationIfIdle(
+  chatId: string,
+  after?: () => void,
+): boolean {
+  if (isTaskChatActive(chatId)) return false;
+  const continuation = pendingChatContinuations.get(chatId);
+  if (!continuation) return false;
+  // Consume before invoke so stream-end microtask and `.finally()` cannot double-launch.
+  pendingChatContinuations.delete(chatId);
+  const promise = continuation()
+    .catch((err) => reportBackgroundError('board-chat-continuation', err))
+    .finally(() => after?.());
+  inFlightChatContinuations.add(promise);
+  void promise.finally(() => {
+    inFlightChatContinuations.delete(promise);
+  });
+  return true;
+}
+
+/** Drain queued + in-flight post-release continuations (unit tests). */
+async function awaitInFlightChatContinuations(): Promise<void> {
+  // A continuation may queue another `runAfterChatRelease` (slot-release drain).
+  // Loop until both the pending map and in-flight set are empty.
+  for (let i = 0; i < 8; i++) {
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    for (const id of [...pendingChatContinuations.keys()]) {
+      flushChatContinuationIfIdle(id);
+    }
+    if (inFlightChatContinuations.size > 0) {
+      await Promise.all([...inFlightChatContinuations]);
+    }
+    if (pendingChatContinuations.size === 0 && inFlightChatContinuations.size === 0) {
+      return;
+    }
+  }
+}
+
+function drainAfterSlotRelease(group: ChatGroup, plannerChat: Chat): void {
+  void drainTaskQueue(group, plannerChat).catch((err) =>
+    reportBackgroundError('drain-after-slot-release', err),
+  );
+}
+
 /** Release a task-chat launch slot, then re-drain the board now that capacity is free. */
 function releaseLaunchSlotAndDrive(
   group: ChatGroup,
   plannerChat: Chat,
   chatId: string,
+  retried = false,
 ): void {
   releaseLaunchSlot(chatId);
   const chat = findChatById(chatId);
   if (chat) {
     teardownBoardTaskChatResources(chat, sessionState?.groups);
   }
-  const continuation = pendingChatContinuations.get(chatId);
-  if (continuation) {
-    pendingChatContinuations.delete(chatId);
-    void continuation()
-      .catch((err) => reportBackgroundError('board-chat-continuation', err))
-      .finally(() => {
-        void drainTaskQueue(group, plannerChat).catch((err) =>
-          reportBackgroundError('drain-after-continuation', err),
-        );
-      });
+  const drain = (): void => drainAfterSlotRelease(group, plannerChat);
+  // notifyChatStreamEnded runs before setStreaming(false). Leave the continuation
+  // queued while the chat still occupies a slot and retry once on a microtask.
+  if (isTaskChatActive(chatId)) {
+    if (!retried && pendingChatContinuations.has(chatId)) {
+      queueMicrotask(() => releaseLaunchSlotAndDrive(group, plannerChat, chatId, true));
+    }
     return;
   }
-  void drainTaskQueue(group, plannerChat).catch((err) =>
-    reportBackgroundError('drain-after-slot-release', err),
-  );
+  if (flushChatContinuationIfIdle(chatId, drain)) return;
+  drain();
 }
 
 function runAfterChatRelease(chatId: string, continuation: () => Promise<void>): void {
-  if (isTaskChatActive(chatId)) {
-    pendingChatContinuations.set(chatId, continuation);
-    return;
-  }
-  void continuation().catch((err) => reportBackgroundError('board-chat-continuation', err));
+  pendingChatContinuations.set(chatId, continuation);
+  // Always defer one microtask: notifyChatStreamEnded is still inside the turn
+  // teardown stack (streaming may still be true), and a sync launch would no-op.
+  queueMicrotask(() => {
+    flushChatContinuationIfIdle(chatId);
+  });
 }
 
 function isLaunchReserved(chatId: string): boolean {
@@ -968,10 +1021,14 @@ function tryNudgeForMissingBoardReport(
   const attempt = sent + 1;
   missingReportNudges.set(chatId, attempt);
   logBoardReportNudge(group, task.id, attempt, MISSING_REPORT_NUDGE_CAP);
-  void runTaskChatNudge(group, task.id, plannerChat, undefined, {
-    chatId,
-    missingReport: true,
-  }).catch((err) => reportBackgroundError('missing-board-report-nudge', err));
+  // Defer past stream teardown: calling nudge while isTaskChatActive is still
+  // true no-ops and used to burn this counter with no follow-up turn.
+  runAfterChatRelease(chatId, () =>
+    runTaskChatNudge(group, task.id, plannerChat, undefined, {
+      chatId,
+      missingReport: true,
+    }),
+  );
   return true;
 }
 
@@ -1042,12 +1099,7 @@ export function finalizeBoardTaskOnStreamEnd(
   if (outcome === 'stopped') {
     const board = group.orchestrateBoard;
     const stopReason = resolveTaskChatStopReason(chat, board);
-    if (
-      stopReason === 'system' &&
-      (taskChatStallRestarts.get(chatId) ?? 0) > 0
-    ) {
-      // Stall supervision killed the turn; nudge/self-heal owns recovery — do not
-      // park the task or burn stopRetries from this stream-end.
+    if (tryScheduleStallRecoveryOnStreamEnd(group, task, plannerChat, chat, outcome, stopReason)) {
       return;
     }
     logBuildVerdict(group, task.id, 'stopped');
@@ -1124,6 +1176,10 @@ export function finalizeBoardTaskOnStreamEnd(
         reportBackgroundError('auto-delegate-after-stop', err),
       );
     }
+    return;
+  }
+
+  if (tryScheduleStallRecoveryOnStreamEnd(group, task, plannerChat, chat, outcome)) {
     return;
   }
 
@@ -1277,7 +1333,100 @@ function resolveStallHealPhase(
   return 'build';
 }
 
+/** Last-ditch: if stall recovery did not re-occupy the slot, re-drive the board. */
+async function maybeAutoDelegateAfterStallIdle(
+  group: ChatGroup,
+  plannerChat: Chat,
+  task: BoardTask,
+  chatId: string,
+): Promise<void> {
+  // Tests skip real launches; do not start auto-report timers from this fallback.
+  if (skipBackgroundBoardChatLaunch()) return;
+  if (pendingChatContinuations.has(chatId)) return;
+  if (!isBoardRunning(group)) return;
+  if (isTaskChatActive(chatId)) return;
+  const board = group.orchestrateBoard;
+  const fresh = board?.tasks.find((t) => t.id === task.id);
+  if (!board || !fresh) return;
+  if (fresh.status !== 'in_progress' && fresh.status !== 'testing') return;
+  if (!isTaskStalledForRestart(board, fresh, isTaskChatActiveForStallCheck)) return;
+  await autoDelegateNext(group, plannerChat);
+}
+
+/**
+ * Continue-nudge on first stall, self-heal on the second. Heartbeat only kills;
+ * this runs after the chat has released its slot.
+ */
+function scheduleStallRecoveryAfterRelease(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  chatId: string,
+): void {
+  if (stallRecoveryScheduled.has(chatId)) return;
+  stallRecoveryScheduled.add(chatId);
+  const reason =
+    stallStopReasons.get(chatId) ?? 'task-chat-stall (no output)';
+  stallStopReasons.delete(chatId);
+  const restarts = taskChatStallRestarts.get(chatId) ?? 0;
+  runAfterChatRelease(chatId, async () => {
+    if (restarts === 1) {
+      recordTaskChatNudgeCallForTests(task.id, chatId);
+      await runTaskChatNudge(group, task.id, plannerChat, reason, { chatId });
+    } else if (restarts >= 2) {
+      recordStallSelfHealCallForTests(task.id);
+      const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+      const phase = resolveStallHealPhase(fresh, chatId, group.orchestrateBoard);
+      await runSelfHeal(
+        group,
+        fresh,
+        plannerChat,
+        { phase, category: 'stall', summary: reason },
+        makeSelfHealDeps(),
+      );
+      // runSelfHeal already re-drives the board; do not autoDelegateNext again.
+      return;
+    }
+    await maybeAutoDelegateAfterStallIdle(group, plannerChat, task, chatId);
+  });
+}
+
+/**
+ * True when this stream-end belongs to a stall kill. Schedules deferred recovery
+ * and tells the caller to skip park / stopRetries / missing-report routing.
+ */
+function tryScheduleStallRecoveryOnStreamEnd(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  chat: Chat,
+  outcome: TaskChatStreamOutcome,
+  stopReason?: ChatStopReason,
+): boolean {
+  const chatId = chat.id;
+  const restarts = taskChatStallRestarts.get(chatId) ?? 0;
+  if (restarts <= 0 && !stallStopReasons.has(chatId) && !stallRecoveryScheduled.has(chatId)) {
+    return false;
+  }
+  const board = group.orchestrateBoard;
+  const reason = stopReason ?? resolveTaskChatStopReason(chat, board);
+  if (reason === 'user' || board?.userStopped === true) return false;
+  if (outcome === 'completed') return false;
+
+  if (stallStopReasons.has(chatId) || stallRecoveryScheduled.has(chatId)) {
+    scheduleStallRecoveryAfterRelease(group, task, plannerChat, chatId);
+    return true;
+  }
+  // Leftover stall-restart budget on a system stop: do not park / burn stopRetries
+  // (the original early return). Recovery is already queued or was the heartbeat's.
+  if (outcome === 'stopped' && reason === 'system' && restarts > 0) {
+    return true;
+  }
+  return false;
+}
+
 function startTaskChatSupervision(chatId: string): void {
+  stallRecoveryScheduled.delete(chatId);
   const runId = chatTaskRunId(chatId);
   const supervision = createRunSupervision();
   bindRunSupervision(runId, supervision);
@@ -1334,31 +1483,18 @@ function startTaskChatSupervision(chatId: string): void {
     // also preserves the counter; it is cleared on a natural stream end.
     stopHeartbeat(chatTaskRunId(chatId));
     stallStoppedChatIds.add(chatId);
+    stallStopReasons.set(chatId, `task-chat-stall (${progressAge}ms no output)`);
     stopGeneration(chatId, 'system');
-
-    const stallReason = `task-chat-stall (${progressAge}ms no output)`;
-    if (restarts === 0) {
-      recordTaskChatNudgeCallForTests(taskId, chatId);
-      void runTaskChatNudge(group, taskId, planner, stallReason, { chatId }).catch((err) =>
-        reportBackgroundError('task-chat-stall-nudge', err),
-      );
-    } else if (stallTask) {
-      recordStallSelfHealCallForTests(stallTask.id);
-      const phase = resolveStallHealPhase(stallTask, chatId, group.orchestrateBoard);
-      void runSelfHeal(
-        group,
-        stallTask,
-        planner,
-        { phase, category: 'stall', summary: stallReason },
-        makeSelfHealDeps(),
-      ).catch((err) => reportBackgroundError('task-chat-stall-selfheal', err));
-    }
+    // Recovery is owned by stream-end (runAfterChatRelease). Nudging here races
+    // abort teardown: isTaskChatActive is still true, so the launch no-ops.
   });
 }
 
 function stopTaskChatSupervision(chatId: string): void {
   taskChatStallRestarts.delete(chatId);
   stallStoppedChatIds.delete(chatId);
+  stallStopReasons.delete(chatId);
+  stallRecoveryScheduled.delete(chatId);
   stopHeartbeat(chatTaskRunId(chatId));
 }
 
@@ -1482,14 +1618,16 @@ function ensureStreamEndSubscription(): void {
       // the concurrency check sees count=1 and enqueues instead of starting.
       // Re-drain after the flag clears. Rejections are logged, never swallowed.
       const safeDrain = (g: ChatGroup, p: Chat): void => {
+        flushChatContinuationIfIdle(endedChatId);
         void drainTaskQueue(g, p).catch((err) =>
           reportBackgroundError('drain-task-queue', err),
         );
-        queueMicrotask(() =>
+        queueMicrotask(() => {
+          flushChatContinuationIfIdle(endedChatId);
           void drainTaskQueue(g, p).catch((err) =>
             reportBackgroundError('drain-task-queue', err),
-          ),
-        );
+          );
+        });
       };
       for (const group of sessionState.groups ?? []) {
         const board = group.orchestrateBoard;
@@ -1597,6 +1735,7 @@ function skipBackgroundBoardChatLaunch(): boolean {
 
 /** Best-effort sidebar repaint after a launch. UI failures must never fail a launch. */
 async function refreshSidebarAfterLaunch(): Promise<void> {
+  if (typeof document === 'undefined') return;
   try {
     const { renderSidebar } = await import('../ui/sidebar.ts');
     renderSidebar();
@@ -3982,6 +4121,19 @@ async function finalizeTaskTestingOnStreamEndImpl(
 
   if (
     endedTestChat &&
+    tryScheduleStallRecoveryOnStreamEnd(
+      group,
+      fresh,
+      plannerChat,
+      endedTestChat,
+      resolveTaskChatStreamOutcome(endedTestChat),
+    )
+  ) {
+    return;
+  }
+
+  if (
+    endedTestChat &&
     resolveTaskChatStreamOutcome(endedTestChat) === 'failed' &&
     isTransientContextLengthError(extractChatFailureText(endedTestChat))
   ) {
@@ -5419,6 +5571,9 @@ export function startTaskChatSupervisionForTests(chatId: string): void {
 
 export function clearTaskChatStallRestartsForTests(): void {
   taskChatStallRestarts.clear();
+  stallStopReasons.clear();
+  stallRecoveryScheduled.clear();
+  pendingChatContinuations.clear();
 }
 
 export function getTaskChatStallRestartCountForTests(chatId: string): number {
@@ -5475,6 +5630,7 @@ export async function triggerFixerStallReconcileForTests(
   }
   notifyChatStreamEnded(chatId);
   await new Promise((resolve) => setTimeout(resolve, 50));
+  await awaitInFlightChatContinuations();
 }
 
 /** Test-only: invoke merge-fixer finalize directly (re-entrancy / idempotency tests). */
@@ -5531,6 +5687,24 @@ export function clearStallStoppedChatIdsForTests(): void {
   stallStoppedChatIds.clear();
 }
 
+/** Test-only: flush deferred board-chat continuations after streaming is cleared. */
+export async function flushBoardChatContinuationsForTests(chatId?: string): Promise<void> {
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
+  if (chatId) {
+    flushChatContinuationIfIdle(chatId);
+  } else {
+    for (const id of [...pendingChatContinuations.keys()]) {
+      flushChatContinuationIfIdle(id);
+    }
+  }
+  await awaitInFlightChatContinuations();
+}
+
+/** Test-only: wait for queued + in-flight `runAfterChatRelease` work before teardown. */
+export async function awaitBoardChatContinuationsForTests(): Promise<void> {
+  await awaitInFlightChatContinuations();
+}
+
 /** Test-only: build merge-fixer seed with optional retry context. */
 export function buildMergeFixerSeedMessageForTests(
   task: BoardTask,
@@ -5552,5 +5726,8 @@ export async function simulateUnmatchedFixerStreamEndForTests(
 ): Promise<void> {
   ensureStreamEndSubscription();
   notifyChatStreamEnded(endedChatId);
+  // Tester finalize is async; give it a turn before flushing recovery.
   await new Promise((resolve) => setTimeout(resolve, 50));
+  flushChatContinuationIfIdle(endedChatId);
+  await awaitInFlightChatContinuations();
 }

@@ -54,6 +54,11 @@ let composerBoxSyncRaf = 0;
 
 function scheduleBoardChatComposerBoxSync(): void {
   if (composerBoxSyncRaf) return;
+  if (typeof requestAnimationFrame !== 'function') {
+    syncBoardChatRailColumnBox();
+    syncBoardChatComposerBox();
+    return;
+  }
   composerBoxSyncRaf = requestAnimationFrame(() => {
     composerBoxSyncRaf = 0;
     syncBoardChatRailColumnBox();
@@ -146,11 +151,24 @@ function bindComposerBoxObserver(): void {
   if (codeViews instanceof HTMLElement) composerBoxObserver.observe(codeViews);
 }
 
+/**
+ * Re-assert composer chrome while a board chat embed is open.
+ * Stream-end refresh can drop `main-column--board-chat`, which hides the
+ * input bar, approval host, and question UI (see ob-page.css).
+ */
+export function ensureBoardChatComposerChrome(): void {
+  if (!isBoardChatEmbedOpen()) return;
+  syncMainColumnBoardChatClass(true);
+  bindComposerBoxObserver();
+}
+
 function unbindComposerBoxObserver(): void {
   composerBoxObserver?.disconnect();
   composerBoxObserver = null;
   if (composerBoxSyncRaf) {
-    cancelAnimationFrame(composerBoxSyncRaf);
+    if (typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(composerBoxSyncRaf);
+    }
     composerBoxSyncRaf = 0;
   }
 }
