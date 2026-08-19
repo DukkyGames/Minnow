@@ -7,6 +7,7 @@ import { isToolAllowedForMode, filterToolsByMode } from '../chat/modes/tool-poli
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
   ensureToolConfigReady,
+  getToolPermissionForId,
   isToolEnabled,
   loadToolConfig,
 } from '../tools/config';
@@ -170,7 +171,12 @@ export async function executeHeadlessTool(
           'Error: Brave web search requires the Minnow browser UI. Select Tavily or DuckDuckGo in Settings → Tools for headless mode.',
       };
     }
-    const serverTool = route.kind === 'tavily' ? 'web_search_tavily' : 'web_search_ddg';
+    const serverTool =
+      route.kind === 'tavily'
+        ? 'web_search_tavily'
+        : route.kind === 'searxng'
+          ? 'web_search_searxng'
+          : 'web_search_ddg';
     const blockedWeb = maybeBlockHeadlessToolApproval(
       'web_search',
       args,
@@ -179,11 +185,17 @@ export async function executeHeadlessTool(
       name,
     );
     if (blockedWeb) return blockedWeb;
-    return postServerTool(serverTool, { query: args.query }, modeId);
+    // Mirrors client.ts: deep_read fetches result pages, so it needs fetch_web_content.
+    const deepRead =
+      args.deep_read === true &&
+      getToolPermissionForId(config, 'fetch_web_content') !== 'off';
+    return postServerTool(serverTool, { query: args.query, deep_read: deepRead }, modeId);
   }
 
   const permissionId =
-    name === 'web_search_ddg' || name === 'web_search_tavily'
+    name === 'web_search_ddg' ||
+    name === 'web_search_tavily' ||
+    name === 'web_search_searxng'
       ? 'web_search'
       : (tool?.id ?? name);
   const blocked = maybeBlockHeadlessToolApproval(

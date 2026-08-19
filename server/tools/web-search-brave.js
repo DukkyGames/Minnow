@@ -3,6 +3,7 @@
  */
 
 import {
+  applyRelevanceGuard,
   formatSearchResults,
   normalizeSearchResults,
 } from './search-result.js';
@@ -76,7 +77,7 @@ export async function searchBraveStructured(query, apiKey, count = BRAVE_DEFAULT
     return { results: [], error: `No Brave results found for: ${query}` };
   }
 
-  return { results };
+  return applyRelevanceGuard('Brave', query, results);
 }
 
 /**
