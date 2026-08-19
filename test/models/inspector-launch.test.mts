@@ -12,7 +12,10 @@ import { describe, it } from 'node:test';
 import { CONTEXT_LADDER, type LlamaLaunchPlan } from '../../src/models/launch-plan.mjs';
 import { llamaSettingsFromLaunchPrefs, estimateLoadDurationMs } from '../../src/config/library-launch-meta.ts';
 import {
+  applyGpuLayersAuto,
+  applyGpuLayersTouch,
   contextSliderMax,
+  CONTEXT_SLIDER_STEP,
   ensureManualDraft,
   settingsForDraft,
   snapCtxPerSlot,
@@ -67,6 +70,44 @@ describe('inspector-launch draft helpers', () => {
     assert.equal(next.n_gpu_layers, undefined);
   });
 
+  it('applyGpuLayersAuto restores unset ngl and collapses a GPU-only touch to planner auto', () => {
+    const touched = applyGpuLayersTouch(undefined, DISPLAYED, 12);
+    assert.equal(touched.n_gpu_layers, 12);
+    assert.equal(touched.fit_mode, 'manual');
+    const restored = applyGpuLayersAuto(touched, DISPLAYED);
+    assert.equal(restored.n_gpu_layers, undefined);
+    assert.equal(restored.fit_mode, undefined);
+    assert.equal(restored.ctx, undefined);
+    assert.deepEqual(settingsForDraft(restored), {});
+  });
+
+  it('applyGpuLayersAuto keeps a custom parallel slot count when collapsing GPU auto', () => {
+    const restored = applyGpuLayersAuto(
+      applyGpuLayersTouch({ parallel: 4 }, DISPLAYED, 12),
+      DISPLAYED,
+    );
+    assert.equal(restored.n_gpu_layers, undefined);
+    assert.equal(restored.parallel, 4);
+    assert.deepEqual(settingsForDraft(restored), { parallel: 4 });
+  });
+
+  it('applyGpuLayersAuto keeps a custom context while restoring GPU auto', () => {
+    const restored = applyGpuLayersAuto(
+      {
+        fit_mode: 'manual',
+        ctx: 8192,
+        n_gpu_layers: 12,
+        cache_type: 'f16',
+      },
+      DISPLAYED,
+    );
+    assert.equal(restored.fit_mode, 'manual');
+    assert.equal(restored.ctx, 8192);
+    assert.equal(restored.n_gpu_layers, undefined);
+    assert.equal(restored.cache_type, 'f16');
+    assert.equal(settingsForDraft(restored).n_gpu_layers, undefined);
+  });
+
   it('estimateLoadDurationMs scales monotonically with file size', () => {
     assert.equal(estimateLoadDurationMs(2_000_000_000, 10_000, 1_000_000_000), 20_000);
     assert.equal(estimateLoadDurationMs(1_000_000_000, 10_000, 1_000_000_000), 10_000);
@@ -103,8 +144,13 @@ describe('inspector-launch draft helpers', () => {
     assert.equal(contextSliderMax(undefined), CONTEXT_LADDER[CONTEXT_LADDER.length - 1]);
     // 20k requested but trained context is 8k → snap to 8192, not 16384.
     assert.equal(snapCtxPerSlot(20000, 8192), 8192);
-    // 5k under an 8k cap → next ladder rung down (4096).
+    // 5k under an 8k cap → floor onto the 1k slider grid (4096).
     assert.equal(snapCtxPerSlot(5000, 8192), 4096);
     assert.equal(snapCtxPerSlot(32768, 131072), 32768);
+    // Manual slider is 1024-token steps, not the 13-rung auto-planning ladder.
+    assert.equal(CONTEXT_SLIDER_STEP, 1024);
+    assert.equal(snapCtxPerSlot(40000, 131072), 39936);
+    // Far-right max is always legal, even when trainCtx is not step-aligned.
+    assert.equal(snapCtxPerSlot(10000, 10000), 10000);
   });
 });

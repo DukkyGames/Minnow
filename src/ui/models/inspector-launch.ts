@@ -20,6 +20,15 @@ import type { HardwareSnapshot } from '../../models/types';
 
 const LADDER_MAX = CONTEXT_LADDER[CONTEXT_LADDER.length - 1];
 
+/** Inspector slider floor. Same as the planner's lowest rung. */
+export const CONTEXT_SLIDER_MIN = CONTEXT_LADDER[0];
+
+/**
+ * Manual context slider step in tokens. Auto-planning still snaps to CONTEXT_LADDER;
+ * the Load-tab range uses 1k so a 262k ceiling is pointer-fine instead of 13 jumps.
+ */
+export const CONTEXT_SLIDER_STEP = 1024;
+
 /** Values the Load tab shows before the user overrides them. */
 export interface DisplayedLaunch {
   ctxPerSlot: number;
@@ -42,31 +51,21 @@ export function contextSliderMax(trainCtx?: number | null): number {
   return Math.min(trained, LADDER_MAX);
 }
 
-/** Ladder rungs the context slider may land on for this model. */
-export function contextRungsUpTo(maxTokens: number): number[] {
-  const rungs = CONTEXT_LADDER.filter((rung) => rung <= maxTokens);
-  return rungs.length ? [...rungs] : [CONTEXT_LADDER[0]];
-}
-
-/** Largest ladder rung ≤ tokens that still fits under the slider max. */
+/**
+ * Snap a per-slot context onto the inspector slider grid.
+ * Floors to CONTEXT_SLIDER_STEP, never below the floor, never above `maxTokens`.
+ * The slider max itself is always legal so a non-aligned trainCtx (e.g. 10000) can
+ * still be chosen at the far right.
+ */
 export function snapCtxPerSlot(tokens: number, maxTokens: number): number {
-  const rungs = contextRungsUpTo(maxTokens);
-  let best = rungs[0];
-  for (const rung of rungs) {
-    if (rung <= tokens) best = rung;
-  }
-  return best;
-}
-
-/** Range input index for a per-slot context already on (or below) the ladder. */
-export function ladderIndex(ctxPerSlot: number, rungs: readonly number[]): number {
-  const exact = rungs.indexOf(ctxPerSlot);
-  if (exact >= 0) return exact;
-  let best = 0;
-  for (let i = 0; i < rungs.length; i += 1) {
-    if (rungs[i] <= ctxPerSlot) best = i;
-  }
-  return best;
+  const max = Math.max(1, Math.trunc(Number(maxTokens) || 0));
+  const min = Math.min(CONTEXT_SLIDER_MIN, max);
+  if (!Number.isFinite(tokens)) return min;
+  if (tokens <= min) return min;
+  if (tokens >= max) return max;
+  const stepped =
+    min + Math.floor((tokens - min) / CONTEXT_SLIDER_STEP) * CONTEXT_SLIDER_STEP;
+  return Math.min(max, Math.max(min, stepped));
 }
 
 /**
@@ -135,7 +134,7 @@ export function applyCtxPerSlotTouch(
   return next;
 }
 
-/** First (or later) touch of GPU layers. `null` is not used here — moving the slider is a count. */
+/** First (or later) touch of GPU layers. Moving the slider writes a count, never Auto. */
 export function applyGpuLayersTouch(
   draft: LlamaServeSettings | undefined,
   displayed: DisplayedLaunch,
@@ -143,6 +142,34 @@ export function applyGpuLayersTouch(
 ): LlamaServeSettings {
   const next = ensureManualDraft(draft, displayed);
   next.n_gpu_layers = nGpuLayers;
+  return next;
+}
+
+/**
+ * Restore GPU Auto: drop `n_gpu_layers` so llama.cpp `--fit` owns the split.
+ * Custom context / KV stay manual. If those still match the plan (the first GPU
+ * tick copies them), fall back to planner auto and keep pass-through fields.
+ */
+export function applyGpuLayersAuto(
+  draft: LlamaServeSettings | undefined,
+  displayed: DisplayedLaunch,
+): LlamaServeSettings {
+  const next: LlamaServeSettings = { ...(draft ?? {}) };
+  delete next.n_gpu_layers;
+
+  if (next.fit_mode !== 'manual') {
+    return passThroughFrom(next);
+  }
+
+  const ctxMatchesPlan = next.ctx == null || next.ctx === displayed.plan.ctx;
+  const cacheMatchesPlan = !next.cache_type || next.cache_type === displayed.plan.cache_type;
+  if (ctxMatchesPlan && cacheMatchesPlan) {
+    const restored = passThroughFrom({ ...next, fit_mode: 'auto' });
+    // ensureManualDraft always copies parallel; 1 is the default, not an override.
+    if (restored.parallel === 1) delete restored.parallel;
+    return restored;
+  }
+
   return next;
 }
 

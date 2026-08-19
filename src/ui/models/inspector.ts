@@ -34,14 +34,16 @@ import { joinArgv, tokenizeArgv } from '../../models/argv-tokenize.mjs';
 import {
   applyCacheTypeTouch,
   applyCtxPerSlotTouch,
+  applyGpuLayersAuto,
   applyGpuLayersTouch,
   applyPassThroughTouch,
-  contextRungsUpTo,
+  CONTEXT_SLIDER_MIN,
+  CONTEXT_SLIDER_STEP,
   contextSliderMax,
   displayedLaunchFrom,
   inspectorLaunchPlan,
-  ladderIndex,
   settingsForDraft,
+  snapCtxPerSlot,
   type DisplayedLaunch,
 } from './inspector-launch';
 import { capabilityLabel, type LibraryModel } from '../../models/library';
@@ -82,6 +84,11 @@ const TAB_LABELS: Record<InspectorTab, { label: string; glyph: string }> = {
 let activeTab: InspectorTab = 'info';
 let bound = false;
 let inspectorRenderRaf: number | null = null;
+/**
+ * Store / GGUF / runtime updates that arrived while a launch slider still had
+ * focus. Flushed on blur (next frame) so we do not remount the range mid-drag.
+ */
+let inspectorRenderDeferred = false;
 /** Per-model launch settings, kept while the app is open. Empty = auto (server planner). */
 const draftSettings = new Map<string, LlamaServeSettings>();
 /** Slider `input` fires every tick — debounce PUT so we do not hammer config.json. */
@@ -160,6 +167,50 @@ function root(): HTMLElement | null {
   return document.getElementById('modelsInspector');
 }
 
+function isLaunchRange(node: EventTarget | null): node is HTMLInputElement {
+  if (!node || typeof node !== 'object') return false;
+  const candidate = node as HTMLInputElement;
+  // Duck-type: happy-dom tests do not install HTMLInputElement on globalThis.
+  return (
+    candidate.tagName === 'INPUT' &&
+    candidate.type === 'range' &&
+    Boolean(candidate.classList?.contains('models-field__range'))
+  );
+}
+
+/** True while a Load-tab slider still has focus (mouse drag or arrow keys). */
+function launchRangeHasFocus(): boolean {
+  const host = root();
+  const active = document.activeElement;
+  return Boolean(host && isLaunchRange(active) && host.contains(active));
+}
+
+/**
+ * Replace only the occupancy cluster. Rebuilding the inspector on every range
+ * `input` destroys the slider and drops pointer capture after one tick.
+ */
+function patchLaunchMemoryMeter(model: LibraryModel): void {
+  const host = root();
+  if (!host) return;
+  const existing = host.querySelector('.models-launch-memory');
+  if (!existing) return;
+  existing.replaceWith(launchMemoryHint(model, displayedFor(model)));
+}
+
+/**
+ * After a deferred full render, wait a frame so the click that blurred the
+ * slider still hits the existing tab or footer button.
+ */
+function bindLaunchRangeLifecycle(range: HTMLInputElement): void {
+  range.addEventListener('blur', () => {
+    if (!inspectorRenderDeferred) return;
+    window.requestAnimationFrame(() => {
+      if (launchRangeHasFocus()) return;
+      render();
+    });
+  });
+}
+
 /** Label/value row — the definition-list pattern from the Info tab. */
 function infoRow(label: string, value: Node | string): HTMLElement {
   const row = el('div', 'models-info-row');
@@ -229,9 +280,11 @@ function contextLengthField(
   onChange: (ctxPerSlot: number) => void,
 ): HTMLElement {
   const maxTokens = contextSliderMax(displayed.trainCtx);
-  const rungs = contextRungsUpTo(maxTokens);
-  const ctxPerSlot = displayed.ctxPerSlot;
-  const wrap = el('label', 'models-field');
+  const minTokens = Math.min(CONTEXT_SLIDER_MIN, maxTokens);
+  const ctxPerSlot = snapCtxPerSlot(displayed.ctxPerSlot, maxTokens);
+  // Div, not label: Chromium retargets pointermove on a range nested in a
+  // <label>, so the thumb snaps one step and the drag dies.
+  const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
   head.append(el('span', 'models-field__label', 'Context length'));
   const valueText =
@@ -242,21 +295,23 @@ function contextLengthField(
 
   const range = el('input', 'models-field__range') as HTMLInputElement;
   range.type = 'range';
-  range.min = '0';
-  range.max = String(rungs.length - 1);
-  range.step = '1';
-  range.value = String(ladderIndex(ctxPerSlot, rungs));
-  range.setAttribute('aria-valuemin', String(rungs[0]));
-  range.setAttribute('aria-valuemax', String(rungs[rungs.length - 1]));
-  range.setAttribute('aria-valuenow', String(ctxPerSlot));
+  // Token values, 1k step: auto-planning still uses CONTEXT_LADDER (13 rungs).
+  range.min = String(minTokens);
+  range.max = String(maxTokens);
+  range.step = String(CONTEXT_SLIDER_STEP);
+  range.value = String(ctxPerSlot);
+  range.setAttribute('aria-valuemin', range.min);
+  range.setAttribute('aria-valuemax', range.max);
+  range.setAttribute('aria-valuenow', range.value);
   range.setAttribute('aria-label', 'Context length in tokens per slot');
   range.addEventListener('input', () => {
-    const next = rungs[Number(range.value)] ?? rungs[0];
+    const next = snapCtxPerSlot(Number(range.value), maxTokens);
     valueEl.textContent =
       displayed.parallel > 1 ? `${next.toLocaleString()} / slot` : next.toLocaleString();
     range.setAttribute('aria-valuenow', String(next));
     onChange(next);
   });
+  bindLaunchRangeLifecycle(range);
   wrap.appendChild(range);
 
   if (displayed.trainCtx) {
@@ -344,10 +399,19 @@ function draftFor(modelId: string): LlamaServeSettings | undefined {
 function persistDraft(model: LibraryModel, next: LlamaServeSettings): void {
   draftSettings.set(model.id, next);
   const payload = settingsForDraft(next);
-  // Empty auto payload is not a clear — do not DELETE the row (would wipe lastLoadMs).
-  if (Object.keys(payload).length === 0) return;
   const pending = launchSaveTimers.get(model.id);
   if (pending) clearTimeout(pending);
+
+  // Load sends `{}` for planner auto. An empty PUT would delete the row and
+  // wipe lastLoadMs, so restoring Auto writes `{ fit_mode: 'auto' }` over a
+  // previously saved ngl/ctx row instead.
+  let toSave: LlamaServeSettings = payload;
+  if (Object.keys(payload).length === 0) {
+    const savedLlama = llamaSettingsFromLaunchPrefs(getLibraryLaunchSettingsForId(model.id));
+    if (!savedLlama) return;
+    toSave = { fit_mode: 'auto' };
+  }
+
   // Fire-and-forget after debounce (sampler save is immediate on `change`;
   // sliders use `input` so we wait until the user pauses).
   launchSaveTimers.set(
@@ -356,7 +420,7 @@ function persistDraft(model: LibraryModel, next: LlamaServeSettings): void {
       launchSaveTimers.delete(model.id);
       void saveLibraryLaunchSettings({
         libraryId: model.id,
-        settings: payload,
+        settings: toSave,
       }).catch(() => undefined);
     }, LAUNCH_SAVE_DEBOUNCE_MS),
   );
@@ -405,23 +469,46 @@ function formatGpuLayersSliderLabel(
   return String(sliderValue);
 }
 
+/** Insert the Auto restore control without remounting the range (slider ticks must keep the thumb). */
+function ensureGpuAutoRestoreButton(meta: HTMLElement, onAuto: () => void): void {
+  if (meta.querySelector('.models-field__auto')) return;
+  const autoBtn = el('button', 'models-field__auto', 'Auto') as HTMLButtonElement;
+  autoBtn.type = 'button';
+  autoBtn.setAttribute('aria-label', 'Restore GPU layers to Auto');
+  autoBtn.addEventListener('click', () => {
+    // Drop range focus so render() is not deferred mid-drag.
+    const range = meta.closest('.models-field')?.querySelector<HTMLInputElement>('.models-field__range');
+    range?.blur();
+    onAuto();
+  });
+  meta.appendChild(autoBtn);
+}
+
 function gpuLayersSlider(
   model: LibraryModel,
   displayed: DisplayedLaunch,
-  onChange: (nGpuLayers: number) => void,
+  onChange: (nGpuLayers: number | null) => void,
 ): HTMLElement {
   const maxLayers = estimateTransformerLayerCount(model.paramsB, memoryHints(model));
   const auto = displayed.n_gpu_layers == null;
   const sliderValue = sliderValueFromNGpu(displayed.n_gpu_layers, maxLayers);
-  const wrap = el('label', 'models-field');
+  // Same label-wrap trap as contextLengthField: keep the range outside <label>.
+  const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
   head.append(el('span', 'models-field__label', 'GPU layers'));
+  const meta = el('div', 'models-field__range-meta');
   const valueEl = el(
     'span',
     'models-field__range-value',
     formatGpuLayersSliderLabel(sliderValue, maxLayers, auto),
   );
-  head.appendChild(valueEl);
+  meta.appendChild(valueEl);
+  // The slider cannot represent "unset". Show Auto only after the user wrote a
+  // count (including CPU 0). A CPU-plan 0 is not an override.
+  if (draftFor(model.id)?.n_gpu_layers != null) {
+    ensureGpuAutoRestoreButton(meta, () => onChange(null));
+  }
+  head.appendChild(meta);
   wrap.appendChild(head);
 
   const range = el('input', 'models-field__range') as HTMLInputElement;
@@ -435,7 +522,7 @@ function gpuLayersSlider(
   range.setAttribute('aria-valuenow', range.value);
   range.setAttribute(
     'aria-valuetext',
-    auto ? 'Auto — llama.cpp sizes the GPU split' : formatGpuLayersSliderLabel(sliderValue, maxLayers, false),
+    auto ? 'Auto: llama.cpp sizes the GPU split' : formatGpuLayersSliderLabel(sliderValue, maxLayers, false),
   );
   range.setAttribute('aria-label', 'Transformer layers to offload to the GPU');
   range.addEventListener('input', () => {
@@ -446,11 +533,17 @@ function gpuLayersSlider(
       'aria-valuetext',
       formatGpuLayersSliderLabel(nextSlider, maxLayers, false),
     );
+    // First tick leaves auto: drop the hint and reveal Auto without remounting.
+    wrap.querySelector('.models-field__auto-hint')?.remove();
+    ensureGpuAutoRestoreButton(meta, () => onChange(null));
     onChange(nGpuLayersFromSlider(nextSlider, maxLayers));
   });
+  bindLaunchRangeLifecycle(range);
   wrap.appendChild(range);
   if (auto) {
-    wrap.appendChild(el('p', 'models-hint', 'Auto — llama.cpp sizes the GPU split.'));
+    wrap.appendChild(
+      el('p', 'models-hint models-field__auto-hint', 'Auto: llama.cpp sizes the GPU split.'),
+    );
   }
   return wrap;
 }
@@ -543,11 +636,20 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     memoryHint,
     contextLengthField(displayed, (ctxPerSlot) => {
       persistDraft(model, applyCtxPerSlotTouch(draftFor(model.id), displayed, ctxPerSlot));
-      refreshAfterTouch();
+      // Keep the range mounted; only the occupancy cluster needs a live refresh.
+      patchLaunchMemoryMeter(model);
     }),
     gpuLayersSlider(model, displayed, (nGpuLayers) => {
-      persistDraft(model, applyGpuLayersTouch(draftFor(model.id), displayed, nGpuLayers));
-      refreshAfterTouch();
+      persistDraft(
+        model,
+        nGpuLayers == null
+          ? applyGpuLayersAuto(draftFor(model.id), displayed)
+          : applyGpuLayersTouch(draftFor(model.id), displayed, nGpuLayers),
+      );
+      // Restoring Auto remounts so the hint and slider position return; a
+      // count tick only patches the occupancy cluster so the thumb stays grabbed.
+      if (nGpuLayers == null) refreshAfterTouch();
+      else patchLaunchMemoryMeter(model);
     }),
   );
   configBlock.appendChild(
@@ -781,6 +883,15 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
 export function render(): void {
   const host = root();
   if (!host) return;
+
+  // Recreating the panel mid-drag drops pointer capture on the range thumb.
+  if (launchRangeHasFocus()) {
+    inspectorRenderDeferred = true;
+    const focusedModel = getSelectedModel();
+    if (focusedModel && activeTab === 'load') patchLaunchMemoryMeter(focusedModel);
+    return;
+  }
+  inspectorRenderDeferred = false;
 
   const model = getSelectedModel();
   host.classList.toggle('is-empty', !model);

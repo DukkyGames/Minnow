@@ -1,8 +1,8 @@
 /**
  * DOM for the Load-tab launch memory instrument.
  *
- * The inspector rebuilds this on every slider tick, so fills are instant
- * (no 0→value animation that would flash on each `input`).
+ * The Load tab replaces this cluster on each slider tick (the range inputs
+ * stay mounted). Fills are instant: no 0→value animation on a reused node.
  */
 
 import {

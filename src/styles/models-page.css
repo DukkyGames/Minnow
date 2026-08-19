@@ -320,7 +320,7 @@
   height: 100%;
   border-radius: inherit;
   background: color-mix(in oklch, var(--mn-fg) 48%, transparent);
-  /* Instant: the Load tab rebuilds this node on every slider tick. */
+  /* Instant: this node is replaced on each slider tick; the range stays put. */
   transform: scaleX(var(--fill, 0));
   transform-origin: left center;
 }
@@ -1748,9 +1748,16 @@
 
 .models-field__range-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.models-field__range-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .models-field__range-value {
@@ -1759,6 +1766,32 @@
   font-variant-numeric: tabular-nums;
   color: var(--mn-fg-muted);
   white-space: nowrap;
+}
+
+/* Quiet restore next to a custom GPU-layer count. Not a chip: Auto is a mode, not a preset. */
+.models-field__auto {
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .models-field__auto:hover {
+    color: var(--mn-fg);
+  }
+}
+
+.models-field__auto:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
 }
 
 /* Compact token count next to the context slider — same type as the read-only value. */
