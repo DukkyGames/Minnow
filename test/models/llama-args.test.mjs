@@ -436,4 +436,269 @@ describe('llama args', () => {
     // Total -c is still a ladder rung; planner multiplies per-slot × parallel.
     assert.ok(Number(flagValue(two, '-c')) > 0);
   });
+
+  test('LM Studio parity flags map to their llama-server spellings', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: {
+        threads: 12,
+        kv_unified: true,
+        kv_offload: false,
+        ctx_checkpoints: 8,
+        context_shift: true,
+        swa_full: true,
+        rope_freq_base: 1_000_000,
+        rope_freq_scale: 0.5,
+        seed: 42,
+        flash_attn: 'off',
+        reasoning_budget_message: 'Out of thinking budget.',
+      },
+    });
+    assert.equal(flagValue(args, '-t'), '12');
+    assert.ok(args.includes('--kv-unified'));
+    assert.ok(args.includes('--no-kv-offload'));
+    assert.equal(flagValue(args, '-ctxcp'), '8');
+    assert.ok(args.includes('--context-shift'));
+    assert.ok(args.includes('--swa-full'));
+    assert.equal(flagValue(args, '--rope-freq-base'), '1000000');
+    assert.equal(flagValue(args, '--rope-freq-scale'), '0.5');
+    assert.equal(flagValue(args, '-s'), '42');
+    assert.equal(flagValue(args, '--flash-attn'), 'off');
+    assert.equal(flagValue(args, '--reasoning-budget-message'), 'Out of thinking budget.');
+  });
+
+  test('boolean parity flags emit their off spelling, or nothing when unset', () => {
+    const off = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { kv_unified: false, context_shift: false },
+    });
+    assert.ok(off.includes('--no-kv-unified'));
+    assert.ok(off.includes('--no-context-shift'));
+
+    const unset = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: {},
+    });
+    for (const flag of [
+      '--kv-unified',
+      '--no-kv-unified',
+      '--no-kv-offload',
+      '-ctxcp',
+      '--context-shift',
+      '--no-context-shift',
+      '--swa-full',
+      '--rope-freq-base',
+      '--rope-freq-scale',
+      '-s',
+      '--reasoning-budget-message',
+    ]) {
+      assert.equal(unset.includes(flag), false, `${flag} should not be emitted by default`);
+    }
+  });
+
+  test('extra_args wins over every parity flag', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: {
+        seed: 42,
+        ctx_checkpoints: 8,
+        flash_attn: 'off',
+        cache_type_k: 'q4_0',
+        extra_args: ['-s', '7', '-ctxcp', '4', '--flash-attn', 'on', '--cache-type-k', 'q8_0'],
+      },
+    });
+    assert.equal(args.filter((token) => token === '-s').length, 1);
+    assert.equal(flagValue(args, '-s'), '7');
+    assert.equal(args.filter((token) => token === '-ctxcp').length, 1);
+    assert.equal(flagValue(args, '-ctxcp'), '4');
+    assert.equal(args.filter((token) => token === '--flash-attn').length, 1);
+    assert.equal(flagValue(args, '--flash-attn'), 'on');
+    assert.equal(args.filter((token) => token === '--cache-type-k').length, 1);
+    assert.equal(flagValue(args, '--cache-type-k'), 'q8_0');
+  });
+
+  test('cache_type_k / cache_type_v override the shared type per side', () => {
+    const split = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { fit_mode: 'manual', ctx: 4096, cache_type: 'q8_0', cache_type_v: 'q4_0' },
+    });
+    assert.equal(flagValue(split, '--cache-type-k'), 'q8_0');
+    assert.equal(flagValue(split, '--cache-type-v'), 'q4_0');
+
+    // f16 is llama.cpp's own default, so pinning it means omitting the flag.
+    const pinnedF16 = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { fit_mode: 'manual', ctx: 4096, cache_type: 'q8_0', cache_type_k: 'f16' },
+    });
+    assert.equal(pinnedF16.includes('--cache-type-k'), false);
+    assert.equal(flagValue(pinnedF16, '--cache-type-v'), 'q8_0');
+  });
+
+  test('the removed --draft-max / --draft-min spellings are never emitted', () => {
+    const { args } = buildLlamaServerLaunch({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { seed: 1 },
+    });
+    for (const flag of ['--draft', '--draft-n', '--draft-max', '--draft-min', '--draft-n-min']) {
+      assert.equal(args.includes(flag), false, `${flag} was removed in llama.cpp b9628+`);
+    }
+  });
+
+  test('-lv 4 is emitted so the load bar has phase markers, unless extra_args sets it', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: {},
+    });
+    // At the default verbosity (3) the whole weight load is silent.
+    assert.equal(flagValue(args, '-lv'), '4');
+    // The activity poller depends on /slots; do not rely on it staying default-on.
+    assert.ok(args.includes('--slots'));
+
+    const pinned = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { extra_args: ['-lv', '2'] },
+    });
+    assert.equal(pinned.filter((token) => token === '-lv').length, 1);
+    assert.equal(flagValue(pinned, '-lv'), '2');
+
+    const verbose = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { extra_args: ['-v'] },
+    });
+    assert.equal(verbose.includes('-lv'), false);
+  });
+
+  test('spec decoding emits only the --spec-* spellings', () => {
+    const args = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: {
+        spec_type: 'draft-simple',
+        spec_draft_model: '/tmp/draft.gguf',
+        spec_draft_ngl: 16,
+        spec_draft_n_max: 5,
+        spec_draft_n_min: 1,
+        spec_draft_p_min: 0.4,
+      },
+    });
+    assert.equal(flagValue(args, '--spec-type'), 'draft-simple');
+    assert.equal(flagValue(args, '--spec-draft-model'), '/tmp/draft.gguf');
+    assert.equal(flagValue(args, '--spec-draft-ngl'), '16');
+    assert.equal(flagValue(args, '--spec-draft-n-max'), '5');
+    assert.equal(flagValue(args, '--spec-draft-n-min'), '1');
+    assert.equal(flagValue(args, '--spec-draft-p-min'), '0.4');
+  });
+
+  test('draft-mtp needs no draft model, and spec flags vanish when the mode is off', () => {
+    const mtp = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { spec_type: 'draft-mtp', spec_draft_n_max: 3 },
+    });
+    assert.equal(flagValue(mtp, '--spec-type'), 'draft-mtp');
+    assert.equal(mtp.includes('--spec-draft-model'), false);
+
+    // `none` and an unknown mode both emit nothing — an unknown --spec-type aborts
+    // the launch before the port binds.
+    for (const spec_type of ['none', 'draft-telepathy']) {
+      const off = buildLlamaServerArgs({
+        modelPath: '/tmp/model.gguf',
+        port: 8085,
+        variant: 'cuda-12.4',
+        hardware: HW_12GB,
+        weightsBytes: WEIGHTS_8B_Q4_KM,
+        ggufMeta: GGUF_8B,
+        settings: { spec_type, spec_draft_n_max: 5 },
+      });
+      assert.equal(off.includes('--spec-type'), false, spec_type);
+      assert.equal(off.includes('--spec-draft-n-max'), false, spec_type);
+    }
+  });
+
+  test('a spec-decode launch carries its mode onto the plan for failure diagnosis', () => {
+    const { plan } = buildLlamaServerLaunch({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { spec_type: 'draft-eagle3' },
+    });
+    assert.equal(plan.spec_type, 'draft-eagle3');
+    assert.equal(plan.spec_draft_model, undefined);
+  });
+
+  test('the resolved per-side KV types are stamped onto the plan for residency sizing', () => {
+    const { plan } = buildLlamaServerLaunch({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { fit_mode: 'manual', ctx: 4096, cache_type: 'q8_0', cache_type_v: 'q4_0', swa_full: true },
+    });
+    assert.equal(plan.cache_type_k, 'q8_0');
+    assert.equal(plan.cache_type_v, 'q4_0');
+    assert.equal(plan.swa_full, true);
+  });
 });

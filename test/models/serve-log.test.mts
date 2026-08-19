@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   classifyLogLine,
   describeLoadPhase,
+  matchServeLoadPhase,
   parseLoadProgress,
   toLogLines,
 } from '../../src/models/serve-log.ts';
@@ -48,9 +49,27 @@ describe('classifyLogLine', () => {
 describe('describeLoadPhase', () => {
   test('names the phase the log is in', () => {
     assert.equal(describeLoadPhase(''), 'Starting runtime');
-    assert.equal(describeLoadPhase('load_tensors: offloading 48 layers'), 'Loading weights');
-    assert.equal(describeLoadPhase('llama_context: kv_size = 4096'), 'Allocating context');
-    assert.equal(describeLoadPhase('main: server is listening'), 'Warming up');
+    assert.equal(describeLoadPhase('load_tensors: loading model tensors'), 'Loading weights');
+    assert.equal(describeLoadPhase('llama_kv_cache: size = 512.00 MiB'), 'Allocating context');
+    assert.equal(describeLoadPhase('main: server is listening'), 'Starting the server');
+  });
+
+  test('exposes the same phase as a keyed band, so labels and the bar cannot drift', () => {
+    const weights = matchServeLoadPhase('load_tensors: loading model tensors');
+    assert.equal(weights.key, 'weights');
+    assert.equal(weights.label, describeLoadPhase('load_tensors: loading model tensors'));
+    assert.ok(weights.ceiling > weights.floor);
+  });
+
+  test('the furthest phase in the log wins, not the last line', () => {
+    // A real b9628 load reaches "listening" but keeps printing slot lines after it.
+    const log = [
+      'common_init_result: fitting params to device memory ...',
+      'load_tensors: loading model tensors, this can take a while...',
+      'srv  llama_server: server is listening on http://127.0.0.1:8085',
+      'srv  update_slots: all slots are idle',
+    ].join('\n');
+    assert.equal(matchServeLoadPhase(log).key, 'listening');
   });
 });
 

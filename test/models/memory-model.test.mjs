@@ -72,6 +72,26 @@ describe('kv cache sizing', () => {
     assert.ok(kvCacheBytes(narrow, 32768) < kvCacheBytes(wide, 32768));
   });
 
+  it('sizes K and V separately when they carry different quantizations', () => {
+    const f16 = kvCacheBytes(geom(), 8192, 'f16');
+    const q8 = kvCacheBytes(geom(), 8192, 'q8_0');
+    // A mixed pair is the mean of the two symmetric caches, not either one doubled.
+    const mixed = kvCacheBytes(geom(), 8192, { k: 'f16', v: 'q8_0' });
+    assert.equal(mixed, (f16 + q8) / 2);
+    // A pair naming the same type on both sides matches the string form exactly.
+    assert.equal(kvCacheBytes(geom(), 8192, { k: 'q8_0', v: 'q8_0' }), q8);
+  });
+
+  it('drops the sliding-window saving under --swa-full', () => {
+    const swa = geom({ nLayers: 48, headDim: 256, swaWindow: 1024, swaPeriod: 6 });
+    const windowed = kvCacheBytes(swa, 32768, 'f16', { ubatch: 512 });
+    const full = kvCacheBytes(swa, 32768, 'f16', { ubatch: 512, swaFull: true });
+    assert.ok(full > windowed);
+    // Every layer now carries the whole context, so it matches a non-windowed model.
+    const dense = geom({ nLayers: 48, headDim: 256, swaWindow: 0, swaPeriod: 1 });
+    assert.equal(full, kvCacheBytes(dense, 32768, 'f16', { ubatch: 512 }));
+  });
+
   it('charges only the full-attention layers on a linear-attention hybrid', () => {
     // Qwen3.5-9B: 8 of 32 layers grow a cache; the rest hold a constant-size state.
     const hybrid = geom({ nLayers: 32, nKvHeads: 4, headDim: 256, swaWindow: 0, swaPeriod: 4 });

@@ -8,6 +8,7 @@
  */
 
 import type { LlamaServeSettings } from '../../models/api-client';
+import { specNeedsDraftModel } from '../../models/spec-decode.mjs';
 import {
   CONTEXT_LADDER,
   planLlamaLaunch,
@@ -85,6 +86,30 @@ export function settingsForDraft(draft: LlamaServeSettings | undefined): LlamaSe
     if (draft.tensor_split) out.tensor_split = draft.tensor_split;
     if (draft.main_gpu != null) out.main_gpu = draft.main_gpu;
     if (draft.n_cpu_moe != null) out.n_cpu_moe = draft.n_cpu_moe;
+    if (draft.threads != null) out.threads = draft.threads;
+    if (draft.ctx_checkpoints != null) out.ctx_checkpoints = draft.ctx_checkpoints;
+    if (draft.rope_freq_base != null) out.rope_freq_base = draft.rope_freq_base;
+    if (draft.rope_freq_scale != null) out.rope_freq_scale = draft.rope_freq_scale;
+    if (draft.seed != null) out.seed = draft.seed;
+    if (draft.idle_ttl_ms != null) out.idle_ttl_ms = draft.idle_ttl_ms;
+    if (typeof draft.kv_unified === 'boolean') out.kv_unified = draft.kv_unified;
+    if (draft.kv_offload === false) out.kv_offload = false;
+    if (typeof draft.context_shift === 'boolean') out.context_shift = draft.context_shift;
+    if (draft.swa_full === true) out.swa_full = true;
+    if (draft.flash_attn) out.flash_attn = draft.flash_attn;
+    if (draft.reasoning_budget_message) {
+      out.reasoning_budget_message = draft.reasoning_budget_message;
+    }
+    // Speculative decoding does not touch the fit planner's ctx / ngl / cache choices,
+    // so it rides along in auto.
+    if (draft.spec_type && draft.spec_type !== 'none') {
+      out.spec_type = draft.spec_type;
+      if (draft.spec_draft_model) out.spec_draft_model = draft.spec_draft_model;
+      if (draft.spec_draft_ngl != null) out.spec_draft_ngl = draft.spec_draft_ngl;
+      if (draft.spec_draft_n_max != null) out.spec_draft_n_max = draft.spec_draft_n_max;
+      if (draft.spec_draft_n_min != null) out.spec_draft_n_min = draft.spec_draft_n_min;
+      if (draft.spec_draft_p_min != null) out.spec_draft_p_min = draft.spec_draft_p_min;
+    }
     if (draft.no_mmap === true) out.no_mmap = true;
     if (draft.mlock === true) out.mlock = true;
     if (draft.chat_template) out.chat_template = draft.chat_template;
@@ -184,6 +209,26 @@ export function applyCacheTypeTouch(
 }
 
 /**
+ * Pinning K or V independently is a cache-type choice, so it leaves auto the same way
+ * the shared KV select does. The planner's degrade ladder only knows one symmetric
+ * type; letting a pinned f16 K ride along under auto would silently blow the budget it
+ * planned against. Manual mode instead surfaces the over-budget warning.
+ * `undefined` clears the pin and falls back to the shared type.
+ */
+export function applyCacheTypeSideTouch(
+  draft: LlamaServeSettings | undefined,
+  displayed: DisplayedLaunch,
+  side: 'k' | 'v',
+  cacheType: string | undefined,
+): LlamaServeSettings {
+  const next = ensureManualDraft(draft, displayed);
+  const key = side === 'k' ? 'cache_type_k' : 'cache_type_v';
+  if (cacheType) next[key] = cacheType;
+  else delete next[key];
+  return next;
+}
+
+/**
  * Parallel / batch / extra_args do not leave auto. When already manual, keep per-slot
  * context and rescale total `-c`.
  */
@@ -204,6 +249,34 @@ export function applyPassThroughTouch(
   }
   if (draft?.fit_mode === 'manual') return { ...draft, ...patch };
   return { ...passThroughFrom(draft), ...patch };
+}
+
+/**
+ * Why this draft cannot be launched, or `null` when it can.
+ *
+ * `draft-simple` / `draft-eagle3` without a draft model do not fail cleanly — verified
+ * on b9628, llama-server registers the implementation and then segfaults with nothing
+ * in the log. Blocking here turns a crash-and-diagnose round trip into a sentence.
+ *
+ * `mtpCapable` is `null` while the GGUF header is still loading; an unknown header
+ * never blocks, because guessing wrong would lock a user out of a working mode.
+ */
+export function launchValidationError(
+  draft: LlamaServeSettings | undefined,
+  mtpCapable: boolean | null = null,
+): string | null {
+  const specType = draft?.spec_type;
+  if (!specType || specType === 'none') return null;
+
+  if (specNeedsDraftModel(specType, draft?.spec_draft_model)) {
+    return `${specType} drafts tokens with a second, smaller model. Choose a draft GGUF, or set speculative decoding to none.`;
+  }
+
+  if (specType === 'draft-mtp' && mtpCapable === false) {
+    return 'These weights carry no multi-token-prediction heads, so draft-mtp cannot start. Use a draft model instead, or set speculative decoding to none.';
+  }
+
+  return null;
 }
 
 export function isManualDraft(draft: LlamaServeSettings | undefined): boolean {

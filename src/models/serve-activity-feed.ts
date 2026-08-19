@@ -26,6 +26,11 @@ let sseUnsub: (() => void) | null = null;
  * tears the stream down once nobody is left listening.
  */
 export function subscribeServeActivityFeed(listener: FeedListener): () => void {
+  // The feed is started from app init, which also runs under happy-dom and in the
+  // Electron main-adjacent bundles. Telemetry is a nicety; never make a boot path
+  // depend on EventSource existing.
+  if (typeof EventSource !== 'function') return () => {};
+
   listeners.add(listener);
 
   if (!sseUnsub) {
@@ -99,6 +104,21 @@ export function activitySuffixForModelId(modelId: string): string {
   return busy.state === 'prompt'
     ? `pp ${compactTokens(busy.promptProcessed)}`
     : `${compactTokens(busy.decoded)} tok`;
+}
+
+/**
+ * Repaint every `[data-activity-for]` node from the current samples.
+ *
+ * Called on each telemetry tick (~400 ms while a slot is busy), so it must never rebuild
+ * the picker menu — a rebuild at that cadence would fight the user's pointer. Lives here
+ * rather than in the picker because it only needs this module's data.
+ */
+export function syncModelActivityIndicators(root: ParentNode = document): void {
+  const nodes = root.querySelectorAll<HTMLElement>('[data-activity-for]');
+  for (const node of nodes) {
+    const next = activitySuffixForModelId(node.dataset.activityFor ?? '');
+    if (node.textContent !== next) node.textContent = next;
+  }
 }
 
 /** True when any local serve is working — drives the header dot's animation. */

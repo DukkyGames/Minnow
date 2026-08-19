@@ -83,6 +83,34 @@ export const LOAD_PHASES = [
   },
 ];
 
+/**
+ * `srv load_model: [spec] estimated memory usage of MTP context is 168.02 MiB`.
+ * `.` excludes newlines in JS, so no character class is needed.
+ */
+const SPEC_CONTEXT_BYTES_PATTERN =
+  /\[spec\].*?memory usage of .*?context is\s+([\d.]+)\s*(MiB|GiB|KiB|B)/i;
+
+/**
+ * Bytes llama-server reserved for a speculative-decoding context, from its own report.
+ *
+ * MTP needs no second weights file, but its context is not free, and this line is the
+ * only place the real figure exists — nothing in the GGUF header predicts it. Null when
+ * the line has not been printed (no spec decoding, or the load has not reached it).
+ *
+ * @param {string | null | undefined} text
+ * @returns {number | null}
+ */
+export function parseSpecContextBytes(text) {
+  if (!text) return null;
+  const match = SPEC_CONTEXT_BYTES_PATTERN.exec(String(text));
+  if (!match) return null;
+  const value = Number.parseFloat(match[1]);
+  if (!Number.isFinite(value) || value < 0) return null;
+  const unit = match[2].toLowerCase();
+  const scale = unit === 'gib' ? 1024 ** 3 : unit === 'mib' ? 1024 ** 2 : unit === 'kib' ? 1024 : 1;
+  return Math.round(value * scale);
+}
+
 /** Ceiling until `/health` answers. 100 is only ever claimed on a real probe. */
 export const MAX_PERCENT_BEFORE_HEALTHY = 99;
 

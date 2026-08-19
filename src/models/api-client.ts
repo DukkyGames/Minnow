@@ -4,8 +4,9 @@
 
 import { withSessionToken } from '../api/session-token.ts';
 import type { GgufGeometryFacts } from './serve-memory-estimate.ts';
+import type { SpecDecodeType } from './spec-decode.d.mts';
 
-export type { GgufGeometryFacts };
+export type { GgufGeometryFacts, SpecDecodeType };
 
 /** GGUF fetches one file; MLX fetches a whole repo snapshot into a directory. */
 export type ModelDownloadFormat = 'gguf' | 'mlx';
@@ -87,6 +88,49 @@ export interface LlamaServeSettings {
   batch_size?: number;
   ubatch_size?: number;
   parallel?: number;
+  /** `-t`; manual override of the partial-offload thread heuristic. */
+  threads?: number;
+  /** `--kv-unified` / `--no-kv-unified`. */
+  kv_unified?: boolean;
+  /** `--no-kv-offload` when explicitly `false`. KV on GPU is the default. */
+  kv_offload?: boolean;
+  /** `-ctxcp`; max context checkpoints per slot. */
+  ctx_checkpoints?: number;
+  /** `--reasoning-budget-message`. */
+  reasoning_budget_message?: string;
+  /** `--rope-freq-base`. */
+  rope_freq_base?: number;
+  /** `--rope-freq-scale`. */
+  rope_freq_scale?: number;
+  /** `-s`; `-1` is llama.cpp's explicit "random". */
+  seed?: number;
+  /** Manual override of the per-variant `plan.flash_attn`. */
+  flash_attn?: 'on' | 'off' | 'auto';
+  /** `--cache-type-k`; overrides `cache_type` for K when set. */
+  cache_type_k?: string;
+  /** `--cache-type-v`; overrides `cache_type` for V when set. */
+  cache_type_v?: string;
+  /** `--context-shift` / `--no-context-shift`. */
+  context_shift?: boolean;
+  /** `--swa-full`; invalidates the sliding-window saving in the memory estimate. */
+  swa_full?: boolean;
+  /** Minnow-side idle eviction for this model. Not a llama-server flag. */
+  idle_ttl_ms?: number;
+  /**
+   * `--spec-type`. `draft-mtp` needs no draft model (the heads ship inside the GGUF);
+   * `draft-simple` / `draft-eagle3` cannot start without `spec_draft_model`.
+   */
+  spec_type?: SpecDecodeType;
+  /** `--spec-draft-model`: path to the draft GGUF. */
+  spec_draft_model?: string;
+  /** `--spec-draft-ngl`: draft model layers on the GPU. */
+  spec_draft_ngl?: number;
+  /** `--spec-draft-n-max`: max tokens drafted per step. */
+  spec_draft_n_max?: number;
+  /** `--spec-draft-n-min`: min tokens drafted per step. */
+  spec_draft_n_min?: number;
+  /** `--spec-draft-p-min`: minimum draft probability. */
+  spec_draft_p_min?: number;
   split_mode?: string;
   tensor_split?: string;
   main_gpu?: number;
@@ -171,6 +215,12 @@ export interface LlamaRuntimeStatus {
   gpuCapable: boolean;
   preferredVariant: string;
   installableVariants: string[];
+  /**
+   * Rolling bytes-per-ms for this variant from `~/.minnow/llama-cpp.json`, or null
+   * before any load has been recorded. The load bar's fallback ETA for a model that
+   * has never been loaded on this machine.
+   */
+  loadRateBytesPerMs?: number | null;
 }
 
 export interface LlamaInstallJob {
@@ -517,6 +567,60 @@ export function subscribeServeEvents(
       if (data && Array.isArray(data.serves)) {
         onEvent({ serves: data.serves, reason: data.reason ?? 'update' });
       }
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  return () => source.close();
+}
+
+/**
+ * One llama.cpp slot's live state, normalised server-side from `/slots`.
+ *
+ * There is no prefill percentage here on purpose: during prompt processing llama.cpp's
+ * `/slots` reports the running count in both `n_prompt_tokens` and
+ * `n_prompt_tokens_processed`, so no total exists to divide by. A real percentage is
+ * available only in the chat stream (`prompt_progress`).
+ */
+export interface ServeActivitySlot {
+  id: number;
+  taskId: number | null;
+  state: 'idle' | 'prompt' | 'generating';
+  /** Prompt tokens fed so far. A count, not a fraction. */
+  promptProcessed: number;
+  /** Prefix reused from the prompt cache. */
+  promptCached: number;
+  /** Tokens generated for the current task. */
+  decoded: number;
+  /** Tokens still allowed for the current task. */
+  remaining: number | null;
+  /** Derived from consecutive samples; null until there are two. */
+  tokensPerSecond: number | null;
+}
+
+export interface ServeActivity {
+  serveId: string;
+  /** Identity for surfaces that never hold a serve list (the header picker). */
+  modelLabel: string;
+  /** Library row id, when the serve was started from one. */
+  libraryId: string | null;
+  updatedAt: number;
+  /** `/slots` answered at least once. */
+  available: boolean;
+  /** The last sample is too old to trust — a saturated server stops answering. */
+  stale: boolean;
+  slots: ServeActivitySlot[];
+}
+
+/** Live `/slots` telemetry for every running llama.cpp serve. */
+export function subscribeServeActivity(
+  onEvent: (activity: ServeActivity) => void,
+): () => void {
+  const source = new EventSource(withSessionToken('/api/models/serve/activity/stream'));
+  source.onmessage = (msg) => {
+    try {
+      const data = JSON.parse(msg.data) as ServeActivity;
+      if (data && typeof data.serveId === 'string') onEvent(data);
     } catch {
       /* ignore malformed */
     }

@@ -26,6 +26,11 @@ import {
   shouldKeepModelMenuOpenAfterSelect,
 } from './model-select-picker';
 import {
+  activitySuffixForModelId,
+  subscribeServeActivityFeed,
+  syncModelActivityIndicators,
+} from '../models/serve-activity-feed';
+import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
@@ -78,6 +83,8 @@ interface ComposerModelTrigger {
 }
 
 const triggers: ComposerModelTrigger[] = [];
+/** App-wide live-activity subscription; opened once by initComposerModelTriggers. */
+let activityFeedUnsub: (() => void) | null = null;
 let openTrigger: ComposerModelTrigger | null = null;
 let chromePopoverRegistered = false;
 let globalsBound = false;
@@ -232,6 +239,27 @@ function syncMenubarLoadDot(trigger: ComposerModelTrigger, selectValue: string):
         : 'unknown';
   }
   trigger.dotEl.dataset.loadState = state;
+  // Separate from loadState: a loaded model that is *working* animates, a loaded idle
+  // one does not. Glanceable without opening the menu.
+  const busy = state === 'loaded' && Boolean(activitySuffixForModelId(canonicalActivityId(selectValue)));
+  if (busy) trigger.dotEl.dataset.busy = 'true';
+  else delete trigger.dotEl.dataset.busy;
+}
+
+/** Canonical model id an activity sample would be keyed by, for a picker select value. */
+function canonicalActivityId(selectValue: string): string {
+  if (!selectValue) return '';
+  const decoded = decodeModelSelectKey(selectValue);
+  return decoded?.modelId?.trim() || selectValue.trim();
+}
+
+/**
+ * Repaint only what telemetry changes — the trigger dots and the open menu's activity
+ * suffixes. Deliberately not `syncComposerModelTriggers`, which rebuilds the menu.
+ */
+function syncActivityOnly(): void {
+  for (const trigger of triggers) syncMenubarLoadDot(trigger, resolveTriggerSelectValue(trigger));
+  syncModelActivityIndicators();
 }
 
 /** Sync logo + label on one composer model trigger. */
@@ -878,4 +906,18 @@ export function initComposerModelTriggers(): void {
   }
 
   mountChatAppComposerModelTrigger();
+
+  // App-wide, not a Models-page side effect: the header is on screen everywhere. The
+  // feed opens its stream on this first subscriber and closes it on teardown.
+  if (!activityFeedUnsub) {
+    activityFeedUnsub = subscribeServeActivityFeed(() => {
+      syncActivityOnly();
+    });
+  }
+}
+
+/** Close the app-wide activity stream (called on quit). */
+export function teardownComposerModelTriggers(): void {
+  activityFeedUnsub?.();
+  activityFeedUnsub = null;
 }

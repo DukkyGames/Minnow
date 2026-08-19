@@ -15,6 +15,7 @@ import {
   getLibrarySamplerForId,
   saveLibraryInferenceSampler,
 } from '../../config/library-inference-meta';
+import { getLibraryLaunchSettingsForId } from '../../config/library-launch-meta';
 import {
   cancelModelDownload,
   fetchCachedModels,
@@ -22,11 +23,13 @@ import {
   fetchRuntimes,
   listModelServes,
   startModelDownload,
+  fetchLlamaRuntime,
   startModelServe,
   stopModelServe,
   subscribeDownloadProgress,
   subscribeServeEvents,
   subscribeServeLog,
+  type ServeActivity,
   type DownloadJob,
   type LlamaServeSettings,
   type ModelDownloadFormat,
@@ -34,18 +37,30 @@ import {
   type ServeRecord,
 } from '../../models/api-client';
 import { fetchHardware } from '../../models/hardware-client';
+import { subscribeServeActivityFeed } from '../../models/serve-activity-feed';
 import { activeServeFor, buildLibrary, type LibraryModel } from '../../models/library';
 import { isLiveServeStatus, isRetryableServeStatus, settingsForServeRetry } from '../../models/serve-status';
-import { describeLoadPhase, parseLoadProgress } from '../../models/serve-log';
+import { parseLoadProgress } from '../../models/serve-log';
+import { computeLoadProgress, resolveBytesPerMs } from '../../models/load-progress.mjs';
 import type { HardwareSnapshot } from '../../models/types';
 
 /** Live loading state for a serve that started asynchronously. */
 export interface LoadProgress {
   serveId: string;
   modelId: string | null;
-  /** Percent when llama.cpp reported one, otherwise null (indeterminate). */
+  /**
+   * 0–100, monotonic. Null only for the sub-second window before the first tick,
+   * when there is genuinely nothing to draw. llama.cpp prints no percentage of its
+   * own, so this is modelled — see `src/models/load-progress.mjs`.
+   */
   percent: number | null;
   phase: string;
+  /** Stable phase id (`weights`, `context`, …) for anything that must not match on prose. */
+  phaseKey: string;
+  /** Predicted milliseconds remaining, or null when no rate prior applies. */
+  etaMs: number | null;
+  /** Weights being loaded, when known — the denominator of the time model. */
+  bytesTotal: number | null;
   startedAt: number;
   error: string | null;
 }
@@ -53,6 +68,11 @@ export interface LoadProgress {
 export interface ModelsState {
   library: LibraryModel[];
   serves: ServeRecord[];
+  /**
+   * Live `/slots` telemetry by serve id. Reflects every client hitting the runtime,
+   * not just Minnow's own chat — that is the whole point of polling it server-side.
+   */
+  activity: Map<string, ServeActivity>;
   downloads: DownloadJob[];
   runtimes: RuntimeDetection | null;
   hardware: HardwareSnapshot | null;
@@ -65,6 +85,7 @@ export interface ModelsState {
 const state: ModelsState = {
   library: [],
   serves: [],
+  activity: new Map(),
   downloads: [],
   runtimes: null,
   hardware: null,
@@ -77,11 +98,35 @@ const state: ModelsState = {
 type Listener = (snapshot: ModelsState) => void;
 const listeners = new Set<Listener>();
 const logUnsubs = new Map<string, () => void>();
+/** Latest log text per tracked load — the ticker re-reads it without a new SSE event. */
+const loadLogText = new Map<string, string>();
+/** Redraw cadence for in-flight loads. */
+const LOAD_TICK_MS = 250;
+/** @type {number | null} handle for the in-flight-load ticker. */
+let loadTicker: number | null = null;
+/**
+ * Rolling bytes-per-ms for the installed llama.cpp variant, from the runtime status.
+ * Fetched once; it only changes after a load completes, and a stale value costs an ETA
+ * that is slightly off, not a wrong bar.
+ */
+let variantLoadRate = 0;
+let variantLoadRateFetched = false;
 const downloadUnsubs = new Map<string, () => void>();
 let refreshInFlight: Promise<void> | null = null;
 /** Batches high-frequency download byte updates to one store notification per frame. */
 let emitRaf: number | null = null;
 let serveEventsUnsub: (() => void) | null = null;
+let serveActivityUnsub: (() => void) | null = null;
+/** RAF handle coalescing a burst of activity samples into one repaint. */
+let activityEmitRaf: number | null = null;
+
+function scheduleActivityEmit(): void {
+  if (activityEmitRaf != null) return;
+  activityEmitRaf = requestAnimationFrame(() => {
+    activityEmitRaf = null;
+    emit();
+  });
+}
 let serveReconcileTimer: number | null = null;
 /** Fallback when SSE drops — keep this slow; live updates come from commitServes. */
 const SERVE_RECONCILE_MS = 15_000;
@@ -238,6 +283,7 @@ export async function refreshHardware(): Promise<void> {
 function stopTracking(serveId: string): void {
   logUnsubs.get(serveId)?.();
   logUnsubs.delete(serveId);
+  loadLogText.delete(serveId);
 }
 
 function updateLoad(serveId: string, patch: Partial<LoadProgress>): void {
@@ -268,6 +314,14 @@ function ensureServeListWatch(): void {
   if (!serveEventsUnsub) {
     serveEventsUnsub = subscribeServeEvents((payload) => {
       applyServes(payload.serves);
+    });
+  }
+  if (!serveActivityUnsub) {
+    serveActivityUnsub = subscribeServeActivityFeed((activity) => {
+      state.activity.set(activity.serveId, activity);
+      // A busy slot ticks every ~400 ms per serve. Coalesce into one frame so
+      // telemetry cannot thrash the whole models page.
+      scheduleActivityEmit();
     });
   }
   if (serveReconcileTimer == null) {
@@ -324,7 +378,10 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
       modelId,
       percent: null,
       phase: 'Starting runtime',
-      startedAt: Date.now(),
+      phaseKey: 'spawning',
+      etaMs: null,
+      bytesTotal: weightsBytesForLoad(serve, modelId),
+      startedAt: serve.startedAt || Date.now(),
       error: null,
     });
   }
@@ -333,17 +390,94 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
     logUnsubs.set(
       serve.id,
       subscribeServeLog(serve.id, (event) => {
-        const percent = parseLoadProgress(event.text);
-        updateLoad(serve.id, {
-          phase: describeLoadPhase(event.text),
-          ...(percent != null ? { percent } : {}),
-        });
+        loadLogText.set(serve.id, event.text);
+        recomputeLoad(serve.id);
       }),
     );
   }
 
+  ensureLoadTicker();
   ensureServeListWatch();
   emit();
+}
+
+/**
+ * Recompute one load's bar from its log tail and the elapsed clock.
+ * Cheap and idempotent — the ticker and the log stream both call it.
+ */
+function recomputeLoad(serveId: string): void {
+  const entry = state.loads.find((l) => l.serveId === serveId);
+  if (!entry || entry.error) return;
+  const logText = loadLogText.get(serveId) ?? '';
+  const next = computeLoadProgress({
+    logText,
+    elapsedMs: Date.now() - entry.startedAt,
+    weightsBytes: entry.bytesTotal ?? 0,
+    bytesPerMs: bytesPerMsForLoad(entry.modelId),
+    previousPercent: entry.percent,
+    reportedPercent: parseLoadProgress(logText),
+  });
+  updateLoad(serveId, {
+    percent: next.percent,
+    phase: next.label,
+    phaseKey: next.phaseKey,
+    etaMs: next.etaMs,
+  });
+}
+
+/**
+ * Weights size for the time model. The library row is authoritative; a serve resumed
+ * after a restart has no model id, and then the bar steps between phases with no ETA
+ * rather than inventing a denominator.
+ */
+function weightsBytesForLoad(serve: ServeRecord, modelId: string | null): number | null {
+  const byId = modelId ? state.library.find((m) => m.id === modelId) : undefined;
+  const byPath = byId ?? state.library.find((m) => m.path && m.path === serve.modelPath);
+  return byPath && byPath.sizeBytes > 0 ? byPath.sizeBytes : null;
+}
+
+/**
+ * Fetch the installed runtime's rolling load rate once. Failure is silent: the bar
+ * falls back to stepping between phase floors, which is the pre-prior behaviour.
+ */
+function ensureVariantLoadRate(): void {
+  if (variantLoadRate > 0 || variantLoadRateFetched) return;
+  variantLoadRateFetched = true;
+  void fetchLlamaRuntime()
+    .then((status) => {
+      variantLoadRate = Number(status.loadRateBytesPerMs) || 0;
+    })
+    .catch(() => {
+      /* no prior; phase floors still move the bar */
+    });
+}
+
+/** Per-model prior first, then the rolling per-variant rate from the installed runtime. */
+function bytesPerMsForLoad(modelId: string | null): number {
+  const saved = modelId ? getLibraryLaunchSettingsForId(modelId) : null;
+  return resolveBytesPerMs({
+    lastLoadMs: saved?.lastLoadMs,
+    lastWeightsBytes: saved?.lastWeightsBytes,
+    variantBytesPerMs: variantLoadRate,
+  });
+}
+
+/**
+ * ~250 ms redraw while any load is in flight. The server panel otherwise only
+ * re-renders on its 5 s elapsed clock, which is far too coarse for a bar.
+ */
+function ensureLoadTicker(): void {
+  ensureVariantLoadRate();
+  if (loadTicker != null) return;
+  loadTicker = window.setInterval(() => {
+    const live = state.loads.filter((l) => !l.error);
+    if (!live.length) {
+      window.clearInterval(loadTicker as number);
+      loadTicker = null;
+      return;
+    }
+    for (const entry of live) recomputeLoad(entry.serveId);
+  }, LOAD_TICK_MS);
 }
 
 /** Remove a failed load row and stop the underlying serve session. */
@@ -575,10 +709,21 @@ export async function cancelDownload(jobId: string): Promise<void> {
 /** Tear down every poller and stream (called when the app closes). */
 export function teardownModelsStore(): void {
   for (const serveId of [...logUnsubs.keys()]) stopTracking(serveId);
+  if (loadTicker != null) {
+    window.clearInterval(loadTicker);
+    loadTicker = null;
+  }
   for (const unsub of downloadUnsubs.values()) unsub();
   downloadUnsubs.clear();
   serveEventsUnsub?.();
   serveEventsUnsub = null;
+  serveActivityUnsub?.();
+  serveActivityUnsub = null;
+  if (activityEmitRaf != null) {
+    cancelAnimationFrame(activityEmitRaf);
+    activityEmitRaf = null;
+  }
+  state.activity.clear();
   if (serveReconcileTimer != null) {
     window.clearInterval(serveReconcileTimer);
     serveReconcileTimer = null;

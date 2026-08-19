@@ -13,6 +13,12 @@
 
 /** @typedef {import('./model-geometry.d.mts').ModelGeometry} ModelGeometry */
 
+/**
+ * A KV cache quantization: one value for both caches, or a `--cache-type-k` /
+ * `--cache-type-v` pair when the user set them independently.
+ * @typedef {string | { k?: string, v?: string }} KvCacheType
+ */
+
 export const GIB = 1024 ** 3;
 
 /**
@@ -119,6 +125,21 @@ export function kvElementBytes(cacheType) {
 }
 
 /**
+ * K and V element sizes. llama.cpp quantizes the two caches independently
+ * (`--cache-type-k` / `--cache-type-v`), so a q8_0/f16 pair is not the same size as
+ * either type doubled. A plain string means both sides share it.
+ * @param {KvCacheType | null | undefined} cacheType
+ * @returns {{ k: number, v: number }}
+ */
+export function kvElementBytesPair(cacheType) {
+  if (cacheType && typeof cacheType === 'object') {
+    return { k: kvElementBytes(cacheType.k), v: kvElementBytes(cacheType.v) };
+  }
+  const both = kvElementBytes(cacheType);
+  return { k: both, v: both };
+}
+
+/**
  * Full-attention layers in a model — the ones whose cache grows with context. Sliding-window
  * layers never exceed their window no matter how long the context gets.
  *
@@ -138,27 +159,33 @@ export function fullAttentionLayers(geometry) {
 /**
  * KV cache bytes for a context length.
  *
- * `2 *` covers the separate K and V caches. Sliding-window layers are charged for their
- * window plus one micro-batch of headroom, which is what llama.cpp allocates for them, and
- * use their own head size when the architecture narrows them.
+ * K and V are summed separately because llama.cpp lets them carry different quantizations.
+ * Sliding-window layers are charged for their window plus one micro-batch of headroom,
+ * which is what llama.cpp allocates for them, and use their own head size when the
+ * architecture narrows them.
  * @param {ModelGeometry} geometry
  * @param {number} ctx
- * @param {string} [cacheType]
- * @param {{ ubatch?: number, parallel?: number }} [opts]
+ * @param {KvCacheType} [cacheType]
+ * @param {{ ubatch?: number, parallel?: number, swaFull?: boolean }} [opts]
  */
 export function kvCacheBytes(geometry, ctx, cacheType = 'f16', opts = {}) {
   const tokens = Math.max(0, ctx);
   if (!tokens) return 0;
   const ubatch = opts.ubatch ?? DEFAULT_UBATCH;
-  const bytesPerElement = kvElementBytes(cacheType);
+  const { k: kBytes, v: vBytes } = kvElementBytesPair(cacheType);
+  const kvBytes = kBytes + vBytes;
 
   const fullLayers = fullAttentionLayers(geometry);
   const windowedLayers = geometry.nLayers - fullLayers;
-  const windowTokens = Math.min(tokens, (geometry.swaWindow || 0) + ubatch);
+  // `--swa-full` opts out of the windowed allocation: every layer carries the
+  // whole context, which is exactly the saving this term normally banks.
+  const windowTokens = opts.swaFull
+    ? tokens
+    : Math.min(tokens, (geometry.swaWindow || 0) + ubatch);
   const swaHeadDim = geometry.swaHeadDim || geometry.headDim;
 
-  const fullBytes = 2 * geometry.nKvHeads * geometry.headDim * bytesPerElement;
-  const windowBytes = 2 * geometry.nKvHeads * swaHeadDim * bytesPerElement;
+  const fullBytes = kvBytes * geometry.nKvHeads * geometry.headDim;
+  const windowBytes = kvBytes * geometry.nKvHeads * swaHeadDim;
 
   return fullBytes * fullLayers * tokens + windowBytes * windowedLayers * windowTokens;
 }
@@ -168,11 +195,11 @@ export function kvCacheBytes(geometry, ctx, cacheType = 'f16', opts = {}) {
  * the context?" answerable without re-running the whole estimate. Windowed layers contribute
  * nothing here; their cost is a fixed floor, not a slope.
  * @param {ModelGeometry} geometry
- * @param {string} [cacheType]
+ * @param {KvCacheType} [cacheType]
  */
 export function kvBytesPerToken(geometry, cacheType = 'f16') {
-  const bytesPerElement = kvElementBytes(cacheType);
-  return 2 * fullAttentionLayers(geometry) * geometry.nKvHeads * geometry.headDim * bytesPerElement;
+  const { k, v } = kvElementBytesPair(cacheType);
+  return (k + v) * fullAttentionLayers(geometry) * geometry.nKvHeads * geometry.headDim;
 }
 
 /**
@@ -218,11 +245,14 @@ export function weightsBytesFor(paramsB, quant) {
  * @property {ModelGeometry} geometry
  * @property {number} weightsBytes Exact file size when the weights are on disk.
  * @property {number} ctx
- * @property {string} [cacheType] `--cache-type-k/v`; defaults to f16.
+ * @property {KvCacheType} [cacheType] `--cache-type-k/v`; a single value or a `{k, v}` pair
+ *   when they were set independently. Defaults to f16.
  * @property {number} [nGpuLayers] llama.cpp `-ngl`. Undefined or >= nLayers means all.
  * @property {string} [backend] cuda | rocm | vulkan | metal | cpu.
  * @property {number} [deviceCount]
  * @property {number} [ubatch]
+ * @property {boolean} [swaFull] `--swa-full`: sliding-window layers hold the full context.
+ * @property {number} [draftWeightsBytes] Speculative draft model file size, when one is set.
  */
 
 /**
@@ -289,18 +319,24 @@ export function estimateRunMemory(input) {
   const offloadOutput = requested > geometry.nLayers;
   const onGpu = gpuLayers > 0;
 
-  const kvTotal = kvCacheBytes(geometry, ctx, input.cacheType, { ubatch });
+  const kvTotal = kvCacheBytes(geometry, ctx, input.cacheType, {
+    ubatch,
+    swaFull: input.swaFull === true,
+  });
   // KV lives wherever its layer lives — the old model charged every byte of it to VRAM even
   // at `-ngl 1`, which made partial offload look far more expensive than it is.
   const kvVram = geometry.nLayers > 0 ? kvTotal * (gpuLayers / geometry.nLayers) : 0;
   const kvRam = kvTotal - kvVram;
 
-  const { weightsVram, weightsRam } = splitWeights(
-    geometry,
-    weightsBytes,
-    gpuLayers,
-    offloadOutput,
-  );
+  const split = splitWeights(geometry, weightsBytes, gpuLayers, offloadOutput);
+  // A speculative draft model is a second, whole set of weights. It has its own
+  // geometry we do not parse, so it is charged as one block to wherever the main
+  // model's layers live rather than split layer-by-layer. MTP adds nothing here —
+  // its heads ship inside the main GGUF (its runtime context is a separate, small
+  // term llama-server reports itself once loaded).
+  const draftWeights = Math.max(0, input.draftWeightsBytes || 0);
+  const weightsVram = split.weightsVram + (onGpu ? draftWeights : 0);
+  const weightsRam = split.weightsRam + (onGpu ? 0 : draftWeights);
 
   const compute = computeBufferBytes(geometry, { ubatch });
   const backendOverhead = backendOverheadBytes(
@@ -348,7 +384,7 @@ export function estimateRunMemory(input) {
  * default would silently drop those rungs out of every fit() display string.
  * @param {ModelGeometry} geometry
  * @param {number} budgetBytes bytes left after weights, compute, and overhead
- * @param {string} [cacheType]
+ * @param {KvCacheType} [cacheType]
  * @param {{ ubatch?: number, minCtx?: number, maxCtx?: number, snap?: 'power2' | 'none' }} [opts]
  * @returns {number} 0 when even the minimum does not fit
  */

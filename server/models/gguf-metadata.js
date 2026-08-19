@@ -370,6 +370,9 @@ function resolveHybridAttention(arch, nLayers, kv, swa, tensors) {
     swaPeriod,
     fullLayers,
     fullAttentionInterval: interval > 1 ? interval : 0,
+    // Multi-token-prediction heads shipped inside the main GGUF. Non-zero is what
+    // makes `--spec-type draft-mtp` startable without a separate draft model.
+    nextnPredictLayers: nextn > 0 ? nextn : 0,
   };
 }
 
@@ -505,6 +508,7 @@ export async function parseGgufHeader(filePath) {
       swaPeriod: hybrid.swaPeriod,
       nFullAttentionLayers: hybrid.fullLayers,
       fullAttentionInterval: hybrid.fullAttentionInterval,
+      nextnPredictLayers: hybrid.nextnPredictLayers,
       swaHeadDim: swaKeyLength,
       trainCtx: asNumber(kv[`${arch}.context_length`]),
       layerBytes: tensors.layerBytes,

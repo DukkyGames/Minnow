@@ -567,5 +567,9 @@ export function geometryFromGgufMetadata(meta) {
     source: 'gguf',
     layerBytes: Number(meta.layerBytes) > 0 ? Number(meta.layerBytes) : undefined,
     fixedBytes: Number(meta.fixedBytes) > 0 ? Number(meta.fixedBytes) : undefined,
+    // Only the header can tell us this, so it is undefined for family-derived geometry —
+    // which is why the MTP option is offered only for models we actually parsed.
+    nextnPredictLayers:
+      Number(meta.nextnPredictLayers) > 0 ? Number(meta.nextnPredictLayers) : undefined,
   };
 }

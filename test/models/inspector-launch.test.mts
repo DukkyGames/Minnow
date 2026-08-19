@@ -17,6 +17,7 @@ import {
   contextSliderMax,
   CONTEXT_SLIDER_STEP,
   ensureManualDraft,
+  launchValidationError,
   settingsForDraft,
   snapCtxPerSlot,
   type DisplayedLaunch,
@@ -134,6 +135,47 @@ describe('inspector-launch draft helpers', () => {
       cache_type: 'q8_0',
       parallel: 2,
     });
+  });
+
+  it('blocks a draft-model spec mode with no draft model, and nothing else', () => {
+    assert.equal(launchValidationError(undefined), null);
+    assert.equal(launchValidationError({ spec_type: 'none' }), null);
+    // MTP and the ngram families need no second model.
+    assert.equal(launchValidationError({ spec_type: 'draft-mtp' }, true), null);
+    assert.equal(launchValidationError({ spec_type: 'ngram-simple' }), null);
+
+    const missing = launchValidationError({ spec_type: 'draft-simple' });
+    assert.match(String(missing), /second, smaller model/);
+    assert.equal(
+      launchValidationError({ spec_type: 'draft-simple', spec_draft_model: '/tmp/d.gguf' }),
+      null,
+    );
+    // Whitespace is not a path.
+    assert.ok(launchValidationError({ spec_type: 'draft-eagle3', spec_draft_model: '   ' }));
+  });
+
+  it('blocks draft-mtp only once the header says the heads are absent', () => {
+    // null = header still loading. Guessing here would lock a user out of a working mode.
+    assert.equal(launchValidationError({ spec_type: 'draft-mtp' }, null), null);
+    assert.equal(launchValidationError({ spec_type: 'draft-mtp' }, true), null);
+    assert.match(
+      String(launchValidationError({ spec_type: 'draft-mtp' }, false)),
+      /no multi-token-prediction heads/,
+    );
+  });
+
+  it('carries speculative settings through an auto draft without leaving auto', () => {
+    const payload = settingsForDraft({
+      spec_type: 'draft-mtp',
+      spec_draft_n_max: 5,
+      spec_draft_p_min: 0.4,
+    });
+    assert.equal(payload.fit_mode, undefined);
+    assert.equal(payload.spec_type, 'draft-mtp');
+    assert.equal(payload.spec_draft_n_max, 5);
+    assert.equal(payload.spec_draft_p_min, 0.4);
+    // `none` is the absence of the flag, not a value to send.
+    assert.equal(settingsForDraft({ spec_type: 'none' }).spec_type, undefined);
   });
 
   it('snapCtxPerSlot and contextSliderMax never exceed trainCtx', () => {

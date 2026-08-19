@@ -57,6 +57,20 @@ export interface LlamaLaunchPlan {
   /** `null` on GPU auto (leave `-ngl` unset). `0` on CPU. Never `999`. */
   n_gpu_layers: number | null;
   cache_type: 'f16' | 'q8_0' | 'q4_0';
+  /** Resolved `--cache-type-k`, stamped on by buildLlamaServerLaunch. */
+  cache_type_k?: string;
+  /** Resolved `--cache-type-v`. */
+  cache_type_v?: string;
+  /** `--swa-full` was requested; sizing drops the sliding-window saving. */
+  swa_full?: boolean;
+  /** `--spec-type` the launch asked for, when not `none`. */
+  spec_type?: string;
+  /** `--spec-draft-model` path, when one was set. */
+  spec_draft_model?: string;
+  /** Draft model size on disk; a second set of weights on the same device budget. */
+  draftWeightsBytes?: number;
+  /** llama-server's own post-load figure for the speculative context, when it printed one. */
+  specContextBytes?: number;
   flash_attn: 'on' | 'auto';
   fits: boolean;
   /** `estimateRunMemory(...).totalGb` at the planned ctx / cache / offload. */

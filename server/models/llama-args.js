@@ -14,6 +14,7 @@ import { getMinnowHome } from '../config/home.js';
 import { estimateRunMemory, GIB } from '../../src/models/memory-model.mjs';
 import { geometryFromGgufMetadata, resolveGeometry } from '../../src/models/model-geometry.mjs';
 import { normalizeExtraArgs } from '../../src/models/argv-tokenize.mjs';
+import { SPEC_TYPES } from '../../src/models/spec-decode.mjs';
 import {
   CONTEXT_LADDER,
   flashAttnForVariant,
@@ -36,6 +37,7 @@ const LEGACY_OFFLOAD_ALL = 999;
 /** Manual launches this far over the planner budget get a serve-log warning (Phase 3 greps `fit planner`). */
 const FIT_PLANNER_OVERBUDGET_RATIO = 1.25;
 
+
 /**
  * @typedef {object} LlamaServeSettings
  * @property {number} [ctx]
@@ -45,6 +47,27 @@ const FIT_PLANNER_OVERBUDGET_RATIO = 1.25;
  * @property {number} [batch_size]
  * @property {number} [ubatch_size]
  * @property {number} [parallel]
+ * @property {number} [threads] `-t`; manual override of the partial-offload heuristic.
+ * @property {boolean} [kv_unified] `--kv-unified` / `--no-kv-unified`.
+ * @property {boolean} [kv_offload] `--no-kv-offload` when explicitly false. Default on.
+ * @property {number} [ctx_checkpoints] `-ctxcp`; max context checkpoints per slot.
+ * @property {string} [reasoning_budget_message] `--reasoning-budget-message`.
+ * @property {number} [rope_freq_base] `--rope-freq-base`.
+ * @property {number} [rope_freq_scale] `--rope-freq-scale`.
+ * @property {number} [seed] `-s`.
+ * @property {'on' | 'off' | 'auto'} [flash_attn] Manual override of `plan.flash_attn`.
+ * @property {string} [cache_type_k] `--cache-type-k`; overrides `cache_type` for K when set.
+ * @property {string} [cache_type_v] `--cache-type-v`; overrides `cache_type` for V when set.
+ * @property {boolean} [context_shift] `--context-shift` / `--no-context-shift`.
+ * @property {boolean} [swa_full] `--swa-full`.
+ * @property {number} [idle_ttl_ms] Minnow-side idle eviction; not a llama-server flag.
+ * @property {string} [spec_type] `--spec-type`. `draft-mtp` needs no draft model; the
+ *   `draft-*` modes other than MTP require `spec_draft_model`.
+ * @property {string} [spec_draft_model] `--spec-draft-model` (`-md`).
+ * @property {number} [spec_draft_ngl] `--spec-draft-ngl`.
+ * @property {number} [spec_draft_n_max] `--spec-draft-n-max`.
+ * @property {number} [spec_draft_n_min] `--spec-draft-n-min`.
+ * @property {number} [spec_draft_p_min] `--spec-draft-p-min`.
  * @property {string} [split_mode]
  * @property {string} [tensor_split]
  * @property {number} [main_gpu]
@@ -188,6 +211,34 @@ function effectiveLlamaSettings(merged) {
   }
   if (merged.no_mmap === true) out.no_mmap = true;
   if (merged.mlock === true) out.mlock = true;
+  if (merged.batch_size != null) out.batch_size = merged.batch_size;
+  if (merged.ubatch_size != null) out.ubatch_size = merged.ubatch_size;
+  if (merged.n_cpu_moe != null) out.n_cpu_moe = merged.n_cpu_moe;
+  if (merged.threads != null) out.threads = merged.threads;
+  if (typeof merged.kv_unified === 'boolean') out.kv_unified = merged.kv_unified;
+  if (merged.kv_offload === false) out.kv_offload = false;
+  if (merged.ctx_checkpoints != null) out.ctx_checkpoints = merged.ctx_checkpoints;
+  if (merged.context_shift != null) out.context_shift = merged.context_shift;
+  if (merged.swa_full === true) out.swa_full = true;
+  if (merged.rope_freq_base != null) out.rope_freq_base = merged.rope_freq_base;
+  if (merged.rope_freq_scale != null) out.rope_freq_scale = merged.rope_freq_scale;
+  if (merged.seed != null) out.seed = merged.seed;
+  if (merged.flash_attn) out.flash_attn = merged.flash_attn;
+  if (merged.cache_type_k) out.cache_type_k = merged.cache_type_k;
+  if (merged.cache_type_v) out.cache_type_v = merged.cache_type_v;
+  // Not a spawn flag — the heartbeat's idle sweep reads it back off the serve row.
+  if (merged.idle_ttl_ms != null) out.idle_ttl_ms = merged.idle_ttl_ms;
+  if (SPEC_TYPES.has(String(merged.spec_type)) && merged.spec_type !== 'none') {
+    out.spec_type = merged.spec_type;
+    if (merged.spec_draft_model) out.spec_draft_model = merged.spec_draft_model;
+    if (merged.spec_draft_ngl != null) out.spec_draft_ngl = merged.spec_draft_ngl;
+    if (merged.spec_draft_n_max != null) out.spec_draft_n_max = merged.spec_draft_n_max;
+    if (merged.spec_draft_n_min != null) out.spec_draft_n_min = merged.spec_draft_n_min;
+    if (merged.spec_draft_p_min != null) out.spec_draft_p_min = merged.spec_draft_p_min;
+  }
+  if (typeof merged.reasoning_budget_message === 'string' && merged.reasoning_budget_message.trim()) {
+    out.reasoning_budget_message = merged.reasoning_budget_message.trim();
+  }
   if (typeof merged.chat_template === 'string' && merged.chat_template.trim()) {
     out.chat_template = merged.chat_template.trim();
   }
@@ -195,6 +246,46 @@ function effectiveLlamaSettings(merged) {
     out.chat_template_file = merged.chat_template_file.trim();
   }
   return out;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number | undefined}
+ */
+function finiteInt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : undefined;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number | undefined}
+ */
+function positiveInt(value) {
+  const n = finiteInt(value);
+  return n != null && n > 0 ? n : undefined;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number | undefined}
+ */
+function positiveNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * Manual per-side KV type wins; otherwise the planner's single `cache_type`.
+ * Falls back to llama.cpp's own default so the caller can compare against 'f16'.
+ * @param {unknown} manual
+ * @param {unknown} planned
+ * @returns {string}
+ */
+function resolveCacheType(manual, planned) {
+  if (typeof manual === 'string' && manual.trim()) return manual.trim();
+  if (typeof planned === 'string' && planned.trim()) return planned.trim();
+  return 'f16';
 }
 
 /**
@@ -299,7 +390,14 @@ function manualOverBudgetWarning(opts, variant, merged, plan) {
     geometry,
     weightsBytes,
     ctx: Number(merged.ctx) > 0 ? Number(merged.ctx) : plan.ctx,
-    cacheType: merged.cache_type || plan.cache_type,
+    // Manual per-side KV types are sized separately — a q8_0/f16 pair is not the
+    // same as either type doubled.
+    cacheType: {
+      k: resolveCacheType(merged.cache_type_k, merged.cache_type || plan.cache_type),
+      v: resolveCacheType(merged.cache_type_v, merged.cache_type || plan.cache_type),
+    },
+    swaFull: merged.swa_full === true,
+    draftWeightsBytes: Number(opts.draftWeightsBytes) || 0,
     nGpuLayers: merged.n_gpu_layers == null ? undefined : merged.n_gpu_layers,
     backend: typeof hardware.backend === 'string' ? hardware.backend : undefined,
   });
@@ -325,6 +423,7 @@ function manualOverBudgetWarning(opts, variant, merged, plan) {
  * @param {string} [opts.mmprojPath] Sibling vision projector (mmproj*.gguf).
  * @param {Record<string, unknown> | null} [opts.ggufMeta] Parsed GGUF header from readGgufMetadata.
  * @param {number} [opts.weightsBytes] On-disk weights size; else `modelMeta.serveWeightsGb`.
+ * @param {number} [opts.draftWeightsBytes] Speculative draft model size on disk, when set.
  * @param {string} [opts.libraryId] Stable `--alias` for `/v1/models` when startServe has a row id.
  * @returns {LlamaServerLaunch}
  */
@@ -438,8 +537,16 @@ export function buildLlamaServerLaunch(opts) {
     args.push('-ngl', String(merged.n_gpu_layers));
   }
 
-  if (merged.cache_type && merged.cache_type !== 'f16') {
-    args.push('--cache-type-k', merged.cache_type, '--cache-type-v', merged.cache_type);
+  // `cache_type` is the planner-owned auto value (the f16 → q8_0 → q4_0 ladder).
+  // `cache_type_k` / `cache_type_v` are manual per-side overrides and win when set.
+  // f16 is llama.cpp's own default, so it is expressed by omitting the flag.
+  const cacheTypeK = resolveCacheType(merged.cache_type_k, merged.cache_type);
+  const cacheTypeV = resolveCacheType(merged.cache_type_v, merged.cache_type);
+  if (cacheTypeK !== 'f16' && !extraHasFlag('--cache-type-k')) {
+    args.push('--cache-type-k', cacheTypeK);
+  }
+  if (cacheTypeV !== 'f16' && !extraHasFlag('--cache-type-v')) {
+    args.push('--cache-type-v', cacheTypeV);
   }
 
   if (merged.n_cpu_moe != null && merged.n_cpu_moe > 0) {
@@ -473,6 +580,87 @@ export function buildLlamaServerLaunch(opts) {
     args.push('--main-gpu', String(merged.main_gpu));
   }
 
+  // Unified KV buffer. llama.cpp's own default is "enabled when --parallel is auto",
+  // and Minnow always passes an explicit --parallel, so leaving this unset means OFF
+  // upstream — emit both spellings rather than relying on that.
+  if (typeof merged.kv_unified === 'boolean' && !extraHasFlag('--kv-unified') && !extraHasFlag('--no-kv-unified')) {
+    args.push(merged.kv_unified ? '--kv-unified' : '--no-kv-unified');
+  }
+
+  // KV on GPU is the default; only the opt-out needs a flag.
+  if (merged.kv_offload === false && !extraHasFlag('--no-kv-offload')) {
+    args.push('--no-kv-offload');
+  }
+
+  const ctxCheckpoints = positiveInt(merged.ctx_checkpoints);
+  if (ctxCheckpoints != null && !extraHasFlag('-ctxcp') && !extraHasFlag('--ctx-checkpoints')) {
+    args.push('-ctxcp', String(ctxCheckpoints));
+  }
+
+  if (merged.context_shift != null && !extraHasFlag('--context-shift') && !extraHasFlag('--no-context-shift')) {
+    args.push(merged.context_shift ? '--context-shift' : '--no-context-shift');
+  }
+
+  // Full-size SWA cache. Auto sizing already banks the sliding-window saving in
+  // kvCacheBytes(), so turning this on invalidates the estimate — the UI says so.
+  if (merged.swa_full === true && !extraHasFlag('--swa-full')) {
+    args.push('--swa-full');
+  }
+
+  const ropeFreqBase = positiveNumber(merged.rope_freq_base);
+  if (ropeFreqBase != null && !extraHasFlag('--rope-freq-base')) {
+    args.push('--rope-freq-base', String(ropeFreqBase));
+  }
+
+  const ropeFreqScale = positiveNumber(merged.rope_freq_scale);
+  if (ropeFreqScale != null && !extraHasFlag('--rope-freq-scale')) {
+    args.push('--rope-freq-scale', String(ropeFreqScale));
+  }
+
+  // -1 is llama.cpp's "random seed" and is a legitimate explicit choice.
+  const seed = finiteInt(merged.seed);
+  if (seed != null && !extraHasFlag('-s') && !extraHasFlag('--seed')) {
+    args.push('-s', String(seed));
+  }
+
+  const reasoningBudgetMessage =
+    typeof merged.reasoning_budget_message === 'string'
+      ? merged.reasoning_budget_message.trim()
+      : '';
+  if (reasoningBudgetMessage && !extraHasFlag('--reasoning-budget-message')) {
+    args.push('--reasoning-budget-message', reasoningBudgetMessage);
+  }
+
+  // Speculative decoding. `--draft-max` / `--draft-min` are removal stubs in b9628+
+  // (they abort the launch with "the argument has been removed"), so only the
+  // `--spec-draft-*` spellings are ever emitted here.
+  const specType = SPEC_TYPES.has(String(merged.spec_type)) ? String(merged.spec_type) : '';
+  if (specType && specType !== 'none' && !extraHasFlag('--spec-type')) {
+    args.push('--spec-type', specType);
+
+    const draftModel =
+      typeof merged.spec_draft_model === 'string' ? merged.spec_draft_model.trim() : '';
+    if (draftModel && !extraHasFlag('--spec-draft-model') && !extraHasFlag('-md')) {
+      args.push('--spec-draft-model', draftModel);
+    }
+    const draftNgl = finiteInt(merged.spec_draft_ngl);
+    if (draftNgl != null && draftNgl >= 0 && !extraHasFlag('--spec-draft-ngl')) {
+      args.push('--spec-draft-ngl', String(draftNgl));
+    }
+    const draftNMax = finiteInt(merged.spec_draft_n_max);
+    if (draftNMax != null && draftNMax > 0 && !extraHasFlag('--spec-draft-n-max')) {
+      args.push('--spec-draft-n-max', String(draftNMax));
+    }
+    const draftNMin = finiteInt(merged.spec_draft_n_min);
+    if (draftNMin != null && draftNMin >= 0 && !extraHasFlag('--spec-draft-n-min')) {
+      args.push('--spec-draft-n-min', String(draftNMin));
+    }
+    const draftPMin = Number(merged.spec_draft_p_min);
+    if (Number.isFinite(draftPMin) && draftPMin >= 0 && !extraHasFlag('--spec-draft-p-min')) {
+      args.push('--spec-draft-p-min', String(draftPMin));
+    }
+  }
+
   // llama-server expects `--fit on|off`, not a bare boolean flag.
   if (merged.fit === true) {
     args.push('--fit', 'on');
@@ -489,12 +677,32 @@ export function buildLlamaServerLaunch(opts) {
     args.push('--fit', 'off');
   }
 
-  if (!extraHasFlag('--flash-attn')) {
-    args.push('--flash-attn', plan.flash_attn);
+  // Plan-owned per variant; a manual on/off/auto from the Load tab wins.
+  const flashAttn =
+    merged.flash_attn === 'on' || merged.flash_attn === 'off' || merged.flash_attn === 'auto'
+      ? merged.flash_attn
+      : plan.flash_attn;
+  if (!extraHasFlag('--flash-attn') && !extraHasFlag('-fa')) {
+    args.push('--flash-attn', flashAttn);
   }
 
   if (merged.no_warmup === true) {
     args.push('--no-warmup');
+  }
+
+  // The slots endpoint backs the live activity panels. It is enabled by default in
+  // b9628, but that default has flipped before — say so explicitly.
+  if (!extraHasFlag('--slots') && !extraHasFlag('--no-slots')) {
+    args.push('--slots');
+  }
+
+  // Verbosity 4. The default (3) prints *nothing* between "fitting params" and
+  // "llama_context" — an 11-second silent gap on a 27B — so the load bar has no
+  // waypoints to snap to and per-slot prompt progress never appears either. At 4 the
+  // loader prints its phase lines (~270 lines for a 9B load, which is fine for a
+  // per-run log file). See src/models/load-progress.mjs.
+  if (!extraHasFlag('-lv') && !extraHasFlag('--verbosity') && !extraHasFlag('--log-verbosity') && !extraHasFlag('-v') && !extraHasFlag('--verbose')) {
+    args.push('-lv', '4');
   }
 
   // Continuous batching is how LM Studio overlaps prompts; extra_args can
@@ -516,12 +724,11 @@ export function buildLlamaServerLaunch(opts) {
   const ngl = merged.n_gpu_layers;
   const threadsKnownPartialOffload =
     ngl != null && Number.isFinite(nLayers) && nLayers > 0 && ngl < nLayers;
-  if (
-    threadsKnownPartialOffload &&
-    !extraHasFlag('-t') &&
-    !extraHasFlag('--threads')
-  ) {
-    const threads = cpuThreadCount();
+  // A manual thread count is a user choice about their own CPU — honour it whatever
+  // the offload split looks like.
+  const manualThreads = positiveInt(merged.threads);
+  if (!extraHasFlag('-t') && !extraHasFlag('--threads')) {
+    const threads = manualThreads ?? (threadsKnownPartialOffload ? cpuThreadCount() : 0);
     if (threads > 0) args.push('-t', String(threads));
   }
 
@@ -553,6 +760,19 @@ export function buildLlamaServerLaunch(opts) {
     if (typeof token === 'string' && token.trim()) {
       args.push(token.trim());
     }
+  }
+
+  // Stamp the resolved per-side KV types onto the plan so everything downstream that
+  // sizes memory from `launchPlan` (admit-serve residency, the serve row) sees the
+  // manual override rather than only the planner's single `cache_type`.
+  plan.cache_type_k = cacheTypeK;
+  plan.cache_type_v = cacheTypeV;
+  if (merged.swa_full === true) plan.swa_full = true;
+  // Carried so diagnoseLlamaFailure can name a spec-decode misconfiguration; llama-server
+  // segfaults on it silently, leaving nothing in the log to match.
+  if (specType && specType !== 'none') {
+    plan.spec_type = specType;
+    if (merged.spec_draft_model) plan.spec_draft_model = merged.spec_draft_model;
   }
 
   return {

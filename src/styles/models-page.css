@@ -1447,6 +1447,13 @@
   background: var(--mn-success-soft);
 }
 
+/* A slot doing prompt processing or generation. Accent, not warning — this is the
+   model working, which is the thing the user asked for. */
+.models-loaded__state.is-busy {
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+
 .models-loaded__state.is-error {
   color: var(--mn-danger-ink);
   background: var(--mn-danger-soft);
@@ -1882,17 +1889,26 @@
   border-style: dashed;
 }
 
+/* Stacked collapsible groups in the Load tab: each rule is the divider above it. */
 .models-advanced {
   padding-top: 16px;
   border-top: 1px solid var(--mn-border);
 }
 
+.models-advanced[open] {
+  padding-bottom: 8px;
+}
+
 .models-advanced__summary {
-  margin-bottom: 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--mn-fg-muted);
   cursor: pointer;
+}
+
+/* Only open groups need the gap; a run of closed summaries stays evenly spaced. */
+.models-advanced[open] > .models-advanced__summary {
+  margin-bottom: 12px;
 }
 
 .models-copy-field {

@@ -5,7 +5,7 @@
 > drivable*: full launch-settings parity, speculative decoding incl. MTP, a real load
 > progress bar, and live runtime telemetry on every surface.
 
-Status: **Phases 0–1 complete (2026-08-18). Phases 2–5 not started.**
+Status: **complete — Phases 0–5 (2026-08-18/19).**
 
 ## Context
 
@@ -322,7 +322,37 @@ markup per row.
 
 ---
 
-## Phase 2 — Speculative decoding, including MTP (2–3 days)
+## Phase 2 — Speculative decoding, including MTP — **COMPLETE (2026-08-19)**
+
+Shipped: six `spec_*` settings through all four schema locations, the `--spec-*` flags,
+`nextnPredictLayers` surfaced from the GGUF header and threaded into `ModelGeometry`, a
+Speculative decoding section in the Load tab gated on it, launch-time validation, a
+`spec_missing_draft_model` diagnosis, and draft-model memory accounting.
+
+Three things the plan did not anticipate:
+
+- **`draft-simple` with no draft model does not fail cleanly — it segfaults.** Probed
+  directly: llama-server logs `common_speculative_impl_draft_simple: adding speculative
+  implementation` and then dies with exit 139 and **no error line at all**. So the
+  diagnosis rule matches on the launch *settings*, not on a log signature, and the
+  inspector disables the Load button outright rather than letting the crash happen.
+- **The `--spec-type` vocabulary moved to `src/models/spec-decode.mjs`.** Importing it
+  from `llama-args.js` broke every test that mocks that module — and three of the four
+  consumers (persistence, diagnosis, client) have nothing to do with building argv.
+- **The draft-model picker only offers files smaller than the target.** A draft model
+  larger than the model it is guessing for costs memory to make generation slower.
+
+Speculative memory is accounted from two sources: a separate draft model's file size,
+statted in `startServe`; and `specContextBytes`, parsed from llama-server's own
+`[spec] estimated memory usage of ... context is N MiB` after load, since nothing in the
+GGUF header predicts it. Both feed `estimatePlanMemoryBytes`, so residency is truthful.
+
+Verified live on `unsloth/Qwen3.5-9B-MTP-GGUF`: MTP starts, the header's
+`nextn_predict_layers = 1` gates the option in, `specContextBytes` persisted as
+234,901,996 (224.02 MiB — exactly what the runtime reported), and generation ran at
+**132–147 tok/s with 63.6% draft acceptance** (393 of 618) against ~94–97 tok/s without.
+
+### Original scope
 
 **Settings** (same four schema locations):
 `spec_type` (`'none' | 'draft-mtp' | 'draft-simple' | 'draft-eagle3' | 'ngram-mod' | 'ngram-simple'`),
@@ -358,7 +388,24 @@ Phase 0.5: 0.63 acceptance ⇒ 94 → 147 tok/s.
 
 ---
 
-## Phase 3 — Real load progress (2 days)
+## Phase 3 — Real load progress — **COMPLETE (2026-08-19)**
+
+Shipped: `-lv 4` in argv, the pure `src/models/load-progress.mjs` (phase table, banded
+time model, monotonic cap, rate priors, EWMA per-variant rate), `describeLoadPhase`
+delegating to the shared phase table so a label can never disagree with the bar, a
+~250 ms store ticker, and an ETA on the loading card.
+
+The per-variant rate is exposed to the client on `GET /api/models/llama-runtime` as
+`loadRateBytesPerMs` and folded in after every successful load, so a model being loaded
+for the first time still gets an ETA.
+
+Verified in a real Minnow serve log: `verbosity = 4`, and every phase marker the floor
+table depends on now present — `llama_model_loader: loaded meta data`,
+`load_tensors: loading model tensors`, `load_tensors: offloaded 34/34 layers to GPU`,
+`llama_kv_cache: size =`, `warming up the model`, `server is listening`. Before this
+change the same load printed **none** of them.
+
+### Original scope
 
 **Prerequisite discovered in Phase 0: emit `-lv 4`.** Without it there is nothing to
 parse (0.4). Add it in `buildLlamaServerLaunch` under the usual `extraHasFlag` guard.
@@ -408,7 +455,27 @@ held monotonic by the caller. Rate priors:
 
 ---
 
-## Phase 4 — Runtime activity telemetry (2–3 days)
+## Phase 4 — Runtime activity telemetry — **COMPLETE (2026-08-19)**
+
+Shipped: `server/models/serve-activity.js` (adaptive 400 ms / 2.5 s cadence, stale-not-idle
+on timeout, tok/s derived from Δdecoded, `n_decoded` reset across `id_task`), lifecycle
+reconciliation driven off `commitServes` so start / crash / evict / restore all take one
+path, `GET /api/models/serve/activity{,/stream}`, and `state.activity` in the models store.
+
+Two deviations from the plan:
+
+- **The DTO carries `modelLabel` and `libraryId`.** The header picker holds no serve list,
+  and giving it one would have coupled a global surface to the Models page.
+- **`src/models/serve-activity-feed.ts` owns the single SSE subscription**, opening on the
+  first subscriber and closing on the last, with the models store as just another consumer.
+  It no-ops when `EventSource` is absent, so app init never depends on telemetry.
+
+Verified end-to-end against a running serve, with the completion issued **from outside
+Minnow** — the point of polling `/slots` rather than reading Minnow's own stream:
+`idle` → `prompt` (`promptProcessed` 8192) → `generating` (`decoded` climbing,
+derived **144.9 tok/s**) → `idle`.
+
+### Original scope
 
 New `server/models/serve-activity.js` — a poller per running llama.cpp serve.
 
@@ -451,7 +518,29 @@ whole models page.
 
 ---
 
-## Phase 5 — Surfaces (3–4 days)
+## Phase 5 — Surfaces — **COMPLETE (2026-08-19)**
+
+Shipped across all three surfaces: per-slot `N PP … tok` / `N GEN … tok` chips plus a
+`tok/s` fact and the spec-mode chip on the Loaded Models card; a compact activity suffix
+and a busy-pulse dot in the header picker, repainted in place rather than by rebuilding
+the menu; and in chat, the `timings_per_token` / `return_progress` opt-ins added once in
+`prepareUpstreamRequestBody`, `timings` and `prompt_progress` captured in
+`mergeStreamMeta`, a `prompt_processing` stream phase with a live detail span, and
+prompt-rate and draft-acceptance stat chips on the finished message.
+
+`statsFromLlamaTimings` ignores the opening chunk of every stream — b9628 reports
+`predicted_n: 1` over `predicted_ms: 0.001`, i.e. a million tokens per second — and only
+adopts timings once there are at least two predicted tokens. Everything else flows through
+the existing usage-coherence reconciler, so local tok/s stops being a browser wall-clock
+estimate without loosening the plausibility guards.
+
+**Not confirmed in a live browser:** the busy chips on the Loaded Models card and the chat
+status row. The dev server in this session kept being reaped after a minute or two (no
+error in its log, serve rows left mid-flight — a harness lifecycle artifact, not a code
+path), so those two render functions were verified only through their unit tests and
+through the data they read, which was confirmed against the live API. Worth a manual pass.
+
+### Original scope
 
 ### 5a. Loaded Models card
 `loadedCard` (`src/ui/models/server-panel.ts:257`). Replace the static `Ready` chip with

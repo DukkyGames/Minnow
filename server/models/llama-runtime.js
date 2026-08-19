@@ -315,7 +315,23 @@ export async function getLlamaRuntimeStatus() {
     ),
     preferredVariant,
     installableVariants,
+    // Rolling bytes-per-ms for this variant, folded in after every successful load.
+    // The load bar's fallback ETA when a model has never been loaded before — CUDA and
+    // CPU builds differ by an order of magnitude, hence the per-variant key.
+    loadRateBytesPerMs: readLoadRateForVariant(config, variant),
   };
+}
+
+/**
+ * @param {{ loadRate?: unknown }} config `~/.minnow/llama-cpp.json`
+ * @param {string | null | undefined} variant
+ * @returns {number | null}
+ */
+function readLoadRateForVariant(config, variant) {
+  const table = config?.loadRate;
+  if (!table || typeof table !== 'object' || !variant) return null;
+  const value = Number(/** @type {Record<string, unknown>} */ (table)[variant]);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 async function fetchJson(url) {

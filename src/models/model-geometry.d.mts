@@ -26,6 +26,12 @@ export interface ModelGeometry {
   layerBytes?: number;
   /** Exact bytes of embedding / output tensors (GGUF only). */
   fixedBytes?: number;
+  /**
+   * `<arch>.nextn_predict_layers` — multi-token-prediction heads shipped inside the
+   * weights. Non-zero is what makes `--spec-type draft-mtp` startable with no draft
+   * model. GGUF headers only; undefined for family-derived geometry.
+   */
+  nextnPredictLayers?: number;
 }
 
 export interface GeometryInput {

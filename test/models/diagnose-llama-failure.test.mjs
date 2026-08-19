@@ -237,6 +237,38 @@ describe('diagnoseLlamaFailure', () => {
     assert.equal(classified.code, 'oom_vram');
   });
 
+  test('a draft-model mode with no draft model is named, not left as unknown', () => {
+    // b9628 registers the speculative implementation and then segfaults with nothing
+    // in the log, so this can only be matched on the launch settings.
+    const log = [
+      "common_speculative_impl_draft_simple: adding speculative implementation 'draft-simple'",
+      'common_speculative_impl_draft_simple: - n_max=3, n_min=0, p_min=0.000000',
+    ].join('\n');
+    const result = diagnoseLlamaFailure(log, 139, { spec_type: 'draft-simple' });
+    assert.equal(result.code, 'spec_missing_draft_model');
+    assert.equal(result.retryable, false);
+    assert.equal(result.suggestedSettings.spec_type, 'none');
+  });
+
+  test('spec_missing_draft_model does not fire when a draft model is set, or for MTP', () => {
+    assert.equal(
+      diagnoseLlamaFailure('', 139, {
+        spec_type: 'draft-simple',
+        spec_draft_model: '/tmp/draft.gguf',
+      }).code,
+      'unknown',
+    );
+    assert.equal(diagnoseLlamaFailure('', 139, { spec_type: 'draft-mtp' }).code, 'unknown');
+  });
+
+  test('a real OOM signature still wins over the spec-decode settings rule', () => {
+    const result = diagnoseLlamaFailure('cudaMalloc failed: out of memory', 1, {
+      ...OOM_PLAN,
+      spec_type: 'draft-simple',
+    });
+    assert.equal(result.code, 'oom_vram');
+  });
+
   test('unknown detail is the 280-char grepped excerpt', () => {
     const log = 'fatal: something obscure broke in ggml\nerror: not a classified signature';
     const result = diagnoseLlamaFailure(log, 1, null);

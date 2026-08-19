@@ -10,6 +10,7 @@ import { getModelsConfig, patchModelsConfig } from './models-config.js';
 import { getInferencePrefs, setLibraryInferenceSampler } from './inference-prefs.js';
 import { getLaunchPrefs, setLibraryLaunchSettings } from './launch-prefs.js';
 import { readGgufMetadata } from './gguf-metadata.js';
+import { listServeActivity, subscribeServeActivity } from './serve-activity.js';
 import { computeServeProfiles } from './profiles.js';
 import { detectRuntimes } from './runtime-detect.js';
 import { getServe, listServes, startServe, stopServe, subscribeServeEvents } from './serve.js';
@@ -396,6 +397,31 @@ export async function handleModelsRequest(req, res, pathname) {
       }
     });
     req.on('close', () => unsubscribe());
+    return true;
+  }
+
+  // Deliberately its own stream. `/serve/events` fires a whole serve list on every
+  // commit; telemetry ticks every ~400 ms while a slot is busy and must not drag that
+  // payload along with it.
+  if (pathname === '/api/models/serve/activity/stream' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    const unsubscribe = subscribeServeActivity((activity) => {
+      try {
+        res.write(`data: ${JSON.stringify(activity)}\n\n`);
+      } catch {
+        unsubscribe();
+      }
+    });
+    req.on('close', () => unsubscribe());
+    return true;
+  }
+
+  if (pathname === '/api/models/serve/activity' && req.method === 'GET') {
+    sendJson(res, 200, { activity: listServeActivity() });
     return true;
   }
 

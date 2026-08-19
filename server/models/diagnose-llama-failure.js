@@ -12,6 +12,7 @@ import {
   planLlamaLaunch,
   snapContextToLadder,
 } from '../../src/models/launch-plan.mjs';
+import { specNeedsDraftModel } from '../../src/models/spec-decode.mjs';
 
 /** Windows `STATUS_STACK_BUFFER_OVERRUN` / abort — llama.cpp hits this on RAM OOM. */
 const WIN_FASTFAIL = 0xc0000409;
@@ -36,6 +37,8 @@ const OOM_VRAM_BUDGET_SCALE = 0.85;
  * @property {number} [trainCtx]
  * @property {number} [parallel]
  * @property {number} [splitCount]
+ * @property {string} [spec_type] `--spec-type` the launch asked for.
+ * @property {string} [spec_draft_model] `--spec-draft-model` path, when one was set.
  */
 
 /**
@@ -313,6 +316,23 @@ function matchFailure(log, exit, plan) {
       remediation: 'Retry with --no-mmap so the file is read instead of mapped, or copy the weights onto a local disk.',
       retryable: true,
       suggestedSettings: { extra_args: ['--no-mmap'] },
+    };
+  }
+
+  // Speculative decoding with a mode that needs a draft model but has none. Verified
+  // against b9628: llama-server registers the implementation and then dies in the
+  // loader with **no error line at all** (SIGSEGV / STATUS_ACCESS_VIOLATION), so this
+  // has to be matched on the launch settings rather than on a log signature. Last
+  // before the generic fallback so any real signature above still wins.
+  if (specNeedsDraftModel(plan?.spec_type, plan?.spec_draft_model)) {
+    return {
+      code: 'spec_missing_draft_model',
+      title: 'Speculative decoding needs a draft model',
+      detail: `\`${plan?.spec_type}\` drafts tokens with a second, smaller model, and no draft model was set. llama-server crashes on this rather than reporting it.`,
+      remediation:
+        'Pick a draft GGUF in the Load tab under Speculative decoding, or switch the mode to none. Models with MTP heads can use draft-mtp, which needs no second file.',
+      retryable: false,
+      suggestedSettings: { spec_type: 'none' },
     };
   }
 

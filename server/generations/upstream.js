@@ -112,6 +112,26 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
 
   if (apiKind !== 'openai-v1') return body;
 
+  // llama.cpp telemetry opt-ins, added once here rather than at each of the four
+  // body-building call sites. Both sanitizers are denylists, so these survive intact.
+  //
+  // `return_progress` is undocumented in `--help` but is the field that makes
+  // llama-server emit `prompt_progress` chunks — verified on b9628, where
+  // `stream_options.include_progress` is silently ignored. It is the only source of a
+  // real prefill percentage anywhere; `/slots` cannot produce one.
+  if ((providerId ?? profile.id) === LLAMA_CPP_LOCAL_ID) {
+    try {
+      const parsed = JSON.parse(body.toString('utf8'));
+      if (parsed && typeof parsed === 'object') {
+        const withTelemetry = { ...parsed, timings_per_token: true };
+        if (parsed.stream === true) withTelemetry.return_progress = true;
+        body = Buffer.from(JSON.stringify(withTelemetry), 'utf8');
+      }
+    } catch {
+      /* keep the body as-is; telemetry is not worth failing a generation over */
+    }
+  }
+
   try {
     const parsed = JSON.parse(body.toString('utf8'));
     if (!parsed || typeof parsed !== 'object') return body;

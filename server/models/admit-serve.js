@@ -100,10 +100,21 @@ export function estimatePlanMemoryBytes(plan) {
       geometry: plan.geometry,
       weightsBytes: Number(plan.weightsBytes) || 0,
       ctx: Number(plan.ctx) || 0,
-      cacheType: typeof plan.cache_type === 'string' ? plan.cache_type : 'f16',
+      // buildLlamaServerLaunch stamps the resolved per-side types onto the plan, so a
+      // manual q8_0/f16 pair is sized as a pair rather than as either type doubled.
+      cacheType: {
+        k: typeof plan.cache_type_k === 'string' ? plan.cache_type_k : plan.cache_type,
+        v: typeof plan.cache_type_v === 'string' ? plan.cache_type_v : plan.cache_type,
+      },
       // null ngl (GPU auto) ⇒ full-offload estimate, matching unset `-ngl`.
       nGpuLayers: plan.n_gpu_layers == null ? undefined : Number(plan.n_gpu_layers),
       backend: backendFromVariant(plan.variant),
+      swaFull: plan.swa_full === true,
+      // A draft model is a second set of weights sharing the same device budget.
+      // `specContextBytes` is llama-server's own post-load figure for a speculative
+      // context (MTP included, which has no second weights file to measure).
+      draftWeightsBytes:
+        (Number(plan.draftWeightsBytes) || 0) + (Number(plan.specContextBytes) || 0),
     });
     return isCpu ? est.ramBytes : est.vramBytes;
   }

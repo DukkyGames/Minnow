@@ -8,6 +8,7 @@
  */
 
 import { estimateRunMemory, kvBytesPerToken, GIB } from './memory-model.mjs';
+import type { KvCacheType } from './memory-model.d.mts';
 import { geometryFromGgufMetadata, resolveGeometry } from './model-geometry.mjs';
 import type { GeometrySource, ModelGeometry } from './model-geometry.d.mts';
 
@@ -37,6 +38,8 @@ export interface GgufGeometryFacts {
   nFullAttentionLayers?: number;
   /** `{arch}.full_attention_interval` — Gated DeltaNet hybrids (Qwen3.5 / 3.8). */
   fullAttentionInterval?: number;
+  /** `{arch}.nextn_predict_layers` — non-zero means the model can drive `--spec-type draft-mtp`. */
+  nextnPredictLayers?: number;
   swaHeadDim?: number;
   layerBytes?: number;
   fixedBytes?: number;
@@ -48,7 +51,8 @@ export interface ServeMemoryInput {
   weightsGb: number;
   paramsB: number | null | undefined;
   ctx: number;
-  cacheType?: string;
+  /** One value for both caches, or a `{k, v}` pair when set independently. */
+  cacheType?: KvCacheType;
   /** llama.cpp `-ngl`: 0 = CPU, 999 = every layer on GPU. */
   nGpuLayers?: number;
   /** Exact header facts when the weights are on disk — always preferred. */
@@ -58,6 +62,10 @@ export interface ServeMemoryInput {
   name?: string | null;
   backend?: string | null;
   deviceCount?: number;
+  /** `--swa-full`: sliding-window layers hold the full context. */
+  swaFull?: boolean;
+  /** Speculative draft model size on disk, when `spec_draft_model` is set. */
+  draftWeightsGb?: number;
 }
 
 /** Best geometry available for a library row. */
@@ -100,6 +108,8 @@ export function estimateServeMemory(input: ServeMemoryInput): ServeMemoryEstimat
     nGpuLayers: input.nGpuLayers,
     backend: input.backend ?? undefined,
     deviceCount: input.deviceCount,
+    swaFull: input.swaFull,
+    draftWeightsBytes: Math.max(0, input.draftWeightsGb ?? 0) * GIB,
   });
 
   return {

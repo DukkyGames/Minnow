@@ -77,6 +77,14 @@ const MISSING_TRAIN_CTX = 8192;
  * @property {number} ctxPerSlot
  * @property {number | null} n_gpu_layers `null` on GPU auto (leave `-ngl` unset); `0` on CPU.
  * @property {'f16' | 'q8_0' | 'q4_0'} cache_type
+ * @property {string} [cache_type_k] Resolved `--cache-type-k`, stamped on by
+ *   buildLlamaServerLaunch once manual overrides are folded in.
+ * @property {string} [cache_type_v] Resolved `--cache-type-v`.
+ * @property {boolean} [swa_full] `--swa-full` was requested; sizing drops the SWA saving.
+ * @property {string} [spec_type] `--spec-type` the launch asked for, when not `none`.
+ * @property {string} [spec_draft_model] `--spec-draft-model` path, when one was set.
+ * @property {number} [draftWeightsBytes] Draft model size on disk.
+ * @property {number} [specContextBytes] llama-server's own post-load speculative-context figure.
  * @property {'on' | 'auto'} flash_attn
  * @property {boolean} fits
  * @property {number} estimateGb

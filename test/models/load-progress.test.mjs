@@ -15,6 +15,7 @@ import {
   LOAD_PHASES,
   MAX_PERCENT_BEFORE_HEALTHY,
   matchLoadPhase,
+  parseSpecContextBytes,
   resolveBytesPerMs,
   updateLoadRate,
 } from '../../src/models/load-progress.mjs';
@@ -63,6 +64,29 @@ describe('matchLoadPhase', () => {
       );
       assert.ok(LOAD_PHASES[i].ceiling > LOAD_PHASES[i].floor);
     }
+  });
+});
+
+describe('parseSpecContextBytes', () => {
+  it('reads the figure llama-server prints for an MTP context', () => {
+    // Verbatim from a b9628 load of unsloth/Qwen3.5-9B-MTP-GGUF.
+    const log = 'srv    load_model: [spec] estimated memory usage of MTP context is 168.02 MiB';
+    assert.equal(parseSpecContextBytes(log), Math.round(168.02 * 1024 ** 2));
+  });
+
+  it('handles the other units and finds the line inside a full log', () => {
+    const log = [
+      'srv  llama_server: loading model',
+      'srv    load_model: [spec] estimated memory usage of draft context is 1.50 GiB',
+      'srv  llama_server: model loaded',
+    ].join('\n');
+    assert.equal(parseSpecContextBytes(log), Math.round(1.5 * 1024 ** 3));
+  });
+
+  it('reports nothing when spec decoding printed nothing', () => {
+    assert.equal(parseSpecContextBytes(''), null);
+    assert.equal(parseSpecContextBytes('srv  llama_server: model loaded'), null);
+    assert.equal(parseSpecContextBytes(null), null);
   });
 });
 

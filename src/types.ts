@@ -62,6 +62,45 @@ export interface Stats {
   time_to_first_token?: number;
   generation_time?: number;
   stop_reason?: string;
+  /** llama.cpp prefill throughput (`timings.prompt_per_second`). */
+  prompt_tokens_per_second?: number;
+  /**
+   * Speculative-decoding acceptance, 0–1, from `timings.draft_n_accepted / draft_n`.
+   * The only honest way to tell whether spec decoding is earning its memory.
+   */
+  draft_acceptance?: number;
+}
+
+/**
+ * llama.cpp `timings`, present on every chunk when `timings_per_token` is set.
+ * `draft_n` / `draft_n_accepted` appear only when `--spec-type` is not `none`.
+ */
+export interface LlamaTimings {
+  cache_n?: number;
+  prompt_n?: number;
+  prompt_ms?: number;
+  prompt_per_token_ms?: number | null;
+  prompt_per_second?: number;
+  predicted_n?: number;
+  predicted_ms?: number;
+  predicted_per_token_ms?: number | null;
+  predicted_per_second?: number;
+  draft_n?: number;
+  draft_n_accepted?: number;
+}
+
+/**
+ * llama.cpp prefill progress, emitted when the request carries `return_progress`.
+ * `total` is present from the first chunk, so this is a real fraction — unlike
+ * `/slots`, which reports the running count as both the part and the whole.
+ * `cache` is the prefix served from the prompt cache, which is why `processed` can
+ * start near `total` on a repeat prompt.
+ */
+export interface LlamaPromptProgress {
+  total: number;
+  cache: number;
+  processed: number;
+  time_ms: number;
 }
 
 export interface UserMessage {
@@ -1314,6 +1353,10 @@ export interface ChatCompletionChunk {
   usage?: Usage;
   model_info?: ModelInfo;
   model?: string;
+  /** llama.cpp per-chunk timings (`timings_per_token`). */
+  timings?: LlamaTimings;
+  /** llama.cpp prefill progress (`return_progress`). */
+  prompt_progress?: LlamaPromptProgress;
   error?: string | { message?: string; code?: string | number; type?: string };
 }
 
@@ -1327,6 +1370,10 @@ export interface StreamMeta {
   model_info?: ModelInfo;
   model?: string;
   finish_reason?: string;
+  /** Latest llama.cpp timings seen on the stream. */
+  timings?: LlamaTimings;
+  /** Latest llama.cpp prefill progress seen on the stream. */
+  prompt_progress?: LlamaPromptProgress;
 }
 
 /** Result of `finalizeResponseMeta` before pushing assistant history. */

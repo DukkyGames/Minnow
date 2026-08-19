@@ -32,7 +32,9 @@ import {
 import { renderLaunchMemoryMeter } from './launch-memory-meter';
 import { joinArgv, tokenizeArgv } from '../../models/argv-tokenize.mjs';
 import {
+  applyCacheTypeSideTouch,
   applyCacheTypeTouch,
+  launchValidationError,
   applyCtxPerSlotTouch,
   applyGpuLayersAuto,
   applyGpuLayersTouch,
@@ -101,8 +103,58 @@ const LAUNCH_SAVE_DEBOUNCE_MS = 300;
  */
 let llamaVariant: string | null = null;
 let llamaVariantFetched = false;
-/** Keep Advanced open across Load-tab re-renders after a slider touch. */
-let loadAdvancedOpen = false;
+/**
+ * Which advanced Load-tab groups are open, kept across re-renders after a slider
+ * touch. Keys are the `advancedSection` ids below.
+ */
+const loadSectionOpen = new Set<string>();
+
+/**
+ * `--cache-type-k/v` values, ordered largest to smallest. The shared "KV cache" select
+ * above only offers the three the planner's degrade ladder uses; pinning one side is an
+ * expert move, so it gets the full set llama.cpp accepts.
+ */
+const KV_CACHE_TYPE_OPTIONS = [
+  { value: 'f32', label: 'f32 — full float' },
+  { value: 'f16', label: 'f16 — full precision' },
+  { value: 'bf16', label: 'bf16' },
+  { value: 'q8_0', label: 'q8_0 — balanced' },
+  { value: 'q5_1', label: 'q5_1' },
+  { value: 'q5_0', label: 'q5_0' },
+  { value: 'q4_1', label: 'q4_1' },
+  { value: 'q4_0', label: 'q4_0 — smaller' },
+  { value: 'iq4_nl', label: 'iq4_nl' },
+];
+
+/** Idle unload windows. `''` inherits the 20-minute default; `0` keeps it loaded. */
+const IDLE_TTL_OPTIONS = [
+  { value: '', label: 'Default (20 minutes)' },
+  { value: '0', label: 'Never — keep loaded' },
+  { value: String(5 * 60_000), label: '5 minutes' },
+  { value: String(10 * 60_000), label: '10 minutes' },
+  { value: String(30 * 60_000), label: '30 minutes' },
+  { value: String(60 * 60_000), label: '1 hour' },
+];
+
+/**
+ * `--spec-type` modes worth exposing. The ngram families draft from the prompt itself
+ * and need no second model; `draft-mtp` needs heads inside the GGUF; the remaining two
+ * need a draft file. Modes llama.cpp accepts but nobody asks for (`ngram-map-k4v`,
+ * `ngram-cache`) stay reachable through extra_args.
+ */
+const SPEC_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'none', label: 'Off' },
+  { value: 'draft-mtp', label: 'MTP — heads inside these weights' },
+  { value: 'draft-simple', label: 'Draft model' },
+  { value: 'draft-eagle3', label: 'Draft model (EAGLE-3)' },
+  { value: 'ngram-simple', label: 'N-gram — from the prompt' },
+  { value: 'ngram-mod', label: 'N-gram (mod)' },
+];
+
+/** Selected option value for the idle-unload select — `''` when nothing is pinned. */
+function idleTtlValue(draft: LlamaServeSettings | undefined): string {
+  return draft?.idle_ttl_ms == null ? '' : String(draft.idle_ttl_ms);
+}
 
 /**
  * GGUF headers by file path — exact layer count and attention geometry for models already on
@@ -161,6 +213,16 @@ function memoryHints(model: LibraryModel): {
     arch: model.arch || null,
     name: model.name || null,
   };
+}
+
+/**
+ * Whether these weights can drive `--spec-type draft-mtp`.
+ * `null` while the header is still in flight — the UI must not claim either way then.
+ */
+function mtpCapable(model: LibraryModel): boolean | null {
+  const facts = ensureGgufGeometry(model);
+  if (!facts) return null;
+  return Number(facts.nextnPredictLayers) > 0;
 }
 
 function root(): HTMLElement | null {
@@ -377,6 +439,76 @@ function selectField(
 }
 
 /**
+ * Select whose empty option means "leave it to llama.cpp / the planner". Keeps the
+ * distinction between "the user chose f16" and "nobody chose", which matters because
+ * only the former pins the flag.
+ */
+function optionalSelectField(
+  label: string,
+  options: Array<{ value: string; label: string }>,
+  value: string | undefined,
+  autoLabel: string,
+  onChange: (value: string | undefined) => void,
+): HTMLElement {
+  return selectField(
+    label,
+    [{ value: '', label: autoLabel }, ...options],
+    value ?? '',
+    (v) => onChange(v || undefined),
+  );
+}
+
+function checkboxField(
+  label: string,
+  checked: boolean,
+  onChange: (checked: boolean) => void,
+): HTMLElement {
+  const wrap = el('label', 'models-field models-field--check');
+  const input = el('input') as HTMLInputElement;
+  input.type = 'checkbox';
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+  wrap.append(input, el('span', undefined, label));
+  return wrap;
+}
+
+function textField(
+  label: string,
+  value: string | undefined,
+  placeholder: string,
+  onChange: (value: string | undefined) => void,
+): HTMLElement {
+  const wrap = el('label', 'models-field');
+  wrap.append(el('span', 'models-field__label', label));
+  const input = el('input', 'models-field__input') as HTMLInputElement;
+  input.type = 'text';
+  input.placeholder = placeholder;
+  input.value = value ?? '';
+  input.addEventListener('change', () => {
+    const next = input.value.trim();
+    onChange(next || undefined);
+  });
+  wrap.appendChild(input);
+  return wrap;
+}
+
+/**
+ * One collapsible group in the Load tab's advanced area. Open/closed is remembered
+ * per group for the session, the way the single Advanced block used to be.
+ */
+function advancedSection(key: string, title: string, ...children: Node[]): HTMLElement {
+  const section = el('details', 'models-advanced');
+  section.open = loadSectionOpen.has(key);
+  section.addEventListener('toggle', () => {
+    if ((section as HTMLDetailsElement).open) loadSectionOpen.add(key);
+    else loadSectionOpen.delete(key);
+  });
+  section.appendChild(el('summary', 'models-advanced__summary', title));
+  section.append(...children);
+  return section;
+}
+
+/**
  * Launch payload for Load. Empty until a control is touched — do not pre-seed 125k/999.
  * Seeds from models.launch.byLibraryId when the session Map has no row yet (reload).
  */
@@ -552,11 +684,17 @@ function gpuLayersSlider(
 function launchMemoryHint(model: LibraryModel, displayed: DisplayedLaunch): HTMLElement {
   const weightsGb = model.sizeBytes > 0 ? model.sizeBytes / 1024 ** 3 : 0;
   const hw = getModelsState().hardware;
+  const draft = draftFor(model.id);
   const estimate = estimateServeMemory({
     weightsGb,
     paramsB: model.paramsB,
     ctx: displayed.ctx,
-    cacheType: displayed.cache_type,
+    // A pinned K or V is sized on its own side; unpinned sides follow the shared type.
+    cacheType: {
+      k: draft?.cache_type_k ?? displayed.cache_type,
+      v: draft?.cache_type_v ?? displayed.cache_type,
+    },
+    swaFull: draft?.swa_full === true,
     nGpuLayers: displayed.n_gpu_layers ?? undefined,
     backend: hw?.backend ?? null,
     deviceCount: hw?.gpuCount ?? 1,
@@ -583,6 +721,124 @@ function loadDurationHint(model: LibraryModel): HTMLElement | null {
     ? `Last load took about ${label}.`
     : `About ${label} at the last observed rate.`;
   return el('p', 'models-muted', text);
+}
+
+/**
+ * Other GGUF weights on this machine that could act as a draft model.
+ *
+ * Restricted to files smaller than the target and listed smallest first: drafting only
+ * pays off when the draft model is much cheaper to run than the model it is guessing
+ * for, and a larger one costs memory to make generation slower.
+ */
+function draftModelOptions(model: LibraryModel): Array<{ value: string; label: string }> {
+  return getModelsState()
+    .library.filter(
+      (row) =>
+        row.id !== model.id &&
+        row.format === 'GGUF' &&
+        row.servable &&
+        Boolean(row.path) &&
+        row.sizeBytes > 0 &&
+        (model.sizeBytes <= 0 || row.sizeBytes < model.sizeBytes),
+    )
+    .sort((a, b) => a.sizeBytes - b.sizeBytes)
+    .map((row) => ({
+      value: row.path as string,
+      label: `${row.name} · ${formatBytes(row.sizeBytes)}`,
+    }));
+}
+
+/**
+ * Speculative decoding. The mode list is gated on what these weights can actually do:
+ * `draft-mtp` only appears once the GGUF header confirms `nextn_predict_layers > 0`,
+ * because picking it otherwise makes llama-server exit.
+ */
+function speculativeSection(
+  model: LibraryModel,
+  touch: (patch: LlamaServeSettings) => void,
+  refresh: () => void,
+): HTMLElement {
+  const draft = draftFor(model.id);
+  const specType = draft?.spec_type ?? 'none';
+  const mtp = mtpCapable(model);
+  const needsDraftModel = specType === 'draft-simple' || specType === 'draft-eagle3';
+
+  const options = SPEC_TYPE_OPTIONS.filter(
+    // Keep a previously-saved mtp choice visible even if the header says no, so the
+    // reason below is attached to something the user can see and change.
+    (opt) => opt.value !== 'draft-mtp' || mtp !== false || specType === 'draft-mtp',
+  );
+
+  const children: Node[] = [
+    selectField('Mode', options, specType, (v) => {
+      touch({ spec_type: v === 'none' ? undefined : (v as LlamaServeSettings['spec_type']) });
+      refresh();
+    }),
+  ];
+
+  if (mtp === false) {
+    children.push(
+      el(
+        'p',
+        'models-hint',
+        'These weights carry no multi-token-prediction heads, so MTP is not available for this model.',
+      ),
+    );
+  } else if (mtp === true) {
+    children.push(
+      el(
+        'p',
+        'models-hint',
+        'These weights ship MTP heads — draft-mtp needs no second model and no extra weights in memory.',
+      ),
+    );
+  }
+
+  if (needsDraftModel) {
+    const drafts = draftModelOptions(model);
+    children.push(
+      drafts.length
+        ? optionalSelectField(
+            'Draft model',
+            drafts,
+            draft?.spec_draft_model,
+            'Choose a draft model…',
+            (v) => {
+              touch({ spec_draft_model: v });
+              refresh();
+            },
+          )
+        : el(
+            'p',
+            'models-hint models-hint--warning',
+            'No installed GGUF is smaller than this model, so there is nothing worth drafting with. Download a small model of the same family first.',
+          ),
+      numberField('Draft GPU layers', draft?.spec_draft_ngl, 'all', (v) => {
+        touch({ spec_draft_ngl: v });
+      }),
+    );
+  }
+
+  if (specType !== 'none') {
+    children.push(
+      numberField('Max draft tokens', draft?.spec_draft_n_max, '3', (v) => {
+        touch({ spec_draft_n_max: v });
+      }),
+      numberField('Min draft tokens', draft?.spec_draft_n_min, '0', (v) => {
+        touch({ spec_draft_n_min: v });
+      }),
+      numberField('Draft probability', draft?.spec_draft_p_min, '0', (v) => {
+        touch({ spec_draft_p_min: v });
+      }),
+    );
+  }
+
+  const blocked = launchValidationError(draft, mtp);
+  if (blocked) {
+    children.push(el('p', 'models-hint models-hint--warning', blocked));
+  }
+
+  return advancedSection('speculative', 'Speculative decoding', ...children);
 }
 
 function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
@@ -671,24 +927,148 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   if (durationHint) configBlock.appendChild(durationHint);
   body.appendChild(configBlock);
 
-  const advanced = el('details', 'models-advanced');
-  advanced.open = loadAdvancedOpen;
-  advanced.addEventListener('toggle', () => {
-    loadAdvancedOpen = advanced.open;
-  });
-  advanced.appendChild(el('summary', 'models-advanced__summary', 'Advanced'));
-  advanced.append(
-    numberField('Batch size', draft?.batch_size, 'auto', (v) => {
-      persistDraft(model, applyPassThroughTouch(draftFor(model.id), displayed, { batch_size: v }));
+  /** Pass-through touch that never leaves auto. */
+  const touch = (patch: LlamaServeSettings): void => {
+    persistDraft(model, applyPassThroughTouch(draftFor(model.id), displayed, patch));
+  };
+
+  body.appendChild(
+    advancedSection(
+      'performance',
+      'Performance',
+      numberField('CPU thread pool size', draft?.threads, 'auto', (v) => {
+        touch({ threads: v });
+      }),
+      numberField('Batch size', draft?.batch_size, 'auto', (v) => {
+        touch({ batch_size: v });
+      }),
+      numberField('Micro-batch', draft?.ubatch_size, 'auto', (v) => {
+        touch({ ubatch_size: v });
+      }),
+      numberField('Parallel slots', draft?.parallel, '1', (v) => {
+        touch({ parallel: v });
+        refreshAfterTouch();
+      }),
+      numberField('Context checkpoints', draft?.ctx_checkpoints, '32', (v) => {
+        touch({ ctx_checkpoints: v });
+      }),
+      el(
+        'p',
+        'models-hint',
+        'Checkpoints let a slot rewind instead of reprocessing the prompt. They cost host memory that the estimate above does not model.',
+      ),
+    ),
+  );
+
+  const kvSection = advancedSection(
+    'kv-cache',
+    'KV cache',
+    checkboxField('Unified KV cache', draft?.kv_unified === true, (checked) => {
+      touch({ kv_unified: checked ? true : undefined });
     }),
-    numberField('Micro-batch', draft?.ubatch_size, 'auto', (v) => {
-      persistDraft(model, applyPassThroughTouch(draftFor(model.id), displayed, { ubatch_size: v }));
+    checkboxField('Offload KV cache to GPU memory', draft?.kv_offload !== false, (checked) => {
+      touch({ kv_offload: checked ? undefined : false });
     }),
-    numberField('Parallel slots', draft?.parallel, '1', (v) => {
-      persistDraft(model, applyPassThroughTouch(draftFor(model.id), displayed, { parallel: v }));
+    optionalSelectField('K cache type', KV_CACHE_TYPE_OPTIONS, draft?.cache_type_k, 'Match KV cache', (v) => {
+      persistDraft(model, applyCacheTypeSideTouch(draftFor(model.id), displayed, 'k', v));
+      refreshAfterTouch();
+    }),
+    optionalSelectField('V cache type', KV_CACHE_TYPE_OPTIONS, draft?.cache_type_v, 'Match KV cache', (v) => {
+      persistDraft(model, applyCacheTypeSideTouch(draftFor(model.id), displayed, 'v', v));
+      refreshAfterTouch();
+    }),
+    optionalSelectField(
+      'Flash attention',
+      [
+        { value: 'on', label: 'On' },
+        { value: 'off', label: 'Off' },
+        { value: 'auto', label: 'Let llama.cpp decide' },
+      ],
+      draft?.flash_attn,
+      `Minnow default (${displayed.plan.flash_attn})`,
+      (v) => {
+        touch({ flash_attn: v as LlamaServeSettings['flash_attn'] });
+        refreshAfterTouch();
+      },
+    ),
+    checkboxField('Full-size sliding-window cache', draft?.swa_full === true, (checked) => {
+      touch({ swa_full: checked ? true : undefined });
       refreshAfterTouch();
     }),
   );
+  if (draft?.flash_attn === 'off') {
+    kvSection.appendChild(
+      el(
+        'p',
+        'models-hint models-hint--warning',
+        'Without flash attention the compute buffer grows with context. The estimate above assumes it is on.',
+      ),
+    );
+  }
+  body.appendChild(kvSection);
+
+  body.appendChild(speculativeSection(model, touch, refreshAfterTouch));
+
+  body.appendChild(
+    advancedSection(
+      'memory',
+      'Memory',
+      checkboxField('Keep model in memory (mlock)', draft?.mlock === true, (checked) => {
+        touch({ mlock: checked ? true : undefined });
+      }),
+      checkboxField('Try mmap', draft?.no_mmap !== true, (checked) => {
+        touch({ no_mmap: checked ? undefined : true });
+      }),
+      numberField('MoE layers on CPU', draft?.n_cpu_moe, '0', (v) => {
+        touch({ n_cpu_moe: v });
+        refreshAfterTouch();
+      }),
+      selectField('Auto unload after idle', IDLE_TTL_OPTIONS, idleTtlValue(draft), (v) => {
+        touch({ idle_ttl_ms: v === '' ? undefined : Number(v) });
+      }),
+      checkboxField(
+        'CUDA unified memory',
+        Boolean(draft?.env?.GGML_CUDA_ENABLE_UNIFIED_MEMORY),
+        (checked) => {
+          touch({ env: checked ? { GGML_CUDA_ENABLE_UNIFIED_MEMORY: '1' } : undefined });
+        },
+      ),
+    ),
+  );
+
+  body.appendChild(
+    advancedSection(
+      'sampling',
+      'Sampling & template',
+      numberField('Seed', draft?.seed, 'random', (v) => {
+        touch({ seed: v });
+      }),
+      numberField('RoPE frequency base', draft?.rope_freq_base, 'from model', (v) => {
+        touch({ rope_freq_base: v });
+      }),
+      numberField('RoPE frequency scale', draft?.rope_freq_scale, '1', (v) => {
+        touch({ rope_freq_scale: v });
+      }),
+      checkboxField('Context shift on overflow', draft?.context_shift === true, (checked) => {
+        touch({ context_shift: checked ? true : undefined });
+      }),
+      textField(
+        'Reasoning budget message',
+        draft?.reasoning_budget_message,
+        'Injected when the thinking budget runs out',
+        (v) => {
+          touch({ reasoning_budget_message: v });
+        },
+      ),
+      textField('Chat template', draft?.chat_template, "Model's own template", (v) => {
+        touch({ chat_template: v });
+      }),
+      textField('Chat template file', draft?.chat_template_file, 'Path to a .jinja file', (v) => {
+        touch({ chat_template_file: v });
+      }),
+    ),
+  );
+
   const extraWrap = el('label', 'models-field');
   extraWrap.append(el('span', 'models-field__label', 'Extra llama-server args'));
   const extraInput = el('input', 'models-field__input') as HTMLInputElement;
@@ -698,31 +1078,17 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     const raw = extraInput.value.trim();
     // POSIX-ish tokenize so `--chat-template "hello world"` stays two argv tokens.
     const tokens = raw ? tokenizeArgv(raw) : [];
-    persistDraft(
-      model,
-      applyPassThroughTouch(draftFor(model.id), displayed, {
-        extra_args: tokens.length ? tokens : undefined,
-      }),
-    );
+    touch({ extra_args: tokens.length ? tokens : undefined });
   });
   extraWrap.appendChild(extraInput);
-  advanced.appendChild(extraWrap);
-
-  const unifiedWrap = el('label', 'models-field models-field--check');
-  const unified = el('input') as HTMLInputElement;
-  unified.type = 'checkbox';
-  unified.checked = Boolean(draft?.env?.GGML_CUDA_ENABLE_UNIFIED_MEMORY);
-  unified.addEventListener('change', () => {
-    persistDraft(
-      model,
-      applyPassThroughTouch(draftFor(model.id), displayed, {
-        env: unified.checked ? { GGML_CUDA_ENABLE_UNIFIED_MEMORY: '1' } : undefined,
-      }),
-    );
-  });
-  unifiedWrap.append(unified, el('span', undefined, 'CUDA unified memory'));
-  advanced.appendChild(unifiedWrap);
-  body.appendChild(advanced);
+  body.appendChild(
+    advancedSection(
+      'escape-hatch',
+      'Escape hatch',
+      extraWrap,
+      el('p', 'models-hint', 'Anything set here wins over every field above.'),
+    ),
+  );
 }
 
 
@@ -746,10 +1112,45 @@ function renderInferenceTab(model: LibraryModel, body: HTMLElement): void {
               ? '—'
               : 'Auto',
       ),
-      infoRow('KV cache', settings.cache_type ?? '—'),
+      infoRow(
+        'KV cache',
+        settings.cache_type_k || settings.cache_type_v
+          ? `K ${settings.cache_type_k ?? settings.cache_type ?? 'f16'} / V ${settings.cache_type_v ?? settings.cache_type ?? 'f16'}`
+          : (settings.cache_type ?? '—'),
+      ),
       infoRow('Fit', settings.fit_mode === 'manual' ? 'Manual' : 'Auto'),
       infoRow('Parallel', String(settings.parallel ?? 1)),
     );
+    // Only flags the user actually pinned — an all-defaults launch keeps this short.
+    const extras: Array<[string, string]> = [];
+    if (settings.flash_attn) extras.push(['Flash attention', settings.flash_attn]);
+    if (settings.threads != null) extras.push(['Threads', String(settings.threads)]);
+    if (settings.batch_size != null) extras.push(['Batch', String(settings.batch_size)]);
+    if (settings.ubatch_size != null) extras.push(['Micro-batch', String(settings.ubatch_size)]);
+    if (settings.kv_unified != null) extras.push(['Unified KV', settings.kv_unified ? 'On' : 'Off']);
+    if (settings.kv_offload === false) extras.push(['KV offload', 'Off']);
+    if (settings.ctx_checkpoints != null) {
+      extras.push(['Context checkpoints', String(settings.ctx_checkpoints)]);
+    }
+    if (settings.swa_full) extras.push(['SWA cache', 'Full size']);
+    if (settings.context_shift != null) {
+      extras.push(['Context shift', settings.context_shift ? 'On' : 'Off']);
+    }
+    if (settings.n_cpu_moe != null) extras.push(['MoE on CPU', String(settings.n_cpu_moe)]);
+    if (settings.seed != null) extras.push(['Seed', String(settings.seed)]);
+    if (settings.rope_freq_base != null) {
+      extras.push(['RoPE base', String(settings.rope_freq_base)]);
+    }
+    if (settings.rope_freq_scale != null) {
+      extras.push(['RoPE scale', String(settings.rope_freq_scale)]);
+    }
+    if (settings.spec_type && settings.spec_type !== 'none') {
+      extras.push(['Speculative', settings.spec_type]);
+      if (settings.spec_draft_model) {
+        extras.push(['Draft model', settings.spec_draft_model.split(/[\/]/).pop() ?? '']);
+      }
+    }
+    for (const [label, value] of extras) list.appendChild(infoRow(label, value));
     block.appendChild(list);
   } else {
     block.appendChild(
@@ -849,6 +1250,13 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
 
   if (!model.servable) return;
 
+  // A spec-decode mode with no draft model does not fail cleanly — llama-server
+  // segfaults with nothing in the log. Refuse here rather than spawn it.
+  const blocked = launchValidationError(draftFor(model.id), mtpCapable(model));
+  if (blocked) {
+    footer.appendChild(el('p', 'models-hint models-hint--warning', blocked));
+  }
+
   const retry = Boolean(serve && isRetryableServeStatus(serve.status));
   const retryLabel = serve && retry ? retryLabelForServe(serve) : 'Retry';
   const loadBtn = textButton(
@@ -876,6 +1284,10 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
     },
     'primary',
   );
+  if (blocked) {
+    loadBtn.disabled = true;
+    loadBtn.title = blocked;
+  }
   footer.appendChild(loadBtn);
 }
 

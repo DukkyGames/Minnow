@@ -6,10 +6,22 @@
 import { formatThinkingDuration } from './thinking-duration';
 import { humanizeToolName } from './tool-messages';
 
-export type StreamPhase = 'loading_model' | 'generating' | 'thinking' | 'prose' | 'done';
+export type StreamPhase =
+  | 'loading_model'
+  | 'prompt_processing'
+  | 'generating'
+  | 'thinking'
+  | 'prose'
+  | 'done';
 
 /** Visible while the local model is loading into memory before the first token. */
 export const STREAM_LABEL_LOADING_MODEL = 'Loading model…';
+
+/**
+ * Visible while llama.cpp is still feeding the prompt through. Only reachable for
+ * local llama.cpp models, which are the only ones that report prefill progress.
+ */
+export const STREAM_LABEL_PROMPT_PROCESSING = 'Processing prompt…';
 
 /** Visible while waiting for reasoning or prose (no tokens yet). */
 export const STREAM_LABEL_GENERATING = 'Generating response…';
@@ -17,8 +29,12 @@ export const STREAM_LABEL_GENERATING = 'Generating response…';
 /** Visible while reasoning SSE is active (thought bubbles are primary). */
 export const STREAM_LABEL_THINKING = 'Thinking…';
 
-const LABEL_BY_PHASE: Record<'loading_model' | 'generating' | 'thinking', string> = {
+const LABEL_BY_PHASE: Record<
+  'loading_model' | 'prompt_processing' | 'generating' | 'thinking',
+  string
+> = {
   loading_model: STREAM_LABEL_LOADING_MODEL,
+  prompt_processing: STREAM_LABEL_PROMPT_PROCESSING,
   generating: STREAM_LABEL_GENERATING,
   thinking: STREAM_LABEL_THINKING,
 };
@@ -27,6 +43,11 @@ export interface StreamingStatusHandle {
   setPhase(phase: StreamPhase): void;
   /** Muted elapsed suffix while phase is `thinking`; pass null to clear. */
   setThinkingElapsed(ms: number | null): void;
+  /**
+   * Runtime detail beside the label: prefill percent during `prompt_processing`,
+   * a token count while generating. Pass null to clear.
+   */
+  setRuntimeDetail(detail: string | null): void;
   dispose(): void;
 }
 
@@ -59,9 +80,17 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
   // Elapsed ticks live inside aria-live status; hide from SR to avoid "Thinking 1s 2s…" spam.
   elapsedEl.setAttribute('aria-hidden', 'true');
 
+  const detailEl = document.createElement('span');
+  detailEl.className = 'stream-status__detail';
+  detailEl.hidden = true;
+  // Ticks ~10x a second inside an aria-live region; announcing every value would
+  // turn the status into noise for a screen reader.
+  detailEl.setAttribute('aria-hidden', 'true');
+
   statusEl.appendChild(dots);
   statusEl.appendChild(labelEl);
   statusEl.appendChild(elapsedEl);
+  statusEl.appendChild(detailEl);
 
   const label = wrap.querySelector('.msg-label');
   const bubble = wrap.querySelector('.msg-bubble');
@@ -95,6 +124,15 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
     syncElapsedVisibility();
   };
 
+  const setRuntimeDetail = (detail: string | null): void => {
+    if (disposed) return;
+    const text = detail?.trim() ? ` ${detail.trim()}` : '';
+    // This ticks once per generated token; skip the DOM write when nothing changed.
+    if (detailEl.textContent === text) return;
+    detailEl.textContent = text;
+    detailEl.hidden = !text;
+  };
+
   const setPhase = (phase: StreamPhase): void => {
     if (disposed) return;
     currentPhase = phase;
@@ -102,6 +140,8 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
     if (phase === 'prose' || phase === 'done') {
       elapsedEl.textContent = '';
       elapsedEl.hidden = true;
+      detailEl.textContent = '';
+      detailEl.hidden = true;
       statusEl.classList.add('hidden');
       statusEl.setAttribute('aria-busy', 'false');
       wrap.dataset.streamPhase = phase;
@@ -112,6 +152,7 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
     statusEl.setAttribute('aria-busy', 'true');
     statusEl.classList.remove(
       'stream-status--loading-model',
+      'stream-status--prompt-processing',
       'stream-status--generating',
       'stream-status--thinking',
     );
@@ -119,6 +160,8 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
       statusEl.classList.add('stream-status--thinking');
     } else if (phase === 'loading_model') {
       statusEl.classList.add('stream-status--loading-model');
+    } else if (phase === 'prompt_processing') {
+      statusEl.classList.add('stream-status--prompt-processing');
     } else {
       statusEl.classList.add('stream-status--generating');
     }
@@ -137,7 +180,7 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
     delete wrap.dataset.streamPhase;
   };
 
-  return { setPhase, setThinkingElapsed, dispose };
+  return { setPhase, setThinkingElapsed, setRuntimeDetail, dispose };
 }
 
 /** Row parts needed to show an in-flight tool-call indicator beside streaming prose. */

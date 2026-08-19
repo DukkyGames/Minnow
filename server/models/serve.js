@@ -43,6 +43,7 @@ import {
   findSiblingMmproj,
   readLlamaCppConfig,
   warnIfReasoningBudgetCliFlag,
+  writeLlamaCppConfig,
 } from './llama-args.js';
 import { appendServeLog } from './serve-logs.js';
 import { setProviderThinkingBudgetSupport } from '../providers/capabilities-store.js';
@@ -51,6 +52,13 @@ import { readGgufMetadata } from './gguf-metadata.js';
 import { assertSplitGgufSiblings } from './split-gguf.js';
 import { diagnoseLlamaFailure } from './diagnose-llama-failure.js';
 import { geometryFromGgufMetadata } from '../../src/models/model-geometry.mjs';
+import { parseSpecContextBytes, updateLoadRate } from '../../src/models/load-progress.mjs';
+import {
+  listServeActivity,
+  startServeActivity,
+  stopAllServeActivity,
+  stopServeActivity,
+} from './serve-activity.js';
 import {
   getLaunchPrefs,
   llamaSettingsFromLaunchRow,
@@ -393,6 +401,7 @@ async function saveServes() {
  */
 export async function commitServes(reason) {
   await saveServes();
+  reconcileServeActivityPollers();
   const snapshot = { serves: servesCache.map(publicServe), reason: String(reason || 'update') };
   for (const listener of [...serveCommitListeners]) {
     try {
@@ -400,6 +409,30 @@ export async function commitServes(reason) {
     } catch {
       /* listener must not break persistence */
     }
+  }
+}
+
+/**
+ * Keep the `/slots` pollers matched to what is actually running. Driven off
+ * `commitServes` so a serve that starts, dies, is evicted, or is restored after a
+ * restart all take the same path — there is no separate lifecycle to keep in step.
+ */
+function reconcileServeActivityPollers() {
+  const wanted = new Set();
+  for (const row of servesCache) {
+    if (row.runtime !== 'llama-cpp') continue;
+    if (row.status !== 'running' && row.status !== 'unhealthy') continue;
+    wanted.add(row.id);
+    startServeActivity({
+      id: row.id,
+      baseUrl: row.baseUrl,
+      runtime: row.runtime,
+      modelLabel: row.modelLabel,
+      libraryId: row.libraryId,
+    });
+  }
+  for (const activity of listServeActivity()) {
+    if (!wanted.has(activity.serveId)) stopServeActivity(activity.serveId);
   }
 }
 
@@ -976,6 +1009,20 @@ export async function startServe(body) {
     }
   }
 
+  // A speculative draft model is a second set of weights on the same device. Stat it
+  // here so the plan, the residency budget, and the OOM re-plan all see its cost.
+  // MTP has no second file — its heads ship inside the main GGUF.
+  let draftWeightsBytes = 0;
+  const draftModelPath =
+    typeof userSettings?.spec_draft_model === 'string' ? userSettings.spec_draft_model.trim() : '';
+  if (draftModelPath) {
+    try {
+      draftWeightsBytes = (await fsp.stat(draftModelPath)).size;
+    } catch {
+      draftWeightsBytes = 0;
+    }
+  }
+
   const modelMeta = {
     name: modelLabel,
     quantization: body.quant,
@@ -997,6 +1044,7 @@ export async function startServe(body) {
     // Same ggufMeta GET /api/models/profiles already feeds computeServeProfiles.
     ggufMeta,
     weightsBytes,
+    draftWeightsBytes,
     // Stable --alias for /v1/models. Empty when picker/CLI omitted libraryId.
     libraryId: libraryId || undefined,
   };
@@ -1009,6 +1057,7 @@ export async function startServe(body) {
     ...launch.plan,
     geometry: ggufGeometry ?? undefined,
     weightsBytes,
+    draftWeightsBytes,
     hardware,
     variant: llamaVariant,
     trainCtx: ggufMeta?.trainCtx,
@@ -1130,16 +1179,48 @@ export async function startServe(body) {
       healthy = await waitForHealth(currentBaseUrl, MODEL_LOAD_TIMEOUT_MS, currentRun.runId);
     }
 
-    // Record the load-progress prior before flipping to `running` so a client
+    // Record the load-progress priors before flipping to `running` so a client
     // that polls status does not observe running with a stale lastLoadMs.
+    const loadMs = Math.max(0, Date.now() - row.startedAt);
     if (libraryId) {
       try {
         await recordLaunchLoadPrior(libraryId, {
-          lastLoadMs: Math.max(0, Date.now() - row.startedAt),
+          lastLoadMs: loadMs,
           lastWeightsBytes: weightsBytes,
         });
       } catch (err) {
         console.warn('[llama-cpp] launch load prior persist failed:', err);
+      }
+    }
+    // Rolling per-variant rate, so a model being loaded for the first time still gets
+    // an ETA. Keyed by variant because a CUDA build and a CPU build are an order of
+    // magnitude apart on the same file.
+    try {
+      const config = await readLlamaCppConfig();
+      const table =
+        config.loadRate && typeof config.loadRate === 'object' ? { ...config.loadRate } : {};
+      const next = updateLoadRate(table[llamaVariant], { loadMs, weightsBytes });
+      if (next > 0) {
+        table[llamaVariant] = next;
+        await writeLlamaCppConfig({ loadRate: table });
+      }
+    } catch (err) {
+      console.warn('[llama-cpp] load rate persist failed:', err);
+    }
+
+    // llama-server reports what a speculative context actually cost
+    // (`[spec] estimated memory usage of MTP context is N MiB`). Nothing Minnow parses
+    // from the GGUF can predict that, so take the runtime's own figure and fold it into
+    // the plan the residency budget is computed from.
+    if (currentLaunch?.plan?.spec_type && currentRun?.runId) {
+      try {
+        const tail = (await readRunLogTail(currentRun.runId, 32768)) ?? '';
+        const specBytes = parseSpecContextBytes(tail);
+        if (specBytes != null && specBytes > 0 && row.launchPlan) {
+          row.launchPlan.specContextBytes = specBytes;
+        }
+      } catch {
+        /* the figure is a refinement, not a requirement */
       }
     }
 
@@ -1507,6 +1588,19 @@ function stopServeHeartbeat() {
   }
 }
 
+/**
+ * Idle unload window for one serve. Per-model `idle_ttl_ms` from the Load tab wins;
+ * `0` means keep it loaded indefinitely. Falls back to the global 20-minute default.
+ * @param {{ llamaSettings?: Record<string, unknown> | null }} row
+ * @returns {number}
+ */
+function serveIdleTtlMs(row) {
+  const raw = row?.llamaSettings?.idle_ttl_ms;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 0) return Math.trunc(n);
+  return SERVE_IDLE_TTL_MS;
+}
+
 function ensureServeHeartbeat() {
   if (heartbeatTimer) return;
   // node:test sets NODE_TEST_CONTEXT — tests drive ticks via tickServeHeartbeatForTests
@@ -1535,7 +1629,9 @@ async function tickServeHeartbeat() {
     if (row.runtime !== 'llama-cpp') continue;
     if (row.status !== 'running' && row.status !== 'unhealthy') continue;
     const usedAt = row.lastUsedAt ?? row.startedAt ?? 0;
-    if (now - usedAt >= SERVE_IDLE_TTL_MS) ttlIds.push(row.id);
+    const ttl = serveIdleTtlMs(row);
+    // 0 is the Load tab's "keep loaded" — never sweep it.
+    if (ttl > 0 && now - usedAt >= ttl) ttlIds.push(row.id);
   }
   for (const id of ttlIds) {
     try {
@@ -1649,6 +1745,7 @@ export async function resetServesForTests() {
   lastTtlEviction = null;
   serveCommitListeners.clear();
   stopServeHeartbeat();
+  stopAllServeActivity();
   if (typeof mlxCrashUnsub === 'function') {
     try {
       mlxCrashUnsub();

@@ -149,4 +149,63 @@ describe('models launch prefs', () => {
     assert.equal(row.mlock, false);
     assert.deepEqual(row.extra_args, ['--chat-template', 'hello world']);
   });
+
+  test('LM Studio parity settings survive normalize; bad values are dropped', async () => {
+    const prefs = await setLibraryLaunchSettings('lib-parity', {
+      threads: 12,
+      kv_unified: true,
+      kv_offload: false,
+      ctx_checkpoints: 8,
+      context_shift: true,
+      swa_full: true,
+      rope_freq_base: 1_000_000,
+      rope_freq_scale: 0.5,
+      seed: -1,
+      flash_attn: 'off',
+      cache_type_k: 'Q8_0',
+      cache_type_v: 'not-a-type',
+      reasoning_budget_message: '  wrap it up  ',
+      idle_ttl_ms: 0,
+      n_cpu_moe: 4,
+    });
+    const row = prefs.byLibraryId['lib-parity'];
+    assert.equal(row.threads, 12);
+    assert.equal(row.kv_unified, true);
+    assert.equal(row.kv_offload, false);
+    assert.equal(row.ctx_checkpoints, 8);
+    assert.equal(row.context_shift, true);
+    assert.equal(row.swa_full, true);
+    assert.equal(row.rope_freq_base, 1_000_000);
+    assert.equal(row.rope_freq_scale, 0.5);
+    assert.equal(row.seed, -1);
+    assert.equal(row.flash_attn, 'off');
+    // Case-folded onto the ggml type name; an unknown type never reaches argv.
+    assert.equal(row.cache_type_k, 'q8_0');
+    assert.equal(row.cache_type_v, undefined);
+    assert.equal(row.reasoning_budget_message, 'wrap it up');
+    assert.equal(row.idle_ttl_ms, 0);
+    assert.equal(row.n_cpu_moe, 4);
+  });
+
+  test('out-of-range parity values are dropped rather than stored', async () => {
+    const prefs = await setLibraryLaunchSettings('lib-parity-bad', {
+      ctx: 4096,
+      threads: 0,
+      seed: -5,
+      rope_freq_base: -1,
+      rope_freq_scale: 0,
+      ctx_checkpoints: -2,
+      idle_ttl_ms: -1,
+      flash_attn: 'sometimes',
+    });
+    const row = prefs.byLibraryId['lib-parity-bad'];
+    assert.equal(row.ctx, 4096);
+    assert.equal(row.threads, undefined);
+    assert.equal(row.seed, undefined);
+    assert.equal(row.rope_freq_base, undefined);
+    assert.equal(row.rope_freq_scale, undefined);
+    assert.equal(row.ctx_checkpoints, undefined);
+    assert.equal(row.idle_ttl_ms, undefined);
+    assert.equal(row.flash_attn, undefined);
+  });
 });
