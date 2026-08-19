@@ -14,10 +14,7 @@ import { getChatsForWorkspace, getChatLastMessageAt } from '../state/session-wor
 import { getChatMessageCount, sessionState } from '../state/sessions';
 import type { LastStats } from '../types';
 import type { Chat } from '../types';
-import type { ModeId } from '../chat/modes/types';
-import { setChatMode, syncModeSelectorFromActiveChat } from './mode-selector';
-import { createModeMaskIconLg } from './mode-icons';
-import { intentPrefill, mapIntentModeId, type HubIntentId } from './hub-intents';
+import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { switchChat } from './sidebar';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import {
@@ -34,7 +31,6 @@ import {
 export const HUB_ROOT_ID = 'vibeHub';
 /** Max recent workspace chats shown on the hub (excluding the active empty chat). */
 export const HUB_RECENT_CHAT_LIMIT = 6;
-export { intentPrefill, mapIntentModeId };
 
 let hubChatId: string | null = null;
 let composerRestoreParent: HTMLElement | null = null;
@@ -237,16 +233,6 @@ function getRecentChats(workspacePath: string, activeChat: Chat): Chat[] {
     .slice(0, HUB_RECENT_CHAT_LIMIT);
 }
 
-function applyIntent(intent: HubIntentId): void {
-  const modeId = mapIntentModeId(intent);
-  setChatMode(modeId);
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (!input) return;
-  input.value = intentPrefill(intent);
-  input.focus();
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
 function renderRecentTiles(container: HTMLElement, activeChat: Chat): void {
   container.replaceChildren();
   const workspacePath = getWorkspacePath();
@@ -399,71 +385,6 @@ function buildHubDom(activeChat: Chat): HTMLElement {
     </div>
   `;
 
-  const intents = document.createElement('div');
-  intents.className = 'hub-intents';
-  const intentDefs: { id: HubIntentId; title: string; sub: string; modeId: ModeId }[] = [
-    {
-      id: 'build',
-      title: 'Build',
-      sub: 'Scaffold and implement',
-      modeId: 'build',
-    },
-    {
-      id: 'plan',
-      title: 'Plan',
-      sub: 'Map it before code',
-      modeId: 'plan',
-    },
-    {
-      id: 'debug',
-      title: 'Debug',
-      sub: 'Reproduce and fix',
-      modeId: 'debug',
-    },
-    {
-      id: 'explain',
-      title: 'Explain',
-      sub: 'Get oriented fast',
-      modeId: 'general',
-    },
-    {
-      id: 'orchestrate',
-      title: 'Orchestrate',
-      sub: 'Run a plan as a board',
-      modeId: 'orchestrate',
-    },
-  ];
-  for (const def of intentDefs) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'hub-intent';
-
-    const iconWrap = document.createElement('span');
-    iconWrap.className = 'hub-intent__icon';
-    const icon = createModeMaskIconLg(def.modeId);
-    iconWrap.appendChild(icon);
-
-    const copy = document.createElement('span');
-    const titleEl = document.createElement('div');
-    titleEl.className = 'hub-intent__title';
-    titleEl.textContent = def.title;
-    const subEl = document.createElement('div');
-    subEl.className = 'hub-intent__sub';
-    subEl.textContent = def.sub;
-    copy.append(titleEl, subEl);
-
-    btn.append(iconWrap, copy);
-    btn.addEventListener('click', () => {
-      if (def.id === 'orchestrate') {
-        teardownHub();
-        void import('./orchestrate-hub').then((m) => m.renderOrchestrateHub());
-        return;
-      }
-      applyIntent(def.id);
-    });
-    intents.appendChild(btn);
-  }
-
   const recentHead = document.createElement('div');
   recentHead.className = 'hub-recent-head';
   recentHead.innerHTML =
@@ -474,7 +395,7 @@ function buildHubDom(activeChat: Chat): HTMLElement {
   recentRow.className = 'hub-recent-row';
   recentRow.id = 'hubRecentRow';
 
-  inner.append(status, heading, composerSlot, strip, intents, recentHead, recentRow);
+  inner.append(status, heading, composerSlot, strip, recentHead, recentRow);
   root.appendChild(inner);
 
   const serverCell = strip.querySelector('#hubDevServerCell') as HTMLElement | null;
