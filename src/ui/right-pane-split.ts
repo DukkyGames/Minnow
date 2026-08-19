@@ -108,13 +108,24 @@ function slotElements(slot: PaneSlotId): {
   };
 }
 
+/**
+ * Which surface the single (un-split) primary slot should show.
+ *
+ * `rightPaneMode` is the source of truth. Preview tabs stay in the unified strip
+ * with `activePreviewTab` still set while the user is looking at a file — treating
+ * that leftover id as "show preview" hid the editor behind an empty guest pane.
+ */
 function defaultPrimarySlotContent(): SlotContent {
   const state = getFilePanelState();
-  if (state.rightPaneMode === 'preview' || state.activePreviewTab) {
+  if (state.rightPaneMode === 'preview') {
     return { kind: 'preview', tabId: state.activePreviewTab };
   }
   const path = state.activeViewerTab ?? getActiveViewerTabPath();
   if (path) return { kind: 'viewer', tabPath: path };
+  // No file tab: fall back to a leftover browser tab (close-last-file → preview).
+  if (state.activePreviewTab) {
+    return { kind: 'preview', tabId: state.activePreviewTab };
+  }
   return { kind: 'none' };
 }
 
