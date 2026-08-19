@@ -910,37 +910,60 @@ export function registerPreviewHostIpc(): void {
 
   ipcMain.handle(
     channels.PREVIEW_LOAD_SOURCE,
-    (event, payload: PreviewLoadSourcePayload, tabId?: string, instanceId?: string) => {
+    async (event, payload: PreviewLoadSourcePayload, tabId?: string, instanceId?: string) => {
       const win = windowFromInvoke(event);
       const entry = getActiveEntry(event, tabId, instanceId);
       if (!entry || !win || !payload || typeof payload !== 'object') return;
+      const instance = PreviewInstanceRegistry.resolveInstanceId(instanceId);
       if (tabId && typeof tabId === 'string') {
         windowState(win, instanceId).activeTabId = tabId;
       }
-      // Do not call showActiveTab here — it detaches the guest and clears bounds mid-navigation.
-      void loadSourceInGuest(entry.view.webContents, payload).catch((err) => {
-        if (!win) return;
+      try {
+        await loadSourceInGuest(entry.view.webContents, payload);
+        const bounds = lastBoundsByInstance.get(boundsKey(win.id, instance));
+        if (isValidPreviewBounds(bounds)) {
+          showActiveTab(win, bounds, instanceId);
+        }
+      } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const id = resolveTabId(win, tabId, instanceId) ?? 'unknown';
         sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, id, {
           errorCode: -2,
           errorDescription: message,
           url: payload.kind === 'url' ? payload.url : payload.path,
-        }, PreviewInstanceRegistry.resolveInstanceId(instanceId));
-      });
+        }, instance);
+      }
     },
   );
 
   ipcMain.handle(
     channels.PREVIEW_LOAD_URL,
-    (event, url: string, tabId?: string, instanceId?: string) => {
+    async (event, url: string, tabId?: string, instanceId?: string) => {
       const win = windowFromInvoke(event);
       const entry = getActiveEntry(event, tabId, instanceId);
       if (!entry || typeof url !== 'string' || !url.trim()) return;
+      const instance = PreviewInstanceRegistry.resolveInstanceId(instanceId);
       if (win && tabId && typeof tabId === 'string') {
         windowState(win, instanceId).activeTabId = tabId;
       }
-      void entry.view.webContents.loadURL(url);
+      try {
+        await entry.view.webContents.loadURL(url);
+        if (win) {
+          const bounds = lastBoundsByInstance.get(boundsKey(win.id, instance));
+          if (isValidPreviewBounds(bounds)) {
+            showActiveTab(win, bounds, instanceId);
+          }
+        }
+      } catch (err) {
+        if (!win) return;
+        const message = err instanceof Error ? err.message : String(err);
+        const id = resolveTabId(win, tabId, instanceId) ?? 'unknown';
+        sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, id, {
+          errorCode: -2,
+          errorDescription: message,
+          url,
+        }, instance);
+      }
     },
   );
 

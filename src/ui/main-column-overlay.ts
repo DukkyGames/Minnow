@@ -104,6 +104,11 @@ export function isCodeStageViewHidingChatSidebar(): boolean {
 /** Notify Code view chrome (Chats toggle) after a stage view opens or closes. */
 export function notifyCodeStageViewChanged(): void {
   emitChatSidebarChanged();
+  // Stage views hide the chat rail in CSS; re-measure the preview guest so it
+  // tracks the shifted #previewBody instead of sitting at stale bounds.
+  void import('./preview-electron-visibility').then((m) => {
+    m.scheduleElectronPreviewHostLayoutSync();
+  });
 }
 
 /** Leave whichever Code stage view is active and restore the chat transcript. */

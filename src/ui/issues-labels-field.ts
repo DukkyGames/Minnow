@@ -19,7 +19,65 @@ export type IssuesLabelsFieldOptions = {
 /** True when focus is inside a labels field (skip detail re-render while editing). */
 export function isIssuesLabelsFieldFocused(): boolean {
   const active = document.activeElement;
-  return active instanceof HTMLElement && Boolean(active.closest('.issues-labels-field'));
+  if (!active || typeof (active as { closest?: unknown }).closest !== 'function') return false;
+  return Boolean((active as { closest: (s: string) => Element | null }).closest('.issues-labels-field'));
+}
+
+/** Filter workspace label suggestions for the inline editor menu. */
+export function filterIssueLabelSuggestions(
+  allSuggestions: readonly string[],
+  currentLabels: readonly string[],
+  query: string,
+  limit = 10,
+): string[] {
+  const applied = new Set(currentLabels.map((label) => label.toLowerCase()));
+  const needle = query.trim().toLowerCase();
+  const out: string[] = [];
+  for (const suggestion of allSuggestions) {
+    if (applied.has(suggestion.toLowerCase())) continue;
+    if (needle && !suggestion.toLowerCase().includes(needle)) continue;
+    out.push(suggestion);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+let openSuggestionsMenu: HTMLUListElement | null = null;
+let openSuggestionsInput: HTMLInputElement | null = null;
+let suggestionsRepositionHandler: (() => void) | null = null;
+
+/** Close any open labels suggestion menu (body-mounted). */
+export function closeIssuesLabelsSuggestionsMenu(): void {
+  if (suggestionsRepositionHandler) {
+    window.removeEventListener('resize', suggestionsRepositionHandler);
+    window.removeEventListener('scroll', suggestionsRepositionHandler, true);
+    suggestionsRepositionHandler = null;
+  }
+  openSuggestionsMenu?.remove();
+  openSuggestionsMenu = null;
+  openSuggestionsInput?.setAttribute('aria-expanded', 'false');
+  openSuggestionsInput = null;
+}
+
+function positionSuggestionsMenu(anchor: HTMLElement, menu: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  const margin = 8;
+  const gap = 4;
+  const menuHeight = menu.offsetHeight || menu.getBoundingClientRect().height;
+  const menuWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
+
+  let top = rect.bottom + gap;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - menuHeight - gap);
+  }
+
+  let left = rect.left;
+  if (left + menuWidth > window.innerWidth - margin) {
+    left = Math.max(margin, window.innerWidth - menuWidth - margin);
+  }
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
 }
 
 /** Deduplicate labels case-insensitively while preserving first-seen casing. */
@@ -84,16 +142,20 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
   input.placeholder = options.variant === 'detail' ? 'Add label…' : 'Label…';
   input.setAttribute('aria-label', 'Add label');
   input.setAttribute('autocomplete', 'off');
-  const datalistId = `issues-labels-datalist-${options.issueId}`;
-  input.setAttribute('list', datalistId);
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-expanded', 'false');
+  input.setAttribute('aria-autocomplete', 'list');
+  const suggestionsListId = `issues-labels-suggestions-${options.issueId}`;
+  input.setAttribute('aria-controls', suggestionsListId);
 
-  const datalist = document.createElement('datalist');
-  datalist.id = datalistId;
-  for (const suggestion of suggestions) {
-    const opt = document.createElement('option');
-    opt.value = suggestion;
-    datalist.appendChild(opt);
-  }
+  const suggestionsMenu = document.createElement('ul');
+  suggestionsMenu.className = 'issues-labels-suggestions';
+  suggestionsMenu.id = suggestionsListId;
+  suggestionsMenu.setAttribute('role', 'listbox');
+  suggestionsMenu.hidden = true;
+
+  let visibleSuggestions: string[] = [];
+  let activeSuggestionIndex = -1;
 
   const commit = (labels: string[]): void => {
     currentLabels = normalizeIssueLabelsList(labels);
@@ -116,6 +178,75 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
     }
     commit([...currentLabels, label]);
     input.value = '';
+    closeSuggestionsMenu();
+    if (document.activeElement === input) refreshSuggestions();
+  };
+
+  const closeSuggestionsMenu = (): void => {
+    if (openSuggestionsInput === input) {
+      closeIssuesLabelsSuggestionsMenu();
+    }
+    suggestionsMenu.hidden = true;
+    suggestionsMenu.replaceChildren();
+    visibleSuggestions = [];
+    activeSuggestionIndex = -1;
+    input.setAttribute('aria-expanded', 'false');
+  };
+
+  const chooseSuggestion = (label: string): void => {
+    addLabel(label);
+    input.focus();
+  };
+
+  const paintSuggestionsMenu = (): void => {
+    suggestionsMenu.replaceChildren();
+    visibleSuggestions.forEach((label, index) => {
+      const item = document.createElement('li');
+      item.className = 'issues-labels-suggestions__item';
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(index === activeSuggestionIndex));
+      item.classList.toggle('is-active', index === activeSuggestionIndex);
+      item.textContent = label;
+      item.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        chooseSuggestion(label);
+      });
+      suggestionsMenu.appendChild(item);
+    });
+
+    const hasSuggestions = visibleSuggestions.length > 0;
+    suggestionsMenu.hidden = !hasSuggestions;
+    input.setAttribute('aria-expanded', String(hasSuggestions));
+
+    if (!hasSuggestions) {
+      if (openSuggestionsInput === input) closeIssuesLabelsSuggestionsMenu();
+      return;
+    }
+
+    if (!suggestionsMenu.isConnected) {
+      document.body.appendChild(suggestionsMenu);
+    }
+    if (openSuggestionsInput && openSuggestionsInput !== input) {
+      closeIssuesLabelsSuggestionsMenu();
+    }
+    openSuggestionsMenu = suggestionsMenu;
+    openSuggestionsInput = input;
+    positionSuggestionsMenu(input, suggestionsMenu);
+
+    if (!suggestionsRepositionHandler) {
+      suggestionsRepositionHandler = () => {
+        if (!openSuggestionsMenu || !openSuggestionsInput) return;
+        positionSuggestionsMenu(openSuggestionsInput, openSuggestionsMenu);
+      };
+      window.addEventListener('resize', suggestionsRepositionHandler);
+      window.addEventListener('scroll', suggestionsRepositionHandler, true);
+    }
+  };
+
+  const refreshSuggestions = (): void => {
+    visibleSuggestions = filterIssueLabelSuggestions(suggestions, currentLabels, input.value);
+    activeSuggestionIndex = visibleSuggestions.length > 0 ? 0 : -1;
+    paintSuggestionsMenu();
   };
 
   const paint = (): void => {
@@ -162,6 +293,33 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
 
   input.addEventListener('keydown', (event) => {
     event.stopPropagation();
+    if (!suggestionsMenu.hidden && visibleSuggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        activeSuggestionIndex = (activeSuggestionIndex + 1) % visibleSuggestions.length;
+        paintSuggestionsMenu();
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        activeSuggestionIndex =
+          activeSuggestionIndex <= 0
+            ? visibleSuggestions.length - 1
+            : activeSuggestionIndex - 1;
+        paintSuggestionsMenu();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeSuggestionsMenu();
+        return;
+      }
+      if (event.key === 'Enter' && activeSuggestionIndex >= 0) {
+        event.preventDefault();
+        chooseSuggestion(visibleSuggestions[activeSuggestionIndex]);
+        return;
+      }
+    }
     if (event.key === 'Enter' || event.key === ',') {
       event.preventDefault();
       addLabel(input.value);
@@ -172,17 +330,25 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
     }
   });
 
+  input.addEventListener('input', () => {
+    refreshSuggestions();
+  });
+
   input.addEventListener('focus', () => {
     if (options.variant === 'row') {
       expanded = true;
       paint();
     }
+    refreshSuggestions();
   });
 
   input.addEventListener('blur', () => {
-    if (options.variant !== 'row') return;
     window.setTimeout(() => {
-      if (root.contains(document.activeElement)) return;
+      if (root.contains(document.activeElement) || suggestionsMenu.contains(document.activeElement)) {
+        return;
+      }
+      closeSuggestionsMenu();
+      if (options.variant !== 'row') return;
       expanded = false;
       paint();
     }, 0);
@@ -202,6 +368,6 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
   });
 
   paint();
-  root.append(chipsHost, input, datalist);
+  root.append(chipsHost, input);
   return root;
 }

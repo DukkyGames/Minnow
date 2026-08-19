@@ -806,7 +806,8 @@ function markPreviewHostMode(): void {
 }
 
 async function showPreviewHost(): Promise<void> {
-  await syncElectronPreviewHostLayout();
+  const tabId = getActivePreviewTabId();
+  await syncElectronPreviewHostLayout(tabId);
   scheduleElectronPreviewHostLayoutSync();
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -836,6 +837,16 @@ async function clearPreviewGuest(tabId?: string): Promise<void> {
   await api.loadURL('about:blank', id ?? undefined);
 }
 
+async function ensureElectronPreviewTab(tabId: string): Promise<void> {
+  const api = getPreviewApi();
+  if (!api?.tabs) return;
+  const listed = await api.tabs.list();
+  if (!listed.some((t) => t.id === tabId)) {
+    await api.tabs.create(tabId);
+  }
+  await api.tabs.activate(tabId);
+}
+
 async function loadSourceInPreview(
   source: PreviewSource,
   cacheBust?: number,
@@ -844,15 +855,38 @@ async function loadSourceInPreview(
   const api = getPreviewApi();
   if (!api) return;
   const id = resolveTabId(tabId);
-  setPreviewLoading(true, id ?? undefined);
+  if (!id) return;
+  setPreviewLoading(true, id);
   const url = resolvePreviewLoadUrl(source, cacheBust, getFileTreeListingWorkspaceRoot());
-  const tabKey = id ?? undefined;
+
+  await ensureElectronPreviewTab(id);
+  // Remember bounds before navigation so the main-process guest can attach with size.
+  await showPreviewHost();
+
+  if (api.navigateAndWait) {
+    const result = await api.navigateAndWait(url, id);
+    if (!result.ok) {
+      onPreviewLoadFailed(
+        {
+          errorCode: result.errorCode ?? -1,
+          errorDescription: result.errorDescription ?? 'Navigation failed',
+          url,
+        },
+        id,
+      );
+    }
+    await showPreviewHost();
+    scheduleElectronPreviewHostVisibilitySync();
+    return;
+  }
+
   if (api.loadSource) {
-    await api.loadSource({ kind: 'url', url, cacheBust }, tabKey);
+    await api.loadSource({ kind: 'url', url, cacheBust }, id);
   } else {
-    await api.loadURL(url, tabKey);
+    await api.loadURL(url, id);
   }
   await showPreviewHost();
+  scheduleElectronPreviewHostVisibilitySync();
 }
 
 function clearFrameBlockedTimer(): void {
@@ -1252,26 +1286,27 @@ export async function openPreviewPanel(source?: PreviewSource | null): Promise<v
   if (!(await dismissFileViewerForPreview())) return;
   showPreviewSplit();
   const resolved = source ?? getActivePreviewSource();
+  const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
 
   if (usesElectronPreview()) {
     if (!resolved) {
-      const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
       updatePreviewTabSource(tabId, null);
       await clearPreviewGuest(tabId);
+      await showPreviewHost();
+      scheduleElectronPreviewHostVisibilitySync();
+    } else {
+      updatePreviewTabSource(tabId, resolved);
+      await activatePreviewTabGuest(tabId, { forceLoad: true });
+      syncPreviewChromeFromState();
+      return;
     }
-    await showPreviewHost();
-    scheduleElectronPreviewHostVisibilitySync();
-  }
-
-  if (resolved) {
+  } else if (resolved) {
     loadPreviewSource(resolved);
   } else {
     const input = getUrlInput();
     if (input) input.value = '';
     hidePreviewStatus();
-    if (!usesElectronPreview()) {
-      clearPreviewFrame();
-    }
+    clearPreviewFrame();
   }
   syncPreviewChromeFromState();
 }
@@ -1788,5 +1823,8 @@ export async function initPreviewPanel(): Promise<void> {
 
 /** Open a workspace HTML file in the preview panel. */
 export function openWorkspacePathInPreview(relativePath: string): void {
-  openPreviewPanel({ kind: 'workspace', path: normalizeWorkspacePath(relativePath) });
+  void openPreviewTabFromUi({
+    kind: 'workspace',
+    path: normalizeWorkspacePath(relativePath),
+  });
 }

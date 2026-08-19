@@ -1,0 +1,317 @@
+/*
+ * Issue description editor (src/ui/issue-editor.ts).
+ *
+ * The peek panel is a glance surface, so the editor stays close to the density
+ * of the rendered markdown it replaces: no card, no inner border, no toolbar
+ * chrome that reads as a separate application. The toolbar is a row of 22px
+ * text buttons that only earn their contrast on hover and focus.
+ */
+
+.mn-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mn-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.mn-editor__tool {
+  min-width: 24px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-editor__tool:hover {
+    border-color: var(--mn-border);
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+    color: var(--mn-fg);
+  }
+}
+
+.mn-editor__tool:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+  color: var(--mn-fg);
+}
+
+.mn-editor__tool[data-tool='bold'] {
+  font-weight: 700;
+}
+
+.mn-editor__tool[data-tool='italic'] {
+  font-style: italic;
+}
+
+.mn-editor__tool[data-tool='strike'] {
+  text-decoration: line-through;
+}
+
+.mn-editor__body {
+  min-height: 96px;
+  padding: 4px 2px;
+  border-radius: 4px;
+  color: var(--mn-fg);
+  font-size: 13px;
+  line-height: 1.55;
+  outline: none;
+}
+
+.mn-editor__body:focus-visible,
+.mn-editor__body:focus-within {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.mn-editor__body.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--mn-fg-muted);
+  pointer-events: none;
+}
+
+/* Blank runs are document structure; they must not add visual gaps. */
+.mn-editor__blank {
+  height: 0;
+  margin: 0;
+}
+
+.mn-editor__para {
+  margin: 0 0 6px;
+}
+
+.mn-editor__heading {
+  margin: 10px 0 4px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.mn-editor h1.mn-editor__heading {
+  font-size: 17px;
+}
+
+.mn-editor h2.mn-editor__heading {
+  font-size: 15px;
+}
+
+.mn-editor h3.mn-editor__heading,
+.mn-editor h4.mn-editor__heading,
+.mn-editor h5.mn-editor__heading,
+.mn-editor h6.mn-editor__heading {
+  font-size: 13px;
+}
+
+.mn-editor__list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.mn-editor__list--tasks {
+  list-style: none;
+  padding-left: 2px;
+}
+
+.mn-editor__task {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.mn-editor__task-box {
+  flex: none;
+  margin: 0;
+  accent-color: var(--mn-accent);
+  cursor: pointer;
+}
+
+.mn-editor__task-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.mn-editor__quote {
+  margin: 0 0 6px;
+  padding: 2px 0 2px 10px;
+  border-left: 1px solid var(--mn-border-strong);
+  color: var(--mn-fg-muted);
+}
+
+.mn-editor__divider {
+  margin: 8px 0;
+}
+
+.mn-editor__divider hr {
+  border: none;
+  border-top: 1px solid var(--mn-border);
+  margin: 0;
+}
+
+.mn-editor__table-wrap {
+  margin: 0 0 8px;
+  overflow-x: auto;
+}
+
+.mn-editor__table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.mn-editor__table th,
+.mn-editor__table td {
+  padding: 3px 7px;
+  border: 1px solid var(--mn-border);
+  text-align: left;
+}
+
+.mn-editor__table th {
+  background: color-mix(in oklch, var(--mn-fg) 5%, transparent);
+  font-weight: 600;
+}
+
+/* ── Code blocks ────────────────────────────────────────────────────────
+ * Read-only and highlighted at rest; a plain textarea while editing, so
+ * contenteditable's autocorrect and stray markup never reach the source.
+ */
+
+.mn-editor__code {
+  margin: 0 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mn-editor__code-head {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--mn-border);
+  background: color-mix(in oklch, var(--mn-fg) 4%, transparent);
+  cursor: text;
+}
+
+.mn-editor__code-lang {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: var(--mn-fg-muted);
+}
+
+.mn-editor__code pre {
+  margin: 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  cursor: text;
+}
+
+.mn-editor__code code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mn-editor__code-input {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+/* ── Raw blocks ─────────────────────────────────────────────────────────
+ * Markdown outside the supported subset. Read-only, labelled with why, and
+ * emitted verbatim on save — the editor never rewrites what it did not author.
+ */
+
+.mn-editor__raw {
+  position: relative;
+  margin: 0 0 8px;
+  padding: 4px 8px 6px;
+  border: 1px dashed var(--mn-border-strong);
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--mn-fg) 3%, transparent);
+}
+
+.mn-editor__raw-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  cursor: help;
+}
+
+.mn-editor__raw-source {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+/* ── Mention chips ──────────────────────────────────────────────────────
+ * Backed by data: the span carries the issue id or the path and line range,
+ * so a click opens the target rather than selecting text.
+ */
+
+.mn-mention {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 0 3px;
+  border: 1px solid var(--mn-border);
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--mn-fg) 5%, transparent);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--mn-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-mention:hover {
+    border-color: var(--mn-accent);
+  }
+}
+
+.mn-editor__body code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--mn-fg) 7%, transparent);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.mn-editor__body a {
+  color: var(--mn-accent);
+}
+
+.mn-editor__body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}

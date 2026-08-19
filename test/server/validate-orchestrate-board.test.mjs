@@ -412,9 +412,9 @@ describe('mergeConfigMeta autopilot', () => {
     assert.equal(merged.autopilot.maxTestAttempts, 3);
     assert.equal(merged.autopilot.maxBuildAttempts, 2);
     assert.equal(merged.autopilot.maxFinalTestAttempts, 3);
-    assert.equal(merged.autopilot.heartbeatIntervalMs, 7000);
-    assert.equal(merged.autopilot.progressStallMs, 90000);
-    assert.equal(merged.autopilot.heartbeatDeadMs, 30000);
+    assert.equal(merged.autopilot.heartbeatIntervalMs, 10000);
+    assert.equal(merged.autopilot.progressStallMs, 300000);
+    assert.equal(merged.autopilot.heartbeatDeadMs, 90000);
   });
 
   it('clamps autopilot numeric fields', () => {
@@ -433,9 +433,9 @@ describe('mergeConfigMeta autopilot', () => {
     assert.equal(merged.autopilot.maxTestAttempts, 1);
     assert.equal(merged.autopilot.maxBuildAttempts, 1);
     assert.equal(merged.autopilot.maxFinalTestAttempts, 10);
-    assert.equal(merged.autopilot.heartbeatIntervalMs, 1000);
-    assert.equal(merged.autopilot.progressStallMs, 10000);
-    assert.equal(merged.autopilot.heartbeatDeadMs, 300000);
+    assert.equal(merged.autopilot.heartbeatIntervalMs, 500);
+    assert.equal(merged.autopilot.progressStallMs, 5_000);
+    assert.equal(merged.autopilot.heartbeatDeadMs, 600_000);
   });
 
   it('validates execution and isolation mode enums', () => {

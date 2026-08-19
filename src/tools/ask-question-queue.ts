@@ -55,12 +55,18 @@ async function drainQueue(): Promise<void> {
     const modalOptions: QuestionCardsModalOptions = embedHost
       ? { host: embedHost, embedded: true, chatId }
       : { chatId };
+    // Surface the block on the issue too, not only in the chat. An agent
+    // waiting on a question you never noticed is the worst outcome the
+    // dispatch loop has, and the chat may not be the surface you are looking at.
+    void import('../chat/issues/agent-watch').then((m) => m.markIssueAwaitingInput(chatId));
+
     const result = await showQuestionCardsModal(
       next.args,
       next.context,
       modalOptions,
     );
     await applyBrowserAllowlistFromAskQuestion(next.args, result);
+    void import('../chat/issues/agent-watch').then((m) => m.clearIssueAwaitingInput(chatId));
     next.resolve(stringifyAskQuestionResult(result));
   } catch {
     next.resolve(stringifyAskQuestionResult({ status: 'cancelled', answers: [] }));

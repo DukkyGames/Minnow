@@ -167,4 +167,35 @@ describe('theme-contrast', () => {
       }
     });
   }
+
+  // Shared context menu and command palette (Issues app v2, Phase 0). Both
+  // render over --mn-bg in every family. `--mn-fg-subtle` was the first reach
+  // for their secondary text and bottoms out near 1.8:1 in the light families;
+  // these pairs pin the tokens that actually clear AA.
+  for (const themeId of THEME_IDS) {
+    test(`${themeId}: context menu and palette text meet WCAG AA`, () => {
+      const vars = readThemeBlock(css, themeId);
+      const bg = vars['--mn-bg'];
+      assert.ok(bg, `missing --mn-bg for ${themeId}`);
+
+      const pairs: Array<[string, string]> = [
+        // .mn-menu__item / .mn-palette__row label
+        ['--mn-fg', 'menu and palette row label'],
+        // .mn-menu__heading, .mn-menu__shortcut, .mn-palette__group,
+        // .mn-palette__group-tag, .mn-palette__shortcut, ::placeholder
+        ['--mn-fg-muted', 'menu and palette secondary text'],
+        // .mn-menu__item.is-danger
+        ['--mn-danger-ink', 'destructive menu row label'],
+      ];
+
+      for (const [token, role] of pairs) {
+        const fg = resolveToken(vars, token);
+        assert.ok(fg, `${token} resolves to a color for ${themeId}`);
+        assert.ok(
+          contrastRatio(fg!, bg) >= 4.5,
+          `${role} (${token}) on --mn-bg ${contrastRatio(fg!, bg).toFixed(2)} < 4.5 for ${themeId}`,
+        );
+      }
+    });
+  }
 });

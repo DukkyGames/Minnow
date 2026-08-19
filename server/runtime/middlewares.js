@@ -51,6 +51,7 @@ import { createToolsMiddleware } from './tools-middleware.js';
 import { createAuthMiddleware } from './auth-middleware.js';
 import { createAuthRoutesMiddleware } from '../auth/routes.js';
 import { createDiagnosticsMiddleware } from '../diagnostics/middleware.js';
+import { createIssueAttachmentsMiddleware } from '../issues/attachments-routes.js';
 import { installDiagnosticsProcessHandlers } from '../diagnostics/process-handlers.js';
 
 /**
@@ -63,6 +64,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createAuthRoutesMiddleware());
   connectApp.use(createDiagnosticsMiddleware());
   connectApp.use(createConfigMiddleware());
+  connectApp.use(createIssueAttachmentsMiddleware());
   connectApp.use(createSettingsMiddleware());
   connectApp.use(createBenchmarksMiddleware());
   connectApp.use(createCompareMiddleware());

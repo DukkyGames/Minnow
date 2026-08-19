@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import {
   buildProviderChain,
+  getLastSearchDiscardedUnrelated,
   getLastSearchError,
   getLastSearchProvider,
   searchStructured,
@@ -118,6 +119,78 @@ describe('searchStructured', () => {
     const results = await searchStructured('no hits', { useCache: false });
     assert.equal(results.length, 0);
     assert.match(getLastSearchError() ?? '', /No SearXNG results|No Tavily|No DuckDuckGo/);
+  });
+
+  it('falls back to Tavily when SearXNG returns a decoy SERP', async () => {
+    const decoy = [
+      { title: 'Nick Jr. | Homepage', url: 'https://www.nickjr.com/', content: 'Preschool games' },
+      { title: 'Convert m to cm', url: 'https://unitconverters.net/', content: 'Length units' },
+      { title: 'Booking.com', url: 'https://www.booking.com/', content: 'Hotels and flights' },
+      { title: 'Speedtest by Ookla', url: 'https://www.speedtest.net/', content: 'Internet speed' },
+    ];
+
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes('localhost:18080')) {
+        return { ok: true, status: 200, json: async () => ({ results: decoy }) };
+      }
+      if (url.includes('api.tavily.com')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            results: [
+              {
+                title: 'chokidar v4 watch options',
+                url: 'https://github.com/paulmillr/chokidar',
+                content: 'chokidar watch options changed in v4',
+              },
+            ],
+          }),
+        };
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const results = await searchStructured('chokidar v4 watch options', { useCache: false });
+    assert.equal(results.length, 1);
+    assert.equal(results[0].url, 'https://github.com/paulmillr/chokidar');
+    assert.equal(getLastSearchProvider(), 'tavily');
+    assert.equal(getLastSearchDiscardedUnrelated(), true);
+  });
+
+  it('ignores a cached result set that no longer matches its query', async () => {
+    const chain = ['searxng', 'tavily', 'duckduckgo'];
+    const key = JSON.stringify({ query: 'chokidar v4 watch options', chain, count: 5 });
+    await setSearch(key, [
+      { title: 'Nick Jr. | Homepage', url: 'https://www.nickjr.com/', snippet: 'Preschool games' },
+      { title: 'Convert m to cm', url: 'https://unitconverters.net/', snippet: 'Length units' },
+      { title: 'Booking.com', url: 'https://www.booking.com/', snippet: 'Hotels and flights' },
+    ]);
+
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes('localhost:18080')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            results: [
+              {
+                title: 'chokidar v4 release notes',
+                url: 'https://github.com/paulmillr/chokidar/releases',
+                content: 'New watch options in v4',
+              },
+            ],
+          }),
+        };
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+
+    const results = await searchStructured('chokidar v4 watch options');
+    assert.equal(results.length, 1);
+    assert.match(results[0].url, /chokidar/);
   });
 
   it('reads and writes disk search cache with TTL', async () => {

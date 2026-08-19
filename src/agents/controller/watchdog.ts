@@ -117,12 +117,14 @@ function isApprovalPausedForRun(run: SubAgentRun): boolean {
 }
 
 function isHeartbeatFresh(run: SubAgentRun, deadMs: number): boolean {
+  if (deadMs <= 0) return true;
   const age = getHeartbeatAgeMs(run);
   if (age === null) return true;
   return age <= deadMs;
 }
 
 function isProgressFresh(run: SubAgentRun, stallMs: number): boolean {
+  if (stallMs <= 0) return true;
   if (isApprovalPausedForRun(run)) return true;
   const age = getProgressAgeMs(run);
   if (age === null) return true;
@@ -154,6 +156,12 @@ function evaluateRun(run: SubAgentRun): void {
   if (run.status !== 'running') return;
 
   const config = getHeartbeatConfig();
+  const supervisionActive =
+    config.progressStallMs > 0 ||
+    config.heartbeatDeadMs > 0 ||
+    repetitionThresholds.duplicateToolCallThreshold > 0;
+  if (!supervisionActive) return;
+
   const state = ensureRunState(run.runId);
   const lifecycle = resolveRunLifecycle(run);
 

@@ -5,7 +5,12 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { resolveConfigPath, resourceToRelativeKey } from './paths.js';
+import {
+  issuesBackupDir,
+  issuesBackupPath,
+  resolveConfigPath,
+  resourceToRelativeKey,
+} from './paths.js';
 import { ensureMinnowLayout } from './home.js';
 import {
   mergeConfigMeta,
@@ -27,6 +32,7 @@ import {
   validateUserRulesSettings,
   validateBugsState,
   validateIssuesState,
+  issuesSchemaRevisionOf,
   validateIssuesTaxonomy,
   defaultIssuesTaxonomy,
 } from './validators.js';
@@ -239,6 +245,47 @@ export async function writeConfigJson(relativeKey, data) {
     return writeConfigJsonUnlocked(relativeKey, data);
   }
   return withConfigJsonLock(relativeKey, () => writeConfigJsonUnlocked(relativeKey, data));
+}
+
+/** How many pre-migration copies of issues/state.json to keep on disk. */
+const ISSUES_BACKUP_KEEP = 5;
+
+/**
+ * Copy issues/state.json aside before a write that changes its schema revision.
+ *
+ * The whole Issues epic hangs off this file, and the one prior attempt at a
+ * schema move (MIN-354 v1) lost data. A migration that goes wrong is survivable
+ * as long as the previous bytes still exist; the cost here is one file copy on
+ * the single write per install where the revision actually changes.
+ *
+ * Never throws: a backup that cannot be written must not block the user's save.
+ *
+ * @param {string} relativeKey
+ * @param {number} nextVersion
+ */
+async function backupIssuesStateOnSchemaChange(relativeKey, nextVersion) {
+  try {
+    const current = await readConfigJson(relativeKey);
+    if (!current || typeof current !== 'object') return;
+    const row = /** @type {Record<string, unknown>} */ (current);
+    if (!Array.isArray(row.issues)) return;
+    const fromVersion = issuesSchemaRevisionOf(row);
+    if (fromVersion === nextVersion) return;
+
+    const dir = issuesBackupDir();
+    await fs.mkdir(dir, { recursive: true });
+    const target = issuesBackupPath(fromVersion, Date.now());
+    await fs.writeFile(target, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
+
+    const entries = (await fs.readdir(dir))
+      .filter((name) => name.startsWith('state.v') && name.endsWith('.json'))
+      .sort();
+    for (const stale of entries.slice(0, Math.max(0, entries.length - ISSUES_BACKUP_KEEP))) {
+      await fs.rm(path.join(dir, stale), { force: true });
+    }
+  } catch {
+    /* best effort — a failed backup must not fail the save */
+  }
 }
 
 /**
@@ -470,6 +517,7 @@ export async function writeResource(resource, body) {
   }
   if (resource === 'issues') {
     const validated = validateIssuesState(body);
+    await backupIssuesStateOnSchemaChange(key, validated.schemaRevision);
     await writeConfigJson(key, validated);
     return validated;
   }

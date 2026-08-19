@@ -164,7 +164,11 @@ export function getToolPermissionForId(
   const raw = config.permissions.default[id];
   if (isToolPermissionMode(raw)) return raw;
   if (id.startsWith('mcp__') || id.startsWith('plugin__')) return 'ask';
-  if (id === 'web_search_ddg' || id === 'web_search_tavily') {
+  if (
+    id === 'web_search_ddg' ||
+    id === 'web_search_tavily' ||
+    id === 'web_search_searxng'
+  ) {
     return getToolPermissionForId(config, 'web_search');
   }
   const tool = BUILT_IN_TOOLS.find((t) => t.id === id);

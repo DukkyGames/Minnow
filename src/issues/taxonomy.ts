@@ -3,6 +3,8 @@
  * User-editable catalog for issue types, statuses, and priorities.
  */
 
+import { DEFAULT_ISSUE_TYPE_ICONS, isIssueTypeIconClass } from './type-icons';
+
 /** Semantic workflow roles mapped onto status ids at runtime. */
 export type IssueStatusRole =
   | 'triage'
@@ -21,6 +23,8 @@ export type TaxonomyItem = {
   order: number;
   /** Optional chip color (CSS token name or hex from the fixed palette). */
   color?: string;
+  /** Optional Uicons class for list chips (e.g. fi-sr-bug). Settings → Issues picker only. */
+  icon?: string;
 };
 
 /** Status catalog entry with workflow and board metadata. */
@@ -71,10 +75,10 @@ export function createDefaultIssuesTaxonomy(): IssuesTaxonomy {
   return {
     version: 1,
     types: [
-      { id: 'bug', label: 'Bug', order: 0 },
-      { id: 'task', label: 'Task', order: 1 },
-      { id: 'idea', label: 'Idea', order: 2 },
-      { id: 'note', label: 'Note', order: 3 },
+      { id: 'bug', label: 'Bug', order: 0, icon: DEFAULT_ISSUE_TYPE_ICONS.bug },
+      { id: 'task', label: 'Task', order: 1, icon: DEFAULT_ISSUE_TYPE_ICONS.task },
+      { id: 'idea', label: 'Idea', order: 2, icon: DEFAULT_ISSUE_TYPE_ICONS.idea },
+      { id: 'note', label: 'Note', order: 3, icon: DEFAULT_ISSUE_TYPE_ICONS.note },
     ],
     statuses: [
       { id: 'triage', label: 'Triage', order: 0, role: 'triage', boardVisible: true },
@@ -188,6 +192,19 @@ function validateItemList(
 
     const item: TaxonomyItem = { id, label, order };
     if (typeof row.color === 'string' && row.color.trim()) item.color = row.color.trim();
+    if (kind === 'types') {
+      if (typeof row.icon === 'string' && row.icon.trim()) {
+        const icon = row.icon.trim();
+        if (!isIssueTypeIconClass(icon)) {
+          errors.push({
+            field: `${kind}.${id}.icon`,
+            message: `Unknown type icon "${icon}"`,
+          });
+        } else {
+          item.icon = icon;
+        }
+      }
+    }
     out.push(item);
   }
 

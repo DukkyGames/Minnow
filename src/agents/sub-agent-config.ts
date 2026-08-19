@@ -28,34 +28,40 @@ export function clampSubAgentCheckInNudgeMs(value: unknown, fallback = 120_000):
   return Math.min(1_800_000, Math.max(10_000, rounded));
 }
 
-/** Coerce heartbeat interval H to [1s, 60s]. */
-export function clampHeartbeatIntervalMs(value: unknown, fallback = 7_000): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(60_000, Math.max(1_000, Math.round(n)));
-}
-
-/** Coerce progress stall threshold P to [10s, 30m]. */
-export function clampProgressStallMs(value: unknown, fallback = 90_000): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(1_800_000, Math.max(10_000, Math.round(n)));
-}
-
-/** Coerce heartbeat dead threshold D to [5s, 5m]. */
-export function clampHeartbeatDeadMs(value: unknown, fallback = 30_000): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(300_000, Math.max(5_000, Math.round(n)));
-}
-
-/** Coerce duplicate-tool watchdog threshold to [0, 256]; `0` disables detection. */
-export function clampDuplicateToolCallThreshold(value: unknown, fallback = 5): number {
+/** Coerce heartbeat interval H; `0` disables periodic ticks. */
+export function clampHeartbeatIntervalMs(value: unknown, fallback = 10_000): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
   const rounded = Math.round(n);
   if (rounded <= 0) return 0;
-  return Math.min(256, rounded);
+  return rounded;
+}
+
+/** Coerce progress stall threshold P; `0` disables stall detection. */
+export function clampProgressStallMs(value: unknown, fallback = 300_000): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return rounded;
+}
+
+/** Coerce heartbeat dead threshold D; `0` disables unresponsive detection. */
+export function clampHeartbeatDeadMs(value: unknown, fallback = 90_000): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return rounded;
+}
+
+/** Coerce duplicate-tool watchdog threshold; `0` disables detection. */
+export function clampDuplicateToolCallThreshold(value: unknown, fallback = 25): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return rounded;
 }
 
 function cloneTypeConfig(raw: SubAgentTypeConfig): SubAgentTypeConfig {
