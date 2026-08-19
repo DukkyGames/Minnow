@@ -167,6 +167,10 @@
   min-width: max-content;
   max-width: none;
   overflow: visible;
+  /* Overlay the compact grid so the listbox does not steal a track. */
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
   z-index: 37;
   padding: 6px;
   background: var(--mn-bg-elevated, var(--mn-bg));

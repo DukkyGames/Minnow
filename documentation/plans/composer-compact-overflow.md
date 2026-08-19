@@ -96,3 +96,110 @@ The cog popover is a fixed-position settings sheet above the button (same family
 ## Open questions
 
 None that block implementation. Threshold 880/920 is an asserted default from the 665px / 710px overflow screenshots; tune only if QA shows the wide strip still clips just above 920px.
+
+---
+
+## Polish brief (compact row + overflow sheet)
+
+Visual pass on the shipped compact overflow. Trigger, parking, and wide-row behavior stay. The compact row and cog sheet need a real layout, not a dump of toolbar widgets.
+
+### Feature summary
+
+A developer in a ~650–720px Code chat column should still type a message without fighting chrome. Compact keeps mode, model, context usage, and a settings cog **inside** the composer card. The cog opens one settings sheet: labeled rows for parked toggles, then the full Tools catalog in the same scroll.
+
+### Primary user action
+
+Send the next turn. Glance mode, model, and context. Open the cog only for Local/branch, reasoning, injection toggles, or tool permissions.
+
+### Design direction
+
+- **Register:** product. **Color strategy:** Restrained (`--mn-*` only).
+- **Scene:** Same as above: split Code column, afternoon indoor light, next-turn focus.
+- **Anchors:** Cursor composer overflow, VS Code compact toolbar, Linear settings rows.
+- **Visual probes:** skipped. This is a density pass on an existing surface, not a new visual lane.
+
+### Confirmed topology (2026-08-18)
+
+1. **Cog stays inside the composer card**, on the compact row. It does not sit in the send column or stack above Send. Hub and active-chat `.composer-controls` stay in the composer column (`grid-column: 1`), not `1 / -1`.
+2. **Swap cog and context wheel** vs the first compact layout:
+   `[ Mode ▾ ]  (cog)  ···  (model, may ellipsize)  (wheel)`
+   Board-managed (no mode): `(cog)  ···  (model)  (wheel)`.
+3. **Parked toggles are labeled rows** in the sheet: icon + name + control. Wide toolbar stays icon-only.
+   - Reasoning (effort select on the same row when the model uses levels)
+   - Context documents
+   - Code map
+   - Brain notes
+4. **Keep the full Tools catalog** in the sheet. Flatten it: one popover scroll, no nested bordered panel, no inner `max-height` / inner scrollbar. Header row is `Tools` + Enable all, then groups, then Web search / cache / All tool settings as the last section of the same sheet.
+
+### Layout strategy
+
+**Compact row (inside the card, column 1 only):**
+
+```
+[ Mode ▾ ]  (cog)          (model · provider)  (wheel)     |  [Send]
+[ textarea + inset actions                             ]
+```
+
+- Mode never shrinks. Cog is `flex-shrink: 0`.
+- Compact **moves the cog in the DOM** to sit after the mode dropdown (flex `order` 1–4: mode, cog, trail/model, wheel). Do not use `display: contents` on the trail — that dropped the cog onto a second row.
+- Model takes leftover space and ellipsizes; logo + chevron stay.
+- Wheel is the last compact control, still live (breakdown opens above the ring).
+- Send stays a single glyph in the send stack. No cog above it.
+
+**Overflow sheet (single scroll, ~26rem, max 70vh):**
+
+1. Local + branch chips (wrap row, unchanged controls)
+2. Labeled toggle rows (tight 8px sibling gap)
+3. Optional Orchestrate / board / work-agent rows when those wraps are visible
+4. Hairline, then Tools header + Enable all
+5. Tool groups (existing Full / Ask / Off segments; group summary padding 10px 12px)
+6. Web search, cache checkbox, All tool settings
+
+Sheet uses `display: contents` (or equivalent unwrap) on `.composer-tools-popover` while parked so its header, list, and footer are siblings of the toggle rows. `.tools-list--composer` overflow is visible; only `.composer-overflow-popover` scrolls.
+
+### Key states
+
+| State | What the user sees |
+|---|---|
+| Compact | Mode, cog, model, wheel inside the card. Send alone in the send column. |
+| Compact + cog open | One sheet above the cog. Labeled rows, then flattened Tools. One scrollbar. |
+| Compact + tools group open | Group expands in the same sheet; sheet grows then scrolls. |
+| Wide | Unchanged labelled segments + inline chips + trail Tools. Cog hidden. Labels on injection toggles stay hidden. |
+
+### Interaction model
+
+Unchanged: cog toggle, click-outside, Escape, close on compact/wide swap. Tools fill still runs when the sheet opens. Nested Local/branch menus stay `position: fixed`.
+
+### Anti-goals
+
+- Nested cards or a second scroll inside the sheet
+- Glass, extra shadow vocabulary, or a compact-only palette
+- Moving mode or model behind the cog
+- Two-row composer chrome
+- Changing 880 / 920 thresholds in this pass
+
+### Implementation todos
+
+- [x] Constrain compact (and hub) composer-controls to the composer column so the cog never sits above Send
+- [x] Compact row order: mode, cog, model, context wheel (DOM move + flex order; not display:contents)
+- [x] Overflow labeled rows for reasoning / docs / map / brain (wide stays icon-only)
+- [x] Flatten Tools into the overflow sheet: one scroll, no nested panel, Tools + Enable all on one header row
+- [x] Sheet width/padding/group density; drop inner tools `max-height`
+- [x] Tests for compact order + overflow flattening; update `documentation/context.md`
+
+### Recommended Impeccable references
+
+`reference/layout.md`, `reference/quieter.md`, `reference/interaction-design.md`, `reference/harden.md`
+
+---
+
+## Bugfix: sheet behind chats sidebar
+
+The cog sheet used `position: fixed; z-index: 36` while still a descendant of `#mainColumn`. That column sets `container-type: inline-size`, which creates a stacking context. `.chat-sidebar` is a flex sibling at z-index 36, so the sheet painted under the chats list. End-aligning a ~26rem sheet to the left-side cog also placed it at ~171px, overlapping the 300px sidebar.
+
+### Todos
+
+- [x] Portal `#composerOverflowPopover` to `document.body` while open (same pattern as the model menu)
+- [x] Raise sheet stacking to `z-index: 1200` (above sidebar 36 / resizer 37)
+- [x] Clamp placement into `#mainColumn` when the sheet fits; viewport-clamp otherwise
+- [x] Tests for clamp math + portal restore; note in `documentation/context.md`

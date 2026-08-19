@@ -167,6 +167,11 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   overflow: visible;
 }
 
+/* Compact: keep the strip in the composer column so the cog is not stacked above Send. */
+.input-bar--hub.input-bar--composer-compact .composer-controls {
+  grid-column: 1;
+}
+
 /* Plan / Super Plan caret menu is absolutely positioned below the mode strip.
    Hub uses the same input-bar grid as chat — raise the controls row so the
    dropdown is not covered by #msgInput on the next grid row. */
@@ -770,7 +775,7 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 
   .input-bar--hub .composer-controls__trail .view-mode-toggle-btn--to-board,
   .input-bar--hub .composer-controls__trail .composer-tools-btn--toolbar,
-  .input-bar--hub .composer-controls__trail .composer-overflow-btn {
+  .input-bar--hub .composer-controls--compact .composer-overflow-btn {
     width: var(--touch-min, 44px);
     height: var(--touch-min, 44px);
   }

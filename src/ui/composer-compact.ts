@@ -1,6 +1,8 @@
 /**
  * Compact Code composer strip: when the controls row is too narrow, keep
- * mode / context wheel / model visible and park the rest behind a cog.
+ * mode / cog / model / context wheel on the row and park the rest in the cog
+ * sheet. Compact moves the cog next to the mode dropdown; CSS `order` puts
+ * the wheel last.
  *
  * Hub (`.input-bar--hub`) and active chat share `#composerControls`, so one
  * observer covers both. Threshold is width-based with hysteresis — not live
@@ -22,7 +24,7 @@ export const COMPOSER_COMPACT_LEAVE_PX = 920;
 
 /**
  * Controls that leave the compact row. Order is the overflow sheet top-to-bottom.
- * Context wheel, mode, and the model chip stay on the row.
+ * Mode, cog, model, and the context wheel stay on the row.
  */
 const OVERFLOW_ITEM_IDS = [
   'composerRunTargetWrap',
@@ -45,6 +47,8 @@ let outsideHandler: ((event: PointerEvent) => void) | null = null;
 let escapeHandler: ((event: KeyboardEvent) => void) | null = null;
 let controlsChangedHandler: ((event: Event) => void) | null = null;
 let initialized = false;
+/** Original neighbor of the overflow sheet before it was portaled to `document.body`. */
+let overflowPopoverHome: { parent: Node; next: ChildNode | null } | null = null;
 
 function getRow(): HTMLElement | null {
   return document.getElementById('composerControls');
@@ -92,18 +96,91 @@ function detachOverflowListeners(): void {
   }
 }
 
+/**
+ * Viewport box used to keep the overflow sheet on screen and, when it fits,
+ * inside the Code chat column so it does not slide under the chats sidebar.
+ */
+export type ComposerOverflowViewport = {
+  width: number;
+  height: number;
+  columnLeft?: number;
+  columnRight?: number;
+  margin?: number;
+};
+
+/**
+ * Clamp a viewport-fixed overflow sheet. Prefers the chat column (`#mainColumn`)
+ * when the sheet fits there; otherwise keeps the preferred left and only
+ * viewport-clamps so a too-narrow column can still overlay the sidebar.
+ */
+export function clampComposerOverflowPlacement(
+  box: { top: number; left: number; width: number; height: number },
+  viewport: ComposerOverflowViewport,
+): { top: number; left: number } {
+  const margin = viewport.margin ?? 8;
+  let { top, left } = box;
+  const { width, height } = box;
+
+  const colLeft = viewport.columnLeft;
+  const colRight = viewport.columnRight;
+  const columnInner =
+    colLeft != null && colRight != null ? colRight - colLeft - margin * 2 : Number.NaN;
+
+  // Sheet fits in the chat column: keep it to the right of the chats sidebar.
+  if (Number.isFinite(columnInner) && width <= columnInner && colLeft != null && colRight != null) {
+    const minLeft = colLeft + margin;
+    const maxLeft = colRight - width - margin;
+    left = Math.min(Math.max(left, minLeft), Math.max(minLeft, maxLeft));
+  }
+
+  const minLeft = margin;
+  const maxLeft = viewport.width - width - margin;
+  left = Math.min(Math.max(left, minLeft), Math.max(minLeft, maxLeft));
+
+  const minTop = margin;
+  const maxTop = viewport.height - height - margin;
+  top = Math.min(Math.max(top, minTop), Math.max(minTop, maxTop));
+
+  return { top, left };
+}
+
+/**
+ * Lift the sheet to `document.body` while open. `#mainColumn` uses
+ * `container-type: inline-size`, which creates a stacking context; a
+ * `position:fixed` descendant at z-index 36 then paints under `.chat-sidebar`
+ * (also 36) even though the sheet is "fixed".
+ */
+function portalOverflowPopover(popover: HTMLElement): void {
+  if (popover.parentElement === document.body) return;
+  if (popover.parentNode) {
+    overflowPopoverHome = { parent: popover.parentNode, next: popover.nextSibling };
+  }
+  document.body.appendChild(popover);
+}
+
+/** Put the hidden sheet back next to the cog so compact DOM stays predictable. */
+function unportalOverflowPopover(popover: HTMLElement): void {
+  const home = overflowPopoverHome;
+  overflowPopoverHome = null;
+  if (!home?.parent.isConnected) return;
+  const next = home.next && home.next.isConnected ? home.next : null;
+  home.parent.insertBefore(popover, next);
+}
+
 /** Close the overflow settings sheet (cog popover). */
 export function closeComposerOverflowPopover(): void {
   const popover = getOverflowPopover();
   const button = getOverflowButton();
   if (!popover) {
     overflowOpen = false;
+    overflowPopoverHome = null;
     return;
   }
   popover.classList.add('hidden');
   overflowOpen = false;
   button?.setAttribute('aria-expanded', 'false');
   detachOverflowListeners();
+  unportalOverflowPopover(popover);
 }
 
 /** Place a panel above `anchor`, flipping below if it would clip the viewport. */
@@ -119,18 +196,23 @@ function positionFixedPanel(anchor: HTMLElement, panel: HTMLElement, align: 'sta
   if (top < margin) {
     top = rect.bottom + gap;
   }
-  if (top + height > window.innerHeight - margin) {
-    top = Math.max(margin, window.innerHeight - height - margin);
-  }
 
-  let left = align === 'end' ? rect.right - width : rect.left;
-  if (left < margin) left = margin;
-  if (left + width > window.innerWidth - margin) {
-    left = Math.max(margin, window.innerWidth - width - margin);
-  }
+  const column = document.getElementById('mainColumn');
+  const columnRect = column?.getBoundingClientRect();
+  const preferredLeft = align === 'end' ? rect.right - width : rect.left;
+  const placed = clampComposerOverflowPlacement(
+    { top, left: preferredLeft, width, height },
+    {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      columnLeft: columnRect?.left,
+      columnRight: columnRect?.right,
+      margin,
+    },
+  );
 
-  panel.style.top = `${Math.round(top)}px`;
-  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(placed.top)}px`;
+  panel.style.left = `${Math.round(placed.left)}px`;
 }
 
 function attachOverflowListeners(): void {
@@ -166,6 +248,8 @@ function openOverflowPopover(): void {
   } catch {
     /* Tools list is lazy; an empty section is still better than failing the sheet. */
   }
+  // Portal before un-hiding so the first paint is already above the sidebar.
+  portalOverflowPopover(popover);
   popover.classList.remove('hidden');
   overflowOpen = true;
   button.setAttribute('aria-expanded', 'true');
@@ -244,6 +328,32 @@ function setToolsPopoverInline(inline: boolean): void {
   popover.classList.toggle('hidden', !inline);
 }
 
+/**
+ * Compact row is flex, not a 4-column grid: the cog must be a sibling of the
+ * mode dropdown. Leaving it inside the trail (or promoting it with
+ * display:contents) dropped it onto a second implicit row.
+ */
+function placeOverflowAnchor(compactMode: boolean): void {
+  const anchor = document.getElementById('composerOverflowAnchor');
+  const trail = getRow()?.querySelector('.composer-controls__trail');
+  if (!anchor) return;
+
+  if (!compactMode) {
+    if (trail && anchor.parentElement !== trail) trail.appendChild(anchor);
+    return;
+  }
+
+  const dropdown = document.getElementById('modeSelectorDropdown');
+  const row = dropdown?.parentElement ?? getRow();
+  if (!row) return;
+  if (dropdown && anchor.parentElement === row && dropdown.nextSibling === anchor) return;
+  if (dropdown) {
+    row.insertBefore(anchor, dropdown.nextSibling);
+    return;
+  }
+  if (row.firstChild !== anchor) row.insertBefore(anchor, row.firstChild);
+}
+
 /** Park (or restore) overflow controls to match the current compact flag. */
 export function refreshComposerCompactOverflow(): void {
   const slot = getOverflowSlot();
@@ -254,9 +364,12 @@ export function refreshComposerCompactOverflow(): void {
       parkElement(el, slot);
     }
     setToolsPopoverInline(true);
+    placeOverflowAnchor(true);
     return;
   }
 
+  // Overflow must be back in the trail before restore uses it as nextSibling.
+  placeOverflowAnchor(false);
   setToolsPopoverInline(false);
   // Reverse order so stored nextSibling pointers are already back in the row.
   for (const el of overflowElements().reverse()) {
@@ -355,6 +468,7 @@ export function disposeComposerCompactForTests(): void {
   const button = getOverflowButton();
   button?.removeEventListener('click', onOverflowButtonClick);
   overflowHomes.clear();
+  overflowPopoverHome = null;
   initialized = false;
   compact = false;
   overflowOpen = false;

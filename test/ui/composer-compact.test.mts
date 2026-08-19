@@ -15,6 +15,7 @@ const { disposeModeSelectorForTests, initModeSelector } = await import(
 const {
   COMPOSER_COMPACT_ENTER_PX,
   COMPOSER_COMPACT_LEAVE_PX,
+  clampComposerOverflowPlacement,
   disposeComposerCompactForTests,
   initComposerCompact,
   isComposerControlsCompact,
@@ -114,11 +115,13 @@ describe('composer compact overflow', () => {
     initComposerCompact();
     syncComposerCompactFromWidth(700);
 
+    const bar = row.closest('.input-bar');
     const slot = document.getElementById('composerOverflowSlot');
     const thinking = document.getElementById('composerThinkingWrap');
     const tools = document.getElementById('composerToolsAnchor');
     const wheel = row.querySelector('.context-usage-anchor');
     const dropdown = document.getElementById('modeSelectorDropdown');
+    const overflowBtn = document.getElementById('btnComposerOverflow');
 
     assert.equal(isComposerControlsCompact(), true);
     assert.equal(thinking?.parentElement?.id, 'composerOverflowSlot');
@@ -128,10 +131,19 @@ describe('composer compact overflow', () => {
     assert.equal(dropdown?.hidden, false);
     assert.match(dropdown?.textContent ?? '', /Plan/);
     assert.equal(dropdown?.parentElement, row);
+    assert.equal(overflowBtn?.closest('#composerControls'), row);
+    assert.equal(slot?.contains(overflowBtn), false);
+    assert.equal(bar?.classList.contains('input-bar--composer-compact'), true);
+    assert.equal(document.getElementById('composerOverflowAnchor')?.previousElementSibling, dropdown);
 
     syncComposerCompactFromWidth(940);
     assert.equal(thinking?.parentElement, row);
     assert.equal(tools?.parentElement?.className, 'composer-controls__trail');
+    assert.equal(bar?.classList.contains('input-bar--composer-compact'), false);
+    assert.equal(
+      document.getElementById('composerOverflowAnchor')?.parentElement?.className,
+      'composer-controls__trail',
+    );
   });
 
   test('mode dropdown CSS never allows the compact trigger to shrink or clip', () => {
@@ -156,5 +168,83 @@ describe('composer compact overflow', () => {
     refreshComposerCompactOverflow();
 
     assert.equal(wrap.parentElement?.id, 'composerOverflowSlot');
+  });
+
+  test('compact CSS pins mode, cog, model, wheel inside the composer column', () => {
+    const css = readFileSync(new URL('../../src/styles/composer-overflow.css', import.meta.url), 'utf8');
+    assert.match(css, /\.composer-controls\.composer-controls--compact \{[\s\S]*?display:\s*flex;/);
+    assert.doesNotMatch(
+      css,
+      /\.composer-controls--compact \.composer-controls__trail \{\s*display:\s*contents;/,
+    );
+    assert.match(css, /\.composer-controls--compact #modeSelectorDropdown \{[\s\S]*?order:\s*1;/);
+    assert.match(css, /\.composer-controls--compact \.composer-overflow-anchor \{[\s\S]*?order:\s*2;/);
+    assert.match(css, /\.composer-controls--compact \.composer-controls__trail \{[\s\S]*?order:\s*3;/);
+    assert.match(css, /\.composer-controls--compact \.context-usage-anchor \{[\s\S]*?order:\s*4;/);
+    assert.match(
+      css,
+      /\.input-bar\.input-bar--composer-compact > \.composer-controls \{\s*grid-column:\s*1;/,
+    );
+    const hubCss = readFileSync(new URL('../../src/styles/hub.css', import.meta.url), 'utf8');
+    assert.match(
+      hubCss,
+      /\.input-bar--hub\.input-bar--composer-compact \.composer-controls \{\s*grid-column:\s*1;/,
+    );
+  });
+
+  test('overflow sheet CSS flattens Tools and labels parked toggles', () => {
+    const css = readFileSync(new URL('../../src/styles/composer-overflow.css', import.meta.url), 'utf8');
+    assert.match(
+      css,
+      /\.composer-overflow-slot \.composer-tools-popover:not\(\.hidden\)[\s\S]*display:\s*contents/,
+    );
+    assert.doesNotMatch(css, /max-height:\s*min\(40vh/);
+    assert.match(css, /content:\s*'Reasoning'/);
+    assert.match(css, /content:\s*'Context documents'/);
+    assert.match(css, /content:\s*'Code map'/);
+    assert.match(css, /content:\s*'Brain notes'/);
+    assert.match(css, /\.composer-overflow-popover \{[\s\S]*?z-index:\s*1200;/);
+  });
+
+  test('overflow clamp keeps a fitting sheet inside the chat column', () => {
+    const placed = clampComposerOverflowPlacement(
+      { top: 400, left: 171, width: 414, height: 485 },
+      { width: 1600, height: 1000, columnLeft: 348, columnRight: 1000 },
+    );
+    assert.equal(placed.left, 356);
+    assert.equal(placed.top, 400);
+  });
+
+  test('overflow clamp viewport-only when the sheet is wider than the column', () => {
+    const placed = clampComposerOverflowPlacement(
+      { top: 400, left: 171, width: 414, height: 485 },
+      { width: 1600, height: 1000, columnLeft: 348, columnRight: 700 },
+    );
+    assert.equal(placed.left, 171);
+  });
+
+  test('open overflow sheet portals to body and close restores it beside the cog', () => {
+    const row = setupComposerDom();
+    initModeSelector();
+    initComposerCompact();
+    syncComposerCompactFromWidth(700);
+
+    const btn = document.getElementById('btnComposerOverflow');
+    const popover = document.getElementById('composerOverflowPopover');
+    const anchor = document.getElementById('composerOverflowAnchor');
+    assert.ok(btn);
+    assert.ok(popover);
+    assert.ok(anchor);
+    assert.equal(row.classList.contains('composer-controls--compact'), true);
+
+    btn.click();
+    assert.equal(popover.parentElement, document.body);
+    assert.equal(popover.classList.contains('hidden'), false);
+    assert.equal(btn.getAttribute('aria-expanded'), 'true');
+
+    btn.click();
+    assert.equal(popover.parentElement, anchor);
+    assert.equal(popover.classList.contains('hidden'), true);
+    assert.equal(btn.getAttribute('aria-expanded'), 'false');
   });
 });
