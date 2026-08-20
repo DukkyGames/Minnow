@@ -18,6 +18,7 @@ const { initBoard } = await import('../../src/state/orchestrate-board-store.ts')
 const { renderBoardView, disposeBoardViewForTests } = await import(
   '../../src/ui/orchestrate-board.ts'
 );
+const { registerStreamDomRemount } = await import('../../src/tools/stream-chat-dom.ts');
 const { setOrchestrateViewMode } = await import('../../src/ui/view-mode-toggle.ts');
 const { setStreaming } = await import('../../src/app-state.ts');
 const { setSidebarStreamPhase } = await import('../../src/ui/chat-item-dot.ts');
@@ -63,6 +64,7 @@ function initBoardForChat(chat, input) {
 describe('orchestrate chat stream remount', { concurrency: false }, () => {
   afterEach(() => {
     setStreaming(false);
+    registerStreamDomRemount(FIXED_CHAT_ID, null);
     disposeBoardViewForTests();
     setSessionStateForTests(null);
   });
@@ -86,16 +88,19 @@ describe('orchestrate chat stream remount', { concurrency: false }, () => {
     });
     setStreaming(true, chat.id);
     setSidebarStreamPhase('generating', chat.id);
+    registerStreamDomRemount(chat.id, () => {});
 
     renderBoardView(group);
     assert.equal(document.querySelector('.stream-status'), null);
 
     setOrchestrateViewMode('chat');
-    for (let i = 0; i < 10; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    let label = null;
+    for (let i = 0; i < 50; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      label = document.querySelector('.stream-status__label');
+      if (label?.textContent === STREAM_LABEL_GENERATING) break;
     }
 
-    const label = document.querySelector('.stream-status__label');
     assert.equal(label?.textContent, STREAM_LABEL_GENERATING);
   });
 });

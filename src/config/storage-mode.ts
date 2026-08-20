@@ -9,15 +9,23 @@ const CONFIG_PING_RETRY_DELAY_MS = 200;
 export type StorageMode = 'server' | 'localStorage';
 
 let storageMode: StorageMode = 'localStorage';
+/** When true, detectConfigServer returns the pinned mode without network probes. */
+let storageModePinnedForTests = false;
 
 /** Current persistence mode (set after detectConfigServer). */
 export function getStorageMode(): StorageMode {
   return storageMode;
 }
 
-/** Override storage mode (unit / headless tests). */
-export function setStorageModeForTests(mode: StorageMode): void {
+/** Override storage mode (unit / headless tests). Pass null to clear the pin. */
+export function setStorageModeForTests(mode: StorageMode | null): void {
+  if (mode === null) {
+    storageMode = 'localStorage';
+    storageModePinnedForTests = false;
+    return;
+  }
   storageMode = mode;
+  storageModePinnedForTests = true;
 }
 
 /** Whether reads/writes should use ~/.minnow via the API. */
@@ -73,6 +81,9 @@ async function probeConfigServer(): Promise<StorageMode> {
  * Successful server mode is cached; localStorage is re-probed on later calls.
  */
 export async function detectConfigServer(): Promise<StorageMode> {
+  if (storageModePinnedForTests) {
+    return storageMode;
+  }
   if (storageMode === 'server') {
     return storageMode;
   }

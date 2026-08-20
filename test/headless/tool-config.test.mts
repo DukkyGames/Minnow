@@ -25,7 +25,7 @@ describe('headless tool config', () => {
 
   beforeEach(async () => {
     previousStorageMode = getStorageMode();
-    setStorageModeForTests('localStorage');
+    setStorageModeForTests(null);
     invalidateToolConfigCache();
     installHeadlessLocalStorage();
 
@@ -70,7 +70,7 @@ describe('headless tool config', () => {
     restoreFetch?.();
     restoreFetch = null;
     invalidateToolConfigCache();
-    setStorageModeForTests(previousStorageMode);
+    setStorageModeForTests(null);
     await new Promise((resolve) => setTimeout(resolve, 50));
     if (server && typeof server.closeAllConnections === 'function') {
       server.closeAllConnections();

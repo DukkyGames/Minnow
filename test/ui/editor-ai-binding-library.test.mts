@@ -76,6 +76,8 @@ mock.module('../../src/models/api-client.ts', {
     fetchModelServe: async () => null,
     fetchServeLog: async () => ({ lines: [] }),
     subscribeServeLog: () => () => undefined,
+    subscribeServeEvents: () => () => undefined,
+    subscribeServeActivity: () => () => undefined,
     resolveDownloadRepo: () => null,
   },
 });

@@ -158,6 +158,27 @@ export function extractChatFailureText(chat: Chat): string {
 }
 
 /**
+ * Agent output only — excludes user seed/nudge text. Board seeds mention infra
+ * examples ("connection refused", "missing binary") that must not classify a
+ * clean VERDICT: fail as infra.
+ */
+function extractAgentFailureText(chat: Chat): string {
+  const parts: string[] = [];
+  for (const msg of chat.history) {
+    if (isUiOnlyTranscriptMessage(msg)) continue;
+    if (msg.role !== 'assistant' && msg.role !== 'tool') continue;
+    const content = msg.content;
+    if (content) {
+      parts.push(typeof content === 'string' ? content : JSON.stringify(content));
+    }
+  }
+  for (const run of chat.runs ?? []) {
+    if (run.errorMessage?.trim()) parts.push(run.errorMessage.trim());
+  }
+  return parts.join('\n');
+}
+
+/**
  * Inlined outcome detection (mirrors the frozen resolveTaskChatStreamOutcome).
  * Called inside this module only; callers that need the canonical export
  * should use resolveTaskChatStreamOutcome from orchestrate-board-actions.
@@ -217,8 +238,8 @@ export function classifyTaskFailure(
   // 'ok' should not reach the failure path.
   // 'failed' falls through to text scan below.
 
-  // 2. Transcript text scan (covers both prose and embedded tool output).
-  const text = extractChatFailureText(chat);
+  // 2. Agent transcript scan (assistant/tool + run errors — not user seed copy).
+  const text = extractAgentFailureText(chat);
   if (isTransientContextLengthError(text)) return 'code';
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
   if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';

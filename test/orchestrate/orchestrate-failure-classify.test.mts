@@ -227,6 +227,20 @@ describe('classifyTaskFailure — structured signal takes precedence', () => {
     const chat = chatWithText('Maximum tool turns reached and ECONNREFUSED');
     assert.equal(classifyTaskFailure(chat), 'stall');
   });
+
+  test('user seed infra examples do not classify VERDICT fail as infra', () => {
+    const chat = makeChat({
+      history: [
+        {
+          role: 'user',
+          content:
+            'Run tests. If setup fails (DB connection refused, missing binary, port unavailable), report fail.',
+        },
+        { role: 'assistant', content: 'VERDICT: fail' },
+      ],
+    });
+    assert.equal(classifyTaskFailure(chat, 'fail'), 'code');
+  });
 });
 
 // ── resolveTaskChatStreamFailure ───────────────────────────────────────────

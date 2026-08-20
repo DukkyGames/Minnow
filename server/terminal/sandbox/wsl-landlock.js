@@ -11,6 +11,7 @@
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   listMinnowSandboxHelperCandidates,
@@ -863,9 +864,20 @@ export function composeWslLandlockWrap(spawnTarget, policy, opts = {}) {
   };
 
   // Linux-side temps: Windows policy omits /tmp; the command runs in WSL.
+  // Host Temp often contains MINNOW_HOME (tests use os.tmpdir()); sibling expansion
+  // in buildScopedWriteRootGrants blows CreateProcess argv limits. Agent one-shots
+  // run inside WSL and use Linux /tmp, not the host Temp mount.
+  const winTemp =
+    process.platform === 'win32' ? path.resolve(os.tmpdir()) : null;
+  const writeRootsForWsl = winTemp
+    ? policy.writeRoots.filter((wr) => {
+        const abs = path.resolve(wr);
+        return abs !== winTemp && !abs.startsWith(`${winTemp}${path.sep}`);
+      })
+    : policy.writeRoots;
   const policyForWsl = {
     ...policy,
-    writeRoots: [...policy.writeRoots, '/tmp', '/var/tmp'],
+    writeRoots: [...writeRootsForWsl, '/tmp', '/var/tmp'],
     platform: 'linux',
   };
 
@@ -874,6 +886,8 @@ export function composeWslLandlockWrap(spawnTarget, policy, opts = {}) {
     helperPath,
     seccomp: opts.seccomp !== false,
     mapPath: mapPolicyPathToWsl,
+    // Windows→WSL argv must stay under CreateProcess limits; skip $HOME readdir expansion.
+    compactHomeRead: true,
   });
 
   const wrappedArgs = [...split.prefix, '--', linuxWrapped.command, ...linuxWrapped.args];

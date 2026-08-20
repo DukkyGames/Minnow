@@ -11,7 +11,7 @@ import '../styles/issues-file-drawer.css';
 import { getForegroundAppId, subscribeInstances } from '../os/instances';
 import { patchFilePanelState, getFilePanelState } from '../state/file-panel';
 import { initFileTreeIfNeeded } from './file-tree';
-import { applyFileSidebarVisuals } from './init-file-panel';
+import { applyFileSidebarVisuals } from './file-layout';
 
 type Listener = () => void;
 

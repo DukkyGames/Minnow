@@ -448,6 +448,10 @@ describe('controller watchdog', () => {
       category: 'build',
     });
 
+    await waitForRunActive(FIXED_RUN_ID);
+    // executeRun merges sub-agents.json (default 25); pin the test threshold after dispatch.
+    setRepetitionThresholds({ duplicateToolCallThreshold: 5 });
+
     const args = { pattern: 'auth' };
     recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
     recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
@@ -505,6 +509,7 @@ describe('controller watchdog', () => {
       category: 'build',
     });
 
+    await waitForRunActive(FIXED_RUN_ID);
     setRepetitionThresholds({ duplicateToolCallThreshold: 0 });
 
     const args = { pattern: 'auth' };

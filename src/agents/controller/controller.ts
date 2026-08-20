@@ -465,13 +465,22 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
   const { run, abort } = internals;
   const toolModeId = resolveSubAgentToolModeId(modeId);
 
+  const runWasStopped = (): boolean =>
+    abort.signal.aborted ||
+    run.status === 'cancelled' ||
+    run.status === 'completed' ||
+    run.status === 'failed';
+
   try {
     const config = await loadSubAgentConfig();
+    if (runWasStopped()) return;
     const typeConfig = config.types[run.type];
     if (!typeConfig) {
       settleRun(internals, 'failed', '', `Unknown sub-agent type: ${run.type}`);
       return;
     }
+
+    if (runWasStopped()) return;
 
     setStatus(run, 'running');
     run.lifecycle = 'dispatching';
@@ -520,6 +529,8 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       [...allowedNames],
       parentChat ?? null,
     );
+
+    if (runWasStopped()) return;
 
     const filteredExecute = async (
       name: string,

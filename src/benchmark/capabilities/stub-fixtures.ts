@@ -175,5 +175,25 @@ export function capabilityStubPayload(
       issueRefs: normalizeStubIssueRefs(args?.issue_refs ?? args?.issueRefs),
     };
   }
+  if (toolName === 'issue_search') {
+    return {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      issues: [{ id: 'ISS-1', title: 'Prior grid bug', status: 'triage' }],
+    };
+  }
+  if (toolName === 'issue_comment') {
+    return { id: args?.issue_id ?? 'ISS-1', commentCount: 1 };
+  }
+  if (toolName === 'issue_assign') {
+    return { id: args?.issue_id ?? 'ISS-1', assignee: args?.assignee ?? 'me' };
+  }
+  if (toolName === 'issue_unlink') {
+    return { id: args?.issue_id ?? 'ISS-1', removed: true };
+  }
+  if (toolName === 'issue_move') {
+    return { id: args?.issue_id ?? 'ISS-1', status: args?.status ?? 'todo' };
+  }
   return STUB_BY_TOOL[toolName] ?? null;
 }

@@ -331,8 +331,9 @@ describe('preview-electron-visibility', () => {
     });
     elements.get('previewPane')!.classList.delete('hidden');
     registerChromePopover();
-
-    await syncElectronPreviewHostLayout();
+    // registerChromePopover schedules sync via rAF; flush its async hide before asserting.
+    await Promise.resolve();
+    await Promise.resolve();
 
     assert.equal(showCalls, 0);
     assert.equal(hideCalls, 1);

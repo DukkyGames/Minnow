@@ -20,7 +20,24 @@ const FULLSCREEN_OVERLAY_IDS = [
 
 const MAX_LAYOUT_STABLE_FRAMES = 6;
 
+/** rAF in browser; run immediately in Node/happy-dom tests without animation frames. */
+function scheduleFrame(callback: () => void): number {
+  if (typeof requestAnimationFrame === 'function') {
+    return requestAnimationFrame(callback);
+  }
+  callback();
+  return 0;
+}
+
+function cancelScheduledFrame(handle: number): void {
+  if (!handle) return;
+  if (typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(handle);
+  }
+}
+
 function usesElectronPreview(): boolean {
+  if (typeof window === 'undefined') return false;
   return Boolean(window.minnow?.preview);
 }
 
@@ -169,6 +186,11 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
     let previous: DOMRect | null = null;
 
     const tick = (): void => {
+      if (typeof document === 'undefined') {
+        resolve(null);
+        return;
+      }
+
       const body = document.getElementById('previewBody');
       if (!body) {
         resolve(null);
@@ -182,7 +204,7 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
           resolve(null);
           return;
         }
-        requestAnimationFrame(tick);
+        scheduleFrame(tick);
         return;
       }
 
@@ -197,10 +219,10 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
         resolve(readPreviewBodyBounds());
         return;
       }
-      requestAnimationFrame(tick);
+      scheduleFrame(tick);
     };
 
-    requestAnimationFrame(tick);
+    scheduleFrame(tick);
   });
 }
 
@@ -209,6 +231,7 @@ let layoutSyncChain: Promise<void> = Promise.resolve();
 let previewGuestVisible = false;
 
 async function runElectronPreviewHostLayoutSync(tabId?: string | null): Promise<void> {
+  if (typeof window === 'undefined') return;
   const api = window.minnow?.preview;
   if (!api) return;
 
@@ -249,6 +272,7 @@ let layoutRetryFrames = 0;
 const MAX_LAYOUT_RETRY_FRAMES = 8;
 
 function scheduleLayoutRetryIfNeeded(): void {
+  if (typeof window === 'undefined') return;
   if (!usesElectronPreview()) return;
   if (!isPreviewPaneDomVisible() || isFullscreenOverlayObscuringWorkspace()) return;
   if (previewBodyHasLayout()) {
@@ -257,16 +281,18 @@ function scheduleLayoutRetryIfNeeded(): void {
   }
   if (layoutRetryFrames >= MAX_LAYOUT_RETRY_FRAMES) return;
   layoutRetryFrames += 1;
-  requestAnimationFrame(() => {
+  scheduleFrame(() => {
     void syncElectronPreviewHostLayout().then(scheduleLayoutRetryIfNeeded);
   });
 }
 
 /** Debounced show/hide + bounds sync (resize, layout, overlay open, Code foreground). */
 export function scheduleElectronPreviewHostVisibilitySync(): void {
+  if (typeof window === 'undefined') return;
   if (layoutSyncRaf) return;
-  layoutSyncRaf = requestAnimationFrame(() => {
+  layoutSyncRaf = scheduleFrame(() => {
     layoutSyncRaf = 0;
+    if (typeof window === 'undefined') return;
     void syncElectronPreviewHostLayout().then(scheduleLayoutRetryIfNeeded);
   });
 }
@@ -283,8 +309,8 @@ export function scheduleSecondaryPreviewHostLayoutSync(): void {
 export function resetPreviewGuestVisibilityForTests(): void {
   previewGuestVisible = false;
   layoutSyncChain = Promise.resolve();
-  if (layoutSyncRaf && typeof cancelAnimationFrame === 'function') {
-    cancelAnimationFrame(layoutSyncRaf);
+  if (layoutSyncRaf) {
+    cancelScheduledFrame(layoutSyncRaf);
     layoutSyncRaf = 0;
   }
   layoutRetryFrames = 0;

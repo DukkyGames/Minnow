@@ -277,10 +277,10 @@ describe('tool payload token reduction', () => {
     );
 
     assert.ok(allTokens > 9_000, `baseline should exceed 9k, got ${allTokens}`);
-    // Ceiling allows short clarifying clauses on shell-run tools (e.g. found:false / orphaned).
+    // Ceiling allows issue v2 tools in build mode (~900 tok) plus shell-run clarifiers.
     assert.ok(
-      buildTokens >= 7_000 && buildTokens <= 10_000,
-      `build payload expected ~7k-10k tok, got ${buildTokens} (all=${allTokens})`,
+      buildTokens >= 7_000 && buildTokens <= 11_000,
+      `build payload expected ~7k-11k tok, got ${buildTokens} (all=${allTokens})`,
     );
     assert.ok(buildTokens < allTokens - 2_000, 'build should save at least 2k tokens');
   });
