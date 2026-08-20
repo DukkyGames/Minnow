@@ -203,3 +203,41 @@ The cog sheet used `position: fixed; z-index: 36` while still a descendant of `#
 - [x] Raise sheet stacking to `z-index: 1200` (above sidebar 36 / resizer 37)
 - [x] Clamp placement into `#mainColumn` when the sheet fits; viewport-clamp otherwise
 - [x] Tests for clamp math + portal restore; note in `documentation/context.md`
+
+---
+
+## Redesign brief (two-page sheet, 2026-08-19)
+
+Confirmed: the cog is this-turn controls. Tools is a second page. Compact row stays `[Mode ▾] [cog] [model] [wheel]`. Probe B (inline controls) + C trimmed (no Web search / cache on the Tools page).
+
+### Feature summary
+
+The compact cog opens a two-page composer sheet. Page 1 is this-turn controls with live editors. Page 2 is Tools permissions, reached only from a chevron row. Web search and cache stay in Settings and in the wide Tools popover.
+
+### Primary user action
+
+Change reasoning or a context toggle for the next send, then close. Opening Tools is a deliberate second step.
+
+### Design direction
+
+- **Register:** product. **Color:** Restrained (`--mn-*` only). Sage accent only on selected High, ON, and Full.
+- **Scene:** Developer at a desk with Code split so the chat column is about 650–720px, afternoon indoor light, focused on the next turn.
+- **Anchors:** Linear settings rows (page 1), VS Code / Cursor overflow drill-in (page chrome), existing Minnow Full / Ask / Off (page 2).
+
+### Layout
+
+**Page 1:** Local + branch, labeled reasoning / docs / map / brain rows (Low | Medium | High when the model has levels), optional Orchestrate extras, then a Tools nav row.
+
+**Page 2:** Back + Tools + Enable all. Quiet status line. Group rows that expand in place. All tool settings. No web search, no cache.
+
+Escape closes the whole sheet from either page. Back returns to page 1.
+
+### Todos
+
+- [x] Page 1: identity + inline rows; Tools is a nav row only
+- [x] Reasoning: segments when levels apply; toggle when on/off only
+- [x] Page 2: back header, group rows, quiet status, Enable all, All tool settings
+- [x] Hide Web search + cache in the compact Tools page only
+- [x] Keyboard: drill-in, Back, Escape closes, focus restore
+- [x] Tests + `documentation/context.md` + design-system layout-shell note
+

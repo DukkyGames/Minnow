@@ -41,7 +41,7 @@ Primary chrome shared across Chat and Code workspace views.
 - **Logic:** [`input.ts`](../../src/ui/input.ts), [`composer-send.ts`](../../src/ui/composer-send.ts), [`mode-selector.ts`](../../src/ui/mode-selector.ts), [`composer-compact.ts`](../../src/ui/composer-compact.ts), [`context-usage-ring.ts`](../../src/ui/context-usage-ring.ts)
 - **Input:** `#msgInput` min-height 44px; 16px font at ≤600px (iOS zoom guard)
 - **Context ring:** SVG ring on the compact row (after the model chip) showing context fill
-- **Compact:** `#composerControls` under 880px (hysteresis leave 920px) shows mode dropdown, overflow cog, model, then context wheel inside the composer column; extras park in the cog sheet as labeled rows plus flattened Tools. The sheet portals to `document.body` (`z-index: 1200`) while open so it paints above the chats sidebar.
+- **Compact:** `#composerControls` under 880px (hysteresis leave 920px) shows mode dropdown, overflow cog, model, then context wheel inside the composer column. The cog sheet is two pages: labeled this-turn rows, then a Tools drill-in. The sheet portals to `document.body` (`z-index: 1200`) while open so it paints above the chats sidebar.
 
 ## Stats strip
 

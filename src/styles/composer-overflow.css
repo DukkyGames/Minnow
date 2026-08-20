@@ -1,10 +1,11 @@
 /**
- * Compact composer overflow: cog + settings sheet, and the compact row itself.
+ * Compact composer overflow: cog + two-page settings sheet, and the compact row.
  * Wide layout stays in mode-selector.css / composer-controls.css.
  *
  * Compact row (inside the composer column, never the send stack):
  *   [mode ▾] [cog] … [model] [wheel]
- * Overflow sheet is one scroll: labeled toggle rows, then flattened Tools.
+ * Cog sheet page 1: labeled this-turn rows + Tools nav.
+ * Cog sheet page 2: Tools permissions (no web search / cache).
  */
 
 .composer-overflow-anchor {
@@ -70,10 +71,12 @@
    * Matches other composer menus that portal to document.body. */
   z-index: 1200;
   box-sizing: border-box;
-  /* Wide enough for Off/Ask/Full segments without a nested inner pane. */
+  display: flex;
+  flex-direction: column;
+  /* Wide enough for Off/Ask/Full segments on the Tools page. */
   width: min(26rem, calc(100vw - 16px));
   max-height: min(70vh, 32rem);
-  overflow: auto;
+  overflow: hidden;
   padding: 0;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
@@ -87,170 +90,525 @@
 
 .composer-overflow-slot {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0;
+}
+
+.composer-overflow-page {
+  min-height: 0;
+}
+
+.composer-overflow-page.hidden,
+.composer-overflow-page[hidden] {
+  display: none;
+}
+
+.composer-overflow-page--settings:not(.hidden):not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
   padding: 10px 12px 12px;
 }
 
-/* Parked controls occupy a full row; Tools title + Enable all share one. */
-.composer-overflow-slot > .composer-control,
-.composer-overflow-slot > .composer-run-target-wrap,
-.composer-overflow-slot > .work-agent-dev,
-.composer-overflow-slot > .view-mode-toggle-btn,
-.composer-overflow-slot > .composer-tools-popover__status,
-.composer-overflow-slot > .tool-group,
-.composer-overflow-slot > .composer-tools-popover__footer {
-  flex: 1 1 100%;
+.composer-overflow-settings-lead {
+  margin: 0 0 4px;
+  padding: 0 4px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
+}
+
+.composer-overflow-page--settings > .composer-control,
+.composer-overflow-page--settings > .composer-run-target-wrap,
+.composer-overflow-page--settings > .work-agent-dev,
+.composer-overflow-page--settings > .view-mode-toggle-btn {
+  flex: 0 0 auto;
   width: 100%;
   min-width: 0;
 }
 
 /* Parked chips stay in a tight row inside the sheet, not a second toolbar. */
-.composer-overflow-slot .composer-run-target-wrap {
+.composer-overflow-page--settings .composer-run-target-wrap {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   max-width: none;
-  padding-bottom: 4px;
+  padding: 2px 0 8px;
 }
 
-.composer-overflow-slot .composer-run-target-btn {
+.composer-overflow-page--settings .composer-run-target-btn {
   max-width: 100%;
 }
 
-/* Labeled rows: icon + name, with the effort select on the same row when shown. */
-.composer-overflow-slot .thinking-control-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
+/* Labeled rows: icon tile + name + status pill; effort segments sit beside Reasoning. */
+.composer-overflow-page--settings .thinking-control-wrap {
+  display: block;
   width: 100%;
 }
 
-.composer-overflow-slot .thinking-toggle-host,
-.composer-overflow-slot .context-documents-toggle-host,
-.composer-overflow-slot .code-map-toggle-host,
-.composer-overflow-slot .brain-notes-toggle-host {
+.composer-overflow-page--settings .thinking-control-wrap:has(.composer-reasoning-effort-wrap:not(.hidden)) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.composer-overflow-page--settings .thinking-toggle-host,
+.composer-overflow-page--settings .context-documents-toggle-host,
+.composer-overflow-page--settings .code-map-toggle-host,
+.composer-overflow-page--settings .brain-notes-toggle-host {
+  display: flex;
+  width: 100%;
   min-width: 0;
 }
 
-.composer-overflow-slot .thinking-toggle-btn {
-  width: auto;
+.composer-overflow-page--settings .thinking-toggle-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
   max-width: 100%;
   height: auto;
-  min-height: 36px;
+  min-height: 40px;
   justify-content: flex-start;
-  gap: 8px;
-  padding: 6px 4px;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
 }
 
-.composer-overflow-slot .thinking-toggle-btn::after {
+.composer-overflow-page--settings .thinking-toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  order: 1;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+  --mn-icon-size: 16px;
+  opacity: 1;
+  transition:
+    background 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn::after {
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.25;
   color: var(--mn-fg);
+  text-align: left;
 }
 
-.composer-overflow-slot .thinking-toggle-host > .thinking-toggle-btn::after {
+.composer-overflow-page--settings .thinking-toggle-btn::before {
+  order: 3;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true']::before {
+  content: 'On';
+  border-color: color-mix(in srgb, var(--mn-accent) 35%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-bg));
+  color: var(--mn-accent);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'][data-inherit='true']::before {
+  content: 'Inherit';
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'][data-inherit='false']::before {
+  content: 'Off';
+}
+
+.composer-overflow-page--settings
+  .thinking-control-wrap:has(.composer-reasoning-effort-wrap:not(.hidden))
+  .thinking-toggle-btn::before {
+  display: none;
+}
+
+.composer-overflow-page--settings .thinking-toggle-host > .thinking-toggle-btn::after {
   content: 'Reasoning';
 }
 
-.composer-overflow-slot .context-documents-toggle-btn::after {
+.composer-overflow-page--settings .context-documents-toggle-btn::after {
   content: 'Context documents';
 }
 
-.composer-overflow-slot .code-map-toggle-btn::after {
+.composer-overflow-page--settings .code-map-toggle-btn::after {
   content: 'Code map';
 }
 
-.composer-overflow-slot .brain-notes-toggle-btn::after {
+.composer-overflow-page--settings .brain-notes-toggle-btn::after {
   content: 'Brain notes';
 }
 
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true'] .thinking-toggle-icon {
+  background: color-mix(in srgb, var(--mn-accent) 18%, transparent);
+  color: var(--mn-accent);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'] .thinking-toggle-icon {
+  color: var(--mn-fg-muted);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false']::after {
+  color: var(--mn-fg-muted);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--mn-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--mn-accent) 6%, var(--mn-surface-1));
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'][data-inherit='true'] {
+  border-color: transparent;
+}
+
 @media (hover: hover) and (pointer: fine) {
-  .composer-overflow-slot .thinking-toggle-btn:hover:not(:disabled) {
+  .composer-overflow-page--settings .thinking-toggle-btn:hover:not(:disabled) {
+    border-color: var(--mn-border);
     background: var(--mn-surface-elevated);
+  }
+
+  .composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true']:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--mn-accent) 30%, var(--mn-border));
+    background: color-mix(in srgb, var(--mn-accent) 10%, var(--mn-surface-1));
   }
 }
 
-.composer-overflow-slot > .view-mode-toggle-btn {
+.composer-overflow-page--settings .thinking-toggle-btn:active:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-fg) 8%, var(--mn-surface-1));
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn:focus-visible {
+  border-color: var(--mn-accent);
+}
+
+.composer-overflow-page--settings > .view-mode-toggle-btn {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 10px;
+  width: 100%;
   height: auto;
-  min-height: 36px;
-  padding: 6px 4px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
 }
 
-.composer-overflow-slot > .view-mode-toggle-btn::after {
+.composer-overflow-page--settings > .view-mode-toggle-btn::after {
   content: 'Board view';
   font-size: 13px;
   font-weight: 500;
   color: var(--mn-fg);
 }
 
-/* Unwrap the Tools popover so it is a section of this sheet, not a nested window. */
-.composer-overflow-slot .composer-tools-anchor {
-  display: contents;
+@media (hover: hover) and (pointer: fine) {
+  .composer-overflow-page--settings > .view-mode-toggle-btn:hover:not(:disabled) {
+    border-color: var(--mn-border);
+    background: var(--mn-surface-elevated);
+  }
 }
 
-.composer-overflow-slot .composer-tools-popover:not(.hidden),
-.composer-overflow-slot .composer-tools-popover:not(.hidden) .tools-list--composer {
-  display: contents;
-}
-
-.composer-overflow-slot .composer-tools-popover.hidden {
+/* Wide row keeps the native select; the sheet uses Low / Medium / High segments. */
+.composer-reasoning-effort-segments {
   display: none;
 }
 
-.composer-overflow-slot .composer-tools-btn {
-  display: none;
+.composer-overflow-page--settings .composer-reasoning-effort-select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.composer-overflow-slot > .composer-tools-popover__header {
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-  padding: 10px 0 6px;
-  border-bottom: 1px solid var(--mn-border);
+.composer-overflow-page--settings .composer-reasoning-effort-wrap {
+  position: relative;
 }
 
-.composer-overflow-slot > .composer-tools-popover__header .composer-tools-popover__title {
-  font-size: 13px;
+.composer-overflow-page--settings .composer-reasoning-effort-segments {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
 }
 
-.composer-overflow-slot > .tool-list-toolbar {
-  flex: 0 0 auto;
-  width: auto;
-  margin-left: auto;
-  padding: 10px 0 6px;
-  border: none;
-  border-bottom: 1px solid var(--mn-border);
+.composer-reasoning-effort-segment {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
   background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease-out),
+    color 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-reasoning-effort-segment:hover:not([aria-checked='true']):not(:disabled) {
+    color: var(--mn-fg);
+    border-color: var(--mn-border);
+    background: color-mix(in srgb, var(--mn-fg) 4%, var(--mn-bg));
+  }
+}
+
+.composer-reasoning-effort-segment[aria-checked='true'] {
+  background: var(--mn-accent);
+  border-color: var(--mn-accent);
+  color: var(--mn-fg-on-accent);
+}
+
+.composer-reasoning-effort-segment:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.composer-reasoning-effort-segment:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.composer-overflow-tools-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-top: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
+}
+
+.composer-overflow-tools-nav .icon-svg {
+  --mn-icon-size: 16px;
+  color: var(--mn-fg-muted);
+}
+
+.composer-overflow-tools-nav__chevron {
+  margin-left: auto;
+  color: var(--mn-fg-subtle);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-overflow-tools-nav:hover {
+    border-color: var(--mn-border);
+    background: var(--mn-surface-elevated);
+  }
+}
+
+.composer-overflow-tools-nav:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.composer-overflow-page--tools:not(.hidden):not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.composer-overflow-tools-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
+}
+
+.composer-overflow-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.composer-overflow-back .icon-svg {
+  --mn-icon-size: 18px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-overflow-back:hover {
+    background: var(--mn-surface-2);
+    border-color: var(--mn-border);
+    color: var(--mn-fg);
+  }
+}
+
+.composer-overflow-back:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.composer-overflow-tools-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--mn-fg);
+}
+
+.composer-overflow-enable-all .tool-list-toolbar {
   position: static;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
-.composer-overflow-slot .tools-list--composer .tool-group-summary {
-  padding: 10px 4px;
+.composer-overflow-tools-body {
+  min-width: 0;
 }
 
-.composer-overflow-slot .tools-list--composer .tool-row {
-  padding: 8px 4px;
+.composer-overflow-page--tools .composer-tools-btn {
+  display: none;
 }
 
-.composer-overflow-slot > .composer-tools-popover__footer {
-  padding: 10px 0 0;
+.composer-overflow-page--tools .composer-tools-popover {
+  position: static;
+  width: auto;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.composer-overflow-page--tools .composer-tools-popover.hidden {
+  display: none;
+}
+
+.composer-overflow-page--tools .composer-tools-popover__header {
+  display: none;
+}
+
+/* Quiet status line, not a banner beside the title. */
+.composer-overflow-page--tools .composer-tools-popover__status {
+  margin: 0;
+  padding: 8px 12px 0;
+  border: none;
+  background: transparent;
+}
+
+.composer-overflow-page--tools .composer-tools-popover__notice {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.composer-overflow-page--tools .tools-list--composer {
+  flex: 0 1 auto;
+  overflow: visible;
+}
+
+.composer-overflow-page--tools .tools-list--composer .tool-list-toolbar {
+  display: none;
+}
+
+.composer-overflow-page--tools .tool-group-mode {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+}
+
+.composer-overflow-page--tools .tool-group-mode[data-mode='full'] {
+  color: var(--mn-accent);
+}
+
+.composer-overflow-page--tools .composer-tools-popover__footer {
+  padding: 10px 12px 12px;
   border-top: 1px solid var(--mn-border);
   background: transparent;
 }
 
-.composer-overflow-slot > .composer-tools-popover__status {
-  margin-top: 4px;
+/* Web search and cache stay in the wide Tools popover and in Settings. */
+.composer-overflow-page--tools .composer-tools-popover__setting,
+.composer-overflow-page--tools .composer-tools-popover__toggle,
+.composer-overflow-page--tools .composer-tools-popover__hint {
+  display: none;
 }
 
 /*
@@ -303,7 +661,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .composer-overflow-btn {
+  .composer-overflow-btn,
+  .composer-reasoning-effort-segment {
     transition: none;
   }
 }
