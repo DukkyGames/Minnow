@@ -85,7 +85,7 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     delete next.min_p;
     delete next.repetition_penalty;
   }
-  if (!templateKwargsReachModel) {
+  if (!templateKwargsReachModel && !providerKeepsExtendedSamplers(provider)) {
     delete next.enable_thinking;
   }
 
