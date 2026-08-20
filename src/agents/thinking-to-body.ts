@@ -51,6 +51,7 @@ const ANTHROPIC_BUDGET_FLOOR = 1024;
  * Sanitization drops it for every provider that is not a local serve.
  */
 const LOCAL_TEMPLATE_THINKING_OFF = {
+  enable_thinking: false,
   chat_template_kwargs: { enable_thinking: false },
 } as const;
 
@@ -77,6 +78,7 @@ function applyQwen38ThinkingOnFields(
     body.chat_template_kwargs && typeof body.chat_template_kwargs === 'object'
       ? { ...(body.chat_template_kwargs as Record<string, unknown>) }
       : {};
+  body.enable_thinking = true;
   body.chat_template_kwargs = {
     ...prev,
     enable_thinking: true,

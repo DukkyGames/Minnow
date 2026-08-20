@@ -23,9 +23,9 @@ export interface HeartbeatConfig {
 }
 
 const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
-  heartbeatIntervalMs: 7_000,
-  progressStallMs: 90_000,
-  heartbeatDeadMs: 30_000,
+  heartbeatIntervalMs: 10_000,
+  progressStallMs: 300_000,
+  heartbeatDeadMs: 90_000,
 };
 
 /** Prefix for chat-backed board task supervision run ids. */
@@ -235,10 +235,18 @@ export function startHeartbeat(runId: string, onTick?: () => void): void {
   if (entry.timer) return;
   recordHeartbeat(runId);
   const intervalMs = heartbeatConfig.heartbeatIntervalMs;
+  if (intervalMs <= 0) return;
   entry.timer = setInterval(() => {
     recordHeartbeat(runId);
     entry.onTick?.();
   }, intervalMs);
+  // node:test will not exit while a ref'd interval is alive. Tests call
+  // resetWrapperState(), but a late board continuation can restart a heartbeat
+  // after teardown — unref so a missed clear cannot hang the runner.
+  if (typeof process !== 'undefined' && process.env?.MINNOW_TEST === '1') {
+    const timer = entry.timer as { unref?: () => void };
+    timer.unref?.();
+  }
 }
 
 /** Stop heartbeat ticks for a run (on settle or stream end). */

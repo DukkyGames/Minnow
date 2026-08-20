@@ -20,6 +20,7 @@ import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
 import { openProductWiki } from '../ui/product-wiki';
 import { initAgentActivityMenubar } from '../ui/agent-activity-panel';
+import { initMenubarCapture } from './menubar-capture';
 
 /** Render the Minnow menubar. Returns cleanup function. */
 export function renderMenubar(root: HTMLElement): () => void {
@@ -102,6 +103,11 @@ export function renderMenubar(root: HTMLElement): () => void {
   agentsBtn.innerHTML = iconHtml('appAgentActivity', { size: 16 });
   const cleanupAgentActivity = initAgentActivityMenubar(agentsBtn);
 
+  // Capture sits immediately before the bell: work leaves you here, and
+  // arrives there. Both are drop-or-glance targets in the same cluster.
+  const captureBtn = document.createElement('button');
+  const cleanupCapture = initMenubarCapture(captureBtn);
+
   const bell = document.createElement('button');
   bell.type = 'button';
   bell.className = 'mn-os-mb-bell';
@@ -138,6 +144,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   right.append(
     modelChipAnchor,
     agentsBtn,
+    captureBtn,
     bell,
     updateSlot,
     wikiBtn,
@@ -215,6 +222,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     unsubNotif();
     cleanupModelChip();
     cleanupAgentActivity();
+    cleanupCapture();
     cleanupNotifications();
     cleanupUpdatePill();
     cleanupShellChrome();

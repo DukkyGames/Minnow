@@ -129,3 +129,29 @@ describe('models markup contract', () => {
     );
   });
 });
+
+describe('models layout contract', () => {
+  test('models-page fills OS stage height (not viewport 100vh)', () => {
+    const css = fs.readFileSync(new URL('../../src/styles/models-page.css', import.meta.url), 'utf8');
+    // First height in .models-page must be the stage fill, not 100vh (MIN-606).
+    const pageBlock = css.match(/\.models-page\s*\{[\s\S]*?\n\}/);
+    assert.ok(pageBlock, 'expected .models-page rule');
+    assert.match(pageBlock[0], /height:\s*100%/);
+    assert.doesNotMatch(pageBlock[0], /height:\s*100vh/);
+    assert.match(css, /html:not\(\.minnow-os-enabled\)\s*\.models-page\.is-open/);
+    const shell = fs.readFileSync(new URL('../../src/styles/minnowos-shell.css', import.meta.url), 'utf8');
+    assert.match(shell, /#osAppsLayer\s*\.models-page\.is-open/);
+  });
+
+  test('runtime log pane shrinks and scrolls inside the body', () => {
+    const css = fs.readFileSync(new URL('../../src/styles/models-page.css', import.meta.url), 'utf8');
+    const logsBlock = css.match(/\.models-logs\s*\{[\s\S]*?\n\}/);
+    assert.ok(logsBlock, 'expected .models-logs rule');
+    assert.match(logsBlock[0], /min-height:\s*0/);
+    assert.match(logsBlock[0], /overflow:\s*hidden/);
+    const bodyBlock = css.match(/\.models-logs__body\s*\{[\s\S]*?\n\}/);
+    assert.ok(bodyBlock, 'expected .models-logs__body rule');
+    assert.match(bodyBlock[0], /overflow:\s*auto/);
+    assert.match(bodyBlock[0], /min-height:\s*0/);
+  });
+});

@@ -8,7 +8,6 @@ import type { MinnowPreviewBounds } from '../electron';
 import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
 import { isRightPaneSplitActive } from './right-pane-split';
-import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 
 const FULLSCREEN_OVERLAY_IDS = [
   'issuesView',
@@ -122,8 +121,9 @@ export function shouldShowElectronPreviewHost(): boolean {
   if (isDesignModeUsingIframeGuest()) return false;
   if (!isPreviewSurfaceActive()) return false;
   if (!isPreviewPaneDomVisible()) return false;
-  // Native guest is a window-level overlay — hide when Code main-column overlays cover the workspace.
-  if (isMainColumnOverlaySuppressingChatDom()) return false;
+  // Full-window covers hide the native guest. Stage views do not — they only
+  // replace #chatArea; #previewPane stays a sibling in #workspaceSplit, and hiding
+  // the guest there leaves a blank browser pane.
   if (isFullscreenOverlayObscuringWorkspace()) return false;
   if (isProductWikiOverlayVisible()) return false;
   if (isChromePopoverOpen()) return false;
@@ -208,7 +208,7 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
 let layoutSyncChain: Promise<void> = Promise.resolve();
 let previewGuestVisible = false;
 
-async function runElectronPreviewHostLayoutSync(): Promise<void> {
+async function runElectronPreviewHostLayoutSync(tabId?: string | null): Promise<void> {
   const api = window.minnow?.preview;
   if (!api) return;
 
@@ -225,7 +225,7 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
 
   // Always use show(bounds) — tab activate / loadSource can attach the guest at 0×0
   // before layout is ready; setBounds alone is skipped when the guest is not visible.
-  await api.show(bounds);
+  await api.show(bounds, tabId ?? undefined);
   previewGuestVisible = true;
 }
 
@@ -233,8 +233,8 @@ async function runElectronPreviewHostLayoutSync(): Promise<void> {
  * Show or hide the native preview host and sync bounds when visible.
  * Call after layout changes (Code foreground, split restore, resize).
  */
-export function syncElectronPreviewHostLayout(): Promise<void> {
-  const next = layoutSyncChain.then(() => runElectronPreviewHostLayoutSync());
+export function syncElectronPreviewHostLayout(tabId?: string | null): Promise<void> {
+  const next = layoutSyncChain.then(() => runElectronPreviewHostLayoutSync(tabId));
   layoutSyncChain = next.catch(() => {});
   return next;
 }

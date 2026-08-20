@@ -45,6 +45,7 @@ describe('thinkingToCompletionBody', () => {
     });
     assert.deepEqual(body, {
       thinking: { type: 'disabled' },
+      enable_thinking: false,
       chat_template_kwargs: { enable_thinking: false },
     });
     assert.equal(body.reasoning_effort, undefined);
@@ -170,6 +171,7 @@ describe('reasoningEffortToCompletionBody', () => {
     const { body } = reasoningEffortToCompletionBody('off', 'openai-v1', reasoningCaps);
     assert.deepEqual(body, {
       thinking: { type: 'disabled' },
+      enable_thinking: false,
       chat_template_kwargs: { enable_thinking: false },
     });
   });
@@ -268,6 +270,7 @@ describe('reasoningEffortToCompletionBody', () => {
     );
     assert.equal(patch.body.reasoning_effort, 'xhigh');
     assert.deepEqual(patch.body.reasoning, { effort: 'xhigh' });
+    assert.equal(patch.body.enable_thinking, true);
     assert.deepEqual(patch.body.chat_template_kwargs, {
       enable_thinking: true,
       preserve_thinking: true,

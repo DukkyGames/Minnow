@@ -42,6 +42,15 @@ const PROBE_SCHEMA = {
   additionalProperties: false,
 };
 
+/**
+ * 16x16 checkerboard PNG (88 bytes) for the accept/reject vision probe: runtimes
+ * without a multimodal projector reject the request outright. Deliberately not a
+ * 1x1 pixel — LM Studio answers `Invalid image detected at index 0` for those, so
+ * a real VLM would be recorded as vision-less.
+ */
+const PROBE_IMAGE_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAH0lEQVR42mP4jwQYkAAucYZBqGGQO48oDaPxMCg0AADZV36QzYI8swAAAABJRU5ErkJggg==';
+
 const DUMMY_TOOL = {
   type: 'function',
   function: {
@@ -358,6 +367,25 @@ function applyToolsProbe(cap, result) {
 }
 
 /**
+ * Record a vision probe result. Only a rejected request is evidence of "no vision";
+ * a catalog row that already claims vision is left alone.
+ *
+ * @param {object} cap
+ * @param {{ ok: boolean, status: number, text?: string }} result
+ */
+function applyVisionProbe(cap, result) {
+  if (cap.vision === true) return;
+  cap.vision = result.ok;
+  cap.sources = { ...cap.sources, vision: 'probe' };
+  if (!result.ok) {
+    cap.probeErrors = {
+      ...cap.probeErrors,
+      vision: result.text?.trim().slice(0, 200) || `image probe rejected (HTTP ${result.status})`,
+    };
+  }
+}
+
+/**
  * @param {number} timeoutMs
  * @param {AbortSignal | undefined} signal
  */
@@ -446,6 +474,35 @@ async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
     toolProbe.dispose();
   }
 
+  if (cap.streaming === true && cap.vision !== true) {
+    const visionProbe = createProbeAbortSignal(MODEL_PROBE_TIMEOUT_MS, signal);
+    try {
+      await generateText({
+        model: anthropic(modelId),
+        messages: openAiMessagesToCoreMessages([
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'ping' },
+              { type: 'image_url', image_url: { url: PROBE_IMAGE_DATA_URL } },
+            ],
+          },
+        ]),
+        maxOutputTokens: 1,
+        abortSignal: visionProbe.signal,
+      });
+      applyVisionProbe(cap, { ok: true, status: 200 });
+    } catch (err) {
+      applyVisionProbe(cap, {
+        ok: false,
+        status: 0,
+        text: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      visionProbe.dispose();
+    }
+  }
+
   return cap;
 }
 
@@ -509,6 +566,32 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
     signal,
   );
   applyToolsProbe(cap, toolResult);
+
+  // Only meaningful once plain chat works — otherwise a rejected image says
+  // nothing about vision (auth, wrong path, runtime down).
+  if (chatResult.ok && cap.vision !== true) {
+    const visionResult = await postChatCompletion(
+      url,
+      runtime.headers,
+      {
+        model: modelId,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'ping' },
+              { type: 'image_url', image_url: { url: PROBE_IMAGE_DATA_URL } },
+            ],
+          },
+        ],
+        max_tokens: 1,
+        stream: false,
+      },
+      MODEL_PROBE_TIMEOUT_MS,
+      signal,
+    );
+    applyVisionProbe(cap, visionResult);
+  }
 
   return cap;
 }

@@ -428,6 +428,7 @@ async function streamTurnWithBody(
 
   const toolCalls = mergeContentJsonToolCalls(contentText, finalizeToolCalls(toolAcc), {
     harmonyParseText: contentRouter.getCommentaryParseText(),
+    xmlParseText: contentRouter.getToolCallParseText(),
   });
   const finishReason =
     streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);

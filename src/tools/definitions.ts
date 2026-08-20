@@ -119,6 +119,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       'Search the web for up-to-date information. Provider is configured in Settings → Tools (Brave API, Tavily API, or DuckDuckGo via local server).',
       {
         query: { type: 'string', description: 'Search query' },
+        deep_read: {
+          type: 'boolean',
+          description:
+            'Also fetch the top 3 results and return the passages most relevant to the query. Slower, but usually avoids a follow-up fetch_web_content call.',
+        },
         api_key: {
           type: 'string',
           description: 'Optional Brave Search API key (overrides saved key when Brave is selected)',
@@ -1293,8 +1298,127 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           type: 'string',
           description: 'Optional stable id such as MIN-12 (auto-generated if omitted)',
         },
+        parent_id: {
+          type: 'string',
+          description:
+            'Parent issue id to file this as a sub-issue. Hierarchy is one level deep.',
+        },
+        project_id: { type: 'string', description: 'Optional project to file this under' },
       },
       ['title'],
+    ),
+  },
+  {
+    id: 'issue_search',
+    label: 'Issue search',
+    description: 'Query issues with field selection and paging.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_search',
+      'Search issues. Prefer this over issue_get_state: it returns only the fields you ask for, in pages, instead of every field of every issue.',
+      {
+        query: {
+          type: 'string',
+          description: 'Case-insensitive substring over id, title, description, and labels',
+        },
+        status: { type: 'string', description: 'Status id to filter by' },
+        assignee: { type: 'string', description: 'Assignee id to filter by' },
+        label: { type: 'string', description: 'Label to filter by' },
+        parent_id: { type: 'string', description: 'Only sub-issues of this parent' },
+        project_id: { type: 'string', description: 'Only issues in this project' },
+        scope: {
+          type: 'string',
+          description: "'current_workspace' (default) or 'all'",
+        },
+        hide_done: { type: 'boolean', description: 'Omit closed issues' },
+        fields: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Fields to return. Default: id, title, status, priority, type, updatedAt. Ask for "attachments" to get on-disk paths you can read.',
+        },
+        limit: { type: 'number', description: 'Page size (default 25, max 100)' },
+        offset: { type: 'number', description: 'Page offset' },
+      },
+      [],
+    ),
+  },
+  {
+    id: 'issue_comment',
+    label: 'Issue comment',
+    description: 'Append a comment to an issue timeline.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_comment',
+      'Append a comment to an issue. Use this to report progress or findings — it adds to a timeline instead of overwriting the notes field.',
+      {
+        issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
+        body: { type: 'string', description: 'Markdown comment body' },
+        author: { type: 'string', description: 'Optional agent name for attribution' },
+      },
+      ['issue_id', 'body'],
+    ),
+  },
+  {
+    id: 'issue_assign',
+    label: 'Issue assign',
+    description: 'Set the accountable human or queue a work agent.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_assign',
+      'Set an issue assignee and/or queue a work agent on it. Queuing does not start a run; the user starts it from the Issues app.',
+      {
+        issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
+        assignee: { type: 'string', description: "Accountable human id ('me' locally)" },
+        assignee_label: { type: 'string', description: 'Display name for the assignee' },
+        agent: { type: 'string', description: 'Work agent id to queue' },
+        clear_agent: { type: 'boolean', description: 'Remove the agent slot' },
+      },
+      ['issue_id'],
+    ),
+  },
+  {
+    id: 'issue_unlink',
+    label: 'Issue unlink',
+    description: 'Remove a link that issue_link added.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_unlink',
+      'Remove a code ref, git link, chat link, or issue relation. issue_link is append-only, so this is how a wrong link gets corrected.',
+      {
+        issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
+        path: { type: 'string', description: 'Remove code refs with this path' },
+        ref: { type: 'string', description: 'Remove git links with this ref (sha, branch, PR)' },
+        target_issue_id: {
+          type: 'string',
+          description: 'Remove the relation to this issue (both directions)',
+        },
+        chat_id: { type: 'string', description: 'Remove this linked chat id' },
+      },
+      ['issue_id'],
+    ),
+  },
+  {
+    id: 'issue_move',
+    label: 'Issue move',
+    description: 'Set status and manual rank in one call.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'issue_move',
+      'Move an issue to a status and position. Setting both at once avoids fighting the manual ordering the user set by dragging.',
+      {
+        issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
+        status: { type: 'string', description: 'Destination status id' },
+        before_issue_id: { type: 'string', description: 'Place immediately above this issue' },
+        after_issue_id: { type: 'string', description: 'Place immediately below this issue' },
+        to_top: { type: 'boolean', description: 'Place at the top of the destination' },
+      },
+      ['issue_id'],
     ),
   },
   {

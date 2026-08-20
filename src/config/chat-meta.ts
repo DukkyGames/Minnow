@@ -14,13 +14,8 @@ export interface ChatMeta {
 
 const CHAT_META_STORAGE_KEY = 'minnow.chatMeta';
 
-export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 25 * 60_000;
-export const DEFAULT_GENERATION_MAX_DURATION_MS = 60 * 60_000;
-
-const MIN_GENERATION_IDLE_TIMEOUT_MS = 30_000;
-const MAX_GENERATION_IDLE_TIMEOUT_MS = 30 * 60_000;
-const MIN_GENERATION_MAX_DURATION_MS = 60_000;
-const MAX_GENERATION_MAX_DURATION_MS = 4 * 60 * 60_000;
+export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 60 * 60_000;
+export const DEFAULT_GENERATION_MAX_DURATION_MS = 240 * 60_000;
 
 const DEFAULT_CHAT_META: ChatMeta = {
   generationIdleTimeoutMs: DEFAULT_GENERATION_IDLE_TIMEOUT_MS,
@@ -29,29 +24,33 @@ const DEFAULT_CHAT_META: ChatMeta = {
 
 let cachedChat: ChatMeta | null = null;
 
-/** Coerce idle timeout (ms) to server-allowed range. */
+/** Coerce idle timeout (ms); `0` disables the idle limit. */
 export function clampGenerationIdleTimeoutMs(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_GENERATION_IDLE_TIMEOUT_MS;
-  return Math.min(
-    MAX_GENERATION_IDLE_TIMEOUT_MS,
-    Math.max(MIN_GENERATION_IDLE_TIMEOUT_MS, Math.round(n)),
-  );
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return rounded;
 }
 
-/** Coerce max generation duration (ms) to server-allowed range. */
+/** Coerce max generation duration (ms); `0` disables the wall-clock cap. */
 export function clampGenerationMaxDurationMs(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_GENERATION_MAX_DURATION_MS;
-  return Math.min(
-    MAX_GENERATION_MAX_DURATION_MS,
-    Math.max(MIN_GENERATION_MAX_DURATION_MS, Math.round(n)),
-  );
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return rounded;
 }
 
-/** Settings UI: whole minutes from milliseconds. */
+/** True when either generation timeout is active. */
+export function isGenerationTimeoutEnabled(meta: ChatMeta): boolean {
+  return meta.generationIdleTimeoutMs > 0 || meta.generationMaxDurationMs > 0;
+}
+
+/** Settings UI: whole minutes from milliseconds (`0` = off). */
 export function generationTimeoutMsToMinutes(ms: number): number {
-  return Math.max(1, Math.round(ms / 60_000));
+  if (ms <= 0) return 0;
+  return Math.round(ms / 60_000);
 }
 
 /** Settings UI: milliseconds from whole minutes. */

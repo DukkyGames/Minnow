@@ -4,6 +4,7 @@
  */
 
 import { LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID } from '../../src/models/runtime-ids.mjs';
+import { providerSupportsChatTemplateKwargs } from './provider-host.js';
 
 /**
  * True when OpenAI o-series / gpt-5 models expect max_completion_tokens.
@@ -65,7 +66,7 @@ function providerKeepsExtendedSamplers(provider) {
 /**
  * Normalize a chat completion body for the target provider.
  * @param {Record<string, unknown>} body
- * @param {{ apiKind?: string, id?: string, supportsExtendedSamplers?: boolean }} provider
+ * @param {{ apiKind?: string, id?: string, supportsExtendedSamplers?: boolean, baseUrl?: string }} provider
  * @param {{ reasoning?: boolean, reasoningAllowedOptions?: string[] } | null | undefined} [modelCapabilities]
  * @returns {Record<string, unknown>}
  */
@@ -76,12 +77,15 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
   }
 
   const next = stripInternalApiMessageFields({ ...body });
+  const templateKwargsReachModel = providerSupportsChatTemplateKwargs(provider);
   // Hosted OpenAI rejects LM Studio / llama.cpp sampler fields. Local llama.cpp
   // and mlx-lm keep them so min_p actually reaches the serve.
   if (!providerKeepsExtendedSamplers(provider)) {
     delete next.top_k;
     delete next.min_p;
     delete next.repetition_penalty;
+  }
+  if (!templateKwargsReachModel) {
     delete next.enable_thinking;
   }
 
@@ -127,10 +131,11 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     delete next.thinking_budget_tokens;
   }
 
-  // Jinja template kwargs reach the model only on local runtimes; hosted
-  // OpenAI-compatible APIs reject the unknown field with a 400.
-  if (providerId !== LLAMA_CPP_LOCAL_ID && providerId !== MLX_LM_LOCAL_ID) {
+  // Jinja kwargs reach local runtimes and loopback OpenAI-compatible servers
+  // (MTPLX, etc.); hosted cloud APIs reject the unknown field with a 400.
+  if (!templateKwargsReachModel) {
     delete next.chat_template_kwargs;
+    delete next.preserve_thinking;
   }
 
   return next;

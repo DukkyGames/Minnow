@@ -18,7 +18,10 @@ export function getOrCreatePreviewIframe(instanceId: string, host: HTMLElement):
 
   const frame = document.createElement('iframe');
   frame.className = 'preview-frame';
-  frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups allow-modals');
+  frame.setAttribute(
+    'sandbox',
+    'allow-scripts allow-forms allow-popups allow-modals allow-same-origin',
+  );
   frame.title = `Preview: ${instanceId}`;
   host.appendChild(frame);
   framesByInstance.set(instanceId, frame);

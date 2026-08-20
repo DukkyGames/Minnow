@@ -1,0 +1,309 @@
+/**
+ * Compact composer overflow: cog + settings sheet, and the compact row itself.
+ * Wide layout stays in mode-selector.css / composer-controls.css.
+ *
+ * Compact row (inside the composer column, never the send stack):
+ *   [mode ▾] [cog] … [model] [wheel]
+ * Overflow sheet is one scroll: labeled toggle rows, then flattened Tools.
+ */
+
+.composer-overflow-anchor {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Cog is compact-only; wide trail still uses the Tools sliders button. */
+.composer-controls:not(.composer-controls--compact) .composer-overflow-anchor {
+  display: none;
+}
+
+.composer-overflow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  transition:
+    color 0.12s var(--ease-out),
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
+}
+
+.composer-overflow-btn .icon-svg {
+  --mn-icon-size: 18px;
+}
+
+.composer-overflow-btn:active:not(:disabled) {
+  background: var(--mn-surface-elevated);
+  color: var(--mn-fg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-overflow-btn:hover:not(:disabled) {
+    background: var(--mn-surface-2);
+    border-color: var(--mn-border);
+    color: var(--mn-fg);
+  }
+}
+
+.composer-overflow-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.composer-overflow-btn[aria-expanded='true'] {
+  color: var(--mn-fg);
+  background: var(--mn-surface-2);
+  border-color: var(--mn-border);
+}
+
+.composer-overflow-popover {
+  position: fixed;
+  /* Body-level, above .chat-sidebar (36) and the sidebar resizer (37).
+   * Matches other composer menus that portal to document.body. */
+  z-index: 1200;
+  box-sizing: border-box;
+  /* Wide enough for Off/Ask/Full segments without a nested inner pane. */
+  width: min(26rem, calc(100vw - 16px));
+  max-height: min(70vh, 32rem);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: var(--shadow-popover-tall, var(--mn-shadow-popover, 0 8px 24px oklch(0.12 0.02 250 / 0.28)));
+}
+
+.composer-overflow-popover.hidden {
+  display: none;
+}
+
+.composer-overflow-slot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 10px 12px 12px;
+}
+
+/* Parked controls occupy a full row; Tools title + Enable all share one. */
+.composer-overflow-slot > .composer-control,
+.composer-overflow-slot > .composer-run-target-wrap,
+.composer-overflow-slot > .work-agent-dev,
+.composer-overflow-slot > .view-mode-toggle-btn,
+.composer-overflow-slot > .composer-tools-popover__status,
+.composer-overflow-slot > .tool-group,
+.composer-overflow-slot > .composer-tools-popover__footer {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Parked chips stay in a tight row inside the sheet, not a second toolbar. */
+.composer-overflow-slot .composer-run-target-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: none;
+  padding-bottom: 4px;
+}
+
+.composer-overflow-slot .composer-run-target-btn {
+  max-width: 100%;
+}
+
+/* Labeled rows: icon + name, with the effort select on the same row when shown. */
+.composer-overflow-slot .thinking-control-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.composer-overflow-slot .thinking-toggle-host,
+.composer-overflow-slot .context-documents-toggle-host,
+.composer-overflow-slot .code-map-toggle-host,
+.composer-overflow-slot .brain-notes-toggle-host {
+  min-width: 0;
+}
+
+.composer-overflow-slot .thinking-toggle-btn {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  min-height: 36px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.composer-overflow-slot .thinking-toggle-btn::after {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--mn-fg);
+}
+
+.composer-overflow-slot .thinking-toggle-host > .thinking-toggle-btn::after {
+  content: 'Reasoning';
+}
+
+.composer-overflow-slot .context-documents-toggle-btn::after {
+  content: 'Context documents';
+}
+
+.composer-overflow-slot .code-map-toggle-btn::after {
+  content: 'Code map';
+}
+
+.composer-overflow-slot .brain-notes-toggle-btn::after {
+  content: 'Brain notes';
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-overflow-slot .thinking-toggle-btn:hover:not(:disabled) {
+    background: var(--mn-surface-elevated);
+  }
+}
+
+.composer-overflow-slot > .view-mode-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  height: auto;
+  min-height: 36px;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.composer-overflow-slot > .view-mode-toggle-btn::after {
+  content: 'Board view';
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mn-fg);
+}
+
+/* Unwrap the Tools popover so it is a section of this sheet, not a nested window. */
+.composer-overflow-slot .composer-tools-anchor {
+  display: contents;
+}
+
+.composer-overflow-slot .composer-tools-popover:not(.hidden),
+.composer-overflow-slot .composer-tools-popover:not(.hidden) .tools-list--composer {
+  display: contents;
+}
+
+.composer-overflow-slot .composer-tools-popover.hidden {
+  display: none;
+}
+
+.composer-overflow-slot .composer-tools-btn {
+  display: none;
+}
+
+.composer-overflow-slot > .composer-tools-popover__header {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  padding: 10px 0 6px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.composer-overflow-slot > .composer-tools-popover__header .composer-tools-popover__title {
+  font-size: 13px;
+}
+
+.composer-overflow-slot > .tool-list-toolbar {
+  flex: 0 0 auto;
+  width: auto;
+  margin-left: auto;
+  padding: 10px 0 6px;
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  background: transparent;
+  position: static;
+}
+
+.composer-overflow-slot .tools-list--composer .tool-group-summary {
+  padding: 10px 4px;
+}
+
+.composer-overflow-slot .tools-list--composer .tool-row {
+  padding: 8px 4px;
+}
+
+.composer-overflow-slot > .composer-tools-popover__footer {
+  padding: 10px 0 0;
+  border-top: 1px solid var(--mn-border);
+  background: transparent;
+}
+
+.composer-overflow-slot > .composer-tools-popover__status {
+  margin-top: 4px;
+}
+
+/*
+ * Compact row: [mode] [cog] … [model] [wheel], one flex line.
+ * The cog is moved next to the dropdown in JS; order puts the wheel last.
+ * Controls stay in the composer column (not above Send).
+ */
+.composer-controls.composer-controls--compact {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  overflow: visible;
+  min-width: 0;
+  position: relative;
+}
+
+.input-bar.input-bar--composer-compact > .composer-controls {
+  grid-column: 1;
+}
+
+.composer-controls--compact #modeSelectorDropdown {
+  order: 1;
+  flex: 0 0 auto;
+}
+
+.composer-controls--compact .composer-overflow-anchor {
+  order: 2;
+  flex: 0 0 auto;
+}
+
+.composer-controls--compact .composer-controls__trail {
+  order: 3;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
+.composer-controls--compact .composer-model-trigger-anchor,
+.composer-controls--compact .composer-model-trigger-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.composer-controls--compact .context-usage-anchor {
+  order: 4;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-overflow-btn {
+    transition: none;
+  }
+}

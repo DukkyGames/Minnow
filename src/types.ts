@@ -586,6 +586,10 @@ export interface OrchestrateBoardState {
   modelProviderId?: string;
   /** Model for board orchestration (planner + task chats). */
   modelId?: string;
+  /** Per-board reasoning effort (planner + linked task chats). */
+  reasoningEffort?: ReasoningEffortOption;
+  /** Per-board thinking override for off/on-only models (planner + linked task chats). */
+  thinkingMode?: ThinkingTriState;
   /** Manual board vs auto-pilot delegation (default manual). */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   /** When true, skip per-task Tester; only final integration test runs verification. */
@@ -885,6 +889,128 @@ export interface IssueIssueRef {
   addedAt: number;
 }
 
+/** Where an issue came from — drives the Triage lane and its badge. */
+export type IssueSource = 'user' | 'agent' | 'crash' | 'github';
+
+/** Who is accountable for an issue. One human slot; agents live in {@link IssueAgentRun}. */
+export interface IssueAssignee {
+  /** Stable actor id. `me` is the local single-player user until multiplayer exists. */
+  id: string;
+  /** Display name captured at assign time so a removed teammate still renders. */
+  label?: string;
+  assignedAt: number;
+}
+
+/**
+ * Live state of the work agent running on an issue.
+ *
+ * Deliberately narrow: Issues renders assigned / running / asked / PR / failed
+ * and nothing about waves, slots, or integration branches. The Orchestrator
+ * board remains the engine and the only place its internals are shown.
+ */
+export type IssueAgentPhase =
+  | 'queued'
+  | 'running'
+  | 'awaiting_input'
+  | 'review'
+  | 'failed'
+  | 'canceled'
+  | 'done';
+
+/** The `agent` slot on a card: which agent, what it is doing, and where its work lives. */
+export interface IssueAgentRun {
+  /** Work agent id from the agents registry. */
+  agentId: string;
+  phase: IssueAgentPhase;
+  /** Human-readable current step ("Running tests"), not a derived guess. */
+  step?: string;
+  startedAt: number;
+  updatedAt: number;
+  /** Single-task board group backing this run. */
+  boardGroupId?: string;
+  boardTaskId?: string;
+  /** Agent chat, so "answer from the row" can resume the right thread. */
+  chatId?: string;
+  /** Isolation for the run. */
+  worktreePath?: string;
+  branch?: string;
+  /** Set once the agent has opened its PR and stopped. */
+  prNumber?: number;
+  prUrl?: string;
+  /** Pending `ask_question` id, surfaced on the row as "needs you". */
+  pendingQuestionId?: string;
+  /** Plain-words failure reason; `envBlocked` separates broken env from broken code. */
+  error?: string;
+  envBlocked?: boolean;
+}
+
+/** One entry on an issue's comment timeline (appended, never overwritten). */
+export interface IssueComment {
+  id: string;
+  authorKind: 'user' | 'agent' | 'system';
+  /** Agent id or user label; absent for system entries. */
+  author?: string;
+  /** Markdown, same constrained subset as `IssueCard.description`. */
+  body: string;
+  createdAt: number;
+  editedAt?: number;
+}
+
+/** Structured activity record (status changes, assignments, agent milestones). */
+export interface IssueActivityEntry {
+  id: string;
+  kind: string;
+  at: number;
+  actorKind?: 'user' | 'agent' | 'system';
+  actor?: string;
+  /** Small kind-specific payload (`{ from, to }` for a status change). */
+  data?: Record<string, string | number | boolean | null>;
+}
+
+/** File or image stored alongside the issue. */
+export interface IssueAttachment {
+  id: string;
+  name: string;
+  /** Path under ~/.minnow/issues/attachments; agents may read it. */
+  path: string;
+  mime?: string;
+  bytes?: number;
+  addedAt: number;
+}
+
+/** Grouping container with a progress rollup (deliberately not an Orchestrator board). */
+export interface IssueProject {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  archivedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Named filter tab across the top of the list. */
+export interface IssueSavedView {
+  id: string;
+  name: string;
+  /** Serialized filter state; shape owned by the list, not the store. */
+  filters: Record<string, string | string[] | boolean | null>;
+  groupBy?: string;
+  order: number;
+  /** Built-in views ship with the app and cannot be deleted. */
+  builtIn?: boolean;
+}
+
+/**
+ * Per-issue cap on {@link IssueActivityEntry} retained in state.json.
+ *
+ * Phase 0 decision: activity stays in the single debounced state.json rather
+ * than moving to an append-only side file. Nothing writes activity yet, and a
+ * second file with its own write path is the shape that broke MIN-354 v1.
+ * The cap keeps the blob bounded; revisit in Phase 4 when agents start writing.
+ */
+export const ISSUE_ACTIVITY_CAP = 50;
+
 /** One issue card in the Issues app (Linear-style tracker). */
 export interface IssueCard {
   id: string;
@@ -910,6 +1036,49 @@ export interface IssueCard {
   legacyBugId?: string;
   /** Preserved bug severity after migration (shown as a label). */
   severity?: BugSeverity;
+
+  // ── v3 (Issues app v2) ────────────────────────────────────────────────────
+  /** Accountable human. Separate from {@link agent} so a run never steals ownership. */
+  assignee?: IssueAssignee;
+  /** Work agent slot and its live state. */
+  agent?: IssueAgentRun;
+  /** Parent issue id; hierarchy is one level deep by design. */
+  parentId?: string;
+  /** Lexicographic manual order key within a group (drag or Alt+↑/↓). */
+  rank?: string;
+  projectId?: string;
+  comments?: IssueComment[];
+  /** Capped at {@link ISSUE_ACTIVITY_CAP}, oldest dropped first. */
+  activity?: IssueActivityEntry[];
+  attachments?: IssueAttachment[];
+  source?: IssueSource;
+  /** Set when the issue left the Triage lane (accepted or declined). */
+  triagedAt?: number;
+  /** Opt this issue into GitHub sync while the mode is Link + push. */
+  githubSync?: boolean;
+  /** Remote identity and the watermark conflict detection compares against. */
+  github?: IssueGithubLink;
+}
+
+/**
+ * The remote half of a synced issue.
+ *
+ * `syncedAt` is the watermark, and it is what makes mirror mode safe: an edit
+ * on either side after this timestamp is a change, and a change on *both*
+ * sides is a conflict the user resolves rather than a race the last writer
+ * wins. Storing only "is it synced" would make that undecidable.
+ */
+export interface IssueGithubLink {
+  number: number;
+  url: string;
+  /** `owner/repo` at the time of linking, so a moved remote is visible. */
+  repo?: string;
+  /** Local and remote were last known equal at this moment. */
+  syncedAt: number;
+  /** Remote `updatedAt` observed at the last sync. */
+  remoteUpdatedAt?: number;
+  /** Local `updatedAt` observed at the last sync. */
+  localUpdatedAt?: number;
 }
 
 /** Per-workspace project key + counter for KEY-n allocation. */
@@ -918,14 +1087,56 @@ export interface IssuesWorkspaceIdConfig {
   nextId: number;
 }
 
-/** Persisted Issues app state under ~/.minnow/issues/state.json. */
+/**
+ * Value always written to `version` on disk.
+ *
+ * Frozen at the highest revision every already-shipped reader can parse. Those
+ * readers reset to an empty state on an unrecognized `version` — so writing a 3
+ * there would erase every issue for anyone who rolls a release back. The real
+ * revision travels in {@link IssuesState.schemaRevision}, which old readers
+ * ignore. They lose fields they never modelled; they do not lose issues.
+ */
+export const ISSUES_COMPAT_VERSION = 2;
+
+/** Current schema revision for ~/.minnow/issues/state.json. */
+export const ISSUES_SCHEMA_VERSION = 3;
+
+/**
+ * Persisted Issues app state under ~/.minnow/issues/state.json.
+ *
+ * Both revision fields are `number`, not literal unions. Pinning them to the
+ * known values is what let both parsers treat "newer than me" as "corrupt" and
+ * reset to empty — the data-wipe shape that killed MIN-354 v1. Readers must
+ * tolerate any revision and preserve what they do not understand.
+ */
 export interface IssuesState {
-  version: 2;
+  /** Compatibility floor; see {@link ISSUES_COMPAT_VERSION}. */
+  version: number;
+  /** Real schema revision. Absent on files written before v3. */
+  schemaRevision?: number;
   /** Legacy global counter for ISS-n (diagnostics / migration). */
   nextId: number;
   issues: IssueCard[];
   /** Key: normalizeWorkspacePath(absolute path). */
   workspaces?: Record<string, IssuesWorkspaceIdConfig>;
+  projects?: IssueProject[];
+  views?: IssueSavedView[];
+}
+
+/** Effective schema revision of a stored blob (`schemaRevision`, else `version`). */
+export function issuesSchemaRevisionOf(raw: {
+  version?: unknown;
+  schemaRevision?: unknown;
+}): number {
+  const explicit = raw.schemaRevision;
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= 1) {
+    return Math.floor(explicit);
+  }
+  const legacy = raw.version;
+  if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy >= 1) {
+    return Math.floor(legacy);
+  }
+  return ISSUES_SCHEMA_VERSION;
 }
 
 /** Stable id for one execution from a fork point (branch). */

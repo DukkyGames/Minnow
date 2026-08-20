@@ -305,14 +305,19 @@ export async function fetchLibraryModelSelectMerge(
     .map((model) => {
       const key = encodeLibraryModelSelectKey(model.id);
       const state = libraryModelLoadState(model, serves);
+      // Minnow serves these itself (llama-server --mmproj / mlx-lm), so the local
+      // library row is the only place vision can come from — there is no upstream
+      // catalog to read it back off.
+      const vision = model.capabilities.includes('vision');
       cacheEntries.push({
         key,
         row: {
           id: model.id,
-          type: 'llm',
+          type: vision ? 'vlm' : 'llm',
           state,
           quantization: model.quant || undefined,
           max_context_length: model.contextLength ?? undefined,
+          ...(vision ? { catalogVision: true } : {}),
         },
       });
       return buildTopBarModelOptionHtml({

@@ -57,6 +57,27 @@ describe('buildLibrary', () => {
     assert.equal(rows[0].servable, true);
   });
 
+  test('a sibling mmproj marks the row as vision (llama-server --mmproj)', async () => {
+    const rows = await buildLibrary([ggufRow()]);
+    assert.ok(rows[0].capabilities.includes('vision'));
+  });
+
+  test('no projector leaves capabilities untouched', async () => {
+    const row = ggufRow({
+      gguf_files: [
+        {
+          name: 'Qwen3-8B-Q4_K_M.gguf',
+          rel_path: 'Qwen3-8B-Q4_K_M.gguf',
+          size_bytes: 4_800_000_000,
+          role: 'model',
+          quant: 'Q4_K_M',
+        },
+      ],
+    });
+    const rows = await buildLibrary([row]);
+    assert.equal(rows[0].capabilities.includes('vision'), false);
+  });
+
   test('lists every quant in a repo separately', async () => {
     const row = ggufRow({
       gguf_files: [

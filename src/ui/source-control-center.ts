@@ -49,7 +49,8 @@ import { createHistoryView } from './scc-history';
 import { createPullsView } from './scc-pulls';
 import { createBranchesView, createStashesView, createWorktreesView } from './scc-refs';
 import { refreshForgeRailBadges, refreshGitRailBadges } from './scc-rail-badges';
-import { createSccPalette, type SccCommand, type SccPaletteHandle } from './scc-palette';
+import { isCommandPaletteOpen, openCommandPalette } from './command-palette';
+import { registerCommandSource, type Command } from './command-registry';
 import {
   button,
   el,
@@ -79,7 +80,7 @@ let root: HTMLElement | null = null;
 let railEl: HTMLElement | null = null;
 let paneEl: HTMLElement | null = null;
 let noRepoEl: HTMLElement | null = null;
-let palette: SccPaletteHandle | null = null;
+let unregisterGlobalCommands: (() => void) | null = null;
 
 let activeSection: SccSectionId = 'changes';
 let activeView: SccView | null = null;
@@ -271,7 +272,7 @@ function buildHeader(): HTMLElement {
     variant: 'ghost',
     title: 'Run a git command',
     className: 'scc-head__palette-btn',
-    onClick: () => palette?.open(),
+    onClick: () => openCommandPalette(),
   });
   paletteBtn.appendChild(el('kbd', 'scc-head__kbd', modKeyLabel('K')));
 
@@ -577,11 +578,11 @@ function advancedContext() {
   };
 }
 
-function buildCommands(): SccCommand[] {
+function buildCommands(): Command[] {
   const onGitHub = (): boolean => Boolean(forge?.supported);
   const conflictHost = paneEl ?? document.createElement('div');
 
-  const jump = (id: SccSectionId, title: string, shortcut: string): SccCommand => ({
+  const jump = (id: SccSectionId, title: string, shortcut: string): Command => ({
     id: `go.${id}`,
     title,
     group: 'Go to',
@@ -835,13 +836,9 @@ function handleKey(event: KeyboardEvent): void {
 
   const mod = event.ctrlKey || event.metaKey;
 
-  if (mod && event.key.toLowerCase() === 'k') {
-    event.preventDefault();
-    palette?.open();
-    return;
-  }
-
-  if (palette?.isOpen()) return;
+  // Ctrl+K is not intercepted here — the global handler owns it, and the global
+  // palette already carries these commands while this surface is open.
+  if (isCommandPaletteOpen()) return;
 
   if (mod && /^[1-7]$/.test(event.key)) {
     event.preventDefault();
@@ -896,26 +893,8 @@ function stopPolling(): void {
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 async function closeCompetingMainColumnViews(): Promise<void> {
-  const overview = await import('./code-overview');
-  if (overview.isCodeOverviewOpen()) overview.closeCodeOverview({ restoreChat: false });
-
-  const orchestrate = await import('./orchestrate-hub');
-  if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
-
-  const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
-  teardownCodeBrainMapBeforeChatPaint();
-
-  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
-  teardownIssuesEmbedBeforeChatPaint();
-
-  const { teardownResearchPanelBeforeChatPaint } = await import('./research-panel');
-  teardownResearchPanelBeforeChatPaint();
-
-  const { closeDevServerScreen, isDevServerScreenOpen } = await import('./dev-server-screen');
-  if (isDevServerScreenOpen()) closeDevServerScreen({ skipNavigate: true, restoreChat: false });
-
-  const { teardownHub } = await import('./hub');
-  teardownHub();
+  const { closeOtherCodeStageViews } = await import('./main-column-overlay');
+  await closeOtherCodeStageViews('source-control');
 }
 
 /** Mount the Source Control Center into the Code main column. */
@@ -945,7 +924,14 @@ export async function openSourceControlCenter(options?: {
   area.classList.add(CHAT_AREA_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_CLASS);
 
-  palette = createSccPalette({ host: root, getCommands: buildCommands });
+  // Source Control has no palette of its own any more: it contributes its verbs
+  // to the one global palette while it is open. Ctrl+K is a single chord with a
+  // single meaning, and the header button opens the same list it always did.
+  unregisterGlobalCommands = registerCommandSource(
+    'source-control',
+    () => (isSourceControlCenterOpen() ? buildCommands() : []),
+    { order: 20 },
+  );
 
   keyHandler = handleKey;
   document.addEventListener('keydown', keyHandler, true);
@@ -963,8 +949,8 @@ export async function openSourceControlCenter(options?: {
   notifyAskQuestionDisplayContextChanged();
 }
 
-/** Tear the center down and hand the main column back to chat. */
-export function closeSourceControlCenter(): void {
+/** Tear the center down. Skip chat restore when another Code view is taking the column. */
+export function closeSourceControlCenter(options?: { restoreChat?: boolean }): void {
   if (!isSourceControlCenterOpen()) return;
 
   stopPolling();
@@ -973,8 +959,8 @@ export function closeSourceControlCenter(): void {
     keyHandler = null;
   }
 
-  palette?.destroy();
-  palette = null;
+  unregisterGlobalCommands?.();
+  unregisterGlobalCommands = null;
   activeView?.destroy();
   activeView = null;
 
@@ -994,6 +980,11 @@ export function closeSourceControlCenter(): void {
   pushBtn = null;
   forge = null;
   badges.clear();
+
+  if (options?.restoreChat === false) {
+    void import('./main-column-overlay').then((m) => m.notifyCodeStageViewChanged());
+    return;
+  }
 
   void restoreChatColumn();
 }
@@ -1027,8 +1018,8 @@ export function resetSourceControlCenterForTests(): void {
     document.removeEventListener('keydown', keyHandler, true);
     keyHandler = null;
   }
-  palette?.destroy();
-  palette = null;
+  unregisterGlobalCommands?.();
+  unregisterGlobalCommands = null;
   activeView?.destroy();
   activeView = null;
   document.getElementById(ROOT_ID)?.remove();

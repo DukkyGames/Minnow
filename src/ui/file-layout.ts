@@ -226,9 +226,8 @@ function refreshUnifiedTabsIfPresent(): void {
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
 export function applyFileSidebarVisuals(): void {
   reconcileRightSplitDomWithState();
-  if (isRightPaneSplitActive()) {
-    applyRightPaneSplitDom();
-  }
+  // Always sync split chrome and pane focus ring (clears stale is-focused when split is off).
+  applyRightPaneSplitDom();
 
   const side = document.getElementById('fileSidebar');
   const btn = document.getElementById('btnFileSidebarCollapse');

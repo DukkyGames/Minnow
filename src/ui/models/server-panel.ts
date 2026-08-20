@@ -519,6 +519,8 @@ function logsBlock(serves: ServeRecord[]): HTMLElement {
   head.appendChild(controls);
   block.appendChild(head);
 
+  // The pane is a flex child of .models-surface; CSS keeps this <pre> as the
+  // scrollport so long output does not clip at the bottom of the stage.
   const body = el('pre', 'models-logs__body');
   body.id = 'modelsLogBody';
   body.setAttribute('role', 'log');

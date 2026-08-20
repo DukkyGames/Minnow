@@ -587,6 +587,24 @@
   color: var(--mn-fg-muted);
 }
 
+.settings-general .settings-group--emphasis .settings-toggle-row + .settings-watchdog-supervision__thresholds {
+  margin-top: 12px;
+}
+
+.settings-general .settings-group--emphasis .settings-watchdog-supervision__notes {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.settings-general .settings-group--emphasis .settings-watchdog-supervision__notes .settings-field-hint {
+  margin-bottom: 12px;
+}
+
+.settings-general .settings-group--emphasis .settings-watchdog-supervision__notes .settings-field-hint:last-child {
+  margin-bottom: 0;
+}
+
 .settings-row,
 .settings-toggle-row {
   display: flex;

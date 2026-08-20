@@ -253,18 +253,13 @@
   gap: 5px;
 }
 
+/* Uicons inherit the button's `color` via currentColor. Do not use the
+   raster `.icon-img` invert (brightness(0) / invert(1)): that forces
+   glyphs to pure black/white and fights --mn-fg / --mn-accent-ink. */
 .git-source-control-btn__icon {
-  width: 12px;
-  height: 12px;
-  display: block;
-  object-fit: contain;
+  --mn-icon-size: 12px;
   flex-shrink: 0;
-  filter: brightness(0);
-  opacity: 0.88;
-}
-
-html[data-theme$='-dark'] .git-source-control-btn__icon {
-  filter: brightness(0) invert(1);
+  color: inherit;
 }
 
 .git-source-control-btn__label {
@@ -297,27 +292,15 @@ html[data-theme$='-dark'] .git-source-control-btn__icon {
 }
 
 .git-panel-action-btn--icon .git-panel-action-btn__icon {
-  width: 12px;
-  height: 12px;
-  display: block;
-  object-fit: contain;
-  filter: brightness(0);
-  opacity: 0.88;
-}
-
-html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__icon {
-  filter: brightness(0) invert(1);
+  --mn-icon-size: 12px;
+  color: inherit;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .git-panel-action-btn--ai:hover:not(:disabled) {
     background: var(--mn-accent);
     border-color: var(--mn-accent);
-  }
-
-  .git-panel-action-btn--ai:hover:not(:disabled) .git-panel-action-btn__icon {
-    filter: brightness(0) invert(1);
-    opacity: 1;
+    color: var(--mn-fg-on-accent);
   }
 }
 

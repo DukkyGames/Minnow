@@ -1,0 +1,237 @@
+/*
+ * Capture popover (src/ui/issue-capture-popover.ts).
+ *
+ * Same density argument as the context menu: this opens, takes a title, and
+ * closes inside twenty seconds. It is sized to the title field and the chips,
+ * with no chrome that does not carry information. Flat, per the Flat Chrome
+ * Rule — the shadow is the only lift, and it exists so the popover reads as
+ * above the app rather than inside it.
+ */
+
+.mn-capture {
+  position: fixed;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, calc(100vw - 16px));
+  padding: 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-bg);
+  box-shadow: var(--mn-shadow, 0 8px 24px color-mix(in oklch, var(--mn-fg) 12%, transparent));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mn-capture {
+    animation: mn-capture-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes mn-capture-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mn-capture.is-drop-target {
+  outline: 2px dashed var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.mn-capture__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mn-capture__source {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.mn-capture__destination {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mn-capture__chevron {
+  font-size: 9px;
+  color: var(--mn-fg-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-capture__destination:hover {
+    border-color: var(--mn-border-strong);
+    background: color-mix(in oklch, var(--mn-fg) 5%, transparent);
+  }
+}
+
+.mn-capture__destination:focus-visible,
+.mn-capture__submit:focus-visible,
+.mn-capture__chip-remove:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.mn-capture__title {
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 4px;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.mn-capture__title::placeholder {
+  color: var(--mn-fg-muted);
+}
+
+.mn-capture__title:focus {
+  border-color: var(--mn-accent);
+  outline: none;
+}
+
+.mn-capture__title.is-muted {
+  color: var(--mn-fg-muted);
+  background: color-mix(in oklch, var(--mn-fg) 4%, transparent);
+}
+
+.mn-capture__title.is-invalid {
+  border-color: var(--mn-danger);
+}
+
+.mn-capture__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.mn-capture__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 1px 3px 1px 5px;
+  border: 1px solid var(--mn-border);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--mn-fg);
+}
+
+.mn-capture__chip-icon {
+  flex: none;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--mn-fg-muted);
+}
+
+.mn-capture__chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+
+.mn-capture__chip-detail {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 90px;
+  color: var(--mn-fg-muted);
+}
+
+.mn-capture__chip-remove {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-capture__chip-remove:hover {
+    background: color-mix(in oklch, var(--mn-fg) 8%, transparent);
+    color: var(--mn-fg);
+  }
+}
+
+.mn-capture__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mn-capture__hint {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.mn-capture__submit {
+  min-height: 24px;
+  padding: 3px 12px;
+  border: 1px solid var(--mn-accent);
+  border-radius: 4px;
+  background: var(--mn-accent);
+  color: var(--mn-bg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-capture__submit:hover {
+    background: color-mix(in oklch, var(--mn-accent) 84%, var(--mn-bg));
+  }
+}
+
+/*
+ * Drop-target affordance for the menubar button and the Issues rail tile.
+ * Keyed off a root class set by the shell drag layer, because `dragover`
+ * cannot read the transfer payload to decide this per-event.
+ */
+.mn-capture-target.is-drop-target {
+  outline: 2px dashed var(--mn-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.mn-capture-dragging .mn-capture-target {
+  background: color-mix(in oklch, var(--mn-accent) 12%, transparent);
+  border-radius: 4px;
+}

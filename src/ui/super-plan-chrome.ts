@@ -32,6 +32,11 @@ export function syncSuperPlanChrome(open: boolean): void {
   }
 
   emitChatSidebarChanged();
+  // Super Plan hides the chat rail via html.mn-super-plan-open; keep the native
+  // preview guest aligned with #previewBody after that layout shift.
+  void import('./preview-electron-visibility').then((m) => {
+    m.scheduleElectronPreviewHostLayoutSync();
+  });
 }
 
 /** True when the shell is currently in the Super Plan chrome state. */

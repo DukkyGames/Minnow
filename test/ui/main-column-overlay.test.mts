@@ -6,12 +6,17 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import {
+  isCodeStageOverlayMounted,
   isMainColumnOverlaySuppressingChatDom,
   stripMainColumnOverlayClasses,
 } from '../../src/ui/main-column-overlay.ts';
 
+let activeWindow: Window | undefined;
+
 function setupDom(): void {
+  activeWindow?.close();
   const window = new Window();
+  activeWindow = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
 
@@ -27,6 +32,8 @@ function setupDom(): void {
 describe('main-column-overlay', () => {
   afterEach(() => {
     document.body.innerHTML = '';
+    activeWindow?.close();
+    activeWindow = undefined;
   });
 
   test('stripMainColumnOverlayClasses removes overlay modifiers from chat area and main column', () => {
@@ -66,6 +73,25 @@ describe('main-column-overlay', () => {
     root.id = 'devServerScreenRoot';
     document.getElementById('chatArea')!.appendChild(root);
     assert.equal(isMainColumnOverlaySuppressingChatDom(), true);
+  });
+
+  test('isMainColumnOverlaySuppressingChatDom is true when super plan page root is mounted', () => {
+    setupDom();
+    stripMainColumnOverlayClasses();
+    const root = document.createElement('div');
+    root.id = 'superPlanPage';
+    document.getElementById('chatArea')!.appendChild(root);
+    assert.equal(isMainColumnOverlaySuppressingChatDom(), true);
+    assert.equal(isCodeStageOverlayMounted(), true);
+  });
+
+  test('isCodeStageOverlayMounted is true when overview root is mounted even without classes', () => {
+    setupDom();
+    stripMainColumnOverlayClasses();
+    const root = document.createElement('div');
+    root.id = 'codeOverviewRoot';
+    document.getElementById('chatArea')!.appendChild(root);
+    assert.equal(isCodeStageOverlayMounted(), true);
   });
 
   test('stripMainColumnOverlayClasses removes chat-area--dev-server', () => {

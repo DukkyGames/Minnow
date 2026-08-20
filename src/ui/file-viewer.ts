@@ -60,6 +60,7 @@ import {
 } from './editor-suggestions';
 import { isIntentEnabled, toggleIntentMode } from './editor-suggestions';
 import { addCodeReferenceToComposer } from '../attachments/code-ref';
+import { CAPTURE_MENU_KINDS, legacyCaptureMenuItems } from './issue-capture';
 import { codeSelectionDragExtension } from './editor-code-selection-drag';
 import {
   buildFileViewerContextMenuItems,
@@ -1500,9 +1501,28 @@ export function bindFileViewerContextMenu(): void {
 
     e.preventDefault();
 
+    const selectionTarget = hasEditorSelection && editorView
+      ? (() => {
+          const sel = editorView.state.selection.main;
+          const { fromLine, toLine } = lineNumbersForRange(
+            editorView.state.doc,
+            sel.from,
+            sel.to,
+          );
+          return {
+            kind: CAPTURE_MENU_KINDS.editorSelection,
+            path: tab.path,
+            startLine: fromLine,
+            endLine: toLine,
+            text: editorView.state.doc.sliceString(sel.from, sel.to),
+          };
+        })()
+      : null;
+
     const items = buildFileViewerContextMenuItems({
       path: tab.path,
       hasEditorSelection,
+      captureItems: selectionTarget ? legacyCaptureMenuItems(selectionTarget) : undefined,
       isMarkdown,
       isMarkdownPreview: isPreview,
       onAddSelectionToChat: () => {

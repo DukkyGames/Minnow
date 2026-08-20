@@ -23,7 +23,8 @@ function resolveCwd(cwd) {
   return cwd && String(cwd).trim() ? String(cwd).trim() : getWorkspaceRoot();
 }
 
-async function gh(args, cwd, timeout = GH_TIMEOUT_MS) {
+/** Run `gh` with paging and colour disabled. Exported for forge-issue-ops.js. */
+export async function gh(args, cwd, timeout = GH_TIMEOUT_MS) {
   return runProcess('gh', args, {
     cwd,
     timeout,
@@ -33,7 +34,7 @@ async function gh(args, cwd, timeout = GH_TIMEOUT_MS) {
 }
 
 /** Combined stdout/stderr, trimmed, for error surfaces. */
-function processError(result, fallback) {
+export function processError(result, fallback) {
   const text = `${result.stderr ?? ''}\n${result.stdout ?? ''}`.trim();
   if (!text) return fallback;
   // gh prefixes hard failures with a cross; strip it so the UI can style its own.
@@ -190,7 +191,8 @@ async function probeForgeStatus(root) {
 }
 
 /** Gate every forge op behind a usable gh + supported remote. */
-async function requireForge(cwd) {
+/** Gate every forge call on a GitHub remote plus working `gh` auth. */
+export async function requireForge(cwd) {
   const root = resolveCwd(cwd);
   const status = await forgeStatus({ cwd: root });
   if (!status.supported) {
@@ -200,7 +202,7 @@ async function requireForge(cwd) {
 }
 
 /** Parse gh --json output; gh emits `[]`/`{}` or nothing. */
-function parseJson(stdout, fallback) {
+export function parseJson(stdout, fallback) {
   const text = String(stdout ?? '').trim();
   if (!text) return fallback;
   try {

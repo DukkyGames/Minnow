@@ -31,6 +31,11 @@
   box-sizing: border-box;
 }
 
+/* Compact strip stays in the textarea column; Send keeps its own stack. */
+.input-bar.input-bar--composer-compact > .composer-controls {
+  grid-column: 1;
+}
+
 .input-bar .input-row {
   grid-column: 1;
 }

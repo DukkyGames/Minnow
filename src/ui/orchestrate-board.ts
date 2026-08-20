@@ -165,6 +165,7 @@ import {
 import {
   boardChatRailCollapsedWaves,
   confirmBoardChatDelete,
+  ensureBoardChatComposerChrome,
   mountBoardChatHost,
   refreshBoardChatHeader,
   toggleBoardChatRailWave,
@@ -177,13 +178,13 @@ import {
 } from './orchestrate-board-chat-state';
 import { showChatItemContextMenu } from './sidebar';
 import { setStatus } from './status';
-import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
-import { isCodeOverviewOpen } from './code-overview';
+import { isMainColumnOverlaySuppressingChatDom, isCodeStageOverlayMounted } from './main-column-overlay';
 import { teardownHub } from './hub';
 
 /** Live kanban uses chat-area--orchestrate for layout; that must not block board refresh. */
 function isBoardDomRefreshBlockedByOverlay(): boolean {
-  if (isCodeOverviewOpen()) return true;
+  // View-bar overlays own #chatArea even while the folder stays in board mode.
+  if (isCodeStageOverlayMounted()) return true;
   if (isOrchestrateBoardViewActive() || isOrchestrateInitSplitChromeActive()) {
     return false;
   }
@@ -218,6 +219,10 @@ import {
   syncBoardHeaderModelSelect,
   wireBoardHeaderModelSelect,
 } from './orchestrate-board-model-select';
+import {
+  syncBoardHeaderReasoning,
+  wireBoardHeaderReasoning,
+} from './orchestrate-board-reasoning';
 import {
   confirmManualTaskStart,
   confirmManualWaveStart,
@@ -1214,6 +1219,9 @@ function wireBoardHeaderControls(
   boardAfkHintShownForSession = false;
 
   void wireBoardHeaderModelSelect(controls, group, board, plannerChat, () => {
+    refreshActiveBoardIfMounted();
+  });
+  wireBoardHeaderReasoning(controls, group, board, plannerChat, () => {
     refreshActiveBoardIfMounted();
   });
   // Execution mode segments (Manual → Sequential → Auto → AFK)
@@ -2982,6 +2990,7 @@ function refreshBoardDom(
   }
 
   syncBoardHeaderModelSelect(root, group, board, plannerChat);
+  syncBoardHeaderReasoning(group, board, plannerChat);
 
   // Sync Start/Stop button: add if needed, remove when mode switches to manual
   const controls = root.querySelector('.board-header__controls') as HTMLElement | null;
@@ -3409,17 +3418,23 @@ export async function mountBoardOnboardingPanel(
  */
 export function refreshActiveBoardIfMounted(): void {
   if (isOrchestrateHubMounted()) return;
-  if (isBoardDomRefreshBlockedByOverlay()) return;
   /*
    * A chat is showing in `.ob-main` and the board root is parked off-DOM.
    * Rebuilding here would evict the transcript mid-read, so only the live parts
-   * that stay on screen (rail dots, header state) refresh.
+   * that stay on screen (rail dots, header state, composer chrome) refresh.
+   * Check this before the overlay gate: `#chatArea.chat-area--orchestrate` looks
+   * like a full-column overlay, and skipping here is what dropped the composer
+   * class on stream-end.
    */
   if (isBoardChatEmbedOpen()) {
-    repaintBoardRail?.();
-    refreshBoardChatHeader();
+    ensureBoardChatComposerChrome();
+    if (!isBoardDomRefreshBlockedByOverlay()) {
+      repaintBoardRail?.();
+      refreshBoardChatHeader();
+    }
     return;
   }
+  if (isBoardDomRefreshBlockedByOverlay()) return;
   if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
   const group = getActiveBoardGroup();
   if (!group) return;

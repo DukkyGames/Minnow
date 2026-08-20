@@ -151,6 +151,36 @@ describe('file-layout right split reconcile (MIN-342)', () => {
     assert.equal(document.getElementById('rightPaneColumn')?.classList.contains('hidden'), true);
   });
 
+  test('showViewerSplit reveals the file pane even when a preview tab remains open', async () => {
+    const { showViewerSplit } = await import('../../src/ui/file-layout.ts');
+    const column = document.getElementById('rightPaneColumn')!;
+    const primarySlot = document.createElement('div');
+    primarySlot.id = 'rightPaneSlotPrimary';
+    const viewer = document.getElementById('fileViewerPane')!;
+    const preview = document.getElementById('previewPane')!;
+    primarySlot.appendChild(viewer);
+    primarySlot.appendChild(preview);
+    column.prepend(primarySlot);
+
+    patchFilePanelState({
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      openViewerTabs: ['src/a.ts'],
+      activeViewerTab: 'src/a.ts',
+      previewTabs: [{ id: 'tab-1', source: { kind: 'url', url: 'http://localhost:3000' } }],
+      activePreviewTab: 'tab-1',
+    });
+    column.classList.remove('hidden');
+    preview.classList.remove('hidden');
+    viewer.classList.add('hidden');
+
+    showViewerSplit();
+
+    assert.equal(getFilePanelState().rightPaneMode, 'viewer');
+    assert.equal(viewer.classList.contains('hidden'), false);
+    assert.equal(preview.classList.contains('hidden'), true);
+  });
+
   test('hideViewerSplit still falls back to preview when user closes last viewer tab', async () => {
     const { hideViewerSplit } = await import('../../src/ui/file-layout.ts');
     patchFilePanelState({

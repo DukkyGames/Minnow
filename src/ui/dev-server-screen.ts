@@ -213,16 +213,8 @@ function startPolling(): void {
 }
 
 async function closeCompetingMainColumnViews(): Promise<void> {
-  const orchestrate = await import('./orchestrate-hub');
-  if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
-  const overview = await import('./code-overview');
-  if (overview.isCodeOverviewOpen()) {
-    overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
-  }
-  const brain = await import('./code-brain-map');
-  if (brain.isCodeBrainMapOpen()) brain.closeCodeBrainMap();
-  const { teardownHub } = await import('./hub');
-  teardownHub();
+  const { closeOtherCodeStageViews } = await import('./main-column-overlay');
+  await closeOtherCodeStageViews('dev-server');
 }
 
 function buildShell(): HTMLElement {

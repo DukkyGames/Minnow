@@ -110,7 +110,7 @@ describe('mode selector for orchestrator board chats', () => {
     assert.equal(modeSelector.hidden, false);
   });
 
-  test('hub composer keeps mode labels (never icon-only compact)', () => {
+  test('compact composer uses a mode dropdown instead of icon-only segments', () => {
     const modeSelector = setupModeSelectorDom({ hubComposer: true });
     const chat = createEmptyChatObject('');
     chat.id = REGULAR_CHAT_ID;
@@ -123,9 +123,13 @@ describe('mode selector for orchestrator board chats', () => {
     });
 
     initModeSelector();
-    modeSelector.classList.add('mode-segmented--compact');
+    document.getElementById('composerControls')?.classList.add('composer-controls--compact');
     syncModeSelectorFromActiveChat();
 
+    const dropdown = document.getElementById('modeSelectorDropdown');
+    assert.ok(dropdown);
+    assert.equal(dropdown?.hidden, false);
+    assert.match(dropdown?.textContent ?? '', /Build/);
     assert.equal(modeSelector.classList.contains('mode-segmented--compact'), false);
     assert.ok(modeSelector.querySelector('.mode-segment__label'));
   });

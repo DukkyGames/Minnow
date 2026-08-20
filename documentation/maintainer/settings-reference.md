@@ -311,21 +311,21 @@ Settings → **Agents → Watchdog**.
 
 **Generation timeouts** — server-side limits while streaming from the model:
 
-| Setting | Key |
-|---------|-----|
-| Idle timeout (minutes) | `chat.generationIdleTimeoutMs` |
-| Max duration (minutes) | `chat.generationMaxDurationMs` |
+| Setting | Key | Default |
+|---------|-----|---------|
+| Idle timeout (minutes) | `chat.generationIdleTimeoutMs` | 60 min |
+| Max duration (minutes) | `chat.generationMaxDurationMs` | 240 min |
 
-Idle timeout resets when new tokens arrive; applies to the next generation without restart.
+Idle timeout resets when new tokens arrive; applies to the next generation without restart. Either limit may be set to `0` to disable it.
 
 **Agent supervision** (`sub-agents.json`) — one policy covering sub-agents *and* orchestrate task chats. Both write the same `heartbeatConfig` singleton in `agents/controller/wrapper`, so they must resolve from one store; `config/supervision-thresholds.ts` is that resolver.
 
-| Setting | Key | Range | Default |
-|---------|-----|-------|---------|
-| Stall timeout | `progressStallMs` | 10 s – 30 min | 90 s |
-| Unresponsive after | `heartbeatDeadMs` | 5 s – 5 min | 30 s |
-| Heartbeat interval | `heartbeatIntervalMs` | 1 s – 60 s | 7 s |
-| Repeated tool limit | `duplicateToolCallThreshold` | 0 – 256 (`0` = off) | 5 |
+| Setting | Key | Default |
+|---------|-----|-------|
+| Stall timeout | `progressStallMs` | 300 s (`0` = off) |
+| Unresponsive after | `heartbeatDeadMs` | 90 s (`0` = off) |
+| Heartbeat interval | `heartbeatIntervalMs` | 10 s (`0` = off) |
+| Repeated tool limit | `duplicateToolCallThreshold` | 25 (`0` = off) |
 
 Progress is bumped by streamed messages, live activity, and tool calls — a model that reasons for longer than the stall timeout in one non-streaming completion trips it. Repeated-tool detection uses a sliding window (`4x` the threshold, min 12 recent calls), so identical calls spread across a long run are ignored.
 

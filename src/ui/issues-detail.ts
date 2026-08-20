@@ -5,8 +5,11 @@
  * Phase 4: Git menu — branch, commits, PR via gh, GitHub URL chips.
  * Flat chrome; --mn-* tokens only.
  *
- * IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass shape=pass
- * image_gate=skipped:harness lacks native image generation mutation=open
+ * Peek is a description-first document: sticky identity + dispatch, then the
+ * body, then compact add-rows for empty secondary sections.
+ *
+ * IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=not_required
+ * shape=pass image_gate=skipped:harness lacks native image generation mutation=open
  */
 
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -14,6 +17,8 @@ import {
   appendIssueLinks,
   deleteIssue,
   findIssueById,
+  issueCodeRefsEqual,
+  scheduleSaveIssues,
   updateIssue,
 } from '../state/issues-store';
 import { parseIssueCodeRefPaste } from '../state/issue-code-ref-parse';
@@ -50,15 +55,25 @@ import {
   resolveGitLinkOpenUrl,
 } from '../chat/issues/git-actions';
 import { createCodeRefLinkButton } from './code-ref-link';
-import { createIssuesLabelsField } from './issues-labels-field';
+import { createIssueEditor } from './issue-editor';
+import { collectInlineRefs } from '../issues/markdown-inline';
+import { codeRefsExcludingPlan, inferIssuePlanPath } from '../issues/plan-attach';
+import { renderIssueAttachments } from './issues-attachments-section';
+import { bindIssueDropTarget } from './issue-drop-target';
+import { renderIssueGithubSection } from './issues-github-section';
+import { createIssuesLabelsField, isIssuesLabelsFieldFocused } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
+import { createIssueTypeChip } from '../issues/type-icons';
 import {
   sortedPriorities,
   sortedStatuses,
   sortedTypes,
 } from '../issues/taxonomy';
 import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store';
+import { isLocalServerAvailable } from '../tools/config';
+import { createIcon } from './icon';
+import { openIssuesContextMenu } from './issues-context-menu';
 import type {
   IssueCard,
   IssueCodeRef,
@@ -109,9 +124,36 @@ export function getSelectedIssueId(): string | undefined {
   return selectedIssueId;
 }
 
+/**
+ * True when focus is inside peek chrome that a remount would wipe.
+ * Store subscriptions refresh the panel on every patch; skip that while the
+ * title, description, labels, or an add-row field is being typed.
+ */
+export function isIssuesDetailEditing(): boolean {
+  const active = document.activeElement;
+  if (!active || typeof (active as { closest?: unknown }).closest !== 'function') {
+    return false;
+  }
+  if (isIssuesLabelsFieldFocused()) return true;
+  const el = active as HTMLElement;
+  return Boolean(
+    el.closest('.issues-detail__title') ||
+      el.closest('.issues-detail__desc-wrap') ||
+      el.closest('.mn-editor') ||
+      el.closest('.issues-detail__add-code'),
+  );
+}
+
 /** Whether an expand run is in flight for this issue. */
 export function isIssueExpanding(issueId: string): boolean {
   return expandingIds.has(issueId);
+}
+
+function syncDetailLayoutClass(open: boolean): void {
+  const root = document.getElementById('issuesView');
+  root?.classList.toggle('has-detail', open);
+  // @container rules match descendants of .issues-page, not the page itself.
+  root?.querySelector('.issues-shell')?.classList.toggle('is-detail', open);
 }
 
 /** Close the detail panel and clear selection. */
@@ -122,7 +164,7 @@ export function closeIssueDetail(): void {
     host.classList.remove('is-open');
     host.innerHTML = '';
   }
-  document.getElementById('issuesView')?.classList.remove('has-detail');
+  syncDetailLayoutClass(false);
 }
 
 /** Delete the open issue after confirmation. */
@@ -150,7 +192,7 @@ export function openIssueDetail(issueId: string): void {
   selectedIssueId = issue.id;
   const host = ensureDetailHost();
   if (!host) return;
-  document.getElementById('issuesView')?.classList.add('has-detail');
+  syncDetailLayoutClass(true);
   host.classList.add('is-open');
   renderIssueDetail(host, issue);
 }
@@ -198,30 +240,34 @@ async function addCodeRefFromPaste(issueId: string, paste: string): Promise<void
   const snippet = await captureSnippetForRef(parsed.ref);
   const ref: IssueCodeRef = snippet ? { ...parsed.ref, snippet } : parsed.ref;
   appendIssueLinks(issueId, { codeRefs: [ref] });
+  scheduleSaveIssues();
   refreshIssueDetailIfOpen();
 }
 
-function fillSelect(
-  select: HTMLSelectElement,
-  options: Array<{ id: string; label: string }>,
-  value: string,
-): void {
-  select.innerHTML = '';
-  const seen = new Set<string>();
-  for (const opt of options) {
-    seen.add(opt.id);
-    const el = document.createElement('option');
-    el.value = opt.id;
-    el.textContent = opt.label;
-    select.appendChild(el);
-  }
-  if (value && !seen.has(value)) {
-    const unknown = document.createElement('option');
-    unknown.value = value;
-    unknown.textContent = `${value} (unknown)`;
-    select.appendChild(unknown);
-  }
-  select.value = value;
+function removeCodeRefFromIssue(issueId: string, ref: IssueCodeRef): void {
+  const issue = findIssueById(issueId);
+  if (!issue?.codeRefs?.length) return;
+  const next = issue.codeRefs.filter((entry) => !issueCodeRefsEqual(entry, ref));
+  if (next.length === issue.codeRefs.length) return;
+  updateIssue(issueId, { codeRefs: next });
+  scheduleSaveIssues();
+  refreshIssueDetailIfOpen();
+}
+
+/** Unlink a plan markdown path from the issue (does not delete the file). */
+function removePlanFromIssue(issueId: string, planPath: string): void {
+  const issue = findIssueById(issueId);
+  if (!issue) return;
+  const hadExplicitPlan = Boolean(issue.planPath?.trim());
+  const nextCodeRefs = codeRefsExcludingPlan(issue.codeRefs ?? [], planPath);
+  const codeRefsChanged = nextCodeRefs.length !== (issue.codeRefs?.length ?? 0);
+  if (!hadExplicitPlan && !codeRefsChanged) return;
+  const patch: Parameters<typeof updateIssue>[1] = {};
+  if (hadExplicitPlan) patch.planPath = '';
+  if (codeRefsChanged) patch.codeRefs = nextCodeRefs;
+  updateIssue(issueId, patch);
+  scheduleSaveIssues();
+  refreshIssueDetailIfOpen();
 }
 
 function formatTs(ts: number): string {
@@ -237,119 +283,185 @@ function formatTs(ts: number): string {
   }
 }
 
-function section(title: string): { section: HTMLElement; body: HTMLElement } {
+type DetailSectionOptions = {
+  /** No heading — the description is the page, activity is a caption. */
+  untitled?: boolean;
+  /** One-line add row: heading (if any) sits beside the control. */
+  compact?: boolean;
+  variant?: 'document' | 'meta';
+};
+
+function section(
+  title: string | null,
+  options: DetailSectionOptions = {},
+): { section: HTMLElement; body: HTMLElement } {
   const sectionEl = document.createElement('section');
   sectionEl.className = 'issues-detail__section';
-  const h = document.createElement('h3');
-  h.className = 'issues-detail__section-title';
-  h.textContent = title;
+  if (options.compact) sectionEl.classList.add('issues-detail__section--compact');
+  if (options.variant) sectionEl.classList.add(`issues-detail__section--${options.variant}`);
+  if (title && !options.untitled) {
+    const h = document.createElement('h3');
+    h.className = 'issues-detail__section-title';
+    if (options.compact) h.classList.add('issues-detail__section-title--inline');
+    h.textContent = title;
+    sectionEl.appendChild(h);
+  }
   const body = document.createElement('div');
   body.className = 'issues-detail__section-body';
-  sectionEl.append(h, body);
+  sectionEl.appendChild(body);
   return { section: sectionEl, body };
 }
 
-/** Click-to-edit description: markdown preview when idle, textarea on focus. */
+/** Icon button used for Close and the more menu — 28px visual, 44px on coarse pointers. */
+function detailIconButton(label: string, iconName: 'close' | 'more'): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'issues-detail__icon-btn';
+  btn.setAttribute('aria-label', label);
+  btn.appendChild(createIcon(iconName, { size: 16 }));
+  return btn;
+}
+
+/**
+ * Make a list-style chip a keyboard-openable property control.
+ * Peek uses the same menu primitive as the row so type/status/priority do not
+ * invent a second select vocabulary.
+ */
+function bindPropertyChip(
+  chip: HTMLElement,
+  ariaLabel: string,
+  open: (anchor: HTMLElement) => void,
+): void {
+  chip.classList.add('issues-detail__prop');
+  chip.setAttribute('role', 'button');
+  chip.setAttribute('tabindex', '0');
+  chip.setAttribute('aria-haspopup', 'menu');
+  chip.setAttribute('aria-label', ariaLabel);
+  // Chevron signals the shared context menu — same affordance as workflow split buttons.
+  chip.appendChild(
+    createIcon('chevronDown', { size: 10, className: 'issues-detail__prop-chevron' }),
+  );
+  const show = (): void => open(chip);
+  chip.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    show();
+  });
+  chip.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    event.stopPropagation();
+    show();
+  });
+}
+
+function openDetailPropertyMenu(
+  anchor: HTMLElement,
+  label: string,
+  items: Array<{ id: string; label: string }>,
+  onPick: (id: string) => void,
+): void {
+  openIssuesContextMenu({
+    anchor,
+    restoreFocus: anchor,
+    label,
+    items: items.map((item) => ({
+      id: item.id,
+      label: item.label,
+      onSelect: () => onPick(item.id),
+    })),
+  });
+}
+
+function createDetailStatusChip(status: IssueStatus): HTMLElement {
+  const taxonomy = getIssuesTaxonomySync();
+  const item = taxonomy.statuses.find((entry) => entry.id === status);
+  const chip = document.createElement('span');
+  chip.className = `issues-status-chip issues-status-chip--${status}`;
+  chip.textContent = item?.label ?? `${status.replace(/_/g, ' ')} (unknown)`;
+  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
+  chip.classList.toggle('is-unknown', !item);
+  return chip;
+}
+
+function createDetailPriorityChip(priority: IssuePriority): HTMLElement {
+  const taxonomy = getIssuesTaxonomySync();
+  const item = taxonomy.priorities.find((entry) => entry.id === priority);
+  const chip = document.createElement('span');
+  chip.className = `issues-priority-chip issues-priority-chip--${priority}`;
+  chip.textContent = item?.label ?? (priority === 'none' ? 'None' : priority);
+  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
+  chip.classList.toggle('is-unknown', !item);
+  return chip;
+}
+
+/** Input + submit used by code links and git paste rows. */
+function buildAddRow(
+  input: HTMLInputElement,
+  button: HTMLButtonElement,
+  extraClass?: string,
+): HTMLElement {
+  const addRow = document.createElement('div');
+  addRow.className = extraClass
+    ? `issues-detail__add-code ${extraClass}`
+    : 'issues-detail__add-code';
+  addRow.append(input, button);
+  return addRow;
+}
+
+/**
+ * Description: the WYSIWYG editor over canonical markdown.
+ *
+ * Always live rather than click-to-edit. The Phase 1 surface swapped a rendered
+ * preview for a raw textarea on click, which meant every edit started by
+ * looking at markdown source — the opposite of what the editor is for. The
+ * editor renders and edits in the same place, and writes markdown on commit.
+ *
+ * Mentions written in the body become real links (`issueRefs`, `codeRefs`) so
+ * `#KEY-12` and `@src/foo.ts:12` are data, not text.
+ */
 function buildDescriptionSection(issue: IssueCard): HTMLElement {
-  const descSection = section('Description');
-  const descWrap = document.createElement('div');
-  descWrap.className = 'issues-detail__desc-wrap';
-  descWrap.setAttribute('role', 'button');
-  descWrap.tabIndex = 0;
-  descWrap.setAttribute('aria-label', 'Issue description. Click to edit.');
+  // No "Description" heading — the editor *is* the page.
+  const descSection = section(null, { untitled: true, variant: 'document' });
+  const host = document.createElement('div');
+  host.className = 'issues-detail__desc-wrap';
 
-  let editing = false;
+  let lastCommitted = findIssueById(issue.id)?.description ?? issue.description;
 
-  const renderDisplay = (): void => {
-    editing = false;
-    descWrap.classList.remove('is-editing');
-    descWrap.setAttribute('role', 'button');
-    descWrap.tabIndex = 0;
-    descWrap.innerHTML = '';
-
-    const current = findIssueById(issue.id)?.description ?? issue.description;
-    const desc = document.createElement('div');
-    if (current.trim()) {
-      desc.className = 'issues-detail__markdown msg-bubble msg-bubble--md';
-      setAssistantBubbleContent(desc, current);
-    } else {
-      desc.className = 'issues-detail__empty';
-      desc.textContent = 'No description yet. Click to add.';
-    }
-    descWrap.appendChild(desc);
-  };
-
-  const enterEdit = (): void => {
-    if (editing) return;
-    editing = true;
-    descWrap.classList.add('is-editing');
-    descWrap.removeAttribute('role');
-    descWrap.tabIndex = -1;
-    descWrap.innerHTML = '';
-
-    const current = findIssueById(issue.id)?.description ?? issue.description;
-    const textarea = document.createElement('textarea');
-    textarea.className = 'issues-detail__desc-input';
-    textarea.value = current;
-    textarea.setAttribute('aria-label', 'Issue description');
-    textarea.rows = 8;
-    textarea.spellcheck = true;
-
-    const commit = (): void => {
-      const next = textarea.value.trim();
-      const prev = (findIssueById(issue.id)?.description ?? issue.description).trim();
-      if (next !== prev) {
-        updateIssue(issue.id, { description: next });
-      }
-      renderDisplay();
-    };
-
-    const cancel = (): void => {
-      renderDisplay();
-    };
-
-    textarea.addEventListener('blur', () => {
-      commit();
-    });
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        cancel();
-        return;
-      }
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        textarea.blur();
-      }
-    });
-
-    descWrap.appendChild(textarea);
-    textarea.focus();
-    const end = textarea.value.length;
-    textarea.setSelectionRange(end, end);
-  };
-
-  const openEdit = (e?: Event): void => {
-    if (editing) return;
-    const target = e?.target;
-    if (target instanceof HTMLElement && target.closest('a, button')) return;
-    enterEdit();
-  };
-
-  descWrap.addEventListener('click', (e) => {
-    openEdit(e);
-  });
-  descWrap.addEventListener('keydown', (e) => {
-    if (editing) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      enterEdit();
-    }
+  createIssueEditor(host, {
+    value: lastCommitted,
+    issueId: issue.id,
+    placeholder: 'Describe the problem. / for blocks, # for issues, @ for files.',
+    onChange: (markdown) => {
+      if (markdown === lastCommitted) return;
+      lastCommitted = markdown;
+      updateIssue(issue.id, { description: markdown });
+      syncDescriptionRefs(issue.id, markdown);
+      scheduleSaveIssues();
+    },
   });
 
-  renderDisplay();
-  descSection.body.appendChild(descWrap);
+  descSection.body.appendChild(host);
   return descSection.section;
+}
+
+/**
+ * Turn `#KEY-12` and `@path:12-34` in the body into real links.
+ *
+ * Append-only, and it never removes a link when a mention is deleted: a link
+ * may also have been added by capture, an agent, or the Git section, and this
+ * has no way to tell which. Removing a link stays an explicit action.
+ */
+function syncDescriptionRefs(issueId: string, markdown: string): void {
+  const refs = collectInlineRefs(markdown);
+  if (refs.issueIds.length === 0 && refs.codeRefs.length === 0) return;
+
+  appendIssueLinks(issueId, {
+    issueRefs: refs.issueIds
+      .filter((id) => id !== issueId && findIssueById(id))
+      .map((id) => ({ issueId: id, kind: 'related' as const, addedAt: Date.now() })),
+    codeRefs: refs.codeRefs,
+  });
 }
 
 /** Build the detail panel DOM for one issue. */
@@ -373,27 +485,36 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const headerActions = document.createElement('div');
   headerActions.className = 'issues-detail__header-actions';
 
-  const deleteBtn = document.createElement('button');
-  deleteBtn.type = 'button';
-  deleteBtn.className = 'issues-btn issues-btn--danger issues-detail__delete';
-  deleteBtn.setAttribute('aria-label', 'Delete issue');
-  deleteBtn.textContent = 'Delete';
-  deleteBtn.addEventListener('click', () => {
-    void deleteIssueFromDetail(issue.id);
+  const moreBtn = detailIconButton('Issue actions', 'more');
+  moreBtn.classList.add('issues-detail__more');
+  moreBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    openIssuesContextMenu({
+      anchor: moreBtn,
+      restoreFocus: moreBtn,
+      label: 'Issue actions',
+      items: [
+        {
+          id: 'delete',
+          label: 'Delete issue',
+          danger: true,
+          onSelect: () => {
+            void deleteIssueFromDetail(issue.id);
+          },
+        },
+      ],
+    });
   });
 
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'issues-btn issues-detail__close';
-  closeBtn.setAttribute('aria-label', 'Close issue detail');
-  closeBtn.textContent = 'Close';
+  const closeBtn = detailIconButton('Close issue detail', 'close');
+  closeBtn.classList.add('issues-detail__close');
   closeBtn.addEventListener('click', () => {
     closeIssueDetail();
     // Embedded Code host keeps `#/app/code/...` — do not jump to fullscreen Issues.
     void import('./issues-page').then((m) => m.setIssuesRouteHash('#/app/issues'));
   });
 
-  headerActions.append(deleteBtn, closeBtn);
+  headerActions.append(moreBtn, closeBtn);
   header.append(idEl, headerActions);
   sticky.appendChild(header);
 
@@ -410,33 +531,47 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
   const props = document.createElement('div');
   props.className = 'issues-detail__props';
-
-  const typeSel = document.createElement('select');
-  typeSel.className = 'issues-filter';
-  typeSel.setAttribute('aria-label', 'Type');
   const taxonomy = getIssuesTaxonomySync();
-  fillSelect(typeSel, sortedTypes(taxonomy), issue.type);
-  typeSel.addEventListener('change', () => {
-    updateIssue(issue.id, { type: typeSel.value as IssueType });
+
+  const typeChip = createIssueTypeChip(
+    issue.type,
+    taxonomy.types.find((entry) => entry.id === issue.type),
+    { labeled: true },
+  );
+  bindPropertyChip(typeChip, `Type: ${typeChip.title || issue.type}`, (anchor) => {
+    openDetailPropertyMenu(
+      anchor,
+      'Type',
+      sortedTypes(taxonomy).map((entry) => ({ id: entry.id, label: entry.label })),
+      (id) => updateIssue(issue.id, { type: id as IssueType }),
+    );
   });
 
-  const statusSel = document.createElement('select');
-  statusSel.className = 'issues-filter';
-  statusSel.setAttribute('aria-label', 'Status');
-  fillSelect(statusSel, sortedStatuses(taxonomy), issue.status);
-  statusSel.addEventListener('change', () => {
-    updateIssue(issue.id, { status: statusSel.value as IssueStatus });
+  const statusChip = createDetailStatusChip(issue.status);
+  bindPropertyChip(statusChip, `Status: ${statusChip.textContent || issue.status}`, (anchor) => {
+    openDetailPropertyMenu(
+      anchor,
+      'Status',
+      sortedStatuses(taxonomy).map((entry) => ({ id: entry.id, label: entry.label })),
+      (id) => updateIssue(issue.id, { status: id as IssueStatus }),
+    );
   });
 
-  const prioritySel = document.createElement('select');
-  prioritySel.className = 'issues-filter';
-  prioritySel.setAttribute('aria-label', 'Priority');
-  fillSelect(prioritySel, sortedPriorities(taxonomy), issue.priority);
-  prioritySel.addEventListener('change', () => {
-    updateIssue(issue.id, { priority: prioritySel.value as IssuePriority });
-  });
+  const priorityChip = createDetailPriorityChip(issue.priority);
+  bindPropertyChip(
+    priorityChip,
+    `Priority: ${priorityChip.textContent || issue.priority}`,
+    (anchor) => {
+      openDetailPropertyMenu(
+        anchor,
+        'Priority',
+        sortedPriorities(taxonomy).map((entry) => ({ id: entry.id, label: entry.label })),
+        (id) => updateIssue(issue.id, { priority: id as IssuePriority }),
+      );
+    },
+  );
 
-  props.append(typeSel, statusSel, prioritySel);
+  props.append(typeChip, statusChip, priorityChip);
   sticky.appendChild(props);
 
   const labelsField = createIssuesLabelsField({
@@ -458,116 +593,175 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
   scroll.appendChild(buildDescriptionSection(issue));
 
-  // Code links
-  const codeSection = section('Code links');
-  const refs = issue.codeRefs ?? [];
-  if (refs.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'issues-detail__empty';
-    empty.textContent = 'No code links yet.';
-    codeSection.body.appendChild(empty);
-  } else {
+  // Secondary blocks: filled sections get a heading; empty ones collapse to
+  // one add-row so the description stays the page.
+  const planPath = inferIssuePlanPath(issue);
+  scroll.appendChild(buildCodeLinksSection(issue, planPath));
+
+  const githubHasLink = Boolean(issue.github);
+  const githubSection = section(githubHasLink ? 'GitHub' : null, {
+    untitled: !githubHasLink,
+    compact: !githubHasLink,
+  });
+  if (renderIssueGithubSection(githubSection.body, issue, () => refreshIssueDetailIfOpen())) {
+    scroll.appendChild(githubSection.section);
+  }
+
+  const attachmentCount = issue.attachments?.length ?? 0;
+  const attachmentsSection = section(attachmentCount > 0 ? 'Attachments' : null, {
+    untitled: attachmentCount === 0,
+    compact: attachmentCount === 0,
+  });
+  renderIssueAttachments(attachmentsSection.body, issue, () => refreshIssueDetailIfOpen());
+  scroll.appendChild(attachmentsSection.section);
+
+  if (planPath) {
+    scroll.appendChild(buildPlanSection(issue, planPath));
+  }
+
+  scroll.appendChild(buildGitSection(issue));
+
+  const related = buildRelatedIssuesSection(issue);
+  if (related) scroll.appendChild(related);
+
+  scroll.appendChild(buildActivityFooter(issue));
+
+  panel.appendChild(scroll);
+  bindIssueDropTarget(panel, issue.id, () => refreshIssueDetailIfOpen());
+  host.appendChild(panel);
+}
+
+function buildCodeAddRow(issueId: string): HTMLElement {
+  const pasteInput = document.createElement('input');
+  pasteInput.type = 'text';
+  pasteInput.className = 'issues-search';
+  pasteInput.placeholder = 'Add code link…';
+  pasteInput.setAttribute('aria-label', 'Paste code link');
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'issues-btn';
+  addBtn.textContent = 'Add';
+  const submitPaste = (): void => {
+    const value = pasteInput.value.trim();
+    if (!value) return;
+    void addCodeRefFromPaste(issueId, value).then(() => {
+      pasteInput.value = '';
+    });
+  };
+  addBtn.addEventListener('click', submitPaste);
+  pasteInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    submitPaste();
+  });
+  return buildAddRow(pasteInput, addBtn);
+}
+
+function buildCodeLinksSection(issue: IssueCard, planPath: string | undefined): HTMLElement {
+  const refs = codeRefsExcludingPlan(issue.codeRefs ?? [], planPath);
+  const empty = refs.length === 0;
+  const codeSection = section(empty ? null : 'Code links', {
+    untitled: empty,
+    compact: empty,
+  });
+
+  if (!empty) {
     const list = document.createElement('div');
     list.className = 'issues-detail__code-list';
     for (const ref of refs) {
       const row = document.createElement('div');
       row.className = 'issues-detail__code-row';
+
+      const main = document.createElement('div');
+      main.className = 'issues-detail__code-row-main';
+
       const btn = createCodeRefLinkButton({
         workspacePath: ref.path,
         startLine: ref.startLine ?? 1,
         endLine: ref.endLine ?? ref.startLine ?? 1,
       });
-      row.appendChild(btn);
+      main.appendChild(btn);
       if (ref.snippet?.trim()) {
         const snip = document.createElement('pre');
         snip.className = 'issues-detail__snippet';
         snip.textContent = ref.snippet.slice(0, 500);
-        row.appendChild(snip);
+        main.appendChild(snip);
       }
+      row.appendChild(main);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'issues-detail__code-remove';
+      remove.setAttribute('aria-label', `Remove link to ${ref.path}`);
+      remove.textContent = '×';
+      remove.addEventListener('click', () => {
+        removeCodeRefFromIssue(issue.id, ref);
+      });
+      row.appendChild(remove);
+
       list.appendChild(row);
     }
     codeSection.body.appendChild(list);
   }
 
-  const addRow = document.createElement('div');
-  addRow.className = 'issues-detail__add-code';
-  const pasteInput = document.createElement('input');
-  pasteInput.type = 'text';
-  pasteInput.className = 'issues-search';
-  pasteInput.placeholder = 'path or path:12-34';
-  pasteInput.setAttribute('aria-label', 'Paste code link');
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'issues-btn';
-  addBtn.textContent = 'Add link';
-  const submitPaste = () => {
-    const value = pasteInput.value.trim();
-    if (!value) return;
-    void addCodeRefFromPaste(issue.id, value).then(() => {
-      pasteInput.value = '';
-    });
-  };
-  addBtn.addEventListener('click', submitPaste);
-  pasteInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      submitPaste();
-    }
-  });
-  addRow.append(pasteInput, addBtn);
-  codeSection.body.appendChild(addRow);
-  scroll.appendChild(codeSection.section);
+  codeSection.body.appendChild(buildCodeAddRow(issue.id));
+  return codeSection.section;
+}
 
-  // Plan — Send to board lives here when a plan exists
+function buildPlanSection(issue: IssueCard, planPath: string): HTMLElement {
   const planSection = section('Plan');
-  const planEl = document.createElement('p');
-  planEl.className = 'issues-detail__empty';
-  if (issue.planPath?.trim()) {
-    planEl.textContent = issue.planPath;
-    planSection.body.appendChild(planEl);
 
-    const planActions = document.createElement('div');
-    planActions.className = 'issues-detail__plan-actions';
+  const planRow = document.createElement('div');
+  planRow.className = 'issues-detail__plan-row';
 
-    const openPlan = document.createElement('button');
-    openPlan.type = 'button';
-    openPlan.className = 'issues-btn';
-    openPlan.textContent = 'Open plan';
-    openPlan.addEventListener('click', () => {
-      void openIssuePlanInEditor(issue.planPath!, issue.workspacePath);
-    });
-    planActions.appendChild(openPlan);
+  const planText = document.createElement('p');
+  planText.className = 'issues-detail__plan-path';
+  planText.textContent = planPath;
+  planRow.appendChild(planText);
 
-    const workflowOk = canRunIssueWorkflow(issue);
-    const workflowBusy = workflowBusyIds.has(issue.id) || expandingIds.has(issue.id);
-    const boardBtn = document.createElement('button');
-    boardBtn.type = 'button';
-    boardBtn.className = 'issues-btn';
-    boardBtn.disabled = !workflowOk || workflowBusy;
-    boardBtn.textContent = 'Send to board';
-    boardBtn.title = workflowOk
-      ? 'Launch an Orchestrate board from the issue plan'
-      : 'Issue is closed';
-    boardBtn.addEventListener('click', () => {
-      void runWorkflowAction(issue.id, 'board');
-    });
-    planActions.appendChild(boardBtn);
+  const removePlan = document.createElement('button');
+  removePlan.type = 'button';
+  removePlan.className = 'issues-detail__code-remove';
+  removePlan.setAttribute('aria-label', `Remove plan ${planPath}`);
+  removePlan.textContent = '×';
+  removePlan.addEventListener('click', () => {
+    removePlanFromIssue(issue.id, planPath);
+  });
+  planRow.appendChild(removePlan);
+  planSection.body.appendChild(planRow);
 
-    planSection.body.appendChild(planActions);
-  } else {
-    planEl.textContent = 'No plan yet. Use Send to chat or Send to background.';
-    planSection.body.appendChild(planEl);
-  }
-  scroll.appendChild(planSection.section);
+  const planActions = document.createElement('div');
+  planActions.className = 'issues-detail__plan-actions';
 
-  // Git — restrained menu + commits / chips (Phase 4)
-  scroll.appendChild(buildGitSection(issue));
+  const openPlan = document.createElement('button');
+  openPlan.type = 'button';
+  openPlan.className = 'issues-btn';
+  openPlan.textContent = 'Open plan';
+  openPlan.addEventListener('click', () => {
+    void openIssuePlanInEditor(planPath, issue.workspacePath);
+  });
+  planActions.appendChild(openPlan);
 
-  // Related issues (agent-linked via issue_link)
-  scroll.appendChild(buildRelatedIssuesSection(issue));
+  const workflowOk = canRunIssueWorkflow(issue);
+  const workflowBusy = workflowBusyIds.has(issue.id) || expandingIds.has(issue.id);
+  const boardBtn = document.createElement('button');
+  boardBtn.type = 'button';
+  boardBtn.className = 'issues-btn';
+  boardBtn.disabled = !workflowOk || workflowBusy;
+  boardBtn.textContent = 'Send to board';
+  boardBtn.title = workflowOk
+    ? 'Launch an Orchestrate board from the issue plan'
+    : 'Issue is closed';
+  boardBtn.addEventListener('click', () => {
+    void runWorkflowAction(issue.id, 'board');
+  });
+  planActions.appendChild(boardBtn);
+  planSection.body.appendChild(planActions);
+  return planSection.section;
+}
 
-  // Activity + linked chats (compact footer)
-  const activitySection = section('Activity');
+function buildActivityFooter(issue: IssueCard): HTMLElement {
+  const activitySection = section(null, { untitled: true, variant: 'meta' });
   const ws = issue.workspacePath || getWorkspacePath();
   const activity = document.createElement('p');
   activity.className = 'issues-detail__meta-line';
@@ -596,15 +790,17 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     notes.textContent = issue.notes;
     activitySection.body.appendChild(notes);
   }
-  scroll.appendChild(activitySection.section);
-
-  panel.appendChild(scroll);
-  host.appendChild(panel);
+  return activitySection.section;
 }
 
 /** Restrained Git menu + linked chips + commit grep list for the detail panel. */
 function buildGitSection(issue: IssueCard): HTMLElement {
-  const gitSection = section('Git');
+  const gitLinks = issue.gitLinks ?? [];
+  const empty = gitLinks.length === 0;
+  const gitSection = section(empty ? null : 'Git', {
+    untitled: empty,
+    compact: empty,
+  });
   const body = gitSection.body;
   const busy = gitBusyIds.has(issue.id);
 
@@ -630,7 +826,7 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   branchBtn.className = 'issues-btn';
   branchBtn.disabled = busy;
   branchBtn.textContent = busy ? 'Working…' : 'Create branch';
-  branchBtn.title = 'Create and checkout issue/iss-n-<slug>';
+  branchBtn.title = 'Create and checkout issue/<id>-<slug>';
   branchBtn.addEventListener('click', () => {
     void runGitAction(issue.id, 'branch');
   });
@@ -646,19 +842,19 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     void runGitAction(issue.id, 'pr');
   });
 
-  menu.append(branchBtn, prBtn);
+  const linkToggle = document.createElement('button');
+  linkToggle.type = 'button';
+  linkToggle.className = 'issues-btn issues-detail__git-link-toggle';
+  linkToggle.textContent = 'Link…';
+  linkToggle.setAttribute('aria-expanded', 'false');
+  linkToggle.setAttribute('aria-controls', `issues-git-link-fields-${issue.id}`);
+
+  menu.append(branchBtn, prBtn, linkToggle);
   body.append(menu, errEl);
 
-  // Link chips (branch / pr / github-issue / commit)
-  const gitLinks = issue.gitLinks ?? [];
-  const chipList = document.createElement('ul');
-  chipList.className = 'issues-detail__git-list';
-  if (gitLinks.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'issues-detail__empty';
-    empty.textContent = 'No linked branches, PRs, or GitHub issues yet.';
-    body.appendChild(empty);
-  } else {
+  if (!empty) {
+    const chipList = document.createElement('ul');
+    chipList.className = 'issues-detail__git-list';
     for (const link of gitLinks) {
       chipList.appendChild(buildGitLinkRow(link));
     }
@@ -669,17 +865,11 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   const commitsHead = document.createElement('h4');
   commitsHead.className = 'issues-detail__git-subhead';
   commitsHead.textContent = 'Commits';
+  commitsHead.hidden = true;
   const commitsHost = document.createElement('div');
   commitsHost.className = 'issues-detail__git-commits';
-  const commitsLoading = document.createElement('p');
-  commitsLoading.className = 'issues-detail__empty';
-  commitsLoading.textContent = 'Looking for commits mentioning this issue…';
-  commitsHost.appendChild(commitsLoading);
+  commitsHost.hidden = true;
   body.append(commitsHead, commitsHost);
-
-  // Manual link rows
-  const linkRow = document.createElement('div');
-  linkRow.className = 'issues-detail__add-code issues-detail__git-link-row';
 
   const shaInput = document.createElement('input');
   shaInput.type = 'text';
@@ -727,10 +917,26 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     }
   });
 
-  linkRow.append(shaInput, shaBtn, urlInput, urlBtn);
-  body.appendChild(linkRow);
+  const linkFields = document.createElement('div');
+  linkFields.id = `issues-git-link-fields-${issue.id}`;
+  linkFields.className = 'issues-detail__git-link-fields';
+  linkFields.hidden = true;
+  linkFields.append(buildAddRow(shaInput, shaBtn), buildAddRow(urlInput, urlBtn));
+  body.appendChild(linkFields);
 
-  // Async: gh availability + commit grep
+  linkToggle.addEventListener('click', () => {
+    const next = linkFields.hidden;
+    linkFields.hidden = !next;
+    linkToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+    if (next) shaInput.focus();
+  });
+
+  // gh detect and commit grep need the tool server. Skip the round-trip when
+  // it is down rather than leaving Create PR and Commits in a loading void.
+  if (!isLocalServerAvailable()) {
+    return gitSection.section;
+  }
+
   void (async () => {
     const hasGh = await detectGhAvailable();
     if (selectedIssueId !== issue.id) return;
@@ -744,20 +950,13 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     const listed = await listIssueCommits(issue);
     if (selectedIssueId !== issue.id) return;
     commitsHost.innerHTML = '';
-    if (!listed.ok) {
-      const err = document.createElement('p');
-      err.className = 'issues-detail__empty';
-      err.textContent = listed.error || 'Could not load commits.';
-      commitsHost.appendChild(err);
+    if (!listed.ok || listed.commits.length === 0) {
+      commitsHead.hidden = true;
+      commitsHost.hidden = true;
       return;
     }
-    if (listed.commits.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'issues-detail__empty';
-      empty.textContent = `No commits with ${issue.id ? `[${issue.id}]` : 'this id'} yet.`;
-      commitsHost.appendChild(empty);
-      return;
-    }
+    commitsHead.hidden = false;
+    commitsHost.hidden = false;
     const ul = document.createElement('ul');
     ul.className = 'issues-detail__git-list';
     for (const c of listed.commits) {
@@ -794,17 +993,11 @@ const ISSUE_RELATION_LABELS: Record<IssueIssueRef['kind'], string> = {
 };
 
 /** Related issue chips with deep links to other cards. */
-function buildRelatedIssuesSection(issue: IssueCard): HTMLElement {
-  const relatedSection = section('Related issues');
+function buildRelatedIssuesSection(issue: IssueCard): HTMLElement | null {
   const refs = issue.issueRefs ?? [];
-  if (refs.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'issues-detail__empty';
-    empty.textContent = 'No related issues yet.';
-    relatedSection.body.appendChild(empty);
-    return relatedSection.section;
-  }
+  if (refs.length === 0) return null;
 
+  const relatedSection = section('Related issues');
   const list = document.createElement('ul');
   list.className = 'issues-detail__related-list';
   for (const ref of refs) {

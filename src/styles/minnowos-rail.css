@@ -209,3 +209,40 @@ html.mn-narrow.minnow-os-enabled .mn-os-app-rail__btn {
 html.mn-narrow.minnow-os-enabled .mn-os-app-rail__tooltip {
   display: none !important;
 }
+
+/*
+ * Issues dock badge (src/issues/dock-badge.ts).
+ *
+ * Counts only queues that drain by looking at them: unreviewed Triage, and
+ * agents blocked on a question. A running agent is deliberately not counted —
+ * a badge that never goes down teaches the user to stop reading it.
+ *
+ * Neutral at rest; `--mn-danger` only for "an agent is waiting on you", which
+ * is a state, not decoration, and so stays inside the Metric Color Rule.
+ */
+
+.mn-os-app-rail__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--mn-fg-muted);
+  color: var(--mn-bg);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.mn-os-app-rail__badge.is-urgent {
+  background: var(--mn-danger);
+}
+
+.mn-os-app-rail__badge[hidden] {
+  display: none;
+}

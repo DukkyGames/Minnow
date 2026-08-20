@@ -1,13 +1,8 @@
 /**
  * MIN-286 Part 5b — board task-chat stall detection in AFK/auto mode.
  *
- * Tests that the heartbeat tick:
- *  - increments the stall-restart counter and fires a nudge when a build chat stalls in AFK
- *  - does NOT restart when progress was recently bumped
- *  - does NOT restart in manual mode (sequential IS supervised — one hung chat
- *    stops the whole board at maxConcurrent 1)
- *  - preserves the stall counter across a stall-stop stream end so the second
- *    stall escalates to self-heal instead of nudging forever
+ * Heartbeat ticks kill the stuck turn and increment the stall-restart counter.
+ * Continue-nudge / self-heal run on stream-end after the chat is actually idle.
  *
  * Uses setSessionStateForTests + tickHeartbeatForTests to avoid real timers.
  */
@@ -17,14 +12,21 @@ import { Window } from 'happy-dom';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { setAutopilotMetaForTests, resetAutopilotMetaCache } from '../../src/config/autopilot-meta.ts';
 import {
+  awaitBoardChatContinuationsForTests,
   clearStallStoppedChatIdsForTests,
   clearTaskChatStallRestartsForTests,
+  flushBoardChatContinuationsForTests,
   getTaskChatStallRestartCountForTests,
+  isStallStoppedChatForTests,
   simulateUnmatchedFixerStreamEndForTests,
   startTaskChatSupervisionForTests,
   trackTaskChatStallRecoveryCallsForTests,
 } from '../../src/state/orchestrate-board-actions.ts';
-import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import {
+  resetSessionPersistenceForTests,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
+import { setChatAbort, setStreaming } from '../../src/app-state.ts';
 import {
   bumpProgress,
   chatTaskRunId,
@@ -54,8 +56,15 @@ function setupDom(): void {
   globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
 }
 
-function teardownDom(): void {
-  domWindow?.close();
+async function teardownDom(): Promise<void> {
+  // Window.close() is a no-op for a root happy-dom window (no opener). Abort
+  // the detached browser so its timers and fetches cannot keep node:test alive.
+  const api = domWindow?.happyDOM;
+  if (api && typeof api.close === 'function') {
+    await api.close();
+  } else {
+    domWindow?.close();
+  }
   domWindow = undefined;
   // @ts-expect-error test cleanup
   delete globalThis.document;
@@ -132,6 +141,18 @@ function makeGroup(executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'af
   return group;
 }
 
+function armLiveTurn(chatId: string): void {
+  // Live turns abort locally; stopGeneration must not flushStoppedChatPresentation
+  // (that path notifies stream-end immediately and would hide the heartbeat/stream-end split).
+  setChatAbort(chatId, new AbortController());
+  setStreaming(true, chatId);
+}
+
+function disarmLiveTurn(chatId: string): void {
+  setChatAbort(chatId, null);
+  setStreaming(false, chatId);
+}
+
 beforeEach(() => {
   process.env.MINNOW_TEST = '1';
   setupDom();
@@ -151,18 +172,25 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   performance.now = originalNow;
+  // Drop live-turn flags first so queued stall recovery can finish, then wait.
+  setChatAbort(TASK_CHAT_ID, null);
+  setChatAbort(TEST_CHAT_ID, null);
+  setStreaming(false);
+  await awaitBoardChatContinuationsForTests();
   resetWrapperState();
   resetAutopilotMetaCache();
   clearTaskChatStallRestartsForTests();
   clearStallStoppedChatIdsForTests();
   trackTaskChatStallRecoveryCallsForTests(false);
-  teardownDom();
+  setSessionStateForTests(null);
+  resetSessionPersistenceForTests();
+  await teardownDom();
 });
 
 describe('board task-chat stall detection', () => {
-  test('stalled AFK chat: counter incremented on first stall tick', () => {
+  test('stalled AFK chat: heartbeat kills only — no immediate nudge', () => {
     const planner = makePlanner();
     const taskChat = makeTaskChat();
     const group = makeGroup('afk');
@@ -174,6 +202,7 @@ describe('board task-chat stall detection', () => {
       groups: [group],
     });
 
+    armLiveTurn(TASK_CHAT_ID);
     trackTaskChatStallRecoveryCallsForTests(true);
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
 
@@ -181,13 +210,11 @@ describe('board task-chat stall detection', () => {
     now = STALL_THRESHOLD_MS + 100;
     tickHeartbeatForTests(chatTaskRunId(TASK_CHAT_ID));
 
-    const { nudges } = trackTaskChatStallRecoveryCallsForTests(false);
-    assert.deepEqual(
-      nudges,
-      [TASK_ID],
-      `nudges=${JSON.stringify(nudges)} counter=${getTaskChatStallRestartCountForTests(TASK_CHAT_ID)}`,
-    );
+    const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
+    assert.deepEqual(nudges, [], 'heartbeat must not nudge while the turn is still tearing down');
+    assert.deepEqual(selfHeals, []);
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 1);
+    assert.equal(isStallStoppedChatForTests(TASK_CHAT_ID), true);
   });
 
   test('recent bumpProgress prevents stall restart', () => {
@@ -205,15 +232,12 @@ describe('board task-chat stall detection', () => {
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     const runId = chatTaskRunId(TASK_CHAT_ID);
 
-    // Advance time past threshold, then bump progress just before the tick
     now = STALL_THRESHOLD_MS + 100;
-    bumpProgress(runId); // fresh progress — age becomes 0
+    bumpProgress(runId);
 
     tickHeartbeatForTests(runId);
-
-    // Counter should still be 0 — no restart triggered
-    // (heartbeat timer is still active; calling tick again doesn't throw)
     tickHeartbeatForTests(runId);
+    assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
   });
 
   test('manual mode: stall detection does not restart', () => {
@@ -233,15 +257,12 @@ describe('board task-chat stall detection', () => {
 
     bumpProgress(runId);
     now = STALL_THRESHOLD_MS + 100;
-
-    // Should NOT trigger stall restart in manual mode
     tickHeartbeatForTests(runId);
-
-    // Heartbeat timer still active — tick is still callable
     tickHeartbeatForTests(runId);
+    assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
   });
 
-  test('sequential mode: stall detection nudges (one hung chat stops the board)', () => {
+  test('sequential mode: stall tick kills only; stream-end nudges', async () => {
     const planner = makePlanner();
     const taskChat = makeTaskChat();
     const group = makeGroup('sequential');
@@ -253,18 +274,21 @@ describe('board task-chat stall detection', () => {
       groups: [group],
     });
 
-    trackTaskChatStallRecoveryCallsForTests(true);
+    armLiveTurn(TASK_CHAT_ID);
+    const captured = trackTaskChatStallRecoveryCallsForTests(true);
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     const runId = chatTaskRunId(TASK_CHAT_ID);
 
     bumpProgress(runId);
     now = STALL_THRESHOLD_MS + 100;
-
     tickHeartbeatForTests(runId);
-
-    const { nudges } = trackTaskChatStallRecoveryCallsForTests(false);
-    assert.deepEqual(nudges, [TASK_ID], 'sequential stall must nudge like afk/auto');
+    assert.deepEqual(captured.nudges, [], 'heartbeat must not nudge');
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 1);
+
+    disarmLiveTurn(TASK_CHAT_ID);
+    await simulateUnmatchedFixerStreamEndForTests(group, planner, TASK_CHAT_ID);
+    assert.deepEqual(captured.nudges, [TASK_ID], 'sequential stall must nudge like afk/auto after stream-end');
+    trackTaskChatStallRecoveryCallsForTests(false);
   });
 
   test('stall counter survives the stall-stop stream end; second stall self-heals', async () => {
@@ -279,17 +303,17 @@ describe('board task-chat stall detection', () => {
       groups: [group],
     });
 
+    armLiveTurn(TASK_CHAT_ID);
     trackTaskChatStallRecoveryCallsForTests(true);
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     const runId = chatTaskRunId(TASK_CHAT_ID);
 
-    // First stall → nudge, counter = 1, chat marked stall-stopped.
     bumpProgress(runId);
     now = STALL_THRESHOLD_MS + 100;
     tickHeartbeatForTests(runId);
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 1);
 
-    // Stream end from the stall-triggered stopGeneration must NOT wipe the counter.
+    disarmLiveTurn(TASK_CHAT_ID);
     await simulateUnmatchedFixerStreamEndForTests(group, planner, TASK_CHAT_ID);
     assert.equal(
       getTaskChatStallRestartCountForTests(TASK_CHAT_ID),
@@ -297,11 +321,13 @@ describe('board task-chat stall detection', () => {
       'stall-stop stream end must preserve the restart counter',
     );
 
-    // Second stall → escalates to self-heal instead of nudging again.
+    armLiveTurn(TASK_CHAT_ID);
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     bumpProgress(runId);
     now += STALL_THRESHOLD_MS + 100;
     tickHeartbeatForTests(runId);
+    disarmLiveTurn(TASK_CHAT_ID);
+    await simulateUnmatchedFixerStreamEndForTests(group, planner, TASK_CHAT_ID);
 
     const { nudges, selfHeals } = trackTaskChatStallRecoveryCallsForTests(false);
     assert.deepEqual(nudges, [TASK_ID], 'only the first stall should nudge');
@@ -320,17 +346,17 @@ describe('board task-chat stall detection', () => {
       groups: [group],
     });
 
+    armLiveTurn(TASK_CHAT_ID);
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     const runId = chatTaskRunId(TASK_CHAT_ID);
 
-    // Stall once (counter = 1, marked stall-stopped), consume the stall-stop end.
     bumpProgress(runId);
     now = STALL_THRESHOLD_MS + 100;
     tickHeartbeatForTests(runId);
+    disarmLiveTurn(TASK_CHAT_ID);
     await simulateUnmatchedFixerStreamEndForTests(group, planner, TASK_CHAT_ID);
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 1);
 
-    // Next turn ends naturally (no stall tick) → full supervision teardown.
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     bumpProgress(runId);
     taskChat.history.push({ role: 'assistant', content: 'Done.' });
@@ -357,19 +383,17 @@ describe('board task-chat stall detection', () => {
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     const runId = chatTaskRunId(TASK_CHAT_ID);
 
-    // Simulate a long-lived session, then a tab-focus baseline reset.
     now = 4_000_000;
     resetHeartbeatBaselines();
     bumpProgress(runId);
 
-    // One heartbeat interval later — progress is fresh, not hours stale.
     now = 4_000_000 + 7_000;
     tickHeartbeatForTests(runId);
 
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
   });
 
-  test('stalled tester chat nudges the test chat, not the builder', () => {
+  test('stalled tester chat nudges the test chat, not the builder', async () => {
     const planner = makePlanner();
     const taskChat = makeTaskChat();
     const testChat: Chat = {
@@ -400,12 +424,15 @@ describe('board task-chat stall detection', () => {
       groups: [group],
     });
 
+    armLiveTurn(TEST_CHAT_ID);
     trackTaskChatStallRecoveryCallsForTests(true);
     startTaskChatSupervisionForTests(TEST_CHAT_ID);
 
     bumpProgress(chatTaskRunId(TEST_CHAT_ID));
     now = STALL_THRESHOLD_MS + 100;
     tickHeartbeatForTests(chatTaskRunId(TEST_CHAT_ID));
+    disarmLiveTurn(TEST_CHAT_ID);
+    await simulateUnmatchedFixerStreamEndForTests(group, planner, TEST_CHAT_ID);
 
     const { nudges, nudgeChatIds } = trackTaskChatStallRecoveryCallsForTests(false);
     assert.deepEqual(nudges, [TASK_ID]);
@@ -429,11 +456,9 @@ describe('board task-chat stall detection', () => {
     startTaskChatSupervisionForTests(TASK_CHAT_ID);
     const runId = chatTaskRunId(TASK_CHAT_ID);
 
-    // Do NOT call bumpProgress — lastProgressAt stays null
     now = STALL_THRESHOLD_MS + 100;
-
-    // Should not crash and should not trigger stall (null progress = guard returns early)
     tickHeartbeatForTests(runId);
+    assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
   });
 
   test('hidden page past stall threshold does not nudge or stop', () => {
@@ -460,5 +485,37 @@ describe('board task-chat stall detection', () => {
     const { nudges } = trackTaskChatStallRecoveryCallsForTests(false);
     assert.deepEqual(nudges, [], 'stall watchdog must not fire while the page is hidden');
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
+  });
+
+  test('production order: no launch while streaming; nudge after setStreaming(false)', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup('afk');
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    armLiveTurn(TASK_CHAT_ID);
+    const captured = trackTaskChatStallRecoveryCallsForTests(true);
+    startTaskChatSupervisionForTests(TASK_CHAT_ID);
+    const runId = chatTaskRunId(TASK_CHAT_ID);
+
+    bumpProgress(runId);
+    now = STALL_THRESHOLD_MS + 100;
+    tickHeartbeatForTests(runId);
+    assert.deepEqual(captured.nudges, [], 'stall tick must not launch a nudge');
+
+    await simulateUnmatchedFixerStreamEndForTests(group, planner, TASK_CHAT_ID);
+    assert.deepEqual(captured.nudges, [], 'stream-end while still streaming must not launch');
+
+    disarmLiveTurn(TASK_CHAT_ID);
+    await flushBoardChatContinuationsForTests(TASK_CHAT_ID);
+    assert.deepEqual(captured.nudges, [TASK_ID], 'first stall recovers with a continue-nudge after teardown');
+    assert.deepEqual(captured.selfHeals, []);
+    trackTaskChatStallRecoveryCallsForTests(false);
   });
 });

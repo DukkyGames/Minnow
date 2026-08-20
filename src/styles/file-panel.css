@@ -69,13 +69,25 @@
   flex: 1 1 auto;
 }
 
+/* Overlay the column boundary (same pattern as .sidebar-resizer) — no flex gutter. */
 .split-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   width: 6px;
-  flex-shrink: 0;
   cursor: col-resize;
   background: transparent;
   touch-action: none;
   z-index: 2;
+  flex: none;
+}
+
+.workspace-split.viewer-open .split-resizer:not(.hidden) {
+  left: calc(var(--split-ratio, 0.55) * 100% - 3px);
+}
+
+.workspace-split.viewer-open.chat-column-collapsed .split-resizer:not(.hidden) {
+  left: 0;
 }
 
 .split-resizer:hover,
@@ -157,7 +169,8 @@
   display: none;
 }
 
-.right-pane-slot.is-focused {
+/* Focus ring only when two editor groups are visible — not on the lone single-pane layout. */
+.right-pane-split.is-active .right-pane-slot.is-focused {
   border-color: var(--mn-accent);
 }
 

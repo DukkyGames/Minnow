@@ -2130,147 +2130,7 @@
   </div>
 </main>
 
-<main id="issuesView" class="issues-page" aria-label="Issues">
-  <header class="issues-header">
-    <div class="issues-header__brand">
-      <span id="issuesPageIcon" class="issues-header__icon" aria-hidden="true"></span>
-      <div class="issues-header__titles">
-        <h1>Issues</h1>
-        <p id="issuesSummary" class="issues-summary" aria-live="polite"></p>
-      </div>
-    </div>
-    <div class="issues-header__controls">
-      <label class="visually-hidden" for="issuesScope">Workspace scope</label>
-      <select id="issuesScope" class="issues-filter" aria-label="Workspace scope">
-        <option value="current_workspace">Current workspace</option>
-        <option value="all">All workspaces</option>
-      </select>
-      <div class="issues-view-toggle" role="group" aria-label="View mode">
-        <button type="button" id="issuesViewList" class="is-active" aria-pressed="true">List</button>
-        <button type="button" id="issuesViewBoard" aria-pressed="false">Board</button>
-      </div>
-      <div class="issues-quick-capture">
-        <label class="visually-hidden" for="issuesQuickCapture">Quick capture</label>
-        <input
-          type="text"
-          id="issuesQuickCapture"
-          placeholder="Quick capture…"
-          autocomplete="off"
-        >
-      </div>
-      <button type="button" class="issues-btn issues-btn--primary" id="btnIssuesNew">New issue</button>
-    </div>
-  </header>
-  <div class="issues-filter-bar" aria-label="Issue filters">
-    <label class="visually-hidden" for="issuesType">Type</label>
-    <select id="issuesType" class="issues-filter" aria-label="Type filter">
-      <option value="all">All types</option>
-      <option value="bug">Bug</option>
-      <option value="task">Task</option>
-      <option value="idea">Idea</option>
-      <option value="note">Note</option>
-    </select>
-    <label class="visually-hidden" for="issuesStatus">Status</label>
-    <select id="issuesStatus" class="issues-filter" aria-label="Status filter">
-      <option value="all">All statuses</option>
-      <option value="triage">Triage</option>
-      <option value="backlog">Backlog</option>
-      <option value="todo">Todo</option>
-      <option value="planned">Planned</option>
-      <option value="in_progress">In progress</option>
-      <option value="review">Review</option>
-      <option value="done">Done</option>
-      <option value="canceled">Canceled</option>
-    </select>
-    <label class="visually-hidden" for="issuesPriority">Priority</label>
-    <select id="issuesPriority" class="issues-filter" aria-label="Priority filter">
-      <option value="all">All priorities</option>
-      <option value="urgent">Urgent</option>
-      <option value="high">High</option>
-      <option value="medium">Medium</option>
-      <option value="low">Low</option>
-      <option value="none">None</option>
-    </select>
-    <label class="issues-hide-done">
-      <input type="checkbox" id="issuesHideDone" checked>
-      <span>Hide done</span>
-    </label>
-    <label class="visually-hidden" for="issuesSearch">Search issues</label>
-    <input type="search" id="issuesSearch" class="issues-search" placeholder="Search issues…" autocomplete="off">
-  </div>
-  <form id="issuesNewForm" class="issues-new-form" aria-label="New issue">
-    <div class="issues-new-form__grid">
-      <label class="issues-new-form__title">
-        Title
-        <input type="text" id="issuesNewTitle" required autocomplete="off" placeholder="What needs doing?">
-      </label>
-      <label>
-        Type
-        <select id="issuesNewType">
-          <option value="task">Task</option>
-          <option value="bug">Bug</option>
-          <option value="idea">Idea</option>
-          <option value="note">Note</option>
-        </select>
-      </label>
-      <label>
-        Priority
-        <select id="issuesNewPriority">
-          <option value="none">None</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="urgent">Urgent</option>
-        </select>
-      </label>
-      <label class="issues-new-form__desc">
-        Description
-        <textarea id="issuesNewDescription" rows="2" placeholder="Optional details"></textarea>
-      </label>
-    </div>
-    <div class="issues-new-form__actions">
-      <button type="submit" class="issues-btn issues-btn--primary">Create issue</button>
-      <button type="button" class="issues-btn" id="btnIssuesNewCancel">Cancel</button>
-    </div>
-  </form>
-  <div class="issues-body">
-    <div id="issuesSelectionBar" class="issues-selection-bar" hidden>
-      <span id="issuesSelectionCount" class="issues-selection-bar__count"></span>
-      <div class="issues-selection-bar__actions">
-        <button type="button" class="issues-btn issues-btn--danger" id="btnIssuesDeleteSelected">
-          Delete
-        </button>
-        <button type="button" class="issues-btn" id="btnIssuesClearSelection">Clear</button>
-      </div>
-    </div>
-    <div class="issues-list-pane">
-      <div id="issuesListHead" class="issues-list-head" hidden role="row">
-        <button type="button" class="issues-list-head__sort issues-list-head__id" data-sort-key="id" aria-sort="none">
-          ID<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="issues-list-head__sort issues-list-head__type" data-sort-key="type" aria-sort="none">
-          Type<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="issues-list-head__sort issues-list-head__title" data-sort-key="title" aria-sort="none">
-          Title<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="issues-list-head__sort issues-list-head__status" data-sort-key="status" aria-sort="none">
-          Status<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="issues-list-head__sort issues-list-head__priority" data-sort-key="priority" aria-sort="none">
-          Priority<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="issues-list-head__sort issues-list-head__labels" data-sort-key="labels" aria-sort="none">
-          Labels<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="issues-list-head__sort issues-list-head__updated" data-sort-key="updated" aria-sort="descending">
-          Updated<span class="issues-list-head__sort-indicator" aria-hidden="true"></span>
-        </button>
-      </div>
-      <div id="issuesPanelMount" class="issues-main" role="region" aria-label="Issues"></div>
-    </div>
-  </div>
-</main>
+<main id="issuesView" class="issues-page" aria-label="Issues"></main>
 
 <main id="expertsView" class="experts-page" data-step="browse" aria-label="Experts' Lab">
   <header class="experts-hdr">
@@ -2478,64 +2338,67 @@
         </div>
       </main>
 
-      <button type="button" id="chatJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
+      <!-- Jump chip + code-change strip share one dock so they cannot overlap. -->
+      <div class="chat-viewport-dock">
+        <button type="button" id="chatJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
 
-      <!-- Code changes + undo: floats over the transcript (not a main-column flex row) -->
-      <div class="code-change-strip-wrap" hidden>
-        <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">
-          <div id="codeChangePanelList" class="code-change-panel__list"></div>
-        </div>
-        <div class="code-change-strip-row">
-          <button
-            type="button"
-            id="codeChangeStrip"
-            class="code-change-strip hidden"
-            aria-live="polite"
-            aria-expanded="false"
-            aria-haspopup="listbox"
-            aria-label="Code changes in this chat"
-          >
-            <span class="code-change-strip__label">Code changes</span>
-            <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
-          </button>
-          <div id="codeChangeStripActions" class="code-change-strip__actions" hidden>
+        <!-- Code changes + undo: floats over the transcript (not a main-column flex row) -->
+        <div class="code-change-strip-wrap" hidden>
+          <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">
+            <div id="codeChangePanelList" class="code-change-panel__list"></div>
+          </div>
+          <div class="code-change-strip-row">
             <button
               type="button"
-              id="btnCodeChangeCommit"
-              class="code-change-strip__action"
-              title="Stage and commit files changed in this chat"
-              hidden
+              id="codeChangeStrip"
+              class="code-change-strip hidden"
+              aria-live="polite"
+              aria-expanded="false"
+              aria-haspopup="listbox"
+              aria-label="Code changes in this chat"
             >
-              Commit
+              <span class="code-change-strip__label">Code changes</span>
+              <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
             </button>
+            <div id="codeChangeStripActions" class="code-change-strip__actions" hidden>
+              <button
+                type="button"
+                id="btnCodeChangeCommit"
+                class="code-change-strip__action"
+                title="Stage and commit files changed in this chat"
+                hidden
+              >
+                Commit
+              </button>
+              <button
+                type="button"
+                id="btnCodeChangeCreatePr"
+                class="code-change-strip__action"
+                title="Push and open a pull request for this branch"
+                hidden
+              >
+                Create PR
+              </button>
+            </div>
+            <!-- Undo last agent turn — lives with code-change chrome (MIN-409); Uicons undo glyph.
+                 Hidden unless git + the undo target turn mutated files. -->
             <button
               type="button"
-              id="btnCodeChangeCreatePr"
-              class="code-change-strip__action"
-              title="Push and open a pull request for this branch"
+              id="btnCodeChangeUndo"
+              class="code-change-strip__undo"
+              aria-label="Undo last agent turn"
+              title="Undo last agent turn"
+              aria-disabled="true"
+              disabled
               hidden
             >
-              Create PR
+              <i
+                class="fi fi-rr-undo-alt icon-svg code-change-strip__undo-icon"
+                aria-hidden="true"
+                style="--mn-icon-size: 14px"
+              ></i>
             </button>
           </div>
-          <!-- Undo last agent turn — lives with code-change chrome (MIN-409); Uicons undo glyph.
-               Hidden unless git + the undo target turn mutated files. -->
-          <button
-            type="button"
-            id="btnCodeChangeUndo"
-            class="code-change-strip__undo"
-            aria-label="Undo last agent turn"
-            title="Undo last agent turn"
-            aria-disabled="true"
-            disabled
-            hidden
-          >
-            <i
-              class="fi fi-rr-undo-alt icon-svg code-change-strip__undo-icon"
-              aria-hidden="true"
-              style="--mn-icon-size: 14px"
-            ></i>
-          </button>
         </div>
       </div>
     </div>
@@ -2612,7 +2475,7 @@
             <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
               <i class="fi fi-rr-layout-fluid icon-svg view-mode-toggle-btn__icon" aria-hidden="true"></i>
             </button>
-            <div class="composer-tools-anchor">
+            <div class="composer-tools-anchor" id="composerToolsAnchor">
               <button type="button" class="composer-tools-btn composer-tools-btn--toolbar" id="btnComposerTools"
                 aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
                 aria-controls="composerToolsPopover">
@@ -2647,6 +2510,18 @@
                     <i class="fi fi-rr-angle-right icon-svg" aria-hidden="true"></i>
                   </button>
                 </footer>
+              </div>
+            </div>
+            <!-- Compact overflow: extra composer settings live in this cog sheet -->
+            <div class="composer-overflow-anchor" id="composerOverflowAnchor">
+              <button type="button" class="composer-overflow-btn" id="btnComposerOverflow"
+                aria-label="Composer settings" title="Composer settings"
+                aria-expanded="false" aria-haspopup="dialog"
+                aria-controls="composerOverflowPopover">
+                <i class="fi fi-rr-settings icon-svg" aria-hidden="true"></i>
+              </button>
+              <div id="composerOverflowPopover" class="composer-overflow-popover hidden" role="dialog" aria-label="Composer settings">
+                <div id="composerOverflowSlot" class="composer-overflow-slot"></div>
               </div>
             </div>
           </div>
@@ -2771,7 +2646,7 @@
   <div class="right-pane-column hidden" id="rightPaneColumn">
 
   <div class="right-pane-split" id="rightPaneSplit">
-    <div class="right-pane-slot is-focused" id="rightPaneSlotPrimary" data-pane-slot="primary">
+    <div class="right-pane-slot" id="rightPaneSlotPrimary" data-pane-slot="primary">
     <header class="unified-tab-bar slot-tab-bar" id="unifiedTabBar">
       <div class="unified-tabs" id="unifiedTabs" role="tablist" aria-label="Editor and browser tabs"></div>
     </header>

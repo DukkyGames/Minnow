@@ -341,7 +341,7 @@ html.mn-phone .context-usage-ring {
 /* Mode, run target, thinking, and code-map controls sit on the same row and
    are 23–28px tall on desktop. 38px keeps them in one row while staying
    hittable; the row wraps rather than shrinking further. */
-html.mn-phone :is(.mode-segment, .composer-run-target-btn) {
+html.mn-phone :is(.mode-segment, .composer-run-target-btn, #modeSelectorDropdown) {
   min-height: 38px;
 }
 
@@ -358,6 +358,16 @@ html.mn-phone .composer-controls,
 html.mn-phone .composer-controls__trail {
   flex-wrap: wrap;
   row-gap: 6px;
+}
+
+html.mn-phone .composer-controls--compact,
+html.mn-phone .composer-controls--compact .composer-controls__trail {
+  flex-wrap: nowrap;
+}
+
+html.mn-phone .composer-overflow-btn {
+  width: 38px;
+  height: 38px;
 }
 
 /* ---------- Brain: graph overlays and tree rows ---------- */

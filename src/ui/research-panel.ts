@@ -201,28 +201,8 @@ async function ensureResearchControls(): Promise<void> {
 }
 
 async function closeCompetingMainColumnViews(): Promise<void> {
-  const overview = await import('./code-overview');
-  if (overview.isCodeOverviewOpen()) {
-    overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
-  }
-
-  const orchestrate = await import('./orchestrate-hub');
-  if (orchestrate.isOrchestrateHubMounted()) orchestrate.closeOrchestrateHub();
-
-  const { teardownCodeBrainMapBeforeChatPaint } = await import('./code-brain-map');
-  teardownCodeBrainMapBeforeChatPaint();
-
-  const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
-  teardownIssuesEmbedBeforeChatPaint();
-
-  const scc = await import('./source-control-center');
-  if (scc.isSourceControlCenterOpen()) scc.closeSourceControlCenter();
-
-  const { closeDevServerScreen, isDevServerScreenOpen } = await import('./dev-server-screen');
-  if (isDevServerScreenOpen()) closeDevServerScreen({ skipNavigate: true, restoreChat: false });
-
-  const { teardownHub } = await import('./hub');
-  teardownHub();
+  const { closeOtherCodeStageViews } = await import('./main-column-overlay');
+  await closeOtherCodeStageViews('research');
 }
 
 function bindEmbedEscape(): void {

@@ -3,6 +3,7 @@
  */
 
 import {
+  applyRelevanceGuard,
   formatSearchResults,
   normalizeSearchResults,
 } from './search-result.js';
@@ -142,7 +143,7 @@ export async function searchDdgStructured(query) {
     return { results: [], error: `No DuckDuckGo results found for: ${query}` };
   }
 
-  return { results };
+  return applyRelevanceGuard('DuckDuckGo', query, results);
 }
 
 /** User-facing message when DDG serves a bot challenge instead of results. */

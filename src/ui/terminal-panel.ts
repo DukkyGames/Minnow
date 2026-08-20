@@ -64,6 +64,7 @@ import {
   terminalCwdsEqual,
 } from './terminal-worktree-cwd';
 import { resolveTerminalPanelMinHeightPx } from './terminal-layout';
+import { notifyChatStreamActivity } from '../chat/streaming-state';
 const MAX_HEIGHT_RATIO = 0.5;
 const MAIN_COLUMN_TERMINAL_MAX_CLASS = 'main-column--terminal-maximized';
 
@@ -105,6 +106,15 @@ export interface TerminalStreamHooks {
 }
 
 let externalHooks: TerminalStreamHooks = {};
+
+/**
+ * Count live execute_command stdout/stderr as stream progress so the board
+ * stall watchdog does not kill a long but chatty tool.
+ */
+export function notifyProgressFromTerminalChunk(chatId: string, text: string): void {
+  if (!chatId.trim() || !text) return;
+  notifyChatStreamActivity(chatId);
+}
 
 function minPanelHeight(): number {
   return resolveTerminalPanelMinHeightPx(panelEl, xtermHostEl);
@@ -859,10 +869,12 @@ export async function runCommandWithTerminalStream(
         if (ev.type === 'stdout') {
           stdoutAcc = accumulate(stdoutAcc, ev.text);
           appendTerminalOutput(runId, 'stdout', ev.text);
+          notifyProgressFromTerminalChunk(options.chatId, ev.text);
           options.hooks?.onChunk?.(runId, 'stdout', ev.text);
         } else if (ev.type === 'stderr') {
           stderrAcc = accumulate(stderrAcc, ev.text);
           appendTerminalOutput(runId, 'stderr', ev.text);
+          notifyProgressFromTerminalChunk(options.chatId, ev.text);
           options.hooks?.onChunk?.(runId, 'stderr', ev.text);
         } else if (ev.type === 'exit') {
           exitCode = ev.code;

@@ -183,6 +183,13 @@ const KIND_GROUP: Record<NotificationKind, NotificationKindGroup> = {
   scheduler: 'background',
   research: 'background',
   synthesis: 'background',
+  // An agent working an issue is a task, so it obeys the same switch as board
+  // tasks. Triage arrivals are background: they are a queue, not an event.
+  issue_agent_started: 'tasks',
+  issue_agent_question: 'tasks',
+  issue_agent_pr: 'tasks',
+  issue_agent_failed: 'tasks',
+  issue_triage: 'background',
 };
 
 /** True when prefs allow pushing this notification kind. */

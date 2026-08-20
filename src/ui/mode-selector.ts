@@ -1,6 +1,10 @@
 /**
  * Operating mode segmented control (General / Build / Plan / Debug).
  *
+ * Wide composer: four labelled segments. Compact composer (see
+ * `composer-compact.ts`): a current-mode dropdown that opens the same
+ * radiogroup as a list — the label is never clipped or icon-only.
+ *
  * Plan is one plain segment. Super Plan used to hang off it behind a caret —
  * a disclosure menu inside a radio button, which is neither a radio nor a menu
  * and was invisible until hovered. It is a top-bar destination now (see
@@ -24,118 +28,28 @@ import { setStatus } from './status';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { refreshComposerRunTargetDisabled } from './composer-run-target';
+import { createIcon } from './icon';
 import { createModeMaskIcon, syncModeIconInDom } from './mode-icons';
 
 const MODE_STATUS_MS = 2200;
 
 let modeSelectorRoot: HTMLElement | null = null;
+let modeDropdownBtn: HTMLButtonElement | null = null;
 let statusHideTimer: ReturnType<typeof setTimeout> | null = null;
-let modeSelectorCompactObserver: ResizeObserver | null = null;
+let modeMenuOutsideHandler: ((event: PointerEvent) => void) | null = null;
+let modeMenuEscapeHandler: ((event: KeyboardEvent) => void) | null = null;
 
-function measureComposerGapPx(parent: HTMLElement): number {
-  const style = getComputedStyle(parent);
-  const raw = style.columnGap !== 'normal' ? style.columnGap : style.gap;
-  const gap = parseFloat(raw);
-  return Number.isFinite(gap) ? gap : 0;
-}
-
-function getComposerControlsRow(root: HTMLElement): HTMLElement | null {
-  return root.closest('#composerControls') as HTMLElement | null;
-}
-
-function isHubComposerModeSelector(root: HTMLElement): boolean {
-  return Boolean(root.closest('.input-bar--hub'));
-}
-
-/** Space left in #composerControls for the mode strip (not its current icon-only width). */
-function availableModeSelectorWidth(root: HTMLElement): number {
-  const row = getComposerControlsRow(root) ?? root.parentElement;
-  if (!row) return root.clientWidth;
-
-  const gap = measureComposerGapPx(row);
-  const childCount = row.children.length;
-  let siblingsWidth = 0;
-
-  for (const child of row.children) {
-    if (child === root) continue;
-    const el = child as HTMLElement;
-    if (el.classList.contains('hidden') || el.hidden) continue;
-    siblingsWidth += el.getBoundingClientRect().width;
-  }
-
-  const totalGap = childCount > 1 ? gap * (childCount - 1) : 0;
-  return Math.max(0, row.clientWidth - siblingsWidth - totalGap);
-}
-
-/** Natural labelled strip width without flex shrink or max-width squeezing the measure. */
-function measureLabelledModeSelectorWidth(root: HTMLElement): number {
-  root.classList.add('mode-segmented--measuring');
-  void root.offsetWidth;
-  const width = root.scrollWidth;
-  root.classList.remove('mode-segmented--measuring');
-  return width;
-}
-
-/** True when labelled segments need more space than the composer row can give them. */
-function shouldModeSelectorBeCompact(root: HTMLElement): boolean {
-  const availableWidth = availableModeSelectorWidth(root);
-  root.classList.remove('mode-segmented--compact');
-  const labelledWidth = measureLabelledModeSelectorWidth(root);
-  return labelledWidth > availableWidth + 1;
-}
-
-/** Hide segment labels when labelled content cannot fit the space left in the composer row. */
-function syncModeSelectorCompact(root: HTMLElement): void {
-  // Hub keeps labelled segments (horizontal scroll on the strip when tight).
-  if (isHubComposerModeSelector(root)) {
-    root.classList.remove('mode-segmented--compact');
-    return;
-  }
-
-  if (shouldModeSelectorBeCompact(root)) {
-    root.classList.add('mode-segmented--compact');
-  } else {
-    root.classList.remove('mode-segmented--compact');
-  }
-}
-
-/** Re-run compact layout after composer siblings (branch/worktree chips) change width. */
+/** Re-sync the compact dropdown face after composer siblings change. */
 export function refreshModeSelectorLayout(): void {
   const root = getModeSelectorEl();
   if (!root) return;
-  syncModeSelectorCompact(root);
+  syncModeDropdownFromActiveChat(root);
 }
 
-/** Observe a composer sibling inserted after boot (e.g. run-target wrap). */
-export function observeModeSelectorComposerSibling(el: HTMLElement): void {
-  const root = getModeSelectorEl();
-  if (!root) return;
-
-  if (modeSelectorCompactObserver) {
-    modeSelectorCompactObserver.observe(el);
-  }
-  syncModeSelectorCompact(root);
-}
-
-function attachModeSelectorCompactObserver(root: HTMLElement): void {
-  if (modeSelectorCompactObserver) return;
-  const row = getComposerControlsRow(root) ?? root.parentElement;
-  if (!row) return;
-
-  if (typeof ResizeObserver === 'undefined') {
-    syncModeSelectorCompact(root);
-    return;
-  }
-
-  modeSelectorCompactObserver = new ResizeObserver(() => {
-    syncModeSelectorCompact(root);
-  });
-  modeSelectorCompactObserver.observe(root);
-  modeSelectorCompactObserver.observe(row);
-  for (const child of row.children) {
-    if (child !== root) modeSelectorCompactObserver.observe(child);
-  }
-  syncModeSelectorCompact(root);
+/** Run-target (and similar) inserts after boot — refresh the dropdown and overflow park. */
+export function observeModeSelectorComposerSibling(_el: HTMLElement): void {
+  refreshModeSelectorLayout();
+  document.dispatchEvent(new CustomEvent('minnow:composer-controls-changed'));
 }
 
 function getModeSelectorEl(): HTMLElement | null {
@@ -143,6 +57,180 @@ function getModeSelectorEl(): HTMLElement | null {
     modeSelectorRoot = document.getElementById('modeSelector');
   }
   return modeSelectorRoot;
+}
+
+function getModeDropdownEl(): HTMLButtonElement | null {
+  if (!modeDropdownBtn) {
+    modeDropdownBtn = document.getElementById('modeSelectorDropdown') as HTMLButtonElement | null;
+  }
+  return modeDropdownBtn;
+}
+
+function detachModeMenuListeners(): void {
+  if (modeMenuOutsideHandler) {
+    document.removeEventListener('pointerdown', modeMenuOutsideHandler, true);
+    modeMenuOutsideHandler = null;
+  }
+  if (modeMenuEscapeHandler) {
+    document.removeEventListener('keydown', modeMenuEscapeHandler, true);
+    modeMenuEscapeHandler = null;
+  }
+}
+
+/** Close the compact mode list without changing the selected mode. */
+export function closeModeSelectorMenu(): void {
+  const root = getModeSelectorEl();
+  const dropdown = getModeDropdownEl();
+  root?.classList.remove('mode-segmented--menu-open');
+  if (root) {
+    root.style.position = '';
+    root.style.top = '';
+    root.style.left = '';
+    root.style.minWidth = '';
+  }
+  dropdown?.setAttribute('aria-expanded', 'false');
+  detachModeMenuListeners();
+}
+
+function positionModeMenu(root: HTMLElement, dropdown: HTMLElement): void {
+  root.style.position = 'fixed';
+  const rect = dropdown.getBoundingClientRect();
+  const margin = 8;
+  const gap = 4;
+  const height = root.offsetHeight || root.getBoundingClientRect().height;
+  const width = Math.max(root.offsetWidth || 0, rect.width);
+
+  let top = rect.bottom + gap;
+  if (top + height > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - height - gap);
+  }
+
+  let left = rect.left;
+  if (left + width > window.innerWidth - margin) {
+    left = Math.max(margin, window.innerWidth - width - margin);
+  }
+
+  root.style.top = `${Math.round(top)}px`;
+  root.style.left = `${Math.round(left)}px`;
+  root.style.minWidth = `${Math.round(rect.width)}px`;
+}
+
+function attachModeMenuListeners(root: HTMLElement, dropdown: HTMLButtonElement): void {
+  detachModeMenuListeners();
+
+  modeMenuOutsideHandler = (event: PointerEvent) => {
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+    if (root.contains(target) || dropdown.contains(target)) return;
+    closeModeSelectorMenu();
+  };
+  document.addEventListener('pointerdown', modeMenuOutsideHandler, true);
+
+  modeMenuEscapeHandler = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    closeModeSelectorMenu();
+    dropdown.focus();
+  };
+  document.addEventListener('keydown', modeMenuEscapeHandler, true);
+}
+
+function openModeMenu(): void {
+  const root = getModeSelectorEl();
+  const dropdown = getModeDropdownEl();
+  if (!root || !dropdown || root.hidden) return;
+
+  document.dispatchEvent(new CustomEvent('minnow:close-composer-overflow'));
+  root.classList.add('mode-segmented--menu-open');
+  dropdown.setAttribute('aria-expanded', 'true');
+  positionModeMenu(root, dropdown);
+  attachModeMenuListeners(root, dropdown);
+
+  const selected = root.querySelector<HTMLButtonElement>('[aria-checked="true"]');
+  selected?.focus();
+}
+
+function toggleModeMenu(): void {
+  const root = getModeSelectorEl();
+  if (root?.classList.contains('mode-segmented--menu-open')) {
+    closeModeSelectorMenu();
+    return;
+  }
+  openModeMenu();
+}
+
+function composerModeLabel(modeId: ModeId): string {
+  if (isPlanFamilyMode(modeId)) return 'Plan';
+  return listModes().find((m) => m.id === modeId)?.label ?? modeId;
+}
+
+/** Keep the compact dropdown face in sync with the selected segment. */
+function syncModeDropdownFromActiveChat(root: HTMLElement): void {
+  const dropdown = ensureModeDropdown(root);
+  dropdown.hidden = root.hidden;
+  if (root.hidden) {
+    closeModeSelectorMenu();
+    return;
+  }
+
+  const chat = sessionState ? getActiveChat() : null;
+  const activeId = normalizeModeId(chat?.modeId);
+  const label = composerModeLabel(activeId);
+
+  const iconHost = dropdown.querySelector('.mode-selector-dropdown__icon');
+  if (iconHost instanceof HTMLElement) {
+    applyModeIconToDropdown(iconHost, activeId);
+  }
+
+  const labelEl = dropdown.querySelector('.mode-selector-dropdown__label');
+  if (labelEl) labelEl.textContent = label;
+
+  dropdown.title = listModes().find((m) => m.id === activeId)?.description ?? label;
+  dropdown.setAttribute('aria-label', `Operating mode, ${label}, selected`);
+}
+
+function applyModeIconToDropdown(host: HTMLElement, modeId: ModeId): void {
+  host.replaceChildren(createModeMaskIcon(modeId, 'mode-segment__icon mode-mask-icon'));
+}
+
+function ensureModeDropdown(root: HTMLElement): HTMLButtonElement {
+  const existing = getModeDropdownEl();
+  if (existing) return existing;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'modeSelectorDropdown';
+  btn.className = 'mode-selector-dropdown';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-controls', 'modeSelector');
+
+  const face = document.createElement('span');
+  face.className = 'mode-selector-dropdown__face';
+  const iconHost = document.createElement('span');
+  iconHost.className = 'mode-selector-dropdown__icon';
+  const label = document.createElement('span');
+  label.className = 'mode-selector-dropdown__label';
+  face.append(iconHost, label);
+
+  const chevron = createIcon('chevronDown', { className: 'mode-selector-dropdown__chevron icon-svg' });
+  btn.append(face, chevron);
+
+  btn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (isActiveChatStreaming() || isComposerRecoveryBlocked()) return;
+    toggleModeMenu();
+  });
+  btn.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModeMenu();
+    }
+  });
+
+  root.parentElement?.insertBefore(btn, root);
+  modeDropdownBtn = btn;
+  return btn;
 }
 
 /** Board-managed chats must retain the role and tool policy assigned by the orchestrator. */
@@ -166,31 +254,32 @@ export function syncModeSelectorFromActiveChat(): void {
 
   const chat = getActiveChat();
   root.hidden = isBoardManagedChat(chat);
-  if (root.hidden) return;
 
-  const activeId = normalizeModeId(chat.modeId);
-  const buttons = root.querySelectorAll<HTMLButtonElement>('[data-mode-id]');
-  let index = 0;
-  let selectedIndex = 0;
+  if (!root.hidden) {
+    const activeId = normalizeModeId(chat.modeId);
+    const buttons = root.querySelectorAll<HTMLButtonElement>('[data-mode-id]');
+    let index = 0;
+    let selectedIndex = 0;
 
-  buttons.forEach((btn) => {
-    const segmentModeId = btn.dataset.modeId as ModeId;
-    const isSelected =
-      segmentModeId === 'plan' ? isPlanFamilyMode(activeId) : segmentModeId === activeId;
+    buttons.forEach((btn) => {
+      const segmentModeId = btn.dataset.modeId as ModeId;
+      const isSelected =
+        segmentModeId === 'plan' ? isPlanFamilyMode(activeId) : segmentModeId === activeId;
 
-    btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
-    btn.tabIndex = isSelected ? 0 : -1;
-    if (isSelected) selectedIndex = index;
-    index += 1;
-  });
+      btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+      btn.tabIndex = isSelected ? 0 : -1;
+      if (isSelected) selectedIndex = index;
+      index += 1;
+    });
 
-  root.setAttribute(
-    'aria-label',
-    `Operating mode, ${listModes().find((m) => m.id === activeId)?.label ?? activeId}, selected, ${selectedIndex + 1} of ${buttons.length}`,
-  );
+    root.setAttribute(
+      'aria-label',
+      `Operating mode, ${listModes().find((m) => m.id === activeId)?.label ?? activeId}, selected, ${selectedIndex + 1} of ${buttons.length}`,
+    );
+  }
 
   refreshModeSelectorDisabled();
-  syncModeSelectorCompact(root);
+  syncModeDropdownFromActiveChat(root);
 }
 
 /** Disable segments while the model is streaming. */
@@ -201,6 +290,8 @@ export function refreshModeSelectorDisabled(): void {
   root.querySelectorAll<HTMLButtonElement>('[data-mode-id]').forEach((btn) => {
     btn.disabled = disabled;
   });
+  const dropdown = getModeDropdownEl();
+  if (dropdown) dropdown.disabled = disabled;
   refreshComposerRunTargetDisabled();
 }
 
@@ -325,32 +416,38 @@ export function initModeSelector(): void {
     label.textContent = mode.label;
     btn.append(icon, label);
 
-    btn.addEventListener('click', () => selectMode(mode.id));
+    btn.addEventListener('click', () => {
+      selectMode(mode.id);
+      closeModeSelectorMenu();
+    });
     btn.addEventListener('keydown', (e) => onSegmentKeydown(e, mode.id));
 
     root.appendChild(btn);
   }
 
   root.dataset.initialized = 'true';
-  attachModeSelectorCompactObserver(root);
+  ensureModeDropdown(root);
   syncModeSelectorFromActiveChat();
 }
 
 /** Tear down observers and DOM for unit tests. */
 export function disposeModeSelectorForTests(): void {
-  if (modeSelectorCompactObserver) {
-    modeSelectorCompactObserver.disconnect();
-    modeSelectorCompactObserver = null;
-  }
+  closeModeSelectorMenu();
   if (statusHideTimer) {
     clearTimeout(statusHideTimer);
     statusHideTimer = null;
   }
   modeSelectorRoot = null;
+  modeDropdownBtn?.remove();
+  modeDropdownBtn = null;
   const root = document.getElementById('modeSelector');
   if (root) {
     root.innerHTML = '';
-    root.classList.remove('mode-segmented--compact');
+    root.classList.remove('mode-segmented--compact', 'mode-segmented--menu-open');
+    root.style.position = '';
+    root.style.top = '';
+    root.style.left = '';
+    root.style.minWidth = '';
     delete root.dataset.initialized;
   }
 }

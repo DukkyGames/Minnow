@@ -498,4 +498,122 @@ describe('openai-v1 capabilities/probe route', () => {
       await new Promise((resolve) => openaiMock.close(resolve));
     }
   });
+
+  it('probes vision with an image part and records both outcomes', async () => {
+    /** @type {Array<{ model: string, hasImage: boolean }>} */
+    const seen = [];
+    const visionMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            data: [{ id: 'sees-images' }, { id: 'text-only' }],
+          }),
+        );
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let body = '';
+        req.on('data', (c) => {
+          body += c;
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          const hasImage = JSON.stringify(parsed.messages).includes('image_url');
+          seen.push({ model: parsed.model, hasImage });
+          res.setHeader('Content-Type', 'application/json');
+          if (hasImage && parsed.model === 'text-only') {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'model does not support images' }));
+            return;
+          }
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: 'pong' }, finish_reason: 'stop' }],
+            }),
+          );
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => visionMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (visionMock.address()).port;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-vision',
+        label: 'Probe vision',
+        baseUrl: `http://127.0.0.1:${port}`,
+        apiKind: 'openai-v1',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-vision/capabilities/probe',
+        { modelIds: ['sees-images', 'text-only'] },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(res.json.models['sees-images'].vision, true);
+      assert.equal(res.json.models['sees-images'].sources.vision, 'probe');
+      assert.equal(res.json.models['text-only'].vision, false);
+      assert.equal(res.json.models['text-only'].sources.vision, 'probe');
+      assert.match(res.json.models['text-only'].probeErrors.vision, /support/i);
+      assert.equal(seen.filter((r) => r.hasImage).length, 2);
+    } finally {
+      await new Promise((resolve) => visionMock.close(resolve));
+    }
+  });
+
+  it('skips the vision probe when plain chat already fails', async () => {
+    let imageRequests = 0;
+    const downMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ data: [{ id: 'unreachable' }] }));
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let body = '';
+        req.on('data', (c) => {
+          body += c;
+        });
+        req.on('end', () => {
+          if (JSON.stringify(JSON.parse(body).messages).includes('image_url')) {
+            imageRequests += 1;
+          }
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: 'unauthorized' }));
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => downMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (downMock.address()).port;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-vision-down',
+        label: 'Probe vision down',
+        baseUrl: `http://127.0.0.1:${port}`,
+        apiKind: 'openai-v1',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-vision-down/capabilities/probe',
+        { modelIds: ['unreachable'] },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(imageRequests, 0);
+      assert.equal(res.json.models['unreachable'].sources.vision, 'catalog');
+    } finally {
+      await new Promise((resolve) => downMock.close(resolve));
+    }
+  });
 });

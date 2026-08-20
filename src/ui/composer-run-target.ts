@@ -78,6 +78,11 @@ function closeMenus(): void {
   detachGlobalListeners();
 }
 
+/** Close Local / branch menus (compact layout swap and overflow sheet). */
+export function closeComposerRunTargetMenus(): void {
+  closeMenus();
+}
+
 function positionMenu(anchor: HTMLElement, menu: HTMLElement): void {
   const rect = anchor.getBoundingClientRect();
   const margin = 8;
@@ -260,6 +265,7 @@ function ensureControls(): HTMLDivElement {
       host.appendChild(wrapEl);
     }
     observeModeSelectorComposerSibling(wrapEl);
+    document.dispatchEvent(new CustomEvent('minnow:composer-controls-changed'));
   }
 
   return wrapEl;

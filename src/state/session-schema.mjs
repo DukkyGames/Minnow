@@ -604,6 +604,14 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.modelId === 'string' && r.modelId.trim()) {
     out.modelId = r.modelId.trim().slice(0, 200);
   }
+  const REASONING_EFFORT = new Set(['off', 'on', 'low', 'medium', 'high']);
+  if (typeof r.reasoningEffort === 'string' && REASONING_EFFORT.has(r.reasoningEffort)) {
+    out.reasoningEffort = r.reasoningEffort;
+  }
+  const THINKING_MODE = new Set(['inherit', 'on', 'off']);
+  if (typeof r.thinkingMode === 'string' && THINKING_MODE.has(r.thinkingMode)) {
+    out.thinkingMode = r.thinkingMode;
+  }
   if (typeof r.completionShownAt === 'number') {
     out.completionShownAt = r.completionShownAt;
   }

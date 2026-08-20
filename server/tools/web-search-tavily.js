@@ -3,6 +3,7 @@
  */
 
 import {
+  applyRelevanceGuard,
   formatSearchResults,
   normalizeSearchResults,
 } from './search-result.js';
@@ -82,7 +83,7 @@ export async function searchTavilyStructured(query, apiKey, maxResults = TAVILY_
     return { results: [], error: `No Tavily results found for: ${query}` };
   }
 
-  return { results };
+  return applyRelevanceGuard('Tavily', query, results);
 }
 
 /**

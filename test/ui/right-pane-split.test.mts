@@ -304,4 +304,65 @@ describe('unified strip active tab', () => {
     assert.equal(active.viewerPath, null);
     assert.equal(active.previewId, preview.id);
   });
+
+  test('single-pane viewer mode shows the file pane even when a preview tab remains open', () => {
+    seedOpenFiles(['src/a.ts'], 'src/a.ts');
+    const preview = openPreviewTab({ kind: 'url', url: 'https://example.com' });
+    patchFilePanelState({
+      rightPaneMode: 'viewer',
+      viewerOpen: true,
+      activePreviewTab: preview.id,
+    });
+    document.getElementById('fileViewerPane')?.classList.remove('hidden');
+    document.getElementById('previewPane')?.classList.add('hidden');
+
+    applyRightPaneSplitDom();
+
+    assert.equal(document.getElementById('fileViewerPane')?.classList.contains('hidden'), false);
+    assert.equal(document.getElementById('previewPane')?.classList.contains('hidden'), true);
+  });
+
+  test('single-pane preview mode shows the browser pane even when a file tab remains open', () => {
+    seedOpenFiles(['src/a.ts'], 'src/a.ts');
+    const preview = openPreviewTab({ kind: 'url', url: 'https://example.com' });
+    patchFilePanelState({
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      activePreviewTab: preview.id,
+    });
+    document.getElementById('fileViewerPane')?.classList.remove('hidden');
+    document.getElementById('previewPane')?.classList.add('hidden');
+
+    applyRightPaneSplitDom();
+
+    assert.equal(document.getElementById('fileViewerPane')?.classList.contains('hidden'), true);
+    assert.equal(document.getElementById('previewPane')?.classList.contains('hidden'), false);
+  });
+
+  test('single-pane layout does not show pane focus ring', () => {
+    seedOpenFiles(['src/a.ts'], 'src/a.ts');
+    applyRightPaneSplitDom();
+
+    const primary = document.getElementById('rightPaneSlotPrimary');
+    assert.equal(primary?.classList.contains('is-focused'), false);
+    assert.equal(
+      document.getElementById('rightPaneSplit')?.classList.contains('is-active'),
+      false,
+    );
+  });
+
+  test('split layout shows focus ring on the focused pane only', () => {
+    seedOpenFiles(['src/a.ts', 'src/b.ts'], 'src/b.ts');
+    enableRightPaneSplit();
+    applyRightPaneSplitDom();
+
+    const primary = document.getElementById('rightPaneSlotPrimary');
+    const secondary = document.getElementById('rightPaneSlotSecondary');
+    assert.equal(
+      document.getElementById('rightPaneSplit')?.classList.contains('is-active'),
+      true,
+    );
+    assert.equal(primary?.classList.contains('is-focused'), false);
+    assert.equal(secondary?.classList.contains('is-focused'), true);
+  });
 });
