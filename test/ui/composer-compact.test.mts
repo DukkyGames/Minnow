@@ -253,8 +253,13 @@ describe('composer compact overflow', () => {
   test('overflow sheet CSS is a two-page sheet with labeled rows', () => {
     const css = readFileSync(new URL('../../src/styles/composer-overflow.css', import.meta.url), 'utf8');
     assert.match(css, /\.composer-overflow-page--settings/);
+    assert.match(css, /\.composer-overflow-settings-lead/);
     assert.match(css, /\.composer-overflow-page--tools/);
     assert.match(css, /\.composer-overflow-tools-nav/);
+    assert.match(
+      css,
+      /\.composer-overflow-page--settings \.thinking-toggle-btn\[aria-pressed='true'\]::before/,
+    );
     assert.match(
       css,
       /\.composer-overflow-page--tools \.composer-tools-popover__setting[\s\S]*display:\s*none/,

@@ -109,9 +109,21 @@
 .composer-overflow-page--settings:not(.hidden):not([hidden]) {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   overflow: auto;
   padding: 10px 12px 12px;
+}
+
+.composer-overflow-settings-lead {
+  margin: 0 0 4px;
+  padding: 0 4px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle);
 }
 
 .composer-overflow-page--settings > .composer-control,
@@ -136,38 +148,109 @@
   max-width: 100%;
 }
 
-/* Labeled rows: icon + name, with effort segments on the same row when shown. */
+/* Labeled rows: icon tile + name + status pill; effort segments sit beside Reasoning. */
 .composer-overflow-page--settings .thinking-control-wrap {
+  display: block;
+  width: 100%;
+}
+
+.composer-overflow-page--settings .thinking-control-wrap:has(.composer-reasoning-effort-wrap:not(.hidden)) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
-  width: 100%;
 }
 
 .composer-overflow-page--settings .thinking-toggle-host,
 .composer-overflow-page--settings .context-documents-toggle-host,
 .composer-overflow-page--settings .code-map-toggle-host,
 .composer-overflow-page--settings .brain-notes-toggle-host {
+  display: flex;
+  width: 100%;
   min-width: 0;
 }
 
 .composer-overflow-page--settings .thinking-toggle-btn {
-  width: auto;
+  display: flex;
+  align-items: center;
+  width: 100%;
   max-width: 100%;
   height: auto;
-  min-height: 36px;
+  min-height: 40px;
   justify-content: flex-start;
-  gap: 8px;
-  padding: 6px 4px;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
+}
+
+.composer-overflow-page--settings .thinking-toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  order: 1;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+  --mn-icon-size: 16px;
+  opacity: 1;
+  transition:
+    background 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
 }
 
 .composer-overflow-page--settings .thinking-toggle-btn::after {
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.25;
   color: var(--mn-fg);
+  text-align: left;
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn::before {
+  order: 3;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true']::before {
+  content: 'On';
+  border-color: color-mix(in srgb, var(--mn-accent) 35%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-bg));
+  color: var(--mn-accent);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'][data-inherit='true']::before {
+  content: 'Inherit';
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'][data-inherit='false']::before {
+  content: 'Off';
+}
+
+.composer-overflow-page--settings
+  .thinking-control-wrap:has(.composer-reasoning-effort-wrap:not(.hidden))
+  .thinking-toggle-btn::before {
+  display: none;
 }
 
 .composer-overflow-page--settings .thinking-toggle-host > .thinking-toggle-btn::after {
@@ -186,21 +269,62 @@
   content: 'Brain notes';
 }
 
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true'] .thinking-toggle-icon {
+  background: color-mix(in srgb, var(--mn-accent) 18%, transparent);
+  color: var(--mn-accent);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'] .thinking-toggle-icon {
+  color: var(--mn-fg-muted);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false']::after {
+  color: var(--mn-fg-muted);
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--mn-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--mn-accent) 6%, var(--mn-surface-1));
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='false'][data-inherit='true'] {
+  border-color: transparent;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .composer-overflow-page--settings .thinking-toggle-btn:hover:not(:disabled) {
+    border-color: var(--mn-border);
     background: var(--mn-surface-elevated);
   }
+
+  .composer-overflow-page--settings .thinking-toggle-btn[aria-pressed='true']:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--mn-accent) 30%, var(--mn-border));
+    background: color-mix(in srgb, var(--mn-accent) 10%, var(--mn-surface-1));
+  }
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn:active:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-fg) 8%, var(--mn-surface-1));
+}
+
+.composer-overflow-page--settings .thinking-toggle-btn:focus-visible {
+  border-color: var(--mn-accent);
 }
 
 .composer-overflow-page--settings > .view-mode-toggle-btn {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 10px;
+  width: 100%;
   height: auto;
-  min-height: 36px;
-  padding: 6px 4px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
 }
 
 .composer-overflow-page--settings > .view-mode-toggle-btn::after {
@@ -208,6 +332,13 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--mn-fg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-overflow-page--settings > .view-mode-toggle-btn:hover:not(:disabled) {
+    border-color: var(--mn-border);
+    background: var(--mn-surface-elevated);
+  }
 }
 
 /* Wide row keeps the native select; the sheet uses Low / Medium / High segments. */
@@ -292,13 +423,13 @@
 .composer-overflow-tools-nav {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  margin-top: 8px;
-  padding: 8px 4px;
-  border: 0;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid transparent;
   border-top: 1px solid var(--mn-border);
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--mn-fg);
   font-family: var(--font-ui);
@@ -306,6 +437,9 @@
   font-weight: 500;
   text-align: left;
   cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
 }
 
 .composer-overflow-tools-nav .icon-svg {
@@ -320,6 +454,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .composer-overflow-tools-nav:hover {
+    border-color: var(--mn-border);
     background: var(--mn-surface-elevated);
   }
 }
