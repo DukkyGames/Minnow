@@ -875,6 +875,48 @@ function buildOutcomeToReportOutcome(
   return null;
 }
 
+/** True when the tester chat has a user turn awaiting a VERDICT (do not reuse stale testVerdict). */
+function isTesterVerdictPending(chatId: string | undefined): boolean {
+  const id = chatId?.trim();
+  if (!id) return false;
+  const chat = findChatById(id);
+  if (!chat) return false;
+  let lastUserIdx = -1;
+  for (let i = chat.history.length - 1; i >= 0; i--) {
+    if (chat.history[i]?.role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx < 0) return false;
+  for (let i = chat.history.length - 1; i > lastUserIdx; i--) {
+    const msg = chat.history[i];
+    if (msg?.role !== 'assistant') continue;
+    const content = typeof msg.content === 'string' ? msg.content : '';
+    if (parseLastVerdictFromContent(content)) return false;
+    return true;
+  }
+  return true;
+}
+
+/** Tester stream-end report: transcript VERDICT first, then tester board_report only. */
+function resolveTesterPhaseReport(task: BoardTask): BoardReport | null {
+  const parsed = parseTesterVerdictMarker(task.testChatId);
+  if (parsed) {
+    return { outcome: parsed.verdict, summary: parsed.summary };
+  }
+  if (task.boardReport?.outcome && task.boardReport.summary?.trim()) {
+    return task.boardReport;
+  }
+  if (task.testVerdict && !isTesterVerdictPending(task.testChatId)) {
+    return {
+      outcome: task.testVerdict,
+      summary: task.testSummary?.trim() || `Tester verdict: ${task.testVerdict}`,
+    };
+  }
+  return null;
+}
+
 /** Primary structured report with legacy field fallback for hydrated sessions. */
 function resolveBoardReport(task: BoardTask): BoardReport | null {
   if (task.boardReport?.outcome && task.boardReport.summary?.trim()) {
@@ -3886,7 +3928,12 @@ export function applyTaskTestFailureState(
   updateTask(
     group,
     task.id,
-    { ...BOARD_REPORT_RESET_PATCH, testAttempts: attempts, testSummary: summary },
+    {
+      testAttempts: attempts,
+      testSummary: summary,
+      // Drop stale VERDICT markers so a retest is not re-read as an immediate fail.
+      testVerdict: undefined,
+    },
     plannerChat,
   );
 
@@ -3965,13 +4012,26 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
   if (!id) return null;
   const chat = findChatById(id);
   if (!chat) return null;
+
+  // Ignore VERDICT markers from prior tester rounds — only the latest user turn
+  // (the current seed/nudge) and its assistant reply are authoritative.
+  let lastUserIdx = -1;
   for (let i = chat.history.length - 1; i >= 0; i--) {
+    if (chat.history[i]?.role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+
+  for (let i = chat.history.length - 1; i > lastUserIdx; i--) {
     const msg = chat.history[i];
     if (!msg || msg.role !== 'assistant') continue;
     const content = typeof msg.content === 'string' ? msg.content : '';
     if (!content.trim()) continue;
     const parsed = parseLastVerdictFromContent(content);
     if (parsed) return parsed;
+    // Current tester turn has a user seed but no VERDICT yet — do not reuse older turns.
+    if (lastUserIdx >= 0) return null;
   }
   return null;
 }
@@ -4163,21 +4223,14 @@ async function finalizeTaskTestingOnStreamEndImpl(
     }
   }
 
-  // The live tester transcript wins over stale report fields left from a prior
-  // attempt (testVerdict / buildOutcome); structured board_report on the task
-  // remains the fallback when the chat has no VERDICT marker.
-  const parsed = parseTesterVerdictMarker(fresh.testChatId);
-  let report: BoardReport | null = null;
-  if (parsed) {
-    report = { outcome: parsed.verdict, summary: parsed.summary };
+  const report = resolveTesterPhaseReport(fresh);
+  if (report?.outcome === 'pass') {
     updateTask(
       group,
       fresh.id,
-      { testVerdict: parsed.verdict, testSummary: parsed.summary },
+      { testVerdict: 'pass', testSummary: report.summary },
       plannerChat,
     );
-  } else {
-    report = resolveBoardReport(fresh);
   }
 
   // Context-window overflow on the Tester is transient — retry testing without

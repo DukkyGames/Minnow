@@ -539,25 +539,18 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       'grep',
       'Search file contents (ripgrep-style). Workspace-relative path:line:snippet; respects .gitignore. Paginate with offset (default 200 lines, 32k chars max). Prefer files_with_matches or count before content mode.',
       {
-        pattern: { type: 'string', description: 'Regex or literal search pattern' },
-        path: { type: 'string', description: 'Directory or file to search (default workspace root)' },
-        glob: { type: 'string', description: 'Optional glob filter (e.g. "*.ts")' },
+        pattern: { type: 'string', description: 'Regex or literal pattern' },
+        path: { type: 'string', description: 'Directory or file (default workspace root)' },
+        glob: { type: 'string', description: 'Glob filter (e.g. *.ts)' },
         case_insensitive: { type: 'boolean' },
-        literal: { type: 'boolean', description: 'Treat pattern as literal text, not regex' },
-        context: { type: 'number', description: 'Lines of context around each match (0–5)' },
-        head_limit: {
-          type: 'number',
-          description: 'Max output lines per page — matches plus context (default 200, max 200)',
-        },
-        offset: {
-          type: 'number',
-          description: 'Skip this many match lines before returning (pagination)',
-        },
+        literal: { type: 'boolean', description: 'Treat pattern as literal text' },
+        context: { type: 'number', description: 'Context lines (0-5)' },
+        head_limit: { type: 'number', description: 'Max output lines per page (max 200)' },
+        offset: { type: 'number', description: 'Match-line offset for pagination' },
         output_mode: {
           type: 'string',
           enum: ['content', 'count', 'files_with_matches', 'grouped'],
-          description:
-            'content (default) | grouped | count | files_with_matches — use count or files_with_matches to avoid paging large result sets',
+          description: 'content (default), grouped, count, or files_with_matches',
         },
       },
       ['pattern'],
@@ -1277,33 +1270,16 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_add',
-      'File a new issue (bug, task, idea, or note) in the Issues tracker.',
+      'File a new issue in the Issues tracker.',
       {
-        title: { type: 'string', description: 'Short issue title' },
-        description: { type: 'string', description: 'Markdown description' },
-        type: {
-          type: 'string',
-          description: 'Issue type id from Settings → Issues (default task)',
-        },
-        priority: {
-          type: 'string',
-          description: 'Priority id from Settings → Issues (default none)',
-        },
-        labels: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional labels',
-        },
-        issue_id: {
-          type: 'string',
-          description: 'Optional stable id such as MIN-12 (auto-generated if omitted)',
-        },
-        parent_id: {
-          type: 'string',
-          description:
-            'Parent issue id to file this as a sub-issue. Hierarchy is one level deep.',
-        },
-        project_id: { type: 'string', description: 'Optional project to file this under' },
+        title: { type: 'string', description: 'Short title' },
+        description: { type: 'string', description: 'Markdown body' },
+        type: { type: 'string', description: 'Issue type id (default task)' },
+        priority: { type: 'string', description: 'Priority id (default none)' },
+        labels: { type: 'array', items: { type: 'string' }, description: 'Labels' },
+        issue_id: { type: 'string', description: 'Optional stable id (MIN-12)' },
+        parent_id: { type: 'string', description: 'Parent issue id for a sub-issue' },
+        project_id: { type: 'string', description: 'Project id' },
       },
       ['title'],
     ),
@@ -1316,29 +1292,22 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_search',
-      'Search issues. Prefer this over issue_get_state: it returns only the fields you ask for, in pages, instead of every field of every issue.',
+      'Search issues with filters, field selection, and paging.',
       {
-        query: {
-          type: 'string',
-          description: 'Case-insensitive substring over id, title, description, and labels',
-        },
-        status: { type: 'string', description: 'Status id to filter by' },
-        assignee: { type: 'string', description: 'Assignee id to filter by' },
-        label: { type: 'string', description: 'Label to filter by' },
-        parent_id: { type: 'string', description: 'Only sub-issues of this parent' },
-        project_id: { type: 'string', description: 'Only issues in this project' },
-        scope: {
-          type: 'string',
-          description: "'current_workspace' (default) or 'all'",
-        },
+        query: { type: 'string', description: 'Substring over id, title, description, labels' },
+        status: { type: 'string', description: 'Status id filter' },
+        assignee: { type: 'string', description: 'Assignee id filter' },
+        label: { type: 'string', description: 'Label filter' },
+        parent_id: { type: 'string', description: 'Parent issue id filter' },
+        project_id: { type: 'string', description: 'Project id filter' },
+        scope: { type: 'string', description: 'current_workspace (default) or all' },
         hide_done: { type: 'boolean', description: 'Omit closed issues' },
         fields: {
           type: 'array',
           items: { type: 'string' },
-          description:
-            'Fields to return. Default: id, title, status, priority, type, updatedAt. Ask for "attachments" to get on-disk paths you can read.',
+          description: 'Fields to return (default id, title, status, priority, type, updatedAt)',
         },
-        limit: { type: 'number', description: 'Page size (default 25, max 100)' },
+        limit: { type: 'number', description: 'Page size (max 100)' },
         offset: { type: 'number', description: 'Page offset' },
       },
       [],
@@ -1352,11 +1321,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_comment',
-      'Append a comment to an issue. Use this to report progress or findings — it adds to a timeline instead of overwriting the notes field.',
+      'Append a markdown comment to an issue timeline.',
       {
         issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
-        body: { type: 'string', description: 'Markdown comment body' },
-        author: { type: 'string', description: 'Optional agent name for attribution' },
+        body: { type: 'string', description: 'Comment body' },
+        author: { type: 'string', description: 'Optional author label' },
       },
       ['issue_id', 'body'],
     ),
@@ -1369,13 +1338,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_assign',
-      'Set an issue assignee and/or queue a work agent on it. Queuing does not start a run; the user starts it from the Issues app.',
+      'Set assignee and/or queue a work agent (does not start a run).',
       {
         issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
-        assignee: { type: 'string', description: "Accountable human id ('me' locally)" },
-        assignee_label: { type: 'string', description: 'Display name for the assignee' },
+        assignee: { type: 'string', description: "Human assignee id ('me' locally)" },
+        assignee_label: { type: 'string', description: 'Assignee display name' },
         agent: { type: 'string', description: 'Work agent id to queue' },
-        clear_agent: { type: 'boolean', description: 'Remove the agent slot' },
+        clear_agent: { type: 'boolean', description: 'Clear queued agent' },
       },
       ['issue_id'],
     ),
@@ -1388,16 +1357,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_unlink',
-      'Remove a code ref, git link, chat link, or issue relation. issue_link is append-only, so this is how a wrong link gets corrected.',
+      'Remove a code ref, git link, chat link, or issue relation.',
       {
         issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
-        path: { type: 'string', description: 'Remove code refs with this path' },
-        ref: { type: 'string', description: 'Remove git links with this ref (sha, branch, PR)' },
-        target_issue_id: {
-          type: 'string',
-          description: 'Remove the relation to this issue (both directions)',
-        },
-        chat_id: { type: 'string', description: 'Remove this linked chat id' },
+        path: { type: 'string', description: 'Code ref path to remove' },
+        ref: { type: 'string', description: 'Git ref to remove' },
+        target_issue_id: { type: 'string', description: 'Related issue id to remove' },
+        chat_id: { type: 'string', description: 'Linked chat id to remove' },
       },
       ['issue_id'],
     ),
@@ -1410,13 +1376,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_move',
-      'Move an issue to a status and position. Setting both at once avoids fighting the manual ordering the user set by dragging.',
+      'Set issue status and rank in one call.',
       {
         issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
         status: { type: 'string', description: 'Destination status id' },
-        before_issue_id: { type: 'string', description: 'Place immediately above this issue' },
-        after_issue_id: { type: 'string', description: 'Place immediately below this issue' },
-        to_top: { type: 'boolean', description: 'Place at the top of the destination' },
+        before_issue_id: { type: 'string', description: 'Place above this issue' },
+        after_issue_id: { type: 'string', description: 'Place below this issue' },
+        to_top: { type: 'boolean', description: 'Place at column top' },
       },
       ['issue_id'],
     ),
@@ -1484,51 +1450,47 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'issue_link',
-      'Append links to an issue: code_refs (file/line), git_links, chat_id, and/or issue_refs.',
+      'Append code refs, git links, chat id, and/or issue_refs to an issue.',
       {
-        issue_id: { type: 'string', description: 'Issue id (KEY-n) or legacy bug id' },
+        issue_id: { type: 'string', description: 'Issue id (KEY-n)' },
         code_refs: {
           type: 'array',
-          description: 'File/line links to append',
+          description: 'File/line refs',
           items: {
             type: 'object',
             properties: {
-              path: { type: 'string', description: 'Workspace-relative path' },
-              start_line: { type: 'number', description: '1-based start line' },
-              end_line: { type: 'number', description: '1-based end line' },
-              snippet: { type: 'string', description: 'Captured text at link time' },
+              path: { type: 'string' },
+              start_line: { type: 'number' },
+              end_line: { type: 'number' },
+              snippet: { type: 'string' },
               note: { type: 'string' },
             },
           },
         },
         git_links: {
           type: 'array',
-          description: 'Git/GitHub link chips to append',
+          description: 'Git/GitHub links',
           items: {
             type: 'object',
             properties: {
-              kind: {
-                type: 'string',
-                enum: ['commit', 'branch', 'pr', 'github-issue'],
-              },
-              ref: { type: 'string', description: 'Sha, branch name, or number' },
+              kind: { type: 'string', enum: ['commit', 'branch', 'pr', 'github-issue'] },
+              ref: { type: 'string' },
               url: { type: 'string' },
               title: { type: 'string' },
             },
           },
         },
-        chat_id: { type: 'string', description: 'Chat id to append to chatIds' },
+        chat_id: { type: 'string', description: 'Chat id' },
         issue_refs: {
           type: 'array',
-          description:
-            'Related issues to append (string id = related, or { issue_id, kind?, note? })',
+          description: 'Related issue ids or { issue_id, kind?, note? }',
           items: {
             oneOf: [
-              { type: 'string', description: 'Target issue id (kind defaults to related)' },
+              { type: 'string', description: 'Target issue id' },
               {
                 type: 'object',
                 properties: {
-                  issue_id: { type: 'string', description: 'Target issue id' },
+                  issue_id: { type: 'string' },
                   kind: {
                     type: 'string',
                     enum: [

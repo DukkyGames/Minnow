@@ -11,6 +11,7 @@ import { showToast } from './toast';
 
 /** Legacy settings field; when #serverUrl is absent, default LM Studio port for Vite-only mode. */
 export function serverUrl(): string {
+  if (typeof document === 'undefined') return 'http://localhost:1234';
   const el = document.getElementById('serverUrl') as HTMLInputElement | null;
   if (!el) return 'http://localhost:1234';
   return el.value.trim().replace(/\/$/, '');

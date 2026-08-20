@@ -175,6 +175,22 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
       return fail('No issue_* emit');
     },
   },
+  'agents-issue-tools-v2': {
+    kind: 'tool-chain',
+    maxToolRounds: 6,
+    toolIds: ['issue_search', 'issue_comment', 'issue_assign', 'issue_unlink', 'issue_move'],
+    emitOnly: true,
+    verdict: (out) => {
+      const searched = hasTool(out.toolCalls, 'issue_search');
+      const commented = hasTool(out.toolCalls, 'issue_comment');
+      if (searched && commented) return pass('Searched issues and commented');
+      if (searched) return partial('Searched issues but never commented');
+      if (hasAnyTool(out.toolCalls, ['issue_assign', 'issue_unlink', 'issue_move'])) {
+        return partial('Used v2 issue tools without search');
+      }
+      return fail('No issue v2 emit');
+    },
+  },
   'knowledge-brain-read': {
     kind: 'tool-call',
     toolIds: ['brain_search', 'brain_read_page', 'brain_list'],

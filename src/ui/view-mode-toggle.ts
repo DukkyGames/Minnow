@@ -5,6 +5,7 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
+import { isChatStreaming } from '../chat/streaming-state';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import {
   isBoardSetupIncomplete,
@@ -254,6 +255,10 @@ export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
   activeGroup.viewMode = 'chat';
   exitBoardViewForNavigation();
   closeBoardGroupView(activeGroup);
+  renderChat(chat);
+  if (isChatStreaming(chat.id)) {
+    void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
+  }
   syncViewModeToggleFromActiveChat();
   void import('./git-panel').then((m) =>
     m.syncPanelFromActiveChat({ forceFileTree: true }),

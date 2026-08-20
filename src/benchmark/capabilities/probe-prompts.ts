@@ -150,6 +150,8 @@ const STANDALONE_PROBE_PROMPTS: Record<string, string> = {
     'Spawn a sub-agent to audit the tool catalog and report back with what it finds.',
   'agents-issue-tools':
     'Log an issue titled "Grid header overlaps on narrow panes", then link it to issue ISS-1.',
+  'agents-issue-tools-v2':
+    'Search issues for "grid overlap", add a comment on the first match, then assign it to me.',
 
   'knowledge-brain-read': 'What does the Brain say about the session engine?',
   'knowledge-brain-write': [

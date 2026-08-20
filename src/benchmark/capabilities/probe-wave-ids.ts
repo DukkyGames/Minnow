@@ -37,6 +37,7 @@ export const PHASE_2D_EMIT_ONLY_CAPABILITY_IDS = [
   'web-wikipedia',
   'agents-spawn-sub-agent',
   'agents-issue-tools',
+  'agents-issue-tools-v2',
   'knowledge-brain-read',
   'knowledge-brain-write',
   'knowledge-minnow-docs',

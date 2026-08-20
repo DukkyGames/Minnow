@@ -193,7 +193,14 @@ function evaluateRun(run: SubAgentRun): void {
 
 async function enterSuspect(run: SubAgentRun, reason: string): Promise<void> {
   const state = ensureRunState(run.runId);
-  if (state.handlingSuspect || run.status !== 'running') return;
+  if (
+    state.handlingSuspect ||
+    run.status === 'completed' ||
+    run.status === 'failed' ||
+    run.status === 'cancelled'
+  ) {
+    return;
+  }
   state.handlingSuspect = true;
   state.repetitionFlagged = false;
 
@@ -270,7 +277,12 @@ export function observeSubAgentToolCall(
   state.repetitionFlagged = true;
 
   const run = getSubAgentRun(runId);
-  if (run?.status === 'running') {
+  if (
+    run &&
+    run.status !== 'completed' &&
+    run.status !== 'failed' &&
+    run.status !== 'cancelled'
+  ) {
     void enterSuspect(run, hit.reason);
   }
 }

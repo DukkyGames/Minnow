@@ -152,24 +152,30 @@ export function extractChatText(chat: Chat): string {
   return parts.join('\n');
 }
 
-/** Assistant/tool output plus run errors — excludes user seeds that mention infra hypotheticals. */
+/** Transcript plus failed-run error messages (board chats often only record errors on runs). */
+export function extractChatFailureText(chat: Chat): string {
+  return extractChatText(chat);
+}
+
+/**
+ * Agent output only — excludes user seed/nudge text. Board seeds mention infra
+ * examples ("connection refused", "missing binary") that must not classify a
+ * clean VERDICT: fail as infra.
+ */
 function extractAgentFailureText(chat: Chat): string {
   const parts: string[] = [];
   for (const msg of chat.history) {
     if (isUiOnlyTranscriptMessage(msg)) continue;
     if (msg.role !== 'assistant' && msg.role !== 'tool') continue;
     const content = msg.content;
-    if (content) parts.push(content);
+    if (content) {
+      parts.push(typeof content === 'string' ? content : JSON.stringify(content));
+    }
   }
   for (const run of chat.runs ?? []) {
     if (run.errorMessage?.trim()) parts.push(run.errorMessage.trim());
   }
   return parts.join('\n');
-}
-
-/** Transcript plus failed-run error messages (board chats often only record errors on runs). */
-export function extractChatFailureText(chat: Chat): string {
-  return extractChatText(chat);
 }
 
 /**

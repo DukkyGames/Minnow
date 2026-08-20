@@ -194,6 +194,11 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
     let previous: DOMRect | null = null;
 
     const tick = (): void => {
+      if (typeof document === 'undefined') {
+        resolve(null);
+        return;
+      }
+
       const body = document.getElementById('previewBody');
       if (!body) {
         resolve(null);
@@ -279,6 +284,7 @@ let layoutRetryFrames = 0;
 const MAX_LAYOUT_RETRY_FRAMES = 8;
 
 function scheduleLayoutRetryIfNeeded(): void {
+  if (typeof window === 'undefined') return;
   if (!usesElectronPreview()) return;
   if (!isPreviewPaneDomVisible() || isFullscreenOverlayObscuringWorkspace()) return;
   if (previewBodyHasLayout()) {
@@ -298,6 +304,7 @@ export function scheduleElectronPreviewHostVisibilitySync(): void {
   if (layoutSyncRaf) return;
   layoutSyncRaf = scheduleAnimationFrame(() => {
     layoutSyncRaf = 0;
+    if (typeof window === 'undefined') return;
     void syncElectronPreviewHostLayout().then(scheduleLayoutRetryIfNeeded);
   });
 }

@@ -332,15 +332,22 @@ export const buildWriteRootReadGrants = buildScopedWriteRootGrants;
  * @param {import('./policy.js').SandboxPolicy} policy
  * @returns {{ writePaths: string[], readPaths: string[] }}
  */
-export function buildLandlockPathLists(policy) {
+/**
+ * @param {import('./policy.js').SandboxPolicy} policy
+ * @param {{ compactHomeRead?: boolean }} [opts]
+ */
+export function buildLandlockPathLists(policy, { compactHomeRead = false } = {}) {
   const writePaths = [
     ...landlockDeviceWriteAllowlist(),
     ...policy.writeRoots.flatMap((wr) => buildScopedWriteRootGrants(wr, policy)),
   ];
+  const homeReadPaths = compactHomeRead
+    ? homeShellReadPaths(policy.home)
+    : buildHomeReadAllowlist(policy);
   const readSet = new Set([
     ...defaultSystemReadRoots(),
     ...policy.allowReadExceptions,
-    ...buildHomeReadAllowlist(policy),
+    ...homeReadPaths,
   ]);
   for (const wr of policy.writeRoots) {
     for (const grant of buildScopedWriteRootGrants(wr, policy)) {
@@ -363,9 +370,13 @@ export function buildLandlockPathLists(policy) {
  * @param {{ seccomp?: boolean, mapPath?: (p: string) => string }} [opts]
  * @returns {string[]}
  */
-export function buildLandlockArgv(spawnTarget, policy, { seccomp = true, mapPath } = {}) {
+export function buildLandlockArgv(
+  spawnTarget,
+  policy,
+  { seccomp = true, mapPath, compactHomeRead = false } = {},
+) {
   const map = typeof mapPath === 'function' ? mapPath : (p) => p;
-  const { writePaths, readPaths } = buildLandlockPathLists(policy);
+  const { writePaths, readPaths } = buildLandlockPathLists(policy, { compactHomeRead });
   /** @type {string[]} */
   const args = [];
   if (!seccomp) args.push('--no-seccomp');
@@ -404,6 +415,7 @@ export function wrapWithLandlock(spawnTarget, policy, opts = {}) {
     args: buildLandlockArgv(spawnTarget, policy, {
       seccomp: opts.seccomp !== false,
       mapPath: opts.mapPath,
+      compactHomeRead: opts.compactHomeRead === true,
     }),
     shell: false,
     ...(spawnTarget.cwd != null ? { cwd: spawnTarget.cwd } : {}),

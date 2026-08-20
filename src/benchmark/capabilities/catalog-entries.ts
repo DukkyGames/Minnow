@@ -439,6 +439,17 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
   },
   {
+    "id": "agents-issue-tools-v2",
+    "group": "agents-tasks",
+    "header": "issue_search / comment / assign / move",
+    tier: 3,
+    "scoreMode": "auto",
+    "howToTest": "'Search open issues for grid overlap, comment on the match, then assign it to me.'",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Search open issues for grid overlap, comment on the match, then assign it to me.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing."
+  },
+  {
     "id": "knowledge-brain-read",
     "group": "knowledge",
     "header": "brain_search / read_page / list",

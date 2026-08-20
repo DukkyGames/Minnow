@@ -11,7 +11,6 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ensureMinnowLayout, resetMinnowHomeCache } from '../../../server/config/home.js';
-import { executeServerTool } from '../../../server/runtime/tools-middleware.js';
 import {
   createBackgroundRun,
   getRun,
@@ -125,15 +124,18 @@ describe('Phase 2: createBackgroundRun + code-exec use the chokepoint', () => {
   });
 
   it('createBackgroundRun parents under sandbox-exec when sandbox forced on darwin', async () => {
-    const isWin = process.platform === 'win32';
-    const command = isWin
-      ? 'powershell -NoProfile -Command "Start-Sleep -Seconds 60"'
-      : 'sleep 60';
+    if (process.platform === 'win32') {
+      // Live WSL+Landlock wrap is covered by wsl-landlock-canary; skip here to
+      // avoid duplicating long argv spawns on Windows (CreateProcess limits).
+      return;
+    }
+
+    const command = 'sleep 60';
 
     const started = await createBackgroundRun({
       command,
       cwd: repoRoot,
-      shell: isWin,
+      shell: false,
       source: 'agent',
       // Force wrap attempt regardless of MINNOW_SHELL_SANDBOX (Phase 1 prefer-like).
       sandbox: true,
@@ -162,6 +164,7 @@ describe('Phase 2: createBackgroundRun + code-exec use the chokepoint', () => {
   });
 
   it('run_javascript goes through createRun (terminal log + exit formatting)', async () => {
+    const { executeServerTool } = await import('../../../server/runtime/tools-middleware.js');
     const logsDir = path.join(homeDir, 'logs', 'terminal');
     await fs.mkdir(logsDir, { recursive: true });
     const before = new Set(await fs.readdir(logsDir));
@@ -181,6 +184,7 @@ describe('Phase 2: createBackgroundRun + code-exec use the chokepoint', () => {
   });
 
   it('run_python goes through createRun when an interpreter is available', async () => {
+    const { executeServerTool } = await import('../../../server/runtime/tools-middleware.js');
     const out = await executeServerTool('run_python', {
       code: 'print("phase2-py")',
     });

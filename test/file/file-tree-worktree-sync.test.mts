@@ -37,6 +37,7 @@ import {
   resetSessionPersistenceForTests,
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import { installHappyDomGlobals, teardownHappyDomAsync } from '../os/dom-helpers.mts';
 
 const MAIN_WS = 'C:/projects/minnow';
@@ -54,6 +55,7 @@ function setupDom(): void {
 }
 
 beforeEach(() => {
+  setStorageModeForTests('localStorage');
   resetInstancesForTests();
   resetDesktopWorkspaceMountsForTests();
 });
@@ -72,6 +74,7 @@ afterEach(async () => {
   setFileTreeServerAvailable(false);
   resetInstancesForTests();
   resetDesktopWorkspaceMountsForTests();
+  setStorageModeForTests(null);
 });
 
 describe('resolvePanelWorktreeCwd', () => {
