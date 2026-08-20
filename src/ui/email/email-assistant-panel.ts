@@ -35,6 +35,7 @@ import {
   switchComposerDraft,
 } from '../composer-draft';
 import { initComposerDrop } from '../composer-drop';
+import { initComposerPaste } from '../composer-paste';
 import { handleComposerPromptHistoryKeydown } from '../composer-prompt-history';
 import {
   initComposerSteerInputListener,
@@ -269,6 +270,7 @@ export function mountEmailAssistantPanel(
   initComposerDraftListener(input);
   initComposerSlashPicker(input);
   initComposerDrop();
+  initComposerPaste();
   renderAttachPreview();
 
   /** Keep send, stop, and attachment affordances aligned with active chat state. */

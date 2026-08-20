@@ -51,6 +51,19 @@ const PROBE_SCHEMA = {
 const PROBE_IMAGE_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAH0lEQVR42mP4jwQYkAAucYZBqGGQO48oDaPxMCg0AADZV36QzYI8swAAAABJRU5ErkJggg==';
 
+/**
+ * Control payload for the vision probe: a well-formed `data:image/png` URL whose
+ * base64 body is not a PNG at all.
+ *
+ * Anything that actually decodes images rejects this. Gateways that pass image
+ * parts straight through to a text-only model — OpenCode Zen, several OpenAI
+ * proxies — answer 200 to both this and the real image, which used to be
+ * recorded as "vision: true" and left the user attaching screenshots to a model
+ * that could never see them.
+ */
+const PROBE_INVALID_IMAGE_DATA_URL =
+  'data:image/png;base64,bm90LWFuLWltYWdlLW1pbm5vdy1jYXBhYmlsaXR5LXByb2Jl';
+
 const DUMMY_TOOL = {
   type: 'function',
   function: {
@@ -370,19 +383,39 @@ function applyToolsProbe(cap, result) {
  * Record a vision probe result. Only a rejected request is evidence of "no vision";
  * a catalog row that already claims vision is left alone.
  *
+ * `control` is the {@link PROBE_INVALID_IMAGE_DATA_URL} request. Accepting the real
+ * image only counts as vision when the endpoint *rejected* the corrupt one — an
+ * endpoint that takes both is not looking at either, so the probe records nothing
+ * and lets the catalog (or the send-time attempt) decide.
+ *
  * @param {object} cap
  * @param {{ ok: boolean, status: number, text?: string }} result
+ * @param {{ ok: boolean, status: number, text?: string }} [control]
  */
-function applyVisionProbe(cap, result) {
+function applyVisionProbe(cap, result, control) {
   if (cap.vision === true) return;
-  cap.vision = result.ok;
-  cap.sources = { ...cap.sources, vision: 'probe' };
+
   if (!result.ok) {
+    cap.vision = false;
+    cap.sources = { ...cap.sources, vision: 'probe' };
     cap.probeErrors = {
       ...cap.probeErrors,
       vision: result.text?.trim().slice(0, 200) || `image probe rejected (HTTP ${result.status})`,
     };
+    return;
   }
+
+  if (control?.ok) {
+    cap.probeErrors = {
+      ...cap.probeErrors,
+      vision:
+        'endpoint also accepted a corrupt image — image input is passed through, not decoded',
+    };
+    return;
+  }
+
+  cap.vision = true;
+  cap.sources = { ...cap.sources, vision: 'probe' };
 }
 
 /**
@@ -475,32 +508,41 @@ async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
   }
 
   if (cap.streaming === true && cap.vision !== true) {
-    const visionProbe = createProbeAbortSignal(MODEL_PROBE_TIMEOUT_MS, signal);
-    try {
-      await generateText({
-        model: anthropic(modelId),
-        messages: openAiMessagesToCoreMessages([
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'ping' },
-              { type: 'image_url', image_url: { url: PROBE_IMAGE_DATA_URL } },
-            ],
-          },
-        ]),
-        maxOutputTokens: 1,
-        abortSignal: visionProbe.signal,
-      });
-      applyVisionProbe(cap, { ok: true, status: 200 });
-    } catch (err) {
-      applyVisionProbe(cap, {
-        ok: false,
-        status: 0,
-        text: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      visionProbe.dispose();
-    }
+    /** @param {string} dataUrl */
+    const runImageProbe = async (dataUrl) => {
+      const probe = createProbeAbortSignal(MODEL_PROBE_TIMEOUT_MS, signal);
+      try {
+        await generateText({
+          model: anthropic(modelId),
+          messages: openAiMessagesToCoreMessages([
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'ping' },
+                { type: 'image_url', image_url: { url: dataUrl } },
+              ],
+            },
+          ]),
+          maxOutputTokens: 1,
+          abortSignal: probe.signal,
+        });
+        return { ok: true, status: 200 };
+      } catch (err) {
+        return {
+          ok: false,
+          status: 0,
+          text: err instanceof Error ? err.message : String(err),
+        };
+      } finally {
+        probe.dispose();
+      }
+    };
+
+    const visionResult = await runImageProbe(PROBE_IMAGE_DATA_URL);
+    const controlResult = visionResult.ok
+      ? await runImageProbe(PROBE_INVALID_IMAGE_DATA_URL)
+      : undefined;
+    applyVisionProbe(cap, visionResult, controlResult);
   }
 
   return cap;
@@ -570,27 +612,40 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
   // Only meaningful once plain chat works — otherwise a rejected image says
   // nothing about vision (auth, wrong path, runtime down).
   if (chatResult.ok && cap.vision !== true) {
+    const imageProbeBody = (dataUrl) => ({
+      model: modelId,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'ping' },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+      max_tokens: 1,
+      stream: false,
+    });
+
     const visionResult = await postChatCompletion(
       url,
       runtime.headers,
-      {
-        model: modelId,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'ping' },
-              { type: 'image_url', image_url: { url: PROBE_IMAGE_DATA_URL } },
-            ],
-          },
-        ],
-        max_tokens: 1,
-        stream: false,
-      },
+      imageProbeBody(PROBE_IMAGE_DATA_URL),
       MODEL_PROBE_TIMEOUT_MS,
       signal,
     );
-    applyVisionProbe(cap, visionResult);
+    // Only worth asking when the real image was accepted — a rejection already
+    // settles it, and the control costs a second round-trip per model.
+    const controlResult = visionResult.ok
+      ? await postChatCompletion(
+          url,
+          runtime.headers,
+          imageProbeBody(PROBE_INVALID_IMAGE_DATA_URL),
+          MODEL_PROBE_TIMEOUT_MS,
+          signal,
+        )
+      : undefined;
+    applyVisionProbe(cap, visionResult, controlResult);
   }
 
   return cap;

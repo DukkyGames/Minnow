@@ -447,7 +447,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
         turnKind: 'user',
         chatId: chat.id,
         modeId: chat.modeId,
-      }, { renderFromHistory: true });
+      }, { renderFromHistory: true, persistedImages: userMsg.images });
       if (userMsg.steer) {
         markMessageSteered(wrap);
       }

@@ -1357,8 +1357,8 @@ export function render(): void {
   const footer = el('footer', 'models-inspector__footer');
   renderFooter(model, footer);
 
-  host.replaceChildren(head, tabs, body);
-  if (footer.childElementCount) host.appendChild(footer);
+  // Footer mount is always present so tab switches do not change panel height.
+  host.replaceChildren(head, tabs, body, footer);
 }
 
 /** Coalesce re-renders onto the next frame. */

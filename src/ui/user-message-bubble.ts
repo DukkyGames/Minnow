@@ -8,6 +8,7 @@ import {
   inferFileKindFromName,
 } from '../attachments/file-card';
 import type { Attachment } from '../attachments/types';
+import type { UserImageAttachment } from '../types';
 import { formatElementRefLabel } from '../attachments/element-ref-format';
 import { formatDesignRefLabel } from '../attachments/design-ref-format';
 import {
@@ -22,33 +23,44 @@ import { createCodeRefLinkButton } from './code-ref-link';
 export interface UserBubbleRenderOptions {
   /** Pending attachments from the composer (includes image data URLs). */
   liveAttachments?: Attachment[];
+  /**
+   * Image bytes stored on the history row. The composer's pending list is gone
+   * after the turn, so this is the only source of thumbnails once the app is
+   * reloaded or the chat is re-opened.
+   */
+  persistedImages?: UserImageAttachment[];
+}
+
+/** Stored bytes for one `[image: name]` placeholder, or undefined for old rows. */
+function findPersistedImageDataUrl(
+  name: string,
+  persisted?: UserImageAttachment[],
+): string | undefined {
+  return persisted?.find((image) => image.name === name)?.dataUrl;
 }
 
 function findLiveImageDataUrl(
   name: string,
-  liveAttachments?: Attachment[],
+  options?: UserBubbleRenderOptions,
 ): string | undefined {
-  if (!liveAttachments?.length) return undefined;
-  const hit = liveAttachments.find((a) => a.kind === 'image' && a.name === name);
-  return hit?.dataUrl;
+  const hit = options?.liveAttachments?.find((a) => a.kind === 'image' && a.name === name);
+  return hit?.dataUrl ?? findPersistedImageDataUrl(name, options?.persistedImages);
 }
 
 function findLiveElementRefDataUrl(
   name: string,
-  liveAttachments?: Attachment[],
+  options?: UserBubbleRenderOptions,
 ): string | undefined {
-  if (!liveAttachments?.length) return undefined;
-  const hit = liveAttachments.find((a) => a.kind === 'elementRef' && a.name === name);
-  return hit?.croppedDataUrl;
+  const hit = options?.liveAttachments?.find((a) => a.kind === 'elementRef' && a.name === name);
+  return hit?.croppedDataUrl ?? findPersistedImageDataUrl(name, options?.persistedImages);
 }
 
 function findLiveDesignRefDataUrl(
   name: string,
-  liveAttachments?: Attachment[],
+  options?: UserBubbleRenderOptions,
 ): string | undefined {
-  if (!liveAttachments?.length) return undefined;
-  const hit = liveAttachments.find((a) => a.kind === 'designRef' && a.name === name);
-  return hit?.compositedDataUrl;
+  const hit = options?.liveAttachments?.find((a) => a.kind === 'designRef' && a.name === name);
+  return hit?.compositedDataUrl ?? findPersistedImageDataUrl(name, options?.persistedImages);
 }
 
 /** Multi-line "open" body for an element-ref chip (selector, styles, outerHTML preview). */
@@ -276,7 +288,7 @@ export function renderUserMessageBubble(
   }
 
   for (const image of visibleImages) {
-    const dataUrl = findLiveImageDataUrl(image.name, live);
+    const dataUrl = findLiveImageDataUrl(image.name, options);
     row.appendChild(
       createMessageAttachChip(image.name, {
         kind: 'image',
@@ -296,7 +308,7 @@ export function renderUserMessageBubble(
 
   for (const ref of parsed.elementRefs) {
     const label = formatElementRefLabel(ref.selector, ref.pageUrl);
-    const dataUrl = ref.imageName ? findLiveElementRefDataUrl(ref.imageName, live) : undefined;
+    const dataUrl = ref.imageName ? findLiveElementRefDataUrl(ref.imageName, options) : undefined;
     const summary = elementRefSummaryText(ref);
     row.appendChild(
       createMessageAttachChip(label, {
@@ -310,7 +322,7 @@ export function renderUserMessageBubble(
 
   for (const ref of parsed.designRefs) {
     const label = formatDesignRefLabel(ref.kind, ref.pageUrl);
-    const dataUrl = ref.imageName ? findLiveDesignRefDataUrl(ref.imageName, live) : undefined;
+    const dataUrl = ref.imageName ? findLiveDesignRefDataUrl(ref.imageName, options) : undefined;
     row.appendChild(
       createMessageAttachChip(label, {
         kind: 'image',

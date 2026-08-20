@@ -83,6 +83,7 @@ import { initAttachments } from './attachments/store';
 import { initShellHandlers } from './ui/shell-handlers';
 import { installScopedSelectAllHandler } from './ui/scoped-select-all';
 import { initComposerDrop } from './ui/composer-drop';
+import { initComposerPaste } from './ui/composer-paste';
 import { initContextUsageRing, refreshContextUsageRing } from './ui/context-usage-ring';
 import { closeContextUsageBreakdown } from './ui/context-usage-breakdown';
 import {
@@ -352,6 +353,7 @@ export async function initApp(): Promise<void> {
   }
   initAllComposerSlashPickers();
   initComposerDrop();
+  initComposerPaste();
   initAppSidebarResizers();
   // Config cluster — independent loads; run in parallel while the user picks a folder.
   markBootPhase('config');

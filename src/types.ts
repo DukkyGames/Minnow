@@ -103,9 +103,23 @@ export interface LlamaPromptProgress {
   time_ms: number;
 }
 
+/**
+ * Pixels the user attached to a message, persisted so they survive a reload and
+ * stay visible to the model on later turns. `content` still carries the matching
+ * `[image: name]` placeholder for the transcript and for text-only models.
+ */
+export interface UserImageAttachment {
+  /** Attachment name — matches the `[image: name]` placeholder in `content`. */
+  name: string;
+  /** `data:image/…;base64,…` payload sent as an `image_url` content part. */
+  dataUrl: string;
+}
+
 export interface UserMessage {
   role: 'user';
   content: string;
+  /** Attached image bytes (drag-drop, paste, Design Mode crop). Vision models only. */
+  images?: UserImageAttachment[];
   /** True when the row was injected via steer consume (interrupt-and-steer). */
   steer?: boolean;
   /** True when the row records a satisfied /goal completion condition. */

@@ -73,11 +73,17 @@ export function getModelRowForSelectOrCanonicalId(modelIdOrKey: string): LmModel
   if (decoded) {
     return modelCache.get(encodeModelSelectKey(decoded.providerId, decoded.modelId));
   }
-  const chat = getActiveChat();
-  const pid = chat.providerId?.trim();
-  if (pid) {
-    const byChat = modelCache.get(encodeModelSelectKey(pid, trimmed));
-    if (byChat) return byChat;
+  // Scoping by the active chat's provider is a refinement, not a requirement —
+  // callers reach here from paths (outbound payload building, capability reads)
+  // that must not fail just because the session store has not loaded yet.
+  try {
+    const pid = getActiveChat().providerId?.trim();
+    if (pid) {
+      const byChat = modelCache.get(encodeModelSelectKey(pid, trimmed));
+      if (byChat) return byChat;
+    }
+  } catch {
+    // No session state yet — fall through to the canonical-id scan.
   }
   const k = findFirstSelectKeyForCanonicalModelId(modelCache.keys(), trimmed);
   return k ? modelCache.get(k) : undefined;

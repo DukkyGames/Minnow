@@ -5,7 +5,7 @@
 
 import { apiMessageContentToText, contentPartsToText } from '../api/message-content.ts';
 import {
-  ESTIMATE_IMAGE_URL_TOKENS,
+  imagePaddingForEstimate,
   estimateTokensFromText,
 } from './prompts/token-estimate-core';
 import type { ApiMessage, ContentPart } from '../types';
@@ -75,11 +75,8 @@ export function serializeApiMessageForEstimate(msg: ApiMessage): string {
   if (msg.role === 'user') {
     const text = apiMessageContentToText(msg.content);
     if (Array.isArray(msg.content)) {
-      let extra = 0;
-      for (const part of msg.content) {
-        if (part.type === 'image_url') extra += ESTIMATE_IMAGE_URL_TOKENS;
-      }
-      return text + ' '.repeat(extra);
+      const images = msg.content.filter((part) => part.type === 'image_url').length;
+      return text + imagePaddingForEstimate(images);
     }
     return text;
   }

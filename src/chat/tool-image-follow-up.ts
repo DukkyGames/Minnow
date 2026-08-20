@@ -56,3 +56,10 @@ export function toolMessageHasImageAttachment(message: Message): boolean {
   if (message.role !== 'tool' || !message.attachments?.length) return false;
   return message.attachments.some((att) => att.type === 'image');
 }
+
+/**
+ * Appended to a user message whose attached images could not be sent as pixels.
+ * Without it the model sees only `[image: name]` and reports a missing tool.
+ */
+export const USER_IMAGE_NO_VISION_HINT =
+  '\n\n(The user attached the image(s) named above, but the current model cannot accept image input, so the pixels were not sent. There is no tool that can read them — say you cannot see the image and suggest switching to a vision model.)';

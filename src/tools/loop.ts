@@ -46,6 +46,10 @@ import {
   replacePendingAttachments,
 } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
+import {
+  attachmentImageDataUrl,
+  attachmentsHaveImages,
+} from '../attachments/attachment-image';
 import { codeRefHistoryBlock, isCodeRefAttachment } from '../attachments/code-ref';
 import { elementRefHistoryBlock, isElementRefAttachment } from '../attachments/element-ref';
 import { designRefHistoryBlock, isDesignRefAttachment } from '../attachments/design-ref';
@@ -150,6 +154,7 @@ import type {
   TurnSnapshot,
   Stats,
   Usage,
+  UserImageAttachment,
   UserMessage,
 } from '../types';
 import { markMessageStopped } from '../ui/stopped-affordance';
@@ -253,7 +258,13 @@ import {
   syncPerChatModelBindingFromCatalog,
 } from '../ui/default-model';
 import { getActiveProvider } from '../providers/store';
-import { isVisionModel } from '../providers/vision-model.ts';
+import {
+  canSendImagesToModel,
+  isImageRejectionError,
+  isVisionModel,
+  recordImageRejection,
+} from '../providers/vision-model.ts';
+import { bodyHasImageParts, stripImagePartsFromBody } from '../api/image-parts';
 import {
   getToolCallsMetaSync,
   isConstrainedDecodingEnabledForProvider,
@@ -291,6 +302,7 @@ import {
   TOOL_IMAGE_NO_VISION_HINT,
   toolImageFollowUpUserMessage,
   toolMessageHasImageAttachment,
+  USER_IMAGE_NO_VISION_HINT,
 } from '../chat/tool-image-follow-up';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
@@ -427,12 +439,7 @@ function indexOfMultimodalUserMessage(
   history: Message[],
   pending: Attachment[],
 ): number {
-  const hasPendingImages = pending.some(
-    (a) =>
-      (a.kind === 'image' && a.dataUrl) ||
-      (a.kind === 'elementRef' && a.croppedDataUrl) ||
-      (a.kind === 'designRef' && a.compositedDataUrl),
-  );
+  const hasPendingImages = attachmentsHaveImages(pending);
   if (!hasPendingImages) {
     return indexOfLastUserMessage(history);
   }
@@ -447,14 +454,7 @@ function indexOfMultimodalUserMessage(
 
 /** Skip ask_question prose retry when this turn includes image input. */
 function turnHasImageContext(chat: Chat, pending: Attachment[]): boolean {
-  if (
-    pending.some(
-      (a) =>
-        (a.kind === 'image' && a.dataUrl) ||
-        (a.kind === 'elementRef' && a.croppedDataUrl) ||
-        (a.kind === 'designRef' && a.compositedDataUrl),
-    )
-  ) {
+  if (attachmentsHaveImages(pending)) {
     return true;
   }
   for (const m of chat.history) {
@@ -540,12 +540,20 @@ export function buildHistoryUserContent(
   return parts.join('\n\n');
 }
 
-/** Non-VLM API payload: one string with text, file blocks, and image placeholders. */
+/**
+ * Non-VLM API payload: one string with text, file blocks, and image placeholders.
+ *
+ * A bare `[image: shot.png]` reads to the model like a file it should go fetch,
+ * so it answers "I don't have an image tool" instead of saying it cannot see.
+ * Spell out what actually happened whenever pixels were dropped.
+ */
 function buildStringUserApiContent(
   userText: string,
   attachments: Attachment[],
 ): string {
-  return buildHistoryUserContent(userText, attachments);
+  const content = buildHistoryUserContent(userText, attachments);
+  if (!attachmentsHaveImages(attachments)) return content;
+  return `${content}${USER_IMAGE_NO_VISION_HINT}`;
 }
 
 /** VLM API payload: text part plus image_url parts (no image placeholders in text). */
@@ -615,30 +623,82 @@ export function buildVlmUserApiContent(
   }
 
   for (const att of attachments) {
-    if (att.kind === 'image' && att.dataUrl) {
-      parts.push({
-        type: 'image_url',
-        image_url: { url: att.dataUrl, detail: 'auto' },
-      });
-    }
-    if (att.kind === 'elementRef' && att.croppedDataUrl) {
-      parts.push({
-        type: 'image_url',
-        image_url: { url: att.croppedDataUrl, detail: 'auto' },
-      });
-    }
-    if (att.kind === 'designRef' && att.compositedDataUrl) {
-      parts.push({
-        type: 'image_url',
-        image_url: { url: att.compositedDataUrl, detail: 'auto' },
-      });
-    }
+    const url = attachmentImageDataUrl(att);
+    if (!url) continue;
+    parts.push({ type: 'image_url', image_url: { url, detail: 'auto' } });
   }
 
   if (parts.length === 0) {
     parts.push({ type: 'text', text: trimmed || '' });
   }
 
+  return parts;
+}
+
+/**
+ * Ceiling on image bytes stored per user row. Sessions are one JSON blob, so a
+ * handful of 4K screenshots would make every save rewrite tens of megabytes;
+ * over the cap the turn still sends the pixels, they just are not persisted.
+ */
+const MAX_PERSISTED_IMAGE_BYTES = 6 * 1024 * 1024;
+
+/** Composer attachments → the image records stored on the pushed user row. */
+export function persistableUserImages(
+  attachments: Attachment[],
+): UserImageAttachment[] {
+  const out: UserImageAttachment[] = [];
+  let bytes = 0;
+  for (const att of attachments) {
+    const dataUrl = attachmentImageDataUrl(att);
+    if (!dataUrl?.startsWith('data:image/')) continue;
+    bytes += dataUrl.length;
+    if (bytes > MAX_PERSISTED_IMAGE_BYTES) break;
+    out.push({ name: att.name, dataUrl });
+  }
+  return out;
+}
+
+/**
+ * Most recent persisted user images replayed per request. Every replayed image
+ * costs its full token price on every later turn, so an old screenshot must not
+ * quietly eat the context window for the rest of the chat.
+ */
+const MAX_REPLAYED_HISTORY_IMAGES = 6;
+
+/**
+ * History rows whose persisted images should ride along as `image_url` parts.
+ * Walks newest-first so the budget is spent on what the user just asked about,
+ * and skips the row that already receives the in-flight composer attachments.
+ */
+function historyImageReplayIndices(
+  history: Message[],
+  multimodalUserIdx: number,
+): Set<number> {
+  const indices = new Set<number>();
+  let budget = MAX_REPLAYED_HISTORY_IMAGES;
+  for (let i = history.length - 1; i >= 0 && budget > 0; i -= 1) {
+    if (i === multimodalUserIdx) continue;
+    const m = history[i];
+    if (m.role !== 'user') continue;
+    const count = m.images?.length ?? 0;
+    if (count === 0) continue;
+    indices.add(i);
+    budget -= count;
+  }
+  return indices;
+}
+
+/** Persisted user row → multimodal content so the model can re-read the pixels. */
+function replayUserImageContent(message: UserMessage): ApiMessageContent {
+  const parts: ContentPart[] = [];
+  if (message.content.trim()) {
+    parts.push({ type: 'text', text: message.content });
+  }
+  for (const image of message.images ?? []) {
+    if (!image.dataUrl?.startsWith('data:image/')) continue;
+    parts.push({ type: 'image_url', image_url: { url: image.dataUrl, detail: 'auto' } });
+  }
+  if (parts.length === 0) return message.content;
   return parts;
 }
 
@@ -714,7 +774,14 @@ export function buildApiMessages(
   const outboundHistory = copyHistoryForOutboundApi(chat.history);
   const multimodalUserIdx = indexOfMultimodalUserMessage(outboundHistory, pending);
   const modelId = options?.modelId;
+  // Tool screenshots are injected by Minnow, so they stay conservative: a wasted
+  // 400 mid-tool-loop is worse than a text-only result. Images the user attached
+  // by hand get the benefit of the doubt — see `canSendImagesToModel`.
   const vlm = options?.vision ?? isVisionModel(modelId);
+  const sendUserImages = options?.vision ?? canSendImagesToModel(modelId);
+  const replayIndices = sendUserImages
+    ? historyImageReplayIndices(outboundHistory, multimodalUserIdx)
+    : new Set<number>();
 
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
@@ -723,10 +790,12 @@ export function buildApiMessages(
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
         const userText = options?.pendingUserText ?? m.content;
-        const content: ApiMessageContent = vlm
+        const content: ApiMessageContent = sendUserImages
           ? buildVlmUserApiContent(userText, pending)
           : buildStringUserApiContent(userText, pending);
         messages.push({ role: 'user', content });
+      } else if (replayIndices.has(i)) {
+        messages.push({ role: 'user', content: replayUserImageContent(m) });
       } else {
         messages.push({ role: 'user', content: m.content });
       }
@@ -1366,13 +1435,20 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       scheduleSaveSessions();
     }
     clearComposerDraftOnChat(chat);
-    chat.history.push(
+    const pushedUserRow: Message =
       superPlanStage
         ? superPlanPipelineUserMessage(historyContent, superPlanStage)
         : hideUserEcho
           ? hiddenTranscriptUserMessage(historyContent)
-          : { role: 'user', content: historyContent },
-    );
+          : { role: 'user', content: historyContent };
+    // Persist the bytes, not just the `[image: name]` marker: without this the
+    // transcript loses its thumbnails on reload and the model can never look at
+    // the image again after the turn it was attached on.
+    const persistedImages = persistableUserImages(validAttachments);
+    if (pushedUserRow.role === 'user' && persistedImages.length > 0) {
+      pushedUserRow.images = persistedImages;
+    }
+    chat.history.push(pushedUserRow);
     recordChatMessage(chat);
     scheduleSaveSessions();
     syncTurnContextUsage(chat.id, '', null);
@@ -2148,6 +2224,20 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               logConstrainedDebug('strip_retry', { providerId: provider.id });
               usedConstrained = false;
               currentBody = stripResponseFormatFromBody(currentBody);
+              turnResult = await runStreamTurn(currentBody, streamOpts());
+            } else if (
+              bodyHasImageParts(currentBody) &&
+              isImageRejectionError(streamErr)
+            ) {
+              // Minnow sends attached pixels to any model that has not been
+              // *proven* text-only. This is where that bet is settled: drop the
+              // images, tell the model why, and remember so the next turn on
+              // this model skips the wasted round-trip entirely.
+              recordImageRejection(sendModelId);
+              currentBody = stripImagePartsFromBody(currentBody);
+              if (isStreamDomVisible(chat.id)) {
+                setStatus('err', 'Model rejected the image — resent without it');
+              }
               turnResult = await runStreamTurn(currentBody, streamOpts());
             } else {
               throw streamErr;
@@ -3359,6 +3449,13 @@ export async function sendMessageWithTools(
     return;
   }
   replacePendingAttachments(resolvedAttachments);
+
+  // Say it up front when the pixels are not going to make it. The model is told
+  // too (USER_IMAGE_NO_VISION_HINT), but the user should not have to read the
+  // reply to find out their screenshot was dropped.
+  if (attachmentsHaveImages(validAttachments) && !canSendImagesToModel(sendModelId)) {
+    setStatus('err', 'This model cannot read images — sending the text only');
+  }
 
   const { shouldRouteComposerSendToSuperPlan, startPlanningFromComposer } = await import(
     '../ui/orchestrate-plan-screen'

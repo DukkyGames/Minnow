@@ -16,6 +16,17 @@ export function estimateTokensFromText(text: string): number {
 /** Fixed per-image token proxy (aligned with API `image_url` budgeting). */
 export const ESTIMATE_IMAGE_URL_TOKENS = 256;
 
+/**
+ * Filler that costs {@link ESTIMATE_IMAGE_URL_TOKENS} per image once run through
+ * {@link estimateTokensFromText}. Image parts carry no text to measure, so every
+ * estimator prices them by padding the serialized row — and the padding is in
+ * *characters*, which is four per token.
+ */
+export function imagePaddingForEstimate(imageCount: number): string {
+  if (imageCount <= 0) return '';
+  return ' '.repeat(imageCount * ESTIMATE_IMAGE_URL_TOKENS * 4);
+}
+
 /** User-facing label for a token count. */
 export function formatTokenEstimateLabel(tokens: number): string {
   if (!Number.isFinite(tokens) || tokens < 0) return '—';
@@ -41,6 +52,24 @@ export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[
   for (const m of history) {
     if (isUiOnlyTranscriptMessage(m)) continue;
     if (m.role === 'user') {
+      // Stored attachment pixels ride along on later turns (see the replay in
+      // buildApiMessages), so the estimate has to price them. Slightly high when
+      // the replay budget trims older images — never low, which would let a chat
+      // blow past the window without warning.
+      const images = m.images ?? [];
+      if (images.length > 0) {
+        messages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: m.content },
+            ...images.map((image) => ({
+              type: 'image_url' as const,
+              image_url: { url: image.dataUrl, detail: 'auto' as const },
+            })),
+          ],
+        });
+        continue;
+      }
       messages.push({ role: 'user', content: m.content });
       continue;
     }
@@ -72,7 +101,12 @@ export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[
 
 /** Serialize one history row the same way outbound API messages count payload size. */
 export function serializeMessageContentForEstimate(m: Message): string {
-  if (m.role === 'user') return m.content;
+  if (m.role === 'user') {
+    const imageCount = m.images?.length ?? 0;
+    if (imageCount === 0) return m.content;
+    // Same fixed per-image proxy the outbound budget uses.
+    return m.content + imagePaddingForEstimate(imageCount);
+  }
   if (m.role === 'tool') return m.content;
   if (m.role === 'assistant') {
     const withTools = m as AssistantToolCallMessage;

@@ -1,6 +1,7 @@
 /**
- * OpenCode Zen / Go model lists omit context_length on /v1/models.
- * OpenCode resolves limits from models.dev — mirror that for Minnow catalog rows.
+ * OpenCode Zen / Go model lists omit both context_length and any vision signal on
+ * /v1/models. OpenCode resolves those from models.dev — mirror that for Minnow
+ * catalog rows, so a text-only model is never advertised as multimodal.
  */
 
 const MODELS_DEV_URL = 'https://models.dev/api.json';
@@ -8,7 +9,15 @@ const MODELS_DEV_TIMEOUT_MS = 20_000;
 /** Refresh catalog daily; limits change infrequently. */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** @type {{ fetchedAt: number, models: Record<string, { limit?: { context?: number } }> | null }} */
+/**
+ * @typedef {{
+ *   limit?: { context?: number },
+ *   attachment?: boolean,
+ *   modalities?: { input?: string[], output?: string[] },
+ * }} ModelsDevEntry
+ */
+
+/** @type {{ fetchedAt: number, models: Record<string, ModelsDevEntry> | null }} */
 const cache = { fetchedAt: 0, models: null };
 
 /**
@@ -26,7 +35,7 @@ export function isOpenCodeProviderBaseUrl(baseUrl) {
 }
 
 /**
- * @returns {Promise<Record<string, { limit?: { context?: number } }>>}
+ * @returns {Promise<Record<string, ModelsDevEntry>>}
  */
 async function loadOpenCodeModelsDevCatalog() {
   const now = Date.now();
@@ -44,7 +53,7 @@ async function loadOpenCodeModelsDevCatalog() {
     const json = await res.json();
     const models =
       json?.opencode?.models && typeof json.opencode.models === 'object'
-        ? /** @type {Record<string, { limit?: { context?: number } }>} */ (json.opencode.models)
+        ? /** @type {Record<string, ModelsDevEntry>} */ (json.opencode.models)
         : {};
     cache.fetchedAt = now;
     cache.models = models;
@@ -55,10 +64,30 @@ async function loadOpenCodeModelsDevCatalog() {
 }
 
 /**
- * Attach max_context_length from models.dev when OpenCode upstream omits it.
- * Exact model id match only — authoritative for opencode.ai providers.
+ * Image-input support for one models.dev entry, or undefined when it says nothing.
  *
- * @param {{ data: Array<{ id: string, max_context_length?: number, [key: string]: unknown }> }} normalized
+ * `modalities.input` is the precise field; `attachment` is the older flag and is
+ * only read as a positive, since plenty of vision models predate it being set.
+ *
+ * @param {ModelsDevEntry | undefined} entry
+ * @returns {boolean | undefined}
+ */
+export function modelsDevVisionFlag(entry) {
+  const input = entry?.modalities?.input;
+  if (Array.isArray(input) && input.length > 0) {
+    return input.some((m) => typeof m === 'string' && /^images?$/i.test(m.trim()));
+  }
+  if (entry?.attachment === true) return true;
+  return undefined;
+}
+
+/**
+ * Attach max_context_length and vision support from models.dev when OpenCode
+ * upstream omits them. Exact model id match only — authoritative for opencode.ai
+ * providers, including the negative case: `modalities.input: ["text"]` is how a
+ * text-only model stops being probed (and mis-reported) as multimodal.
+ *
+ * @param {{ data: Array<{ id: string, max_context_length?: number, catalogVision?: boolean, [key: string]: unknown }> }} normalized
  */
 export async function enrichOpenCodeModelsFromModelsDev(normalized) {
   if (!normalized?.data?.length) {
@@ -74,11 +103,19 @@ export async function enrichOpenCodeModelsFromModelsDev(normalized) {
   }
 
   const data = normalized.data.map((row) => {
-    const devLimit = catalog[row.id]?.limit?.context;
-    if (typeof devLimit !== 'number' || !Number.isFinite(devLimit) || devLimit <= 0) {
-      return row;
+    const entry = catalog[row.id];
+    if (!entry) return row;
+
+    const next = { ...row };
+    const devLimit = entry.limit?.context;
+    if (typeof devLimit === 'number' && Number.isFinite(devLimit) && devLimit > 0) {
+      next.max_context_length = devLimit;
     }
-    return { ...row, max_context_length: devLimit };
+    const vision = modelsDevVisionFlag(entry);
+    if (vision !== undefined) {
+      next.catalogVision = vision;
+    }
+    return next;
   });
 
   return { data };

@@ -507,7 +507,7 @@ describe('openai-v1 capabilities/probe route', () => {
         res.setHeader('Content-Type', 'application/json');
         res.end(
           JSON.stringify({
-            data: [{ id: 'sees-images' }, { id: 'text-only' }],
+            data: [{ id: 'sees-images' }, { id: 'text-only' }, { id: 'passthrough' }],
           }),
         );
         return;
@@ -519,12 +519,22 @@ describe('openai-v1 capabilities/probe route', () => {
         });
         req.on('end', () => {
           const parsed = JSON.parse(body);
-          const hasImage = JSON.stringify(parsed.messages).includes('image_url');
+          const serialized = JSON.stringify(parsed.messages);
+          const hasImage = serialized.includes('image_url');
+          // Real PNG bytes always start `iVBOR` once base64-encoded.
+          const decodesImage = serialized.includes('base64,iVBOR');
           seen.push({ model: parsed.model, hasImage });
           res.setHeader('Content-Type', 'application/json');
           if (hasImage && parsed.model === 'text-only') {
             res.statusCode = 400;
             res.end(JSON.stringify({ error: 'model does not support images' }));
+            return;
+          }
+          // A model that really decodes images refuses a corrupt payload; the
+          // `passthrough` gateway answers 200 without ever looking at it.
+          if (hasImage && parsed.model === 'sees-images' && !decodesImage) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'invalid image data' }));
             return;
           }
           res.end(
@@ -553,7 +563,7 @@ describe('openai-v1 capabilities/probe route', () => {
         baseUrl,
         'POST',
         '/api/providers/probe-vision/capabilities/probe',
-        { modelIds: ['sees-images', 'text-only'] },
+        { modelIds: ['sees-images', 'text-only', 'passthrough'] },
       );
       assert.equal(res.status, 200);
       assert.equal(res.json.models['sees-images'].vision, true);
@@ -561,7 +571,13 @@ describe('openai-v1 capabilities/probe route', () => {
       assert.equal(res.json.models['text-only'].vision, false);
       assert.equal(res.json.models['text-only'].sources.vision, 'probe');
       assert.match(res.json.models['text-only'].probeErrors.vision, /support/i);
-      assert.equal(seen.filter((r) => r.hasImage).length, 2);
+      // Accepting a corrupt image proves the endpoint is not decoding images, so
+      // the probe must not claim vision — it records why and leaves it unknown.
+      assert.notEqual(res.json.models['passthrough'].vision, true);
+      assert.notEqual(res.json.models['passthrough'].sources?.vision, 'probe');
+      assert.match(res.json.models['passthrough'].probeErrors.vision, /corrupt image/i);
+      // Real image for all three, plus the control for the two that accepted it.
+      assert.equal(seen.filter((r) => r.hasImage).length, 5);
     } finally {
       await new Promise((resolve) => visionMock.close(resolve));
     }

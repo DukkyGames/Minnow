@@ -8,6 +8,7 @@ import { formatModelLabel } from '../lib/format-model-label';
 import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
 import { modelCache } from '../app-state';
 import type { Attachment } from '../attachments/types';
+import { attachmentImageDataUrl } from '../attachments/attachment-image';
 import type { Chat, LmModelRecord } from '../types';
 import {
   estimateInFlightOverlayTokens,
@@ -75,12 +76,15 @@ export function estimateAttachmentTokens(attachments: Attachment[]): number {
       total += estimateTokensFromText(attachment.text);
       continue;
     }
+    // API sends image_url parts, not base64 in text — cap per image like
+    // context-budget. Covers Design Mode crops and annotations too, which carry
+    // their pixels under different field names.
+    if (attachmentImageDataUrl(attachment)) {
+      total += ESTIMATE_IMAGE_URL_TOKENS;
+      continue;
+    }
     if (attachment.dataUrl) {
-      // API sends image_url parts, not base64 in text — cap per image like context-budget.
-      total +=
-        attachment.kind === 'image'
-          ? ESTIMATE_IMAGE_URL_TOKENS
-          : estimateTokensFromText(attachment.dataUrl);
+      total += estimateTokensFromText(attachment.dataUrl);
       continue;
     }
     if (attachment.workspacePath) {
