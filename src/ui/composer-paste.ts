@@ -27,24 +27,27 @@ function nameForPastedImage(file: File, index: number): string {
 /** Image files on a clipboard payload, renamed for the attachment chip. */
 export function imageFilesFromClipboard(data: DataTransfer | null): File[] {
   if (!data) return [];
-  const out: File[] = [];
-  const seen = new Set<File>();
+  const raw: File[] = [];
 
+  // Prefer DataTransferItemList — it is the canonical paste API. Chromium and
+  // Electron mirror the same blob into `.files` as a second File instance, so
+  // merging both lists without deduping produces duplicate attachment chips.
   for (const item of Array.from(data.items ?? [])) {
     if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
     const file = item.getAsFile();
-    if (file) seen.add(file);
-  }
-  for (const file of Array.from(data.files ?? [])) {
-    if (file.type.startsWith('image/')) seen.add(file);
+    if (file) raw.push(file);
   }
 
-  let index = 0;
-  for (const file of seen) {
-    out.push(new File([file], nameForPastedImage(file, index), { type: file.type }));
-    index += 1;
+  // Some hosts only expose clipboard files on `.files` (no items list).
+  if (raw.length === 0) {
+    for (const file of Array.from(data.files ?? [])) {
+      if (file.type.startsWith('image/')) raw.push(file);
+    }
   }
-  return out;
+
+  return raw.map((file, index) =>
+    new File([file], nameForPastedImage(file, index), { type: file.type }),
+  );
 }
 
 /**

@@ -13,13 +13,21 @@ function clipboard(options: {
   files?: File[];
   text?: string;
   itemsOnly?: boolean;
+  /** When set, items and files lists use different File instances (Chromium paste). */
+  splitItemAndFileRefs?: boolean;
 }): DataTransfer {
   const files = options.files ?? [];
-  const items = files.map((file) => ({
-    kind: 'file' as const,
-    type: file.type,
-    getAsFile: () => file,
-  }));
+  const items = files.map((file, index) => {
+    const itemFile =
+      options.splitItemAndFileRefs && index === 0
+        ? new File([file], file.name, { type: file.type })
+        : file;
+    return {
+      kind: 'file' as const,
+      type: file.type,
+      getAsFile: () => itemFile,
+    };
+  });
   return {
     items,
     files: options.itemsOnly ? [] : files,
@@ -70,6 +78,17 @@ describe('imageFilesFromClipboard', () => {
 
   it('does not double-count a file present in both items and files', () => {
     assert.equal(imageFilesFromClipboard(clipboard({ files: [png('shot.png')] })).length, 1);
+  });
+
+  it('does not double-count when items and files are separate File instances', () => {
+    // Chromium/Electron paste: getAsFile() and .files[i] are the same blob but
+    // not the same object — Set<File> identity dedupe would miss this.
+    assert.equal(
+      imageFilesFromClipboard(
+        clipboard({ files: [png('image.png')], splitItemAndFileRefs: true }),
+      ).length,
+      1,
+    );
   });
 
   it('ignores non-image clipboard files', () => {

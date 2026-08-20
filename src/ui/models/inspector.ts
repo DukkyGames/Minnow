@@ -107,7 +107,8 @@ let llamaVariantFetched = false;
  * Which advanced Load-tab groups are open, kept across re-renders after a slider
  * touch. Keys are the `advancedSection` ids below.
  */
-const loadSectionOpen = new Set<string>();
+/** Memory and Sampling match the LM Studio default: open on first visit. */
+const loadSectionOpen = new Set<string>(['memory', 'sampling']);
 
 /**
  * `--cache-type-k/v` values, ordered largest to smallest. The shared "KV cache" select
@@ -504,7 +505,9 @@ function advancedSection(key: string, title: string, ...children: Node[]): HTMLE
     else loadSectionOpen.delete(key);
   });
   section.appendChild(el('summary', 'models-advanced__summary', title));
-  section.append(...children);
+  const body = el('div', 'models-advanced__body');
+  body.append(...children);
+  section.appendChild(body);
   return section;
 }
 
@@ -932,7 +935,9 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     persistDraft(model, applyPassThroughTouch(draftFor(model.id), displayed, patch));
   };
 
-  body.appendChild(
+  const advancedStack = el('div', 'models-advanced-stack');
+
+  advancedStack.appendChild(
     advancedSection(
       'performance',
       'Performance',
@@ -960,9 +965,7 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     ),
   );
 
-  const kvSection = advancedSection(
-    'kv-cache',
-    'KV cache',
+  const kvChildren: Node[] = [
     checkboxField('Unified KV cache', draft?.kv_unified === true, (checked) => {
       touch({ kv_unified: checked ? true : undefined });
     }),
@@ -995,9 +998,9 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
       touch({ swa_full: checked ? true : undefined });
       refreshAfterTouch();
     }),
-  );
+  ];
   if (draft?.flash_attn === 'off') {
-    kvSection.appendChild(
+    kvChildren.push(
       el(
         'p',
         'models-hint models-hint--warning',
@@ -1005,11 +1008,12 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
       ),
     );
   }
-  body.appendChild(kvSection);
+  const kvSection = advancedSection('kv-cache', 'KV cache', ...kvChildren);
+  advancedStack.appendChild(kvSection);
 
-  body.appendChild(speculativeSection(model, touch, refreshAfterTouch));
+  advancedStack.appendChild(speculativeSection(model, touch, refreshAfterTouch));
 
-  body.appendChild(
+  advancedStack.appendChild(
     advancedSection(
       'memory',
       'Memory',
@@ -1036,7 +1040,7 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     ),
   );
 
-  body.appendChild(
+  advancedStack.appendChild(
     advancedSection(
       'sampling',
       'Sampling & template',
@@ -1081,7 +1085,7 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     touch({ extra_args: tokens.length ? tokens : undefined });
   });
   extraWrap.appendChild(extraInput);
-  body.appendChild(
+  advancedStack.appendChild(
     advancedSection(
       'escape-hatch',
       'Escape hatch',
@@ -1089,6 +1093,8 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
       el('p', 'models-hint', 'Anything set here wins over every field above.'),
     ),
   );
+
+  body.appendChild(advancedStack);
 }
 
 

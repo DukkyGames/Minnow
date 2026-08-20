@@ -66,6 +66,7 @@ describe('models inspector footer', () => {
     );
     assert.ok(btn, 'footer should include a primary Load button');
     assert.equal(btn?.textContent, 'Load model');
+    assert.ok(document.querySelector('.models-inspector__footer'));
     assert.ok(
       document.querySelector('.models-launch-memory.models-launch-memory-hint'),
       'Load tab should show the launch memory occupancy cluster',

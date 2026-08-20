@@ -89,7 +89,7 @@ html:not(.minnow-os-enabled) .models-page.is-open {
    descendants of its container, never the container element itself. */
 .models-page-body {
   --models-rail-w: 212px;
-  --models-inspector-w: 336px;
+  --models-inspector-w: 360px;
   --models-gutter: 20px;
 
   position: relative;
@@ -442,7 +442,7 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 4px 16px 20px;
+  padding: 8px 16px 24px;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -451,6 +451,11 @@ html:not(.minnow-os-enabled) .models-page.is-open {
 .models-inspector__block {
   padding: 16px 0;
   border-bottom: 1px solid var(--mn-border);
+}
+
+/* Launch controls sit above the advanced accordion; its top border is enough. */
+.models-inspector__block:has(+ .models-advanced-stack) {
+  border-bottom: none;
 }
 
 .models-inspector__block:last-child {
@@ -1919,26 +1924,113 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   border-style: dashed;
 }
 
-/* Stacked collapsible groups in the Load tab: each rule is the divider above it. */
-.models-advanced {
-  padding-top: 16px;
+/* Stacked collapsible groups in the Load tab — LM Studio-style accordions. */
+.models-advanced-stack {
+  margin-top: 4px;
   border-top: 1px solid var(--mn-border);
 }
 
-.models-advanced[open] {
-  padding-bottom: 8px;
+.models-advanced {
+  border-top: 1px solid var(--mn-border);
+}
+
+.models-advanced-stack > .models-advanced:first-child {
+  border-top: none;
 }
 
 .models-advanced__summary {
-  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 11px 0;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--mn-fg-muted);
+  color: var(--mn-fg);
+  letter-spacing: -0.01em;
+  text-transform: none;
   cursor: pointer;
+  list-style: none;
+  user-select: none;
 }
 
-/* Only open groups need the gap; a run of closed summaries stays evenly spaced. */
-.models-advanced[open] > .models-advanced__summary {
-  margin-bottom: 12px;
+.models-advanced__summary::-webkit-details-marker {
+  display: none;
+}
+
+.models-advanced__summary::before {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  content: '';
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--mn-fg-muted);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.models-advanced[open] > .models-advanced__summary::before {
+  transform: rotate(90deg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .models-advanced__summary:hover {
+    color: var(--mn-fg);
+  }
+
+  .models-advanced__summary:hover::before {
+    border-left-color: var(--mn-fg);
+  }
+}
+
+.models-advanced__summary:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.models-advanced[open] {
+  padding-bottom: 4px;
+}
+
+.models-advanced__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 0 14px 13px;
+}
+
+.models-advanced__body .models-field,
+.models-advanced__body .models-field-block {
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.models-advanced__body .models-field__label {
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.models-advanced__body .models-field__input {
+  height: 34px;
+}
+
+.models-advanced__body .models-field--check {
+  gap: 10px;
+  align-items: flex-start;
+  min-height: 34px;
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mn-fg);
+}
+
+.models-advanced__body .models-field--check input {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.models-advanced__body .models-hint {
+  margin: -4px 0 0;
 }
 
 .models-copy-field {
