@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   classifyLogLine,
   describeLoadPhase,
+  foldServeLogEvent,
   matchServeLoadPhase,
   parseLoadProgress,
   toLogLines,
@@ -70,6 +71,26 @@ describe('describeLoadPhase', () => {
       'srv  update_slots: all slots are idle',
     ].join('\n');
     assert.equal(matchServeLoadPhase(log).key, 'listening');
+  });
+});
+
+describe('foldServeLogEvent', () => {
+  test('replaces on the initial tail, then appends deltas', () => {
+    const afterTail = foldServeLogEvent('', {
+      text: 'load_tensors: loading model tensors\n',
+      initial: true,
+    });
+    assert.equal(afterTail, 'load_tensors: loading model tensors\n');
+    const afterDots = foldServeLogEvent(afterTail, { text: '....' });
+    assert.equal(afterDots, 'load_tensors: loading model tensors\n....');
+  });
+
+  test('an initial event after a reconnect replaces, it does not double the tail', () => {
+    const folded = foldServeLogEvent('stale buffer', {
+      text: 'llama_kv_cache: size = 512.00 MiB\n',
+      initial: true,
+    });
+    assert.equal(folded, 'llama_kv_cache: size = 512.00 MiB\n');
   });
 });
 

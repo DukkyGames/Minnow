@@ -121,4 +121,39 @@ test('revealAssistantProseBubble removes awaiting state and hides status', () =>
 
   streamStatus.dispose();
 });
+
+test('appendStreamingAssistantRow drops a revealed live row that still has a caret', () => {
+  setupChatDom();
+  const first = appendStreamingAssistantRow();
+  revealAssistantProseBubble(first.wrap, first.bubble, first.streamStatus);
+  assert.ok(first.wrap.querySelector('.cursor--prose'));
+  assert.ok(!first.wrap.classList.contains('msg--awaiting-prose'));
+
+  const second = appendStreamingAssistantRow();
+
+  const area = document.getElementById('chatArea');
+  assert.equal(area?.querySelectorAll('.msg.assistant').length, 1);
+  assert.equal(area?.querySelectorAll('.cursor--prose').length, 1);
+  assert.equal(area?.querySelector('.msg.assistant'), second.wrap);
+  assert.equal(first.wrap.isConnected, false);
+
+  second.streamStatus.dispose();
+});
+
+test('appendStreamingAssistantRow keeps a settled assistant message without a caret', () => {
+  setupChatDom();
+  const area = document.getElementById('chatArea');
+  const settled = document.createElement('div');
+  settled.className = 'msg assistant';
+  settled.innerHTML = '<div class="msg-label">Assistant</div><div class="msg-bubble">Done.</div>';
+  area.appendChild(settled);
+
+  const { wrap, streamStatus } = appendStreamingAssistantRow();
+
+  assert.equal(area?.querySelectorAll('.msg.assistant').length, 2);
+  assert.ok(settled.isConnected);
+  assert.equal(wrap.classList.contains('msg--awaiting-prose'), true);
+
+  streamStatus.dispose();
+});
 });

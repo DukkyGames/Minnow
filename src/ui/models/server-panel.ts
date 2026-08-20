@@ -4,7 +4,7 @@
  */
 
 import { subscribeServeLog, type ServeRecord } from '../../models/api-client';
-import { classifyLogLine, toLogLines } from '../../models/serve-log';
+import { classifyLogLine, foldServeLogEvent, toLogLines } from '../../models/serve-log';
 import { isLiveServeStatus, isRetryableServeStatus, retryLabelForServe, serveStatusLabel } from '../../models/serve-status';
 import { setStatus } from '../status';
 import {
@@ -79,7 +79,7 @@ function bindLogStream(serveId: string | null): void {
     return;
   }
   logUnsub = subscribeServeLog(serveId, (event) => {
-    logBuffer = event.initial ? event.text : logBuffer + event.text;
+    logBuffer = foldServeLogEvent(logBuffer, event);
     renderLogBody();
   });
 }
@@ -203,12 +203,14 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
 
   const head = el('div', 'models-loaded__head');
   const stateChip = el('span', 'models-loaded__state');
+  // Spawning starts at a modelled 0. Printing that as "Loading 0%" looks stuck
+  // before the first phase marker or time-model tick has anything to show.
+  const shownPercent = load.percent != null && load.percent > 0 ? Math.round(load.percent) : null;
   if (load.error) {
     stateChip.classList.add('is-error');
     stateChip.textContent = 'Failed';
   } else {
-    stateChip.textContent =
-      load.percent != null ? `Loading ${Math.round(load.percent)}%` : 'Loading';
+    stateChip.textContent = shownPercent != null ? `Loading ${shownPercent}%` : 'Loading';
     stateChip.appendChild(el('span', 'models-spinner'));
   }
   head.appendChild(stateChip);
@@ -262,9 +264,9 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
   if (!load.error) {
     const track = el('div', 'models-progress');
     const fill = el('div', 'models-progress__fill');
-    // The bar is modelled, so it has a width from the first tick. Indeterminate is
-    // now only the sub-second window before that tick, when there is nothing to draw.
-    if (load.percent != null) fill.style.width = `${Math.min(100, load.percent)}%`;
+    // A 0-width modelled bar reads as stuck. Stay indeterminate until the model
+    // has moved off the spawning floor.
+    if (shownPercent != null) fill.style.width = `${Math.min(100, shownPercent)}%`;
     else fill.classList.add('is-indeterminate');
     track.appendChild(fill);
     card.appendChild(track);

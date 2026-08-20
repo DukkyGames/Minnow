@@ -26,7 +26,9 @@ import {
 import { aggregateWinRates, formatCompareWinnerLabel, voteSlotRefs } from '../compare/win-rates';
 import { cancelGeneration } from '../api/generations';
 import {
+  STREAMING_CARET_CLASS,
   cancelAssistantBubbleRenderDebounce,
+  finishStreamingBubbleRender,
   scheduleAssistantBubbleRender,
   setAssistantBubbleContent,
 } from '../markdown/renderer';
@@ -97,7 +99,7 @@ function ensureColumnStreamCursor(screenIndex: number): HTMLDivElement {
   let cursor = columnStreamCursors.get(screenIndex);
   if (!cursor) {
     cursor = document.createElement('div');
-    cursor.className = 'cursor cursor--prose';
+    cursor.className = `cursor ${STREAMING_CARET_CLASS}`;
     cursor.setAttribute('aria-hidden', 'true');
     columnStreamCursors.set(screenIndex, cursor);
   }
@@ -117,6 +119,7 @@ function renderColumnBodyMarkdown(
     return;
   }
   cancelAssistantBubbleRenderDebounce(body);
+  finishStreamingBubbleRender(body, columnStreamCursors.get(screenIndex) ?? null);
   setAssistantBubbleContent(body, markdown, { streaming: false });
 }
 

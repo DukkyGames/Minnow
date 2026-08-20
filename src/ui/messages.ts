@@ -40,7 +40,7 @@ import type {
 import { createIcon, type IconName } from './icon';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
-import { setAssistantBubbleContent } from '../markdown/renderer';
+import { STREAMING_CARET_CLASS, STREAMING_CARET_SELECTOR, setAssistantBubbleContent } from '../markdown/renderer';
 import {
   getActiveBoardGroup,
   getBoardGroupForChat,
@@ -977,8 +977,13 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
 
 /** Drop orphaned in-flight assistant shells before mounting a fresh stream row. */
 function removeStaleLiveStreamingRows(mount: HTMLElement): void {
-  for (const row of mount.querySelectorAll('.msg.assistant.msg--awaiting-prose')) {
-    row.remove();
+  for (const row of mount.querySelectorAll('.msg.assistant')) {
+    // Revealed rows still holding a caret are live shells, not settled messages.
+    const isAwaiting = row.classList.contains('msg--awaiting-prose');
+    const hasLiveCaret = Boolean(row.querySelector(STREAMING_CARET_SELECTOR));
+    if (isAwaiting || hasLiveCaret) {
+      row.remove();
+    }
   }
 }
 
@@ -1014,7 +1019,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   bubble.className = 'msg-bubble msg-bubble--awaiting';
 
   const cursor = document.createElement('div');
-  cursor.className = 'cursor cursor--prose';
+  cursor.className = `cursor ${STREAMING_CARET_CLASS}`;
   cursor.setAttribute('aria-hidden', 'true');
 
   wrap.appendChild(label);

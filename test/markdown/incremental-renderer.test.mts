@@ -73,7 +73,13 @@ function buildFixture(partial: 'full' | 'unterminated-fence' | 'growing'): strin
 }
 
 describe('incremental assistant markdown render', () => {
-  afterEach(() => {
+  afterEach(async () => {
+    try {
+      const { cancelAssistantBubbleRenderDebounce } = await import('../../src/markdown/renderer.ts');
+      cancelAssistantBubbleRenderDebounce();
+    } catch {
+      /* Renderer may not be loaded yet if a test failed before import. */
+    }
     win?.close();
   });
 
@@ -199,5 +205,53 @@ describe('incremental assistant markdown render', () => {
     assert.ok(midStreamNonEmpty, 'expected non-empty bubble before stream end');
     assert.ok(paintCount >= 2, 'expected multiple paints during fast stream');
     assert.ok(state.lastRenderedAt > 0, 'expected scheduler to record at least one paint');
+  });
+
+  it('incremental paint keeps a single streaming caret', async () => {
+    installWindow();
+    const { setAssistantBubbleContent } = await import('../../src/markdown/renderer.ts');
+    const bubble = win.document.createElement('div');
+    win.document.body.appendChild(bubble);
+
+    const cursor = win.document.createElement('div');
+    cursor.className = 'cursor cursor--prose';
+    const stray = win.document.createElement('div');
+    stray.className = 'cursor cursor--prose';
+    bubble.appendChild(stray);
+    bubble.appendChild(cursor);
+
+    setAssistantBubbleContent(bubble, 'Hello **there**.', {
+      streaming: true,
+      streamCursor: cursor,
+    });
+
+    assert.equal(bubble.querySelectorAll('.cursor--prose').length, 1);
+    assert.equal(bubble.querySelector('.cursor--prose'), cursor);
+  });
+
+  it('finishStreamingBubbleRender strips the caret and a cancelled flush cannot restore it', async () => {
+    installWindow();
+    const {
+      cancelAssistantBubbleRenderDebounce,
+      finishStreamingBubbleRender,
+      scheduleAssistantBubbleRender,
+      setAssistantBubbleContent,
+    } = await import('../../src/markdown/renderer.ts');
+
+    const bubble = win.document.createElement('div');
+    win.document.body.appendChild(bubble);
+    const cursor = win.document.createElement('div');
+    cursor.className = 'cursor cursor--prose';
+
+    setAssistantBubbleContent(bubble, 'Hello', { streaming: true, streamCursor: cursor });
+    scheduleAssistantBubbleRender(bubble, 'Hello world', cursor);
+    cancelAssistantBubbleRenderDebounce(bubble);
+    finishStreamingBubbleRender(bubble, cursor);
+    setAssistantBubbleContent(bubble, 'Hello world', { streaming: false });
+
+    await sleep(ASSISTANT_RENDER_DEBOUNCE_MS + 20);
+
+    assert.equal(bubble.querySelectorAll('.cursor--prose').length, 0);
+    assert.ok(bubble.textContent?.includes('Hello world'));
   });
 });

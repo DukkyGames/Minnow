@@ -40,7 +40,7 @@ import { fetchHardware } from '../../models/hardware-client';
 import { subscribeServeActivityFeed } from '../../models/serve-activity-feed';
 import { activeServeFor, buildLibrary, type LibraryModel } from '../../models/library';
 import { isLiveServeStatus, isRetryableServeStatus, settingsForServeRetry } from '../../models/serve-status';
-import { parseLoadProgress } from '../../models/serve-log';
+import { foldServeLogEvent, parseLoadProgress } from '../../models/serve-log';
 import { computeLoadProgress, resolveBytesPerMs } from '../../models/load-progress.mjs';
 import type { HardwareSnapshot } from '../../models/types';
 
@@ -390,7 +390,8 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
     logUnsubs.set(
       serve.id,
       subscribeServeLog(serve.id, (event) => {
-        loadLogText.set(serve.id, event.text);
+        // Tail then deltas. Replacing here drops phase markers and freezes the bar.
+        loadLogText.set(serve.id, foldServeLogEvent(loadLogText.get(serve.id) ?? '', event));
         recomputeLoad(serve.id);
       }),
     );

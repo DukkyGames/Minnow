@@ -42,7 +42,10 @@ export interface LoadProgressInput {
   bytesPerMs?: number;
   /** Last value shown, to hold the bar monotonic. */
   previousPercent?: number | null;
-  /** A real percentage from the runtime, if a build ever prints one. Always wins. */
+  /**
+   * Runtime-printed percent. Null or omitted means none — never coerce that to 0
+   * (`Number(null) === 0` pins the Local Server chip at 0% for the whole load).
+   */
   reportedPercent?: number | null;
   /** `/health` has answered — the only way to reach 100. */
   healthy?: boolean;

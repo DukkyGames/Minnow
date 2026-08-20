@@ -693,8 +693,8 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   margin-bottom: 8px;
 }
 
-/* Streaming caret (prose only; thought rows use .thought-cursor) */
-.cursor,
+/* Streaming caret. Match `.cursor--prose` only — a bare `.cursor` class in
+   model HTML would otherwise keep blinking after the reply settles. */
 .cursor--prose {
   display: inline-block;
   width: 2px;
@@ -708,7 +708,6 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
 @keyframes cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .cursor,
   .cursor--prose {
     animation: none;
     opacity: 0.85;

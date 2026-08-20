@@ -36,16 +36,19 @@ export function registerStreamDomRemount(
 export function remountStreamDomForChat(chatId: string): void {
   if (!isChatStreaming(chatId) || !isStreamDomVisible(chatId)) return;
 
-  const row: StreamingAssistantRow = appendStreamingAssistantRow(chatId);
   const listener = remountListeners.get(chatId);
-  if (listener) {
-    listener({
-      wrap: row.wrap,
-      bubble: row.bubble,
-      cursor: row.cursor,
-      streamStatus: row.streamStatus,
-    });
+  if (!listener) {
+    // No owner to retarget. A new shell would sit in the transcript with a stuck caret.
+    return;
   }
+
+  const row: StreamingAssistantRow = appendStreamingAssistantRow(chatId);
+  listener({
+    wrap: row.wrap,
+    bubble: row.bubble,
+    cursor: row.cursor,
+    streamStatus: row.streamStatus,
+  });
 
   // Restore thinking/generating label after history re-render cleared the live row.
   const phase = getSidebarStreamPhase(chatId);

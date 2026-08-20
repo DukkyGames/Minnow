@@ -13,6 +13,25 @@ import type { MatchedLoadPhase } from './load-progress.d.mts';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'plain';
 
+/** One event from `subscribeServeLog`: the existing tail, then appended deltas. */
+export type ServeLogChunk = {
+  text?: string;
+  offset?: number;
+  initial?: boolean;
+};
+
+/**
+ * Fold one log-stream event into the text we already have.
+ *
+ * The SSE emits the existing tail (`initial: true`) then appended chunks.
+ * Replacing the buffer with every event drops phase markers printed earlier,
+ * which pins the modelled load bar at the spawning floor (0%).
+ */
+export function foldServeLogEvent(previous: string, event: ServeLogChunk): string {
+  const chunk = typeof event.text === 'string' ? event.text : '';
+  return event.initial ? chunk : `${previous}${chunk}`;
+}
+
 /** Percent forms llama.cpp has used across builds. */
 const PERCENT_PATTERNS = [
   /(?:load|loading)[^\n%]{0,40}?(\d{1,3}(?:\.\d+)?)\s*%/i,

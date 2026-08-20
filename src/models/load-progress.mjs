@@ -205,7 +205,8 @@ export function updateLoadRate(previousBytesPerMs, sample) {
  * @property {number} [bytesPerMs] From `resolveBytesPerMs`; 0 disables the time model.
  * @property {number | null} [previousPercent] Last value shown, to hold the bar monotonic.
  * @property {number | null} [reportedPercent] A real percentage from the runtime, if a
- *   future build ever prints one. Always wins over the model.
+ *   future build ever prints one. Always wins over the model. Null/undefined means
+ *   none — `Number(null)` is 0 and must not be treated as a reported value.
  * @property {boolean} [healthy] `/health` has answered — the only way to reach 100.
  */
 
@@ -232,8 +233,11 @@ export function computeLoadProgress(input) {
     return { percent: 100, phaseKey: 'ready', label: 'Ready', etaMs: 0, modelled: false };
   }
 
-  const reported = Number(input.reportedPercent);
-  if (Number.isFinite(reported) && reported >= 0 && reported <= 100) {
+  // `Number(null) === 0`. The store passes `parseLoadProgress(...)`, which is
+  // null on every llama.cpp build we ship (none of them print a %). Treating
+  // that as a reported 0% pins Local Server at "Loading 0%" for the whole load.
+  const reported = reportedPercentOf(input.reportedPercent);
+  if (reported != null) {
     return {
       percent: capped(Math.max(reported, floorFromPrevious)),
       phaseKey: phase.key,
@@ -266,6 +270,18 @@ export function computeLoadProgress(input) {
       predictedTotalMs > elapsedMs ? Math.round(predictedTotalMs - elapsedMs) : null,
     modelled: true,
   };
+}
+
+/**
+ * A percentage the runtime itself printed. Null/undefined means "none", which is
+ * the normal case — do not coerce that to 0.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+function reportedPercentOf(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
 }
 
 /** @param {number} percent */

@@ -216,6 +216,30 @@ describe('computeLoadProgress', () => {
     assert.equal(result.modelled, false);
   });
 
+  it('does not treat a missing reported percent as 0%', () => {
+    // This is the store's real call: parseLoadProgress returns null on llama.cpp.
+    const result = computeLoadProgress({
+      logText: 'load_tensors: loading model tensors, this can take a while...',
+      elapsedMs: 4_000,
+      weightsBytes: 0,
+      bytesPerMs: 0,
+      reportedPercent: null,
+    });
+    assert.equal(result.percent, 18);
+    assert.equal(result.phaseKey, 'weights');
+    assert.equal(result.modelled, true);
+  });
+
+  it('still honours a runtime that actually printed 0%', () => {
+    const result = computeLoadProgress({
+      logText: 'loading 0 %',
+      elapsedMs: 4_000,
+      reportedPercent: 0,
+    });
+    assert.equal(result.percent, 0);
+    assert.equal(result.modelled, false);
+  });
+
   it('holds a reported percentage monotonic too', () => {
     const result = computeLoadProgress({
       elapsedMs: 1_000,

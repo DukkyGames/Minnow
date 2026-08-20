@@ -6,6 +6,7 @@ import {
 } from '../chat/streaming-state';
 import {
   cancelAssistantBubbleRenderDebounce,
+  finishStreamingBubbleRender,
   scheduleAssistantBubbleRender,
   setAssistantBubbleContent,
 } from '../markdown/renderer';
@@ -780,7 +781,7 @@ export async function sendMessage(): Promise<void> {
     }
 
     cancelAssistantBubbleRenderDebounce();
-    cursor.remove();
+    finishStreamingBubbleRender(bubble, cursor);
 
     if (!fullText) {
       revealProse();
@@ -873,7 +874,7 @@ export async function sendMessage(): Promise<void> {
       thinkingTracker.abort();
       streamStatus.setThinkingElapsed(null);
       cancelAssistantBubbleRenderDebounce();
-      if (cursor.parentElement) cursor.remove();
+      finishStreamingBubbleRender(bubble, cursor);
       thoughtController.abort();
 
       const text = fullText.trim();
@@ -908,7 +909,7 @@ export async function sendMessage(): Promise<void> {
       return;
     }
     cancelAssistantBubbleRenderDebounce();
-    cursor.remove();
+    finishStreamingBubbleRender(bubble, cursor);
     revealProse();
     setAssistantErrorBubble(
       bubble,
