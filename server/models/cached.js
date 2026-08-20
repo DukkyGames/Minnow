@@ -10,6 +10,7 @@ import { getModelsConfig } from './models-config.js';
 import { getModelsRoot, repoDownloadDir } from './paths.js';
 import { scanInstalledArtifacts } from './installed.js';
 import { contextLengthFromTransformersConfig } from './mlx-context-length.js';
+import { getMinnowHome } from '../config/home.js';
 
 /** LM Studio / Ollama metadata folders — not model roots. */
 const CUSTOM_DIR_SKIP_NAMES = new Set(['blobs', 'manifests']);
@@ -735,11 +736,32 @@ async function scanMlxArtifacts(seen, existing) {
   return out;
 }
 
+/** 30s — `/v1/models` for mlx-lm-local used to re-walk the HF cache on every request. */
+export const CACHED_MODELS_LIST_TTL_MS = 30_000;
+
+/** @type {{ at: number, home: string, payload: { models: CachedModelRow[] } } | null} */
+let listCache = null;
+let cachedModelsScanCount = 0;
+
+/** Drop the scan TTL so a finished download / model-dir change is visible immediately. */
+export function invalidateCachedModelsCache() {
+  listCache = null;
+}
+
+export function getCachedModelsScanCountForTests() {
+  return cachedModelsScanCount;
+}
+
+export function resetCachedModelsScanCountForTests() {
+  cachedModelsScanCount = 0;
+}
+
 /**
  * Full cached model scan (local machine).
  * @returns {Promise<{ models: CachedModelRow[] }>}
  */
-export async function listCachedModels() {
+async function scanCachedModelsUncached() {
+  cachedModelsScanCount += 1;
   const seen = new Set();
   const models = [];
 
@@ -761,4 +783,24 @@ export async function listCachedModels() {
 
   models.sort((a, b) => a.repo_id.localeCompare(b.repo_id));
   return { models };
+}
+
+/**
+ * Full cached model scan (local machine). 30s TTL keyed by Minnow home so
+ * `/v1/models` enrichment and the library table share one walk.
+ * @returns {Promise<{ models: CachedModelRow[] }>}
+ */
+export async function listCachedModels() {
+  const now = Date.now();
+  const home = getMinnowHome();
+  if (
+    listCache &&
+    listCache.home === home &&
+    now - listCache.at < CACHED_MODELS_LIST_TTL_MS
+  ) {
+    return listCache.payload;
+  }
+  const payload = await scanCachedModelsUncached();
+  listCache = { at: now, home, payload };
+  return payload;
 }

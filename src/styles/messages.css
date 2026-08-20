@@ -380,6 +380,16 @@
   color: var(--mn-fg-muted);
 }
 
+/* Runtime detail beside the phase label: prefill percent, then the token count. */
+.stream-status__detail {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-muted);
+}
+
 .msg-label {
   position: absolute;
   width: 1px;
@@ -748,8 +758,8 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
   margin-bottom: 8px;
 }
 
-/* Streaming caret (prose only; thought rows use .thought-cursor) */
-.cursor,
+/* Streaming caret. Match `.cursor--prose` only — a bare `.cursor` class in
+   model HTML would otherwise keep blinking after the reply settles. */
 .cursor--prose {
   display: inline-block;
   width: 2px;
@@ -763,7 +773,6 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
 @keyframes cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .cursor,
   .cursor--prose {
     animation: none;
     opacity: 0.85;
@@ -796,6 +805,9 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
 .stat-chip.g { color: var(--mn-success); border-color: color-mix(in srgb, var(--mn-success) 35%, transparent); }
 .stat-chip.y { color: var(--mn-warning); border-color: color-mix(in srgb, var(--mn-warning) 35%, transparent); }
 .stat-chip.r { color: var(--mn-danger); border-color: color-mix(in srgb, var(--mn-danger) 35%, transparent); }
+/* llama.cpp-only chips: prompt-processing rate and speculative-draft acceptance. */
+.stat-chip.b { color: var(--mn-fg-muted); border-color: color-mix(in srgb, var(--mn-fg-muted) 35%, transparent); }
+.stat-chip.p { color: var(--mn-accent-ink); border-color: color-mix(in srgb, var(--mn-accent-ink) 35%, transparent); }
 
 /* ── Tool call rows ────────────────────────────────────────────────────────
    A transcript can hold hundreds of these, so a settled call is one quiet line:

@@ -4,8 +4,9 @@
 
 import { withSessionToken } from '../api/session-token.ts';
 import type { GgufGeometryFacts } from './serve-memory-estimate.ts';
+import type { SpecDecodeType } from './spec-decode.d.mts';
 
-export type { GgufGeometryFacts };
+export type { GgufGeometryFacts, SpecDecodeType };
 
 /** GGUF fetches one file; MLX fetches a whole repo snapshot into a directory. */
 export type ModelDownloadFormat = 'gguf' | 'mlx';
@@ -18,13 +19,21 @@ export interface DownloadJob {
   quant: string;
   /** Absent on jobs persisted before MLX support; treat as 'gguf'. */
   format?: ModelDownloadFormat;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   bytesReceived: number;
   totalBytes: number | null;
   destPath: string;
   error: string | null;
   createdAt: number;
   finishedAt: number | null;
+  /** Byte offset to resume from (`.partial` size). */
+  resumeAt?: number | null;
+  /** EWMA download speed from progress ticks. */
+  bytesPerSec?: number | null;
+  /** Remaining time from EWMA speed; 0 when complete. */
+  etaMs?: number | null;
+  /** True after a tool-server restart requeued this job. */
+  interrupted?: boolean;
 }
 
 export interface InstalledArtifact {
@@ -35,6 +44,23 @@ export interface InstalledArtifact {
   mtimeMs: number;
 }
 
+export interface ServeFailure {
+  code: string;
+  title?: string;
+  detail?: string;
+  remediation?: string;
+  retryable?: boolean;
+  /** Manual load payload for one-click Retry (ctx / cache_type / extra_args). */
+  suggestedSettings?: LlamaServeSettings;
+  /**
+   * bad_template: first-class LlamaServeSettings keys the UI can point at
+   * (`--chat-template` / `--chat-template-file`). Values are omitted — we do
+   * not invent a template string llama-server would try to parse.
+   */
+  chatTemplateFields?: string[];
+  exitCode?: number | null;
+}
+
 export interface ServeRecord {
   id: string;
   runtime: string;
@@ -43,13 +69,15 @@ export interface ServeRecord {
   port: number;
   baseUrl: string;
   providerId: string;
-  status: 'starting' | 'running' | 'stopped' | 'error';
+  status: 'starting' | 'running' | 'stopped' | 'error' | 'crashed' | 'unhealthy';
   runId: string | null;
   pid: number | null;
   error: string | null;
   startedAt: number;
   stoppedAt: number | null;
   llamaSettings?: Record<string, unknown> | null;
+  exitCode?: number | null;
+  failure?: ServeFailure | null;
 }
 
 export interface LlamaServeSettings {
@@ -60,11 +88,71 @@ export interface LlamaServeSettings {
   batch_size?: number;
   ubatch_size?: number;
   parallel?: number;
+  /** `-t`; manual override of the partial-offload thread heuristic. */
+  threads?: number;
+  /** `--kv-unified` / `--no-kv-unified`. */
+  kv_unified?: boolean;
+  /** `--no-kv-offload` when explicitly `false`. KV on GPU is the default. */
+  kv_offload?: boolean;
+  /** `-ctxcp`; max context checkpoints per slot. */
+  ctx_checkpoints?: number;
+  /** `--reasoning-budget-message`. */
+  reasoning_budget_message?: string;
+  /** `--rope-freq-base`. */
+  rope_freq_base?: number;
+  /** `--rope-freq-scale`. */
+  rope_freq_scale?: number;
+  /** `-s`; `-1` is llama.cpp's explicit "random". */
+  seed?: number;
+  /** Manual override of the per-variant `plan.flash_attn`. */
+  flash_attn?: 'on' | 'off' | 'auto';
+  /** `--cache-type-k`; overrides `cache_type` for K when set. */
+  cache_type_k?: string;
+  /** `--cache-type-v`; overrides `cache_type` for V when set. */
+  cache_type_v?: string;
+  /** `--context-shift` / `--no-context-shift`. */
+  context_shift?: boolean;
+  /** `--swa-full`; invalidates the sliding-window saving in the memory estimate. */
+  swa_full?: boolean;
+  /** Minnow-side idle eviction for this model. Not a llama-server flag. */
+  idle_ttl_ms?: number;
+  /**
+   * `--spec-type`. `draft-mtp` needs no draft model (the heads ship inside the GGUF);
+   * `draft-simple` / `draft-eagle3` cannot start without `spec_draft_model`.
+   */
+  spec_type?: SpecDecodeType;
+  /** `--spec-draft-model`: path to the draft GGUF. */
+  spec_draft_model?: string;
+  /** `--spec-draft-ngl`: draft model layers on the GPU. */
+  spec_draft_ngl?: number;
+  /** `--spec-draft-n-max`: max tokens drafted per step. */
+  spec_draft_n_max?: number;
+  /** `--spec-draft-n-min`: min tokens drafted per step. */
+  spec_draft_n_min?: number;
+  /** `--spec-draft-p-min`: minimum draft probability. */
+  spec_draft_p_min?: number;
   split_mode?: string;
   tensor_split?: string;
   main_gpu?: number;
   fit?: boolean;
+  /**
+   * `auto` (default) — server `planLlamaLaunch` owns ctx / n_gpu_layers / cache_type.
+   * `manual` — those three pass through unclamped. `fit: true` is not manual.
+   */
+  fit_mode?: 'auto' | 'manual';
   no_warmup?: boolean;
+  /**
+   * Omit `--jinja` (Phase 3 retry after a bad chat template). Not a llama-server flag.
+   */
+  skip_jinja?: boolean;
+  /** `--no-mmap`; default off. mmap_failed retry also uses extra_args. */
+  no_mmap?: boolean;
+  /** `--mlock`; default off. */
+  mlock?: boolean;
+  /** llama-server `--chat-template` (may contain spaces). */
+  chat_template?: string;
+  /** llama-server `--chat-template-file`. */
+  chat_template_file?: string;
   extra_args?: string[];
   env?: Record<string, string>;
 }
@@ -113,13 +201,26 @@ export interface LlamaRuntimeStatus {
   path: string | null;
   source: string | null;
   variant: string | null;
+  /** Installed meta.version when known; otherwise the pinned release tag. */
   version: string;
+  /** ggml-org tag Minnow currently ships (`LLAMA_CPP_RELEASE_TAG`). */
+  pinnedVersion: string;
+  /** meta.json `version` for a managed install, or null when unknown. */
+  installedVersion: string | null;
+  /** True when a managed llama.cpp tree exists and its version differs from the pin. */
+  upgradeAvailable: boolean;
   assetNames: string[];
   installedAt: string | null;
   installable: boolean;
   gpuCapable: boolean;
   preferredVariant: string;
   installableVariants: string[];
+  /**
+   * Rolling bytes-per-ms for this variant from `~/.minnow/llama-cpp.json`, or null
+   * before any load has been recorded. The load bar's fallback ETA for a model that
+   * has never been loaded on this machine.
+   */
+  loadRateBytesPerMs?: number | null;
 }
 
 export interface LlamaInstallJob {
@@ -234,6 +335,10 @@ export function subscribeDownloadProgress(
     status: DownloadJob['status'];
     bytesReceived: number;
     totalBytes: number | null;
+    bytesPerSec?: number | null;
+    etaMs?: number | null;
+    interrupted?: boolean;
+    resumeAt?: number | null;
     error?: string | null;
   }) => void,
 ): () => void {
@@ -256,6 +361,10 @@ export function subscribeDownloadProgress(
             status: job.status,
             bytesReceived: job.bytesReceived,
             totalBytes: job.totalBytes,
+            bytesPerSec: job.bytesPerSec,
+            etaMs: job.etaMs,
+            interrupted: job.interrupted,
+            resumeAt: job.resumeAt,
             error: job.error,
           });
         })
@@ -387,6 +496,8 @@ export async function startModelServe(payload: {
   isMoe?: boolean;
   weightsGb?: number;
   llama?: LlamaServeSettings;
+  /** Library row id so startServe can merge saved models.launch prefs. */
+  libraryId?: string;
   /** Return as soon as the process spawns; poll fetchModelServe for readiness. */
   async?: boolean;
 }): Promise<ServeRecord> {
@@ -438,6 +549,78 @@ export function subscribeServeLog(
   source.onmessage = (msg) => {
     try {
       onChunk(JSON.parse(msg.data));
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  return () => source.close();
+}
+
+/** Live serve-list snapshots from commitServes. 15s poll in the store is the fallback. */
+export function subscribeServeEvents(
+  onEvent: (payload: { serves: ServeRecord[]; reason: string }) => void,
+): () => void {
+  const source = new EventSource(withSessionToken('/api/models/serve/events'));
+  source.onmessage = (msg) => {
+    try {
+      const data = JSON.parse(msg.data) as { serves?: ServeRecord[]; reason?: string };
+      if (data && Array.isArray(data.serves)) {
+        onEvent({ serves: data.serves, reason: data.reason ?? 'update' });
+      }
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  return () => source.close();
+}
+
+/**
+ * One llama.cpp slot's live state, normalised server-side from `/slots`.
+ *
+ * There is no prefill percentage here on purpose: during prompt processing llama.cpp's
+ * `/slots` reports the running count in both `n_prompt_tokens` and
+ * `n_prompt_tokens_processed`, so no total exists to divide by. A real percentage is
+ * available only in the chat stream (`prompt_progress`).
+ */
+export interface ServeActivitySlot {
+  id: number;
+  taskId: number | null;
+  state: 'idle' | 'prompt' | 'generating';
+  /** Prompt tokens fed so far. A count, not a fraction. */
+  promptProcessed: number;
+  /** Prefix reused from the prompt cache. */
+  promptCached: number;
+  /** Tokens generated for the current task. */
+  decoded: number;
+  /** Tokens still allowed for the current task. */
+  remaining: number | null;
+  /** Derived from consecutive samples; null until there are two. */
+  tokensPerSecond: number | null;
+}
+
+export interface ServeActivity {
+  serveId: string;
+  /** Identity for surfaces that never hold a serve list (the header picker). */
+  modelLabel: string;
+  /** Library row id, when the serve was started from one. */
+  libraryId: string | null;
+  updatedAt: number;
+  /** `/slots` answered at least once. */
+  available: boolean;
+  /** The last sample is too old to trust — a saturated server stops answering. */
+  stale: boolean;
+  slots: ServeActivitySlot[];
+}
+
+/** Live `/slots` telemetry for every running llama.cpp serve. */
+export function subscribeServeActivity(
+  onEvent: (activity: ServeActivity) => void,
+): () => void {
+  const source = new EventSource(withSessionToken('/api/models/serve/activity/stream'));
+  source.onmessage = (msg) => {
+    try {
+      const data = JSON.parse(msg.data) as ServeActivity;
+      if (data && typeof data.serveId === 'string') onEvent(data);
     } catch {
       /* ignore malformed */
     }

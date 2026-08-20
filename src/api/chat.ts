@@ -6,6 +6,7 @@ import {
 } from '../chat/streaming-state';
 import {
   cancelAssistantBubbleRenderDebounce,
+  finishStreamingBubbleRender,
   scheduleAssistantBubbleRender,
   setAssistantBubbleContent,
 } from '../markdown/renderer';
@@ -29,6 +30,8 @@ import type {
   ApiMessage,
   AssistantMessage,
   ChatCompletionChunk,
+  LlamaPromptProgress,
+  LlamaTimings,
   ModelInfo,
   Stats,
   ToolCall,
@@ -88,6 +91,7 @@ import {
 import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { createStreamingStatsPublisher } from '../chat/streaming-stats';
+import { llamaRuntimeStatusView } from '../chat/llama-runtime-status';
 
 export { parseSsePayloads } from './sse-parse';
 
@@ -99,6 +103,10 @@ export interface StreamMetaAccumulator {
   model?: string;
   finish_reason?: string;
   error?: string;
+  /** Latest llama.cpp `timings` block seen on the stream. */
+  timings?: LlamaTimings;
+  /** Latest llama.cpp `prompt_progress` seen on the stream. */
+  prompt_progress?: LlamaPromptProgress;
 }
 
 /** Non-streaming completion body (multimodal messages + optional tools). */
@@ -264,12 +272,55 @@ export function extractAssistantCompletionText(
   return '';
 }
 
+/**
+ * llama.cpp `timings` in the shape the stats reconciler already understands.
+ *
+ * Returns null until there is something worth trusting: the first chunk of a stream
+ * reports `predicted_n: 1` over `predicted_ms: 0.001`, which is a million tokens per
+ * second and not a measurement.
+ */
+export function statsFromLlamaTimings(timings: LlamaTimings | undefined): Stats | null {
+  if (!timings) return null;
+  const predictedN = Number(timings.predicted_n);
+  const predictedMs = Number(timings.predicted_ms);
+  if (!(predictedN >= 2) || !(predictedMs > 0)) return null;
+
+  const out: Stats = {
+    generation_time: predictedMs / 1000,
+    tokens_per_second:
+      Number(timings.predicted_per_second) > 0
+        ? Number(timings.predicted_per_second)
+        : (predictedN / predictedMs) * 1000,
+  };
+  // Prefill time is the engine's own time-to-first-token, measured rather than
+  // inferred from when the browser saw the first byte.
+  if (Number(timings.prompt_ms) > 0) out.time_to_first_token = Number(timings.prompt_ms) / 1000;
+  if (Number(timings.prompt_per_second) > 0) {
+    out.prompt_tokens_per_second = Number(timings.prompt_per_second);
+  }
+  const draftN = Number(timings.draft_n);
+  const draftAccepted = Number(timings.draft_n_accepted);
+  if (draftN > 0 && Number.isFinite(draftAccepted)) {
+    out.draft_acceptance = draftAccepted / draftN;
+  }
+  return out;
+}
+
 /** Merge stats, usage, model_info, and finish_reason from successive chunks. */
 export function mergeStreamMeta(
   acc: StreamMetaAccumulator | null | undefined,
   chunk: ChatCompletionChunk
 ): StreamMetaAccumulator {
   const next: StreamMetaAccumulator = { ...(acc || {}) };
+  // llama.cpp sends these on every chunk once the request opts in; the last one is
+  // the complete picture. Folded into `stats` so the existing reconciler can weigh
+  // them against usage the same way it weighs any other server timing.
+  if (chunk.timings) {
+    next.timings = { ...next.timings, ...chunk.timings };
+    const derived = statsFromLlamaTimings(next.timings);
+    if (derived) next.stats = { ...next.stats, ...derived };
+  }
+  if (chunk.prompt_progress) next.prompt_progress = chunk.prompt_progress;
   if (chunk.stats) next.stats = { ...next.stats, ...chunk.stats };
   if (chunk.usage) next.usage = { ...next.usage, ...chunk.usage };
   if (chunk.model_info) next.model_info = { ...next.model_info, ...chunk.model_info };
@@ -689,6 +740,13 @@ export async function sendMessage(): Promise<void> {
       if (contentDelta) {
         routeContentDelta(contentDelta);
       }
+      // Local llama.cpp streams carry prefill progress and a running token count.
+      // Everything else reports neither, and the view collapses to empty.
+      const runtime = llamaRuntimeStatusView(streamMeta, tFirst != null);
+      if (runtime.phase === 'prompt_processing' && tFirst == null) {
+        streamStatus.setPhase('prompt_processing');
+      }
+      streamStatus.setRuntimeDetail(runtime.detail || null);
       streamingStatsPublisher.schedule({
         streamMeta,
         t0,
@@ -723,7 +781,7 @@ export async function sendMessage(): Promise<void> {
     }
 
     cancelAssistantBubbleRenderDebounce();
-    cursor.remove();
+    finishStreamingBubbleRender(bubble, cursor);
 
     if (!fullText) {
       revealProse();
@@ -816,7 +874,7 @@ export async function sendMessage(): Promise<void> {
       thinkingTracker.abort();
       streamStatus.setThinkingElapsed(null);
       cancelAssistantBubbleRenderDebounce();
-      if (cursor.parentElement) cursor.remove();
+      finishStreamingBubbleRender(bubble, cursor);
       thoughtController.abort();
 
       const text = fullText.trim();
@@ -851,7 +909,7 @@ export async function sendMessage(): Promise<void> {
       return;
     }
     cancelAssistantBubbleRenderDebounce();
-    cursor.remove();
+    finishStreamingBubbleRender(bubble, cursor);
     revealProse();
     setAssistantErrorBubble(
       bubble,

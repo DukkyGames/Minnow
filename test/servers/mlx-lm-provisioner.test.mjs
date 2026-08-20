@@ -153,6 +153,10 @@ describe('mlx-lm install status', () => {
     const status = await getInstallStatus();
     assert.equal(status.installed, false);
     assert.equal(status.version, null);
+    // Settings → Servers uses these to hide Install on Windows/Linux.
+    assert.equal(status.supported, isMlxSupported());
+    assert.equal(status.installable, isMlxSupported());
+    assert.equal(status.reason, isMlxSupported() ? null : MLX_UNSUPPORTED_MESSAGE);
   });
 
   test('a venv without a completed-install marker is not installed', async () => {

@@ -15,18 +15,21 @@ import {
   getLibrarySamplerForId,
   saveLibraryInferenceSampler,
 } from '../../config/library-inference-meta';
+import { getLibraryLaunchSettingsForId } from '../../config/library-launch-meta';
 import {
   cancelModelDownload,
   fetchCachedModels,
   fetchInstalledModels,
-  fetchModelServe,
   fetchRuntimes,
   listModelServes,
   startModelDownload,
+  fetchLlamaRuntime,
   startModelServe,
   stopModelServe,
   subscribeDownloadProgress,
+  subscribeServeEvents,
   subscribeServeLog,
+  type ServeActivity,
   type DownloadJob,
   type LlamaServeSettings,
   type ModelDownloadFormat,
@@ -34,18 +37,30 @@ import {
   type ServeRecord,
 } from '../../models/api-client';
 import { fetchHardware } from '../../models/hardware-client';
-import { resolveLlamaServeSettings } from '../../models/launch-settings';
+import { subscribeServeActivityFeed } from '../../models/serve-activity-feed';
 import { activeServeFor, buildLibrary, type LibraryModel } from '../../models/library';
-import { describeLoadPhase, parseLoadProgress } from '../../models/serve-log';
+import { isLiveServeStatus, isRetryableServeStatus, settingsForServeRetry } from '../../models/serve-status';
+import { foldServeLogEvent, parseLoadProgress } from '../../models/serve-log';
+import { computeLoadProgress, resolveBytesPerMs } from '../../models/load-progress.mjs';
 import type { HardwareSnapshot } from '../../models/types';
 
 /** Live loading state for a serve that started asynchronously. */
 export interface LoadProgress {
   serveId: string;
   modelId: string | null;
-  /** Percent when llama.cpp reported one, otherwise null (indeterminate). */
+  /**
+   * 0–100, monotonic. Null only for the sub-second window before the first tick,
+   * when there is genuinely nothing to draw. llama.cpp prints no percentage of its
+   * own, so this is modelled — see `src/models/load-progress.mjs`.
+   */
   percent: number | null;
   phase: string;
+  /** Stable phase id (`weights`, `context`, …) for anything that must not match on prose. */
+  phaseKey: string;
+  /** Predicted milliseconds remaining, or null when no rate prior applies. */
+  etaMs: number | null;
+  /** Weights being loaded, when known — the denominator of the time model. */
+  bytesTotal: number | null;
   startedAt: number;
   error: string | null;
 }
@@ -53,6 +68,11 @@ export interface LoadProgress {
 export interface ModelsState {
   library: LibraryModel[];
   serves: ServeRecord[];
+  /**
+   * Live `/slots` telemetry by serve id. Reflects every client hitting the runtime,
+   * not just Minnow's own chat — that is the whole point of polling it server-side.
+   */
+  activity: Map<string, ServeActivity>;
   downloads: DownloadJob[];
   runtimes: RuntimeDetection | null;
   hardware: HardwareSnapshot | null;
@@ -65,6 +85,7 @@ export interface ModelsState {
 const state: ModelsState = {
   library: [],
   serves: [],
+  activity: new Map(),
   downloads: [],
   runtimes: null,
   hardware: null,
@@ -77,11 +98,38 @@ const state: ModelsState = {
 type Listener = (snapshot: ModelsState) => void;
 const listeners = new Set<Listener>();
 const logUnsubs = new Map<string, () => void>();
-const pollTimers = new Map<string, number>();
+/** Latest log text per tracked load — the ticker re-reads it without a new SSE event. */
+const loadLogText = new Map<string, string>();
+/** Redraw cadence for in-flight loads. */
+const LOAD_TICK_MS = 250;
+/** @type {number | null} handle for the in-flight-load ticker. */
+let loadTicker: number | null = null;
+/**
+ * Rolling bytes-per-ms for the installed llama.cpp variant, from the runtime status.
+ * Fetched once; it only changes after a load completes, and a stale value costs an ETA
+ * that is slightly off, not a wrong bar.
+ */
+let variantLoadRate = 0;
+let variantLoadRateFetched = false;
 const downloadUnsubs = new Map<string, () => void>();
 let refreshInFlight: Promise<void> | null = null;
 /** Batches high-frequency download byte updates to one store notification per frame. */
 let emitRaf: number | null = null;
+let serveEventsUnsub: (() => void) | null = null;
+let serveActivityUnsub: (() => void) | null = null;
+/** RAF handle coalescing a burst of activity samples into one repaint. */
+let activityEmitRaf: number | null = null;
+
+function scheduleActivityEmit(): void {
+  if (activityEmitRaf != null) return;
+  activityEmitRaf = requestAnimationFrame(() => {
+    activityEmitRaf = null;
+    emit();
+  });
+}
+let serveReconcileTimer: number | null = null;
+/** Fallback when SSE drops — keep this slow; live updates come from commitServes. */
+const SERVE_RECONCILE_MS = 15_000;
 
 function scheduleEmit(): void {
   if (emitRaf != null) return;
@@ -125,9 +173,18 @@ export function selectModel(id: string | null): void {
   emit();
 }
 
-/** Serve currently holding a library row. */
+/** Serve currently holding a library row (live, or crashed/error for Retry). */
 export function serveForModel(model: LibraryModel): ServeRecord | undefined {
-  return activeServeFor(model, state.serves);
+  return (
+    activeServeFor(model, state.serves) ??
+    state.serves.find(
+      (s) =>
+        (s.status === 'crashed' || s.status === 'unhealthy' || s.status === 'error') &&
+        (model.path
+          ? s.modelPath === model.path
+          : s.modelLabel === model.repoId || s.modelLabel === model.name),
+    )
+  );
 }
 
 /** In-flight load for a library row, if any. */
@@ -137,7 +194,14 @@ export function loadForModel(model: LibraryModel): LoadProgress | undefined {
 }
 
 export function runningServes(): ServeRecord[] {
-  return state.serves.filter((s) => s.status === 'running' || s.status === 'starting');
+  return state.serves.filter((s) => isLiveServeStatus(s.status));
+}
+
+/** Crashed / error / unhealthy rows the Local Server list should still show. */
+export function attentionServes(): ServeRecord[] {
+  return state.serves.filter(
+    (s) => s.status === 'crashed' || s.status === 'unhealthy' || s.status === 'error',
+  );
 }
 
 /**
@@ -165,6 +229,7 @@ export function refreshModels(options?: { hardware?: boolean; fresh?: boolean })
       state.serves = serves;
       state.runtimes = runtimes;
       state.error = null;
+      ensureServeListWatch();
 
       if (state.selectedId) {
         const selected = state.library.find((m) => m.id === state.selectedId);
@@ -172,7 +237,7 @@ export function refreshModels(options?: { hardware?: boolean; fresh?: boolean })
       }
       // Resume tracking work that was still in flight when the app reopened.
       for (const serve of serves) {
-        if (serve.status === 'starting' && !pollTimers.has(serve.id)) {
+        if (serve.status === 'starting' && !logUnsubs.has(serve.id)) {
           trackLoad(serve, null);
         }
       }
@@ -218,9 +283,7 @@ export async function refreshHardware(): Promise<void> {
 function stopTracking(serveId: string): void {
   logUnsubs.get(serveId)?.();
   logUnsubs.delete(serveId);
-  const timer = pollTimers.get(serveId);
-  if (timer != null) window.clearInterval(timer);
-  pollTimers.delete(serveId);
+  loadLogText.delete(serveId);
 }
 
 function updateLoad(serveId: string, patch: Partial<LoadProgress>): void {
@@ -230,9 +293,83 @@ function updateLoad(serveId: string, patch: Partial<LoadProgress>): void {
   emit();
 }
 
+function applyServes(serves: ServeRecord[]): void {
+  state.serves = serves;
+  for (const serve of serves) {
+    if (serve.status === 'starting' && !logUnsubs.has(serve.id)) {
+      trackLoad(serve, null);
+    }
+    void settleTrackedLoad(serve);
+  }
+  emit();
+}
+
+function upsertServe(serve: ServeRecord): void {
+  const index = state.serves.findIndex((s) => s.id === serve.id);
+  if (index >= 0) state.serves[index] = serve;
+  else state.serves.unshift(serve);
+}
+
+function ensureServeListWatch(): void {
+  if (!serveEventsUnsub) {
+    serveEventsUnsub = subscribeServeEvents((payload) => {
+      applyServes(payload.serves);
+    });
+  }
+  if (!serveActivityUnsub) {
+    serveActivityUnsub = subscribeServeActivityFeed((activity) => {
+      state.activity.set(activity.serveId, activity);
+      // A busy slot ticks every ~400 ms per serve. Coalesce into one frame so
+      // telemetry cannot thrash the whole models page.
+      scheduleActivityEmit();
+    });
+  }
+  if (serveReconcileTimer == null) {
+    serveReconcileTimer = window.setInterval(() => {
+      void listModelServes()
+        .then(applyServes)
+        .catch(() => {
+          /* SSE is the live path; this is only a reconciling fallback */
+        });
+    }, SERVE_RECONCILE_MS);
+  }
+}
+
 /**
- * Follow an async serve start: poll status, stream the log for progress, and
- * hand the provider to chat once the model answers.
+ * When an async load leaves `starting`, bind the picker (running) or surface
+ * the error/crash on the load card. Driven by SSE, not a 1s poll.
+ */
+async function settleTrackedLoad(next: ServeRecord): Promise<void> {
+  const load = state.loads.find((l) => l.serveId === next.id);
+  if (!load || next.status === 'starting') return;
+
+  if (next.status === 'running') {
+    const modelId = load.modelId;
+    stopTracking(next.id);
+    state.loads = state.loads.filter((l) => l.serveId !== next.id);
+    if (isLibraryModelProviderId(next.providerId) && modelId?.trim()) {
+      await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, modelId).catch(() => false);
+    } else {
+      await selectProviderModel(next.providerId, next.modelLabel).catch(() => false);
+    }
+    emit();
+    return;
+  }
+
+  if (isRetryableServeStatus(next.status)) {
+    stopTracking(next.id);
+    updateLoad(next.id, {
+      error:
+        next.failure?.title ??
+        next.error ??
+        (next.status === 'crashed' ? 'Runtime crashed' : 'Model failed to load'),
+    });
+  }
+}
+
+/**
+ * Follow an async serve start: stream the log for progress, and let serve SSE
+ * (plus a 15s fallback poll) tell us when the row leaves `starting`.
  */
 function trackLoad(serve: ServeRecord, modelId: string | null): void {
   if (!state.loads.some((l) => l.serveId === serve.id)) {
@@ -241,67 +378,112 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
       modelId,
       percent: null,
       phase: 'Starting runtime',
-      startedAt: Date.now(),
+      phaseKey: 'spawning',
+      etaMs: null,
+      bytesTotal: weightsBytesForLoad(serve, modelId),
+      startedAt: serve.startedAt || Date.now(),
       error: null,
     });
   }
 
-  logUnsubs.set(
-    serve.id,
-    subscribeServeLog(serve.id, (event) => {
-      const percent = parseLoadProgress(event.text);
-      updateLoad(serve.id, {
-        phase: describeLoadPhase(event.text),
-        ...(percent != null ? { percent } : {}),
-      });
-    }),
-  );
+  if (!logUnsubs.has(serve.id)) {
+    logUnsubs.set(
+      serve.id,
+      subscribeServeLog(serve.id, (event) => {
+        // Tail then deltas. Replacing here drops phase markers and freezes the bar.
+        loadLogText.set(serve.id, foldServeLogEvent(loadLogText.get(serve.id) ?? '', event));
+        recomputeLoad(serve.id);
+      }),
+    );
+  }
 
-  const timer = window.setInterval(() => {
-    void fetchModelServe(serve.id)
-      .then(async (next) => {
-        if (!next) {
-          stopTracking(serve.id);
-          state.loads = state.loads.filter((l) => l.serveId !== serve.id);
-          emit();
-          return;
-        }
-        const index = state.serves.findIndex((s) => s.id === next.id);
-        if (index >= 0) state.serves[index] = next;
-        else state.serves.unshift(next);
-
-        if (next.status === 'starting') {
-          emit();
-          return;
-        }
-
-        stopTracking(serve.id);
-        if (next.status === 'running') {
-          state.loads = state.loads.filter((l) => l.serveId !== serve.id);
-          if (isLibraryModelProviderId(next.providerId) && modelId?.trim()) {
-            await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, modelId).catch(() => false);
-          } else {
-            await selectProviderModel(next.providerId, next.modelLabel).catch(() => false);
-          }
-        } else {
-          updateLoad(serve.id, { error: next.error ?? 'Model failed to load' });
-        }
-        emit();
-      })
-      .catch(() => {
-        /* transient — the next tick retries */
-      });
-  }, 1_000);
-
-  pollTimers.set(serve.id, timer);
+  ensureLoadTicker();
+  ensureServeListWatch();
   emit();
 }
 
-/** Dismiss a failed load card. */
-export function dismissLoad(serveId: string): void {
-  stopTracking(serveId);
-  state.loads = state.loads.filter((l) => l.serveId !== serveId);
-  emit();
+/**
+ * Recompute one load's bar from its log tail and the elapsed clock.
+ * Cheap and idempotent — the ticker and the log stream both call it.
+ */
+function recomputeLoad(serveId: string): void {
+  const entry = state.loads.find((l) => l.serveId === serveId);
+  if (!entry || entry.error) return;
+  const logText = loadLogText.get(serveId) ?? '';
+  const next = computeLoadProgress({
+    logText,
+    elapsedMs: Date.now() - entry.startedAt,
+    weightsBytes: entry.bytesTotal ?? 0,
+    bytesPerMs: bytesPerMsForLoad(entry.modelId),
+    previousPercent: entry.percent,
+    reportedPercent: parseLoadProgress(logText),
+  });
+  updateLoad(serveId, {
+    percent: next.percent,
+    phase: next.label,
+    phaseKey: next.phaseKey,
+    etaMs: next.etaMs,
+  });
+}
+
+/**
+ * Weights size for the time model. The library row is authoritative; a serve resumed
+ * after a restart has no model id, and then the bar steps between phases with no ETA
+ * rather than inventing a denominator.
+ */
+function weightsBytesForLoad(serve: ServeRecord, modelId: string | null): number | null {
+  const byId = modelId ? state.library.find((m) => m.id === modelId) : undefined;
+  const byPath = byId ?? state.library.find((m) => m.path && m.path === serve.modelPath);
+  return byPath && byPath.sizeBytes > 0 ? byPath.sizeBytes : null;
+}
+
+/**
+ * Fetch the installed runtime's rolling load rate once. Failure is silent: the bar
+ * falls back to stepping between phase floors, which is the pre-prior behaviour.
+ */
+function ensureVariantLoadRate(): void {
+  if (variantLoadRate > 0 || variantLoadRateFetched) return;
+  variantLoadRateFetched = true;
+  void fetchLlamaRuntime()
+    .then((status) => {
+      variantLoadRate = Number(status.loadRateBytesPerMs) || 0;
+    })
+    .catch(() => {
+      /* no prior; phase floors still move the bar */
+    });
+}
+
+/** Per-model prior first, then the rolling per-variant rate from the installed runtime. */
+function bytesPerMsForLoad(modelId: string | null): number {
+  const saved = modelId ? getLibraryLaunchSettingsForId(modelId) : null;
+  return resolveBytesPerMs({
+    lastLoadMs: saved?.lastLoadMs,
+    lastWeightsBytes: saved?.lastWeightsBytes,
+    variantBytesPerMs: variantLoadRate,
+  });
+}
+
+/**
+ * ~250 ms redraw while any load is in flight. The server panel otherwise only
+ * re-renders on its 5 s elapsed clock, which is far too coarse for a bar.
+ */
+function ensureLoadTicker(): void {
+  ensureVariantLoadRate();
+  if (loadTicker != null) return;
+  loadTicker = window.setInterval(() => {
+    const live = state.loads.filter((l) => !l.error);
+    if (!live.length) {
+      window.clearInterval(loadTicker as number);
+      loadTicker = null;
+      return;
+    }
+    for (const entry of live) recomputeLoad(entry.serveId);
+  }, LOAD_TICK_MS);
+}
+
+/** Remove a failed load row and stop the underlying serve session. */
+export async function dismissLoad(serveId: string): Promise<void> {
+  await unloadServe(serveId);
 }
 
 /**
@@ -319,7 +501,7 @@ export async function loadModel(
       runtime: 'ollama',
       modelLabel: model.repoId,
     });
-    state.serves.unshift(serve);
+    upsertServe(serve);
     await selectProviderModel(serve.providerId, serve.modelLabel).catch(() => false);
     const sampler = getLibrarySamplerForId(model.id);
     if (sampler) {
@@ -346,9 +528,11 @@ export async function loadModel(
       // the Hub instead of the copy already on disk.
       modelLabel: model.path,
     });
-    state.serves.unshift(serve);
+    upsertServe(serve);
     // No trackLoad: MLX serves return already running (no spawn progress). Runtime
     // output lives on the shared mlx-lm managed server log, exposed via serve log routes.
+    // Still watch the serve list so a later mlx-lm exit shows as crashed.
+    ensureServeListWatch();
     await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, model.id).catch(() => false);
     const mlxSampler = getLibrarySamplerForId(model.id);
     if (mlxSampler) {
@@ -376,13 +560,16 @@ export async function loadModel(
     isMoe: model.isMoe,
     weightsGb: model.sizeBytes / 1024 ** 3,
     hardware: (state.hardware as unknown as Record<string, unknown>) ?? undefined,
-    // Inspector drafts apply even when the caller is the library row or picker.
-    llama: resolveLlamaServeSettings(model, settings),
+    llama: settings,
+    // Lets startServe merge models.launch.byLibraryId between llama-cpp.json
+    // defaults and this body, so picker / CLI loads reuse the last fit_mode.
+    libraryId: model.id,
     async: true,
   });
 
-  state.serves.unshift(serve);
+  upsertServe(serve);
   trackLoad(serve, model.id);
+  ensureServeListWatch();
   const sampler = getLibrarySamplerForId(model.id);
   if (sampler) {
     void saveLibraryInferenceSampler({
@@ -413,9 +600,34 @@ export async function unloadServe(serveId: string): Promise<void> {
   }
 }
 
+/**
+ * Reload weights after a crash or failed load. Prefers the matching library row
+ * so launch prefs apply; falls back to the serve's last path/settings.
+ */
+export async function retryServe(serve: ServeRecord): Promise<ServeRecord> {
+  const model = state.library.find((m) => m.path === serve.modelPath);
+  if (model) return loadModel(model, settingsForServeRetry(serve));
+  const next = await startModelServe({
+    modelPath: serve.modelPath,
+    runtime: (serve.runtime as 'llama-cpp' | 'mlx-lm' | 'ollama' | 'lm-studio') || 'llama-cpp',
+    modelLabel: serve.modelLabel,
+    llama: settingsForServeRetry(
+      serve,
+      (serve.llamaSettings as LlamaServeSettings | null | undefined) ?? {},
+    ),
+    async: true,
+  });
+  upsertServe(next);
+  if (next.status === 'starting') trackLoad(next, null);
+  emit();
+  return next;
+}
+
 /** Active downloads, newest first. */
 export function activeDownloads(): DownloadJob[] {
-  return state.downloads.filter((j) => j.status === 'queued' || j.status === 'running');
+  return state.downloads.filter(
+    (j) => j.status === 'queued' || j.status === 'running' || j.status === 'interrupted',
+  );
 }
 
 /** Repo ids (and `repo#file` keys) that already exist on disk. */
@@ -441,6 +653,10 @@ function trackDownload(job: DownloadJob): void {
         row.bytesReceived = event.bytesReceived;
         row.totalBytes = event.totalBytes;
         row.error = event.error ?? null;
+        if (event.bytesPerSec != null) row.bytesPerSec = event.bytesPerSec;
+        if (event.etaMs != null) row.etaMs = event.etaMs;
+        if (event.interrupted != null) row.interrupted = event.interrupted;
+        if (event.resumeAt != null) row.resumeAt = event.resumeAt;
       }
       if (event.status === 'completed') {
         downloadUnsubs.get(job.id)?.();
@@ -493,7 +709,24 @@ export async function cancelDownload(jobId: string): Promise<void> {
 
 /** Tear down every poller and stream (called when the app closes). */
 export function teardownModelsStore(): void {
-  for (const serveId of [...pollTimers.keys()]) stopTracking(serveId);
+  for (const serveId of [...logUnsubs.keys()]) stopTracking(serveId);
+  if (loadTicker != null) {
+    window.clearInterval(loadTicker);
+    loadTicker = null;
+  }
   for (const unsub of downloadUnsubs.values()) unsub();
   downloadUnsubs.clear();
+  serveEventsUnsub?.();
+  serveEventsUnsub = null;
+  serveActivityUnsub?.();
+  serveActivityUnsub = null;
+  if (activityEmitRaf != null) {
+    cancelAnimationFrame(activityEmitRaf);
+    activityEmitRaf = null;
+  }
+  state.activity.clear();
+  if (serveReconcileTimer != null) {
+    window.clearInterval(serveReconcileTimer);
+    serveReconcileTimer = null;
+  }
 }

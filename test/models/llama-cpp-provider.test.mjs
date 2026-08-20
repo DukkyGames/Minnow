@@ -109,6 +109,7 @@ describe('llama-cpp single provider', () => {
     const llamaProv = providers.find((p) => p.id === LLAMA_CPP_LOCAL_ID);
     assert.ok(llamaProv?.enabled);
     assert.equal(llamaProv?.baseUrl, serveA.baseUrl);
+    assert.equal(llamaProv?.supportsExtendedSamplers, true);
     assert.equal(providers.filter((p) => /^models-[a-f0-9]{8}$/.test(p.id)).length, 0);
 
     await stopServe(serveA.id);

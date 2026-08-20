@@ -21,15 +21,19 @@ import {
   validateProviderId,
   validateProviderPricing,
 } from './validate.js';
+import {
+  LLAMA_CPP_LOCAL_ID,
+  MLX_LM_LOCAL_ID,
+} from '../../src/models/runtime-ids.mjs';
 
 const DEFAULT_LM_STUDIO_URL = 'http://localhost:1234';
 const LM_STUDIO_LOCAL_ID = 'lm-studio-local';
-export const LLAMA_CPP_LOCAL_ID = 'llama-cpp-local';
+// Re-export so `import { LLAMA_CPP_LOCAL_ID } from './store.js'` keeps working.
+export { LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID };
 
 /** Synthetic id on serve records / model picker for Minnow-hosted My Models (not a registry row). */
 export const MINNOW_LIBRARY_PROVIDER_ID = 'minnow-library';
 const DEFAULT_LLAMA_CPP_URL = 'http://127.0.0.1:8085';
-export const MLX_LM_LOCAL_ID = 'mlx-lm-local';
 
 /** Best-effort restrictive permissions on secrets files (Unix). */
 async function chmodSecrets(filePath) {
@@ -94,6 +98,7 @@ export function toProviderPublic(profile, flags) {
     hasApiKey: flags.hasApiKey,
     hasBearer: flags.hasBearer,
     ...(profile.pricing ? { pricing: profile.pricing } : {}),
+    supportsExtendedSamplers: profile.supportsExtendedSamplers === true,
   };
 }
 
@@ -282,8 +287,13 @@ async function migrateProviderCapabilities() {
  * Seed a disabled llama.cpp provider row (upserted when a model is served).
  */
 export async function seedLlamaCppLocal() {
-  const ids = await listProviderIds();
-  if (ids.includes(LLAMA_CPP_LOCAL_ID)) return;
+  const profilePath = path.join(providerDir(LLAMA_CPP_LOCAL_ID), 'profile.json');
+  try {
+    await fs.access(profilePath);
+    return;
+  } catch {
+    /* capabilities.json can mkdir this dir first — still need a profile */
+  }
 
   const baseUrl = validateBaseUrl(DEFAULT_LLAMA_CPP_URL);
   const now = new Date().toISOString();
@@ -298,6 +308,7 @@ export async function seedLlamaCppLocal() {
     modelsPath: paths.modelsPath,
     chatCompletionsPath: paths.chatCompletionsPath,
     supportsModelLoadUnload: false,
+    supportsExtendedSamplers: true,
     customHeaders: {},
     createdAt: now,
     updatedAt: now,
@@ -431,6 +442,7 @@ export async function createProvider(body) {
       body.supportsModelLoadUnload !== undefined
         ? body.supportsModelLoadUnload === true
         : caps.supportsModelLoadUnload,
+    supportsExtendedSamplers: body.supportsExtendedSamplers === true,
     modelsLoadPath: body.modelsLoadPath || paths.modelsLoadPath,
     modelsUnloadPath: body.modelsUnloadPath || paths.modelsUnloadPath,
     customHeaders:
@@ -507,6 +519,11 @@ export async function updateProvider(id, body) {
     profile.constrainedToolCalls = false;
   } else   if (body.constrainedToolCalls === null) {
     delete profile.constrainedToolCalls;
+  }
+  if (body.supportsExtendedSamplers === true) {
+    profile.supportsExtendedSamplers = true;
+  } else if (body.supportsExtendedSamplers === false) {
+    profile.supportsExtendedSamplers = false;
   }
 
   if (body.pricing !== undefined) {

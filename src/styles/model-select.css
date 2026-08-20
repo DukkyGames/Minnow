@@ -451,6 +451,21 @@
   white-space: nowrap;
 }
 
+/* Live runtime activity on a loaded local model. Collapses to nothing when idle, so
+   the row layout is identical for the 99% of models that are not local serves. */
+.model-select-option-activity {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-accent-ink);
+  letter-spacing: 0.02em;
+}
+
+.model-select-option-activity:empty {
+  display: none;
+}
+
 .model-select-option-action {
   flex-shrink: 0;
   margin-left: auto;
@@ -554,6 +569,17 @@
   animation: model-load-dot-spin 0.65s linear infinite;
 }
 
+/* Loaded and working. A pulse, not the loading spinner — the model is up, it is busy.
+   Only ever set on a dot that is already `loaded`. */
+.model-load-dot[data-busy='true'] {
+  animation: model-load-dot-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes model-load-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.78); }
+}
+
 .model-wrap[data-model-state='loading'] .model-state-dot {
   background: transparent;
   border-color: transparent;
@@ -573,6 +599,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .model-load-dot[data-load-state='loading'],
+  .model-load-dot[data-busy='true'],
   .model-wrap[data-model-state='loading'] .model-state-dot {
     animation: none;
     opacity: 0.85;

@@ -91,6 +91,7 @@ import {
 } from '../models/model-select-library';
 import {
   cancelAssistantBubbleRenderDebounce,
+  finishStreamingBubbleRender,
   scheduleAssistantBubbleRender,
   setAssistantBubbleContent,
 } from '../markdown/renderer';
@@ -815,8 +816,7 @@ async function streamCompletionTurn(
   provider: Awaited<ReturnType<typeof getActiveProvider>>,
   body: ChatCompletionBody,
   resumeGenerationId: string | undefined,
-  bubble: HTMLDivElement,
-  cursor: HTMLDivElement,
+  getStreamDom: () => { bubble: HTMLDivElement; cursor: HTMLDivElement },
   signal: AbortSignal,
   thoughtController: ThoughtBubbleController | null,
   domVisible: boolean,
@@ -870,6 +870,7 @@ async function streamCompletionTurn(
     onFirstProseDelta?.();
     onPartialText?.(fullText);
     if (domVisible) {
+      const { bubble, cursor } = getStreamDom();
       scheduleAssistantBubbleRender(bubble, fullText, cursor);
     }
   }
@@ -914,6 +915,7 @@ async function streamCompletionTurn(
     fullText += text;
     onPartialText?.(fullText);
     if (domVisible) {
+      const { bubble, cursor } = getStreamDom();
       scheduleAssistantBubbleRender(bubble, fullText, cursor);
     }
   }
@@ -1682,6 +1684,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
     };
     thoughtController?.setAssistantWrap(wrap);
+    if (livePartialText.trim() && isStreamDomVisible(chat.id)) {
+      // Replay already-streamed prose onto the new shell so the caret is not
+      // left on an empty revealed bubble while tokens keep painting a detached node.
+      revealProse();
+      scheduleAssistantBubbleRender(bubble, livePartialText, cursor);
+    }
   });
 
   thinkingTracker = new ThinkingDurationTracker((elapsedMs) => {
@@ -2074,8 +2082,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           provider,
           turnBody,
           activeResumeGenerationId,
-          bubble,
-          cursor,
+          () => ({ bubble, cursor }),
           chatSignal,
           thoughtController,
           domVisible,
@@ -2236,7 +2243,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
       cancelAssistantBubbleRenderDebounce();
       resetToolStartIndicator();
-      cursor.remove();
+      finishStreamingBubbleRender(bubble, cursor);
 
       const finishReason =
         turnResult.finishReason ||
@@ -2687,7 +2694,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       scheduleSaveSessions();
 
       cancelAssistantBubbleRenderDebounce();
-      if (cursor.parentElement) cursor.remove();
+      finishStreamingBubbleRender(bubble, cursor);
       thoughtController?.abort();
 
       const text = livePartialText.trim();
@@ -2810,7 +2817,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             forkHistoryIndex: failedForkIndex,
           });
         } else {
-          if (cursor.parentElement) cursor.remove();
+          finishStreamingBubbleRender(bubble, cursor);
           revealProse();
           setAssistantErrorBubbleWithRecovery(bubble, lost, {
             chatId: chat.id,

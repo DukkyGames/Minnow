@@ -4,7 +4,7 @@
 
 import { anthropicThinkingTypeFromProviderOptions } from '../lib/anthropic-thinking-style';
 import type { ProviderPublic, ApiKind } from './types';
-import { LLAMA_CPP_LOCAL_PROVIDER_ID } from './types';
+import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from './types';
 import { providerSupportsChatTemplateKwargs } from './provider-host';
 import { resolvedApiForModel } from './resolve-model-api';
 import type { ModelCapabilities } from '../types';
@@ -70,8 +70,21 @@ function stripInternalApiMessageFields(
 }
 
 /**
+ * llama.cpp / mlx-lm accept min_p / top_k / repetition_penalty / enable_thinking.
+ * Prefer the persisted flag; fall back to the stable local ids so in-memory
+ * tests and generations that only pass `{ id }` still keep those fields.
+ */
+function providerKeepsExtendedSamplers(provider: ProviderPublic): boolean {
+  if (provider.supportsExtendedSamplers === true) return true;
+  return (
+    provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID || provider.id === MLX_LM_LOCAL_PROVIDER_ID
+  );
+}
+
+/**
  * Normalize a chat completion body for the target provider.
- * openai-v1: drop LM Studio sampler fields, optional thinking, map max_tokens when needed.
+ * openai-v1: drop LM Studio sampler fields unless the provider is a local
+ * llama.cpp / mlx-lm serve (`supportsExtendedSamplers` or those stable ids).
  * anthropic-v1: drop sampler fields when extended thinking is active.
  */
 export function sanitizeCompletionBodyForProvider(
@@ -97,10 +110,14 @@ export function sanitizeCompletionBodyForProvider(
 
   const next = stripInternalApiMessageFields({ ...body });
   const templateKwargsReachModel = providerSupportsChatTemplateKwargs(provider);
-  delete next.top_k;
-  delete next.min_p;
-  delete next.repetition_penalty;
-  if (!templateKwargsReachModel) {
+  // Hosted OpenAI rejects LM Studio / llama.cpp sampler fields. Local llama.cpp
+  // and mlx-lm keep them so min_p actually reaches the serve.
+  if (!providerKeepsExtendedSamplers(provider)) {
+    delete next.top_k;
+    delete next.min_p;
+    delete next.repetition_penalty;
+  }
+  if (!templateKwargsReachModel && !providerKeepsExtendedSamplers(provider)) {
     delete next.enable_thinking;
   }
 

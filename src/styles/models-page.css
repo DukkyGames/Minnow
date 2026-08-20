@@ -266,6 +266,93 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   color: var(--mn-danger);
 }
 
+/* Planner miss / trainCtx notes — warning tone, not the danger used for tight VRAM. */
+.models-hint--warning {
+  color: var(--mn-warning);
+}
+
+/*
+ * Launch memory occupancy — bench gauges above the context / GPU-layer sliders.
+ * Not a card: same surface as the inspector, hairline tracks, mono values.
+ */
+.models-launch-memory {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.models-launch-memory__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: baseline;
+}
+
+.models-launch-memory__kind {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--mn-fg-muted);
+}
+
+.models-launch-memory__value {
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg);
+  white-space: nowrap;
+}
+
+.models-launch-memory__row[data-tone='warn'] .models-launch-memory__value {
+  color: var(--mn-warning);
+}
+
+.models-launch-memory__row[data-tone='tight'] .models-launch-memory__value,
+.models-launch-memory__row[data-tone='over'] .models-launch-memory__value {
+  color: var(--mn-danger);
+}
+
+.models-launch-memory__track {
+  grid-column: 1 / -1;
+  height: 6px;
+  overflow: hidden;
+  background: var(--mn-border-strong);
+  border-radius: 3px;
+}
+
+.models-launch-memory__fill {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in oklch, var(--mn-fg) 48%, transparent);
+  /* Instant: this node is replaced on each slider tick; the range stays put. */
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left center;
+}
+
+.models-launch-memory__row[data-tone='warn'] .models-launch-memory__fill {
+  background: var(--mn-warning);
+}
+
+.models-launch-memory__row[data-tone='tight'] .models-launch-memory__fill,
+.models-launch-memory__row[data-tone='over'] .models-launch-memory__fill {
+  background: var(--mn-danger);
+}
+
+.models-launch-memory__note,
+.models-launch-memory__caption {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.models-launch-memory__caption--warn {
+  color: var(--mn-danger);
+}
+
 /* ------------------------------------------------------------- inspector */
 
 .models-inspector {
@@ -532,6 +619,19 @@ html:not(.minnow-os-enabled) .models-page.is-open {
 
 .models-dot--error {
   background: var(--mn-danger);
+}
+
+.models-dot--crashed {
+  background: var(--mn-danger);
+}
+
+.models-dot--unhealthy {
+  background: var(--mn-warning);
+  animation: models-pulse 1.4s var(--ease-out) infinite;
+}
+
+.models-dot--stopped {
+  background: var(--mn-fg-subtle);
 }
 
 @keyframes models-pulse {
@@ -988,6 +1088,17 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   border-radius: 999px;
 }
 
+.models-row__loaded-badge.is-crashed,
+.models-row__loaded-badge.is-error {
+  color: var(--mn-danger-ink);
+  background: var(--mn-danger-soft);
+}
+
+.models-row__loaded-badge.is-unhealthy {
+  color: var(--mn-warning);
+  background: var(--mn-warning-soft);
+}
+
 .models-row__warn {
   flex-shrink: 0;
   font-size: 10px;
@@ -1344,9 +1455,26 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   background: var(--mn-success-soft);
 }
 
+/* A slot doing prompt processing or generation. Accent, not warning — this is the
+   model working, which is the thing the user asked for. */
+.models-loaded__state.is-busy {
+  color: var(--mn-accent-ink);
+  background: var(--mn-accent-soft);
+}
+
 .models-loaded__state.is-error {
   color: var(--mn-danger-ink);
   background: var(--mn-danger-soft);
+}
+
+.models-loaded__state.is-crashed {
+  color: var(--mn-danger-ink);
+  background: var(--mn-danger-soft);
+}
+
+.models-loaded__state.is-unhealthy {
+  color: var(--mn-warning);
+  background: var(--mn-warning-soft);
 }
 
 .models-loaded__name {
@@ -1377,6 +1505,37 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* Classified llama.cpp failure — title + cause + what to do. Full border, no side stripe. */
+.models-serve-failure {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--mn-danger-soft);
+  border: 1px solid var(--mn-danger-border);
+  border-radius: var(--radius-md);
+}
+
+.models-serve-failure__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-danger-ink);
+}
+
+.models-serve-failure__detail,
+.models-serve-failure__fix {
+  margin: 0;
+  max-width: 75ch;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg);
+}
+
+.models-serve-failure__fix {
+  color: var(--mn-fg);
 }
 
 .models-spinner {
@@ -1609,9 +1768,16 @@ html:not(.minnow-os-enabled) .models-page.is-open {
 
 .models-field__range-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.models-field__range-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .models-field__range-value {
@@ -1620,6 +1786,32 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   font-variant-numeric: tabular-nums;
   color: var(--mn-fg-muted);
   white-space: nowrap;
+}
+
+/* Quiet restore next to a custom GPU-layer count. Not a chip: Auto is a mode, not a preset. */
+.models-field__auto {
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .models-field__auto:hover {
+    color: var(--mn-fg);
+  }
+}
+
+.models-field__auto:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
 }
 
 /* Compact token count next to the context slider — same type as the read-only value. */
@@ -1710,17 +1902,26 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   border-style: dashed;
 }
 
+/* Stacked collapsible groups in the Load tab: each rule is the divider above it. */
 .models-advanced {
   padding-top: 16px;
   border-top: 1px solid var(--mn-border);
 }
 
+.models-advanced[open] {
+  padding-bottom: 8px;
+}
+
 .models-advanced__summary {
-  margin-bottom: 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--mn-fg-muted);
   cursor: pointer;
+}
+
+/* Only open groups need the gap; a run of closed summaries stays evenly spaced. */
+.models-advanced[open] > .models-advanced__summary {
+  margin-bottom: 12px;
 }
 
 .models-copy-field {
@@ -2070,6 +2271,7 @@ html:not(.minnow-os-enabled) .models-page.is-open {
 
 @media (prefers-reduced-motion: reduce) {
   .models-dot--starting,
+  .models-dot--unhealthy,
   .models-spinner,
   .models-progress__fill.is-indeterminate,
   .models-skeleton__row {

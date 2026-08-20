@@ -2,10 +2,12 @@
  * Hugging Face Hub helpers — list GGUF files and stream downloads.
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { getModelsConfig } from './models-config.js';
+import { expandSplitGgufFilenames } from './split-gguf.js';
 import { validateGgufFilename, validateRepoId } from './validate.js';
 
 /** Cached config token to avoid disk read on every HEAD. */
@@ -83,9 +85,32 @@ export async function listRepoFilesRecursive(repoId) {
 }
 
 /**
- * Pick a GGUF filename for a quant tier from repo listing.
+ * Rank listed GGUF paths for a quant, then expand split shards.
+ * Ranking still picks one preferred name; a `-00001-of-00003` hit expands to every sibling.
+ * @param {string[]} ggufs
+ * @param {string} [quant]
+ * @returns {string[]}
+ */
+export function pickGgufFilenames(ggufs, quant = 'Q4_K_M') {
+  if (!ggufs.length) {
+    throw new Error('No GGUF files found');
+  }
+  const q = (quant || 'Q4_K_M').toUpperCase();
+  const ranked = [
+    ggufs.find((name) => name.toUpperCase().includes(q)),
+    ggufs.find((name) => name.toUpperCase().includes('Q4_K_M')),
+    ggufs.find((name) => name.toUpperCase().includes('Q4')),
+    ggufs[0],
+  ].filter(Boolean);
+  return expandSplitGgufFilenames(ranked[0], ggufs);
+}
+
+/**
+ * Pick GGUF file(s) for a quant tier from the repo listing.
+ * Returns every shard when the chosen name is a split GGUF.
  * @param {string} repoId
  * @param {string} [quant] e.g. Q4_K_M
+ * @returns {Promise<string[]>}
  */
 export async function resolveGgufFilename(repoId, quant = 'Q4_K_M') {
   const files = await listRepoFilesRecursive(repoId);
@@ -95,15 +120,7 @@ export async function resolveGgufFilename(repoId, quant = 'Q4_K_M') {
   if (!ggufs.length) {
     throw new Error(`No GGUF files found in ${repoId}`);
   }
-
-  const q = (quant || 'Q4_K_M').toUpperCase();
-  const ranked = [
-    ggufs.find((name) => name.toUpperCase().includes(q)),
-    ggufs.find((name) => name.toUpperCase().includes('Q4_K_M')),
-    ggufs.find((name) => name.toUpperCase().includes('Q4')),
-    ggufs[0],
-  ].filter(Boolean);
-  return ranked[0];
+  return pickGgufFilenames(ggufs, quant);
 }
 
 /**
@@ -172,27 +189,157 @@ function finishWriteStream(file) {
 }
 
 /**
- * Stream a HF file to disk with progress callbacks.
- * @param {{ repoId: string, filename: string, destPath: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void }} opts
+ * Hugging Face `X-Linked-Etag` is the sha256 of the LFS blob. Values are often
+ * quoted, may carry a `W/` weak prefix, and sometimes a `sha256:` scheme.
+ * Returns lowercase hex, or null when the header is absent / not a 64-char
+ * digest — ordinary HTTP etags are not checksums, and tests without the header
+ * still need to complete.
+ * @param {string | null | undefined} raw
+ * @returns {string | null}
  */
-export async function downloadHfFile({ repoId, filename, destPath, signal, onProgress }) {
-  validateRepoId(repoId);
-  const repoFilePath = validateRepoFilePath(filename);
-  const token = await resolveHfTokenAsync();
-  const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURI(repoFilePath)}`;
-  const res = await fetch(url, { headers: hfHeaders(token), redirect: 'follow', signal });
-  if (!res.ok || !res.body) {
-    throw new Error(`Hugging Face download failed (${res.status})`);
+export function parseLinkedEtag(raw) {
+  if (raw == null) return null;
+  let value = String(raw).trim();
+  if (!value) return null;
+  if (value.startsWith('W/') || value.startsWith('w/')) value = value.slice(2).trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+  if (value.toLowerCase().startsWith('sha256:')) value = value.slice(7);
+  value = value.trim();
+  if (!/^[0-9a-f]{64}$/i.test(value)) return null;
+  return value.toLowerCase();
+}
+
+/**
+ * `bytes start-end/total` from a 206 Content-Range. Total may be `*`.
+ * @param {string | null} header
+ * @returns {{ start: number, end: number, total: number | null } | null}
+ */
+function parseContentRange(header) {
+  if (!header) return null;
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)/i.exec(header.trim());
+  if (!match) return null;
+  return {
+    start: Number(match[1]),
+    end: Number(match[2]),
+    total: match[3] === '*' ? null : Number(match[3]),
+  };
+}
+
+/** Hash an existing `.partial` so a resumed digest covers the prefix, not just new bytes. */
+async function hashFileInto(hasher, filePath) {
+  const stream = fs.createReadStream(filePath);
+  for await (const chunk of stream) {
+    hasher.update(chunk);
+  }
+}
+
+function isRedirectStatus(status) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+/**
+ * Follow redirects by hand so `Range` survives the hop to the HF CDN.
+ * `redirect: 'follow'` can drop Range; Authorization stays on huggingface.co only.
+ * @param {string} url
+ * @param {{ token?: string, rangeStart?: number, signal?: AbortSignal }} opts
+ */
+async function fetchHfPreservingRange(url, { token, rangeStart = 0, signal } = {}) {
+  let current = url;
+  for (let hop = 0; hop < 8; hop += 1) {
+    /** @type {Record<string, string>} */
+    const headers = { 'User-Agent': 'Minnow/1.0' };
+    try {
+      const host = new URL(current).hostname;
+      if (token && (host === 'huggingface.co' || host.endsWith('.huggingface.co'))) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {
+      if (token) headers.Authorization = `Bearer ${token}`;
+    }
+    if (rangeStart > 0) headers.Range = `bytes=${rangeStart}-`;
+    const res = await fetch(current, { headers, redirect: 'manual', signal });
+    if (isRedirectStatus(res.status)) {
+      const location = res.headers.get('location');
+      if (res.body) await res.body.cancel().catch(() => {});
+      if (!location) {
+        throw new Error(`Hugging Face download failed (${res.status})`);
+      }
+      current = new URL(location, current).href;
+      continue;
+    }
+    return res;
+  }
+  throw new Error('Hugging Face download failed (too many redirects)');
+}
+
+/**
+ * Stream a fetch response onto `destPath` via `destPath.partial`.
+ *
+ * Resume: if the partial already has bytes, send `Range: bytes=<size>-`.
+ * 206 appends; 200 (server ignored Range) truncates and restarts.
+ * Errors leave the partial on disk — the next attempt resumes from its size.
+ * @param {{ url: string, destPath: string, token?: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void, errorLabel?: string }} opts
+ */
+async function streamHfUrlToFile({ url, destPath, token, signal, onProgress, errorLabel }) {
+  await fsp.mkdir(path.dirname(destPath), { recursive: true });
+  const tmpPath = `${destPath}.partial`;
+
+  // A completed dest is a successful prior rename — skip rather than re-fetch.
+  try {
+    const destStat = await fsp.stat(destPath);
+    if (destStat.isFile() && destStat.size > 0) {
+      await fsp.rm(tmpPath, { force: true }).catch(() => {});
+      onProgress?.(destStat.size, destStat.size);
+      return { bytesReceived: destStat.size, totalBytes: destStat.size };
+    }
+  } catch {
+    /* dest missing — download or resume from .partial */
   }
 
-  const totalHeader = res.headers.get('content-length');
-  const totalBytes = totalHeader ? Number(totalHeader) : null;
-  await fsp.mkdir(path.dirname(destPath), { recursive: true });
+  let resumeFrom = 0;
+  try {
+    const partialStat = await fsp.stat(tmpPath);
+    if (partialStat.isFile() && partialStat.size > 0) resumeFrom = partialStat.size;
+  } catch {
+    resumeFrom = 0;
+  }
 
-  const tmpPath = `${destPath}.partial`;
-  const file = fs.createWriteStream(tmpPath);
+  const res = await fetchHfPreservingRange(url, { token, rangeStart: resumeFrom, signal });
+  if (!res.ok || !res.body) {
+    const suffix = errorLabel ? ` for ${errorLabel}` : '';
+    throw new Error(`Hugging Face download failed (${res.status})${suffix}`);
+  }
+
+  // 206 = continue from resumeFrom; 200 = rewrite the partial from byte 0.
+  const append = res.status === 206;
+  const writeFlags = append ? 'a' : 'w';
+  const startOffset = append ? resumeFrom : 0;
+
+  const contentRange = parseContentRange(res.headers.get('content-range'));
+  const lengthHeader = res.headers.get('content-length');
+  const length = lengthHeader ? Number(lengthHeader) : null;
+  let totalBytes = null;
+  if (append) {
+    // Content-Length on a 206 is the remainder; Content-Range carries the full size.
+    if (contentRange?.total != null) totalBytes = contentRange.total;
+    else if (length != null) totalBytes = startOffset + length;
+  } else if (length != null) {
+    totalBytes = length;
+  }
+
+  const hasher = crypto.createHash('sha256');
+  if (append && startOffset > 0) {
+    await hashFileInto(hasher, tmpPath);
+  }
+
+  const file = fs.createWriteStream(tmpPath, { flags: writeFlags });
   const reader = res.body.getReader();
-  let bytesReceived = 0;
+  let bytesReceived = startOffset;
 
   try {
     while (true) {
@@ -202,6 +349,7 @@ export async function downloadHfFile({ repoId, filename, destPath, signal, onPro
       const { done, value } = await readChunkWithStallTimeout(reader, signal);
       if (done) break;
       if (!value?.byteLength) continue;
+      hasher.update(value);
       bytesReceived += value.byteLength;
       if (!file.write(value)) {
         await new Promise((resolve) => file.once('drain', resolve));
@@ -210,25 +358,44 @@ export async function downloadHfFile({ repoId, filename, destPath, signal, onPro
     }
   } catch (err) {
     file.destroy();
-    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+    // Keep `.partial` so the next attempt can send Range from its size.
     throw err;
   }
 
   await finishWriteStream(file);
 
   if (totalBytes != null && bytesReceived < totalBytes) {
-    await fsp.rm(tmpPath, { force: true }).catch(() => {});
     throw new Error(`Incomplete download (${bytesReceived} of ${totalBytes} bytes)`);
   }
 
   const written = await fsp.stat(tmpPath);
   if (written.size !== bytesReceived) {
-    await fsp.rm(tmpPath, { force: true }).catch(() => {});
     throw new Error(`Incomplete download (file size mismatch)`);
+  }
+
+  // Skip verify when HF omitted the header (mirrors, tests, non-LFS files).
+  const expected = parseLinkedEtag(res.headers.get('x-linked-etag'));
+  if (expected) {
+    const digest = hasher.digest('hex');
+    if (digest !== expected) {
+      throw new Error(`Checksum mismatch (sha256 ${digest} != ${expected})`);
+    }
   }
 
   await fsp.rename(tmpPath, destPath);
   return { bytesReceived, totalBytes: totalBytes ?? bytesReceived };
+}
+
+/**
+ * Stream a HF file to disk with progress callbacks.
+ * @param {{ repoId: string, filename: string, destPath: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void }} opts
+ */
+export async function downloadHfFile({ repoId, filename, destPath, signal, onProgress }) {
+  validateRepoId(repoId);
+  const repoFilePath = validateRepoFilePath(filename);
+  const token = await resolveHfTokenAsync();
+  const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURI(repoFilePath)}`;
+  return streamHfUrlToFile({ url, destPath, token, signal, onProgress });
 }
 
 /**
@@ -246,7 +413,8 @@ export function validateRepoFilePath(filename) {
 }
 
 /**
- * Stream any HF repo file to disk (voice snapshots, not only GGUF).
+ * Stream any HF repo file to disk (MLX snapshots, not only GGUF).
+ * Shares resume / checksum behaviour with `downloadHfFile`.
  * @param {{ repoId: string, filename: string, destPath: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void }} opts
  */
 export async function downloadHfRepoFile({ repoId, filename, destPath, signal, onProgress }) {
@@ -254,55 +422,14 @@ export async function downloadHfRepoFile({ repoId, filename, destPath, signal, o
   validateRepoFilePath(filename);
   const token = await resolveHfTokenAsync();
   const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURI(filename)}`;
-  const res = await fetch(url, { headers: hfHeaders(token), redirect: 'follow', signal });
-  if (!res.ok || !res.body) {
-    throw new Error(`Hugging Face download failed (${res.status}) for ${filename}`);
-  }
-
-  const totalHeader = res.headers.get('content-length');
-  const totalBytes = totalHeader ? Number(totalHeader) : null;
-  await fsp.mkdir(path.dirname(destPath), { recursive: true });
-
-  const tmpPath = `${destPath}.partial`;
-  const file = fs.createWriteStream(tmpPath);
-  const reader = res.body.getReader();
-  let bytesReceived = 0;
-
-  try {
-    while (true) {
-      if (signal?.aborted) {
-        throw new Error('Download cancelled');
-      }
-      const { done, value } = await readChunkWithStallTimeout(reader, signal);
-      if (done) break;
-      if (!value?.byteLength) continue;
-      bytesReceived += value.byteLength;
-      if (!file.write(value)) {
-        await new Promise((resolve) => file.once('drain', resolve));
-      }
-      onProgress?.(bytesReceived, totalBytes);
-    }
-  } catch (err) {
-    file.destroy();
-    await fsp.rm(tmpPath, { force: true }).catch(() => {});
-    throw err;
-  }
-
-  await finishWriteStream(file);
-
-  if (totalBytes != null && bytesReceived < totalBytes) {
-    await fsp.rm(tmpPath, { force: true }).catch(() => {});
-    throw new Error(`Incomplete download (${bytesReceived} of ${totalBytes} bytes)`);
-  }
-
-  const written = await fsp.stat(tmpPath);
-  if (written.size !== bytesReceived) {
-    await fsp.rm(tmpPath, { force: true }).catch(() => {});
-    throw new Error(`Incomplete download (file size mismatch)`);
-  }
-
-  await fsp.rename(tmpPath, destPath);
-  return { bytesReceived, totalBytes: totalBytes ?? bytesReceived };
+  return streamHfUrlToFile({
+    url,
+    destPath,
+    token,
+    signal,
+    onProgress,
+    errorLabel: filename,
+  });
 }
 
 /**

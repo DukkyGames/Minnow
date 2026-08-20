@@ -5,6 +5,10 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { sanitizeCompletionBodyForProvider } from '../../src/providers/sanitize-completion-body.ts';
 import type { ProviderPublic } from '../../src/providers/types.ts';
+import {
+  EXTENDED_SAMPLER_BODY,
+  EXTENDED_SAMPLER_CASES,
+} from './sanitize-extended-samplers.fixtures.mjs';
 
 const OPENAI: ProviderPublic = {
   id: 'openai-v1',
@@ -245,4 +249,20 @@ describe('sanitizeCompletionBodyForProvider', () => {
     assert.equal(stripped.chat_template_kwargs, undefined);
     assert.equal(stripped.enable_thinking, undefined);
   });
+});
+
+describe('extended sampler keep vs strip (shared fixtures)', () => {
+  for (const fixture of EXTENDED_SAMPLER_CASES) {
+    test(fixture.name, () => {
+      const provider: ProviderPublic = { ...OPENAI, ...fixture.provider };
+      const body = { ...EXTENDED_SAMPLER_BODY } as Record<string, unknown>;
+      const out = sanitizeCompletionBodyForProvider({ ...EXTENDED_SAMPLER_BODY }, provider);
+      for (const key of fixture.keep) {
+        assert.equal(out[key], body[key], `expected to keep ${key}`);
+      }
+      for (const key of fixture.strip) {
+        assert.equal(out[key], undefined, `expected to strip ${key}`);
+      }
+    });
+  }
 });

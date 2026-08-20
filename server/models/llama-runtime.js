@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
 import { getMinnowHome } from '../config/home.js';
@@ -30,6 +31,13 @@ const BINARY_BASE = 'llama-server';
 
 /** @type {Promise<string> | null} */
 let installPromise = null;
+
+/**
+ * `llama-server --help` thinking-budget probe, keyed by binary path.
+ * Same path after a managed reinstall would otherwise keep a stale answer.
+ * @type {Map<string, Promise<boolean>>}
+ */
+const thinkingBudgetSupportCache = new Map();
 
 /**
  * @typedef {{ phase: 'idle' | 'installing' | 'completed' | 'failed', percent: number, message: string, error: string | null }} LlamaInstallJob
@@ -214,17 +222,55 @@ export function pickLlamaReleaseAssetName(tag = LLAMA_CPP_RELEASE_TAG) {
 }
 
 /**
+ * Compare ggml-org llama.cpp release tags.
+ * `b9628` vs `b10448` strip a leading `b` and compare as integers when both
+ * parse; otherwise fall back to string equality (pre-release / odd tags).
+ * @param {string | null | undefined} a
+ * @param {string | null | undefined} b
+ * @returns {boolean}
+ */
+export function llamaReleaseTagsEqual(a, b) {
+  if (a == null || b == null) return false;
+  const left = normalizeLlamaReleaseTag(String(a));
+  const right = normalizeLlamaReleaseTag(String(b));
+  if (left.build != null && right.build != null) return left.build === right.build;
+  return left.raw === right.raw;
+}
+
+/**
+ * @param {string} tag
+ * @returns {{ raw: string, build: number | null }}
+ */
+function normalizeLlamaReleaseTag(tag) {
+  const raw = tag.trim();
+  const stripped = raw.replace(/^b/i, '');
+  // Require the whole remainder to be digits so `b10448-rc` does not collide with `b10448`.
+  if (/^\d+$/.test(stripped)) {
+    return { raw, build: Number.parseInt(stripped, 10) };
+  }
+  return { raw, build: null };
+}
+
+/**
+ * Managed-install metadata, or null when the file is missing / invalid.
+ * @returns {Promise<Record<string, unknown> | null>}
+ */
+async function readManagedLlamaMeta() {
+  try {
+    const meta = JSON.parse(await fsp.readFile(getManagedLlamaMetaPath(), 'utf8'));
+    return meta && typeof meta === 'object' ? meta : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Read installed variant from meta.json when present.
  * @returns {Promise<string | null>}
  */
 export async function getInstalledLlamaVariant() {
-  try {
-    const raw = await fsp.readFile(getManagedLlamaMetaPath(), 'utf8');
-    const meta = JSON.parse(raw);
-    return typeof meta.variant === 'string' ? meta.variant : null;
-  } catch {
-    return null;
-  }
+  const meta = await readManagedLlamaMeta();
+  return typeof meta?.variant === 'string' ? meta.variant : null;
 }
 
 /**
@@ -232,12 +278,16 @@ export async function getInstalledLlamaVariant() {
  */
 export async function getLlamaRuntimeStatus() {
   const resolved = await resolveLlamaServer();
-  let meta = null;
-  try {
-    meta = JSON.parse(await fsp.readFile(getManagedLlamaMetaPath(), 'utf8'));
-  } catch {
-    /* not installed via managed path */
-  }
+  const meta = await readManagedLlamaMeta();
+  const installedVersion = typeof meta?.version === 'string' ? meta.version : null;
+  const pinnedVersion = LLAMA_CPP_RELEASE_TAG;
+  // Offer upgrade only for a managed tree we actually installed — PATH/vendor
+  // binaries are not something Settings can replace with the pin.
+  const managedInstallExists = Boolean(findBinaryInDir(getManagedLlamaRoot()));
+  const upgradeAvailable =
+    managedInstallExists &&
+    installedVersion != null &&
+    !llamaReleaseTagsEqual(installedVersion, pinnedVersion);
 
   const assets = await fetchReleaseAssetList();
   const installableVariants = listInstallableVariants(assets);
@@ -245,21 +295,43 @@ export async function getLlamaRuntimeStatus() {
   const config = await readLlamaCppConfig();
   const variant =
     (typeof config.variant === 'string' ? config.variant : null) ??
-    meta?.variant ??
+    (typeof meta?.variant === 'string' ? meta.variant : null) ??
     preferredVariant;
 
   return {
     path: resolved.path,
     source: resolved.source,
-    variant: meta?.variant ?? (resolved.path ? variant : preferredVariant),
-    version: meta?.version ?? LLAMA_CPP_RELEASE_TAG,
-    assetNames: meta?.assetNames ?? [],
-    installedAt: meta?.installedAt ?? null,
+    variant: (typeof meta?.variant === 'string' ? meta.variant : null) ?? (resolved.path ? variant : preferredVariant),
+    // Prefer the installed tag when known so callers do not treat the pin as what is on disk.
+    version: installedVersion ?? pinnedVersion,
+    pinnedVersion,
+    installedVersion,
+    upgradeAvailable,
+    assetNames: Array.isArray(meta?.assetNames) ? meta.assetNames : [],
+    installedAt: typeof meta?.installedAt === 'string' ? meta.installedAt : null,
     installable: isLlamaRuntimeInstallable(),
-    gpuCapable: isGpuCapableVariant(meta?.variant ?? preferredVariant),
+    gpuCapable: isGpuCapableVariant(
+      (typeof meta?.variant === 'string' ? meta.variant : null) ?? preferredVariant,
+    ),
     preferredVariant,
     installableVariants,
+    // Rolling bytes-per-ms for this variant, folded in after every successful load.
+    // The load bar's fallback ETA when a model has never been loaded before — CUDA and
+    // CPU builds differ by an order of magnitude, hence the per-variant key.
+    loadRateBytesPerMs: readLoadRateForVariant(config, variant),
   };
+}
+
+/**
+ * @param {{ loadRate?: unknown }} config `~/.minnow/llama-cpp.json`
+ * @param {string | null | undefined} variant
+ * @returns {number | null}
+ */
+function readLoadRateForVariant(config, variant) {
+  const table = config?.loadRate;
+  if (!table || typeof table !== 'object' || !variant) return null;
+  const value = Number(/** @type {Record<string, unknown>} */ (table)[variant]);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 async function fetchJson(url) {
@@ -303,6 +375,47 @@ async function downloadToFile(url, dest, onProgress) {
     file.end(() => resolve());
     file.on('error', reject);
   });
+}
+
+/**
+ * sha256 a file without loading the whole zip into RAM.
+ * @param {string} filePath
+ */
+async function sha256File(filePath) {
+  const hash = crypto.createHash('sha256');
+  const stream = fs.createReadStream(filePath);
+  for await (const chunk of stream) hash.update(chunk);
+  return hash.digest('hex');
+}
+
+/**
+ * Compare sha256 of a downloaded GitHub release archive to the asset `digest`.
+ * Fail closed when a digest is present — extracting a corrupted zip has already
+ * cost a 20 GB model load later. Skip when the API object omitted digest so
+ * older GitHub snapshots / test fixtures still install.
+ *
+ * @param {string | Buffer | Uint8Array} filePathOrBuffer
+ * @param {string | null | undefined} digest  e.g. `sha256:abc…`
+ */
+export async function assertArchiveDigest(filePathOrBuffer, digest) {
+  const raw = typeof digest === 'string' ? digest.trim() : '';
+  if (!raw) {
+    // GitHub added `digest` on release assets recently; older API responses omit it.
+    return;
+  }
+  const expected = raw.replace(/^sha256:/i, '').trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expected)) {
+    throw new Error(`Unrecognized llama.cpp archive digest: ${raw}`);
+  }
+  const actual =
+    typeof filePathOrBuffer === 'string'
+      ? await sha256File(filePathOrBuffer)
+      : crypto.createHash('sha256').update(filePathOrBuffer).digest('hex');
+  if (actual !== expected) {
+    throw new Error(
+      `llama.cpp archive sha256 mismatch (expected ${expected}, got ${actual}) — not extracting`,
+    );
+  }
 }
 
 /**
@@ -411,7 +524,18 @@ export async function ensureLlamaServer(opts = {}) {
   const wantsVariant = opts.variant ?? config.variant;
 
   if (resolved.path && !opts.reinstall) {
-    if (!wantsVariant || wantsVariant === installedVariant) {
+    const variantOk = !wantsVariant || wantsVariant === installedVariant;
+    if (variantOk) {
+      // Compare against the pin so drift is detected here, but never download
+      // during a normal load — Settings offers Upgrade via upgradeAvailable.
+      const meta = await readManagedLlamaMeta();
+      const installedVersion = typeof meta?.version === 'string' ? meta.version : null;
+      const pinnedVersion = opts.tag ?? LLAMA_CPP_RELEASE_TAG;
+      const versionDrift =
+        Boolean(installedVersion) && !llamaReleaseTagsEqual(installedVersion, pinnedVersion);
+      if (versionDrift) {
+        return resolved.path;
+      }
       return resolved.path;
     }
   }
@@ -486,6 +610,7 @@ async function installManagedLlamaServer(opts) {
     await downloadToFile(mainAsset.browser_download_url, mainArchivePath, (pct) => {
       onProgress({ percent: pct, message: `Downloading ${mainZip}` });
     });
+    await assertArchiveDigest(mainArchivePath, mainAsset.digest);
 
     if (companionZip) {
       const companionAsset = assetByName.get(companionZip);
@@ -493,6 +618,7 @@ async function installManagedLlamaServer(opts) {
         onProgress({ percent: 50, message: `Downloading ${companionZip}` });
         const companionPath = path.join(tmpRoot, companionZip);
         await downloadToFile(companionAsset.browser_download_url, companionPath);
+        await assertArchiveDigest(companionPath, companionAsset.digest);
         onProgress({ percent: 70, message: 'Extracting CUDA runtime' });
         const companionExtract = path.join(tmpRoot, 'companion');
         await extractArchive(companionPath, companionExtract);
@@ -532,6 +658,9 @@ async function installManagedLlamaServer(opts) {
       'utf8',
     );
 
+    // Same managed path after a reinstall would otherwise keep the old --help probe.
+    thinkingBudgetSupportCache.clear();
+
     onProgress({ percent: 100, message: 'llama-server ready' });
     setInstallJob({ phase: 'completed', percent: 100, message: 'llama-server ready', error: null });
     return installed;
@@ -567,23 +696,32 @@ export function buildLlamaServerEnv(binaryPath, baseEnv = process.env) {
   };
 }
 
-/** Test helper — clear in-flight install lock. */
+/** Test helper — clear in-flight install lock and the --help probe cache. */
 export function resetLlamaRuntimeInstallForTests() {
   installPromise = null;
+  thinkingBudgetSupportCache.clear();
 }
 
 /**
  * Feature-detect per-request reasoning budget support via `llama-server --help`.
+ * Memoized per binary path so a successful load does not respawn --help.
  * @param {string} binaryPath
  * @returns {Promise<boolean>}
  */
 export async function detectLlamaThinkingBudgetSupport(binaryPath) {
   if (!binaryPath) return false;
-  try {
-    const result = await runProcess(binaryPath, ['--help'], { timeout: 15_000 });
-    const helpText = `${result.stdout}\n${result.stderr}`;
-    return /--reasoning-budget/.test(helpText);
-  } catch {
-    return false;
-  }
+  const cached = thinkingBudgetSupportCache.get(binaryPath);
+  if (cached) return cached;
+
+  const probe = (async () => {
+    try {
+      const result = await runProcess(binaryPath, ['--help'], { timeout: 15_000 });
+      const helpText = `${result.stdout}\n${result.stderr}`;
+      return /--reasoning-budget/.test(helpText);
+    } catch {
+      return false;
+    }
+  })();
+  thinkingBudgetSupportCache.set(binaryPath, probe);
+  return probe;
 }

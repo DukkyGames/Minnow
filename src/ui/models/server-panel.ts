@@ -4,7 +4,8 @@
  */
 
 import { subscribeServeLog, type ServeRecord } from '../../models/api-client';
-import { classifyLogLine, toLogLines } from '../../models/serve-log';
+import { classifyLogLine, foldServeLogEvent, toLogLines } from '../../models/serve-log';
+import { isLiveServeStatus, isRetryableServeStatus, retryLabelForServe, serveStatusLabel } from '../../models/serve-status';
 import { setStatus } from '../status';
 import {
   chip,
@@ -12,22 +13,24 @@ import {
   copyText,
   el,
   emptyState,
-  formatBytes,
   formatElapsed,
   icon,
   iconButton,
   textButton,
 } from './dom';
 import { showModelInInspector } from './inspector';
+import { serveFailureBlock } from './serve-failure-view';
 import {
-  dismissLoad,
+  attentionServes,
   getModelsState,
   refreshModels,
+  retryServe,
   runningServes,
   subscribeModelsStore,
   unloadServe,
   type LoadProgress,
 } from './store';
+import type { ServeActivity } from '../../models/api-client';
 
 /** OpenAI-compatible surface llama-server exposes. */
 const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
@@ -44,6 +47,17 @@ let logUnsub: (() => void) | null = null;
 let logBuffer = '';
 let autoScroll = true;
 let elapsedTimer: number | null = null;
+
+function dedupeServes(serves: ServeRecord[]): ServeRecord[] {
+  const seen = new Set<string>();
+  const out: ServeRecord[] = [];
+  for (const serve of serves) {
+    if (seen.has(serve.id)) continue;
+    seen.add(serve.id);
+    out.push(serve);
+  }
+  return out;
+}
 
 function mount(): HTMLElement | null {
   return document.getElementById('modelsServerBody');
@@ -65,7 +79,7 @@ function bindLogStream(serveId: string | null): void {
     return;
   }
   logUnsub = subscribeServeLog(serveId, (event) => {
-    logBuffer = event.initial ? event.text : logBuffer + event.text;
+    logBuffer = foldServeLogEvent(logBuffer, event);
     renderLogBody();
   });
 }
@@ -86,7 +100,25 @@ function renderLogBody(): void {
 function statusBar(serves: ServeRecord[]): HTMLElement {
   const running = serves.filter((s) => s.status === 'running');
   const starting = serves.filter((s) => s.status === 'starting');
-  const isUp = running.length > 0;
+  const unhealthy = serves.filter((s) => s.status === 'unhealthy');
+  const crashed = getModelsState().serves.filter((s) => s.status === 'crashed');
+  const isUp = running.length > 0 || unhealthy.length > 0;
+
+  let tone: 'running' | 'starting' | 'unhealthy' | 'crashed' | 'stopped' = 'stopped';
+  let label = 'Stopped';
+  if (running.length) {
+    tone = 'running';
+    label = 'Running';
+  } else if (starting.length) {
+    tone = 'starting';
+    label = 'Starting';
+  } else if (unhealthy.length) {
+    tone = 'unhealthy';
+    label = 'Unhealthy';
+  } else if (crashed.length) {
+    tone = 'crashed';
+    label = 'Crashed';
+  }
 
   const bar = el('div', 'models-status-bar');
 
@@ -103,7 +135,8 @@ function statusBar(serves: ServeRecord[]): HTMLElement {
   toggle.addEventListener('click', () => {
     if (isUp) {
       toggle.disabled = true;
-      void Promise.all(running.map((s) => unloadServe(s.id)))
+      const toStop = [...running, ...unhealthy];
+      void Promise.all(toStop.map((s) => unloadServe(s.id)))
         .catch((err: unknown) => {
           setStatus('err', err instanceof Error ? err.message : 'Could not stop the server');
         })
@@ -115,24 +148,27 @@ function statusBar(serves: ServeRecord[]): HTMLElement {
     void import('../models-page').then((m) => m.openModels('installed'));
   });
 
-  const label = el(
-    'span',
-    'models-status-bar__label',
-    isUp ? 'Running' : starting.length ? 'Starting' : 'Stopped',
-  );
-  label.prepend(
-    el('span', `models-dot models-dot--${isUp ? 'running' : starting.length ? 'starting' : 'stopped'}`),
-  );
-  state.append(label, toggle);
+  const labelEl = el('span', 'models-status-bar__label', label);
+  labelEl.prepend(el('span', `models-dot models-dot--${tone}`));
+  state.append(labelEl, toggle);
   bar.appendChild(state);
 
   if (isUp) {
     const reach = el('div', 'models-status-bar__reach');
-    reach.append(el('span', 'models-field-label', 'Reachable at'), copyField(running[0].baseUrl, 'Copy server URL'));
+    reach.append(
+      el('span', 'models-field-label', 'Reachable at'),
+      copyField((running[0] ?? unhealthy[0]).baseUrl, 'Copy server URL'),
+    );
     bar.appendChild(reach);
   } else {
     bar.appendChild(
-      el('p', 'models-status-bar__hint', 'No model is loaded, so nothing is listening yet.'),
+      el(
+        'p',
+        'models-status-bar__hint',
+        crashed.length
+          ? 'The runtime exited. Retry with the suggested settings, or load another model from My Models.'
+          : 'No model is loaded, so nothing is listening yet.',
+      ),
     );
   }
 
@@ -148,17 +184,33 @@ function statusBar(serves: ServeRecord[]): HTMLElement {
   return bar;
 }
 
+/**
+ * "~12s left" for a predicted remainder. Null once the model has overshot — a stuck
+ * "0s left" is worse than saying nothing.
+ */
+function formatEta(etaMs: number | null): string | null {
+  if (etaMs == null || !Number.isFinite(etaMs) || etaMs <= 0) return null;
+  const seconds = Math.round(etaMs / 1000);
+  if (seconds < 1) return null;
+  if (seconds < 60) return `~${seconds}s left`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest ? `~${minutes}m ${rest}s left` : `~${minutes}m left`;
+}
+
 function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLElement {
   const card = el('article', 'models-loaded is-loading');
 
   const head = el('div', 'models-loaded__head');
   const stateChip = el('span', 'models-loaded__state');
+  // Spawning starts at a modelled 0. Printing that as "Loading 0%" looks stuck
+  // before the first phase marker or time-model tick has anything to show.
+  const shownPercent = load.percent != null && load.percent > 0 ? Math.round(load.percent) : null;
   if (load.error) {
     stateChip.classList.add('is-error');
     stateChip.textContent = 'Failed';
   } else {
-    stateChip.textContent =
-      load.percent != null ? `Loading ${load.percent.toFixed(2)}%` : 'Loading';
+    stateChip.textContent = shownPercent != null ? `Loading ${shownPercent}%` : 'Loading';
     stateChip.appendChild(el('span', 'models-spinner'));
   }
   head.appendChild(stateChip);
@@ -166,7 +218,26 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
 
   const actions = el('div', 'models-loaded__actions');
   if (load.error) {
-    actions.appendChild(textButton('Dismiss', () => dismissLoad(load.serveId)));
+    if (serve && isRetryableServeStatus(serve.status)) {
+      actions.appendChild(
+        textButton(
+          retryLabelForServe(serve),
+          () => {
+            void retryServe(serve).catch((err: unknown) => {
+              setStatus('err', err instanceof Error ? err.message : 'Retry failed');
+            });
+          },
+          'primary',
+        ),
+      );
+    }
+    actions.appendChild(
+      textButton('Clear', () => {
+        void unloadServe(load.serveId).catch((err: unknown) => {
+          setStatus('err', err instanceof Error ? err.message : 'Clear failed');
+        });
+      }),
+    );
   } else {
     actions.appendChild(
       textButton('Cancel', () => {
@@ -179,18 +250,23 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
   head.appendChild(actions);
   card.appendChild(head);
 
-  card.appendChild(
-    el(
-      'p',
-      'models-loaded__meta',
-      load.error ? load.error : `${load.phase} · ${formatElapsed(load.startedAt)}`,
-    ),
-  );
+  if (load.error) {
+    const failure = serve ? serveFailureBlock(serve) : null;
+    if (failure) card.appendChild(failure);
+    else card.appendChild(el('p', 'models-loaded__meta', load.error));
+  } else {
+    const parts = [load.phase, formatElapsed(load.startedAt)];
+    const eta = formatEta(load.etaMs);
+    if (eta) parts.push(eta);
+    card.appendChild(el('p', 'models-loaded__meta', parts.join(' · ')));
+  }
 
   if (!load.error) {
     const track = el('div', 'models-progress');
     const fill = el('div', 'models-progress__fill');
-    if (load.percent != null) fill.style.width = `${Math.min(100, load.percent)}%`;
+    // A 0-width modelled bar reads as stuck. Stay indeterminate until the model
+    // has moved off the spawning floor.
+    if (shownPercent != null) fill.style.width = `${Math.min(100, shownPercent)}%`;
     else fill.classList.add('is-indeterminate');
     track.appendChild(fill);
     card.appendChild(track);
@@ -198,12 +274,51 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
   return card;
 }
 
+/** `1.2k` / `917` — token counts read at a glance without a jumping column width. */
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 10_000) return `${Math.round(tokens / 1000)}k`;
+  if (tokens >= 1_000) return `${(tokens / 1000).toFixed(1)}k`;
+  return String(tokens);
+}
+
+/**
+ * One chip per working slot, plus `Ready` when nothing is.
+ *
+ * Prompt processing shows a token *count*, not a percentage: `/slots` reports the same
+ * running number in `n_prompt_tokens` and `n_prompt_tokens_processed` during prefill, so
+ * there is no total to divide by. Inventing one would be the only way to show a percent
+ * here, and a made-up bar is worse than an honest counter.
+ */
+function activityChips(activity: ServeActivity | undefined): HTMLElement[] {
+  if (!activity?.available) return [el('span', 'models-loaded__state is-ready', 'Ready')];
+
+  const busy = activity.slots.filter((slot) => slot.state !== 'idle');
+  if (!busy.length) {
+    const chipEl = el('span', 'models-loaded__state is-ready', 'Ready');
+    // A saturated server stops answering /slots. Say the reading is old rather than
+    // claim it is idle.
+    if (activity.stale) chipEl.textContent = 'Ready · stale';
+    return [chipEl];
+  }
+
+  return busy.map((slot) => {
+    const chipEl = el('span', 'models-loaded__state is-busy');
+    if (slot.state === 'prompt') {
+      chipEl.textContent = `${slot.id} PP ${formatTokenCount(slot.promptProcessed)} tok`;
+    } else {
+      chipEl.textContent = `${slot.id} GEN ${formatTokenCount(slot.decoded)} tok`;
+    }
+    chipEl.appendChild(el('span', 'models-spinner'));
+    return chipEl;
+  });
+}
+
 function loadedCard(serve: ServeRecord): HTMLElement {
   const card = el('article', 'models-loaded');
+  const activity = getModelsState().activity.get(serve.id);
 
   const head = el('div', 'models-loaded__head');
-  const stateChip = el('span', 'models-loaded__state is-ready', 'Ready');
-  head.appendChild(stateChip);
+  for (const chipEl of activityChips(activity)) head.appendChild(chipEl);
   head.appendChild(el('span', 'models-loaded__name', serve.modelLabel));
 
   const actions = el('div', 'models-loaded__actions');
@@ -240,9 +355,17 @@ function loadedCard(serve: ServeRecord): HTMLElement {
     chip(`port ${serve.port}`),
     chip(`up ${formatElapsed(serve.startedAt)}`),
   );
-  const settings = serve.llamaSettings as { ctx?: number; parallel?: number } | null;
+  const settings = serve.llamaSettings as
+    | { ctx?: number; parallel?: number; spec_type?: string }
+    | null;
   if (settings?.ctx) meta.appendChild(chip(`ctx ${settings.ctx}`));
   if (settings?.parallel) meta.appendChild(chip(`parallel ${settings.parallel}`));
+  if (settings?.spec_type && settings.spec_type !== 'none') {
+    meta.appendChild(chip(settings.spec_type));
+  }
+  // /slots carries no tok/s of its own; this is Δdecoded over Δt from the poller.
+  const rate = activity?.slots.find((slot) => slot.tokensPerSecond != null)?.tokensPerSecond;
+  if (rate != null && rate > 0) meta.appendChild(chip(`${rate.toFixed(1)} tok/s`));
   card.appendChild(meta);
 
   card.appendChild(copyField(serve.baseUrl, 'Copy base URL'));
@@ -255,6 +378,70 @@ function loadedCard(serve: ServeRecord): HTMLElement {
       showModelInInspector(model.id);
     });
     card.classList.add('is-selectable');
+  }
+  return card;
+}
+
+/** Crashed / unhealthy / error — distinct from Stopped (user eject) and load Failed. */
+function attentionCard(serve: ServeRecord): HTMLElement {
+  const card = el('article', `models-loaded is-${serve.status}`);
+  const head = el('div', 'models-loaded__head');
+  const toneClass =
+    serve.status === 'unhealthy'
+      ? 'is-unhealthy'
+      : serve.status === 'crashed'
+        ? 'is-crashed'
+        : 'is-error';
+  head.appendChild(el('span', `models-loaded__state ${toneClass}`, serveStatusLabel(serve.status)));
+  head.appendChild(el('span', 'models-loaded__name', serve.modelLabel));
+
+  const actions = el('div', 'models-loaded__actions');
+  if (isRetryableServeStatus(serve.status)) {
+    actions.appendChild(
+      textButton(
+        retryLabelForServe(serve),
+        () => {
+          void retryServe(serve).catch((err: unknown) => {
+            setStatus('err', err instanceof Error ? err.message : 'Retry failed');
+          });
+        },
+        'primary',
+      ),
+    );
+  }
+  if (serve.status === 'error' || serve.status === 'crashed') {
+    actions.appendChild(
+      textButton('Clear', () => {
+        void unloadServe(serve.id).catch((err: unknown) => {
+          setStatus('err', err instanceof Error ? err.message : 'Clear failed');
+        });
+      }),
+    );
+  } else if (serve.status === 'unhealthy') {
+    actions.appendChild(
+      textButton(
+        'Eject',
+        () => {
+          void unloadServe(serve.id).catch((err: unknown) => {
+            setStatus('err', err instanceof Error ? err.message : 'Eject failed');
+          });
+        },
+        'danger',
+      ),
+    );
+  }
+  head.appendChild(actions);
+  card.appendChild(head);
+
+  const failure = serveFailureBlock(serve);
+  if (failure) {
+    card.appendChild(failure);
+  } else {
+    const bits: string[] = [serve.runtime];
+    if (serve.exitCode != null) bits.push(`exit ${serve.exitCode}`);
+    if (serve.failure?.code && serve.failure.code !== 'unknown') bits.push(serve.failure.code);
+    if (serve.error) bits.push(serve.error);
+    card.appendChild(el('p', 'models-loaded__meta', bits.join(' · ')));
   }
   return card;
 }
@@ -350,6 +537,8 @@ export function render(): void {
   const state = getModelsState();
   const serves = runningServes();
   const running = serves.filter((s) => s.status === 'running');
+  const attention = attentionServes();
+  const loadIds = new Set(state.loads.map((l) => l.serveId));
 
   const fragment = document.createDocumentFragment();
   fragment.appendChild(statusBar(serves));
@@ -363,6 +552,18 @@ export function render(): void {
   }
   for (const serve of running) {
     list.appendChild(loadedCard(serve));
+  }
+  for (const serve of attention) {
+    if (serve.status === 'error' && loadIds.has(serve.id)) continue;
+    // A Retry that spawned a new live row supersedes the crashed/error card.
+    if (
+      serves.some(
+        (s) => isLiveServeStatus(s.status) && s.modelPath === serve.modelPath && s.id !== serve.id,
+      )
+    ) {
+      continue;
+    }
+    list.appendChild(attentionCard(serve));
   }
 
   if (!list.childElementCount) {
@@ -384,7 +585,8 @@ export function render(): void {
   fragment.appendChild(loadedBlock);
 
   fragment.appendChild(endpointsBlock(running[0]?.baseUrl ?? null));
-  fragment.appendChild(logsBlock(serves));
+  const logServes = dedupeServes([...serves, ...attention]);
+  fragment.appendChild(logsBlock(logServes));
 
   host.replaceChildren(fragment);
 

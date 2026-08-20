@@ -1,12 +1,36 @@
 /**
- * llama-server log parsing — load progress and line severity.
+ * llama-server log parsing — load phase and line severity.
  *
- * Progress is only reported when the runtime actually prints it; there is no
- * synthetic estimate, so callers must handle `null` by showing an indeterminate
- * state rather than a fake percentage.
+ * `parseLoadProgress` still only reports a percentage the runtime actually printed, and
+ * no build since b9628 prints one. The modelled bar lives in `load-progress.mjs`; a real
+ * number, if one ever appears, wins over it.
  */
 
+import { matchLoadPhase } from './load-progress.mjs';
+// Lives in load-progress.mjs so the tool server (plain node, no TS transform) can use it.
+export { parseSpecContextBytes } from './load-progress.mjs';
+import type { MatchedLoadPhase } from './load-progress.d.mts';
+
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'plain';
+
+/** One event from `subscribeServeLog`: the existing tail, then appended deltas. */
+export type ServeLogChunk = {
+  text?: string;
+  offset?: number;
+  initial?: boolean;
+};
+
+/**
+ * Fold one log-stream event into the text we already have.
+ *
+ * The SSE emits the existing tail (`initial: true`) then appended chunks.
+ * Replacing the buffer with every event drops phase markers printed earlier,
+ * which pins the modelled load bar at the spawning floor (0%).
+ */
+export function foldServeLogEvent(previous: string, event: ServeLogChunk): string {
+  const chunk = typeof event.text === 'string' ? event.text : '';
+  return event.initial ? chunk : `${previous}${chunk}`;
+}
 
 /** Percent forms llama.cpp has used across builds. */
 const PERCENT_PATTERNS = [
@@ -62,17 +86,17 @@ export function toLogLines(text: string, maxLines = 500): string[] {
 }
 
 /**
- * Human phase for a starting serve, read from the tail of its log.
- * Falls back to a generic label when nothing recognisable has been printed.
+ * Phase of a starting serve, read from the tail of its log.
+ *
+ * The phase table lives in `load-progress.mjs` because the progress bar needs each
+ * phase's floor and ceiling, not just its name — keeping two lists in step was the
+ * obvious way to end up with a label that disagreed with the bar.
  */
+export function matchServeLoadPhase(text: string): MatchedLoadPhase {
+  return matchLoadPhase(text);
+}
+
+/** Human phase label for a starting serve. */
 export function describeLoadPhase(text: string): string {
-  if (!text) return 'Starting runtime';
-  if (/server is listening|starting the main loop|HTTP server listening/i.test(text)) {
-    return 'Warming up';
-  }
-  if (/load_tensors|loading model tensors|llama_model_loader/i.test(text)) {
-    return 'Loading weights';
-  }
-  if (/llama_context|init: kv_size|KV self size/i.test(text)) return 'Allocating context';
-  return 'Starting runtime';
+  return matchLoadPhase(text).label;
 }

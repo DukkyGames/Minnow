@@ -28,6 +28,7 @@ const SEARCH_KEY_BY_FIELD: Record<keyof SamplerPreset, string> = {
   repetitionPenalty: 'repetitionPenalty',
   presencePenalty: 'presencePenalty',
   maxTokens: 'maxTokens',
+  stop: 'stop',
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(

@@ -29,6 +29,7 @@ import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
+import { activitySuffixForModelId } from '../models/serve-activity-feed';
 import { iconHtml } from './icon';
 import { MINNOW_GLYPH_HEADER_HTML } from './minnow-glyph';
 import { setModelHostFilterLoadUnloadResolver } from './model-host-filter-context';
@@ -981,6 +982,14 @@ function appendModelOptionRow(
   label.textContent = opt.text;
   label.title = rowTitle;
 
+  // Live runtime activity for local serves — empty (and invisible) for every other row.
+  // Prefill shows a token count, not a percentage: /slots reports no total to divide by.
+  const activityEl = document.createElement('span');
+  activityEl.className = 'model-select-option-activity';
+  activityEl.dataset.activityFor = canonicalModelId;
+  activityEl.setAttribute('aria-hidden', 'true');
+  activityEl.textContent = activitySuffixForModelId(canonicalModelId);
+
   const badges = formatCapabilityBadges(caps);
   if (logo) li.appendChild(logo);
   if (badges.length > 0) {
@@ -995,10 +1004,12 @@ function appendModelOptionRow(
     }
     li.appendChild(dot);
     li.appendChild(label);
+    li.appendChild(activityEl);
     li.appendChild(badgeSpan);
   } else {
     li.appendChild(dot);
     li.appendChild(label);
+    li.appendChild(activityEl);
   }
 
   if (optionShowsInlineLoadUnload(opt)) {

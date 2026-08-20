@@ -341,4 +341,18 @@ describe('server manager', () => {
     assert.equal(row?.installed, true);
     assert.equal(row?.running, true);
   });
+
+  it('forwards mlx-lm supported/installable/reason so Settings can hide off-platform Install', async () => {
+    const rows = await listServers();
+    const mlx = rows.find((s) => s.id === 'mlx-lm');
+    assert.ok(mlx, 'mlx-lm must appear in the managed catalog');
+    assert.equal(typeof mlx.supported, 'boolean');
+    assert.equal(typeof mlx.installable, 'boolean');
+    assert.equal(mlx.supported, mlx.installable);
+    const appleSilicon = process.platform === 'darwin' && process.arch === 'arm64';
+    if (!appleSilicon) {
+      assert.equal(mlx.installable, false);
+      assert.match(String(mlx.reason), /Apple Silicon/);
+    }
+  });
 });

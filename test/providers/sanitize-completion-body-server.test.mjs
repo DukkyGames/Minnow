@@ -7,6 +7,10 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { sanitizeCompletionBodyForProvider } from '../../server/providers/sanitize-completion-body.js';
+import {
+  EXTENDED_SAMPLER_BODY,
+  EXTENDED_SAMPLER_CASES,
+} from './sanitize-extended-samplers.fixtures.mjs';
 
 const OPENAI = { apiKind: 'openai-v1', id: 'opencode-zen' };
 
@@ -65,4 +69,21 @@ describe('server sanitizeCompletionBodyForProvider', () => {
     assert.deepEqual(out.thinking, { type: 'disabled' });
     assert.deepEqual(out.chat_template_kwargs, { enable_thinking: false });
   });
+});
+
+describe('extended sampler keep vs strip (shared fixtures)', () => {
+  for (const fixture of EXTENDED_SAMPLER_CASES) {
+    test(fixture.name, () => {
+      const out = sanitizeCompletionBodyForProvider(
+        { ...EXTENDED_SAMPLER_BODY },
+        fixture.provider,
+      );
+      for (const key of fixture.keep) {
+        assert.equal(out[key], EXTENDED_SAMPLER_BODY[key], `expected to keep ${key}`);
+      }
+      for (const key of fixture.strip) {
+        assert.equal(out[key], undefined, `expected to strip ${key}`);
+      }
+    });
+  }
 });

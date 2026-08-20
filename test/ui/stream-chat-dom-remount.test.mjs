@@ -171,4 +171,27 @@ describe('stream-chat-dom remount', { concurrency: false }, () => {
       STREAM_LABEL_GENERATING,
     );
   });
+
+  test('remountStreamDomForChat without a listener does not insert an orphan caret row', () => {
+    setupDom();
+    const streaming = createEmptyChatObject('');
+    streaming.id = 'chat-streaming';
+    streaming.history.push({ role: 'user', content: 'hi' });
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: streaming.id,
+      sidebarCollapsed: false,
+      chats: [streaming],
+    });
+
+    appState.setStreaming(true, streaming.id);
+    setSidebarStreamPhase('generating', streaming.id);
+
+    remountStreamDomForChat(streaming.id);
+
+    const area = document.getElementById('chatArea');
+    assert.equal(area?.querySelectorAll('.msg.assistant').length, 0);
+    assert.equal(area?.querySelectorAll('.cursor--prose').length, 0);
+  });
 });

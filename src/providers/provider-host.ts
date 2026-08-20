@@ -11,7 +11,7 @@ import {
 /** Built-in provider ids that always resolve to local inference. */
 export const KNOWN_LOCAL_PROVIDER_IDS = new Set(['lm-studio-local', 'vite-fallback']);
 
-const BUILTIN_LOCAL_TEMPLATE_KWARGS_IDS = new Set([
+const BUILTIN_LOCAL_TEMPLATE_KWARGS_IDS = new Set<string>([
   LLAMA_CPP_LOCAL_PROVIDER_ID,
   MLX_LM_LOCAL_PROVIDER_ID,
 ]);

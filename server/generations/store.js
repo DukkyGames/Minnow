@@ -461,7 +461,7 @@ export function cancel(state) {
 }
 
 /** Fallback roles for lightweight background jobs (not user-facing agent chat). */
-const NON_AGENT_FALLBACK_ROLES = new Set(['utility', 'chat-titles', 'goal-eval', 'editor-completion']);
+export const NON_AGENT_FALLBACK_ROLES = new Set(['utility', 'chat-titles', 'goal-eval', 'editor-completion']);
 
 /**
  * True when a user-facing agent generation is pending or streaming.

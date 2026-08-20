@@ -36,7 +36,7 @@ import {
   skeletonRows,
   textButton,
 } from './dom';
-import { showModelInInspector } from './inspector';
+import { settingsFor, showModelInInspector } from './inspector';
 import { ensureRuntimeForModel } from './runtime-install-prompt';
 import {
   getModelsState,
@@ -47,6 +47,7 @@ import {
   subscribeModelsStore,
   unloadServe,
 } from './store';
+import { isRetryableServeStatus, retryLabelForServe, serveStatusLabel, settingsForServeRetry } from '../../models/serve-status';
 
 interface LibraryFilters {
   search: string;
@@ -247,8 +248,15 @@ function startLoad(model: LibraryModel, trigger: HTMLButtonElement): void {
         trigger.disabled = false;
         return;
       }
-      // Drafts come from the inspector Load tab via resolveLlamaServeSettings in loadModel.
-      await loadModel(model);
+      // Same payload as inspector Load — settingsFor is {} until a control is
+      // touched, then the saved/manual draft. A classified failure attaches
+      // suggestedSettings (lower ctx / --no-mmap) and forces fit_mode manual.
+      const serve = serveForModel(model);
+      const settings =
+        serve && isRetryableServeStatus(serve.status)
+          ? settingsForServeRetry(serve, settingsFor(model))
+          : settingsFor(model);
+      await loadModel(model, settings);
     } catch (err) {
       setStatus('err', err instanceof Error ? err.message : 'Load failed');
       trigger.disabled = false;
@@ -266,7 +274,7 @@ function renderRowActions(model: LibraryModel): HTMLElement {
     return wrap;
   }
 
-  if (serve && (serve.status === 'running' || serve.status === 'starting')) {
+  if (serve && (serve.status === 'running' || serve.status === 'starting' || serve.status === 'unhealthy')) {
     wrap.appendChild(
       textButton('Eject', () => {
         void unloadServe(serve.id).catch((err: unknown) => {
@@ -274,6 +282,12 @@ function renderRowActions(model: LibraryModel): HTMLElement {
         });
       }),
     );
+    return wrap;
+  }
+
+  if (serve && isRetryableServeStatus(serve.status) && model.servable) {
+    const btn = textButton(retryLabelForServe(serve), () => startLoad(model, btn), 'primary');
+    wrap.appendChild(btn);
     return wrap;
   }
 
@@ -340,6 +354,10 @@ function renderGroupRow(
   if (serve?.status === 'running') {
     const badge = el('span', 'models-row__loaded-badge', 'Loaded');
     badge.prepend(el('span', 'models-dot models-dot--running'));
+    nameLine.appendChild(badge);
+  } else if (serve && (serve.status === 'crashed' || serve.status === 'unhealthy' || serve.status === 'error')) {
+    const badge = el('span', `models-row__loaded-badge is-${serve.status}`, serveStatusLabel(serve.status));
+    badge.prepend(el('span', `models-dot models-dot--${serve.status}`));
     nameLine.appendChild(badge);
   }
   if (group.variants.some((v) => v.incomplete)) {

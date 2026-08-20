@@ -16,6 +16,8 @@ const TOP_K_MIN = 1;
 const TOP_K_MAX = 200;
 const MAX_TOKENS_MIN = 1;
 const MAX_TOKENS_MAX = 131072;
+/** Same cap Anthropic mapping uses — enough for chat, not a dump of the prompt. */
+const MAX_STOP_SEQUENCES = 8;
 
 function clampTemperature(value) {
   const n = typeof value === 'number' ? value : Number(value);
@@ -60,8 +62,28 @@ function clampMaxTokens(value) {
 }
 
 /**
+ * Accept a string or string[], trim, drop empties, cap at 8.
+ * Why 8: Anthropic's stop_sequences mapping uses the same ceiling.
+ * @param {unknown} value
+ * @returns {string[] | undefined}
+ */
+function clampStopSequences(value) {
+  const raw = typeof value === 'string' ? [value] : Array.isArray(value) ? value : null;
+  if (!raw) return undefined;
+  const out = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    out.push(trimmed);
+    if (out.length >= MAX_STOP_SEQUENCES) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/**
  * @param {unknown} raw
- * @returns {Record<string, number>|null}
+ * @returns {Record<string, unknown>|null}
  */
 export function normalizeSamplerPreset(raw) {
   if (raw === null) return null;
@@ -97,6 +119,10 @@ export function normalizeSamplerPreset(raw) {
   if ('maxTokens' in src) {
     const v = clampMaxTokens(src.maxTokens);
     if (v !== undefined) out.maxTokens = v;
+  }
+  if ('stop' in src) {
+    const v = clampStopSequences(src.stop);
+    if (v !== undefined) out.stop = v;
   }
 
   return Object.keys(out).length > 0 ? out : {};

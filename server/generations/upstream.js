@@ -7,7 +7,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readConfigJson } from '../config/store.js';
-import { getProviderRuntime } from '../providers/store.js';
+import { getProviderRuntime, LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID } from '../providers/store.js';
+import {
+  admitLocalCompletion,
+  classifyLocalCompletionPriority,
+} from '../providers/proxy.js';
 import {
   resolveOpenCodeZenUpstreamUrl,
 } from '../providers/opencode-zen.js';
@@ -97,6 +101,7 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
         {
           apiKind,
           id: providerId ?? profile.id,
+          supportsExtendedSamplers: profile.supportsExtendedSamplers === true,
           baseUrl: profile.baseUrl,
         },
       );
@@ -107,6 +112,26 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
   }
 
   if (apiKind !== 'openai-v1') return body;
+
+  // llama.cpp telemetry opt-ins, added once here rather than at each of the four
+  // body-building call sites. Both sanitizers are denylists, so these survive intact.
+  //
+  // `return_progress` is undocumented in `--help` but is the field that makes
+  // llama-server emit `prompt_progress` chunks — verified on b9628, where
+  // `stream_options.include_progress` is silently ignored. It is the only source of a
+  // real prefill percentage anywhere; `/slots` cannot produce one.
+  if ((providerId ?? profile.id) === LLAMA_CPP_LOCAL_ID) {
+    try {
+      const parsed = JSON.parse(body.toString('utf8'));
+      if (parsed && typeof parsed === 'object') {
+        const withTelemetry = { ...parsed, timings_per_token: true };
+        if (parsed.stream === true) withTelemetry.return_progress = true;
+        body = Buffer.from(JSON.stringify(withTelemetry), 'utf8');
+      }
+    } catch {
+      /* keep the body as-is; telemetry is not worth failing a generation over */
+    }
+  }
 
   try {
     const parsed = JSON.parse(body.toString('utf8'));
@@ -215,11 +240,36 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    const url = resolveOpenCodeZenUpstreamUrl(
+    // llama-cpp-local is one provider row with one profile.baseUrl, but two
+    // resident models are two llama-server processes on two ports. Route by
+    // body.model before the upstream fetch. Hosted OpenAI keeps profile.baseUrl.
+    let completionAdmission = null;
+    let url = resolveOpenCodeZenUpstreamUrl(
       runtime.profile.baseUrl,
       runtime.paths.chatCompletionsPath,
     );
-    const origin = originFromUrl(runtime.profile.baseUrl);
+    let origin = originFromUrl(runtime.profile.baseUrl);
+
+    try {
+      if (
+        candidate.providerId === LLAMA_CPP_LOCAL_ID ||
+        candidate.providerId === MLX_LM_LOCAL_ID
+      ) {
+        const admissionController = new AbortController();
+        state.upstreamController = admissionController;
+        completionAdmission = await admitLocalCompletion({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          priority: classifyLocalCompletionPriority(state),
+          signal: admissionController.signal,
+        });
+        url = resolveOpenCodeZenUpstreamUrl(
+          completionAdmission.baseUrl,
+          runtime.paths.chatCompletionsPath,
+        );
+        origin = originFromUrl(completionAdmission.baseUrl);
+      }
+
     if (isHostDead(origin)) {
       lastError = `Host in cooldown: ${origin}`;
       if (index < state.candidates.length - 1) {
@@ -313,6 +363,17 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
     lastError = result.message ?? lastError;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      lastError = message;
+      if (index < state.candidates.length - 1) {
+        continue;
+      }
+      markError(state, lastError);
+      return;
+    } finally {
+      completionAdmission?.release?.();
+    }
   }
 
   markError(state, lastError ?? 'All fallback candidates failed');

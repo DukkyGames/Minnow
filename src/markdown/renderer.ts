@@ -40,6 +40,26 @@ const renderStateByBubble = new WeakMap<HTMLElement, RenderState>();
 /** Strong refs for bubbles with an active debounce timer (cancel-all needs iteration). */
 const bubblesWithActiveTimer = new Set<HTMLElement>();
 
+/**
+ * Live streaming caret class. CSS matches this token only so model HTML with a
+ * generic `cursor` class cannot keep blinking after the reply settles.
+ */
+export const STREAMING_CARET_CLASS = 'cursor--prose';
+export const STREAMING_CARET_SELECTOR = '.cursor--prose';
+
+/** Drop leftover streaming carets under `root`, optionally keeping one live node. */
+export function removeStreamingCarets(root: ParentNode, keep?: HTMLElement | null): void {
+  for (const el of [...root.querySelectorAll(STREAMING_CARET_SELECTOR)]) {
+    if (keep && el === keep) continue;
+    el.remove();
+  }
+}
+
+function clearPendingPaint(state: RenderState): void {
+  state.pendingMarkdown = null;
+  state.pendingCursor = null;
+}
+
 function getRenderState(bubble: HTMLElement): RenderState {
   let state = renderStateByBubble.get(bubble);
   if (!state) {
@@ -90,7 +110,11 @@ function clearBubbleTimers(bubble: HTMLElement, state: RenderState): void {
 export function cancelAssistantBubbleRenderDebounce(bubble?: HTMLElement): void {
   if (bubble) {
     const state = renderStateByBubble.get(bubble);
-    if (state) clearBubbleTimers(bubble, state);
+    if (state) {
+      clearBubbleTimers(bubble, state);
+      // Drop the pending caret so a late flush cannot resurrect it on a finished bubble.
+      clearPendingPaint(state);
+    }
     return;
   }
   if (assistantRenderDebounceTimer != null) {
@@ -99,8 +123,23 @@ export function cancelAssistantBubbleRenderDebounce(bubble?: HTMLElement): void 
   }
   for (const b of [...bubblesWithActiveTimer]) {
     const state = renderStateByBubble.get(b);
-    if (state) clearBubbleTimers(b, state);
+    if (state) {
+      clearBubbleTimers(b, state);
+      clearPendingPaint(state);
+    }
   }
+}
+
+/** Stop pending paints and strip every streaming caret from a finished bubble. */
+export function finishStreamingBubbleRender(
+  bubble: HTMLElement,
+  cursor?: HTMLElement | null,
+): void {
+  cancelAssistantBubbleRenderDebounce(bubble);
+  cursor?.remove();
+  removeStreamingCarets(bubble);
+  const wrap = bubble.parentElement;
+  if (wrap) removeStreamingCarets(wrap);
 }
 
 /** Configure marked once for GitHub-flavored markdown without single-line breaks. */
@@ -189,7 +228,12 @@ function renderFull(
   applyDataLangAttributes(bubble);
   highlightCodeBlocks(bubble);
 
-  if (streaming && streamCursor) bubble.appendChild(streamCursor);
+  if (streaming && streamCursor) {
+    removeStreamingCarets(bubble);
+    bubble.appendChild(streamCursor);
+  } else {
+    removeStreamingCarets(bubble);
+  }
   resetIncrementalState(bubble);
 }
 
@@ -236,8 +280,10 @@ function renderIncremental(
   state.nodes.length = dirtyFrom;
   state.signatures.length = dirtyFrom;
 
-  // Detach stream cursor before appending so it is not duplicated.
+  // Detach this bubble's carets (and the live node, wherever it sits) so a
+  // remount or a previous paint cannot leave a second blinking bar.
   if (streamCursor?.parentNode) streamCursor.remove();
+  removeStreamingCarets(bubble);
 
   const fragment = document.createDocumentFragment();
   const newNodeGroups: Node[][] = [];
@@ -310,6 +356,7 @@ export function setAssistantBubbleContent(
 
   if (!raw.trim() && !streaming) {
     bubble.innerHTML = '';
+    removeStreamingCarets(bubble);
     resetIncrementalState(bubble);
     return;
   }

@@ -40,7 +40,7 @@ import type {
 import { createIcon, type IconName } from './icon';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
-import { setAssistantBubbleContent } from '../markdown/renderer';
+import { STREAMING_CARET_CLASS, STREAMING_CARET_SELECTOR, setAssistantBubbleContent } from '../markdown/renderer';
 import {
   getActiveBoardGroup,
   getBoardGroupForChat,
@@ -969,6 +969,7 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
     streamStatus: {
       setPhase: () => {},
       setThinkingElapsed: () => {},
+      setRuntimeDetail: () => {},
       dispose: () => {},
     },
   };
@@ -976,8 +977,13 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
 
 /** Drop orphaned in-flight assistant shells before mounting a fresh stream row. */
 function removeStaleLiveStreamingRows(mount: HTMLElement): void {
-  for (const row of mount.querySelectorAll('.msg.assistant.msg--awaiting-prose')) {
-    row.remove();
+  for (const row of mount.querySelectorAll('.msg.assistant')) {
+    // Revealed rows still holding a caret are live shells, not settled messages.
+    const isAwaiting = row.classList.contains('msg--awaiting-prose');
+    const hasLiveCaret = Boolean(row.querySelector(STREAMING_CARET_SELECTOR));
+    if (isAwaiting || hasLiveCaret) {
+      row.remove();
+    }
   }
 }
 
@@ -1013,7 +1019,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   bubble.className = 'msg-bubble msg-bubble--awaiting';
 
   const cursor = document.createElement('div');
-  cursor.className = 'cursor cursor--prose';
+  cursor.className = `cursor ${STREAMING_CARET_CLASS}`;
   cursor.setAttribute('aria-hidden', 'true');
 
   wrap.appendChild(label);
@@ -1103,6 +1109,18 @@ export function appendStats(
     ['g', s.time_to_first_token != null, `TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`],
     ['y', s.generation_time != null, `gen <span>${s.generation_time?.toFixed(3)}s</span>`],
     ['r', u.total_tokens != null, `<span>${u.total_tokens}</span> tokens`],
+    // llama.cpp-only: prefill throughput, and how much of the draft the target model
+    // kept. Acceptance is the only honest read on whether spec decoding is helping.
+    [
+      'b',
+      s.prompt_tokens_per_second != null,
+      `pp <span>${s.prompt_tokens_per_second?.toFixed(0)}</span> tok/s`,
+    ],
+    [
+      'p',
+      s.draft_acceptance != null,
+      `draft <span>${((s.draft_acceptance ?? 0) * 100).toFixed(0)}%</span> accepted`,
+    ],
   ];
 
   for (const [cls, show, html] of defs) {

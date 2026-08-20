@@ -7,7 +7,7 @@ import { getModelsConfig, patchModelsConfig } from './models-config.js';
 
 /**
  * @typedef {object} ModelsInferenceBlock
- * @property {Record<string, Record<string, number>>} byLibraryId
+ * @property {Record<string, Record<string, unknown>>} byLibraryId
  * @property {Record<string, string>} chatModelAliases model id / label → library id
  */
 

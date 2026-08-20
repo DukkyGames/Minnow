@@ -236,6 +236,26 @@ describe('gguf metadata', () => {
     const meta = await parseGgufHeader(filePath);
     // 16 full-attention layers in the 64-block trunk plus one dense MTP block.
     assert.equal(meta.nFullAttentionLayers, 17);
+    // Surfaced so the Load tab can offer `--spec-type draft-mtp` for this model only.
+    assert.equal(meta.nextnPredictLayers, 1);
+  });
+
+  it('reports no MTP heads when the header does not declare them', async () => {
+    const filePath = await writeGguf('qwen35-no-mtp.gguf', {
+      kv: [
+        kvString('general.architecture', 'qwen35'),
+        kvU32('qwen35.block_count', 32),
+        kvU32('qwen35.embedding_length', 4096),
+        kvU32('qwen35.attention.head_count', 32),
+        kvU32('qwen35.attention.head_count_kv', 4),
+        kvU32('qwen35.attention.key_length', 256),
+        kvU32('qwen35.full_attention_interval', 4),
+      ],
+      tensors: [],
+    });
+
+    const meta = await parseGgufHeader(filePath);
+    assert.equal(meta.nextnPredictLayers, 0);
   });
 
   it('counts linear-attention layers from ssm tensors when the interval key is missing', async () => {

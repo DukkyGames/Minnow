@@ -12,24 +12,42 @@ import {
   saveLibraryInferenceSampler,
 } from '../../config/library-inference-meta';
 import {
+  estimateLoadDurationMs,
+  getLibraryLaunchSettingsForId,
+  llamaSettingsFromLaunchPrefs,
+  loadLibraryLaunchPrefs,
+  saveLibraryLaunchSettings,
+} from '../../config/library-launch-meta';
+import {
   fetchGgufGeometry,
+  fetchLlamaRuntime,
   type GgufGeometryFacts,
   type LlamaServeSettings,
 } from '../../models/api-client';
 import { buildSamplerFieldInputs } from '../settings-sampler-fields';
-import { DEFAULT_CONTEXT_TOKENS } from '../../models/default-context-tokens';
-import {
-  CONTEXT_SLIDER_MIN,
-  CONTEXT_SLIDER_STEP,
-  clampContextSlider,
-  contextSliderMax,
-  getLaunchSettings,
-} from '../../models/launch-settings';
 import {
   estimateServeMemory,
   estimateTransformerLayerCount,
-  formatServeMemoryEstimate,
 } from '../../models/serve-memory-estimate';
+import { renderLaunchMemoryMeter } from './launch-memory-meter';
+import { joinArgv, tokenizeArgv } from '../../models/argv-tokenize.mjs';
+import {
+  applyCacheTypeSideTouch,
+  applyCacheTypeTouch,
+  launchValidationError,
+  applyCtxPerSlotTouch,
+  applyGpuLayersAuto,
+  applyGpuLayersTouch,
+  applyPassThroughTouch,
+  CONTEXT_SLIDER_MIN,
+  CONTEXT_SLIDER_STEP,
+  contextSliderMax,
+  displayedLaunchFrom,
+  inspectorLaunchPlan,
+  settingsForDraft,
+  snapCtxPerSlot,
+  type DisplayedLaunch,
+} from './inspector-launch';
 import { capabilityLabel, type LibraryModel } from '../../models/library';
 import { setStatus } from '../status';
 import {
@@ -45,6 +63,7 @@ import {
 } from './dom';
 import { setModelsInspectorOpen } from './inspector-visibility';
 import { ensureRuntimeForModel } from './runtime-install-prompt';
+import { serveFailureBlock } from './serve-failure-view';
 import {
   getModelsState,
   getSelectedModel,
@@ -54,6 +73,7 @@ import {
   subscribeModelsStore,
   unloadServe,
 } from './store';
+import { isRetryableServeStatus, retryLabelForServe, settingsForServeRetry } from '../../models/serve-status';
 
 type InspectorTab = 'info' | 'load' | 'inference';
 
@@ -66,6 +86,75 @@ const TAB_LABELS: Record<InspectorTab, { label: string; glyph: string }> = {
 let activeTab: InspectorTab = 'info';
 let bound = false;
 let inspectorRenderRaf: number | null = null;
+/**
+ * Store / GGUF / runtime updates that arrived while a launch slider still had
+ * focus. Flushed on blur (next frame) so we do not remount the range mid-drag.
+ */
+let inspectorRenderDeferred = false;
+/** Per-model launch settings, kept while the app is open. Empty = auto (server planner). */
+const draftSettings = new Map<string, LlamaServeSettings>();
+/** Slider `input` fires every tick — debounce PUT so we do not hammer config.json. */
+const launchSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const LAUNCH_SAVE_DEBOUNCE_MS = 300;
+
+/**
+ * Installed llama.cpp variant (`cuda-12.4`, …). Decides flash-attn on vs auto.
+ * `hardware.backend` is the fallback until GET /api/models/llama-runtime returns.
+ */
+let llamaVariant: string | null = null;
+let llamaVariantFetched = false;
+/**
+ * Which advanced Load-tab groups are open, kept across re-renders after a slider
+ * touch. Keys are the `advancedSection` ids below.
+ */
+const loadSectionOpen = new Set<string>();
+
+/**
+ * `--cache-type-k/v` values, ordered largest to smallest. The shared "KV cache" select
+ * above only offers the three the planner's degrade ladder uses; pinning one side is an
+ * expert move, so it gets the full set llama.cpp accepts.
+ */
+const KV_CACHE_TYPE_OPTIONS = [
+  { value: 'f32', label: 'f32 — full float' },
+  { value: 'f16', label: 'f16 — full precision' },
+  { value: 'bf16', label: 'bf16' },
+  { value: 'q8_0', label: 'q8_0 — balanced' },
+  { value: 'q5_1', label: 'q5_1' },
+  { value: 'q5_0', label: 'q5_0' },
+  { value: 'q4_1', label: 'q4_1' },
+  { value: 'q4_0', label: 'q4_0 — smaller' },
+  { value: 'iq4_nl', label: 'iq4_nl' },
+];
+
+/** Idle unload windows. `''` inherits the 20-minute default; `0` keeps it loaded. */
+const IDLE_TTL_OPTIONS = [
+  { value: '', label: 'Default (20 minutes)' },
+  { value: '0', label: 'Never — keep loaded' },
+  { value: String(5 * 60_000), label: '5 minutes' },
+  { value: String(10 * 60_000), label: '10 minutes' },
+  { value: String(30 * 60_000), label: '30 minutes' },
+  { value: String(60 * 60_000), label: '1 hour' },
+];
+
+/**
+ * `--spec-type` modes worth exposing. The ngram families draft from the prompt itself
+ * and need no second model; `draft-mtp` needs heads inside the GGUF; the remaining two
+ * need a draft file. Modes llama.cpp accepts but nobody asks for (`ngram-map-k4v`,
+ * `ngram-cache`) stay reachable through extra_args.
+ */
+const SPEC_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'none', label: 'Off' },
+  { value: 'draft-mtp', label: 'MTP — heads inside these weights' },
+  { value: 'draft-simple', label: 'Draft model' },
+  { value: 'draft-eagle3', label: 'Draft model (EAGLE-3)' },
+  { value: 'ngram-simple', label: 'N-gram — from the prompt' },
+  { value: 'ngram-mod', label: 'N-gram (mod)' },
+];
+
+/** Selected option value for the idle-unload select — `''` when nothing is pinned. */
+function idleTtlValue(draft: LlamaServeSettings | undefined): string {
+  return draft?.idle_ttl_ms == null ? '' : String(draft.idle_ttl_ms);
+}
 
 /**
  * GGUF headers by file path — exact layer count and attention geometry for models already on
@@ -73,6 +162,24 @@ let inspectorRenderRaf: number | null = null;
  */
 const ggufGeometry = new Map<string, GgufGeometryFacts | null>();
 const ggufGeometryPending = new Set<string>();
+
+/** Installed variant when known, else the hardware probe — see comment on `llamaVariant`. */
+function ensureLlamaVariant(): string | null {
+  if (!llamaVariantFetched) {
+    llamaVariantFetched = true;
+    void fetchLlamaRuntime()
+      .then((status) => {
+        llamaVariant = status.variant;
+      })
+      .catch(() => {
+        llamaVariant = null;
+      })
+      .finally(() => {
+        scheduleInspectorRender();
+      });
+  }
+  return llamaVariant || getModelsState().hardware?.backend || null;
+}
 
 /**
  * Read the header for a model's weights, re-rendering once it lands.
@@ -108,8 +215,62 @@ function memoryHints(model: LibraryModel): {
   };
 }
 
+/**
+ * Whether these weights can drive `--spec-type draft-mtp`.
+ * `null` while the header is still in flight — the UI must not claim either way then.
+ */
+function mtpCapable(model: LibraryModel): boolean | null {
+  const facts = ensureGgufGeometry(model);
+  if (!facts) return null;
+  return Number(facts.nextnPredictLayers) > 0;
+}
+
 function root(): HTMLElement | null {
   return document.getElementById('modelsInspector');
+}
+
+function isLaunchRange(node: EventTarget | null): node is HTMLInputElement {
+  if (!node || typeof node !== 'object') return false;
+  const candidate = node as HTMLInputElement;
+  // Duck-type: happy-dom tests do not install HTMLInputElement on globalThis.
+  return (
+    candidate.tagName === 'INPUT' &&
+    candidate.type === 'range' &&
+    Boolean(candidate.classList?.contains('models-field__range'))
+  );
+}
+
+/** True while a Load-tab slider still has focus (mouse drag or arrow keys). */
+function launchRangeHasFocus(): boolean {
+  const host = root();
+  const active = document.activeElement;
+  return Boolean(host && isLaunchRange(active) && host.contains(active));
+}
+
+/**
+ * Replace only the occupancy cluster. Rebuilding the inspector on every range
+ * `input` destroys the slider and drops pointer capture after one tick.
+ */
+function patchLaunchMemoryMeter(model: LibraryModel): void {
+  const host = root();
+  if (!host) return;
+  const existing = host.querySelector('.models-launch-memory');
+  if (!existing) return;
+  existing.replaceWith(launchMemoryHint(model, displayedFor(model)));
+}
+
+/**
+ * After a deferred full render, wait a frame so the click that blurred the
+ * slider still hits the existing tab or footer button.
+ */
+function bindLaunchRangeLifecycle(range: HTMLInputElement): void {
+  range.addEventListener('blur', () => {
+    if (!inspectorRenderDeferred) return;
+    window.requestAnimationFrame(() => {
+      if (launchRangeHasFocus()) return;
+      render();
+    });
+  });
 }
 
 /** Label/value row — the definition-list pattern from the Info tab. */
@@ -177,54 +338,62 @@ function renderInfoTab(model: LibraryModel, body: HTMLElement): void {
 }
 
 function contextLengthField(
-  value: number | undefined,
-  onChange: (value: number) => void,
-  trainCtx?: number | null,
+  displayed: DisplayedLaunch,
+  onChange: (ctxPerSlot: number) => void,
 ): HTMLElement {
-  const max = contextSliderMax(trainCtx);
-  const ctx = clampContextSlider(value ?? DEFAULT_CONTEXT_TOKENS, max);
+  const maxTokens = contextSliderMax(displayed.trainCtx);
+  const minTokens = Math.min(CONTEXT_SLIDER_MIN, maxTokens);
+  const ctxPerSlot = snapCtxPerSlot(displayed.ctxPerSlot, maxTokens);
+  // Div, not label: Chromium retargets pointermove on a range nested in a
+  // <label>, so the thumb snaps one step and the drag dies.
   const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
   head.append(el('span', 'models-field__label', 'Context length'));
-
-  // Editable number is the source of truth — a 260k-wide slider cannot pick 2048 vs 125k by eye.
-  const valueInput = el('input', 'models-field__range-value-input') as HTMLInputElement;
-  valueInput.type = 'number';
-  valueInput.inputMode = 'numeric';
-  valueInput.min = String(CONTEXT_SLIDER_MIN);
-  valueInput.max = String(max);
-  valueInput.step = String(CONTEXT_SLIDER_STEP);
-  valueInput.value = String(ctx);
-  valueInput.setAttribute('aria-label', 'Context length in tokens');
-  head.appendChild(valueInput);
+  const valueText =
+    displayed.parallel > 1 ? `${ctxPerSlot.toLocaleString()} / slot` : ctxPerSlot.toLocaleString();
+  const valueEl = el('span', 'models-field__range-value', valueText);
+  head.appendChild(valueEl);
   wrap.appendChild(head);
 
   const range = el('input', 'models-field__range') as HTMLInputElement;
   range.type = 'range';
-  range.min = String(CONTEXT_SLIDER_MIN);
-  range.max = String(max);
+  // Token values, 1k step: auto-planning still uses CONTEXT_LADDER (13 rungs).
+  range.min = String(minTokens);
+  range.max = String(maxTokens);
   range.step = String(CONTEXT_SLIDER_STEP);
-  range.value = String(ctx);
+  range.value = String(ctxPerSlot);
   range.setAttribute('aria-valuemin', range.min);
   range.setAttribute('aria-valuemax', range.max);
   range.setAttribute('aria-valuenow', range.value);
-  range.setAttribute('aria-label', 'Context length in tokens');
-
-  const apply = (raw: number): void => {
-    const next = clampContextSlider(raw, max);
-    valueInput.value = String(next);
-    range.value = String(next);
+  range.setAttribute('aria-label', 'Context length in tokens per slot');
+  range.addEventListener('input', () => {
+    const next = snapCtxPerSlot(Number(range.value), maxTokens);
+    valueEl.textContent =
+      displayed.parallel > 1 ? `${next.toLocaleString()} / slot` : next.toLocaleString();
     range.setAttribute('aria-valuenow', String(next));
     onChange(next);
-  };
-
-  valueInput.addEventListener('change', () => {
-    apply(Number(valueInput.value));
   });
-  range.addEventListener('input', () => {
-    apply(Number(range.value));
-  });
+  bindLaunchRangeLifecycle(range);
   wrap.appendChild(range);
+
+  if (displayed.trainCtx) {
+    wrap.appendChild(
+      el(
+        'p',
+        'models-hint',
+        `Trained context: ${displayed.trainCtx.toLocaleString()}`,
+      ),
+    );
+  }
+  if (displayed.parallel > 1) {
+    wrap.appendChild(
+      el(
+        'p',
+        'models-hint',
+        `Per slot. Total -c is ${(ctxPerSlot * displayed.parallel).toLocaleString()} (${ctxPerSlot.toLocaleString()} × ${displayed.parallel} slots).`,
+      ),
+    );
+  }
   return wrap;
 }
 
@@ -269,45 +438,209 @@ function selectField(
   return wrap;
 }
 
-/** Launch settings for a model (defaults: full GPU offload, f16 KV cache). */
-function settingsFor(model: LibraryModel): LlamaServeSettings {
-  return getLaunchSettings(model.id);
+/**
+ * Select whose empty option means "leave it to llama.cpp / the planner". Keeps the
+ * distinction between "the user chose f16" and "nobody chose", which matters because
+ * only the former pins the flag.
+ */
+function optionalSelectField(
+  label: string,
+  options: Array<{ value: string; label: string }>,
+  value: string | undefined,
+  autoLabel: string,
+  onChange: (value: string | undefined) => void,
+): HTMLElement {
+  return selectField(
+    label,
+    [{ value: '', label: autoLabel }, ...options],
+    value ?? '',
+    (v) => onChange(v || undefined),
+  );
 }
 
-function sliderValueFromNGpu(nGpuLayers: number | undefined, maxLayers: number): number {
+function checkboxField(
+  label: string,
+  checked: boolean,
+  onChange: (checked: boolean) => void,
+): HTMLElement {
+  const wrap = el('label', 'models-field models-field--check');
+  const input = el('input') as HTMLInputElement;
+  input.type = 'checkbox';
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+  wrap.append(input, el('span', undefined, label));
+  return wrap;
+}
+
+function textField(
+  label: string,
+  value: string | undefined,
+  placeholder: string,
+  onChange: (value: string | undefined) => void,
+): HTMLElement {
+  const wrap = el('label', 'models-field');
+  wrap.append(el('span', 'models-field__label', label));
+  const input = el('input', 'models-field__input') as HTMLInputElement;
+  input.type = 'text';
+  input.placeholder = placeholder;
+  input.value = value ?? '';
+  input.addEventListener('change', () => {
+    const next = input.value.trim();
+    onChange(next || undefined);
+  });
+  wrap.appendChild(input);
+  return wrap;
+}
+
+/**
+ * One collapsible group in the Load tab's advanced area. Open/closed is remembered
+ * per group for the session, the way the single Advanced block used to be.
+ */
+function advancedSection(key: string, title: string, ...children: Node[]): HTMLElement {
+  const section = el('details', 'models-advanced');
+  section.open = loadSectionOpen.has(key);
+  section.addEventListener('toggle', () => {
+    if ((section as HTMLDetailsElement).open) loadSectionOpen.add(key);
+    else loadSectionOpen.delete(key);
+  });
+  section.appendChild(el('summary', 'models-advanced__summary', title));
+  section.append(...children);
+  return section;
+}
+
+/**
+ * Launch payload for Load. Empty until a control is touched — do not pre-seed 125k/999.
+ * Seeds from models.launch.byLibraryId when the session Map has no row yet (reload).
+ */
+export function settingsFor(model: LibraryModel): LlamaServeSettings {
+  return settingsForDraft(draftFor(model.id));
+}
+
+/**
+ * In-memory draft, or the saved row after a reload. Progress fields (lastLoadMs)
+ * stay out of the spawn payload.
+ */
+function draftFor(modelId: string): LlamaServeSettings | undefined {
+  if (draftSettings.has(modelId)) return draftSettings.get(modelId);
+  const saved = llamaSettingsFromLaunchPrefs(getLibraryLaunchSettingsForId(modelId));
+  if (!saved) return undefined;
+  draftSettings.set(modelId, saved);
+  return saved;
+}
+
+function persistDraft(model: LibraryModel, next: LlamaServeSettings): void {
+  draftSettings.set(model.id, next);
+  const payload = settingsForDraft(next);
+  const pending = launchSaveTimers.get(model.id);
+  if (pending) clearTimeout(pending);
+
+  // Load sends `{}` for planner auto. An empty PUT would delete the row and
+  // wipe lastLoadMs, so restoring Auto writes `{ fit_mode: 'auto' }` over a
+  // previously saved ngl/ctx row instead.
+  let toSave: LlamaServeSettings = payload;
+  if (Object.keys(payload).length === 0) {
+    const savedLlama = llamaSettingsFromLaunchPrefs(getLibraryLaunchSettingsForId(model.id));
+    if (!savedLlama) return;
+    toSave = { fit_mode: 'auto' };
+  }
+
+  // Fire-and-forget after debounce (sampler save is immediate on `change`;
+  // sliders use `input` so we wait until the user pauses).
+  launchSaveTimers.set(
+    model.id,
+    setTimeout(() => {
+      launchSaveTimers.delete(model.id);
+      void saveLibraryLaunchSettings({
+        libraryId: model.id,
+        settings: toSave,
+      }).catch(() => undefined);
+    }, LAUNCH_SAVE_DEBOUNCE_MS),
+  );
+}
+
+function displayedFor(model: LibraryModel): DisplayedLaunch {
+  const draft = draftFor(model.id);
+  const parallel = Math.max(1, draft?.parallel ?? 1);
+  const gguf = ensureGgufGeometry(model);
+  const plan = inspectorLaunchPlan({
+    gguf,
+    arch: model.arch,
+    name: model.name,
+    paramsB: model.paramsB,
+    sizeBytes: model.sizeBytes,
+    hardware: getModelsState().hardware,
+    variant: ensureLlamaVariant(),
+    parallel,
+  });
+  const trainCtx = Number(gguf?.trainCtx) > 0 ? Number(gguf?.trainCtx) : null;
+  return displayedLaunchFrom(draft, plan, trainCtx);
+}
+
+function sliderValueFromNGpu(nGpuLayers: number | null | undefined, maxLayers: number): number {
   if (nGpuLayers === 0) return 0;
-  if (nGpuLayers === 999 || nGpuLayers == null) return maxLayers;
+  // Auto (null) sits at max visually; the label says Auto, not "all / 999".
+  if (nGpuLayers == null) return maxLayers;
   return Math.min(maxLayers, Math.max(0, nGpuLayers));
 }
 
 function nGpuLayersFromSlider(sliderValue: number, maxLayers: number): number {
   if (sliderValue <= 0) return 0;
-  if (sliderValue >= maxLayers) return 999;
-  return sliderValue;
+  // Send the real layer count, not 999 — 999 was the old "all" sentinel the server
+  // could not tell from a deliberate user choice.
+  return Math.min(maxLayers, sliderValue);
 }
 
-function formatGpuLayersSliderLabel(sliderValue: number, maxLayers: number): string {
+function formatGpuLayersSliderLabel(
+  sliderValue: number,
+  maxLayers: number,
+  auto: boolean,
+): string {
+  if (auto) return 'Auto';
   if (sliderValue <= 0) return 'CPU only';
   if (sliderValue >= maxLayers) return `All (${maxLayers})`;
   return String(sliderValue);
 }
 
+/** Insert the Auto restore control without remounting the range (slider ticks must keep the thumb). */
+function ensureGpuAutoRestoreButton(meta: HTMLElement, onAuto: () => void): void {
+  if (meta.querySelector('.models-field__auto')) return;
+  const autoBtn = el('button', 'models-field__auto', 'Auto') as HTMLButtonElement;
+  autoBtn.type = 'button';
+  autoBtn.setAttribute('aria-label', 'Restore GPU layers to Auto');
+  autoBtn.addEventListener('click', () => {
+    // Drop range focus so render() is not deferred mid-drag.
+    const range = meta.closest('.models-field')?.querySelector<HTMLInputElement>('.models-field__range');
+    range?.blur();
+    onAuto();
+  });
+  meta.appendChild(autoBtn);
+}
+
 function gpuLayersSlider(
   model: LibraryModel,
-  nGpuLayers: number | undefined,
-  onChange: (nGpuLayers: number) => void,
+  displayed: DisplayedLaunch,
+  onChange: (nGpuLayers: number | null) => void,
 ): HTMLElement {
   const maxLayers = estimateTransformerLayerCount(model.paramsB, memoryHints(model));
-  const sliderValue = sliderValueFromNGpu(nGpuLayers, maxLayers);
-  const wrap = el('label', 'models-field');
+  const auto = displayed.n_gpu_layers == null;
+  const sliderValue = sliderValueFromNGpu(displayed.n_gpu_layers, maxLayers);
+  // Same label-wrap trap as contextLengthField: keep the range outside <label>.
+  const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
   head.append(el('span', 'models-field__label', 'GPU layers'));
+  const meta = el('div', 'models-field__range-meta');
   const valueEl = el(
     'span',
     'models-field__range-value',
-    formatGpuLayersSliderLabel(sliderValue, maxLayers),
+    formatGpuLayersSliderLabel(sliderValue, maxLayers, auto),
   );
-  head.appendChild(valueEl);
+  meta.appendChild(valueEl);
+  // The slider cannot represent "unset". Show Auto only after the user wrote a
+  // count (including CPU 0). A CPU-plan 0 is not an override.
+  if (draftFor(model.id)?.n_gpu_layers != null) {
+    ensureGpuAutoRestoreButton(meta, () => onChange(null));
+  }
+  head.appendChild(meta);
   wrap.appendChild(head);
 
   const range = el('input', 'models-field__range') as HTMLInputElement;
@@ -319,72 +652,193 @@ function gpuLayersSlider(
   range.setAttribute('aria-valuemin', range.min);
   range.setAttribute('aria-valuemax', range.max);
   range.setAttribute('aria-valuenow', range.value);
+  range.setAttribute(
+    'aria-valuetext',
+    auto ? 'Auto: llama.cpp sizes the GPU split' : formatGpuLayersSliderLabel(sliderValue, maxLayers, false),
+  );
   range.setAttribute('aria-label', 'Transformer layers to offload to the GPU');
   range.addEventListener('input', () => {
     const nextSlider = Number(range.value);
-    valueEl.textContent = formatGpuLayersSliderLabel(nextSlider, maxLayers);
+    valueEl.textContent = formatGpuLayersSliderLabel(nextSlider, maxLayers, false);
     range.setAttribute('aria-valuenow', String(nextSlider));
+    range.setAttribute(
+      'aria-valuetext',
+      formatGpuLayersSliderLabel(nextSlider, maxLayers, false),
+    );
+    // First tick leaves auto: drop the hint and reveal Auto without remounting.
+    wrap.querySelector('.models-field__auto-hint')?.remove();
+    ensureGpuAutoRestoreButton(meta, () => onChange(null));
     onChange(nGpuLayersFromSlider(nextSlider, maxLayers));
   });
+  bindLaunchRangeLifecycle(range);
   wrap.appendChild(range);
+  if (auto) {
+    wrap.appendChild(
+      el('p', 'models-hint models-field__auto-hint', 'Auto: llama.cpp sizes the GPU split.'),
+    );
+  }
   return wrap;
 }
 
-function launchMemoryHint(model: LibraryModel, settings: LlamaServeSettings): HTMLElement {
+/** Occupancy meters for the current launch settings vs measured hardware. */
+function launchMemoryHint(model: LibraryModel, displayed: DisplayedLaunch): HTMLElement {
   const weightsGb = model.sizeBytes > 0 ? model.sizeBytes / 1024 ** 3 : 0;
   const hw = getModelsState().hardware;
+  const draft = draftFor(model.id);
   const estimate = estimateServeMemory({
     weightsGb,
     paramsB: model.paramsB,
-    ctx: settings.ctx ?? DEFAULT_CONTEXT_TOKENS,
-    cacheType: settings.cache_type ?? 'f16',
-    nGpuLayers: settings.n_gpu_layers,
+    ctx: displayed.ctx,
+    // A pinned K or V is sized on its own side; unpinned sides follow the shared type.
+    cacheType: {
+      k: draft?.cache_type_k ?? displayed.cache_type,
+      v: draft?.cache_type_v ?? displayed.cache_type,
+    },
+    swaFull: draft?.swa_full === true,
+    nGpuLayers: displayed.n_gpu_layers ?? undefined,
     backend: hw?.backend ?? null,
     deviceCount: hw?.gpuCount ?? 1,
     ...memoryHints(model),
   });
-  const line = formatServeMemoryEstimate(estimate);
-  const budgetVram = hw?.gpuVramGb ?? 0;
-  const budgetRam = hw?.availableRamGb ?? hw?.totalRamGb ?? 0;
-  const tight =
-    (estimate.vramGb > 0 && budgetVram > 0 && estimate.vramGb > budgetVram * 0.92) ||
-    (estimate.ramGb > 0 && budgetRam > 0 && estimate.ramGb > budgetRam * 0.55);
+  return renderLaunchMemoryMeter({ estimate, hardware: hw });
+}
 
-  const suffix = estimate.kvGbPer1kTokens > 0 ? ` (${estimate.kvGbPer1kTokens} GB per 1k ctx)` : '';
-  const hint = el(
-    'p',
-    tight ? 'models-hint models-hint--warn' : 'models-hint',
-    `Estimated memory at launch: ${line}${suffix}`,
-  );
-  if (tight) {
-    hint.title = 'This configuration may exceed the memory Minnow measured on this machine.';
-  } else if (estimate.geometrySource !== 'gguf') {
-    hint.title =
-      "Estimated from this model's architecture and size — exact numbers need the weights on disk.";
-  }
-  return hint;
+/** Time-based estimate from the last successful load — not a fake percent. */
+function loadDurationHint(model: LibraryModel): HTMLElement | null {
+  const loading = getModelsState().loads.some((l) => l.modelId === model.id && !l.error);
+  // Skip while the table/footer already show load.phase text.
+  if (loading) return null;
+  const saved = getLibraryLaunchSettingsForId(model.id);
+  if (!saved) return null;
+  const lastLoadMs = Number(saved.lastLoadMs);
+  const lastWeightsBytes = Number(saved.lastWeightsBytes);
+  const ms = estimateLoadDurationMs(model.sizeBytes, lastLoadMs, lastWeightsBytes);
+  if (ms == null) return null;
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  const label = seconds === 1 ? '1 second' : `${seconds} seconds`;
+  const sameSize = lastWeightsBytes === model.sizeBytes;
+  const text = sameSize
+    ? `Last load took about ${label}.`
+    : `About ${label} at the last observed rate.`;
+  return el('p', 'models-muted', text);
 }
 
 /**
- * The Load tab edits the next spawn; it does not hot-reload a running llama-server.
- * Call out when the slider no longer matches the process that is already up.
+ * Other GGUF weights on this machine that could act as a draft model.
+ *
+ * Restricted to files smaller than the target and listed smallest first: drafting only
+ * pays off when the draft model is much cheaper to run than the model it is guessing
+ * for, and a larger one costs memory to make generation slower.
  */
-function runningContextMismatchHint(
+function draftModelOptions(model: LibraryModel): Array<{ value: string; label: string }> {
+  return getModelsState()
+    .library.filter(
+      (row) =>
+        row.id !== model.id &&
+        row.format === 'GGUF' &&
+        row.servable &&
+        Boolean(row.path) &&
+        row.sizeBytes > 0 &&
+        (model.sizeBytes <= 0 || row.sizeBytes < model.sizeBytes),
+    )
+    .sort((a, b) => a.sizeBytes - b.sizeBytes)
+    .map((row) => ({
+      value: row.path as string,
+      label: `${row.name} · ${formatBytes(row.sizeBytes)}`,
+    }));
+}
+
+/**
+ * Speculative decoding. The mode list is gated on what these weights can actually do:
+ * `draft-mtp` only appears once the GGUF header confirms `nextn_predict_layers > 0`,
+ * because picking it otherwise makes llama-server exit.
+ */
+function speculativeSection(
   model: LibraryModel,
-  settings: LlamaServeSettings,
-): HTMLElement | null {
-  const serve = serveForModel(model);
-  if (!serve || (serve.status !== 'running' && serve.status !== 'starting')) return null;
-  const launched = serve.llamaSettings as LlamaServeSettings | null | undefined;
-  const liveCtx = launched?.ctx;
-  if (liveCtx == null) return null;
-  const draftCtx = settings.ctx ?? DEFAULT_CONTEXT_TOKENS;
-  if (liveCtx === draftCtx) return null;
-  return el(
-    'p',
-    'models-hint models-hint--warn',
-    `Running at ${liveCtx.toLocaleString()} context. Eject and load again to apply ${draftCtx.toLocaleString()}.`,
+  touch: (patch: LlamaServeSettings) => void,
+  refresh: () => void,
+): HTMLElement {
+  const draft = draftFor(model.id);
+  const specType = draft?.spec_type ?? 'none';
+  const mtp = mtpCapable(model);
+  const needsDraftModel = specType === 'draft-simple' || specType === 'draft-eagle3';
+
+  const options = SPEC_TYPE_OPTIONS.filter(
+    // Keep a previously-saved mtp choice visible even if the header says no, so the
+    // reason below is attached to something the user can see and change.
+    (opt) => opt.value !== 'draft-mtp' || mtp !== false || specType === 'draft-mtp',
   );
+
+  const children: Node[] = [
+    selectField('Mode', options, specType, (v) => {
+      touch({ spec_type: v === 'none' ? undefined : (v as LlamaServeSettings['spec_type']) });
+      refresh();
+    }),
+  ];
+
+  if (mtp === false) {
+    children.push(
+      el(
+        'p',
+        'models-hint',
+        'These weights carry no multi-token-prediction heads, so MTP is not available for this model.',
+      ),
+    );
+  } else if (mtp === true) {
+    children.push(
+      el(
+        'p',
+        'models-hint',
+        'These weights ship MTP heads — draft-mtp needs no second model and no extra weights in memory.',
+      ),
+    );
+  }
+
+  if (needsDraftModel) {
+    const drafts = draftModelOptions(model);
+    children.push(
+      drafts.length
+        ? optionalSelectField(
+            'Draft model',
+            drafts,
+            draft?.spec_draft_model,
+            'Choose a draft model…',
+            (v) => {
+              touch({ spec_draft_model: v });
+              refresh();
+            },
+          )
+        : el(
+            'p',
+            'models-hint models-hint--warning',
+            'No installed GGUF is smaller than this model, so there is nothing worth drafting with. Download a small model of the same family first.',
+          ),
+      numberField('Draft GPU layers', draft?.spec_draft_ngl, 'all', (v) => {
+        touch({ spec_draft_ngl: v });
+      }),
+    );
+  }
+
+  if (specType !== 'none') {
+    children.push(
+      numberField('Max draft tokens', draft?.spec_draft_n_max, '3', (v) => {
+        touch({ spec_draft_n_max: v });
+      }),
+      numberField('Min draft tokens', draft?.spec_draft_n_min, '0', (v) => {
+        touch({ spec_draft_n_min: v });
+      }),
+      numberField('Draft probability', draft?.spec_draft_p_min, '0', (v) => {
+        touch({ spec_draft_p_min: v });
+      }),
+    );
+  }
+
+  const blocked = launchValidationError(draft, mtp);
+  if (blocked) {
+    children.push(el('p', 'models-hint models-hint--warning', blocked));
+  }
+
+  return advancedSection('speculative', 'Speculative decoding', ...children);
 }
 
 function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
@@ -412,45 +866,49 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     return;
   }
 
-  const settings = settingsFor(model);
+  const displayed = displayedFor(model);
+  const draft = draftFor(model.id);
+  const serve = serveForModel(model);
 
   const configBlock = el('section', 'models-inspector__block');
   configBlock.appendChild(el('h3', 'models-block__label', 'Launch'));
 
-  const memoryHint = launchMemoryHint(model, settings);
-  memoryHint.classList.add('models-launch-memory-hint');
+  if (serve && (serve.status === 'error' || serve.status === 'crashed')) {
+    const failure = serveFailureBlock(serve);
+    if (failure) configBlock.appendChild(failure);
+  }
 
-  const refreshMemoryHint = (): void => {
-    const next = launchMemoryHint(model, settings);
-    memoryHint.textContent = next.textContent;
-    memoryHint.className = next.className;
-    if (next.title) memoryHint.title = next.title;
-    else memoryHint.removeAttribute('title');
-  };
+  if (!displayed.plan.fits) {
+    configBlock.appendChild(el('p', 'models-hint models-hint--warning', displayed.plan.reason));
+  }
 
-  const mismatchHost = el('div');
-  const refreshMismatchHint = (): void => {
-    const next = runningContextMismatchHint(model, settings);
-    mismatchHost.replaceChildren(...(next ? [next] : []));
+  const memoryHint = launchMemoryHint(model, displayed);
+
+  const refreshAfterTouch = (): void => {
+    render();
   };
-  refreshMismatchHint();
 
   configBlock.append(
     memoryHint,
-    contextLengthField(
-      settings.ctx,
-      (v) => {
-        settings.ctx = v;
-        refreshMemoryHint();
-        refreshMismatchHint();
-      },
-      model.contextLength,
-    ),
-    gpuLayersSlider(model, settings.n_gpu_layers, (v) => {
-      settings.n_gpu_layers = v;
-      refreshMemoryHint();
+    contextLengthField(displayed, (ctxPerSlot) => {
+      persistDraft(model, applyCtxPerSlotTouch(draftFor(model.id), displayed, ctxPerSlot));
+      // Keep the range mounted; only the occupancy cluster needs a live refresh.
+      patchLaunchMemoryMeter(model);
     }),
-    mismatchHost,
+    gpuLayersSlider(model, displayed, (nGpuLayers) => {
+      persistDraft(
+        model,
+        nGpuLayers == null
+          ? applyGpuLayersAuto(draftFor(model.id), displayed)
+          : applyGpuLayersTouch(draftFor(model.id), displayed, nGpuLayers),
+      );
+      // Restoring Auto remounts so the hint and slider position return; a
+      // count tick only patches the occupancy cluster so the thumb stays grabbed.
+      if (nGpuLayers == null) refreshAfterTouch();
+      else patchLaunchMemoryMeter(model);
+    }),
+  );
+  configBlock.appendChild(
     selectField(
       'KV cache',
       [
@@ -458,51 +916,181 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
         { value: 'q8_0', label: 'q8_0 — balanced' },
         { value: 'q4_0', label: 'q4_0 — smaller' },
       ],
-      settings.cache_type ?? 'f16',
+      displayed.cache_type,
       (v) => {
-        settings.cache_type = v;
-        refreshMemoryHint();
+        persistDraft(model, applyCacheTypeTouch(draftFor(model.id), displayed, v));
+        refreshAfterTouch();
       },
     ),
   );
+  const durationHint = loadDurationHint(model);
+  if (durationHint) configBlock.appendChild(durationHint);
   body.appendChild(configBlock);
 
-  const advanced = el('details', 'models-advanced');
-  advanced.appendChild(el('summary', 'models-advanced__summary', 'Advanced'));
-  advanced.append(
-    numberField('Batch size', settings.batch_size, 'auto', (v) => {
-      settings.batch_size = v;
+  /** Pass-through touch that never leaves auto. */
+  const touch = (patch: LlamaServeSettings): void => {
+    persistDraft(model, applyPassThroughTouch(draftFor(model.id), displayed, patch));
+  };
+
+  body.appendChild(
+    advancedSection(
+      'performance',
+      'Performance',
+      numberField('CPU thread pool size', draft?.threads, 'auto', (v) => {
+        touch({ threads: v });
+      }),
+      numberField('Batch size', draft?.batch_size, 'auto', (v) => {
+        touch({ batch_size: v });
+      }),
+      numberField('Micro-batch', draft?.ubatch_size, 'auto', (v) => {
+        touch({ ubatch_size: v });
+      }),
+      numberField('Parallel slots', draft?.parallel, '1', (v) => {
+        touch({ parallel: v });
+        refreshAfterTouch();
+      }),
+      numberField('Context checkpoints', draft?.ctx_checkpoints, '32', (v) => {
+        touch({ ctx_checkpoints: v });
+      }),
+      el(
+        'p',
+        'models-hint',
+        'Checkpoints let a slot rewind instead of reprocessing the prompt. They cost host memory that the estimate above does not model.',
+      ),
+    ),
+  );
+
+  const kvSection = advancedSection(
+    'kv-cache',
+    'KV cache',
+    checkboxField('Unified KV cache', draft?.kv_unified === true, (checked) => {
+      touch({ kv_unified: checked ? true : undefined });
     }),
-    numberField('Micro-batch', settings.ubatch_size, 'auto', (v) => {
-      settings.ubatch_size = v;
+    checkboxField('Offload KV cache to GPU memory', draft?.kv_offload !== false, (checked) => {
+      touch({ kv_offload: checked ? undefined : false });
     }),
-    numberField('Parallel slots', settings.parallel, '1', (v) => {
-      settings.parallel = v;
+    optionalSelectField('K cache type', KV_CACHE_TYPE_OPTIONS, draft?.cache_type_k, 'Match KV cache', (v) => {
+      persistDraft(model, applyCacheTypeSideTouch(draftFor(model.id), displayed, 'k', v));
+      refreshAfterTouch();
+    }),
+    optionalSelectField('V cache type', KV_CACHE_TYPE_OPTIONS, draft?.cache_type_v, 'Match KV cache', (v) => {
+      persistDraft(model, applyCacheTypeSideTouch(draftFor(model.id), displayed, 'v', v));
+      refreshAfterTouch();
+    }),
+    optionalSelectField(
+      'Flash attention',
+      [
+        { value: 'on', label: 'On' },
+        { value: 'off', label: 'Off' },
+        { value: 'auto', label: 'Let llama.cpp decide' },
+      ],
+      draft?.flash_attn,
+      `Minnow default (${displayed.plan.flash_attn})`,
+      (v) => {
+        touch({ flash_attn: v as LlamaServeSettings['flash_attn'] });
+        refreshAfterTouch();
+      },
+    ),
+    checkboxField('Full-size sliding-window cache', draft?.swa_full === true, (checked) => {
+      touch({ swa_full: checked ? true : undefined });
+      refreshAfterTouch();
     }),
   );
+  if (draft?.flash_attn === 'off') {
+    kvSection.appendChild(
+      el(
+        'p',
+        'models-hint models-hint--warning',
+        'Without flash attention the compute buffer grows with context. The estimate above assumes it is on.',
+      ),
+    );
+  }
+  body.appendChild(kvSection);
+
+  body.appendChild(speculativeSection(model, touch, refreshAfterTouch));
+
+  body.appendChild(
+    advancedSection(
+      'memory',
+      'Memory',
+      checkboxField('Keep model in memory (mlock)', draft?.mlock === true, (checked) => {
+        touch({ mlock: checked ? true : undefined });
+      }),
+      checkboxField('Try mmap', draft?.no_mmap !== true, (checked) => {
+        touch({ no_mmap: checked ? undefined : true });
+      }),
+      numberField('MoE layers on CPU', draft?.n_cpu_moe, '0', (v) => {
+        touch({ n_cpu_moe: v });
+        refreshAfterTouch();
+      }),
+      selectField('Auto unload after idle', IDLE_TTL_OPTIONS, idleTtlValue(draft), (v) => {
+        touch({ idle_ttl_ms: v === '' ? undefined : Number(v) });
+      }),
+      checkboxField(
+        'CUDA unified memory',
+        Boolean(draft?.env?.GGML_CUDA_ENABLE_UNIFIED_MEMORY),
+        (checked) => {
+          touch({ env: checked ? { GGML_CUDA_ENABLE_UNIFIED_MEMORY: '1' } : undefined });
+        },
+      ),
+    ),
+  );
+
+  body.appendChild(
+    advancedSection(
+      'sampling',
+      'Sampling & template',
+      numberField('Seed', draft?.seed, 'random', (v) => {
+        touch({ seed: v });
+      }),
+      numberField('RoPE frequency base', draft?.rope_freq_base, 'from model', (v) => {
+        touch({ rope_freq_base: v });
+      }),
+      numberField('RoPE frequency scale', draft?.rope_freq_scale, '1', (v) => {
+        touch({ rope_freq_scale: v });
+      }),
+      checkboxField('Context shift on overflow', draft?.context_shift === true, (checked) => {
+        touch({ context_shift: checked ? true : undefined });
+      }),
+      textField(
+        'Reasoning budget message',
+        draft?.reasoning_budget_message,
+        'Injected when the thinking budget runs out',
+        (v) => {
+          touch({ reasoning_budget_message: v });
+        },
+      ),
+      textField('Chat template', draft?.chat_template, "Model's own template", (v) => {
+        touch({ chat_template: v });
+      }),
+      textField('Chat template file', draft?.chat_template_file, 'Path to a .jinja file', (v) => {
+        touch({ chat_template_file: v });
+      }),
+    ),
+  );
+
   const extraWrap = el('label', 'models-field');
   extraWrap.append(el('span', 'models-field__label', 'Extra llama-server args'));
   const extraInput = el('input', 'models-field__input') as HTMLInputElement;
-  extraInput.placeholder = '--no-mmap --flash-attn';
-  extraInput.value = (settings.extra_args ?? []).join(' ');
+  extraInput.placeholder = '--chat-template "..." --no-mmap';
+  extraInput.value = joinArgv(draft?.extra_args ?? []);
   extraInput.addEventListener('change', () => {
     const raw = extraInput.value.trim();
-    settings.extra_args = raw ? raw.split(/\s+/) : undefined;
+    // POSIX-ish tokenize so `--chat-template "hello world"` stays two argv tokens.
+    const tokens = raw ? tokenizeArgv(raw) : [];
+    touch({ extra_args: tokens.length ? tokens : undefined });
   });
   extraWrap.appendChild(extraInput);
-  advanced.appendChild(extraWrap);
-
-  const unifiedWrap = el('label', 'models-field models-field--check');
-  const unified = el('input') as HTMLInputElement;
-  unified.type = 'checkbox';
-  unified.checked = Boolean(settings.env?.GGML_CUDA_ENABLE_UNIFIED_MEMORY);
-  unified.addEventListener('change', () => {
-    settings.env = unified.checked ? { GGML_CUDA_ENABLE_UNIFIED_MEMORY: '1' } : undefined;
-  });
-  unifiedWrap.append(unified, el('span', undefined, 'CUDA unified memory'));
-  advanced.appendChild(unifiedWrap);
-  body.appendChild(advanced);
+  body.appendChild(
+    advancedSection(
+      'escape-hatch',
+      'Escape hatch',
+      extraWrap,
+      el('p', 'models-hint', 'Anything set here wins over every field above.'),
+    ),
+  );
 }
+
 
 function renderInferenceTab(model: LibraryModel, body: HTMLElement): void {
   const serve = serveForModel(model);
@@ -518,13 +1106,51 @@ function renderInferenceTab(model: LibraryModel, body: HTMLElement): void {
         'GPU layers',
         settings.n_gpu_layers === 0
           ? 'CPU only'
-          : settings.n_gpu_layers === 999
-            ? 'All'
-            : String(settings.n_gpu_layers ?? '—'),
+          : settings.n_gpu_layers != null
+            ? String(settings.n_gpu_layers)
+            : settings.fit_mode === 'manual'
+              ? '—'
+              : 'Auto',
       ),
-      infoRow('KV cache', settings.cache_type ?? '—'),
+      infoRow(
+        'KV cache',
+        settings.cache_type_k || settings.cache_type_v
+          ? `K ${settings.cache_type_k ?? settings.cache_type ?? 'f16'} / V ${settings.cache_type_v ?? settings.cache_type ?? 'f16'}`
+          : (settings.cache_type ?? '—'),
+      ),
+      infoRow('Fit', settings.fit_mode === 'manual' ? 'Manual' : 'Auto'),
       infoRow('Parallel', String(settings.parallel ?? 1)),
     );
+    // Only flags the user actually pinned — an all-defaults launch keeps this short.
+    const extras: Array<[string, string]> = [];
+    if (settings.flash_attn) extras.push(['Flash attention', settings.flash_attn]);
+    if (settings.threads != null) extras.push(['Threads', String(settings.threads)]);
+    if (settings.batch_size != null) extras.push(['Batch', String(settings.batch_size)]);
+    if (settings.ubatch_size != null) extras.push(['Micro-batch', String(settings.ubatch_size)]);
+    if (settings.kv_unified != null) extras.push(['Unified KV', settings.kv_unified ? 'On' : 'Off']);
+    if (settings.kv_offload === false) extras.push(['KV offload', 'Off']);
+    if (settings.ctx_checkpoints != null) {
+      extras.push(['Context checkpoints', String(settings.ctx_checkpoints)]);
+    }
+    if (settings.swa_full) extras.push(['SWA cache', 'Full size']);
+    if (settings.context_shift != null) {
+      extras.push(['Context shift', settings.context_shift ? 'On' : 'Off']);
+    }
+    if (settings.n_cpu_moe != null) extras.push(['MoE on CPU', String(settings.n_cpu_moe)]);
+    if (settings.seed != null) extras.push(['Seed', String(settings.seed)]);
+    if (settings.rope_freq_base != null) {
+      extras.push(['RoPE base', String(settings.rope_freq_base)]);
+    }
+    if (settings.rope_freq_scale != null) {
+      extras.push(['RoPE scale', String(settings.rope_freq_scale)]);
+    }
+    if (settings.spec_type && settings.spec_type !== 'none') {
+      extras.push(['Speculative', settings.spec_type]);
+      if (settings.spec_draft_model) {
+        extras.push(['Draft model', settings.spec_draft_model.split(/[\/]/).pop() ?? '']);
+      }
+    }
+    for (const [label, value] of extras) list.appendChild(infoRow(label, value));
     block.appendChild(list);
   } else {
     block.appendChild(
@@ -607,7 +1233,7 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
     return;
   }
 
-  if (serve && (serve.status === 'running' || serve.status === 'starting')) {
+  if (serve && (serve.status === 'running' || serve.status === 'starting' || serve.status === 'unhealthy')) {
     footer.appendChild(
       textButton(
         'Eject',
@@ -624,8 +1250,17 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
 
   if (!model.servable) return;
 
+  // A spec-decode mode with no draft model does not fail cleanly — llama-server
+  // segfaults with nothing in the log. Refuse here rather than spawn it.
+  const blocked = launchValidationError(draftFor(model.id), mtpCapable(model));
+  if (blocked) {
+    footer.appendChild(el('p', 'models-hint models-hint--warning', blocked));
+  }
+
+  const retry = Boolean(serve && isRetryableServeStatus(serve.status));
+  const retryLabel = serve && retry ? retryLabelForServe(serve) : 'Retry';
   const loadBtn = textButton(
-    'Load model',
+    retry ? retryLabel : 'Load model',
     () => {
       loadBtn.disabled = true;
       loadBtn.textContent = 'Starting…';
@@ -633,19 +1268,26 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
         try {
           if (!(await ensureRuntimeForModel(model))) {
             loadBtn.disabled = false;
-            loadBtn.textContent = 'Load model';
+            loadBtn.textContent = retry ? retryLabel : 'Load model';
             return;
           }
-          await loadModel(model, model.source === 'ollama' ? undefined : settingsFor(model));
+          const base = model.source === 'ollama' ? undefined : settingsFor(model);
+          const payload =
+            retry && serve ? settingsForServeRetry(serve, base ?? {}) : base;
+          await loadModel(model, payload);
         } catch (err) {
           setStatus('err', err instanceof Error ? err.message : 'Load failed');
           loadBtn.disabled = false;
-          loadBtn.textContent = 'Load model';
+          loadBtn.textContent = retry ? retryLabel : 'Load model';
         }
       })();
     },
     'primary',
   );
+  if (blocked) {
+    loadBtn.disabled = true;
+    loadBtn.title = blocked;
+  }
   footer.appendChild(loadBtn);
 }
 
@@ -653,6 +1295,15 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
 export function render(): void {
   const host = root();
   if (!host) return;
+
+  // Recreating the panel mid-drag drops pointer capture on the range thumb.
+  if (launchRangeHasFocus()) {
+    inspectorRenderDeferred = true;
+    const focusedModel = getSelectedModel();
+    if (focusedModel && activeTab === 'load') patchLaunchMemoryMeter(focusedModel);
+    return;
+  }
+  inspectorRenderDeferred = false;
 
   const model = getSelectedModel();
   host.classList.toggle('is-empty', !model);
@@ -722,6 +1373,9 @@ function scheduleInspectorRender(): void {
 /** Wire the inspector to the store (idempotent). */
 export function initInspector(): void {
   void loadLibraryInferencePrefs();
+  void loadLibraryLaunchPrefs().then(() => {
+    scheduleInspectorRender();
+  });
   if (bound) {
     render();
     return;

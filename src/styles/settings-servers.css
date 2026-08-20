@@ -62,3 +62,8 @@
   font-size: 13px;
   color: var(--mn-fg-muted);
 }
+
+/* Semantic warning for llama.cpp version drift — state, not decorative chrome. */
+.settings-servers .settings-mcp-hint--upgrade {
+  color: var(--mn-warning);
+}

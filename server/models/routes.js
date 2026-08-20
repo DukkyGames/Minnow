@@ -8,10 +8,12 @@ import { listCachedModels } from './cached.js';
 import { listInstalled } from './installed.js';
 import { getModelsConfig, patchModelsConfig } from './models-config.js';
 import { getInferencePrefs, setLibraryInferenceSampler } from './inference-prefs.js';
+import { getLaunchPrefs, setLibraryLaunchSettings } from './launch-prefs.js';
 import { readGgufMetadata } from './gguf-metadata.js';
+import { listServeActivity, subscribeServeActivity } from './serve-activity.js';
 import { computeServeProfiles } from './profiles.js';
 import { detectRuntimes } from './runtime-detect.js';
-import { getServe, listServes, startServe, stopServe } from './serve.js';
+import { getServe, listServes, startServe, stopServe, subscribeServeEvents } from './serve.js';
 import {
   readServeLogTailForServe,
   subscribeServeLogForServe,
@@ -228,6 +230,32 @@ export async function handleModelsRequest(req, res, pathname) {
     return true;
   }
 
+  // Per-model llama.cpp launch drafts. Survive reload; My Models Load and the
+  // inspector send the same payload via settingsFor() + startServe merge.
+  if (pathname === '/api/models/launch' && req.method === 'GET') {
+    const launch = await getLaunchPrefs();
+    sendJson(res, 200, launch);
+    return true;
+  }
+
+  if (pathname === '/api/models/launch' && req.method === 'PUT') {
+    try {
+      const body = await readJsonBody(req);
+      const libraryId = typeof body.libraryId === 'string' ? body.libraryId : '';
+      const settings =
+        body.settings === null
+          ? null
+          : body.settings && typeof body.settings === 'object'
+            ? body.settings
+            : null;
+      const launch = await setLibraryLaunchSettings(libraryId, settings);
+      sendJson(res, 200, { ok: true, ...launch });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
   if (pathname === '/api/models/profiles' && req.method === 'GET') {
     try {
       const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -260,6 +288,8 @@ export async function handleModelsRequest(req, res, pathname) {
       const variant = (await getInstalledLlamaVariant()) ?? 'cpu';
       const profilesWithArgs = profiles.map((p) => ({
         ...p,
+        // Preview argv must use the same GGUF header as startServe so inspector
+        // and launch share one geometry source (exact nLayers, not a guess).
         llama_args: buildLlamaServerArgs({
           modelPath: '/model.gguf',
           port: 8085,
@@ -267,6 +297,7 @@ export async function handleModelsRequest(req, res, pathname) {
           hardware,
           modelMeta: model,
           variant,
+          ggufMeta,
         }),
       }));
       sendJson(res, 200, { profiles: profilesWithArgs, hardware });
@@ -349,6 +380,48 @@ export async function handleModelsRequest(req, res, pathname) {
   if (pathname === '/api/models/serve' && req.method === 'GET') {
     const serves = await listServes();
     sendJson(res, 200, { serves });
+    return true;
+  }
+
+  if (pathname === '/api/models/serve/events' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    const unsubscribe = subscribeServeEvents((payload) => {
+      try {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      } catch {
+        unsubscribe();
+      }
+    });
+    req.on('close', () => unsubscribe());
+    return true;
+  }
+
+  // Deliberately its own stream. `/serve/events` fires a whole serve list on every
+  // commit; telemetry ticks every ~400 ms while a slot is busy and must not drag that
+  // payload along with it.
+  if (pathname === '/api/models/serve/activity/stream' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    const unsubscribe = subscribeServeActivity((activity) => {
+      try {
+        res.write(`data: ${JSON.stringify(activity)}\n\n`);
+      } catch {
+        unsubscribe();
+      }
+    });
+    req.on('close', () => unsubscribe());
+    return true;
+  }
+
+  if (pathname === '/api/models/serve/activity' && req.method === 'GET') {
+    sendJson(res, 200, { activity: listServeActivity() });
     return true;
   }
 
