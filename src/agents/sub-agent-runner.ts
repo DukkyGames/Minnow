@@ -43,6 +43,11 @@ import {
 } from '../providers/constrained-tool-calls';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
+import {
+  ContentToolCallRouter,
+  hasXmlToolCallMarkup,
+  stripXmlToolCallBlocks,
+} from '../providers/xml-tool-calls';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { sanitizeCompletionBodyForProvider } from '../providers/sanitize-completion-body';
 import { isVisionModel } from '../providers/vision-model';
@@ -338,6 +343,7 @@ async function streamSubAgentTurnOnce(
     thinkingModel: modelLikelyUsesInlineThinking(modelId),
   });
   const harmonyRouter = new HarmonyChannelRouter();
+  const toolCallRouter = new ContentToolCallRouter();
   const carriedText = streamOptions?.carriedText ?? '';
   let proseText = carriedText;
   let reasoningText = streamOptions?.carriedReasoning ?? '';
@@ -393,9 +399,17 @@ async function streamSubAgentTurnOnce(
       }
       thinkingBudgetTracker?.endSession();
       if (tFirst == null) tFirst = performance.now();
-      proseText += text;
-      onDelta?.(proseText);
+      // `<tool_call>` markup (Qwen via mlx-lm) is withheld here so it never renders as prose.
+      emitProse(toolCallRouter.feed(text));
     }
+  }
+
+  function emitProse(text: string): void {
+    if (!text) {
+      return;
+    }
+    proseText += text;
+    onDelta?.(proseText);
   }
 
   function routeContentDelta(delta: string): void {
@@ -430,6 +444,7 @@ async function streamSubAgentTurnOnce(
       processRoutedParts(inlineRouter.feed(harmonyText));
     }
     processRoutedParts(inlineRouter.flush());
+    emitProse(toolCallRouter.flush());
   }
 
   reader = res.body!.getReader();
@@ -498,7 +513,12 @@ async function streamSubAgentTurnOnce(
   const streamedToolCalls = finalizeToolCalls(toolAcc);
   const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls, {
     harmonyParseText: harmonyRouter.getCommentaryParseText(),
+    xmlParseText: toolCallRouter.getToolCallParseText(),
   });
+  // Carried/resumed text bypasses the router; drop markup only once it parsed as a call.
+  if (toolCalls.length > 0 && hasXmlToolCallMarkup(fullText)) {
+    fullText = stripXmlToolCallBlocks(fullText);
+  }
   const finishReason =
     streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);
 

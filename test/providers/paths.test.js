@@ -108,4 +108,58 @@ describe('provider paths', () => {
     const out = normalizeModelsResponse('openai-v1', { data: ['gpt-4o'] });
     assert.deepEqual(out.data[0], { id: 'gpt-4o', type: 'llm', state: 'loaded' });
   });
+
+  it('openai-v1 leaves catalogVision unset when the row says nothing', () => {
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [{ id: 'Qwen3-8B', object: 'model' }],
+    });
+    assert.equal(out.data[0].catalogVision, undefined);
+  });
+
+  it('openai-v1 reads capabilities.vision and boolean vision flags', () => {
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [
+        { id: 'a', capabilities: { vision: true } },
+        { id: 'b', capabilities: { vision: false } },
+        { id: 'c', supports_vision: true },
+        { id: 'd', vision: false },
+      ],
+    });
+    assert.equal(out.data[0].catalogVision, true);
+    assert.equal(out.data[1].catalogVision, false);
+    assert.equal(out.data[2].catalogVision, true);
+    assert.equal(out.data[3].catalogVision, false);
+  });
+
+  it('openai-v1 reads capability token lists', () => {
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [
+        { id: 'a', capabilities: ['tools', 'vision'] },
+        { id: 'b', capabilities: ['tools'] },
+      ],
+    });
+    assert.equal(out.data[0].catalogVision, true);
+    assert.equal(out.data[1].catalogVision, undefined);
+  });
+
+  it('openai-v1 reads OpenRouter input modalities', () => {
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [
+        { id: 'a', architecture: { input_modalities: ['text', 'image'] } },
+        { id: 'b', architecture: { modality: 'text+image->text' } },
+        { id: 'c', architecture: { modality: 'text->image' } },
+      ],
+    });
+    assert.equal(out.data[0].catalogVision, true);
+    assert.equal(out.data[1].catalogVision, true);
+    // Image *output* is a generator, not a model that reads images.
+    assert.equal(out.data[2].catalogVision, undefined);
+  });
+
+  it('openai-v1 type vlm sets catalogVision', () => {
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [{ id: 'local-vlm', type: 'vlm' }],
+    });
+    assert.equal(out.data[0].catalogVision, true);
+  });
 });

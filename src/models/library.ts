@@ -261,6 +261,19 @@ function sourceOf(row: CachedModelRow): LibrarySource {
   return 'hf-cache';
 }
 
+/**
+ * A sibling `mmproj*.gguf` is exactly what `llama-server` is handed via `--mmproj`
+ * when Minnow serves the row, so the weights are a VLM even when the catalog entry
+ * (or a repo with no catalog match at all) never says so.
+ */
+function capabilitiesWithProjectorVision(
+  capabilities: string[],
+  hasProjector: boolean,
+): string[] {
+  if (!hasProjector || capabilities.includes('vision')) return capabilities;
+  return [...capabilities, 'vision'];
+}
+
 /** Absolute path for a GGUF entry, or null when it cannot be resolved. */
 function ggufPath(row: CachedModelRow, relPath: string, source: LibrarySource): string | null {
   if (!relPath) return null;
@@ -279,6 +292,7 @@ export async function buildLibrary(cached: CachedModelRow[]): Promise<LibraryMod
     const source = sourceOf(row);
     const publisher = publisherOf(row.repo_id, source);
     const modelFiles = (row.gguf_files ?? []).filter((f) => f.role === 'model');
+    const hasProjector = (row.gguf_files ?? []).some((f) => f.role === 'projector');
 
     if (!modelFiles.length) {
       const entry = matchCatalogEntry(row.repo_id);
@@ -337,7 +351,10 @@ export async function buildLibrary(cached: CachedModelRow[]): Promise<LibraryMod
         domain: entry ? inferUseCase(entry) : inferUseCase({ name } as CatalogModel),
         paramsB: (entry ? catalogParamsB(entry) || null : null) ?? inferParamsFromName(name),
         contextLength: row.mlx_context_length ?? entry?.context_length ?? null,
-        capabilities: entry?.capabilities ?? [],
+        capabilities: capabilitiesWithProjectorVision(
+          entry?.capabilities ?? [],
+          hasProjector,
+        ),
         sizeBytes: file.size_bytes,
         path,
         fileName: file.name,

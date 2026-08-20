@@ -73,6 +73,71 @@ describe('isVisionModel (BUG-004)', () => {
   test('no catalog and cache miss is not vision', () => {
     assert.equal(isVisionModel('unknown-model'), false);
   });
+
+  test('lm-studio llm row stays text-only (its catalog names VLMs)', () => {
+    modelCache.set('lms-vl-row', {
+      id: 'lms-vl-row',
+      type: 'llm',
+      api: 'lm-studio-v0',
+      capabilities: {
+        vision: false,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: null,
+        contextLength: null,
+        loadState: null,
+        sources: { vision: 'catalog' },
+      },
+    });
+    assert.equal(isVisionModel('lms-vl-row'), false);
+  });
+
+  test('openai-v1 llm row falls back to the id heuristic (MTPLX, llama.cpp)', () => {
+    // These catalogs list bare `{ id }` rows; `llm` is stamped on by the
+    // normalizer and is not evidence that the model cannot read images.
+    modelCache.set('Qwen3-VL-8B-Instruct', {
+      id: 'Qwen3-VL-8B-Instruct',
+      type: 'llm',
+      api: 'openai-v1',
+      capabilities: {
+        vision: false,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: null,
+        contextLength: null,
+        loadState: null,
+        sources: { vision: 'catalog' },
+      },
+    });
+    assert.equal(isVisionModel('Qwen3-VL-8B-Instruct'), true);
+  });
+
+  test('a probed vision:false is decisive over the id heuristic', () => {
+    modelCache.set('Qwen3-VL-8B-Instruct', {
+      id: 'Qwen3-VL-8B-Instruct',
+      type: 'llm',
+      api: 'openai-v1',
+      capabilities: {
+        vision: false,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: null,
+        contextLength: null,
+        loadState: null,
+        sources: { vision: 'probe' },
+      },
+    });
+    assert.equal(isVisionModel('Qwen3-VL-8B-Instruct'), false);
+  });
+
+  test('id heuristic does not fire on plain text model ids', () => {
+    for (const id of ['Qwen3-8B-Instruct', 'vllm-served-7b', 'devstral-small']) {
+      assert.equal(isVisionModel(id), false, id);
+    }
+  });
 });
 
 describe('scoreMultimodalProbe (BUG-004)', () => {

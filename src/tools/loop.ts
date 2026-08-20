@@ -240,6 +240,11 @@ import {
   stripResponseFormatFromBody,
 } from '../providers/constrained-tool-calls';
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
+import {
+  ContentToolCallRouter,
+  hasXmlToolCallMarkup,
+  stripXmlToolCallBlocks,
+} from '../providers/xml-tool-calls';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { applyModelSelectValueToChat } from '../lib/model-select-key';
 import {
@@ -851,6 +856,7 @@ async function streamCompletionTurn(
     thinkingModel: modelLikelyUsesInlineThinking(modelId),
   });
   const harmonyRouter = new HarmonyChannelRouter();
+  const toolCallRouter = new ContentToolCallRouter();
   const thinkingBudgetTracker = streamOptions?.thinkingBudgetTracker ?? null;
   let prefillEchoPartial = streamOptions?.prefillEchoPartial?.trim() ?? '';
   let carriedEchoPending = carriedText.trim().length > 0;
@@ -894,13 +900,21 @@ async function streamCompletionTurn(
       }
       thinkingBudgetTracker?.endSession();
       thoughtController?.endReasoningPhase();
-      onFirstProseDelta?.();
-      fullText += text;
-      onPartialText?.(fullText);
+      // `<tool_call>` markup (Qwen via mlx-lm) is withheld here so it never renders as prose.
+      emitProse(toolCallRouter.feed(text));
       onStreamContextActivity?.();
-      if (domVisible) {
-        scheduleAssistantBubbleRender(bubble, fullText, cursor);
-      }
+    }
+  }
+
+  function emitProse(text: string): void {
+    if (!text) {
+      return;
+    }
+    onFirstProseDelta?.();
+    fullText += text;
+    onPartialText?.(fullText);
+    if (domVisible) {
+      scheduleAssistantBubbleRender(bubble, fullText, cursor);
     }
   }
 
@@ -936,6 +950,7 @@ async function streamCompletionTurn(
       processRoutedParts(inlineRouter.feed(harmonyText));
     }
     processRoutedParts(inlineRouter.flush());
+    emitProse(toolCallRouter.flush());
   }
 
   function emitStreamProgress(): void {
@@ -1135,7 +1150,13 @@ async function streamCompletionTurn(
   const tEnd = performance.now();
   const toolCalls = mergeContentJsonToolCalls(fullText, finalizeToolCalls(toolAcc), {
     harmonyParseText: harmonyRouter.getCommentaryParseText(),
+    xmlParseText: toolCallRouter.getToolCallParseText(),
   });
+  // Carried/resumed text bypasses the router; drop markup only once it parsed as a call.
+  if (toolCalls.length > 0 && hasXmlToolCallMarkup(fullText)) {
+    fullText = stripXmlToolCallBlocks(fullText);
+    onPartialText?.(fullText);
+  }
   const finishReason =
     streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);
 

@@ -122,6 +122,96 @@ function normalizeLmStudioModelRow(item) {
   };
 }
 
+/** Boolean catalog fields that mean "this model reads images". */
+const VISION_BOOLEAN_FIELDS = ['vision', 'supports_vision', 'supports_images', 'multimodal'];
+
+/** Capability tokens meaning image input across OpenAI-compatible catalogs. */
+const VISION_CAPABILITY_TOKENS = new Set([
+  'vision',
+  'image',
+  'images',
+  'image_input',
+  'multimodal',
+  'vlm',
+]);
+
+/**
+ * @param {unknown} value
+ */
+function capabilityListHasVision(value) {
+  if (!Array.isArray(value)) return false;
+  return value.some(
+    (v) => typeof v === 'string' && VISION_CAPABILITY_TOKENS.has(v.trim().toLowerCase()),
+  );
+}
+
+/**
+ * @param {unknown} value
+ */
+function modalityListHasImage(value) {
+  if (!Array.isArray(value)) return false;
+  return value.some((v) => typeof v === 'string' && /^images?$/i.test(v.trim()));
+}
+
+/**
+ * OpenRouter-style `text+image->text`: only the input half means vision
+ * (`text->image` is an image generator, not a VLM).
+ *
+ * @param {string} value
+ */
+function inputModalityStringHasImage(value) {
+  const input = value.split('->')[0];
+  return /(^|[+,\s|/])images?([+,\s|/]|$)/i.test(input);
+}
+
+/**
+ * Vision signal from an OpenAI-compatible catalog row. Returns undefined when the
+ * catalog says nothing — the caller must not read that as "no vision".
+ *
+ * @param {Record<string, unknown>} src
+ * @returns {boolean | undefined}
+ */
+export function openAiRowVisionFlag(src) {
+  if (typeof src.type === 'string' && src.type.trim().toLowerCase() === 'vlm') {
+    return true;
+  }
+
+  for (const field of VISION_BOOLEAN_FIELDS) {
+    if (typeof src[field] === 'boolean') {
+      return /** @type {boolean} */ (src[field]);
+    }
+  }
+
+  const caps = src.capabilities;
+  if (caps && typeof caps === 'object' && !Array.isArray(caps)) {
+    const vision = /** @type {Record<string, unknown>} */ (caps).vision;
+    if (typeof vision === 'boolean') return vision;
+  }
+  if (capabilityListHasVision(caps)) return true;
+
+  const architecture =
+    src.architecture && typeof src.architecture === 'object'
+      ? /** @type {Record<string, unknown>} */ (src.architecture)
+      : null;
+
+  const modalityLists = [
+    src.input_modalities,
+    src.modalities,
+    architecture?.input_modalities,
+    architecture?.modalities,
+  ];
+  for (const list of modalityLists) {
+    if (modalityListHasImage(list)) return true;
+  }
+
+  const modality = architecture?.modality ?? src.modality;
+  if (typeof modality === 'string' && inputModalityStringHasImage(modality)) {
+    return true;
+  }
+
+  return undefined;
+}
+
 /** @type {readonly string[]} */
 const OPENAI_CONTEXT_FIELD_ALIASES = [
   'context_length',
@@ -186,6 +276,8 @@ function normalizeOpenAiModelRow(item) {
     maxContext = firstPositiveContextField(meta, OPENAI_NESTED_CONTEXT_FIELD_ALIASES);
   }
 
+  const catalogVision = openAiRowVisionFlag(src);
+
   return {
     id,
     type,
@@ -194,6 +286,7 @@ function normalizeOpenAiModelRow(item) {
     ...(typeof src.owned_by === 'string' ? { owned_by: src.owned_by } : {}),
     ...(typeof src.arch === 'string' ? { arch: src.arch } : {}),
     ...(typeof src.family === 'string' ? { family: src.family } : {}),
+    ...(catalogVision !== undefined ? { catalogVision } : {}),
   };
 }
 

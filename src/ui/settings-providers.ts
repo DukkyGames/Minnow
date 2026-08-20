@@ -1027,12 +1027,15 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   appendPricingFields(form, provider.pricing);
 
+  // Only LM Studio needs a *loaded* model: every other backend serves whatever its
+  // catalog lists, so the server resolves the probe target from the live catalog.
+  const needsLoadedModel = provider.apiKind === 'lm-studio-v0';
   const loadedModelId = findLoadedModelIdForProvider(provider.id);
+  const probesBlocked = needsLoadedModel && !loadedModelId;
 
-  const probeHint =
-    provider.apiKind === 'lm-studio-v0'
-      ? 'On LM Studio, both probes require at least one loaded model. Model probe runs chat checks on up to 8 loaded models (tools/streaming); vision is read from the catalog. Structured-output probe tests JSON Schema response_format. Neither runs on refresh.'
-      : 'Model probe checks tools and streaming (up to 8 models); vision comes from the catalog. Structured-output probe requires a loaded model and tests JSON Schema response_format. Neither runs on refresh.';
+  const probeHint = needsLoadedModel
+    ? 'On LM Studio, both probes require at least one loaded model. Model probe runs chat checks on up to 8 loaded models (tools/streaming/vision). Structured-output probe tests JSON Schema response_format. Neither runs on refresh.'
+    : 'Model probe checks tools, streaming, and vision (up to 8 models). Structured-output probe tests JSON Schema response_format on one catalog model. Neither runs on refresh.';
   form.append(el('p', 'field-hint', probeHint));
   form.append(
     createSettingsActionsRow(
@@ -1040,25 +1043,22 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
         {
           label: 'Probe models',
           className: 'settings-inline-btn',
-          disabled: provider.apiKind === 'lm-studio-v0' && !loadedModelId,
-          title:
-            provider.apiKind === 'lm-studio-v0' && !loadedModelId
-              ? NO_LOADED_MODEL_PROBE_MSG
-              : undefined,
+          disabled: probesBlocked,
+          title: probesBlocked ? NO_LOADED_MODEL_PROBE_MSG : undefined,
           dataset: { providerModelProbe: provider.id },
         },
         {
           label: 'Probe structured output',
           className: 'settings-inline-btn',
-          disabled: !loadedModelId,
-          title: !loadedModelId ? NO_LOADED_MODEL_PROBE_MSG : undefined,
+          disabled: probesBlocked,
+          title: probesBlocked ? NO_LOADED_MODEL_PROBE_MSG : undefined,
           dataset: { providerStructuredProbe: provider.id },
         },
       ],
       { className: 'settings-providers-form-actions' },
     ),
   );
-  if (!loadedModelId) {
+  if (probesBlocked) {
     const noLoadedNotice = el('p', 'settings-providers-probe-notice');
     noLoadedNotice.setAttribute('role', 'status');
     noLoadedNotice.dataset.providerStructuredProbeNotice = provider.id;
@@ -1441,7 +1441,11 @@ function bindProvidersListActions(listEl: HTMLElement): void {
             selectedModelId,
             provider?.apiKind,
           );
-          if (!modelId) {
+          // LM Studio is the only backend where an empty cache really means
+          // "nothing to probe". Elsewhere the picker may simply not list this
+          // provider (My Models hides its llama.cpp / mlx rows), so hand the
+          // server no model id and let it resolve one from the live catalog.
+          if (!modelId && provider?.apiKind === 'lm-studio-v0') {
             setProviderEditFormError(structuredProbeId, NO_LOADED_MODEL_PROBE_MSG);
             setStatus('err', NO_LOADED_MODEL_PROBE_MSG);
             return;
@@ -1449,11 +1453,15 @@ function bindProvidersListActions(listEl: HTMLElement): void {
           setProviderEditFormError(structuredProbeId, null);
           setStatus(
             'spin',
-            `Probing structured output for ${structuredProbeId} (${modelId})…`,
+            modelId
+              ? `Probing structured output for ${structuredProbeId} (${modelId})…`
+              : `Probing structured output for ${structuredProbeId}…`,
           );
           await probeProviderCapabilities(structuredProbeId, {
-            modelId,
-            selectedModelId: selectedModelId ?? modelId,
+            ...(modelId ? { modelId } : {}),
+            ...(selectedModelId || modelId
+              ? { selectedModelId: selectedModelId ?? modelId ?? undefined }
+              : {}),
           });
           setStatus('ok', `Structured output probed for ${structuredProbeId}`);
           await renderProvidersSettingsSection();

@@ -34,7 +34,7 @@ export function normalizeHarmonyToolName(raw: string): string {
 }
 
 /** Extract a balanced `{…}` JSON object starting at `startIndex`. */
-function extractBalancedJsonObject(text: string, startIndex: number): string | null {
+export function extractBalancedJsonObject(text: string, startIndex: number): string | null {
   const braceStart = text.indexOf('{', startIndex);
   if (braceStart < 0) {
     return null;

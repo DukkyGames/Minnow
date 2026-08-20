@@ -16,6 +16,8 @@ import { extractReasoningDelta } from '../../src/api/reasoning.ts';
 
 const RT_OPEN = '<' + 'redacted_thinking>';
 const RT_CLOSE = '</' + 'redacted_thinking>';
+const THINK_OPEN = '<' + 'think>';
+const THINK_CLOSE = '</' + 'think>';
 
 function collectRouted(router: InlineContentThinkingRouter, chunks: readonly string[]): RoutedContentPart[] {
   const parts: RoutedContentPart[] = [];
@@ -117,6 +119,50 @@ describe('InlineContentThinkingRouter', () => {
     ]);
     assert.equal(thinkingText(parts), 'reasoning');
     assert.match(replyText(parts), /Hi!/);
+  });
+
+  for (const thinkingModel of [false, true]) {
+    test(`routes a plain <think> block (thinkingModel=${thinkingModel})`, () => {
+      const router = new InlineContentThinkingRouter({ thinkingModel });
+      const parts = collectRouted(router, [THINK_OPEN, 'reasoning ', THINK_CLOSE, 'Hi!']);
+      assert.equal(thinkingText(parts), 'reasoning ');
+      assert.equal(replyText(parts), 'Hi!');
+    });
+
+    // mlx-lm splits `</think>` across SSE deltas; an unmatched close used to keep
+    // every later delta — tool-call markup included — routed as reasoning.
+    test(`closes thinking when </think> is split across deltas (thinkingModel=${thinkingModel})`, () => {
+      const router = new InlineContentThinkingRouter({ thinkingModel });
+      const parts = collectRouted(router, [
+        THINK_OPEN,
+        'reasoning ',
+        THINK_CLOSE.slice(0, 4),
+        THINK_CLOSE.slice(4),
+        'Hi!',
+      ]);
+      assert.equal(thinkingText(parts), 'reasoning ');
+      assert.equal(replyText(parts), 'Hi!');
+    });
+
+    test(`routes think tags streamed one character at a time (thinkingModel=${thinkingModel})`, () => {
+      const router = new InlineContentThinkingRouter({ thinkingModel });
+      const parts = collectRouted(router, [...`${THINK_OPEN}reasoning${THINK_CLOSE}Hi!`]);
+      assert.equal(thinkingText(parts), 'reasoning');
+      assert.equal(replyText(parts), 'Hi!');
+    });
+  }
+
+  test('keeps a lone < in prose instead of holding it back', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const parts = collectRouted(router, [THINK_OPEN, 'x', THINK_CLOSE, 'a < b and <div>']);
+    assert.equal(replyText(parts), 'a < b and <div>');
+  });
+
+  test('releases an incomplete opener left at end of stream', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const parts = collectRouted(router, ['Done.', ' <thi']);
+    assert.equal(thinkingText(parts), '');
+    assert.equal(replyText(parts), 'Done. <thi');
   });
 });
 

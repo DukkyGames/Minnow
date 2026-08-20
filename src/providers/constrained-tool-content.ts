@@ -6,6 +6,7 @@
 
 import type { ToolCall } from '../types';
 import { tryParseHarmonyToolCallsFromText } from './harmony-tool-calls';
+import { tryParseXmlToolCallsFromText } from './xml-tool-calls';
 
 /** Generate stable synthetic ids for tool rows parsed from message content. */
 function syntheticToolCallId(index: number): string {
@@ -175,26 +176,35 @@ function mergeStreamedWithContentToolCalls(
  * Prefer streamed `tool_calls`; when empty, recover tool calls embedded in assistant text.
  * When both exist (common with constrained decoding), keep streamed ids but prefer
  * non-empty `arguments` from assistant JSON when SSE only delivered `{}`.
- * Harmony / gpt-oss commentary-channel payloads are parsed when SSE `tool_calls` are empty.
+ * Harmony / gpt-oss commentary-channel payloads are parsed when SSE `tool_calls` are empty,
+ * as are Qwen-style `<tool_call>` blocks from mlx-lm / llama.cpp servers.
  */
 export function mergeContentJsonToolCalls(
   fullText: string,
   streamed: ToolCall[],
-  options?: { harmonyParseText?: string },
+  options?: { harmonyParseText?: string; xmlParseText?: string },
 ): ToolCall[] {
   const harmonyHaystack = [options?.harmonyParseText, fullText]
     .filter((part): part is string => Boolean(part?.trim()))
     .join('\n');
   const fromHarmony = tryParseHarmonyToolCallsFromText(harmonyHaystack);
+  const xmlHaystack = [options?.xmlParseText, fullText]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .join('\n');
+  const fromXml = tryParseXmlToolCallsFromText(xmlHaystack);
   const fromContent = tryParseToolCallsFromAssistantContent(fullText);
 
   if (streamed.length === 0) {
     if (fromHarmony.length > 0) {
       return fromHarmony;
     }
+    if (fromXml.length > 0) {
+      return fromXml;
+    }
     return fromContent;
   }
 
-  const contentFallback = fromHarmony.length > 0 ? fromHarmony : fromContent;
+  const contentFallback =
+    fromHarmony.length > 0 ? fromHarmony : fromXml.length > 0 ? fromXml : fromContent;
   return mergeStreamedWithContentToolCalls(streamed, contentFallback);
 }

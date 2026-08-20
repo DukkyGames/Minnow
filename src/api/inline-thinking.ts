@@ -304,23 +304,68 @@ function stripTrailingThinkClose(text: string): string {
   return text.replace(new RegExp(`</${THINK_TAG}>\\s*$`, 'i'), '').trimEnd();
 }
 
-const THINK_OPEN_MARKERS = [REDACTED_THINKING_OPEN, '<thinking>', '<thought>'] as const;
+const THINK_OPEN_MARKERS = [
+  REDACTED_THINKING_OPEN,
+  '<thinking>',
+  '<thought>',
+  '<' + 'think>',
+] as const;
 const MAX_THINK_OPEN_LEN = Math.max(...THINK_OPEN_MARKERS.map((marker) => marker.length));
+/** Cap a buffered `<think …attrs>` opener so a stray `<think ` never swallows the reply. */
+const MAX_THINK_OPEN_ATTR_LEN = 256;
+const THINK_OPEN_ATTR_PARTIAL_RE = new RegExp(`^<${THINK_TAG}\\s[^>]*$`, 'i');
+
+/** Tag names that open or close a thinking block, for chunk-boundary hold-back. */
+const THINK_TAG_NAMES = ['think', 'thinking', 'thought', 'redacted_think', 'redacted_thinking'] as const;
+const THINK_BOUNDARY_TAGS = THINK_TAG_NAMES.flatMap((name) => [
+  `<${name}>`,
+  `<${name} `,
+  `</${name}>`,
+]);
+const MAX_THINK_BOUNDARY_LEN = Math.max(...THINK_BOUNDARY_TAGS.map((tag) => tag.length));
+
+/**
+ * Length of the trailing partial `<think>` / `</think>` tag to hold back.
+ * Local runtimes (mlx-lm, llama.cpp) split those tags across SSE deltas; without
+ * the hold a split `</think>` is never matched and every later delta — tool-call
+ * markup included — stays routed as reasoning.
+ */
+function thinkTagSuffixHoldLen(text: string): number {
+  const limit = Math.min(text.length, MAX_THINK_BOUNDARY_LEN - 1);
+  for (let n = limit; n > 0; n -= 1) {
+    const suffix = text.slice(-n).toLowerCase();
+    if (!suffix.startsWith('<')) {
+      continue;
+    }
+    if (THINK_BOUNDARY_TAGS.some((tag) => tag.startsWith(suffix))) {
+      return n;
+    }
+  }
+  return 0;
+}
 
 function isThinkOpenPrefix(text: string): boolean {
   const lower = text.trimStart().toLowerCase();
   if (!lower.startsWith('<')) {
     return false;
   }
+  if (THINK_OPEN_ATTR_PARTIAL_RE.test(lower)) {
+    return true;
+  }
   return THINK_OPEN_MARKERS.some((marker) => marker.startsWith(lower) || lower.startsWith(marker));
 }
 
 function completeThinkOpenAtStart(text: string): number | null {
   const trimmed = text.trimStart();
+  const lead = text.length - trimmed.length;
+  const tagMatch = THINK_OPEN_RE.exec(trimmed);
+  if (tagMatch) {
+    return lead + tagMatch[0].length;
+  }
   const lower = trimmed.toLowerCase();
   for (const marker of THINK_OPEN_MARKERS) {
     if (lower.startsWith(marker)) {
-      return text.length - trimmed.length + marker.length;
+      return lead + marker.length;
     }
   }
   return null;
@@ -434,6 +479,15 @@ export class InlineContentThinkingRouter {
 
   private openTagBuffer = '';
 
+  /** Trailing bytes withheld because they may be the start of a think tag. */
+  private tagTail = '';
+
+  /** Set during `flush()` so an incomplete opener is emitted instead of re-buffered. */
+  private finalizing = false;
+
+  /** Latched once a buffered opener is released, so it is never re-buffered. */
+  private openTagAbandoned = false;
+
   constructor(options?: { thinkingModel?: boolean }) {
     this.thinkingModel = options?.thinkingModel ?? false;
   }
@@ -442,14 +496,28 @@ export class InlineContentThinkingRouter {
     if (!text) {
       return [];
     }
-    return this.routeChunk(text);
+    const combined = this.tagTail + text;
+    const hold = thinkTagSuffixHoldLen(combined);
+    this.tagTail = hold > 0 ? combined.slice(combined.length - hold) : '';
+    const emit = hold > 0 ? combined.slice(0, combined.length - hold) : combined;
+    if (!emit) {
+      return [];
+    }
+    return this.routeChunk(emit);
   }
 
   flush(): RoutedContentPart[] {
     const out: RoutedContentPart[] = [];
+    this.finalizing = true;
+    if (this.tagTail) {
+      const tail = this.tagTail;
+      this.tagTail = '';
+      out.push(...this.routeChunk(tail));
+    }
     if (this.openTagBuffer) {
-      out.push(...this.routeChunk(this.openTagBuffer));
+      const buffered = this.openTagBuffer;
       this.openTagBuffer = '';
+      out.push(...this.routeChunk(buffered));
     }
     if (this.inReasoningProse && this.proseBuffer) {
       const split = findReasoningProseSplit(this.proseBuffer);
@@ -462,6 +530,7 @@ export class InlineContentThinkingRouter {
       this.inReasoningProse = false;
       this.firstContentSent = true;
     }
+    this.finalizing = false;
     return out;
   }
 
@@ -485,6 +554,8 @@ export class InlineContentThinkingRouter {
       !this.firstContentSent &&
       !this.inThinkTag &&
       !this.inReasoningProse &&
+      !this.finalizing &&
+      !this.openTagAbandoned &&
       (this.openTagBuffer || isThinkOpenPrefix(stripped))
     ) {
       this.openTagBuffer += chunk;
@@ -499,12 +570,16 @@ export class InlineContentThinkingRouter {
         }
         return out;
       }
-      if (
-        this.openTagBuffer.length > MAX_THINK_OPEN_LEN ||
-        !isThinkOpenPrefix(this.openTagBuffer.trimStart())
-      ) {
+      const bufferedStart = this.openTagBuffer.trimStart();
+      const attrPending = THINK_OPEN_ATTR_PARTIAL_RE.test(bufferedStart.toLowerCase());
+      const overLimit = attrPending
+        ? this.openTagBuffer.length > MAX_THINK_OPEN_ATTR_LEN
+        : this.openTagBuffer.length > MAX_THINK_OPEN_LEN;
+      if (overLimit || !isThinkOpenPrefix(bufferedStart)) {
         const buffered = this.openTagBuffer;
         this.openTagBuffer = '';
+        // An over-long opener stays a valid prefix, so latch it off before re-routing.
+        this.openTagAbandoned = true;
         out.push(...this.routeChunk(buffered));
         return out;
       }

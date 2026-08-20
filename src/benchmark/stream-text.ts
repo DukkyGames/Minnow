@@ -13,6 +13,7 @@ import {
   type RoutedContentPart,
 } from '../api/inline-thinking.ts';
 import { StreamingContentAccumulator } from '../api/message-content.ts';
+import { ContentToolCallRouter } from '../providers/xml-tool-calls.ts';
 import type { ThinkingBudgetTracker } from '../agents/thinking-budget.ts';
 import type { ChatCompletionChunk } from '../types';
 
@@ -55,6 +56,8 @@ export class BenchmarkStreamContentRouter {
 
   private readonly harmonyRouter = new HarmonyChannelRouter();
 
+  private readonly toolCallRouter = new ContentToolCallRouter();
+
   private readonly thinkingBudgetTracker: ThinkingBudgetTracker | null;
 
   private readonly cumulativeBudget: boolean;
@@ -91,6 +94,10 @@ export class BenchmarkStreamContentRouter {
     return this.harmonyRouter.getCommentaryParseText();
   }
 
+  getToolCallParseText(): string {
+    return this.toolCallRouter.getToolCallParseText();
+  }
+
   ingestReasoningDelta(delta: string): void {
     if (!delta) return;
     this.feedThinkingBudget(delta);
@@ -123,6 +130,7 @@ export class BenchmarkStreamContentRouter {
       this.processRoutedParts(this.inlineRouter.feed(harmonyText));
     }
     this.processRoutedParts(this.inlineRouter.flush());
+    this.proseText += this.toolCallRouter.flush();
   }
 
   private feedThinkingBudget(delta: string): void {
@@ -144,7 +152,8 @@ export class BenchmarkStreamContentRouter {
       }
       if (!text) continue;
       if (!this.cumulativeBudget) this.thinkingBudgetTracker?.endSession();
-      this.proseText += text;
+      // `<tool_call>` markup is withheld from prose and parsed as tool calls instead.
+      this.proseText += this.toolCallRouter.feed(text);
     }
   }
 }
