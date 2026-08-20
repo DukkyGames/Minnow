@@ -448,6 +448,9 @@ describe('controller watchdog', () => {
       category: 'build',
     });
 
+    await waitForRunActive(FIXED_RUN_ID);
+    setRepetitionThresholds({ duplicateToolCallThreshold: 5 });
+
     const args = { pattern: 'auth' };
     recordToolCallForRun(FIXED_RUN_ID, 'grep', args);
     recordToolCallForRun(FIXED_RUN_ID, 'grep', args);

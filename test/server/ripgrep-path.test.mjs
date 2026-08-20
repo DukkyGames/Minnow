@@ -54,8 +54,9 @@ describe('ripgrep-path', () => {
   });
 
   it('resolveRipgrepExecutablePath does not return app.asar paths when unpacked is missing', () => {
+    // Use a fictitious bundle path so a locally installed Minnow.app cannot satisfy existsSync.
     const inAsar =
-      '/Applications/Minnow.app/Contents/Resources/app.asar/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg';
+      '/Nonexistent/Minnow-Fixture.app/Contents/Resources/app.asar/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg';
     const resolved = resolveRipgrepExecutablePath(inAsar);
     assert.notEqual(resolved, inAsar);
     assert.match(resolved, /^(rg|rg\.exe)$/);

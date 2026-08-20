@@ -114,7 +114,12 @@ describe('preview-electron-visibility', () => {
     elements.set('appBody', { classList: new Set(['hidden']) });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    resetChromePopoverRegistryForTests();
+    resetPreviewGuestVisibilityForTests();
+    // Let debounced preview sync finish before restoring globals (avoids post-test rejections).
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     resetDesignModeIframeGuestForTests();
     globalThis.requestAnimationFrame = originalRaf;
     Object.defineProperty(globalThis, 'document', {
@@ -331,6 +336,9 @@ describe('preview-electron-visibility', () => {
     });
     elements.get('previewPane')!.classList.delete('hidden');
     registerChromePopover();
+    // registerChromePopover schedules a debounced sync; isolate the direct sync under test.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    hideCalls = 0;
 
     await syncElectronPreviewHostLayout();
 

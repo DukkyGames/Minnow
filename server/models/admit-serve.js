@@ -169,7 +169,9 @@ export function pickEvictions(opts) {
 export function serveMatchesModelId(row, modelId) {
   const id = String(modelId ?? '').trim();
   if (!id || !row) return false;
-  const base = path.basename(String(row.modelPath || ''));
+  // Normalize Windows paths so basename works on Unix CI hosts.
+  const normalizedPath = String(row.modelPath || '').replace(/\\/g, '/');
+  const base = path.basename(normalizedPath);
   const stem = base.replace(/\.gguf$/i, '');
   const needles = [row.libraryId, row.modelLabel, base, stem].filter(
     (value) => typeof value === 'string' && value.trim(),

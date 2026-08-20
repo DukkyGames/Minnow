@@ -248,7 +248,9 @@ function bindIssuesDockBadge(btn: HTMLButtonElement, appLabel: string): () => vo
   // mount is often disposed before its import settles, and the badge that
   // survives ends up with no listener at all.
   const sync = (): void => {
-    const state = computeIssuesDockBadge(issuesStore?.listIssues() ?? []);
+    const issues =
+      issuesStore?.isIssuesStoreLoaded() === true ? issuesStore.listIssues() : [];
+    const state = computeIssuesDockBadge(issues);
     const text = issuesDockBadgeText(state);
     badge.hidden = text === '';
     badge.textContent = text;

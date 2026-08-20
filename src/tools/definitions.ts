@@ -537,7 +537,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'grep',
-      'Search file contents (ripgrep-style). path:line:snippet, workspace-relative; respects .gitignore. Returns at most head_limit output lines per call (matches plus any surrounding context lines; default 200, max 200) and 32k total chars — truncated output includes offset= for the next page. Prefer output_mode files_with_matches or count for overview scans (count reports true per-file totals); use path/glob to narrow scope before paging.',
+      'Search file contents (ripgrep-style). Workspace-relative path:line:snippet; respects .gitignore. Paginate with offset (default 200 lines, 32k chars max). Prefer files_with_matches or count before content mode.',
       {
         pattern: { type: 'string', description: 'Regex or literal search pattern' },
         path: { type: 'string', description: 'Directory or file to search (default workspace root)' },

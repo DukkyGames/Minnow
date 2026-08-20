@@ -152,6 +152,21 @@ export function extractChatText(chat: Chat): string {
   return parts.join('\n');
 }
 
+/** Assistant/tool output plus run errors — excludes user seeds that mention infra hypotheticals. */
+function extractAgentFailureText(chat: Chat): string {
+  const parts: string[] = [];
+  for (const msg of chat.history) {
+    if (isUiOnlyTranscriptMessage(msg)) continue;
+    if (msg.role !== 'assistant' && msg.role !== 'tool') continue;
+    const content = msg.content;
+    if (content) parts.push(content);
+  }
+  for (const run of chat.runs ?? []) {
+    if (run.errorMessage?.trim()) parts.push(run.errorMessage.trim());
+  }
+  return parts.join('\n');
+}
+
 /** Transcript plus failed-run error messages (board chats often only record errors on runs). */
 export function extractChatFailureText(chat: Chat): string {
   return extractChatText(chat);
@@ -217,8 +232,9 @@ export function classifyTaskFailure(
   // 'ok' should not reach the failure path.
   // 'failed' falls through to text scan below.
 
-  // 2. Transcript text scan (covers both prose and embedded tool output).
-  const text = extractChatFailureText(chat);
+  // 2. Transcript text scan (assistant/tool output only — user seeds mention infra
+  // hypotheticals and must not route a code failure to the env-fixer).
+  const text = extractAgentFailureText(chat);
   if (isTransientContextLengthError(text)) return 'code';
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
   if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';

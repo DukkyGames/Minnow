@@ -395,6 +395,17 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores list-then-cancel against a stubbed running agent."
   },
   {
+    "id": "agents-delegate-tasks",
+    "group": "agents-tasks",
+    "header": "delegate_tasks",
+    tier: 2,
+    "scoreMode": "auto",
+    "howToTest": "Give three independent chunks of work and ask it to fan them out.",
+    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
+    "prompt": "Give three independent chunks of work and ask it to fan them out.",
+    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores delegate_tasks fan-out against a stubbed orchestrate board."
+  },
+  {
     "id": "agents-board-init",
     "group": "agents-tasks",
     "header": "board_init / board_update_task",

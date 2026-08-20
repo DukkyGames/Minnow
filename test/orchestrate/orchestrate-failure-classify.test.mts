@@ -91,6 +91,20 @@ describe('classifyTaskFailure — text markers', () => {
     assert.equal(classifyTaskFailure(chatWithText('Error: ECONNREFUSED 127.0.0.1:5432')), 'infra');
   });
 
+  test('user seed infra hypotheticals do not classify as infra', () => {
+    const chat = makeChat({
+      history: [
+        {
+          role: 'user',
+          content:
+            'If setup fails (DB connection refused, missing binary, port unavailable), report fail.',
+        },
+        { role: 'assistant', content: 'VERDICT: fail' },
+      ],
+    });
+    assert.equal(classifyTaskFailure(chat, 'fail'), 'code');
+  });
+
   test('Connection refused → infra', () => {
     assert.equal(classifyTaskFailure(chatWithText('Connection refused on port 5432')), 'infra');
   });

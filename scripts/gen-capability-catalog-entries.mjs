@@ -52,6 +52,7 @@ const GROUP_BY_HEADER_PREFIX = [
   { prefix: 'list / get / cancel sub-agents', group: 'agents-tasks' },
   { prefix: 'board_init', group: 'agents-tasks' },
   { prefix: 'board_report', group: 'agents-tasks' },
+  { prefix: 'delegate_tasks', group: 'agents-tasks' },
   { prefix: 'issue_*', group: 'agents-tasks' },
   { prefix: 'brain_search', group: 'knowledge' },
   { prefix: 'brain_write_page', group: 'knowledge' },
@@ -121,6 +122,7 @@ const ID_BY_HEADER = {
   'list / get / cancel sub-agents': 'agents-sub-agent-control',
   'board_init / board_update_task': 'agents-board-init',
   'board_report / board_get_state': 'agents-board-report',
+  delegate_tasks: 'agents-delegate-tasks',
   'issue_* tools': 'agents-issue-tools',
   'brain_search / read_page / list': 'knowledge-brain-read',
   'brain_write_page / append_log / ingest': 'knowledge-brain-write',
@@ -187,6 +189,8 @@ const AUTO_SCOPE_NOTES = {
   'agents-sub-agent-control': 'Probe scores list-then-cancel against a stubbed running agent.',
   'agents-board-init': 'Probe scores board seeding and task moves; the board itself is stubbed.',
   'agents-board-report': 'Probe scores whether the model reports completion against a stubbed board.',
+  'agents-delegate-tasks':
+    'Probe scores delegate_tasks fan-out against a stubbed orchestrate board.',
   'knowledge-recall': 'Probe scores whether the model calls a recall tool instead of guessing.',
   'apps-email-list': 'Probe scores list-then-open against a stubbed mailbox.',
   'apps-email-draft': 'Probe scores drafting and the never-send rule against a stubbed mailbox.',
@@ -196,9 +200,6 @@ const AUTO_SCOPE_NOTES = {
 
 /** Spreadsheet columns we intentionally omit from the shipped catalog. */
 const SKIP_GROUP = 'modes';
-
-/** Retired spreadsheet columns — omitted from the shipped catalog. */
-const SKIP_CAPABILITY_IDS = new Set(['agents-delegate-tasks']);
 
 function parseTier(comment) {
   const m = comment.match(/Tier (\d)/);
@@ -255,7 +256,6 @@ for (let C = 10; C <= range.e.c; C++) {
   const howToTest = parseHowToTest(comment);
   const id = ID_BY_HEADER[header];
   if (!id) throw new Error(`missing id for ${header}`);
-  if (SKIP_CAPABILITY_IDS.has(id)) continue;
   const group = inferGroup(header);
   if (group === SKIP_GROUP) continue;
   const scoreMode = MANUAL_IDS.has(id) ? 'manual' : 'auto';
@@ -284,9 +284,9 @@ for (let C = 10; C <= range.e.c; C++) {
   });
 }
 
-if (entries.length !== 57) throw new Error(`expected 57 entries, got ${entries.length}`);
+if (entries.length !== 58) throw new Error(`expected 58 entries, got ${entries.length}`);
 const autoCount = entries.filter((e) => e.scoreMode === 'auto').length;
-if (autoCount !== 53) throw new Error(`expected 53 auto, got ${autoCount}`);
+if (autoCount !== 54) throw new Error(`expected 54 auto, got ${autoCount}`);
 
 const lines = [
   '/**',

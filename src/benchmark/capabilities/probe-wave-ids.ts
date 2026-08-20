@@ -52,6 +52,7 @@ export const PHASE_2D_EMIT_ONLY_CAPABILITY_IDS = [
   'agents-sub-agent-control',
   'agents-board-init',
   'agents-board-report',
+  'agents-delegate-tasks',
   'knowledge-recall',
   'apps-email-list',
   'apps-email-draft',

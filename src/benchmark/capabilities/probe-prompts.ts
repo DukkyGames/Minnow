@@ -191,6 +191,8 @@ const STANDALONE_PROBE_PROMPTS: Record<string, string> = {
     'Set up an orchestrate board for three tasks — audit the tool catalog, write the report, file follow-ups — then mark the first one in progress.',
   'agents-board-report':
     'You have finished your assigned board task task-1. Check the board, then report your completion back to it.',
+  'agents-delegate-tasks':
+    'Three independent chunks of work are ready on the board — delegate them all in one go.',
 
   'features-chat-title':
     'Suggest a short title for a chat where the user debugged a failing IMAP sync and fixed a UID gap. Reply with the title only.',

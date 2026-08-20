@@ -31,19 +31,19 @@ describe('resolveOneShotSpawn', () => {
       assert.equal(darwin.command, '/bin/zsh');
       assert.deepEqual(darwin.args, ['-l', '-c', 'which npm 2>&1 || true']);
       assert.equal(darwin.shell, false);
+
+      const linux = resolveOneShotSpawn({
+        command: 'echo hi',
+        args: [],
+        platform: 'linux',
+      });
+      assert.equal(linux.command, '/bin/bash');
+      assert.deepEqual(linux.args, ['-l', '-c', 'echo hi']);
+      assert.equal(linux.shell, false);
     } finally {
       if (prevShell === undefined) delete process.env.SHELL;
       else process.env.SHELL = prevShell;
     }
-
-    const linux = resolveOneShotSpawn({
-      command: 'echo hi',
-      args: [],
-      platform: 'linux',
-    });
-    assert.equal(linux.command, '/bin/bash');
-    assert.deepEqual(linux.args, ['-l', '-c', 'echo hi']);
-    assert.equal(linux.shell, false);
   });
 
   it('uses cmd.exe for Windows one-shot strings', () => {

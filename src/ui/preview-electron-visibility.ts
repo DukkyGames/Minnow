@@ -20,8 +20,33 @@ const FULLSCREEN_OVERLAY_IDS = [
 
 const MAX_LAYOUT_STABLE_FRAMES = 6;
 
+/** happy-dom / node --test may omit requestAnimationFrame on globalThis. */
+function scheduleAnimationFrame(callback: FrameRequestCallback): number {
+  if (typeof globalThis.requestAnimationFrame === 'function') {
+    return globalThis.requestAnimationFrame(callback);
+  }
+  if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+    return window.setTimeout(
+      () => callback(typeof performance !== 'undefined' ? performance.now() : Date.now()),
+      0,
+    ) as unknown as number;
+  }
+  return 0;
+}
+
+function cancelScheduledAnimationFrame(handle: number): void {
+  if (!handle) return;
+  if (typeof globalThis.cancelAnimationFrame === 'function') {
+    globalThis.cancelAnimationFrame(handle);
+    return;
+  }
+  if (typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+    window.clearTimeout(handle);
+  }
+}
+
 function usesElectronPreview(): boolean {
-  return Boolean(window.minnow?.preview);
+  return Boolean(typeof window !== 'undefined' && window.minnow?.preview);
 }
 
 /** True when a full-screen app covers the workspace (Issues, settings, etc.). */
@@ -182,7 +207,7 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
           resolve(null);
           return;
         }
-        requestAnimationFrame(tick);
+        scheduleAnimationFrame(tick);
         return;
       }
 
@@ -197,10 +222,10 @@ function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
         resolve(readPreviewBodyBounds());
         return;
       }
-      requestAnimationFrame(tick);
+      scheduleAnimationFrame(tick);
     };
 
-    requestAnimationFrame(tick);
+    scheduleAnimationFrame(tick);
   });
 }
 
@@ -209,7 +234,7 @@ let layoutSyncChain: Promise<void> = Promise.resolve();
 let previewGuestVisible = false;
 
 async function runElectronPreviewHostLayoutSync(tabId?: string | null): Promise<void> {
-  const api = window.minnow?.preview;
+  const api = typeof window !== 'undefined' ? window.minnow?.preview : undefined;
   if (!api) return;
 
   if (!shouldShowElectronPreviewHost()) {
@@ -234,6 +259,11 @@ async function runElectronPreviewHostLayoutSync(tabId?: string | null): Promise<
  * Call after layout changes (Code foreground, split restore, resize).
  */
 export function syncElectronPreviewHostLayout(tabId?: string | null): Promise<void> {
+  // Direct sync supersedes a pending debounced pass (e.g. registerChromePopover + immediate sync).
+  if (layoutSyncRaf) {
+    cancelScheduledAnimationFrame(layoutSyncRaf);
+    layoutSyncRaf = 0;
+  }
   const next = layoutSyncChain.then(() => runElectronPreviewHostLayoutSync(tabId));
   layoutSyncChain = next.catch(() => {});
   return next;
@@ -257,15 +287,16 @@ function scheduleLayoutRetryIfNeeded(): void {
   }
   if (layoutRetryFrames >= MAX_LAYOUT_RETRY_FRAMES) return;
   layoutRetryFrames += 1;
-  requestAnimationFrame(() => {
+  scheduleAnimationFrame(() => {
     void syncElectronPreviewHostLayout().then(scheduleLayoutRetryIfNeeded);
   });
 }
 
 /** Debounced show/hide + bounds sync (resize, layout, overlay open, Code foreground). */
 export function scheduleElectronPreviewHostVisibilitySync(): void {
+  if (typeof window === 'undefined') return;
   if (layoutSyncRaf) return;
-  layoutSyncRaf = requestAnimationFrame(() => {
+  layoutSyncRaf = scheduleAnimationFrame(() => {
     layoutSyncRaf = 0;
     void syncElectronPreviewHostLayout().then(scheduleLayoutRetryIfNeeded);
   });
@@ -283,8 +314,8 @@ export function scheduleSecondaryPreviewHostLayoutSync(): void {
 export function resetPreviewGuestVisibilityForTests(): void {
   previewGuestVisible = false;
   layoutSyncChain = Promise.resolve();
-  if (layoutSyncRaf && typeof cancelAnimationFrame === 'function') {
-    cancelAnimationFrame(layoutSyncRaf);
+  if (layoutSyncRaf) {
+    cancelScheduledAnimationFrame(layoutSyncRaf);
     layoutSyncRaf = 0;
   }
   layoutRetryFrames = 0;

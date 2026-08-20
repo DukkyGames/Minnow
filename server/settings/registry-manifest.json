@@ -3918,6 +3918,136 @@
     ]
   },
   {
+    "key": "integrations.tools.permission.issue_search",
+    "label": "Tool permission: issue_search",
+    "description": "Permission mode for the issue_search tool (off, ask, or full).",
+    "keywords": [
+      "issue_search",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.issue_search",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.issue_comment",
+    "label": "Tool permission: issue_comment",
+    "description": "Permission mode for the issue_comment tool (off, ask, or full).",
+    "keywords": [
+      "issue_comment",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.issue_comment",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.issue_assign",
+    "label": "Tool permission: issue_assign",
+    "description": "Permission mode for the issue_assign tool (off, ask, or full).",
+    "keywords": [
+      "issue_assign",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.issue_assign",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.issue_unlink",
+    "label": "Tool permission: issue_unlink",
+    "description": "Permission mode for the issue_unlink tool (off, ask, or full).",
+    "keywords": [
+      "issue_unlink",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.issue_unlink",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.issue_move",
+    "label": "Tool permission: issue_move",
+    "description": "Permission mode for the issue_move tool (off, ask, or full).",
+    "keywords": [
+      "issue_move",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.issue_move",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.permission.issue_update",
     "label": "Tool permission: issue_update",
     "description": "Permission mode for the issue_update tool (off, ask, or full).",

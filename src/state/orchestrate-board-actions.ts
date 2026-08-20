@@ -3886,7 +3886,7 @@ export function applyTaskTestFailureState(
   updateTask(
     group,
     task.id,
-    { testAttempts: attempts, testSummary: summary },
+    { ...BOARD_REPORT_RESET_PATCH, testAttempts: attempts, testSummary: summary },
     plannerChat,
   );
 
@@ -4163,19 +4163,21 @@ async function finalizeTaskTestingOnStreamEndImpl(
     }
   }
 
-  let report = resolveBoardReport(fresh);
-
-  if (!report) {
-    const parsed = parseTesterVerdictMarker(fresh.testChatId);
-    if (parsed) {
-      report = { outcome: parsed.verdict, summary: parsed.summary };
-      updateTask(
-        group,
-        fresh.id,
-        { testVerdict: parsed.verdict, testSummary: parsed.summary },
-        plannerChat,
-      );
-    }
+  // The live tester transcript wins over stale report fields left from a prior
+  // attempt (testVerdict / buildOutcome); structured board_report on the task
+  // remains the fallback when the chat has no VERDICT marker.
+  const parsed = parseTesterVerdictMarker(fresh.testChatId);
+  let report: BoardReport | null = null;
+  if (parsed) {
+    report = { outcome: parsed.verdict, summary: parsed.summary };
+    updateTask(
+      group,
+      fresh.id,
+      { testVerdict: parsed.verdict, testSummary: parsed.summary },
+      plannerChat,
+    );
+  } else {
+    report = resolveBoardReport(fresh);
   }
 
   // Context-window overflow on the Tester is transient — retry testing without

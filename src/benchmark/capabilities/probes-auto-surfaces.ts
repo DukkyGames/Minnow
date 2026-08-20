@@ -148,6 +148,22 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
       return fail('No completion report');
     },
   },
+  'agents-delegate-tasks': {
+    kind: 'tool-call',
+    maxToolRounds: 8,
+    toolIds: ['delegate_tasks'],
+    emitOnly: true,
+    verdict: (out) => {
+      if (!hasTool(out.toolCalls, 'delegate_tasks')) {
+        return fail('No delegate_tasks call');
+      }
+      const calls = out.toolCalls.filter((tc) => tc.function?.name === 'delegate_tasks');
+      if (calls.length >= 2) {
+        return pass('Delegated multiple tasks in one fan-out');
+      }
+      return partial('Delegated once but did not fan out every ready task');
+    },
+  },
 
   'knowledge-recall': {
     kind: 'tool-call',
