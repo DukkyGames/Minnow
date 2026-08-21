@@ -15,7 +15,7 @@ import { validateProviderId } from './validate.js';
 import { resolveModelApi } from '../generations/resolve-model-api.js';
 import { NON_AGENT_FALLBACK_ROLES } from '../generations/store.js';
 import { enrichMlxLmModelsWithCachedContext } from '../models/mlx-context-length.js';
-import { enrichLlamaCppModelsWithModalities } from '../models/llama-cpp-modalities.js';
+import { enrichLlamaCppModelsFromProps } from '../models/llama-cpp-modalities.js';
 import { MODEL_LOAD_TIMEOUT_MS } from '../models/timeouts.js';
 import { serveMatchesModelId } from '../models/admit-serve.js';
 import {
@@ -71,7 +71,7 @@ export async function proxyModels(id) {
       normalized = await enrichMlxLmModelsWithCachedContext(normalized);
     }
     if (id === LLAMA_CPP_LOCAL_ID) {
-      normalized = await enrichLlamaCppModelsWithModalities(
+      normalized = await enrichLlamaCppModelsFromProps(
         profile.baseUrl,
         headers,
         normalized,

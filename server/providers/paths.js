@@ -221,12 +221,18 @@ const OPENAI_CONTEXT_FIELD_ALIASES = [
   'max_seq_len',
 ];
 
-/** @type {readonly string[]} */
+/**
+ * `meta` / `model_extra` context fields. `n_ctx_train` is what llama-server puts in
+ * `meta` — the trained window, i.e. this row's max. The window the process is
+ * actually serving comes from `/props` as `loaded_context_length`.
+ * @type {readonly string[]}
+ */
 const OPENAI_NESTED_CONTEXT_FIELD_ALIASES = [
   'n_ctx',
   'context_length',
   'context_window',
   'max_model_len',
+  'n_ctx_train',
 ];
 
 /**

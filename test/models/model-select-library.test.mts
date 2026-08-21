@@ -13,6 +13,7 @@ import {
   resolveLibrarySendBinding,
   resolveServedBindingForLibraryId,
   resolveUpstreamProviderId,
+  servedContextLength,
   LIBRARY_MODEL_PROVIDER_ID,
   libraryModelNeedsLoad,
 } from '../../src/models/model-select-library.ts';
@@ -74,6 +75,28 @@ describe('model-select-library', () => {
       isLibraryModelBinding(LIBRARY_MODEL_PROVIDER_ID, 'mlx:org/repo'),
       true,
     );
+  });
+
+  test('servedContextLength reports the per-slot window of a running serve', () => {
+    // `-c` is ctxPerSlot * parallel, so a 2-slot serve gives each chat half of it.
+    assert.equal(
+      servedContextLength(sampleServe({ llamaSettings: { ctx: 65_536, parallel: 2 } })),
+      32_768,
+    );
+    assert.equal(
+      servedContextLength(sampleServe({ llamaSettings: { ctx: 32_768 } })),
+      32_768,
+    );
+  });
+
+  test('servedContextLength stays undefined without a running serve or ctx', () => {
+    assert.equal(servedContextLength(undefined), undefined);
+    assert.equal(
+      servedContextLength(sampleServe({ status: 'starting', llamaSettings: { ctx: 32_768 } })),
+      undefined,
+    );
+    assert.equal(servedContextLength(sampleServe({ llamaSettings: null })), undefined);
+    assert.equal(servedContextLength(sampleServe({ llamaSettings: { ctx: 0 } })), undefined);
   });
 
   test('resolveUpstreamProviderId maps minnow-library to local runtimes', () => {

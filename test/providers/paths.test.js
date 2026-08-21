@@ -104,6 +104,20 @@ describe('provider paths', () => {
     assert.equal(out.data[0].max_context_length, 200_000);
   });
 
+  it('openai-v1 extracts nested meta.n_ctx_train (llama-server)', () => {
+    // llama-server's /v1/models rows carry the trained window here and nowhere
+    // else, so a GGUF outside the bundled catalog used to arrive with no limit.
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [
+        {
+          id: 'gguf:acme/ornith-1.5:ornith-1.5-q4_k_m.gguf',
+          meta: { n_ctx_train: 262_144, n_params: 35_000_000_000 },
+        },
+      ],
+    });
+    assert.equal(out.data[0].max_context_length, 262_144);
+  });
+
   it('openai-v1 string model ids default to loaded llm rows', () => {
     const out = normalizeModelsResponse('openai-v1', { data: ['gpt-4o'] });
     assert.deepEqual(out.data[0], { id: 'gpt-4o', type: 'llm', state: 'loaded' });

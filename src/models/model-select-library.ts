@@ -97,6 +97,25 @@ export interface LibraryModelSelectMerge {
   serves: ServeRecord[];
 }
 
+/**
+ * Context window a chat actually gets from a running serve.
+ *
+ * `llamaSettings.ctx` is the `-c` total, which the planner already multiplied by
+ * `--parallel` (`ctx = ctxPerSlot * parallel`), so the per-chat window is the
+ * quotient. Without this a model outside the bundled catalog — anything the GGUF
+ * scan has no `context_length` for — reads back as "Context limit unknown", which
+ * also switches off history compression.
+ */
+export function servedContextLength(serve: ServeRecord | undefined): number | undefined {
+  if (!serve || serve.status !== 'running') return undefined;
+  const settings = serve.llamaSettings;
+  if (!settings || typeof settings !== 'object') return undefined;
+  const ctx = Number(settings.ctx);
+  if (!Number.isFinite(ctx) || ctx <= 0) return undefined;
+  const parallel = Math.max(1, Math.trunc(Number(settings.parallel) || 1));
+  return Math.floor(ctx / parallel) || undefined;
+}
+
 function serveLoadState(serve: ServeRecord | undefined): LmModelRecord['state'] {
   if (!serve) return 'not loaded';
   if (serve.status === 'running') return 'loaded';
@@ -304,11 +323,15 @@ export async function fetchLibraryModelSelectMerge(
   const opts = library
     .map((model) => {
       const key = encodeLibraryModelSelectKey(model.id);
-      const state = libraryModelLoadState(model, serves);
+      const serve = activeServeFor(model, serves);
+      const state = serveLoadState(serve);
       // Minnow serves these itself (llama-server --mmproj / mlx-lm), so the local
       // library row is the only place vision can come from — there is no upstream
       // catalog to read it back off.
       const vision = model.capabilities.includes('vision');
+      // Same for context: only the running serve knows the window it was started
+      // with, and for an uncatalogued GGUF it is the only number there is.
+      const loadedContext = servedContextLength(serve);
       cacheEntries.push({
         key,
         row: {
@@ -317,6 +340,7 @@ export async function fetchLibraryModelSelectMerge(
           state,
           quantization: model.quant || undefined,
           max_context_length: model.contextLength ?? undefined,
+          ...(loadedContext !== undefined ? { loaded_context_length: loadedContext } : {}),
           ...(vision ? { catalogVision: true } : {}),
         },
       });
