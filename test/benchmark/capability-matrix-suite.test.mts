@@ -64,9 +64,9 @@ const { runCapabilityMatrixSuite } = await import('../../src/benchmark/suites/ca
 const { listExpectedTestsForSuites } = await import('../../src/benchmark/test-catalog.ts');
 
 describe('capability-matrix suite', () => {
-  test('emits 58 rows; phase 2b autos run; manual and gated autos are n-a', async () => {
+  test('emits 59 rows; phase 2b autos run; manual and gated autos are n-a', async () => {
     const expected = listExpectedTestsForSuites(['capability-matrix']);
-    assert.equal(expected.length, 58);
+    assert.equal(expected.length, 59);
 
     const suite = await runCapabilityMatrixSuite({
       providerId: 'fake-provider',
@@ -76,7 +76,7 @@ describe('capability-matrix suite', () => {
     });
 
     assert.equal(suite.id, 'capability-matrix');
-    assert.equal(suite.tests.length, 58);
+    assert.equal(suite.tests.length, 59);
 
     assert.deepEqual(
       suite.tests.map((t) => t.testId),
@@ -119,7 +119,7 @@ describe('capability-matrix suite', () => {
     }
 
     assert.equal(manualSkipped, 4);
-    assert.equal(ran + gatedSkipped, 54);
+    assert.equal(ran + gatedSkipped, 55);
     assert.ok(ran > 0);
     assert.ok(suite.score > 0);
   });

@@ -1445,6 +1445,26 @@ export function waitForServeRestartsForTests() {
   return Promise.all([...pendingRestarts.values()].map((h) => h.promise));
 }
 
+/**
+ * Exit handlers persist then maybe schedule a restart. Tests drain this set so
+ * commitServes cannot write after MINNOW_HOME is restored and the temp home is deleted.
+ * @type {Set<Promise<void>>}
+ */
+const pendingCrashHandlers = new Set();
+
+/** Track a fire-and-forget llama/MLX crash handler so tests can await it. */
+function trackCrashHandler(promise) {
+  pendingCrashHandlers.add(promise);
+  void promise.finally(() => {
+    pendingCrashHandlers.delete(promise);
+  });
+}
+
+/** Wait until in-flight crash persist + restart scheduling has finished. */
+export function waitForServeCrashHandlersForTests() {
+  return Promise.all([...pendingCrashHandlers]);
+}
+
 function watchLlamaRun(row) {
   if (!row.runId) return;
   llamaRunUnsubs.get(row.id)?.();
@@ -1452,7 +1472,7 @@ function watchLlamaRun(row) {
   if (typeof subscribe !== 'function') return;
   const unsub = subscribe(row.runId, (event) => {
     if (event?.type !== 'exit') return;
-    void handleLlamaRunExit(row.id, event);
+    trackCrashHandler(handleLlamaRunExit(row.id, event));
   });
   llamaRunUnsubs.set(row.id, typeof unsub === 'function' ? unsub : () => {});
 }
@@ -1515,7 +1535,7 @@ function ensureMlxCrashWatch() {
   if (typeof subscribe !== 'function') return;
   mlxCrashUnsub = subscribe('mlx-lm', (event) => {
     if (event?.type !== 'exit') return;
-    void handleMlxServerExit(event);
+    trackCrashHandler(handleMlxServerExit(event));
   });
 }
 

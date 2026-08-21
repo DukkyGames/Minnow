@@ -38,7 +38,7 @@ export const CAPABILITY_GROUP_LABELS: Record<CapabilityGroupId, string> = {
   features: 'FEATURES',
 };
 
-/** Expected capability count per band (58 total). */
+/** Expected capability count per band (59 total, including agents-issue-tools-v2). */
 export const CAPABILITY_GROUP_COUNTS: Record<CapabilityGroupId, number> = {
   'core-protocol': 10,
   files: 6,
@@ -48,7 +48,7 @@ export const CAPABILITY_GROUP_COUNTS: Record<CapabilityGroupId, number> = {
   lsp: 1,
   web: 3,
   browser: 3,
-  'agents-tasks': 7,
+  'agents-tasks': 8,
   knowledge: 5,
   apps: 5,
   'mode-control': 3,

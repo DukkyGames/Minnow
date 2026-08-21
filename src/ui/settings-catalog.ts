@@ -501,7 +501,7 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('advanced.capabilityMatrix', 'Capability matrix', 'advanced', 'capability-matrix', {
     keywords: ['benchmark', 'capabilities', 'spreadsheet', 'model matrix', 'roster'],
     description:
-      '58-capability grid with manual verdicts, auto probe results, and run history.',
+      '59-capability grid with manual verdicts, auto probe results, and run history.',
   }),
   field('advanced.capabilityMatrix.roster', 'Matrix roster', 'advanced', 'capability-matrix', {
     keywords: ['models', 'cloud', 'lm studio', 'hosting'],

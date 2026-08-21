@@ -1,5 +1,5 @@
 /**
- * Capability matrix catalog — 58 definitions in spreadsheet column order.
+ * Capability matrix catalog — 59 definitions in spreadsheet column order.
  */
 
 import { CAPABILITY_CATALOG_ENTRIES } from './catalog-entries.ts';

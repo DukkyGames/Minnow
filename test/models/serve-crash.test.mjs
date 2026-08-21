@@ -26,6 +26,7 @@ import {
   stopServe,
   subscribeServeEvents,
   waitForServeRestartsForTests,
+  waitForServeCrashHandlersForTests,
 } from '../../server/models/serve.js';
 
 const RUN_ID_1 = 'test-run-crash-1';
@@ -116,6 +117,8 @@ describe('serve crash watcher', () => {
   });
 
   after(async () => {
+    // Drain crash persist before swapping MINNOW_HOME so commitServes cannot hit a deleted path.
+    await waitForServeCrashHandlersForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await resetServesForTests();
@@ -158,6 +161,8 @@ describe('serve crash watcher', () => {
     patchServeRowForTests(serve.id, { lastHealthyAt: Date.now() - THIRTY_ONE_S });
 
     emitRunExit(RUN_ID_1, { type: 'exit', code: 1 });
+    // Wait until persist + scheduleAutoRestart finish; Windows disk I/O can lag the restart.
+    await waitForServeCrashHandlersForTests();
     await waitForStatus(serve.id, 'crashed');
     assert.equal(peekServeRowForTests(serve.id)?.restartCount, 1);
 

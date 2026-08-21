@@ -41,7 +41,7 @@ mock.module('../../server/servers/mlx-lm.js', {
 
 const { resetMinnowHomeCache } = await import('../../server/config/home.js');
 const { getServesIndexPath } = await import('../../server/models/paths.js');
-const { listServes, resetServesForTests, startServe, setMlxWarmupOverrideForTests } = await import('../../server/models/serve.js');
+const { listServes, resetServesForTests, startServe, setMlxWarmupOverrideForTests, waitForServeCrashHandlersForTests } = await import('../../server/models/serve.js');
 
 describe('MLX serve crash', () => {
   /** @type {string} */
@@ -71,6 +71,8 @@ describe('MLX serve crash', () => {
   });
 
   after(async () => {
+    // Drain crash persist before swapping MINNOW_HOME so commitServes cannot hit a deleted path.
+    await waitForServeCrashHandlersForTests();
     if (prevHome === undefined) delete process.env.MINNOW_HOME;
     else process.env.MINNOW_HOME = prevHome;
     resetMinnowHomeCache();
@@ -106,5 +108,6 @@ describe('MLX serve crash', () => {
     assert.equal(row.exitCode, 1);
     assert.equal(row.failure?.code, 'unknown');
     assert.equal(row.id, serve.id);
+    await waitForServeCrashHandlersForTests();
   });
 });
