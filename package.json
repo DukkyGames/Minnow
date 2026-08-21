@@ -209,7 +209,9 @@
     "brace-expansion": "^5.0.8",
     "minimatch": "^10.2.5",
     "protobufjs": "^7.6.3",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "html-to-text": "^10.0.1",
+    "deepmerge-ts": "^8.0.1"
   },
   "optionalDependencies": {
     "@emnapi/core": "1.11.3",
