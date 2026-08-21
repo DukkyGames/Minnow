@@ -22,7 +22,6 @@ const { registerStreamDomRemount } = await import('../../src/tools/stream-chat-d
 const { setOrchestrateViewMode } = await import('../../src/ui/view-mode-toggle.ts');
 const { setStreaming } = await import('../../src/app-state.ts');
 const { setSidebarStreamPhase } = await import('../../src/ui/chat-item-dot.ts');
-const { registerStreamDomRemount } = await import('../../src/tools/stream-chat-dom.ts');
 const { STREAM_LABEL_GENERATING } = await import('../../src/ui/stream-status.ts');
 
 function setupDom() {
