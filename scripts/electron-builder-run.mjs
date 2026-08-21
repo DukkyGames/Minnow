@@ -14,6 +14,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const defaultOut = path.join(repoRoot, 'release', 'pkg');
 const winUnpacked = path.join(defaultOut, 'win-unpacked');
 
+// Fail before asar packing if the server imports a src/ file that is not in build.files.
+// package:win / package:linux skip npm's prepackage hook, so this must live here.
+const validate = spawnSync('node', ['scripts/validate-packaged-runtime-files.mjs'], {
+  cwd: repoRoot,
+  stdio: 'inherit',
+});
+if (validate.status !== 0) process.exit(validate.status ?? 1);
+
 // Best-effort clean of the current output tree.
 spawnSync('node', ['scripts/clean-release.mjs'], { cwd: repoRoot, stdio: 'inherit' });
 

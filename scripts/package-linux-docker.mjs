@@ -15,6 +15,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const outputDir = 'release/pkg-linux';
 const image = 'electronuserland/builder:22';
 
+// Same contract as electron-builder-run.mjs: catch missing asar files before Docker npm ci.
+const validate = spawnSync('node', ['scripts/validate-packaged-runtime-files.mjs'], {
+  cwd: repoRoot,
+  stdio: 'inherit',
+});
+if (validate.status !== 0) process.exit(validate.status ?? 1);
+
 const dockerArgs = [
   'run',
   '--rm',

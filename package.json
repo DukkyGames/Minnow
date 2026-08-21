@@ -244,6 +244,7 @@
       "src/chat/prompts/**",
       "src/lsp/**",
       "src/lib/**",
+      "src/models/**",
       "src/attachments/document-extensions.mjs",
       "src/state/session-schema.mjs",
       "src/product-wiki/path-filter.mjs",

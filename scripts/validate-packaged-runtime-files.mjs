@@ -33,6 +33,8 @@ const REQUIRED_RUNTIME_DIRS = [
   'src/skills',
   'src/chat/prompts',
   'src/evals/packs',
+  // Server llama.cpp paths import the shared .mjs memory/geometry modules at runtime.
+  'src/models',
 ];
 
 /** @returns {string[]} */
