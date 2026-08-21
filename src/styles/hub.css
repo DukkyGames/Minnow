@@ -135,7 +135,6 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
   column-gap: 10px;
   row-gap: 8px;
   align-items: end;
@@ -156,7 +155,6 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
 
 .input-bar--hub .composer-controls {
   grid-column: 1 / -1;
-  grid-row: 1;
   margin-bottom: 0;
   flex-wrap: nowrap;
   align-items: center;
@@ -243,30 +241,11 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   flex: none;
 }
 
-.input-bar--hub .attach-preview:not(.hidden) {
-  grid-column: 1 / -1;
-  grid-row: 1;
-}
-
-.input-bar--hub:has(.attach-preview:not(.hidden)) {
-  grid-template-rows: auto auto auto;
-}
-
-.input-bar--hub:has(.attach-preview:not(.hidden)) .composer-controls {
-  grid-row: 2;
-}
-
-.input-bar--hub:has(.attach-preview:not(.hidden)) .input-row {
-  grid-row: 3;
-}
-
-.input-bar--hub:has(.attach-preview:not(.hidden)) .input-bar-send-stack {
-  grid-row: 3;
-}
-
+/* Strips (checklist, goal hint, queue, attach preview) span both columns and take
+   their own rows in document order; the field and Send auto-place onto the last
+   row together. Counting rows here instead only ever held for one strip. */
 .input-bar--hub .input-row {
   grid-column: 1;
-  grid-row: 2;
   align-self: stretch;
   min-width: 0;
   width: 100%;
@@ -290,10 +269,9 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   padding-right: calc(8px + 3 * var(--input-inset-btn-size, 36px) + 4px);
 }
 
-/* Same grid row as .input-row so send aligns with the message/plan field */
+/* Auto-places onto .input-row's row so Send aligns with the message/plan field */
 .input-bar--hub .input-bar-send-stack {
   grid-column: 2;
-  grid-row: 2;
   margin-top: 0;
   align-self: end;
   flex: none;

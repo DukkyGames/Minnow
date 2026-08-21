@@ -134,6 +134,31 @@ describe('pickEvictions', () => {
     });
     assert.deepEqual(evicted, []);
   });
+
+  test('zero or missing budgetBytes is cap-only (does not evict on estimates)', () => {
+    const residents = [
+      { id: SERVE_OLD, lastUsedAt: 1000, estimateBytes: 6 * GIB },
+      { id: SERVE_NEW, lastUsedAt: 2000, estimateBytes: 6 * GIB },
+    ];
+    assert.deepEqual(
+      pickEvictions({
+        residents,
+        incomingEstimateBytes: 6 * GIB,
+        modelsMax: 3,
+        budgetBytes: 0,
+      }).map((row) => row.id),
+      [],
+    );
+    assert.deepEqual(
+      pickEvictions({
+        residents,
+        incomingEstimateBytes: 6 * GIB,
+        modelsMax: 3,
+        budgetBytes: Number.NaN,
+      }).map((row) => row.id),
+      [],
+    );
+  });
 });
 
 describe('serveMatchesModelId', () => {
@@ -155,5 +180,9 @@ describe('estimatePlanMemoryBytes', () => {
   test('missing geometry with no estimateGb is 0 so cap-only fixtures still work', () => {
     assert.equal(estimatePlanMemoryBytes({ variant: 'cpu' }), 0);
     assert.equal(estimatePlanMemoryBytes(null), 0);
+  });
+
+  test('planner estimateGb counts when geometry is absent (stub GGUF launch plans)', () => {
+    assert.equal(estimatePlanMemoryBytes({ variant: 'cpu', estimateGb: 1.5 }), 1.5 * GIB);
   });
 });

@@ -86,8 +86,10 @@ export function resolveResidencyLimits(opts) {
 
 /**
  * Bytes the new (or resident) plan is expected to occupy on the constrained pool.
- * GPU → VRAM; CPU → RAM. Missing geometry (4-byte GGUF stubs in serve tests)
- * returns 0 so only `models_max` evicts — typical fixtures stay at cap 1.
+ * GPU → VRAM; CPU → RAM. Exact GGUF `geometry` uses `estimateRunMemory`; otherwise
+ * planner `estimateGb` counts. 4-byte serve-test stubs have no geometry but still
+ * carry a heuristic `estimateGb` (~1 GiB KV), so integration tests must pin
+ * `hardware` — do not rely on the runner's `os.freemem()`.
  *
  * @param {object | null | undefined} plan
  * @returns {number}
@@ -140,12 +142,17 @@ export function pickEvictions(opts) {
   const remaining = opts.residents.filter((row) => row.id !== incomingId);
   const incomingBytes = Number(opts.incomingEstimateBytes) || 0;
   const modelsMax = Math.max(1, Number(opts.modelsMax) || 1);
-  const budgetBytes = Number(opts.budgetBytes) || 0;
+  // 0 / NaN / missing = probe failed or host reported no free RAM. Cap still
+  // applies; a zero budget must not evict every resident on the first extra load.
+  const budgetBytes = Number(opts.budgetBytes);
+  const hasBudget = Number.isFinite(budgetBytes) && budgetBytes > 0;
   const evicted = [];
 
   const overLimit = () => {
     const used = remaining.reduce((sum, row) => sum + (Number(row.estimateBytes) || 0), 0);
-    return remaining.length >= modelsMax || used + incomingBytes > budgetBytes;
+    const overCap = remaining.length >= modelsMax;
+    const overBudget = hasBudget && used + incomingBytes > budgetBytes;
+    return overCap || overBudget;
   };
 
   while (remaining.length > 0 && overLimit()) {

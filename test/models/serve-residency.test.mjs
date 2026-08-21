@@ -42,6 +42,27 @@ const LIB_C = 'lib-gamma';
 const IDLE_PAST = 1_700_000_000_000;
 const LRU_OLD = 1_000;
 const LRU_NEW = 2_000;
+/**
+ * Pin RAM so cap/LRU assertions are not coupled to the runner's os.freemem().
+ * macOS CI often reports ~1 GB free; the planner's heuristic estimateGb for a
+ * 4-byte GGUF stub is then over-budget and evicts the previous resident.
+ */
+const TEST_HARDWARE = {
+  totalRamGb: 64,
+  availableRamGb: 64,
+  gpuVramGb: 0,
+  backend: 'cpu',
+};
+
+/** startServe with RAM large enough that only models_max / LRU decide residency. */
+function startResidentServe(opts = {}) {
+  return startServe({
+    runtime: 'llama-cpp',
+    async: true,
+    ...opts,
+    hardware: opts.hardware ?? TEST_HARDWARE,
+  });
+}
 
 async function waitForStatus(serveId, status, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
@@ -111,20 +132,16 @@ describe('llama.cpp multi-serve residency', () => {
   });
 
   test('two models stay resident under models_max: 3 and route by libraryId', async () => {
-    const a = await startServe({
+    const a = await startResidentServe({
       modelPath: modelPathA,
-      runtime: 'llama-cpp',
       libraryId: LIB_A,
       port: 18085,
-      async: true,
     });
     await waitForStatus(a.id, 'running');
-    const b = await startServe({
+    const b = await startResidentServe({
       modelPath: modelPathB,
-      runtime: 'llama-cpp',
       libraryId: LIB_B,
       port: 18086,
-      async: true,
     });
     await waitForStatus(b.id, 'running');
 
@@ -152,28 +169,22 @@ describe('llama.cpp multi-serve residency', () => {
 
   test('third model at cap 2 evicts the older lastUsedAt', async () => {
     await writeLlamaCppConfig({ models_max: 2 });
-    const a = await startServe({
+    const a = await startResidentServe({
       modelPath: modelPathA,
-      runtime: 'llama-cpp',
       libraryId: LIB_A,
-      async: true,
     });
-    const b = await startServe({
+    const b = await startResidentServe({
       modelPath: modelPathB,
-      runtime: 'llama-cpp',
       libraryId: LIB_B,
-      async: true,
     });
     await waitForStatus(a.id, 'running');
     await waitForStatus(b.id, 'running');
     patchServeRowForTests(a.id, { lastUsedAt: LRU_OLD });
     patchServeRowForTests(b.id, { lastUsedAt: LRU_NEW });
 
-    const c = await startServe({
+    const c = await startResidentServe({
       modelPath: modelPathC,
-      runtime: 'llama-cpp',
       libraryId: LIB_C,
-      async: true,
     });
     await waitForStatus(c.id, 'running');
 
@@ -183,11 +194,9 @@ describe('llama.cpp multi-serve residency', () => {
   });
 
   test('idle past TTL unloads, then a completion JIT-reloads only that alias', async () => {
-    const a = await startServe({
+    const a = await startResidentServe({
       modelPath: modelPathA,
-      runtime: 'llama-cpp',
       libraryId: LIB_A,
-      async: true,
     });
     await waitForStatus(a.id, 'running');
     const runsBeforeTtl = runSeq;
@@ -212,11 +221,9 @@ describe('llama.cpp multi-serve residency', () => {
   });
 
   test('user-stopped models are not JIT-reloaded', async () => {
-    const a = await startServe({
+    const a = await startResidentServe({
       modelPath: modelPathA,
-      runtime: 'llama-cpp',
       libraryId: LIB_A,
-      async: true,
     });
     await waitForStatus(a.id, 'running');
     await stopServe(a.id);

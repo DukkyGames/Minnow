@@ -19,8 +19,14 @@
   display: contents;
 }
 
-/* Mode strip, hints, and attach preview span the full bar (including send column) */
-.input-bar > :not(.input-bar-send-stack):not(.input-row) {
+/* Mode strip, hints, checklist, message queue, and attach preview span the full
+   bar (including the send column). `.input-bar-composer` is display:contents, so
+   its children are grid items of `.input-bar` but never match the `>` combinator
+   above; without the second selector two visible strips auto-place side by side,
+   the second lands in the `auto` send column, and its content width squeezes the
+   message field down to nothing. */
+.input-bar > :not(.input-bar-send-stack):not(.input-row),
+.input-bar-composer > :not(.input-bar-send-stack):not(.input-row) {
   grid-column: 1 / -1;
 }
 
@@ -156,8 +162,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 2px;
-  margin-bottom: 8px;
+  padding: 2px;
+  margin-bottom: 6px;
+  /* Three chip rows, then scroll. An unbounded strip walks the message field off
+     the bottom of a narrow rail once a handful of files are queued. */
+  max-height: 128px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .attach-preview.hidden {
