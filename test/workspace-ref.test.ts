@@ -26,6 +26,25 @@ describe('resolveWorkspaceReferences', () => {
     assert.equal(out[0].text, 'mock:src/foo.ts');
   });
 
+  it('sizes the resolved text so the chip stops reading 0 B', async () => {
+    const input: Attachment[] = [
+      {
+        id: 'ws-1',
+        name: 'foo.ts',
+        kind: 'workspace',
+        mimeType: 'application/x-minnow-workspace-file',
+        size: 0,
+        workspacePath: 'src/foo.ts',
+      },
+    ];
+
+    // Non-ASCII on purpose: the chip advertises bytes, not characters.
+    const body = 'héllo wörld';
+    const out = await resolveWorkspaceReferences(input, async () => body);
+    assert.equal(out[0].size, new TextEncoder().encode(body).length);
+    assert.ok(out[0].size > body.length, 'expected byte length, not character length');
+  });
+
   it('passes through non-workspace attachments unchanged', async () => {
     const textAttachment: Attachment = {
       id: 't-1',

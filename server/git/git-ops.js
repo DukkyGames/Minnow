@@ -363,7 +363,40 @@ export async function diff({ cwd, cached, path: filePath, workingTree } = {}) {
   return { ok: true, patch: result.stdout ?? '' };
 }
 
-/** `git add <paths[]>` */
+/**
+ * Paths git can accept as pathspecs: tracked in the index, or present on disk.
+ *
+ * A file an agent created and then deleted in the same session is neither, and `git add`
+ * aborts the *entire* command on one unmatched pathspec — so without this filter a single
+ * throwaway temp file makes every other path in the batch unstageable (MIN-651). Tracked
+ * files that were deleted still match the index, so their deletion stages normally.
+ */
+async function partitionStageablePaths(paths, cwd) {
+  const listed = await git(['ls-files', '-z', '--', ...paths], cwd);
+  const tracked = new Set(
+    listed.code === 0
+      ? (listed.stdout ?? '').split('\0').filter(Boolean).map((p) => p.replace(/\\/g, '/'))
+      : paths.map((p) => p.replace(/\\/g, '/')),
+  );
+
+  const stageable = [];
+  const skipped = [];
+  for (const rel of paths) {
+    if (tracked.has(rel.replace(/\\/g, '/'))) {
+      stageable.push(rel);
+      continue;
+    }
+    try {
+      await fs.access(path.resolve(cwd, rel));
+      stageable.push(rel);
+    } catch {
+      skipped.push(rel);
+    }
+  }
+  return { stageable, skipped };
+}
+
+/** `git add <paths[]>`, minus pathspecs that no longer match anything. */
 export async function stage({ cwd, paths } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -372,12 +405,21 @@ export async function stage({ cwd, paths } = {}) {
     return { ok: false, error: 'paths array is required' };
   }
 
-  const result = await git(['add', ...paths.map(String)], repo.cwd);
+  const requested = paths.map(String);
+  const { stageable, skipped } = await partitionStageablePaths(requested, repo.cwd);
+
+  // Nothing left to stage is not a failure — the caller asked about files that are simply
+  // gone, and reporting an error there would block a commit of the rest.
+  if (stageable.length === 0) {
+    return { ok: true, stagedPaths: [], skippedPaths: skipped };
+  }
+
+  const result = await git(['add', ...stageable], repo.cwd);
   if (result.code !== 0) {
     return { ok: false, error: processError(result) };
   }
 
-  return { ok: true };
+  return { ok: true, stagedPaths: stageable, skippedPaths: skipped };
 }
 
 /** `git add -A` */

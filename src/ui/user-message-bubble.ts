@@ -276,7 +276,9 @@ export function renderUserMessageBubble(
   for (const file of parsed.files) {
     const liveFile = findLiveFileAttachment(file.name, live);
     const fileKind = liveFile?.kind ?? inferFileKindFromName(file.name);
-    const fileSize = liveFile?.size ?? estimateTextByteSize(file.body);
+    // `??` would keep a live size of 0 — which is what an unresolved workspace ref carries —
+    // and render "0 B" over a file whose bytes are sitting right there in `file.body`.
+    const fileSize = liveFile?.size || estimateTextByteSize(file.body);
     row.appendChild(
       createMessageAttachChip(file.name, {
         kind: 'file',

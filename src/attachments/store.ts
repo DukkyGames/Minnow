@@ -71,6 +71,20 @@ export function replacePendingAttachments(next: Attachment[]): void {
 }
 
 /**
+ * Puts a sent turn's attachments back in the composer after that turn failed or was
+ * stopped (MIN-650). Merges rather than replaces: the user is free to queue new files
+ * while a turn runs, and a straight replace would silently throw those away.
+ */
+export function restorePendingAttachments(previous: Attachment[]): void {
+  if (!previous.length) return;
+  const present = new Set(pendingAttachments.map((item) => item.id));
+  const missing = previous.filter((item) => !present.has(item.id));
+  if (!missing.length) return;
+  pendingAttachments.unshift(...missing);
+  renderAttachPreview();
+}
+
+/**
  * Processes and appends files from the hidden file input.
  * Oversize and unsupported types become error chips.
  */

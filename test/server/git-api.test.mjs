@@ -117,6 +117,54 @@ describe('git API', () => {
     assert.ok(history.commits?.some((c) => c.subject === 'add new file'));
   });
 
+  test('stage skips paths that no longer match anything', async () => {
+    // MIN-651: the chat ledger keeps every path an agent touched, including a file it
+    // created and deleted again. One such ghost used to abort the whole `git add`.
+    await fs.writeFile(path.join(repoDir, 'kept.txt'), 'kept\n', 'utf8');
+
+    const res = await stage({
+      cwd: repoDir,
+      paths: ['kept.txt', 'created-then-deleted.txt'],
+    });
+
+    assert.equal(res.ok, true);
+    assert.deepEqual(res.stagedPaths, ['kept.txt']);
+    assert.deepEqual(res.skippedPaths, ['created-then-deleted.txt']);
+
+    const staged = await status({ cwd: repoDir });
+    assert.ok(staged.staged?.some((f) => f.path === 'kept.txt'));
+  });
+
+  test('stage keeps deletions of tracked files', async () => {
+    await fs.writeFile(path.join(repoDir, 'doomed.txt'), 'bye\n', 'utf8');
+    await execFileAsync('git', ['add', 'doomed.txt'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'add doomed'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await fs.rm(path.join(repoDir, 'doomed.txt'));
+
+    // Deleted but still tracked: it matches the index, so the removal must stage.
+    const res = await stage({ cwd: repoDir, paths: ['doomed.txt'] });
+    assert.equal(res.ok, true);
+    assert.deepEqual(res.stagedPaths, ['doomed.txt']);
+
+    const staged = await status({ cwd: repoDir });
+    assert.ok(staged.staged?.some((f) => f.path === 'doomed.txt' && f.status === 'D'));
+
+    await execFileAsync('git', ['commit', '-m', 'remove doomed'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+  });
+
+  test('stage reports success when every path is gone', async () => {
+    const res = await stage({ cwd: repoDir, paths: ['ghost-a.txt', 'ghost-b.txt'] });
+    assert.equal(res.ok, true);
+    assert.deepEqual(res.stagedPaths, []);
+    assert.deepEqual(res.skippedPaths, ['ghost-a.txt', 'ghost-b.txt']);
+  });
+
   test('commit auto-stages all changes when index is empty', async () => {
     await fs.writeFile(path.join(repoDir, 'auto.txt'), 'auto\n', 'utf8');
     await fs.writeFile(path.join(repoDir, 'tracked.txt'), 'v3\n', 'utf8');

@@ -30,6 +30,10 @@ export interface GitOpResult {
   untracked?: GitFileEntry[];
   patch?: string;
   sha?: string;
+  /** `stage`: pathspecs actually handed to `git add`. */
+  stagedPaths?: string[];
+  /** `stage`: pathspecs dropped because they are neither tracked nor on disk (MIN-651). */
+  skippedPaths?: string[];
   /** HEAD tip when a snapshot was created/restored (MIN-409). */
   headSha?: string;
   treeSha?: string;

@@ -44,6 +44,7 @@ import {
   clearAttachments,
   getPendingAttachments,
   replacePendingAttachments,
+  restorePendingAttachments,
 } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
 import {
@@ -409,6 +410,12 @@ export interface BuildApiMessagesOptions {
   ephemeralContinueInstruction?: string;
   /** Surface-owned context injected as a system message without persisting in history. */
   ephemeralContext?: string;
+  /**
+   * Attachments belonging to this turn. Defaults to the composer's pending list only for
+   * callers that have not resolved their own set — the running turn always passes its own
+   * so the composer strip can be emptied at send time instead of at turn end (MIN-650).
+   */
+  attachments?: Attachment[];
 }
 
 interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
@@ -770,7 +777,9 @@ export function buildApiMessages(
     messages.push({ role: 'system', content: ephemeralContext });
   }
 
-  const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
+  const pending = (options?.attachments ?? getPendingAttachments()).filter(
+    (a) => a.kind !== 'error',
+  );
   const outboundHistory = copyHistoryForOutboundApi(chat.history);
   const multimodalUserIdx = indexOfMultimodalUserMessage(outboundHistory, pending);
   const modelId = options?.modelId;
@@ -1913,6 +1922,22 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let synthesisRoundCount = 0;
   let synthesisToolCount = 0;
 
+  /*
+   * MIN-650: the composer strip empties the moment the turn owns the files, the same way
+   * the text input does — `validAttachments` is this turn's transport from here on, so the
+   * global pending list no longer has to survive until teardown. Kept as a snapshot only to
+   * hand the files back if the turn fails or is stopped, so a retry does not re-attach by hand.
+   *
+   * Guarded exactly like `clearComposerInput` above: the pending list is one global strip
+   * shared by every surface, so a background or sub-agent turn must not empty the composer
+   * of whatever chat the user is actually looking at.
+   */
+  const ownsComposer = pushUser && !hideUserEcho && useActiveChatDom;
+  const sentAttachments = ownsComposer ? getPendingAttachments() : [];
+  if (sentAttachments.length > 0) {
+    clearAttachments();
+  }
+
   try {
     let provider = await getActiveProvider(sendProviderId);
     await loadToolCallsMeta();
@@ -2026,6 +2051,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         userRulesContent: userRulesContent ?? undefined,
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
         ephemeralContext,
+        attachments: validAttachments,
       });
 
       let preMessages = rawMessages;
@@ -2533,11 +2559,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const askQuestionToolAvailable =
         enabledTools.some((t) => t.function.name === 'ask_question') &&
         isToolEnabled('ask_question');
-      const pendingForRetry = getPendingAttachments().filter((a) => a.kind !== 'error');
+      const turnAttachments = validAttachments.filter((a) => a.kind !== 'error');
       if (
         askQuestionToolAvailable &&
         fullText.trim() &&
-        !turnHasImageContext(chat, pendingForRetry) &&
+        !turnHasImageContext(chat, turnAttachments) &&
         looksLikeProseStructuredQuestion(fullText) &&
         proseQuestionRetries < MAX_PROSE_QUESTION_RETRIES
       ) {
@@ -2918,7 +2944,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const msg = e.message ?? '';
       const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
       const attachHint =
-        getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
+        sentAttachments.length > 0 ? ' Attachments kept for retry.' : '';
       setStatus('err', (rolledBack ? lost : statusMsg) + attachHint);
     } else {
       const statusMsg = lost.length > 80 ? `${lost.slice(0, 77)}…` : lost;
@@ -2946,8 +2972,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     thoughtController?.abort();
     thinkingTracker?.abort();
+    if (!completedNormally) {
+      restorePendingAttachments(sentAttachments);
+    }
     if (completedNormally) {
-      clearAttachments();
       if (deferTitleUntilTurnEnd || shouldScheduleTitle) {
         const seed = titleSeed?.trim() || userText?.trim() || rawText?.trim();
         if (seed) {

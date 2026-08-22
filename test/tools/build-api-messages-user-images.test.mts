@@ -80,6 +80,36 @@ describe('buildApiMessages user attachments', () => {
     assert.doesNotMatch(text && 'text' in text ? text.text : '', /\[image:/);
   });
 
+  test('a turn carries its own attachments once the composer has been emptied', () => {
+    // MIN-650: the strip clears at send, so an in-flight turn cannot rely on the
+    // pending store still holding its files.
+    clearAttachments();
+    const messages = buildApiMessages(chatWithPendingImage(), 'sys', {
+      composedSystemPrompt: 'sys',
+      pendingUserText: 'What is wrong here?',
+      vision: true,
+      attachments: [imageAttachment],
+    });
+    const parts = lastUserParts(messages);
+    assert.ok(parts, 'expected multimodal user content');
+    const image = parts.find((p) => p.type === 'image_url');
+    assert.equal(image && 'image_url' in image ? image.image_url.url : '', SHOT);
+  });
+
+  test('explicit turn attachments win over whatever the composer holds now', () => {
+    // A file queued for the *next* message must not leak into the running turn.
+    pushAttachment({ ...imageAttachment, id: 'att-next', name: 'next.png' });
+    const messages = buildApiMessages(chatWithPendingImage(), 'sys', {
+      composedSystemPrompt: 'sys',
+      pendingUserText: 'What is wrong here?',
+      vision: true,
+      attachments: [],
+    });
+    const parts = lastUserParts(messages);
+    const images = (parts ?? []).filter((p) => p.type === 'image_url');
+    assert.equal(images.length, 0);
+  });
+
   test('a Design Mode element crop is sent as pixels too', () => {
     pushAttachment({
       id: 'att-el',

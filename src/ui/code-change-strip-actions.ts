@@ -280,6 +280,14 @@ async function onCommitClick(): Promise<void> {
     setButtonsBusy(false);
     return;
   }
+  // The ledger records every path the chat ever touched, including files the agent created
+  // and then deleted again. Those are dropped server-side; when they were *all* of them
+  // there is nothing to commit and running the skill would just confuse it (MIN-651).
+  if (stageRes.stagedPaths && stageRes.stagedPaths.length === 0) {
+    setStatus('err', 'No files from this chat still exist to commit');
+    setButtonsBusy(false);
+    return;
+  }
 
   setStatus('spin', 'Committing with git-commit skill…');
   const userText =

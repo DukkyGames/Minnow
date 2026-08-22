@@ -5,6 +5,7 @@
  */
 
 import { executeTool } from '../tools/client';
+import { estimateTextByteSize } from './file-card';
 import { isImageFilePath } from './image-path';
 import { isDocumentFilePath } from './document-extensions.mjs';
 import {
@@ -162,6 +163,10 @@ export async function resolveWorkspaceReferences(
         name,
         mimeType: 'text/plain',
         text,
+        // The chip was queued at size 0 with a "Workspace" placeholder; now that the bytes
+        // are here it stops being a placeholder, so it needs a real size or it renders 0 B
+        // in both the composer strip and the sent message (MIN-631).
+        size: estimateTextByteSize(text),
         largeTextWarning: text.length > 32 * 1024,
       });
     } catch (err) {
