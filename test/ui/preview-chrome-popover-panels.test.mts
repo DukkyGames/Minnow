@@ -91,6 +91,22 @@ describe('preview chrome popover panels (MIN-457)', () => {
     assert.equal(isChromePopoverOpen(), false);
   });
 
+  test('issue capture popover registers chrome popover while open', async () => {
+    const { emptyCapturePayload } = await import('../../src/issues/capture-payload.ts');
+    const { openIssueCapture, closeIssueCapture, resetIssueCaptureForTests } = await import(
+      '../../src/ui/issue-capture-popover.ts'
+    );
+
+    try {
+      assert.equal(isChromePopoverOpen(), false);
+      openIssueCapture({ payload: emptyCapturePayload() });
+      assert.equal(isChromePopoverOpen(), true);
+      closeIssueCapture({ restoreFocus: false, clearDraft: true });
+      assert.equal(isChromePopoverOpen(), false);
+    } finally {
+      resetIssueCaptureForTests();
+    }
+  });
   test('composer model menu registers chrome popover while open', async () => {
     win.document.body.innerHTML = `
       <select id="modelSelect"><option value="qwen/qwen2.5-7b">Qwen 2.5 7B</option></select>

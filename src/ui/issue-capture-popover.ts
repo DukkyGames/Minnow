@@ -33,6 +33,10 @@ import {
   saveIssueCaptureDraft,
   type IssueCaptureDraft,
 } from './issue-capture-draft';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from './preview-electron-visibility';
 import { showToast } from './toast';
 
 const EDGE_GAP = 8;
@@ -73,6 +77,8 @@ interface CaptureSession {
 }
 
 let session: CaptureSession | null = null;
+/** True while the popover holds a chrome-popover registration (native preview guest hidden). */
+let chromePopoverRegistered = false;
 
 /** True while the capture popover is open. */
 export function isIssueCaptureOpen(): boolean {
@@ -110,6 +116,10 @@ export function closeIssueCapture(options?: {
   const restore = options?.restoreFocus === false ? null : current.restoreFocus;
   if (restore?.isConnected) restore.focus();
   current.root.remove();
+  if (chromePopoverRegistered) {
+    unregisterChromePopover();
+    chromePopoverRegistered = false;
+  }
 }
 
 function chipIconFor(kind: CaptureItem['kind']): string {
@@ -529,6 +539,11 @@ export function openIssueCapture(options: OpenIssueCaptureOptions): void {
   document.body.appendChild(root);
   positionPopover(root, current.anchor);
   bindGlobalListeners();
+  // The popover is a DOM layer; the Electron preview guest is a native
+  // WebContentsView that paints above it. Register so the guest hides while
+  // open (same contract as the other chrome popovers).
+  registerChromePopover();
+  chromePopoverRegistered = true;
 
   titleInput.focus();
   titleInput.select();

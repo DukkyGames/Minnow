@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minnow for Junior Developers — A Practical Guide</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --panel-2: #1c2230;
+    --ink: #e7ecf4;
+    --muted: #9aa7bd;
+    --line: #2a3243;
+    --accent: #5aa9ff;
+    --accent-2: #7ee0c3;
+    --warn-bg: #2a2318;
+    --warn-line: #8a6d3b;
+    --tip-bg: #14231d;
+    --tip-line: #2f6b52;
+    --note-bg: #161d2c;
+    --note-line: #35507e;
+    --code-bg: #0b0e13;
+    --radius: 12px;
+    --maxw: 900px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  header.hero {
+    background: linear-gradient(135deg, #12203a 0%, #0f1115 70%);
+    border-bottom: 1px solid var(--line);
+    padding: 56px 24px 44px;
+    text-align: center;
+  }
+  header.hero .kicker {
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  header.hero h1 {
+    margin: 14px 0 8px;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.1;
+  }
+  header.hero p.lede {
+    max-width: 640px;
+    margin: 0 auto;
+    color: var(--muted);
+    font-size: 17px;
+  }
+  .badge {
+    display: inline-block;
+    margin-top: 18px;
+    padding: 6px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--panel);
+  }
+  main { max-width: var(--maxw); margin: 0 auto; padding: 40px 24px 80px; }
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin: 0 0 44px;
+  }
+  nav.toc h2 { margin: 0 0 12px; font-size: 15px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+  nav.toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 40px; }
+  nav.toc li { margin: 6px 0; break-inside: avoid; }
+  nav.toc a { color: var(--ink); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  h2.sec {
+    font-size: 28px;
+    margin: 0 0 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--line);
+  }
+  h2.sec .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 12px; }
+  h3 { font-size: 20px; margin: 30px 0 10px; }
+  h4 { font-size: 16px; margin: 22px 0 8px; color: var(--accent-2); }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); }
+  ul, ol { padding-left: 24px; }
+  li { margin: 6px 0; }
+  strong { color: #fff; }
+  dfn, .term {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--accent-2);
+  }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 13.5px;
+    color: #ffd9a0;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+  pre code { background: none; border: none; padding: 0; color: #d7e3f4; }
+  .comment { color: #5b6a84; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 18px 0 24px;
+    font-size: 14.5px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th { background: var(--panel-2); color: #fff; font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: rgba(255,255,255,.015); }
+  .callout {
+    border-radius: var(--radius);
+    padding: 16px 18px 16px 52px;
+    margin: 20px 0;
+    position: relative;
+    border: 1px solid;
+  }
+  .callout .icon {
+    position: absolute; left: 16px; top: 15px;
+    font-size: 18px;
+  }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 8px; }
+  .callout.tip { background: var(--tip-bg); border-color: var(--tip-line); }
+  .callout.note { background: var(--note-bg); border-color: var(--note-line); }
+  .callout.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .callout .label { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; display: block; margin-bottom: 4px; }
+  .tip .label { color: var(--accent-2); }
+  .note .label { color: var(--accent); }
+  .warn .label { color: #e6b566; }
+  .step {
+    display: flex;
+    gap: 16px;
+    margin: 22px 0;
+  }
+  .step .n {
+    flex: 0 0 auto;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #06121f;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .step .body { flex: 1; }
+  .step .body h4 { margin: 4px 0 6px; color: var(--ink); }
+  .step .body p { margin: 0 0 8px; }
+  dl.gloss { margin: 18px 0; }
+  dl.gloss dt { font-weight: 700; color: var(--accent-2); margin-top: 16px; }
+  dl.gloss dd { margin: 4px 0 0 0; color: var(--ink); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 720px) {
+    nav.toc ol { columns: 1; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+  .chip {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 2px 4px 2px 0;
+  }
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 24px 44px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  footer a { color: var(--accent); }
+  .kbd {
+    font-family: monospace;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 12.5px;
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="kicker">Learning Guide</div>
+  <h1>Minnow for Junior Developers</h1>
+  <p class="lede">A local-first AI development workspace. This guide explains what Minnow is, the core ideas you need, and how to actually use it — in plain language, with examples.</p>
+  <span class="badge">No prior AI experience required · Built from the official Minnow manual</span>
+</header>
+
+<main>
+
+<nav class="toc" aria-label="Table of contents">
+  <h2>What's in this guide</h2>
+  <ol>
+    <li><a href="#what">What Minnow is</a></li>
+    <li><a href="#mental-model">The mental model</a></li>
+    <li><a href="#concepts">Core concepts</a></li>
+    <li><a href="#setup">Getting started</a></li>
+    <li><a href="#first-turn">Your first real turn</a></li>
+    <li><a href="#modes">Choosing modes</a></li>
+    <li><a href="#tools">Tools &amp; permissions</a></li>
+    <li><a href="#memory">Memory, context &amp; rules</a></li>
+    <li><a href="#skills">Skills &amp; slash commands</a></li>
+    <li><a href="#apps">The other apps</a></li>
+    <li><a href="#workflows">Practical workflows</a></li>
+    <li><a href="#safety">Safety &amp; privacy</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#where-next">Where to go next</a></li>
+  </ol>
+</nav>
+
+<!-- ========================================================= -->
+<section id="what">
+  <h2 class="sec"><span class="num">1</span>What Minnow is</h2>
+  <p><span class="term">Minnow</span> is a <strong>local-first development workspace</strong>: a single desktop app that gives an AI assistant a full set of developer tools — reading and writing files, running git, spawning a terminal, indexing your code, searching the web, and keeping a persistent memory — all working against the project folder you have open.</p>
+  <p>The important word is <em>local-first</em>. Minnow does not ship with an AI model and it does not run its own model in the cloud by default. Your code, your chats, your memory, and your settings all live <strong>on your machine</strong> (in a folder called <code>~/.minnow</code>). The only thing you have to supply is a model to talk to — and that model can be local or in the cloud, your choice.</p>
+
+  <h3>Three things stacked together</h3>
+  <p>Minnow is really three layers, and understanding the layers explains almost everything about the product:</p>
+  <table>
+    <thead><tr><th>Layer</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><strong>A workspace shell</strong></td><td>The app UI. You pick a project folder, then work in <strong>Code</strong> with chat beside your files. Other apps (Research, Models, Brain, Issues…) hang off the same shell.</td></tr>
+      <tr><td><strong>A local tool server</strong></td><td>A Node process on port <strong>9473</strong> that does everything a browser tab can't: read/write files, run git, open terminals, index code, store chats, download models. It binds to loopback only.</td></tr>
+      <tr><td><strong>A model you supply</strong></td><td>Any <span class="term">OpenAI-compatible</span> endpoint — LM Studio, Ollama, a model Minnow serves itself, or a cloud API. Minnow is indifferent to where it lives.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout tip">
+    <span class="icon">💡</span>
+    <span class="label">The one-sentence version</span>
+    <p>Minnow is the <em>environment</em> (files, git, terminal, memory) that makes an AI assistant genuinely useful for development, and it keeps that environment on your machine.</p>
+  </div>
+
+  <h3>What Minnow is <em>not</em></h3>
+  <ul>
+    <li>It is <strong>not</strong> a chatbot website. It has no account, no cloud backend for your code, and no telemetry.</li>
+    <li>It does <strong>not</strong> include a model. If nothing can answer you, it's almost always because no model is connected and running.</li>
+    <li>It is <strong>not</strong> a general-purpose code editor replacement — the chat is the product, and the file tree/editor/preview around it exist so the assistant has real things to act on.</li>
+  </ul>
+</section>
+
+<!-- ========================================================= -->
+<section id="mental-model">
+  <h2 class="sec"><span class="num">2</span>The mental model</h2>
+  <p>Read this once and most of Minnow stops needing explanation. Two ideas do most of the work.</p>
+
+  <h3>Idea 1 — The loop</h3>
+  <p>Every time you press <span class="kbd">Enter</span>, this is what happens:</p>
+  <ol>
+    <li>Minnow assembles a <span class="term">system prompt</span> — the active <a href="#modes">mode</a>, your standing rules, retrieved memories, and guidance for using tools.</li>
+    <li>It sends your conversation history plus the <strong>tool definitions your mode allows</strong> to the model.</li>
+    <li>The model streams a reply. If it wants to call a tool, Minnow checks each one against your <a href="#tools">permissions</a> and either runs it, asks you, or refuses.</li>
+    <li>Tool results go back to the model, and it continues. This repeats until it stops calling tools.</li>
+    <li>The finished turn is written to disk.</li>
+  </ol>
+  <p>Two consequences explain most "why did it do that?" moments:</p>
+  <ul>
+    <li><strong>A model that can't call tools can only talk.</strong> If the assistant is confidently reciting answers but never actually reads a file, the model (not your permission settings) is the likely cause.</li>
+    <li><strong>Every tool result costs context.</strong> Reading a huge file isn't free — it competes with your conversation for space in the model's window.</li>
+  </ul>
+
+  <h3>Idea 2 — The workspace boundary</h3>
+  <p>File, git, search, and terminal tools resolve <strong>under one folder</strong>: the project you opened. An attempt to read outside that folder fails. That boundary is the single most important safety property in Minnow — it's what stands between an over-eager assistant and the rest of your disk. You can deliberately lift it (full-disk access), but that's a conscious decision, not a default.</p>
+
+  <div class="callout note">
+    <span class="icon">📐</span>
+    <span class="label">Why this matters for you</span>
+    <p>When you open a repo in Minnow, think of it as handing the assistant a sandbox that is exactly the size of that repo. Everything it can touch is in there; everything it can't touch is outside it. That mental picture makes the rest of the guide predictable.</p>
+  </div>
+</section>
+
+<!-- ========================================================= -->
+<section id="concepts">
+  <h2 class="sec"><span class="num">3</span>Core concepts</h2>
+  <p>These are the words you'll keep hearing. Learn them and everything else has a place to attach.</p>
+  <dl class="gloss">
+    <dt>Workspace</dt>
+    <dd>The project folder you open. It becomes the root that all file/git/terminal tools operate inside. You can switch it anytime from the menubar.</dd>
+    <dt>Mode</dt>
+    <dd>A preset that changes two things at once: the system prompt the model gets <em>and</em> which tools even exist for that turn. There are four in the composer: <strong>General, Build, Plan, Debug</strong>.</dd>
+    <dt>Tool</dt>
+    <dd>A function the model may call — read a file, run a command, search the web, write a memory page. Minnow ships over a hundred of them.</dd>
+    <dt>Permission level</dt>
+    <dd>Every tool is <strong>Off</strong>, <strong>Ask</strong>, or <strong>Full</strong> — see <a href="#tools">section 7</a>.</dd>
+    <dt>Provider / Model</dt>
+    <dd>A <em>provider</em> is an endpoint you connect to (LM Studio, Ollama, OpenAI, etc.). A <em>model</em> is a specific model that provider reports. You pick providers, then pick a model for a chat.</dd>
+    <dt>Context window</dt>
+    <dd>The model's finite working memory for one conversation. System prompt + rules + memories + tools + your whole history + tool results all compete for it.</dd>
+    <dt>Brain (memory)</dt>
+    <dd>A real wiki of markdown pages on your disk. Minnow retrieves relevant pages before a turn and injects them, so the assistant can remember durable facts across chats.</dd>
+    <dt>Rule</dt>
+    <dd>A standing instruction injected into every prompt ("always run tests before committing"). Off by default; costs context every turn.</dd>
+    <dt>Skill / slash command</dt>
+    <dd>Packaged instructions the model follows when you type <code>/</code> — code review, commit messages, a UI critique, etc.</dd>
+    <dt>Sub-agent</dt>
+    <dd>A nested agent the main assistant can spawn for parallel work (a researcher, an explorer) that reports back without cluttering your transcript.</dd>
+  </dl>
+
+  <div class="callout note">
+    <span class="icon">🔗</span>
+    <span class="label">Apps are surfaces, not silos</span>
+    <p>Code, Research, Brain, Issues, and the rest all share <em>one</em> chat engine, one set of tools, one session store, and one workspace. Opening Research doesn't start a different assistant — it gives the same assistant a different layout. That's why work can flow freely: an issue can be sent to a chat, a research report can be discussed, a plan can become a board of tasks.</p>
+  </div>
+</section>
+
+<!-- ========================================================= -->
+<section id="setup">
+  <h2 class="sec"><span class="num">4</span>Getting started</h2>
+  <p>Four steps from zero to a working assistant. Total time is mostly the model download.</p>
+
+  <div class="step"><div class="n">1</div><div class="body">
+    <h4>Install Minnow</h4>
+    <p>Download the installer for your platform from the Minnow releases page:</p>
+    <ul>
+      <li><strong>Windows</strong> — an NSIS <code>.exe</code> installer. If SmartScreen warns the publisher is unknown, choose <em>More info → Run anyway</em> (builds may be unsigned).</li>
+      <li><strong>macOS</strong> — a <code>.dmg</code> (or <code>.zip</code>).</li>
+      <li><strong>Linux</strong> — an AppImage; make it executable and run it.</li>
+    </ul>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="body">
+    <h4>Open a project folder</h4>
+    <p>On first launch, Minnow opens on the <strong>workspaces picker</strong>. Choose the folder of the project you want to work on (or continue without one). Minnow then opens <strong>Code</strong> with the chat rail on the left, beside the files it will work on. That folder is now your <a href="#mental-model">workspace boundary</a>.</p>
+    <p>Behind the scenes, Minnow creates its home folder (<code>~/.minnow</code> or <code>%USERPROFILE%\.minnow</code>) and starts the local tool server on port 9473.</p>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="body">
+    <h4>Connect a model</h4>
+    <p>Pick whichever route fits you:</p>
+    <table>
+      <thead><tr><th>If you want…</th><th>Do this</th></tr></thead>
+      <tbody>
+        <tr><td>A local model you already have</td><td><strong>LM Studio</strong> (start its local server, default <code>http://localhost:1234</code>) or <strong>Ollama</strong> (<code>http://localhost:11434/v1</code>).</td></tr>
+        <tr><td>Minnow to download &amp; serve it</td><td><strong>Models → Recommendations</strong> probes your hardware and scores models that will fit, then <strong>Library</strong> downloads and <strong>Serve</strong> runs it.</td></tr>
+        <tr><td>Frontier quality, no local hardware</td><td><strong>Models → Providers</strong> has one-click presets (OpenAI, Anthropic, OpenRouter, Groq, …) plus a custom base URL. You paste an API key.</td></tr>
+      </tbody>
+    </table>
+    <p>All of this lives in the <strong>Models</strong> app. If a provider is already listening on its default port, Minnow detects it automatically.</p>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div class="body">
+    <h4>Pick a model and go</h4>
+    <p>There are two pickers, and mixing them up causes a lot of "why is it using the wrong model?" confusion:</p>
+    <ul>
+      <li><strong>Menubar model chip</strong> — the global default for <em>new</em> chats.</li>
+      <li><strong>Composer picker</strong> (or <span class="kbd">Ctrl</span>+<span class="kbd">M</span>) — binds a model to <em>this chat only</em>.</li>
+    </ul>
+    <p>If the picker is empty: is the provider running? Is a model loaded in it? Is the base URL right (including <code>/v1</code> where needed)? Then press <strong>Refresh</strong> in Models → Providers.</p>
+  </div></div>
+
+  <div class="callout tip">
+    <span class="icon">💡</span>
+    <span class="label">First-run wizard</span>
+    <p>You'll usually get a short guided setup — theme, provider, model, tool permissions, and memory. Skip it any time and re-run it later from <strong>Settings → General → Run setup again</strong>.</p>
+  </div>
+
+  <h3>Closing and quitting</h3>
+  <p>Closing the window does <strong>not</strong> quit Minnow. By default it hides to the system tray so chats, agents, scheduled jobs, and the tool server keep running — a long agent run should survive you closing the window. Use <strong>Quit Minnow</strong> from the tray for a full shutdown. Change this under <strong>Settings → General → Desktop app</strong>.</p>
+</section>
+
+<!-- ========================================================= -->
+<section id="first-turn">
+  <h2 class="sec"><span class="num">5</span>Your first real turn</h2>
+  <p>Let's do one full turn and notice each piece, so the abstract terms have a concrete memory attached.</p>
+
+  <h3>The layout you're looking at</h3>
+  <table>
+    <thead><tr><th>Area</th><th>What it is</th></tr></thead>
+    <tbody>
+      <tr><td><strong>App rail</strong> (left edge)</td><td>Switch between Code, Research, Models, Brain, Issues, Scheduler.</td></tr>
+      <tr><td><strong>Menubar</strong> (top)</td><td>Workspace chip, model chip, notifications, Settings, help.</td></tr>
+      <tr><td><strong>Chat rail</strong> (inside Code, left)</td><td>Your conversations. Search and start new chats here.</td></tr>
+      <tr><td><strong>Composer</strong> (centre)</td><td>Where you type. Mode strip, attachments, tools, model, send.</td></tr>
+      <tr><td><strong>Project panel</strong> (right)</td><td>File tree, editor, preview — everything scoped to your folder.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Send something that forces Minnow to <em>do</em> something</h3>
+  <p>Type into the composer and press <span class="kbd">Enter</span> (<span class="kbd">Shift</span>+<span class="kbd">Enter</span> for a new line). Try a question that makes the assistant actually look at something instead of reciting from memory:</p>
+  <pre><code>What can you do on this machine? Check what tools you have.</code></pre>
+  <p>While it streams you'll see a live tokens/second readout. Press <span class="kbd">Enter</span> again or the stop button to cut it short — the partial reply stays.</p>
+
+  <h3>Approving a tool</h3>
+  <p>Most interesting requests make the model call a tool. When a tool's permission is <strong>Ask</strong>, a strip appears in the chat with three choices (and keyboard shortcuts):</p>
+  <table>
+    <thead><tr><th>Key</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td><span class="kbd">1</span></td><td>Allow once</td></tr>
+      <tr><td><span class="kbd">2</span></td><td><strong>Always allow</strong> this tool (a permanent settings change — see section 7)</td></tr>
+      <tr><td><span class="kbd">3</span></td><td>Cancel</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <span class="label">"Always allow" is permanent</span>
+    <p>Pressing <span class="kbd">2</span> writes a real permission change to disk and applies to <em>every</em> future chat, not just this one. That's usually what you want for a read-only tool like <code>read_file</code> on day two, and almost never what you want for <code>execute_command</code>. If you change your mind, <strong>Settings → Integrations → Tools</strong>.</p>
+  </div>
+
+  <h3>The context ring</h3>
+  <p>The ring beside <strong>Send</strong> shows how much of the model's context window this conversation is using. Click it for a breakdown. If replies suddenly get vague or start forgetting things, this ring is the first place to look (see <a href="#memory">section 8</a>).</p>
+</section>
+
+<!-- ========================================================= -->
+<section id="modes">
+  <h2 class="sec"><span class="num">6</span>Choosing modes</h2>
+  <p>A mode is the most consequential control in the composer, and it's one click. It changes the system prompt <em>and</em> the tool list. Pick the mode <strong>before</strong> you send — it decides what's even possible for that turn.</p>
+
+  <table>
+    <thead><tr><th>Mode</th><th>Use it for</th><th>Key difference</th></tr></thead>
+    <tbody>
+      <tr><td><strong>General</strong></td><td>Everyday questions, mixed tasks, drafting</td><td>Broad tools with normal approvals. The only composer mode that can read the Minnow manual.</td></tr>
+      <tr><td><strong>Build</strong></td><td>Writing code in your open project</td><td>The development default: files, git, terminal, code intelligence, sub-agents, browser automation.</td></tr>
+      <tr><td><strong>Plan</strong></td><td>Designing and analysing without acting</td><td>Reads anything and can run shell commands to investigate, but the mutating file/git tools are <em>removed</em>. Can only write plan documents under <code>documentation/plans/</code>.</td></tr>
+      <tr><td><strong>Debug</strong></td><td>Chasing failures, reading logs</td><td>Everything Build has, plus local diagnostics, aimed at the Issues tracker.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout tip">
+    <span class="icon">💡</span>
+    <span class="label">Plan mode is a real guard, not a request</span>
+    <p>"Design this, don't touch my code" in Plan mode isn't a plea — the editing tools literally aren't in the payload the model receives. That's why "Plan" is the safe mode for exploring a big idea before you commit to implementation.</p>
+  </div>
+
+  <h3>A quick decision table</h3>
+  <ul>
+    <li>Asking how something works / drafting text → <strong>General</strong></li>
+    <li>Implementing a feature in your open project → <strong>Build</strong></li>
+    <li>Writing a spec you don't want acted on yet → <strong>Plan</strong></li>
+    <li>Chasing a bug and filing what you find → <strong>Debug</strong></li>
+  </ul>
+  <p>You can switch modes mid-conversation; it takes effect from the next message.</p>
+</section>
+
+<!-- ========================================================= -->
+<section id="tools">
+  <h2 class="sec"><span class="num">7</span>Tools &amp; permissions</h2>
+  <p>Tools are what make Minnow useful <em>and</em> what make it risky. The permission system is how you keep the first without the second.</p>
+
+  <h3>Three permission levels</h3>
+  <table>
+    <thead><tr><th>Level</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Off</strong></td><td>The model never sees the tool. It can't call it, and it costs no context.</td></tr>
+      <tr><td><strong>Ask</strong></td><td>The model may call it; you approve each call from the strip in chat.</td></tr>
+      <tr><td><strong>Full</strong></td><td>Runs immediately, no prompt.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Set them in two places that write to the same file:</p>
+  <ul>
+    <li><strong>Settings → Integrations → Tools</strong> — the full catalog grouped by category, with bulk actions.</li>
+    <li><strong>The tools button in any composer</strong> — the same Off/Ask/Full controls in a popover, right in your chat.</li>
+  </ul>
+
+  <h3>What's on by default</h3>
+  <p>Minnow ships conservative. A fresh install enables roughly thirty tools; the rest are Off. A few safe ones default to <strong>Full</strong> (read-only or clearly safe): Brain/memory tools, Minnow documentation, and settings <em>reads</em>. Everything else that's enabled starts on <strong>Ask</strong> — files, git, shell, and browser tools all need your say-so until you decide otherwise.</p>
+
+  <h3>Two gates, not one</h3>
+  <p>A tool must pass <strong>both</strong> of these, in order:</p>
+  <ol>
+    <li>The <a href="#modes">mode</a> must allow the tool at all.</li>
+    <li>Your <strong>permission</strong> for it must be Ask or Full (not Off).</li>
+  </ol>
+  <p>So turning a tool to Full does <em>not</em> make it available in Plan mode (Plan removed it), and a mode allowing a tool doesn't skip your approval. Modes are a ceiling, not a grant.</p>
+
+  <div class="callout note">
+    <span class="icon">🛡️</span>
+    <span class="label">The shell is special</span>
+    <p>File and git tools are confined to your workspace boundary. But <code>execute_command</code> on Full is different: once the model is inside a shell, the path check never sees the command string, so it has the same filesystem authority as you. If you're letting an agent run commands unattended, consider the <strong>agent shell sandbox</strong> (Settings → General).</p>
+  </div>
+
+  <h3>A sensible starting setup</h3>
+  <p><strong>Cautious (best default for most people):</strong> read-only tools on Full (<code>read_file</code>, <code>list_directory</code>, <code>grep</code>, <code>git_status</code>, <code>git_diff</code>), and everything that writes or executes on Ask. The model stops nagging about harmless lookups, and you still see every mutation.</p>
+</section>
+
+<!-- ========================================================= -->
+<section id="memory">
+  <h2 class="sec"><span class="num">8</span>Memory, context &amp; rules</h2>
+  <p>A model has no memory. Every turn, Minnow rebuilds everything it knows and sends it. Three separate mechanisms feed that rebuild — and confusing them is the #1 cause of "the assistant has amnesia."</p>
+
+  <table>
+    <thead><tr><th>Mechanism</th><th>Question it answers</th><th>Where it lives</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Context window</strong></td><td>What's in <em>this</em> conversation right now?</td><td>In the request, rebuilt every turn</td></tr>
+      <tr><td><strong>Memory (Brain)</strong></td><td>What did we establish days ago?</td><td>On disk, retrieved when relevant</td></tr>
+      <tr><td><strong>Rules</strong></td><td>What must <em>always</em> be true of my behaviour?</td><td>On disk, injected every turn</td></tr>
+    </tbody>
+  </table>
+
+  <h3>The context window</h3>
+  <p>Everything competes for that finite space: system prompt, rules, retrieved memories, tool definitions, your whole history, and every tool result. A single large file read can cost more than an hour of conversation. The <a href="#first-turn">context ring</a> is your gauge.</p>
+  <p><strong>When the window gets full</strong>, the symptoms are distinctive: the model forgets a constraint you set, repeats work, or answers a question from ten messages ago. Fixes, cheapest first:</p>
+  <ol>
+    <li>Start a new chat for the new subtask (usually right).</li>
+    <li>Remove large attachments you no longer need.</li>
+    <li>Move durable facts into Brain, then start fresh — they come back via retrieval, not scrollback.</li>
+    <li>Switch to a larger-context model.</li>
+  </ol>
+
+  <h3>Memory = Brain</h3>
+  <p>Memory in Minnow isn't a hidden vector blob — it's a <strong>real wiki of markdown pages</strong> in your Minnow home that you can open, read, edit, and delete. When memory is on, Minnow retrieves relevant pages before a turn and injects them. You can save a memory three ways: ask ("remember we deploy on Fridays"), write a page yourself in <strong>Brain → Edit</strong>, or let Minnow propose one from your conversations (they queue in <strong>Brain → Proposals</strong> for review).</p>
+  <p><strong>Good</strong> memory: durable decisions and their reasons, conventions, environment quirks, "we tried X and it failed because Y." <strong>Bad</strong> memory: transcripts, anything that changes weekly, secrets.</p>
+
+  <h3>Rules</h3>
+  <p>Rules are standing instructions injected into every system prompt: "Always use TypeScript strict mode." "Never commit without running tests." They're in <strong>Settings → Agents → Rules</strong>, off by default, and grouped so you can enable/disable a whole set together. Keep them short and testable — they cost context on <em>every</em> turn.</p>
+
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <span class="label">Memory is retrieved into prompts</span>
+    <p>That includes prompts sent to a <em>cloud</em> provider if that's what you're using. Don't put secrets in memory.</p>
+  </div>
+</section>
+
+<!-- ========================================================= -->
+<section id="skills">
+  <h2 class="sec"><span class="num">9</span>Skills &amp; slash commands</h2>
+  <p>Type <code>/</code> at the start of an empty composer to open the picker. <span class="term">Skills</span> are packaged instructions the model follows — code review, commit-message writing, a security pass, a UI critique. A dozen or so ship built in and are on by default, and you can install more from the <strong>Skills Library</strong>.</p>
+  <p>The same picker also holds two chat controls that aren't skills:</p>
+  <ul>
+    <li><code>/goal</code> — keeps working until a condition is met.</li>
+    <li><code>/loop</code> — re-runs a prompt on a schedule.</li>
+  </ul>
+  <div class="callout tip">
+    <span class="icon">💡</span>
+    <span class="label">Example</span>
+    <p>Before committing, type <code>/</code> and pick the commit-message skill. The assistant drafts a conventional commit message from your staged diff instead of guessing from memory.</p>
+  </div>
+</section>
+
+<!-- ========================================================= -->
+<section id="apps">
+  <h2 class="sec"><span class="num">10</span>The other apps</h2>
+  <p>Everything shares one assistant, one tool set, one session store. These are different <em>surfaces</em> of the same brain:</p>
+  <table>
+    <thead><tr><th>App</th><th>What it's for</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Code</strong></td><td>The primary surface. Chat beside your files, editor, preview, terminal.</td></tr>
+      <tr><td><strong>Research</strong></td><td>Hand a question to a research agent that runs multiple rounds and writes a report.</td></tr>
+      <tr><td><strong>Models</strong></td><td>Providers, model library, routing, sampler, usage &amp; cost.</td></tr>
+      <tr><td><strong>Brain</strong></td><td>Your memory wiki — browse, edit pages, run lint to find orphans and contradictions.</td></tr>
+      <tr><td><strong>Issues</strong></td><td>A Linear-style tracker (list + board) where the assistant can file and work bugs.</td></tr>
+      <tr><td><strong>Scheduler</strong></td><td>Scheduled, unattended agent runs.</td></tr>
+      <tr><td><strong>Settings</strong></td><td>General, appearance, providers, tools, agents, rules, and more.</td></tr>
+    </tbody>
+  </table>
+  <p>The assistant can also open an app on its own when it decides that's the right move — that's the <code>launch_minnow_app</code> tool, and it can carry your message across as a seed.</p>
+
+  <h3>Routing (in Models)</h3>
+  <p>You can bind <em>different</em> models to different jobs: a small fast local model for naming chats and routine turns, a bigger cloud model for planning and review. A 3B model is fine at titling a chat; you don't want it judging whether your goal was met. This lives under <strong>Models → Routing</strong>.</p>
+</section>
+
+<!-- ========================================================= -->
+<section id="workflows">
+  <h2 class="sec"><span class="num">11</span>Practical workflows</h2>
+  <p>Concrete sequences to build muscle memory.</p>
+
+  <h3>Understanding an unfamiliar codebase</h3>
+  <ol>
+    <li>Open the repo, pick <strong>General</strong> (or Build).</li>
+    <li>"Give me a tour of this project: entry points, main modules, and where the config lives. Read the actual files — don't guess."</li>
+    <li>Approve the read tools. Follow up on the parts you don't get.</li>
+  </ol>
+
+  <h3>Implementing a feature safely</h3>
+  <ol>
+    <li><strong>Plan</strong> mode first: "Design the change. Don't touch any code." — read the plan doc it writes under <code>documentation/plans/</code>.</li>
+    <li>Switch to <strong>Build</strong>: "Implement the plan, run the tests, and show me the diff."</li>
+    <li>Commit before long runs — Minnow's undo can restore a working tree, but a commit is cheaper and more certain.</li>
+  </ol>
+
+  <h3>Chasing a bug</h3>
+  <ol>
+    <li><strong>Debug</strong> mode: "This endpoint 500s under X. Read the logs and the relevant code, reproduce if you can, and file what you find in Issues."</li>
+    <li>Debug mode is the only composer mode that can read local diagnostics.</li>
+  </ol>
+
+  <h3>Keeping knowledge for next time</h3>
+  <ol>
+    <li>Mid-conversation: "Remember that we deploy on Fridays and that CI is flaky on Windows." → the assistant saves a Brain page and shows a 10-second review card you can reject or open.</li>
+    <li>Next week, in a fresh chat, the relevant page is retrieved automatically.</li>
+  </ol>
+
+  <h3>Attachments (when you do want them)</h3>
+  <p>Drag files onto the composer (up to 10&nbsp;MB each). Images need a vision model; PDF/Word/Excel are parsed to text first. For <em>code</em>, you usually don't want an attachment at all — keep the project open and let the model read the specific files it needs with tools.</p>
+</section>
+
+<!-- ========================================================= -->
+<section id="safety">
+  <h2 class="sec"><span class="num">12</span>Safety &amp; privacy</h2>
+  <ul>
+    <li><strong>Local by default.</strong> Chats, memory, API keys, downloaded models, and logs all live in your Minnow home. No analytics, no crash-reporting service.</li>
+    <li><strong>Traffic leaves only when you send it somewhere</strong> — a cloud provider you configured, a web search, a page fetch, a model download.</li>
+    <li><strong>Secrets are encrypted at rest</strong> with AES-256-GCM under a key file in your Minnow home. If you lose that key file, the keys can't be decrypted.</li>
+    <li><strong>The workspace boundary</strong> confines file/git tools to your open project. Lifting it to full-disk is a deliberate choice.</li>
+    <li><strong>Content the model reads is data, not instructions.</strong> Web pages and fetched documents are wrapped in untrusted-content fences, so a page saying "ignore your instructions" arrives as quoted material, not a command. It mitigates prompt injection — it doesn't make it impossible — so be thoughtful about pairing <em>Full</em> tools with a model that reads arbitrary web pages.</li>
+  </ul>
+</section>
+
+<!-- ========================================================= -->
+<section id="glossary">
+  <h2 class="sec"><span class="num">13</span>Glossary (cheat sheet)</h2>
+  <dl class="gloss">
+    <dt>OpenAI-compatible</dt>
+    <dd>An API shape (<code>/v1/chat/completions</code>) that many providers speak. Because Minnow targets it, one app can drive dozens of backends.</dd>
+    <dt>Provider</dt>
+    <dd>The endpoint you connect to (LM Studio, Ollama, OpenAI, …). You manage these in the Models app.</dd>
+    <dt>Model</dt>
+    <dd>A specific model a provider reports. Picked per-chat or as the global default.</dd>
+    <dt>System prompt</dt>
+    <dd>The standing instructions assembled before each turn from mode + rules + memory + tool guidance.</dd>
+    <dt>Streaming</dt>
+    <dd>The model's reply arriving token-by-token in real time, with a live speed readout.</dd>
+    <dt>Sub-agent</dt>
+    <dd>A nested agent for parallel work that reports back without cluttering the main transcript.</dd>
+    <dt>Work agent / Board</dt>
+    <dd>Delivery agents (builders, testers, fixers) each working one task on a kanban board.</dd>
+    <dt>Token</dt>
+    <dd>The unit of context. Roughly a word or a chunk of a word; the context ring and budgets are measured in these.</dd>
+  </dl>
+</section>
+
+<!-- ========================================================= -->
+<section id="troubleshooting">
+  <h2 class="sec"><span class="num">14</span>Troubleshooting</h2>
+  <h3>Nothing answers me</h3>
+  <ol>
+    <li>Is your model provider actually running, with a model loaded?</li>
+    <li><strong>Models → Providers</strong> — is the base URL right? Press <em>Refresh</em>.</li>
+    <li><strong>Settings → Advanced → Health &amp; diagnostics</strong> — subsystem probes, grouped errors, and a local log tail. <em>Copy report</em> makes a redacted summary for a bug report.</li>
+  </ol>
+
+  <h3>The model picker is empty</h3>
+  <ol>
+    <li>Is the provider process running?</li>
+    <li>Is a model loaded in it? Minnow lists only what the provider reports.</li>
+    <li>Is the base URL right, including <code>/v1</code> where required?</li>
+    <li>Press Refresh.</li>
+  </ol>
+
+  <h3>Replies are empty or garbled</h3>
+  <p>The endpoint probably isn't speaking standard <code>/v1/chat/completions</code> streaming. Try a different model or provider profile.</p>
+
+  <div class="callout note">
+    <span class="icon">ℹ️</span>
+    <span class="label">Benign startup noise</span>
+    <p>Seeing <code>[providers] fetch failed</code> in a log at startup is normal when your local model runtime isn't up yet. Start it and Refresh — it's not a broken server.</p>
+  </div>
+</section>
+
+<!-- ========================================================= -->
+<section id="where-next">
+  <h2 class="sec"><span class="num">15</span>Where to go next</h2>
+  <p>When you're comfortable here, these are the natural next reads — all in the shipped manual:</p>
+  <ul>
+    <li><strong>How Minnow works</strong> — the full mental model (the deep version of sections 1–2).</li>
+    <li><strong>Working in chat</strong> — queueing, steering, undo, branches, dictation.</li>
+    <li><strong>Apps overview</strong> — a deeper tour of each surface.</li>
+    <li><strong>Orchestrate boards</strong> — turning a plan into parallel delivery work.</li>
+    <li><strong>Privacy and security</strong> — the full detail on where data lives and how it's protected.</li>
+  </ul>
+  <p class="callout tip" style="margin-top:24px">
+    <span class="label">The whole point</span>
+    <p>Minnow turns a chat window into a real development partner: it has your files, your git, your terminal, and a memory — and it keeps all of it on your machine. Master the loop, the boundary, modes, and permissions, and the rest is just using the tools.</p>
+  </p>
+</section>
+
+</main>
+
+<footer>
+  Built from the official Minnow user manual (Get started, Concepts) and the project's <code>AGENTS.md</code>.
+  <br>For setup commands, see the Minnow repo's <code>documentation/contributor/</code> guides.
+</footer>
+
+</body>
+</html>
