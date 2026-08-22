@@ -47,6 +47,47 @@ import {
 /** Cap matches server/terminal-runner.js MAX_TERMINAL_HISTORY. */
 const MAX_TERMINAL_HISTORY = 50;
 
+/** Below this many stored chats a prune is too small to be worth second-guessing. */
+const PRUNE_GUARD_MIN_CHATS = 5;
+/** Above this share of the store, a prune reads as a degraded client, not an intent. */
+const PRUNE_GUARD_MAX_RATIO = 0.5;
+
+/**
+ * Monotonic write counter for optimistic concurrency.
+ * Clients echo the revision they read; a mismatch means another window wrote in
+ * between and the caller must re-hydrate instead of overwriting.
+ */
+export function readSessionRevision() {
+  const value = readSessionMeta(getSessionsDb(), 'revision');
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/** Bump the write counter. Call once per committed transaction. */
+function bumpSessionRevision() {
+  const db = getSessionsDb();
+  const current = readSessionMeta(db, 'revision');
+  const next = (typeof current === 'number' && Number.isFinite(current) ? current : 0) + 1;
+  writeSessionMeta(db, 'revision', next);
+  return next;
+}
+
+/**
+ * Throw 409 when the caller wrote against a revision that is no longer current.
+ * `undefined` opts out (migrations, tools, tests).
+ * @param {unknown} baseRevision
+ */
+function assertSessionRevision(baseRevision) {
+  if (baseRevision === undefined || baseRevision === null) return;
+  const expected = Number(baseRevision);
+  if (!Number.isFinite(expected)) return;
+  const current = readSessionRevision();
+  if (expected === current) return;
+  const err = new Error('Session state changed in another window');
+  /** @type {Error & { statusCode?: number, revision?: number }} */ (err).statusCode = 409;
+  /** @type {Error & { revision?: number }} */ (err).revision = current;
+  throw err;
+}
+
 /** @type {WeakMap<import('better-sqlite3').Database, Record<string, import('better-sqlite3').Statement>>} */
 const readStmtsByDb = new WeakMap();
 
@@ -407,10 +448,17 @@ function readChatMessageDerived(db, chatId) {
 
 /**
  * Upsert chat metadata and optionally sync message rows.
+ *
+ * A history-omitting write means "preserve the stored messages". That is only
+ * meaningful for a chat that already exists: creating a fresh row this way
+ * resurrects it with zero messages and no way to ever get them back, which is
+ * how lazily-unloaded chats lost their transcripts. Skip those instead.
+ *
  * @param {import('better-sqlite3').Database} db
  * @param {Record<string, any>} chat
  * @param {number} sortIndex
  * @param {boolean} syncHistory
+ * @returns {boolean} false when the upsert was skipped as an empty resurrection
  */
 function upsertChatWithOptionalHistory(db, chat, sortIndex, syncHistory) {
   const chatId = String(chat.id);
@@ -424,12 +472,45 @@ function upsertChatWithOptionalHistory(db, chat, sortIndex, syncHistory) {
     const derived = syncMessages(db, chatId, history);
     upsertChatRow(db, chat, sortIndex, derived);
   } else {
+    const existing = db.prepare('SELECT id FROM chats WHERE id = ?').get(chatId);
+    if (!existing) {
+      console.warn(
+        `[sessions] refusing to create chat ${chatId} from a history-omitting write`,
+      );
+      return false;
+    }
     const derived = readChatMessageDerived(db, chatId);
     upsertChatRow(db, chat, sortIndex, derived);
   }
   syncChatRuns(db, chatId, Array.isArray(chat.runs) ? chat.runs : []);
   syncSubAgentRuns(db, chatId, Array.isArray(chat.subAgentRuns) ? chat.subAgentRuns : []);
   syncChatLoops(db, chatId, Array.isArray(chat.activeLoops) ? chat.activeLoops : []);
+  return true;
+}
+
+/**
+ * Delete chat rows and every child table that does not cascade.
+ *
+ * `messages` cascades from `chats`, but `messages_fts` is an FTS5 virtual table
+ * with no foreign key — a bare `DELETE FROM chats` leaves its rows orphaned and
+ * they keep surfacing in search forever.
+ *
+ * @param {import('better-sqlite3').Database} db
+ * @param {string[]} chatIds
+ * @returns {number} rows removed from `chats`
+ */
+function deleteChatRows(db, chatIds) {
+  const delFts = db.prepare('DELETE FROM messages_fts WHERE chat_id = ?');
+  const delChat = db.prepare('DELETE FROM chats WHERE id = ?');
+  let removed = 0;
+  for (const rawId of chatIds) {
+    const id = typeof rawId === 'string' ? rawId.trim() : '';
+    if (!id) continue;
+    delFts.run(id);
+    const result = delChat.run(id);
+    if (result.changes > 0) removed += 1;
+  }
+  return removed;
 }
 
 /**
@@ -463,6 +544,15 @@ export function syncMessages(db, chatId, history) {
     chatRow.history_digest === historyDigest
   ) {
     return derived;
+  }
+
+  // Shrinking a transcript is legitimate (Clear chat, truncate, fork) but it is also
+  // what every history-loss bug looks like from here. Leave a trail.
+  const before = chatRow?.message_count ?? 0;
+  if (before > 0 && messages.length < before) {
+    console.warn(
+      `[sessions] chat ${chatId} history ${before} → ${messages.length} messages`,
+    );
   }
 
   const existing = db
@@ -635,20 +725,42 @@ function writeScalars(db, state) {
 }
 
 /**
- * Wholesale replace SessionState in ONE transaction.
+ * Write a whole SessionState in ONE transaction.
  * Does NOT apply chat.terminalHistory from the client blob (server-owned).
  *
+ * Deletion is never inferred from absence. A client that boots lazily holds chat
+ * rows it has not hydrated, and a client whose load degraded holds almost none —
+ * treating "not in this payload" as "delete" let either of them wipe the store.
+ * Callers that genuinely own the complete list opt in via `pruneMissingChats`.
+ *
  * @param {Record<string, any>} state  Already validated SessionState
- * @param {{ rawChats?: unknown[] }} [options]  Unvalidated wire chats (history-key detection)
+ * @param {{
+ *   rawChats?: unknown[],
+ *   deleteChatIds?: string[],
+ *   deleteGroupIds?: string[],
+ *   pruneMissingChats?: boolean,
+ *   baseRevision?: number,
+ * }} [options]  `rawChats` are the unvalidated wire chats (history-key detection)
  */
 export function writeWholeSessionState(state, options = {}) {
   const db = getSessionsDb();
   const chats = Array.isArray(state.chats) ? state.chats : [];
   const groups = Array.isArray(state.groups) ? state.groups : [];
   const rawById = indexRawWireChats(options.rawChats);
+  const pruneMissing = options.pruneMissingChats === true;
+  const deleteChatIds = Array.isArray(options.deleteChatIds) ? options.deleteChatIds : [];
+  const deleteGroupIds = Array.isArray(options.deleteGroupIds) ? options.deleteGroupIds : [];
 
   const tx = db.transaction(() => {
+    // Inside the transaction so the check and the write cannot straddle another one.
+    assertSessionRevision(options.baseRevision);
     writeScalars(db, state);
+
+    deleteChatRows(db, deleteChatIds);
+    for (const rawId of deleteGroupIds) {
+      const id = typeof rawId === 'string' ? rawId.trim() : '';
+      if (id) db.prepare('DELETE FROM groups WHERE id = ?').run(id);
+    }
 
     const groupIds = [];
     for (const group of groups) {
@@ -659,34 +771,73 @@ export function writeWholeSessionState(state, options = {}) {
       syncBoardTasks(db, group.id, Array.isArray(board?.tasks) ? board.tasks : []);
       syncBoardLog(db, group.id, Array.isArray(board?.log) ? board.log : []);
     }
-    if (groupIds.length === 0) {
-      db.prepare('DELETE FROM groups').run();
-    } else {
-      const placeholders = groupIds.map(() => '?').join(', ');
-      db.prepare(`DELETE FROM groups WHERE id NOT IN (${placeholders})`).run(...groupIds);
+    if (pruneMissing) {
+      if (groupIds.length === 0) {
+        db.prepare('DELETE FROM groups').run();
+      } else {
+        const placeholders = groupIds.map(() => '?').join(', ');
+        db.prepare(`DELETE FROM groups WHERE id NOT IN (${placeholders})`).run(...groupIds);
+      }
     }
 
     const chatIds = [];
     chats.forEach((chat, sortIndex) => {
       if (!chat?.id) return;
       const chatId = String(chat.id);
-      chatIds.push(chatId);
       const hasHistoryKey =
         rawById.size === 0 || wireChatIncludesHistory(rawById.get(chatId) ?? {});
 
-      upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey);
+      if (upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey)) {
+        chatIds.push(chatId);
+      }
       // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
     });
 
-    if (chatIds.length === 0) {
-      db.prepare('DELETE FROM chats').run();
-    } else {
-      const placeholders = chatIds.map(() => '?').join(', ');
-      db.prepare(`DELETE FROM chats WHERE id NOT IN (${placeholders})`).run(...chatIds);
+    if (pruneMissing) {
+      const keep = new Set(chatIds);
+      const stored = db.prepare('SELECT id FROM chats').all().map((row) => String(row.id));
+      const doomed = stored.filter((id) => !keep.has(id));
+      assertPruneIsSane(db, stored.length, doomed);
+      deleteChatRows(db, doomed);
     }
+
+    bumpSessionRevision();
   });
   tx();
   markSessionsJsonMirrorDirty();
+}
+
+/**
+ * Refuse an implausible prune. A payload that would drop most of the store is a
+ * degraded client, not an intentional bulk delete — bulk deletes arrive as
+ * explicit `deleteChatIds`.
+ *
+ * @param {import('better-sqlite3').Database} db
+ * @param {number} storedCount
+ * @param {string[]} doomed
+ */
+function assertPruneIsSane(db, storedCount, doomed) {
+  if (doomed.length === 0) return;
+  const ratio = storedCount > 0 ? doomed.length / storedCount : 0;
+  if (storedCount >= PRUNE_GUARD_MIN_CHATS && ratio > PRUNE_GUARD_MAX_RATIO) {
+    const err = new Error(
+      `Refusing to prune ${doomed.length} of ${storedCount} chats from one write`,
+    );
+    /** @type {Error & { statusCode?: number }} */ (err).statusCode = 409;
+    throw err;
+  }
+  const messages = db
+    .prepare(
+      `SELECT COALESCE(SUM(message_count), 0) AS n FROM chats WHERE id IN (${doomed
+        .map(() => '?')
+        .join(', ')})`,
+    )
+    .get(...doomed);
+  if ((messages?.n ?? 0) > 0) {
+    console.warn(
+      `[sessions] prune removing ${doomed.length} chats holding ${messages.n} messages`,
+    );
+  }
 }
 
 /**
@@ -1172,6 +1323,8 @@ export function readSessionSummariesState(filter = {}) {
 
   /** @type {Record<string, unknown>} */
   const raw = {
+    // Echoed back on write so a second window cannot overwrite this snapshot blindly.
+    revision: readSessionRevision(),
     version: readSessionMeta(db, 'schemaVersion') ?? SESSION_SCHEMA_VERSION,
     activeId: readSessionMeta(db, 'activeId') ?? '',
     sidebarCollapsed: !!readSessionMeta(db, 'sidebarCollapsed'),
@@ -1244,15 +1397,14 @@ export function patchSessionState(delta) {
   };
 
   const db = getSessionsDb();
+  let revision = 0;
   const tx = db.transaction(() => {
-    // Explicit deletes first (CASCADE clears child rows).
+    // Inside the transaction so the check and the write cannot straddle another one.
+    assertSessionRevision(body.baseRevision);
+
+    // Explicit deletes first (CASCADE clears child rows; FTS is swept by hand).
     if (Array.isArray(body.deleteChatIds)) {
-      const delChat = db.prepare('DELETE FROM chats WHERE id = ?');
-      for (const id of body.deleteChatIds) {
-        if (typeof id !== 'string' || !id.trim()) continue;
-        const result = delChat.run(id.trim());
-        if (result.changes > 0) applied.deletedChats += 1;
-      }
+      applied.deletedChats += deleteChatRows(db, body.deleteChatIds);
     }
 
     if (Array.isArray(body.deleteGroupIds)) {
@@ -1286,9 +1438,10 @@ export function patchSessionState(delta) {
         }
 
         const hasHistoryKey = wireChatIncludesHistory(raw);
-        upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey);
-        // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
-        applied.chats += 1;
+        if (upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey)) {
+          // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
+          applied.chats += 1;
+        }
       }
     }
 
@@ -1334,10 +1487,11 @@ export function patchSessionState(delta) {
 
     // Keep schemaVersion meta aligned with wire version.
     writeSessionMeta(db, 'schemaVersion', SESSION_SCHEMA_VERSION);
+    revision = bumpSessionRevision();
   });
   tx();
   markSessionsJsonMirrorDirty();
-  return { ok: true, applied };
+  return { ok: true, applied, revision };
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   getSessionSummaries,
   patchSessions,
   putSessions,
+  SessionsRevisionConflictError,
   type SessionsPatchDelta,
 } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
@@ -141,6 +142,13 @@ export let sessionState: SessionState | null = null;
  * localStorage fallback cannot clobber on-disk sessions (MIN-408).
  */
 let sessionsHydratedFromServer = false;
+
+/**
+ * Store revision this client last read or wrote. Echoed on every write so a second
+ * window (or a restart racing the old process) gets a 409 instead of overwriting.
+ * `null` means unknown — writes then skip the check rather than block.
+ */
+let sessionRevision: number | null = null;
 
 /** Dirty chat ids since last successful flush (B.2 PATCH payload). */
 const dirtyChatIds = new Set<string>();
@@ -665,7 +673,16 @@ function installUnloadedHistoryTrap(chat: Chat): void {
   });
 }
 
-/** Replace placeholder history with the full transcript and clear the unload marker. */
+/**
+ * Merge the fetched transcript into the placeholder and clear the unload marker.
+ *
+ * A send can land while ensureChatHistoryLoaded is still in flight — hitting
+ * Continue on a chat the lazy boot never hydrated does exactly that. The rows the
+ * running turn appended live only in the local array, so overwriting it with the
+ * server payload left the bubbles on screen while `buildApiMessages` replayed a
+ * transcript that no longer contained them. Splice the local tail onto the fetched
+ * history instead of choosing one side and dropping the other.
+ */
 function materializeChatHistory(chat: Chat, messages: Message[]): void {
   const desc = Object.getOwnPropertyDescriptor(chat, 'history');
   if (desc && (desc.get || desc.set)) {
@@ -674,19 +691,16 @@ function materializeChatHistory(chat: Chat, messages: Message[]): void {
   }
   const incoming = Array.isArray(messages) ? messages : [];
   const current = Array.isArray(chat.history) ? chat.history : [];
-  // A send can land while ensureChatHistoryLoaded is still in flight (e.g. session
-  // rail switched activeId before hydrate finished). Never discard a longer local tail.
-  if (current.length > incoming.length) {
-    chat.historyLoaded = true;
-    chat.messageCount = current.length;
-    if (sessionState) {
-      captureDirtyTrackingShadow(sessionState);
-    }
-    return;
-  }
-  chat.history = incoming;
+
+  // The placeholder started empty, so anything in it now was appended during the
+  // fetch and belongs after the stored rows.
+  chat.history = current.length > 0 ? [...incoming, ...current] : incoming;
   chat.historyLoaded = true;
   chat.messageCount = chat.history.length;
+  if (current.length > 0) {
+    // Locally-appended rows are unsaved work — make sure the next flush carries them.
+    touchChat(chat);
+  }
   // Server hydrate is not a local edit — refresh shadow so dirty verifier stays quiet.
   if (sessionState) {
     captureDirtyTrackingShadow(sessionState);
@@ -1459,6 +1473,29 @@ export interface LoadSessionsOptions {
   force?: boolean;
 }
 
+/**
+ * True when the parsed state still describes every chat the server listed.
+ * Guards against `parseSessionStateFromJson` silently degrading to its
+ * one-empty-chat default, which downstream code would otherwise treat as the
+ * user's real session.
+ */
+function sessionStateCoversRemoteChats(
+  parsed: SessionState,
+  remote: SessionSummariesState,
+): boolean {
+  const remoteIds = new Set(
+    (Array.isArray(remote.chats) ? remote.chats : [])
+      .map((summary) => summary?.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0),
+  );
+  if (remoteIds.size === 0) return true;
+  const parsedIds = new Set(parsed.chats.map((chat) => chat.id));
+  for (const id of remoteIds) {
+    if (!parsedIds.has(id)) return false;
+  }
+  return true;
+}
+
 /** Load sessions from API or localStorage (after detectConfigServer). */
 export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Promise<void> {
   if (sessionState && !options?.force) {
@@ -1470,12 +1507,34 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
         if (sessionsLazyHistoryEnabled) {
           // C.2: summaries first (meta + non-message children); history on demand.
           const remote = await getSessionSummaries();
-          sessionState = sessionStateFromSummaries(remote);
-          // Active chat is hydrated immediately so the first paint has a transcript.
+          const parsed = sessionStateFromSummaries(remote);
+          /*
+           * parseSessionStateFromJson degrades to a one-empty-chat default for any
+           * shape it does not recognize. Adopting that as "hydrated" state is how a
+           * single bad boot turned into a full PUT that deleted every other chat.
+           * A short chat list means the parse failed, not that the store is empty.
+           */
+          if (!sessionStateCoversRemoteChats(parsed, remote)) {
+            throw new Error('Session summaries did not survive parsing');
+          }
+          sessionState = parsed;
+          sessionRevision = typeof remote.revision === 'number' ? remote.revision : null;
+          sessionsHydratedFromServer = true;
+          /*
+           * Hydration of the active transcript is deliberately outside the hydrate
+           * gate above: one failed history GET used to discard the entire parsed
+           * session and leave the user staring at a single blank chat.
+           */
           if (sessionState.activeId) {
-            await ensureChatHistoryLoaded(sessionState.activeId);
-            const active = findChatById(sessionState.activeId);
-            if (active) clearStaleGenerationIdsOnLoad([active]);
+            try {
+              await ensureChatHistoryLoaded(sessionState.activeId);
+              const active = findChatById(sessionState.activeId);
+              if (active) clearStaleGenerationIdsOnLoad([active]);
+            } catch {
+              if (typeof document !== 'undefined') {
+                setStatus('err', 'Could not load this chat’s messages — reopen it to retry');
+              }
+            }
           }
           // Code-change backfill only for chats whose history is already loaded.
           await runSessionCodeChangeBackfill(sessionState);
@@ -1484,9 +1543,9 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
           const remote = await getSessions();
           sessionState = parseSessionStateFromJson(remote);
           markAllHistoriesLoaded(sessionState.chats);
+          sessionsHydratedFromServer = true;
           await runSessionCodeChangeBackfill(sessionState);
         }
-        sessionsHydratedFromServer = true;
         return;
       } catch {
         if (typeof document !== 'undefined') {
@@ -1497,6 +1556,9 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
         if (!sessionState) {
           sessionState = defaultSessionState();
           markAllHistoriesLoaded(sessionState.chats);
+          // Placeholder state, not the store: saving it must stay blocked.
+          sessionsHydratedFromServer = false;
+          sessionRevision = null;
         }
         return;
       }
@@ -1746,6 +1808,26 @@ export type SaveSessionsOptions = {
   keepalive?: boolean;
 };
 
+/** True when any chat still holds an empty lazy-history placeholder. */
+function hasUnloadedChatHistories(state: SessionState): boolean {
+  return state.chats.some((chat) => chat.historyLoaded === false);
+}
+
+/**
+ * Mark the whole session dirty so a PATCH can stand in for a full PUT.
+ * Used when the dirty sets are untrusted but a PUT would be unsafe.
+ */
+function markEveryChatDirty(state: SessionState): void {
+  for (const chat of state.chats) {
+    dirtyChatIds.add(chat.id);
+  }
+  for (const group of state.groups ?? []) {
+    dirtyGroupIds.add(group.id);
+  }
+  sessionScalarsDirty = true;
+  bumpSessionDirtyEpoch();
+}
+
 /**
  * Persist session state. In server mode (B.2):
  * - MIN-408: no network write until hydrated from ~/.minnow
@@ -1769,8 +1851,20 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
       return 'ok';
     }
 
-    const usePatch =
-      sessionsClientPatchEnabled && sessionPatchDirtySetsReady && !verifierMiss;
+    let usePatch = sessionsClientPatchEnabled && sessionPatchDirtySetsReady && !verifierMiss;
+    /*
+     * A whole-blob PUT describes the entire session, so it must only be sent by a
+     * client that can actually describe it. After a lazy boot most chats hold an
+     * empty history placeholder. Rather than PUT that, upgrade to a PATCH that
+     * upserts every chat: unhydrated rows omit `history`, which the server reads as
+     * "preserve", so no transcript can be replaced by a placeholder.
+     */
+    let patchCoversWholeState = false;
+    if (!usePatch && hasUnloadedChatHistories(sessionState)) {
+      markEveryChatDirty(sessionState);
+      usePatch = true;
+      patchCoversWholeState = true;
+    }
 
     if (usePatch && !hasSessionDirtyWork()) {
       // Nothing changed since the last successful flush.
@@ -1782,9 +1876,18 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
     if (options?.keepalive) {
       // Shutdown: small PATCH delta → sendBeacon (POST alias); else keepalive whole-blob PUT.
+      /*
+       * No baseRevision on the shutdown path: a 409 here is unrecoverable (the beacon
+       * is fire-and-forget and the page is going away), so a stale-but-landed write
+       * beats a rejected one. The write itself is non-destructive — it upserts, omits
+       * history for unhydrated chats and deletes only what is named.
+       */
       const delta = usePatch && hasSessionDirtyWork() ? buildSessionsPatchDelta(sessionState) : null;
       const wireState = sessionStateForSessionsWire(sessionState);
-      const { clearedOk } = flushSessionsOnShutdown(delta, wireState);
+      const { clearedOk } = flushSessionsOnShutdown(delta, wireState, {
+        deleteChatIds: [...deletedChatIds],
+        deleteGroupIds: [...deletedGroupIds],
+      });
       if (clearedOk) {
         clearSessionDirtySets();
         // Keepalive PUT also re-establishes a trusted baseline when we were not patching.
@@ -1801,21 +1904,39 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
       return 'ok';
     }
 
-    const reportSaveError = (): void => {
+    const reportSaveError = (err: unknown): void => {
+      if (err instanceof SessionsRevisionConflictError) {
+        /*
+         * Another window wrote first. Adopt its revision and let the standard
+         * follow-up flush retry against it — the dirty markers are still set, and
+         * the write itself is non-destructive now (upsert, explicit deletes only,
+         * history omitted for chats this client never hydrated). Re-reading the
+         * store here instead would replace `sessionState` and throw away exactly
+         * the unsaved edits this flush exists to persist.
+         */
+        sessionRevision = err.revision ?? null;
+        if (typeof document !== 'undefined') {
+          setStatus('spin', 'Sessions changed in another window — retrying save');
+        }
+        return;
+      }
       if (typeof document !== 'undefined') {
         setStatus('err', 'Could not save sessions to ~/.minnow');
       }
     };
 
     const epochAtStart = sessionDirtyEpoch;
-    const finishSave = (ok: boolean): void => {
+    const finishSave = (ok: boolean, revision?: number): void => {
       inFlightSessionSave = null;
       if (ok) {
+        if (typeof revision === 'number') sessionRevision = revision;
         // Only drop dirty markers when nothing newer landed during the request.
         if (sessionDirtyEpoch === epochAtStart) {
           clearSessionDirtySets();
         }
-        if (!usePatch) sessionPatchDirtySetsReady = true;
+        // A whole-state PATCH establishes the same trusted baseline a PUT would,
+        // so later saves can narrow back down to the chats that actually changed.
+        if (!usePatch || patchCoversWholeState) sessionPatchDirtySetsReady = true;
         captureDirtyTrackingShadow(sessionState);
       }
       const shouldFollowUp = sessionSaveQueued || hasSessionDirtyWork();
@@ -1827,10 +1948,11 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
     if (usePatch) {
       const delta = buildSessionsPatchDelta(sessionState);
+      if (sessionRevision != null) delta.baseRevision = sessionRevision;
       inFlightSessionSave = patchSessions(delta)
-        .then(() => finishSave(true))
-        .catch(() => {
-          reportSaveError();
+        .then((revision) => finishSave(true, revision))
+        .catch((err) => {
+          reportSaveError(err);
           finishSave(false);
         });
       void import('../ui/hub').then((m) => m.refreshHubLiveData());
@@ -1839,11 +1961,16 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
     // Full-PUT fallback (first save after load, verifier miss, or flag off).
     // Capture wire body now; a follow-up flush re-reads sessionState if deletes race this PUT.
+    // Deletes travel as an explicit list: the server never infers them from absence.
     const wireState = sessionStateForSessionsWire(sessionState);
-    inFlightSessionSave = putSessions(wireState)
-      .then(() => finishSave(true))
-      .catch(() => {
-        reportSaveError();
+    inFlightSessionSave = putSessions(wireState, {
+      deleteChatIds: [...deletedChatIds],
+      deleteGroupIds: [...deletedGroupIds],
+      ...(sessionRevision != null ? { baseRevision: sessionRevision } : {}),
+    })
+      .then((revision) => finishSave(true, revision))
+      .catch((err) => {
+        reportSaveError(err);
         finishSave(false);
       });
     void import('../ui/hub').then((m) => m.refreshHubLiveData());

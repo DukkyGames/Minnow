@@ -247,6 +247,43 @@ describe('lazy history (C.2)', () => {
     assert.equal(chat.history[0]?.content, 'sent while loading');
   });
 
+  test('materializeChatHistory splices a mid-hydrate send onto the stored transcript', async () => {
+    // The Continue-after-restart case: the turn appends to the placeholder while the
+    // history GET is still in flight. Overwriting the array left the bubble on screen
+    // and the row out of the transcript the model replays.
+    setStorageModeForTests('server');
+    setSessionsLazyHistoryEnabledForTests(true);
+
+    const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
+    setSessionStateForTests(makeState([chat]));
+
+    let resolveFetch!: (value: Response) => void;
+    globalThis.fetch = async () =>
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+
+    const hydrate = ensureChatHistoryLoaded(CHAT_A);
+    await Promise.resolve();
+    chat.history.push({ role: 'user', content: 'continue' });
+
+    const stored: Message[] = [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'reply' },
+    ];
+    resolveFetch(
+      new Response(JSON.stringify({ chatId: CHAT_A, history: stored }), { status: 200 }),
+    );
+    await hydrate;
+
+    assert.equal(chat.historyLoaded, true);
+    assert.deepEqual(
+      chat.history.map((m) => m.content),
+      ['first', 'reply', 'continue'],
+    );
+    assert.equal(chat.messageCount, 3);
+  });
+
   test('resetSessionPersistenceForTests restores flag default ON', () => {
     setSessionsLazyHistoryEnabledForTests(false);
     assert.equal(isSessionsLazyHistoryEnabled(), false);

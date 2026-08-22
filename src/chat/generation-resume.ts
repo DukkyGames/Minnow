@@ -21,8 +21,14 @@ export function listChatsWithGenerationId(chats: Chat[]): Chat[] {
 }
 
 /**
- * Resume all chats that still reference a backend generation id.
- * The first matching chat owns the global streaming flag; others subscribe in the background.
+ * Resume chats that still reference a backend generation id.
+ *
+ * Only the active chat resumes at boot. A lazy boot leaves every other chat with an
+ * empty history placeholder and a generation id that a server restart already
+ * invalidated, so resuming them all meant hydrating and failing each one in turn —
+ * and each failure ran the turn's history rollback. The rest resume on activation
+ * (see `bootGenerationResumeForChat` from the chat switch), by which point their
+ * transcript is loaded.
  */
 export async function bootGenerationResumeForChats(chats: Chat[]): Promise<void> {
   const resumable = listChatsWithGenerationId(chats);
@@ -30,11 +36,13 @@ export async function bootGenerationResumeForChats(chats: Chat[]): Promise<void>
     return;
   }
 
-  let first = true;
-  for (const chat of resumable) {
-    await bootGenerationResumeForChat(chat, { ownsGlobalStreaming: first });
-    first = false;
+  const { getActiveChat } = await import('../state/sessions');
+  const activeId = getActiveChat()?.id;
+  const active = resumable.find((chat) => chat.id === activeId);
+  if (!active) {
+    return;
   }
+  await bootGenerationResumeForChat(active, { ownsGlobalStreaming: true });
 }
 
 export interface BootGenerationResumeOptions {

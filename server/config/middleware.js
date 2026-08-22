@@ -23,6 +23,7 @@ import { handleRunsConfigRequest } from '../runs/middleware.js';
 import {
   exportSessionStateToJson,
   readChatHistory,
+  readSessionRevision,
   readSessionSummariesState,
   searchSessionChats,
   useJsonSessionsStore,
@@ -400,7 +401,11 @@ export async function handleConfigRequest(req, res, pathname) {
       if (req.method === 'PUT') {
         const body = await readJsonBody(req);
         const saved = await writeResource(resource, body);
-        sendJson(res, 200, { ok: true, data: saved });
+        const payload = { ok: true, data: saved };
+        if (resource === 'sessions' && !useJsonSessionsStore()) {
+          payload.revision = readSessionRevision();
+        }
+        sendJson(res, 200, payload);
         return true;
       }
 
@@ -471,6 +476,16 @@ export async function handleConfigRequest(req, res, pathname) {
         : undefined;
     if (statusCode === 413) {
       sendJson(res, 413, { error: message });
+      return true;
+    }
+    if (statusCode === 409) {
+      // Stale write: another window advanced the store. Hand back the current
+      // revision so the client can re-hydrate instead of retrying blindly.
+      const revision =
+        err && typeof err === 'object' && 'revision' in err
+          ? Number(/** @type {{ revision: number }} */ (err).revision)
+          : undefined;
+      sendJson(res, 409, { error: message, ...(revision != null ? { revision } : {}) });
       return true;
     }
     if (message === 'Invalid config path' || message.includes('Invalid config')) {

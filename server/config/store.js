@@ -444,16 +444,24 @@ export async function writeResource(resource, body) {
 
   if (resource === 'sessions') {
     const validated = validateSessionState(body);
+    const raw = body && typeof body === 'object' ? /** @type {Record<string, unknown>} */ (body) : {};
+    const rawChats = Array.isArray(raw.chats) ? raw.chats : undefined;
     if (useJsonSessionsStore()) {
-      await writeConfigJson(key, validated);
+      const merged = await mergeJsonSessionHistories(key, validated, rawChats, {
+        deleteChatIds: Array.isArray(raw.deleteChatIds) ? raw.deleteChatIds : [],
+        pruneMissingChats: raw.pruneMissingChats === true,
+      });
+      await writeConfigJson(key, merged);
       return validated;
     }
     await ensureMinnowLayout();
-    const rawChats =
-      body && typeof body === 'object' && Array.isArray(/** @type {Record<string, unknown>} */ (body).chats)
-        ? /** @type {Record<string, unknown>} */ (body).chats
-        : undefined;
-    writeWholeSessionState(validated, { rawChats });
+    writeWholeSessionState(validated, {
+      rawChats,
+      deleteChatIds: Array.isArray(raw.deleteChatIds) ? raw.deleteChatIds : [],
+      deleteGroupIds: Array.isArray(raw.deleteGroupIds) ? raw.deleteGroupIds : [],
+      pruneMissingChats: raw.pruneMissingChats === true,
+      baseRevision: raw.baseRevision,
+    });
     return validated;
   }
   if (resource === 'tools') {
@@ -539,6 +547,75 @@ export async function writeResource(resource, body) {
 
   await writeConfigJson(key, body);
   return body;
+}
+
+/**
+ * JSON-store twin of the SQLite history-key rule.
+ *
+ * `validateSessionState` turns every history-omitting wire chat into `history: []`,
+ * so writing the validated blob straight to disk would erase the transcripts of
+ * every chat the client had not lazily hydrated. Carry the stored messages across
+ * instead, keep chats the payload never mentioned, and refuse to create a chat
+ * from a write that cannot describe its own history.
+ *
+ * @param {string} key
+ * @param {Record<string, any>} validated
+ * @param {unknown[] | undefined} rawChats
+ * @param {{ deleteChatIds?: string[], pruneMissingChats?: boolean }} [options]
+ */
+async function mergeJsonSessionHistories(key, validated, rawChats, options = {}) {
+  const stored = await readConfigJson(key);
+  const storedChats = Array.isArray(stored?.chats) ? stored.chats : [];
+  if (storedChats.length === 0) return validated;
+
+  const deleted = new Set(
+    (Array.isArray(options.deleteChatIds) ? options.deleteChatIds : [])
+      .filter((id) => typeof id === 'string' && id.trim())
+      .map((id) => id.trim()),
+  );
+
+  const storedById = new Map(
+    storedChats
+      .filter((chat) => chat && typeof chat.id === 'string')
+      .map((chat) => [chat.id, chat]),
+  );
+  const rawById = new Map(
+    (Array.isArray(rawChats) ? rawChats : [])
+      .filter((chat) => chat && typeof chat === 'object' && typeof chat.id === 'string')
+      .map((chat) => [chat.id, chat]),
+  );
+
+  const chats = [];
+  const seen = new Set();
+  for (const chat of Array.isArray(validated.chats) ? validated.chats : []) {
+    const id = typeof chat?.id === 'string' ? chat.id : '';
+    if (!id || deleted.has(id)) continue;
+    seen.add(id);
+    const wire = rawById.get(id);
+    const omitsHistory =
+      rawById.size > 0 &&
+      (!wire || !Object.prototype.hasOwnProperty.call(wire, 'history'));
+    if (!omitsHistory) {
+      chats.push(chat);
+      continue;
+    }
+    const prior = storedById.get(id);
+    if (!prior) {
+      console.warn(`[sessions] refusing to create chat ${id} from a history-omitting write`);
+      continue;
+    }
+    chats.push({ ...chat, history: Array.isArray(prior.history) ? prior.history : [] });
+  }
+
+  // Deletion is explicit, never inferred from absence (see writeWholeSessionState).
+  if (!options.pruneMissingChats) {
+    for (const chat of storedChats) {
+      const id = typeof chat?.id === 'string' ? chat.id : '';
+      if (id && !seen.has(id) && !deleted.has(id)) chats.push(chat);
+    }
+  }
+
+  return { ...validated, chats };
 }
 
 /**

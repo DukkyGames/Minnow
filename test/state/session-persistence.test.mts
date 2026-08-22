@@ -569,4 +569,214 @@ describe('session persistence (MIN-408 + B.2)', () => {
     putSessionsKeepalive(defaultSessionState());
     assert.equal(catchAttached, true);
   });
+
+  test('putSessionsKeepalive reports an over-cap body as not dispatched', () => {
+    // Browsers drop keepalive bodies past 64 KiB silently. Reporting that as a
+    // success let the client clear dirty markers for a write that never happened.
+    let dispatched = false;
+    globalThis.fetch = (async () => {
+      dispatched = true;
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch;
+
+    const state = defaultSessionState();
+    state.chats[0]!.history = [
+      { role: 'user', content: 'x'.repeat(FETCH_KEEPALIVE_MAX_BYTES) },
+    ];
+
+    assert.equal(putSessionsKeepalive(state), false);
+    assert.equal(dispatched, false);
+  });
+
+  test('shutdown flush splits an oversized delta into per-chat beacons', async () => {
+    setStorageModeForTests('server');
+    setSessionStateForTests(defaultSessionState());
+    resetSessionPersistenceForTests();
+    globalThis.fetch = mockSessionsGet(defaultSessionState());
+    await loadSessionsFromStorage({ force: true });
+    setSessionPatchDirtySetsReadyForTests(true);
+
+    const state = sessionState!;
+    // Two chats that each fit a beacon but together blow the budget.
+    const half = Math.floor(SESSIONS_BEACON_MAX_BYTES * 0.6);
+    state.chats[0]!.history = [{ role: 'user', content: 'x'.repeat(half) }];
+    state.chats.push({
+      id: OTHER_CHAT_ID,
+      name: 'B',
+      workspacePath: '',
+      modelId: 'm',
+      modeId: 'build',
+      history: [{ role: 'user', content: 'y'.repeat(half) }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      lastMessageAt: 1,
+    });
+    touchChat(state.chats[0]!);
+    touchChat(state.chats[1]!);
+
+    let beaconCalls = 0;
+    let keepalivePut = false;
+    // @ts-expect-error test stub
+    globalThis.navigator = {
+      sendBeacon() {
+        beaconCalls += 1;
+        return true;
+      },
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/api/config/sessions') && init?.keepalive) {
+        keepalivePut = true;
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+
+    flushPendingSessionSaveOnShutdown();
+
+    assert.equal(beaconCalls, 2, 'one beacon per chat');
+    assert.equal(keepalivePut, false, 'no over-cap whole-blob fallback needed');
+    assert.equal(getSessionDirtyTrackingForTests().dirtyChatIds.length, 0);
+  });
+
+  test('shutdown flush keeps dirty markers when nothing could be dispatched', async () => {
+    // Reporting an undispatched keepalive PUT as success dropped the markers for a
+    // write the browser had already discarded.
+    setStorageModeForTests('server');
+    setSessionStateForTests(defaultSessionState());
+    resetSessionPersistenceForTests();
+    globalThis.fetch = mockSessionsGet(defaultSessionState());
+    await loadSessionsFromStorage({ force: true });
+    setSessionPatchDirtySetsReadyForTests(true);
+
+    const state = sessionState!;
+    // A single chat too big for a beacon and for the keepalive cap.
+    state.chats[0]!.history = [
+      { role: 'user', content: 'x'.repeat(FETCH_KEEPALIVE_MAX_BYTES + 1024) },
+    ];
+    touchChat(state.chats[0]!);
+
+    let beaconCalls = 0;
+    let keepalivePut = false;
+    // @ts-expect-error test stub
+    globalThis.navigator = {
+      sendBeacon() {
+        beaconCalls += 1;
+        return true;
+      },
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/api/config/sessions') && init?.keepalive) {
+        keepalivePut = true;
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+
+    flushPendingSessionSaveOnShutdown();
+
+    assert.equal(beaconCalls, 0);
+    assert.equal(keepalivePut, false);
+    assert.equal(
+      getSessionDirtyTrackingForTests().dirtyChatIds.length,
+      1,
+      'an undispatched shutdown write must keep its dirty markers',
+    );
+  });
+
+  test('a degraded summaries parse does not count as hydrated', async () => {
+    // parseSessionStateFromJson falls back to a single empty chat for shapes it does
+    // not recognize. Adopting that as real state is what turned one bad boot into a
+    // PUT that deleted every other chat.
+    setStorageModeForTests('server');
+    setSessionsLazyHistoryEnabledForTests(true);
+    setSessionStateForTests(defaultSessionState());
+    resetSessionPersistenceForTests();
+
+    const remote = defaultSessionState();
+    remote.chats.push({
+      id: OTHER_CHAT_ID,
+      name: 'Real chat',
+      workspacePath: '',
+      modelId: 'm',
+      modeId: 'build',
+      history: [{ role: 'user', content: 'keep me' }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      lastMessageAt: 1,
+    });
+    // A version the parser rejects sends it down the default-state path.
+    globalThis.fetch = mockSessionsGet({ ...remote, version: 99 });
+
+    await loadSessionsFromStorage({ force: true });
+    assert.equal(isSessionsHydratedFromServerForTests(), false);
+
+    let wrote = false;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        String(input).includes('/api/config/sessions') &&
+        (init?.method === 'PUT' || init?.method === 'PATCH')
+      ) {
+        wrote = true;
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+
+    if (sessionState?.chats[0]) touchChat(sessionState.chats[0]);
+    saveSessionsNow();
+    await waitForSessionSaveForTests();
+    assert.equal(wrote, false, 'a degraded session must never reach the store');
+  });
+
+  test('a lazy-unloaded chat forces PATCH instead of a whole-blob PUT', async () => {
+    // A PUT describes the whole session. After a lazy boot the client cannot
+    // describe the transcripts it never loaded, so it must not send one.
+    setStorageModeForTests('server');
+    setSessionsLazyHistoryEnabledForTests(true);
+    setSessionStateForTests(defaultSessionState());
+    resetSessionPersistenceForTests();
+
+    const remote = defaultSessionState();
+    remote.chats[0]!.history = [{ role: 'user', content: 'stored' }];
+    remote.chats.push({
+      id: OTHER_CHAT_ID,
+      name: 'Never opened',
+      workspacePath: '',
+      modelId: 'm',
+      modeId: 'build',
+      history: [{ role: 'user', content: 'do not lose me' }],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+      lastMessageAt: 1,
+    });
+
+    globalThis.fetch = mockSessionsGet(remote);
+    await loadSessionsFromStorage({ force: true });
+
+    const unloaded = sessionState!.chats.find((c) => c.id === OTHER_CHAT_ID)!;
+    assert.equal(unloaded.historyLoaded, false, 'precondition: chat stayed unhydrated');
+
+    let putCalls = 0;
+    let patchBody: Record<string, unknown> | null = null;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/config/sessions') && init?.method === 'PUT') putCalls += 1;
+      if (url.includes('/api/config/sessions') && init?.method === 'PATCH') {
+        patchBody = JSON.parse(String(init.body));
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+
+    touchChat(sessionState!.chats[0]!);
+    saveSessionsNow();
+    await waitForSessionSaveForTests();
+
+    assert.equal(putCalls, 0, 'no whole-blob PUT while a transcript is unloaded');
+    assert.ok(patchBody, 'the save must still reach the server');
+    const wired = (patchBody!.chats as Record<string, unknown>[]).find(
+      (c) => c.id === OTHER_CHAT_ID,
+    );
+    assert.ok(wired, 'the unloaded chat is still upserted');
+    assert.equal('history' in wired!, false, 'without a history key the server preserves it');
+  });
 });

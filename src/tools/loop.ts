@@ -124,6 +124,7 @@ import {
   buildSynthesisExcerpt,
   buildSynthesisMessages,
 } from '../synthesis/post-turn';
+import { tagApiMessageHistoryIndex } from '../chat/api-message-origin';
 import { buildTurnSnapshot, resolveForkHistoryIndex } from '../chat/turn-snapshot';
 import { createStreamingStatsPublisher } from '../chat/streaming-stats';
 import { aggregateTurnMetaSegments } from '../chat/orchestrate/stats-math';
@@ -792,6 +793,13 @@ export function buildApiMessages(
     ? historyImageReplayIndices(outboundHistory, multimodalUserIdx)
     : new Set<number>();
 
+  // Record where each row lands so archive collapse can address history rows by
+  // identity instead of guessing at `systemEnd + i` (see api-message-origin.ts).
+  const pushFromHistory = (message: ApiMessage, historyIndex: number): void => {
+    tagApiMessageHistoryIndex(message, historyIndex);
+    messages.push(message);
+  };
+
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
     if (isUiOnlyTranscriptMessage(m)) continue;
@@ -802,25 +810,29 @@ export function buildApiMessages(
         const content: ApiMessageContent = sendUserImages
           ? buildVlmUserApiContent(userText, pending)
           : buildStringUserApiContent(userText, pending);
-        messages.push({ role: 'user', content });
+        pushFromHistory({ role: 'user', content }, i);
       } else if (replayIndices.has(i)) {
-        messages.push({ role: 'user', content: replayUserImageContent(m) });
+        pushFromHistory({ role: 'user', content: replayUserImageContent(m) }, i);
       } else {
-        messages.push({ role: 'user', content: m.content });
+        pushFromHistory({ role: 'user', content: m.content }, i);
       }
       continue;
     }
 
     if (m.role === 'tool') {
       const hasImage = toolMessageHasImageAttachment(m);
-      messages.push({
-        role: 'tool',
-        tool_call_id: m.tool_call_id,
-        content:
-          hasImage && !vlm ? `${m.content}${TOOL_IMAGE_NO_VISION_HINT}` : m.content,
-      });
+      pushFromHistory(
+        {
+          role: 'tool',
+          tool_call_id: m.tool_call_id,
+          content:
+            hasImage && !vlm ? `${m.content}${TOOL_IMAGE_NO_VISION_HINT}` : m.content,
+        },
+        i,
+      );
       if (vlm) {
         const followUp = toolImageFollowUpUserMessage(m);
+        // The follow-up carries no history row of its own; it rides with the tool result.
         if (followUp) messages.push(followUp);
       }
       continue;
@@ -830,19 +842,22 @@ export function buildApiMessages(
       const withTools = m as AssistantToolCallMessage;
       if (withTools.tool_calls?.length) {
         const reasoningText = withTools.thinking?.join('\n\n').trim() ?? '';
-        messages.push({
-          role: 'assistant',
-          content: withTools.content ?? null,
-          tool_calls: withTools.tool_calls,
-          ...outboundReasoningReplayFields(
-            modelId ?? '',
-            reasoningText,
-            withTools.thinkingSignature,
-            { toolCallTurn: true },
-          ),
-        });
+        pushFromHistory(
+          {
+            role: 'assistant',
+            content: withTools.content ?? null,
+            tool_calls: withTools.tool_calls,
+            ...outboundReasoningReplayFields(
+              modelId ?? '',
+              reasoningText,
+              withTools.thinkingSignature,
+              { toolCallTurn: true },
+            ),
+          },
+          i,
+        );
       } else {
-        messages.push({ role: 'assistant', content: m.content });
+        pushFromHistory({ role: 'assistant', content: m.content }, i);
       }
     }
   }
@@ -2864,7 +2879,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
     let rolledBack = false;
     let preservedTurnOutput = false;
-    if (isBoardTaskChatFlag) {
+    /*
+     * A generation the server forgot across a restart produced nothing here, so
+     * there is no partial tail to undo — slicing history can only destroy rows the
+     * turn never wrote. Leave the transcript alone and let the user retry.
+     */
+    const generationLost = e.message === GENERATION_LOST_ON_RESTART_MESSAGE;
+    if (generationLost) {
+      // Transcript stays as-is; the notice attaches as its own row below.
+      preservedTurnOutput = true;
+      // Still drop an orphan tool tail — replaying that would poison the retry.
+      if (repairSessionHistoryTail(chat)) {
+        scheduleSaveSessions();
+        renderSidebar();
+      }
+      if (isStreamDomVisible(chat.id)) {
+        removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
+        renderChatFromHistory(chat);
+      }
+    } else if (isBoardTaskChatFlag) {
       const repaired = repairSessionHistoryTail(chat);
       if (repaired) {
         recordChatMessage(chat);

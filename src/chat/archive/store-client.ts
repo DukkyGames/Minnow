@@ -3,6 +3,7 @@
  */
 
 import { isLocalServerAvailable } from '../../tools/config';
+import { historyIndexOfApiMessage } from '../api-message-origin';
 import type { ApiMessage } from '../../types';
 import type {
   ArchiveBundleRequest,
@@ -137,6 +138,25 @@ export function sliceTurnsForRange(
     }
     return n;
   })();
+
+  // Select by the history row each message was built from. Positional slicing
+  // assumed history index i sat at systemEnd + i, which UI-only rows and tool-pair
+  // repair both break — bundling the wrong turns into the archive.
+  const selected: ApiMessage[] = [];
+  let inRange = false;
+  for (let i = systemEnd; i < messages.length; i += 1) {
+    const tagged = historyIndexOfApiMessage(messages[i]);
+    if (tagged !== undefined) {
+      inRange = tagged >= range.startIndex && tagged < range.endIndex;
+    }
+    // Untagged rows (screenshot follow-ups, synthesized tool results) ride with
+    // the tagged row before them.
+    if (inRange) selected.push(messages[i]);
+  }
+  if (selected.length > 0) return selected;
+
+  // Nothing was tagged (a synthetic message list, e.g. in tests) — fall back to
+  // the positional read.
   const start = systemEnd + range.startIndex;
   const end = systemEnd + range.endIndex;
   if (start < 0 || end > messages.length) {

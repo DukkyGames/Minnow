@@ -6,6 +6,7 @@ import { isChatStreaming } from '../chat/streaming-state';
 import {
   findChatById,
   getActiveChat,
+  isChatHistoryLoaded,
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
@@ -24,7 +25,12 @@ export type TruncateMode = 'inclusive' | 'exclusive';
 
 export interface TruncateResult {
   ok: boolean;
-  error?: 'not_found' | 'streaming' | 'invalid_index' | 'invalid_target';
+  error?:
+    | 'not_found'
+    | 'streaming'
+    | 'invalid_index'
+    | 'invalid_target'
+    | 'history_not_loaded';
   removedCount?: number;
   chat?: Chat;
 }
@@ -56,6 +62,15 @@ export function truncateChatHistory(
     (getActiveChat().id === chatId ? getActiveChat() : undefined);
   if (!chat) {
     return { ok: false, error: 'not_found' };
+  }
+
+  /*
+   * `cutIndex` is absolute into the full transcript. An unhydrated chat holds an
+   * empty placeholder, so slicing it would persist that placeholder as the whole
+   * history. Callers must `await ensureChatHistoryLoaded` first.
+   */
+  if (!isChatHistoryLoaded(chat)) {
+    return { ok: false, error: 'history_not_loaded' };
   }
 
   if (!Number.isInteger(cutIndex) || cutIndex < 0 || cutIndex >= chat.history.length) {

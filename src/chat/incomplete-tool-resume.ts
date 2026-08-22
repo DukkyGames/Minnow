@@ -274,6 +274,28 @@ export async function bootIncompleteToolResumeForChats(chats: readonly Chat[]): 
 
   const active = getActiveChat();
 
+  if (!active) {
+
+    return;
+
+  }
+
+  // A lazy boot leaves history as an empty placeholder, so the tail scan below would
+
+  // find nothing and silently skip the resume it exists to perform.
+
+  try {
+
+    const { ensureChatHistoryLoaded } = await import('../state/sessions');
+
+    await ensureChatHistoryLoaded(active.id);
+
+  } catch {
+
+    return;
+
+  }
+
   if (!findIncompleteToolBatchAtTail(active)) {
 
     return;

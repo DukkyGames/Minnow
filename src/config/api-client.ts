@@ -40,6 +40,8 @@ export const SESSIONS_BEACON_MAX_BYTES = 60 * 1024;
 /** Partial sessions write body for PATCH /api/config/sessions (and POST beacon alias). */
 export interface SessionsPatchDelta {
   baseVersion: number;
+  /** Store revision this delta was composed against; mismatch returns 409. */
+  baseRevision?: number;
   chats?: Chat[];
   deleteChatIds?: string[];
   groups?: ChatGroup[];
@@ -214,47 +216,108 @@ export async function putIssuesTaxonomy(taxonomy: IssuesTaxonomy): Promise<void>
   await parseJsonResponse<{ ok: boolean }>(res);
 }
 
-/** PUT /api/config/sessions */
-export async function putSessions(state: SessionState): Promise<void> {
+/** Raised when the server rejected a write because another window advanced the store. */
+export class SessionsRevisionConflictError extends Error {
+  readonly revision: number | undefined;
+
+  constructor(message: string, revision: number | undefined) {
+    super(message || 'Session state changed in another window');
+    this.name = 'SessionsRevisionConflictError';
+    this.revision = revision;
+  }
+}
+
+async function parseSessionsWriteResponse(res: Response): Promise<number | undefined> {
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: unknown;
+      revision?: unknown;
+    };
+    throw new SessionsRevisionConflictError(
+      typeof body.error === 'string' ? body.error : '',
+      typeof body.revision === 'number' ? body.revision : undefined,
+    );
+  }
+  const body = await parseJsonResponse<{ ok: boolean; revision?: number }>(res);
+  return typeof body.revision === 'number' ? body.revision : undefined;
+}
+
+/** Extra keys the sessions PUT carries alongside the state blob. */
+export interface PutSessionsOptions {
+  /** Chats to remove. Absence from `state.chats` never deletes anything. */
+  deleteChatIds?: string[];
+  deleteGroupIds?: string[];
+  /**
+   * Opt in to removing stored chats missing from this payload. Only safe for a
+   * caller that provably holds the complete list — the client never sets it.
+   */
+  pruneMissingChats?: boolean;
+  /** Revision this write was composed against; mismatch returns 409. */
+  baseRevision?: number;
+}
+
+/** PUT /api/config/sessions — returns the server's new revision when it reports one. */
+export async function putSessions(
+  state: SessionState,
+  options: PutSessionsOptions = {},
+): Promise<number | undefined> {
   const res = await fetch('/api/config/sessions', {
     method: 'PUT',
     headers: JSON_HEADERS,
-    body: JSON.stringify(state),
+    body: JSON.stringify({ ...state, ...options }),
   });
-  await parseJsonResponse<{ ok: boolean }>(res);
+  return parseSessionsWriteResponse(res);
 }
 
 /** PATCH /api/config/sessions — partial upsert / explicit deletes. */
-export async function patchSessions(delta: SessionsPatchDelta): Promise<void> {
+export async function patchSessions(delta: SessionsPatchDelta): Promise<number | undefined> {
   const res = await fetch('/api/config/sessions', {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify(delta),
   });
-  await parseJsonResponse<{ ok: boolean }>(res);
+  return parseSessionsWriteResponse(res);
 }
 
 /**
  * Best-effort whole-blob session save during `pagehide` / abrupt shutdown.
  * `keepalive` lets the browser finish the request after the tab closes.
  *
- * Note: browsers cap keepalive bodies at {@link FETCH_KEEPALIVE_MAX_BYTES} (64 KiB).
- * A full SessionState often exceeds that, so this path was likely a silent no-op for
- * large blobs — prefer {@link sendSessionsPatchBeacon} when the delta fits.
+ * Browsers cap keepalive bodies at {@link FETCH_KEEPALIVE_MAX_BYTES} (64 KiB) and
+ * drop oversized ones silently. A full SessionState routinely exceeds that, so an
+ * over-cap body is reported as not dispatched rather than pretended into success.
+ *
+ * @returns whether the request was actually handed to the browser.
  */
-export function putSessionsKeepalive(state: SessionState): void {
+export function putSessionsKeepalive(
+  state: SessionState,
+  options: PutSessionsOptions = {},
+): boolean {
   try {
+    const body = JSON.stringify({ ...state, ...options });
+    if (utf8ByteLength(body) >= FETCH_KEEPALIVE_MAX_BYTES) {
+      return false;
+    }
     void fetch('/api/config/sessions', {
       method: 'PUT',
       headers: JSON_HEADERS,
-      body: JSON.stringify(state),
+      body,
       keepalive: true,
     }).catch(() => {
       /* ignore — server may already be down during pagehide */
     });
+    return true;
   } catch {
     /* ignore — nothing else we can do during unload */
+    return false;
   }
+}
+
+/** UTF-8 length, falling back to string length where TextEncoder is absent. */
+function utf8ByteLength(text: string): number {
+  return typeof TextEncoder !== 'undefined'
+    ? new TextEncoder().encode(text).length
+    : text.length;
 }
 
 /**
@@ -277,26 +340,66 @@ export function sendSessionsPatchBeacon(delta: SessionsPatchDelta): boolean {
 
 /**
  * Shutdown flush: beacon POST when the delta is small; otherwise keepalive whole-blob PUT.
- * @returns whether the dirty sets may be cleared (beacon queued, or keepalive PUT dispatched).
+ *
+ * `clearedOk` reports what actually left the process. Reporting an unconfirmed
+ * keepalive PUT as success let the client drop dirty markers for a write the
+ * browser had silently discarded, so the edits were gone on the next boot.
+ *
+ * An oversized delta is split into per-chat beacons rather than collapsed into one
+ * whole-blob PUT that would be over the cap anyway.
+ *
+ * @returns whether the dirty sets may be cleared.
  */
 export function flushSessionsOnShutdown(
   delta: SessionsPatchDelta | null,
   fullState: SessionState,
+  fullStateOptions: PutSessionsOptions = {},
 ): { transport: SessionsShutdownTransport; clearedOk: boolean } {
   if (delta) {
-    const body = JSON.stringify(delta);
-    // Prefer byteLength for UTF-8; fall back to string length in odd environments.
-    const byteLength =
-      typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(body).length : body.length;
+    const byteLength = utf8ByteLength(JSON.stringify(delta));
     const transport = chooseSessionsShutdownTransport(byteLength);
     if (transport === 'beacon') {
       const queued = sendSessionsPatchBeacon(delta);
       if (queued) return { transport, clearedOk: true };
-      // Beacon rejected — fall through to keepalive PUT of the whole blob.
+      // Beacon rejected — fall through.
+    } else if (splitSessionsPatchBeacons(delta)) {
+      return { transport: 'beacon', clearedOk: true };
     }
   }
-  putSessionsKeepalive(fullState);
-  return { transport: 'keepalive-put', clearedOk: true };
+  const dispatched = putSessionsKeepalive(fullState, fullStateOptions);
+  return { transport: 'keepalive-put', clearedOk: dispatched };
+}
+
+/**
+ * Send an over-cap delta as one beacon per chat plus a tail beacon for everything
+ * else. Each chat is independent, so a partial success still persists that chat.
+ * @returns true when every piece was queued.
+ */
+function splitSessionsPatchBeacons(delta: SessionsPatchDelta): boolean {
+  const chats = Array.isArray(delta.chats) ? delta.chats : [];
+  const { chats: _chats, ...rest } = delta;
+  void _chats;
+
+  let allQueued = true;
+  for (const chat of chats) {
+    const piece: SessionsPatchDelta = { baseVersion: delta.baseVersion, chats: [chat] };
+    if (utf8ByteLength(JSON.stringify(piece)) >= SESSIONS_BEACON_MAX_BYTES) {
+      // One chat alone is over the cap — nothing smaller left to try.
+      allQueued = false;
+      continue;
+    }
+    if (!sendSessionsPatchBeacon(piece)) allQueued = false;
+  }
+
+  const hasTail =
+    rest.deleteChatIds?.length ||
+    rest.groups?.length ||
+    rest.deleteGroupIds?.length ||
+    rest.scalars;
+  if (hasTail && !sendSessionsPatchBeacon(rest as SessionsPatchDelta)) {
+    allQueued = false;
+  }
+  return allQueued;
 }
 
 /** GET /api/config/tools */

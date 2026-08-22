@@ -1272,6 +1272,8 @@ export type ChatSummary = Omit<Chat, 'history' | 'historyLoaded' | 'lastStats' |
 /** Session blob from GET /api/config/sessions/summaries (chats omit `history`). */
 export interface SessionSummariesState {
   version: SessionSchemaVersion;
+  /** Monotonic store write counter, echoed back on write for conflict detection. */
+  revision?: number;
   activeId: string | null;
   sidebarCollapsed: boolean;
   sidebarWidth?: number;

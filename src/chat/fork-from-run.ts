@@ -6,7 +6,13 @@ import { isActiveChatStreaming } from '../chat/streaming-state';
 import { clearAttachments } from '../attachments/store';
 import { parseSlashCommand } from '../skills/parse-slash';
 import { parseSkillTagFromHistory } from '../skills/history-content';
-import { findChatById, getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
+import {
+  ensureChatHistoryLoaded,
+  findChatById,
+  getActiveChat,
+  scheduleSaveSessions,
+  touchChat,
+} from '../state/sessions';
 import { getActiveRun } from '../state/runs-store';
 import { runChatTurn } from '../tools/loop';
 import type { TurnSnapshot } from '../types';
@@ -52,6 +58,18 @@ export async function forkFromUserIndex(
     (getActiveChat().id === chatId ? getActiveChat() : undefined);
   if (!chat) {
     setStatus('err', 'Chat not found');
+    return;
+  }
+
+  /*
+   * Every index below is absolute into the full transcript. On a lazy boot this
+   * chat may still hold an empty placeholder, which made the retry affordance on a
+   * failed turn report "Invalid message" — precisely when it is needed.
+   */
+  try {
+    await ensureChatHistoryLoaded(chatId);
+  } catch {
+    setStatus('err', 'Could not load this chat’s messages');
     return;
   }
 
