@@ -23,8 +23,9 @@
  *   Hosted `openai-v1` providers reject unknown fields, so
  *   `sanitizeCompletionBodyForProvider` strips the kwargs everywhere except local.
  * - An effort level only means something to a model *trained* on one (gpt-oss,
- *   o-series/gpt-5, Qwen3.8). For everything else the template's `enable_thinking`
- *   is the whole switch, which is why level options are not inferred for them.
+ *   o-series/gpt-5, Qwen3.8); elsewhere the template's `enable_thinking` is the whole
+ *   switch and the effort is inert. Inert, though — not harmful — so the composer
+ *   still offers levels for bare local catalogs rather than guessing from the id.
  * - Qwen3.8: composer High maps to wire `xhigh`; thinking-on also sends
  *   `preserve_thinking` (LM Studio custom field, or `chat_template_kwargs` on local).
  */

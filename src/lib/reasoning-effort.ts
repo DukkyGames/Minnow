@@ -163,25 +163,23 @@ export function formatReasoningEffortLabel(option: ReasoningEffortOption): strin
   }
 }
 
-/**
- * Families trained on a reasoning effort level, so an effort actually changes output.
- *
- * An effort is a *trained* behavior, not a protocol feature: llama-server hands the
- * value to the Jinja template and `mlx_lm.server` only sees `chat_template_kwargs`,
- * so on a model that was never trained on one it is inert either way. Inferring
- * levels for every id put a dead Low/Medium/High dropdown on plain Llama and Qwen3
- * weights; those get the on/off brain toggle, which is the switch that works.
- * A catalog `allowed_options` block always wins over this list.
- */
-function isEffortLevelTrainedModel(modelId: string): boolean {
+/** Models on openai-v1 that only support thinking.type on/off, not reasoning_effort levels. */
+function isThinkingTypeOnlyOpenAiModel(modelId: string): boolean {
   const id = modelId.trim().toLowerCase();
-  // gpt-oss: low/medium/high. o-series + gpt-5: minimal/low/medium/high.
-  return /gpt-oss/.test(id) || /(?:^|[^a-z0-9])o\d(?![0-9])/.test(id) || /gpt-5/.test(id);
+  return /kimi|moonshot|deepseek|minimax/.test(id);
 }
 
 /**
  * Fallback allowed options when catalog lacks reasoning metadata.
  * Qwen3.8 always gets levels (any provider). Other models only infer on openai-v1.
+ *
+ * Bare `{ id }` catalogs (llama.cpp, mlx_lm.server, MTPLX) carry no reasoning block,
+ * so this is the *only* signal for every model they serve. Levels stay the default
+ * here deliberately: narrowing it to an id allowlist of effort-trained families hid
+ * the dropdown on MTPLX models whose ids the list did not anticipate, and hiding a
+ * control the model can use is a worse failure than showing one it ignores. An
+ * effort the model was not trained on is inert, not harmful. A catalog
+ * `allowed_options` block always wins over this inference.
  */
 export function inferReasoningOptionsFromModelId(
   modelId: string,
@@ -192,10 +190,10 @@ export function inferReasoningOptionsFromModelId(
     return [...QWEN38_REASONING_OPTIONS];
   }
   if (apiKind !== 'openai-v1') return [];
-  if (isEffortLevelTrainedModel(modelId)) {
-    return ['off', 'low', 'medium', 'high'];
+  if (isThinkingTypeOnlyOpenAiModel(modelId)) {
+    return ['off', 'on'];
   }
-  return ['off', 'on'];
+  return ['off', 'low', 'medium', 'high'];
 }
 
 /**
