@@ -95,18 +95,27 @@ leave XTC behind the advanced sampler panel. Skip `logit_bias`.
 A documented MLX request field; Minnow sends none. Covered by the llama.cpp plan's Phase 4
 `normalizeSamplerPreset` change — this phase only confirms it reaches MLX.
 
-### 2c. Fix the `chat_template_kwargs` illusion
+### 2c. ~~Fix the `chat_template_kwargs` illusion~~ — RESOLVED, it is not an illusion
 
-`sanitize-completion-body.ts:131-138` *keeps* `chat_template_kwargs` for `mlx-lm-local`, and
-`src/agents/thinking-to-body.ts` uses it to carry `enable_thinking`. But
-`chat_template_kwargs` is **not** in `mlx_lm.server`'s documented request fields — the
-equivalent is the `--chat-template-args` CLI argument. So thinking-toggle for MLX models is
-very likely a silent no-op today.
+**Answered 2026-08-23 from the pinned runtime's source, no Mac needed.** `SERVER.md` omits it,
+which is what prompted this item, but `mlx_lm/server.py` at v0.31.3 does read it:
 
-**Verify this first on the Mac** (send `enable_thinking: false` to a thinking-capable MLX model
-and check whether reasoning is actually suppressed). If confirmed inert, move it to
-`--chat-template-args` set at spawn (Phase 3) and stop advertising a per-request thinking
-toggle for MLX that the runtime cannot honour.
+```python
+self.chat_template_kwargs = self.body.get("chat_template_kwargs")   # do_POST
+template_kwargs = dict(tools=tools, tokenize=True, **chat_template_args)
+prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, **template_kwargs)
+```
+
+So per-request `chat_template_kwargs` **does** reach the Jinja template on MLX, and the
+thinking toggle is real. Do **not** move it to `--chat-template-args` — that flag is
+process-wide and would make the per-request toggle impossible.
+
+What `mlx_lm.server` does *not* read is top-level `reasoning_effort` (the key appears nowhere
+in `server.py`), unlike `llama-server`, which reads it and treats `none` as a disable. That
+asymmetry was the actual bug: composer Low/Medium/High only ever set the top-level field for
+non-Qwen3.8 models, so every level was byte-identical on MLX. Fixed 2026-08-23 —
+`applyLocalTemplateThinkingOn` in `src/agents/thinking-to-body.ts` now carries
+`enable_thinking` **and** `reasoning_effort` inside `chat_template_kwargs` for every model.
 
 ### 2d. Guard against a false structured-output probe
 
@@ -308,8 +317,10 @@ speed win. Phase 5 is independent and can run in parallel.
 Because this is the first real hardware pass, three things should be confirmed on the Mac
 **before** building on them — each changes a design decision:
 
-1. **Does `chat_template_kwargs` reach the model at all?** (Phase 2c — determines whether MLX
-   thinking-toggle moves to `--chat-template-args`.)
+1. ~~**Does `chat_template_kwargs` reach the model at all?**~~ **Answered: yes** — read in
+   `mlx_lm/server.py` v0.31.3 `do_POST` and splatted into `apply_chat_template`. Phase 2c
+   closed; the toggle stays per-request. Still worth a behavioural spot-check on the Mac that
+   a level actually changes output on a model trained on one (Qwen3.8).
 2. **Does the structured-output probe falsely report support?** (Phase 2d — determines whether
    the probe itself needs to get stricter.)
 3. **Does per-request `draft_model` co-resident-load, or thrash?** (Phase 4 — determines

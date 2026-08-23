@@ -163,10 +163,20 @@ export function formatReasoningEffortLabel(option: ReasoningEffortOption): strin
   }
 }
 
-/** Models on openai-v1 that only support thinking.type on/off, not reasoning_effort levels. */
-function isThinkingTypeOnlyOpenAiModel(modelId: string): boolean {
+/**
+ * Families trained on a reasoning effort level, so an effort actually changes output.
+ *
+ * An effort is a *trained* behavior, not a protocol feature: llama-server hands the
+ * value to the Jinja template and `mlx_lm.server` only sees `chat_template_kwargs`,
+ * so on a model that was never trained on one it is inert either way. Inferring
+ * levels for every id put a dead Low/Medium/High dropdown on plain Llama and Qwen3
+ * weights; those get the on/off brain toggle, which is the switch that works.
+ * A catalog `allowed_options` block always wins over this list.
+ */
+function isEffortLevelTrainedModel(modelId: string): boolean {
   const id = modelId.trim().toLowerCase();
-  return /kimi|moonshot|deepseek|minimax/.test(id);
+  // gpt-oss: low/medium/high. o-series + gpt-5: minimal/low/medium/high.
+  return /gpt-oss/.test(id) || /(?:^|[^a-z0-9])o\d(?![0-9])/.test(id) || /gpt-5/.test(id);
 }
 
 /**
@@ -182,10 +192,10 @@ export function inferReasoningOptionsFromModelId(
     return [...QWEN38_REASONING_OPTIONS];
   }
   if (apiKind !== 'openai-v1') return [];
-  if (isThinkingTypeOnlyOpenAiModel(modelId)) {
-    return ['off', 'on'];
+  if (isEffortLevelTrainedModel(modelId)) {
+    return ['off', 'low', 'medium', 'high'];
   }
-  return ['off', 'low', 'medium', 'high'];
+  return ['off', 'on'];
 }
 
 /**

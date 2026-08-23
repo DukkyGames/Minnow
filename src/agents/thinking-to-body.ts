@@ -11,11 +11,20 @@
  * - `anthropic-v1`: `providerOptions.anthropic.thinking` (`enabled` + `budgetTokens`,
  *   `adaptive` + `effort`, or omit when off) per model family.
  * - `llama-cpp-local`: per-request `thinking_budget_tokens` (never CLI `--reasoning-budget`).
- * - llama.cpp / mlx_lm servers ignore `thinking.type` and `reasoning_effort` entirely;
- *   the only switch they honor is `chat_template_kwargs.enable_thinking`, which is
- *   forwarded to the model's Jinja template. Hosted `openai-v1` providers reject
- *   unknown fields, so `sanitizeCompletionBodyForProvider` strips it everywhere
- *   except the local runtime providers.
+ * - Local runtimes, verified against upstream (2026-08):
+ *   - `llama-server` reads top-level `reasoning_effort` (`none` disables reasoning,
+ *     any other value is handed to the Jinja template) **and** `chat_template_kwargs`.
+ *   - `mlx_lm.server` reads **only** `chat_template_kwargs` — `do_POST` stores
+ *     `self.body.get("chat_template_kwargs")` and splats it into
+ *     `apply_chat_template`; it never reads `reasoning_effort` (mlx-lm 0.31.3
+ *     `mlx_lm/server.py`). MTPLX is MLX-native and documents neither.
+ *   - So the effort level rides inside `chat_template_kwargs` for every model, not
+ *     just Qwen3.8: a top-level-only `reasoning_effort` is invisible to MLX/MTPLX.
+ *   Hosted `openai-v1` providers reject unknown fields, so
+ *   `sanitizeCompletionBodyForProvider` strips the kwargs everywhere except local.
+ * - An effort level only means something to a model *trained* on one (gpt-oss,
+ *   o-series/gpt-5, Qwen3.8). For everything else the template's `enable_thinking`
+ *   is the whole switch, which is why level options are not inferred for them.
  * - Qwen3.8: composer High maps to wire `xhigh`; thinking-on also sends
  *   `preserve_thinking` (LM Studio custom field, or `chat_template_kwargs` on local).
  */
@@ -61,29 +70,50 @@ function mapHighEffortForQwen38(effort: string, modelId?: string | null): string
   return effort;
 }
 
-/** LM Studio custom field + local Jinja kwargs when Qwen3.8 thinking is on. */
-function applyQwen38ThinkingOnFields(
+/** Existing template kwargs on the body, as a fresh object. */
+function templateKwargsOf(body: Record<string, unknown>): Record<string, unknown> {
+  return body.chat_template_kwargs && typeof body.chat_template_kwargs === 'object'
+    ? { ...(body.chat_template_kwargs as Record<string, unknown>) }
+    : {};
+}
+
+/**
+ * Thinking-on fields for runtimes that read the Jinja template kwargs.
+ *
+ * `chat_template_kwargs` is the only reasoning lever `mlx_lm.server` reads at all,
+ * and llama-server reads it too, so both `enable_thinking` and the effort level go
+ * there for **every** model — previously only Qwen3.8 got them, which left
+ * Low/Medium/High byte-identical on MLX. Extra template variables are inert when a
+ * template does not reference them, so this is safe for non-reasoning weights.
+ * `preserve_thinking` stays Qwen3.8-only: it is that template's own variable.
+ * Sanitization drops all of it for hosted providers, which 400 on unknown fields.
+ *
+ * @param wireEffort Effort to expose to the template, or undefined for on/off models.
+ */
+function applyLocalTemplateThinkingOn(
   body: Record<string, unknown>,
   apiKind: ApiKind,
-  wireEffort: string,
+  wireEffort: string | undefined,
   modelId?: string | null,
 ): void {
-  if (!isQwen38ModelId(modelId)) return;
-  if (apiKind === 'lm-studio-v0') {
+  if (apiKind !== 'openai-v1' && apiKind !== 'lm-studio-v0') return;
+  // Kimi / Moonshot 400 on `enable_thinking`; thinking.type is their only switch.
+  // Sanitization also strips these for hosted providers — this keeps a loopback
+  // proxy fronting Moonshot correct too.
+  if (/kimi|moonshot/i.test(modelId ?? '')) return;
+  const isQwen38 = isQwen38ModelId(modelId);
+  if (apiKind === 'lm-studio-v0' && isQwen38) {
+    // LM Studio custom field; it ignores API reasoning_effort (lmstudio bug #988).
     body.preserve_thinking = true;
-    return;
   }
-  if (apiKind !== 'openai-v1') return;
-  const prev =
-    body.chat_template_kwargs && typeof body.chat_template_kwargs === 'object'
-      ? { ...(body.chat_template_kwargs as Record<string, unknown>) }
-      : {};
-  body.enable_thinking = true;
+  if (apiKind === 'openai-v1') {
+    body.enable_thinking = true;
+  }
   body.chat_template_kwargs = {
-    ...prev,
+    ...templateKwargsOf(body),
     enable_thinking: true,
-    preserve_thinking: true,
-    reasoning_effort: wireEffort,
+    ...(wireEffort ? { reasoning_effort: wireEffort } : {}),
+    ...(isQwen38 ? { preserve_thinking: true } : {}),
   };
 }
 
@@ -244,16 +274,15 @@ export function reasoningEffortToCompletionBody(
       if (enabledValue === 'adaptive') {
         body.thinking = { type: 'adaptive' };
       }
-      applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
+      applyLocalTemplateThinkingOn(body, apiKind, wireEffort, modelId);
       return { body };
     }
 
     body.thinking = { type: enabledValue };
-    if (isQwen38ModelId(modelId)) {
-      const wireEffort = 'xhigh';
-      body.reasoning_effort = wireEffort;
-      applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
-    }
+    // `thinking.type` alone reaches no local runtime — carry enable_thinking too.
+    const onEffort = isQwen38ModelId(modelId) ? 'xhigh' : undefined;
+    if (onEffort) body.reasoning_effort = onEffort;
+    applyLocalTemplateThinkingOn(body, apiKind, onEffort, modelId);
     return { body };
   }
 
@@ -274,7 +303,7 @@ export function reasoningEffortToCompletionBody(
       reasoning_effort: wireEffort,
       reasoning: { effort: wireEffort },
     };
-    applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
+    applyLocalTemplateThinkingOn(body, apiKind, wireEffort, modelId);
     return { body, hint: LM_STUDIO_BEST_EFFORT };
   }
 
@@ -284,7 +313,7 @@ export function reasoningEffortToCompletionBody(
     reasoning_effort: wireEffort,
     reasoning: { effort: wireEffort },
   };
-  applyQwen38ThinkingOnFields(body, apiKind, wireEffort, modelId);
+  applyLocalTemplateThinkingOn(body, apiKind, wireEffort, modelId);
   return { body, hint: LM_STUDIO_BEST_EFFORT };
 }
 
@@ -355,10 +384,10 @@ export function thinkingToCompletionBody(
     if (budgetTokens != null && budgetTokens > 0) {
       body.thinking_budget_tokens = budgetTokens;
     }
-    if (isQwen38ModelId(modelId)) {
-      applyQwen38ThinkingOnFields(body, apiKind, 'xhigh', modelId);
-      body.reasoning_effort = 'xhigh';
-    }
+    // `thinking.type` alone reaches no local runtime — carry enable_thinking too.
+    const onEffort = isQwen38ModelId(modelId) ? 'xhigh' : undefined;
+    if (onEffort) body.reasoning_effort = onEffort;
+    applyLocalTemplateThinkingOn(body, apiKind, onEffort, modelId);
     return { body };
   }
 
@@ -370,7 +399,7 @@ export function thinkingToCompletionBody(
     enable_thinking: resolved === 'on',
   };
   if (resolved === 'on') {
-    applyQwen38ThinkingOnFields(body, apiKind, effort, modelId);
+    applyLocalTemplateThinkingOn(body, apiKind, effort, modelId);
   }
 
   return { body, hint: LM_STUDIO_BEST_EFFORT };

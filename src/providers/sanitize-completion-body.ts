@@ -133,6 +133,17 @@ export function sanitizeCompletionBodyForProvider(
     delete next.reasoning_effort;
   }
 
+  // llama-server disables reasoning on `reasoning_effort: "none"`, which covers
+  // templates that read the effort but not `enable_thinking`. Local-only: hosted
+  // OpenAI 400s on `none` (its enum is minimal/low/medium/high).
+  if (
+    reasoningSupported &&
+    templateKwargsReachModel &&
+    isThinkingExplicitlyDisabled(next.thinking)
+  ) {
+    next.reasoning_effort = 'none';
+  }
+
   const modelId = typeof next.model === 'string' ? next.model : '';
   if (typeof next.max_tokens === 'number' && modelUsesMaxCompletionTokens(modelId)) {
     next.max_completion_tokens = next.max_tokens;

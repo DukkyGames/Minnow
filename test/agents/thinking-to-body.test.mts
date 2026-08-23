@@ -18,19 +18,45 @@ const reasoningCaps: ModelCapabilities = {
 };
 
 describe('thinkingToCompletionBody', () => {
-  test('openai-v1 on enables thinking without enable_thinking (Kimi compat)', () => {
-    const { body } = thinkingToCompletionBody('on', 'openai-v1', {
-      vision: false,
-      tools: null,
-      streaming: null,
-      grammar: null,
-      reasoning: true,
-      contextLength: null,
-      loadState: null,
+  const bareReasoningCaps = {
+    vision: false,
+    tools: null,
+    streaming: null,
+    grammar: null,
+    reasoning: true,
+    contextLength: null,
+    loadState: null,
+  };
+
+  test('openai-v1 on omits enable_thinking for Kimi/Moonshot (they 400 on it)', () => {
+    for (const modelId of ['moonshotai/kimi-k2-thinking', 'moonshot-v1-128k']) {
+      const { body } = thinkingToCompletionBody(
+        'on',
+        'openai-v1',
+        bareReasoningCaps,
+        null,
+        modelId,
+      );
+      assert.deepEqual(body, { thinking: { type: 'enabled' } }, modelId);
+    }
+  });
+
+  test('openai-v1 on carries enable_thinking for everything else', () => {
+    // thinking.type reaches no local runtime; chat_template_kwargs is the only
+    // switch mlx_lm.server reads, so the on/off toggle has to ride there too.
+    const { body } = thinkingToCompletionBody(
+      'on',
+      'openai-v1',
+      bareReasoningCaps,
+      null,
+      'qwen/qwen3-32b',
+    );
+    assert.deepEqual(body, {
+      thinking: { type: 'enabled' },
+      enable_thinking: true,
+      chat_template_kwargs: { enable_thinking: true },
     });
-    assert.deepEqual(body, { thinking: { type: 'enabled' } });
     assert.equal(body.reasoning_effort, undefined);
-    assert.equal(body.enable_thinking, undefined);
   });
 
   test('openai-v1 off disables DeepSeek thinking without reasoning_effort none', () => {
@@ -176,11 +202,23 @@ describe('reasoningEffortToCompletionBody', () => {
     });
   });
 
-  test('openai-v1 on enables thinking without enable_thinking', () => {
+  test('openai-v1 on carries template kwargs, but not for Kimi', () => {
     const { body } = reasoningEffortToCompletionBody('on', 'openai-v1', reasoningCaps);
-    assert.deepEqual(body, { thinking: { type: 'enabled' } });
-    assert.equal(body.enable_thinking, undefined);
+    assert.deepEqual(body, {
+      thinking: { type: 'enabled' },
+      enable_thinking: true,
+      chat_template_kwargs: { enable_thinking: true },
+    });
     assert.equal(body.reasoning_effort, undefined);
+
+    const kimi = reasoningEffortToCompletionBody(
+      'on',
+      'openai-v1',
+      reasoningCaps,
+      null,
+      'moonshotai/kimi-k2-thinking',
+    ).body;
+    assert.deepEqual(kimi, { thinking: { type: 'enabled' } });
   });
 
   test('openai-v1 low uses top-level reasoning_effort and nested reasoning.effort', () => {
@@ -197,7 +235,7 @@ describe('reasoningEffortToCompletionBody', () => {
     for (const effort of ['medium', 'high'] as const) {
       const { body } = reasoningEffortToCompletionBody(effort, 'openai-v1', reasoningCaps);
       assert.deepEqual(body.reasoning, { effort });
-      assert.equal(body.enable_thinking, undefined);
+      assert.equal(body.enable_thinking, true);
     }
   });
 
@@ -206,7 +244,11 @@ describe('reasoningEffortToCompletionBody', () => {
       ...reasoningCaps,
       reasoningThinkingEnabledValue: 'adaptive',
     });
-    assert.deepEqual(body, { thinking: { type: 'adaptive' } });
+    assert.deepEqual(body, {
+      thinking: { type: 'adaptive' },
+      enable_thinking: true,
+      chat_template_kwargs: { enable_thinking: true },
+    });
   });
 
   test('lm-studio-v0 off sets none effort and disables enable_thinking', () => {
@@ -278,10 +320,29 @@ describe('reasoningEffortToCompletionBody', () => {
     });
   });
 
-  test('non-Qwen3.8 openai-v1 high stays high without preserve_thinking kwargs', () => {
+  test('non-Qwen3.8 openai-v1 high carries template kwargs without preserve_thinking', () => {
     const patch = reasoningEffortToCompletionBody('high', 'openai-v1', reasoningCaps);
     assert.equal(patch.body.reasoning_effort, 'high');
-    assert.equal(patch.body.chat_template_kwargs, undefined);
+    // mlx_lm.server reads only chat_template_kwargs, so the level has to ride there
+    // for every model — top-level reasoning_effort alone made Low/Medium/High inert.
+    assert.deepEqual(patch.body.chat_template_kwargs, {
+      enable_thinking: true,
+      reasoning_effort: 'high',
+    });
+    assert.equal(patch.body.enable_thinking, true);
     assert.equal(patch.body.preserve_thinking, undefined);
+  });
+
+  test('openai-v1 levels differ on the wire for a local runtime', () => {
+    const bodies = (['low', 'medium', 'high'] as const).map(
+      (effort) =>
+        reasoningEffortToCompletionBody(effort, 'openai-v1', reasoningCaps).body
+          .chat_template_kwargs,
+    );
+    assert.deepEqual(bodies, [
+      { enable_thinking: true, reasoning_effort: 'low' },
+      { enable_thinking: true, reasoning_effort: 'medium' },
+      { enable_thinking: true, reasoning_effort: 'high' },
+    ]);
   });
 });

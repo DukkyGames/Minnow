@@ -123,7 +123,7 @@ describe('composer reasoning control helpers', () => {
 });
 
 describe('inferReasoningOptionsFromModelId', () => {
-  test('infers off/low/medium/high for any openai-v1 model without catalog', () => {
+  test('infers off/low/medium/high only for effort-trained families on openai-v1', () => {
     const expected = ['off', 'low', 'medium', 'high'];
     assert.deepEqual(
       inferReasoningOptionsFromModelId('openai/o3-mini', 'openai-v1'),
@@ -134,24 +134,27 @@ describe('inferReasoningOptionsFromModelId', () => {
       expected,
     );
     assert.deepEqual(
-      inferReasoningOptionsFromModelId('meta-llama/Llama-3.2-3B', 'openai-v1'),
-      expected,
-    );
-    assert.deepEqual(
-      inferReasoningOptionsFromModelId('qwen/qwen3-32b', 'openai-v1'),
+      inferReasoningOptionsFromModelId('openai/gpt-oss-20b', 'openai-v1'),
       expected,
     );
   });
 
-  test('uses off/on for thinking-type-only vendors on openai-v1', () => {
-    assert.deepEqual(
-      inferReasoningOptionsFromModelId('moonshot/kimi-k2', 'openai-v1'),
-      ['off', 'on'],
-    );
-    assert.deepEqual(
-      inferReasoningOptionsFromModelId('deepseek/deepseek-chat', 'openai-v1'),
-      ['off', 'on'],
-    );
+  // An effort level is a trained behavior, not a protocol feature: llama-server hands
+  // it to the Jinja template and mlx_lm.server never reads it at all, so a dropdown on
+  // weights that were not trained on one is dead UI.
+  test('uses off/on for models never trained on an effort level', () => {
+    for (const id of [
+      'meta-llama/Llama-3.2-3B',
+      'qwen/qwen3-32b',
+      'moonshot/kimi-k2',
+      'deepseek/deepseek-chat',
+    ]) {
+      assert.deepEqual(
+        inferReasoningOptionsFromModelId(id, 'openai-v1'),
+        ['off', 'on'],
+        id,
+      );
+    }
   });
 
   test('returns empty for lm-studio-v0 (catalog should drive options)', () => {
