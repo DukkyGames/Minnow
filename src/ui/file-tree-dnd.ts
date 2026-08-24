@@ -10,7 +10,6 @@ import { getLocalServerAvailable } from '../tools/client';
 import { expandDir } from './file-tree';
 import { importDroppedEntriesToWorkspace } from './import-external-files';
 import { movePath } from './file-tree-ops';
-import { showMoveConfirmDialog } from './file-tree-move-dialog';
 import { setStatus } from './status';
 
 const DROP_TARGET_CLASS = 'file-tree-row--drop-target';
@@ -54,16 +53,6 @@ function clearDropHighlight(host: HTMLElement): void {
   }
 }
 
-function sourceKindFromRow(sourcePath: string): 'file' | 'dir' {
-  if (!hostBound) return 'file';
-  for (const row of hostBound.querySelectorAll('.file-tree-row')) {
-    if (row.getAttribute('data-path') === sourcePath) {
-      return row.getAttribute('data-entry-kind') === 'dir' ? 'dir' : 'file';
-    }
-  }
-  return 'file';
-}
-
 async function handleTreeDrop(
   event: DragEvent,
   targetRow: HTMLElement,
@@ -71,7 +60,7 @@ async function handleTreeDrop(
   const dataTransfer = event.dataTransfer;
   if (!dataTransfer) return;
 
-  const source = pathFromDataTransfer(dataTransfer);
+  const source = activeDragSourcePath?.trim() || (dataTransfer ? pathFromDataTransfer(dataTransfer) : null) || '';
   const destDir = targetRow.dataset.path;
   if (!source || !destDir) return;
 
@@ -83,13 +72,6 @@ async function handleTreeDrop(
     setStatus('err', 'Cannot move a folder into itself or its subfolder.');
     return;
   }
-
-  const confirmed = await showMoveConfirmDialog({
-    source,
-    destinationDir: destDir,
-    sourceKind: sourceKindFromRow(source),
-  });
-  if (!confirmed) return;
 
   moveInFlight = true;
   try {
