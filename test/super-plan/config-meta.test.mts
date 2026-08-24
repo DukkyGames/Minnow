@@ -6,9 +6,11 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   DEFAULT_SUPER_PLAN_CONFIG,
+  getSuperPlanConfigSync,
   getSuperPlanReviewPasses,
   resetSuperPlanConfigCache,
   resolveSuperPlanResearchMaxRounds,
+  saveSuperPlanConfig,
   setSuperPlanConfigForTests,
 } from '../../src/config/super-plan-meta.ts';
 import {
@@ -119,6 +121,20 @@ describe('pipeline stage skipping', () => {
   test('impeccable always when configured always', () => {
     const config = { ...DEFAULT_SUPER_PLAN_CONFIG, impeccable: 'always' as const };
     assert.equal(shouldRunSuperPlanImpeccable(config, false), true);
+  });
+});
+
+describe('saveSuperPlanConfig cache', () => {
+  test('updates getSuperPlanConfigSync before the promise settles', () => {
+    resetSuperPlanConfigCache();
+    setSuperPlanConfigForTests({ ...DEFAULT_SUPER_PLAN_CONFIG });
+
+    void saveSuperPlanConfig({ grillQuestionBudget: 12 }).catch(() => {
+      /* server fetch may fail in unit tests; sync cache is what we assert */
+    });
+
+    assert.equal(getSuperPlanConfigSync().grillQuestionBudget, 12);
+    assert.equal(getSuperPlanConfigSync().grillEnabled, true);
   });
 });
 

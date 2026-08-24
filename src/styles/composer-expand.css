@@ -6,6 +6,41 @@
   isolation: isolate;
 }
 
+/* Super Plan / Research composer bars — ghost control before send. */
+.composer-expand-btn--bar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.12s) var(--ease-out),
+    opacity var(--duration-fast, 0.12s) var(--ease-out);
+}
+
+.composer-expand-btn--bar .composer-expand-btn__icon {
+  --mn-icon-size: 18px;
+}
+
+.composer-expand-btn--bar:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composer-expand-btn--bar:not(:disabled):not(.composer-expand-btn--busy):hover {
+    color: var(--mn-accent);
+    background: transparent;
+  }
+}
+
 .composer-expand-btn__icon {
   position: relative;
   z-index: 1;

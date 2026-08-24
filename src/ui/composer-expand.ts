@@ -12,12 +12,16 @@ import { setStatus } from './status';
 interface ExpandTarget {
   /** Button id to mount. */
   btnId: string;
-  /** Existing composer button this one is inserted after. */
+  /** Existing composer button this one is inserted after. Ignored when `prebuilt`. */
   anchorIds: string[];
   /** Composer textarea this button expands. */
   inputId: string;
   /** Desktop concierge composer uses its own button chrome. */
   desktop?: boolean;
+  /** Button is already in the DOM; bind in place, do not insert after a mic. */
+  prebuilt?: boolean;
+  /** Ghost 32px bar control (Super Plan / Research). Send stays the only accent. */
+  bar?: boolean;
 }
 
 const TARGETS: readonly ExpandTarget[] = [
@@ -33,7 +37,31 @@ const TARGETS: readonly ExpandTarget[] = [
     inputId: 'desktopInput',
     desktop: true,
   },
+  {
+    btnId: 'btnResearchExpand',
+    anchorIds: [],
+    inputId: 'researchQuery',
+    prebuilt: true,
+    bar: true,
+  },
+  {
+    btnId: 'btnSuperPlanExpand',
+    anchorIds: [],
+    inputId: 'superPlanPrompt',
+    prebuilt: true,
+    bar: true,
+  },
 ];
+
+/** Find an id under a possibly-disconnected tree (Super Plan builds off-document). */
+function findEl(id: string, root: ParentNode = document): HTMLElement | null {
+  if ('getElementById' in root && typeof root.getElementById === 'function') {
+    return root.getElementById(id);
+  }
+  const escaped =
+    typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id;
+  return root.querySelector(`#${escaped}`);
+}
 
 const EXPAND_MARKUP =
   iconHtml('sparkles', { className: 'composer-expand-btn__icon' }) +
@@ -53,6 +81,8 @@ interface ActiveRun {
 
 let activeRun: ActiveRun | null = null;
 let expandFetchImpl = fetchExpandedPrompt;
+/** Bound textarea per expand button (supports off-document Super Plan trees). */
+const expandInputByButton = new WeakMap<HTMLButtonElement, HTMLTextAreaElement>();
 
 /** Replace the expansion request (unit tests). */
 export function setExpandPromptFetcherForTests(
@@ -65,8 +95,12 @@ function findTargetByButtonId(btnId: string): ExpandTarget | undefined {
   return TARGETS.find((t) => t.btnId === btnId);
 }
 
-function resolveInput(target: ExpandTarget): HTMLTextAreaElement | null {
-  return document.getElementById(target.inputId) as HTMLTextAreaElement | null;
+function resolveInput(
+  target: ExpandTarget,
+  root: ParentNode = document,
+): HTMLTextAreaElement | null {
+  const node = findEl(target.inputId, root);
+  return node?.tagName === 'TEXTAREA' ? (node as HTMLTextAreaElement) : null;
 }
 
 function resizeComposerInput(input: HTMLTextAreaElement): void {
@@ -121,8 +155,14 @@ export function cancelComposerExpand(): boolean {
   return true;
 }
 
+/** Cancel only if the active expansion belongs to this textarea. */
+export function cancelComposerExpandFor(inputId: string): boolean {
+  if (activeRun?.input.id !== inputId) return false;
+  return cancelComposerExpand();
+}
+
 async function runExpand(btn: HTMLButtonElement, target: ExpandTarget): Promise<void> {
-  const input = resolveInput(target);
+  const input = expandInputByButton.get(btn) ?? resolveInput(target);
   const original = input?.value ?? '';
   if (!input || !original.trim()) return;
 
@@ -196,9 +236,14 @@ function onComposerKeydown(event: KeyboardEvent): void {
   }
 }
 
-function bindInput(target: ExpandTarget, btn: HTMLButtonElement): void {
-  const input = resolveInput(target);
+function bindInput(
+  target: ExpandTarget,
+  btn: HTMLButtonElement,
+  root: ParentNode = document,
+): void {
+  const input = resolveInput(target, root);
   if (!input) return;
+  expandInputByButton.set(btn, input);
   if (!input.dataset.expandBound) {
     input.addEventListener('input', () => syncButtonEnabled(btn, input));
     input.addEventListener('keydown', onComposerKeydown);
@@ -207,38 +252,56 @@ function bindInput(target: ExpandTarget, btn: HTMLButtonElement): void {
   syncButtonEnabled(btn, input);
 }
 
-function ensureExpandButton(target: ExpandTarget): void {
-  const existing = document.getElementById(target.btnId);
-  if (existing instanceof HTMLButtonElement) {
-    bindInput(target, existing);
+function bindExpandButton(
+  target: ExpandTarget,
+  btn: HTMLButtonElement,
+  root: ParentNode = document,
+): void {
+  if (!btn.innerHTML.trim()) btn.innerHTML = EXPAND_MARKUP;
+  if (!btn.hasAttribute('aria-label')) btn.setAttribute('aria-label', IDLE_LABEL);
+  if (!btn.hasAttribute('aria-busy')) btn.setAttribute('aria-busy', 'false');
+  if (!btn.title) btn.title = IDLE_TITLE;
+  if (!btn.dataset.expandClickBound) {
+    btn.dataset.expandClickBound = '1';
+    btn.addEventListener('click', onExpandClick);
+  }
+  bindInput(target, btn, root);
+}
+
+function ensureExpandButton(target: ExpandTarget, root: ParentNode = document): void {
+  const existing = findEl(target.btnId, root);
+  if (existing?.tagName === 'BUTTON') {
+    bindExpandButton(target, existing as HTMLButtonElement, root);
     return;
   }
+  if (target.prebuilt) return;
 
   const anchor = target.anchorIds
-    .map((id) => document.getElementById(id))
-    .find((el): el is HTMLElement => el instanceof HTMLElement);
+    .map((id) => findEl(id, root))
+    .find((el): el is HTMLElement => Boolean(el));
   if (!anchor?.parentElement) return;
 
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.id = target.btnId;
-  btn.className = target.desktop
-    ? 'mn-os-desktop-comp-btn composer-expand-btn'
-    : 'input-inset-btn composer-expand-btn';
+  btn.className = target.bar
+    ? 'composer-expand-btn composer-expand-btn--bar'
+    : target.desktop
+      ? 'mn-os-desktop-comp-btn composer-expand-btn'
+      : 'input-inset-btn composer-expand-btn';
   btn.setAttribute('aria-label', IDLE_LABEL);
   btn.setAttribute('aria-busy', 'false');
   btn.title = IDLE_TITLE;
   btn.innerHTML = EXPAND_MARKUP;
   btn.disabled = true;
-  btn.addEventListener('click', onExpandClick);
+  bindExpandButton(target, btn, root);
   anchor.insertAdjacentElement('afterend', btn);
-  bindInput(target, btn);
 }
 
-/** Mount Expand buttons on the Code, Chat, and desktop composer surfaces. */
-export function initComposerExpand(): void {
+/** Mount Expand buttons. Pass a search root for disconnected Super Plan trees. */
+export function initComposerExpand(root: ParentNode = document): void {
   for (const target of TARGETS) {
-    ensureExpandButton(target);
+    ensureExpandButton(target, root);
   }
 }
 

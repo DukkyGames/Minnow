@@ -21,7 +21,7 @@ Then set the run up:
 | **Search** | Override the search provider for this run (engine chip) |
 | **Model** | On the composer bar: same picker as Code — binds the **active chat** for this run (Settings → Deep Research model applies when unset) |
 
-Press **Research**. A progress stepper shows each round as it happens; **Cancel** stops it.
+The sparkles control beside **Research** expands your draft into a fuller question in place before you start. Press **Research**. A progress stepper shows each round as it happens; **Cancel** stops it.
 
 **Codebase scope is underrated.** "How does authentication flow through this repo?" against Web + Codebase gives you an answer grounded in your actual code and in what the libraries you use are documented to do.
 

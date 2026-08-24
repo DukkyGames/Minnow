@@ -147,7 +147,11 @@ function readLocalSuperPlanConfig(): SuperPlanConfig {
 }
 
 function writeLocalSuperPlanConfig(config: SuperPlanConfig): void {
-  localStorage.setItem(SUPER_PLAN_META_STORAGE_KEY, JSON.stringify(config));
+  try {
+    localStorage.setItem(SUPER_PLAN_META_STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    /* private mode / missing localStorage in unit tests */
+  }
 }
 
 function extractSuperPlanFromMeta(meta: Record<string, unknown>): SuperPlanConfig {
@@ -230,12 +234,11 @@ function serializeSuperPlanForMeta(config: SuperPlanConfig): Record<string, unkn
   };
 }
 
-/** Persist partial Super Plan config via PUT /api/config/meta. */
-export async function saveSuperPlanConfig(
+function mergeSuperPlanPatch(
+  current: SuperPlanConfig,
   patch: Partial<SuperPlanConfig>,
-): Promise<SuperPlanConfig> {
-  const current = await loadSuperPlanConfig();
-  const next: SuperPlanConfig = {
+): SuperPlanConfig {
+  return {
     reviewRounds:
       patch.reviewRounds !== undefined
         ? clampReviewRounds(patch.reviewRounds)
@@ -280,6 +283,16 @@ export async function saveSuperPlanConfig(
         ? clampReviewTimeoutMs(patch.reviewTimeoutMs)
         : current.reviewTimeoutMs,
   };
+}
+
+/**
+ * Persist a partial Super Plan config. Cache and localStorage update before
+ * any await so chip labels can read the new values on the same turn.
+ */
+export async function saveSuperPlanConfig(
+  patch: Partial<SuperPlanConfig>,
+): Promise<SuperPlanConfig> {
+  const next = mergeSuperPlanPatch(getSuperPlanConfigSync(), patch);
   cachedSuperPlan = next;
   writeLocalSuperPlanConfig(next);
 

@@ -38,6 +38,8 @@ function installTestWindow(): void {
   activeWindow = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
+  globalThis.HTMLButtonElement = window.HTMLButtonElement;
+  globalThis.HTMLTextAreaElement = window.HTMLTextAreaElement;
 }
 
 const calls: string[] = [];
@@ -345,6 +347,66 @@ describe('super plan page', () => {
       'super-plan model trigger',
     );
     teardownSuperPlanPage();
+  });
+
+  test('.sp-opts must not clip popovers with overflow-x auto', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../src/styles/super-plan-page.css'),
+      'utf8',
+    );
+    const blocks = [...css.matchAll(/\.sp-opts\s*\{[^}]+\}/g)].map((match) => match[0]);
+    assert.ok(blocks.length > 0, '.sp-opts rule exists');
+    assert.ok(
+      blocks.some((block) => /overflow:\s*visible/.test(block)),
+      'main chip row keeps overflow visible',
+    );
+    assert.ok(
+      blocks.every((block) => !/overflow-x:\s*auto/.test(block)),
+      'no .sp-opts block may scroll horizontally',
+    );
+  });
+
+  test('Interview chip label updates on the first input event', () => {
+    installTestWindow();
+    const chat = makeRunChat('sp-interview-chip', 'grill');
+    chat.superPlan = undefined;
+    const root = mountPage(chat, 'compose');
+
+    const interviewChip = root.querySelector('#spChip-interview') as HTMLButtonElement;
+    assert.ok(interviewChip);
+    interviewChip.click();
+
+    const budget = root.querySelector('.sp-pop:not([hidden]) input[type="number"]') as HTMLInputElement;
+    assert.ok(budget);
+    budget.value = '12';
+    budget.dispatchEvent(new activeWindow!.Event('input', { bubbles: true }));
+
+    assert.match(interviewChip.textContent ?? '', /Interview · 12/);
+
+    const toggle = root.querySelector('.sp-pop:not([hidden]) input[type="checkbox"]') as HTMLInputElement;
+    toggle.checked = false;
+    toggle.dispatchEvent(new activeWindow!.Event('change', { bubbles: true }));
+    assert.match(interviewChip.textContent ?? '', /Interview off/);
+  });
+
+  test('compose bar mounts Expand immediately before send', () => {
+    installTestWindow();
+    const chat = makeRunChat('sp-expand', 'grill');
+    chat.superPlan = undefined;
+    const root = mountPage(chat, 'compose');
+
+    const expand = root.querySelector('#btnSuperPlanExpand') as HTMLButtonElement;
+    const send = root.querySelector('.sp-send') as HTMLButtonElement;
+    assert.ok(expand);
+    assert.ok(send);
+    assert.equal(expand.nextElementSibling, send);
+    assert.ok(expand.classList.contains('composer-expand-btn--bar'));
+    assert.equal(expand.disabled, true);
+
+    const field = root.querySelector('#superPlanPrompt') as HTMLTextAreaElement;
+    field.value = 'Plan the sync layer';
+    field.dispatchEvent(new activeWindow!.Event('input', { bubbles: true }));
+    assert.equal(expand.disabled, false);
   });
 
   test('chip popovers open one at a time', () => {

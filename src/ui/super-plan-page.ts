@@ -54,6 +54,7 @@ import {
 import { findChatById } from '../state/sessions';
 import type { Chat } from '../types';
 import { bindComposerAutoResize } from './composer-auto-resize';
+import { cancelComposerExpandFor, initComposerExpand } from './composer-expand';
 
 export const SUPER_PLAN_PAGE_ROOT_ID = 'superPlanPage';
 export const SUPER_PLAN_PAGE_QUESTIONS_ID = 'orchestratePlanScreenQuestions';
@@ -330,6 +331,9 @@ class SuperPlanPage {
     const shell = el('div', 'sp-shell');
     shell.append(this.buildRail(), this.buildMain(options));
     this.root.appendChild(shell);
+    // Composer Expand looks up #btnSuperPlanExpand under this root so the
+    // bind works before tests append the page to document.
+    if (this.mode === 'compose') initComposerExpand(this.root);
 
     void this.loadLibrary();
     this.autoCollapseRailWhenNarrow();
@@ -368,6 +372,8 @@ class SuperPlanPage {
   }
 
   destroy(): void {
+    // Abort an in-flight expand that belongs to this composer, not Code/Chat.
+    cancelComposerExpandFor('superPlanPrompt');
     this.unbindComposerResize?.();
     this.unbindComposerResize = null;
     this.railObserver?.disconnect();
@@ -699,6 +705,14 @@ class SuperPlanPage {
     modelAnchor.id = 'superPlanComposerModelAnchor';
     const spacer = el('div', 'sp-composer__spacer');
 
+    const expand = el('button', 'composer-expand-btn composer-expand-btn--bar');
+    expand.type = 'button';
+    expand.id = 'btnSuperPlanExpand';
+    expand.setAttribute('aria-label', 'Expand prompt');
+    expand.setAttribute('aria-busy', 'false');
+    expand.title = 'Expand prompt into a fuller version';
+    expand.disabled = true;
+
     const send = el('button', 'sp-send');
     send.type = 'button';
     send.setAttribute('aria-label', 'Start planning');
@@ -727,7 +741,7 @@ class SuperPlanPage {
     // Grow with extra lines the same way Code/Chat do (CSS field-sizing + JS fallback).
     this.unbindComposerResize = bindComposerAutoResize(field);
 
-    bar.append(opts, spacer, modelAnchor, send);
+    bar.append(opts, spacer, modelAnchor, expand, send);
     composer.append(field, bar);
     mountComposerModelTrigger(modelAnchor, 'super-plan');
 
@@ -859,20 +873,23 @@ class SuperPlanPage {
       return wrapper;
     };
 
-    // Interview
+    // Interview — labels read the live controls, not the async-saved cache.
+    let interviewToggle!: HTMLInputElement;
+    let interviewBudget!: HTMLInputElement;
     makeChip(
       'interview',
       () =>
-        getSuperPlanConfigSync().grillEnabled
-          ? `Interview · ${getSuperPlanConfigSync().grillQuestionBudget}`
+        interviewToggle.checked
+          ? `Interview · ${interviewBudget.value}`
           : 'Interview off',
-      () => getSuperPlanConfigSync().grillQuestionBudget !== 20,
-      () => !getSuperPlanConfigSync().grillEnabled,
+      () => Number(interviewBudget.value) !== 20,
+      () => !interviewToggle.checked,
       (pop, sync) => {
         const toggleLabel = el('label', 'sp-field__check');
         const toggle = document.createElement('input');
         toggle.type = 'checkbox';
         toggle.checked = config.grillEnabled;
+        interviewToggle = toggle;
         toggleLabel.append(toggle, document.createTextNode('Run the interview stage'));
         toggle.addEventListener('change', () => {
           patch({ grillEnabled: toggle.checked });
@@ -880,39 +897,42 @@ class SuperPlanPage {
         });
         pop.appendChild(toggleLabel);
 
-        const budget = el('input', 'sp-input');
+        const budget = el('input', 'sp-input') as HTMLInputElement;
         budget.type = 'number';
         budget.min = '5';
         budget.max = '40';
         budget.value = String(config.grillQuestionBudget);
-        budget.addEventListener('change', () => {
+        interviewBudget = budget;
+        const commitBudget = (): void => {
           patch({ grillQuestionBudget: Number(budget.value) });
           sync();
-        });
+        };
+        budget.addEventListener('input', commitBudget);
+        budget.addEventListener('change', commitBudget);
         field(pop, 'Questions', budget, 'Roughly how many the interview aims for.');
       },
     );
 
     // Research
+    let researchToggle!: HTMLInputElement;
+    let researchScope!: HTMLSelectElement;
+    let researchDepth!: HTMLSelectElement;
     makeChip(
       'research',
       () => {
-        const c = getSuperPlanConfigSync();
-        if (!c.researchEnabled) return 'Research off';
-        return `Research · ${RESEARCH_SCOPE_LABEL[c.researchScope]} · ${
-          RESEARCH_DEPTH_LABEL[c.researchDepth]
+        if (!researchToggle.checked) return 'Research off';
+        return `Research · ${RESEARCH_SCOPE_LABEL[researchScope.value as ResearchScope]} · ${
+          RESEARCH_DEPTH_LABEL[researchDepth.value as SuperPlanResearchDepth]
         }`;
       },
-      () => {
-        const c = getSuperPlanConfigSync();
-        return c.researchScope !== 'both' || c.researchDepth !== 'auto';
-      },
-      () => !getSuperPlanConfigSync().researchEnabled,
+      () => researchScope.value !== 'both' || researchDepth.value !== 'auto',
+      () => !researchToggle.checked,
       (pop, sync) => {
         const toggleLabel = el('label', 'sp-field__check');
         const toggle = document.createElement('input');
         toggle.type = 'checkbox';
         toggle.checked = config.researchEnabled;
+        researchToggle = toggle;
         toggleLabel.append(toggle, document.createTextNode('Run Deep Research'));
         toggle.addEventListener('change', () => {
           patch({ researchEnabled: toggle.checked });
@@ -920,98 +940,96 @@ class SuperPlanPage {
         });
         pop.appendChild(toggleLabel);
 
-        field(
-          pop,
-          'Scope',
-          select(
-            [
-              { value: 'both', label: 'Web and codebase' },
-              { value: 'web', label: 'Web only' },
-              { value: 'codebase', label: 'Codebase only' },
-            ],
-            config.researchScope,
-            (value) => {
-              patch({ researchScope: value as ResearchScope });
-              sync();
-            },
-          ),
+        const scopeWrap = select(
+          [
+            { value: 'both', label: 'Web and codebase' },
+            { value: 'web', label: 'Web only' },
+            { value: 'codebase', label: 'Codebase only' },
+          ],
+          config.researchScope,
+          (value) => {
+            patch({ researchScope: value as ResearchScope });
+            sync();
+          },
         );
+        researchScope = scopeWrap.querySelector('select')!;
+        field(pop, 'Scope', scopeWrap);
 
-        field(
-          pop,
-          'Depth',
-          select(
-            [
-              { value: 'auto', label: 'Auto' },
-              { value: 'quick', label: 'Quick (2 rounds)' },
-              { value: 'standard', label: 'Standard (3 rounds)' },
-              { value: 'deep', label: 'Deep (5 rounds)' },
-            ],
-            config.researchDepth,
-            (value) => {
-              patch({ researchDepth: value as SuperPlanResearchDepth, researchMaxRounds: 0 });
-              sync();
-            },
-          ),
+        const depthWrap = select(
+          [
+            { value: 'auto', label: 'Auto' },
+            { value: 'quick', label: 'Quick (2 rounds)' },
+            { value: 'standard', label: 'Standard (3 rounds)' },
+            { value: 'deep', label: 'Deep (5 rounds)' },
+          ],
+          config.researchDepth,
+          (value) => {
+            patch({ researchDepth: value as SuperPlanResearchDepth, researchMaxRounds: 0 });
+            sync();
+          },
         );
+        researchDepth = depthWrap.querySelector('select')!;
+        field(pop, 'Depth', depthWrap);
       },
     );
 
     // Reviews
+    let reviewSelect!: HTMLSelectElement;
     makeChip(
       'reviews',
       () => {
-        const n = getSuperPlanConfigSync().reviewRounds;
+        const n = Number(reviewSelect.value);
         return n === 0 ? 'No review' : `${n} review${n === 1 ? '' : 's'}`;
       },
-      () => getSuperPlanConfigSync().reviewRounds !== 2,
-      () => getSuperPlanConfigSync().reviewRounds === 0,
+      () => Number(reviewSelect.value) !== 2,
+      () => Number(reviewSelect.value) === 0,
       (pop, sync) => {
+        const wrap = select(
+          [
+            { value: '0', label: 'None' },
+            { value: '1', label: '1 pass' },
+            { value: '2', label: '2 passes' },
+            { value: '3', label: '3 passes' },
+            { value: '4', label: '4 passes' },
+          ],
+          String(config.reviewRounds),
+          (value) => {
+            patch({ reviewRounds: Number(value) });
+            sync();
+          },
+        );
+        reviewSelect = wrap.querySelector('select')!;
         field(
           pop,
           'Draft and review cycles',
-          select(
-            [
-              { value: '0', label: 'None' },
-              { value: '1', label: '1 pass' },
-              { value: '2', label: '2 passes' },
-              { value: '3', label: '3 passes' },
-              { value: '4', label: '4 passes' },
-            ],
-            String(config.reviewRounds),
-            (value) => {
-              patch({ reviewRounds: Number(value) });
-              sync();
-            },
-          ),
+          wrap,
           'Each pass sends the draft to the plan reviewer, then rewrites it.',
         );
       },
     );
 
     // Impeccable
+    let impeccableSelect!: HTMLSelectElement;
     makeChip(
       'impeccable',
-      () => `UI pass · ${getSuperPlanConfigSync().impeccable}`,
-      () => getSuperPlanConfigSync().impeccable !== 'auto',
-      () => getSuperPlanConfigSync().impeccable === 'never',
+      () => `UI pass · ${impeccableSelect.value}`,
+      () => impeccableSelect.value !== 'auto',
+      () => impeccableSelect.value === 'never',
       (pop, sync) => {
-        field(
-          pop,
-          'Impeccable UI pass',
-          select(
-            [
-              { value: 'auto', label: 'When the plan touches UI' },
-              { value: 'always', label: 'Always' },
-              { value: 'never', label: 'Never' },
-            ],
-            config.impeccable,
-            (value) => {
-              patch({ impeccable: value as SuperPlanImpeccableMode });
-              sync();
-            },
-          ),
+        const wrap = select(
+          [
+            { value: 'auto', label: 'When the plan touches UI' },
+            { value: 'always', label: 'Always' },
+            { value: 'never', label: 'Never' },
+          ],
+          config.impeccable,
+          (value) => {
+            patch({ impeccable: value as SuperPlanImpeccableMode });
+            sync();
+          },
         );
+        impeccableSelect = wrap.querySelector('select')!;
+        field(pop, 'Impeccable UI pass', wrap);
       },
     );
 

@@ -8,7 +8,7 @@ It is slower than asking for a plan. That is the entire point.
 
 Open the caret under **Plan** in the composer and choose **Super Plan**, or start from the Orchestrate plan screen. Describe what you want in as much or as little detail as you have.
 
-On the compose screen, pick the model on the composer bar (same catalog as Code). That binding is what grill, spec, drafts, and finalize use unless you set separate stage overrides in Settings.
+On the compose screen, pick the model on the composer bar (same catalog as Code). That binding is what grill, spec, drafts, and finalize use unless you set separate stage overrides in Settings. The sparkles control beside **Start planning** expands your draft into a fuller prompt in place before you send.
 
 Super Plan writes plans and reference documents. Like Plan mode, it cannot edit the rest of your repository — the mutating file and git tools are removed.
 

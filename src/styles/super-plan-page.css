@@ -498,26 +498,25 @@ html.mn-super-plan-open #sidebarBackdrop {
 
 /* ── Option chips ──────────────────────────────────────────────────────── */
 
+/*
+ * Wrap like Research `.rs-opts`. Overflow-x: auto here also clips y (CSS
+ * spec: a visible axis becomes auto when the other is not visible), which
+ * hid `.sp-pop` sitting above the 27px chip row.
+ */
 .sp-opts {
   display: flex;
   align-items: center;
   flex: 1 1 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 5px;
   min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.sp-opts::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 
 .sp-opt {
   position: relative;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .sp-chip {
