@@ -11,7 +11,8 @@ import {
 /** Built-in provider ids that always resolve to local inference. */
 export const KNOWN_LOCAL_PROVIDER_IDS = new Set(['lm-studio-local', 'vite-fallback']);
 
-const BUILTIN_LOCAL_TEMPLATE_KWARGS_IDS = new Set<string>([
+/** Minnow's own local serves — always on-device regardless of how the URL reads. */
+const BUILTIN_LOCAL_SERVE_IDS = new Set<string>([
   LLAMA_CPP_LOCAL_PROVIDER_ID,
   MLX_LM_LOCAL_PROVIDER_ID,
 ]);
@@ -45,8 +46,21 @@ export function isKnownLocalProviderId(providerId: string): boolean {
 export function providerSupportsChatTemplateKwargs(
   provider: Pick<ProviderPublic, 'id' | 'baseUrl'>,
 ): boolean {
-  if (BUILTIN_LOCAL_TEMPLATE_KWARGS_IDS.has(provider.id.trim())) {
+  if (BUILTIN_LOCAL_SERVE_IDS.has(provider.id.trim())) {
     return true;
   }
+  return isLocalProviderBaseUrl(provider.baseUrl);
+}
+
+/**
+ * True when inference for this provider runs on this machine.
+ *
+ * Callers use it to decide whether the renderer is competing with the model for local
+ * hardware — see `ui/motion-ticker.ts`, which steps animation down to 8 Hz so the GPU's
+ * 3D queue is not shared with a spinner during decode.
+ */
+export function isLocalProvider(provider: Pick<ProviderPublic, 'id' | 'baseUrl'>): boolean {
+  const id = provider.id.trim();
+  if (BUILTIN_LOCAL_SERVE_IDS.has(id) || isKnownLocalProviderId(id)) return true;
   return isLocalProviderBaseUrl(provider.baseUrl);
 }

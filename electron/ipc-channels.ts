@@ -112,6 +112,7 @@ export const WINDOW_IS_MAXIMIZED = 'minnow:window:is-maximized';
 export const WINDOW_RESTORE_FOCUS = 'minnow:window:restore-focus';
 /** Main → renderer: shell window maximized state changed. */
 export const WINDOW_MAXIMIZED_CHANGED = 'minnow:window:maximized-changed';
+export const WINDOW_VISIBILITY_CHANGED = 'minnow:window:visibility-changed';
 
 /** Renderer → main: tray status snapshot for menu labels. */
 export const TRAY_PUBLISH_STATUS = 'minnow:tray:publish-status';

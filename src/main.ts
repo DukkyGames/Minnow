@@ -78,6 +78,7 @@ import {
   measureBootPhase,
 } from './boot/boot-metrics';
 import { initTheme } from './ui/theme';
+import { initRenderIdleTracking } from './boot/render-idle';
 import { initMobileLayout } from './ui/mobile-layout';
 import { initAttachments } from './attachments/store';
 import { initShellHandlers } from './ui/shell-handlers';
@@ -563,6 +564,9 @@ installFetchAuth();
 registerServiceWorker();
 
 initTheme();
+// Park decorative animation while the window is hidden — a tray-hidden shell should not
+// hold the GPU's 3D queue open against a local model's decode loop.
+initRenderIdleTracking();
 
 // Stamp mn-phone / mn-tablet / mn-touch before first paint so the shell never
 // renders a desktop layout and then reflows into the phone one.

@@ -260,6 +260,8 @@ import {
   syncPerChatModelBindingFromCatalog,
 } from '../ui/default-model';
 import { getActiveProvider } from '../providers/store';
+import { isLocalProvider } from '../providers/provider-host';
+import { acquireTickedMotion } from '../ui/motion-ticker';
 import {
   canSendImagesToModel,
   isImageRejectionError,
@@ -1132,6 +1134,13 @@ async function streamCompletionTurn(
     }
   }
 
+  // Decode and the renderer share one GPU, and a CSS animation costs a compositor frame
+  // every vsync for as long as it runs — several tok/s, measurably, on a local serve. Step
+  // the working indicators down to 8 Hz for the length of the stream. Not gated on
+  // `domVisible`: a background chat still spins a ring in the rail. No-op for cloud
+  // providers, where there is no local decode to protect.
+  const releaseTickedMotion = isLocalProvider(provider) ? acquireTickedMotion() : null;
+
   try {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -1226,6 +1235,7 @@ async function streamCompletionTurn(
     }
     throw err;
   } finally {
+    releaseTickedMotion?.();
     finishStreamEarly = null;
     setSteerEnqueuedListener(null);
   }

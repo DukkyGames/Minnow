@@ -300,6 +300,30 @@ function wireShellWindowState(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', emit);
 }
 
+/**
+ * Push window visibility to the renderer so it can stop producing frames while hidden.
+ *
+ * `backgroundThrottling: false` (below) keeps AFK timers and SSE alive when the window is
+ * minimised or in the tray — but it also stops Chromium from throttling the compositor, so
+ * decorative CSS animations keep the GPU's 3D queue busy for a window nobody is looking at.
+ * That is measurable: a local llama.cpp serve runs several tok/s slower with Minnow hidden
+ * in the tray than minimised. Timers stay unthrottled; only animation pauses.
+ */
+function wireShellWindowVisibility(win: BrowserWindow): void {
+  const emit = (): void => {
+    if (win.isDestroyed()) return;
+    // `isVisible()` is false for tray-hidden windows, true-but-minimised otherwise.
+    const visible = win.isVisible() && !win.isMinimized();
+    win.webContents.send(channels.WINDOW_VISIBILITY_CHANGED, visible);
+  };
+
+  win.on('show', emit);
+  win.on('hide', emit);
+  win.on('minimize', emit);
+  win.on('restore', emit);
+  win.webContents.on('did-finish-load', emit);
+}
+
 /** Ask the renderer to system-pause running boards before tearing down the server. */
 async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<void> {
   if (win.isDestroyed()) return;
@@ -455,6 +479,8 @@ async function createMainWindow(): Promise<BrowserWindow> {
       backgroundThrottling: false,
     },
   });
+
+  wireShellWindowVisibility(win);
 
   wireShellZoom(win, {
     readPercent: async () => shellZoomPercent,

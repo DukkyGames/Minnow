@@ -282,6 +282,8 @@ export interface MinnowWindowApi {
   /** Restore shell and renderer focus after a blocking native dialog. */
   restoreFocus?(): Promise<void>;
   onMaximizedChanged(callback: (maximized: boolean) => void): () => void;
+  /** Optional: absent on a preload from an older build until the shell restarts. */
+  onVisibilityChanged?(callback: (visible: boolean) => void): () => void;
 }
 
 export interface MinnowLastCrashMarker {

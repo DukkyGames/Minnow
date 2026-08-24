@@ -66,7 +66,20 @@
   background: var(--mn-danger, oklch(0.62 0.18 15));
   height: 3px;
   transform-origin: bottom center;
-  animation: composer-mic-bar-dance 0.55s var(--ease-out) infinite alternate;
+}
+
+/* The bars sit under `opacity: 0` until the mic is detecting, and opacity does not
+   stop an animation — declared on the base selector these three danced at the display
+   refresh rate in every chat, mic or no mic, holding the GPU compositor open for the
+   whole session. Attach the animation only while detecting.
+   Longhands, not the `animation` shorthand: the shorthand resets `animation-delay`
+   and would flatten the per-bar stagger set on the :nth-child rules below. */
+.composer-mic-btn--detecting .composer-mic-btn__bars span {
+  animation-name: composer-mic-bar-dance;
+  animation-duration: 0.55s;
+  animation-timing-function: var(--ease-out);
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
 }
 
 .composer-mic-btn__bars span:nth-child(1) {

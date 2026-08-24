@@ -2,6 +2,14 @@
 const APP_READY_STYLE_TIMEOUT_MS = 4_000;
 
 /**
+ * Grace period before the faded loader leaves the DOM — the `html.app-ready` opacity
+ * transition in `index.html` is 0.22s. Removal matters: the loader is
+ * `position: fixed; inset: 0`, so leaving it parked at `opacity: 0` keeps a
+ * full-viewport composited layer alive for the whole session.
+ */
+export const APP_LOADER_REMOVE_DELAY_MS = 260;
+
+/**
  * Sentinel custom property declared on `:root` by `styles/tokens.css`. The inline
  * critical CSS in `index.html` only *consumes* tokens (with fallbacks) and declares
  * none, so resolving this proves the bundled stylesheet is applied.
@@ -200,6 +208,10 @@ export function markAppReady(): void {
   if (loader) {
     loader.setAttribute('aria-busy', 'false');
     loader.setAttribute('aria-hidden', 'true');
+    // Drop it once the fade ends. Until this landed the loader lived forever at
+    // `opacity: 0` with its spinner still animating, which is enough on its own to
+    // keep the GPU compositor producing frames at the display refresh rate.
+    window.setTimeout(() => loader.remove(), APP_LOADER_REMOVE_DELAY_MS);
   }
   const status = document.getElementById('appLoaderStatus');
   if (status) status.textContent = '';

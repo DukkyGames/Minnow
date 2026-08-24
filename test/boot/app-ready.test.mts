@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Window } from 'happy-dom';
 import {
+  APP_LOADER_REMOVE_DELAY_MS,
   APP_CSS_READY_PROPERTY,
   isAppShellStyled,
   isChromeReady,
+  markAppReady,
   markChromeReady,
   resetAppReadyForTests,
   scheduleMarkAppReady,
@@ -239,5 +241,37 @@ describe('dual-gate chrome ready', () => {
       tick();
     });
     assert.equal(win.document.documentElement.classList.contains('app-ready'), true);
+  });
+});
+
+describe('boot loader teardown', () => {
+  let win: Window;
+
+  afterEach(() => {
+    resetAppReadyForTests();
+    win?.close();
+  });
+
+  it('removes the loader after the fade so its spinner stops animating', async () => {
+    win = new Window();
+    const g = globalThis as typeof globalThis & { document: Document; window: Window };
+    g.document = win.document as unknown as Document;
+    g.window = win;
+    win.document.body.innerHTML =
+      '<div id="app-loader"><div class="app-loader__spinner"></div>' +
+      '<p id="appLoaderStatus">Loading…</p></div>';
+
+    markAppReady();
+
+    // Still present during the opacity transition, but flagged done for a11y.
+    const during = win.document.getElementById('app-loader');
+    assert.ok(during);
+    assert.equal(during.getAttribute('aria-hidden'), 'true');
+    assert.equal(win.document.documentElement.classList.contains('app-ready'), true);
+
+    await new Promise((resolve) => setTimeout(resolve, APP_LOADER_REMOVE_DELAY_MS + 60));
+
+    // A full-viewport fixed layer at opacity 0 still composites — it must be gone.
+    assert.equal(win.document.getElementById('app-loader'), null);
   });
 });

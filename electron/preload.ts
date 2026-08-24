@@ -346,6 +346,13 @@ const minnowBridge = {
         ipcRenderer.removeListener(channels.WINDOW_MAXIMIZED_CHANGED, handler);
       };
     },
+    onVisibilityChanged: (callback: (visible: boolean) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, visible: boolean) => callback(visible);
+      ipcRenderer.on(channels.WINDOW_VISIBILITY_CHANGED, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.WINDOW_VISIBILITY_CHANGED, handler);
+      };
+    },
   },
   updater: {
     getStatus: (): Promise<UpdaterStatus | null> =>

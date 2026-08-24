@@ -136,6 +136,13 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* The loader fades out but stays a full-viewport fixed layer until app-ready.ts
+     removes it. `opacity: 0` does not stop the spinner, and a running animation
+     keeps the compositor producing a frame every vsync for the life of the app —
+     measurable as lost tok/s when hosting a local model. Stop it at reveal. */
+  html.app-ready .app-loader__spinner {
+    animation: none;
+  }
   .app-loader__mark {
     width: 56px;
     height: 56px;

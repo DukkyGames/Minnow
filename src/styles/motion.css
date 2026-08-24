@@ -20,3 +20,21 @@
     animation: none;
   }
 }
+
+/**
+ * Hidden-window animation park.
+ *
+ * `data-mn-render="idle"` is set by `src/boot/render-idle.ts` while the window is
+ * minimised, tray-hidden, or occluded. The shell disables Chromium's background
+ * throttling to keep AFK timers and SSE alive, which also leaves the compositor
+ * producing a frame every vsync for animations nobody can see — measurable as lost
+ * tok/s on a machine hosting a local model. Pausing is enough: no layout changes, and
+ * every animation resumes mid-cycle when the window comes back.
+ */
+:root[data-mn-render='idle'],
+:root[data-mn-render='idle'] *,
+:root[data-mn-render='idle'] *::before,
+:root[data-mn-render='idle'] *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
