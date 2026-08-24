@@ -579,18 +579,28 @@ function displayedFor(model: LibraryModel): DisplayedLaunch {
   return displayedLaunchFrom(draft, plan, trainCtx);
 }
 
-function sliderValueFromNGpu(nGpuLayers: number | null | undefined, maxLayers: number): number {
-  if (nGpuLayers === 0) return 0;
-  // Auto (null) sits at max visually; the label says Auto, not "all / 999".
-  if (nGpuLayers == null) return maxLayers;
-  return Math.min(maxLayers, Math.max(0, nGpuLayers));
+/**
+ * llama.cpp offload slots for a model with `nLayers` repeating blocks. The output layer
+ * takes a slot of its own, so "everything on the GPU" is `nLayers + 1` — at `-ngl nLayers`
+ * llama.cpp offloads the output layer plus only `nLayers - 1` blocks and leaves one block
+ * on the CPU, which costs ~25% tok/s for no VRAM saving.
+ */
+function offloadSlotCount(maxLayers: number): number {
+  return maxLayers + 1;
 }
 
-function nGpuLayersFromSlider(sliderValue: number, maxLayers: number): number {
+function sliderValueFromNGpu(nGpuLayers: number | null | undefined, slots: number): number {
+  if (nGpuLayers === 0) return 0;
+  // Auto (null) sits at max visually; the label says Auto, not "all / 999".
+  if (nGpuLayers == null) return slots;
+  return Math.min(slots, Math.max(0, nGpuLayers));
+}
+
+function nGpuLayersFromSlider(sliderValue: number, slots: number): number {
   if (sliderValue <= 0) return 0;
-  // Send the real layer count, not 999 — 999 was the old "all" sentinel the server
+  // Send the real slot count, not 999 — 999 was the old "all" sentinel the server
   // could not tell from a deliberate user choice.
-  return Math.min(maxLayers, sliderValue);
+  return Math.min(slots, sliderValue);
 }
 
 function formatGpuLayersSliderLabel(
@@ -600,7 +610,8 @@ function formatGpuLayersSliderLabel(
 ): string {
   if (auto) return 'Auto';
   if (sliderValue <= 0) return 'CPU only';
-  if (sliderValue >= maxLayers) return `All (${maxLayers})`;
+  // Top of the range is every block plus the output layer — report the block count.
+  if (sliderValue >= offloadSlotCount(maxLayers)) return `All (${maxLayers})`;
   return String(sliderValue);
 }
 
@@ -625,8 +636,9 @@ function gpuLayersSlider(
   onChange: (nGpuLayers: number | null) => void,
 ): HTMLElement {
   const maxLayers = estimateTransformerLayerCount(model.paramsB, memoryHints(model));
+  const slots = offloadSlotCount(maxLayers);
   const auto = displayed.n_gpu_layers == null;
-  const sliderValue = sliderValueFromNGpu(displayed.n_gpu_layers, maxLayers);
+  const sliderValue = sliderValueFromNGpu(displayed.n_gpu_layers, slots);
   // Same label-wrap trap as contextLengthField: keep the range outside <label>.
   const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
@@ -649,7 +661,7 @@ function gpuLayersSlider(
   const range = el('input', 'models-field__range') as HTMLInputElement;
   range.type = 'range';
   range.min = '0';
-  range.max = String(maxLayers);
+  range.max = String(slots);
   range.step = '1';
   range.value = String(sliderValue);
   range.setAttribute('aria-valuemin', range.min);
@@ -671,7 +683,7 @@ function gpuLayersSlider(
     // First tick leaves auto: drop the hint and reveal Auto without remounting.
     wrap.querySelector('.models-field__auto-hint')?.remove();
     ensureGpuAutoRestoreButton(meta, () => onChange(null));
-    onChange(nGpuLayersFromSlider(nextSlider, maxLayers));
+    onChange(nGpuLayersFromSlider(nextSlider, slots));
   });
   bindLaunchRangeLifecycle(range);
   wrap.appendChild(range);

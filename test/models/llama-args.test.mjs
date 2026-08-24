@@ -96,7 +96,8 @@ describe('llama args', () => {
     });
     const { args, warning } = launch;
 
-    assert.equal(flagValue(args, '-ngl'), '32');
+    // nLayers + 1: llama.cpp spends one offload slot on the output layer.
+    assert.equal(flagValue(args, '-ngl'), '33');
     assert.equal(flagValue(args, '-c'), '128000');
     assert.equal(flagValue(args, '--fit'), 'off');
     assert.ok(warning);
@@ -403,8 +404,48 @@ describe('llama args', () => {
       ggufMeta: GGUF_8B,
       settings: { fit_mode: 'manual', n_gpu_layers: 32, ctx: 4096 },
     });
-    assert.equal(flagValue(full, '-ngl'), '32');
+    assert.equal(flagValue(full, '-ngl'), '33');
     assert.equal(full.indexOf('-t'), -1);
+  });
+
+  test('manual ngl at the layer count offloads every block (nLayers + 1)', () => {
+    // `-ngl 32` on a 32-block model leaves one block on the CPU: llama.cpp spends the
+    // first offload slot on the output layer. The slider's "All" must clear the model.
+    for (const requested of [32, 40]) {
+      const args = buildLlamaServerArgs({
+        modelPath: '/tmp/model.gguf',
+        port: 8085,
+        variant: 'cuda-12.4',
+        hardware: HW_12GB,
+        weightsBytes: WEIGHTS_8B_Q4_KM,
+        ggufMeta: GGUF_8B,
+        settings: { fit_mode: 'manual', n_gpu_layers: requested, ctx: 4096 },
+      });
+      assert.equal(flagValue(args, '-ngl'), '33');
+    }
+
+    // Partial offload is a real user choice and passes through untouched.
+    const partial = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { fit_mode: 'manual', n_gpu_layers: 31, ctx: 4096 },
+    });
+    assert.equal(flagValue(partial, '-ngl'), '31');
+
+    // No GGUF header means no layer count to reason about — do not invent one.
+    const noMeta = buildLlamaServerArgs({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      settings: { fit_mode: 'manual', n_gpu_layers: 32, ctx: 4096 },
+    });
+    assert.equal(flagValue(noMeta, '-ngl'), '32');
   });
 
   test('extra_args -t skips the default thread flag', () => {

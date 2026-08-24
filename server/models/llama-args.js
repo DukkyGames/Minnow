@@ -37,6 +37,23 @@ const LEGACY_OFFLOAD_ALL = 999;
 /** Manual launches this far over the planner budget get a serve-log warning (Phase 3 greps `fit planner`). */
 const FIT_PLANNER_OVERBUDGET_RATIO = 1.25;
 
+/**
+ * llama.cpp counts `n_layer + 1` offload slots: the output layer takes one, the repeating
+ * blocks take the rest. `-ngl <nLayers>` therefore offloads the output layer plus only
+ * `nLayers - 1` blocks and strands one block on the CPU — a measured ~25% tok/s loss on a
+ * 65-block 27B (30.7 -> full-offload), with no VRAM saving worth the trade. The GPU-layers
+ * slider tops out at "All", so a stored count at or above `nLayers` always meant all of them.
+ *
+ * @param {number} nGpuLayers
+ * @param {Record<string, unknown> | null | undefined} ggufMeta
+ * @returns {number}
+ */
+function fullOffloadNGpuLayers(nGpuLayers, ggufMeta) {
+  const nLayers = Number(ggufMeta?.nLayers);
+  if (!Number.isFinite(nLayers) || nLayers <= 0) return nGpuLayers;
+  return nGpuLayers >= nLayers ? nLayers + 1 : nGpuLayers;
+}
+
 
 /**
  * @typedef {object} LlamaServeSettings
@@ -534,7 +551,7 @@ export function buildLlamaServerLaunch(opts) {
   }
 
   if (merged.n_gpu_layers != null) {
-    args.push('-ngl', String(merged.n_gpu_layers));
+    args.push('-ngl', String(fullOffloadNGpuLayers(merged.n_gpu_layers, ggufMeta)));
   }
 
   // `cache_type` is the planner-owned auto value (the f16 → q8_0 → q4_0 ladder).
