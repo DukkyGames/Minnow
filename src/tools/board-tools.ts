@@ -18,8 +18,10 @@ import {
   isTaskReadyForAuto,
 } from '../state/orchestrate-board-store.ts';
 import {
+  appendBoardTasks,
   getBoardStateForPlanner,
   initBoard,
+  nextBoardWaveId,
   updateTask,
 } from '../state/orchestrate-board-store.ts';
 import {
@@ -33,7 +35,7 @@ import {
 } from '../state/orchestrate-board-actions.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
 import { findChatById, scheduleSaveSessions } from '../state/sessions.ts';
-import type { BoardCategory, BoardTask, BoardTaskStatus, Chat, OrchestrateBoardState } from '../types.ts';
+import type { BoardCategory, BoardRunInstructions, BoardTask, BoardTaskStatus, Chat, OrchestrateBoardState } from '../types.ts';
 
 export interface BoardExecutorContext {
   chatId: string;
@@ -364,6 +366,77 @@ export function validateBoardInitArgs(
   };
 }
 
+export type BoardAddTasksArgs = {
+  tasks: BoardInitArgs['tasks'];
+  wave: number | string;
+};
+
+export type ValidateBoardAddTasksResult =
+  | { ok: true; args: BoardAddTasksArgs }
+  | { ok: false; error: string };
+
+/**
+ * Validate board_add_tasks against the **merged** task set.
+ *
+ * Validating only the new tasks would miss every interesting failure: a new task
+ * duplicating an existing id, depending on a task that does not exist, or closing
+ * a cycle through existing tasks. So the existing board is folded into a synthetic
+ * board_init payload and run through {@link validateBoardInitArgs}, then the
+ * appended tail is sliced back off.
+ */
+export function validateBoardAddTasksArgs(
+  args: Record<string, unknown>,
+  board: OrchestrateBoardState | null | undefined,
+): ValidateBoardAddTasksResult {
+  if (!board) return { ok: false, error: 'Error: orchestrate board is not initialized' };
+
+  const rawTasks = coerceToolArrayField(args.tasks);
+  if (!rawTasks || !rawTasks.length) {
+    return { ok: false, error: 'Error: board_add_tasks requires non-empty "tasks"' };
+  }
+
+  const waveId = args.wave != null ? parseWaveId(args.wave) : nextBoardWaveId(board);
+  if (waveId === null) {
+    return { ok: false, error: 'Error: board_add_tasks "wave" must be a number or string id' };
+  }
+
+  // Every new task lands in the appended wave unless it names an existing one.
+  const knownWaves = new Set(board.waves.map((w) => String(w.id)));
+  const newTasks = rawTasks.map((item) => {
+    const r = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+    const named = r.wave != null ? parseWaveId(r.wave) : null;
+    const wave = named != null && knownWaves.has(String(named)) ? named : waveId;
+    return { ...r, wave };
+  });
+
+  const merged = validateBoardInitArgs(
+    {
+      plan_path: board.planPath || 'board',
+      waves: [...board.waves.map((w) => ({ id: w.id })), { id: waveId }].filter(
+        // The appended wave may already exist when the caller named one.
+        (w, i, all) => all.findIndex((o) => String(o.id) === String(w.id)) === i,
+      ),
+      tasks: [
+        ...board.tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          wave: t.wave,
+          category: t.category,
+          ...(t.dependsOn?.length ? { dependsOn: t.dependsOn } : {}),
+        })),
+        ...newTasks,
+      ],
+    },
+    null,
+  );
+  if (merged.ok === false) {
+    return { ok: false, error: merged.error.replace('board_init', 'board_add_tasks') };
+  }
+
+  const appended = merged.args.tasks.slice(board.tasks.length);
+  return { ok: true, args: { tasks: appended, wave: waveId } };
+}
+
 export type BoardUpdateTaskArgs = {
   task_id: string;
   status: BoardTaskStatus;
@@ -418,7 +491,26 @@ export type BoardReportArgs = {
   summary: string;
   blockers?: string[];
   failing_tasks?: string[];
+  /** FULL_BOARD only: commands the tester ran and verified. */
+  run_instructions?: BoardRunInstructions;
 };
+
+/** Read `run_instructions` off a board_report payload; only verified strings survive. */
+function parseRunInstructions(raw: unknown): BoardRunInstructions | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const pick = (key: string): string | undefined => {
+    const value = r[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  };
+  const out: BoardRunInstructions = {
+    ...(pick('install') ? { install: pick('install') } : {}),
+    ...(pick('start') ? { start: pick('start') } : {}),
+    ...(pick('test') ? { test: pick('test') } : {}),
+    ...(pick('notes') ? { notes: pick('notes') } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
+}
 
 export type ValidateBoardReportResult =
   | { ok: true; args: BoardReportArgs }
@@ -489,6 +581,9 @@ export function validateBoardReportArgs(
       if (!failing_tasks.includes(id)) failing_tasks.push(id);
     }
   }
+  const run_instructions = parseRunInstructions(
+    args.run_instructions ?? args.runInstructions,
+  );
   return {
     ok: true,
     args: {
@@ -497,6 +592,7 @@ export function validateBoardReportArgs(
       summary,
       ...(blockers?.length ? { blockers } : {}),
       ...(failing_tasks?.length ? { failing_tasks } : {}),
+      ...(run_instructions ? { run_instructions } : {}),
     },
   };
 }
@@ -620,6 +716,14 @@ export async function executeBoardTool(
     return executeBoardUpdateTask(plannerChat, args);
   }
 
+  if (name === 'board_add_tasks') {
+    const plannerChat = resolveOrchestratePlannerChat(options?.chatId);
+    if (!plannerChat) {
+      return 'Error: board tools require an active Orchestrate chat';
+    }
+    return executeBoardAddTasks(plannerChat, args);
+  }
+
   if (name === 'board_set_autonomy') {
     const plannerChat = resolveOrchestratePlannerChat(options?.chatId);
     if (!plannerChat) {
@@ -676,6 +780,41 @@ async function executeBoardInit(
   );
   executorContext = { chatId: chat.id, groupId: group.id };
   return JSON.stringify(board, null, 2);
+}
+
+async function executeBoardAddTasks(
+  chat: Chat,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const group = getOrCreateBoardGroup(chat);
+  const board = group.orchestrateBoard;
+  const validated = validateBoardAddTasksArgs(args, board);
+  if (validated.ok === false) return validated.error;
+
+  const appended = appendBoardTasks(
+    group,
+    validated.args.tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      wave: t.wave,
+      category: t.category,
+      build: t.build,
+      test: t.test,
+      dependsOn: t.dependsOn,
+    })),
+    chat,
+    { waveId: validated.args.wave },
+  );
+
+  return JSON.stringify(
+    {
+      wave: validated.args.wave,
+      added: appended.map((t: BoardTask) => ({ id: t.id, title: t.title, wave: t.wave })),
+      totalTasks: group.orchestrateBoard?.tasks.length ?? 0,
+    },
+    null,
+    2,
+  );
 }
 
 async function executeBoardUpdateTask(
@@ -891,7 +1030,8 @@ async function executeBoardReport(
     return 'Error: board_report requires a chat linked to an orchestrate board';
   }
   const { group, board } = ctx;
-  const { task_id, outcome, summary, blockers, failing_tasks } = validated.args;
+  const { task_id, outcome, summary, blockers, failing_tasks, run_instructions } =
+    validated.args;
   const callerChatId = resolveActiveChatId(overrideChatId);
   const callerChat = callerChatId ? findChatById(callerChatId) : null;
 
@@ -916,6 +1056,10 @@ async function executeBoardReport(
       recordedVerdict: outcomeToTestVerdict(outcome),
       summary,
       failingTaskIds: validatedFailing,
+      // Keep a previously reported set when this report omits them.
+      ...(run_instructions ?? priorFinal?.runInstructions
+        ? { runInstructions: run_instructions ?? priorFinal?.runInstructions }
+        : {}),
     };
     board.lastUpdatedAt = Date.now();
     scheduleSaveSessions();
@@ -926,6 +1070,9 @@ async function executeBoardReport(
         outcome,
         summary,
         failingTaskIds: validatedFailing,
+        ...(board.finalTest.runInstructions
+          ? { runInstructions: board.finalTest.runInstructions }
+          : {}),
       },
       null,
       2,

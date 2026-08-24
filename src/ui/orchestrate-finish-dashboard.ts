@@ -13,15 +13,18 @@ import {
   isOrchestrateBoardFinished,
   isOrchestrateFinalTestFailedWithAllTasksComplete,
 } from '../chat/orchestrate/plan-complete.ts';
-import { enrichFinishReportWithRecommendations } from '../chat/orchestrate/finish-recommendations.ts';
+import {
+  enrichFinishReportWithRecommendations,
+  enrichFinishReportWithRunInstructions,
+} from '../chat/orchestrate/finish-recommendations.ts';
 import { setAssistantBubbleContent } from '../markdown/renderer.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
 import {
+  appendFinalTestFixTask,
   clearBoardWorktreesAfterLanding,
   markBoardIntegrationLanded,
   restartBoardAfterRequeueFailures,
 } from '../state/orchestrate-board-actions.ts';
-import { getBoardExecutionMode } from '../state/orchestrate-board-store.ts';
 import {
   mergeIntegrationIntoWorkspace,
   openWorkspacePr,
@@ -81,6 +84,7 @@ function ensureFinishReport(
     scheduleSaveSessions();
   }
   void enrichFinishReportWithRecommendations(groupId, plannerChat, board);
+  void enrichFinishReportWithRunInstructions(groupId, plannerChat, board);
   return board.finishReport!.trim();
 }
 
@@ -816,13 +820,40 @@ export function renderFinishDashboard(
   subtitle.textContent = passedFinal
     ? 'All tasks passed the final integration test. Review the summary below, merge into your branch, or start a follow-up chat.'
     : finalFailed
-      ? 'Tasks merged, but the final integration test failed. Rerun failed tasks to reopen work, or use the board header to re-run the final test.'
+      ? 'Tasks merged, but the final integration test failed. Use Fix integration failures to add a fix task seeded from the tester report, or rerun failed tasks.'
       : 'Some tasks are quarantined or blocked. Rerun failed tasks to put them back on the board and resume auto run.';
   heroCopy.appendChild(title);
   heroCopy.appendChild(subtitle);
   hero.appendChild(badge);
   hero.appendChild(heroCopy);
   panel.appendChild(hero);
+
+  // What the tester actually said, rather than only the generic subtitle.
+  if (finalFailed) {
+    const detail = document.createElement('div');
+    detail.className = 'board-finish-dashboard__final-test';
+    detail.dataset.boardSection = 'final-test-failure';
+
+    const heading = document.createElement('h4');
+    heading.className = 'board-finish-dashboard__section-title';
+    heading.textContent = 'Final integration test';
+    detail.appendChild(heading);
+
+    const summary = document.createElement('p');
+    summary.className = 'board-finish-dashboard__final-test-summary';
+    summary.textContent =
+      board.finalTest?.summary?.trim() || 'The tester reported a failure without a summary.';
+    detail.appendChild(summary);
+
+    const failingIds = board.finalTest?.failingTaskIds ?? [];
+    if (failingIds.length) {
+      const blamed = document.createElement('p');
+      blamed.className = 'board-finish-dashboard__final-test-tasks';
+      blamed.textContent = `Tasks held responsible: ${failingIds.join(', ')}`;
+      detail.appendChild(blamed);
+    }
+    panel.appendChild(detail);
+  }
 
   const statsGrid = document.createElement('div');
   statsGrid.className = 'board-finish-dashboard__stats';
@@ -904,10 +935,8 @@ export function renderFinishDashboard(
     emitBoardChange(group.id);
   });
 
-  const execMode = getBoardExecutionMode(board);
-  const showRerunFailed =
-    (execMode === 'auto' || execMode === 'sequential') &&
-    (boardHasRecoverableTasks(board) || finalFailed);
+  // No mode gate: an AFK board's failures are exactly as rerunnable as any other's.
+  const showRerunFailed = boardHasRecoverableTasks(board) || finalFailed;
   let rerunBtn: HTMLButtonElement | null = null;
   if (showRerunFailed) {
     rerunBtn = document.createElement('button');
@@ -921,6 +950,27 @@ export function renderFinishDashboard(
         .then(() => emitBoardChange(group.id))
         .finally(() => {
           rerunBtn!.disabled = false;
+        });
+    });
+  }
+
+  // The final test failing is a gap *between* tasks that each passed their own
+  // tests, so reopening those tasks is the wrong shape — append a real fix task.
+  let fixBtn: HTMLButtonElement | null = null;
+  if (finalFailed) {
+    fixBtn = document.createElement('button');
+    fixBtn.type = 'button';
+    fixBtn.className = 'board-btn board-btn--compact board-btn--primary';
+    fixBtn.dataset.boardAction = 'fix-final-test';
+    fixBtn.textContent = 'Fix integration failures';
+    fixBtn.title =
+      'Add a fix task in a new wave seeded from the tester report, then re-run the final test';
+    fixBtn.addEventListener('click', () => {
+      fixBtn!.disabled = true;
+      void appendFinalTestFixTask(group, plannerChat)
+        .then(() => emitBoardChange(group.id))
+        .finally(() => {
+          fixBtn!.disabled = false;
         });
     });
   }
@@ -955,6 +1005,7 @@ export function renderFinishDashboard(
   const commitWrap = buildFinishGitAction(group, board, plannerChat, null, gitStatus);
 
   actions.appendChild(backBtn);
+  if (fixBtn) actions.appendChild(fixBtn);
   if (rerunBtn) actions.appendChild(rerunBtn);
   actions.appendChild(followUpBtn);
   actions.appendChild(commitWrap);

@@ -6,7 +6,12 @@ import { getOrchestrateBoardElapsedMs } from '../../state/orchestrate-board-stor
 import { findChatById } from '../../state/sessions.ts';
 import { workspaceLandingStats } from '../../state/worktree-service.ts';
 import { resolveIsolationMode } from '../../state/worktree-isolation.ts';
-import type { Chat, OrchestrateBoardState, Usage } from '../../types.ts';
+import type {
+  BoardRunInstructions,
+  Chat,
+  OrchestrateBoardState,
+  Usage,
+} from '../../types.ts';
 import { sumUsageSegments } from './stats-math.ts';
 
 /** Local + async git stats shown on the finish dashboard. */
@@ -104,6 +109,41 @@ function shortPlanLabel(planPath: string): string {
 export const FINISH_REPORT_RECOMMENDATIONS_PLACEHOLDER =
   '_Generating recommendations from the plan…_';
 
+/**
+ * Placeholder for run instructions the final tester did not report, replaced
+ * asynchronously by manifest detection ({@link detectProjectRunInstructions}).
+ */
+export const FINISH_REPORT_RUN_PLACEHOLDER = '_Detecting run commands…_';
+
+/** Swap the run-instructions placeholder for detected (unverified) commands. */
+export function mergeFinishReportRunInstructions(
+  report: string,
+  runMarkdown: string,
+): string {
+  const body = runMarkdown.trim() || '_No run commands detected for this project._';
+  if (report.includes(FINISH_REPORT_RUN_PLACEHOLDER)) {
+    return report.replace(FINISH_REPORT_RUN_PLACEHOLDER, body);
+  }
+  return report;
+}
+
+/** Render the tester's verified commands as a fenced block. */
+function formatVerifiedRunInstructions(run: BoardRunInstructions): string[] {
+  const commands = [run.install, run.start, run.test].filter(
+    (cmd): cmd is string => Boolean(cmd?.trim()),
+  );
+  const lines: string[] = [];
+  if (commands.length) {
+    lines.push('```bash', ...commands, '```');
+  }
+  if (run.notes?.trim()) {
+    lines.push('', run.notes.trim());
+  }
+  if (!lines.length) return ['_The tester reported no runnable commands._'];
+  lines.push('', '_Verified by the final integration tester._');
+  return lines;
+}
+
 /** Swap the recommendations placeholder for LLM output (or a fallback line). */
 export function mergeFinishReportRecommendations(
   report: string,
@@ -189,6 +229,9 @@ export function buildDeterministicFinishReport(
     }
   }
 
+  // Verified commands from the final tester beat anything we could infer; the
+  // placeholder is filled in from the project's manifests only when it has none.
+  const reported = board.finalTest?.runInstructions;
   lines.push(
     '',
     `## How to run`,
@@ -197,15 +240,11 @@ export function buildDeterministicFinishReport(
       ? 'From the workspace root (or the integration worktree):'
       : 'From the workspace root:',
     '',
-    '```bash',
-    'npm install',
-    'npm start',
-    '```',
-    '',
-    planPath
-      ? `_Plan reference: \`${planPath}\`_`
-      : '_Set a plan path on the board for project-specific run instructions._',
+    ...(reported ? formatVerifiedRunInstructions(reported) : [FINISH_REPORT_RUN_PLACEHOLDER]),
   );
+  if (planPath) {
+    lines.push('', `_Plan reference: \`${planPath}\`_`);
+  }
 
   return lines.join('\n');
 }

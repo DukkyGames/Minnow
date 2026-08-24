@@ -1117,6 +1117,49 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'board_add_tasks',
+    label: 'Board add tasks',
+    description:
+      'Append follow-up tasks to a running board in a new wave (board_init replaces the whole board).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_add_tasks',
+      'Append tasks to the existing board in a new wave. Use this for follow-up work — board_init would discard the board. Tasks may depend on existing task ids.',
+      {
+        tasks: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              category: {
+                type: 'string',
+                enum: ['build', 'fix', 'test', 'research'],
+              },
+              build: { type: 'string' },
+              test: { type: 'string' },
+              dependsOn: {
+                type: 'array',
+                description: 'Existing or new task ids this task waits on',
+                items: { type: 'string' },
+              },
+            },
+            required: ['id', 'title', 'category'],
+          },
+        },
+        wave: {
+          type: 'string',
+          description:
+            'Optional wave id. Omit to append a new wave after the highest existing one.',
+        },
+      },
+      ['tasks'],
+    ),
+  },
+  {
     id: 'board_update_task',
     label: 'Board update task',
     description: 'Update one board task status and metadata after board_init.',
@@ -1209,6 +1252,17 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           type: 'array',
           items: { type: 'string' },
           description: 'FULL_BOARD fail only: board task ids responsible for the failure',
+        },
+        run_instructions: {
+          type: 'object',
+          description:
+            'FULL_BOARD only: commands you actually ran and verified in this project. Omit any command you did not run — the finish report presents these as verified.',
+          properties: {
+            install: { type: 'string', description: 'e.g. npm install' },
+            start: { type: 'string', description: 'e.g. npm run dev' },
+            test: { type: 'string', description: 'e.g. npm test' },
+            notes: { type: 'string', description: 'Prerequisites or caveats worth stating' },
+          },
         },
       },
       ['task_id', 'outcome', 'summary'],

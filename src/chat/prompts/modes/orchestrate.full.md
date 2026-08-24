@@ -70,6 +70,7 @@ on the board before it activates.
 | Tool | Use |
 |------|-----|
 | `board_init` | Create/replace the board from parsed plan (required fields below) |
+| `board_add_tasks` | **Append** follow-up tasks to a board that already exists, in a new wave. Use this instead of `board_init`, which would throw the board away. |
 | `board_get_state` | Read board JSON (concurrency, hands-off, tasks, waves) |
 | `board_update_task` | Optional metadata; do not fake execution progress |
 | `board_set_autonomy` | Set `concurrency` (1–20) and/or request `handsOff`. Hands-off requires user confirmation before it activates. |
@@ -103,6 +104,28 @@ on the board before it activates.
 - Task chats are linked via `board_task_id` on `spawn_sub_agent` (set automatically — do not call `spawn_sub_agent`; the category field determines agent type)
 
 After `board_init`, end your turn. If the user enables **Auto** or **Sequential** on the board, the next ready wave starts automatically.
+
+### `board_add_tasks` shape
+
+Follow-up work on a board that is already running — never re-run `board_init` for this.
+
+```json
+{
+  "tasks": [
+    {
+      "id": "W3-FIX-A",
+      "title": "Fix failing integration test",
+      "category": "fix",
+      "build": "…what to change…",
+      "test": "…how to verify…"
+    }
+  ]
+}
+```
+
+- Omit `wave` to append a new wave after the highest existing one (the usual case).
+- `dependsOn` may reference **existing** task ids as well as new ones; cycles are rejected.
+- Ids must not collide with tasks already on the board.
 
 ### Skip per-task tests (board header)
 

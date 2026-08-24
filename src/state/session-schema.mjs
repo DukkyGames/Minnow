@@ -557,7 +557,21 @@ function ensureOrchestrateFinalTest(raw) {
   if (typeof r.summary === 'string' && r.summary.trim()) {
     out.summary = r.summary.trim();
   }
+  const runInstructions = ensureBoardRunInstructions(r.runInstructions);
+  if (runInstructions) out.runInstructions = runInstructions;
   return out;
+}
+
+/** Verified project commands reported by the final tester (board_report FULL_BOARD). */
+function ensureBoardRunInstructions(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const out = {};
+  for (const key of ['install', 'start', 'test', 'notes']) {
+    const value = r[key];
+    if (typeof value === 'string' && value.trim()) out[key] = value.trim();
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function ensureOrchestrateBoard(raw) {

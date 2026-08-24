@@ -41,12 +41,24 @@ export function isOrchestrateFinalTestFailedWithAllTasksComplete(
   return board.tasks.length > 0 && board.tasks.every((t) => t.status === 'complete');
 }
 
+/**
+ * The run is over and the final integration test failed.
+ *
+ * Deliberately looser than {@link isOrchestrateFinalTestFailedWithAllTasksComplete}:
+ * requiring *every* task to be `complete` meant one quarantined task hid the
+ * report entirely, which is exactly the run the user most needs to read.
+ */
+export function isOrchestrateFinalTestFailed(board: OrchestrateBoardState): boolean {
+  return board.finalTest?.status === 'failed' && isOrchestratePlanComplete(board);
+}
+
 /** Finish dashboard is available (passed final test, all-quarantined blocked, or final-test fail). */
 export function canAccessOrchestrateFinishDashboard(board: OrchestrateBoardState): boolean {
   if (isOrchestrateBoardFinished(board)) return true;
+  // A failed final test is a result, not a non-result — it always has a report.
+  if (isOrchestrateFinalTestFailed(board)) return true;
   if (board.completionShownAt == null) return false;
-  if (board.terminalBlocked === true) return true;
-  return isOrchestrateFinalTestFailedWithAllTasksComplete(board);
+  return board.terminalBlocked === true;
 }
 
 /** True when the finish dashboard should replace the kanban (MIN-208). */

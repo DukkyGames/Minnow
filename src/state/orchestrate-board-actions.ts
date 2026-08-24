@@ -88,7 +88,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logWorktreeReleased, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents, type OrchestrateBoardTimerContext } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logWorktreeReleased, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents, appendBoardTasks, nextBoardWaveId, type OrchestrateBoardTimerContext } from './orchestrate-board-store.ts';
 import {
   acquirePipelineHold,
   heldTaskIdsForOccupancy,
@@ -2119,7 +2119,12 @@ export function buildFinalIntegrationTestSeedMessage(
     taskList,
     '',
     'Exercise the whole app end-to-end. On failure, identify responsible task ids via board_get_state.',
-    `Report exactly once via board_report({ task_id: "${FULL_BOARD_TEST_ID}", outcome: "pass" | "fail", summary: "...", failing_tasks: [...] }).`,
+    '',
+    'Also determine how a person runs this project: actually run the install, start,',
+    'and test commands and note which ones worked. Report only commands you ran and',
+    'verified — omit anything you did not run rather than guessing from the manifest.',
+    '',
+    `Report exactly once via board_report({ task_id: "${FULL_BOARD_TEST_ID}", outcome: "pass" | "fail", summary: "...", failing_tasks: [...], run_instructions: { install, start, test, notes } }).`,
   ].join('\n');
 }
 
@@ -4802,6 +4807,11 @@ export function finalizeFinalTestOnStreamEnd(
     attempts,
     summary,
   };
+  // Reachable on the *first* failure, not only once retries are exhausted — the
+  // finish dashboard is where the user reads what failed and asks for a fix.
+  if (board.completionShownAt == null && isOrchestratePlanComplete(board)) {
+    board.completionShownAt = Date.now();
+  }
   board.lastUpdatedAt = Date.now();
   scheduleSaveSessions();
   emitBoardChange(group.id);
@@ -5130,6 +5140,117 @@ export async function resetAllFailedBoardTasks(
     await resetBoardTask(group, id, plannerChat);
   }
   return rootIds;
+}
+
+/** Task id for an appended integration-fix task, de-duped against the board. */
+function mintFixTaskId(board: OrchestrateBoardState, waveId: number | string): string {
+  const taken = new Set(board.tasks.map((t) => t.id));
+  const base = `${waveId}-FIX`;
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 100; n += 1) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base}-${Date.now()}`;
+}
+
+/** Build the spec for the appended fix task from what the final tester reported. */
+function buildFinalTestFixSpec(board: OrchestrateBoardState): string {
+  const summary = board.finalTest?.summary?.trim() || 'The final integration test failed.';
+  const failing = board.finalTest?.failingTaskIds ?? [];
+  const lines = [
+    'The full-board integration test failed after every task was merged.',
+    '',
+    'Reported failure:',
+    summary,
+  ];
+  if (failing.length) {
+    const named = failing
+      .map((id) => {
+        const task = board.tasks.find((t) => t.id === id);
+        return task ? `- ${task.id} — ${task.title}` : `- ${id}`;
+      })
+      .join('\n');
+    lines.push('', 'Tasks the tester held responsible:', named);
+  }
+  const testerChatId = board.finalTest?.chatId?.trim();
+  if (testerChatId) {
+    lines.push('', `Final tester chat: ${testerChatId}`);
+  }
+  lines.push(
+    '',
+    'Fix the integration failure across whatever files it touches, then report what you changed.',
+  );
+  return lines.join('\n');
+}
+
+/**
+ * Explicit "Fix integration failures" path from the finish dashboard.
+ *
+ * Appends one real `fix` task in a new wave rather than reopening the tasks that
+ * already passed their own tests — the failure is *between* them. Resets the
+ * final-test gate so `syncBoardRunCompletion` re-fires it once the fix goes
+ * terminal; no new trigger is needed.
+ *
+ * The automatic AFK path stays {@link applyFinalTestFailureReopens}.
+ */
+export async function appendFinalTestFixTask(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<string | null> {
+  const board = group.orchestrateBoard;
+  if (!board || board.finalTest?.status !== 'failed') return null;
+
+  const waveId = nextBoardWaveId(board);
+  const taskId = mintFixTaskId(board, waveId);
+  const spec = buildFinalTestFixSpec(board);
+
+  const appended = appendBoardTasks(
+    group,
+    [
+      {
+        id: taskId,
+        title: 'Fix final integration test failure',
+        wave: waveId,
+        category: 'fix',
+        build: spec,
+        test: 'Re-run the full test suite and confirm the integration failure is gone.',
+      },
+    ],
+    plannerChat,
+    { waveId },
+  );
+  if (!appended.length) return null;
+
+  // Same reset block restartBoardAfterRequeueFailures uses, so the dashboard
+  // stops claiming a finished run and the final test can fire again.
+  const chatId = board.finalTest.chatId;
+  const attempts = board.finalTest.attempts;
+  board.finalTest = {
+    ...(chatId ? { chatId } : {}),
+    ...(attempts != null ? { attempts } : {}),
+    status: 'pending',
+    recordedVerdict: undefined,
+    summary: undefined,
+    failingTaskIds: undefined,
+  };
+  delete board.completionShownAt;
+  delete board.finishReport;
+  delete board.wrapUpPending;
+  board.terminalBlocked = false;
+  board.dashboardDismissed = true;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+
+  // Start it now when the board is running; otherwise it waits on the board's
+  // own Start, exactly like any other planned task.
+  if (isBoardRunning(group)) {
+    await autoDelegateNext(group, plannerChat);
+  } else {
+    await startTask(group, taskId, plannerChat);
+  }
+  return taskId;
 }
 
 /**

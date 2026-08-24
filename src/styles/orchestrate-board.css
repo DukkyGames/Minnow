@@ -1020,6 +1020,30 @@
   min-height: 44px;
 }
 
+/* ---------- final-test failure detail (finish dashboard) ---------- */
+
+.board-finish-dashboard__final-test {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-danger-border, var(--mn-border));
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-danger-soft, transparent);
+}
+
+.board-finish-dashboard__final-test-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.board-finish-dashboard__final-test-tasks {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
 /* ---------- run-settings help lightbox ---------- */
 
 .board-header__run-help {

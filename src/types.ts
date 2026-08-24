@@ -672,6 +672,12 @@ export interface OrchestrateBoardState {
     recordedVerdict?: 'pass' | 'fail';
     failingTaskIds?: string[];
     summary?: string;
+    /**
+     * Commands the final tester **actually ran and verified**, reported via
+     * `board_report`. The finish report prints these instead of guessing; when
+     * absent it falls back to manifest detection and labels it unverified.
+     */
+    runInstructions?: BoardRunInstructions;
   };
   /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
   log?: BoardLogEvent[];
@@ -681,6 +687,14 @@ export interface OrchestrateBoardState {
   provisionedSignatures?: string[];
   /** Structured per-task unresolved issues — data source for the MIN-208 finish dashboard. */
   unresolvedIssues?: UnresolvedIssue[];
+}
+
+/** Verified project commands reported by the final integration tester. */
+export interface BoardRunInstructions {
+  install?: string;
+  start?: string;
+  test?: string;
+  notes?: string;
 }
 
 export type BoardLogLevel = 'info' | 'warn' | 'error';
@@ -763,6 +777,10 @@ export interface BoardLogDetail {
   error?: string;
   summary?: string;
   failingTaskIds?: string[];
+  /** Wave a `board_add_tasks` append landed in. */
+  waveId?: string;
+  /** Task ids appended to a running board. */
+  taskIds?: string[];
   /** Durable correlation id for one phase invocation. */
   phaseId?: string;
   phase?: BoardExecutionPhase;
