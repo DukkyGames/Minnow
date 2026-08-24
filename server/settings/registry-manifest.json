@@ -126,6 +126,27 @@
     ]
   },
   {
+    "key": "general.desktop.hardwareAcceleration",
+    "label": "Hardware acceleration",
+    "description": "Render the interface on the GPU. Turning it off frees the GPU for local models. Applies after a restart.",
+    "keywords": [
+      "gpu",
+      "acceleration",
+      "performance",
+      "render",
+      "graphics"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.notifications",
     "label": "Notifications",
     "description": "Menubar bell when background chats, tasks, or jobs need attention.",

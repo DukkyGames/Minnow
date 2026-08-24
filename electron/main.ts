@@ -28,8 +28,11 @@ import { resolveMinnowPort } from './minnow-port.js';
 import { disposeUpdater, initUpdater } from './updater.js';
 import {
   readCloseToTrayPreference,
+  readHardwareAccelerationPreference,
+  readHardwareAccelerationSync,
   readShellZoomPercent,
   writeCloseToTrayPreference,
+  writeHardwareAccelerationPreference,
   writeShellZoomPercent,
 } from './desktop-shell-config.js';
 import { applyShellZoom, DEFAULT_SHELL_ZOOM_PERCENT, shellZoomFactorFromPercent, wireShellZoom } from './shell-zoom.js';
@@ -270,6 +273,23 @@ function registerIpcHandlers(): void {
     const next = writeLoginItemOpenAtLogin(enabled);
     trayManager?.rebuildMenu();
     return next;
+  });
+
+  ipcMain.handle(channels.APP_GET_HARDWARE_ACCELERATION, () =>
+    readHardwareAccelerationPreference(),
+  );
+
+  ipcMain.handle(channels.APP_SET_HARDWARE_ACCELERATION, async (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return readHardwareAccelerationPreference();
+    return writeHardwareAccelerationPreference(enabled);
+  });
+
+  // app.exit(0) rather than app.quit(): quit() re-enters the close-to-tray and
+  // window-all-closed handlers, which can swallow it.
+  ipcMain.handle(channels.APP_RESTART, async () => {
+    await prepareQuitForUpdate();
+    app.relaunch();
+    app.exit(0);
   });
 
   ipcMain.handle(channels.SHELL_GET_ZOOM_PERCENT, () => shellZoomPercent);
@@ -669,6 +689,10 @@ function failBootstrap(err: unknown): void {
   );
   app.exit(1);
 }
+
+// Must run before Electron's `ready` event — disableHardwareAcceleration() is a
+// silent no-op afterwards, so the preference is read synchronously here.
+if (!readHardwareAccelerationSync()) app.disableHardwareAcceleration();
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {

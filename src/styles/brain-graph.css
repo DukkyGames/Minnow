@@ -81,14 +81,6 @@
   box-shadow: var(--shadow-card);
 }
 
-@supports (backdrop-filter: blur(1px)) {
-  .brain-page.is-graph-canvas-bg .brain-rail.brain-overlay-surface {
-    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-}
-
 .brain-rail__btn {
   display: flex;
   flex-direction: row;
@@ -262,14 +254,6 @@
   background: var(--mn-surface-1);
   border: 1px solid var(--mn-border);
   box-shadow: var(--shadow-drawer);
-}
-
-@supports (backdrop-filter: blur(1px)) {
-  .brain-page.is-graph-canvas-bg .brain-inspector.is-open {
-    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
 }
 
 .brain-inspector__inner {

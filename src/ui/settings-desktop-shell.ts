@@ -1,8 +1,10 @@
 /**
- * Settings → General: Desktop app (close-to-tray, launch at startup, interface zoom).
+ * Settings → General: Desktop app (close-to-tray, launch at startup, interface zoom,
+ * hardware acceleration).
  */
 
 import { detectConfigServer } from '../config/storage-mode';
+import { appConfirm } from './app-dialog';
 import { setStatus } from './status';
 import { appendSettingsOfflineHint, createSettingsSelectRow } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
@@ -16,6 +18,19 @@ function isElectronShell(): boolean {
 
 function trayApi(): NonNullable<typeof window.minnow>['tray'] | null {
   return window.minnow?.tray ?? null;
+}
+
+/** Null on a preload from an older build, which predates the hardware-acceleration IPC. */
+function hardwareAccelerationApi() {
+  const app = window.minnow?.app;
+  if (!app?.getHardwareAcceleration || !app.setHardwareAcceleration || !app.restart) {
+    return null;
+  }
+  return {
+    get: app.getHardwareAcceleration.bind(app),
+    set: app.setHardwareAcceleration.bind(app),
+    restart: app.restart.bind(app),
+  };
 }
 
 /** Render Desktop app controls into the General settings mount. */
@@ -42,10 +57,13 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
     );
   }
 
-  const [closeToTray, loginItem, zoomPercent] = await Promise.all([
+  const gpuApi = hardwareAccelerationApi();
+
+  const [closeToTray, loginItem, zoomPercent, hardwareAcceleration] = await Promise.all([
     api.getCloseToTray(),
     api.getLoginItem(),
     api.getZoomPercent(),
+    gpuApi ? gpuApi.get() : Promise.resolve(true),
   ]);
 
   const zoomOptions = SHELL_ZOOM_PRESET_PERCENTS.map((value) => ({
@@ -91,7 +109,17 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
     },
   );
 
+  const gpuRow = gpuApi
+    ? createSettingsToggleRow('Hardware acceleration', {
+        searchKey: 'general.desktop.hardwareAcceleration',
+        checked: hardwareAcceleration,
+        description:
+          'Render the Minnow interface on the GPU. Turning it off hands the whole GPU to local models, at the cost of a slower interface. Applies after a restart.',
+      })
+    : null;
+
   mount.append(zoomRow, closeRow, loginRow);
+  if (gpuRow) mount.append(gpuRow.row);
 
   zoomSelect.addEventListener('change', () => {
     void (async () => {
@@ -140,6 +168,39 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
 
   api.onCloseToTrayChanged((enabled) => {
     closeInput.checked = enabled;
+  });
+
+  gpuRow?.input.addEventListener('change', () => {
+    void (async () => {
+      const input = gpuRow.input;
+      const enabled = input.checked;
+      try {
+        await gpuApi?.set(enabled);
+      } catch {
+        input.checked = !enabled;
+        setStatus('err', 'Could not save hardware acceleration preference');
+        return;
+      }
+      const restartNow = await appConfirm(
+        enabled
+          ? 'Hardware acceleration will be enabled the next time Minnow starts.'
+          : 'Hardware acceleration will be disabled the next time Minnow starts, freeing the GPU for local models.',
+        {
+          title: 'Restart Minnow?',
+          confirmLabel: 'Restart now',
+          cancelLabel: 'Later',
+        },
+      );
+      if (!restartNow) {
+        setStatus('ok', 'Hardware acceleration applies after the next restart');
+        return;
+      }
+      try {
+        await gpuApi?.restart();
+      } catch {
+        setStatus('err', 'Could not restart Minnow — quit and reopen to apply');
+      }
+    })();
   });
 
   const refreshLogin = () => {

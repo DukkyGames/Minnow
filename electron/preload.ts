@@ -332,6 +332,11 @@ const minnowBridge = {
     isElectron: true as const,
     openExternal: (url: string): Promise<void> =>
       ipcRenderer.invoke(channels.APP_OPEN_EXTERNAL, url),
+    getHardwareAcceleration: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.APP_GET_HARDWARE_ACCELERATION),
+    setHardwareAcceleration: (enabled: boolean): Promise<boolean> =>
+      ipcRenderer.invoke(channels.APP_SET_HARDWARE_ACCELERATION, enabled),
+    restart: (): Promise<void> => ipcRenderer.invoke(channels.APP_RESTART),
   },
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_MINIMIZE),

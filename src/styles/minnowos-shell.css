@@ -56,8 +56,7 @@ html.minnow-os-enabled {
   justify-content: space-between;
   gap: 8px;
   padding: 0 14px;
-  background: color-mix(in srgb, var(--os-surface-1) 86%, transparent);
-  backdrop-filter: blur(18px);
+  background: var(--os-surface-1);
   border-bottom: 1px solid var(--os-border);
   position: relative;
   z-index: 40;
@@ -789,7 +788,7 @@ html.is-electron-shell[data-platform='darwin'] .mn-os-mb-window-controls {
 
 .mn-os-stage.is-in-app .mn-os-desktop-layer {
   transform: scale(0.965);
-  filter: blur(7px) brightness(0.6);
+  filter: brightness(0.6);
   opacity: 0.5;
 }
 

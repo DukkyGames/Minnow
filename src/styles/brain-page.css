@@ -123,14 +123,6 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
   box-shadow: var(--shadow-card);
 }
 
-@supports (backdrop-filter: blur(1px)) {
-  .brain-page-header.brain-overlay-surface {
-    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-}
-
 .brain-page-header__back {
   flex-shrink: 0;
   align-self: center;
@@ -402,14 +394,6 @@ html:not(.minnow-os-enabled) .brain-page.is-open {
 
 .brain-page.is-graph-canvas-bg .brain-overlay-card {
   background: var(--mn-surface-1);
-}
-
-@supports (backdrop-filter: blur(1px)) {
-  .brain-page.is-graph-canvas-bg .brain-overlay-card {
-    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
 }
 
 .brain-card--flush {

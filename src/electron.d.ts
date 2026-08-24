@@ -264,6 +264,12 @@ export interface MinnowAppApi {
   platform: NodeJS.Platform;
   isElectron: true;
   openExternal(url: string): Promise<void>;
+  /** Optional: absent on a preload from an older build until the shell restarts. */
+  getHardwareAcceleration?(): Promise<boolean>;
+  /** Persisted immediately; takes effect on the next launch. */
+  setHardwareAcceleration?(enabled: boolean): Promise<boolean>;
+  /** Clean teardown, then relaunch the shell. */
+  restart?(): Promise<void>;
 }
 
 /** OS file manager integration (Explorer / Finder). */

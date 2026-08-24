@@ -972,7 +972,6 @@
   align-items: stretch;
   justify-content: flex-end;
   background: color-mix(in srgb, var(--mn-bg) 40%, transparent);
-  backdrop-filter: blur(2px);
 }
 
 .benchmark-transcript-drawer-panel {
@@ -2316,7 +2315,6 @@
   inset: 0;
   z-index: 199;
   background: color-mix(in srgb, var(--mn-bg) 35%, transparent);
-  backdrop-filter: blur(2px);
 }
 
 .benchmark-catalog-drawer-close {

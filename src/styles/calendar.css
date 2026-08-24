@@ -423,7 +423,6 @@
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--mn-bg) 35%, transparent);
-  backdrop-filter: blur(2px);
   padding: 20px;
 }
 
@@ -539,7 +538,6 @@
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--mn-bg) 35%, transparent);
-  backdrop-filter: blur(2px);
   padding: 20px;
 }
 

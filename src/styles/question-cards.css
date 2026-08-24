@@ -54,11 +54,10 @@
   animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
 }
 
-/* Frosted composer shell (Minnow desktop dock) */
+/* Composer shell (Minnow desktop dock) */
 .question-cards-panel--os-dock {
   padding: 14px 16px 16px;
-  background: color-mix(in srgb, var(--os-surface-2) 85%, transparent);
-  backdrop-filter: blur(14px);
+  background: var(--os-surface-2);
   border: 1px solid var(--os-border-strong);
   border-radius: 16px;
   box-shadow:

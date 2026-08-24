@@ -164,6 +164,11 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('general.desktop.launchAtStartup', 'Launch Minnow at startup', 'general', 'general', {
     keywords: ['login', 'boot', 'startup', 'open at login'],
   }),
+  field('general.desktop.hardwareAcceleration', 'Hardware acceleration', 'general', 'general', {
+    keywords: ['gpu', 'acceleration', 'performance', 'render', 'graphics'],
+    description:
+      'Render the interface on the GPU. Turning it off frees the GPU for local models. Applies after a restart.',
+  }),
   field('general.notifications', 'Notifications', 'general', 'notifications', {
     keywords: ['bell', 'alert', 'sound', 'menubar'],
     description: 'Menubar bell when background chats, tasks, or jobs need attention.',

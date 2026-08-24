@@ -2275,14 +2275,6 @@ html.mn-phone .settings-page--in-os-window .settings-page-header {
   box-shadow: var(--shadow-card);
 }
 
-@supports (backdrop-filter: blur(1px)) {
-  .settings-page--in-os-window .settings-page-header {
-    background: color-mix(in srgb, var(--mn-surface-1) 96%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-}
-
 .settings-page--os-embedded .settings-page-body {
   min-height: 0;
 }

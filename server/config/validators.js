@@ -2136,10 +2136,13 @@ export function mergeConfigMeta(existing, patch) {
     const existingShell =
       base.desktopShell && typeof base.desktopShell === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.desktopShell) }
-        : { closeToTray: true, zoomPercent: 80 };
+        : { closeToTray: true, zoomPercent: 80, hardwareAcceleration: true };
     const ds = /** @type {Record<string, unknown>} */ (p.desktopShell);
     if (typeof ds.closeToTray === 'boolean') {
       existingShell.closeToTray = ds.closeToTray;
+    }
+    if (typeof ds.hardwareAcceleration === 'boolean') {
+      existingShell.hardwareAcceleration = ds.hardwareAcceleration;
     }
     if (typeof ds.zoomPercent === 'number' && Number.isFinite(ds.zoomPercent)) {
       const rounded = Math.round(ds.zoomPercent);

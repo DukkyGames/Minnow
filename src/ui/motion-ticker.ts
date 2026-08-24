@@ -13,10 +13,10 @@
  * at zero running animations, which means the fix has to be exhaustive rather than a list
  * of selectors someone has to remember to extend.
  *
- * So: pause every infinite animation and advance its `currentTime` by one tick's worth on
- * each tick. A paused animation drives no frames; assigning `currentTime` produces exactly
+ * So: pause every infinite animation and advance its `currentTime` by the real time that
+ * has passed. A paused animation drives no frames; assigning `currentTime` produces exactly
  * one. Motion stays legible — a stepped spinner is an ordinary look, and a frozen one
- * reads as a hung app — while frame production drops from the refresh rate to 8 Hz.
+ * reads as a hung app — while frame production drops from the refresh rate to STEP_HZ.
  *
  * Stepping the real animations rather than reimplementing them means each one keeps its
  * own keyframes, easing, `animation-delay` and per-child stagger, and animations added
@@ -24,6 +24,18 @@
  *
  * Finite animations are deliberately left alone: a panel reveal is a fifth of a second of
  * frames, and freezing one mid-flight would look broken.
+ *
+ * Two things here are load-bearing for how the result *feels*, both learned the hard way:
+ *
+ * - Steps advance by measured elapsed time, never by a fixed amount. `setInterval` drifts
+ *   badly while the main thread is parsing SSE and re-rendering markdown, so a fixed
+ *   advance desynchronises the animation clock from the wall clock — motion runs slow,
+ *   stalls, then jumps. Irregular stepping reads as broken far more than slow stepping
+ *   does; film is 24 fps and looks fine because it is metronomic.
+ *
+ * - Rescanning is decoupled from stepping. `document.getAnimations()` forces a style
+ *   recalc, so calling it at the step rate on a long, actively streaming transcript adds
+ *   real input and scroll latency. Stepping animations we already hold costs nothing.
  */
 
 import { isRenderIdle } from '../boot/render-idle';
@@ -33,10 +45,30 @@ const MOTION_ATTR = 'data-mn-motion';
 const MOTION_TICKED = 'ticked';
 
 /**
- * 8 Hz. Below ~6 Hz a spinner reads as stuttering rather than stepped; above ~12 Hz the
- * frames saved stop being worth the main-thread work.
+ * How often parked animations advance — the frame rate the UI actually runs at during a
+ * local generation, and the dial for the whole trade.
+ *
+ * Cost is close to linear in frames per second: the full-rate penalty measured ~6 tok/s at
+ * 144 Hz, so each step/second is worth very roughly 0.04 tok/s. 8 Hz was cheap but visibly
+ * choppy; 20 Hz costs a few tenths of a tok/s and reads as motion rather than as a series
+ * of poses. Raise it if smoothness matters more than the last tenth.
  */
-const TICK_INTERVAL_MS = 125;
+const STEP_HZ = 20;
+const STEP_INTERVAL_MS = Math.round(1000 / STEP_HZ);
+
+/**
+ * How often to look for animations that have started since the last sweep. Deliberately
+ * much slower than the step rate — this is the call that forces a style recalc. A spinner
+ * that appears mid-turn runs at full rate for at most this long before being parked.
+ */
+const RESCAN_INTERVAL_MS = 250;
+
+/**
+ * Ceiling on a single advance. After a long main-thread stall (a big tool result landing,
+ * a tab regaining focus) the true elapsed time can be seconds; replaying all of it would
+ * spin a spinner wildly. Cap it and let the animation land wherever it lands.
+ */
+const MAX_STEP_MS = 250;
 
 /**
  * The slice of the Web Animations API this module needs, structurally typed so tests can
@@ -54,6 +86,8 @@ const NOOP = (): void => {};
 
 let leases = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
+let lastStepAt = 0;
+let lastRescanAt = 0;
 const parked = new Set<SteppableAnimation>();
 
 /** Only looping animations are worth parking; a finite one ends on its own. */
@@ -111,18 +145,36 @@ function currentAnimations(): SteppableAnimation[] {
   return doc.getAnimations() as unknown as SteppableAnimation[];
 }
 
+function now(): number {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+}
+
 function tick(): void {
-  // A hidden window already parks animation wholesale (`render-idle.ts`); holding where
-  // we are costs nothing and resumes mid-cycle when the window comes back.
-  if (isRenderIdle()) return;
-  parkRunningInfinite(currentAnimations());
-  stepParked(TICK_INTERVAL_MS);
+  const at = now();
+  // A hidden window already parks animation wholesale (`render-idle.ts`). Reset the clock
+  // rather than banking the elapsed time, so coming back does not replay the whole gap.
+  if (isRenderIdle()) {
+    lastStepAt = at;
+    return;
+  }
+
+  if (at - lastRescanAt >= RESCAN_INTERVAL_MS) {
+    lastRescanAt = at;
+    parkRunningInfinite(currentAnimations());
+  }
+
+  stepParked(Math.min(at - lastStepAt, MAX_STEP_MS));
+  lastStepAt = at;
 }
 
 function start(): void {
   document.documentElement?.setAttribute(MOTION_ATTR, MOTION_TICKED);
+  lastStepAt = now();
+  lastRescanAt = lastStepAt;
   parkRunningInfinite(currentAnimations());
-  timer = setInterval(tick, TICK_INTERVAL_MS);
+  timer = setInterval(tick, STEP_INTERVAL_MS);
 }
 
 function stop(): void {

@@ -22,6 +22,30 @@ describe('desktopShell config', () => {
     assert.equal(merged.desktopShell.closeToTray, true);
   });
 
+  test('defaults hardwareAcceleration to true when missing', () => {
+    const merged = mergeConfigMeta({}, {});
+    assert.equal(merged.desktopShell?.hardwareAcceleration, undefined);
+    const patched = mergeConfigMeta(merged, { desktopShell: {} });
+    assert.equal(patched.desktopShell.hardwareAcceleration, true);
+  });
+
+  test('round-trips explicit hardwareAcceleration false', () => {
+    const merged = mergeConfigMeta({}, { desktopShell: { hardwareAcceleration: false } });
+    assert.equal(merged.desktopShell.hardwareAcceleration, false);
+    // Survives an unrelated later write (the whitelist drops unknown keys).
+    const rewritten = mergeConfigMeta(merged, { desktopShell: { closeToTray: true } });
+    assert.equal(rewritten.desktopShell.hardwareAcceleration, false);
+    const reread = JSON.parse(JSON.stringify(rewritten));
+    assert.equal(reread.desktopShell.hardwareAcceleration, false);
+  });
+
+  test('rejects non-boolean hardwareAcceleration values', () => {
+    const merged = mergeConfigMeta({ desktopShell: { hardwareAcceleration: false } }, {
+      desktopShell: { hardwareAcceleration: 'off' },
+    });
+    assert.equal(merged.desktopShell.hardwareAcceleration, false);
+  });
+
   test('persists shell zoom percent within bounds', () => {
     const merged = mergeConfigMeta({}, { desktopShell: { zoomPercent: 80 } });
     assert.equal(merged.desktopShell.zoomPercent, 80);

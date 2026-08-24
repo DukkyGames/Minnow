@@ -74,6 +74,12 @@ export const PREVIEW_CONTEXT_RESOLVE_ELEMENT = 'minnow:preview:context-resolve-e
 export const PREVIEW_CONTEXT_ACTION = 'minnow:preview:context-action';
 
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
+/** Renderer → main: read the persisted hardware-acceleration preference. */
+export const APP_GET_HARDWARE_ACCELERATION = 'minnow:app:get-hardware-acceleration';
+/** Renderer → main: persist hardware acceleration (applies on next launch). */
+export const APP_SET_HARDWARE_ACCELERATION = 'minnow:app:set-hardware-acceleration';
+/** Renderer → main: clean teardown, then relaunch the shell. */
+export const APP_RESTART = 'minnow:app:restart';
 /** Renderer → main: reveal a workspace file/folder in Explorer / Finder (desktop shell). */
 export const SHELL_REVEAL_IN_EXPLORER = 'minnow:shell:reveal-in-explorer';
 /** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */

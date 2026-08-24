@@ -220,7 +220,6 @@
   margin: 12px -16px -18px;
   padding: 12px 16px 16px;
   background: color-mix(in srgb, var(--mn-bg) 94%, transparent);
-  backdrop-filter: blur(8px);
 }
 
 /* Event chips: tinted background + full border (no left accent stripe) */
