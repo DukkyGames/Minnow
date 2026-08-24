@@ -55,15 +55,20 @@ let composerBoxSyncRaf = 0;
 function scheduleBoardChatComposerBoxSync(): void {
   if (composerBoxSyncRaf) return;
   if (typeof requestAnimationFrame !== 'function') {
-    syncBoardChatRailColumnBox();
-    syncBoardChatComposerBox();
+    syncBoardChatColumnBoxes();
     return;
   }
   composerBoxSyncRaf = requestAnimationFrame(() => {
     composerBoxSyncRaf = 0;
-    syncBoardChatRailColumnBox();
-    syncBoardChatComposerBox();
+    syncBoardChatColumnBoxes();
   });
+}
+
+/** Rail pin, composer inset, and terminal inset — all `#mainColumn` siblings of the board pane. */
+function syncBoardChatColumnBoxes(): void {
+  syncBoardChatRailColumnBox();
+  syncBoardChatComposerBox();
+  syncBoardChatTerminalBox();
 }
 
 /**
@@ -112,7 +117,6 @@ function syncBoardChatComposerBox(): void {
   if (!transcript || !transcript.isConnected) {
     column.style.removeProperty('--ob-chat-composer-left');
     column.style.removeProperty('--ob-chat-composer-width');
-    syncBoardChatRailColumnBox();
     return;
   }
   const style = getComputedStyle(transcript);
@@ -136,19 +140,54 @@ function syncBoardChatComposerBox(): void {
   column.style.setProperty('--ob-chat-composer-width', nextWidth);
 }
 
+/**
+ * Publish `.ob-main`'s box to `.main-column` so the terminal dock sits beside
+ * the pinned chats rail instead of stretching under it (see ob-page.css).
+ *
+ * Measured from the main pane, not the padded transcript: the dock should
+ * share the chat column's left edge, not the message content inset.
+ */
+function syncBoardChatTerminalBox(): void {
+  const column = document.getElementById('mainColumn');
+  if (!column) return;
+  const pane = queryObMain();
+  if (!column.classList.contains(MAIN_COLUMN_CHAT_CLASS) || !pane?.isConnected) {
+    column.style.removeProperty('--ob-chat-terminal-left');
+    column.style.removeProperty('--ob-chat-terminal-width');
+    return;
+  }
+  const columnRect = column.getBoundingClientRect();
+  const paneRect = pane.getBoundingClientRect();
+  const left = Math.max(0, Math.round(paneRect.left - columnRect.left));
+  const width = Math.round(paneRect.width);
+  if (width <= 0) return;
+  const nextLeft = `${left}px`;
+  const nextWidth = `${width}px`;
+  if (
+    column.style.getPropertyValue('--ob-chat-terminal-left') === nextLeft &&
+    column.style.getPropertyValue('--ob-chat-terminal-width') === nextWidth
+  ) {
+    return;
+  }
+  column.style.setProperty('--ob-chat-terminal-left', nextLeft);
+  column.style.setProperty('--ob-chat-terminal-width', nextWidth);
+}
+
 function bindComposerBoxObserver(): void {
   unbindComposerBoxObserver();
   scheduleBoardChatComposerBoxSync();
   const column = document.getElementById('mainColumn');
   const transcript = queryBoardChatTranscriptHost();
   const codeViews = document.getElementById('codeViews');
+  const pane = queryObMain();
   if (!column || typeof ResizeObserver !== 'function') return;
-  // Observe the column + transcript, not `.ob-page` — the shell rail observer
-  // already watches the page; doubling up caused ResizeObserver loop noise.
+  // Observe the column + transcript + main pane, not `.ob-page` — the shell
+  // rail observer already watches the page; doubling up caused loop noise.
   composerBoxObserver = new ResizeObserver(() => scheduleBoardChatComposerBoxSync());
   composerBoxObserver.observe(column);
   if (transcript?.isConnected) composerBoxObserver.observe(transcript);
   if (codeViews instanceof HTMLElement) composerBoxObserver.observe(codeViews);
+  if (pane?.isConnected) composerBoxObserver.observe(pane);
 }
 
 /**
@@ -412,12 +451,11 @@ export function unmountBoardChatHost(): boolean {
   const pageAfterClose = queryOrchestratePage();
   if (pageAfterClose) syncOrchestratePageRailVisibility(pageAfterClose);
   syncMainColumnBoardChatClass(false);
-  syncBoardChatRailColumnBox();
   unbindEscapeToBoard();
   unbindComposerBoxObserver();
   if (!(host instanceof HTMLElement)) {
     parkedBoardRoot = null;
-    syncBoardChatComposerBox();
+    syncBoardChatColumnBoxes();
     return false;
   }
   host.remove();
@@ -425,8 +463,8 @@ export function unmountBoardChatHost(): boolean {
     main.appendChild(parkedBoardRoot);
   }
   parkedBoardRoot = null;
-  // After the host is gone, so the measured box clears rather than going stale.
-  syncBoardChatComposerBox();
+  // After the host is gone, so the measured boxes clear rather than going stale.
+  syncBoardChatColumnBoxes();
   return true;
 }
 

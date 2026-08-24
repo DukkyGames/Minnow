@@ -118,6 +118,20 @@ main#chatArea.chat-area:has(.ob-page) {
   max-width: calc(100% - var(--ob-chat-composer-left, 0px));
 }
 
+/*
+ * The terminal is the same kind of `#mainColumn` row as the composer, so the
+ * pinned chats rail (`bottom: 0`) would cover it. Inset to `.ob-main` (not the
+ * padded transcript) so the dock lines up with the chat pane. Maximized mode
+ * hides the viewport — and the rail with it — so the dock goes full-column.
+ */
+.main-column.main-column--board-chat:not(.main-column--terminal-maximized) .terminal-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  margin-left: var(--ob-chat-terminal-left, 0px);
+  width: var(--ob-chat-terminal-width, auto);
+  max-width: calc(100% - var(--ob-chat-terminal-left, 0px));
+}
+
 /* Free-standing over the page: a full-bleed strip would re-draw the edge the
    inset above just removed. The composer keeps its own border. */
 .main-column--board-chat .input-bar {
@@ -128,10 +142,10 @@ main#chatArea.chat-area:has(.ob-page) {
 }
 
 /*
- * Board chat lives in #chatArea (.chat-viewport) but the composer is a
- * #mainColumn row below the viewport — the rail must span the full column
- * (composer only in the main pane). Pin the rail to #mainColumn; reserve width
- * on .ob-shell so .ob-main does not sit under the out-of-flow rail.
+ * Board chat lives in #chatArea (.chat-viewport) but the composer and terminal
+ * are #mainColumn rows below the viewport — the rail must span the full column
+ * (composer and terminal only in the main pane). Pin the rail to #mainColumn;
+ * reserve width on .ob-shell so .ob-main does not sit under the out-of-flow rail.
  */
 .main-column.main-column--board-chat {
   position: relative;

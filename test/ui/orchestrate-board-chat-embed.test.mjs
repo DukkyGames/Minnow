@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 
 const PLANNER_ID = '22222222-2222-2222-2222-222222222222';
 const TASK_CHAT_ID = '33333333-3333-3333-3333-333333333333';
@@ -20,7 +21,7 @@ const { appendBubble, appendStreamingAssistantRow } = await import(
 const { disposeBoardViewForTests, refreshActiveBoardIfMounted } = await import(
   '../../src/ui/orchestrate-board.ts'
 );
-const { ensureBoardChatComposerChrome } = await import(
+const { ensureBoardChatComposerChrome, unmountBoardChatHost } = await import(
   '../../src/ui/orchestrate-board-chat.ts'
 );
 const { resetOrchestrateInitSplitForTests } = await import(
@@ -59,6 +60,87 @@ function setupDom() {
   document.body.appendChild(obChat);
 
   return transcript;
+}
+
+/** Layout box used by board-chat inset measurement (happy-dom reports 0x0). */
+function stubBox(el, left, top, width, height) {
+  el.getBoundingClientRect = () => ({
+    x: left,
+    y: top,
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    toJSON() {
+      return {};
+    },
+  });
+}
+
+/**
+ * Column + orchestrate shell so terminal inset can measure `.ob-main`
+ * against `#mainColumn` (the transcript-only fixture is not enough).
+ */
+function setupBoardChatColumnDom() {
+  const window = new Window();
+  installHappyDomGlobals(window);
+
+  const column = document.createElement('div');
+  column.id = 'mainColumn';
+  stubBox(column, 0, 0, 1064, 800);
+
+  const viewport = document.createElement('div');
+  viewport.className = 'chat-viewport';
+  stubBox(viewport, 0, 48, 1064, 520);
+
+  const area = document.createElement('main');
+  area.id = 'chatArea';
+  area.classList.add('chat-area--orchestrate');
+
+  const page = document.createElement('div');
+  page.id = 'orchestrateBoardPage';
+  page.className = 'ob-page is-chat-open';
+
+  const shell = document.createElement('div');
+  shell.className = 'ob-shell';
+
+  const rail = document.createElement('aside');
+  rail.className = 'ob-rail';
+  stubBox(rail, 0, 48, 264, 752);
+
+  const pane = document.createElement('div');
+  pane.className = 'ob-main';
+  stubBox(pane, 264, 48, 800, 520);
+
+  const obChat = document.createElement('div');
+  obChat.className = 'ob-chat';
+  const scroll = document.createElement('div');
+  scroll.className = 'ob-chat__scroll';
+  const transcript = document.createElement('div');
+  transcript.className = 'ob-chat__transcript chat-area';
+  transcript.dataset.testid = ORCHESTRATE_CHAT_PANE_TESTID;
+  stubBox(transcript, 264, 48, 800, 400);
+  Object.defineProperty(transcript, 'clientWidth', { configurable: true, value: 800 });
+
+  scroll.appendChild(transcript);
+  obChat.appendChild(scroll);
+  pane.appendChild(obChat);
+  shell.append(rail, pane);
+  page.appendChild(shell);
+  area.appendChild(page);
+  viewport.appendChild(area);
+  column.appendChild(viewport);
+
+  const terminal = document.createElement('section');
+  terminal.id = 'terminalPanel';
+  terminal.className = 'terminal-panel';
+  stubBox(terminal, 0, 600, 1064, 200);
+  column.appendChild(terminal);
+
+  document.body.appendChild(column);
+  return { column, pane, terminal, transcript };
 }
 
 function seedBoardTaskSession() {
@@ -163,6 +245,44 @@ describe('orchestrate board chat embed transcript', () => {
 
     ensureBoardChatComposerChrome();
     assert.equal(column.classList.contains('main-column--board-chat'), true);
+  });
+
+  test('ensureBoardChatComposerChrome insets the terminal beside the chats rail', () => {
+    const { column } = setupBoardChatColumnDom();
+    const savedRaf = globalThis.requestAnimationFrame;
+    // Sync immediately so the test does not wait on happy-dom's animation frame.
+    globalThis.requestAnimationFrame = undefined;
+    try {
+      seedBoardTaskSession();
+      setOpenBoardChatId(TASK_CHAT_ID);
+
+      ensureBoardChatComposerChrome();
+
+      assert.equal(column.style.getPropertyValue('--ob-chat-terminal-left'), '264px');
+      assert.equal(column.style.getPropertyValue('--ob-chat-terminal-width'), '800px');
+    } finally {
+      globalThis.requestAnimationFrame = savedRaf;
+    }
+  });
+
+  test('unmountBoardChatHost clears the terminal inset vars', () => {
+    const { column } = setupBoardChatColumnDom();
+    const savedRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = undefined;
+    try {
+      seedBoardTaskSession();
+      setOpenBoardChatId(TASK_CHAT_ID);
+      ensureBoardChatComposerChrome();
+      assert.equal(column.style.getPropertyValue('--ob-chat-terminal-left'), '264px');
+
+      unmountBoardChatHost();
+
+      assert.equal(column.style.getPropertyValue('--ob-chat-terminal-left'), '');
+      assert.equal(column.style.getPropertyValue('--ob-chat-terminal-width'), '');
+      assert.equal(column.classList.contains('main-column--board-chat'), false);
+    } finally {
+      globalThis.requestAnimationFrame = savedRaf;
+    }
   });
 
   test('refreshActiveBoardIfMounted restores board-chat composer class when embed is open', () => {
