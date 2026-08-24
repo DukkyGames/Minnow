@@ -1104,6 +1104,9 @@ export function normalizeSessionScalars(raw, options = {}) {
     ) {
       out.activeBoardGroupId = parsed.activeBoardGroupId.trim();
     }
+    if (typeof parsed.lastBoardGroupId === 'string' && parsed.lastBoardGroupId.trim()) {
+      out.lastBoardGroupId = parsed.lastBoardGroupId.trim();
+    }
     if (
       parsed.codeChangeTotalsByWorkspace &&
       typeof parsed.codeChangeTotalsByWorkspace === 'object' &&
@@ -1128,6 +1131,13 @@ export function normalizeSessionScalars(raw, options = {}) {
         out.activeBoardGroupId = parsed.activeBoardGroupId.trim();
       } else {
         out.activeBoardGroupId = null;
+      }
+    }
+    if (has('lastBoardGroupId')) {
+      if (typeof parsed.lastBoardGroupId === 'string' && parsed.lastBoardGroupId.trim()) {
+        out.lastBoardGroupId = parsed.lastBoardGroupId.trim();
+      } else {
+        out.lastBoardGroupId = null;
       }
     }
     if (has('codeChangeTotalsByWorkspace')) {

@@ -21,7 +21,9 @@ import {
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
 import {
+  boardHasRecoverableTasks,
   canAccessOrchestrateFinishDashboard,
+  isBoardTaskRecoverableStatus,
   isOrchestratePlanComplete,
   shouldShowOrchestrateFinishDashboard,
 } from '../chat/orchestrate/plan-complete';
@@ -29,7 +31,12 @@ import {
   getKanbanColumnDefs,
   getWaveCompactLaneDefs,
 } from '../chat/orchestrate/board-kanban-columns.ts';
+import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
+import {
+  bindBoardCardDrag,
+  bindBoardColumnDrop,
+} from './orchestrate-board-dnd.ts';
 import { sumUsageSegments } from '../chat/orchestrate/stats-math';
 import {
   isActiveChatStreaming,
@@ -69,8 +76,12 @@ import {
   listRunningBoardTaskSlots,
   moveTaskStatus,
   moveTaskToNewChat,
+  listRecoverableBoardTaskRootIds,
+  requeueAllFailedBoardTasks,
   requeueBoardTask,
+  resetAllFailedBoardTasks,
   resolveEffectiveMaxConcurrent,
+  resetBoardTask,
   restartBoardTask,
   setBoardHandsOff,
   setBoardIsolationMode,
@@ -1188,6 +1199,20 @@ function wireBoardHeaderControls(
   skipWrapper.appendChild(skipText);
   settings.appendChild(skipWrapper);
 
+  // The three controls above constrain each other in ways the strip cannot show
+  // (isolation derives from concurrency, per-board skips merging entirely).
+  const helpBtn = createBoardHeaderIconButton('run-help', 'help', {
+    ariaLabel: 'About run settings',
+    title: 'What concurrency, hands-off, and isolation do',
+  });
+  helpBtn.classList.add('board-header__run-help');
+  helpBtn.addEventListener('click', () => {
+    void import('./orchestrate-run-help-lightbox.ts').then((m) =>
+      m.openBoardRunHelpLightbox(),
+    );
+  });
+  settings.appendChild(helpBtn);
+
   controls.appendChild(settings);
 
   // Start / Stop. A board that has not been started is the "manual" case — there is
@@ -1241,6 +1266,9 @@ function wireBoardHeaderControls(
     openBoardTimelineDrawer(group.id);
   });
 
+  const bulkRequeue = buildBulkRequeueSplitButton(group, board, plannerChat);
+  if (bulkRequeue) controls.appendChild(bulkRequeue);
+
   controls.appendChild(timelineBtn);
   controls.appendChild(openPlan);
 
@@ -1271,6 +1299,112 @@ function wireBoardHeaderControls(
     });
     controls.appendChild(dashToggle);
   }
+}
+
+/**
+ * Bulk recovery split-button: **Requeue N** primary, **Reset N** behind the caret.
+ * Same two verbs as the per-card row — requeue keeps each worktree, reset does not.
+ * Mirrors the finish dashboard's commit split-button.
+ */
+function buildBulkRequeueSplitButton(
+  group: ChatGroup,
+  board: BoardState,
+  plannerChat: Chat,
+): HTMLElement | null {
+  if (!boardHasRecoverableTasks(board)) return null;
+  const count = listRecoverableBoardTaskRootIds(board).length;
+  if (count === 0) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'board-header__bulk-requeue';
+  wrap.dataset.boardAction = 'bulk-requeue';
+
+  let openMenu: HTMLElement | null = null;
+  let busy = false;
+
+  const run = (action: 'requeue' | 'reset'): void => {
+    if (busy) return;
+    busy = true;
+    primary.disabled = true;
+    caret.disabled = true;
+    const work =
+      action === 'requeue'
+        ? requeueAllFailedBoardTasks(group, plannerChat)
+        : resetAllFailedBoardTasks(group, plannerChat);
+    void work
+      .catch((err) => reportBackgroundError('board-bulk-requeue', err))
+      .then(() => {
+        busy = false;
+        refreshActiveBoardIfMounted();
+      });
+  };
+
+  const closeMenu = (): void => {
+    openMenu?.remove();
+    openMenu = null;
+    caret.setAttribute('aria-expanded', 'false');
+  };
+
+  const primary = document.createElement('button');
+  primary.type = 'button';
+  primary.className = 'board-btn board-btn--compact board-header__bulk-requeue-primary';
+  primary.textContent = `Requeue ${count} failed`;
+  primary.title = 'Run every failed task again in its existing worktree';
+  primary.addEventListener('click', () => run('requeue'));
+
+  const caret = document.createElement('button');
+  caret.type = 'button';
+  caret.className = 'board-btn board-btn--compact board-header__bulk-requeue-caret';
+  caret.setAttribute('aria-haspopup', 'menu');
+  caret.setAttribute('aria-expanded', 'false');
+  caret.setAttribute('aria-label', 'More recovery options');
+  caret.textContent = '▾';
+  caret.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    if (openMenu) {
+      closeMenu();
+      return;
+    }
+    const menu = document.createElement('div');
+    menu.className = 'board-header__bulk-requeue-menu';
+    menu.setAttribute('role', 'menu');
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'board-header__bulk-requeue-menuitem';
+    item.setAttribute('role', 'menuitem');
+    item.textContent = `Reset ${count} failed`;
+    item.title = 'Discard each worktree and run again from the integration tip';
+    item.addEventListener('click', (itemEv) => {
+      itemEv.stopPropagation();
+      closeMenu();
+      run('reset');
+    });
+    menu.appendChild(item);
+    wrap.appendChild(menu);
+    openMenu = menu;
+    caret.setAttribute('aria-expanded', 'true');
+
+    const onDoc = (docEv: MouseEvent): void => {
+      const target = docEv.target as Node;
+      if (menu.contains(target) || caret.contains(target)) return;
+      closeMenu();
+      document.removeEventListener('click', onDoc, true);
+    };
+    const onKey = (keyEv: KeyboardEvent): void => {
+      if (keyEv.key !== 'Escape') return;
+      closeMenu();
+      caret.focus();
+      document.removeEventListener('keydown', onKey);
+    };
+    requestAnimationFrame(() => {
+      document.addEventListener('click', onDoc, true);
+      document.addEventListener('keydown', onKey);
+    });
+  });
+
+  wrap.appendChild(primary);
+  wrap.appendChild(caret);
+  return wrap;
 }
 
 /** Banner when the orchestrator requested hands-off and awaits user confirmation. */
@@ -1936,65 +2070,45 @@ function createBoardAdvanceIcon(kind: BoardAdvanceIconKind): HTMLElement {
   });
 }
 
-function buildStatusActionButtons(
+/**
+ * Requeue / Reset for a recoverable card. Status *moves* are drag-and-drop now
+ * (see orchestrate-board-dnd.ts) — these two are the actions drag cannot express,
+ * because they differ only in whether the task keeps its worktree.
+ *
+ * `failed` and `blocked` get the same real requeue as `quarantined`: the old
+ * "Reopen" was a bare status move that left attempt counters maxed out.
+ */
+function buildTaskRequeueActions(
   task: BoardTask,
   group: ChatGroup,
   plannerChat: Chat,
   row: HTMLElement,
 ): void {
-  const skipPerTaskTests = group.orchestrateBoard
-    ? boardSkipsPerTaskTesting(group.orchestrateBoard)
-    : false;
-  const addBtn = (
-    label: string,
-    status: BoardTaskStatus,
-    icon: BoardAdvanceIconKind,
-  ): void => {
+  if (!isBoardTaskRecoverableStatus(task.status)) return;
+
+  const addBtn = (label: string, title: string, run: () => Promise<void>): void => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'board-task-card__advance-btn';
-    btn.appendChild(createBoardAdvanceIcon(icon));
+    btn.title = title;
+    btn.appendChild(createBoardAdvanceIcon('recycle'));
     const text = document.createElement('span');
     text.className = 'board-task-card__advance-label';
     text.textContent = label;
     btn.appendChild(text);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      moveTaskStatus(group, task.id, status, plannerChat);
-      refreshActiveBoardIfMounted();
+      void run().then(() => refreshActiveBoardIfMounted());
     });
     row.appendChild(btn);
   };
-  if (task.status === 'planned' || task.status === 'blocked') {
-    addBtn('In progress', 'in_progress', 'forward');
-  }
-  if (task.status === 'in_progress' && !skipPerTaskTests) {
-    addBtn('Testing', 'testing', 'forward');
-  }
-  if (task.status === 'testing') {
-    addBtn('Complete', 'complete', 'check');
-    addBtn('Failed', 'failed', 'forward');
-  }
-  if (task.status === 'complete' || task.status === 'failed') {
-    addBtn('Reopen', 'planned', 'recycle');
-  }
-  if (task.status === 'quarantined') {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'board-task-card__advance-btn';
-    btn.appendChild(createBoardAdvanceIcon('recycle'));
-    const text = document.createElement('span');
-    text.className = 'board-task-card__advance-label';
-    text.textContent = 'Requeue';
-    btn.appendChild(text);
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      void requeueBoardTask(group, task.id, plannerChat).then(() => {
-        refreshActiveBoardIfMounted();
-      });
-    });
-    row.appendChild(btn);
-  }
+
+  addBtn('Requeue', 'Run again in the existing worktree', () =>
+    requeueBoardTask(group, task.id, plannerChat),
+  );
+  addBtn('Reset', 'Discard the worktree and run again from the integration tip', () =>
+    resetBoardTask(group, task.id, plannerChat),
+  );
 }
 
 /** True when a stopped/failed/blocked task can use recovery controls. */
@@ -2207,6 +2321,8 @@ function buildTaskCard(
   }
 
   card.setAttribute('data-board-task-id', task.id);
+  card.setAttribute('data-board-task-status', task.status);
+  bindBoardCardDrag(card, task);
 
   const opensPlan = taskCardOpensPlanPanel(task.status);
   const opensChat = !opensPlan;
@@ -2250,7 +2366,11 @@ function buildTaskCard(
         return;
       }
       void import('./orchestrate-board-keyboard').then((mod) => {
-        mod.handleBoardCardKeydown(e, card);
+        mod.handleBoardCardKeydown(e, card, {
+          group,
+          plannerChat,
+          onApplied: () => refreshActiveBoardIfMounted(),
+        });
       });
     });
   }
@@ -2390,7 +2510,7 @@ function buildTaskCard(
 
   const advanceRow = document.createElement('div');
   advanceRow.className = 'board-task-card__advance';
-  buildStatusActionButtons(task, group, plannerChat, advanceRow);
+  buildTaskRequeueActions(task, group, plannerChat, advanceRow);
   if (advanceRow.childElementCount) {
     footer.appendChild(advanceRow);
   }
@@ -2594,6 +2714,9 @@ function renderKanbanColumns(
       list.appendChild(card);
     }
     column.appendChild(list);
+    bindBoardColumnDrop(column, col.id, group, plannerChat, () =>
+      refreshActiveBoardIfMounted(),
+    );
     grid.appendChild(column);
   }
   return grid;

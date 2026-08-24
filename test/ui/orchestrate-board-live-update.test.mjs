@@ -231,6 +231,16 @@ async function primeSubAgentConfig() {
   await loadSubAgentConfig();
 }
 
+/** Poll until `check()` is truthy — requeue is async (it awaits a dynamic import). */
+async function waitFor(check, label) {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 async function waitForKanban() {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
@@ -414,30 +424,42 @@ describe('orchestrate board live updates', { concurrency: false }, () => {
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    updateTask(group, 'W1-A', { status: 'complete' });
+    // `failed` is the recoverable case that keeps a card button; status *moves*
+    // are drag-and-drop now, so there is no Reopen button to click.
+    updateTask(group, 'W1-A', { status: 'failed', buildAttempts: 3 });
     setSessionStateForTests(sessionStateForBoard(chat, group));
 
     renderBoardView(group);
     await waitForKanban();
 
-    const reopenBtn = document.querySelector(
+    const requeueBtn = document.querySelector(
       `${kanbanColumnSelector('complete')} .board-task-card__advance-btn`,
     );
-    assert.ok(reopenBtn, 'complete column shows Reopen');
-    reopenBtn.focus();
-    assert.equal(document.activeElement, reopenBtn);
+    assert.ok(requeueBtn, 'failed card shows Requeue');
+    requeueBtn.focus();
+    assert.equal(document.activeElement, requeueBtn);
 
-    reopenBtn.click();
-    await waitForKanban();
+    requeueBtn.click();
+    await waitFor(
+      () =>
+        document.querySelectorAll(`${kanbanColumnSelector('planned')} .board-task-card`)
+          .length === 1,
+      'requeued card to land in Planned',
+    );
 
     assert.equal(
       document.querySelectorAll(`${kanbanColumnSelector('planned')} .board-task-card`).length,
       1,
-      'reopened task should move to Planned without a second click',
+      'requeued task should move to Planned without a second click',
     );
     assert.equal(
       document.querySelectorAll(`${kanbanColumnSelector('complete')} .board-task-card`).length,
       0,
+    );
+    assert.equal(
+      group.orchestrateBoard.tasks[0].buildAttempts,
+      undefined,
+      'requeue resets the retry budget instead of re-failing immediately',
     );
   });
 

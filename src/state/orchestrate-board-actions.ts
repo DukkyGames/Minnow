@@ -11,7 +11,7 @@ import {
   sanitizeBoardReasoningForModel,
   type BoardReasoningPatch,
 } from '../chat/orchestrate/board-reasoning-binding.ts';
-import { isOrchestratePlanComplete, hasIncompleteOrchestrateWork } from '../chat/orchestrate/plan-complete.ts';
+import { isOrchestratePlanComplete, hasIncompleteOrchestrateWork, isBoardTaskRecoverableStatus } from '../chat/orchestrate/plan-complete.ts';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import {
@@ -5009,6 +5009,11 @@ export async function requeueBoardTask(
         selfHealRound: undefined,
         lastHealCategory: undefined,
         stopRetries: undefined,
+        // A requeue is a fresh run, so the retry budget resets with it —
+        // otherwise a maxed-out `buildAttempts` quarantines it again immediately.
+        buildAttempts: undefined,
+        testAttempts: undefined,
+        fixerAttempts: undefined,
         lifecycleRun: (existing?.lifecycleRun ?? 0) + 1,
         ...BOARD_REPORT_RESET_PATCH,
       },
@@ -5047,6 +5052,82 @@ export async function requeueAllFailedBoardTasks(
   const rootIds = listRecoverableBoardTaskRootIds(board);
   for (const id of rootIds) {
     await requeueBoardTask(group, id, plannerChat);
+  }
+  return rootIds;
+}
+
+/**
+ * Harder variant of {@link requeueBoardTask}: requeue *and* throw the task's
+ * worktree away, so `ensureTaskWorktree` mints a fresh one off the current
+ * integration tip instead of resuming a branch that may be half-broken.
+ *
+ * Requeue keeps the worktree (fast, preserves context); Reset does not.
+ */
+export async function resetBoardTask(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const task = board.tasks.find((t) => t.id === taskId);
+  if (!task || !isBoardTaskRecoverableStatus(task.status)) return;
+
+  const mode = resolveIsolationMode(board);
+  const slotId = worktreeSlotId(mode, task);
+  // Per-board isolation shares the integration checkout with every other task —
+  // removing it would take the whole board's work with it.
+  const removable =
+    mode === 'per-task' && Boolean(slotId) && Boolean(task.worktreePath?.trim());
+
+  if (removable && slotId) {
+    const res = await removeWorktreeOp({
+      boardId: boardWorktreeSlug(group),
+      slotId,
+    }).catch((err) => {
+      reportBackgroundError('worktree-reset', err);
+      return { ok: false as const };
+    });
+    if (res.ok) {
+      updateTask(
+        group,
+        taskId,
+        {
+          worktreePath: undefined,
+          worktreeBranch: undefined,
+          devPort: undefined,
+          apiPort: undefined,
+        },
+        plannerChat,
+      );
+      logWorktreeReleased(group, taskId, task.worktreeBranch ?? '', {
+        slotId,
+        reason: 'reset',
+      });
+    }
+  }
+
+  // Drop the seeds a retry would otherwise replay into the fresh worktree.
+  updateTask(
+    group,
+    taskId,
+    { pendingBuildSeed: undefined, boardReport: undefined },
+    plannerChat,
+  );
+
+  await requeueBoardTask(group, taskId, plannerChat);
+}
+
+/** Reset (fresh worktree) every recoverable task — bulk sibling of requeue-all. */
+export async function resetAllFailedBoardTasks(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<string[]> {
+  const board = group.orchestrateBoard;
+  if (!board) return [];
+  const rootIds = listRecoverableBoardTaskRootIds(board);
+  for (const id of rootIds) {
+    await resetBoardTask(group, id, plannerChat);
   }
   return rootIds;
 }

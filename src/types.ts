@@ -1293,6 +1293,7 @@ export interface SessionSummariesState {
   chats: ChatSummary[];
   groups?: ChatGroup[];
   activeBoardGroupId?: string;
+  lastBoardGroupId?: string;
   lastActiveChatIdByWorkspace?: Record<string, string>;
   lastActiveChatIdByApp?: Record<string, string>;
   codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
@@ -1478,6 +1479,12 @@ export interface SessionState {
   groups?: ChatGroup[];
   /** Folder whose board fills #chatArea when viewMode is board. */
   activeBoardGroupId?: string;
+  /**
+   * Board folder the user was last inside, kept after they navigate away so
+   * re-entering Orchestrator lands back on it instead of the hub.
+   * Unlike `activeBoardGroupId` this does *not* mean a board is mounted.
+   */
+  lastBoardGroupId?: string;
   /** Last selected chat per normalized workspace key ('' = unassigned bucket). */
   lastActiveChatIdByWorkspace?: Record<string, string>;
   /** Last selected chat per Minnow app id (e.g. `{ chat: '…' }` for the Chat app). */

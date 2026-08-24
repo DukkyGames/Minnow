@@ -5,7 +5,7 @@
 
 import { boardSetupStatusLabel } from '../chat/orchestrate/board-setup';
 import { getGroupsForWorkspace } from '../state/chat-groups';
-import { getBoardProgressPercent } from '../state/orchestrate-board-store';
+import { getBoardProgressPercent, isBoardRunning } from '../state/orchestrate-board-store';
 import { sessionState } from '../state/sessions';
 import type { BoardTask, Chat, ChatGroup } from '../types';
 import { getWorkspacePath } from '../state/workspace';
@@ -16,7 +16,11 @@ import {
 } from './chat-item-dot';
 import { shortPlanLabel } from './orchestrate-plan-picker';
 
-/** Boards/plans linked to this workspace (shared with hub list helpers). */
+/**
+ * Boards/plans linked to this workspace (shared with hub list helpers).
+ * Running boards pin to the top — a board doing work is the one you came back
+ * for — then most recently active first within each half.
+ */
 function listWorkspaceBoards(workspacePath: string): ChatGroup[] {
   if (!sessionState) return [];
   return getGroupsForWorkspace(workspacePath)
@@ -24,7 +28,25 @@ function listWorkspaceBoards(workspacePath: string): ChatGroup[] {
       (group) =>
         Boolean(group.orchestrateBoard) || Boolean(group.orchestratePlanPath?.trim()),
     )
-    .sort((a, b) => boardGroupSortKey(b) - boardGroupSortKey(a));
+    .sort((a, b) => {
+      const runningDelta = Number(isBoardGroupRunning(b)) - Number(isBoardGroupRunning(a));
+      if (runningDelta !== 0) return runningDelta;
+      return boardGroupSortKey(b) - boardGroupSortKey(a);
+    });
+}
+
+/** True when the group has a board that is actively running. */
+function isBoardGroupRunning(group: ChatGroup): boolean {
+  return Boolean(group.orchestrateBoard) && isBoardRunning(group);
+}
+
+/** Terminal / total task counts for the rail's `done/total` readout. */
+function boardTaskCounts(group: ChatGroup): { done: number; total: number } {
+  const tasks = group.orchestrateBoard?.tasks ?? [];
+  const done = tasks.filter(
+    (t) => t.status === 'complete' || t.status === 'quarantined',
+  ).length;
+  return { done, total: tasks.length };
 }
 
 /** Root class for the Orchestrate library-first page. */
@@ -318,13 +340,17 @@ export function paintOrchestrateBoardRail(
       const board = g.orchestrateBoard;
       const status = board ? 'Board' : boardSetupStatusLabel(g);
       const pct = board ? getBoardProgressPercent(board) : 0;
+      const counts = boardTaskCounts(g);
       return [
         g.id,
         boardTileTitle(g),
         status,
         formatRelativeTime(boardGroupSortKey(g)),
-        board ? board.tasks.length : 0,
+        counts.total,
+        counts.done,
         pct,
+        // Without this the live dot never appears or clears on its own.
+        isBoardGroupRunning(g) ? 'running' : 'idle',
       ].join('|');
     }),
   ].join(' | ');
@@ -368,29 +394,38 @@ export function paintOrchestrateBoardRail(
       : boardSetupStatusLabel(group);
     const board = group.orchestrateBoard;
     const progressPct = board ? getBoardProgressPercent(board) : 0;
-    const taskCount = board?.tasks.length ?? 0;
+    const { done, total } = boardTaskCounts(group);
+    const running = isBoardGroupRunning(group);
 
     const wrap = el('div', 'ob-row-wrap');
     const row = el('button', 'ob-row orchestrate-hub__board-row') as HTMLButtonElement;
     row.type = 'button';
     row.setAttribute('role', 'listitem');
+    if (running) row.classList.add('is-running');
     if (options.activeGroupId && group.id === options.activeGroupId) {
       row.classList.add('is-active');
       row.setAttribute('aria-current', 'true');
     }
 
     const titleEl = el('span', 'ob-row__title orchestrate-hub__board-row-title', title);
+    if (running) {
+      const dot = el('span', 'ob-row__running-dot');
+      dot.setAttribute('aria-hidden', 'true');
+      titleEl.prepend(dot);
+    }
     const meta = el('span', 'ob-row__meta orchestrate-hub__board-row-meta');
     const chip = el('span', 'ob-state orchestrate-hub__board-row-chip', statusLabel);
     meta.appendChild(chip);
     const bits = [when];
-    if (board && taskCount > 0) bits.push(`${progressPct}%`);
+    if (board && total > 0) bits.push(`${done}/${total}`, `${progressPct}%`);
     meta.appendChild(document.createTextNode(` · ${bits.join(' · ')}`));
 
     row.append(titleEl, meta);
     row.setAttribute(
       'aria-label',
-      `${title}, ${statusLabel}, updated ${when}`,
+      `${title}, ${statusLabel}${running ? ', running' : ''}${
+        total > 0 ? `, ${done} of ${total} tasks done` : ''
+      }, updated ${when}`,
     );
     row.addEventListener('click', () => {
       // Collapse overlay rail on narrow layouts after pick (SP pattern).
