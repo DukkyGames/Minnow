@@ -53,6 +53,9 @@ export interface WorktreeOpResult {
   hasRemote?: boolean;
   hasGh?: boolean;
   alreadyLanded?: boolean;
+  /** Stats came from the uncommitted workspace checkout (no integration branch). */
+  dirtyWorkspace?: boolean;
+  untrackedCount?: number;
   currentBranch?: string | null;
 }
 
@@ -191,9 +194,12 @@ export function integrationStats(input: {
   return postWorktree('integration_stats', input);
 }
 
-/** Numstat diff for landing integration work into the workspace checkout. */
+/**
+ * Numstat diff for landing integration work into the workspace checkout. With no
+ * branch the server reports the uncommitted workspace diff instead (isolation off).
+ */
 export function workspaceLandingStats(input: {
-  branch: string;
+  branch?: string;
 }): Promise<WorktreeOpResult> {
   return postWorktree('workspace_landing_stats', input);
 }

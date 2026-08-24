@@ -88,7 +88,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents, type OrchestrateBoardTimerContext } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBoardReportNudge, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logWorktreeReleased, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict, logBoardPhase, logBoardSlot, logBoardHold, logBoardConcurrency, logBoardLifecycleOwner, quarantineTaskAndDependents, type OrchestrateBoardTimerContext } from './orchestrate-board-store.ts';
 import {
   acquirePipelineHold,
   heldTaskIdsForOccupancy,
@@ -114,6 +114,8 @@ import {
   allocateTaskPorts,
   usedDevPorts,
   DEFAULT_BOARD_PORT_BASE,
+  tasksSharingSlot,
+  type IsolationMode,
 } from './worktree-isolation.ts';
 import { resolveBoardConcurrency } from './board-execution-mode.ts';
 import { teardownBoardTaskChatResources } from './board-task-teardown.ts';
@@ -129,6 +131,7 @@ import {
   verifyIntegrationMerge as verifyIntegrationMergeOp,
   refreshIntegrationDeps as refreshIntegrationDepsOp,
   cleanupBoardWorktrees as cleanupBoardWorktreesOp,
+  removeWorktree as removeWorktreeOp,
 } from './worktree-service.ts';
 
 const MAX_MERGE_FIXER_ATTEMPTS = 2;
@@ -2824,6 +2827,79 @@ async function ensureTaskWorktree(
 }
 
 /**
+ * Drop a task's worktree directory once its branch has landed in integration.
+ *
+ * The **branch is deliberately kept** — the work stays inspectable, and
+ * `ensureTaskWorktree` recreates the slot from the surviving branch on requeue
+ * (`worktree-ops.js` already has a branch-exists path), so this needs no undo.
+ *
+ * Only runs in `per-task` mode: `per-wave` slots are shared with tasks that may
+ * still be working, and `per-board` *is* the integration checkout.
+ */
+async function releaseMergedTaskWorktree(
+  group: ChatGroup,
+  task: BoardTask,
+  mode: IsolationMode,
+  boardId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  if (mode !== 'per-task') return;
+  const board = group.orchestrateBoard;
+  if (!board) return;
+
+  const fresh = board.tasks.find((t) => t.id === task.id) ?? task;
+  if (!fresh.worktreePath?.trim()) return;
+
+  const slotId = worktreeSlotId(mode, fresh);
+  if (!slotId) return;
+
+  // Anything else still sharing this slot (never true for per-task, but the check
+  // is what makes it safe to widen the mode guard later) must be done with it.
+  const sharing = tasksSharingSlot(mode, fresh, board.tasks).filter((t) => t.id !== fresh.id);
+  if (sharing.some((t) => t.status !== 'complete' && t.status !== 'quarantined')) return;
+
+  // A live chat still writing into the directory outranks tidiness.
+  const chatIds = [fresh.chatId, fresh.testChatId, fresh.fixerChatId]
+    .map((id) => id?.trim())
+    .filter((id): id is string => Boolean(id));
+  if (chatIds.some((id) => isChatStreaming(id))) return;
+
+  // Stop dev servers/background runs bound to the worktree *before* the path is
+  // cleared — teardown resolves the root through the task's persisted path.
+  for (const id of chatIds) {
+    const chat = findChatById(id);
+    if (chat) teardownBoardTaskChatResources(chat, sessionState?.groups);
+  }
+
+  const res = await removeWorktreeOp({ boardId, slotId }).catch((err) => {
+    reportBackgroundError('worktree-release', err);
+    return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+  });
+  if (!res.ok) {
+    // A surviving directory is an orphan slot a later create would silently reuse,
+    // so keep pointing at it rather than pretending it is gone.
+    reportBackgroundError(
+      'worktree-release',
+      new Error(`Kept ${fresh.id} worktree: ${res.error || 'removal failed'}`),
+    );
+    return;
+  }
+
+  for (const id of chatIds) {
+    const chat = findChatById(id);
+    if (chat?.worktreeRoot) delete chat.worktreeRoot;
+  }
+  // Keep worktreeBranch: it is what makes requeue-after-cleanup work.
+  updateTask(
+    group,
+    fresh.id,
+    { worktreePath: undefined, devPort: undefined, apiPort: undefined },
+    plannerChat,
+  );
+  logWorktreeReleased(group, fresh.id, fresh.worktreeBranch ?? '', { slotId });
+}
+
+/**
  * Fold a passed task's branch into integration. Returns whether the merge landed.
  * Auto-commits the task worktree first (per-task isolation only). Serialized per board.
  */
@@ -2901,6 +2977,7 @@ async function mergeCompletedTaskWorktree(
           reportBackgroundError('worktree-refresh-deps', err);
         }
         logMergeResult(group, task.id, 'merged', { branch });
+        await releaseMergedTaskWorktree(group, task, mode, boardId, plannerChat);
         return { outcome: 'merged' };
       }
       const reasons = verified.reasons?.join('; ') || 'Integration merge verification failed';
@@ -3707,15 +3784,23 @@ async function finalizeEnvFixerOnStreamEnd(
 }
 
 /**
- * Remove all per-task/wave worktrees for a board (keeps the integration branch +
- * worktree so MIN-208 can commit/push from it). Call on board teardown/delete.
+ * Remove per-task/wave worktrees for a board. By default the integration branch +
+ * worktree survive so the finish dashboard can still commit/push from them; pass
+ * `includeIntegration` when the board itself is going away (folder delete), or the
+ * integration checkout is leaked with nothing left to reference it.
+ *
+ * Branches are never deleted — only the checked-out directories.
  */
-export function cleanupBoardIsolation(group: ChatGroup): void {
+export function cleanupBoardIsolation(
+  group: ChatGroup,
+  options: { includeIntegration?: boolean } = {},
+): void {
   const board = group.orchestrateBoard;
   if (!board?.integrationBranch) return;
-  void cleanupBoardWorktreesOp({ boardId: boardWorktreeSlug(group) }).catch((err) =>
-    reportBackgroundError('worktree-cleanup', err),
-  );
+  void cleanupBoardWorktreesOp({
+    boardId: boardWorktreeSlug(group),
+    includeIntegration: options.includeIntegration === true,
+  }).catch((err) => reportBackgroundError('worktree-cleanup', err));
 }
 
 /** Record that integration work was merged into the workspace and committed. */
@@ -5670,6 +5755,15 @@ export function trackDrainResumeCallsForTests(enabled: boolean): string[] {
   const captured = drainResumeCallsForTests ?? [];
   drainResumeCallsForTests = null;
   return captured;
+}
+
+/** Test-only: provision (or recreate) a task's worktree slot. */
+export async function ensureTaskWorktreeForTests(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<string | null> {
+  return ensureTaskWorktree(group, task, plannerChat);
 }
 
 /** Test-only: run integration merge on the per-board queue (waits for fixers). */

@@ -696,6 +696,7 @@ export type BoardLogEventType =
   | 'test_verdict'
   | 'merge_result'
   | 'worktree_allocated'
+  | 'worktree_released'
   | 'task_retry'
   | 'nudge'
   | 'task_error'

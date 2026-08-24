@@ -13,7 +13,6 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
 import { collapseChatSidebarForBoardEnter } from '../ui/layout';
-import { boardWorktreeSlug } from './worktree-isolation.ts';
 import {
   markGroupDeleted,
   markGroupDirty,
@@ -209,13 +208,15 @@ function teardownBoardGroup(group: ChatGroup, chatIds: readonly string[]): void 
     getChatAbort(chatId)?.abort();
   }
   if (group.orchestrateBoard?.integrationBranch) {
-    void fetch('/api/worktree', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op: 'cleanup', boardId: boardWorktreeSlug(group) }),
-    }).catch(() => {
-      /* best-effort on folder delete */
-    });
+    // The board folder is going away, so nothing is left to commit from the
+    // integration checkout — `includeIntegration` is what stops it (and the board
+    // worktree dir) leaking forever. Branches are kept; only directories go.
+    // Imported lazily: orchestrate-board-actions imports this module.
+    void import('./orchestrate-board-actions.ts')
+      .then((m) => m.cleanupBoardIsolation(group, { includeIntegration: true }))
+      .catch(() => {
+        /* best-effort on folder delete */
+      });
   }
 }
 

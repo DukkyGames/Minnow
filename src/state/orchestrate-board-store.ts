@@ -293,6 +293,26 @@ export function logWorktreeAllocated(
   });
 }
 
+/**
+ * Counterpart to {@link logWorktreeAllocated}: the task's worktree directory was
+ * removed after its branch landed in integration. The branch is deliberately kept,
+ * so a later requeue can recreate the slot from it.
+ */
+export function logWorktreeReleased(
+  group: ChatGroup,
+  taskId: string,
+  branch: string,
+  detail?: Record<string, unknown>,
+): void {
+  appendBoardLog(group, {
+    type: 'worktree_released',
+    level: 'info',
+    taskId,
+    message: `${taskId}: worktree released (branch ${branch} kept)`,
+    detail: { branch, ...detail },
+  });
+}
+
 export function logTaskRetry(
   group: ChatGroup,
   taskId: string,

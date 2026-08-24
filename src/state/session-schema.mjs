@@ -243,6 +243,7 @@ const BOARD_LOG_TYPES = new Set([
   'test_verdict',
   'merge_result',
   'worktree_allocated',
+  'worktree_released',
   'task_retry',
   'nudge',
   'task_error',
