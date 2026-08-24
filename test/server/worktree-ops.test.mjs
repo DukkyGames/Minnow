@@ -22,6 +22,7 @@ import {
   mergeIntoIntegration,
   pushIntegration,
   refreshIntegrationDeps,
+  removeWorktree,
   restoreIntegration,
   verifyIntegrationMerge,
   workspaceLandingStats,
@@ -448,6 +449,44 @@ describe('worktree conflict merge and verification', () => {
     assert.equal((await git(['rev-parse', 'HEAD'], intPath)).stdout.trim(), integrationSha);
     assert.equal((await git(['status', '--porcelain'], intPath)).stdout.trim(), '');
     assert.equal(await mergeHeadExists(intPath), false);
+  });
+
+  test('removeWorktree reports failure when the directory survives', async () => {
+    // A slot that reports removed-but-survived becomes an orphan that a later
+    // createWorktree silently reuses — dep links and all. It must not claim ok.
+    const boardId = 'test-board-remove-survive';
+    const slotId = 'task-W1-A';
+    const created = await createWorktree({
+      boardId,
+      slotId,
+      branch: `minnow/board/${boardId}/task/W1-A`,
+      baseRef: 'HEAD',
+    });
+    assert.equal(created.ok, true, created.output);
+    const wtPath = created.path;
+
+    // Pin the directory so both `git worktree remove` and `fs.rm` fail.
+    const parent = path.dirname(wtPath);
+    const cwdBefore = process.cwd();
+    if (process.platform === 'win32') {
+      process.chdir(wtPath); // Windows refuses to remove a process's cwd.
+    } else {
+      await fs.chmod(parent, 0o500); // POSIX: no unlink rights in the parent.
+    }
+
+    try {
+      const res = await removeWorktree({ boardId, slotId });
+      assert.equal(res.ok, false);
+      assert.match(String(res.error), /survived/);
+      await fs.access(wtPath);
+    } finally {
+      if (process.platform === 'win32') process.chdir(cwdBefore);
+      else await fs.chmod(parent, 0o700);
+    }
+
+    const cleaned = await removeWorktree({ boardId, slotId });
+    assert.equal(cleaned.ok, true, cleaned.error);
+    await assert.rejects(() => fs.access(wtPath));
   });
 
   test('cleanupBoardWorktrees keeps integration by default and removes all when includeIntegration', async () => {

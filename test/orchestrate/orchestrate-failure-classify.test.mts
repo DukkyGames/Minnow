@@ -113,6 +113,24 @@ describe('classifyTaskFailure — text markers', () => {
     assert.equal(classifyTaskFailure(chatWithText('listen EADDRINUSE :::3000')), 'infra');
   });
 
+  test('spawn ELOOP (broken worktree dep link) → infra', () => {
+    // A dangling/looping node_modules junction kills every npm script in the worktree.
+    // The builder cannot fix it from inside — it must route to the env-fixer.
+    assert.equal(
+      classifyTaskFailure(
+        chatWithText('npm error code ELOOP\nnpm error syscall spawn\nnpm error spawn ELOOP'),
+      ),
+      'infra',
+    );
+  });
+
+  test('too many symbolic links → infra', () => {
+    assert.equal(
+      classifyTaskFailure(chatWithText('ELOOP: too many symbolic links encountered')),
+      'infra',
+    );
+  });
+
   test('service-client command not found (psql) → infra', () => {
     assert.equal(classifyTaskFailure(chatWithText('bash: psql: command not found')), 'infra');
   });

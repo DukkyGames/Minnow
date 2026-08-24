@@ -9,6 +9,7 @@
  *  1. Structured buildOutcome signal — env_blocked ⇒ infra regardless of prose
  *  2. Stall markers in transcript (max-tool-turns, reply-could-not-complete)
  *  3. Service-infra markers in transcript (ECONNREFUSED, port-in-use, docker daemon …)
+ *     and broken dep-link markers (ELOOP — a dangling node_modules junction)
  *  4. Missing-binary markers — disambiguated by *which* binary is missing:
  *       - a project/npm toolchain bin (eslint, tsc, vite …) or an npm-script
  *         context ⇒ 'code' (the builder can `npm install` / add the devDep)
@@ -48,6 +49,19 @@ const SERVICE_INFRA_MARKERS: string[] = [
   'ETIMEDOUT',
   'getaddrinfo',
   'socket hang up',
+];
+
+/**
+ * Broken dependency links in the task worktree. `spawn ELOOP` fires when a
+ * `node_modules` junction is dangling or self-referential: every `npm run` / `npm exec`
+ * in that worktree dies before it starts, while a direct `node` invocation still works.
+ * That is an environment defect the builder cannot fix from inside the worktree — it
+ * needs a provisioning pass, so route it to the env-fixer rather than re-seeding code.
+ */
+const DEP_LINK_INFRA_MARKERS: string[] = [
+  'ELOOP',
+  'spawn ELOOP',
+  'too many symbolic links',
 ];
 
 /**
@@ -244,6 +258,7 @@ export function classifyTaskFailure(
   if (isTransientContextLengthError(text)) return 'code';
   if (matchesAny(text, STALL_MARKERS)) return 'stall';
   if (matchesAny(text, SERVICE_INFRA_MARKERS)) return 'infra';
+  if (matchesAny(text, DEP_LINK_INFRA_MARKERS)) return 'infra';
 
   // 3. Missing-binary: disambiguate by which binary / context is named.
   if (matchesAny(text, MISSING_BIN_MARKERS)) {

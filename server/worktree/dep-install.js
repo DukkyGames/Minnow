@@ -51,10 +51,20 @@ export async function refreshDependencies(root, changedFiles, { timeout = INSTAL
       if (seenCommands.has(dedupeKey)) continue;
       seenCommands.add(dedupeKey);
 
-      // Remove seed junctions so installs write into a real dir in this worktree.
-      await materializeDepDirs(root, entry.dirs);
-
       const label = `${install.command} ${install.args.join(' ')}`;
+
+      // Remove seed junctions so installs write into a real dir in this worktree.
+      // A junction that survives (open handle on Windows) would make the install
+      // write straight into the main workspace's dep dir — refuse instead.
+      const materialized = await materializeDepDirs(root, entry.dirs);
+      if (materialized.failed.length > 0) {
+        const dirs = materialized.failed.join(', ');
+        const reason = `${dirs} link could not be removed — refusing to install through it`;
+        failed.push(`${label} (${reason})`);
+        console.warn(`[dep-install] skipped ${label} in ${root}: ${reason}`);
+        continue;
+      }
+
       try {
         const result = await runProcess(install.command, install.args, {
           cwd: root,

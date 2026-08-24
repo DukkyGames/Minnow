@@ -195,10 +195,13 @@ export async function ensureBoardInfraProvisioned(
     const serverSigs: string[] = result.signatures ?? [];
     const allSigs = [taskSig, ...serverSigs.map((s) => `shared:${s}`)];
 
-    // Deduplicate and add new signatures to board.
+    // Deduplicate and add new signatures to board. Only on success: recording the
+    // per-worktree signature after a failed provision (e.g. a broken node_modules link)
+    // makes every later pass short-circuit to "already provisioned" and report ok.
     if (board) {
-      const merged = [...new Set([...existing, ...allSigs])];
-      board.provisionedSignatures = merged;
+      if (result.ok) {
+        board.provisionedSignatures = [...new Set([...existing, ...allSigs])];
+      }
       board.provisionState = result.ok ? 'ready' : 'failed';
       scheduleSaveSessions();
       emitBoardChange(group.id);

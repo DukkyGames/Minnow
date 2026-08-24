@@ -16,6 +16,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { runProcess } from '../process-runner.js';
 import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
+import { inspectDepDir } from '../worktree/dep-symlinks.js';
 
 async function fileExists(p) {
   try {
@@ -101,7 +102,18 @@ export async function provisionBoardInfra(workspaceRoot, opts = {}) {
   // ── 2. Node.js deps (per-worktree) ────────────────────────────────────────
   const packageJsonPath = path.join(workspaceRoot, 'package.json');
   const nodeModulesPath = path.join(workspaceRoot, 'node_modules');
-  if (await fileExists(packageJsonPath) && !(await fileExists(nodeModulesPath))) {
+  // `fileExists` (access) reports a dangling/looping junction as present — inspect the
+  // link instead, so a broken node_modules is not read as "deps already provisioned".
+  const nodeModulesState = await fileExists(packageJsonPath)
+    ? await inspectDepDir(nodeModulesPath)
+    : 'real-dir';
+  if (nodeModulesState === 'broken') {
+    // Repairing the link is dep-symlinks' job (it needs the source root); report it so
+    // the task is classified infra instead of installing through a broken link.
+    failed.push(
+      `node_modules in ${workspaceRoot} is a broken link — re-provision the worktree dep links`,
+    );
+  } else if (nodeModulesState === 'missing') {
     const lockfiles = ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb'];
     let command = 'npm';
     let args = ['ci'];

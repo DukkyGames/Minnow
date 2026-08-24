@@ -14,7 +14,7 @@ import { parseGitNumstat } from '../tools/git-change-stats.js';
 import { invalidateRegisteredWorktreeCache } from './allowlist.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { refreshDependencies } from './dep-install.js';
-import { symlinkDependencyDirs } from './dep-symlinks.js';
+import { ensureDependencyDirs } from './dep-symlinks.js';
 import {
   getBoardWorktreesDir,
   getChatWorktreePath,
@@ -30,6 +30,9 @@ async function git(args, cwd = getWorkspaceRoot()) {
 
 const ok = (r) => r.code === 0;
 const out = (r) => `${r.stdout ?? ''}\n${r.stderr ?? ''}`.trim();
+
+/** Human-readable summary of the dep failures in an `ensureDependencyDirs` result. */
+const depFailureOutput = (deps) => deps.failed.map((f) => f.reason).join('; ');
 
 async function pathExists(targetPath) {
   try {
@@ -65,17 +68,17 @@ export async function ensureIntegration({ boardId, branch, baseRef }) {
     if (!ok(b)) return { ok: false, stage: 'branch', output: out(b) };
   }
   const intPath = getWorktreeSlotPath(boardId, 'integration');
-  try {
-    await fs.access(intPath);
-    return { ok: true, path: intPath, branch, created: false };
-  } catch {
-    /* needs creation */
+  if (await pathExists(intPath)) {
+    // Re-validate on reuse: task worktrees chain their dep links off integration, so a
+    // broken link here breaks every task in the wave.
+    const deps = await ensureDependencyDirs(getWorkspaceRoot(), intPath);
+    return { ok: true, path: intPath, branch, created: false, deps };
   }
   await fs.mkdir(path.dirname(intPath), { recursive: true });
   const w = await git(['worktree', 'add', intPath, branch]);
   if (!ok(w)) return { ok: false, stage: 'worktree', path: intPath, output: out(w) };
-  await symlinkDependencyDirs(getWorkspaceRoot(), intPath);
-  return { ok: true, path: intPath, branch, created: true };
+  const deps = await ensureDependencyDirs(getWorkspaceRoot(), intPath);
+  return { ok: true, path: intPath, branch, created: true, deps };
 }
 
 /**
@@ -110,6 +113,20 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
   }
 
   if (exists) {
+    // Heal first: a reused slot may carry a dangling/looping dep link from an earlier
+    // pass, and nothing else in the board flow ever re-validates it.
+    const deps = await ensureDependencyDirs(depSource, wtPath);
+    if (!deps.ok) {
+      return {
+        ok: false,
+        error: 'deps',
+        path: wtPath,
+        branch,
+        created: false,
+        deps,
+        output: depFailureOutput(deps),
+      };
+    }
     const synced = await mergeBaseIntoWorktree(wtPath, base);
     if (!synced.ok) {
       return {
@@ -120,7 +137,7 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
         output: synced.output,
       };
     }
-    return { ok: true, path: wtPath, branch, created: false, synced: true };
+    return { ok: true, path: wtPath, branch, created: false, synced: true, deps };
   }
 
   await fs.mkdir(path.dirname(wtPath), { recursive: true });
@@ -132,7 +149,18 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
   if (await branchExists(branch)) {
     const w = await git(['worktree', 'add', wtPath, branch]);
     if (!ok(w)) return { ok: false, path: wtPath, branch, output: out(w) };
-    await symlinkDependencyDirs(depSource, wtPath);
+    const deps = await ensureDependencyDirs(depSource, wtPath);
+    if (!deps.ok) {
+      return {
+        ok: false,
+        error: 'deps',
+        path: wtPath,
+        branch,
+        created: true,
+        deps,
+        output: depFailureOutput(deps),
+      };
+    }
     const synced = await mergeBaseIntoWorktree(wtPath, base);
     if (!synced.ok) {
       return {
@@ -143,13 +171,24 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
         output: synced.output,
       };
     }
-    return { ok: true, path: wtPath, branch, created: true };
+    return { ok: true, path: wtPath, branch, created: true, deps };
   }
 
   const r = await git(['worktree', 'add', '-b', branch, wtPath, baseSha]);
   if (!ok(r)) return { ok: false, path: wtPath, branch, output: out(r) };
-  await symlinkDependencyDirs(depSource, wtPath);
-  return { ok: true, path: wtPath, branch, created: true };
+  const deps = await ensureDependencyDirs(depSource, wtPath);
+  if (!deps.ok) {
+    return {
+      ok: false,
+      error: 'deps',
+      path: wtPath,
+      branch,
+      created: true,
+      deps,
+      output: depFailureOutput(deps),
+    };
+  }
+  return { ok: true, path: wtPath, branch, created: true, deps };
 }
 
 /**
@@ -361,9 +400,19 @@ export async function removeWorktree({ boardId, slotId }) {
   await git(['worktree', 'prune']);
   // Windows: a lingering handle can leave the dir; best-effort rm.
   try {
-    await fs.rm(wtPath, { recursive: true, force: true });
+    await fs.rm(wtPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   } catch {
-    /* best-effort */
+    /* the lstat below is the authority, not the rm */
+  }
+  // Report the truth: a surviving dir is an orphan slot that a later createWorktree
+  // would silently reuse, dep links and all.
+  if (await pathExists(wtPath)) {
+    return {
+      ok: false,
+      error: 'worktree directory survived removal',
+      path: wtPath,
+      output: out(r),
+    };
   }
   return { ok: true, path: wtPath, output: out(r) };
 }
@@ -385,6 +434,7 @@ export async function cleanupBoardWorktrees({ boardId, includeIntegration = fals
   }
   let removed = 0;
   let keptIntegration = false;
+  const failedSlots = [];
   for (const slot of slots) {
     // Keep integration until the user lands work in the workspace (MIN-208 finish dashboard).
     if (!includeIntegration && slot === 'integration') {
@@ -392,17 +442,24 @@ export async function cleanupBoardWorktrees({ boardId, includeIntegration = fals
       continue;
     }
     const r = await removeWorktree({ boardId, slotId: slot });
-    if (r.ok) removed += 1;
+    if (r.ok) {
+      removed += 1;
+    } else {
+      failedSlots.push(slot);
+      console.warn(
+        `[worktree] ${boardId}/${slot} survived cleanup: ${r.error || r.output || 'unknown'}`,
+      );
+    }
   }
   await git(['worktree', 'prune']);
   if (!keptIntegration) {
     try {
-      await fs.rm(dir, { recursive: true, force: true });
+      await fs.rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     } catch {
       /* best-effort */
     }
   }
-  return { ok: true, removed, keptIntegration };
+  return { ok: true, removed, keptIntegration, failedSlots };
 }
 
 /**
@@ -686,16 +743,16 @@ export async function createChatWorktree({ chatId, branch, baseRef }) {
   if (await branchExists(branchName)) {
     const w = await git(['worktree', 'add', wtPath, branchName]);
     if (!ok(w)) return { ok: false, path: wtPath, branch: branchName, output: out(w) };
-    await symlinkDependencyDirs(depSource, wtPath);
+    const deps = await ensureDependencyDirs(depSource, wtPath);
     invalidateRegisteredWorktreeCache();
-    return { ok: true, path: wtPath, branch: branchName, created: true };
+    return { ok: true, path: wtPath, branch: branchName, created: true, deps };
   }
 
   const r = await git(['worktree', 'add', '-b', branchName, wtPath, baseSha]);
   if (!ok(r)) return { ok: false, path: wtPath, branch: branchName, output: out(r) };
-  await symlinkDependencyDirs(depSource, wtPath);
+  const deps = await ensureDependencyDirs(depSource, wtPath);
   invalidateRegisteredWorktreeCache();
-  return { ok: true, path: wtPath, branch: branchName, created: true };
+  return { ok: true, path: wtPath, branch: branchName, created: true, deps };
 }
 
 /**
