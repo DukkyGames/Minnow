@@ -344,6 +344,10 @@ async function streamSubAgentTurnOnce(
   });
   const harmonyRouter = new HarmonyChannelRouter();
   const toolCallRouter = new ContentToolCallRouter();
+  // Second capture for the inline-thinking channel: Qwen3.8 interleaved thinking emits
+  // `<tool_call>` *before* `</think>`, so without this the call is swallowed as reasoning
+  // and no tool ever runs (the model then retries until the generation overflows).
+  const thinkingToolCallRouter = new ContentToolCallRouter();
   const carriedText = streamOptions?.carriedText ?? '';
   let proseText = carriedText;
   let reasoningText = streamOptions?.carriedReasoning ?? '';
@@ -383,14 +387,23 @@ async function streamSubAgentTurnOnce(
     streamOptions?.onReasoningDelta?.(reasoningText);
   }
 
+  function emitThinking(text: string): void {
+    if (!text) {
+      return;
+    }
+    feedThinkingBudget(text);
+    reasoningText += text;
+    notifyReasoningDelta();
+  }
+
   function processRoutedParts(parts: RoutedContentPart[]): void {
     for (const [text, isThinking] of parts) {
       if (isThinking) {
         if (text) {
           noteThinkingChannel('inline');
-          feedThinkingBudget(text);
-          reasoningText += text;
-          notifyReasoningDelta();
+          // A `<tool_call>` block inside the think span is withheld from reasoning text
+          // and kept for post-stream parsing instead.
+          emitThinking(thinkingToolCallRouter.feed(text));
         }
         continue;
       }
@@ -444,6 +457,7 @@ async function streamSubAgentTurnOnce(
       processRoutedParts(inlineRouter.feed(harmonyText));
     }
     processRoutedParts(inlineRouter.flush());
+    emitThinking(thinkingToolCallRouter.flush());
     emitProse(toolCallRouter.flush());
   }
 
@@ -514,6 +528,12 @@ async function streamSubAgentTurnOnce(
   const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls, {
     harmonyParseText: harmonyRouter.getCommentaryParseText(),
     xmlParseText: toolCallRouter.getToolCallParseText(),
+    // Thinking-side markup: the streamed think span, plus a block the post-stream split
+    // just moved out of `fullText` and into reasoning.
+    thinkingXmlParseText: [
+      thinkingToolCallRouter.getToolCallParseText(),
+      ...split.thinking,
+    ].join('\n'),
   });
   // Carried/resumed text bypasses the router; drop markup only once it parsed as a call.
   if (toolCalls.length > 0 && hasXmlToolCallMarkup(fullText)) {

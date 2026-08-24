@@ -58,6 +58,13 @@ export class BenchmarkStreamContentRouter {
 
   private readonly toolCallRouter = new ContentToolCallRouter();
 
+  /**
+   * Second capture for the inline-thinking channel: Qwen3.8 interleaved thinking emits
+   * `<tool_call>` *before* `</think>`, so without this the call is swallowed as reasoning
+   * and no tool ever runs.
+   */
+  private readonly thinkingToolCallRouter = new ContentToolCallRouter();
+
   private readonly thinkingBudgetTracker: ThinkingBudgetTracker | null;
 
   private readonly cumulativeBudget: boolean;
@@ -98,6 +105,11 @@ export class BenchmarkStreamContentRouter {
     return this.toolCallRouter.getToolCallParseText();
   }
 
+  /** `<tool_call>` blocks captured inside a `<think>` span (fallback parse only). */
+  getThinkingToolCallParseText(): string {
+    return this.thinkingToolCallRouter.getToolCallParseText();
+  }
+
   ingestReasoningDelta(delta: string): void {
     if (!delta) return;
     this.feedThinkingBudget(delta);
@@ -130,6 +142,7 @@ export class BenchmarkStreamContentRouter {
       this.processRoutedParts(this.inlineRouter.feed(harmonyText));
     }
     this.processRoutedParts(this.inlineRouter.flush());
+    this.reasoningText += this.thinkingToolCallRouter.flush();
     this.proseText += this.toolCallRouter.flush();
   }
 
@@ -145,8 +158,12 @@ export class BenchmarkStreamContentRouter {
     for (const [text, isThinking] of parts) {
       if (isThinking) {
         if (text) {
-          this.feedThinkingBudget(text);
-          this.reasoningText += text;
+          // Tool-call markup inside the think span is withheld from reasoning text.
+          const visible = this.thinkingToolCallRouter.feed(text);
+          if (visible) {
+            this.feedThinkingBudget(visible);
+            this.reasoningText += visible;
+          }
         }
         continue;
       }

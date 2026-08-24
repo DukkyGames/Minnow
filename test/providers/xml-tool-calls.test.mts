@@ -12,6 +12,11 @@ import {
   tryParseXmlToolCallsFromText,
 } from '../../src/providers/xml-tool-calls.ts';
 import { mergeContentJsonToolCalls } from '../../src/providers/constrained-tool-content.ts';
+import {
+  InlineContentThinkingRouter,
+  modelLikelyUsesInlineThinking,
+} from '../../src/api/inline-thinking.ts';
+import type { ToolCall } from '../../src/types';
 
 const READ_FILE = '<tool_call>\n{"name": "read_file", "arguments": {"path": "src/a.ts"}}\n</tool_call>';
 
@@ -146,5 +151,126 @@ describe('mergeContentJsonToolCalls with xmlParseText', () => {
 
   test('leaves plain replies without tool calls', () => {
     assert.deepEqual(mergeContentJsonToolCalls('Hello there.', []), []);
+  });
+});
+
+/**
+ * Two-channel stream pipeline as `streamCompletionTurn` wires it: inline-thinking split
+ * first, then a `<tool_call>` capture on each side. Qwen3.8 interleaved thinking emits the
+ * call *before* `</think>`, so the thinking-side capture is what keeps the tool running.
+ */
+function streamTwoChannel(
+  chunks: readonly string[],
+  streamed: ToolCall[] = [],
+): { thinking: string; prose: string; calls: readonly string[] } {
+  const inline = new InlineContentThinkingRouter({
+    thinkingModel: modelLikelyUsesInlineThinking('Qwen3.8-27B-Q4_K_M'),
+  });
+  const prose = new ContentToolCallRouter();
+  const thinkingTools = new ContentToolCallRouter();
+  let thinkingText = '';
+  let proseText = '';
+  const route = (parts: readonly (readonly [string, boolean])[]): void => {
+    for (const [text, isThinking] of parts) {
+      if (isThinking) {
+        thinkingText += thinkingTools.feed(text);
+        continue;
+      }
+      if (!text) continue;
+      proseText += prose.feed(text);
+    }
+  };
+  for (const chunk of chunks) {
+    route(inline.feed(chunk));
+  }
+  route(inline.flush());
+  thinkingText += thinkingTools.flush();
+  proseText += prose.flush();
+  const calls = mergeContentJsonToolCalls(proseText, streamed, {
+    xmlParseText: prose.getToolCallParseText(),
+    thinkingXmlParseText: thinkingTools.getToolCallParseText(),
+  });
+  return { thinking: thinkingText, prose: proseText, calls: calls.map((c) => c.function.name) };
+}
+
+describe('tool calls emitted inside a think span', () => {
+  test('runs the call and keeps the markup out of the thinking bubble', () => {
+    const out = streamTwoChannel([
+      '<think>',
+      'I should read the file.',
+      READ_FILE,
+      '</think>',
+      'Done.',
+    ]);
+    assert.deepEqual(out.calls, ['read_file']);
+    assert.equal(out.thinking.includes('tool_call'), false);
+    assert.equal(out.prose, 'Done.');
+  });
+
+  test('runs the call when `</think>` never arrives', () => {
+    const out = streamTwoChannel(['<think>', 'Reading it now.', READ_FILE]);
+    assert.deepEqual(out.calls, ['read_file']);
+    assert.equal(out.thinking, 'Reading it now.');
+  });
+
+  test('runs the call when the tags are split across deltas', () => {
+    const out = streamTwoChannel([
+      '<think>',
+      'reasoning',
+      '<tool',
+      '_call>{"name":"read_file","arguments":{"path":"a.ts"}}</tool',
+      '_call>',
+      '</think>',
+    ]);
+    assert.deepEqual(out.calls, ['read_file']);
+    assert.equal(out.thinking, 'reasoning');
+  });
+
+  test('leaves reasoning that only discusses the format alone', () => {
+    const out = streamTwoChannel([
+      '<think>',
+      'Qwen emits <tool_call>{ "name": ... }</tool_call> blocks.',
+      '</think>',
+      'Here is the answer.',
+    ]);
+    assert.deepEqual(out.calls, []);
+    assert.equal(out.thinking, 'Qwen emits <tool_call>{ "name": ... }</tool_call> blocks.');
+  });
+
+  test('never rewrites streamed tool calls from a draft left in thinking', () => {
+    const streamed: ToolCall[] = [
+      {
+        id: 'call_1',
+        type: 'function',
+        function: { name: 'read_file', arguments: '{"path":"real.ts"}' },
+      },
+    ];
+    const out = streamTwoChannel(['<think>', READ_FILE, '</think>'], streamed);
+    assert.deepEqual(out.calls, ['read_file']);
+  });
+});
+
+describe('mergeContentJsonToolCalls with thinkingXmlParseText', () => {
+  test('is a last-resort fallback behind prose markup', () => {
+    const calls = mergeContentJsonToolCalls('', [], {
+      xmlParseText: READ_FILE,
+      thinkingXmlParseText: '<tool_call>{"name":"grep","arguments":{"q":"x"}}</tool_call>',
+    });
+    assert.deepEqual(
+      calls.map((call) => call.function.name),
+      ['read_file'],
+    );
+  });
+
+  test('never enriches streamed arguments from thinking', () => {
+    const streamed = [
+      {
+        id: 'call_1',
+        type: 'function' as const,
+        function: { name: 'read_file', arguments: '{"path":"real.ts"}' },
+      },
+    ];
+    const calls = mergeContentJsonToolCalls('', streamed, { thinkingXmlParseText: READ_FILE });
+    assert.deepEqual(JSON.parse(calls[0].function.arguments), { path: 'real.ts' });
   });
 });

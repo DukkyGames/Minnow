@@ -178,11 +178,20 @@ function mergeStreamedWithContentToolCalls(
  * non-empty `arguments` from assistant JSON when SSE only delivered `{}`.
  * Harmony / gpt-oss commentary-channel payloads are parsed when SSE `tool_calls` are empty,
  * as are Qwen-style `<tool_call>` blocks from mlx-lm / llama.cpp servers.
+ *
+ * `thinkingXmlParseText` holds `<tool_call>` blocks captured inside a `<think>` span
+ * (Qwen3.8 interleaved thinking emits the call *before* `</think>`). It is a last-resort
+ * fallback only: a model that drafts a call while reasoning and then calls something else
+ * must never have its streamed arguments rewritten from the draft.
  */
 export function mergeContentJsonToolCalls(
   fullText: string,
   streamed: ToolCall[],
-  options?: { harmonyParseText?: string; xmlParseText?: string },
+  options?: {
+    harmonyParseText?: string;
+    xmlParseText?: string;
+    thinkingXmlParseText?: string;
+  },
 ): ToolCall[] {
   const harmonyHaystack = [options?.harmonyParseText, fullText]
     .filter((part): part is string => Boolean(part?.trim()))
@@ -201,7 +210,10 @@ export function mergeContentJsonToolCalls(
     if (fromXml.length > 0) {
       return fromXml;
     }
-    return fromContent;
+    if (fromContent.length > 0) {
+      return fromContent;
+    }
+    return tryParseXmlToolCallsFromText(options?.thinkingXmlParseText ?? '');
   }
 
   const contentFallback =
