@@ -60,6 +60,12 @@ export function formatDraftChatSidebarName(chat: Chat): string {
 
 /** Board planners and folder-linked chats stay even when still empty. */
 function isProtectedFromEphemeralPrune(chat: Chat, state: SessionState): boolean {
+  /*
+   * A background chat is empty from the moment it is created until its agent
+   * reports back (MIN-637). Pruning it in that window would delete the only
+   * home the run has — the very thing the dedicated chat exists to prevent.
+   */
+  if (chat.background === true) return true;
   if (chat.boardGroupId?.trim() || chat.boardTaskId?.trim()) return true;
   for (const group of state.groups ?? []) {
     if (group.plannerChatId?.trim() === chat.id) return true;

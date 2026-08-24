@@ -37,6 +37,7 @@ import {
 import { parallelToolsActivityLabel } from './parallel-tool-policy.ts';
 import { parseToolArguments } from './parse-tool-arguments.ts';
 import { setSubAgentExecutorContext } from './sub-agent-executor.ts';
+import { findToolWrapInDom } from './tool-wrap-dom.ts';
 import {
   refreshActiveBoardIfMounted,
 } from '../ui/orchestrate-board.ts';
@@ -149,6 +150,24 @@ function buildChatToolExecuteContext(
   };
 }
 
+/**
+ * The row this result should render into, resolved when the result lands.
+ *
+ * Switching chats mid-batch rebuilds the transcript from history, stranding the
+ * node captured at batch start (MIN-649). The history render redraws the card
+ * from the assistant `tool_calls` message, so re-querying by `tool_call_id`
+ * re-attaches to whatever is on screen now and the result fills in.
+ *
+ * A still-connected node is always the right target, so the query only runs on
+ * the stranded path. When nothing is mounted (the user is in another chat) the
+ * detached node is used and the write is harmless — history repaints it on the
+ * way back.
+ */
+function resolveLiveToolWrap(toolCallId: string, captured: HTMLElement): HTMLElement {
+  if (captured.isConnected) return captured;
+  return findToolWrapInDom(toolCallId) ?? captured;
+}
+
 function applyToolOutcome(
   options: RunChatToolBatchOptions,
   outcome: ToolCallOutcome,
@@ -208,7 +227,9 @@ function applyToolOutcome(
   options.trackHistoryPush();
   options.syncContextUsage();
 
-  if (options.paintInChat) {
+  // Live check, not the batch-start snapshot: the row is only worth scrolling to
+  // if it is actually mounted right now.
+  if (toolWrap.isConnected) {
     scrollChatIfPinned();
   }
 
@@ -329,9 +350,14 @@ export async function runChatToolBatch(
       );
     },
     onToolDone: (outcome) => {
-      const toolWrap = wrapById.get(outcome.toolCall.id);
-      if (!toolWrap) {
+      const captured = wrapById.get(outcome.toolCall.id);
+      if (!captured) {
         return;
+      }
+      const toolWrap = resolveLiveToolWrap(outcome.toolCall.id, captured);
+      if (toolWrap !== captured) {
+        // Keep the batch pointed at the row that is actually on screen.
+        wrapById.set(outcome.toolCall.id, toolWrap);
       }
       applyToolOutcome(options, outcome, toolWrap, argsById.get(outcome.toolCall.id));
     },

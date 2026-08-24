@@ -24,7 +24,7 @@ import {
 import { DEFAULT_DEV_SERVER_PORT, type DevServerNetwork } from '../config/startup-api';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { navigateToCodeChat, navigateToCodeDevServers } from '../os/router';
-import { getActiveChat, sessionState } from '../state/sessions';
+import { sessionState } from '../state/sessions';
 import { isLocalServerAvailable } from '../tools/config';
 import {
   clearActiveLog,
@@ -773,9 +773,21 @@ async function onDetectStop(): Promise<void> {
 }
 
 async function onDetect(): Promise<void> {
-  const chat = getActiveChat();
+  /*
+   * Detect owns a chat per workspace instead of borrowing the open one
+   * (MIN-637). That also removes the old hard failure when no chat was open —
+   * the setup agent can always be given somewhere to report.
+   */
+  const { ensureBackgroundChat } = await import('../state/background-chat');
+  const workspacePath = getWorkspacePath();
+  const chat = ensureBackgroundChat({
+    key: `dev-server-detect:${workspacePath}`,
+    name: 'Dev server setup',
+    workspacePath,
+    modeId: 'build',
+  });
   if (!chat) {
-    await appAlert('Open a chat first so Detect can spawn a setup agent.');
+    await appAlert('Sessions are still loading — try Detect again in a moment.');
     return;
   }
   bindDetectRunListener();

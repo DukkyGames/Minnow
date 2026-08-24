@@ -10,7 +10,7 @@ import {
   waitForSubAgent,
 } from '../../agents/orchestrator.ts';
 import { isSubAgentRunSuccessful } from '../../agents/sub-agent-outcome.ts';
-import { decodeModelSelectKey } from '../../lib/model-select-key.ts';
+import { ensureBackgroundChat } from '../../state/background-chat.ts';
 import {
   appendIssueLinks,
   defaultIssuePlanPath,
@@ -18,13 +18,7 @@ import {
   requireIssueStatusForRole,
   updateIssue,
 } from '../../state/issues-store.ts';
-import {
-  createEmptyChatObject,
-  findChatById,
-  scheduleSaveSessions,
-  sessionState,
-  touchChat,
-} from '../../state/sessions.ts';
+import { findChatById } from '../../state/sessions.ts';
 import type { Chat, IssueCard } from '../../types.ts';
 import { isTriageStatus } from '../../issues/taxonomy.ts';
 import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
@@ -66,6 +60,11 @@ export {
 } from './workflow-seeds.ts';
 export type { IssueActivityTarget } from './workflow-seeds.ts';
 
+/** Stable background-chat key for an issue's workflow runs (one chat per issue). */
+function issueBackgroundChatKey(issue: IssueCard): string {
+  return `issue:${issue.id}`;
+}
+
 /**
  * Spawn issue-writer for a triage note; settle leaves status as triage.
  * The writer updates the card via issue_update / issue_link; we only refresh notes on failure.
@@ -79,7 +78,9 @@ export async function runIssueExpandWithAgent(
     return { ok: false, error: 'Expand with agent is only available in triage' };
   }
 
-  const parentChatId = sessionState?.activeId ?? null;
+  // Its own chat, not whatever happens to be open (MIN-637). The writer reports
+  // back into this chat, so the user's conversation stays untouched.
+  const parentChatId = ensureIssueWorkflowChat(issue, 'Expand')?.id ?? null;
 
   try {
     const result = await spawnSubAgent({
@@ -159,7 +160,13 @@ export async function openIssueActivity(issue: IssueCard): Promise<boolean> {
   return true;
 }
 
-/** Create or reuse a workflow chat linked on the issue (Investigate / background Plan). */
+/**
+ * Create or reuse a workflow chat linked on the issue (Investigate / background Plan).
+ *
+ * Delegates creation to {@link ensureBackgroundChat}, which never assigns
+ * `activeId`. This function used to steal focus and repaint the main column,
+ * which is what made background issue work land in whatever chat was open.
+ */
 function ensureIssueWorkflowChat(issue: IssueCard, namePrefix: string): Chat | null {
   const existingId = issue.chatIds?.length
     ? issue.chatIds[issue.chatIds.length - 1]
@@ -168,29 +175,16 @@ function ensureIssueWorkflowChat(issue: IssueCard, namePrefix: string): Chat | n
     const existing = findChatById(existingId);
     if (existing) return existing;
   }
-  if (!sessionState) return null;
 
-  const modelSelect = document.getElementById('modelSelect') as HTMLSelectElement | null;
-  const rawSel = modelSelect?.value?.trim() ?? '';
-  const parsed = decodeModelSelectKey(rawSel);
-  const modelId = parsed?.modelId ?? rawSel;
-  const chat = createEmptyChatObject(modelId, issue.workspacePath);
-  if (parsed) chat.providerId = parsed.providerId;
-  chat.name = `${namePrefix}: ${issue.title.slice(0, 48)}`;
-  chat.modeId = 'build';
-
-  sessionState.chats.unshift(chat);
-  sessionState.activeId = chat.id;
-  touchChat(chat);
-  appendIssueLinks(issue.id, { chatId: chat.id });
-  scheduleSaveSessions();
-
-  void import('../../ui/sidebar.ts').then((m) => {
-    m.renderSidebar();
-    m.syncModelSelectForActiveChat();
+  const chat = ensureBackgroundChat({
+    key: issueBackgroundChatKey(issue),
+    name: `${namePrefix}: ${issue.title.slice(0, 48)}`,
+    workspacePath: issue.workspacePath,
+    modeId: 'build',
   });
-  void import('../../ui/messages.ts').then((m) => m.renderChatFromHistory(chat));
+  if (!chat) return null;
 
+  appendIssueLinks(issue.id, { chatId: chat.id });
   return chat;
 }
 
@@ -454,9 +448,10 @@ export async function runIssueSendToBoard(
     await new Promise((r) => setTimeout(r, 0));
 
     const { launchBoardFromPlan } = await import('../../ui/orchestrate-launch.ts');
-    launchBoardFromPlan(planPath);
+    const launched = launchBoardFromPlan(planPath);
 
-    const boardChatId = sessionState?.activeId;
+    // The launch reports its own chat; `activeId` may still be the user's (MIN-637).
+    const boardChatId = launched?.chat.id;
     updateIssue(issueId, {
       status: requireIssueStatusForRole('in_progress'),
       ...(boardChatId ? { boardChatId } : {}),

@@ -1,4 +1,5 @@
-﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
+﻿import { reportBackgroundError } from '../boot/report-background-error';
+import { isChatsWorkspacePath } from '../lib/chats-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
 import { isChatStreaming } from '../chat/streaming-state';
@@ -1269,6 +1270,14 @@ export async function deleteChat(chatId: string, evt?: Event): Promise<void> {
 
 export async function switchChat(id: string): Promise<void> {
   restoreChatColumnOnChatSelect();
+  /*
+   * A sub-agent that settled while its parent was streaming has nothing left to
+   * wake it once that stream ends silently (MIN-639). Every chat switch is a
+   * cheap, natural moment to re-check the queue.
+   */
+  void import('../agents/sub-agent-completion-push')
+    .then((m) => m.flushAllPendingSubAgentCompletions())
+    .catch((err) => reportBackgroundError('sub-agent-completion-flush', err));
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }
@@ -1300,6 +1309,15 @@ export async function switchChat(id: string): Promise<void> {
     acknowledgeChatViewed(id);
     openBoardGroup(boardRestoreGroup.id);
     syncViewModeToggleFromActiveChat();
+    /*
+     * Board state (`activeBoardGroupId`, `viewMode`) is committed by
+     * `openBoardGroup` above, so the file tree can finally resolve the board's
+     * integration worktree (MIN-619). This branch returns early, so without the
+     * sync here the tree stayed on the previous chat's root until the user
+     * opened Source Control — which is exactly what re-ran it.
+     */
+    clearPanelCwdUserOverride();
+    syncPanelFromActiveChat({ forceFileTree: true });
     syncComposerFromStreamingState();
     closeMobileSidebar();
     applySidebarVisuals();

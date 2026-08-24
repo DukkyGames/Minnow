@@ -24,6 +24,11 @@ import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/
 import { resetWorkspaceStateForTests, setWorkspaceFromServer } from '../../src/state/workspace.ts';
 import type { Chat } from '../../src/types.ts';
 import { streamingChatIds } from '../../src/app-state.ts';
+import {
+  ActivityLogBuffer,
+  type ActivityLogEntry,
+} from '../../src/research/activity-log.ts';
+import { PlanActivityCollector } from '../../src/ui/plan-activity-collector.ts';
 
 let activeWindow: Window | undefined;
 
@@ -448,5 +453,59 @@ describe('super plan library', () => {
     assert.equal(formatRelativeTime(now - 3 * 3_600_000, now), '3h ago');
     assert.equal(formatRelativeTime(now - 2 * 86_400_000, now), '2d ago');
     assert.equal(formatRelativeTime(undefined, now), '');
+  });
+});
+
+describe('super plan activity ledger persistence (MIN-599)', () => {
+  afterEach(() => {
+    setSessionStateForTests(null);
+  });
+
+  function seedEntry(
+    over: Partial<ActivityLogEntry> & Pick<ActivityLogEntry, 'kind' | 'label'>,
+  ): ActivityLogEntry {
+    return { id: `seed-${over.label}-${over.detail ?? ''}`, atMs: 1_000, ...over };
+  }
+
+  test('replays the persisted ledger, including rows no other source can rebuild', async () => {
+    const chat = makeRunChat('sp-activity-1', 'draft1');
+    chat.superPlan!.stages.grill.status = 'done';
+    chat.superPlan!.stages.grill.finishedAt = 2_000;
+    chat.superPlan!.activityLog = [
+      seedEntry({ kind: 'info', label: 'Model', detail: 'thinking…' }),
+      seedEntry({ kind: 'sub-agent', label: 'Reviewer', detail: 'running' }),
+      seedEntry({ kind: 'stage', label: 'Stage', detail: 'Grill · done' }),
+    ];
+    setSessionStateForTests({ version: 5, activeId: chat.id, chats: [chat] });
+
+    const buffer = new ActivityLogBuffer();
+    const collector = new PlanActivityCollector(chat.id, buffer);
+    await collector.start();
+    collector.stop();
+
+    const details = buffer.getEntries().map((e) => `${e.label}|${e.detail ?? ''}`);
+    // Main-turn and reviewer rows are the bulk of the ledger and were previously
+    // never persisted, so reload came back nearly empty.
+    assert.ok(details.includes('Model|thinking…'));
+    assert.ok(details.includes('Reviewer|running'));
+    // The stage row is in both the persisted ledger and the stage replay.
+    assert.equal(details.filter((d) => d.startsWith('Stage|Grill')).length, 1);
+    // Replay is history, not new activity.
+    assert.equal(buffer.getUnreadCount(), 0);
+  });
+
+  test('mirrors new rows back onto the chat so leaving the screen keeps them', async () => {
+    const chat = makeRunChat('sp-activity-2', 'draft1');
+    setSessionStateForTests({ version: 5, activeId: chat.id, chats: [chat] });
+
+    const buffer = new ActivityLogBuffer();
+    const collector = new PlanActivityCollector(chat.id, buffer);
+    await collector.start();
+
+    buffer.append(seedEntry({ kind: 'tool', label: 'Tool', detail: 'tool: write_file' }));
+    collector.stop();
+
+    const persisted = chat.superPlan!.activityLog ?? [];
+    assert.ok(persisted.some((e) => e.detail === 'tool: write_file'));
   });
 });

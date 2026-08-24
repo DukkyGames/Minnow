@@ -5,6 +5,7 @@
  */
 
 import { getChatAbort, setChatStopReason } from '../app-state.ts';
+import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup.ts';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path.ts';
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
@@ -435,24 +436,34 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   markSessionScalarsDirty();
   group.viewMode = 'board';
   persistGroupChange(groupId);
+
+  /*
+   * Board state is committed above, so the file tree can resolve this board's
+   * integration worktree now (MIN-619). Deliberately its own chain rather than
+   * the tail of the render chain below: a rejection anywhere in that chain used
+   * to swallow this sync, leaving the tree on the previous root until the user
+   * opened Source Control.
+   */
+  void import('../ui/git-panel')
+    .then((m) => m.syncPanelFromActiveChat({ forceFileTree: true }))
+    .catch((err) => reportBackgroundError('board-view-panel-sync', err));
+
   void import('../ui/code-overview')
     .then(({ dismissCodeOverviewForNavigation }) => {
       dismissCodeOverviewForNavigation();
       return import('./orchestrate-board-store.ts');
     })
     .then(({ applyOpenBoardWaveCollapse }) => {
-    if (group.orchestrateBoard) {
-      applyOpenBoardWaveCollapse(group);
-    }
-    void import('../ui/sidebar').then((m) => m.renderSidebar());
-    void import('../ui/messages').then((m) => {
-      const chat = state.chats.find((c) => c.id === state.activeId);
-      if (chat) m.renderChatFromHistory(chat);
-    });
-    void import('../ui/git-panel').then((m) =>
-      m.syncPanelFromActiveChat({ forceFileTree: true }),
-    );
-  });
+      if (group.orchestrateBoard) {
+        applyOpenBoardWaveCollapse(group);
+      }
+      void import('../ui/sidebar').then((m) => m.renderSidebar());
+      void import('../ui/messages').then((m) => {
+        const chat = state.chats.find((c) => c.id === state.activeId);
+        if (chat) m.renderChatFromHistory(chat);
+      });
+    })
+    .catch((err) => reportBackgroundError('board-view-activate', err));
 }
 
 /** Open folder board view in the main column (focuses planner chat when a task chat was active). */

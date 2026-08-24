@@ -83,6 +83,13 @@ export interface SuperPlanState {
   review1Critique?: string;
   /** Pass 2 plan-reviewer structured critique (optional audit trail). */
   review2Critique?: string;
+  /**
+   * Capped Activity ledger (MIN-599). The live buffer is rebuilt on every page
+   * mount, so without this the log was lost by simply leaving the screen — and
+   * reload only ever recovered stage transitions plus the research SSE log,
+   * never the main-turn or reviewer rows that make up most of it.
+   */
+  activityLog?: import('../../research/activity-log').ActivityLogEntry[];
 }
 
 export function isSuperPlanStageId(value: string): value is SuperPlanStageId {

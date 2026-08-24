@@ -6,11 +6,14 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import { emitSubAgentRunUpdated } from '../../src/agents/sub-agent-events.ts';
 import {
+  flushAllPendingSubAgentCompletions,
   flushSubAgentCompletionPushForChat,
   initSubAgentCompletionPush,
   resetSubAgentCompletionPushForTests,
   setSubAgentCompletionDeliverHook,
+  setSubAgentCompletionNotifyHook,
 } from '../../src/agents/sub-agent-completion-push.ts';
+import { streamingChatIds } from '../../src/app-state.ts';
 import { resetSubAgentOrchestrator, waitForSubAgent } from '../../src/agents/orchestrator.ts';
 import { resetSubAgentConfigCache, setRuntimeSubAgentOverrides } from '../../src/agents/sub-agent-config.ts';
 import {
@@ -47,8 +50,11 @@ function makeBuildChat(): Chat {
 
 describe('sub-agent completion push', () => {
   const deliveries: Array<{ chatId: string; message: string; runIds: string[] }> = [];
+  const notified: Array<{ chatId: string; runId: string }> = [];
 
   beforeEach(() => {
+    streamingChatIds.clear();
+    notified.length = 0;
     resetSubAgentOrchestrator();
     resetSubAgentConfigCache();
     resetSubAgentRunnerFactory();
@@ -66,8 +72,26 @@ describe('sub-agent completion push', () => {
     setSubAgentCompletionDeliverHook(async (chatId, message, runIds) => {
       deliveries.push({ chatId, message, runIds: [...runIds] });
     });
+    setSubAgentCompletionNotifyHook((chatId, run) => {
+      notified.push({ chatId, runId: run.runId });
+    });
     initSubAgentCompletionPush();
   });
+
+  /** Settle one background run against CHAT_ID and return its run id. */
+  async function settleRun(): Promise<string> {
+    const { spawnSubAgent } = await import('../../src/agents/orchestrator.ts');
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scan',
+      wait: false,
+      parentChatId: CHAT_ID,
+      parentTurnId: 'turn-1',
+      modeId: 'build',
+    });
+    await waitForSubAgent(FIXED_RUN_ID);
+    return FIXED_RUN_ID;
+  }
 
   test('delivers one coalesced resume when run settles and parent is idle', async () => {
     const { spawnSubAgent } = await import('../../src/agents/orchestrator.ts');
@@ -106,6 +130,51 @@ describe('sub-agent completion push', () => {
     await flushSubAgentCompletionPushForChat(CHAT_ID);
     await flushSubAgentCompletionPushForChat(CHAT_ID);
     assert.equal(deliveries.length, 1);
+  });
+
+  test('keeps a failed delivery queued instead of dropping it (MIN-639)', async () => {
+    let fail = true;
+    setSubAgentCompletionDeliverHook(async (chatId, message, runIds) => {
+      if (fail) throw new Error('resume blew up');
+      deliveries.push({ chatId, message, runIds: [...runIds] });
+    });
+
+    await settleRun();
+    await flushSubAgentCompletionPushForChat(CHAT_ID);
+    assert.equal(deliveries.length, 0);
+
+    // The run must still be queued — a non-transport failure used to delete it.
+    fail = false;
+    await flushSubAgentCompletionPushForChat(CHAT_ID);
+    assert.equal(deliveries.length, 1);
+    assert.deepEqual(deliveries[0]?.runIds, [FIXED_RUN_ID]);
+  });
+
+  test('delivers after the parent stream ends rather than dropping (MIN-639)', async () => {
+    streamingChatIds.add(CHAT_ID);
+    await settleRun();
+    await flushSubAgentCompletionPushForChat(CHAT_ID);
+    assert.equal(deliveries.length, 0);
+
+    // Stream ended silently; the chat-switch drain is the backstop.
+    streamingChatIds.delete(CHAT_ID);
+    flushAllPendingSubAgentCompletions();
+    await new Promise((r) => setTimeout(r, 0));
+
+    assert.equal(deliveries.length, 1);
+    assert.deepEqual(deliveries[0]?.runIds, [FIXED_RUN_ID]);
+  });
+
+  test('notifies when the parent chat is gone instead of silence (MIN-639)', async () => {
+    streamingChatIds.add(CHAT_ID);
+    await settleRun();
+    streamingChatIds.delete(CHAT_ID);
+    setSessionStateForTests({ version: 2, activeId: null, chats: [] });
+
+    await flushSubAgentCompletionPushForChat(CHAT_ID);
+
+    assert.equal(deliveries.length, 0);
+    assert.deepEqual(notified, [{ chatId: CHAT_ID, runId: FIXED_RUN_ID }]);
   });
 
   test('skips push for orchestrate mode chats', async () => {

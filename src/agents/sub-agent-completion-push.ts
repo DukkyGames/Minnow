@@ -1,6 +1,13 @@
 /**
  * Event-driven delivery of sub-agent results to the parent chat (non-orchestrate modes).
- * Coalesces completions while the parent is streaming; retries once on transport errors.
+ * Coalesces completions while the parent is streaming; retries on transport errors.
+ *
+ * A completion is only ever dropped from the queue once it is *known delivered*
+ * (MIN-639). Every other outcome — a guard bailing out, a transport failure, a
+ * parent that is still streaming — leaves the run pending and schedules another
+ * attempt. When the parent can never accept the resume (chat deleted,
+ * user-stopped, switched to orchestrate) the summary is surfaced as a
+ * notification and persisted onto the chat instead of vanishing.
  */
 
 import { normalizeModeId } from '../chat/modes/types';
@@ -11,6 +18,7 @@ import {
   notifyChatStreamEnded,
   subscribeChatStreamEnd,
 } from '../chat/streaming-state';
+import { reportBackgroundError } from '../boot/report-background-error';
 import { findChatById } from '../state/sessions';
 import type { PersistedSubAgentRun } from '../types';
 import { getSubAgentRun, listSubAgentRunsForParentChat } from './orchestrator';
@@ -22,6 +30,14 @@ const pendingCompletionByChat = new Map<string, Set<string>>();
 const deliveredRunIds = new Set<string>();
 const nudgedRunIds = new Set<string>();
 const resumeInFlightByChat = new Set<string>();
+const retryTimerByChat = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Backstop poll for a queue that no event will drain on its own: the parent
+ * stream ended before the run settled, or delivery failed mid-flight. Cheap
+ * because it only exists while something is actually pending.
+ */
+const RETRY_DELAY_MS = 5_000;
 
 let pushInitialized = false;
 
@@ -31,11 +47,19 @@ type CompletionDeliverFn = (
   runIdsToMark: string[],
 ) => Promise<void>;
 
+type CompletionNotifyFn = (chatId: string, run: SubAgentRun) => void;
+
 let deliverHook: CompletionDeliverFn | null = null;
+let notifyHook: CompletionNotifyFn | null = null;
 
 /** Tests: capture delivery without running the full chat loop. */
 export function setSubAgentCompletionDeliverHook(fn: CompletionDeliverFn | null): void {
   deliverHook = fn;
+}
+
+/** Tests: capture the undeliverable-completion fallback without the notification stack. */
+export function setSubAgentCompletionNotifyHook(fn: CompletionNotifyFn | null): void {
+  notifyHook = fn;
 }
 
 function isOrchestrateChat(chatId: string): boolean {
@@ -43,12 +67,90 @@ function isOrchestrateChat(chatId: string): boolean {
   return Boolean(chat && normalizeModeId(chat.modeId) === 'orchestrate');
 }
 
-function shouldSkipPushForChat(chatId: string): boolean {
+/**
+ * Why a resume can never land on this chat, or `null` when it can.
+ *
+ * Split out from the old boolean so the enqueue path can treat `orchestrate`
+ * (the board owns delivery — nothing was lost) differently from a chat that has
+ * gone away underneath a queued completion.
+ */
+type PushSkipReason = 'missing_chat' | 'orchestrate' | 'user_stopped';
+
+function pushSkipReason(chatId: string): PushSkipReason | null {
   const chat = findChatById(chatId);
-  if (!chat) return true;
-  if (normalizeModeId(chat.modeId) === 'orchestrate') return true;
-  if (isUserStoppedChat(chat)) return true;
-  return false;
+  if (!chat) return 'missing_chat';
+  if (normalizeModeId(chat.modeId) === 'orchestrate') return 'orchestrate';
+  if (isUserStoppedChat(chat)) return 'user_stopped';
+  return null;
+}
+
+function shouldSkipPushForChat(chatId: string): boolean {
+  return pushSkipReason(chatId) !== null;
+}
+
+function cancelRetryFlush(chatId: string): void {
+  const timer = retryTimerByChat.get(chatId);
+  if (timer === undefined) return;
+  clearTimeout(timer);
+  retryTimerByChat.delete(chatId);
+}
+
+/** Re-attempt a queue that still holds work after this pass (idempotent per chat). */
+function scheduleRetryFlush(chatId: string): void {
+  if (retryTimerByChat.has(chatId)) return;
+  const timer = setTimeout(() => {
+    retryTimerByChat.delete(chatId);
+    void flushPendingCompletions(chatId);
+  }, RETRY_DELAY_MS);
+  // Never hold a node test run (or an app quit) open on a backstop poll.
+  (timer as unknown as { unref?: () => void }).unref?.();
+  retryTimerByChat.set(chatId, timer);
+}
+
+/**
+ * Last resort for a completion the parent chat can never accept: surface it in
+ * the inbox and keep the transcript recoverable on the chat blob.
+ */
+function notifyUndeliverableCompletion(chatId: string, run: SubAgentRun): void {
+  if (notifyHook) {
+    notifyHook(chatId, run);
+    return;
+  }
+  // `persistSubAgentRunSnapshot` no-ops when the chat is gone, which is exactly
+  // the deleted-chat case — the notification is then the only surface left.
+  void import('../state/sub-agent-session-sync')
+    .then((m) => m.persistSubAgentRunSnapshot(run))
+    .catch((err) => reportBackgroundError('sub-agent-completion-persist', err));
+
+  void import('../notifications/push')
+    .then(({ pushNotification }) => {
+      const summary = run.summary?.trim() || run.error?.trim() || '';
+      pushNotification({
+        kind: run.status === 'completed' ? 'sub_agent_complete' : 'sub_agent_failed',
+        title: `Background ${run.type} ${run.status}`,
+        preview: summary.slice(0, 280) || 'Finished with no summary',
+        chatId,
+        appId: 'code',
+        dedupeKey: `sub-agent-completion:${run.runId}`,
+      });
+    })
+    .catch((err) => reportBackgroundError('sub-agent-completion-notify', err));
+}
+
+/** Mark ids delivered-by-fallback so nothing retries or double-reports them. */
+function fallbackDeliverCompletions(chatId: string, runIds: Iterable<string>): void {
+  for (const runId of runIds) {
+    if (deliveredRunIds.has(runId)) continue;
+    const run = getSubAgentRun(runId);
+    deliveredRunIds.add(runId);
+    if (!run || !isSubAgentRunTerminal(run.status)) continue;
+    notifyUndeliverableCompletion(chatId, run);
+  }
+}
+
+function clearPendingForChat(chatId: string): void {
+  pendingCompletionByChat.delete(chatId);
+  cancelRetryFlush(chatId);
 }
 
 function pendingSet(chatId: string): Set<string> {
@@ -79,23 +181,36 @@ function elapsedSeconds(run: SubAgentRun): number {
   return Math.max(0, Math.round((Date.now() - start) / 1000));
 }
 
-async function deliverResume(
+async function attemptDeliver(
   chatId: string,
   message: string,
   runIdsToMark: string[],
 ): Promise<void> {
-  if (resumeInFlightByChat.has(chatId)) return;
+  const deliver = deliverHook ?? defaultDeliverResume;
+  await deliver(chatId, message, runIdsToMark);
+  for (const id of runIdsToMark) {
+    deliveredRunIds.add(id);
+  }
+}
+
+/**
+ * Returns true only when the resume actually landed. Every `false` — guard bail
+ * or failure — is a signal to the caller to keep the runs queued (MIN-639).
+ */
+async function deliverResume(
+  chatId: string,
+  message: string,
+  runIdsToMark: string[],
+): Promise<boolean> {
+  if (resumeInFlightByChat.has(chatId)) return false;
   const chat = findChatById(chatId);
-  if (!chat || shouldSkipPushForChat(chatId)) return;
-  if (isChatStreaming(chatId)) return;
+  if (!chat || shouldSkipPushForChat(chatId)) return false;
+  if (isChatStreaming(chatId)) return false;
 
   resumeInFlightByChat.add(chatId);
   try {
-    const deliver = deliverHook ?? defaultDeliverResume;
-    await deliver(chatId, message, runIdsToMark);
-    for (const id of runIdsToMark) {
-      deliveredRunIds.add(id);
-    }
+    await attemptDeliver(chatId, message, runIdsToMark);
+    return true;
   } catch (err) {
     const messageText = err instanceof Error ? err.message : String(err);
     const transient =
@@ -103,15 +218,15 @@ async function deliverResume(
     if (transient) {
       await new Promise((r) => setTimeout(r, 1500));
       try {
-        const deliver = deliverHook ?? defaultDeliverResume;
-        await deliver(chatId, message, runIdsToMark);
-        for (const id of runIdsToMark) {
-          deliveredRunIds.add(id);
-        }
-      } catch {
-        /* next completion or nudge may retry */
+        await attemptDeliver(chatId, message, runIdsToMark);
+        return true;
+      } catch (retryErr) {
+        reportBackgroundError('sub-agent-completion-push', retryErr);
+        return false;
       }
     }
+    reportBackgroundError('sub-agent-completion-push', err);
+    return false;
   } finally {
     resumeInFlightByChat.delete(chatId);
   }
@@ -134,39 +249,79 @@ async function defaultDeliverResume(
 async function flushPendingCompletions(chatId: string): Promise<void> {
   const pending = pendingCompletionByChat.get(chatId);
   if (!pending?.size) return;
+
   if (shouldSkipPushForChat(chatId)) {
-    pending.clear();
+    // The parent can never take this resume — hand it to the inbox rather than
+    // clearing the queue into the void.
+    fallbackDeliverCompletions(chatId, [...pending]);
+    clearPendingForChat(chatId);
     return;
   }
-  if (isChatStreaming(chatId)) return;
+  if (isChatStreaming(chatId)) {
+    // The stream-end listener normally wins the race; the timer covers the case
+    // where the stream ended before this run settled and nothing fires again.
+    scheduleRetryFlush(chatId);
+    return;
+  }
 
-  const ids = [...pending].filter((id) => !deliveredRunIds.has(id));
-  const runs = runsForDelivery(chatId, ids);
-  if (!runs.length) return;
+  // Anything already delivered by another pass is done, queue or not.
+  for (const id of [...pending]) {
+    if (deliveredRunIds.has(id)) pending.delete(id);
+  }
 
+  const runs = runsForDelivery(chatId, [...pending]);
+  if (!runs.length) {
+    // Nothing left resolves to a live terminal run; it never will, so stop
+    // retrying rather than leaking the ids forever.
+    clearPendingForChat(chatId);
+    return;
+  }
+
+  const runIds = runs.map((r) => r.runId);
   const body = buildSubAgentParentResumeMessage('completion', runs);
-  await deliverResume(
-    chatId,
-    body,
-    runs.map((r) => r.runId),
-  );
-  for (const id of runs.map((r) => r.runId)) {
-    pending.delete(id);
+  await deliverResume(chatId, body, runIds);
+
+  // Only ids that actually landed leave the queue.
+  for (const id of runIds) {
+    if (deliveredRunIds.has(id)) pending.delete(id);
   }
   if (pending.size === 0) {
-    pendingCompletionByChat.delete(chatId);
+    clearPendingForChat(chatId);
+  } else {
+    scheduleRetryFlush(chatId);
   }
 }
 
 function enqueueCompletion(run: SubAgentRun): void {
   const chatId = run.parentChatId?.trim();
   if (!chatId || !isSubAgentRunTerminal(run.status)) return;
-  if (shouldSkipPushForChat(chatId)) return;
   if (deliveredRunIds.has(run.runId)) return;
 
+  const skip = pushSkipReason(chatId);
+  // Orchestrate boards deliver results themselves — staying quiet there is
+  // correct. Every other skip reason means this result has no other home.
+  if (skip === 'orchestrate') return;
+  if (skip) {
+    fallbackDeliverCompletions(chatId, [run.runId]);
+    return;
+  }
+
   pendingSet(chatId).add(run.runId);
-  if (isChatStreaming(chatId)) return;
+  if (isChatStreaming(chatId)) {
+    scheduleRetryFlush(chatId);
+    return;
+  }
   void flushPendingCompletions(chatId);
+}
+
+/**
+ * Drain every queued chat — called on chat switch, where a parent that was
+ * streaming when its sub-agent settled becomes deliverable again.
+ */
+export function flushAllPendingSubAgentCompletions(): void {
+  for (const chatId of [...pendingCompletionByChat.keys()]) {
+    void flushPendingCompletions(chatId);
+  }
 }
 
 /** Fire a single check-in nudge for a long-running sub-agent (orchestrator timer). */
@@ -212,6 +367,9 @@ export function initSubAgentCompletionPush(): void {
 export function resetSubAgentCompletionPushForTests(): void {
   pushInitialized = false;
   deliverHook = null;
+  notifyHook = null;
+  for (const timer of retryTimerByChat.values()) clearTimeout(timer);
+  retryTimerByChat.clear();
   pendingCompletionByChat.clear();
   deliveredRunIds.clear();
   nudgedRunIds.clear();

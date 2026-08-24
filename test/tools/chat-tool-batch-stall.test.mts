@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { subscribeChatStreamActivity } from '../../src/chat/streaming-state.ts';
 import { runChatToolBatch } from '../../src/tools/chat-tool-batch.ts';
+import { renderToolCall } from '../../src/ui/tool-messages.ts';
 import type { Chat, ToolCall } from '../../src/types.ts';
 
 async function flushStreamActivityCoalesce(): Promise<void> {
@@ -115,5 +116,58 @@ describe('runChatToolBatch stall activity bumps', () => {
     await flushStreamActivityCoalesce();
     assert.ok(activityCalls.length >= 1);
     assert.ok(activityCalls.every((id) => id === CHAT_ID));
+  });
+});
+
+describe('runChatToolBatch remount after a mid-batch chat switch (MIN-649)', () => {
+  test('renders the result into the row history redrew, not the stranded one', async () => {
+    const chat = makeChat();
+    const mount = document.getElementById('chatMessages')!;
+
+    let stranded: HTMLElement | undefined;
+    let redrawn: HTMLElement | undefined;
+
+    await runChatToolBatch({
+      chat,
+      toolCalls: [tc('get_datetime', 'call-1')],
+      signal: new AbortController().signal,
+      constrained: false,
+      paintInChat: true,
+      parentTurnId: 'turn-switch',
+      uiDesignerActive: false,
+      uiDesignerMode: 'off',
+      livePartialText: '',
+      thoughtController: null,
+      syncContextUsage: () => {},
+      trackHistoryPush: () => {},
+      ensureToolWrap: (toolName, args, toolCallId) => {
+        stranded = renderToolCall(toolName, args);
+        stranded.dataset.toolCallId = toolCallId;
+        mount.appendChild(stranded);
+
+        /*
+         * Switch away and back before the result lands: the transcript is
+         * rebuilt from history, so the node the batch captured is stranded and
+         * a fresh row carries the same tool_call_id.
+         */
+        mount.innerHTML = '';
+        redrawn = renderToolCall(toolName, args);
+        redrawn.dataset.toolCallId = toolCallId;
+        mount.appendChild(redrawn);
+
+        return stranded;
+      },
+    });
+
+    assert.ok(stranded);
+    assert.ok(redrawn);
+    assert.equal(stranded.isConnected, false);
+    assert.equal(redrawn.isConnected, true);
+    // The result must fill in the row that is actually on screen.
+    const redrawnBody = redrawn.querySelector<HTMLElement>('.tool-call-body');
+    const strandedBody = stranded.querySelector<HTMLElement>('.tool-call-body');
+    assert.equal(redrawnBody?.dataset.resultRendered, 'true');
+    assert.notEqual(strandedBody?.dataset.resultRendered, 'true');
+    assert.equal(chat.history.filter((m) => m.role === 'tool').length, 1);
   });
 });

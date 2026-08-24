@@ -10,10 +10,13 @@ import {
   type SuperPlanStageId,
   type SuperPlanState,
 } from '../chat/super-plan/types';
-import { findChatById } from '../state/sessions';
+import { findChatById, scheduleSaveSessions } from '../state/sessions';
 import type { Chat } from '../types';
 import {
   ActivityLogBuffer,
+  activityLogContentKey,
+  type ActivityLogEntry,
+  entriesFromResearchProgress,
   entryFromMainTurnActivity,
   entryFromSubAgentStatus,
   entryFromSuperPlanStage,
@@ -25,9 +28,19 @@ import {
 } from '../research/client';
 import type { ResearchProgress } from '../research/types';
 
+/**
+ * Rows kept on `chat.superPlan.activityLog`, mirroring the `MAX_PERSISTED_MESSAGES`
+ * capping idiom in sub-agent-session-sync: enough to reconstruct the ledger,
+ * bounded so `state.json` cannot grow without limit.
+ */
+const MAX_PERSISTED_ACTIVITY = 200;
+
 export class PlanActivityCollector {
   private readonly chatId: string;
   private readonly buffer: ActivityLogBuffer;
+  private unsubBuffer: (() => void) | null = null;
+  /** Suppresses persistence while seeding the buffer from what was persisted. */
+  private replaying = false;
   private unsubMainTurn: (() => void) | null = null;
   private unsubController: (() => void) | null = null;
   private unsubSubAgent: (() => void) | null = null;
@@ -69,6 +82,10 @@ export class PlanActivityCollector {
       this.wireResearch(chat.superPlan.researchId);
     }
 
+    // Mirror every subsequent append onto the chat so the ledger outlives both
+    // leaving the screen and a reload (MIN-599).
+    this.unsubBuffer = this.buffer.subscribe(() => this.persistBuffer());
+
     this.unsubMainTurn = subscribeMainTurnActivity(() => {
       const row = getMainTurnActivity(this.chatId);
       if (!row) return;
@@ -109,6 +126,8 @@ export class PlanActivityCollector {
   }
 
   stop(): void {
+    this.unsubBuffer?.();
+    this.unsubBuffer = null;
     this.unsubMainTurn?.();
     this.unsubMainTurn = null;
     this.unsubController?.();
@@ -124,20 +143,72 @@ export class PlanActivityCollector {
     this.lastPaused = null;
   }
 
-  /** Restore stage transitions and research SSE history from persisted chat + API. */
+  /** Write the live buffer back onto the chat, capped, for the next mount to replay. */
+  private persistBuffer(): void {
+    if (this.replaying) return;
+    const chat = findChatById(this.chatId);
+    if (!chat?.superPlan) return;
+
+    const entries = this.buffer.getEntries();
+    // A buffer reset must never erase the stored ledger — losing it is the bug.
+    if (!entries.length && chat.superPlan.activityLog?.length) return;
+
+    chat.superPlan.activityLog =
+      entries.length <= MAX_PERSISTED_ACTIVITY
+        ? [...entries]
+        : entries.slice(-MAX_PERSISTED_ACTIVITY);
+    // Dirty-hint rather than `touchChat`: an activity row is not a message, and
+    // must not reorder the sidebar. The save itself is debounced.
+    scheduleSaveSessions({ chatId: this.chatId });
+  }
+
+  /**
+   * Seed the buffer from the persisted ledger, then top it up with stage
+   * transitions and research SSE history.
+   *
+   * The persisted rows come first because they are the complete record — main
+   * turns and reviewer status included. The two derived sources only ever added
+   * stage and research rows, which is why the ledger used to come back nearly
+   * empty; they now fill gaps rather than being the whole replay, and rows
+   * already present are skipped by content (ids and timestamps are re-minted on
+   * every derivation, so they cannot be compared).
+   */
   private replayPersistedActivity(state: SuperPlanState, researchLog: ResearchProgress[]): void {
-    for (const stageId of SUPER_PLAN_STAGE_ORDER) {
-      const record = state.stages[stageId];
-      if (!record || record.status === 'pending') {
-        continue;
+    const seen = new Set<string>();
+    this.replaying = true;
+    try {
+      for (const entry of state.activityLog ?? []) {
+        this.buffer.append(entry);
+        seen.add(activityLogContentKey(entry));
       }
-      const status = record.status === 'blocked_user' ? 'waiting' : record.status;
-      const atMs = record.finishedAt ?? record.startedAt ?? Date.now();
-      this.buffer.append(entryFromSuperPlanStage(stageId, status, atMs));
+
+      const appendOnce = (entry: ActivityLogEntry): void => {
+        const key = activityLogContentKey(entry);
+        if (seen.has(key)) return;
+        seen.add(key);
+        this.buffer.append(entry);
+      };
+
+      for (const stageId of SUPER_PLAN_STAGE_ORDER) {
+        const record = state.stages[stageId];
+        if (!record || record.status === 'pending') {
+          continue;
+        }
+        const status = record.status === 'blocked_user' ? 'waiting' : record.status;
+        const atMs = record.finishedAt ?? record.startedAt ?? Date.now();
+        appendOnce(entryFromSuperPlanStage(stageId, status, atMs));
+      }
+      for (const event of researchLog) {
+        for (const row of entriesFromResearchProgress(event)) {
+          appendOnce(row);
+        }
+      }
+    } finally {
+      this.replaying = false;
     }
-    for (const event of researchLog) {
-      this.buffer.appendFromResearchProgress(event);
-    }
+    // Replay is history, not new activity — do not light up the unread badge.
+    this.buffer.markRead();
+
     const active = state.activeStage;
     const activeRecord = state.stages[active];
     this.lastStageKey = `${active}:${activeRecord?.status ?? 'unknown'}`;

@@ -959,6 +959,10 @@ export function normalizeChatRow(raw) {
         ? row.name.trim()
         : PLACEHOLDER_CHAT_NAME,
     ...(row.appScope === 'email' ? { appScope: 'email' } : {}),
+    ...(row.background === true ? { background: true } : {}),
+    ...(typeof row.backgroundKey === 'string' && row.backgroundKey.trim()
+      ? { backgroundKey: row.backgroundKey.trim() }
+      : {}),
     workspacePath,
     modelId: typeof row.modelId === 'string' ? row.modelId : '',
     ...(typeof row.providerId === 'string' && row.providerId.trim()

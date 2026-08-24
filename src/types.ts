@@ -1292,6 +1292,15 @@ export interface Chat {
   kind?: ChatKind;
   /** App-owned conversation scope, separate from Code, Desktop, and Chat rails. */
   appScope?: ChatAppScope;
+  /**
+   * True when this chat holds background work (issue workflow, dev-server
+   * Detect, scheduled run) rather than a user conversation (MIN-637). Background
+   * chats are created without ever taking `activeId`, so they announce
+   * themselves through the sidebar unread dot instead of stealing focus.
+   */
+  background?: true;
+  /** Stable work-source id ({@link background} chats) — issue id, server id, schedule id. */
+  backgroundKey?: string;
   /** Specialist id when kind === 'expert'. */
   expertId?: string;
   /** Normalized absolute workspace root at chat creation; '' = unassigned (legacy). */

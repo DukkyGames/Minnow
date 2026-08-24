@@ -151,15 +151,12 @@ export async function dispatchIssueToAgent(
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const { launchBoardFromPlan } = await import('../../ui/orchestrate-launch.ts');
-    launchBoardFromPlan(planPath);
+    const launched = launchBoardFromPlan(planPath);
 
-    const { sessionState } = await import('../../state/sessions.ts');
-    // `activeId` is nullable; normalize to undefined so the optional fields below
-    // stay optional rather than explicitly null on disk.
-    const boardChatId = sessionState?.activeId ?? undefined;
-    const group = boardChatId
-      ? (sessionState?.groups ?? []).find((g) => g.plannerChatId === boardChatId)
-      : undefined;
+    // Take the board from the launch itself. Reading `activeId` here recorded the
+    // wrong chat whenever the launch reused or kept the previous one (MIN-637).
+    const boardChatId = launched?.chat.id;
+    const group = launched?.group;
 
     startIssueAgentRun(issueId, {
       agentId: options?.agentId ?? 'builder',

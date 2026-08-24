@@ -100,6 +100,23 @@ function hostFromUrl(url: string): string {
   }
 }
 
+/**
+ * Identity of a log row by content, ignoring `id` and `atMs`.
+ *
+ * Replay re-derives stage and research rows with fresh ids and timestamps, so
+ * only the content distinguishes "this row is already in the ledger" from a new
+ * one (MIN-599).
+ */
+export function activityLogContentKey(entry: ActivityLogEntry): string {
+  return [
+    entry.kind,
+    entry.label,
+    entry.detail ?? '',
+    entry.url ?? '',
+    (entry.queries ?? []).join('\u001f'),
+  ].join('\u001e');
+}
+
 /** One-line summary for clipboard export. */
 export function formatActivityLogLine(entry: ActivityLogEntry): string {
   const parts = [formatActivityTimestamp(entry.atMs), entry.label];

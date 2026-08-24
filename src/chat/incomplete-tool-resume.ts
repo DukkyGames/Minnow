@@ -18,6 +18,8 @@ import { getActiveChat } from '../state/sessions';
 
 import { runChatToolBatch } from '../tools/chat-tool-batch';
 
+import { findToolWrapInDom } from '../tools/tool-wrap-dom';
+
 import type { Chat } from '../types';
 
 import { getActiveChatMountElement } from '../ui/chat-mount';
@@ -45,16 +47,6 @@ function getSelectedModelIdFromDom(): string {
 
 
 
-function findToolWrap(toolCallId: string): HTMLElement | null {
-
-  return document.querySelector(
-
-    `.tool-call-msg[data-tool-call-id="${CSS.escape(toolCallId)}"]`,
-
-  );
-
-}
-
 
 
 function ensureToolWrap(
@@ -69,7 +61,7 @@ function ensureToolWrap(
 
 ): HTMLElement {
 
-  const existing = findToolWrap(toolCallId);
+  const existing = findToolWrapInDom(toolCallId);
 
   if (existing) {
 

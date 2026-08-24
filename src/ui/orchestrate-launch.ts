@@ -13,7 +13,7 @@ import {
   getPlannerChatForGroup,
   linkPlannerChatToBoardFolder,
 } from '../state/chat-groups';
-import type { ChatGroup } from '../types';
+import type { Chat, ChatGroup } from '../types';
 import {
   getActiveChat,
   scheduleSaveSessions,
@@ -36,10 +36,22 @@ function finishBoardLaunch(group: ChatGroup): void {
   }
 }
 
-/** Resolve or create an Orchestrate planner chat, bind the plan, open board view, kick off init when new. */
-export function launchBoardFromPlan(planPath: string): void {
+/** The planner chat + board folder a launch resolved to. */
+export interface BoardLaunchResult {
+  chat: Chat;
+  group: ChatGroup;
+}
+
+/**
+ * Resolve or create an Orchestrate planner chat, bind the plan, open board view, kick off init when new.
+ *
+ * Returns what it actually launched. Callers must use this rather than reading
+ * `sessionState.activeId` afterwards (MIN-637): a launch that reuses or keeps
+ * the previous chat leaves `activeId` pointing somewhere else entirely.
+ */
+export function launchBoardFromPlan(planPath: string): BoardLaunchResult | null {
   const norm = normalizeOrchestratePlanPath(planPath);
-  if (!norm) return;
+  if (!norm) return null;
 
   const existingGroup = findBoardGroupForPlanPath(getWorkspacePath(), norm);
   if (existingGroup) {
@@ -56,7 +68,7 @@ export function launchBoardFromPlan(planPath: string): void {
       scheduleSaveSessions();
       linkPlannerChatToBoardFolder(planner, existingGroup);
       finishBoardLaunch(existingGroup);
-      return;
+      return { chat: planner, group: existingGroup };
     }
   }
 
@@ -82,4 +94,5 @@ export function launchBoardFromPlan(planPath: string): void {
   group.orchestratePlanPath = norm;
   scheduleSaveSessions();
   finishBoardLaunch(group);
+  return { chat, group };
 }

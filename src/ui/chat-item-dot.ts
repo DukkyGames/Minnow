@@ -277,4 +277,12 @@ export function maybeMarkChatUnreadAfterLeave(chat: Chat): void {
 /** Updates the timestamp used when the user later leaves this chat (active stream only). */
 export function recordAssistantReplyOnChat(chat: Chat): void {
   chat.lastAssistantAt = Date.now();
+  /*
+   * A background chat is never the active one by construction (MIN-637), so the
+   * switch-away path that normally raises the dot never runs for it. Without
+   * this its results would land completely silently.
+   */
+  if (chat.background === true && getActiveChat().id !== chat.id) {
+    chat.unread = true;
+  }
 }
