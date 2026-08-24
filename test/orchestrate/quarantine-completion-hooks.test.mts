@@ -67,7 +67,7 @@ function seedTwoTaskBoard() {
       { id: 'B', title: 'Task B', wave: 'W1', category: 'build', build: 'do b' },
     ],
   });
-  group.orchestrateBoard!.executionMode = 'auto';
+  group.orchestrateBoard!.maxConcurrentTasks = 3;
   group.orchestrateBoard!.autoRunning = true;
   setSessionStateForTests({
     version: 5,
@@ -123,7 +123,7 @@ describe('quarantine completion hooks', () => {
   test('mixed complete+quarantine triggers final test pending via hook', async () => {
     const { group, planner } = seedTwoTaskBoard();
     const board = group.orchestrateBoard!;
-    board.executionMode = 'manual';
+    board.autoRunning = false;
     updateTask(group, 'A', { status: 'complete' }, planner);
 
     quarantineTaskAndDependents(

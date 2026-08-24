@@ -25,7 +25,10 @@ import {
 import {
   requestPendingAfk,
   moveTaskStatus,
-  setBoardExecutionMode,
+  setBoardHandsOff,
+  setBoardMaxConcurrent,
+  getBoardExecutionMode,
+  isBoardAutoMode,
   startBoardAutoRun,
 } from '../state/orchestrate-board-actions.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
@@ -516,37 +519,75 @@ export function normalizeVerdict(raw: unknown): 'pass' | 'fail' | null {
   return null;
 }
 
-const BOARD_AUTONOMY_LEVELS = new Set(['manual', 'sequential', 'auto', 'afk']);
-
 export type BoardSetAutonomyArgs = {
-  level: 'manual' | 'sequential' | 'auto' | 'afk';
+  /** Max tasks running at once, 1–20. Omitted leaves the board's current value. */
+  concurrency?: number;
+  /** Fully autonomous. Turning it on always needs the user's confirmation. */
+  handsOff?: boolean;
 };
 
 export type ValidateBoardSetAutonomyResult =
   | { ok: true; args: BoardSetAutonomyArgs }
   | { ok: false; error: string };
 
-/** Validate board_set_autonomy arguments (exported for tests). */
+/**
+ * Validate board_set_autonomy arguments (exported for tests).
+ *
+ * The old four-value `level` is gone — a board is described by how many tasks run at
+ * once plus whether it may interrupt the user. Legacy `level` strings are still
+ * accepted and folded onto the two fields so in-flight planner turns do not break.
+ */
 export function validateBoardSetAutonomyArgs(
   args: Record<string, unknown>,
 ): ValidateBoardSetAutonomyResult {
-  const raw =
+  const out: BoardSetAutonomyArgs = {};
+
+  const legacyRaw =
     typeof args.level === 'string'
       ? args.level
       : typeof args.mode === 'string'
         ? args.mode
         : '';
-  const level = raw.trim().toLowerCase();
-  if (!level) {
-    return { ok: false, error: 'Error: board_set_autonomy requires "level"' };
+  const legacy = legacyRaw.trim().toLowerCase();
+  if (legacy) {
+    if (legacy === 'afk') out.handsOff = true;
+    else if (legacy === 'sequential' || legacy === 'manual') out.concurrency = 1;
+    else if (legacy !== 'auto') {
+      return {
+        ok: false,
+        error:
+          'Error: board_set_autonomy takes "concurrency" (1-20) and/or "handsOff" (boolean)',
+      };
+    }
   }
-  if (!BOARD_AUTONOMY_LEVELS.has(level)) {
+
+  const rawConcurrency = args.concurrency ?? args.max_concurrent_tasks;
+  if (rawConcurrency != null) {
+    const value = Number(rawConcurrency);
+    if (!Number.isFinite(value) || value < 1 || value > 20) {
+      return {
+        ok: false,
+        error: 'Error: board_set_autonomy "concurrency" must be a number between 1 and 20',
+      };
+    }
+    out.concurrency = Math.floor(value);
+  }
+
+  const rawHandsOff = args.handsOff ?? args.hands_off;
+  if (rawHandsOff != null) {
+    if (typeof rawHandsOff !== 'boolean') {
+      return { ok: false, error: 'Error: board_set_autonomy "handsOff" must be a boolean' };
+    }
+    out.handsOff = rawHandsOff;
+  }
+
+  if (out.concurrency == null && out.handsOff == null) {
     return {
       ok: false,
-      error: 'Error: board_set_autonomy requires level manual, sequential, auto, or afk',
+      error: 'Error: board_set_autonomy requires "concurrency" and/or "handsOff"',
     };
   }
-  return { ok: true, args: { level: level as BoardSetAutonomyArgs['level'] } };
+  return { ok: true, args: out };
 }
 
 /** Execute board_* tools; returns JSON string or Error: prefix. */
@@ -704,30 +745,36 @@ async function executeBoardSetAutonomy(
     return 'Error: orchestrate board is not initialized';
   }
 
-  const { level } = validated.args;
-  if (level === 'manual') {
-    setBoardExecutionMode(group, 'manual', chat);
-  } else if (level === 'afk') {
-    requestPendingAfk(group, chat);
-    return JSON.stringify({
-      level,
-      executionMode: board.executionMode ?? 'manual',
-      autoRunning: board.autoRunning === true,
-      pendingAfk: true,
-      message:
-        'AFK is pending user confirmation and will not activate until the user accepts on the board.',
-    });
-  } else {
-    setBoardExecutionMode(group, level, chat);
-    startBoardAutoRun(group, chat);
+  const { concurrency, handsOff } = validated.args;
+
+  if (concurrency != null) {
+    setBoardMaxConcurrent(group, concurrency, chat);
   }
+
+  // Hands-off can only be *requested* — the user confirms it on the board.
+  let pendingHandsOff = false;
+  if (handsOff === true && board.handsOff !== true) {
+    requestPendingAfk(group, chat);
+    pendingHandsOff = true;
+  } else if (handsOff === false) {
+    setBoardHandsOff(group, false, chat);
+  }
+
+  if (!pendingHandsOff) startBoardAutoRun(group, chat);
 
   const current = group.orchestrateBoard!;
   return JSON.stringify({
-    level,
-    executionMode: current.executionMode ?? 'manual',
+    concurrency: current.maxConcurrentTasks ?? null,
+    handsOff: current.handsOff === true,
+    executionMode: getBoardExecutionMode(current),
     autoRunning: current.autoRunning === true,
-    pendingAfk: current.pendingAfk === true,
+    pendingHandsOff,
+    ...(pendingHandsOff
+      ? {
+          message:
+            'Hands-off is pending user confirmation and will not activate until the user accepts on the board.',
+        }
+      : {}),
   });
 }
 
@@ -773,10 +820,10 @@ async function executeDelegateTasks(
   if (!board) {
     return 'Error: orchestrate board is not initialized';
   }
-  if (board.executionMode !== 'auto') {
+  if (!isBoardAutoMode(group)) {
     return (
-      'Error: delegate_tasks requires Auto-pilot (executionMode auto). ' +
-      'Enable Auto-pilot on the board or call board_get_state to confirm mode.'
+      'Error: delegate_tasks requires an initialized orchestrate board. ' +
+      'Call board_get_state to confirm the board exists.'
     );
   }
 

@@ -89,7 +89,7 @@ function makeGroup(): ChatGroup {
     },
   );
   const board = group.orchestrateBoard!;
-  board.executionMode = 'afk';
+  board.handsOff = true;
   board.autoRunning = true;
   board.tasks[0] = {
     ...board.tasks[0]!,

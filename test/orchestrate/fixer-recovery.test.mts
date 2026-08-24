@@ -173,7 +173,7 @@ function makeMergeGroup(): ChatGroup {
     waves: [{ id: 'W1', status: 'in_progress' }],
   });
   group.orchestrateBoard!.integrationBranch = INTEGRATION_BRANCH;
-  group.orchestrateBoard!.executionMode = 'afk';
+  group.orchestrateBoard!.handsOff = true;
   group.orchestrateBoard!.autoRunning = true;
   return group;
 }
@@ -276,7 +276,7 @@ function makeGroup(): ChatGroup {
     ],
     waves: [{ id: 'W1', status: 'in_progress' }],
   });
-  group.orchestrateBoard!.executionMode = 'afk';
+  group.orchestrateBoard!.handsOff = true;
   group.orchestrateBoard!.autoRunning = true;
   return group;
 }
@@ -706,7 +706,7 @@ describe('Env-fixer pass board_report routing', () => {
       ],
       waves: [{ id: 'W1', status: 'in_progress' }],
     });
-    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.handsOff = true;
     group.orchestrateBoard!.autoRunning = true;
     group.orchestrateBoard!.maxConcurrentTasks = 1;
 
@@ -901,7 +901,7 @@ function makeFixDRunningGroup(): { group: ChatGroup; planner: Chat } {
     { status: 'in_progress', chatId: FIX_D_TASK_CHAT_ID, startedAt: 1 },
     planner,
   );
-  group.orchestrateBoard!.executionMode = 'auto';
+  group.orchestrateBoard!.maxConcurrentTasks = 3;
   group.orchestrateBoard!.autoRunning = true;
   setSessionStateForTests({
     chats: [planner, makeFixDStoppedTaskChat()],

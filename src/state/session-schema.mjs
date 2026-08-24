@@ -4,6 +4,8 @@
  * client load stay on one allowlist (sessions SQLite migration Phase B.1).
  */
 
+import { applyLegacyExecutionMode } from '../lib/legacy-execution-mode.mjs';
+
 /** Inline copy of server/config/orchestrate-plan-path.js (avoid server→client coupling). */
 const ORCHESTRATE_PLANS_PREFIX = 'documentation/plans/';
 const ORCHESTRATE_PLANS_PREFIX_LEN = ORCHESTRATE_PLANS_PREFIX.length;
@@ -619,24 +621,27 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.finishReport === 'string' && r.finishReport.trim()) {
     out.finishReport = r.finishReport.trim();
   }
-  const executionModeRaw =
-    typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
-  const executionMode =
-    executionModeRaw === 'auto' ||
-    executionModeRaw === 'manual' ||
-    executionModeRaw === 'sequential' ||
-    executionModeRaw === 'afk'
-      ? executionModeRaw
-      : 'manual';
-  out.executionMode = executionMode;
   if (r.autoRunning === true) out.autoRunning = true;
+  if (r.handsOff === true) out.handsOff = true;
   if (r.pendingAfk === true) out.pendingAfk = true;
+  // Legacy four-value executionMode folds into concurrency + hands-off, then is
+  // dropped from the persisted shape. The mode is derived from those two now
+  // (src/state/board-execution-mode.ts); persisting it would make that circular.
+  if (typeof r.executionMode === 'string') {
+    applyLegacyExecutionMode(out, r.executionMode.trim());
+    if (out.autoRunning !== true) delete out.autoRunning;
+    if (out.handsOff !== true) delete out.handsOff;
+  }
+  if (typeof r.worktreeSlug === 'string' && r.worktreeSlug.trim()) {
+    out.worktreeSlug = r.worktreeSlug.trim().slice(0, 64);
+  }
   const isolationModeRaw =
     typeof r.isolationMode === 'string' ? r.isolationMode.trim() : '';
   if (
     isolationModeRaw === 'off' ||
     isolationModeRaw === 'per-task' ||
-    isolationModeRaw === 'per-wave'
+    isolationModeRaw === 'per-wave' ||
+    isolationModeRaw === 'per-board'
   ) {
     out.isolationMode = isolationModeRaw;
   }

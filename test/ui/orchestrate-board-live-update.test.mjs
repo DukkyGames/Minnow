@@ -780,7 +780,7 @@ describe('orchestrate board live updates', { concurrency: false }, () => {
     assert.equal(document.getElementById('btnViewModeToggleChat'), null);
   });
 
-  test('isolation select still works after switching to AFK', async () => {
+  test('isolation select still works after enabling hands-off', async () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
@@ -793,22 +793,23 @@ describe('orchestrate board live updates', { concurrency: false }, () => {
 
     renderBoardView(group);
 
-    const afkBtn = document.querySelector('[data-exec-mode="afk"]');
+    const handsOff = document.querySelector('.board-header__hands-off-input');
     const isoSelect = document.querySelector('.board-header__isolation-select');
-    assert.ok(afkBtn);
-    assert.ok(isoSelect instanceof HTMLSelectElement);
+    assert.ok(handsOff);
+    assert.ok(isoSelect instanceof window.HTMLSelectElement);
 
     const confirmStub = () => true;
     const priorConfirm = globalThis.window.confirm;
     globalThis.window.confirm = confirmStub;
     try {
-      afkBtn.click();
+      handsOff.checked = true;
+      handsOff.dispatchEvent(new window.Event('change', { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
       const confirmBtn = document.querySelector('[data-dialog-action="confirm"]');
-      assert.ok(confirmBtn, 'AFK switch should open appConfirm dialog');
+      assert.ok(confirmBtn, 'hands-off should open appConfirm dialog');
       confirmBtn.click();
       await new Promise((resolve) => setTimeout(resolve, 20));
-      assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+      assert.equal(group.orchestrateBoard?.handsOff, true);
 
       isoSelect.value = 'per-wave';
       isoSelect.dispatchEvent(new window.Event('change', { bubbles: true }));

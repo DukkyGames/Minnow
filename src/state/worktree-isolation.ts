@@ -6,11 +6,13 @@
  */
 
 import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
+import { sanitizePathSegment } from '../lib/sanitize-path-segment.mjs';
+import { resolveBoardConcurrency } from './board-execution-mode.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
 import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox.ts';
 import type { BoardTask, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
 
-export type IsolationMode = 'off' | 'per-task' | 'per-wave';
+export type IsolationMode = 'off' | 'per-task' | 'per-wave' | 'per-board';
 
 /** Default base port for isolated dev servers (server may override via env). */
 export const DEFAULT_BOARD_PORT_BASE = 5200;
@@ -18,33 +20,33 @@ export const DEFAULT_BOARD_PORT_BASE = 5200;
 /** Offset above {@link DEFAULT_BOARD_PORT_BASE} client port for the API server port. */
 export const DEFAULT_BOARD_API_PORT_OFFSET = 100;
 
+const ISOLATION_MODES: readonly IsolationMode[] = ['off', 'per-task', 'per-wave', 'per-board'];
+
+function asIsolationMode(value: unknown): IsolationMode | undefined {
+  return ISOLATION_MODES.includes(value as IsolationMode)
+    ? (value as IsolationMode)
+    : undefined;
+}
+
 /**
  * Effective isolation mode: per-board override, then global default (when not `auto`),
- * then derive from execution mode.
- * - `auto` / `afk` execution → `per-task`
- * - `sequential` / `manual` / unset → `off`
+ * then derive from concurrency.
+ * - concurrency `1` → `per-board` (one worktree for the whole board; its branch *is*
+ *   the integration branch, so tasks commit in sequence and never merge)
+ * - concurrency `>1` → `per-task`
+ *
+ * `off` stays selectable but is no longer any board's default — it is what left work
+ * uncommitted in the user's live checkout with no integration branch to land.
  */
 export function resolveIsolationMode(
   board: OrchestrateBoardState | null | undefined,
 ): IsolationMode {
   if (!board) return 'off';
-  const explicit = board.isolationMode;
-  if (explicit === 'off' || explicit === 'per-task' || explicit === 'per-wave') {
-    return explicit;
-  }
-  const globalIso = getAutopilotMetaSync().isolationMode;
-  if (globalIso === 'off' || globalIso === 'per-task' || globalIso === 'per-wave') {
-    return globalIso;
-  }
-  switch (board.executionMode) {
-    case 'auto':
-    case 'afk':
-      return 'per-task';
-    case 'sequential':
-    case 'manual':
-    default:
-      return 'off';
-  }
+  const explicit = asIsolationMode(board.isolationMode);
+  if (explicit) return explicit;
+  const globalIso = asIsolationMode(getAutopilotMetaSync().isolationMode);
+  if (globalIso) return globalIso;
+  return resolveBoardConcurrency(board) === 1 ? 'per-board' : 'per-task';
 }
 
 /** True when the board isolates task work into separate git worktrees. */
@@ -59,17 +61,18 @@ export function isIsolationActive(
  * dot, dash, underscore; collapse the rest to a single dash; bound length.
  */
 export function sanitizeRefFragment(raw: string | number): string {
-  const cleaned = String(raw)
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-    .slice(0, 64);
-  return cleaned || 'x';
+  return sanitizePathSegment(raw);
 }
 
-/** Board integration branch — task/wave branches merge into this. */
-export function boardIntegrationBranch(boardId: string): string {
-  return `minnow/board/${sanitizeRefFragment(boardId)}/integration`;
+/**
+ * Board integration branch — task/wave branches merge into this. In `per-board`
+ * mode it is the *only* branch: tasks commit straight onto it.
+ *
+ * The `minnow/board/` prefix is load-bearing — `server/git/git-ops.js` and
+ * `src/lib/worktree-list-parse.ts` identify board branches by it.
+ */
+export function boardIntegrationBranch(boardSlug: string): string {
+  return `minnow/board/${sanitizeRefFragment(boardSlug)}/integration`;
 }
 
 /** Worktree slot directory name for the board integration checkout. */
@@ -84,12 +87,15 @@ export function integrationWorktreePathFromSlotPath(slotPath: string): string | 
   if (!normalized) return undefined;
   const parts = normalized.split('/');
   const slot = parts[parts.length - 1];
-  if (!slot) return undefined;
+  const boardDir = parts[parts.length - 2];
+  if (!slot || !boardDir) return undefined;
+  // Slot names are free-form now (`T1-add-login`, `wave-2`, …), so the integration
+  // sibling is identified structurally: any slot directly under a board directory.
+  if (!parts.includes('worktrees')) return undefined;
+  // `<repo>/chat/<chatId>` is a regular-chat worktree (MIN-276), not a board slot.
+  if (boardDir === 'chat') return undefined;
   if (slot === BOARD_INTEGRATION_SLOT) return normalized;
-  if (/^(task|wave)-/.test(slot)) {
-    return [...parts.slice(0, -1), BOARD_INTEGRATION_SLOT].join('/');
-  }
-  return undefined;
+  return [...parts.slice(0, -1), BOARD_INTEGRATION_SLOT].join('/');
 }
 
 /** True when a chat belongs to the given orchestrate board folder. */
@@ -137,36 +143,100 @@ export function resolveBoardIntegrationWorktreePath(
   return undefined;
 }
 
+/**
+ * Readable directory/branch fragment for one task: `<taskId>-<title-slug>`.
+ * Long titles are truncated by the shared segment cap, so they degrade to a prefix
+ * rather than collide — the leading task id keeps the slot unique either way.
+ */
+export function taskWorktreeSlot(task: Pick<BoardTask, 'id' | 'title'>): string {
+  const id = sanitizeRefFragment(task.id);
+  const title = task.title?.trim()
+    ? sanitizeRefFragment(task.title.trim().toLowerCase())
+    : '';
+  return title ? sanitizeRefFragment(`${id}-${title}`) : id;
+}
+
 /** Per-task branch (per-task mode). */
-export function taskWorktreeBranch(boardId: string, taskId: string): string {
-  return `minnow/board/${sanitizeRefFragment(boardId)}/task/${sanitizeRefFragment(taskId)}`;
+export function taskWorktreeBranch(
+  boardSlug: string,
+  task: Pick<BoardTask, 'id' | 'title'>,
+): string {
+  return `minnow/board/${sanitizeRefFragment(boardSlug)}/${taskWorktreeSlot(task)}`;
 }
 
 /** Shared per-wave branch (per-wave mode). */
-export function waveWorktreeBranch(boardId: string, waveId: string | number): string {
-  return `minnow/board/${sanitizeRefFragment(boardId)}/wave/${sanitizeRefFragment(waveId)}`;
+export function waveWorktreeBranch(boardSlug: string, waveId: string | number): string {
+  return `minnow/board/${sanitizeRefFragment(boardSlug)}/wave-${sanitizeRefFragment(waveId)}`;
 }
 
 /**
  * Worktree slot id for a task under the given mode — identifies the worktree dir
- * within the board. `per-task` → one per task; `per-wave` → shared per wave.
- * Returns null when isolation is off.
+ * within the board. `per-task` → one per task; `per-wave` → shared per wave;
+ * `per-board` → the single integration checkout. Null when isolation is off.
  */
 export function worktreeSlotId(mode: IsolationMode, task: BoardTask): string | null {
-  if (mode === 'per-task') return `task-${sanitizeRefFragment(task.id)}`;
+  if (mode === 'per-task') return taskWorktreeSlot(task);
   if (mode === 'per-wave') return `wave-${sanitizeRefFragment(task.wave)}`;
+  if (mode === 'per-board') return BOARD_INTEGRATION_SLOT;
   return null;
 }
 
 /** Branch backing a task's worktree under the given mode, or null when off. */
 export function worktreeBranchFor(
   mode: IsolationMode,
-  boardId: string,
+  boardSlug: string,
   task: BoardTask,
 ): string | null {
-  if (mode === 'per-task') return taskWorktreeBranch(boardId, task.id);
-  if (mode === 'per-wave') return waveWorktreeBranch(boardId, task.wave);
+  if (mode === 'per-task') return taskWorktreeBranch(boardSlug, task);
+  if (mode === 'per-wave') return waveWorktreeBranch(boardSlug, task.wave);
+  if (mode === 'per-board') return boardIntegrationBranch(boardSlug);
   return null;
+}
+
+/**
+ * Human-readable board directory segment. Minted once and frozen onto
+ * `board.worktreeSlug` (see `ensureBoardWorktreeSlug` in orchestrate-board-actions)
+ * so renaming the board never orphans a worktree.
+ *
+ * Boards that already provisioned worktrees keep the opaque group id — their
+ * directories and branches exist on disk under that name.
+ */
+export function deriveBoardWorktreeSlug(
+  group: ChatGroup,
+  takenSlugs: Iterable<string> = [],
+): string {
+  const board = group.orchestrateBoard;
+  const existing = board?.worktreeSlug?.trim();
+  if (existing) return existing;
+
+  const provisioned =
+    Boolean(board?.integrationBranch?.trim()) ||
+    Boolean(board?.tasks?.some((t) => t.worktreePath?.trim()));
+  if (provisioned) return sanitizeRefFragment(group.id);
+
+  const planPath = group.orchestratePlanPath?.trim();
+  const planLabel = planPath
+    ? planPath.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '')
+    : '';
+  const source = planLabel || group.name?.trim() || 'board';
+  const base = sanitizeRefFragment(source.toLowerCase());
+
+  const taken = new Set<string>();
+  for (const slug of takenSlugs) {
+    const trimmed = slug?.trim();
+    if (trimmed) taken.add(trimmed);
+  }
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = sanitizeRefFragment(`${base}-${n}`);
+    if (!taken.has(candidate)) return candidate;
+  }
+  return sanitizeRefFragment(`${base}-${group.id}`);
+}
+
+/** Frozen board worktree slug for path/branch construction (falls back to group id). */
+export function boardWorktreeSlug(group: ChatGroup): string {
+  return group.orchestrateBoard?.worktreeSlug?.trim() || sanitizeRefFragment(group.id);
 }
 
 /**
@@ -179,6 +249,7 @@ export function tasksSharingSlot(
   task: BoardTask,
   allTasks: BoardTask[],
 ): BoardTask[] {
+  if (mode === 'per-board') return [...allTasks];
   if (mode === 'per-wave') {
     return allTasks.filter((t) => String(t.wave) === String(task.wave));
   }

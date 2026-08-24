@@ -13,6 +13,7 @@ import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
 import { collapseChatSidebarForBoardEnter } from '../ui/layout';
+import { boardWorktreeSlug } from './worktree-isolation.ts';
 import {
   markGroupDeleted,
   markGroupDirty,
@@ -211,7 +212,7 @@ function teardownBoardGroup(group: ChatGroup, chatIds: readonly string[]): void 
     void fetch('/api/worktree', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op: 'cleanup', boardId: group.id }),
+      body: JSON.stringify({ op: 'cleanup', boardId: boardWorktreeSlug(group) }),
     }).catch(() => {
       /* best-effort on folder delete */
     });

@@ -525,139 +525,6 @@
   white-space: nowrap;
 }
 
-.board-header__auto-pilot {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--mn-muted);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: var(--mn-bg);
-  cursor: pointer;
-  user-select: none;
-}
-
-.board-header__auto-pilot-input {
-  margin: 0;
-  accent-color: var(--mn-accent);
-}
-
-.board-header__auto-pilot-label {
-  white-space: nowrap;
-}
-
-/* Execution autonomy: segmented control (composer mode-segment family). */
-.board-header__exec-mode {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.board-header__exec-mode-segments {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--mn-bg);
-  border: 1px solid var(--mn-border);
-}
-
-.board-header__exec-mode-segment {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: calc(var(--radius-sm) - 2px);
-  background: transparent;
-  color: var(--mn-fg-muted);
-  font-family: var(--font-ui);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  line-height: 1.2;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.2s var(--ease-out),
-    color 0.2s var(--ease-out),
-    border-color 0.2s var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .board-header__exec-mode-segment:hover:not([aria-checked='true']) {
-    color: var(--mn-fg);
-    border-color: var(--mn-border);
-    background: color-mix(in srgb, var(--mn-fg) 4%, var(--mn-bg));
-  }
-}
-
-.board-header__exec-mode-segment[aria-checked='true'] {
-  background: var(--mn-accent);
-  border-color: var(--mn-accent);
-  color: var(--mn-accent-fg, var(--mn-fg-on-accent));
-}
-
-.board-header__exec-mode-segment:focus-visible {
-  outline: 2px solid var(--mn-accent);
-  outline-offset: 2px;
-}
-
-.board-header__exec-mode-hint {
-  position: absolute;
-  top: calc(100% + 5px);
-  right: 0;
-  z-index: 2;
-  margin: 0;
-  box-sizing: border-box;
-  width: max-content;
-  max-width: min(20rem, calc(100vw - 24px));
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--mn-border);
-  background: var(--mn-bg);
-  font-family: var(--font-ui);
-  font-size: 0.625rem;
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--mn-fg-muted);
-  white-space: normal;
-  overflow-wrap: break-word;
-  pointer-events: none;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--mn-fg) 8%, transparent);
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 0.4s var(--ease-out),
-    visibility 0s linear 0.4s;
-}
-
-.board-header__exec-mode-hint.is-visible {
-  opacity: 1;
-  visibility: visible;
-  transition:
-    opacity 0.4s var(--ease-out),
-    visibility 0s linear 0s;
-}
-
-.board-header__exec-mode-hint[hidden] {
-  display: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .board-header__exec-mode-hint,
-  .board-header__exec-mode-hint.is-visible {
-    transition: none;
-  }
-}
-
 .board-header__concurrency {
   display: inline-flex;
   align-items: center;
@@ -711,6 +578,8 @@
   border-radius: var(--radius-sm);
 }
 
+/* Hands-off: autonomy is a checkbox now, not a stop on a segmented control. */
+.board-header__hands-off,
 .board-header__skip-per-task-tests {
   display: inline-flex;
   align-items: center;
@@ -724,6 +593,7 @@
   user-select: none;
 }
 
+.board-header__hands-off-input,
 .board-header__skip-per-task-tests-input {
   margin: 0;
   accent-color: var(--mn-accent);
@@ -734,8 +604,13 @@
   opacity: 0.55;
 }
 
+.board-header__hands-off-label,
 .board-header__skip-per-task-tests-label {
   white-space: nowrap;
+}
+
+.board-header__hands-off:has(.board-header__hands-off-input:checked) {
+  color: var(--mn-accent);
 }
 
 /* Long spelling by default; the narrow container query swaps in the short one. */
@@ -2134,19 +2009,6 @@
   .board-header__controls {
     justify-content: flex-start;
     column-gap: 8px;
-  }
-
-  .board-header__exec-mode,
-  .board-header__exec-mode-segments {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .board-header__exec-mode-segment {
-    flex: 1 1 auto;
-    min-height: var(--touch-min);
-    padding: 0 10px;
-    font-size: 0.75rem;
   }
 
   /* Touch-sized, but never stretched: a 300px-wide "Start" reads as a banner. */

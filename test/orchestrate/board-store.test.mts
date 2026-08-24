@@ -90,7 +90,6 @@ const EXPECTED_INIT_BOARD_JSON = `{
   "lastUpdatedAt": 1710000001000,
   "timerAccumulatedMs": 0,
   "maxConcurrentTasks": 3,
-  "executionMode": "manual",
   "modelId": "test-model",
   "log": [
     {
@@ -480,8 +479,8 @@ describe('isTaskReadyForAuto DAG-first scheduling', () => {
   });
 });
 
-describe('execution mode afk', () => {
-  test('getBoardExecutionMode returns afk when set', () => {
+describe('derived execution mode', () => {
+  function seededBoard() {
     const chat = makeChat();
     const group = makeGroup();
     initBoard(group, chat, {
@@ -489,19 +488,46 @@ describe('execution mode afk', () => {
       tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    group.orchestrateBoard!.executionMode = 'afk';
-    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'afk');
+    return group;
+  }
+
+  test('mode derives from concurrency and hands-off, never from a stored string', () => {
+    const group = seededBoard();
+    const board = group.orchestrateBoard!;
+
+    board.maxConcurrentTasks = 3;
+    assert.equal(getBoardExecutionMode(board), 'auto');
+
+    board.maxConcurrentTasks = 1;
+    assert.equal(getBoardExecutionMode(board), 'sequential');
+
+    // Hands-off wins at any concurrency, including 1.
+    board.handsOff = true;
+    assert.equal(getBoardExecutionMode(board), 'afk');
+    board.maxConcurrentTasks = 4;
+    assert.equal(getBoardExecutionMode(board), 'afk');
   });
 
-  test('isBoardAutoMode and isBoardRunning recognise afk', () => {
-    const chat = makeChat();
-    const group = makeGroup();
-    initBoard(group, chat, {
-      planPath: PLAN_PATH,
-      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
-      waves: [{ id: 'W1' }],
-    });
-    group.orchestrateBoard!.executionMode = 'afk';
+  test('manual is no longer producible', () => {
+    const group = seededBoard();
+    const board = group.orchestrateBoard!;
+    for (const concurrency of [1, 2, 3, 20]) {
+      for (const handsOff of [true, false]) {
+        board.maxConcurrentTasks = concurrency;
+        board.handsOff = handsOff;
+        assert.notEqual(getBoardExecutionMode(board), 'manual');
+      }
+    }
+  });
+
+  test('initBoard does not persist an execution mode', () => {
+    const group = seededBoard();
+    assert.equal(group.orchestrateBoard!.executionMode, undefined);
+  });
+
+  test('isBoardAutoMode is true for any board; isBoardRunning needs Start', () => {
+    const group = seededBoard();
+    group.orchestrateBoard!.handsOff = true;
     assert.equal(isBoardAutoMode(group), true);
     assert.equal(isBoardRunning(group), false);
     group.orchestrateBoard!.autoRunning = true;

@@ -206,7 +206,7 @@ describe('persisted AFK harness (real server, provider HTTP, sessions, and git)'
       sessions.saveSessionsNow();
       await sessions.waitForSessionSaveForTests();
 
-      assert.equal(group.orchestrateBoard.executionMode, 'afk');
+      assert.equal(group.orchestrateBoard.handsOff, true);
       assert.ok(turnsStarted >= 6, `expected builder + tester turns, observed ${turnsStarted}`);
       assert.deepEqual(
         group.orchestrateBoard.tasks.map((task) => [task.id, task.status]),
@@ -233,12 +233,12 @@ describe('persisted AFK harness (real server, provider HTTP, sessions, and git)'
       const persisted = await harness.api<{
         groups: Array<{
           id: string;
-          orchestrateBoard?: { executionMode?: string; tasks?: Array<{ status?: string }> };
+          orchestrateBoard?: { handsOff?: boolean; tasks?: Array<{ status?: string }> };
         }>;
       }>('GET', '/api/config/sessions');
       const persistedBoard = persisted.body.groups.find((candidate) => candidate.id === seeded.groupId)
         ?.orchestrateBoard;
-      assert.equal(persistedBoard?.executionMode, 'afk');
+      assert.equal(persistedBoard?.handsOff, true);
       assert.deepEqual(
         persistedBoard?.tasks?.map((task) => task.status),
         ['complete', 'complete', 'complete'],

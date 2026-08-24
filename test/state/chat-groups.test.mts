@@ -293,7 +293,7 @@ describe('chat groups', () => {
         lastUpdatedAt: 1,
         timerAccumulatedMs: 0,
         maxConcurrentTasks: 3,
-        executionMode: 'manual' as const,
+        maxConcurrentTasks: 1,
       },
     };
     const planner = createEmptyChatObject('', WS);

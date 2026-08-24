@@ -100,7 +100,7 @@ function failedRunRecord(): TurnRunRecord {
   };
 }
 
-function makeGroup(executionMode: 'manual' | 'auto' = 'auto'): ChatGroup {
+function makeGroup(started = true): ChatGroup {
   const planner = makePlanner();
   const group: ChatGroup = {
     id: GROUP_ID,
@@ -127,8 +127,8 @@ function makeGroup(executionMode: 'manual' | 'auto' = 'auto'): ChatGroup {
     { status: 'in_progress', chatId: TASK_CHAT_ID, startedAt: 1 },
     planner,
   );
-  group.orchestrateBoard!.executionMode = executionMode;
-  group.orchestrateBoard!.autoRunning = executionMode !== 'manual';
+  group.orchestrateBoard!.maxConcurrentTasks = 3;
+  group.orchestrateBoard!.autoRunning = started;
   setSessionStateForTests({
     chats: [planner, makePartialBoardTaskChat()],
     groups: [group],
@@ -198,7 +198,7 @@ describe('finalizeBoardTaskOnStreamEnd in-place auto retry', () => {
   });
 
   test('auto retry keeps the same chat id and seeds next build with error context', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     const taskChat = makePartialBoardTaskChat();
     taskChat.history = [
@@ -226,7 +226,7 @@ describe('finalizeBoardTaskOnStreamEnd in-place auto retry', () => {
   });
 
   test('context exceeded failed run retries in-place on same chat id', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     const taskChat = makePartialBoardTaskChat();
     taskChat.history = [

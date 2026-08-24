@@ -263,7 +263,7 @@ describe('resolvePanelBrowseCwd', () => {
       viewMode: 'board' as const,
       orchestrateBoard: {
         planPath: 'documentation/plans/p.md',
-        executionMode: 'auto' as const,
+        maxConcurrentTasks: 3,
         integrationBranch,
         tasks: [
           {
@@ -318,7 +318,7 @@ describe('resolvePanelBrowseCwd', () => {
       viewMode: 'board' as const,
       orchestrateBoard: {
         planPath: 'documentation/plans/p.md',
-        executionMode: 'auto' as const,
+        maxConcurrentTasks: 3,
         integrationBranch,
         tasks: [
           {

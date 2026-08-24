@@ -11,10 +11,15 @@ import {
 } from '../agents/sub-agent-config';
 import { detectConfigServer } from './storage-mode';
 
+/**
+ * @deprecated Boards derive this from concurrency + hands-off
+ * (src/state/board-execution-mode.ts). The alias survives only for the tool filter
+ * and permission gate signatures that still speak the legacy vocabulary.
+ */
 export type AutopilotExecutionMode = 'manual' | 'sequential' | 'auto' | 'afk';
 
-/** Stored isolation sentinel `auto` means derive from execution mode at resolve time. */
-export type AutopilotIsolationMode = 'auto' | 'off' | 'per-task' | 'per-wave';
+/** Stored isolation sentinel `auto` means derive from board concurrency at resolve time. */
+export type AutopilotIsolationMode = 'auto' | 'off' | 'per-task' | 'per-wave' | 'per-board';
 
 /** Board default for agent shell sandbox (MIN-553); overridable per board. */
 export type AutopilotShellSandboxMode = 'off' | 'prefer' | 'require';
@@ -23,7 +28,8 @@ export type AutopilotContinueSmartRoute = 'off' | 'conservative' | 'aggressive';
 
 /** Persisted global autopilot defaults for orchestrate boards. */
 export interface AutopilotMeta {
-  defaultExecutionMode: AutopilotExecutionMode;
+  /** New boards start fully hands-off (never prompt the user). */
+  defaultHandsOff: boolean;
   maxConcurrentTasks: number;
   isolationMode: AutopilotIsolationMode;
 /** @deprecated Boards use toolSecurity.shellSandbox; kept for legacy config.json reads. */
@@ -61,7 +67,7 @@ const FALLBACK_MAX_BUILD_ATTEMPTS = 2;
 const FALLBACK_MAX_FINAL_TEST_ATTEMPTS = 3;
 
 export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
-  defaultExecutionMode: 'manual',
+  defaultHandsOff: false,
   maxConcurrentTasks: FALLBACK_MAX_CONCURRENT,
   isolationMode: 'auto',
   shellSandbox: 'off',
@@ -84,18 +90,12 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
 
 const AUTOPILOT_META_STORAGE_KEY = 'minnow.autopilotMeta';
 
-const EXECUTION_MODES = new Set<AutopilotExecutionMode>([
-  'manual',
-  'sequential',
-  'auto',
-  'afk',
-]);
-
 const ISOLATION_MODES = new Set<AutopilotIsolationMode>([
   'auto',
   'off',
   'per-task',
   'per-wave',
+  'per-board',
 ]);
 
 const SHELL_SANDBOX_MODES = new Set<AutopilotShellSandboxMode>([
@@ -137,14 +137,6 @@ function parseBool(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
-function parseExecutionMode(value: unknown): AutopilotExecutionMode {
-  const raw = typeof value === 'string' ? value.trim() : '';
-  if (EXECUTION_MODES.has(raw as AutopilotExecutionMode)) {
-    return raw as AutopilotExecutionMode;
-  }
-  return DEFAULT_AUTOPILOT_META.defaultExecutionMode;
-}
-
 function parseIsolationMode(value: unknown): AutopilotIsolationMode {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (ISOLATION_MODES.has(raw as AutopilotIsolationMode)) {
@@ -180,7 +172,7 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
   }
   const block = raw as Record<string, unknown>;
   return {
-    defaultExecutionMode: parseExecutionMode(block.defaultExecutionMode),
+    defaultHandsOff: parseBool(block.defaultHandsOff, DEFAULT_AUTOPILOT_META.defaultHandsOff),
     maxConcurrentTasks: clampConcurrency(
       block.maxConcurrentTasks,
       DEFAULT_AUTOPILOT_META.maxConcurrentTasks,

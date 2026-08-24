@@ -77,7 +77,8 @@ type BoardStateJson = {
   lastUpdatedAt: number;
   timerAccumulatedMs: number;
   maxConcurrentTasks: number;
-  executionMode: string;
+  executionMode?: string;
+  handsOff?: boolean;
   log?: Array<{ type: string; level: string; message: string }>;
 };
 
@@ -91,7 +92,9 @@ function assertPlannedBoardInit(parsed: BoardStateJson): void {
   assert.equal(parsed.lastUpdatedAt, FIXED_NOW);
   assert.equal(parsed.timerAccumulatedMs, 0);
   assert.equal(parsed.maxConcurrentTasks, 3);
-  assert.equal(parsed.executionMode, 'manual');
+  // Mode is derived now, never persisted onto the board.
+  assert.equal(parsed.executionMode, undefined);
+  assert.equal(parsed.handsOff, undefined);
   assert.deepEqual(parsed.tasks, [
     {
       id: 'W1-A',
@@ -119,7 +122,9 @@ function assertInProgressBoardState(parsed: BoardStateJson): void {
   assert.equal(parsed.lastUpdatedAt, FIXED_NOW);
   assert.equal(parsed.timerAccumulatedMs, 0);
   assert.equal(parsed.maxConcurrentTasks, 3);
-  assert.equal(parsed.executionMode, 'manual');
+  // Mode is derived now, never persisted onto the board.
+  assert.equal(parsed.executionMode, undefined);
+  assert.equal(parsed.handsOff, undefined);
   assert.deepEqual(parsed.tasks, [
     {
       id: 'W1-A',
@@ -970,35 +975,60 @@ async function seedInitializedBoard() {
 }
 
 describe('validateBoardSetAutonomyArgs', () => {
-  for (const level of ['manual', 'sequential', 'auto', 'afk'] as const) {
-    test(`accepts level ${level}`, () => {
-      const r = validateBoardSetAutonomyArgs({ level });
-      assert.equal(r.ok, true);
-      if (r.ok) assert.equal(r.args.level, level);
-    });
-  }
+  test('accepts concurrency, handsOff, or both', () => {
+    const conc = validateBoardSetAutonomyArgs({ concurrency: 4 });
+    assert.equal(conc.ok, true);
+    if (conc.ok) assert.deepEqual(conc.args, { concurrency: 4 });
 
-  test('accepts mode alias', () => {
-    const r = validateBoardSetAutonomyArgs({ mode: 'Auto' });
+    const hands = validateBoardSetAutonomyArgs({ handsOff: true });
+    assert.equal(hands.ok, true);
+    if (hands.ok) assert.deepEqual(hands.args, { handsOff: true });
+
+    const both = validateBoardSetAutonomyArgs({ concurrency: 2, handsOff: false });
+    assert.equal(both.ok, true);
+    if (both.ok) assert.deepEqual(both.args, { concurrency: 2, handsOff: false });
+  });
+
+  test('accepts snake_case aliases', () => {
+    const r = validateBoardSetAutonomyArgs({ max_concurrent_tasks: 6, hands_off: true });
     assert.equal(r.ok, true);
-    if (r.ok) assert.equal(r.args.level, 'auto');
+    if (r.ok) assert.deepEqual(r.args, { concurrency: 6, handsOff: true });
   });
 
-  test('rejects missing level', () => {
+  test('folds legacy level strings onto the two fields', () => {
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['afk', { handsOff: true }],
+      ['sequential', { concurrency: 1 }],
+      ['manual', { concurrency: 1 }],
+    ];
+    for (const [level, expected] of cases) {
+      const r = validateBoardSetAutonomyArgs({ level });
+      assert.equal(r.ok, true, level);
+      if (r.ok) assert.deepEqual(r.args, expected, level);
+    }
+  });
+
+  test('rejects an empty call', () => {
     const r = validateBoardSetAutonomyArgs({});
-    assert.equal(r.ok, false);
-    if (!r.ok) assert.equal(r.error, 'Error: board_set_autonomy requires "level"');
-  });
-
-  test('rejects invalid level', () => {
-    const r = validateBoardSetAutonomyArgs({ level: 'turbo' });
     assert.equal(r.ok, false);
     if (!r.ok) {
       assert.equal(
         r.error,
-        'Error: board_set_autonomy requires level manual, sequential, auto, or afk',
+        'Error: board_set_autonomy requires "concurrency" and/or "handsOff"',
       );
     }
+  });
+
+  test('rejects out-of-range concurrency and non-boolean handsOff', () => {
+    const tooHigh = validateBoardSetAutonomyArgs({ concurrency: 99 });
+    assert.equal(tooHigh.ok, false);
+    const notBool = validateBoardSetAutonomyArgs({ handsOff: 'yes' });
+    assert.equal(notBool.ok, false);
+  });
+
+  test('rejects an unknown legacy level', () => {
+    const r = validateBoardSetAutonomyArgs({ level: 'turbo' });
+    assert.equal(r.ok, false);
   });
 });
 
@@ -1009,51 +1039,48 @@ describe('executeBoardSetAutonomy', () => {
     setBoardExecutorContext(null);
   });
 
-  test('auto sets executionMode and autoRunning', async () => {
+  test('concurrency >1 sets the cap, starts the run, and derives auto', async () => {
     await seedInitializedBoard();
-    const out = await executeBoardTool('board_set_autonomy', { level: 'auto' });
-    assert.equal(
-      out,
-      '{"level":"auto","executionMode":"auto","autoRunning":true,"pendingAfk":false}',
-    );
-    const chat = findChatById(CHAT_ID)!;
-    const group = getOrCreateBoardGroup(chat);
-    assert.equal(group.orchestrateBoard?.executionMode, 'auto');
-    assert.equal(group.orchestrateBoard?.autoRunning, true);
-  });
-
-  test('sequential sets executionMode and autoRunning', async () => {
-    await seedInitializedBoard();
-    const out = await executeBoardTool('board_set_autonomy', { level: 'sequential' });
-    assert.equal(
-      out,
-      '{"level":"sequential","executionMode":"sequential","autoRunning":true,"pendingAfk":false}',
-    );
-    const chat = findChatById(CHAT_ID)!;
-    const group = getOrCreateBoardGroup(chat);
-    assert.equal(group.orchestrateBoard?.executionMode, 'sequential');
-    assert.equal(group.orchestrateBoard?.autoRunning, true);
-  });
-
-  test('afk sets pendingAfk without changing executionMode', async () => {
-    await seedInitializedBoard();
-    const out = await executeBoardTool('board_set_autonomy', { level: 'afk' });
+    const out = await executeBoardTool('board_set_autonomy', { concurrency: 4 });
     const parsed = JSON.parse(out);
-    assert.equal(parsed.level, 'afk');
-    assert.equal(parsed.executionMode, 'manual');
+    assert.equal(parsed.concurrency, 4);
+    assert.equal(parsed.handsOff, false);
+    assert.equal(parsed.executionMode, 'auto');
+    assert.equal(parsed.autoRunning, true);
+    assert.equal(parsed.pendingHandsOff, false);
+    const chat = findChatById(CHAT_ID)!;
+    const group = getOrCreateBoardGroup(chat);
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 4);
+    assert.equal(group.orchestrateBoard?.autoRunning, true);
+  });
+
+  test('concurrency 1 derives sequential', async () => {
+    await seedInitializedBoard();
+    const out = await executeBoardTool('board_set_autonomy', { concurrency: 1 });
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.concurrency, 1);
+    assert.equal(parsed.executionMode, 'sequential');
+    assert.equal(parsed.autoRunning, true);
+  });
+
+  test('handsOff only requests — the user confirms on the board', async () => {
+    await seedInitializedBoard();
+    const out = await executeBoardTool('board_set_autonomy', { handsOff: true });
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.handsOff, false);
+    assert.equal(parsed.pendingHandsOff, true);
     assert.equal(parsed.autoRunning, false);
-    assert.equal(parsed.pendingAfk, true);
     assert.match(parsed.message, /pending user confirmation/i);
     const chat = findChatById(CHAT_ID)!;
     const group = getOrCreateBoardGroup(chat);
-    assert.equal(group.orchestrateBoard?.executionMode, 'manual');
+    assert.equal(group.orchestrateBoard?.handsOff, undefined);
     assert.equal(group.orchestrateBoard?.pendingAfk, true);
   });
 
   test('rejects non-planner caller', async () => {
     seedOrchestrateChat({ modeId: 'build' });
     withBoardContext();
-    const out = await executeBoardTool('board_set_autonomy', { level: 'auto' });
+    const out = await executeBoardTool('board_set_autonomy', { concurrency: 3 });
     assert.equal(out, 'Error: board tools require an active Orchestrate chat');
   });
 });
@@ -1071,13 +1098,14 @@ describe('autopilot resolution', () => {
       waves: [],
       startedAt: 1,
       lastUpdatedAt: 1,
-      executionMode: 'auto' as const,
     };
     assert.equal(resolveBoardMaxConcurrent(board), 8);
     assert.equal(resolveBoardMaxConcurrent({ ...board, maxConcurrentTasks: 5 }), 5);
     resetAutopilotMetaCache();
     assert.equal(resolveBoardMaxConcurrent(board), 3);
-    assert.equal(resolveBoardMaxConcurrent({ ...board, executionMode: 'sequential' }), 1);
+    // Concurrency is the input to the mode derivation, so it must not read back
+    // from the mode — that would be circular.
+    assert.equal(resolveBoardMaxConcurrent({ ...board, maxConcurrentTasks: 1 }), 1);
   });
 
   test('test thresholds read global meta only', () => {
@@ -1089,8 +1117,8 @@ describe('autopilot resolution', () => {
     assert.equal(resolveMaxFinalTestAttempts(), 3);
   });
 
-  test('initBoard inherits global default execution mode', () => {
-    setAutopilotMetaForTests({ defaultExecutionMode: 'auto', maxConcurrentTasks: 6 });
+  test('initBoard inherits global concurrency and hands-off defaults', () => {
+    setAutopilotMetaForTests({ defaultHandsOff: true, maxConcurrentTasks: 6 });
     seedOrchestrateChat();
     const chat = findChatById(CHAT_ID)!;
     const group = getOrCreateBoardGroup(chat);
@@ -1099,7 +1127,21 @@ describe('autopilot resolution', () => {
       tasks: [{ id: 'W1-A', title: 'T', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    assert.equal(group.orchestrateBoard?.executionMode, 'auto');
+    assert.equal(group.orchestrateBoard?.executionMode, undefined);
+    assert.equal(group.orchestrateBoard?.handsOff, true);
     assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 6);
+  });
+
+  test('initBoard leaves hands-off unset when the global default is off', () => {
+    setAutopilotMetaForTests({ defaultHandsOff: false, maxConcurrentTasks: 2 });
+    seedOrchestrateChat();
+    const chat = findChatById(CHAT_ID)!;
+    const group = getOrCreateBoardGroup(chat);
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'T', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    assert.equal(group.orchestrateBoard?.handsOff, undefined);
   });
 });

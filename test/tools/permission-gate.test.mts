@@ -125,7 +125,7 @@ describe('AFK interaction execution guard', () => {
       tasks: [{ id: 'W1-A', title: 'Task', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.handsOff = true;
     const config = defaultToolConfig();
     config.enabled.ask_question = true;
     config.permissions.default.ask_question = 'full';

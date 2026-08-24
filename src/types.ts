@@ -604,8 +604,20 @@ export interface OrchestrateBoardState {
   reasoningEffort?: ReasoningEffortOption;
   /** Per-board thinking override for off/on-only models (planner + linked task chats). */
   thinkingMode?: ThinkingTriState;
-  /** Manual board vs auto-pilot delegation (default manual). */
+  /**
+   * @deprecated Replaced by {@link maxConcurrentTasks} + {@link handsOff}. Kept only
+   * so legacy sessions can hydrate and migrate; never written by new code. Read the
+   * derived value via `getBoardExecutionMode`.
+   */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  /** Fully autonomous: never prompt the user until Stop or board finish. */
+  handsOff?: boolean;
+  /**
+   * Frozen, human-readable directory segment for this board's worktrees
+   * (`~/.minnow/worktrees/<repo>-<hash>/<worktreeSlug>/…`). Minted once from the
+   * board title so renaming the board never orphans a worktree.
+   */
+  worktreeSlug?: string;
   /** When true, skip per-task Tester; only final integration test runs verification. */
   skipPerTaskTesting?: boolean;
   /** True when the user has pressed Start in auto/sequential mode. */
@@ -626,9 +638,9 @@ export interface OrchestrateBoardState {
   systemPaused?: boolean;
   /**
    * Filesystem/process isolation for parallel tasks (MIN-275). When unset it is
-   * resolved from {@link executionMode} (sequential/manual → off, auto/afk → per-task).
+   * resolved from concurrency (1 → per-board, >1 → per-task).
    */
-  isolationMode?: 'off' | 'per-task' | 'per-wave';
+  isolationMode?: 'off' | 'per-task' | 'per-wave' | 'per-board';
   /**
    * Agent shell sandbox for this board (MIN-553). When unset, inherits Autopilot
    * default (`require`). Complementary to {@link isolationMode} (git worktrees).

@@ -1148,20 +1148,24 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'board_set_autonomy',
     label: 'Board set autonomy',
     description:
-      'Set board execution autonomy (manual, sequential, auto, or afk). AFK requires explicit user confirmation before it activates.',
+      'Set board concurrency and/or request hands-off autonomy. Hands-off requires explicit user confirmation before it activates.',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
       'board_set_autonomy',
-      'Change orchestrate board autonomy level. manual stops auto-run; sequential/auto start delegation. afk requests hands-off mode but needs user confirmation on the board before it takes effect.',
+      'Change how the orchestrate board runs: concurrency is how many tasks run at once; handsOff requests fully autonomous execution but needs user confirmation on the board before it takes effect. Pass either or both.',
       {
-        level: {
-          type: 'string',
-          enum: ['manual', 'sequential', 'auto', 'afk'],
-          description: 'Target autonomy level',
+        concurrency: {
+          type: 'number',
+          description: 'Max tasks running at once (1-20). 1 runs them one at a time.',
+        },
+        handsOff: {
+          type: 'boolean',
+          description:
+            'Request fully hands-off execution (never prompt the user). Requires user confirmation.',
         },
       },
-      ['level'],
+      [],
     ),
   },
   {

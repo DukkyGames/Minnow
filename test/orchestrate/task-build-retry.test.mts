@@ -60,7 +60,7 @@ function makeFailedTaskChat(): Chat {
   };
 }
 
-function makeGroup(executionMode: 'manual' | 'auto' | 'afk' = 'auto'): ChatGroup {
+function makeGroup(shape: 'stopped' | 'auto' | 'afk' = 'auto'): ChatGroup {
   const planner = makePlanner();
   const group: ChatGroup = {
     id: GROUP_ID,
@@ -87,8 +87,9 @@ function makeGroup(executionMode: 'manual' | 'auto' | 'afk' = 'auto'): ChatGroup
     { status: 'in_progress', chatId: TASK_CHAT_ID, startedAt: 1 },
     planner,
   );
-  group.orchestrateBoard!.executionMode = executionMode;
-  group.orchestrateBoard!.autoRunning = executionMode !== 'manual';
+  group.orchestrateBoard!.maxConcurrentTasks = shape === 'stopped' ? 1 : 3;
+  if (shape === 'afk') group.orchestrateBoard!.handsOff = true;
+  group.orchestrateBoard!.autoRunning = shape !== 'stopped';
   setSessionStateForTests({
     chats: [planner, makeFailedTaskChat()],
     groups: [group],
@@ -150,7 +151,7 @@ describe('clearTaskFailureState', () => {
   afterEach(() => setSessionStateForTests(null));
 
   test('resetAttempts clears buildAttempts', () => {
-    const group = makeGroup('manual');
+    const group = makeGroup('stopped');
     const planner = makePlanner();
     updateTask(
       group,
@@ -192,7 +193,7 @@ describe('finalizeBoardTaskOnStreamEnd build retry', () => {
   });
 
   test('manual mode marks failed without retry', () => {
-    const group = makeGroup('manual');
+    const group = makeGroup('stopped');
     const planner = makePlanner();
     const task = group.orchestrateBoard!.tasks[0]!;
     finalizeBoardTaskOnStreamEnd(group, task, planner);

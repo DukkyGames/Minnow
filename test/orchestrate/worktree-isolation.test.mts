@@ -18,6 +18,8 @@ import {
   sanitizeRefFragment,
   tasksSharingSlot,
   taskWorktreeBranch,
+  taskWorktreeSlot,
+  deriveBoardWorktreeSlug,
   usedDevPorts,
   waveWorktreeBranch,
   worktreeBranchFor,
@@ -45,43 +47,58 @@ afterEach(() => {
 });
 
 describe('resolveIsolationMode', () => {
-  test('explicit override wins over execution mode', () => {
+  test('explicit override wins over the derived default', () => {
     assert.equal(
-      resolveIsolationMode(board({ isolationMode: 'per-wave', executionMode: 'sequential' })),
+      resolveIsolationMode(board({ isolationMode: 'per-wave', maxConcurrentTasks: 1 })),
       'per-wave',
     );
     assert.equal(
-      resolveIsolationMode(board({ isolationMode: 'off', executionMode: 'auto' })),
+      resolveIsolationMode(board({ isolationMode: 'off', maxConcurrentTasks: 4 })),
       'off',
+    );
+    assert.equal(
+      resolveIsolationMode(board({ isolationMode: 'per-board', maxConcurrentTasks: 4 })),
+      'per-board',
     );
   });
 
-  test('auto defaults to per-task; sequential/manual/unset default to off', () => {
-    assert.equal(resolveIsolationMode(board({ executionMode: 'auto' })), 'per-task');
-    assert.equal(resolveIsolationMode(board({ executionMode: 'afk' })), 'per-task');
-    assert.equal(resolveIsolationMode(board({ executionMode: 'sequential' })), 'off');
-    assert.equal(resolveIsolationMode(board({ executionMode: 'manual' })), 'off');
-    assert.equal(resolveIsolationMode(board({})), 'off');
+  test('concurrency 1 derives per-board; >1 derives per-task', () => {
+    assert.equal(resolveIsolationMode(board({ maxConcurrentTasks: 1 })), 'per-board');
+    assert.equal(
+      resolveIsolationMode(board({ maxConcurrentTasks: 1, handsOff: true })),
+      'per-board',
+    );
+    assert.equal(resolveIsolationMode(board({ maxConcurrentTasks: 3 })), 'per-task');
+    assert.equal(resolveIsolationMode(board({ handsOff: true })), 'per-task');
+  });
+
+  test('no board concurrency falls back to the global default', () => {
+    setAutopilotMetaForTests({ maxConcurrentTasks: 1 });
+    assert.equal(resolveIsolationMode(board({})), 'per-board');
+    setAutopilotMetaForTests({ maxConcurrentTasks: 5 });
+    assert.equal(resolveIsolationMode(board({})), 'per-task');
   });
 
   test('global isolation default applies when board has no override', () => {
     setAutopilotMetaForTests({ isolationMode: 'per-wave' });
-    assert.equal(resolveIsolationMode(board({ executionMode: 'manual' })), 'per-wave');
+    assert.equal(resolveIsolationMode(board({ maxConcurrentTasks: 1 })), 'per-wave');
     setAutopilotMetaForTests({ isolationMode: 'off' });
-    assert.equal(resolveIsolationMode(board({ executionMode: 'auto' })), 'off');
+    assert.equal(resolveIsolationMode(board({ maxConcurrentTasks: 4 })), 'off');
   });
 
-  test('global auto preserves derive-from-execution-mode behavior', () => {
+  test('global auto keeps deriving from concurrency', () => {
     setAutopilotMetaForTests({ isolationMode: 'auto' });
-    assert.equal(resolveIsolationMode(board({ executionMode: 'auto' })), 'per-task');
-    assert.equal(resolveIsolationMode(board({ executionMode: 'manual' })), 'off');
+    assert.equal(resolveIsolationMode(board({ maxConcurrentTasks: 4 })), 'per-task');
+    assert.equal(resolveIsolationMode(board({ maxConcurrentTasks: 1 })), 'per-board');
   });
 
   test('null board is off; isIsolationActive mirrors resolution', () => {
     assert.equal(resolveIsolationMode(null), 'off');
     assert.equal(isIsolationActive(null), false);
-    assert.equal(isIsolationActive(board({ executionMode: 'auto' })), true);
-    assert.equal(isIsolationActive(board({ executionMode: 'sequential' })), false);
+    assert.equal(isIsolationActive(board({ maxConcurrentTasks: 4 })), true);
+    // Sequential boards are isolated now — that is the whole point of per-board.
+    assert.equal(isIsolationActive(board({ maxConcurrentTasks: 1 })), true);
+    assert.equal(isIsolationActive(board({ isolationMode: 'off' })), false);
   });
 });
 
@@ -94,36 +111,69 @@ describe('ref/slot naming', () => {
     assert.equal(sanitizeRefFragment(7), '7');
   });
 
-  test('branch names are stable and namespaced per board', () => {
-    assert.equal(boardIntegrationBranch('grp1'), 'minnow/board/grp1/integration');
-    assert.equal(taskWorktreeBranch('grp1', 'T-2'), 'minnow/board/grp1/task/T-2');
-    assert.equal(waveWorktreeBranch('grp1', 'W1'), 'minnow/board/grp1/wave/W1');
+  test('branch names are readable, stable and namespaced per board', () => {
+    assert.equal(boardIntegrationBranch('checkout-flow'), 'minnow/board/checkout-flow/integration');
+    assert.equal(
+      taskWorktreeBranch('checkout-flow', { id: 'T-2', title: 'Add Login Form' }),
+      'minnow/board/checkout-flow/T-2-add-login-form',
+    );
+    assert.equal(
+      waveWorktreeBranch('checkout-flow', 'W1'),
+      'minnow/board/checkout-flow/wave-W1',
+    );
+  });
+
+  test('every board branch keeps the minnow/board/ prefix git-ops matches on', () => {
+    const t = task({ id: 'T1', wave: 1, title: 'Do the thing' });
+    for (const branch of [
+      boardIntegrationBranch('slug'),
+      taskWorktreeBranch('slug', t),
+      waveWorktreeBranch('slug', 1),
+      worktreeBranchFor('per-board', 'slug', t),
+    ]) {
+      assert.ok(branch?.startsWith('minnow/board/'), branch ?? '(null)');
+    }
+  });
+
+  test('taskWorktreeSlot degrades gracefully on empty and oversized titles', () => {
+    assert.equal(taskWorktreeSlot({ id: 'T1', title: '   ' }), 'T1');
+    const slot = taskWorktreeSlot({ id: 'T1', title: 'x'.repeat(200) });
+    assert.equal(slot.length, 64);
+    assert.ok(slot.startsWith('T1-'));
+    assert.ok(!slot.endsWith('-'));
   });
 
   test('integrationWorktreePathFromSlotPath derives integration slot path', () => {
     const boardDir = 'C:/repo/.minnow/worktrees/minnow-abc/board-1';
-    assert.equal(
-      integrationWorktreePathFromSlotPath(`${boardDir}/task-T1`),
-      `${boardDir}/integration`,
-    );
-    assert.equal(
-      integrationWorktreePathFromSlotPath(`${boardDir}/wave-W1`),
-      `${boardDir}/integration`,
-    );
+    // Survives the new free-form slot names as well as the legacy task-/wave- ones.
+    for (const slot of ['task-T1', 'wave-W1', 'T1-add-login-form', 'W1']) {
+      assert.equal(
+        integrationWorktreePathFromSlotPath(`${boardDir}/${slot}`),
+        `${boardDir}/integration`,
+      );
+    }
     assert.equal(
       integrationWorktreePathFromSlotPath(`${boardDir}/integration`),
       `${boardDir}/integration`,
     );
     assert.equal(integrationWorktreePathFromSlotPath('C:/other/path'), undefined);
+    // Regular-chat worktrees (MIN-276) are not board slots.
+    assert.equal(
+      integrationWorktreePathFromSlotPath('C:/repo/.minnow/worktrees/minnow-abc/chat/c1'),
+      undefined,
+    );
   });
 
   test('worktreeSlotId / worktreeBranchFor follow the mode', () => {
-    const t = task({ id: 'T-2', wave: 'W1' });
-    assert.equal(worktreeSlotId('per-task', t), 'task-T-2');
+    const t = task({ id: 'T-2', wave: 'W1', title: 'Ship it' });
+    assert.equal(worktreeSlotId('per-task', t), 'T-2-ship-it');
     assert.equal(worktreeSlotId('per-wave', t), 'wave-W1');
+    assert.equal(worktreeSlotId('per-board', t), 'integration');
     assert.equal(worktreeSlotId('off', t), null);
-    assert.equal(worktreeBranchFor('per-task', 'g', t), 'minnow/board/g/task/T-2');
-    assert.equal(worktreeBranchFor('per-wave', 'g', t), 'minnow/board/g/wave/W1');
+    assert.equal(worktreeBranchFor('per-task', 'g', t), 'minnow/board/g/T-2-ship-it');
+    assert.equal(worktreeBranchFor('per-wave', 'g', t), 'minnow/board/g/wave-W1');
+    // Per-board: the board branch *is* the integration branch, so there is no merge.
+    assert.equal(worktreeBranchFor('per-board', 'g', t), 'minnow/board/g/integration');
     assert.equal(worktreeBranchFor('off', 'g', t), null);
   });
 });
@@ -140,8 +190,66 @@ describe('tasksSharingSlot', () => {
   test('per-wave shares with all tasks in the same wave', () => {
     assert.deepEqual(tasksSharingSlot('per-wave', a, all).map((t) => t.id), ['A', 'B']);
   });
+  test('per-board shares with every task on the board', () => {
+    assert.deepEqual(tasksSharingSlot('per-board', a, all).map((t) => t.id), ['A', 'B', 'C']);
+  });
   test('off shares with nothing', () => {
     assert.deepEqual(tasksSharingSlot('off', a, all), []);
+  });
+});
+
+describe('deriveBoardWorktreeSlug', () => {
+  function group(patch: Partial<ChatGroup> = {}): ChatGroup {
+    return {
+      id: 'grp-9f3a2b',
+      name: '',
+      workspacePath: 'C:/repo',
+      collapsed: false,
+      order: 0,
+      createdAt: 0,
+      orchestratePlanPath: 'documentation/plans/checkout-flow.md',
+      orchestrateBoard: board({ maxConcurrentTasks: 3 }),
+      ...patch,
+    } as ChatGroup;
+  }
+
+  test('derives a readable slug from the plan file name', () => {
+    assert.equal(deriveBoardWorktreeSlug(group()), 'checkout-flow');
+  });
+
+  test('falls back to the folder name, then to "board"', () => {
+    const named = group({ orchestratePlanPath: undefined, name: 'Payments Rework' });
+    assert.equal(deriveBoardWorktreeSlug(named), 'payments-rework');
+    const bare = group({ orchestratePlanPath: undefined, name: '' });
+    assert.equal(deriveBoardWorktreeSlug(bare), 'board');
+  });
+
+  test('de-dupes against sibling slugs', () => {
+    assert.equal(deriveBoardWorktreeSlug(group(), ['checkout-flow']), 'checkout-flow-2');
+    assert.equal(
+      deriveBoardWorktreeSlug(group(), ['checkout-flow', 'checkout-flow-2']),
+      'checkout-flow-3',
+    );
+  });
+
+  test('a frozen slug survives a board rename', () => {
+    const g = group();
+    g.orchestrateBoard!.worktreeSlug = 'checkout-flow';
+    g.name = 'Something Else Entirely';
+    g.orchestratePlanPath = 'documentation/plans/renamed.md';
+    assert.equal(deriveBoardWorktreeSlug(g), 'checkout-flow');
+  });
+
+  test('boards that already provisioned worktrees keep the opaque group id', () => {
+    const withBranch = group();
+    withBranch.orchestrateBoard!.integrationBranch = 'minnow/board/grp-9f3a2b/integration';
+    assert.equal(deriveBoardWorktreeSlug(withBranch), 'grp-9f3a2b');
+
+    const withPath = group();
+    withPath.orchestrateBoard!.tasks = [
+      task({ id: 'T1', wave: 1, worktreePath: 'C:/w/grp-9f3a2b/task-T1' }),
+    ];
+    assert.equal(deriveBoardWorktreeSlug(withPath), 'grp-9f3a2b');
   });
 });
 
@@ -161,7 +269,7 @@ describe('resolveBoardIntegrationWorktreePath', () => {
       createdAt: 0,
       viewMode: 'board',
       orchestrateBoard: board({
-        executionMode: 'auto',
+        maxConcurrentTasks: 3,
         integrationBranch,
         tasks,
       }),
@@ -184,10 +292,10 @@ describe('resolveBoardIntegrationWorktreePath', () => {
     const group = boardGroup([
       task({ id: 'T1', wave: 1, status: 'planned', worktreePath: taskPath }),
     ]);
-    group.orchestrateBoard!.executionMode = 'manual';
+    group.orchestrateBoard!.isolationMode = 'off';
     assert.equal(resolveBoardIntegrationWorktreePath(group), undefined);
 
-    group.orchestrateBoard!.executionMode = 'auto';
+    delete group.orchestrateBoard!.isolationMode;
     delete group.orchestrateBoard!.integrationBranch;
     assert.equal(resolveBoardIntegrationWorktreePath(group), undefined);
   });

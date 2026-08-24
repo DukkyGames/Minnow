@@ -9,14 +9,12 @@ import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
+import { sanitizePathSegment } from '../../src/lib/sanitize-path-segment.mjs';
 
 const WORKTREES_DIR_NAME = 'worktrees';
 
-/** Sanitize an id into a safe single path segment. */
-function seg(value) {
-  const cleaned = String(value).replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
-  return cleaned || 'x';
-}
+/** Sanitize an id into a safe single path segment (shared with the client helpers). */
+const seg = sanitizePathSegment;
 
 /** Absolute root for all board worktrees. */
 export function getWorktreesRoot() {

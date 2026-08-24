@@ -1465,8 +1465,13 @@ export function mergeConfigMeta(existing, patch) {
   }
 
   if (p.autopilot !== undefined) {
-    const AUTOPILOT_EXECUTION_MODES = new Set(['manual', 'sequential', 'auto', 'afk']);
-    const AUTOPILOT_ISOLATION_MODES = new Set(['auto', 'off', 'per-task', 'per-wave']);
+    const AUTOPILOT_ISOLATION_MODES = new Set([
+      'auto',
+      'off',
+      'per-board',
+      'per-task',
+      'per-wave',
+    ]);
     const AUTOPILOT_SHELL_SANDBOX_MODES = new Set(['off', 'prefer', 'require']);
     const clampAutopilotConcurrency = (value, fallback) => {
       if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -1509,7 +1514,7 @@ export function mergeConfigMeta(existing, patch) {
     };
     const parseBool = (value, fallback) => (typeof value === 'boolean' ? value : fallback);
     const AUTOPILOT_DEFAULTS = {
-      defaultExecutionMode: 'manual',
+      defaultHandsOff: false,
       maxConcurrentTasks: 3,
       isolationMode: 'auto',
       shellSandbox: 'off',
@@ -1537,11 +1542,8 @@ export function mergeConfigMeta(existing, patch) {
           ? { .../** @type {Record<string, unknown>} */ (base.autopilot) }
           : { ...AUTOPILOT_DEFAULTS };
       const a = /** @type {Record<string, unknown>} */ (p.autopilot);
-      if (typeof a.defaultExecutionMode === 'string') {
-        const mode = a.defaultExecutionMode.trim();
-        if (AUTOPILOT_EXECUTION_MODES.has(mode)) {
-          existingAutopilot.defaultExecutionMode = mode;
-        }
+      if (typeof a.defaultHandsOff === 'boolean') {
+        existingAutopilot.defaultHandsOff = a.defaultHandsOff;
       }
       if (a.maxConcurrentTasks !== undefined) {
         existingAutopilot.maxConcurrentTasks = clampAutopilotConcurrency(

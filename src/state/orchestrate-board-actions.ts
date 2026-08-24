@@ -107,10 +107,15 @@ import {
   worktreeBranchFor,
   worktreeSlotId,
   boardIntegrationBranch,
+  BOARD_INTEGRATION_SLOT,
+  boardWorktreeSlug,
+  deriveBoardWorktreeSlug,
+  sanitizeRefFragment,
   allocateTaskPorts,
   usedDevPorts,
   DEFAULT_BOARD_PORT_BASE,
 } from './worktree-isolation.ts';
+import { resolveBoardConcurrency } from './board-execution-mode.ts';
 import { teardownBoardTaskChatResources } from './board-task-teardown.ts';
 import {
   ensureIntegration as ensureIntegrationWorktree,
@@ -764,7 +769,7 @@ async function commitOrphanedWorkOnTerminalFailure(
   const mode = resolveIsolationMode(board);
   if (mode !== 'per-task') return baseError;
 
-  const boardId = group.id;
+  const boardId = boardWorktreeSlug(group);
   const slotId = worktreeSlotId(mode, task);
   const branch = task.worktreeBranch ?? worktreeBranchFor(mode, boardId, task);
   if (!slotId || !branch) return baseError;
@@ -1745,14 +1750,14 @@ function ensureStreamEndSubscription(): void {
   }
 }
 
-/** Resolved max concurrent tasks: sequential → 1; else board ?? global ?? fallback. */
+/**
+ * Resolved max concurrent tasks: board ?? global ?? fallback.
+ * The execution mode derives *from* this value, so it must not be consulted here.
+ */
 export function resolveBoardMaxConcurrent(
   board: NonNullable<ChatGroup['orchestrateBoard']>,
 ): number {
-  if (board.executionMode === 'sequential') return 1;
-  const boardVal = board.maxConcurrentTasks;
-  if (typeof boardVal === 'number' && boardVal > 0) return boardVal;
-  return getAutopilotMetaSync().maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT;
+  return resolveBoardConcurrency(board);
 }
 
 /** Apply OOM recovery cap on top of board/global concurrency settings. */
@@ -2657,6 +2662,29 @@ function enqueueTaskAtFront(groupId: string, taskId: string): void {
 }
 
 /**
+ * Mint (once) and return the frozen human-readable worktree directory segment for a
+ * board. Every `/api/worktree` op keys its directory off this value, so it must stay
+ * stable for the life of the board — see `deriveBoardWorktreeSlug`.
+ */
+export function ensureBoardWorktreeSlug(group: ChatGroup): string {
+  const board = group.orchestrateBoard;
+  if (!board) return sanitizeRefFragment(group.id);
+  const existing = board.worktreeSlug?.trim();
+  if (existing) return existing;
+
+  const taken: string[] = [];
+  for (const other of sessionState?.groups ?? []) {
+    if (other.id === group.id) continue;
+    const slug = other.orchestrateBoard?.worktreeSlug?.trim();
+    if (slug) taken.push(slug);
+  }
+  const slug = deriveBoardWorktreeSlug(group, taken);
+  board.worktreeSlug = slug;
+  scheduleSaveSessions();
+  return slug;
+}
+
+/**
  * Ensure an isolated git worktree for a task when board isolation is active, and
  * return its absolute path (also persisted on the task). Best-effort: returns null
  * when isolation is off or any git/server step fails, so the task falls back to the
@@ -2672,18 +2700,60 @@ async function ensureTaskWorktree(
   const mode = resolveIsolationMode(board);
   if (mode === 'off') return null;
 
-  const boardId = group.id;
-  const branch = worktreeBranchFor(mode, boardId, task);
+  const boardId = ensureBoardWorktreeSlug(group);
+  // A task that already owns a worktree keeps it, whatever the current naming
+  // scheme would mint — boards provisioned before the rename must not be orphaned.
+  const branch = task.worktreeBranch?.trim() || worktreeBranchFor(mode, boardId, task);
   const slotId = worktreeSlotId(mode, task);
   if (!branch || !slotId) return null;
 
-  // Mint the integration branch + its worktree once per board (lazy).
+  // Mint the integration branch + its worktree once per board (lazy). In per-board
+  // mode this *is* the task worktree, so its path is needed on every call.
   const integrationBranch = board.integrationBranch ?? boardIntegrationBranch(boardId);
-  if (!board.integrationBranch) {
+  let integrationPath: string | undefined;
+  if (!board.integrationBranch || mode === 'per-board') {
     const ensured = await ensureIntegrationWorktree({ boardId, branch: integrationBranch });
     if (!ensured.ok) return null;
-    board.integrationBranch = integrationBranch;
-    scheduleSaveSessions();
+    integrationPath = ensured.path?.trim() || undefined;
+    if (!board.integrationBranch) {
+      board.integrationBranch = integrationBranch;
+      scheduleSaveSessions();
+    }
+  }
+
+  // Per-board mode: every task works in the single integration checkout and commits
+  // straight onto the integration branch — there is nothing to create and nothing
+  // to merge later (see mergeCompletedTaskWorktree).
+  if (mode === 'per-board') {
+    const sibling = board.tasks.find(
+      (t) => t.id !== task.id && Boolean(t.worktreePath) && typeof t.devPort === 'number',
+    );
+    const path = integrationPath ?? sibling?.worktreePath?.trim();
+    if (!path) return null;
+    const ports =
+      typeof sibling?.devPort === 'number' && typeof sibling?.apiPort === 'number'
+        ? { devPort: sibling.devPort, apiPort: sibling.apiPort }
+        : allocateTaskPorts(DEFAULT_BOARD_PORT_BASE, usedDevPorts(board.tasks));
+    if (
+      task.worktreePath !== path ||
+      task.worktreeBranch !== integrationBranch ||
+      task.devPort !== ports.devPort ||
+      task.apiPort !== ports.apiPort
+    ) {
+      updateTask(
+        group,
+        task.id,
+        {
+          worktreePath: path,
+          worktreeBranch: integrationBranch,
+          devPort: ports.devPort,
+          apiPort: ports.apiPort,
+        },
+        plannerChat,
+      );
+      logWorktreeAllocated(group, task.id, integrationBranch, ports.devPort, ports.apiPort);
+    }
+    return path;
   }
 
   // Per-wave mode: reuse a sibling task's already-created worktree for this wave.
@@ -2767,14 +2837,34 @@ async function mergeCompletedTaskWorktree(
     logMergeResult(group, task.id, 'skipped');
     return { outcome: 'skipped' };
   }
+  const mode = resolveIsolationMode(board);
+  const boardId = boardWorktreeSlug(group);
+
+  // Per-board isolation: the board branch *is* the integration branch, so the work
+  // is already on it. Commit in sequence and report merged — no git merge, which is
+  // what makes the whole merge-fixer path unreachable in this mode.
+  if (mode === 'per-board') {
+    try {
+      await commitTaskWorktree({
+        boardId,
+        slotId: BOARD_INTEGRATION_SLOT,
+        message: `Board task ${task.id}: ${task.title}`,
+      });
+    } catch (err) {
+      reportBackgroundError('worktree-commit', err);
+      const message = err instanceof Error ? err.message : String(err);
+      logMergeResult(group, task.id, 'error', { branch: board.integrationBranch, error: message });
+      return { outcome: 'error', message };
+    }
+    logMergeResult(group, task.id, 'merged', { branch: board.integrationBranch });
+    return { outcome: 'merged' };
+  }
+
   const branch = task.worktreeBranch;
   if (!branch || branch === board.integrationBranch) {
     logMergeResult(group, task.id, 'skipped', { branch });
     return { outcome: 'skipped' };
   }
-
-  const mode = resolveIsolationMode(board);
-  const boardId = group.id;
 
   if (mode === 'per-task') {
     const slotId = worktreeSlotId(mode, task);
@@ -2953,7 +3043,7 @@ export async function startMergeConflictFixer(
 
   const hold = acquireBoardPipelineHold(group, task.id, 'merge-fixer-start');
   try {
-  const boardId = group.id;
+  const boardId = boardWorktreeSlug(group);
 
   const ensured = await ensureIntegrationWorktree({
     boardId,
@@ -3154,7 +3244,7 @@ async function finalizeMergeFixerOnStreamEnd(
       return;
     }
 
-    const boardId = group.id;
+    const boardId = boardWorktreeSlug(group);
     const attempts = fresh.fixerAttempts ?? 0;
 
     // Neutral stop (user Stop / board paused): no automatic retry follows, so do
@@ -3623,7 +3713,7 @@ async function finalizeEnvFixerOnStreamEnd(
 export function cleanupBoardIsolation(group: ChatGroup): void {
   const board = group.orchestrateBoard;
   if (!board?.integrationBranch) return;
-  void cleanupBoardWorktreesOp({ boardId: group.id }).catch((err) =>
+  void cleanupBoardWorktreesOp({ boardId: boardWorktreeSlug(group) }).catch((err) =>
     reportBackgroundError('worktree-cleanup', err),
   );
 }
@@ -3648,7 +3738,7 @@ export async function clearBoardWorktreesAfterLanding(
   if (board.worktreesClearedAt) return { ok: true, removed: 0 };
 
   const res = await cleanupBoardWorktreesOp({
-    boardId: group.id,
+    boardId: boardWorktreeSlug(group),
     includeIntegration: true,
   });
   if (!res.ok) {
@@ -4407,7 +4497,7 @@ export async function startFinalIntegrationTest(
   // merged), not the main checkout. Only applies when board isolation is active.
   if (board.integrationBranch) {
     const ensured = await ensureIntegrationWorktree({
-      boardId: group.id,
+      boardId: boardWorktreeSlug(group),
       branch: board.integrationBranch,
     });
     const integrationPath = ensured.path?.trim();
@@ -4502,7 +4592,9 @@ export function tryTriggerFinalIntegrationTest(
     return;
   }
 
-  if (isBoardAutoMode(group)) {
+  // Only a started board launches the tester itself. A board the user never
+  // Started (the old "manual" case) just arms it and waits.
+  if (isBoardRunning(group)) {
     void startFinalIntegrationTest(group, plannerChat);
     return;
   }
@@ -4921,43 +5013,36 @@ export async function restartBoardAfterRequeueFailures(
   }
 }
 
-/** Persist auto/manual/sequential execution mode. Does not start execution — use startBoardAutoRun. */
-export function setBoardExecutionMode(
+/**
+ * Persist hands-off autonomy. Does not start execution — use startBoardAutoRun.
+ * Available at any concurrency, including 1.
+ */
+export function setBoardHandsOff(
   group: ChatGroup,
-  mode: 'manual' | 'auto' | 'sequential' | 'afk',
-  plannerChat: Chat,
+  on: boolean,
+  _plannerChat?: Chat,
 ): void {
   const board = group.orchestrateBoard;
   if (!board) return;
   const prevMode = getBoardExecutionMode(board);
-  board.executionMode = mode;
-  // Sequential → AFK must not silently lift the one-at-a-time cap. Sequential
-  // disables the concurrency stepper (ui/orchestrate-board.ts), so the user
-  // never had a chance to pick a value; pin it to 1 and let them raise it in AFK.
-  if (mode === 'afk' && prevMode === 'sequential' && board.maxConcurrentTasks === undefined) {
-    board.maxConcurrentTasks = 1;
-  }
-  if (mode !== 'afk') delete board.pendingAfk;
-  if (mode === 'manual') board.autoRunning = false;
+  if (on) board.handsOff = true;
+  else delete board.handsOff;
+  if (!on) delete board.pendingAfk;
   board.lastUpdatedAt = Date.now();
-  // Flush stop state immediately so reload cannot resurrect auto execution.
-  if (mode === 'manual') {
-    saveSessionsNow(group);
-  } else {
-    scheduleSaveSessions(group);
-  }
-  if (prevMode !== mode) {
-    logModeChange(group, mode);
+  scheduleSaveSessions(group);
+  const nextMode = getBoardExecutionMode(board);
+  if (prevMode !== nextMode) {
+    logModeChange(group, nextMode);
   }
   emitBoardChange(group.id);
 }
 
-/** Shared AFK activation after user confirmation (slider or pending banner). Does not start execution — user presses Start like Auto. */
+/** Shared AFK activation after user confirmation (checkbox or pending banner). Does not start execution — user presses Start. */
 export function activateAfk(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board) return;
   delete board.pendingAfk;
-  setBoardExecutionMode(group, 'afk', plannerChat);
+  setBoardHandsOff(group, true, plannerChat);
 }
 
 /** Orchestrator requested AFK — show confirmation banner; mode unchanged until accepted. */
@@ -4983,7 +5068,7 @@ export function cancelPendingAfk(group: ChatGroup): void {
 /** Set per-board isolation override; `auto` clears the field (global / derived). */
 export function setBoardIsolationMode(
   group: ChatGroup,
-  mode: 'auto' | 'off' | 'per-task' | 'per-wave',
+  mode: 'auto' | 'off' | 'per-task' | 'per-wave' | 'per-board',
   _plannerChat: Chat,
 ): void {
   const board = group.orchestrateBoard;
@@ -5011,10 +5096,13 @@ export function setBoardMaxConcurrent(
   if (!board) return;
   const clamped = Math.max(1, Math.min(20, Math.floor(value)));
   if (board.maxConcurrentTasks === clamped) return;
+  const prevMode = getBoardExecutionMode(board);
   board.maxConcurrentTasks = clamped;
   board.lastUpdatedAt = Date.now();
   scheduleSaveSessions();
   emitBoardChange(group.id);
+  const nextMode = getBoardExecutionMode(board);
+  if (prevMode !== nextMode) logModeChange(group, nextMode);
   if (isBoardAutoMode(group)) {
     void drainTaskQueue(group, plannerChat);
   }

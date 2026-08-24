@@ -62,7 +62,6 @@ import {
   continueBoardTask,
   countRunningTaskChats,
   recoverMergingBoardTask,
-  getBoardExecutionMode,
   isBoardRunning,
   isBoardSkipPerTaskTestingLocked,
   isTaskChatActive,
@@ -73,7 +72,7 @@ import {
   requeueBoardTask,
   resolveEffectiveMaxConcurrent,
   restartBoardTask,
-  setBoardExecutionMode,
+  setBoardHandsOff,
   setBoardIsolationMode,
   setBoardSkipPerTaskTesting,
   setBoardMaxConcurrent,
@@ -600,7 +599,7 @@ export function buildKanbanRefreshKey(
   const running = countRunningTaskChats(board);
   const parts: string[] = [
     `run:${running}/${cap}`,
-    `mode:${getBoardExecutionMode(board)}`,
+    `handsOff:${board.handsOff ? 1 : 0}`,
     `skip:${board.skipPerTaskTesting ? 1 : 0}`,
     `stream:${isChatStreaming(plannerChat.id) ? 1 : 0}`,
   ];
@@ -992,43 +991,8 @@ function createBoardHeaderIconButton(
   return btn;
 }
 
-/** Autonomy stops (least → most autonomous). */
-const BOARD_EXECUTION_MODES = ['manual', 'sequential', 'auto', 'afk'] as const;
-
-const BOARD_EXECUTION_MODE_META: ReadonlyArray<{
-  id: (typeof BOARD_EXECUTION_MODES)[number];
-  label: string;
-  title: string;
-}> = [
-  {
-    id: 'manual',
-    label: 'Manual',
-    title: 'You start each task from the board',
-  },
-  {
-    id: 'sequential',
-    label: 'Sequential',
-    title: 'Orchestrator runs one task at a time',
-  },
-  {
-    id: 'auto',
-    label: 'Auto',
-    title: 'Orchestrator runs tasks concurrently',
-  },
-  {
-    id: 'afk',
-    label: 'AFK',
-    title: 'Fully autonomous until Stop or the board finishes',
-  },
-] as const;
-
-function boardExecutionModeToIndex(mode: string): number {
-  const idx = BOARD_EXECUTION_MODES.indexOf(mode as (typeof BOARD_EXECUTION_MODES)[number]);
-  return idx >= 0 ? idx : 0;
-}
-
-const BOARD_AFK_CONFIRM_MESSAGE =
-  'Enable AFK mode? The orchestrator will run fully hands-off and will not prompt you until you press Stop or the board finishes.';
+const BOARD_HANDS_OFF_CONFIRM_MESSAGE =
+  'Enable hands-off mode? The orchestrator will run fully autonomously and will not prompt you until you press Stop or the board finishes.';
 
 /**
  * Blur a focused header control so native `<select>` menus (isolation mode, etc.)
@@ -1050,160 +1014,20 @@ function releaseBoardHeaderFocus(): void {
   }
 }
 
-/** User-selected execution mode — AFK goes through the shared confirm + activate path. */
-async function selectBoardExecutionModeFromUi(
+/** User toggled hands-off — enabling always goes through the shared confirm path. */
+async function selectBoardHandsOffFromUi(
   group: ChatGroup,
-  mode: (typeof BOARD_EXECUTION_MODES)[number],
+  on: boolean,
   plannerChat: Chat,
-): Promise<void> {
-  if (mode === 'afk') {
-    if (!await appConfirm(BOARD_AFK_CONFIRM_MESSAGE)) return;
-    activateAfk(group, plannerChat);
-    return;
+): Promise<boolean> {
+  if (!on) {
+    setBoardHandsOff(group, false, plannerChat);
+    return false;
   }
-  setBoardExecutionMode(group, mode, plannerChat);
-}
-
-const BOARD_AFK_HINT_VISIBLE_MS = 2500;
-/** Must match `.board-header__exec-mode-hint` opacity transition duration. */
-const BOARD_AFK_HINT_FADE_MS = 400;
-
-let boardAfkHintDismissTimer: ReturnType<typeof setTimeout> | null = null;
-let boardAfkHintFadeTimer: ReturnType<typeof setTimeout> | null = null;
-let lastSyncedExecMode: string | null = null;
-let boardAfkHintShownForSession = false;
-
-function clearBoardAfkHintTimers(): void {
-  if (boardAfkHintDismissTimer !== null) {
-    clearTimeout(boardAfkHintDismissTimer);
-    boardAfkHintDismissTimer = null;
-  }
-  if (boardAfkHintFadeTimer !== null) {
-    clearTimeout(boardAfkHintFadeTimer);
-    boardAfkHintFadeTimer = null;
-  }
-}
-
-function hideBoardAfkHint(hint: HTMLElement, instant = true): void {
-  clearBoardAfkHintTimers();
-  hint.classList.remove('is-visible');
-  if (instant) {
-    hint.hidden = true;
-    hint.setAttribute('aria-hidden', 'true');
-  }
-}
-
-function finishBoardAfkHintFade(hint: HTMLElement): void {
-  boardAfkHintFadeTimer = null;
-  hint.hidden = true;
-  hint.setAttribute('aria-hidden', 'true');
-}
-
-/** Fade out, then remove from layout once the opacity transition completes. */
-function dismissBoardAfkHint(hint: HTMLElement): void {
-  if (boardAfkHintFadeTimer !== null) return;
-  hint.classList.remove('is-visible');
-
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reducedMotion) {
-    finishBoardAfkHintFade(hint);
-    return;
-  }
-
-  const onTransitionEnd = (event: TransitionEvent): void => {
-    if (event.target !== hint || event.propertyName !== 'opacity') return;
-    hint.removeEventListener('transitionend', onTransitionEnd);
-    finishBoardAfkHintFade(hint);
-  };
-  hint.addEventListener('transitionend', onTransitionEnd);
-  boardAfkHintFadeTimer = setTimeout(() => {
-    hint.removeEventListener('transitionend', onTransitionEnd);
-    finishBoardAfkHintFade(hint);
-  }, BOARD_AFK_HINT_FADE_MS + 80);
-}
-
-/** Brief AFK callout: visible ~2.5s, then fades out without shifting toolbar layout. */
-function showBoardAfkHint(hint: HTMLElement): void {
-  clearBoardAfkHintTimers();
-  hint.hidden = false;
-  hint.setAttribute('aria-hidden', 'false');
-  hint.classList.remove('is-visible');
-  // Two frames so the browser paints opacity 0 before transitioning to 1.
-  const revealHint = (): void => {
-    hint.classList.add('is-visible');
-  };
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => requestAnimationFrame(revealHint));
-  } else {
-    setTimeout(revealHint, 0);
-  }
-
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const visibleMs = reducedMotion ? 1200 : BOARD_AFK_HINT_VISIBLE_MS;
-
-  boardAfkHintDismissTimer = setTimeout(() => {
-    boardAfkHintDismissTimer = null;
-    dismissBoardAfkHint(hint);
-  }, visibleMs);
-}
-
-function syncBoardExecModeUi(root: ParentNode, currentMode: string): void {
-  const idx = boardExecutionModeToIndex(currentMode);
-  const segments = root.querySelectorAll<HTMLButtonElement>(
-    '.board-header__exec-mode-segment',
-  );
-  segments.forEach((btn, i) => {
-    btn.setAttribute('aria-checked', i === idx ? 'true' : 'false');
-  });
-  const hint = root.querySelector('.board-header__exec-mode-hint') as HTMLElement | null;
-  if (!hint) return;
-
-  if (currentMode !== 'afk') {
-    hideBoardAfkHint(hint);
-    lastSyncedExecMode = currentMode;
-    boardAfkHintShownForSession = false;
-    return;
-  }
-
-  const enteredAfk = lastSyncedExecMode !== 'afk';
-  lastSyncedExecMode = 'afk';
-  if (enteredAfk || !boardAfkHintShownForSession) {
-    boardAfkHintShownForSession = true;
-    showBoardAfkHint(hint);
-    if (enteredAfk) releaseBoardHeaderFocus();
-  }
-}
-
-function onBoardExecModeSegmentKeydown(
-  event: KeyboardEvent,
-  modeId: string,
-  group: ChatGroup,
-  plannerChat: Chat,
-): void {
-  const segments = BOARD_EXECUTION_MODES;
-  const currentIndex = segments.indexOf(modeId as (typeof BOARD_EXECUTION_MODES)[number]);
-  if (currentIndex < 0) return;
-
-  let nextIndex = currentIndex;
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-    nextIndex = Math.min(currentIndex + 1, segments.length - 1);
-    event.preventDefault();
-  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-    nextIndex = Math.max(currentIndex - 1, 0);
-    event.preventDefault();
-  } else {
-    return;
-  }
-
-  const nextMode = segments[nextIndex] ?? 'manual';
-  void selectBoardExecutionModeFromUi(group, nextMode, plannerChat);
-  refreshActiveBoardIfMounted();
+  if (!(await appConfirm(BOARD_HANDS_OFF_CONFIRM_MESSAGE))) return false;
+  activateAfk(group, plannerChat);
   releaseBoardHeaderFocus();
-  const root = document.querySelector('.board-root');
-  const nextBtn = root?.querySelector<HTMLButtonElement>(
-    `.board-header__exec-mode-segment[data-exec-mode="${nextMode}"]`,
-  );
-  nextBtn?.focus();
+  return true;
 }
 
 function wireBoardHeaderControls(
@@ -1214,9 +1038,6 @@ function wireBoardHeaderControls(
   plannerChat: Chat,
 ): void {
   controls.replaceChildren();
-  clearBoardAfkHintTimers();
-  lastSyncedExecMode = null;
-  boardAfkHintShownForSession = false;
 
   void wireBoardHeaderModelSelect(controls, group, board, plannerChat, () => {
     refreshActiveBoardIfMounted();
@@ -1224,53 +1045,6 @@ function wireBoardHeaderControls(
   wireBoardHeaderReasoning(controls, group, board, plannerChat, () => {
     refreshActiveBoardIfMounted();
   });
-  // Execution mode segments (Manual → Sequential → Auto → AFK)
-  const currentMode = getBoardExecutionMode(board);
-  const modeWrapper = document.createElement('div');
-  modeWrapper.className = 'board-header__exec-mode';
-
-  const modeGroup = document.createElement('div');
-  modeGroup.className = 'board-header__exec-mode-segments';
-  modeGroup.dataset.boardAction = 'auto-pilot';
-  modeGroup.setAttribute('role', 'radiogroup');
-  modeGroup.setAttribute('aria-label', 'Execution autonomy');
-
-  for (const meta of BOARD_EXECUTION_MODE_META) {
-    const segment = document.createElement('button');
-    segment.type = 'button';
-    segment.className = 'board-header__exec-mode-segment';
-    segment.dataset.execMode = meta.id;
-    segment.setAttribute('role', 'radio');
-    segment.setAttribute(
-      'aria-checked',
-      meta.id === currentMode ? 'true' : 'false',
-    );
-    segment.textContent = meta.label;
-    segment.title = meta.title;
-
-    segment.addEventListener('click', () => {
-      void selectBoardExecutionModeFromUi(group, meta.id, plannerChat);
-      refreshActiveBoardIfMounted();
-      releaseBoardHeaderFocus();
-    });
-    segment.addEventListener('keydown', (event) => {
-      onBoardExecModeSegmentKeydown(event, meta.id, group, plannerChat);
-    });
-
-    modeGroup.appendChild(segment);
-  }
-
-  const afkHint = document.createElement('p');
-  afkHint.className = 'board-header__exec-mode-hint';
-  afkHint.setAttribute('role', 'status');
-  afkHint.textContent =
-    'Hands-off. Press Start; the orchestrator will not prompt you until Stop or the board finishes.';
-  afkHint.hidden = true;
-  afkHint.setAttribute('aria-hidden', 'true');
-
-  modeWrapper.appendChild(modeGroup);
-  modeWrapper.appendChild(afkHint);
-  controls.appendChild(modeWrapper);
 
   // Run settings cluster: concurrency, isolation, per-task testing. Grouped so
   // the strip reads as two clusters (autonomy | settings) instead of a control wall.
@@ -1279,15 +1053,16 @@ function wireBoardHeaderControls(
   settings.setAttribute('role', 'group');
   settings.setAttribute('aria-label', 'Run settings');
 
-  // Max concurrent stepper (editable in Auto and AFK modes)
+  // How many at once. Always editable — concurrency is the run model now, not a
+  // setting some other mode switches off.
   const concWrapper = document.createElement('label');
   concWrapper.className = 'board-header__concurrency';
   concWrapper.title = isOomPauseActive()
-    ? `Max concurrent tasks (throttled to ${resolveEffectiveMaxConcurrent(board)} after OOM crash)`
-    : 'Max concurrent tasks (Auto and AFK modes)';
+    ? `Tasks running at once (throttled to ${resolveEffectiveMaxConcurrent(board)} after OOM crash)`
+    : 'Tasks running at once — 1 runs them one at a time';
   const concLabel = document.createElement('span');
   concLabel.className = 'board-header__field-label';
-  concLabel.textContent = 'max';
+  concLabel.textContent = 'run';
   concWrapper.appendChild(concLabel);
   const concInput = document.createElement('input');
   concInput.type = 'number';
@@ -1297,8 +1072,7 @@ function wireBoardHeaderControls(
   concInput.value = String(
     board.maxConcurrentTasks ?? getAutopilotMetaSync().maxConcurrentTasks ?? 3,
   );
-  concInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
-  concInput.setAttribute('aria-label', 'Max concurrent tasks');
+  concInput.setAttribute('aria-label', 'Tasks running at once');
   concInput.addEventListener('change', () => {
     const val = Number(concInput.value);
     if (Number.isFinite(val)) {
@@ -1317,11 +1091,44 @@ function wireBoardHeaderControls(
   }
   settings.appendChild(concWrapper);
 
-  // Isolation mode override (Auto = global default or derive from execution mode)
+  // May it interrupt me. Available at any concurrency, including 1.
+  const handsOffWrapper = document.createElement('label');
+  handsOffWrapper.className = 'board-header__hands-off';
+  handsOffWrapper.title =
+    'Run fully autonomously — the orchestrator never prompts you until Stop or the board finishes.';
+  const handsOffInput = document.createElement('input');
+  handsOffInput.type = 'checkbox';
+  handsOffInput.className = 'board-header__hands-off-input';
+  handsOffInput.checked = board.handsOff === true;
+  handsOffInput.setAttribute('aria-label', 'Hands-off');
+  handsOffInput.addEventListener('change', () => {
+    const requested = handsOffInput.checked;
+    void selectBoardHandsOffFromUi(group, requested, plannerChat).then((applied) => {
+      // Enabling is confirm-gated; snap the box back when the user declines.
+      handsOffInput.checked = applied;
+      refreshActiveBoardIfMounted();
+    });
+  });
+  const handsOffText = document.createElement('span');
+  handsOffText.className = 'board-header__hands-off-label';
+  handsOffText.setAttribute('aria-hidden', 'true');
+  const handsOffFull = document.createElement('span');
+  handsOffFull.className = 'board-header__label-full';
+  handsOffFull.textContent = 'Hands-off';
+  const handsOffShort = document.createElement('span');
+  handsOffShort.className = 'board-header__label-short';
+  handsOffShort.textContent = 'AFK';
+  handsOffText.appendChild(handsOffFull);
+  handsOffText.appendChild(handsOffShort);
+  handsOffWrapper.appendChild(handsOffInput);
+  handsOffWrapper.appendChild(handsOffText);
+  settings.appendChild(handsOffWrapper);
+
+  // Isolation mode override (Auto = global default or derived from concurrency)
   const isoWrapper = document.createElement('label');
   isoWrapper.className = 'board-header__isolation';
   isoWrapper.title =
-    'Git worktree isolation (Auto uses Settings default or execution mode). Isolates checkouts between tasks — not OS host containment.';
+    'Git worktree isolation (Auto uses the Settings default, else derives from concurrency). Isolates checkouts between tasks — not OS host containment.';
   const isoLabel = document.createElement('span');
   isoLabel.className = 'board-header__field-label';
   isoLabel.textContent = 'isolate';
@@ -1332,6 +1139,7 @@ function wireBoardHeaderControls(
   for (const opt of [
     { value: 'auto', label: 'Auto' },
     { value: 'off', label: 'Off' },
+    { value: 'per-board', label: 'Per-board' },
     { value: 'per-task', label: 'Per-task' },
     { value: 'per-wave', label: 'Per-wave' },
   ]) {
@@ -1342,7 +1150,7 @@ function wireBoardHeaderControls(
   }
   isoSelect.value = board.isolationMode ?? 'auto';
   isoSelect.addEventListener('change', () => {
-    const val = isoSelect.value as 'auto' | 'off' | 'per-task' | 'per-wave';
+    const val = isoSelect.value as 'auto' | 'off' | 'per-board' | 'per-task' | 'per-wave';
     setBoardIsolationMode(group, val, plannerChat);
     refreshActiveBoardIfMounted();
   });
@@ -1382,25 +1190,24 @@ function wireBoardHeaderControls(
 
   controls.appendChild(settings);
 
-  // Start / Stop button (shown in sequential, auto, and afk modes)
-  if (currentMode !== 'manual') {
-    const running = isBoardRunning(group);
-    const runBtn = document.createElement('button');
-    runBtn.type = 'button';
-    runBtn.className = `board-header__run-btn${running ? ' board-header__run-btn--stop' : ''}`;
-    runBtn.setAttribute('aria-label', running ? 'Stop orchestrator' : 'Start orchestrator');
-    runBtn.title = running ? 'Stop all tasks and chats' : 'Start auto execution';
-    runBtn.textContent = running ? 'Stop' : 'Start';
-    runBtn.addEventListener('click', () => {
-      if (isBoardRunning(group)) {
-        stopBoardAutoRun(group, plannerChat);
-      } else {
-        startBoardAutoRun(group, plannerChat);
-      }
-      refreshActiveBoardIfMounted();
-    });
-    controls.appendChild(runBtn);
-  }
+  // Start / Stop. A board that has not been started is the "manual" case — there is
+  // no mode that hides this button any more.
+  const running = isBoardRunning(group);
+  const runBtn = document.createElement('button');
+  runBtn.type = 'button';
+  runBtn.className = `board-header__run-btn${running ? ' board-header__run-btn--stop' : ''}`;
+  runBtn.setAttribute('aria-label', running ? 'Stop orchestrator' : 'Start orchestrator');
+  runBtn.title = running ? 'Stop all tasks and chats' : 'Start auto execution';
+  runBtn.textContent = running ? 'Stop' : 'Start';
+  runBtn.addEventListener('click', () => {
+    if (isBoardRunning(group)) {
+      stopBoardAutoRun(group, plannerChat);
+    } else {
+      startBoardAutoRun(group, plannerChat);
+    }
+    refreshActiveBoardIfMounted();
+  });
+  controls.appendChild(runBtn);
 
   const openPlan = createBoardHeaderIconButton(
     'open-plan',
@@ -1466,7 +1273,7 @@ function wireBoardHeaderControls(
   }
 }
 
-/** Banner when the orchestrator requested AFK and awaits user confirmation. */
+/** Banner when the orchestrator requested hands-off and awaits user confirmation. */
 function buildPendingAfkBanner(
   group: ChatGroup,
   board: BoardState,
@@ -1481,13 +1288,13 @@ function buildPendingAfkBanner(
   const label = document.createElement('span');
   label.className = 'board-header__pending-afk-label';
   label.textContent =
-    'The orchestrator requested AFK mode — fully hands-off execution with no prompts until Stop or board finish.';
+    'The orchestrator requested hands-off mode — fully autonomous execution with no prompts until Stop or board finish.';
   wrap.appendChild(label);
 
   const enableBtn = document.createElement('button');
   enableBtn.type = 'button';
   enableBtn.className = 'board-btn board-btn--compact board-btn--primary';
-  enableBtn.textContent = 'Enable AFK';
+  enableBtn.textContent = 'Enable hands-off';
   enableBtn.addEventListener('click', () => {
     activateAfk(group, plannerChat);
     refreshActiveBoardIfMounted();
@@ -2961,8 +2768,6 @@ function refreshBoardDom(
     openPlanBtn.title = planTitle;
   }
 
-  const currentMode = getBoardExecutionMode(board);
-  syncBoardExecModeUi(root, currentMode);
   const concurrencyInput = root.querySelector(
     '.board-header__concurrency-input',
   ) as HTMLInputElement | null;
@@ -2970,7 +2775,13 @@ function refreshBoardDom(
     concurrencyInput.value = String(
       board.maxConcurrentTasks ?? getAutopilotMetaSync().maxConcurrentTasks ?? 3,
     );
-    concurrencyInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
+  }
+
+  const handsOffInput = root.querySelector(
+    '.board-header__hands-off-input',
+  ) as HTMLInputElement | null;
+  if (handsOffInput) {
+    handsOffInput.checked = board.handsOff === true;
   }
 
   const isolationSelect = root.querySelector(
@@ -2992,41 +2803,37 @@ function refreshBoardDom(
   syncBoardHeaderModelSelect(root, group, board, plannerChat);
   syncBoardHeaderReasoning(group, board, plannerChat);
 
-  // Sync Start/Stop button: add if needed, remove when mode switches to manual
+  // Sync Start/Stop button. It is always present now — there is no mode that hides it.
   const controls = root.querySelector('.board-header__controls') as HTMLElement | null;
   if (controls) {
     let runBtn = controls.querySelector('.board-header__run-btn') as HTMLButtonElement | null;
-    if (currentMode !== 'manual') {
-      const running = isBoardRunning(group);
-      if (!runBtn) {
-        runBtn = document.createElement('button');
-        runBtn.type = 'button';
-        // Keep build order (… settings, Start, Timeline, plan): anchor on the
-        // first trailing action that is a direct child of the controls row.
-        const anchor =
-          controls.querySelector(':scope > .board-timeline-btn') ??
-          controls.querySelector(':scope > [data-board-action="open-plan"]');
-        if (anchor) {
-          controls.insertBefore(runBtn, anchor);
-        } else {
-          controls.appendChild(runBtn);
-        }
-        runBtn.addEventListener('click', () => {
-          if (isBoardRunning(group)) {
-            stopBoardAutoRun(group, plannerChat);
-          } else {
-            startBoardAutoRun(group, plannerChat);
-          }
-          refreshActiveBoardIfMounted();
-        });
+    const running = isBoardRunning(group);
+    if (!runBtn) {
+      runBtn = document.createElement('button');
+      runBtn.type = 'button';
+      // Keep build order (… settings, Start, Timeline, plan): anchor on the
+      // first trailing action that is a direct child of the controls row.
+      const anchor =
+        controls.querySelector(':scope > .board-timeline-btn') ??
+        controls.querySelector(':scope > [data-board-action="open-plan"]');
+      if (anchor) {
+        controls.insertBefore(runBtn, anchor);
+      } else {
+        controls.appendChild(runBtn);
       }
-      runBtn.className = `board-header__run-btn${running ? ' board-header__run-btn--stop' : ''}`;
-      runBtn.setAttribute('aria-label', running ? 'Stop orchestrator' : 'Start orchestrator');
-      runBtn.title = running ? 'Stop all tasks and chats' : 'Start auto execution';
-      runBtn.textContent = running ? 'Stop' : 'Start';
-    } else if (runBtn) {
-      runBtn.remove();
+      runBtn.addEventListener('click', () => {
+        if (isBoardRunning(group)) {
+          stopBoardAutoRun(group, plannerChat);
+        } else {
+          startBoardAutoRun(group, plannerChat);
+        }
+        refreshActiveBoardIfMounted();
+      });
     }
+    runBtn.className = `board-header__run-btn${running ? ' board-header__run-btn--stop' : ''}`;
+    runBtn.setAttribute('aria-label', running ? 'Stop orchestrator' : 'Start orchestrator');
+    runBtn.title = running ? 'Stop all tasks and chats' : 'Start auto execution';
+    runBtn.textContent = running ? 'Stop' : 'Start';
   }
 
   const send = root.querySelector(

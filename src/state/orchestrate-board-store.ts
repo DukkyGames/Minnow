@@ -26,6 +26,7 @@ import type {
   ChatGroup,
   OrchestrateBoardState,
 } from '../types.ts';
+import { deriveBoardExecutionMode } from './board-execution-mode.ts';
 import { getBoardGroupForChat, getPlannerChatForGroup, linkPlannerChatToBoardFolder } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { hasPipelineHold } from './orchestrate-pipeline-holds.ts';
@@ -1000,22 +1001,25 @@ export function markBoardTaskInProgressFromChat(chat: Chat): void {
   }
 }
 
-/** Resolved execution mode (defaults to manual). */
+/**
+ * Resolved execution mode, derived from concurrency + hands-off.
+ * See {@link file://./board-execution-mode.ts} — this is the single derivation point.
+ */
 export function getBoardExecutionMode(
   board: OrchestrateBoardState | null | undefined,
 ): 'manual' | 'auto' | 'sequential' | 'afk' {
-  const m = board?.executionMode;
-  if (m === 'auto' || m === 'sequential' || m === 'afk') return m;
-  return 'manual';
+  return deriveBoardExecutionMode(board);
 }
 
-/** True when the board is in auto-pilot delegation mode (auto, sequential, or afk). */
+/**
+ * True when the board delegates automatically. Every board with a plan does now —
+ * a board that has not been Started is the "manual" case, see {@link isBoardRunning}.
+ */
 export function isBoardAutoMode(group: ChatGroup): boolean {
-  const mode = getBoardExecutionMode(group.orchestrateBoard);
-  return mode === 'auto' || mode === 'sequential' || mode === 'afk';
+  return Boolean(group.orchestrateBoard);
 }
 
-/** True when auto/sequential mode is active AND the user has pressed Start. */
+/** True when the user has pressed Start on the board. */
 export function isBoardRunning(group: ChatGroup): boolean {
   return isBoardAutoMode(group) && group.orchestrateBoard?.autoRunning === true;
 }
@@ -1133,7 +1137,7 @@ export function initBoard(
     lastUpdatedAt: now,
     timerAccumulatedMs: 0,
     maxConcurrentTasks: getAutopilotMetaSync().maxConcurrentTasks ?? 3,
-    executionMode: getAutopilotMetaSync().defaultExecutionMode ?? 'manual',
+    ...(getAutopilotMetaSync().defaultHandsOff === true ? { handsOff: true } : {}),
   };
   const modelBinding = resolveBoardModelBinding(plannerChat);
   if (modelBinding.modelId) {

@@ -54,7 +54,7 @@ function makeSetup(tasks: BoardTask[]): { group: ChatGroup; planner: Chat } {
     lastUpdatedAt: 2,
     waves: [{ id: 'W1', status: 'planned' }],
     tasks,
-    executionMode: 'afk',
+    handsOff: true,
     autoRunning: true,
   };
   const group: ChatGroup = {
@@ -180,10 +180,11 @@ describe('runSelfHeal — board not running', () => {
     assert.equal(fresh.envFixAttempts ?? 0, 0);
   });
 
-  test('manual mode board → same guard applies', async () => {
+  test('a never-started board → same guard applies', async () => {
+    // "Manual" is just a board that has not been Started now.
     const t = task('W1-A');
     const { group, planner } = makeSetup([t]);
-    group.orchestrateBoard!.executionMode = 'manual';
+    delete group.orchestrateBoard!.autoRunning;
 
     const { deps, s } = makeDeps();
     await runSelfHeal(group, t, planner, opts('build', { category: 'code' }), deps);
