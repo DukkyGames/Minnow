@@ -6,11 +6,14 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   applyContextBudget,
+  estimateApiMessageTokens,
   estimateApiMessagesTokens,
   formatContextTrimStatus,
   partitionTurns,
   resolveContextBudget,
+  SAFETY_MARGIN,
 } from '../../src/chat/context-budget.ts';
+import { ESTIMATE_IMAGE_URL_TOKENS } from '../../src/chat/prompts/token-estimate-core.ts';
 import type { ApiMessage, ToolCall } from '../../src/types.ts';
 
 function user(content: string): ApiMessage {
@@ -53,6 +56,106 @@ describe('resolveContextBudget', () => {
       modelLimit: null,
     });
     assert.equal(resolved.effectiveLimit, null);
+  });
+
+  test('reserved tokens come out of the message ceiling', () => {
+    const resolved = resolveContextBudget({
+      agentConfig: { enforcementPolicy: 'slide' },
+      modelLimit: 32000,
+      reservedTokens: 4000,
+    });
+    assert.equal(resolved.effectiveLimit, 24800);
+    assert.equal(resolved.reservedTokens, 4000);
+  });
+
+  test('messages plus reserve always fit inside the model window', () => {
+    // The bug this guards: tool schemas ride in `body.tools`, outside the
+    // message estimate, so an unreserved budget authorised more than the
+    // window could hold and the server rejected the send.
+    for (const reserve of [0, 1200, 12048, 40000]) {
+      const resolved = resolveContextBudget({
+        agentConfig: { enforcementPolicy: 'summarize' },
+        modelLimit: 89088,
+        reservedTokens: reserve,
+      });
+      assert.ok(resolved.effectiveLimit! + reserve <= 89088 * SAFETY_MARGIN + 1);
+    }
+  });
+
+  test('a reserve larger than the window still leaves a usable ceiling', () => {
+    const resolved = resolveContextBudget({
+      agentConfig: { enforcementPolicy: 'slide' },
+      modelLimit: 4096,
+      reservedTokens: 999999,
+    });
+    assert.equal(resolved.effectiveLimit, 1);
+  });
+
+  test('an explicit override replaces both margin and reserve', () => {
+    const resolved = resolveContextBudget({
+      agentConfig: { enforcementPolicy: 'slide' },
+      modelLimit: 32000,
+      reservedTokens: 4000,
+      effectiveLimitOverride: 9000,
+    });
+    assert.equal(resolved.effectiveLimit, 9000);
+    assert.equal(resolved.modelLimit, 32000);
+  });
+});
+
+describe('estimateApiMessageTokens', () => {
+  test('tool output is priced above prose of the same length', () => {
+    const text = 'x'.repeat(3600);
+    const asTool = estimateApiMessageTokens(toolResult('t1', text));
+    const asProse = estimateApiMessageTokens(user(text));
+    assert.ok(asTool > asProse);
+  });
+
+  test('assistant tool_calls JSON is counted, not dropped', () => {
+    const call: ToolCall = {
+      id: 't1',
+      type: 'function',
+      function: { name: 'read_file', arguments: '{"path":"src/app.ts"}' },
+    };
+    const withCall = estimateApiMessageTokens(assistantWithTools(null, [call]));
+    assert.ok(withCall > 0);
+    assert.ok(withCall > estimateApiMessageTokens(assistant('')));
+  });
+
+  test('replayed reasoning on an assistant row is counted', () => {
+    // buildApiMessages can attach `reasoning` / `reasoning_content` outbound.
+    // It is real payload in the request, so the budget has to see it.
+    const plain = assistant('done');
+    const withReasoning: ApiMessage = {
+      ...(plain as object),
+      role: 'assistant',
+      reasoning: 'x'.repeat(3600),
+    } as ApiMessage;
+    assert.ok(
+      estimateApiMessageTokens(withReasoning) > estimateApiMessageTokens(plain) + 900,
+    );
+  });
+
+  test('image parts cost a fixed per-image budget', () => {
+    const withImage: ApiMessage = {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'look' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,AA', detail: 'auto' } },
+      ],
+    };
+    assert.ok(estimateApiMessageTokens(withImage) >= ESTIMATE_IMAGE_URL_TOKENS);
+  });
+
+  test('a tool-heavy transcript sums above a chars-over-four reading of it', () => {
+    // The undercount that made enforcement unreachable: an agent transcript is
+    // mostly tool payload, and chars÷4 read it 20–30% light.
+    const messages: ApiMessage[] = [];
+    for (let i = 0; i < 20; i += 1) {
+      messages.push(toolResult(`t${i}`, 'src/components/panel.tsx:42:7'.repeat(20)));
+    }
+    const chars = messages.reduce((n, m) => n + (m as { content: string }).content.length, 0);
+    assert.ok(estimateApiMessagesTokens(messages) > chars / 4);
   });
 });
 

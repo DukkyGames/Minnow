@@ -6,6 +6,16 @@ import {
   buildLiveStreamUsage,
   LIVE_STREAM_STATS_THROTTLE_MS,
 } from '../../src/chat/streaming-stats.ts';
+import { estimateTokensFromText } from '../../src/chat/prompts/token-estimate-core.ts';
+
+/**
+ * Live stats price streamed prose with the shared estimator — read the expected
+ * count from it rather than restating its divisor, so recalibrating the
+ * estimator does not rewrite this suite.
+ */
+function proseTokens(chars: number): number {
+  return estimateTokensFromText('x'.repeat(chars));
+}
 
 describe('buildLiveStreamUsage', () => {
   test('estimates completion tokens from partial assistant text', () => {
@@ -17,8 +27,8 @@ describe('buildLiveStreamUsage', () => {
       partialThinking: '',
     });
 
-    assert.equal(usage.completion_tokens, 100);
-    assert.equal(usage.total_tokens, 100);
+    assert.equal(usage.completion_tokens, proseTokens(400));
+    assert.equal(usage.total_tokens, proseTokens(400));
   });
 
   test('does not estimate completion from thinking text (provider reports it)', () => {
@@ -139,7 +149,7 @@ describe('buildLiveStreamMeta', () => {
       1000,
     );
 
-    assert.equal(meta.usage.completion_tokens, 20);
+    assert.equal(meta.usage.completion_tokens, proseTokens(80));
     assert.ok(meta.stats.tokens_per_second != null);
   });
 });

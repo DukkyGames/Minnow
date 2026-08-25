@@ -5,8 +5,10 @@
 
 import { apiMessageContentToText, contentPartsToText } from '../api/message-content.ts';
 import {
+  charsPerTokenFor,
   imagePaddingForEstimate,
   estimateTokensFromText,
+  ESTIMATE_IMAGE_URL_TOKENS,
 } from './prompts/token-estimate-core';
 import type { ApiMessage, ContentPart } from '../types';
 import { isToolImageFollowUpMessage } from './tool-image-follow-up';
@@ -24,7 +26,14 @@ export type ContextEnforcementPolicy =
 /** Shipped default when a row omits policy (LLM summarize). */
 export const DEFAULT_CONTEXT_ENFORCEMENT_POLICY: ContextEnforcementPolicy = 'summarize';
 
-const SAFETY_MARGIN = 0.9;
+/**
+ * Headroom left under the model window for the reply itself and for estimator
+ * drift. It only works when the estimate is honest: while `estimateTokensFromText`
+ * ran at `chars ÷ 4` it undercounted tool-heavy transcripts by 24–33%, so this
+ * margin was spent before enforcement ever looked at it and the trigger point
+ * sat *above* the hard limit. See the divisor table in token-estimate-core.
+ */
+export const SAFETY_MARGIN = 0.9;
 const TRUNCATION_MARKER = '[… truncated for context budget]';
 /** Prefix injected before compressed prior-turn summaries (LLM or extractive). */
 export const SUMMARY_HEADER = '## Prior context (compressed)\n';
@@ -39,9 +48,12 @@ export interface AgentContextBudgetConfig {
 }
 
 export interface ResolvedContextBudget {
+  /** Ceiling for the *message* estimate — already net of {@link reservedTokens}. */
   effectiveLimit: number | null;
   modelLimit: number | null;
   policy: ContextEnforcementPolicy;
+  /** Non-message payload sharing the window (tool schemas). */
+  reservedTokens: number;
 }
 
 export interface ApplyContextBudgetResult {
@@ -91,10 +103,44 @@ export function serializeApiMessageForEstimate(msg: ApiMessage): string {
   return '';
 }
 
+/**
+ * Token estimate for one outbound message, priced per content class. Tool
+ * results and serialized `tool_calls` are the bulk of an agent transcript and
+ * tokenize far worse than prose, so they must not share prose's divisor.
+ */
+export function estimateApiMessageTokens(msg: ApiMessage): number {
+  if (msg.role === 'system') return estimateTokensFromText(msg.content, 'prose');
+  if (msg.role === 'tool') return estimateTokensFromText(msg.content, 'payload');
+  if (msg.role === 'user') {
+    const text = apiMessageContentToText(msg.content);
+    const images = Array.isArray(msg.content)
+      ? msg.content.filter((part) => part.type === 'image_url').length
+      : 0;
+    return (
+      estimateTokensFromText(text, 'prose') + images * ESTIMATE_IMAGE_URL_TOKENS
+    );
+  }
+  if (msg.role === 'assistant') {
+    let total = estimateTokensFromText(apiMessageContentToText(msg.content), 'prose');
+    if (msg.tool_calls?.length) {
+      total += estimateTokensFromText(JSON.stringify(msg.tool_calls), 'payload');
+    }
+    // Replayed reasoning is real outbound payload on this row — uncounted, it is
+    // the same hole tool schemas were, just on the message side.
+    const reasoning =
+      (msg.reasoning ?? '') +
+      (msg.reasoning_content ?? '') +
+      (msg.reasoning_signature ?? '');
+    if (reasoning) total += estimateTokensFromText(reasoning, 'prose');
+    return total;
+  }
+  return 0;
+}
+
 export function estimateApiMessagesTokens(messages: ApiMessage[]): number {
   let total = 0;
   for (const msg of messages) {
-    total += estimateTokensFromText(serializeApiMessageForEstimate(msg));
+    total += estimateApiMessageTokens(msg);
   }
   return total;
 }
@@ -129,14 +175,35 @@ export function agentContextBudgetFromSubAgentType(
 export function resolveContextBudget(params: {
   agentConfig: AgentContextBudgetConfig;
   modelLimit: number | null;
+  /**
+   * Tokens the request spends outside `messages` — tool schemas ride in
+   * `body.tools`, share the same window, and are invisible to the message
+   * estimate. Left uncounted, the whole enabled catalog (≈12k real tokens)
+   * silently ate more than {@link SAFETY_MARGIN}.
+   */
+  reservedTokens?: number;
+  /**
+   * Force the message-estimate ceiling, bypassing margin and reserve. Set from
+   * a provider's own overflow numbers so a compact-and-retry targets what the
+   * server actually measured rather than what we guessed.
+   */
+  effectiveLimitOverride?: number | null;
 }): ResolvedContextBudget {
   const policy = params.agentConfig.enforcementPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY;
   const modelLimit = normalizePositiveInt(params.modelLimit);
+  const reservedTokens = Math.max(0, Math.floor(params.reservedTokens ?? 0));
+
+  const override = normalizePositiveInt(params.effectiveLimitOverride);
+  if (override != null) {
+    return { effectiveLimit: override, modelLimit, policy, reservedTokens };
+  }
 
   const effectiveLimit =
-    modelLimit != null ? Math.max(1, Math.floor(modelLimit * SAFETY_MARGIN)) : null;
+    modelLimit != null
+      ? Math.max(1, Math.floor(modelLimit * SAFETY_MARGIN) - reservedTokens)
+      : null;
 
-  return { effectiveLimit, modelLimit, policy };
+  return { effectiveLimit, modelLimit, policy, reservedTokens };
 }
 
 function isPriorContextSummary(msg: ApiMessage): boolean {
@@ -267,7 +334,9 @@ export function collectTurnText(messages: ApiMessage[], turn: TurnSlice): string
 }
 
 export function buildExtractiveSummary(text: string, maxTokens: number): string {
-  const budgetChars = Math.max(32, maxTokens * 4);
+  // Dropped turns are mostly tool payload, so price the char budget at the
+  // payload rate — `maxTokens * 4` handed back a third more than it promised.
+  const budgetChars = Math.max(32, Math.floor(maxTokens * charsPerTokenFor('payload')));
   const body = text.trim();
   if (!body) return '';
   if (body.length <= budgetChars) return body;
@@ -329,6 +398,8 @@ function hardTruncateLongestMessage(
   const over = estimateApiMessagesTokens(messages) - limit;
   if (over <= 0) return { messages, changed: false };
 
+  // 4 is above every message divisor, so cutting `over * 4` chars always sheds
+  // at least `over` tokens whatever the row holds.
   const maxChars = Math.max(32, serializeApiMessageForEstimate(messages[bestIdx]).length - over * 4);
   const next = [...messages];
   next[bestIdx] = truncateMessageContent(messages[bestIdx], maxChars);

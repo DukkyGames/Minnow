@@ -23,9 +23,9 @@ import { pushOutboundSystemMessages } from '../../tools/api-system-messages';
 import {
   agentContextBudgetFromWorkAgent,
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+  estimateApiMessageTokens,
   estimateApiMessagesTokens,
   resolveContextBudget,
-  serializeApiMessageForEstimate,
 } from '../context-budget';
 import { estimateContextPolicyTrim } from '../context/apply-policy';
 import {
@@ -130,7 +130,7 @@ function countHistoryTokensFromApiMessages(messages: ApiMessage[]): number {
   let total = 0;
   for (const msg of messages) {
     if (msg.role === 'system') continue;
-    total += estimateTokensFromText(serializeApiMessageForEstimate(msg));
+    total += estimateApiMessageTokens(msg);
   }
   return total;
 }
@@ -142,6 +142,7 @@ function applyBudgetTrimToHistoryTokens(
   systemText: string,
   userRulesText: string,
   rawHistoryTokens: number,
+  toolsTokens: number,
   historyOptions?: HistoryEstimateOptions,
 ): { history: number; compressedEstimate: number; wouldCompress: boolean } {
   const apiMessages = buildOutboundApiMessagesForEstimate(
@@ -157,6 +158,8 @@ function applyBudgetTrimToHistoryTokens(
   const budgetResolved = resolveContextBudget({
     agentConfig,
     modelLimit: resolveModelLimitForEstimate(modelId, chat),
+    // Match the send-time budget: tools are outside `messages` but inside the window.
+    reservedTokens: toolsTokens,
   });
   if (budgetResolved.effectiveLimit == null) {
     return { history: rawHistoryTokens, compressedEstimate: 0, wouldCompress: false };
@@ -367,6 +370,7 @@ export async function resolveOutboundPromptEstimate(
     staticPart.composed,
     staticPart.userRules ?? '',
     estimate.history,
+    staticPart.tools,
     historyOptions,
   );
 

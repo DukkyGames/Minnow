@@ -32,13 +32,15 @@ export function getContextInFlightOverlay(
 }
 
 /**
- * Heuristic token count for in-flight overlay fields (chars ÷ 4).
+ * Heuristic token count for in-flight overlay fields.
  * Only unfinalized tool-call JSON counts toward the next prompt; streaming
  * completion prose and live reasoning are output channels, not prompt input.
+ * Priced as payload — it lands in history as serialized `tool_calls`, which the
+ * send-time budget measures the same way.
  */
 export function estimateInFlightOverlayTokens(
   overlay: Omit<ContextInFlightOverlay, 'chatId'> | undefined,
 ): number {
   if (!overlay?.pendingToolCallsJson) return 0;
-  return estimateTokensFromText(overlay.pendingToolCallsJson);
+  return estimateTokensFromText(overlay.pendingToolCallsJson, 'payload');
 }

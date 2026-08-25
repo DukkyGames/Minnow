@@ -67,6 +67,7 @@ import {
   resolveContextBudget,
 } from '../chat/context-budget';
 import { applyContextPolicy } from '../chat/context/apply-policy';
+import { estimateToolsTokens } from '../chat/prompts/token-estimate-core';
 import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from './sub-agent-outcome';
 import { buildSubAgentOutcomeResponseFormat } from './sub-agent-outcome-response-format';
 import {
@@ -702,10 +703,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       toolCallsMeta,
     );
 
+    // Tool schemas go out in `body.tools`, share the model window, and never
+    // appear in the message estimate — reserve them up front (see loop.ts).
+    const toolsReserveTokens = estimateToolsTokens(input.tools);
+
     const enforceContextBudget = async (turnIndex: number): Promise<boolean> => {
       const budgetResolved = resolveContextBudget({
         agentConfig: contextBudget,
         modelLimit: modelContextLimit,
+        reservedTokens: toolsReserveTokens,
       });
       const budgetApplied = await applyContextPolicy({
         messages,
@@ -715,6 +721,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         providerId: input.providerId,
         modelId: input.modelId,
         signal: input.signal,
+        reservedTokens: toolsReserveTokens,
       });
       if (budgetApplied.applied) {
         messages.length = 0;
