@@ -94,7 +94,7 @@ function seedTwoTaskBoard() {
       { id: 'B', title: 'Task B', wave: 'W1', category: 'build', build: 'do b' },
     ],
   });
-  group.orchestrateBoard!.executionMode = 'auto';
+  group.orchestrateBoard!.maxConcurrentTasks = 3;
   group.orchestrateBoard!.autoRunning = true;
   setSessionStateForTests({
     version: 5,

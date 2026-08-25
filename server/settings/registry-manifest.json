@@ -1313,19 +1313,19 @@
     ]
   },
   {
-    "key": "agents.autopilot.executionMode",
-    "label": "Default execution mode",
+    "key": "agents.autopilot.handsOff",
+    "label": "Hands-off by default",
+    "keywords": [
+      "afk",
+      "autonomous",
+      "unattended",
+      "hands off"
+    ],
     "category": "agents",
     "area": "autopilot",
     "storage": "meta",
-    "path": "autopilot.defaultExecutionMode",
-    "type": "enum",
-    "allowedValues": [
-      "manual",
-      "sequential",
-      "auto",
-      "afk"
-    ],
+    "path": "autopilot.defaultHandsOff",
+    "type": "boolean",
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
@@ -1343,6 +1343,7 @@
     "allowedValues": [
       "auto",
       "off",
+      "per-board",
       "per-task",
       "per-wave"
     ],

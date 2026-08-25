@@ -79,7 +79,7 @@ function makeGroup(tasks: BoardTask[]): ChatGroup {
     waves: [{ id: 'W1', status: 'in_progress' }],
   });
   group.orchestrateBoard!.integrationBranch = INTEGRATION_BRANCH;
-  group.orchestrateBoard!.executionMode = 'auto';
+  group.orchestrateBoard!.maxConcurrentTasks = 3;
   group.orchestrateBoard!.autoRunning = true;
   return group;
 }

@@ -82,7 +82,7 @@ function makeAfkSessionState() {
       lastUpdatedAt: 2,
       waves: [{ id: 'W1', status: 'in_progress' }],
       tasks: [],
-      executionMode: 'afk',
+      handsOff: true,
       autoRunning: true,
     },
   };

@@ -26,6 +26,7 @@ import type {
   ChatGroup,
   OrchestrateBoardState,
 } from '../types.ts';
+import { deriveBoardExecutionMode } from './board-execution-mode.ts';
 import { getBoardGroupForChat, getPlannerChatForGroup, linkPlannerChatToBoardFolder } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { hasPipelineHold } from './orchestrate-pipeline-holds.ts';
@@ -289,6 +290,26 @@ export function logWorktreeAllocated(
     taskId,
     message: `${taskId}: worktree ${branch} (dev ${devPort}, api ${apiPort})`,
     detail: { branch, devPort, apiPort },
+  });
+}
+
+/**
+ * Counterpart to {@link logWorktreeAllocated}: the task's worktree directory was
+ * removed after its branch landed in integration. The branch is deliberately kept,
+ * so a later requeue can recreate the slot from it.
+ */
+export function logWorktreeReleased(
+  group: ChatGroup,
+  taskId: string,
+  branch: string,
+  detail?: Record<string, unknown>,
+): void {
+  appendBoardLog(group, {
+    type: 'worktree_released',
+    level: 'info',
+    taskId,
+    message: `${taskId}: worktree released (branch ${branch} kept)`,
+    detail: { branch, ...detail },
   });
 }
 
@@ -1000,22 +1021,25 @@ export function markBoardTaskInProgressFromChat(chat: Chat): void {
   }
 }
 
-/** Resolved execution mode (defaults to manual). */
+/**
+ * Resolved execution mode, derived from concurrency + hands-off.
+ * See {@link file://./board-execution-mode.ts} — this is the single derivation point.
+ */
 export function getBoardExecutionMode(
   board: OrchestrateBoardState | null | undefined,
 ): 'manual' | 'auto' | 'sequential' | 'afk' {
-  const m = board?.executionMode;
-  if (m === 'auto' || m === 'sequential' || m === 'afk') return m;
-  return 'manual';
+  return deriveBoardExecutionMode(board);
 }
 
-/** True when the board is in auto-pilot delegation mode (auto, sequential, or afk). */
+/**
+ * True when the board delegates automatically. Every board with a plan does now —
+ * a board that has not been Started is the "manual" case, see {@link isBoardRunning}.
+ */
 export function isBoardAutoMode(group: ChatGroup): boolean {
-  const mode = getBoardExecutionMode(group.orchestrateBoard);
-  return mode === 'auto' || mode === 'sequential' || mode === 'afk';
+  return Boolean(group.orchestrateBoard);
 }
 
-/** True when auto/sequential mode is active AND the user has pressed Start. */
+/** True when the user has pressed Start on the board. */
 export function isBoardRunning(group: ChatGroup): boolean {
   return isBoardAutoMode(group) && group.orchestrateBoard?.autoRunning === true;
 }
@@ -1133,7 +1157,7 @@ export function initBoard(
     lastUpdatedAt: now,
     timerAccumulatedMs: 0,
     maxConcurrentTasks: getAutopilotMetaSync().maxConcurrentTasks ?? 3,
-    executionMode: getAutopilotMetaSync().defaultExecutionMode ?? 'manual',
+    ...(getAutopilotMetaSync().defaultHandsOff === true ? { handsOff: true } : {}),
   };
   const modelBinding = resolveBoardModelBinding(plannerChat);
   if (modelBinding.modelId) {
@@ -1166,6 +1190,89 @@ export function initBoard(
   }
   persistBoardGroup(group);
   return board;
+}
+
+/**
+ * Wave id to use for tasks appended to a running board: one past the highest
+ * existing wave, in whatever spelling the board already uses (`3`, `W3`, …).
+ */
+export function nextBoardWaveId(board: OrchestrateBoardState): number | string {
+  const ids = board.waves.map((w) => w.id);
+  const taken = new Set(ids.map((id) => String(id)));
+
+  const numeric = ids.every((id) => typeof id === 'number' && Number.isFinite(id));
+  if (numeric && ids.length) {
+    let next = Math.max(...(ids as number[])) + 1;
+    while (taken.has(String(next))) next += 1;
+    return next;
+  }
+
+  const prefixed = ids
+    .map((id) => /^([A-Za-z]+)(\d+)$/.exec(String(id)))
+    .filter((m): m is RegExpExecArray => Boolean(m));
+  if (prefixed.length === ids.length && prefixed.length) {
+    const prefix = prefixed[0]![1]!;
+    if (prefixed.every((m) => m[1] === prefix)) {
+      let next = Math.max(...prefixed.map((m) => Number(m[2]))) + 1;
+      while (taken.has(`${prefix}${next}`)) next += 1;
+      return `${prefix}${next}`;
+    }
+  }
+
+  let n = ids.length + 1;
+  while (taken.has(`W${n}`)) n += 1;
+  return `W${n}`;
+}
+
+/**
+ * Append tasks to an existing board in a brand-new wave.
+ *
+ * Distinct from {@link initBoard}, which *replaces* the board wholesale, and from
+ * {@link updateTask}, which throws on an unknown id. Callers must validate the
+ * **merged** task set first (`validateBoardAddTasksArgs`) — cycles and unknown
+ * dependencies only show up once new tasks are read against the existing ones.
+ */
+export function appendBoardTasks(
+  group: ChatGroup,
+  input: InitBoardInput['tasks'],
+  plannerChat: Chat,
+  options: { waveId?: number | string } = {},
+): BoardTask[] {
+  const board = group.orchestrateBoard;
+  if (!board || !input.length) return [];
+
+  const waveId = options.waveId ?? nextBoardWaveId(board);
+  if (!board.waves.some((w) => String(w.id) === String(waveId))) {
+    board.waves.push({ id: waveId, status: 'planned' });
+  }
+
+  const appended: BoardTask[] = input.map((t) => ({
+    id: t.id,
+    title: t.title,
+    wave: t.wave ?? waveId,
+    category: t.category,
+    status: 'planned' as BoardTaskStatus,
+    ...(t.build?.trim() ? { buildSpec: t.build.trim() } : {}),
+    ...(t.test?.trim() ? { testSpec: t.test.trim() } : {}),
+    ...(t.dependsOn && t.dependsOn.length ? { dependsOn: [...t.dependsOn] } : {}),
+  }));
+  board.tasks.push(...appended);
+
+  recomputeWaveRollup(board);
+  board.lastUpdatedAt = boardNowMs();
+  touchChat(plannerChat);
+  appendBoardLog(group, {
+    type: 'board_init',
+    level: 'info',
+    message: `Added ${appended.length} task${appended.length === 1 ? '' : 's'} in wave ${waveId}`,
+    detail: {
+      summary: `${appended.length} tasks appended`,
+      waveId: String(waveId),
+      taskIds: appended.map((t) => t.id),
+    },
+  });
+  persistBoardGroup(group);
+  return appended;
 }
 
 export type UpdateTaskPatch = Partial<

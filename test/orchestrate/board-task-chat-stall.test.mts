@@ -103,9 +103,19 @@ function makeTaskChat(): Chat {
   };
 }
 
+type BoardRunShape = { handsOff?: boolean; maxConcurrentTasks?: number; autoRunning?: boolean };
+
+/** Board run shapes under the concurrency + hands-off model. */
+const RUN_SHAPES = {
+  afk: { handsOff: true, autoRunning: true },
+  sequential: { maxConcurrentTasks: 1, autoRunning: true },
+  auto: { maxConcurrentTasks: 3, autoRunning: true },
+  // "Manual" is simply a board the user never Started.
+  manual: { maxConcurrentTasks: 1, autoRunning: false },
+} satisfies Record<string, BoardRunShape>;
+
 function makeBoard(
-  executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'afk',
-  autoRunning = true,
+  shape: keyof typeof RUN_SHAPES = 'afk',
 ): OrchestrateBoardState {
   return {
     planPath: 'plan.md',
@@ -122,12 +132,11 @@ function makeBoard(
         chatId: TASK_CHAT_ID,
       },
     ],
-    executionMode,
-    autoRunning,
+    ...RUN_SHAPES[shape],
   };
 }
 
-function makeGroup(executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'afk'): ChatGroup {
+function makeGroup(shape: keyof typeof RUN_SHAPES = 'afk'): ChatGroup {
   const group: ChatGroup = {
     id: GROUP_ID,
     name: 'Board',
@@ -136,7 +145,7 @@ function makeGroup(executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'af
     order: 0,
     createdAt: 1,
     plannerChatId: PLANNER_ID,
-    orchestrateBoard: makeBoard(executionMode),
+    orchestrateBoard: makeBoard(shape),
   };
   return group;
 }
@@ -240,7 +249,7 @@ describe('board task-chat stall detection', () => {
     assert.equal(getTaskChatStallRestartCountForTests(TASK_CHAT_ID), 0);
   });
 
-  test('manual mode: stall detection does not restart', () => {
+  test('a never-started board: stall detection does not restart', () => {
     const planner = makePlanner();
     const taskChat = makeTaskChat();
     const group = makeGroup('manual');

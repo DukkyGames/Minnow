@@ -1117,6 +1117,49 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'board_add_tasks',
+    label: 'Board add tasks',
+    description:
+      'Append follow-up tasks to a running board in a new wave (board_init replaces the whole board).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_add_tasks',
+      'Append tasks to the existing board in a new wave. Use this for follow-up work — board_init would discard the board. Tasks may depend on existing task ids.',
+      {
+        tasks: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              category: {
+                type: 'string',
+                enum: ['build', 'fix', 'test', 'research'],
+              },
+              build: { type: 'string' },
+              test: { type: 'string' },
+              dependsOn: {
+                type: 'array',
+                description: 'Existing or new task ids this task waits on',
+                items: { type: 'string' },
+              },
+            },
+            required: ['id', 'title', 'category'],
+          },
+        },
+        wave: {
+          type: 'string',
+          description:
+            'Optional wave id. Omit to append a new wave after the highest existing one.',
+        },
+      },
+      ['tasks'],
+    ),
+  },
+  {
     id: 'board_update_task',
     label: 'Board update task',
     description: 'Update one board task status and metadata after board_init.',
@@ -1148,20 +1191,24 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'board_set_autonomy',
     label: 'Board set autonomy',
     description:
-      'Set board execution autonomy (manual, sequential, auto, or afk). AFK requires explicit user confirmation before it activates.',
+      'Set board concurrency and/or request hands-off autonomy. Hands-off requires explicit user confirmation before it activates.',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
       'board_set_autonomy',
-      'Change orchestrate board autonomy level. manual stops auto-run; sequential/auto start delegation. afk requests hands-off mode but needs user confirmation on the board before it takes effect.',
+      'Change how the orchestrate board runs: concurrency is how many tasks run at once; handsOff requests fully autonomous execution but needs user confirmation on the board before it takes effect. Pass either or both.',
       {
-        level: {
-          type: 'string',
-          enum: ['manual', 'sequential', 'auto', 'afk'],
-          description: 'Target autonomy level',
+        concurrency: {
+          type: 'number',
+          description: 'Max tasks running at once (1-20). 1 runs them one at a time.',
+        },
+        handsOff: {
+          type: 'boolean',
+          description:
+            'Request fully hands-off execution (never prompt the user). Requires user confirmation.',
         },
       },
-      ['level'],
+      [],
     ),
   },
   {
@@ -1205,6 +1252,17 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           type: 'array',
           items: { type: 'string' },
           description: 'FULL_BOARD fail only: board task ids responsible for the failure',
+        },
+        run_instructions: {
+          type: 'object',
+          description:
+            'FULL_BOARD only: commands you actually ran and verified in this project. Omit any command you did not run — the finish report presents these as verified.',
+          properties: {
+            install: { type: 'string', description: 'e.g. npm install' },
+            start: { type: 'string', description: 'e.g. npm run dev' },
+            test: { type: 'string', description: 'e.g. npm test' },
+            notes: { type: 'string', description: 'Prerequisites or caveats worth stating' },
+          },
         },
       },
       ['task_id', 'outcome', 'summary'],

@@ -355,7 +355,9 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['orchestrate', 'board', 'autopilot', 'concurrency', 'isolation'],
     description: 'Global defaults for orchestrate board execution, testing, and heartbeat.',
   }),
-  field('agents.autopilot.executionMode', 'Default execution mode', 'agents', 'autopilot'),
+  field('agents.autopilot.handsOff', 'Hands-off by default', 'agents', 'autopilot', {
+    keywords: ['afk', 'autonomous', 'unattended', 'hands off'],
+  }),
   field('agents.autopilot.isolation', 'Default isolation mode', 'agents', 'autopilot'),
   field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
   field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),

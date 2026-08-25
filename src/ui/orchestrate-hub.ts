@@ -16,8 +16,10 @@ import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-dis
 import { normalizeModeId } from '../chat/modes/types';
 import {
   getGroupsForWorkspace,
+  getLastBoardGroup,
   openBoardGroup,
 } from '../state/chat-groups';
+import { isBoardRunning } from '../state/orchestrate-board-store';
 import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat, ChatGroup } from '../types';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
@@ -421,6 +423,52 @@ function buildOrchestrateHubDom(): HTMLElement {
 }
 
 /** Paint orchestrate hub into #chatArea (replaces current main view). */
+/**
+ * Where entering Orchestrator should land: the board you were last inside, else
+ * the most recently active running board, else the hub itself.
+ *
+ * Modelled on `resolveSuperPlanTarget` — Super Plan already resumes rather than
+ * always showing its own front door, and `lastBoardGroupId` has been persisted
+ * end-to-end all along; nothing read it.
+ */
+export function resolveOrchestrateLandingTarget(): ChatGroup | null {
+  if (!sessionState) return null;
+
+  const last = getLastBoardGroup();
+  if (last?.orchestrateBoard) return last;
+
+  const workspace = getWorkspacePath();
+  const running = listWorkspaceOrchestrateBoardGroups(workspace).filter(
+    (group) => Boolean(group.orchestrateBoard) && isBoardRunning(group),
+  );
+  // The list is already newest-first by board activity.
+  return running[0] ?? null;
+}
+
+export interface RenderOrchestrateHubOptions {
+  /**
+   * Skip the resume and show the hub itself. Used by explicit "new board"
+   * entry points, mirroring Super Plan's `preferNew`.
+   */
+  preferNew?: boolean;
+}
+
+/**
+ * Enter Orchestrator, resuming the last board when there is one.
+ * Falls through to the hub when nothing is resumable.
+ */
+export function openOrchestrateLanding(options?: RenderOrchestrateHubOptions): void {
+  if (!options?.preferNew) {
+    const target = resolveOrchestrateLandingTarget();
+    if (target) {
+      teardownOrchestrateHub();
+      openBoardGroup(target.id);
+      return;
+    }
+  }
+  renderOrchestrateHub();
+}
+
 export function renderOrchestrateHub(): void {
   void import('./main-column-overlay').then((m) => {
     void m.closeOtherCodeStageViews('orchestrate');

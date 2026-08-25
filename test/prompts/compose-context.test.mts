@@ -115,7 +115,7 @@ describe('buildComposeContext cwd', () => {
           createdAt: 1,
           orchestrateBoard: {
             planPath: 'plan.md',
-            executionMode: 'auto',
+            maxConcurrentTasks: 3,
             tasks: [
               {
                 id: TASK_ID,
@@ -211,7 +211,7 @@ describe('buildComposeContext cwd', () => {
           plannerChatId: plannerId,
           orchestrateBoard: {
             planPath: 'plan.md',
-            executionMode: 'auto',
+            maxConcurrentTasks: 3,
             tasks: [
               {
                 id: TASK_ID,

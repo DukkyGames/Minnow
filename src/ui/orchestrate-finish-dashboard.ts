@@ -13,15 +13,18 @@ import {
   isOrchestrateBoardFinished,
   isOrchestrateFinalTestFailedWithAllTasksComplete,
 } from '../chat/orchestrate/plan-complete.ts';
-import { enrichFinishReportWithRecommendations } from '../chat/orchestrate/finish-recommendations.ts';
+import {
+  enrichFinishReportWithRecommendations,
+  enrichFinishReportWithRunInstructions,
+} from '../chat/orchestrate/finish-recommendations.ts';
 import { setAssistantBubbleContent } from '../markdown/renderer.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
 import {
+  appendFinalTestFixTask,
   clearBoardWorktreesAfterLanding,
   markBoardIntegrationLanded,
   restartBoardAfterRequeueFailures,
 } from '../state/orchestrate-board-actions.ts';
-import { getBoardExecutionMode } from '../state/orchestrate-board-store.ts';
 import {
   mergeIntegrationIntoWorkspace,
   openWorkspacePr,
@@ -34,6 +37,7 @@ import {
 } from '../state/sessions.ts';
 import type { BoardTask, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
 import { createChatWithMode } from './sidebar.ts';
+import { openSourceControlCenterLazy } from './source-control-center-entry.ts';
 
 type CommitAction = 'commit-only' | 'commit-push' | 'commit-push-pr';
 
@@ -80,6 +84,7 @@ function ensureFinishReport(
     scheduleSaveSessions();
   }
   void enrichFinishReportWithRecommendations(groupId, plannerChat, board);
+  void enrichFinishReportWithRunInstructions(groupId, plannerChat, board);
   return board.finishReport!.trim();
 }
 
@@ -164,9 +169,25 @@ function closeSplitMenu(menu: HTMLElement | null): void {
   menu?.remove();
 }
 
-type FinishGitActionKind = 'commit' | 'clear' | 'cleared';
+type FinishGitActionKind =
+  | 'commit'
+  | 'clear'
+  | 'cleared'
+  /** No integration branch: commit the live workspace the agents wrote into. */
+  | 'workspace-commit'
+  | 'committed';
+
+/** True when this board has an integration branch to merge from. */
+function boardHasIntegration(board: OrchestrateBoardState): boolean {
+  return Boolean(board.integrationBranch?.trim());
+}
 
 function resolveFinishGitActionKind(board: OrchestrateBoardState): FinishGitActionKind {
+  // Isolation off — the work is already in the user's checkout, so there is
+  // nothing to merge and no worktree to clear afterwards.
+  if (!boardHasIntegration(board)) {
+    return board.integrationLandedAt ? 'committed' : 'workspace-commit';
+  }
   if (board.worktreesClearedAt) return 'cleared';
   if (board.integrationLandedAt) return 'clear';
   return 'commit';
@@ -179,11 +200,20 @@ function tagFinishGitAction(el: HTMLElement, kind: FinishGitActionKind): HTMLEle
   return el;
 }
 
+const FINISH_GIT_ACTION_KINDS: readonly FinishGitActionKind[] = [
+  'commit',
+  'clear',
+  'cleared',
+  'workspace-commit',
+  'committed',
+];
+
 function readFinishGitActionKind(actions: HTMLElement): FinishGitActionKind | null {
   const el = actions.querySelector('[data-board-git-action]');
   const kind = el?.getAttribute('data-board-git-action');
-  if (kind === 'commit' || kind === 'clear' || kind === 'cleared') return kind;
-  return null;
+  return FINISH_GIT_ACTION_KINDS.includes(kind as FinishGitActionKind)
+    ? (kind as FinishGitActionKind)
+    : null;
 }
 
 /** Mark integration landed and swap the primary git action to "Clear worktrees". */
@@ -252,6 +282,14 @@ function buildWorktreesClearedLabel(): HTMLElement {
   return tagFinishGitAction(el, 'cleared');
 }
 
+/** Terminal state for the no-worktree path — nothing left to clear. */
+function buildWorkspaceCommittedLabel(): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'board-finish-dashboard__worktrees-cleared';
+  el.textContent = 'Committed';
+  return tagFinishGitAction(el, 'committed');
+}
+
 /** Primary git action on the finish dashboard: commit, clear worktrees, or cleared label. */
 function buildFinishGitAction(
   group: ChatGroup,
@@ -260,10 +298,10 @@ function buildFinishGitAction(
   git: FinishBoardStats | null,
   statusEl: HTMLElement,
 ): HTMLElement {
-  if (board.worktreesClearedAt) {
-    return buildWorktreesClearedLabel();
-  }
-  if (board.integrationLandedAt) {
+  const kind = resolveFinishGitActionKind(board);
+  if (kind === 'committed') return buildWorkspaceCommittedLabel();
+  if (kind === 'cleared') return buildWorktreesClearedLabel();
+  if (kind === 'clear') {
     return buildClearWorktreesButton(group, board, plannerChat, statusEl);
   }
   return buildCommitSplitButton(group, board, plannerChat, git, statusEl);
@@ -276,9 +314,15 @@ function buildCommitSplitButton(
   git: FinishBoardStats | null,
   statusEl: HTMLElement,
 ): HTMLElement {
+  // No integration branch: the agents wrote into the live checkout, so there is
+  // nothing to merge — commit the workspace itself instead of dead-ending.
+  const isWorkspaceMode = !boardHasIntegration(board);
+
   const wrap = document.createElement('div');
-  wrap.className = 'board-finish-dashboard__commit-split';
-  tagFinishGitAction(wrap, 'commit');
+  wrap.className = isWorkspaceMode
+    ? 'board-finish-dashboard__commit-split board-finish-dashboard__commit-split--workspace'
+    : 'board-finish-dashboard__commit-split';
+  tagFinishGitAction(wrap, isWorkspaceMode ? 'workspace-commit' : 'commit');
 
   const hasRemote = git?.hasRemote === true;
   const hasGh = git?.hasGh === true;
@@ -292,15 +336,21 @@ function buildCommitSplitButton(
     statusEl.hidden = !text;
   };
 
-  /** After merge + commit succeeds, persist landed state and show clear-worktrees action. */
+  /** After commit succeeds, persist landed state and swap to the follow-on action. */
   const finishLanding = (): void => {
+    if (isWorkspaceMode) {
+      // Nothing was ever checked out elsewhere, so there are no worktrees to clear.
+      markBoardIntegrationLanded(group, plannerChat);
+      wrap.replaceWith(buildWorkspaceCommittedLabel());
+      return;
+    }
     swapToClearWorktreesButton(wrap, group, board, plannerChat, statusEl);
   };
 
   const runChain = async (action: CommitAction): Promise<void> => {
     if (busy) return;
     const branch = board.integrationBranch?.trim();
-    if (!branch) {
+    if (!branch && !isWorkspaceMode) {
       setStatus('No integration branch on this board.', 'err');
       return;
     }
@@ -311,30 +361,34 @@ function buildCommitSplitButton(
     const planName =
       board.planPath?.split('/').pop()?.replace(/\.md$/i, '') || 'Orchestrate board';
     const commitMsg = `feat: ${planName} (orchestrate board ${group.id})`;
-    const mergeMsg = `Merge ${branch}`;
 
-    setStatus('Merging integration branch into workspace…', 'info');
-    const mergeRes = await mergeIntegrationIntoWorkspace({
-      branch,
-      message: mergeMsg,
-    });
-    if (!mergeRes.ok) {
-      const detail = mergeRes.output || mergeRes.error || 'Merge failed';
-      if (mergeRes.error === 'merge_conflict' || mergeRes.conflict) {
-        setStatus(
-          `Merge conflict — resolve in your workspace, then try again. ${detail}`,
-          'err',
-        );
-      } else {
-        setStatus(detail, 'err');
+    /** Did the run actually move work onto the current branch? */
+    let merged = false;
+    if (!isWorkspaceMode && branch) {
+      setStatus('Merging integration branch into workspace…', 'info');
+      const mergeRes = await mergeIntegrationIntoWorkspace({
+        branch,
+        message: `Merge ${branch}`,
+      });
+      if (!mergeRes.ok) {
+        const detail = mergeRes.output || mergeRes.error || 'Merge failed';
+        if (mergeRes.error === 'merge_conflict' || mergeRes.conflict) {
+          setStatus(
+            `Merge conflict — resolve in your workspace, then try again. ${detail}`,
+            'err',
+          );
+        } else {
+          setStatus(detail, 'err');
+        }
+        busy = false;
+        primary.disabled = false;
+        caret.disabled = false;
+        return;
       }
-      busy = false;
-      primary.disabled = false;
-      caret.disabled = false;
-      return;
+      merged = mergeRes.merged === true;
     }
 
-    setStatus('Committing…', 'info');
+    setStatus(isWorkspaceMode ? 'Committing workspace changes…' : 'Committing…', 'info');
     const commitRes = await gitCommit({ message: commitMsg });
     const commitClean =
       !commitRes.ok &&
@@ -352,11 +406,21 @@ function buildCommitSplitButton(
 
     if (action === 'commit-only') {
       if (hadNewCommit) {
-        setStatus('Merged and committed to your current branch.', 'ok');
-      } else if (mergeRes.merged) {
+        setStatus(
+          isWorkspaceMode
+            ? 'Committed workspace changes to your current branch.'
+            : 'Merged and committed to your current branch.',
+          'ok',
+        );
+      } else if (merged) {
         setStatus('Merged integration branch into your current branch.', 'ok');
       } else {
-        setStatus('Integration branch already merged; workspace is clean.', 'info');
+        setStatus(
+          isWorkspaceMode
+            ? 'Nothing to commit; workspace is clean.'
+            : 'Integration branch already merged; workspace is clean.',
+          'info',
+        );
       }
       finishLanding();
       busy = false;
@@ -365,8 +429,8 @@ function buildCommitSplitButton(
 
     if (!hasRemote) {
       setStatus(
-        hadNewCommit || mergeRes.merged
-          ? 'Merged locally. No origin remote — push skipped.'
+        hadNewCommit || merged
+          ? 'Committed locally. No origin remote — push skipped.'
           : 'No origin remote — push skipped.',
         'ok',
       );
@@ -385,14 +449,19 @@ function buildCommitSplitButton(
     }
 
     if (action === 'commit-push') {
-      setStatus('Merged and pushed your current branch.', 'ok');
+      setStatus(
+        isWorkspaceMode
+          ? 'Committed and pushed your current branch.'
+          : 'Merged and pushed your current branch.',
+        'ok',
+      );
       finishLanding();
       busy = false;
       return;
     }
 
     if (!hasGh) {
-      setStatus('Merged and pushed. GitHub CLI not available — PR skipped.', 'ok');
+      setStatus('Committed and pushed. GitHub CLI not available — PR skipped.', 'ok');
       finishLanding();
       busy = false;
       return;
@@ -405,12 +474,12 @@ function buildCommitSplitButton(
     });
     if (!prRes.ok) {
       setStatus(
-        `Merged and pushed. PR failed: ${prRes.output || prRes.error || 'unknown'}`,
+        `Committed and pushed. PR failed: ${prRes.output || prRes.error || 'unknown'}`,
         'err',
       );
     } else {
       const url = prRes.url ? ` ${prRes.url}` : '';
-      setStatus(`Merged, pushed, and opened PR.${url}`, 'ok');
+      setStatus(`Committed, pushed, and opened PR.${url}`, 'ok');
     }
     finishLanding();
     busy = false;
@@ -419,8 +488,19 @@ function buildCommitSplitButton(
   const primary = document.createElement('button');
   primary.type = 'button';
   primary.className = 'board-btn board-btn--primary board-finish-dashboard__commit-primary';
-  primary.textContent = 'Commit & push';
-  if (!hasRemote) {
+  primary.textContent = isWorkspaceMode ? 'Review & commit' : 'Commit & push';
+  if (isWorkspaceMode) {
+    const dirty = git?.filesTouched;
+    const fileNote =
+      typeof dirty === 'number' && dirty > 0
+        ? ` (${dirty} changed file${dirty === 1 ? '' : 's'})`
+        : '';
+    primary.title = !hasRemote
+      ? `Commit the workspace changes locally${fileNote} (no origin remote for push)`
+      : !hasGh
+        ? `Commit the workspace changes and push${fileNote}`
+        : `Commit the workspace changes, push, and open a pull request${fileNote}`;
+  } else if (!hasRemote) {
     primary.title = 'Merge into current branch and commit locally (no origin remote for push)';
   } else if (!hasGh) {
     primary.title = 'Merge into current branch, commit, and push';
@@ -519,6 +599,20 @@ function buildCommitSplitButton(
 
   wrap.appendChild(primary);
   wrap.appendChild(caret);
+
+  // Committing the live checkout is unreviewed by definition — offer the diff first.
+  if (isWorkspaceMode) {
+    const review = document.createElement('button');
+    review.type = 'button';
+    review.className = 'board-finish-dashboard__review-link';
+    review.textContent = 'Open in Source Control';
+    review.title = 'Review the uncommitted workspace changes before committing';
+    review.addEventListener('click', () => {
+      void openSourceControlCenterLazy({ section: 'changes' });
+    });
+    wrap.appendChild(review);
+  }
+
   return wrap;
 }
 
@@ -726,13 +820,40 @@ export function renderFinishDashboard(
   subtitle.textContent = passedFinal
     ? 'All tasks passed the final integration test. Review the summary below, merge into your branch, or start a follow-up chat.'
     : finalFailed
-      ? 'Tasks merged, but the final integration test failed. Rerun failed tasks to reopen work, or use the board header to re-run the final test.'
+      ? 'Tasks merged, but the final integration test failed. Use Fix integration failures to add a fix task seeded from the tester report, or rerun failed tasks.'
       : 'Some tasks are quarantined or blocked. Rerun failed tasks to put them back on the board and resume auto run.';
   heroCopy.appendChild(title);
   heroCopy.appendChild(subtitle);
   hero.appendChild(badge);
   hero.appendChild(heroCopy);
   panel.appendChild(hero);
+
+  // What the tester actually said, rather than only the generic subtitle.
+  if (finalFailed) {
+    const detail = document.createElement('div');
+    detail.className = 'board-finish-dashboard__final-test';
+    detail.dataset.boardSection = 'final-test-failure';
+
+    const heading = document.createElement('h4');
+    heading.className = 'board-finish-dashboard__section-title';
+    heading.textContent = 'Final integration test';
+    detail.appendChild(heading);
+
+    const summary = document.createElement('p');
+    summary.className = 'board-finish-dashboard__final-test-summary';
+    summary.textContent =
+      board.finalTest?.summary?.trim() || 'The tester reported a failure without a summary.';
+    detail.appendChild(summary);
+
+    const failingIds = board.finalTest?.failingTaskIds ?? [];
+    if (failingIds.length) {
+      const blamed = document.createElement('p');
+      blamed.className = 'board-finish-dashboard__final-test-tasks';
+      blamed.textContent = `Tasks held responsible: ${failingIds.join(', ')}`;
+      detail.appendChild(blamed);
+    }
+    panel.appendChild(detail);
+  }
 
   const statsGrid = document.createElement('div');
   statsGrid.className = 'board-finish-dashboard__stats';
@@ -814,10 +935,8 @@ export function renderFinishDashboard(
     emitBoardChange(group.id);
   });
 
-  const execMode = getBoardExecutionMode(board);
-  const showRerunFailed =
-    (execMode === 'auto' || execMode === 'sequential') &&
-    (boardHasRecoverableTasks(board) || finalFailed);
+  // No mode gate: an AFK board's failures are exactly as rerunnable as any other's.
+  const showRerunFailed = boardHasRecoverableTasks(board) || finalFailed;
   let rerunBtn: HTMLButtonElement | null = null;
   if (showRerunFailed) {
     rerunBtn = document.createElement('button');
@@ -831,6 +950,27 @@ export function renderFinishDashboard(
         .then(() => emitBoardChange(group.id))
         .finally(() => {
           rerunBtn!.disabled = false;
+        });
+    });
+  }
+
+  // The final test failing is a gap *between* tasks that each passed their own
+  // tests, so reopening those tasks is the wrong shape — append a real fix task.
+  let fixBtn: HTMLButtonElement | null = null;
+  if (finalFailed) {
+    fixBtn = document.createElement('button');
+    fixBtn.type = 'button';
+    fixBtn.className = 'board-btn board-btn--compact board-btn--primary';
+    fixBtn.dataset.boardAction = 'fix-final-test';
+    fixBtn.textContent = 'Fix integration failures';
+    fixBtn.title =
+      'Add a fix task in a new wave seeded from the tester report, then re-run the final test';
+    fixBtn.addEventListener('click', () => {
+      fixBtn!.disabled = true;
+      void appendFinalTestFixTask(group, plannerChat)
+        .then(() => emitBoardChange(group.id))
+        .finally(() => {
+          fixBtn!.disabled = false;
         });
     });
   }
@@ -865,6 +1005,7 @@ export function renderFinishDashboard(
   const commitWrap = buildFinishGitAction(group, board, plannerChat, null, gitStatus);
 
   actions.appendChild(backBtn);
+  if (fixBtn) actions.appendChild(fixBtn);
   if (rerunBtn) actions.appendChild(rerunBtn);
   actions.appendChild(followUpBtn);
   actions.appendChild(commitWrap);

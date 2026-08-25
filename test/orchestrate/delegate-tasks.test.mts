@@ -1,5 +1,5 @@
 /**
- * Orchestrate auto-delegation: delegate_tasks tool, executionMode, wave readiness.
+ * Orchestrate auto-delegation: delegate_tasks tool, derived mode, wave readiness.
  */
 
 import assert from 'node:assert/strict';
@@ -27,7 +27,7 @@ import {
 import {
   activateAfk,
   resolveBoardMaxConcurrent,
-  setBoardExecutionMode,
+  setBoardHandsOff,
   setBoardMaxConcurrent,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -72,7 +72,7 @@ function makeGroup(board?: ChatGroup['orchestrateBoard']): ChatGroup {
   };
 }
 
-function seedBoard(executionMode: 'manual' | 'auto' = 'manual') {
+function seedBoard(concurrency = 1) {
   const planner = makePlanner();
   const group = makeGroup();
   initBoard(group, planner, {
@@ -95,7 +95,7 @@ function seedBoard(executionMode: 'manual' | 'auto' = 'manual') {
       },
     ],
   });
-  group.orchestrateBoard!.executionMode = executionMode;
+  group.orchestrateBoard!.maxConcurrentTasks = concurrency;
   setSessionStateForTests({
     version: 5,
     activeId: PLANNER_ID,
@@ -123,11 +123,12 @@ describe('orchestrate delegate_tasks', () => {
     }
   });
 
-  test('initBoard sets executionMode manual', () => {
+  test('mode derives from concurrency; no mode string is persisted', () => {
     const { group } = seedBoard();
-    assert.equal(group.orchestrateBoard?.executionMode, 'manual');
-    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'manual');
-    assert.equal(getBoardExecutionMode(undefined), 'manual');
+    assert.equal(group.orchestrateBoard?.executionMode, undefined);
+    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'sequential');
+    // No board at all is treated as the most conservative shape.
+    assert.equal(getBoardExecutionMode(undefined), 'sequential');
   });
 
   test('delegate_tasks omitted from planner tools in manual and auto modes', () => {
@@ -149,7 +150,7 @@ describe('orchestrate delegate_tasks', () => {
   });
 
   test('isTaskReadyForAuto respects prior wave completion', () => {
-    const { group } = seedBoard('auto');
+    const { group } = seedBoard(3);
     const board = group.orchestrateBoard!;
     const w1 = board.tasks.find((t) => t.id === 'W1-A')!;
     const w2 = board.tasks.find((t) => t.id === 'W2-A')!;
@@ -160,35 +161,30 @@ describe('orchestrate delegate_tasks', () => {
     assert.equal(isTaskReadyForAuto(board, w2), true);
   });
 
-  test('executeBoardTool delegate_tasks rejects manual mode', async () => {
-    const { planner } = seedBoard('manual');
+  test('delegate_tasks no longer rejects one-at-a-time boards', async () => {
+    // The old gate required executionMode === 'auto' exactly, which rejected every
+    // sequential and AFK board. Any initialized board is delegable now.
+    const { planner } = seedBoard(1);
     const out = await executeBoardTool(
       'delegate_tasks',
       { taskIds: ['W1-A'] },
       { chatId: planner.id },
     );
-    assert.match(out, /executionMode auto/i);
+    assert.doesNotMatch(out, /requires an initialized orchestrate board/i);
   });
 
-  test('setBoardExecutionMode persists auto on board without starting tasks', () => {
-    const { planner, group } = seedBoard('manual');
-    boardSetExecutionModeOnly(group, 'auto');
-    assert.equal(group.orchestrateBoard?.executionMode, 'auto');
-    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'auto');
-    void planner;
+  test('delegate_tasks accepts a hands-off board', async () => {
+    const { planner, group } = seedBoard(3);
+    group.orchestrateBoard!.handsOff = true;
+    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'afk');
+    const out = await executeBoardTool(
+      'delegate_tasks',
+      { taskIds: ['W1-A'] },
+      { chatId: planner.id },
+    );
+    assert.doesNotMatch(out, /requires an initialized orchestrate board/i);
   });
 });
-
-/** Test helper: set mode without auto-delegate side effects. */
-function boardSetExecutionModeOnly(
-  group: ChatGroup,
-  mode: 'manual' | 'auto',
-): void {
-  const board = group.orchestrateBoard;
-  if (!board) return;
-  board.executionMode = mode;
-  board.lastUpdatedAt = Date.now();
-}
 
 describe('orchestrator auto reports', () => {
   beforeEach(() => {
@@ -222,7 +218,7 @@ describe('orchestrator auto reports', () => {
   });
 
   test('deliverOrchestratorTaskReport dedupes by task, kind, and lifecycle run', async () => {
-    const { planner, group } = seedBoard('auto');
+    const { planner, group } = seedBoard(3);
     group.orchestrateBoard!.autoRunning = true;
     const task = group.orchestrateBoard!.tasks[0]!;
     task.status = 'failed';
@@ -241,7 +237,7 @@ describe('orchestrator auto reports', () => {
   });
 
   test('defers failure reports while planner is streaming; flushes on stream end', async () => {
-    const { planner, group } = seedBoard('auto');
+    const { planner, group } = seedBoard(3);
     setSessionStateForTests({ version: 5, activeId: PLANNER_ID, chats: [planner], groups: [group] });
     group.orchestrateBoard!.autoRunning = true;
     const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
@@ -276,7 +272,7 @@ describe('orchestrator auto reports', () => {
   });
 
   test('silent delivery appends assistant message without starting a planner turn', async () => {
-    const { planner, group } = seedBoard('auto');
+    const { planner, group } = seedBoard(3);
     setSessionStateForTests({ version: 5, activeId: PLANNER_ID, chats: [planner], groups: [group] });
     group.orchestrateBoard!.autoRunning = true;
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -295,80 +291,65 @@ describe('orchestrator auto reports', () => {
   });
 });
 
-// ─── Sequential mode and setBoardExecutionMode widening ──────────────────
+// ─── Derived mode + hands-off ─────────────────────────────────────────────
 
-describe('sequential execution mode', () => {
-  test('getBoardExecutionMode returns sequential when set', () => {
-    const { group } = seedBoard('manual');
-    group.orchestrateBoard!.executionMode = 'sequential';
+describe('derived execution mode', () => {
+  test('concurrency 1 derives sequential', () => {
+    const { group } = seedBoard(1);
     assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'sequential');
   });
 
-  test('isBoardAutoMode true for auto, sequential, and afk', () => {
-    const { group } = seedBoard('manual');
-    group.orchestrateBoard!.executionMode = 'auto';
-    assert.equal(isBoardAutoMode(group), true);
-    group.orchestrateBoard!.executionMode = 'sequential';
-    assert.equal(isBoardAutoMode(group), true);
-    group.orchestrateBoard!.executionMode = 'afk';
-    assert.equal(isBoardAutoMode(group), true);
-    group.orchestrateBoard!.executionMode = 'manual';
-    assert.equal(isBoardAutoMode(group), false);
-  });
-
-  test('delegate_tasks rejects sequential mode (not auto)', async () => {
-    const { planner, group } = seedBoard('manual');
-    group.orchestrateBoard!.executionMode = 'sequential';
-    setSessionStateForTests({ version: 5, activeId: PLANNER_ID, chats: [planner], groups: [group] });
-    const out = await executeBoardTool(
-      'delegate_tasks',
-      { taskIds: ['W1-A'] },
-      { chatId: planner.id },
-    );
-    assert.match(out, /executionMode auto/i);
-  });
-
-  test('getBoardExecutionMode falls back to manual for unknown values', () => {
-    const board = { executionMode: 'unknown' as any };
-    assert.equal(getBoardExecutionMode(board as any), 'manual');
-  });
-
-  test('sequential → afk pins maxConcurrentTasks to 1 when unset', () => {
-    const { planner, group } = seedBoard('manual');
+  test('isBoardAutoMode is true for any board, whatever the derived mode', () => {
+    const { group } = seedBoard(1);
     const board = group.orchestrateBoard!;
-    board.executionMode = 'sequential';
-    delete board.maxConcurrentTasks;
+    for (const [concurrency, handsOff] of [[3, false], [1, false], [3, true], [1, true]] as const) {
+      board.maxConcurrentTasks = concurrency;
+      board.handsOff = handsOff;
+      assert.equal(isBoardAutoMode(group), true);
+    }
+  });
+
+  test('hands-off wins over concurrency in the derivation', () => {
+    const { group } = seedBoard(1);
+    const board = group.orchestrateBoard!;
+    board.handsOff = true;
+    assert.equal(getBoardExecutionMode(board), 'afk');
+  });
+
+  test('a stale persisted mode string is ignored entirely', () => {
+    const { group } = seedBoard(3);
+    const board = group.orchestrateBoard!;
+    board.executionMode = 'manual';
+    assert.equal(getBoardExecutionMode(board), 'auto');
+  });
+
+  test('hands-off at concurrency 1 does not lift the one-at-a-time cap', () => {
+    const { planner, group } = seedBoard(1);
+    const board = group.orchestrateBoard!;
     assert.equal(resolveBoardMaxConcurrent(board), 1);
     activateAfk(group, planner);
-    assert.equal(board.maxConcurrentTasks, 1);
+    assert.equal(board.handsOff, true);
     assert.equal(resolveBoardMaxConcurrent(board), 1);
+    assert.equal(getBoardExecutionMode(board), 'afk');
   });
 
-  test('sequential → afk keeps explicit maxConcurrentTasks', () => {
-    const { planner, group } = seedBoard('manual');
+  test('hands-off keeps an explicit maxConcurrentTasks', () => {
+    const { planner, group } = seedBoard(1);
     const board = group.orchestrateBoard!;
-    board.executionMode = 'sequential';
     board.maxConcurrentTasks = 5;
     activateAfk(group, planner);
     assert.equal(board.maxConcurrentTasks, 5);
     assert.equal(resolveBoardMaxConcurrent(board), 5);
   });
 
-  test('auto → afk does not change maxConcurrentTasks', () => {
-    const { planner, group } = seedBoard('auto');
+  test('setBoardHandsOff toggles both ways', () => {
+    const { planner, group } = seedBoard(3);
     const board = group.orchestrateBoard!;
-    delete board.maxConcurrentTasks;
-    setBoardExecutionMode(group, 'afk', planner);
-    assert.equal(board.maxConcurrentTasks, undefined);
-  });
-
-  test('setBoardExecutionMode afk from sequential pins concurrency', () => {
-    const { planner, group } = seedBoard('manual');
-    const board = group.orchestrateBoard!;
-    board.executionMode = 'sequential';
-    delete board.maxConcurrentTasks;
-    setBoardExecutionMode(group, 'afk', planner);
-    assert.equal(board.maxConcurrentTasks, 1);
+    setBoardHandsOff(group, true, planner);
+    assert.equal(board.handsOff, true);
+    setBoardHandsOff(group, false, planner);
+    assert.equal(board.handsOff, undefined);
+    assert.equal(getBoardExecutionMode(board), 'auto');
   });
 });
 
@@ -376,7 +357,7 @@ describe('sequential execution mode', () => {
 
 describe('setBoardMaxConcurrent', () => {
   test('clamps value to [1, 20]', () => {
-    const { planner, group } = seedBoard('auto');
+    const { planner, group } = seedBoard(3);
     setBoardMaxConcurrent(group, 0, planner);
     assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 1);
     setBoardMaxConcurrent(group, 99, planner);
@@ -386,13 +367,13 @@ describe('setBoardMaxConcurrent', () => {
   });
 
   test('floors fractional values', () => {
-    const { planner, group } = seedBoard('auto');
+    const { planner, group } = seedBoard(3);
     setBoardMaxConcurrent(group, 3.9, planner);
     assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 3);
   });
 
   test('no-op when value unchanged', () => {
-    const { planner, group } = seedBoard('auto');
+    const { planner, group } = seedBoard(3);
     group.orchestrateBoard!.maxConcurrentTasks = 5;
     const before = group.orchestrateBoard!.lastUpdatedAt;
     setBoardMaxConcurrent(group, 5, planner);

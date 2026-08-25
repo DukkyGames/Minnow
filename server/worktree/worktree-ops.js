@@ -501,14 +501,67 @@ export async function integrationStats({ boardId, baseRef }) {
 }
 
 /**
+ * Capability probe for the workspace checkout: whether `origin` and the `gh` CLI
+ * are usable for push / PR actions.
+ */
+async function workspaceGitCapabilities(workspace) {
+  const remote = await git(['remote', 'get-url', 'origin'], workspace);
+  const hasRemote = ok(remote) && Boolean(`${remote.stdout ?? ''}`.trim());
+  let hasGh = false;
+  try {
+    const gh = await runProcess('gh', ['--version'], { cwd: workspace, timeout: 10_000 });
+    hasGh = gh.code === 0;
+  } catch {
+    hasGh = false;
+  }
+  return { hasRemote, hasGh };
+}
+
+/**
+ * Diff stats for the *uncommitted* workspace checkout — the isolation-off case,
+ * where agents wrote straight into the user's tree and there is no branch to land.
+ * Untracked files never appear in `git diff`, so they are counted from status.
+ */
+async function workspaceDirtyStats() {
+  const workspace = getWorkspaceRoot();
+  const diff = await git(['diff', '--numstat', 'HEAD'], workspace);
+  if (!ok(diff)) return { ok: false, output: out(diff) };
+  const parsed = parseGitNumstat(diff.stdout ?? '');
+
+  const status = await git(['status', '--porcelain'], workspace);
+  const untracked = `${status.stdout ?? ''}`
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('?? ')).length;
+
+  const current = await git(['branch', '--show-current'], workspace);
+  const { hasRemote, hasGh } = await workspaceGitCapabilities(workspace);
+
+  return {
+    ok: true,
+    additions: parsed.additions,
+    deletions: parsed.deletions,
+    fileCount: parsed.paths.length + untracked,
+    untrackedCount: untracked,
+    hasRemote,
+    hasGh,
+    alreadyLanded: false,
+    dirtyWorkspace: true,
+    currentBranch: `${current.stdout ?? ''}`.trim() || null,
+  };
+}
+
+/**
  * Diff stats for landing board work: integration branch vs the workspace checkout
  * (`git diff --numstat HEAD...<branch>` when not yet merged).
- * @param {{ branch: string }} input
+ *
+ * With no branch it falls back to the uncommitted workspace diff instead of
+ * erroring — a board run with isolation off has no branch but still has work.
+ * @param {{ branch?: string }} input
  */
-export async function workspaceLandingStats({ branch }) {
+export async function workspaceLandingStats({ branch } = {}) {
   const workspace = getWorkspaceRoot();
   const intBranch = (branch && branch.trim()) || '';
-  if (!intBranch) return { ok: false, error: 'branch required' };
+  if (!intBranch) return workspaceDirtyStats();
   if (!(await branchExists(intBranch))) {
     return { ok: false, error: 'integration branch not found' };
   }
@@ -525,16 +578,7 @@ export async function workspaceLandingStats({ branch }) {
   if (!ok(diff)) return { ok: false, output: out(diff) };
   const parsed = parseGitNumstat(diff.stdout ?? '');
 
-  const remote = await git(['remote', 'get-url', 'origin'], workspace);
-  const hasRemote = ok(remote) && Boolean(`${remote.stdout ?? ''}`.trim());
-
-  let hasGh = false;
-  try {
-    const gh = await runProcess('gh', ['--version'], { cwd: workspace, timeout: 10_000 });
-    hasGh = gh.code === 0;
-  } catch {
-    hasGh = false;
-  }
+  const { hasRemote, hasGh } = await workspaceGitCapabilities(workspace);
 
   return {
     ok: true,

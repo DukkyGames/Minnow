@@ -102,7 +102,7 @@ function makeTaskChat(stopped = false, runStopReason?: 'user' | 'timeout' | 'sys
   return chat;
 }
 
-function makeGroup(executionMode: 'manual' | 'auto' = 'manual'): ChatGroup {
+function makeGroup(started = false): ChatGroup {
   const planner = makePlanner();
   const group: ChatGroup = {
     id: GROUP_ID,
@@ -136,8 +136,8 @@ function makeGroup(executionMode: 'manual' | 'auto' = 'manual'): ChatGroup {
     { status: 'in_progress', chatId: TASK_CHAT_ID, startedAt: 1 },
     planner,
   );
-  group.orchestrateBoard!.executionMode = executionMode;
-  if (executionMode === 'auto') {
+  group.orchestrateBoard!.maxConcurrentTasks = 3;
+  if (started) {
     group.orchestrateBoard!.autoRunning = true;
   }
   const taskChat = makeTaskChat();
@@ -179,7 +179,7 @@ describe('task stream end finalization', () => {
   });
 
   test('resolveTaskChatStopReason: run stopReason wins; history marker uses userStopped', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const board = group.orchestrateBoard!;
     assert.equal(resolveTaskChatStopReason(makeTaskChat(true, 'timeout'), board), 'timeout');
     assert.equal(resolveTaskChatStopReason(makeTaskChat(true), board), 'system');
@@ -188,7 +188,7 @@ describe('task stream end finalization', () => {
   });
 
   test('auto mode moves successful build to testing (Tester launched separately)', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -200,7 +200,7 @@ describe('task stream end finalization', () => {
   });
 
   test('second build pass on same task does not bump synthesizedBuildAt', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -224,7 +224,7 @@ describe('task stream end finalization', () => {
   });
 
   test('manual mode moves successful task to testing', () => {
-    const group = makeGroup('manual');
+    const group = makeGroup(false);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -235,7 +235,7 @@ describe('task stream end finalization', () => {
   });
 
   test('user stop parks task back to planned without quarantine (MIN-304)', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     group.orchestrateBoard!.userStopped = true;
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -276,7 +276,7 @@ describe('task stream end finalization', () => {
       ],
       waves: [{ id: 'W1', status: 'in_progress' }],
     });
-    group.orchestrateBoard!.executionMode = 'auto';
+    group.orchestrateBoard!.maxConcurrentTasks = 3;
     group.orchestrateBoard!.autoRunning = true;
     group.orchestrateBoard!.userStopped = true;
     updateTask(group, 'W1-A', { status: 'in_progress', chatId: TASK_CHAT_ID, startedAt: 1 }, planner);
@@ -300,7 +300,7 @@ describe('task stream end finalization', () => {
   });
 
   test('system/timeout stop under cap moves task to planned for bounded retry', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     const task = group.orchestrateBoard!.tasks[0]!;
     const taskChat = makeTaskChat(true, 'system');
@@ -318,7 +318,7 @@ describe('task stream end finalization', () => {
   });
 
   test('stopRetries cleared after successful build completion', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { stopRetries: 1, boardReport: { outcome: 'pass', summary: 'Build verified' } }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -335,7 +335,7 @@ describe('task stream end finalization', () => {
   });
 
   test('system stop at cap quarantines with repeated-stop note', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { stopRetries: MAX_STOP_RETRY_ATTEMPTS }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -354,7 +354,7 @@ describe('task stream end finalization', () => {
   });
 
   test('stopped task does not re-enter finalize once quarantined', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { stopRetries: MAX_STOP_RETRY_ATTEMPTS }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -375,7 +375,7 @@ describe('task stream end finalization', () => {
 
   test('failed outcome quarantines task in auto mode at build retry cap (Phase 2)', () => {
     setAutopilotMetaForTests({ maxBuildAttempts: 1 });
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { buildAttempts: 1 }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
@@ -409,7 +409,7 @@ describe('task stream end finalization', () => {
     process.env.MINNOW_TEST = '1';
     try {
       setAutopilotMetaForTests({ maxBuildAttempts: 2 });
-      const group = makeGroup('auto');
+      const group = makeGroup(true);
       const planner = makePlanner();
       const task = group.orchestrateBoard!.tasks[0]!;
       const failedChat: Chat = {
@@ -455,7 +455,7 @@ describe('task stream end finalization', () => {
     const prevMinnowTest = process.env.MINNOW_TEST;
     process.env.MINNOW_TEST = '1';
     try {
-      const group = makeGroup('auto');
+      const group = makeGroup(true);
       const planner = makePlanner();
       const task = group.orchestrateBoard!.tasks[0]!;
       finalizeBoardTaskOnStreamEnd(group, task, planner);
@@ -482,7 +482,7 @@ describe('task stream end finalization', () => {
       setBoardChatTurnRunner(async (input) => {
         launches.push(input.chat.id);
       });
-      const group = makeGroup('auto');
+      const group = makeGroup(true);
       const planner = makePlanner();
       const task = group.orchestrateBoard!.tasks[0]!;
 
@@ -508,7 +508,7 @@ describe('task stream end finalization', () => {
     const prevMinnowTest = process.env.MINNOW_TEST;
     process.env.MINNOW_TEST = '1';
     try {
-      const group = makeGroup('auto');
+      const group = makeGroup(true);
       const planner = makePlanner();
       finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
       assert.equal(getMissingReportNudgeCountForTests(TASK_CHAT_ID), 1);
@@ -536,7 +536,7 @@ describe('task stream end finalization', () => {
     process.env.MINNOW_TEST = '1';
     try {
       setAutopilotMetaForTests({ maxBuildAttempts: 1 });
-      const group = makeGroup('auto');
+      const group = makeGroup(true);
       const planner = makePlanner();
       updateTask(group, 'W1-A', { buildAttempts: 1 }, planner);
 
@@ -562,7 +562,7 @@ describe('task stream end finalization', () => {
     const prevMinnowTest = process.env.MINNOW_TEST;
     process.env.MINNOW_TEST = '1';
     try {
-      const group = makeGroup('manual');
+      const group = makeGroup(false);
       const planner = makePlanner();
       finalizeBoardTaskOnStreamEnd(group, group.orchestrateBoard!.tasks[0]!, planner);
 
@@ -579,7 +579,7 @@ describe('task stream end finalization', () => {
     const prevMinnowTest = process.env.MINNOW_TEST;
     process.env.MINNOW_TEST = '1';
     try {
-      const group = makeGroup('auto');
+      const group = makeGroup(true);
       const planner = makePlanner();
       updateTask(
         group,
@@ -610,7 +610,7 @@ describe('task stream end finalization', () => {
   });
 
   test('markBoardTaskInProgressFromChat sets in_progress when stream starts', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(group, 'W1-A', { status: 'planned', chatId: TASK_CHAT_ID }, planner);
     const taskChat = makeTaskChat();
@@ -622,7 +622,7 @@ describe('task stream end finalization', () => {
   });
 
   test('markBoardTaskInProgressFromChat leaves testing status for Tester chats', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(
       group,
@@ -642,7 +642,7 @@ describe('task stream end finalization', () => {
   });
 
   test('isTaskStalledForRestart uses testChatId during testing', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(
       group,
@@ -662,7 +662,7 @@ describe('task stream end finalization', () => {
   });
 
   test('isTaskStalledForRestart detects idle in_progress task', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(
       group,
@@ -692,7 +692,7 @@ describe('build→test handoff slot accounting', () => {
   });
 
   test('reservation counts as a concurrency slot', () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     updateTask(
       group,
@@ -709,7 +709,7 @@ describe('build→test handoff slot accounting', () => {
   });
 
   test('handoff reservation keeps board at cap across microtask re-drain', async () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     const board = group.orchestrateBoard!;
     board.maxConcurrentTasks = 2;
@@ -751,7 +751,7 @@ describe('build→test handoff slot accounting', () => {
   });
 
   test('slot release after handoff re-drains stranded tester queue item', async () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     const board = group.orchestrateBoard!;
     board.maxConcurrentTasks = 1;
@@ -783,7 +783,7 @@ describe('build→test handoff slot accounting', () => {
   });
 
   test('drainTaskQueue promotes in-testing tasks ahead of queued builds in auto mode', async () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     const board = group.orchestrateBoard!;
     board.maxConcurrentTasks = 2;
@@ -820,7 +820,7 @@ describe('build→test handoff slot accounting', () => {
   });
 
   test('concurrent drainTaskQueue coalesces and does not double-resume queued tasks', async () => {
-    const group = makeGroup('auto');
+    const group = makeGroup(true);
     const planner = makePlanner();
     const board = group.orchestrateBoard!;
     board.maxConcurrentTasks = 1;
@@ -889,7 +889,7 @@ describe('pipeline merge hold blocks queue drain', () => {
       waves: [{ id: 'W1', status: 'in_progress' }],
     });
     const board = group.orchestrateBoard!;
-    board.executionMode = 'sequential';
+    board.maxConcurrentTasks = 1;
     board.autoRunning = true;
     board.maxConcurrentTasks = 1;
     board.integrationBranch = 'minnow/integration/grp_11111111';
