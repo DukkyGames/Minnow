@@ -72,6 +72,7 @@ import {
   isUiOnlyTranscriptMessage,
 } from '../chat/context/injection-notice';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
+import { resolveContextLimit } from '../chat/context-usage';
 import {
   recordAssistantReplyOnChat,
   setSidebarStreamPhase,
@@ -565,6 +566,7 @@ export async function sendMessage(): Promise<void> {
     userMessagePreview: text,
     routeUserText: text,
     firstUserSend,
+    modelContextLimit: modelId ? resolveContextLimit(modelId, chat) : null,
   });
 
   const injectionAdded = appendInjectionNoticesForTurn(

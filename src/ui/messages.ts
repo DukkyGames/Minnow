@@ -100,7 +100,7 @@ import { syncTodoPanel } from './todo-panel';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 import { attachShellKillUi } from './shell-run-ui';
-import { markMessageStopped } from './stopped-affordance';
+import { markMessageFailed, markMessageStopped } from './stopped-affordance';
 import { markMessageTruncated } from './truncated-affordance';
 import { markMessageSteered } from './steer-affordance';
 import { restoreGoalAchievedAffordance } from './goal-affordance';
@@ -564,6 +564,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     }
     if (withThinking.stopped) {
       markMessageStopped(wrap);
+    }
+    if (withThinking.failed) {
+      markMessageFailed(wrap);
     }
     if (withThinking.truncated) {
       markMessageTruncated(wrap, chat);

@@ -25,6 +25,10 @@ import {
   type UserRulePopoverDraft,
 } from './settings-rules-popover';
 import { renderContextDocumentsRulesSection } from './settings-context-documents';
+import {
+  fetchReplayPriorReasoningEnabled,
+  saveReplayPriorReasoningEnabled,
+} from '../chat/context/reasoning-replay-config';
 
 type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -292,6 +296,45 @@ function renderGroupToolbar(
 }
 
 /** Render user rules controls into a settings content mount. */
+/**
+ * Prior-turn reasoning replay. Off by default: it costs tokens on every later turn,
+ * and several providers reject the fields outright (handled per model on send).
+ */
+async function renderReasoningReplaySection(
+  mount: HTMLElement,
+  setStatus: StatusFn,
+): Promise<void> {
+  const enabled = await fetchReplayPriorReasoningEnabled();
+
+  const groupBody = appendSettingsGroup(
+    mount,
+    'Prior reasoning replay',
+    'Send a reply’s reasoning back with it on later turns, so the model can see how it reached earlier answers.',
+    'agents.rules.reasoningReplay',
+    { emphasis: true },
+  );
+
+  const { row, input } = createSettingsToggleRow('Replay prior reasoning', {
+    id: 'settingsReplayPriorReasoning',
+    checked: enabled,
+    searchKey: 'agents.rules.reasoningReplay.enabled',
+    description:
+      'Costs extra tokens on every turn after the first. Tool-call turns already replay their reasoning.',
+    onChange: (checked) => {
+      void (async () => {
+        const ok = await saveReplayPriorReasoningEnabled(checked);
+        if (!ok) {
+          input.checked = enabled;
+          setStatus('err', 'Could not save reasoning replay setting');
+          return;
+        }
+        setStatus('ok', 'Reasoning replay saved');
+      })();
+    },
+  });
+  groupBody.appendChild(row);
+}
+
 export async function renderRulesSettingsSection(
   mount: HTMLElement,
   setStatus: StatusFn,
@@ -311,6 +354,7 @@ export async function renderRulesSettingsSection(
   let settings = normalizeUserRules(await loadUserRules());
 
   await renderContextDocumentsRulesSection(mount, setStatus);
+  await renderReasoningReplaySection(mount, setStatus);
 
   const group = appendSettingsGroup(
     mount,

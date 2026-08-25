@@ -80,6 +80,7 @@ import {
   type RoutedContentPart,
 } from '../api/inline-thinking';
 import { extractReasoningDelta, extractReasoningSignatureDelta, outboundReasoningReplayFields } from '../api/reasoning';
+import { fetchReplayPriorReasoningEnabled } from '../chat/context/reasoning-replay-config';
 import { resolveModelInfo } from '../api/models';
 import {
   chatTurnNeedsModelLoad,
@@ -390,6 +391,7 @@ import {
   logTurnDebug,
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
+  resolveFailedTurnPartialRow,
   resolveFinalAssistantContent,
   resolveTurnContinuation,
 } from './turn-continuation';
@@ -419,6 +421,11 @@ export interface BuildApiMessagesOptions {
    * so the composer strip can be emptied at send time instead of at turn end (MIN-650).
    */
   attachments?: Attachment[];
+  /**
+   * Replay prior-turn reasoning on plain assistant rows (`features.replayPriorReasoning`).
+   * Resolved once per turn by the caller so this stays synchronous.
+   */
+  replayPriorReasoning?: boolean;
 }
 
 interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
@@ -859,7 +866,19 @@ export function buildApiMessages(
           i,
         );
       } else {
-        pushFromHistory({ role: 'assistant', content: m.content }, i);
+        const reasoningText = options?.replayPriorReasoning
+          ? ((m as AssistantMessage).thinking?.join('\n\n').trim() ?? '')
+          : '';
+        pushFromHistory(
+          {
+            role: 'assistant',
+            content: m.content,
+            ...(reasoningText
+              ? outboundReasoningReplayFields(modelId ?? '', reasoningText)
+              : {}),
+          },
+          i,
+        );
       }
     }
   }
@@ -1329,6 +1348,32 @@ function syncTurnContextUsage(
       : null,
   );
   scheduleContextUsageRefresh({ duringStream: true });
+}
+
+/**
+ * Append a failed turn's streamed output as a `failed: true` assistant row.
+ * Returns true when a row was persisted (see {@link resolveFailedTurnPartialRow}).
+ */
+function persistFailedTurnPartial(params: {
+  chat: Chat;
+  turnRunId: TurnRunId | undefined;
+  skip: boolean;
+  partialText: string;
+  thinking: string[];
+}): boolean {
+  if (params.skip) return false;
+  const row = resolveFailedTurnPartialRow({
+    partialText: params.partialText,
+    thinking: params.thinking,
+  });
+  if (!row) return false;
+
+  params.chat.history.push(row);
+  trackRunHistoryPush(params.chat, params.turnRunId);
+  recordAssistantReplyOnChat(params.chat);
+  recordChatMessage(params.chat);
+  scheduleSaveSessions();
+  return true;
 }
 
 interface FinalizedThinkingRound {
@@ -1879,6 +1924,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
   }
 
+  // Resolved once per turn so buildApiMessages stays synchronous (no sync config cache).
+  const replayPriorReasoning = await fetchReplayPriorReasoningEnabled();
+
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: userText || rawText,
     routeUserText: userText || rawText,
@@ -1886,6 +1934,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       .map((a) => a.workspacePath?.trim())
       .filter((p): p is string => Boolean(p)),
     firstUserSend: firstUserSendForInjections,
+    modelContextLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
     overrides: { skillBody },
   });
   const sysPrompt =
@@ -2097,6 +2146,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
         ephemeralContext,
         attachments: validAttachments,
+        replayPriorReasoning,
       });
 
       let preMessages = rawMessages;
@@ -2219,6 +2269,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
       thoughtController.setAssistantWrap(wrap);
       const domVisible = isStreamDomVisible(chat.id);
+
+      /*
+       * Round-scoped: the previous round's prose is already on its own history row.
+       * `onPartialText` does not fire until this round's first content delta, so
+       * without the reset a round that throws before streaming anything would let
+       * the failure path persist the earlier round's text a second time.
+       */
+      livePartialText = '';
 
       const runStreamTurn = (
         turnBody: ChatCompletionBody,
@@ -2907,6 +2965,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const failedRun = turnRunId ? findRunById(chat, turnRunId) : undefined;
     const failedForkIndex =
       failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
+
+    /*
+     * A user-stopped turn keeps what it streamed; a failed one used to throw it away,
+     * because nothing had been appended yet and `rollbackFailedTurnHistory` slices
+     * back to the user row. Persist the partial first so `turnProducedOutput` below
+     * takes the preserve branch and the error bubble lands underneath it.
+     * Retry is unaffected: `forkFromUserIndex` truncates inclusive at the user row.
+     */
+    persistFailedTurnPartial({
+      chat,
+      turnRunId,
+      // The server forgot this generation across a restart — nothing streamed here.
+      skip: e.message === GENERATION_LOST_ON_RESTART_MESSAGE,
+      partialText: livePartialText,
+      thinking: thoughtController?.getSegmentsNormalized() ?? [],
+    });
+
     let rolledBack = false;
     let preservedTurnOutput = false;
     /*

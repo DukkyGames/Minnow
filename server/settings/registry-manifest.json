@@ -1743,6 +1743,44 @@
     ]
   },
   {
+    "key": "agents.rules.reasoningReplay",
+    "label": "Prior reasoning replay",
+    "keywords": [
+      "thinking",
+      "reasoning",
+      "chain of thought",
+      "replay",
+      "context"
+    ],
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.reasoningReplay.enabled",
+    "label": "Replay prior reasoning",
+    "keywords": [
+      "thinking",
+      "reasoning",
+      "replay"
+    ],
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
     "key": "integrations.search",
     "label": "Web search provider",
     "keywords": [

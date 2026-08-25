@@ -4,6 +4,13 @@
 
 import { randomUUID } from 'node:crypto';
 import { fireAndForget } from '../webhooks/emit.js';
+import {
+  checkpointAppend,
+  checkpointCreated,
+  checkpointFinalize,
+  flushAllCheckpoints,
+  readCheckpoint,
+} from './checkpoint.js';
 
 /** @typedef {'pending' | 'streaming' | 'complete' | 'error' | 'cancelled'} GenerationStatus */
 
@@ -306,6 +313,7 @@ export function createGenerationState({
     chatId: typeof chatId === 'string' && chatId.trim() ? chatId.trim() : null,
   };
   generations.set(id, state);
+  checkpointCreated(state);
   return state;
 }
 
@@ -314,7 +322,52 @@ export function createGenerationState({
  * @returns {GenerationState | undefined}
  */
 export function getGenerationState(id) {
-  return generations.get(id);
+  return generations.get(id) ?? rehydrateFromCheckpoint(id);
+}
+
+/**
+ * Rebuild a terminal generation from its disk checkpoint after a server restart.
+ *
+ * The replayed state is inert — no upstream, no writer — but `addSubscriber` treats
+ * it like any other finished generation: buffered chunks first, then the `end`
+ * sentinel. That is the whole point; the client needs no restart-specific path.
+ *
+ * @param {string} id
+ * @returns {GenerationState | undefined}
+ */
+function rehydrateFromCheckpoint(id) {
+  const saved = readCheckpoint(id);
+  if (!saved) return undefined;
+  const meta = saved.meta ?? {};
+  const chunks = saved.sse.length > 0 ? [saved.sse] : [];
+  /** @type {GenerationState} */
+  const state = {
+    id,
+    providerId: typeof meta.providerId === 'string' ? meta.providerId : '',
+    requestBody: Buffer.alloc(0),
+    chunks,
+    totalBytes: saved.sse.length,
+    status: saved.status,
+    upstreamController: null,
+    subscribers: new Set(),
+    evictTimer: null,
+    // Already on disk; re-checkpointing a replay would append its own bytes back.
+    persist: false,
+    startedAt: typeof meta.startedAt === 'string' ? meta.startedAt : new Date().toISOString(),
+    finishedAt: typeof meta.finishedAt === 'string' ? meta.finishedAt : null,
+    errorMessage: typeof meta.errorMessage === 'string' ? meta.errorMessage : null,
+    candidates: [],
+    activeCandidateIndex: 0,
+    failoverDisabled: true,
+    fallbackUsed: meta.fallbackUsed === true,
+    chosenProviderId: typeof meta.chosenProviderId === 'string' ? meta.chosenProviderId : '',
+    chosenModelId: typeof meta.chosenModelId === 'string' ? meta.chosenModelId : '',
+    fallbackRole: null,
+    chatId: typeof meta.chatId === 'string' ? meta.chatId : null,
+  };
+  generations.set(id, state);
+  scheduleEviction(state);
+  return state;
 }
 
 /**
@@ -352,6 +405,7 @@ export function appendChunk(state, buf) {
 
   state.chunks.push(buf);
   state.totalBytes += buf.length;
+  checkpointAppend(state, buf);
 
   for (const res of [...state.subscribers]) {
     writeToSubscriber(state, res, buf);
@@ -409,6 +463,7 @@ export function markComplete(state) {
   }
   state.status = 'complete';
   state.finishedAt = new Date().toISOString();
+  checkpointFinalize(state);
   broadcastTerminalEvent(state);
   fireAndForget('chat.completed', {
     generationId: state.id,
@@ -434,6 +489,7 @@ export function markError(state, message) {
   state.status = 'error';
   state.errorMessage = message;
   state.finishedAt = new Date().toISOString();
+  checkpointFinalize(state);
   broadcastTerminalEvent(state);
   scheduleEviction(state);
 }
@@ -447,6 +503,7 @@ export function markCancelled(state) {
   }
   state.status = 'cancelled';
   state.finishedAt = new Date().toISOString();
+  checkpointFinalize(state);
   broadcastTerminalEvent(state);
   scheduleEviction(state);
 }
@@ -500,6 +557,7 @@ export function deleteGenerationsForProviderShutdown() {
     }
   }
   generations.clear();
+  flushAllCheckpoints();
 }
 
 
