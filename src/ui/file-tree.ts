@@ -90,7 +90,7 @@ export function setFileTreeGitStatus(map: Map<string, string>): void {
   let needsFullRender = false;
   for (const path of changed) {
     const row = document.querySelector<HTMLElement>(
-      `[data-tree-path="${CSS.escape(path)}"]`,
+      `[data-path="${CSS.escape(path)}"]`,
     );
     if (!row) {
       needsFullRender = true;
@@ -332,7 +332,7 @@ function restoreFileTreeScrollTop(scrollTop: number): void {
 function restoreFocusedTreeRow(): void {
   if (!focusedTreePath || !focusedTreeKind) return;
   const row = document.querySelector<HTMLElement>(
-    `[data-tree-path="${CSS.escape(focusedTreePath)}"]`,
+    `[data-path="${CSS.escape(focusedTreePath)}"]`,
   );
   if (row) {
     row.classList.add('file-tree-row--focused');
@@ -585,7 +585,7 @@ function appendDirRow(
   row.className = 'file-tree-row file-tree-row--dir';
   row.setAttribute('role', 'treeitem');
   row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  row.setAttribute('data-tree-path', fullPath);
+  row.setAttribute('data-path', fullPath);
   row.style.paddingLeft = `${dirRowPaddingLeftPx(depth)}px`;
   row.tabIndex = 0;
 
@@ -643,7 +643,7 @@ function appendFileRow(
   const row = document.createElement('div');
   row.className = 'file-tree-row file-tree-row--file' + (selected ? ' selected' : '');
   row.setAttribute('role', 'treeitem');
-  row.setAttribute('data-tree-path', fullPath);
+  row.setAttribute('data-path', fullPath);
   row.style.paddingLeft = `${fileRowPaddingLeftPx(depth)}px`;
   row.tabIndex = 0;
 
@@ -684,6 +684,7 @@ function appendFlatFileRow(host: HTMLElement, fullPath: string): void {
   row.className =
     'file-tree-row file-tree-row--file file-tree-row--flat' + (selected ? ' selected' : '');
   row.setAttribute('role', 'option');
+  row.setAttribute('data-path', fullPath);
   row.style.paddingLeft = `${FILE_TREE_DIR_BASE_PADDING_PX}px`;
   row.tabIndex = 0;
 
