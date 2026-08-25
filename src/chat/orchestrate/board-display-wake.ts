@@ -5,11 +5,24 @@
 
 import { reportBackgroundError } from '../../boot/report-background-error.ts';
 import { hasIncompleteOrchestrateWork } from './plan-complete.ts';
+import { isOomPauseActive } from './oom-recovery.ts';
 import { reconcileRunningBoardsAfterDisplayWake } from '../../state/orchestrate-board-actions.ts';
 import { sessionState } from '../../state/sessions.ts';
 
 /** Safety net when visibility / unlock IPC is missed during lock. */
 const BOARD_LIVENESS_INTERVAL_MS = 20_000;
+
+/**
+ * How long a task chat must be silent before this poll may treat it as stalled.
+ *
+ * The poll is a backstop for a wake notification that never arrived, not a
+ * supervisor — stall detection proper belongs to the heartbeat. Without a quiet
+ * period it fired every 20s regardless of what the chats were doing and walked
+ * live Builders through nudge → nudge → fail → quarantine in about a minute.
+ * Comfortably longer than a slow tool round; the supervision clock this is
+ * measured against freezes while the display is asleep.
+ */
+const BOARD_LIVENESS_MIN_QUIET_MS = 180_000;
 
 let wakeListenerBound = false;
 let wakeReconcileInFlight: Promise<void> | null = null;
@@ -18,10 +31,14 @@ let boardLivenessTimer: ReturnType<typeof setInterval> | null = null;
 function shouldRunBoardLivenessPoll(): boolean {
   const groups = sessionState?.groups;
   if (!groups?.length) return false;
+  // A board paused after an OOM crash waits for the user to press Start; polling
+  // it forever would spin a wake every 20s with nothing to reconcile.
+  const oomPaused = isOomPauseActive();
   for (const group of groups) {
     const board = group.orchestrateBoard;
     if (!board || !hasIncompleteOrchestrateWork(board)) continue;
-    if (board.autoRunning === true || board.systemPaused === true) return true;
+    if (board.autoRunning === true) return true;
+    if (board.systemPaused === true && !oomPaused) return true;
   }
   return false;
 }
@@ -31,7 +48,7 @@ function syncBoardLivenessPoll(): void {
   if (shouldRunBoardLivenessPoll()) {
     if (boardLivenessTimer != null) return;
     boardLivenessTimer = setInterval(() => {
-      scheduleBoardWakeReconcile(true);
+      scheduleBoardWakeReconcile(true, BOARD_LIVENESS_MIN_QUIET_MS);
     }, BOARD_LIVENESS_INTERVAL_MS);
     return;
   }
@@ -41,9 +58,15 @@ function syncBoardLivenessPoll(): void {
   }
 }
 
-function scheduleBoardWakeReconcile(allowStalledRestart: boolean): void {
+function scheduleBoardWakeReconcile(
+  allowStalledRestart: boolean,
+  minQuietMs = 0,
+): void {
   if (wakeReconcileInFlight) return;
-  wakeReconcileInFlight = reconcileRunningBoardsAfterDisplayWake({ allowStalledRestart })
+  wakeReconcileInFlight = reconcileRunningBoardsAfterDisplayWake({
+    allowStalledRestart,
+    minQuietMs,
+  })
     .catch((err) => reportBackgroundError('board-display-wake-reconcile', err))
     .finally(() => {
       wakeReconcileInFlight = null;
