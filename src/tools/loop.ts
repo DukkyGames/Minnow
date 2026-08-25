@@ -914,7 +914,7 @@ async function streamCompletionTurn(
   getStreamDom: () => { bubble: HTMLDivElement; cursor: HTMLDivElement },
   signal: AbortSignal,
   thoughtController: ThoughtBubbleController | null,
-  domVisible: boolean,
+  isDomVisible: () => boolean,
   onFirstProseDelta?: () => void,
   onPartialText?: (fullText: string) => void,
   onToolCallStreaming?: (toolName: string) => void,
@@ -968,7 +968,7 @@ async function streamCompletionTurn(
     // Re-render what the aborted attempt already showed so the bubble never blanks.
     onFirstProseDelta?.();
     onPartialText?.(fullText);
-    if (domVisible) {
+    if (isDomVisible()) {
       const { bubble, cursor } = getStreamDom();
       scheduleAssistantBubbleRender(bubble, fullText, cursor);
     }
@@ -1022,7 +1022,7 @@ async function streamCompletionTurn(
     onFirstProseDelta?.();
     fullText += text;
     onPartialText?.(fullText);
-    if (domVisible) {
+    if (isDomVisible()) {
       const { bubble, cursor } = getStreamDom();
       scheduleAssistantBubbleRender(bubble, fullText, cursor);
     }
@@ -1113,7 +1113,9 @@ async function streamCompletionTurn(
       }
       thoughtController?.endReasoningPhase();
     }
-    if (domVisible && onToolCallStreaming) {
+    // Not gated on visibility: the name is announced once per round, and a chat the
+    // user returns to mid-call still needs it. The listener decides what to paint.
+    if (onToolCallStreaming) {
       const streamingName = getLatestStreamingToolName(toolAcc);
       if (streamingName && streamingName !== lastAnnouncedToolName) {
         lastAnnouncedToolName = streamingName;
@@ -1121,7 +1123,7 @@ async function streamCompletionTurn(
       }
     }
     emitStreamProgress();
-    if (domVisible) {
+    if (isDomVisible()) {
       scrollChatIfPinned();
     }
   }
@@ -1151,7 +1153,7 @@ async function streamCompletionTurn(
   // Decode and the renderer share one GPU, and a CSS animation costs a compositor frame
   // every vsync for as long as it runs — several tok/s, measurably, on a local serve. Step
   // the working indicators down to 8 Hz for the length of the stream. Not gated on
-  // `domVisible`: a background chat still spins a ring in the rail. No-op for cloud
+  // `isDomVisible()`: a background chat still spins a ring in the rail. No-op for cloud
   // providers, where there is no local decode to protect.
   const releaseTickedMotion = isLocalProvider(provider) ? acquireTickedMotion() : null;
 
@@ -1782,9 +1784,35 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   // Track prose-awaiting without DOM class — stub rows in board view omit msg--awaiting-prose.
   let awaitingProse = true;
   let toolStartIndicator: ToolStartIndicatorHandle | null = null;
+  /**
+   * Tool whose arguments are still streaming, kept for the remount path.
+   *
+   * The stream announces a tool name once per round (`lastAnnouncedToolName`), so a
+   * shell that mounts after the announcement has no second chance to learn it — and a
+   * long argument stream (a file write carries the whole file) leaves the user staring
+   * at a bare caret for the rest of the call.
+   */
+  let streamingToolName: string | null = null;
+  const showToolStartIndicator = (toolName: string): void => {
+    if (!toolName.trim()) return;
+    // Remember it even while hidden — this is what the remount path replays.
+    streamingToolName = toolName;
+    if (!isStreamDomVisible(chat.id)) return;
+    if (!toolStartIndicator) {
+      toolStartIndicator = attachToolStartIndicator({
+        wrap,
+        bubble,
+        cursor,
+        streamStatus,
+      });
+    }
+    toolStartIndicator.show(toolName);
+  };
+  /** Round boundary: the pending call is finished, so drop the name with the row. */
   const resetToolStartIndicator = (): void => {
     toolStartIndicator?.dispose();
     toolStartIndicator = null;
+    streamingToolName = null;
   };
   let revealProse = (): void => {
     awaitingProse = false;
@@ -1806,7 +1834,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     streamCtx.wrap = wrap;
     streamCtx.streamStatus = streamStatus;
     lastWrap = wrap;
-    resetToolStartIndicator();
+    // The handle died with the previous shell; the name is re-applied below.
+    toolStartIndicator?.dispose();
+    toolStartIndicator = null;
     awaitingProse = true;
     revealProse = (): void => {
       awaitingProse = false;
@@ -1819,6 +1849,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       // left on an empty revealed bubble while tokens keep painting a detached node.
       revealProse();
       scheduleAssistantBubbleRender(bubble, livePartialText, cursor);
+    }
+    // Last, so it wins over the caret and stream-status the replay above reveals.
+    if (streamingToolName) {
+      showToolStartIndicator(streamingToolName);
     }
   });
 
@@ -2218,7 +2252,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       thoughtController.setAssistantWrap(wrap);
-      const domVisible = isStreamDomVisible(chat.id);
 
       const runStreamTurn = (
         turnBody: ChatCompletionBody,
@@ -2232,7 +2265,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           () => ({ bubble, cursor }),
           chatSignal,
           thoughtController,
-          domVisible,
+          // Live check, not a per-round snapshot: the user can leave and come back
+          // mid-round, and the shell they come back to is a different one.
+          () => isStreamDomVisible(chat.id),
           () => {
             revealProse();
           },
@@ -2240,16 +2275,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             livePartialText = text;
           },
           (toolName) => {
-            if (!domVisible) return;
-            if (!toolStartIndicator) {
-              toolStartIndicator = attachToolStartIndicator({
-                wrap,
-                bubble,
-                cursor,
-                streamStatus,
-              });
-            }
-            toolStartIndicator.show(toolName);
+            showToolStartIndicator(toolName);
           },
           undefined,
           () => {
