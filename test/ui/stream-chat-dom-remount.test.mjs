@@ -11,6 +11,9 @@ const { registerStreamDomRemount, remountStreamDomForChat } = await import(
   '../../src/tools/stream-chat-dom.ts'
 );
 const { setSidebarStreamPhase } = await import('../../src/ui/chat-item-dot.ts');
+const { emitMainTurnActivity, resetMainTurnActivity } = await import(
+  '../../src/chat/main-turn-activity.ts'
+);
 const { renderChatFromHistory } = await import('../../src/ui/messages.ts');
 const { STREAM_LABEL_GENERATING, STREAM_LABEL_THINKING } = await import(
   '../../src/ui/stream-status.ts'
@@ -73,6 +76,7 @@ function setupDom() {
 describe('stream-chat-dom remount', { concurrency: false }, () => {
   afterEach(async () => {
     appState.setStreaming(false);
+    resetMainTurnActivity();
     registerStreamDomRemount('chat-streaming', null);
     setSessionStateForTests(null);
     if (activeWindow) {
@@ -170,6 +174,40 @@ describe('stream-chat-dom remount', { concurrency: false }, () => {
       area?.querySelector('.stream-status__label')?.textContent,
       STREAM_LABEL_GENERATING,
     );
+  });
+
+  test('tools phase does not remount a caret row over the tool cards', () => {
+    setupDom();
+    const streaming = createEmptyChatObject('');
+    streaming.id = 'chat-streaming';
+    streaming.history.push({ role: 'user', content: 'write a file' });
+
+    setSessionStateForTests({
+      version: 2,
+      activeId: streaming.id,
+      sidebarCollapsed: false,
+      chats: [streaming],
+    });
+
+    appState.setStreaming(true, streaming.id);
+    // The sidebar dot has no `tools` phase, so it still reads `generating` here.
+    setSidebarStreamPhase('generating', streaming.id);
+    emitMainTurnActivity({
+      chatId: streaming.id,
+      phase: 'tools',
+      currentTool: 'write_file',
+      workAgentLabel: '',
+      modelId: 'm1',
+      providerId: 'p1',
+      startedAtMs: Date.now(),
+    });
+    registerStreamDomRemount(streaming.id, () => {});
+
+    remountStreamDomForChat(streaming.id);
+
+    const area = document.getElementById('chatArea');
+    assert.equal(area?.querySelectorAll('.msg.assistant').length, 0);
+    assert.equal(area?.querySelectorAll('.stream-status').length, 0);
   });
 
   test('remountStreamDomForChat without a listener does not insert an orphan caret row', () => {

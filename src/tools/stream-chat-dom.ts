@@ -2,6 +2,7 @@
  * Remount in-flight stream rows when the user returns to a chat that is still streaming.
  */
 
+import { getMainTurnActivity } from '../chat/main-turn-activity';
 import { isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { getSidebarStreamPhase } from '../ui/chat-item-dot';
 import type { StreamingAssistantRow } from '../ui/messages';
@@ -35,6 +36,14 @@ export function registerStreamDomRemount(
 /** After switchChat, attach a fresh stream shell if this chat is still in-flight. */
 export function remountStreamDomForChat(chatId: string): void {
   if (!isChatStreaming(chatId) || !isStreamDomVisible(chatId)) return;
+
+  /*
+   * Tool execution has no live stream shell by design: the loop drops the orphan
+   * row before running the batch, and the tool cards repaint from history on the
+   * way back. A caret here claims the model is generating while it is not, and
+   * reads as the tool card having been replaced by one (MIN-649 follow-up).
+   */
+  if (getMainTurnActivity(chatId)?.phase === 'tools') return;
 
   const listener = remountListeners.get(chatId);
   if (!listener) {
