@@ -382,6 +382,10 @@ export function readWholeSessionState() {
   if (typeof activeBoardGroupId === 'string' && activeBoardGroupId) {
     raw.activeBoardGroupId = activeBoardGroupId;
   }
+  const lastBoardGroupId = readSessionMeta(db, 'lastBoardGroupId');
+  if (typeof lastBoardGroupId === 'string' && lastBoardGroupId) {
+    raw.lastBoardGroupId = lastBoardGroupId;
+  }
   const codeChangeTotalsByWorkspace = readSessionMeta(db, 'codeChangeTotalsByWorkspace');
   if (codeChangeTotalsByWorkspace && typeof codeChangeTotalsByWorkspace === 'object') {
     raw.codeChangeTotalsByWorkspace = codeChangeTotalsByWorkspace;
@@ -714,6 +718,11 @@ function writeScalars(db, state) {
     writeSessionMeta(db, 'activeBoardGroupId', state.activeBoardGroupId);
   } else {
     writeSessionMeta(db, 'activeBoardGroupId', null);
+  }
+  if (typeof state.lastBoardGroupId === 'string') {
+    writeSessionMeta(db, 'lastBoardGroupId', state.lastBoardGroupId);
+  } else {
+    writeSessionMeta(db, 'lastBoardGroupId', null);
   }
   writeSessionMeta(db, 'lastActiveChatIdByWorkspace', state.lastActiveChatIdByWorkspace ?? {});
   writeSessionMeta(db, 'lastActiveChatIdByApp', state.lastActiveChatIdByApp ?? {});
@@ -1340,6 +1349,10 @@ export function readSessionSummariesState(filter = {}) {
   if (typeof activeBoardGroupId === 'string' && activeBoardGroupId) {
     raw.activeBoardGroupId = activeBoardGroupId;
   }
+  const lastBoardGroupId = readSessionMeta(db, 'lastBoardGroupId');
+  if (typeof lastBoardGroupId === 'string' && lastBoardGroupId) {
+    raw.lastBoardGroupId = lastBoardGroupId;
+  }
   const codeChangeTotalsByWorkspace = readSessionMeta(db, 'codeChangeTotalsByWorkspace');
   if (codeChangeTotalsByWorkspace && typeof codeChangeTotalsByWorkspace === 'object') {
     raw.codeChangeTotalsByWorkspace = codeChangeTotalsByWorkspace;
@@ -1521,6 +1534,13 @@ function applyPartialScalars(db, scalars) {
       db,
       'activeBoardGroupId',
       typeof scalars.activeBoardGroupId === 'string' ? scalars.activeBoardGroupId : null,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(scalars, 'lastBoardGroupId')) {
+    writeSessionMeta(
+      db,
+      'lastBoardGroupId',
+      typeof scalars.lastBoardGroupId === 'string' ? scalars.lastBoardGroupId : null,
     );
   }
   if (Object.prototype.hasOwnProperty.call(scalars, 'lastActiveChatIdByWorkspace')) {

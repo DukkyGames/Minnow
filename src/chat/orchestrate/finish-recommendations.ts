@@ -26,8 +26,14 @@ import { executeTool } from '../../tools/client.ts';
 import type { ApiMessage, Chat, ChatCompletionChunk, OrchestrateBoardState } from '../../types.ts';
 import {
   FINISH_REPORT_RECOMMENDATIONS_PLACEHOLDER,
+  FINISH_REPORT_RUN_PLACEHOLDER,
   mergeFinishReportRecommendations,
+  mergeFinishReportRunInstructions,
 } from './finish-stats.ts';
+import {
+  detectProjectRunInstructions,
+  formatDetectedRunInstructions,
+} from './run-instructions-detect.ts';
 
 const RECOMMENDATIONS_SYSTEM =
   'You recommend concrete follow-up engineering tasks after an Orchestrate board run completes. ' +
@@ -40,6 +46,49 @@ const MAX_RECOMMENDATION_TOKENS = 512;
 
 /** In-flight enrichment per board group — avoids duplicate generation calls. */
 const enrichInFlight = new Map<string, Promise<void>>();
+
+/** Same guard for the (cheaper, no-LLM) run-instructions detection pass. */
+const runDetectInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Fill the run-instructions placeholder from the project's manifests.
+ *
+ * Only runs when the final tester reported nothing — a verified block is written
+ * straight into the report by `buildDeterministicFinishReport` and leaves no
+ * placeholder behind.
+ */
+export async function enrichFinishReportWithRunInstructions(
+  groupId: string,
+  plannerChat: Chat,
+  board: OrchestrateBoardState,
+): Promise<void> {
+  const report = board.finishReport?.trim();
+  if (!report || !report.includes(FINISH_REPORT_RUN_PLACEHOLDER)) return;
+
+  const existing = runDetectInFlight.get(groupId);
+  if (existing) {
+    await existing;
+    return;
+  }
+
+  const work = (async (): Promise<void> => {
+    const detected = await detectProjectRunInstructions().catch(() => null);
+    board.finishReport = mergeFinishReportRunInstructions(
+      board.finishReport ?? report,
+      formatDetectedRunInstructions(detected),
+    );
+    touchChat(plannerChat);
+    scheduleSaveSessions();
+    emitBoardChange(groupId);
+  })();
+
+  runDetectInFlight.set(groupId, work);
+  try {
+    await work;
+  } finally {
+    runDetectInFlight.delete(groupId);
+  }
+}
 
 function truncatePlanText(text: string, maxChars = MAX_PLAN_CHARS): string {
   const trimmed = text.trim();

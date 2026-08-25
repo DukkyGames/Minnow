@@ -125,6 +125,13 @@ export function estimateApiMessageTokens(msg: ApiMessage): number {
     if (msg.tool_calls?.length) {
       total += estimateTokensFromText(JSON.stringify(msg.tool_calls), 'payload');
     }
+    // Replayed reasoning is real outbound payload on this row — uncounted, it is
+    // the same hole tool schemas were, just on the message side.
+    const reasoning =
+      (msg.reasoning ?? '') +
+      (msg.reasoning_content ?? '') +
+      (msg.reasoning_signature ?? '');
+    if (reasoning) total += estimateTokensFromText(reasoning, 'prose');
     return total;
   }
   return 0;

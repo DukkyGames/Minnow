@@ -122,6 +122,20 @@ describe('estimateApiMessageTokens', () => {
     assert.ok(withCall > estimateApiMessageTokens(assistant('')));
   });
 
+  test('replayed reasoning on an assistant row is counted', () => {
+    // buildApiMessages can attach `reasoning` / `reasoning_content` outbound.
+    // It is real payload in the request, so the budget has to see it.
+    const plain = assistant('done');
+    const withReasoning: ApiMessage = {
+      ...(plain as object),
+      role: 'assistant',
+      reasoning: 'x'.repeat(3600),
+    } as ApiMessage;
+    assert.ok(
+      estimateApiMessageTokens(withReasoning) > estimateApiMessageTokens(plain) + 900,
+    );
+  });
+
   test('image parts cost a fixed per-image budget', () => {
     const withImage: ApiMessage = {
       role: 'user',

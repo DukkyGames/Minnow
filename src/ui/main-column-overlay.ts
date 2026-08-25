@@ -213,7 +213,9 @@ export async function showCodeStageSection(section: CodeSectionId): Promise<void
   }
   if (section === 'orchestrate') {
     const hub = await import('./orchestrate-hub');
-    hub.renderOrchestrateHub();
+    // Resume the board the user was last inside; the hub is the fallback, not
+    // the unconditional destination.
+    hub.openOrchestrateLanding();
     return;
   }
   if (section === 'map') {

@@ -3,8 +3,24 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 import { shouldRunFirstTurnInjections } from '../../src/chat/prompts/first-turn-injection.ts';
+import {
+  buildComposeContext,
+  resolveOutboundSystemMessages,
+} from '../../src/chat/prompts/compose-context.ts';
+import { composeSystemPrompt } from '../../src/chat/prompts/prompt-composer.ts';
+import { appendInjectionNoticesForTurn } from '../../src/chat/context/injection-notice.ts';
+import {
+  DEFAULT_PROMPT_META,
+  resetPromptMetaCache,
+  setPromptMetaCacheForTests,
+} from '../../src/config/prompt-meta.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import {
+  resetWorkspaceStateForTests,
+  setWorkspaceFromServer,
+} from '../../src/state/workspace.ts';
 import type { Chat } from '../../src/types.ts';
 
 function chatWithHistory(roles: Array<'user' | 'assistant'>): Chat {
@@ -49,5 +65,98 @@ describe('shouldRunFirstTurnInjections', () => {
       messageCount: 4,
     };
     assert.equal(shouldRunFirstTurnInjections(chat), false);
+  });
+});
+
+describe('injection replay on later turns', () => {
+  const CHAT_ID = '22222222-2222-2222-2222-222222222222';
+  const WORKSPACE = 'C:/Users/dukky/Documents/Development/Minnow';
+  const STORED_DOCS = 'AGENTS.md says: never re-add repetition_penalty.';
+
+  function chatWithStoredInjection(overrides: Partial<Chat> = {}): Chat {
+    return {
+      id: CHAT_ID,
+      name: 'Test',
+      modeId: 'build',
+      history: [
+        { role: 'user', content: 'first question' },
+        { role: 'injection', kind: 'context-documents', body: STORED_DOCS, createdAt: 1 },
+        { role: 'assistant', content: 'first answer' },
+        { role: 'user', content: 'second question' },
+      ],
+      createdAt: 1,
+      updatedAt: 1,
+      ...overrides,
+    };
+  }
+
+  let realFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    // No config server here: 404 makes every loader take its documented default,
+    // and stops experts-config rethrowing on the relative URL.
+    realFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(null, { status: 404 })) as typeof globalThis.fetch;
+    resetPromptMetaCache();
+    setPromptMetaCacheForTests({ ...DEFAULT_PROMPT_META });
+    resetWorkspaceStateForTests();
+    setWorkspaceFromServer({ path: WORKSPACE, label: 'Minnow', isDefault: false });
+    setSessionStateForTests(null);
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    resetPromptMetaCache();
+    resetWorkspaceStateForTests();
+    setSessionStateForTests(null);
+  });
+
+  test('turn 2 rehydrates the stored body into the composed prompt', async () => {
+    const ctx = await buildComposeContext(chatWithStoredInjection());
+    assert.equal(ctx.contextDocumentsBlock, STORED_DOCS);
+    assert.equal(ctx.contextDocumentsInjectionEnabled, true);
+    assert.equal(ctx.injectionsReplayed, true);
+    assert.ok(composeSystemPrompt(ctx).includes(STORED_DOCS));
+  });
+
+  test('a source switched off mid-chat is not rehydrated', async () => {
+    const ctx = await buildComposeContext(
+      chatWithStoredInjection({ contextDocumentsInjection: 'off' }),
+    );
+    assert.equal(ctx.contextDocumentsBlock, null);
+    assert.equal(ctx.contextDocumentsInjectionEnabled, false);
+    assert.equal(ctx.injectionsReplayed, false);
+  });
+
+  test('a replayed turn reports no injection blocks, so no duplicate transcript row', async () => {
+    const chat = chatWithStoredInjection();
+    const outbound = await resolveOutboundSystemMessages(chat, '');
+    assert.ok(outbound.composed.includes(STORED_DOCS));
+    assert.deepEqual(outbound.injectionBlocks, {
+      brainNotes: null,
+      codeMap: null,
+      contextDocuments: null,
+    });
+    assert.deepEqual(appendInjectionNoticesForTurn(chat, outbound.injectionBlocks), []);
+    assert.equal(chat.history.filter((m) => m.role === 'injection').length, 1);
+  });
+
+  test('the replay cap drops a body too large for the model window', async () => {
+    const chat = chatWithStoredInjection({
+      history: [
+        { role: 'user', content: 'first question' },
+        {
+          role: 'injection',
+          kind: 'context-documents',
+          body: 'x'.repeat(40_000),
+          createdAt: 1,
+        },
+        { role: 'assistant', content: 'first answer' },
+      ],
+    });
+    const ctx = await buildComposeContext(chat, { modelContextLimit: 8_000 });
+    assert.equal(ctx.contextDocumentsBlock, null);
+    assert.equal(ctx.injectionsReplayed, false);
   });
 });

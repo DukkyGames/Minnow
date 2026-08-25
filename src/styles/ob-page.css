@@ -337,6 +337,25 @@ main#chatArea.chat-area:has(.ob-page) {
   letter-spacing: 0.01em;
 }
 
+/*
+ * Live-run marker on a board row. Deliberately static: a running CSS animation
+ * pins the compositor at refresh rate, and this dot is only ever on screen while
+ * a board (often a local model) is doing work.
+ */
+.ob-row__running-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--mn-success, var(--success));
+  vertical-align: baseline;
+}
+
+.ob-row.is-running .ob-row__title {
+  font-weight: 600;
+}
+
 .ob-row.is-active {
   background: var(--mn-accent-soft);
 }

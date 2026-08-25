@@ -65,13 +65,19 @@ import {
   type RoutedContentPart,
 } from './inline-thinking';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
-import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
+import {
+  renderThoughtsToggle,
+  ThoughtBubbleController,
+  syncThoughtsCaretPulse,
+  thoughtsScopeFromEl,
+} from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import {
   appendInjectionNoticesForTurn,
   isUiOnlyTranscriptMessage,
 } from '../chat/context/injection-notice';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
+import { resolveContextLimit } from '../chat/context-usage';
 import {
   recordAssistantReplyOnChat,
   setSidebarStreamPhase,
@@ -565,6 +571,7 @@ export async function sendMessage(): Promise<void> {
     userMessagePreview: text,
     routeUserText: text,
     firstUserSend,
+    modelContextLimit: modelId ? resolveContextLimit(modelId, chat) : null,
   });
 
   const injectionAdded = appendInjectionNoticesForTurn(
@@ -856,6 +863,7 @@ export async function sendMessage(): Promise<void> {
         renderThoughtsToggle(wrap, thinkingNorm, {
           durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
         });
+        syncThoughtsCaretPulse(thoughtsScopeFromEl(wrap));
       }
       updateStrip(meta.stats, meta.usage, modelInfo);
       setStatus('ok', 'Ready');

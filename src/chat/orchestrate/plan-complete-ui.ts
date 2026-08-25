@@ -9,7 +9,10 @@ import {
   isOrchestratePlanComplete,
 } from './plan-complete.ts';
 import { buildDeterministicFinishReport } from './finish-stats.ts';
-import { enrichFinishReportWithRecommendations } from './finish-recommendations.ts';
+import {
+  enrichFinishReportWithRecommendations,
+  enrichFinishReportWithRunInstructions,
+} from './finish-recommendations.ts';
 import { reportBackgroundError } from '../../boot/report-background-error.ts';
 import { isChatStreaming, subscribeChatStreamEnd } from '../../chat/streaming-state.ts';
 import { isDomAvailable } from '../../lib/dom-available.ts';
@@ -199,6 +202,7 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
   }
 
   void enrichFinishReportWithRecommendations(groupId, planner, board);
+  void enrichFinishReportWithRunInstructions(groupId, planner, board);
 
   if (isDomAvailable()) {
     const activeId = sessionState?.activeId;

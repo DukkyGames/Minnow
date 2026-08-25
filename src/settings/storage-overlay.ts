@@ -166,12 +166,11 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'agents.agentPacks': section(['agent-packs']),
   'agents.subAgents': section(['agent-center']),
   'agents.autopilot': section(['autopilot']),
-  'agents.autopilot.executionMode': meta('autopilot.defaultExecutionMode', 'enum', {
-    allowedValues: ['manual', 'sequential', 'auto', 'afk'],
+  'agents.autopilot.handsOff': meta('autopilot.defaultHandsOff', 'boolean', {
     refreshAreas: ['autopilot'],
   }),
   'agents.autopilot.isolation': meta('autopilot.defaultIsolationMode', 'enum', {
-    allowedValues: ['auto', 'off', 'per-task', 'per-wave'],
+    allowedValues: ['auto', 'off', 'per-board', 'per-task', 'per-wave'],
     refreshAreas: ['autopilot'],
   }),
   'agents.autopilot.concurrency': meta('autopilot.maxConcurrentTasks', 'number', {

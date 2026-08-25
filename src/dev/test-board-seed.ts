@@ -12,6 +12,7 @@ import {
   TEST_BOARD_GROUP_ID,
   TEST_BOARD_PLANNER_ID,
 } from '../../server/orchestrate/board-testing/constants.js';
+import { applyLegacyExecutionMode } from '../lib/legacy-execution-mode.mjs';
 
 export { TEST_BOARD_GROUP_ID, TEST_BOARD_PLANNER_ID };
 
@@ -225,7 +226,9 @@ export function buildTestBoardSession(
   });
 
   const board = group.orchestrateBoard!;
-  board.executionMode = mode;
+  // Scenarios still describe themselves with the legacy mode vocabulary; fold it onto
+  // the two fields the board actually persists.
+  applyLegacyExecutionMode(board, mode);
   board.autoRunning = options.autoStart === true;
   board.integrationBranch = `minnow/integration/${groupId}`;
 

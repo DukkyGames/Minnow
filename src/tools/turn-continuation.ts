@@ -3,7 +3,8 @@
  * orphan tool-tail detection, and optional dev turn logging.
  */
 
-import type { AssistantToolCallMessage, Message } from '../types';
+import type { AssistantMessage, AssistantToolCallMessage, Message } from '../types';
+import { stripXmlToolCallBlocks } from '../providers/xml-tool-calls';
 
 /** localStorage key: set to `1` to log per-round tool-loop decisions in the console. */
 export const TURN_DEBUG_STORAGE_KEY = 'minnowDebugTurns';
@@ -108,4 +109,35 @@ export function resolveFinalAssistantContent(
     content: 'The model returned no text.',
     usedThinkingAsContent: false,
   };
+}
+
+export interface FailedTurnPartialInput {
+  /** Prose streamed before the turn threw. */
+  partialText: string;
+  /** Reasoning segments captured for the same round. */
+  thinking: string[];
+}
+
+/**
+ * The assistant row a failed turn should leave behind, or null when there is
+ * nothing worth keeping.
+ *
+ * A user-stopped turn already persists what it streamed; a failed one used to
+ * discard it, because nothing had been appended and the rollback slices back to
+ * the user message. Tool-call markup the router never closed is dropped — replaying
+ * half a `<tool_call>` as prose is worse than losing it.
+ */
+export function resolveFailedTurnPartialRow(
+  input: FailedTurnPartialInput,
+): AssistantMessage | null {
+  const thinking = input.thinking.filter((seg) => seg.trim().length > 0);
+  const prose = stripXmlToolCallBlocks(input.partialText.trim()).trim();
+  if (!prose && thinking.length === 0) return null;
+
+  const { content } = resolveFinalAssistantContent(prose, thinking);
+  const row: AssistantMessage = { role: 'assistant', content, failed: true };
+  if (thinking.length > 0) {
+    row.thinking = thinking;
+  }
+  return row;
 }

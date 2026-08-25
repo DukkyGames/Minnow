@@ -80,6 +80,7 @@ import {
   type RoutedContentPart,
 } from '../api/inline-thinking';
 import { extractReasoningDelta, extractReasoningSignatureDelta, outboundReasoningReplayFields } from '../api/reasoning';
+import { fetchReplayPriorReasoningEnabled } from '../chat/context/reasoning-replay-config';
 import { resolveModelInfo } from '../api/models';
 import {
   chatTurnNeedsModelLoad,
@@ -216,7 +217,12 @@ import {
 import { completeStreamAnnouncer } from '../ui/a11y/stream-announcer';
 import { refreshBranchPickerAtFork } from '../ui/branch-picker';
 import { setContextInFlightOverlay } from '../chat/context-in-flight';
-import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
+import {
+  renderThoughtsToggle,
+  ThoughtBubbleController,
+  syncThoughtsCaretPulse,
+  thoughtsScopeFromEl,
+} from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import type { StreamingStatusHandle } from '../ui/stream-status';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
@@ -404,6 +410,7 @@ import {
   logTurnDebug,
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
+  resolveFailedTurnPartialRow,
   resolveFinalAssistantContent,
   resolveTurnContinuation,
 } from './turn-continuation';
@@ -433,6 +440,11 @@ export interface BuildApiMessagesOptions {
    * so the composer strip can be emptied at send time instead of at turn end (MIN-650).
    */
   attachments?: Attachment[];
+  /**
+   * Replay prior-turn reasoning on plain assistant rows (`features.replayPriorReasoning`).
+   * Resolved once per turn by the caller so this stays synchronous.
+   */
+  replayPriorReasoning?: boolean;
 }
 
 interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
@@ -873,7 +885,19 @@ export function buildApiMessages(
           i,
         );
       } else {
-        pushFromHistory({ role: 'assistant', content: m.content }, i);
+        const reasoningText = options?.replayPriorReasoning
+          ? ((m as AssistantMessage).thinking?.join('\n\n').trim() ?? '')
+          : '';
+        pushFromHistory(
+          {
+            role: 'assistant',
+            content: m.content,
+            ...(reasoningText
+              ? outboundReasoningReplayFields(modelId ?? '', reasoningText)
+              : {}),
+          },
+          i,
+        );
       }
     }
   }
@@ -928,7 +952,7 @@ async function streamCompletionTurn(
   getStreamDom: () => { bubble: HTMLDivElement; cursor: HTMLDivElement },
   signal: AbortSignal,
   thoughtController: ThoughtBubbleController | null,
-  domVisible: boolean,
+  isDomVisible: () => boolean,
   onFirstProseDelta?: () => void,
   onPartialText?: (fullText: string) => void,
   onToolCallStreaming?: (toolName: string) => void,
@@ -982,7 +1006,7 @@ async function streamCompletionTurn(
     // Re-render what the aborted attempt already showed so the bubble never blanks.
     onFirstProseDelta?.();
     onPartialText?.(fullText);
-    if (domVisible) {
+    if (isDomVisible()) {
       const { bubble, cursor } = getStreamDom();
       scheduleAssistantBubbleRender(bubble, fullText, cursor);
     }
@@ -1036,7 +1060,7 @@ async function streamCompletionTurn(
     onFirstProseDelta?.();
     fullText += text;
     onPartialText?.(fullText);
-    if (domVisible) {
+    if (isDomVisible()) {
       const { bubble, cursor } = getStreamDom();
       scheduleAssistantBubbleRender(bubble, fullText, cursor);
     }
@@ -1127,7 +1151,9 @@ async function streamCompletionTurn(
       }
       thoughtController?.endReasoningPhase();
     }
-    if (domVisible && onToolCallStreaming) {
+    // Not gated on visibility: the name is announced once per round, and a chat the
+    // user returns to mid-call still needs it. The listener decides what to paint.
+    if (onToolCallStreaming) {
       const streamingName = getLatestStreamingToolName(toolAcc);
       if (streamingName && streamingName !== lastAnnouncedToolName) {
         lastAnnouncedToolName = streamingName;
@@ -1135,7 +1161,7 @@ async function streamCompletionTurn(
       }
     }
     emitStreamProgress();
-    if (domVisible) {
+    if (isDomVisible()) {
       scrollChatIfPinned();
     }
   }
@@ -1165,7 +1191,7 @@ async function streamCompletionTurn(
   // Decode and the renderer share one GPU, and a CSS animation costs a compositor frame
   // every vsync for as long as it runs — several tok/s, measurably, on a local serve. Step
   // the working indicators down to 8 Hz for the length of the stream. Not gated on
-  // `domVisible`: a background chat still spins a ring in the rail. No-op for cloud
+  // `isDomVisible()`: a background chat still spins a ring in the rail. No-op for cloud
   // providers, where there is no local decode to protect.
   const releaseTickedMotion = isLocalProvider(provider) ? acquireTickedMotion() : null;
 
@@ -1345,6 +1371,32 @@ function syncTurnContextUsage(
   scheduleContextUsageRefresh({ duringStream: true });
 }
 
+/**
+ * Append a failed turn's streamed output as a `failed: true` assistant row.
+ * Returns true when a row was persisted (see {@link resolveFailedTurnPartialRow}).
+ */
+function persistFailedTurnPartial(params: {
+  chat: Chat;
+  turnRunId: TurnRunId | undefined;
+  skip: boolean;
+  partialText: string;
+  thinking: string[];
+}): boolean {
+  if (params.skip) return false;
+  const row = resolveFailedTurnPartialRow({
+    partialText: params.partialText,
+    thinking: params.thinking,
+  });
+  if (!row) return false;
+
+  params.chat.history.push(row);
+  trackRunHistoryPush(params.chat, params.turnRunId);
+  recordAssistantReplyOnChat(params.chat);
+  recordChatMessage(params.chat);
+  scheduleSaveSessions();
+  return true;
+}
+
 interface FinalizedThinkingRound {
   segments: string[];
   durationMs: number;
@@ -1376,6 +1428,7 @@ function finalizeAndAnchorThinkingRound(opts: {
     } else if (!opts.hasProse) {
       removeOrphanStreamingRow(opts.wrap, opts.streamStatus);
     }
+    syncThoughtsCaretPulse(thoughtsScopeFromEl(opts.wrap));
   }
   return { segments, durationMs };
 }
@@ -1796,9 +1849,35 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   // Track prose-awaiting without DOM class — stub rows in board view omit msg--awaiting-prose.
   let awaitingProse = true;
   let toolStartIndicator: ToolStartIndicatorHandle | null = null;
+  /**
+   * Tool whose arguments are still streaming, kept for the remount path.
+   *
+   * The stream announces a tool name once per round (`lastAnnouncedToolName`), so a
+   * shell that mounts after the announcement has no second chance to learn it — and a
+   * long argument stream (a file write carries the whole file) leaves the user staring
+   * at a bare caret for the rest of the call.
+   */
+  let streamingToolName: string | null = null;
+  const showToolStartIndicator = (toolName: string): void => {
+    if (!toolName.trim()) return;
+    // Remember it even while hidden — this is what the remount path replays.
+    streamingToolName = toolName;
+    if (!isStreamDomVisible(chat.id)) return;
+    if (!toolStartIndicator) {
+      toolStartIndicator = attachToolStartIndicator({
+        wrap,
+        bubble,
+        cursor,
+        streamStatus,
+      });
+    }
+    toolStartIndicator.show(toolName);
+  };
+  /** Round boundary: the pending call is finished, so drop the name with the row. */
   const resetToolStartIndicator = (): void => {
     toolStartIndicator?.dispose();
     toolStartIndicator = null;
+    streamingToolName = null;
   };
   let revealProse = (): void => {
     awaitingProse = false;
@@ -1820,7 +1899,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     streamCtx.wrap = wrap;
     streamCtx.streamStatus = streamStatus;
     lastWrap = wrap;
-    resetToolStartIndicator();
+    // The handle died with the previous shell; the name is re-applied below.
+    toolStartIndicator?.dispose();
+    toolStartIndicator = null;
     awaitingProse = true;
     revealProse = (): void => {
       awaitingProse = false;
@@ -1833,6 +1914,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       // left on an empty revealed bubble while tokens keep painting a detached node.
       revealProse();
       scheduleAssistantBubbleRender(bubble, livePartialText, cursor);
+    }
+    // Last, so it wins over the caret and stream-status the replay above reveals.
+    if (streamingToolName) {
+      showToolStartIndicator(streamingToolName);
     }
   });
 
@@ -1893,6 +1978,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
   }
 
+  // Resolved once per turn so buildApiMessages stays synchronous (no sync config cache).
+  const replayPriorReasoning = await fetchReplayPriorReasoningEnabled();
+
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: userText || rawText,
     routeUserText: userText || rawText,
@@ -1900,6 +1988,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       .map((a) => a.workspacePath?.trim())
       .filter((p): p is string => Boolean(p)),
     firstUserSend: firstUserSendForInjections,
+    modelContextLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
     overrides: { skillBody },
   });
   const sysPrompt =
@@ -2132,6 +2221,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
         ephemeralContext,
         attachments: validAttachments,
+        replayPriorReasoning,
       });
 
       let preMessages = rawMessages;
@@ -2252,7 +2342,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       thoughtController.setAssistantWrap(wrap);
-      const domVisible = isStreamDomVisible(chat.id);
+
+      /*
+       * Round-scoped: the previous round's prose is already on its own history row.
+       * `onPartialText` does not fire until this round's first content delta, so
+       * without the reset a round that throws before streaming anything would let
+       * the failure path persist the earlier round's text a second time.
+       */
+      livePartialText = '';
 
       const runStreamTurn = (
         turnBody: ChatCompletionBody,
@@ -2266,7 +2363,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           () => ({ bubble, cursor }),
           chatSignal,
           thoughtController,
-          domVisible,
+          // Live check, not a per-round snapshot: the user can leave and come back
+          // mid-round, and the shell they come back to is a different one.
+          () => isStreamDomVisible(chat.id),
           () => {
             revealProse();
           },
@@ -2274,16 +2373,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             livePartialText = text;
           },
           (toolName) => {
-            if (!domVisible) return;
-            if (!toolStartIndicator) {
-              toolStartIndicator = attachToolStartIndicator({
-                wrap,
-                bubble,
-                cursor,
-                streamStatus,
-              });
-            }
-            toolStartIndicator.show(toolName);
+            showToolStartIndicator(toolName);
           },
           undefined,
           () => {
@@ -2756,6 +2846,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               durationMs:
                 thinkingDurationForPersist > 0 ? thinkingDurationForPersist : undefined,
             });
+            syncThoughtsCaretPulse(thoughtsScopeFromEl(lastWrap));
           }
           const histIdx = chat.history.length - 1;
           const { attachMessageActions } = await import('../ui/message-actions');
@@ -2854,6 +2945,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               renderThoughtsToggle(lastWrap, thinkingNorm, {
                 durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
               });
+              syncThoughtsCaretPulse(thoughtsScopeFromEl(lastWrap));
             }
           } else if (thinkingNorm.length > 0) {
             anchorPersistedThoughtsOnRow(lastWrap, thinkingNorm, {
@@ -2985,6 +3077,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const failedRun = turnRunId ? findRunById(chat, turnRunId) : undefined;
     const failedForkIndex =
       failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
+
+    /*
+     * A user-stopped turn keeps what it streamed; a failed one used to throw it away,
+     * because nothing had been appended yet and `rollbackFailedTurnHistory` slices
+     * back to the user row. Persist the partial first so `turnProducedOutput` below
+     * takes the preserve branch and the error bubble lands underneath it.
+     * Retry is unaffected: `forkFromUserIndex` truncates inclusive at the user row.
+     */
+    persistFailedTurnPartial({
+      chat,
+      turnRunId,
+      // The server forgot this generation across a restart — nothing streamed here.
+      skip: e.message === GENERATION_LOST_ON_RESTART_MESSAGE,
+      partialText: livePartialText,
+      thinking: thoughtController?.getSegmentsNormalized() ?? [],
+    });
+
     let rolledBack = false;
     let preservedTurnOutput = false;
     /*

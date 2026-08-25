@@ -17,6 +17,19 @@ import {
 } from '../../src/state/orchestrate-board-actions.ts';
 import { resetBoardDisplayWakeLivenessForTests } from '../../src/chat/orchestrate/board-display-wake.ts';
 import { registerOrchestrateBoardShutdownHandler, resetOrchestrateBoardShutdownRegistrationForTests } from '../../src/chat/orchestrate/board-shutdown.ts';
+import {
+  bindRunSupervision,
+  bumpProgress,
+  chatTaskRunId,
+  createRunSupervision,
+  resetWrapperState,
+} from '../../src/agents/controller/wrapper.ts';
+import {
+  clearMainTurnActivity,
+  emitMainTurnActivity,
+} from '../../src/chat/main-turn-activity.ts';
+import { setOomPauseActiveForBoot } from '../../src/chat/orchestrate/oom-recovery.ts';
+import { isChatStreaming } from '../../src/chat/streaming-state.ts';
 import { setStreaming } from '../../src/app-state.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
@@ -89,7 +102,7 @@ function makeGroup(): ChatGroup {
     },
   );
   const board = group.orchestrateBoard!;
-  board.executionMode = 'afk';
+  board.handsOff = true;
   board.autoRunning = true;
   board.tasks[0] = {
     ...board.tasks[0]!,
@@ -117,6 +130,9 @@ describe('board display wake reconcile', () => {
     resetAfkBoardPowerGuardForTests();
     resetOrchestrateBoardShutdownRegistrationForTests();
     resetBoardDisplayWakeLivenessForTests();
+    clearMainTurnActivity(TASK_CHAT_ID);
+    resetWrapperState();
+    setOomPauseActiveForBoot(false);
     setStreaming(false);
     happyDomWindow?.close();
     happyDomWindow = undefined;
@@ -228,6 +244,89 @@ describe('board display wake reconcile', () => {
 
     assert.equal(group.orchestrateBoard!.autoRunning, false);
     assert.equal(group.orchestrateBoard!.systemPaused, true);
+  });
+
+  test('reconcile leaves a task chat with a turn still in flight alone', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    // Mid-turn: history's last entry is an ordinary assistant message (which
+    // reads as `completed`), but the turn is still running tools.
+    setStreaming(true, TASK_CHAT_ID);
+    emitMainTurnActivity({
+      chatId: TASK_CHAT_ID,
+      phase: 'tools',
+      currentTool: 'run_terminal_command',
+      workAgentLabel: 'Builder',
+      modelId: 'm1',
+      providerId: 'p1',
+      startedAtMs: Date.now(),
+    });
+
+    await reconcileRunningBoardsAfterDisplayWake({ allowStalledRestart: true });
+
+    const task = group.orchestrateBoard!.tasks[0]!;
+    assert.equal(task.status, 'in_progress');
+    assert.equal(task.chatId, TASK_CHAT_ID);
+    assert.equal(isChatStreaming(TASK_CHAT_ID), true);
+  });
+
+  test('liveness poll quiet period spares a chat that just produced output', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    bindRunSupervision(chatTaskRunId(TASK_CHAT_ID), createRunSupervision());
+    bumpProgress(chatTaskRunId(TASK_CHAT_ID));
+
+    await reconcileRunningBoardsAfterDisplayWake({
+      allowStalledRestart: true,
+      minQuietMs: 180_000,
+    });
+
+    assert.equal(group.orchestrateBoard!.tasks[0]!.status, 'in_progress');
+
+    // Same board, no quiet period (a real wake): the finished chat advances.
+    await reconcileRunningBoardsAfterDisplayWake();
+    assert.equal(group.orchestrateBoard!.tasks[0]!.status, 'testing');
+  });
+
+  test('reconcile does not auto-resume a board paused after an OOM crash', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+    const board = group.orchestrateBoard!;
+    board.autoRunning = false;
+    board.systemPaused = true;
+    setOomPauseActiveForBoot(true);
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    await reconcileRunningBoardsAfterDisplayWake({ allowStalledRestart: true });
+
+    assert.equal(board.autoRunning, false);
+    assert.equal(board.systemPaused, true);
+    assert.equal(board.tasks[0]!.status, 'in_progress');
   });
 
   test('AFK power guard ref-count tracks board start/stop', () => {

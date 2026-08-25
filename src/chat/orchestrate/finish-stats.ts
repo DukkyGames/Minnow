@@ -5,7 +5,13 @@
 import { getOrchestrateBoardElapsedMs } from '../../state/orchestrate-board-store.ts';
 import { findChatById } from '../../state/sessions.ts';
 import { workspaceLandingStats } from '../../state/worktree-service.ts';
-import type { Chat, OrchestrateBoardState, Usage } from '../../types.ts';
+import { resolveIsolationMode } from '../../state/worktree-isolation.ts';
+import type {
+  BoardRunInstructions,
+  Chat,
+  OrchestrateBoardState,
+  Usage,
+} from '../../types.ts';
 import { sumUsageSegments } from './stats-math.ts';
 
 /** Local + async git stats shown on the finish dashboard. */
@@ -21,6 +27,8 @@ export interface FinishBoardStats {
   hasGh: boolean;
   /** True when the integration branch is already merged into the workspace HEAD. */
   alreadyLanded?: boolean;
+  /** Stats came from the uncommitted workspace checkout (no integration branch). */
+  dirtyWorkspace?: boolean;
   gitStatsLoading: boolean;
   gitStatsError?: string;
 }
@@ -101,6 +109,41 @@ function shortPlanLabel(planPath: string): string {
 export const FINISH_REPORT_RECOMMENDATIONS_PLACEHOLDER =
   '_Generating recommendations from the plan…_';
 
+/**
+ * Placeholder for run instructions the final tester did not report, replaced
+ * asynchronously by manifest detection ({@link detectProjectRunInstructions}).
+ */
+export const FINISH_REPORT_RUN_PLACEHOLDER = '_Detecting run commands…_';
+
+/** Swap the run-instructions placeholder for detected (unverified) commands. */
+export function mergeFinishReportRunInstructions(
+  report: string,
+  runMarkdown: string,
+): string {
+  const body = runMarkdown.trim() || '_No run commands detected for this project._';
+  if (report.includes(FINISH_REPORT_RUN_PLACEHOLDER)) {
+    return report.replace(FINISH_REPORT_RUN_PLACEHOLDER, body);
+  }
+  return report;
+}
+
+/** Render the tester's verified commands as a fenced block. */
+function formatVerifiedRunInstructions(run: BoardRunInstructions): string[] {
+  const commands = [run.install, run.start, run.test].filter(
+    (cmd): cmd is string => Boolean(cmd?.trim()),
+  );
+  const lines: string[] = [];
+  if (commands.length) {
+    lines.push('```bash', ...commands, '```');
+  }
+  if (run.notes?.trim()) {
+    lines.push('', run.notes.trim());
+  }
+  if (!lines.length) return ['_The tester reported no runnable commands._'];
+  lines.push('', '_Verified by the final integration tester._');
+  return lines;
+}
+
 /** Swap the recommendations placeholder for LLM output (or a fallback line). */
 export function mergeFinishReportRecommendations(
   report: string,
@@ -127,7 +170,10 @@ export function buildDeterministicFinishReport(
   const elapsed = formatElapsedMs(getOrchestrateBoardElapsedMs(board));
   const total = board.tasks.length;
   const waves = board.waves.length;
-  const branch = board.integrationBranch?.trim() || '(not set)';
+  const integrationBranch = board.integrationBranch?.trim() || '';
+  // No branch means the agents wrote straight into the user's checkout (isolation
+  // off), so every instruction about merging or reviewing a branch is a lie.
+  const isolated = Boolean(integrationBranch) && resolveIsolationMode(board) !== 'off';
   const usage = sumUsageSegments(collectBoardUsageSegments(plannerChat, board));
   const tokenLine =
     usage.total_tokens != null
@@ -145,13 +191,22 @@ export function buildDeterministicFinishReport(
     '',
     `**${planName}** finished with ${completeCount}/${total} tasks across ${waves} wave${waves === 1 ? '' : 's'} in **${elapsed}**.`,
     '',
-    `- Integration branch: \`${branch}\``,
+    isolated
+      ? `- Integration branch: \`${integrationBranch}\``
+      : '- Isolation off — the work is uncommitted in your workspace checkout',
     `- ${tokenLine}`,
     '',
     `## Next steps`,
     '',
-    '1. Review the integration branch diff and run the project locally.',
-    '2. Use **Commit & push** to merge the integration branch into your current branch, then push.',
+    ...(isolated
+      ? [
+          '1. Review the integration branch diff and run the project locally.',
+          '2. Use **Commit & push** to merge the integration branch into your current branch, then push.',
+        ]
+      : [
+          '1. Review the uncommitted changes in Source Control and run the project locally.',
+          '2. Use **Review & commit** to commit the workspace changes, then push.',
+        ]),
     '3. Start a follow-up chat if you want the assistant to continue from this board.',
     '',
     `## Completed tasks`,
@@ -174,21 +229,22 @@ export function buildDeterministicFinishReport(
     }
   }
 
+  // Verified commands from the final tester beat anything we could infer; the
+  // placeholder is filled in from the project's manifests only when it has none.
+  const reported = board.finalTest?.runInstructions;
   lines.push(
     '',
     `## How to run`,
     '',
-    'From the workspace root (or the integration worktree):',
+    isolated
+      ? 'From the workspace root (or the integration worktree):'
+      : 'From the workspace root:',
     '',
-    '```bash',
-    'npm install',
-    'npm start',
-    '```',
-    '',
-    planPath
-      ? `_Plan reference: \`${planPath}\`_`
-      : '_Set a plan path on the board for project-specific run instructions._',
+    ...(reported ? formatVerifiedRunInstructions(reported) : [FINISH_REPORT_RUN_PLACEHOLDER]),
   );
+  if (planPath) {
+    lines.push('', `_Plan reference: \`${planPath}\`_`);
+  }
 
   return lines.join('\n');
 }
@@ -210,7 +266,13 @@ export function computeLocalFinishStats(
   };
 }
 
-/** Fetch git diff stats and remote/gh capability flags for landing into workspace. */
+/**
+ * Fetch git diff stats and remote/gh capability flags for the finish dashboard.
+ *
+ * With no integration branch (isolation off) the server falls back to the
+ * uncommitted workspace diff, so the stats grid shows the work the agents did in
+ * the live checkout instead of a row of dashes.
+ */
 export async function fetchGitFinishStats(
   integrationBranch: string,
 ): Promise<
@@ -222,21 +284,12 @@ export async function fetchGitFinishStats(
     | 'hasRemote'
     | 'hasGh'
     | 'alreadyLanded'
+    | 'dirtyWorkspace'
     | 'gitStatsError'
   >
 > {
   const branch = integrationBranch.trim();
-  if (!branch) {
-    return {
-      filesTouched: null,
-      additions: null,
-      deletions: null,
-      hasRemote: false,
-      hasGh: false,
-      gitStatsError: 'No integration branch',
-    };
-  }
-  const res = await workspaceLandingStats({ branch });
+  const res = await workspaceLandingStats(branch ? { branch } : {});
   if (!res.ok) {
     return {
       filesTouched: null,
@@ -254,5 +307,6 @@ export async function fetchGitFinishStats(
     hasRemote: res.hasRemote === true,
     hasGh: res.hasGh === true,
     alreadyLanded: res.alreadyLanded === true,
+    dirtyWorkspace: res.dirtyWorkspace === true,
   };
 }

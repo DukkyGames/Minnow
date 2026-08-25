@@ -37,6 +37,7 @@ import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { filterToolsByExpertSnapshot } from '../chat/experts/expert-tool-policy';
 import type { Chat } from '../types';
 import { getBoardGroupForChat, isBoardTaskChat } from '../state/chat-groups';
+import { deriveBoardExecutionMode } from '../state/board-execution-mode.ts';
 import type { CodeChangeStats, ToolExecutionResult } from '../types';
 import { findChatById } from '../state/sessions';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
@@ -643,7 +644,9 @@ export function getEnabledToolDefinitionsForChat(
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
   defs = filterToolsByExpertSnapshot(chat, defs);
-  const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
+  const executionMode = deriveBoardExecutionMode(
+    getBoardGroupForChat(chat)?.orchestrateBoard,
+  );
   if (isBoardTaskChat(chat)) {
     defs = injectBoardMemberSubsetTools(defs);
   }

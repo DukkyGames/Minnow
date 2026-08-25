@@ -2,10 +2,40 @@
  * Pure token estimate helpers (no DOM or compose imports — safe for Node tests).
  */
 
-import type { ApiMessage, AssistantToolCallMessage, Message } from '../../types';
+import type {
+  ApiMessage,
+  AssistantMessage,
+  AssistantToolCallMessage,
+  Message,
+} from '../../types';
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
+import { outboundReasoningReplayFields } from '../../api/reasoning';
 import { isUiOnlyTranscriptMessage } from '../context/injection-notice';
 import { toolImageFollowUpUserMessage } from '../tool-image-follow-up';
+
+/** Shared knobs for history estimators that must mirror `buildApiMessages`. */
+export interface HistoryEstimateOptions {
+  /** Mirrors `BuildApiMessagesOptions.replayPriorReasoning`. */
+  replayPriorReasoning?: boolean;
+  /** Active model id — some providers reject reasoning replay outright. */
+  modelId?: string;
+}
+
+/**
+ * Reasoning fields a plain assistant row would carry outbound, or null when replay
+ * is off (or the provider rejects it). Mirrors the non-tool branch of
+ * `buildApiMessages` so the context ring never under-reports the payload.
+ */
+function replayedReasoningFields(
+  m: Pick<AssistantMessage, 'thinking'>,
+  options: HistoryEstimateOptions | undefined,
+): ReturnType<typeof outboundReasoningReplayFields> | null {
+  if (!options?.replayPriorReasoning) return null;
+  const reasoningText = m.thinking?.join('\n\n').trim() ?? '';
+  if (!reasoningText) return null;
+  const fields = outboundReasoningReplayFields(options.modelId ?? '', reasoningText);
+  return Object.keys(fields).length > 0 ? fields : null;
+}
 
 /**
  * Content class for {@link estimateTokensFromText}. Chars-per-token is not one
@@ -86,7 +116,10 @@ export const SETTINGS_PROMPT_CONFIG_ESTIMATE_TOOLTIP =
  * Map persisted chat history to API messages for token estimate.
  * Mirrors `buildApiMessages` history rows — assistant `thinking` is UI-only and excluded.
  */
-export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[] {
+export function historyToApiMessagesForEstimate(
+  history: Message[],
+  options?: HistoryEstimateOptions,
+): ApiMessage[] {
   const messages: ApiMessage[] = [];
   for (const m of history) {
     if (isUiOnlyTranscriptMessage(m)) continue;
@@ -131,7 +164,12 @@ export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[
           tool_calls: withTools.tool_calls,
         });
       } else {
-        messages.push({ role: 'assistant', content: m.content });
+        const replayed = replayedReasoningFields(m, options);
+        messages.push({
+          role: 'assistant',
+          content: m.content,
+          ...(replayed ?? {}),
+        });
       }
     }
   }
@@ -139,7 +177,10 @@ export function historyToApiMessagesForEstimate(history: Message[]): ApiMessage[
 }
 
 /** Serialize one history row the same way outbound API messages count payload size. */
-export function serializeMessageContentForEstimate(m: Message): string {
+export function serializeMessageContentForEstimate(
+  m: Message,
+  options?: HistoryEstimateOptions,
+): string {
   if (m.role === 'user') {
     const imageCount = m.images?.length ?? 0;
     if (imageCount === 0) return m.content;
@@ -153,7 +194,8 @@ export function serializeMessageContentForEstimate(m: Message): string {
       const content = withTools.content ?? '';
       return content + JSON.stringify(withTools.tool_calls);
     }
-    return m.content ?? '';
+    const replayed = replayedReasoningFields(m, options);
+    return (m.content ?? '') + (replayed ? JSON.stringify(replayed) : '');
   }
   return '';
 }
@@ -161,9 +203,13 @@ export function serializeMessageContentForEstimate(m: Message): string {
 /**
  * Token estimate for one persisted row, priced per content class: tool results
  * and serialized `tool_calls` are payload, everything the model wrote in prose
- * is prose.
+ * is prose. Mirrors the row shapes {@link serializeMessageContentForEstimate}
+ * builds, including replayed reasoning on plain assistant rows.
  */
-export function estimateMessageTokens(m: Message): number {
+export function estimateMessageTokens(
+  m: Message,
+  options?: HistoryEstimateOptions,
+): number {
   if (m.role === 'user') {
     const images = m.images?.length ?? 0;
     return (
@@ -175,19 +221,25 @@ export function estimateMessageTokens(m: Message): number {
     const withTools = m as AssistantToolCallMessage;
     let total = estimateTokensFromText(withTools.content ?? '', 'prose');
     if (withTools.tool_calls?.length) {
-      total += estimateTokensFromText(JSON.stringify(withTools.tool_calls), 'payload');
+      return total + estimateTokensFromText(JSON.stringify(withTools.tool_calls), 'payload');
     }
+    // Replay only rides on plain assistant rows — same branch buildApiMessages uses.
+    const replayed = replayedReasoningFields(m, options);
+    if (replayed) total += estimateTokensFromText(JSON.stringify(replayed), 'prose');
     return total;
   }
   return 0;
 }
 
 /** Sum token estimate across all persisted chat turns (excludes context notices). */
-export function estimateHistoryTokens(history: Message[]): number {
+export function estimateHistoryTokens(
+  history: Message[],
+  options?: HistoryEstimateOptions,
+): number {
   let total = 0;
   for (const m of history) {
     if (isUiOnlyTranscriptMessage(m)) continue;
-    total += estimateMessageTokens(m);
+    total += estimateMessageTokens(m, options);
   }
   return total;
 }

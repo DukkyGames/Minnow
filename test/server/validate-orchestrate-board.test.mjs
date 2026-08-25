@@ -12,7 +12,7 @@ const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
 const PLAN_PATH = 'documentation/plans/reload-persist.md';
 
 describe('validateSessionState orchestrate board', () => {
-  it('preserves autoRunning, sequential mode, and task chat links on save', () => {
+  it('migrates legacy sequential to concurrency 1 and keeps task chat links', () => {
     const out = validateSessionState({
       version: 5,
       activeId: PLANNER_ID,
@@ -64,14 +64,15 @@ describe('validateSessionState orchestrate board', () => {
     });
 
     const board = out.groups[0].orchestrateBoard;
-    assert.equal(board.executionMode, 'sequential');
+    assert.equal(board.executionMode, undefined);
+    assert.equal(board.maxConcurrentTasks, 1);
     assert.equal(board.autoRunning, true);
     assert.equal(board.tasks[0].chatId, '22222222-2222-2222-2222-222222222222');
     assert.equal(board.tasks[0].testChatId, '33333333-3333-3333-3333-333333333333');
     assert.equal(board.finalTest?.status, 'pending');
   });
 
-  it('preserves afk executionMode on save', () => {
+  it('migrates legacy afk to handsOff on save', () => {
     const out = validateSessionState({
       version: 5,
       activeId: PLANNER_ID,
@@ -120,11 +121,12 @@ describe('validateSessionState orchestrate board', () => {
     });
 
     const board = out.groups[0].orchestrateBoard;
-    assert.equal(board.executionMode, 'afk');
+    assert.equal(board.executionMode, undefined);
+    assert.equal(board.handsOff, true);
     assert.equal(board.autoRunning, true);
   });
 
-  it('coerces junk executionMode to manual', () => {
+  it('drops junk executionMode without inventing a concurrency', () => {
     const out = validateSessionState({
       version: 5,
       activeId: PLANNER_ID,
@@ -169,7 +171,10 @@ describe('validateSessionState orchestrate board', () => {
       ],
     });
 
-    assert.equal(out.groups[0].orchestrateBoard.executionMode, 'manual');
+    const junkBoard = out.groups[0].orchestrateBoard;
+    assert.equal(junkBoard.executionMode, undefined);
+    assert.equal(junkBoard.handsOff, undefined);
+    assert.equal(junkBoard.maxConcurrentTasks, undefined);
   });
 
   it('preserves pendingAfk on save', () => {
@@ -221,7 +226,9 @@ describe('validateSessionState orchestrate board', () => {
     });
 
     const board = out.groups[0].orchestrateBoard;
-    assert.equal(board.executionMode, 'manual');
+    assert.equal(board.executionMode, undefined);
+    assert.equal(board.maxConcurrentTasks, 1);
+    assert.equal(board.autoRunning, undefined);
     assert.equal(board.pendingAfk, true);
   });
 
@@ -406,7 +413,7 @@ describe('validateSessionState orchestrate board', () => {
 describe('mergeConfigMeta autopilot', () => {
   it('defaults autopilot block when patch provides empty object', () => {
     const merged = mergeConfigMeta({}, { autopilot: {} });
-    assert.equal(merged.autopilot.defaultExecutionMode, 'manual');
+    assert.equal(merged.autopilot.defaultHandsOff, false);
     assert.equal(merged.autopilot.maxConcurrentTasks, 3);
     assert.equal(merged.autopilot.isolationMode, 'auto');
     assert.equal(merged.autopilot.maxTestAttempts, 3);
@@ -440,15 +447,15 @@ describe('mergeConfigMeta autopilot', () => {
 
   it('validates execution and isolation mode enums', () => {
     const merged = mergeConfigMeta(
-      { autopilot: { defaultExecutionMode: 'auto', isolationMode: 'per-task' } },
+      { autopilot: { defaultHandsOff: true, isolationMode: 'per-task' } },
       {
         autopilot: {
-          defaultExecutionMode: 'not-a-mode',
+          defaultHandsOff: 'not-a-boolean',
           isolationMode: 'invalid',
         },
       },
     );
-    assert.equal(merged.autopilot.defaultExecutionMode, 'auto');
+    assert.equal(merged.autopilot.defaultHandsOff, true);
     assert.equal(merged.autopilot.isolationMode, 'per-task');
   });
 
@@ -456,7 +463,7 @@ describe('mergeConfigMeta autopilot', () => {
     const merged = mergeConfigMeta(
       {
         autopilot: {
-          defaultExecutionMode: 'manual',
+          defaultHandsOff: false,
           maxConcurrentTasks: 3,
           isolationMode: 'auto',
           maxTestAttempts: 3,
@@ -473,7 +480,7 @@ describe('mergeConfigMeta autopilot', () => {
     assert.equal(merged.autopilot.maxConcurrentTasks, 7);
     assert.equal(merged.autopilot.plannerProviderId, 'p1');
     assert.equal(merged.autopilot.plannerModelId, 'm2');
-    assert.equal(merged.autopilot.defaultExecutionMode, 'manual');
+    assert.equal(merged.autopilot.defaultHandsOff, false);
   });
 });
 

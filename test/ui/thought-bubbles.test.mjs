@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
-const { ThoughtBubbleController, renderThoughtsToggle } = await import(
-  '../../src/ui/thought-bubbles.ts'
-);
+const {
+  ThoughtBubbleController,
+  renderThoughtsToggle,
+  syncThoughtsCaretPulse,
+} = await import('../../src/ui/thought-bubbles.ts');
 const { ThinkingDurationTracker } = await import('../../src/ui/thinking-duration.ts');
 
 function setupDom() {
@@ -179,6 +181,84 @@ describe('renderThoughtsToggle', () => {
     btn?.click();
     assert.equal(btn?.getAttribute('aria-expanded'), 'false');
     assert.ok(flow?.hidden);
+  });
+
+  test('collapsed settled toggle does not pulse by default', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    renderThoughtsToggle(wrap, ['Segment one']);
+    const caret = wrap.querySelector('.thoughts-caret');
+    assert.ok(caret);
+    assert.equal(caret.classList.contains('thoughts-caret--pulse'), false);
+    assert.equal(caret.classList.contains('thoughts-caret--expanded'), false);
+  });
+
+  test('pulse: true makes the collapsed caret pulse', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    renderThoughtsToggle(wrap, ['Segment one'], { pulse: true });
+    const caret = wrap.querySelector('.thoughts-caret');
+    assert.ok(caret);
+    assert.equal(caret.classList.contains('thoughts-caret--pulse'), true);
+  });
+});
+
+describe('syncThoughtsCaretPulse', () => {
+  function mountWithRows(count, { pulse = true } = {}) {
+    const mount = document.createElement('div');
+    document.body.appendChild(mount);
+    const carets = [];
+    for (let i = 0; i < count; i += 1) {
+      const wrap = assistantWrap();
+      mount.appendChild(wrap);
+      renderThoughtsToggle(wrap, [`Segment ${i}`], { pulse });
+      carets.push(wrap.querySelector('.thoughts-caret'));
+    }
+    return { mount, carets };
+  }
+
+  test('de-pulses all but the last caret in DOM order', () => {
+    setupDom();
+    const { mount, carets } = mountWithRows(3);
+    assert.equal(carets[0].classList.contains('thoughts-caret--pulse'), true);
+    assert.equal(carets[1].classList.contains('thoughts-caret--pulse'), true);
+    assert.equal(carets[2].classList.contains('thoughts-caret--pulse'), true);
+    syncThoughtsCaretPulse(mount);
+    assert.equal(carets[0].classList.contains('thoughts-caret--pulse'), false);
+    assert.equal(carets[1].classList.contains('thoughts-caret--pulse'), false);
+    assert.equal(carets[2].classList.contains('thoughts-caret--pulse'), true);
+  });
+
+  test('expanding the newest toggle stops its pulse; collapsing restores it', () => {
+    setupDom();
+    const { mount, carets } = mountWithRows(3);
+    syncThoughtsCaretPulse(mount);
+    const lastBtn = carets[2].closest('.thoughts-toggle');
+    lastBtn.click();
+    assert.equal(carets[2].classList.contains('thoughts-caret--expanded'), true);
+    assert.equal(carets[2].classList.contains('thoughts-caret--pulse'), false);
+    lastBtn.click();
+    assert.equal(carets[2].classList.contains('thoughts-caret--expanded'), false);
+    assert.equal(carets[2].classList.contains('thoughts-caret--pulse'), true);
+  });
+
+  test('live stage is the only pulsing caret alongside a prior settled toggle', () => {
+    setupDom();
+    const mount = document.createElement('div');
+    document.body.appendChild(mount);
+    const priorWrap = assistantWrap();
+    mount.appendChild(priorWrap);
+    renderThoughtsToggle(priorWrap, ['Prior thought'], { pulse: true });
+    const priorCaret = priorWrap.querySelector('.thoughts-caret');
+    const liveWrap = assistantWrap();
+    mount.appendChild(liveWrap);
+    const ctrl = new ThoughtBubbleController(liveWrap);
+    ctrl.appendReasoningDelta('Live reasoning');
+    const liveCaret = liveWrap.querySelector('.thoughts-caret');
+    assert.ok(liveCaret);
+    assert.equal(priorCaret.classList.contains('thoughts-caret--pulse'), false);
+    assert.equal(liveCaret.classList.contains('thoughts-caret--pulse'), true);
+    ctrl.endReasoningPhase();
   });
 });
 

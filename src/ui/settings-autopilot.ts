@@ -8,7 +8,6 @@ import {
   loadAutopilotMeta,
   saveAutopilotMeta,
   type AutopilotContinueSmartRoute,
-  type AutopilotExecutionMode,
   type AutopilotIsolationMode,
   type AutopilotMeta,
 } from '../config/autopilot-meta';
@@ -98,7 +97,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Global defaults for orchestrate boards: execution mode, concurrency, git worktree isolation (not host containment), test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
+    'Global defaults for orchestrate boards: concurrency, hands-off autonomy, git worktree isolation (not host containment), test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
     linkToSettingsSection('Watchdog', 'watchdog'),
     '; work agents under ',
     linkToSettingsSection('Agents', 'agent-center'),
@@ -128,34 +127,25 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
     { emphasis: true },
   );
 
-  const modeSelect = document.createElement('select');
-  modeSelect.id = 'settingsAutopilotExecMode';
-  modeSelect.className = 'settings-select';
-  for (const opt of [
-    { value: 'manual', label: 'Manual' },
-    { value: 'sequential', label: 'Sequential' },
-    { value: 'auto', label: 'Auto' },
-    { value: 'afk', label: 'AFK' },
-  ]) {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.label;
-    modeSelect.appendChild(option);
-  }
-  modeSelect.value = meta.defaultExecutionMode;
-  defaultsBody.appendChild(
-    createSettingsSelectRow('Default execution mode', {
-      select: modeSelect,
-      searchKey: 'agents.autopilot.executionMode',
-    }).row,
+  const { row: handsOffRow, input: handsOffToggle } = createSettingsToggleRow(
+    'Hands-off by default',
+    {
+      id: 'settingsAutopilotHandsOff',
+      checked: meta.defaultHandsOff,
+      searchKey: 'agents.autopilot.handsOff',
+      description:
+        'New boards run fully autonomously — the orchestrator never prompts you until Stop or board finish. Available at any concurrency.',
+    },
   );
+  defaultsBody.appendChild(handsOffRow);
 
   const isoSelect = document.createElement('select');
   isoSelect.id = 'settingsAutopilotIsolation';
   isoSelect.className = 'settings-select';
   for (const opt of [
-    { value: 'auto', label: 'Auto (derive from execution mode)' },
+    { value: 'auto', label: 'Auto (derive from concurrency)' },
     { value: 'off', label: 'Off' },
+    { value: 'per-board', label: 'Per-board' },
     { value: 'per-task', label: 'Per-task' },
     { value: 'per-wave', label: 'Per-wave' },
   ]) {
@@ -358,10 +348,8 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
     { label: 'Configure providers', sectionId: 'providers' },
   ]);
 
-  modeSelect.addEventListener('change', () => {
-    void persist({
-      defaultExecutionMode: modeSelect.value as AutopilotExecutionMode,
-    });
+  handsOffToggle.addEventListener('change', () => {
+    void persist({ defaultHandsOff: handsOffToggle.checked });
   });
   isoSelect.addEventListener('change', () => {
     void persist({

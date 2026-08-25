@@ -297,7 +297,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
       const group = makeGroup({ 'W1-A': 'testing' });
       const planner = makePlanner();
       // Nudging (like fail-routing) only happens on a running board.
-      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.handsOff = true;
       group.orchestrateBoard!.autoRunning = true;
       const testChat = makeNoVerdictTesterChat();
       updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
@@ -324,7 +324,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     try {
       const group = makeGroup({ 'W1-A': 'testing' });
       const planner = makePlanner();
-      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.handsOff = true;
       group.orchestrateBoard!.autoRunning = true;
       const testChat = makeNoVerdictTesterChat();
       updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
@@ -352,7 +352,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
   test('retry persists the failure-aware builder seed on the task', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
-    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.handsOff = true;
     group.orchestrateBoard!.autoRunning = true;
     updateTask(
       group,
@@ -384,7 +384,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
       // on for W1-A.
       const group = makeGroup({ 'W1-B': 'testing' });
       const planner = makePlanner();
-      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.handsOff = true;
       group.orchestrateBoard!.autoRunning = true;
       updateTask(
         group,
@@ -415,7 +415,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
 
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
-    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.handsOff = true;
     group.orchestrateBoard!.autoRunning = true;
 
     updateTask(
@@ -462,7 +462,7 @@ describe('skip per-task testing', () => {
     const planner = makePlanner();
     group.orchestrateBoard!.skipPerTaskTesting = true;
     group.orchestrateBoard!.autoRunning = true;
-    group.orchestrateBoard!.executionMode = 'auto';
+    group.orchestrateBoard!.maxConcurrentTasks = 3;
     const buildChat: Chat = {
       id: BUILD_CHAT_ID,
       name: 'Build',
@@ -507,7 +507,7 @@ describe('skip per-task testing', () => {
       const planner = makePlanner();
       group.orchestrateBoard!.skipPerTaskTesting = true;
       group.orchestrateBoard!.autoRunning = true;
-      group.orchestrateBoard!.executionMode = 'auto';
+      group.orchestrateBoard!.maxConcurrentTasks = 3;
       updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
       setSessionStateForTests({ chats: [planner], groups: [group], activeChatId: PLANNER_ID });
       await startTaskTesting(group, 'W1-A', planner);
@@ -523,7 +523,7 @@ describe('skip per-task testing', () => {
     const group = makeGroup({ 'W1-A': 'complete', 'W1-B': 'complete' });
     const planner = makePlanner();
     group.orchestrateBoard!.skipPerTaskTesting = true;
-    group.orchestrateBoard!.executionMode = 'manual';
+    group.orchestrateBoard!.autoRunning = false;
     tryTriggerFinalIntegrationTest(group, planner);
     assert.equal(group.orchestrateBoard!.finalTest?.status, 'pending');
   });
@@ -576,10 +576,10 @@ describe('final integration test', () => {
     assert.notEqual(group.orchestrateBoard!.finalTest.status, 'passed');
   });
 
-  test('manual mode sets final test pending when all tasks complete', () => {
+  test('a never-started board sets final test pending when all tasks complete', () => {
     const group = makeGroup({ 'W1-A': 'complete', 'W1-B': 'complete' });
     const planner = makePlanner();
-    group.orchestrateBoard!.executionMode = 'manual';
+    group.orchestrateBoard!.autoRunning = false;
     tryTriggerFinalIntegrationTest(group, planner);
     assert.equal(group.orchestrateBoard!.finalTest?.status, 'pending');
   });
@@ -647,7 +647,7 @@ describe('final integration test', () => {
     try {
       const group = makeGroup({ 'W1-A': 'complete', 'W1-B': 'complete' });
       const planner = makePlanner();
-      group.orchestrateBoard!.executionMode = 'afk';
+      group.orchestrateBoard!.handsOff = true;
       group.orchestrateBoard!.autoRunning = true;
       group.orchestrateBoard!.finalTest = {
         status: 'in_progress',

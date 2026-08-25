@@ -5,6 +5,7 @@
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { findChatById, isGoalLoopActive } from '../state/sessions';
 import { getBoardGroupForChat } from '../state/chat-groups.ts';
+import { isBoardHandsOff } from '../state/board-execution-mode.ts';
 import { logInteractionRequired } from '../state/orchestrate-board-store.ts';
 import {
   getToolSecurityMetaCached,
@@ -47,7 +48,7 @@ export function blockAfkInteractionAttempt(
   const chatId = context.chatId?.trim();
   const chat = chatId ? findChatById(chatId) : undefined;
   const group = chat ? getBoardGroupForChat(chat) : undefined;
-  if (group?.orchestrateBoard?.executionMode !== 'afk') return null;
+  if (!group || !isBoardHandsOff(group.orchestrateBoard)) return null;
   logInteractionRequired(group, kind, reason, chat?.boardTaskId?.trim());
   return {
     content: `Error: AFK execution denied user interaction (${reason}).`,

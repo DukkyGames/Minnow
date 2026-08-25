@@ -1,5 +1,5 @@
 /**
- * Orchestrate board session hydration: autoRunning, executionMode, finalTest.
+ * Orchestrate board session hydration: autoRunning, hands-off, concurrency, finalTest.
  */
 
 import assert from 'node:assert/strict';
@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { STORAGE_KEY } from '../../src/constants.ts';
 import {
   stopBoardAutoRun,
-  setBoardExecutionMode,
+  setBoardHandsOff,
 } from '../../src/state/orchestrate-board-actions.ts';
 import { initBoard, isBoardRunning } from '../../src/state/orchestrate-board-store.ts';
 import {
@@ -50,7 +50,7 @@ function makeGroup(): ChatGroup {
   };
 }
 
-function seedRunningBoard(executionMode: 'auto' | 'sequential' = 'auto') {
+function seedRunningBoard(concurrency = 3) {
   const planner = makePlanner();
   const group = makeGroup();
   initBoard(group, planner, {
@@ -67,7 +67,7 @@ function seedRunningBoard(executionMode: 'auto' | 'sequential' = 'auto') {
     ],
   });
   const board = group.orchestrateBoard!;
-  board.executionMode = executionMode;
+  board.maxConcurrentTasks = concurrency;
   board.autoRunning = true;
   setSessionStateForTests({
     version: 5,
@@ -122,12 +122,14 @@ const PERSISTED_GROUP = {
 };
 
 describe('orchestrate board hydration', () => {
-  test('restores autoRunning, sequential executionMode, and finalTest', () => {
+  test('migrates legacy sequential to concurrency 1 and restores finalTest', () => {
     const [group] = hydrateSessionGroupsForTests([PERSISTED_GROUP]);
     assert.ok(group);
     const board = group.orchestrateBoard;
     assert.ok(board);
-    assert.equal(board.executionMode, 'sequential');
+    assert.equal(board.executionMode, undefined);
+    assert.equal(board.maxConcurrentTasks, 1);
+    assert.equal(board.handsOff, undefined);
     assert.equal(board.autoRunning, true);
     assert.equal(board.finalTest?.status, 'in_progress');
     assert.equal(board.finalTest?.chatId, '33333333-3333-3333-3333-333333333333');
@@ -144,7 +146,6 @@ describe('orchestrate board hydration', () => {
         orchestrateBoard: {
           ...PERSISTED_GROUP.orchestrateBoard,
           autoRunning: false,
-          executionMode: 'manual',
           tasks: [
             {
               id: 'W1-A',
@@ -189,50 +190,56 @@ describe('orchestrate board hydration', () => {
     assert.equal(dependent?.quarantine?.summary, 'blocked by quarantined W1-A');
   });
 
-  test('restores afk executionMode and autoRunning', () => {
+  function hydrateWithBoard(patch: Record<string, unknown>) {
     const [group] = hydrateSessionGroupsForTests([
       {
         ...PERSISTED_GROUP,
-        orchestrateBoard: {
-          ...PERSISTED_GROUP.orchestrateBoard,
-          executionMode: 'afk',
-          autoRunning: true,
-        },
+        orchestrateBoard: { ...PERSISTED_GROUP.orchestrateBoard, ...patch },
       },
     ]);
-    assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+    return group;
+  }
+
+  test('legacy afk migrates to handsOff and keeps autoRunning', () => {
+    const group = hydrateWithBoard({ executionMode: 'afk', autoRunning: true });
+    assert.equal(group.orchestrateBoard?.executionMode, undefined);
+    assert.equal(group.orchestrateBoard?.handsOff, true);
     assert.equal(group.orchestrateBoard?.autoRunning, true);
     assert.equal(isBoardRunning(group), true);
   });
 
-  test('drops autoRunning when false and coerces unknown executionMode to manual', () => {
-    const [group] = hydrateSessionGroupsForTests([
-      {
-        ...PERSISTED_GROUP,
-        orchestrateBoard: {
-          ...PERSISTED_GROUP.orchestrateBoard,
-          executionMode: 'turbo',
-          autoRunning: false,
-        },
-      },
-    ]);
-    assert.equal(group.orchestrateBoard?.executionMode, 'manual');
+  test('legacy auto keeps its concurrency and stays interactive', () => {
+    const group = hydrateWithBoard({
+      executionMode: 'auto',
+      maxConcurrentTasks: 5,
+      autoRunning: true,
+    });
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 5);
+    assert.equal(group.orchestrateBoard?.handsOff, undefined);
+  });
+
+  test('legacy manual migrates to concurrency 1, stopped', () => {
+    const group = hydrateWithBoard({ executionMode: 'manual', autoRunning: true });
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 1);
     assert.equal(group.orchestrateBoard?.autoRunning, undefined);
     assert.equal(isBoardRunning(group), false);
   });
 
-  test('manual mode with autoRunning true does not count as running', () => {
-    const [group] = hydrateSessionGroupsForTests([
-      {
-        ...PERSISTED_GROUP,
-        orchestrateBoard: {
-          ...PERSISTED_GROUP.orchestrateBoard,
-          executionMode: 'manual',
-          autoRunning: true,
-        },
-      },
-    ]);
+  test('junk executionMode is dropped and leaves the board untouched', () => {
+    const group = hydrateWithBoard({
+      executionMode: 'turbo',
+      maxConcurrentTasks: 4,
+      autoRunning: false,
+    });
+    assert.equal(group.orchestrateBoard?.executionMode, undefined);
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 4);
+    assert.equal(group.orchestrateBoard?.autoRunning, undefined);
     assert.equal(isBoardRunning(group), false);
+  });
+
+  test('worktreeSlug survives a round trip', () => {
+    const group = hydrateWithBoard({ worktreeSlug: 'checkout-flow' });
+    assert.equal(group.orchestrateBoard?.worktreeSlug, 'checkout-flow');
   });
 
   test('restores board diagnostic log events on reload', () => {
@@ -284,7 +291,7 @@ describe('orchestrate board stop persistence', () => {
   });
 
   test('stopBoardAutoRun persists stopped state without debounced flush', () => {
-    const { planner, group } = seedRunningBoard('auto');
+    const { planner, group } = seedRunningBoard(3);
     saveSessionsNow();
     assert.equal(
       readPersistedGroupsFromLocalStorage()[0]?.orchestrateBoard?.autoRunning,
@@ -299,20 +306,29 @@ describe('orchestrate board stop persistence', () => {
     assert.equal(isBoardRunning(persisted), false);
   });
 
-  test('setBoardExecutionMode manual persists stopped state without debounced flush', () => {
-    const { planner, group } = seedRunningBoard('sequential');
+  test('setBoardHandsOff persists hands-off without a stored mode string', () => {
+    const { planner, group } = seedRunningBoard(1);
     saveSessionsNow();
     assert.equal(
       readPersistedGroupsFromLocalStorage()[0]?.orchestrateBoard?.autoRunning,
       true,
     );
 
-    setBoardExecutionMode(group, 'manual', planner);
+    setBoardHandsOff(group, true, planner);
+    saveSessionsNow();
 
     const [persisted] = readPersistedGroupsFromLocalStorage();
     assert.ok(persisted);
-    assert.equal(persisted.orchestrateBoard?.executionMode, 'manual');
-    assert.equal(persisted.orchestrateBoard?.autoRunning, undefined);
-    assert.equal(isBoardRunning(persisted), false);
+    assert.equal(persisted.orchestrateBoard?.handsOff, true);
+    assert.equal(persisted.orchestrateBoard?.executionMode, undefined);
+    // Hands-off is available at concurrency 1 — it does not lift the cap.
+    assert.equal(persisted.orchestrateBoard?.maxConcurrentTasks, 1);
+
+    setBoardHandsOff(group, false, planner);
+    saveSessionsNow();
+    assert.equal(
+      readPersistedGroupsFromLocalStorage()[0]?.orchestrateBoard?.handsOff,
+      undefined,
+    );
   });
 });

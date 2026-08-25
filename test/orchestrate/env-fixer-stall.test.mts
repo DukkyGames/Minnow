@@ -135,7 +135,7 @@ function makeEnvFixerChat(options?: {
   return chat;
 }
 
-function makeGroup(executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'afk'): ChatGroup {
+function makeGroup(shape: 'stopped' | 'sequential' | 'auto' | 'afk' = 'afk'): ChatGroup {
   const group: ChatGroup = {
     id: GROUP_ID,
     name: 'Board',
@@ -162,7 +162,9 @@ function makeGroup(executionMode: 'manual' | 'sequential' | 'auto' | 'afk' = 'af
     ],
     waves: [{ id: 'W1', status: 'in_progress' }],
   });
-  group.orchestrateBoard!.executionMode = executionMode;
+  group.orchestrateBoard!.maxConcurrentTasks = shape === 'auto' ? 3 : 1;
+  if (shape === 'afk') group.orchestrateBoard!.handsOff = true;
+  if (shape === 'stopped') group.orchestrateBoard!.autoRunning = false;
   group.orchestrateBoard!.autoRunning = true;
   return group;
 }

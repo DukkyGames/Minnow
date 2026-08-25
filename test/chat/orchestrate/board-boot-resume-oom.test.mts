@@ -43,7 +43,7 @@ describe('orchestrate OOM recovery', () => {
 
   test('resolveEffectiveMaxConcurrent caps concurrency during OOM recovery', () => {
     const board = {
-      executionMode: 'auto',
+      maxConcurrentTasks: 3,
       maxConcurrentTasks: 5,
     } as OrchestrateBoardState;
 

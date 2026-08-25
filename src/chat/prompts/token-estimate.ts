@@ -42,8 +42,10 @@ import {
   formatTokenEstimateLabel,
   historyToApiMessagesForEstimate,
   TOKEN_ESTIMATE_TOOLTIP,
+  type HistoryEstimateOptions,
   type OutboundPromptEstimate,
 } from './token-estimate-core';
+import { fetchReplayPriorReasoningEnabled } from '../context/reasoning-replay-config';
 
 export {
   ESTIMATE_IMAGE_URL_TOKENS,
@@ -55,6 +57,7 @@ export {
   historyToApiMessagesForEstimate,
   serializeMessageContentForEstimate,
   TOKEN_ESTIMATE_TOOLTIP,
+  type HistoryEstimateOptions,
   type OutboundPromptEstimate,
 } from './token-estimate-core';
 
@@ -111,6 +114,7 @@ function buildOutboundApiMessagesForEstimate(
   chat: Chat,
   systemText: string,
   userRulesText: string,
+  historyOptions?: HistoryEstimateOptions,
 ): ApiMessage[] {
   const messages: ApiMessage[] = [];
   pushOutboundSystemMessages(messages, {
@@ -118,7 +122,7 @@ function buildOutboundApiMessagesForEstimate(
     legacySysPrompt: '',
     userRulesContent: userRulesText || undefined,
   });
-  messages.push(...historyToApiMessagesForEstimate(chat.history));
+  messages.push(...historyToApiMessagesForEstimate(chat.history, historyOptions));
   return messages;
 }
 
@@ -139,8 +143,14 @@ function applyBudgetTrimToHistoryTokens(
   userRulesText: string,
   rawHistoryTokens: number,
   toolsTokens: number,
+  historyOptions?: HistoryEstimateOptions,
 ): { history: number; compressedEstimate: number; wouldCompress: boolean } {
-  const apiMessages = buildOutboundApiMessagesForEstimate(chat, systemText, userRulesText);
+  const apiMessages = buildOutboundApiMessagesForEstimate(
+    chat,
+    systemText,
+    userRulesText,
+    historyOptions,
+  );
   const workAgent = resolveActiveWorkAgent(chat);
   const agentConfig = workAgent
     ? agentContextBudgetFromWorkAgent(workAgent)
@@ -195,6 +205,10 @@ async function resolveOutboundComposeForEstimate(
     ...options?.composeOptions,
     routeUserText,
     userMessagePreview: routeUserText,
+    // Same replay cap the send path uses, so the ring counts what actually ships.
+    modelContextLimit:
+      options?.composeOptions?.modelContextLimit ??
+      resolveModelLimitForEstimate(options?.modelId, chat),
     overrides: {
       expertId: expertCtx.routeSource === 'orphaned' ? null : expertCtx.expertId,
       expertLabel: expertCtx.expertLabel,
@@ -326,7 +340,12 @@ export async function resolveOutboundPromptEstimate(
   const chat = options?.chat ?? getActiveChat();
 
   const staticPart = await resolveCachedStaticOutboundEstimate(chat, options);
-  const historyTokens = estimateHistoryTokens(chat.history);
+  // Mirrors what the send path will actually put on the wire (Phase 4 replay).
+  const historyOptions: HistoryEstimateOptions = {
+    replayPriorReasoning: await fetchReplayPriorReasoningEnabled(),
+    modelId: options?.modelId,
+  };
+  const historyTokens = estimateHistoryTokens(chat.history, historyOptions);
 
   const estimate: OutboundPromptEstimate = {
     total:
@@ -352,6 +371,7 @@ export async function resolveOutboundPromptEstimate(
     staticPart.userRules ?? '',
     estimate.history,
     staticPart.tools,
+    historyOptions,
   );
 
   if (!trimResult.wouldCompress && trimResult.history === estimate.history) {

@@ -355,7 +355,9 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['orchestrate', 'board', 'autopilot', 'concurrency', 'isolation'],
     description: 'Global defaults for orchestrate board execution, testing, and heartbeat.',
   }),
-  field('agents.autopilot.executionMode', 'Default execution mode', 'agents', 'autopilot'),
+  field('agents.autopilot.handsOff', 'Hands-off by default', 'agents', 'autopilot', {
+    keywords: ['afk', 'autonomous', 'unattended', 'hands off'],
+  }),
   field('agents.autopilot.isolation', 'Default isolation mode', 'agents', 'autopilot'),
   field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
   field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),
@@ -427,6 +429,12 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('agents.rules.contextDocuments.default', 'Inject context documents by default', 'agents', 'rules'),
   field('agents.rules.contextDocuments.presets', 'Context document presets', 'agents', 'rules'),
   field('agents.rules.contextDocuments.custom', 'Custom context document paths', 'agents', 'rules'),
+  field('agents.rules.reasoningReplay', 'Prior reasoning replay', 'agents', 'rules', {
+    keywords: ['thinking', 'reasoning', 'chain of thought', 'replay', 'context'],
+  }),
+  field('agents.rules.reasoningReplay.enabled', 'Replay prior reasoning', 'agents', 'rules', {
+    keywords: ['thinking', 'reasoning', 'replay'],
+  }),
 
   // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {
