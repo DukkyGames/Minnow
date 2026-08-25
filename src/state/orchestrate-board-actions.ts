@@ -65,7 +65,8 @@ import {
 } from '../chat/orchestrate/board-afk-power.ts';
 import { runChatTurn } from '../tools/loop.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
-import { setStreaming } from '../app-state.ts';
+import { getChatAbort, setStreaming } from '../app-state.ts';
+import { getMainTurnActivity } from '../chat/main-turn-activity.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
@@ -1559,6 +1560,50 @@ function isTaskChatStreaming(chatId: string): boolean {
   );
 }
 
+/**
+ * Positive proof that a task chat still has a turn in flight.
+ *
+ * The two signals the wake sweep used to rely on cannot tell "finished" from
+ * "mid-turn": `isChatStreaming` is a UI flag the sweep itself is allowed to
+ * clear, and {@link resolveTaskChatStreamOutcome} only reads persisted history,
+ * where a live chat between tool rounds looks exactly like a completed one
+ * (last entry = an ordinary assistant message = `completed`). The 20s liveness
+ * poll therefore finalized live Builders as "ended without board_report" while
+ * their generation kept running — the board relaunched the task while the
+ * orphaned chat carried on editing the same worktree.
+ *
+ * Both signals are owned by `runChatTurn` and cleared in its `finally`, so they
+ * span the whole turn including long tool runs. (`chat.currentGenerationId`
+ * looks like a third signal but is not cleared on every completion path — boot
+ * even has a heuristic to tidy it up — so it would report dead chats as live.)
+ */
+function isTaskChatGenerationLive(chatId: string): boolean {
+  const id = chatId.trim();
+  if (!id) return false;
+  return Boolean(getMainTurnActivity(id)) || Boolean(getChatAbort(id));
+}
+
+/**
+ * True when the chat emitted stream / tool / terminal output within `minQuietMs`.
+ * Uses the supervision clock, which freezes while the page is hidden, so time
+ * spent with the display asleep never counts toward the quiet period.
+ */
+function isRecentlyActiveTaskChat(chatId: string, minQuietMs: number): boolean {
+  if (minQuietMs <= 0) return false;
+  const age = getProgressAgeMs(chatTaskRunId(chatId.trim()));
+  return age !== null && age < minQuietMs;
+}
+
+/**
+ * Stall predicate for the interval-driven liveness poll: a chat that produced
+ * output moments ago is not a stuck slot, even if every other flag says idle.
+ */
+function stallCheckWithQuietPeriod(minQuietMs: number): (chatId: string) => boolean {
+  if (minQuietMs <= 0) return isTaskChatActiveForStallCheck;
+  return (chatId: string) =>
+    isTaskChatActiveForStallCheck(chatId) || isRecentlyActiveTaskChat(chatId, minQuietMs);
+}
+
 /** Provider/model for board chats — board override, then planner / top bar / settings default. */
 function resolvePlannerModelBinding(
   plannerChat: Chat,
@@ -1625,17 +1670,42 @@ function getOrCreateBoardChat(input: {
   if (input.taskId) chat.boardTaskId = input.taskId;
   requireSession().chats.unshift(chat);
   if (input.taskId && input.taskChatField) {
+    const field = input.taskChatField;
+    const replaced = input.group.orchestrateBoard?.tasks
+      .find((t) => t.id === input.taskId)?.[field]
+      ?.trim();
     updateTask(
       input.group,
       input.taskId,
-      { [input.taskChatField]: chat.id },
+      { [field]: chat.id },
       input.plannerChat,
     );
+    if (replaced) stopReplacedBoardTaskChat(replaced, chat.id);
   }
   assignChatToGroup(chat.id, folderId);
   const board = input.group.orchestrateBoard;
   if (board) applyBoardReasoningToChat(chat, board);
   return chat;
+}
+
+/**
+ * Stop a phase chat the board just stopped pointing at.
+ *
+ * Replacing `chatId` / `testChatId` / `fixerChatId` orphans the previous chat:
+ * nothing on the board holds its id any more, so neither Stop nor
+ * {@link stopBoardAutoRun} can ever reach it, while its generation keeps running
+ * tools against the same worktree. One overnight board accumulated five live
+ * Builders on a single task this way. Called after the new id is committed, so
+ * the resulting stream-end matches no task and cannot move the card.
+ */
+function stopReplacedBoardTaskChat(previousChatId: string, nextChatId: string): void {
+  const previous = previousChatId.trim();
+  if (!previous || previous === nextChatId.trim()) return;
+  // Only a chat still holding a turn needs stopping. An already-settled chat is
+  // left untouched so replacement keeps its existing stream-end / retry routing.
+  if (!isTaskChatGenerationLive(previous) && !isTaskChatActive(previous)) return;
+  stopTaskChatSupervision(previous);
+  stopGeneration(previous, 'system');
 }
 
 function ensureStreamEndSubscription(): void {
@@ -1916,6 +1986,8 @@ export function isTaskChatActive(chatId: string): boolean {
  * not healthy occupancy — treat them as idle so auto-pilot can recover.
  */
 export function isTaskChatActiveForStallCheck(chatId: string): boolean {
+  // A turn in flight is never a leaked reservation, whatever the UI flags say.
+  if (isTaskChatGenerationLive(chatId)) return true;
   if (
     isLaunchReserved(chatId) &&
     !isChatStreaming(chatId) &&
@@ -5680,6 +5752,8 @@ export type AutoDelegateNextOptions = {
    * for a leaked slot before streaming/turn-setup begins.
    */
   allowStalledRestart?: boolean;
+  /** Quiet period a chat must exceed before counting as stalled (poll safety net). */
+  stallQuietMs?: number;
 };
 
 /** Start all ready planned tasks up to the concurrency cap (auto-pilot / sequential). */
@@ -5695,13 +5769,13 @@ export async function autoDelegateNext(
   if (!board || !isBoardRunning(group)) return;
 
   const allowStalledRestart = options.allowStalledRestart !== false;
+  const stallCheck = stallCheckWithQuietPeriod(Math.max(0, options.stallQuietMs ?? 0));
   const waveOrder = new Map(board.waves.map((w, i) => [String(w.id), i]));
   const ready = board.tasks
     .filter(
       (t) =>
         isTaskReadyForAuto(board, t) ||
-        (allowStalledRestart &&
-          isTaskStalledForRestart(board, t, isTaskChatActiveForStallCheck)),
+        (allowStalledRestart && isTaskStalledForRestart(board, t, stallCheck)),
     )
     .sort((a, b) => {
       const wa = waveOrder.get(String(a.wave)) ?? 999;
@@ -5726,14 +5800,18 @@ function isBoardCandidateForWakeReconcile(group: ChatGroup): boolean {
   return (
     board.systemPaused === true &&
     board.userStopped !== true &&
+    // An OOM pause is deliberate ("press Start when ready"); resuming it here
+    // put the board straight back into the crash loop 20s after recovery.
+    !isOomPauseActive() &&
     hasIncompleteOrchestrateWork(board)
   );
 }
 
-/** Restore auto-run after sleep/lock system pause (not user Stop). */
+/** Restore auto-run after sleep/lock system pause (not user Stop or OOM pause). */
 function resumeSystemPausedBoardAfterWake(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board?.systemPaused || board.userStopped === true) return;
+  if (isOomPauseActive()) return;
   if (!hasIncompleteOrchestrateWork(board)) return;
   if (isUserStoppedChat(plannerChat)) return;
   const wasRunning = board.autoRunning === true;
@@ -5748,10 +5826,20 @@ function resumeSystemPausedBoardAfterWake(group: ChatGroup, plannerChat: Chat): 
  * Clear leaked streaming / launch flags when the task chat transcript already ended
  * (common after macOS display sleep throttling).
  */
-function reconcileStaleBoardTaskChatActivity(chatId: string): boolean {
+function reconcileStaleBoardTaskChatActivity(
+  chatId: string,
+  minQuietMs = 0,
+): boolean {
   const trimmed = chatId.trim();
   if (!trimmed) return false;
   const chat = findChatById(trimmed);
+
+  // Never clear flags for — or finalize — a chat whose turn is still running.
+  // `setStreaming(false)` below only drops a UI flag; it does not abort the
+  // generation, so treating a live chat as stale forks a second chat onto the
+  // same task while the first keeps writing.
+  if (isTaskChatGenerationLive(trimmed)) return false;
+  if (isRecentlyActiveTaskChat(trimmed, minQuietMs)) return false;
 
   if (isTaskChatActiveForStallCheck(trimmed)) {
     if (!chat) return false;
@@ -5788,21 +5876,25 @@ function boardTimerContextForWake(
   };
 }
 
-async function reconcileBoardTasksAfterWake(group: ChatGroup, planner: Chat): Promise<void> {
+async function reconcileBoardTasksAfterWake(
+  group: ChatGroup,
+  planner: Chat,
+  minQuietMs = 0,
+): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
 
   for (const task of board.tasks) {
     if (task.status === 'in_progress') {
       const chatId = task.chatId?.trim();
-      if (chatId && reconcileStaleBoardTaskChatActivity(chatId)) {
+      if (chatId && reconcileStaleBoardTaskChatActivity(chatId, minQuietMs)) {
         finalizeBoardTaskOnStreamEnd(group, task, planner);
       }
       continue;
     }
     if (task.status === 'testing') {
       const testId = task.testChatId?.trim();
-      if (testId && reconcileStaleBoardTaskChatActivity(testId)) {
+      if (testId && reconcileStaleBoardTaskChatActivity(testId, minQuietMs)) {
         await finalizeTaskTestingOnStreamEnd(group, task, planner).catch((err) =>
           reportBackgroundError('wake-finalize-task-testing', err),
         );
@@ -5812,7 +5904,7 @@ async function reconcileBoardTasksAfterWake(group: ChatGroup, planner: Chat): Pr
 
   const finalChatId = board.finalTest?.chatId?.trim();
   if (board.finalTest?.status === 'in_progress' && finalChatId) {
-    if (reconcileStaleBoardTaskChatActivity(finalChatId)) {
+    if (reconcileStaleBoardTaskChatActivity(finalChatId, minQuietMs)) {
       finalizeFinalTestOnStreamEnd(group, planner);
     }
   }
@@ -5824,6 +5916,13 @@ async function reconcileBoardTasksAfterWake(group: ChatGroup, planner: Chat): Pr
  */
 export type DisplayWakeReconcileOptions = {
   allowStalledRestart?: boolean;
+  /**
+   * Minimum quiet period before a chat may be treated as stale/stalled. The
+   * interval-driven liveness poll sets this so a plain 20s tick can never
+   * finalize or restart a chat that is still producing output; real wake events
+   * (visibility / screen unlock) leave it at 0 and reconcile immediately.
+   */
+  minQuietMs?: number;
 };
 
 export async function reconcileRunningBoardsAfterDisplayWake(
@@ -5832,19 +5931,21 @@ export async function reconcileRunningBoardsAfterDisplayWake(
   if (!sessionState?.groups?.length) return;
   ensureStreamEndSubscription();
   const allowStalledRestart = options.allowStalledRestart === true;
+  const minQuietMs = Math.max(0, options.minQuietMs ?? 0);
+  const stallCheck = stallCheckWithQuietPeriod(minQuietMs);
   for (const group of sessionState.groups) {
     if (!isBoardCandidateForWakeReconcile(group)) continue;
     const planner = getPlannerChatForGroup(group);
     if (!planner) continue;
 
     resumeSystemPausedBoardAfterWake(group, planner);
-    await reconcileBoardTasksAfterWake(group, planner);
+    await reconcileBoardTasksAfterWake(group, planner, minQuietMs);
 
     await reconcileMergingTasks(group, planner, {
-      isFixerChatActive: isTaskChatActiveForStallCheck,
+      isFixerChatActive: stallCheck,
     });
     if (isBoardRunning(group)) {
-      await autoDelegateNext(group, planner, { allowStalledRestart });
+      await autoDelegateNext(group, planner, { allowStalledRestart, stallQuietMs: minQuietMs });
     }
     syncOrchestrateBoardTimer(group, planner, boardTimerContextForWake(group.orchestrateBoard!, planner));
     emitBoardChange(group.id);

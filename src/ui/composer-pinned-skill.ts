@@ -72,7 +72,9 @@ function ensureStrip(): HTMLDivElement {
   const host = document.getElementById('composerControls');
   const anchor = document.getElementById('workAgentDev');
   if (host) {
-    if (anchor) {
+    // The anchor is parked in the compact cog sheet at times, so it is not
+    // always a child of the toolbar — insertBefore would throw NotFoundError.
+    if (anchor?.parentNode === host) {
       host.insertBefore(stripEl, anchor);
     } else {
       host.appendChild(stripEl);
