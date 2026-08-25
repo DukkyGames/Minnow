@@ -282,13 +282,27 @@ import {
 } from '../chat/orchestrate/board-stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
-import { estimateTokensFromText } from '../chat/prompts/token-estimate';
+import {
+  estimateTokensFromText,
+  estimateToolsTokens,
+} from '../chat/prompts/token-estimate';
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+  SAFETY_MARGIN,
   agentContextBudgetFromWorkAgent,
+  estimateApiMessagesTokens,
 } from '../chat/context-budget';
-import { applyContextPolicy } from '../chat/context/apply-policy';
+import { applyContextPolicy, type ApplyContextPolicyResult } from '../chat/context/apply-policy';
 import { appendContextNoticeIfNeeded } from '../chat/context/context-notice';
+import {
+  contextRetryMessageLimit,
+  isContextOverflowText,
+  parseContextOverflowNumbers,
+} from '../chat/context/context-overflow-error';
+import {
+  contextCalibratedMessageLimit,
+  recordContextEstimateBias,
+} from '../chat/context/estimate-calibration';
 import {
   appendInjectionNoticesForTurn,
   isUiOnlyTranscriptMessage,
@@ -2009,6 +2023,27 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let activeResumeGenerationId = resumeGenerationId;
     let archiveMemo: ArchivePreResult | null = null;
 
+    /** Persist + surface a context compaction (pre-send budget or overflow retry). */
+    const recordContextTrim = (result: ApplyContextPolicyResult): void => {
+      if (!result.applied) return;
+      if (result.droppedTurns > 0 || result.summaryInjected) {
+        appendContextNoticeIfNeeded(chat, {
+          policy: result.policy,
+          droppedTurns: result.droppedTurns,
+          summaryText: result.summaryText,
+        });
+        chat.lastContextTrim = {
+          policy: result.policy,
+          droppedTurns: result.droppedTurns,
+          summaryPreview: result.summaryText?.slice(0, 200),
+          at: Date.now(),
+        };
+      }
+      if (result.statusMessage && isStreamDomVisible(chat.id)) {
+        setStatus('ok', result.statusMessage);
+      }
+    };
+
     const prepareNextStreamRound = (statusHint: string): void => {
       streamRow = appendStreamingAssistantRow(chat.id);
       ({ wrap, bubble, cursor, streamStatus } = streamRow);
@@ -2126,37 +2161,36 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         }
       }
 
+      const sendModelLimit = sendModelId ? resolveContextLimit(sendModelId, chat) : null;
+      // Pinned for this round so the compact-and-retry closure below sees the
+      // same binding the request was built from.
+      const roundProviderId = sendProviderId ?? provider.id;
+      // Tool schemas ride in `body.tools`, not in `messages`, but they occupy the
+      // same window — reserve them or the budget is spending tokens it does not have.
+      const toolsReserveTokens = estimateToolsTokens(enabledTools);
       const budgetApplied = await applyContextPolicy({
         messages: preMessages,
         policy: workAgentBudget.enforcementPolicy,
-        modelLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
+        modelLimit: sendModelLimit,
         agentConfig: workAgentBudget,
-        providerId: sendProviderId,
+        providerId: roundProviderId,
         modelId: sendModelId,
         signal: chatSignal,
+        reservedTokens: toolsReserveTokens,
+        // A model that has already overflowed once gets the ceiling its own
+        // tokenizer proved, instead of the estimate that missed.
+        effectiveLimitOverride: contextCalibratedMessageLimit(
+          sendModelId,
+          sendModelLimit,
+          SAFETY_MARGIN,
+          toolsReserveTokens,
+        ),
         onStatus: (level, message) => {
           if (isStreamDomVisible(chat.id)) setStatus(level, message);
         },
       });
       const messages = budgetApplied.messages;
-      if (budgetApplied.applied) {
-        if (budgetApplied.droppedTurns > 0 || budgetApplied.summaryInjected) {
-          appendContextNoticeIfNeeded(chat, {
-            policy: budgetApplied.policy,
-            droppedTurns: budgetApplied.droppedTurns,
-            summaryText: budgetApplied.summaryText,
-          });
-          chat.lastContextTrim = {
-            policy: budgetApplied.policy,
-            droppedTurns: budgetApplied.droppedTurns,
-            summaryPreview: budgetApplied.summaryText?.slice(0, 200),
-            at: Date.now(),
-          };
-        }
-        if (budgetApplied.statusMessage && isStreamDomVisible(chat.id)) {
-          setStatus('ok', budgetApplied.statusMessage);
-        }
-      }
+      recordContextTrim(budgetApplied);
       const body = applySamplerToBody(
         {
           model: sendModelId || undefined,
@@ -2272,6 +2306,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         let prefillPartial = '';
         let carriedText = '';
         let carriedThinking = '';
+        let contextOverflowRetried = false;
         const maxContinuations = 2;
         const streamOpts = (): StreamCompletionTurnOptions => ({
           thinkingBudgetTracker: tracker,
@@ -2309,6 +2344,49 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               if (isStreamDomVisible(chat.id)) {
                 setStatus('err', 'Model rejected the image — resent without it');
               }
+              turnResult = await runStreamTurn(currentBody, streamOpts());
+            } else if (!contextOverflowRetried && isContextOverflowText(streamMessage)) {
+              // The prompt did not fit. Of every way a turn can fail this is the
+              // most recoverable one — the server just said how big the request
+              // was and how big it may be — so compact against those numbers and
+              // send once more instead of losing the turn.
+              contextOverflowRetried = true;
+              const numbers = parseContextOverflowNumbers(streamMessage);
+              const sentEstimate = estimateApiMessagesTokens(currentBody.messages);
+              if (numbers) {
+                recordContextEstimateBias(
+                  sendModelId,
+                  numbers.requestTokens,
+                  sentEstimate,
+                  toolsReserveTokens,
+                );
+              }
+              if (isStreamDomVisible(chat.id)) {
+                setStatus('spin', 'Context full — compacting…');
+              }
+              const compacted = await applyContextPolicy({
+                messages: currentBody.messages,
+                policy: workAgentBudget.enforcementPolicy,
+                modelLimit: sendModelLimit,
+                agentConfig: workAgentBudget,
+                providerId: roundProviderId,
+                modelId: sendModelId,
+                signal: chatSignal,
+                reservedTokens: toolsReserveTokens,
+                effectiveLimitOverride: contextRetryMessageLimit(
+                  sentEstimate,
+                  numbers,
+                  SAFETY_MARGIN,
+                ),
+                onStatus: (level, message) => {
+                  if (isStreamDomVisible(chat.id)) setStatus(level, message);
+                },
+              });
+              if (!compacted.applied) throw streamErr;
+              recordContextTrim(compacted);
+              currentBody = { ...currentBody, messages: compacted.messages };
+              // The rejected generation is gone; the retry has to POST a new one.
+              activeResumeGenerationId = undefined;
               turnResult = await runStreamTurn(currentBody, streamOpts());
             } else {
               throw streamErr;

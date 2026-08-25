@@ -21,12 +21,27 @@ describe('estimateTokensFromText', () => {
     assert.equal(estimateTokensFromText(''), 0);
   });
 
-  test('four characters rounds to 1 token', () => {
-    assert.equal(estimateTokensFromText('abcd'), 1);
+  test('prose is the default content class', () => {
+    assert.equal(estimateTokensFromText('x'.repeat(3600)), 1000);
+    assert.equal(
+      estimateTokensFromText('x'.repeat(3600)),
+      estimateTokensFromText('x'.repeat(3600), 'prose'),
+    );
   });
 
-  test('4000 characters rounds to 1000 tokens', () => {
-    assert.equal(estimateTokensFromText('x'.repeat(4000)), 1000);
+  test('payload prices tool output above prose, schema below it', () => {
+    const text = 'x'.repeat(3600);
+    assert.equal(estimateTokensFromText(text, 'payload'), 1200);
+    assert.equal(estimateTokensFromText(text, 'schema'), 900);
+  });
+
+  test('payload never estimates below prose for the same text', () => {
+    // The whole failure mode was an estimate that came in under reality; tool
+    // output tokenizes worst, so it must never be the cheapest class.
+    const text = ['diff --git a/src/x.ts b/src/x.ts', '@@ -1,4 +1,4 @@'].join('|').repeat(40);
+    assert.ok(
+      estimateTokensFromText(text, 'payload') > estimateTokensFromText(text, 'prose'),
+    );
   });
 
   test('unicode uses UTF-16 code unit length', () => {
@@ -110,7 +125,7 @@ describe('estimateToolsTokens', () => {
         },
       },
     ];
-    const direct = estimateTokensFromText(JSON.stringify(tools));
+    const direct = estimateTokensFromText(JSON.stringify(tools), 'schema');
     assert.equal(estimateToolsTokens(tools), direct);
   });
 });

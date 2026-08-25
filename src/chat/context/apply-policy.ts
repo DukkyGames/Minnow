@@ -27,6 +27,10 @@ export interface ApplyContextPolicyParams {
   modelId: string;
   signal?: AbortSignal;
   onStatus?: (level: 'spin' | 'ok', message: string) => void;
+  /** Tokens the request spends outside `messages` (tool schemas in `body.tools`). */
+  reservedTokens?: number;
+  /** Force the message ceiling — used by compact-and-retry with provider-measured numbers. */
+  effectiveLimitOverride?: number | null;
 }
 
 export type ApplyContextPolicyResult = ApplyContextBudgetResult;
@@ -139,6 +143,8 @@ export async function applyContextPolicy(
   const resolved = resolveContextBudget({
     agentConfig: params.agentConfig,
     modelLimit: params.modelLimit,
+    reservedTokens: params.reservedTokens,
+    effectiveLimitOverride: params.effectiveLimitOverride,
   });
 
   const limit = resolved.effectiveLimit;

@@ -25,6 +25,7 @@
 
 import type { BoardTask, Chat } from '../types.ts';
 import { isUiOnlyTranscriptMessage } from '../chat/context/injection-notice.ts';
+import { isContextOverflowText } from '../chat/context/context-overflow-error.ts';
 
 export type FailureCategory = 'infra' | 'code' | 'stall' | 'merge' | 'unknown';
 
@@ -130,24 +131,21 @@ const STALL_MARKERS: string[] = [
   'Could not complete this reply',
 ];
 
-/** Provider copy for a full context window — transient, retriable as code (not stall). */
-const CONTEXT_LENGTH_MARKERS: string[] = [
-  'context length exceeded',
-  'context limit has been reached',
-  'maximum context length',
-  'context_length_exceeded',
-  'exceed context window',
-  'requested tokens',
-];
-
 function matchesAny(text: string, markers: string[]): boolean {
   const lower = text.toLowerCase();
   return markers.some((m) => lower.includes(m.toLowerCase()));
 }
 
-/** True when the transcript shows a context-window overflow (retriable, not a stall). */
+/**
+ * True when the transcript shows a context-window overflow (retriable, not a stall).
+ *
+ * Markers live in context-overflow-error so the classifier and the retry path
+ * agree on what counts. They did not: this list once omitted llama.cpp's
+ * wording, so board chats served by Minnow's own llama-server were classified
+ * as ordinary failures and never retried.
+ */
 export function isTransientContextLengthError(text: string): boolean {
-  return matchesAny(text, CONTEXT_LENGTH_MARKERS);
+  return isContextOverflowText(text);
 }
 
 export function extractChatText(chat: Chat): string {

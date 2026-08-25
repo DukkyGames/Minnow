@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   classifyTaskFailure,
+  extractChatFailureText,
   inferStreamOutcome,
+  isTransientContextLengthError,
   isUnverifiedCompletion,
   resolveTaskChatStreamFailure,
 } from '../../src/state/orchestrate-failure-classify.ts';
@@ -212,6 +214,18 @@ describe('classifyTaskFailure — text markers', () => {
       ),
       'code',
     );
+  });
+
+  test("llama.cpp's own overflow wording is transient, not a stall", () => {
+    // The marker list once missed this exact sentence, so every overflow on
+    // Minnow's built-in llama-server was classified as an ordinary failure and
+    // the retry path never ran.
+    const chat = chatWithText(
+      'Could not complete this reply: Upstream HTTP 400: request (90052 tokens) ' +
+        'exceeds the available context size (89088 tokens), try increasing it',
+    );
+    assert.equal(isTransientContextLengthError(extractChatFailureText(chat)), true);
+    assert.equal(classifyTaskFailure(chat), 'code');
   });
 
   test('clean prose → code', () => {
