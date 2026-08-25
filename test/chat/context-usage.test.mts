@@ -70,7 +70,8 @@ describe('estimateInFlightOverlayTokens', () => {
       thinkingText: 'efgh',
       pendingToolCallsJson: '{"name":"read_file"}',
     });
-    assert.equal(tokens, 5);
+    // 20 chars of tool-call JSON, priced at the payload rate.
+    assert.equal(tokens, 7);
   });
 
   test('returns zero when only streaming prose or reasoning is present', () => {

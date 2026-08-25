@@ -525,139 +525,6 @@
   white-space: nowrap;
 }
 
-.board-header__auto-pilot {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--mn-muted);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: var(--mn-bg);
-  cursor: pointer;
-  user-select: none;
-}
-
-.board-header__auto-pilot-input {
-  margin: 0;
-  accent-color: var(--mn-accent);
-}
-
-.board-header__auto-pilot-label {
-  white-space: nowrap;
-}
-
-/* Execution autonomy: segmented control (composer mode-segment family). */
-.board-header__exec-mode {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.board-header__exec-mode-segments {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--mn-bg);
-  border: 1px solid var(--mn-border);
-}
-
-.board-header__exec-mode-segment {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: calc(var(--radius-sm) - 2px);
-  background: transparent;
-  color: var(--mn-fg-muted);
-  font-family: var(--font-ui);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  line-height: 1.2;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.2s var(--ease-out),
-    color 0.2s var(--ease-out),
-    border-color 0.2s var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .board-header__exec-mode-segment:hover:not([aria-checked='true']) {
-    color: var(--mn-fg);
-    border-color: var(--mn-border);
-    background: color-mix(in srgb, var(--mn-fg) 4%, var(--mn-bg));
-  }
-}
-
-.board-header__exec-mode-segment[aria-checked='true'] {
-  background: var(--mn-accent);
-  border-color: var(--mn-accent);
-  color: var(--mn-accent-fg, var(--mn-fg-on-accent));
-}
-
-.board-header__exec-mode-segment:focus-visible {
-  outline: 2px solid var(--mn-accent);
-  outline-offset: 2px;
-}
-
-.board-header__exec-mode-hint {
-  position: absolute;
-  top: calc(100% + 5px);
-  right: 0;
-  z-index: 2;
-  margin: 0;
-  box-sizing: border-box;
-  width: max-content;
-  max-width: min(20rem, calc(100vw - 24px));
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--mn-border);
-  background: var(--mn-bg);
-  font-family: var(--font-ui);
-  font-size: 0.625rem;
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--mn-fg-muted);
-  white-space: normal;
-  overflow-wrap: break-word;
-  pointer-events: none;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--mn-fg) 8%, transparent);
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 0.4s var(--ease-out),
-    visibility 0s linear 0.4s;
-}
-
-.board-header__exec-mode-hint.is-visible {
-  opacity: 1;
-  visibility: visible;
-  transition:
-    opacity 0.4s var(--ease-out),
-    visibility 0s linear 0s;
-}
-
-.board-header__exec-mode-hint[hidden] {
-  display: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .board-header__exec-mode-hint,
-  .board-header__exec-mode-hint.is-visible {
-    transition: none;
-  }
-}
-
 .board-header__concurrency {
   display: inline-flex;
   align-items: center;
@@ -711,6 +578,8 @@
   border-radius: var(--radius-sm);
 }
 
+/* Hands-off: autonomy is a checkbox now, not a stop on a segmented control. */
+.board-header__hands-off,
 .board-header__skip-per-task-tests {
   display: inline-flex;
   align-items: center;
@@ -724,6 +593,7 @@
   user-select: none;
 }
 
+.board-header__hands-off-input,
 .board-header__skip-per-task-tests-input {
   margin: 0;
   accent-color: var(--mn-accent);
@@ -734,8 +604,13 @@
   opacity: 0.55;
 }
 
+.board-header__hands-off-label,
 .board-header__skip-per-task-tests-label {
   white-space: nowrap;
+}
+
+.board-header__hands-off:has(.board-header__hands-off-input:checked) {
+  color: var(--mn-accent);
 }
 
 /* Long spelling by default; the narrow container query swaps in the short one. */
@@ -1141,7 +1016,262 @@
   flex-direction: column;
   gap: 8px;
   padding: 8px;
+  /* An empty lane still has to be a drop target. */
+  min-height: 44px;
 }
+
+/* ---------- final-test failure detail (finish dashboard) ---------- */
+
+.board-finish-dashboard__final-test {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-danger-border, var(--mn-border));
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-danger-soft, transparent);
+}
+
+.board-finish-dashboard__final-test-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.board-finish-dashboard__final-test-tasks {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+/* ---------- run-settings help lightbox ---------- */
+
+.board-header__run-help {
+  flex: 0 0 auto;
+}
+
+.board-run-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: var(--mn-overlay);
+}
+
+.board-run-help-overlay.hidden {
+  display: none;
+}
+
+.board-run-help-lightbox {
+  display: flex;
+  flex-direction: column;
+  width: min(40rem, calc(100vw - 1.5rem));
+  max-height: min(88dvh, calc(100dvh - 1.5rem));
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  outline: none;
+  animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
+  /* The dialog is its own container: board surfaces live inside MinnowOS windows,
+     so a viewport @media query would not track the width that matters here. */
+  container: board-run-help / inline-size;
+}
+
+.board-run-help-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.board-run-help-header__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.board-run-help-close.icon-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.board-run-help-body {
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.board-run-help-intro,
+.board-run-help-modes__intro {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+.board-run-help-settings {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin-bottom: 20px;
+}
+
+.board-run-help-setting {
+  padding: 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-surface, transparent);
+}
+
+.board-run-help-setting__title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.board-run-help-setting__body {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.board-run-help-setting__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+.board-run-help-modes__title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.board-run-help-mode {
+  display: grid;
+  align-items: start;
+  gap: 4px 10px;
+  grid-template-columns: auto 7rem 1fr;
+  padding: 10px 0;
+  border-top: 1px solid var(--mn-border);
+}
+
+.board-run-help-mode__icon {
+  --mn-icon-size: 16px;
+
+  margin-top: 2px;
+  color: var(--mn-accent, var(--accent));
+}
+
+.board-run-help-mode__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.board-run-help-mode__line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.board-run-help-mode__line--merge {
+  margin-top: 3px;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+@container board-run-help (max-width: 34rem) {
+  .board-run-help-mode {
+    grid-template-columns: auto 1fr;
+  }
+
+  .board-run-help-mode__detail {
+    grid-column: 2;
+  }
+}
+
+/* ---------- bulk recovery split-button (header) ---------- */
+
+.board-header__bulk-requeue {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.board-header__bulk-requeue-primary {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.board-header__bulk-requeue-caret {
+  min-width: 24px;
+  padding: 0 6px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 0;
+}
+
+.board-header__bulk-requeue-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 5;
+  margin-top: 4px;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-bg, var(--bg));
+  box-shadow: var(--mn-shadow, 0 4px 16px oklch(0.1 0.02 250 / 0.12));
+}
+
+.board-header__bulk-requeue-menuitem {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-header__bulk-requeue-menuitem:hover {
+    background: var(--mn-surface-elevated, var(--surface-elevated));
+  }
+}
+
+/* ---------- card drag between lanes (orchestrate-board-dnd.ts) ---------- */
+
+.kanban-column.is-drag-over {
+  background: var(--mn-bg-hover, rgb(255 255 255 / 4%));
+  border-radius: 6px;
+}
+
+.board-task-card--dragging {
+  opacity: 0.5;
+}
+
+.board-drop-indicator {
+  height: 2px;
+  margin: 0 4px;
+  background: var(--mn-accent, var(--accent));
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* No cursor override: cards are click-to-open first, draggable second, and a
+   grab cursor would hide the primary affordance. */
 
 /* Kanban task tile: scannable id + title, compact bench controls in the footer. */
 .board-task-card {
@@ -2136,19 +2266,6 @@
     column-gap: 8px;
   }
 
-  .board-header__exec-mode,
-  .board-header__exec-mode-segments {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .board-header__exec-mode-segment {
-    flex: 1 1 auto;
-    min-height: var(--touch-min);
-    padding: 0 10px;
-    font-size: 0.75rem;
-  }
-
   /* Touch-sized, but never stretched: a 300px-wide "Start" reads as a banner. */
   .board-header__run-btn {
     height: var(--touch-min);
@@ -3002,6 +3119,36 @@
   border-bottom-right-radius: 0;
 }
 
+/* The review link shares the split-button row, so it must be allowed to wrap. */
+.board-finish-dashboard__commit-split--workspace {
+  flex-wrap: wrap;
+}
+
+/* Workspace-commit path only: review the live diff before committing it. */
+.board-finish-dashboard__review-link {
+  align-self: center;
+  margin-left: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--mn-accent, var(--accent));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.board-finish-dashboard__review-link:hover {
+  color: var(--mn-accent-strong, var(--accent));
+}
+
+.board-finish-dashboard__review-link:focus-visible {
+  outline: 2px solid var(--mn-focus, var(--accent));
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 .board-finish-dashboard__commit-caret {
   min-width: 36px;
   padding: 0 8px;
@@ -3114,6 +3261,11 @@
 
   .board-finish-dashboard__commit-primary {
     flex: 1;
+  }
+
+  .board-finish-dashboard__review-link {
+    margin-left: 0;
+    margin-top: 8px;
   }
 }
 

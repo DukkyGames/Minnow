@@ -265,7 +265,7 @@ describe('requeueBoardTask', () => {
         { id: 'SIBLING', title: 'Sibling', wave: 'W1', category: 'build', build: 'do sibling' },
       ],
     });
-    group.orchestrateBoard!.executionMode = 'auto';
+    group.orchestrateBoard!.maxConcurrentTasks = 3;
     group.orchestrateBoard!.autoRunning = true;
     setSessionStateForTests({
       version: 5,
@@ -376,7 +376,7 @@ describe('deliverOrchestratorTaskReport re-drive idempotency', () => {
         { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build', build: 'do a' },
       ],
     });
-    group.orchestrateBoard!.executionMode = 'auto';
+    group.orchestrateBoard!.maxConcurrentTasks = 3;
     group.orchestrateBoard!.autoRunning = true;
     setSessionStateForTests({
       version: 5,

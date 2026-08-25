@@ -61,6 +61,7 @@ export const TOOL_GROUP_IDS = {
   ],
   board: [
     'board_init',
+    'board_add_tasks',
     'board_update_task',
     'board_set_autonomy',
     'board_get_state',

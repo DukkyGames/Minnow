@@ -17,6 +17,7 @@ const MILESTONE_TYPES = new Set<BoardLogEventType>([
   'test_verdict',
   'merge_result',
   'worktree_allocated',
+  'worktree_released',
   'task_retry',
   'task_error',
   'final_test_started',

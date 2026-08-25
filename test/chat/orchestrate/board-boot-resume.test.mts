@@ -45,7 +45,7 @@ function makeGroup(): ChatGroup {
   };
 }
 
-function seedRunningBoard(executionMode: 'auto' | 'sequential' = 'auto') {
+function seedRunningBoard(concurrency = 3) {
   const planner = makePlanner();
   const group = makeGroup();
   initBoard(group, planner, {
@@ -62,7 +62,7 @@ function seedRunningBoard(executionMode: 'auto' | 'sequential' = 'auto') {
     ],
   });
   const board = group.orchestrateBoard!;
-  board.executionMode = executionMode;
+  board.maxConcurrentTasks = concurrency;
   board.autoRunning = true;
   board.tasks[0]!.status = 'in_progress';
   setSessionStateForTests({
@@ -91,10 +91,10 @@ describe('boot orchestrate board resume', () => {
   });
 
   test('resumeBoardExecutionAfterReload keeps board running for stalled in_progress task', async () => {
-    const { planner, group } = seedRunningBoard('sequential');
+    const { planner, group } = seedRunningBoard(1);
     await resumeBoardExecutionAfterReload(group, planner);
     assert.equal(group.orchestrateBoard?.autoRunning, true);
-    assert.equal(group.orchestrateBoard?.executionMode, 'sequential');
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 1);
   });
 
   test('bootOrchestrateBoardResume skips boards that are not running', async () => {
@@ -159,7 +159,7 @@ describe('boot orchestrate board resume', () => {
       ],
     });
     const board = group.orchestrateBoard!;
-    board.executionMode = 'auto';
+    board.maxConcurrentTasks = 3;
     board.autoRunning = true;
     board.integrationBranch = 'minnow/integration/grp_11111111';
 

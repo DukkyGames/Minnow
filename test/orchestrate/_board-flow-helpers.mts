@@ -129,7 +129,7 @@ export function makeGroup(overrides: Partial<ChatGroup> = {}): ChatGroup {
 /** Build planner + group, init board store, register session, start auto-run. */
 export function seedBoard(
   spec: BoardSeedSpec,
-  executionMode: 'auto' | 'sequential' | 'afk' = 'auto',
+  runShape: 'auto' | 'sequential' | 'afk' = 'auto',
 ): { planner: Chat; group: ChatGroup } {
   const planner = makePlanner();
   const group = makeGroup();
@@ -151,9 +151,11 @@ export function seedBoard(
   });
   const board = group.orchestrateBoard!;
   board.integrationBranch = spec.integrationBranch ?? FLOW_INTEGRATION_BRANCH;
-  board.executionMode = executionMode;
+  // Modes are derived now: sequential *is* concurrency 1, afk *is* handsOff.
+  if (runShape === 'sequential') board.maxConcurrentTasks = 1;
+  if (runShape === 'afk') board.handsOff = true;
   board.autoRunning = true;
-  if (spec.maxConcurrentTasks !== undefined) {
+  if (spec.maxConcurrentTasks !== undefined && runShape !== 'sequential') {
     board.maxConcurrentTasks = spec.maxConcurrentTasks;
   }
   const decoyChat: Chat = {

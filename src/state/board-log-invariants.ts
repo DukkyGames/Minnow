@@ -73,7 +73,11 @@ export interface BoardLogCheckOptions {
   requireTerminal?: boolean;
   /** Make missing durable Phase-2 evidence affect `ok`; default is legacy-compatible. */
   strictEvidence?: boolean;
-  /** Explicit mode when the log starts after the mode_change event. */
+  /**
+   * Explicit derived mode when the log starts after the mode_change event.
+   * `manual` is no longer producible — a board that was never started simply has
+   * no run to audit.
+   */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   /** Board skipped per-task Tester (in_progress may jump to complete after merge). */
   skipPerTaskTesting?: boolean;
@@ -746,7 +750,11 @@ function auditDurableEvents(
   };
 
   for (const event of ctx.sorted) {
-    if (event.type === 'mode_change' && event.detail?.mode === 'afk') afk = true;
+    // Mode is derived from concurrency + hands-off now, so it can move *out* of
+    // AFK mid-run (the user unticks Hands-off). Track the latest value, not a latch.
+    if (event.type === 'mode_change' && event.detail?.mode) {
+      afk = event.detail.mode === 'afk';
+    }
     if (event.type === 'task_status' && event.taskId && event.detail?.to) {
       taskStatuses[event.taskId] = event.detail.to;
     } else if (event.type === 'task_quarantined' && event.taskId) {

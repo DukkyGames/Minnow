@@ -71,7 +71,7 @@ function seedRunningBoard(): { planner: Chat; group: ChatGroup } {
     ],
   });
   const board = group.orchestrateBoard!;
-  board.executionMode = 'auto';
+  board.maxConcurrentTasks = 3;
   board.autoRunning = true;
   setSessionStateForTests({
     version: 5,

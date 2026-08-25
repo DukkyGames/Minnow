@@ -4,6 +4,7 @@
  */
 
 import { scrollChatIfPinned } from './chat-scroll';
+import { resolveChatMount } from './chat-mount';
 import { splitThinkingSegments } from '../api/reasoning';
 import { formatThinkingDuration } from './thinking-duration';
 
@@ -303,6 +304,7 @@ export class ThoughtBubbleController {
     this.toggleBtn.setAttribute('aria-expanded', this.expanded ? 'true' : 'false');
     this.caretEl.classList.toggle('thoughts-caret--expanded', this.expanded);
     this.caretEl.classList.toggle('thoughts-caret--pulse', !this.expanded);
+    syncThoughtsCaretPulse(thoughtsScopeFromEl(this.caretEl));
     if (this.expanded) {
       this.syncFlowContent();
     }
@@ -344,12 +346,47 @@ export class ThoughtBubbleController {
 }
 
 /**
+ * Resolve the mount that holds the `.msg` rows owning `el` (the element whose
+ * children are the message rows). Returns null when `el` is not inside a `.msg`.
+ */
+export function thoughtsScopeFromEl(el: HTMLElement): HTMLElement | null {
+  return el.closest('.msg')?.parentElement ?? null;
+}
+
+/**
+ * Enforce the single-pulse invariant: at most one `.thoughts-caret` animates —
+ * always the most recent in DOM order (the live "Thinking…" stage while
+ * reasoning is active, otherwise the newest settled "Thought for" toggle).
+ * Expanded carets never pulse.
+ *
+ * `scope` is the mount holding the `.msg` rows; when null it falls back to the
+ * active chat mount.
+ */
+export function syncThoughtsCaretPulse(scope: HTMLElement | null): void {
+  const root = scope ?? resolveChatMount();
+  if (!root) return;
+  const carets = Array.from(root.querySelectorAll('.thoughts-caret'));
+  for (const caret of carets) {
+    caret.classList.remove('thoughts-caret--pulse');
+  }
+  const last = carets[carets.length - 1];
+  if (last && !last.classList.contains('thoughts-caret--expanded')) {
+    last.classList.add('thoughts-caret--pulse');
+  }
+}
+
+/**
  * Renders the "Thoughts" control and expandable flow above the assistant bubble.
  * Skips when there are no segments. Idempotent if already present.
  */
 export interface ThoughtsToggleOptions {
   expanded?: boolean;
   durationMs?: number;
+  /**
+   * Whether the collapsed caret pulses. Defaults to false — settled "Thought for
+   * X.Xs" toggles stay static; only the current reasoning indicator animates.
+   */
+  pulse?: boolean;
 }
 
 export function renderThoughtsToggle(
@@ -387,10 +424,10 @@ export function renderThoughtsToggle(
 
   const caret = document.createElement('span');
   caret.className = 'thoughts-caret';
-  if (!expanded) {
-    caret.classList.add('thoughts-caret--pulse');
-  } else {
+  if (expanded) {
     caret.classList.add('thoughts-caret--expanded');
+  } else if (resolved.pulse === true) {
+    caret.classList.add('thoughts-caret--pulse');
   }
   caret.setAttribute('aria-hidden', 'true');
 
@@ -415,7 +452,7 @@ export function renderThoughtsToggle(
     flow.hidden = !nowExpanded;
     btn.setAttribute('aria-expanded', nowExpanded ? 'true' : 'false');
     caret.classList.toggle('thoughts-caret--expanded', nowExpanded);
-    caret.classList.toggle('thoughts-caret--pulse', !nowExpanded);
+    syncThoughtsCaretPulse(thoughtsScopeFromEl(caret));
     const currentLabel = labelSpan.textContent ?? 'Thoughts';
     btn.setAttribute(
       'aria-label',

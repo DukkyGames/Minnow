@@ -8,7 +8,10 @@ import path from 'node:path';
 import { beforeEach, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { composeSystemPrompt } from '../../src/chat/prompts/prompt-composer.ts';
-import { estimateTokensFromText } from '../../src/chat/prompts/token-estimate-core.ts';
+import {
+  charsPerTokenFor,
+  estimateTokensFromText,
+} from '../../src/chat/prompts/token-estimate-core.ts';
 import {
   registerPromptFilesFromRaw,
   resetPromptRegistry,
@@ -126,8 +129,14 @@ describe('prompt overlap collapse (MIN-335 / MIN-379)', () => {
 
     // Normalize newlines so Windows checkouts (CRLF) match Linux CI token estimates.
     const currentTokens = estimateTokensFromText(current.replace(/\r\n/g, '\n'));
-    // Pre-MIN-379: base + build mode + builder + tool-usage stack (~5900 tok).
-    const preMin379BuildTokens = 5900;
+    // Pre-MIN-379: base + build mode + builder + tool-usage stack. Recorded in
+    // *characters* — that is what the old stack actually was — and priced with
+    // today's estimator, so recalibrating the divisor moves both sides of the
+    // comparison and cannot fake a regression in prompt overlap.
+    const preMin379BuildChars = 23_600;
+    const preMin379BuildTokens = Math.round(
+      preMin379BuildChars / charsPerTokenFor('prose'),
+    );
     const saved = preMin379BuildTokens - currentTokens;
     const pctSaved = (saved / preMin379BuildTokens) * 100;
 

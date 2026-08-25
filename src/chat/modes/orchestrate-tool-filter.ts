@@ -15,6 +15,7 @@ import {
 
 const BOARD_MEMBER_STRIPPED_TOOLS = new Set([
   'board_init',
+  'board_add_tasks',
   'board_update_task',
   'board_set_autonomy',
   'delegate_tasks',

@@ -189,6 +189,8 @@ export interface AssistantMessage {
   thinkingDurationMs?: number;
   /** User stopped generation before the model finished. */
   stopped?: boolean;
+  /** Turn errored mid-stream; this row is the partial output that was kept. */
+  failed?: true;
   /** Model hit max_tokens; user can continue the reply. */
   truncated?: true;
   stats?: Stats;
@@ -604,8 +606,20 @@ export interface OrchestrateBoardState {
   reasoningEffort?: ReasoningEffortOption;
   /** Per-board thinking override for off/on-only models (planner + linked task chats). */
   thinkingMode?: ThinkingTriState;
-  /** Manual board vs auto-pilot delegation (default manual). */
+  /**
+   * @deprecated Replaced by {@link maxConcurrentTasks} + {@link handsOff}. Kept only
+   * so legacy sessions can hydrate and migrate; never written by new code. Read the
+   * derived value via `getBoardExecutionMode`.
+   */
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  /** Fully autonomous: never prompt the user until Stop or board finish. */
+  handsOff?: boolean;
+  /**
+   * Frozen, human-readable directory segment for this board's worktrees
+   * (`~/.minnow/worktrees/<repo>-<hash>/<worktreeSlug>/…`). Minted once from the
+   * board title so renaming the board never orphans a worktree.
+   */
+  worktreeSlug?: string;
   /** When true, skip per-task Tester; only final integration test runs verification. */
   skipPerTaskTesting?: boolean;
   /** True when the user has pressed Start in auto/sequential mode. */
@@ -626,9 +640,9 @@ export interface OrchestrateBoardState {
   systemPaused?: boolean;
   /**
    * Filesystem/process isolation for parallel tasks (MIN-275). When unset it is
-   * resolved from {@link executionMode} (sequential/manual → off, auto/afk → per-task).
+   * resolved from concurrency (1 → per-board, >1 → per-task).
    */
-  isolationMode?: 'off' | 'per-task' | 'per-wave';
+  isolationMode?: 'off' | 'per-task' | 'per-wave' | 'per-board';
   /**
    * Agent shell sandbox for this board (MIN-553). When unset, inherits Autopilot
    * default (`require`). Complementary to {@link isolationMode} (git worktrees).
@@ -660,6 +674,12 @@ export interface OrchestrateBoardState {
     recordedVerdict?: 'pass' | 'fail';
     failingTaskIds?: string[];
     summary?: string;
+    /**
+     * Commands the final tester **actually ran and verified**, reported via
+     * `board_report`. The finish report prints these instead of guessing; when
+     * absent it falls back to manifest detection and labels it unverified.
+     */
+    runInstructions?: BoardRunInstructions;
   };
   /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
   log?: BoardLogEvent[];
@@ -669,6 +689,14 @@ export interface OrchestrateBoardState {
   provisionedSignatures?: string[];
   /** Structured per-task unresolved issues — data source for the MIN-208 finish dashboard. */
   unresolvedIssues?: UnresolvedIssue[];
+}
+
+/** Verified project commands reported by the final integration tester. */
+export interface BoardRunInstructions {
+  install?: string;
+  start?: string;
+  test?: string;
+  notes?: string;
 }
 
 export type BoardLogLevel = 'info' | 'warn' | 'error';
@@ -684,6 +712,7 @@ export type BoardLogEventType =
   | 'test_verdict'
   | 'merge_result'
   | 'worktree_allocated'
+  | 'worktree_released'
   | 'task_retry'
   | 'nudge'
   | 'task_error'
@@ -750,6 +779,10 @@ export interface BoardLogDetail {
   error?: string;
   summary?: string;
   failingTaskIds?: string[];
+  /** Wave a `board_add_tasks` append landed in. */
+  waveId?: string;
+  /** Task ids appended to a running board. */
+  taskIds?: string[];
   /** Durable correlation id for one phase invocation. */
   phaseId?: string;
   phase?: BoardExecutionPhase;
@@ -1280,6 +1313,7 @@ export interface SessionSummariesState {
   chats: ChatSummary[];
   groups?: ChatGroup[];
   activeBoardGroupId?: string;
+  lastBoardGroupId?: string;
   lastActiveChatIdByWorkspace?: Record<string, string>;
   lastActiveChatIdByApp?: Record<string, string>;
   codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
@@ -1465,6 +1499,12 @@ export interface SessionState {
   groups?: ChatGroup[];
   /** Folder whose board fills #chatArea when viewMode is board. */
   activeBoardGroupId?: string;
+  /**
+   * Board folder the user was last inside, kept after they navigate away so
+   * re-entering Orchestrator lands back on it instead of the hub.
+   * Unlike `activeBoardGroupId` this does *not* mean a board is mounted.
+   */
+  lastBoardGroupId?: string;
   /** Last selected chat per normalized workspace key ('' = unassigned bucket). */
   lastActiveChatIdByWorkspace?: Record<string, string>;
   /** Last selected chat per Minnow app id (e.g. `{ chat: '…' }` for the Chat app). */

@@ -208,13 +208,15 @@ function teardownBoardGroup(group: ChatGroup, chatIds: readonly string[]): void 
     getChatAbort(chatId)?.abort();
   }
   if (group.orchestrateBoard?.integrationBranch) {
-    void fetch('/api/worktree', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op: 'cleanup', boardId: group.id }),
-    }).catch(() => {
-      /* best-effort on folder delete */
-    });
+    // The board folder is going away, so nothing is left to commit from the
+    // integration checkout — `includeIntegration` is what stops it (and the board
+    // worktree dir) leaking forever. Branches are kept; only directories go.
+    // Imported lazily: orchestrate-board-actions imports this module.
+    void import('./orchestrate-board-actions.ts')
+      .then((m) => m.cleanupBoardIsolation(group, { includeIntegration: true }))
+      .catch(() => {
+        /* best-effort on folder delete */
+      });
   }
 }
 
@@ -238,6 +240,10 @@ export function deleteGroup(
     const chatIds = listBoardGroupChatIds(group, state.chats);
     teardownBoardGroup(group, chatIds);
     groups.splice(idx, 1);
+    if (state.lastBoardGroupId === id) {
+      delete state.lastBoardGroupId;
+      markSessionScalarsDirty();
+    }
 
     let lastRemoval: RemoveChatResult | undefined;
     let activeChanged = false;
@@ -308,6 +314,18 @@ export function getActiveBoardGroup(): ChatGroup | undefined {
   const state = sessionState;
   if (!state?.activeBoardGroupId) return undefined;
   return findGroupById(state.activeBoardGroupId);
+}
+
+/**
+ * Board folder the user was last inside — still set after they navigate away,
+ * which is what {@link getActiveBoardGroup} deliberately is not.
+ */
+export function getLastBoardGroup(): ChatGroup | undefined {
+  const state = sessionState;
+  const id = state?.lastBoardGroupId?.trim();
+  if (!id) return undefined;
+  const group = findGroupById(id);
+  return group?.orchestrateBoard ? group : undefined;
 }
 
 /** Clear board main-column focus (same as leaving board via switchChat). */
@@ -433,6 +451,8 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   const state = requireSession();
   collapseChatSidebarForBoardEnter();
   state.activeBoardGroupId = groupId;
+  // Survives navigating away, so re-entering Orchestrator returns here.
+  state.lastBoardGroupId = groupId;
   markSessionScalarsDirty();
   group.viewMode = 'board';
   persistGroupChange(groupId);

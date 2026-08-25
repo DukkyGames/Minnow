@@ -269,6 +269,14 @@
   margin-bottom: 4px;
 }
 
+.msg.assistant.msg--failed .msg-failed-chip {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-danger, var(--mn-fg-muted));
+  margin-bottom: 4px;
+}
+
 .msg.assistant.msg--truncated .msg-truncated-chip {
   display: flex;
   align-items: center;

@@ -1,5 +1,11 @@
 /**
  * File-tree drag-and-drop: internal moves + OS file/folder import into workspace folders.
+ *
+ * Robustness note: browsers track drop-allowance per DOM element and clear it on
+ * `dragleave`, so a `drop` event may never fire even when the last `dragover` was
+ * allowed (the item snaps back). The `dragend` handler therefore falls back to
+ * resolving the release point via `document.elementFromPoint` and performs the
+ * move itself when no `drop` was handled.
  */
 
 import { collectDroppedTreeEntries } from '../attachments/directory-drop';
@@ -19,6 +25,8 @@ let hostBound: HTMLElement | null = null;
 let moveInFlight = false;
 /** Set on dragstart; dragover cannot read DataTransfer.getData in most browsers. */
 let activeDragSourcePath: string | null = null;
+/** Set when the `drop` handler dispatches a move/import; the dragend fallback skips when true. */
+let dropHandled = false;
 
 function hasWorkspaceDrag(dataTransfer: DataTransfer | null): boolean {
   return classifyFileDrag(dataTransfer) === 'workspace';
@@ -53,17 +61,11 @@ function clearDropHighlight(host: HTMLElement): void {
   }
 }
 
-async function handleTreeDrop(
-  event: DragEvent,
-  targetRow: HTMLElement,
-): Promise<void> {
-  const dataTransfer = event.dataTransfer;
-  if (!dataTransfer) return;
-
-  const source = activeDragSourcePath?.trim() || (dataTransfer ? pathFromDataTransfer(dataTransfer) : null) || '';
-  const destDir = targetRow.dataset.path;
-  if (!source || !destDir) return;
-
+/**
+ * Core internal move: validate + move `source` into `destDir`. Shared by the
+ * `drop` handler and the `dragend` fallback.
+ */
+async function performTreeMove(source: string, destDir: string): Promise<void> {
   const destination = computeMoveDestination(source, destDir);
   if (!destination) {
     if (basename(source) && destDir === source) {
@@ -82,6 +84,21 @@ async function handleTreeDrop(
   } finally {
     moveInFlight = false;
   }
+}
+
+async function handleTreeDrop(
+  event: DragEvent,
+  targetRow: HTMLElement,
+): Promise<void> {
+  const dataTransfer = event.dataTransfer;
+  if (!dataTransfer) return;
+
+  const source = activeDragSourcePath?.trim() || (dataTransfer ? pathFromDataTransfer(dataTransfer) : null) || '';
+  const destDir = targetRow.dataset.path;
+  if (!source || !destDir) return;
+
+  dropHandled = true;
+  await performTreeMove(source, destDir);
 }
 
 async function handleExternalTreeDrop(
@@ -122,6 +139,7 @@ function bindHost(host: HTMLElement): void {
     'dragstart',
     (event) => {
       activeDragSourcePath = pathFromDragRow(event.target);
+      dropHandled = false;
     },
     true,
   );
@@ -190,6 +208,7 @@ function bindHost(host: HTMLElement): void {
     if (hasExternalDrag(event.dataTransfer)) {
       const row = folderRowFromTarget(event.target);
       const destDir = row?.dataset.path ?? '.';
+      dropHandled = true;
       void handleExternalTreeDrop(event, destDir);
       return;
     }
@@ -202,8 +221,28 @@ function bindHost(host: HTMLElement): void {
     void handleTreeDrop(event, row);
   });
 
-  host.addEventListener('dragend', () => {
+  host.addEventListener('dragend', (event) => {
+    // Fallback: the browser may never fire `drop` (a `dragleave` cleared the
+    // per-element drop-allowed state first). Resolve the release point via
+    // elementFromPoint and perform the move so the item does not snap back.
+    const source = activeDragSourcePath?.trim() ?? '';
+    if (!dropHandled && source) {
+      const under = (typeof document.elementFromPoint === 'function'
+        ? document.elementFromPoint(event.clientX, event.clientY)
+        : null) as HTMLElement | null;
+      const destRow = (under?.closest('.file-tree-row--dir') as HTMLElement | null) ?? null;
+      if (
+        destRow?.dataset.path &&
+        host.contains(destRow) &&
+        getLocalServerAvailable() &&
+        !moveInFlight
+      ) {
+        void performTreeMove(source, destRow.dataset.path);
+      }
+    }
+
     activeDragSourcePath = null;
+    dropHandled = false;
     clearDropHighlight(host);
   });
 }
@@ -223,4 +262,5 @@ export function resetFileTreeDnDForTests(): void {
   hostBound = null;
   moveInFlight = false;
   activeDragSourcePath = null;
+  dropHandled = false;
 }

@@ -2,6 +2,10 @@
  * MIN-187: boot resume must subscribe once; post-tool rounds POST new generations.
  */
 
+// Must come first: dompurify binds to globalThis.window at module eval, and the
+// tool loop renders assistant markdown on both the success and failure paths.
+import './install-dom-before-imports.mts';
+
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';

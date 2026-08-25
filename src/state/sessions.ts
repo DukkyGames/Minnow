@@ -385,6 +385,7 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
     // Optional keys: send explicit null so PATCH can clear them.
     scalars.sidebarWidth = state.sidebarWidth ?? null;
     scalars.activeBoardGroupId = state.activeBoardGroupId ?? null;
+    scalars.lastBoardGroupId = state.lastBoardGroupId ?? null;
     if (state.codeChangeTotalsByWorkspace) {
       scalars.codeChangeTotalsByWorkspace = state.codeChangeTotalsByWorkspace;
     }
@@ -728,6 +729,7 @@ function sessionStateFromSummaries(remote: SessionSummariesState): SessionState 
     chats: inflatedChats,
     groups: remote.groups,
     activeBoardGroupId: remote.activeBoardGroupId,
+    lastBoardGroupId: remote.lastBoardGroupId,
     lastActiveChatIdByWorkspace: remote.lastActiveChatIdByWorkspace,
     lastActiveChatIdByApp: remote.lastActiveChatIdByApp,
     sidebarWidth: remote.sidebarWidth,
@@ -1082,6 +1084,12 @@ export function parseSessionStateFromJson(parsed: RawSessionJson | null): Sessio
     rawSession.activeBoardGroupId.trim()
   ) {
     state.activeBoardGroupId = rawSession.activeBoardGroupId.trim();
+  }
+  if (
+    typeof rawSession.lastBoardGroupId === 'string' &&
+    rawSession.lastBoardGroupId.trim()
+  ) {
+    state.lastBoardGroupId = rawSession.lastBoardGroupId.trim();
   }
   if (ver < 5 || state.chats.some((c) => c.orchestrateBoard)) {
     migrateSessionV4ToV5(state);

@@ -7,16 +7,19 @@ import {
   thinkingBudgetGraceTokens,
   THINKING_BUDGET_EPHEMERAL_RETRY_INSTRUCTION,
 } from '../../src/agents/thinking-budget.ts';
+import { charsPerTokenFor } from '../../src/chat/prompts/token-estimate-core.ts';
 
 /**
- * `estimateTokensFromText` is chars ÷ 4, so N tokens of filler is 4N chars.
+ * Reasoning text is estimated at the `prose` rate, so N tokens of filler is
+ * N × that divisor in characters — read it from the source rather than
+ * restating it, so recalibrating the estimator does not rewrite this suite.
  * Each call uses a different character so one run is never a prefix of the next —
  * the tracker treats a prefix-extending delta as a cumulative resend.
  */
 let fillerRun = 0;
 function tokens(count: number): string {
   const char = String.fromCharCode(97 + fillerRun++ % 26);
-  return char.repeat(count * 4);
+  return char.repeat(Math.round(count * charsPerTokenFor('prose')));
 }
 
 describe('ThinkingBudgetTracker turn accounting', () => {

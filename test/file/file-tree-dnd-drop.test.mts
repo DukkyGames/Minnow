@@ -194,4 +194,45 @@ describe('file-tree DnD drop', () => {
 
     assert.equal(movePathCalls.length, 0, 'no move when dropping on the host background');
   });
+
+  test('dragend fallback moves the file when the browser never fires drop', async () => {
+    setupDom(`${FILE_ROW}${DOCS_ROW}`);
+    dnd.initFileTreeDnD();
+
+    const fileRow = document.querySelector('[data-path="notes/a.ts"]')!;
+    const docsRow = document.querySelector('[data-path="docs"]')!;
+
+    // The browser never fires `drop` (a `dragleave` cleared the per-element
+    // drop-allowed state just before release). Stub elementFromPoint to return
+    // the folder row the cursor released over, so the dragend fallback resolves
+    // the target and performs the move.
+    win.document.elementFromPoint = () => docsRow;
+
+    dispatchDrag('dragstart', fileRow, makeDataTransfer('notes/a.ts', true));
+    dispatchDrag('dragend', fileRow, makeDataTransfer('notes/a.ts', true));
+    await settle();
+
+    assert.deepEqual(
+      movePathCalls,
+      [{ source: 'notes/a.ts', destination: 'docs/a.ts', operation: 'move' }],
+      'dragend fallback moves the file into the folder under the cursor',
+    );
+  });
+
+  test('dragend fallback is a no-op when the release point is not a folder', async () => {
+    setupDom(`${FILE_ROW}${DOCS_ROW}`);
+    dnd.initFileTreeDnD();
+
+    const fileRow = document.querySelector('[data-path="notes/a.ts"]')!;
+    const host = document.getElementById('fileTreeHost')!;
+
+    // Release point resolves to the host background (no folder row).
+    win.document.elementFromPoint = () => host;
+
+    dispatchDrag('dragstart', fileRow, makeDataTransfer('notes/a.ts', true));
+    dispatchDrag('dragend', fileRow, makeDataTransfer('notes/a.ts', true));
+    await settle();
+
+    assert.equal(movePathCalls.length, 0, 'no move when the release point is not a folder');
+  });
 });
