@@ -97,7 +97,7 @@ import { resetTokenLedger } from '../usage/token-ledger';
 import { updateCodeChangeStrip } from './code-change-strip';
 import { renderSidebar } from './sidebar';
 import { syncTodoPanel } from './todo-panel';
-import { renderThoughtsToggle } from './thought-bubbles';
+import { renderThoughtsToggle, syncThoughtsCaretPulse } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 import { attachShellKillUi } from './shell-run-ui';
 import { markMessageStopped } from './stopped-affordance';
@@ -579,6 +579,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     attachVoicePlayButton(wrap, trimmed);
   }
   renderPersistedSubAgentCardsForChat(chat);
+  syncThoughtsCaretPulse(area);
   restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
   if (isChatStreaming(chat.id) && isStreamDomVisible(chat.id)) {

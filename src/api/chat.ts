@@ -65,7 +65,12 @@ import {
   type RoutedContentPart,
 } from './inline-thinking';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
-import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
+import {
+  renderThoughtsToggle,
+  ThoughtBubbleController,
+  syncThoughtsCaretPulse,
+  thoughtsScopeFromEl,
+} from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import {
   appendInjectionNoticesForTurn,
@@ -856,6 +861,7 @@ export async function sendMessage(): Promise<void> {
         renderThoughtsToggle(wrap, thinkingNorm, {
           durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
         });
+        syncThoughtsCaretPulse(thoughtsScopeFromEl(wrap));
       }
       updateStrip(meta.stats, meta.usage, modelInfo);
       setStatus('ok', 'Ready');

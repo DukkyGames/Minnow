@@ -216,7 +216,12 @@ import {
 import { completeStreamAnnouncer } from '../ui/a11y/stream-announcer';
 import { refreshBranchPickerAtFork } from '../ui/branch-picker';
 import { setContextInFlightOverlay } from '../chat/context-in-flight';
-import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
+import {
+  renderThoughtsToggle,
+  ThoughtBubbleController,
+  syncThoughtsCaretPulse,
+  thoughtsScopeFromEl,
+} from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import type { StreamingStatusHandle } from '../ui/stream-status';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
@@ -1362,6 +1367,7 @@ function finalizeAndAnchorThinkingRound(opts: {
     } else if (!opts.hasProse) {
       removeOrphanStreamingRow(opts.wrap, opts.streamStatus);
     }
+    syncThoughtsCaretPulse(thoughtsScopeFromEl(opts.wrap));
   }
   return { segments, durationMs };
 }
@@ -2678,6 +2684,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               durationMs:
                 thinkingDurationForPersist > 0 ? thinkingDurationForPersist : undefined,
             });
+            syncThoughtsCaretPulse(thoughtsScopeFromEl(lastWrap));
           }
           const histIdx = chat.history.length - 1;
           const { attachMessageActions } = await import('../ui/message-actions');
@@ -2776,6 +2783,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               renderThoughtsToggle(lastWrap, thinkingNorm, {
                 durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
               });
+              syncThoughtsCaretPulse(thoughtsScopeFromEl(lastWrap));
             }
           } else if (thinkingNorm.length > 0) {
             anchorPersistedThoughtsOnRow(lastWrap, thinkingNorm, {
