@@ -51,9 +51,16 @@ function getComposerControls(): HTMLElement | null {
 /** Home in toolbar: after thinking toggle, before work-agent dev strip. */
 function insertPlanStripInToolbar(strip: HTMLElement): void {
   const toolbar = getComposerControls();
-  const anchor = document.getElementById('workAgentDev');
   if (!toolbar) return;
-  if (anchor) {
+  // Compact parks the strip (and the work-agent anchor) in the cog sheet;
+  // pulling it back here would undo that parking.
+  if (toolbar.classList.contains('composer-controls--compact') && !toolbar.contains(strip)) {
+    return;
+  }
+  const anchor = document.getElementById('workAgentDev');
+  // The anchor is parked in the cog sheet while compact, so it is not always
+  // a child of the toolbar — insertBefore would throw NotFoundError.
+  if (anchor?.parentNode === toolbar) {
     toolbar.insertBefore(strip, anchor);
   } else {
     toolbar.appendChild(strip);
