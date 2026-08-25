@@ -9,6 +9,7 @@ import { ensureChatsWorkspace } from '../chats-workspace/paths.js';
 import { ensureDesktopWorkspace, initDesktopWorkspacePath } from '../desktop-workspace/paths.js';
 import { ensureSchedulerWorkspace } from '../scheduler-workspace/paths.js';
 import { ensureMinnowLayout, getMinnowHome } from '../config/home.js';
+import { sweepCheckpoints } from '../generations/checkpoint.js';
 import { initLspConfig } from '../lsp/middleware.js';
 import { initMcpApi } from '../mcp/middleware.js';
 import { initServersApi } from '../servers/index.js';
@@ -40,6 +41,8 @@ export async function bootstrapMinnowRuntime() {
   await initServersApi();
   await initPluginsApi();
   await recomputeAllNextRuns();
+  // Replayable generations are only useful for as long as a client might come back.
+  sweepCheckpoints();
   const homePath = getMinnowHome();
   return {
     workspacePath,

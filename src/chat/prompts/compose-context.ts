@@ -28,6 +28,7 @@ import { fetchBrainCodeConfig } from '../../brain/client';
 import { loadContextDocumentsSettings, shouldInjectContextDocuments } from '../../chat/context-documents/config';
 import { retrieveContextDocumentsBlock } from '../../chat/context-documents/injection';
 import { shouldRunFirstTurnInjections } from './first-turn-injection';
+import { resolveInjectionReplay } from '../context/injection-replay';
 import { loadPromptConfig } from './prompt-configs';
 import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
@@ -61,6 +62,8 @@ export interface BuildComposeContextOptions {
   routeUserText?: string;
   /** First user message send (set before history.push); gates first-turn injections. */
   firstUserSend?: boolean;
+  /** Model context window; sizes the replay cap for stored injection bodies. */
+  modelContextLimit?: number | null;
   overrides?: Partial<ComposeContext>;
 }
 
@@ -102,12 +105,30 @@ export async function buildComposeContext(
     meta.activeInfoPresetId ??
     'general-assistant';
 
-  let memoryBlock: string | null = null;
   const runFirstTurn = shouldRunFirstTurnInjections(chat, {
     firstUserSend: options?.firstUserSend,
   });
-  const injectMemory = runFirstTurn && (await shouldInjectMemory(chat));
-  if (injectMemory) {
+  /*
+   * The prompt is recomposed on every send (mode, agent, skill, tools and cwd all
+   * move mid-chat), but retrieval only runs on turn 1. Replaying the persisted
+   * bodies keeps turn 20 carrying the same durable context turn 1 had — and keeps
+   * the leading system message byte-stable, so local KV prefixes still hit.
+   */
+  const replayBodies = runFirstTurn
+    ? {}
+    : resolveInjectionReplay(chat.history, {
+        modelContextLimit: options?.modelContextLimit,
+      });
+  let injectionsReplayed = false;
+
+  let memoryBlock: string | null = null;
+  const replayBrainNotes = replayBodies['brain-notes'] ?? null;
+  const injectMemory =
+    (runFirstTurn || Boolean(replayBrainNotes)) && (await shouldInjectMemory(chat));
+  if (injectMemory && !runFirstTurn) {
+    memoryBlock = replayBrainNotes;
+    injectionsReplayed = true;
+  } else if (injectMemory) {
     const query =
       options?.routeUserText ??
       options?.userMessagePreview ??
@@ -127,8 +148,13 @@ export async function buildComposeContext(
   const worktreeCwd = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
 
   let codeMapBlock: string | null = null;
-  const injectCodeMap = runFirstTurn && (await shouldInjectCodeMap(chat));
-  if (injectCodeMap) {
+  const replayCodeMap = replayBodies['code-map'] ?? null;
+  const injectCodeMap =
+    (runFirstTurn || Boolean(replayCodeMap)) && (await shouldInjectCodeMap(chat));
+  if (injectCodeMap && !runFirstTurn) {
+    codeMapBlock = replayCodeMap;
+    injectionsReplayed = true;
+  } else if (injectCodeMap) {
     const codeConfig = await fetchBrainCodeConfig();
     const preview =
       options?.routeUserText ?? options?.userMessagePreview ?? '';
@@ -155,9 +181,14 @@ export async function buildComposeContext(
   }
 
   let contextDocumentsBlock: string | null = null;
+  const replayContextDocuments = replayBodies['context-documents'] ?? null;
   const injectContextDocuments =
-    runFirstTurn && (await shouldInjectContextDocuments(chat));
-  if (injectContextDocuments) {
+    (runFirstTurn || Boolean(replayContextDocuments)) &&
+    (await shouldInjectContextDocuments(chat));
+  if (injectContextDocuments && !runFirstTurn) {
+    contextDocumentsBlock = replayContextDocuments;
+    injectionsReplayed = true;
+  } else if (injectContextDocuments) {
     const { documents } = await loadContextDocumentsSettings();
     contextDocumentsBlock =
       (await retrieveContextDocumentsBlock({
@@ -182,6 +213,7 @@ export async function buildComposeContext(
     codeMapInjectionEnabled: injectCodeMap,
     contextDocumentsBlock,
     contextDocumentsInjectionEnabled: injectContextDocuments,
+    injectionsReplayed,
     enabledToolIds,
     infoPresetId,
     planGranularity: meta.planGranularity ?? 'medium',
@@ -321,14 +353,21 @@ export async function resolveOutboundSystemMessages(
     const { composeSystemPrompt } = await import('./prompt-composer');
     const ctx = await resolveComposeContextForSend(chat, options);
     composedRaw = composeSystemPrompt(ctx);
-    const brain = ctx.memoryBlock?.trim() ?? '';
-    const codeMap = ctx.codeMapBlock?.trim() ?? '';
-    const contextDocuments = ctx.contextDocumentsBlock?.trim() ?? '';
-    injectionBlocks = {
-      brainNotes: brain || null,
-      codeMap: codeMap || null,
-      contextDocuments: contextDocuments || null,
-    };
+    /*
+     * Replayed blocks came *from* the transcript, so re-announcing them would push a
+     * fresh `injection` row on every single turn. Only freshly retrieved bodies get a
+     * notice; the prompt still carries the text either way.
+     */
+    if (!ctx.injectionsReplayed) {
+      const brain = ctx.memoryBlock?.trim() ?? '';
+      const codeMap = ctx.codeMapBlock?.trim() ?? '';
+      const contextDocuments = ctx.contextDocumentsBlock?.trim() ?? '';
+      injectionBlocks = {
+        brainNotes: brain || null,
+        codeMap: codeMap || null,
+        contextDocuments: contextDocuments || null,
+      };
+    }
   } catch {
     composedRaw = '';
   }

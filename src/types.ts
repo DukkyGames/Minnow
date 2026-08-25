@@ -189,6 +189,8 @@ export interface AssistantMessage {
   thinkingDurationMs?: number;
   /** User stopped generation before the model finished. */
   stopped?: boolean;
+  /** Turn errored mid-stream; this row is the partial output that was kept. */
+  failed?: true;
   /** Model hit max_tokens; user can continue the reply. */
   truncated?: true;
   stats?: Stats;
