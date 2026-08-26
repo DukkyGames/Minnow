@@ -20,7 +20,7 @@ Builds may be unsigned, and SmartScreen will announce that the publisher is unkn
 
 ## What happens on first launch
 
-Minnow opens on the **workspaces picker**: choose a project folder (or continue without one), then land in **Code** with chat in the left rail beside your editor. The menubar and app rail are always there; chat is not a separate home screen or dock app.
+Minnow opens on the **workspaces picker**: choose a project folder, then land in **Code** with chat in the left rail beside your editor. The menubar and app rail are always there; chat is not a separate home screen or dock app.
 
 Two things happen behind the scenes:
 

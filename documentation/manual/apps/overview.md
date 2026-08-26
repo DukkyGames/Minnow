@@ -4,7 +4,7 @@ Minnow is one shell built around **Code**. Everything else is a surface that sup
 
 Code, Research, Models, Brain, Issues and Scheduler sit on the left app rail; **Settings** opens from the menubar gear. They share one chat engine, one tool set, one session store, and one workspace folder at a time. Opening Research does not start a different assistant — it gives the same assistant a research workflow.
 
-Cold start opens the **workspaces picker** (`#/workspaces`). Choose a folder (or continue without one) and you route into Code. The menubar **workspace** control opens the same picker anytime.
+Cold start opens the **workspaces picker** (`#/workspaces`). Choose a folder and you route into Code. The menubar **workspace** control opens the same picker anytime.
 
 Move between surfaces with **Ctrl+Tab** / **Ctrl+Shift+Tab**, or the grid icon in the menubar.
 

@@ -306,22 +306,6 @@
   color: var(--mn-fg-subtle);
 }
 
-.welcome-page__continue {
-  display: block;
-  margin: 28px auto 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--mn-fg-subtle);
-  font-size: 13px;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.welcome-page__continue:hover {
-  color: var(--mn-fg);
-}
-
 /* Simplified top bar while welcome is open */
 header.topbar.topbar--welcome .topbar-sep,
 header.topbar.topbar--welcome .topbar-end,

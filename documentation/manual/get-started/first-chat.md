@@ -1,6 +1,6 @@
 # Your first chat
 
-You start at the **workspaces picker** — open a project folder or continue without one. Minnow then opens **Code** with the chat rail on the left, beside the repo it will be working on.
+You start at the **workspaces picker** — open a project folder. Minnow then opens **Code** with the chat rail on the left, beside the repo it will be working on.
 
 This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what you just saw.
 

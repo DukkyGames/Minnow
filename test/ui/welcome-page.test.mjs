@@ -28,7 +28,6 @@ function setupWelcomeDom() {
     <p id="welcomeRecentsEmpty" class="hidden"></p>
     <span id="welcomeRecentsCount" hidden></span>
     <p id="welcomeServerBanner" class="hidden"></p>
-    <button type="button" id="btnWelcomeContinueMinnow"></button>
     <div id="osWorkspaceGate" hidden></div>
   `;
 

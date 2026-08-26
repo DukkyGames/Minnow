@@ -34,7 +34,7 @@
         "Next"
       ],
       "section": "Get started",
-      "hash": "8bdd0267dc3a6b033176a7f76c15ccac72678d1bf10d78c7e7a23d0a272312dd"
+      "hash": "5ec1fbbf47c0e93d8ab8152cc4bd86809748832b720303e20cda16165d1583bf"
     },
     {
       "path": "documentation/manual/get-started/connect-a-model.md",
@@ -59,7 +59,7 @@
     {
       "path": "documentation/manual/get-started/first-chat.md",
       "title": "Your first chat",
-      "summary": "You start at the workspaces picker — open a project folder or continue without one. Minnow then opens Code with the chat rail on the left, beside the repo it will be working on. This page walks through one real turn: send a message, watch it stream, approve a tool, and understand",
+      "summary": "You start at the workspaces picker — open a project folder. Minnow then opens Code with the chat rail on the left, beside the repo it will be working on. This page walks through one real turn: send a message, watch it stream, approve a tool, and understand what you just saw. Code",
       "headings": [
         "Code with chat open",
         "Send something",
@@ -73,7 +73,7 @@
         "Next steps"
       ],
       "section": "Get started",
-      "hash": "b7bd72f2a0f4a79bb6add4054dfac24861c362c7855f0745ca87d067bc373319"
+      "hash": "a8aa82a86e7916ffb9add0547913f07300b57a7da3c3f5420061f2193954f27e"
     },
     {
       "path": "documentation/manual/concepts/how-minnow-works.md",
@@ -195,7 +195,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "640ea773d0fdd0fef67b44f0b7b32eb8c5fd9f0f20829c59a57efdcd4d39210f"
+      "hash": "b29b16cdaea7634edc40e0f42aecbd8aa15406a415a5c82e74c819aa5a6be2a4"
     },
     {
       "path": "documentation/manual/apps/code.md",
@@ -230,7 +230,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "2612ef4a76510b8f00a29c9c3034f91381fe354de8341148d90f363bc346aa40"
+      "hash": "1f8c51f4b95e87a331cb1b75e6c58908d454f76e536c8948cf602912801f5b4a"
     },
     {
       "path": "documentation/manual/apps/brain.md",
@@ -358,7 +358,7 @@
         "Related"
       ],
       "section": "Orchestrate",
-      "hash": "dc410f79aa4080281ee325eeeb25a86b0e23eef2d0590ca15204be95516c37a1"
+      "hash": "dff5090eac7d97d2657838b9347942904dd84367e60af9556d76d235666c424f"
     },
     {
       "path": "documentation/manual/orchestrate/agents.md",

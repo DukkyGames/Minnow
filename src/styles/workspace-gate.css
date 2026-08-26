@@ -50,7 +50,6 @@ html.os-workspace-gate-holding #osWorkspaceGate {
 }
 
 #osWorkspaceGate.workspace-gate--opening .welcome-page__tile,
-#osWorkspaceGate.workspace-gate--opening .welcome-page__recents-row,
-#osWorkspaceGate.workspace-gate--opening .welcome-page__continue {
+#osWorkspaceGate.workspace-gate--opening .welcome-page__recents-row {
   opacity: 0.65;
 }

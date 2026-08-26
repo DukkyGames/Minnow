@@ -20,9 +20,6 @@ import { setStatus } from './status';
 /** Session-only parent for the create-project wizard (Change location). */
 let wizardParentPath = '';
 
-/** User chose "Continue in Minnow folder" — skip welcome until reload. */
-let welcomeDismissedForSession = false;
-
 let staticBindingsDone = false;
 let createPanelOpen = false;
 
@@ -53,17 +50,9 @@ export function isOtherFullPageHash(hash: string): boolean {
   );
 }
 
-/** Whether the user dismissed welcome for this session. */
-export function isWelcomeDismissedForSession(): boolean {
-  return welcomeDismissedForSession;
-}
-
 /** Whether welcome should open when foregrounding the Code app (Minnow Shell). */
 export function shouldPromptCodeWorkspaceWelcome(launchWorkspacePath?: string): boolean {
   if (isOsShellEnabled()) {
-    return false;
-  }
-  if (isWelcomeDismissedForSession()) {
     return false;
   }
   if (launchWorkspacePath?.trim()) {
@@ -80,9 +69,6 @@ export function shouldShowWelcomeOnBoot(): boolean {
     return isDefaultWorkspace();
   }
   if (isOtherFullPageHash(hash)) {
-    return false;
-  }
-  if (welcomeDismissedForSession) {
     return false;
   }
   return isDefaultWorkspace() && (hash === '' || hash === '#/' || hash === '#');
@@ -162,7 +148,6 @@ async function completeWorkspaceActivation(): Promise<void> {
     // Menubar switch: Code already painted; do not hold for initApp (it already finished).
     if (gateSwitchMode) {
       gateSwitchMode = false;
-      syncGateContinueVisibility();
       await gate.finishWorkspaceGateSwitch();
       return;
     }
@@ -184,26 +169,14 @@ export function refreshWorkspaceGateUi(): void {
   showCreatePanel(false);
 }
 
-/** Menubar workspace switch — hide continue-with-default affordance. */
+/** Menubar workspace switch — Code already booted; use fast gate close path. */
 export function onWorkspaceGateOpenedForSwitch(): void {
   gateSwitchMode = true;
-  syncGateContinueVisibility();
 }
 
-/** Boot / route gate — show continue-with-default affordance. */
+/** Boot / route gate — cold pick uses hold-until-paint path. */
 export function resetWorkspaceGateSwitchMode(): void {
   gateSwitchMode = false;
-  syncGateContinueVisibility();
-}
-
-function syncGateContinueVisibility(): void {
-  const continueBtn = document.getElementById('btnWelcomeContinueMinnow');
-  if (!continueBtn) return;
-  if (!isOsShellEnabled()) {
-    continueBtn.hidden = false;
-    return;
-  }
-  continueBtn.toggleAttribute('hidden', gateSwitchMode);
 }
 
 function showCreatePanel(show: boolean): void {
@@ -583,12 +556,7 @@ function onHashChange(): void {
   }
 
   const isHomeHash = hash === '' || hash === '#/' || hash === '#';
-  if (
-    isHomeHash &&
-    isDefaultWorkspace() &&
-    !welcomeDismissedForSession &&
-    !isWelcomePageOpen()
-  ) {
+  if (isHomeHash && isDefaultWorkspace() && !isWelcomePageOpen()) {
     openWelcome({ skipHash: true });
   }
 }
@@ -618,19 +586,6 @@ function bindStaticControls(): void {
   document
     .getElementById('btnWelcomeChangeParent')
     ?.addEventListener('click', () => void onChangeWizardParent());
-
-  document.getElementById('btnWelcomeContinueMinnow')?.addEventListener('click', () => {
-    welcomeDismissedForSession = true;
-    void (async () => {
-      if (isOsShellEnabled()) {
-        const gate = await import('../os/workspace-gate');
-        await gate.onWorkspaceGateChosen();
-        return;
-      }
-      closeWelcome();
-      setStatus('ok', 'Working in Minnow folder');
-    })();
-  });
 
   const projectInput = document.getElementById('welcomeProjectName');
   projectInput?.addEventListener('keydown', (e) => {
@@ -669,7 +624,6 @@ export function markWelcomePendingIfNeeded(): void {
 
 /** Test helper — reset session dismiss and wizard parent. */
 export function resetWelcomeStateForTests(): void {
-  welcomeDismissedForSession = false;
   wizardParentPath = '';
   createPanelOpen = false;
   gateSwitchMode = false;
