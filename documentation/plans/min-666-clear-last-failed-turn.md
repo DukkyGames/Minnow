@@ -20,6 +20,7 @@ Neither control wipes earlier successful turns. Continue must send real history 
 - [x] Add `continueFailedTurn` / `clearFailedAssistantTurn` (hydrate first; Continue never truncates)
 - [x] Error chrome: **Continue** + **Clear** (replace the single rewind-and-retry button)
 - [x] Persist the same actions on a tail `failed: true` chip so they survive a history re-render
+- [x] Inset Continue/Clear on the failed chip so they are not under the message ⋮ trigger
 - [x] Tests: Continue outbound keeps visible transcript; Clear keeps the user prompt; neither wipes earlier turns
 - [x] Update `documentation/context.md` and the chat manual
 

@@ -281,9 +281,20 @@
   margin-bottom: 4px;
 }
 
+/*
+ * The ⋮ trigger is position:absolute at the wrap's top-right. Continue/Clear
+ * sit on this chip (also the top row), so without inset they land under ⋮ and
+ * a Clear click opens the message menu instead.
+ */
+.msg.assistant.msg--failed.msg--has-actions {
+  padding-right: 36px;
+}
+
 .msg.assistant.msg--failed .msg-failed-chip .msg-error-recover-actions {
   text-transform: none;
   letter-spacing: 0.02em;
+  position: relative;
+  z-index: 2;
 }
 
 .msg.assistant.msg--truncated .msg-truncated-chip {

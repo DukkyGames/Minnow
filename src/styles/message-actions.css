@@ -9,6 +9,7 @@
   position: absolute;
   top: 4px;
   right: 4px;
+  z-index: 1;
   width: 28px;
   height: 28px;
   padding: 0;

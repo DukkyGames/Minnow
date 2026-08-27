@@ -44,7 +44,8 @@ export function appendFailedTurnRecoveryActions(
     clearBtn.disabled = true;
   };
 
-  continueBtn.addEventListener('click', () => {
+  continueBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
     disableBoth();
     void import('../chat/failed-turn-recovery.ts').then((mod) =>
       mod.continueFailedTurn(recovery.chatId),
@@ -52,7 +53,8 @@ export function appendFailedTurnRecoveryActions(
     recovery.onRecover?.();
   });
 
-  clearBtn.addEventListener('click', () => {
+  clearBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
     disableBoth();
     void import('../chat/failed-turn-recovery.ts').then((mod) =>
       mod.clearFailedAssistantTurn(recovery.chatId, recovery.forkHistoryIndex),

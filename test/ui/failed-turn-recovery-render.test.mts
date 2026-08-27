@@ -64,6 +64,10 @@ describe('failed-turn recovery render', () => {
       (b) => b.textContent,
     );
     assert.deepEqual(labels, ['Continue', 'Clear']);
+    assert.ok(
+      failed.classList.contains('msg--has-actions'),
+      'failed row keeps the ⋮ menu; CSS must inset Continue/Clear so they are not under it',
+    );
 
     const earlierAssistant = [...area.querySelectorAll('.msg.assistant')].find(
       (el) => !el.classList.contains('msg--failed'),
@@ -96,7 +100,16 @@ describe('failed-turn recovery render', () => {
       '.msg-error-recover-btn:not(.msg-error-recover-btn--continue)',
     ) as HTMLButtonElement | null;
     assert.ok(clearBtn);
+
+    // Clicks must not bubble to the message row (that would open ⋮ / capture menus).
+    const failedRow = area.querySelector('.msg.assistant.msg--failed');
+    assert.ok(failedRow);
+    let rowClicks = 0;
+    failedRow.addEventListener('click', () => {
+      rowClicks += 1;
+    });
     clearBtn.click();
+    assert.equal(rowClicks, 0);
 
     const started = Date.now();
     while (Date.now() - started < 5000) {
