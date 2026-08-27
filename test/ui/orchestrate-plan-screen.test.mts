@@ -50,6 +50,8 @@ function installTestWindow(): void {
   activeWindow = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
+  const rejectPreview: typeof fetch = async () => new Response('', { status: 404 });
+  globalThis.fetch = rejectPreview;
 }
 
 describe('orchestrate plan screen', () => {
