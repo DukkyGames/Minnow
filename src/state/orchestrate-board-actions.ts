@@ -19,6 +19,7 @@ import {
   OOM_SAFE_MAX_CONCURRENT,
   clearOomPauseFromElectron,
 } from '../chat/orchestrate/oom-recovery.ts';
+import { isResumeGateHeld } from '../chat/resume-gate.ts';
 import {
   isChatStreaming,
   notifyChatStreamEnded,
@@ -5793,7 +5794,7 @@ export async function autoDelegateNext(
   await drainTaskQueue(group, plannerChat);
 }
 
-function isBoardCandidateForWakeReconcile(group: ChatGroup): boolean {
+export function isBoardCandidateForWakeReconcile(group: ChatGroup): boolean {
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return false;
   if (isBoardRunning(group)) return true;
@@ -5812,6 +5813,10 @@ function resumeSystemPausedBoardAfterWake(group: ChatGroup, plannerChat: Chat): 
   const board = group.orchestrateBoard;
   if (!board?.systemPaused || board.userStopped === true) return;
   if (isOomPauseActive()) return;
+  // A clean quit leaves the board system-paused. Without this, the first wake after
+  // launch un-paused it and started delegating before the user had said anything —
+  // the boot resume prompt owns that decision now.
+  if (isResumeGateHeld()) return;
   if (!hasIncompleteOrchestrateWork(board)) return;
   if (isUserStoppedChat(plannerChat)) return;
   const wasRunning = board.autoRunning === true;

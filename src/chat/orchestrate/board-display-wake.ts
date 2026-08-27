@@ -6,6 +6,7 @@
 import { reportBackgroundError } from '../../boot/report-background-error.ts';
 import { hasIncompleteOrchestrateWork } from './plan-complete.ts';
 import { isOomPauseActive } from './oom-recovery.ts';
+import { isResumeGateHeld } from '../resume-gate.ts';
 import { reconcileRunningBoardsAfterDisplayWake } from '../../state/orchestrate-board-actions.ts';
 import { sessionState } from '../../state/sessions.ts';
 
@@ -31,6 +32,9 @@ let boardLivenessTimer: ReturnType<typeof setInterval> | null = null;
 function shouldRunBoardLivenessPoll(): boolean {
   const groups = sessionState?.groups;
   if (!groups?.length) return false;
+  // Boot resume prompt unanswered (or declined): nothing may be re-armed, so a
+  // 20s timer would only spin with nothing to reconcile.
+  if (isResumeGateHeld()) return false;
   // A board paused after an OOM crash waits for the user to press Start; polling
   // it forever would spin a wake every 20s with nothing to reconcile.
   const oomPaused = isOomPauseActive();
@@ -92,6 +96,17 @@ export function initOrchestrateBoardDisplayWake(): void {
     /* browser / tests */
   }
 
+  syncBoardLivenessPoll();
+}
+
+/**
+ * Re-evaluate the liveness poll after the boot resume gate resolves.
+ *
+ * `initOrchestrateBoardDisplayWake` runs while the prompt is still up, when the
+ * hold keeps the poll off; without this the poll would stay off for the rest of
+ * the session even after the user chose Resume.
+ */
+export function syncBoardLivenessPollAfterResumeGate(): void {
   syncBoardLivenessPoll();
 }
 

@@ -120,8 +120,10 @@ import { initChatScroll } from './ui/chat-scroll';
 import { initMinnowBrowserLinkRouting } from './ui/minnow-browser-links';
 import { renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
-import { bootGenerationResumeForChats } from './chat/generation-resume';
-import { bootIncompleteToolResumeForChats } from './chat/incomplete-tool-resume';
+import {
+  parkResumeCandidatesAtBoot,
+  startBootResumeGate,
+} from './boot/resume-gate-boot';
 import {
   bindAskQuestionPlanScreenHooks,
   notifyAskQuestionDisplayContextChanged,
@@ -135,7 +137,6 @@ import {
   resolveBoardOnboardingQuestionHost,
 } from './ui/orchestrate-board-onboarding-questions';
 import { subscribeInstances } from './os/instances';
-import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
 import { initBoardLogDiskSink } from './state/board-log-disk.ts';
 import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
 import { rehydrateAllBoardWorktreeRoots } from './state/orchestrate-board-actions';
@@ -459,10 +460,14 @@ export async function initApp(): Promise<void> {
   warmIssuesAppInBackground();
 
   if (sessionState) {
+    // Park first, synchronously: a board that was mid-plan when the app died is
+    // still flagged auto-running, and anything below could delegate from it
+    // before the user has been asked.
+    parkResumeCandidatesAtBoot(sessionState);
     await rehydrateAllBoardWorktreeRoots(sessionState);
-    await bootGenerationResumeForChats(sessionState.chats);
-    await bootIncompleteToolResumeForChats(sessionState.chats);
-    await bootOrchestrateBoardResume(sessionState);
+    // Deliberately not awaited — the prompt must not hold up the loop ticker and
+    // window listeners registered below.
+    startBootResumeGate(sessionState);
   }
 
   // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)
