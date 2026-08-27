@@ -19,6 +19,7 @@ import {
   type SyncAction,
   type SyncFields,
 } from '../issues/github-sync-plan';
+import { userFacingGithubError, isLocalServerOfflineError } from '../issues/github-error';
 import {
   addIssue,
   appendIssueLinks,
@@ -30,7 +31,7 @@ import {
 } from './issues-store';
 import { isClosedStatus } from '../issues/taxonomy';
 import { getIssuesTaxonomySync } from './issues-taxonomy-store';
-import { getLocalServerAvailable } from '../tools/client';
+import { isLocalServerAvailable } from '../tools/config';
 import { getWorkspacePath } from './workspace';
 
 const MODE_STORAGE_KEY = 'minnow.issues.github.mode';
@@ -90,23 +91,53 @@ interface ForgeResponse {
   droppedLabels?: boolean;
 }
 
+/**
+ * POST /api/git for issue forge ops.
+ *
+ * Never throws. Never flips `localServerAvailable` — a GitHub-op failure
+ * (timeout, 401, dropped socket) must not empty the file tree until restart
+ * (MIN-660). Callers render `error` through `userFacingGithubError`.
+ */
 async function forge(op: string, args: Record<string, unknown> = {}): Promise<ForgeResponse> {
-  if (!getLocalServerAvailable()) return { ok: false, error: 'server_off' };
+  if (!isLocalServerAvailable()) return { ok: false, error: 'server_off' };
   try {
     const res = await fetch('/api/git', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ op, ...args }),
     });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    return (await res.json()) as ForgeResponse;
+    let payload: ForgeResponse | null = null;
+    try {
+      payload = (await res.json()) as ForgeResponse;
+    } catch {
+      payload = null;
+    }
+    if (payload && typeof payload === 'object') {
+      const error =
+        typeof payload.error === 'string' && payload.error.trim()
+          ? payload.error
+          : undefined;
+      if (!res.ok) return { ok: false, error: error ?? `HTTP ${res.status}` };
+      return payload;
+    }
+    return { ok: false, error: res.ok ? 'Could not read GitHub response' : `HTTP ${res.status}` };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: isLocalServerOfflineError(message) ? 'server_off' : message };
   }
 }
 
 function localIsClosed(status: string): boolean {
   return isClosedStatus(getIssuesTaxonomySync(), status);
+}
+
+/** Closed GitHub issues map to the done-role status when taxonomy has one. */
+function statusForClosedRemote(): string | undefined {
+  try {
+    return requireIssueStatusForRole('done');
+  } catch {
+    return undefined;
+  }
 }
 
 /** A conflict handed back for the user to resolve. Never resolved here. */
@@ -144,6 +175,19 @@ async function readRemote(issueId: string): Promise<RemoteIssueSnapshot | null> 
  * winner here would eventually be asked to.
  */
 export async function syncIssueWithGithub(issueId: string): Promise<SyncOutcome> {
+  try {
+    return await runIssueSync(issueId);
+  } catch (err) {
+    return {
+      ok: false,
+      action: 'noop',
+      error: userFacingGithubError(err instanceof Error ? err.message : String(err)),
+    };
+  }
+}
+
+/** Inner sync — throws only if the issues store itself is uninitialized. */
+async function runIssueSync(issueId: string): Promise<SyncOutcome> {
   const issue = findIssueById(issueId);
   if (!issue) return { ok: false, action: 'noop', error: 'Issue not found' };
 
@@ -167,7 +211,11 @@ export async function syncIssueWithGithub(issueId: string): Promise<SyncOutcome>
         labels: issue.labels,
       });
       if (!res.ok || !res.number) {
-        return { ok: false, action: 'create', error: res.error ?? 'Could not create the issue' };
+        return {
+          ok: false,
+          action: 'create',
+          error: userFacingGithubError(res.error ?? 'Could not create the issue'),
+        };
       }
       writeLink(issueId, res.number, res.url ?? '', undefined);
       return { ok: true, action: 'create', droppedLabels: res.droppedLabels };
@@ -181,7 +229,7 @@ export async function syncIssueWithGithub(issueId: string): Promise<SyncOutcome>
         title: action.fields.title,
         body: action.fields.body,
       });
-      if (!res.ok) return { ok: false, action: 'push', error: res.error };
+      if (!res.ok) return { ok: false, action: 'push', error: userFacingGithubError(res.error) };
 
       // State is a separate `gh` verb, so it is a second call rather than a
       // field on the edit.
@@ -241,7 +289,7 @@ export async function resolveSyncConflict(
     title: conflict.local.title,
     body: conflict.local.body,
   });
-  if (!res.ok) return { ok: false, action: 'push', error: res.error };
+  if (!res.ok) return { ok: false, action: 'push', error: userFacingGithubError(res.error) };
   if (conflict.local.closed !== conflict.remote.closed) {
     await forge('issueState', {
       number: conflict.number,
@@ -254,9 +302,7 @@ export async function resolveSyncConflict(
 }
 
 function applyRemoteToIssue(issueId: string, fields: SyncFields): void {
-  const status = fields.closed
-    ? requireIssueStatusForRole('done')
-    : findIssueById(issueId)?.status;
+  const status = fields.closed ? statusForClosedRemote() : findIssueById(issueId)?.status;
   updateIssue(issueId, {
     title: fields.title,
     description: fields.body,
@@ -302,53 +348,77 @@ export interface ImportResult {
  * Imported cards land in the Triage lane (`source: 'github'`, no `triagedAt`),
  * which is the whole reason Triage keys off source rather than status: a
  * hundred imported issues must not silently become a hundred backlog items.
+ *
+ * Never throws: a failed import is `{ ok: false, error }` with user-facing copy
+ * so Settings can show a dialog without taking down the rest of the SPA (MIN-660).
  */
 export async function importGithubIssues(options?: {
   state?: 'open' | 'closed' | 'all';
   limit?: number;
 }): Promise<ImportResult> {
-  if (getIssuesGithubMode() === 'off') {
-    return { ok: false, error: 'GitHub sync is off', imported: 0, skipped: 0 };
-  }
-
-  const res = await forge('issueList', {
-    state: options?.state ?? 'open',
-    limit: options?.limit ?? 100,
-  });
-  if (!res.ok || !Array.isArray(res.issues)) {
-    return { ok: false, error: res.error ?? 'Could not list issues', imported: 0, skipped: 0 };
-  }
-
-  const linked = new Set(
-    listIssues()
-      .map((issue) => issue.github?.number)
-      .filter((n): n is number => typeof n === 'number'),
-  );
-
-  let imported = 0;
-  let skipped = 0;
-  const workspacePath = getWorkspacePath();
-
-  for (const remote of res.issues) {
-    if (linked.has(remote.number)) {
-      skipped += 1;
-      continue;
+  try {
+    if (getIssuesGithubMode() === 'off') {
+      return { ok: false, error: 'GitHub sync is off', imported: 0, skipped: 0 };
     }
-    const card = addIssue({
-      title: remote.title || `GitHub #${remote.number}`,
-      description: remote.body,
-      labels: remote.labels,
-      workspacePath,
-      source: 'github',
-      ...(remote.state === 'closed' ? { status: requireIssueStatusForRole('done') } : {}),
-    });
-    updateIssue(card.id, { githubSync: true });
-    writeLink(card.id, remote.number, remote.url, remote.updatedAt);
-    imported += 1;
-  }
 
-  if (imported > 0) scheduleSaveIssues();
-  return { ok: true, imported, skipped };
+    const res = await forge('issueList', {
+      state: options?.state ?? 'open',
+      limit: options?.limit ?? 100,
+    });
+    if (!res.ok || !Array.isArray(res.issues)) {
+      return {
+        ok: false,
+        error: userFacingGithubError(res.error ?? 'Could not list issues'),
+        imported: 0,
+        skipped: 0,
+      };
+    }
+
+    const linked = new Set(
+      listIssues()
+        .map((issue) => issue.github?.number)
+        .filter((n): n is number => typeof n === 'number'),
+    );
+
+    let imported = 0;
+    let skipped = 0;
+    const workspacePath = getWorkspacePath();
+    const closedStatus = statusForClosedRemote();
+
+    for (const remote of res.issues) {
+      if (linked.has(remote.number)) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        const card = addIssue({
+          title: remote.title || `GitHub #${remote.number}`,
+          description: remote.body,
+          labels: remote.labels,
+          workspacePath,
+          source: 'github',
+          ...(remote.state === 'closed' && closedStatus ? { status: closedStatus } : {}),
+        });
+        updateIssue(card.id, { githubSync: true });
+        writeLink(card.id, remote.number, remote.url, remote.updatedAt);
+        linked.add(remote.number);
+        imported += 1;
+      } catch {
+        // One bad remote record must not abort the rest of the import or
+        // surface as an unhandled rejection that bricks the shell.
+      }
+    }
+
+    if (imported > 0) scheduleSaveIssues();
+    return { ok: true, imported, skipped };
+  } catch (err) {
+    return {
+      ok: false,
+      error: userFacingGithubError(err instanceof Error ? err.message : String(err)),
+      imported: 0,
+      skipped: 0,
+    };
+  }
 }
 
 /** Sync every eligible issue; returns the conflicts for the user to resolve. */
@@ -369,7 +439,7 @@ export async function syncAllIssuesWithGithub(): Promise<{
     const outcome = await syncIssueWithGithub(issue.id);
     if (outcome.conflict) conflicts.push(outcome.conflict);
     else if (outcome.ok && outcome.action !== 'noop') synced += 1;
-    else if (!outcome.ok && outcome.error && outcome.error !== 'server_off') {
+    else if (!outcome.ok && outcome.error && !isLocalServerOfflineError(outcome.error)) {
       errors.push(`${issue.id}: ${outcome.error}`);
     }
   }

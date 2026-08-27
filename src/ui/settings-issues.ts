@@ -48,6 +48,7 @@ import {
   importGithubIssues,
   setIssuesGithubMode,
 } from '../state/issues-github';
+import { userFacingGithubError } from '../issues/github-error';
 import {
   appendSettingsOfflineHint,
   createSettingsInputRow,
@@ -740,22 +741,29 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
   importBtn.className = 'settings-btn';
   importBtn.textContent = 'Import issues from GitHub';
   importBtn.disabled = getIssuesGithubMode() === 'off';
+  // Always catch: a thrown import used to leave the dialog/shell wedged (MIN-660).
   importBtn.addEventListener('click', () => {
     importBtn.disabled = true;
-    void importGithubIssues()
-      .then((result) => {
+    void (async () => {
+      try {
+        const result = await importGithubIssues();
         if (!result.ok) {
-          void appAlert(result.error ?? 'Could not import issues', 'GitHub');
+          await appAlert(result.error ?? 'Could not import issues', 'GitHub');
           return;
         }
-        void appAlert(
+        await appAlert(
           `Imported ${result.imported}, skipped ${result.skipped} already linked. Imported issues wait in Triage.`,
           'GitHub',
         );
-      })
-      .finally(() => {
+      } catch (err) {
+        // Last-resort: importGithubIssues is not supposed to throw, but an
+        // unhandled rejection here used to freeze the rest of the shell.
+        const message = err instanceof Error ? err.message : String(err);
+        await appAlert(userFacingGithubError(message, 'Could not import issues'), 'GitHub');
+      } finally {
         importBtn.disabled = getIssuesGithubMode() === 'off';
-      });
+      }
+    })();
   });
   body.appendChild(importBtn);
 }
