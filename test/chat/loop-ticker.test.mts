@@ -309,9 +309,12 @@ describe('loop ticker', () => {
       },
     });
 
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 500);
-    });
+    // Poll instead of a single 500ms sleep — under CI load the wake timer
+    // can land after that window even though dueAt is only 200ms out.
+    const deadline = Date.now() + 2_000;
+    while (Date.now() < deadline && sent.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
 
     stopLoopTicker();
     assert.deepEqual(sent, ['wake me']);
