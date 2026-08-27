@@ -169,6 +169,21 @@ describe('importGithubIssues', () => {
     assert.equal(listIssues().length, 1);
   });
 
+  test('uninitialized store does not leak issuesState error or fetch GitHub', async () => {
+    setIssuesStateForTests(null);
+    let fetched = false;
+    globalThis.fetch = async () => {
+      fetched = true;
+      return gitJsonResponse({ ok: true, issues: [] });
+    };
+    const result = await importGithubIssues();
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'Issues are still loading. Try again in a moment.');
+    assert.doesNotMatch(result.error ?? '', /issuesState is not initialized/);
+    assert.equal(fetched, false);
+    assert.equal(isLocalServerAvailable(), true);
+  });
+
   test('mode off does not fetch', async () => {
     setIssuesGithubMode('off');
     let fetched = false;

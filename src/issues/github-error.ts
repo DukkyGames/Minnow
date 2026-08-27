@@ -42,5 +42,10 @@ export function userFacingGithubError(
   if (/timed out after/i.test(text)) {
     return 'GitHub did not respond in time. Try again.';
   }
+  // Settings can open before boot finishes loadIssuesFromStorage(); the store's
+  // throw used to land on the status pill and look like a frozen shell.
+  if (/issuesState is not initialized/i.test(text)) {
+    return 'Issues are still loading. Try again in a moment.';
+  }
   return text;
 }

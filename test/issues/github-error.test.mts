@@ -35,6 +35,13 @@ describe('userFacingGithubError', () => {
       'GitHub did not respond in time. Try again.',
     );
   });
+
+  test('does not leak the issues-store boot throw', () => {
+    assert.equal(
+      userFacingGithubError('issuesState is not initialized; call loadIssuesFromStorage() first'),
+      'Issues are still loading. Try again in a moment.',
+    );
+  });
 });
 
 describe('isLocalServerOfflineError', () => {

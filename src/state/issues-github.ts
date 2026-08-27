@@ -24,6 +24,7 @@ import {
   addIssue,
   appendIssueLinks,
   findIssueById,
+  isIssuesStoreLoaded,
   listIssues,
   requireIssueStatusForRole,
   scheduleSaveIssues,
@@ -359,6 +360,16 @@ export async function importGithubIssues(options?: {
   try {
     if (getIssuesGithubMode() === 'off') {
       return { ok: false, error: 'GitHub sync is off', imported: 0, skipped: 0 };
+    }
+
+    // listIssues()/addIssue throw if boot has not hydrated the store yet.
+    if (!isIssuesStoreLoaded()) {
+      return {
+        ok: false,
+        error: 'Issues are still loading. Try again in a moment.',
+        imported: 0,
+        skipped: 0,
+      };
     }
 
     const res = await forge('issueList', {

@@ -25,6 +25,7 @@ import {
   getNextIssueIdPreview,
   getWorkspaceIdConfig,
   getWorkspaceProjectKey,
+  isIssuesStoreLoaded,
   saveIssuesNow,
   setWorkspaceProjectKey,
 } from '../state/issues-store';
@@ -101,6 +102,8 @@ async function persistTaxonomy(
 }
 
 function countInUse(kind: 'type' | 'status' | 'priority', id: string): number {
+  // Settings can paint before boot finishes loading ~/.minnow/issues (MIN-660).
+  if (!isIssuesStoreLoaded()) return 0;
   const issues = getIssuesSnapshot()?.issues ?? [];
   return countIssuesUsingTaxonomyId(kind, id, issues);
 }
@@ -500,7 +503,8 @@ function appendIssuesIntro(mount: HTMLElement): void {
 
 function renderIssueIdsPanel(mount: HTMLElement, onChange: () => void): void {
   const workspacePath = getWorkspacePath();
-  const savedKey = getWorkspaceIdConfig(workspacePath)?.projectKey ?? '';
+  const storeReady = isIssuesStoreLoaded();
+  const savedKey = storeReady ? (getWorkspaceIdConfig(workspacePath)?.projectKey ?? '') : '';
   const body = appendSettingsGroup(
     mount,
     'Issue IDs',
@@ -521,12 +525,12 @@ function renderIssueIdsPanel(mount: HTMLElement, onChange: () => void): void {
   errorNode.hidden = true;
 
   const previewNode = el('span', 'settings-issues-id-preview');
-  previewNode.textContent = getNextIssueIdPreview(workspacePath);
+  previewNode.textContent = storeReady ? getNextIssueIdPreview(workspacePath) : '—';
 
   const keyInput = document.createElement('input');
   keyInput.type = 'text';
   keyInput.className = 'settings-input settings-input--mono';
-  keyInput.value = savedKey || getWorkspaceProjectKey(workspacePath);
+  keyInput.value = savedKey || (storeReady ? getWorkspaceProjectKey(workspacePath) : '');
   keyInput.autocomplete = 'off';
   keyInput.spellcheck = false;
   keyInput.setAttribute('aria-describedby', 'settingsIssuesProjectKeyError');
@@ -557,8 +561,11 @@ function renderIssueIdsPanel(mount: HTMLElement, onChange: () => void): void {
 
   const saveBtn = el('button', 'settings-inline-btn', 'Save project key');
   saveBtn.type = 'button';
+  // Project-key writes go through the issues store; disable until it is loaded.
+  saveBtn.disabled = !storeReady;
 
   const refreshPreviewFromStore = (): void => {
+    if (!isIssuesStoreLoaded()) return;
     previewNode.textContent = getNextIssueIdPreview(workspacePath);
     keyInput.value = getWorkspaceIdConfig(workspacePath)?.projectKey ?? getWorkspaceProjectKey(workspacePath);
   };
@@ -568,11 +575,11 @@ function renderIssueIdsPanel(mount: HTMLElement, onChange: () => void): void {
     keyInput.value = normalized;
     errorNode.hidden = true;
     const draft = normalized;
-    if (draft.length >= 2) {
+    if (draft.length >= 2 && isIssuesStoreLoaded()) {
       const basePreview = getNextIssueIdPreview(workspacePath);
       const suffix = basePreview.includes('-') ? basePreview.split('-').slice(1).join('-') : '1';
       previewNode.textContent = `${draft}-${suffix}`;
-    } else {
+    } else if (isIssuesStoreLoaded()) {
       previewNode.textContent = getNextIssueIdPreview(workspacePath);
     }
   });
@@ -586,7 +593,7 @@ function renderIssueIdsPanel(mount: HTMLElement, onChange: () => void): void {
         errorNode.hidden = false;
         return;
       }
-      if (previous && draft !== previous && countIssuesInWorkspace(workspacePath) > 0) {
+      if (previous && draft !== previous && isIssuesStoreLoaded() && countIssuesInWorkspace(workspacePath) > 0) {
         const ok = await appConfirm(
           `New issues will use ${draft}-n. Existing ids stay the same.`,
           { confirmLabel: 'Save', title: 'Change project key?' },
@@ -673,21 +680,42 @@ function renderIssuesTaxonomyPanels(content: HTMLElement, onChange: () => void):
 /** Render Issues taxonomy settings into the mount node. */
 export function renderIssuesSettingsSection(mount: HTMLElement): void {
   const refresh = (): void => {
-    mount.replaceChildren();
+    try {
+      mount.replaceChildren();
 
-    const shell = el('div', 'settings-general settings-issues');
-    mount.appendChild(shell);
+      const shell = el('div', 'settings-general settings-issues');
+      mount.appendChild(shell);
 
-    const content = el('div', 'settings-general__content');
-    shell.appendChild(content);
+      const content = el('div', 'settings-general__content');
+      shell.appendChild(content);
 
-    appendIssuesIntro(content);
-    renderIssueIdsPanel(content, refresh);
-    renderIssuesGithubPanel(content, refresh);
-    renderIssuesTaxonomyPanels(content, refresh);
+      appendIssuesIntro(content);
+      renderIssueIdsPanel(content, refresh);
+      renderIssuesGithubPanel(content, refresh);
+      renderIssuesTaxonomyPanels(content, refresh);
+    } catch (err) {
+      // A throw here used to leave Settings (and the rest of the shell) wedged.
+      const message = err instanceof Error ? err.message : 'Could not render Issues settings';
+      // Do not paint the boot-race store throw onto the status pill (MIN-660).
+      if (/issuesState is not initialized/i.test(message)) return;
+      setStatus('err', message);
+    }
   };
 
   refresh();
+  if (!isIssuesStoreLoaded()) {
+    void (async () => {
+      try {
+        const { loadIssuesTaxonomyFromStorage } = await import('../state/issues-taxonomy-store');
+        await loadIssuesTaxonomyFromStorage();
+        const { loadIssuesFromStorage } = await import('../state/issues-store');
+        await loadIssuesFromStorage();
+      } catch {
+        /* First paint already used safe empty defaults. */
+      }
+      if (mount.isConnected) refresh();
+    })();
+  }
 }
 
 /**
@@ -740,7 +768,9 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
   importBtn.type = 'button';
   importBtn.className = 'settings-btn';
   importBtn.textContent = 'Import issues from GitHub';
-  importBtn.disabled = getIssuesGithubMode() === 'off';
+  const githubImportReady = (): boolean =>
+    getIssuesGithubMode() !== 'off' && isIssuesStoreLoaded();
+  importBtn.disabled = !githubImportReady();
   // Always catch: a thrown import used to leave the dialog/shell wedged (MIN-660).
   importBtn.addEventListener('click', () => {
     importBtn.disabled = true;
@@ -761,7 +791,7 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
         const message = err instanceof Error ? err.message : String(err);
         await appAlert(userFacingGithubError(message, 'Could not import issues'), 'GitHub');
       } finally {
-        importBtn.disabled = getIssuesGithubMode() === 'off';
+        importBtn.disabled = !githubImportReady();
       }
     })();
   });
