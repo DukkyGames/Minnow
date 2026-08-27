@@ -40,6 +40,7 @@ import {
   fetchProviderCapabilities,
   mergeCapabilitiesIntoModelCache,
 } from '../providers/model-capabilities';
+import { scheduleFirstLoadCapabilityProbes } from '../providers/first-load-probe';
 import { syncComposerReasoningEffortFromActiveChat } from '../ui/composer-reasoning-effort';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import {
@@ -501,6 +502,9 @@ export async function populateMultiProviderModelSelect(
         /* stale or missing capabilities file is ok */
       }
     }
+
+    // First time we see a local model loaded, probe vision/tools in the background.
+    scheduleFirstLoadCapabilityProbes(results);
 
     const pid = options?.selectedProviderId?.trim();
     const mid = options?.selectedModelId?.trim();

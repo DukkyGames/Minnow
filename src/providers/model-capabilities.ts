@@ -17,7 +17,12 @@ import {
   QWEN38_REASONING_OPTIONS,
 } from '../lib/reasoning-effort';
 import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
-import type { ApiKind } from './types';
+import { LIBRARY_MODEL_PROVIDER_ID } from '../models/model-select-library';
+import {
+  LLAMA_CPP_LOCAL_PROVIDER_ID,
+  MLX_LM_LOCAL_PROVIDER_ID,
+  type ApiKind,
+} from './types';
 import type { LmModelRecord, ModelCapabilities } from '../types';
 import { getCachedProviderList } from './store';
 
@@ -36,6 +41,8 @@ const providerCapabilitiesCache = new Map<string, ProviderCapabilitiesFile>();
 let lastAppliedCapabilities: ProviderCapabilitiesFile | null = null;
 
 let probeAbort: AbortController | null = null;
+/** True while Settings → Probe models owns `probeAbort` (auto-probe must not steal it). */
+let probeIsManual = false;
 
 /** Match chat model ids to catalog rows when slash-prefixed ids differ (e.g. deepseek/deepseek-v4-flash). */
 function modelIdsMatchForCapabilities(chatModelId: string, catalogModelId: string): boolean {
@@ -84,13 +91,34 @@ export function getCachedProviderCapabilities(
 /** Apply fetched capabilities file to cache and merge into model rows. */
 export function applyProviderCapabilities(file: ProviderCapabilitiesFile): void {
   providerCapabilitiesCache.set(file.providerId, file);
+  stampModelCacheFromCapabilitiesFile(file);
+}
+
+/**
+ * Probe files are keyed by the upstream provider (`llama-cpp-local` / `mlx-lm-local`).
+ * My Models picker rows use `minnow-library` + the same model id — stamp those too
+ * so a first-load probe can show a Vision badge on the row the user selected.
+ */
+function cacheRowAcceptsCapabilitiesFile(
+  fileProviderId: string,
+  rowProviderId: string | undefined,
+): boolean {
+  if (rowProviderId === undefined || rowProviderId === fileProviderId) return true;
+  if (rowProviderId !== LIBRARY_MODEL_PROVIDER_ID) return false;
+  return (
+    fileProviderId === LLAMA_CPP_LOCAL_PROVIDER_ID ||
+    fileProviderId === MLX_LM_LOCAL_PROVIDER_ID
+  );
+}
+
+/** Write each file entry onto matching modelCache rows. */
+function stampModelCacheFromCapabilitiesFile(file: ProviderCapabilitiesFile): void {
   for (const [modelId, caps] of Object.entries(file.models)) {
     for (const [cacheKey, row] of modelCache.entries()) {
       const decoded = decodeModelSelectKey(cacheKey);
       const logicalId = decoded?.modelId ?? cacheKey;
-      const rowProvider = decoded?.providerId;
-      if (rowProvider !== undefined && rowProvider !== file.providerId) continue;
       if (logicalId !== modelId) continue;
+      if (!cacheRowAcceptsCapabilitiesFile(file.providerId, decoded?.providerId)) continue;
       row.capabilities = mergeModelCapabilities(row, caps);
     }
   }
@@ -365,17 +393,10 @@ export function mergeModelCapabilities(
   return withQwen38ReasoningLevels(row.id, merged);
 }
 
-/** Attach merged capabilities to every row in modelCache for a provider file. */
+/** Attach merged capabilities to every matching modelCache row for a provider file. */
 export function mergeCapabilitiesIntoModelCache(file: ProviderCapabilitiesFile): void {
   lastAppliedCapabilities = file;
   applyProviderCapabilities(file);
-  for (const [cacheKey, row] of modelCache.entries()) {
-    const decoded = decodeModelSelectKey(cacheKey);
-    const logicalId = decoded?.modelId ?? cacheKey;
-    if (decoded && decoded.providerId !== file.providerId) continue;
-    const fromFile = file.models[logicalId];
-    row.capabilities = mergeModelCapabilities(row, fromFile);
-  }
 }
 
 /** GET persisted capabilities for a provider. */
@@ -526,6 +547,11 @@ export function prioritizeModelIdsForProbe(
 export const NO_LOADED_MODEL_MATRIX_PROBE_MSG =
   'No loaded model found. Load a model in LM Studio, then run the probe again.';
 
+/** True while a Settings-initiated matrix probe is in flight. */
+export function isManualCapabilityProbeInFlight(): boolean {
+  return probeAbort !== null && probeIsManual;
+}
+
 /** Run capability matrix probe (Settings → Providers button; optional model id filter). */
 export async function runCapabilityProbeForProvider(
   providerId: string,
@@ -533,13 +559,24 @@ export async function runCapabilityProbeForProvider(
     modelIds?: string[];
     selectedModelId?: string;
     apiKind?: ApiKind;
+    /** Settings button — may abort an in-flight first-load probe. */
+    manual?: boolean;
   } = {},
-): Promise<void> {
-  if (!isServerStorageMode()) return;
+): Promise<boolean> {
+  if (!isServerStorageMode()) return false;
 
-  if (probeAbort) probeAbort.abort();
+  const isManual = options.manual === true;
+  if (probeAbort) {
+    if (isManual) {
+      probeAbort.abort();
+    } else {
+      // First-load probes are queued serially; do not abort a Settings probe.
+      return false;
+    }
+  }
   const controller = new AbortController();
   probeAbort = controller;
+  probeIsManual = isManual;
 
   try {
     let modelIds = options.modelIds;
@@ -564,13 +601,15 @@ export async function runCapabilityProbeForProvider(
     if (probeAbort === controller) {
       mergeCapabilitiesIntoModelCache(file);
     }
+    return true;
   } catch (err) {
     const e = err as { name?: string };
-    if (e?.name === 'AbortError') return;
+    if (e?.name === 'AbortError') return false;
     throw err;
   } finally {
     if (probeAbort === controller) {
       probeAbort = null;
+      probeIsManual = false;
     }
   }
 }
