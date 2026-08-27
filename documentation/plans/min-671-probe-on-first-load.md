@@ -17,6 +17,9 @@ todos:
   - id: docs
     content: Update documentation/context.md vision/probes paragraph and Settings probe hint
     status: completed
+  - id: ci-worktree-fixture
+    content: Align MIN-619 panel-cwd fixture with worktrees-segment path rule so CI is not blocked by the pre-existing #941 mismatch
+    status: completed
 isProject: true
 ---
 
