@@ -27,7 +27,7 @@ import {
   isTerminalEscapeInput,
   parseHistoryArrow,
   resolveHistoryNavigation,
-  usesShellNativeHistory,
+  shouldInterceptPtyHistoryArrow,
 } from './terminal-history-nav';
 import { handleTerminalWebLink } from './terminal-console-links';
 import { buildTerminalXtermTheme } from './terminal-xterm-theme';
@@ -211,10 +211,20 @@ function trackLineBufferInput(data: string): void {
 }
 
 function handleHistoryKeys(data: string): boolean {
+  // Known interactive shells (zsh/bash/PSReadLine) must see the raw arrow so
+  // their own history works. Intercepting and injecting Ctrl+A/Ctrl+K is what
+  // painted ^A^K on used macOS zsh tabs (MIN-670).
+  if (
+    !shouldInterceptPtyHistoryArrow({
+      data,
+      shellProfileId: activeShellProfileId,
+      tabHistoryLength: tabHistory.length,
+    })
+  ) {
+    return false;
+  }
   const arrow = parseHistoryArrow(data);
   if (!arrow || !term) return false;
-  if (usesShellNativeHistory(activeShellProfileId)) return false;
-  if (tabHistory.length === 0) return false;
   if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return false;
 
   const nav = resolveHistoryNavigation(

@@ -3,11 +3,23 @@
  */
 
 /**
- * Clear the shell's current input line (readline / PSReadLine): beginning-of-line
- * then kill-to-end. Does not depend on a client-side buffer length (Windows DEL
- * backspaces were unreliable and desynced from PSReadLine).
+ * Fallback line-clear for shells that do not own their own history: beginning-of-line
+ * then kill-to-end (Ctrl+A Ctrl+K). Do not send this to zsh/bash — those shells echo
+ * the bytes as caret notation (^A^K) on an already-used tab (MIN-670).
  */
 export const HISTORY_LINE_CLEAR = '\x01\x0b';
+
+/** WSL distro profile ids (`wsl:Ubuntu`) spawn a real Unix line editor inside the distro. */
+const WSL_SHELL_PROFILE_PREFIX = 'wsl:';
+
+/** Interactive shells whose line editor must receive ArrowUp/Down unchanged. */
+const NATIVE_HISTORY_SHELL_IDS = new Set([
+  'powershell',
+  'cmd',
+  'zsh',
+  'bash',
+  'fish',
+]);
 
 /** Build PTY input that replaces the current editable line with `nextLine`. */
 export function buildHistoryReplaceInput(
@@ -37,12 +49,29 @@ export function isTerminalEscapeInput(data: string): boolean {
 }
 
 /**
- * Shells with their own line editor history (PSReadLine, cmd DOSKEY). ArrowUp/Down
- * must reach the PTY — client-side recall would fight the shell and garble input.
+ * Interactive PTY shells own ArrowUp/Down via their line editor (zle, readline,
+ * fish, PSReadLine, DOSKEY). Client-side recall injects Ctrl+A/Ctrl+K which zsh
+ * prints as ^A^K on a used tab (MIN-670) and garbles PSReadLine on Windows.
  */
 export function usesShellNativeHistory(shellProfileId: string | null | undefined): boolean {
   if (!shellProfileId) return false;
-  return shellProfileId === 'powershell' || shellProfileId === 'cmd';
+  if (shellProfileId.startsWith(WSL_SHELL_PROFILE_PREFIX)) return true;
+  return NATIVE_HISTORY_SHELL_IDS.has(shellProfileId);
+}
+
+/**
+ * True when the xterm handler should swallow this key and inject a stored line.
+ * Fresh tabs (empty history) already pass arrows through; used zsh/bash tabs
+ * must do the same or the prompt shows ^A^K + the command (MIN-670).
+ */
+export function shouldInterceptPtyHistoryArrow(options: {
+  data: string;
+  shellProfileId: string | null | undefined;
+  tabHistoryLength: number;
+}): boolean {
+  if (!parseHistoryArrow(options.data)) return false;
+  if (usesShellNativeHistory(options.shellProfileId)) return false;
+  return options.tabHistoryLength > 0;
 }
 
 export type HistoryArrow = 'up' | 'down';
