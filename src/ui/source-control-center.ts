@@ -42,6 +42,7 @@ import {
   renderGitNoRepositoryState,
 } from './git-no-repo-state';
 import { openGitPanelNamePopover } from './git-panel-name-popover';
+import { slugifyGitRefName } from '../lib/git-branch-slug.mjs';
 import { resolvePanelWorktreeCwd } from './panel-worktree-cwd';
 import { createChangesView, focusCommitMessage } from './scc-changes';
 import { createChecksView } from './scc-checks';
@@ -554,11 +555,16 @@ function openBranchSwitcher(): void {
     placeholder: currentBranch || 'main',
     submitLabel: 'Switch',
     onSubmit: async (name) => {
-      const branch = name.trim();
+      const typed = name.trim();
+      if (!typed || typed === currentBranch) return;
+
+      // Prefer an exact existing branch; otherwise auto-fix and create (MIN-659).
+      const existsExact = localBranches.includes(typed);
+      const branch = existsExact ? typed : slugifyGitRefName(typed);
       if (!branch || branch === currentBranch) return;
       if (!(await confirmDirtyCheckout(effectiveCwd()))) return;
 
-      const exists = localBranches.includes(branch);
+      const exists = existsExact || localBranches.includes(branch);
       await runOp(
         () => gitCheckout({ branch, create: !exists, cwd: effectiveCwd() }),
         exists ? `Switched to ${branch}` : `Created and checked out ${branch}`,

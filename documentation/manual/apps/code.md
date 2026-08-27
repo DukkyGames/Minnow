@@ -94,6 +94,7 @@ The source-control panel does status, stage, diff, commit, branch, pull and push
 
 - **Commit messages** can be generated from the staged diff: conventional commits with optional gitmoji, an imperative subject, and a body explaining why. The `/git-commit` skill uses the same conventions.
 - **Merge to main** appears when you are on a feature branch: it checks out the trunk in the main workspace, merges your branch, and switches you back — warning you first if the tree is dirty and surfacing merge failures with an option to send them to chat.
+- Names you type when creating a **branch** or **worktree** (composer, Source Control, or the git panel) are turned into a git-safe slug: `Test Worktree` becomes `test-worktree`. Empty or illegal characters are stripped; the dialog shows the name that will be used.
 - Agents use the same git operations through tools, so you and the model are never looking at different states.
 
 ## Source Control Center

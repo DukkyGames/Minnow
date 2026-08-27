@@ -13,6 +13,7 @@ import { runProcess } from '../process-runner.js';
 import { parseGitNumstat } from '../tools/git-change-stats.js';
 import { invalidateRegisteredWorktreeCache } from './allowlist.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
+import { slugifyGitRefName } from '../../src/lib/git-branch-slug.mjs';
 import { refreshDependencies } from './dep-install.js';
 import { ensureDependencyDirs } from './dep-symlinks.js';
 import {
@@ -96,6 +97,8 @@ async function mergeBaseIntoWorktree(wtPath, baseRef) {
  * Create (or attach) a task/wave worktree on its branch, based off `baseRef`
  * (normally the integration branch). When the slot already exists, merges the
  * current integration tip in so later / sequential tasks see prior task work.
+ *
+ * Branch names are owned by worktree-isolation.ts — do not slugify here (MIN-659).
  * @param {{ boardId: string, slotId: string, branch: string, baseRef?: string }} input
  */
 export async function createWorktree({ boardId, slotId, branch, baseRef }) {
@@ -762,7 +765,7 @@ export async function createChatWorktree({ chatId, branch, baseRef }) {
   }
 
   const wtPath = getChatWorktreePath(chatId.trim());
-  const branchName = branch.trim();
+  const branchName = slugifyGitRefName(branch, 'worktree');
   const base = (baseRef && baseRef.trim()) || 'HEAD';
   const depSource = getWorkspaceRoot();
 

@@ -2,7 +2,13 @@
  * Per-chat worktree helpers (MIN-276) — attach/detach, labels, managed-slot detection.
  */
 
+import { isPlaceholderChatName } from '../chat/titles/placeholder.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
+import {
+  GIT_REF_FALLBACK_WORKTREE,
+  slugifyGitRefName,
+  suggestGitRefName,
+} from '../lib/git-branch-slug.mjs';
 import { gitBranches } from './git-api.ts';
 import { sanitizeRefFragment } from './worktree-isolation.ts';
 import { getWorkspacePath } from './workspace.ts';
@@ -26,6 +32,32 @@ export function formatComposerRunTargetLabel(chat: Pick<Chat, 'worktreeRoot'>): 
 export function formatComposerBranchLabel(branch?: string): string {
   const name = branch?.trim();
   return name || 'Branch';
+}
+
+/**
+ * Chat title usable as a git-ref source. Placeholder "New chat" is skipped so
+ * the default falls through to the workspace folder slug (MIN-659).
+ */
+export function chatTitleForGitRef(chat: Pick<Chat, 'name'>): string {
+  const title = chat.name?.trim() ?? '';
+  if (!title || isPlaceholderChatName(title)) return '';
+  return title;
+}
+
+/**
+ * Default branch name for a new managed chat worktree: chat title, else folder
+ * basename — never the current checkout or an opaque chat id.
+ */
+export function suggestChatWorktreeBranchName(
+  chat: Pick<Chat, 'name' | 'workspacePath' | 'gitBranch'>,
+  workspacePath = '',
+): string {
+  return suggestGitRefName({
+    title: chatTitleForGitRef(chat),
+    path: chat.workspacePath?.trim() || workspacePath,
+    fallback: GIT_REF_FALLBACK_WORKTREE,
+    reserved: [chat.gitBranch, 'main', 'master'],
+  });
 }
 
 /**
@@ -74,16 +106,18 @@ export async function createManagedChatWorktree(
   branch: string,
   baseRef?: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  // Auto-fix invalid names at the client so the UI toast matches the git ref.
+  const branchName = slugifyGitRefName(branch, GIT_REF_FALLBACK_WORKTREE);
   const res = await createChatWorktree({
     chatId: chat.id,
-    branch: branch.trim(),
+    branch: branchName,
     baseRef,
   });
   if (!res.ok || !res.path) {
     return { ok: false, error: res.error ?? res.output ?? 'Could not create worktree' };
   }
   chat.worktreeRoot = res.path;
-  chat.gitBranch = (res.branch ?? branch).trim();
+  chat.gitBranch = (res.branch ?? branchName).trim();
   chat.chatWorktreeManaged = true;
   return { ok: true };
 }

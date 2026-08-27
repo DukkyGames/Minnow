@@ -141,7 +141,7 @@
 .git-panel-name-popover {
   position: fixed;
   z-index: 60;
-  width: min(240px, calc(100vw - 1rem));
+  width: min(280px, calc(100vw - 1rem));
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -186,6 +186,18 @@
 .git-panel-name-popover__input:focus {
   outline: 2px solid var(--mn-accent);
   outline-offset: -1px;
+}
+
+/* Live slug so the user sees the git name that will actually be created (MIN-659). */
+.git-panel-name-popover__preview {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--mn-fg-muted);
+  overflow-wrap: anywhere;
 }
 
 .git-panel-name-popover__actions {

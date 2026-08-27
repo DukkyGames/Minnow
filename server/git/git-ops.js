@@ -10,6 +10,10 @@ import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
 import { invalidateRegisteredWorktreeCache } from '../worktree/allowlist.js';
 import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import {
+  gitRefFolderName,
+  slugifyGitRefName,
+} from '../../src/lib/git-branch-slug.mjs';
 
 const GIT_TIMEOUT_MS = 120_000;
 
@@ -644,7 +648,7 @@ export async function worktreeAdd({ cwd, branch, path: worktreePath, baseRef } =
     return { ok: false, error: 'branch is required' };
   }
 
-  const branchName = branch.trim();
+  const branchName = slugifyGitRefName(branch, 'worktree');
   const rootResult = await git(['rev-parse', '--show-toplevel'], repo.cwd);
   if (rootResult.code !== 0) {
     return { ok: false, error: processError(rootResult) };
@@ -654,7 +658,7 @@ export async function worktreeAdd({ cwd, branch, path: worktreePath, baseRef } =
   let targetPath =
     typeof worktreePath === 'string' && worktreePath.trim()
       ? worktreePath.trim()
-      : path.join(repoRoot, '.worktrees', branchName.replace(/[^a-zA-Z0-9._-]+/g, '-'));
+      : path.join(repoRoot, '.worktrees', gitRefFolderName(branchName));
 
   const args = ['worktree', 'add', '-b', branchName, targetPath];
   if (baseRef && String(baseRef).trim()) {
@@ -731,9 +735,12 @@ export async function checkout({ cwd, branch, create, startPoint } = {}) {
     return { ok: false, error: 'branch is required' };
   }
 
+  // Create flows auto-fix invalid names (`Test Worktree` → `test-worktree`).
+  // Checkout of an existing branch keeps the typed name so mixed-case refs match.
+  const name = create ? slugifyGitRefName(branch, 'branch') : branch.trim();
   const args = create
-    ? ['checkout', '-b', branch.trim()]
-    : ['checkout', branch.trim()];
+    ? ['checkout', '-b', name]
+    : ['checkout', name];
   if (create && startPoint && typeof startPoint === 'string' && startPoint.trim()) {
     args.push(startPoint.trim());
   }
@@ -742,7 +749,7 @@ export async function checkout({ cwd, branch, create, startPoint } = {}) {
     return { ok: false, error: processError(result) };
   }
 
-  return { ok: true };
+  return { ok: true, branch: name };
 }
 
 /** `git checkout --detach <sha>` */
