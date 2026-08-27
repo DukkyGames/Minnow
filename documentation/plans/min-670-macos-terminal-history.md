@@ -25,6 +25,7 @@ The same footgun is already documented for PowerShell/cmd: `usesShellNativeHisto
 - [x] Keep Ctrl+A/Ctrl+K replace only as a fallback for unknown shells
 - [x] Update [`documentation/context.md`](../context.md) PTY history note
 - [x] Run `terminal-history-nav` tests
+- [x] PTY regression: bash vi-mode echoes `HISTORY_LINE_CLEAR` as `^A^K`; native ArrowUp does not
 
 ## Out of scope
 
