@@ -212,6 +212,7 @@ import {
   removeOrphanStreamingRow,
   revealAssistantProseBubble,
   renderChatFromHistory,
+  setAssistantErrorBubble,
   setAssistantErrorBubbleWithRecovery,
 } from '../ui/messages';
 import { completeStreamAnnouncer } from '../ui/a11y/stream-announcer';
@@ -379,6 +380,7 @@ import { setSubAgentExecutorContext } from './sub-agent-executor';
 import {
   copyHistoryForOutboundApi,
   clearPostToolTailBeforeSend,
+  indexOfLastFailedAssistantAtTail,
   repairSessionHistoryTail,
   rollbackFailedTurnHistory,
   turnProducedOutput,
@@ -3083,7 +3085,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
      * because nothing had been appended yet and `rollbackFailedTurnHistory` slices
      * back to the user row. Persist the partial first so `turnProducedOutput` below
      * takes the preserve branch and the error bubble lands underneath it.
-     * Retry is unaffected: `forkFromUserIndex` truncates inclusive at the user row.
+     * Continue (MIN-666) retries with that partial still in history; Clear drops
+     * only the failed assistant row.
      */
     persistFailedTurnPartial({
       chat,
@@ -3171,6 +3174,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     });
     if (isStreamDomVisible(chat.id)) {
       if (!rolledBack) {
+        const recovery = {
+          chatId: chat.id,
+          forkHistoryIndex: failedForkIndex,
+        };
+        // renderChatFromHistory already put Continue/Clear on a tail failed chip —
+        // keep this bubble as the error text only so the actions are not duplicated.
+        const recoveryOnChip = indexOfLastFailedAssistantAtTail(chat.history) >= 0;
         if (preservedTurnOutput) {
           const { bubble: errorBubble } = appendBubble('assistant', '', {
             historyIndex: chat.history.length,
@@ -3178,17 +3188,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             chatId: chat.id,
             modeId: chat.modeId,
           });
-          setAssistantErrorBubbleWithRecovery(errorBubble, lost, {
-            chatId: chat.id,
-            forkHistoryIndex: failedForkIndex,
-          });
+          if (recoveryOnChip) {
+            setAssistantErrorBubble(errorBubble, lost);
+          } else {
+            setAssistantErrorBubbleWithRecovery(errorBubble, lost, recovery);
+          }
         } else {
           finishStreamingBubbleRender(bubble, cursor);
           revealProse();
-          setAssistantErrorBubbleWithRecovery(bubble, lost, {
-            chatId: chat.id,
-            forkHistoryIndex: failedForkIndex,
-          });
+          setAssistantErrorBubbleWithRecovery(bubble, lost, recovery);
         }
       }
       const msg = e.message ?? '';

@@ -152,6 +152,7 @@
       "headings": [
         "The composer",
         "While the model is working",
+        "When a turn fails",
         "Watching what agents do",
         "Undoing a turn",
         "Branches",
@@ -161,7 +162,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "31185998633239930463c63c3f17c48ab4daa3b1470509c1f63fa9f093e12ad0"
+      "hash": "06f8922a60a952f3e824b39c9f5ae53bf5225a6df037b7dcc6fffe8b9cfdd3f7"
     },
     {
       "path": "documentation/manual/chat/skills-and-commands.md",

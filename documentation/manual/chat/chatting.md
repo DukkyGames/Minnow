@@ -28,6 +28,10 @@ You do not have to sit still and wait.
 
 **Stop** when the run is genuinely off the rails. The partial reply stays.
 
+## When a turn fails
+
+If a reply errors mid-stream, the partial stays on screen. **Continue** retries with the full conversation still in context. **Clear** removes the failed assistant output and keeps your prompt. Neither control wipes earlier turns.
+
 ## Watching what agents do
 
 - **Inference metrics** — tokens, tok/s and totals for the turn. In Code, the strip at the bottom of the chat column.
