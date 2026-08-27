@@ -248,6 +248,24 @@ describe('tool calls emitted inside a think span', () => {
     const out = streamTwoChannel(['<think>', READ_FILE, '</think>'], streamed);
     assert.deepEqual(out.calls, ['read_file']);
   });
+
+  test('runs a tool call inside a second think span after prose', () => {
+    const out = streamTwoChannel([
+      '<think>',
+      'plan',
+      '</think>',
+      'Working.',
+      '<think>',
+      'now call',
+      READ_FILE,
+      '</think>',
+    ]);
+    assert.deepEqual(out.calls, ['read_file']);
+    assert.equal(out.prose, 'Working.');
+    assert.equal(out.thinking.includes('tool_call'), false);
+    assert.match(out.thinking, /plan/);
+    assert.match(out.thinking, /now call/);
+  });
 });
 
 describe('mergeContentJsonToolCalls with thinkingXmlParseText', () => {
