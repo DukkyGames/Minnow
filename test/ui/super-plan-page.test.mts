@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, test } from 'node:test';
+import { after, afterEach, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 
@@ -31,6 +31,8 @@ import {
 import { PlanActivityCollector } from '../../src/ui/plan-activity-collector.ts';
 
 let activeWindow: Window | undefined;
+/** Restored after this file so a 404 stub cannot leak into later tests in the worker. */
+const originalFetch = globalThis.fetch;
 
 async function waitFor(
   predicate: () => boolean,
@@ -136,6 +138,10 @@ function textOf(root: ParentNode, selector: string): string {
 }
 
 describe('super plan page', () => {
+  after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   afterEach(() => {
     streamingChatIds.clear();
     teardownSuperPlanPage();
@@ -144,6 +150,7 @@ describe('super plan page', () => {
     Reflect.deleteProperty(globalThis, 'window');
     activeWindow?.close();
     activeWindow = undefined;
+    globalThis.fetch = originalFetch;
   });
 
   test('pipeline column lists every stage and marks the running one', () => {

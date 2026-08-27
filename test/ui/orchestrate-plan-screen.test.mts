@@ -43,6 +43,7 @@ function mountCodeChatAreaForTests(): HTMLElement {
 }
 
 let activeWindow: Window | undefined;
+const originalFetch = globalThis.fetch;
 
 function installTestWindow(): void {
   activeWindow?.close();
@@ -64,6 +65,7 @@ describe('orchestrate plan screen', () => {
     activeWindow?.close();
     activeWindow = undefined;
     setSessionStateForTests(null);
+    globalThis.fetch = originalFetch;
   });
 
   test('mount shows prompt and suppresses stream DOM', async () => {

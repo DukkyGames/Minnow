@@ -347,6 +347,8 @@ class SuperPlanPage {
   private lastSpecPath = '';
   private lastPlanPath = '';
   private renderedDocSig = '';
+  /** Set in destroy() so an in-flight library fetch cannot paint a dead page. */
+  private destroyed = false;
 
   // Element refs held for in-place patching.
   private railList!: HTMLElement;
@@ -426,6 +428,7 @@ class SuperPlanPage {
   }
 
   destroy(): void {
+    this.destroyed = true;
     // Abort an in-flight expand that belongs to this composer, not Code/Chat.
     cancelComposerExpandFor('superPlanPrompt');
     this.unbindComposerResize?.();
@@ -525,11 +528,14 @@ class SuperPlanPage {
   }
 
   private async loadLibrary(): Promise<void> {
+    if (this.destroyed) return;
     try {
       const result = await listSuperPlanLibrary();
+      if (this.destroyed) return;
       this.libraryEntries = result.entries;
       this.libraryError = result.error;
     } catch {
+      if (this.destroyed) return;
       this.libraryEntries = [];
       this.libraryError = 'find_files failed';
     }
