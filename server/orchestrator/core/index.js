@@ -31,3 +31,5 @@ export {
 } from './events.js';
 
 export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive.js';
+
+export { decide, formatPolicyTable, POLICY_TABLE } from './policy.js';

@@ -38,3 +38,6 @@ export {
 
 export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive';
 export type { Attempt, TouchesOverflow, FinalTestState, WaveRef, Evidence } from './types';
+
+export { decide, formatPolicyTable, POLICY_TABLE } from './policy';
+export type { PolicyOutcome, PolicyRow, RetryAction, AdvanceAction, AbandonAction } from './types';

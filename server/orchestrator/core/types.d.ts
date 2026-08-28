@@ -318,14 +318,52 @@ export interface Desired {
 }
 
 // ---------------------------------------------------------------------------
-// Policy — populated by P0-E
+// Policy — P0-E
 // ---------------------------------------------------------------------------
 
-/** What the policy table says happens next. Refined in P0-E. */
-export type Action =
-  | { kind: 'retry' }
-  | { kind: 'abandon'; reason: string }
-  | { kind: 'advance' };
+/**
+ * What an attempt of any role can end as.
+ *
+ * `conflicted` is merge-only and is why this is wider than `AttemptResult`.
+ */
+export type PolicyOutcome = AttemptResult | 'conflicted';
+
+/** Retry always targets the builder — one backward target in the whole table. */
+export interface RetryAction {
+  kind: 'retry';
+  role: 'builder';
+  seedKind: SeedKind;
+  /** `blocked` repairs in the worktree it broke in. */
+  sameWorktree: boolean;
+}
+
+/** The one forward edge: builder → tester → merge → done. */
+export interface AdvanceAction {
+  kind: 'advance';
+  to: 'tester' | 'merge' | 'done';
+}
+
+/**
+ * Every abandonment carries a machine-readable reason and the inputs to the
+ * decision, so PRD §11's retroactive measurement stays possible.
+ */
+export interface AbandonAction {
+  kind: 'abandon';
+  reason: string;
+  evidence: Evidence;
+}
+
+/** What the policy table says happens next. */
+export type Action = RetryAction | AdvanceAction | AbandonAction;
+
+/** One row of the policy table. */
+export interface PolicyRow {
+  role: Role | '*';
+  outcome: PolicyOutcome | '*';
+  /** Applies while `attemptCount < under`. `null` is the unbounded fallback. */
+  under: number | null;
+  action: RetryAction | AdvanceAction | { kind: 'abandon'; reason: string };
+}
 
 // ---------------------------------------------------------------------------
 // Snapshot — populated by P0-G
