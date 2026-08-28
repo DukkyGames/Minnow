@@ -199,25 +199,46 @@ export type ValidationResult =
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
-// Plan graph — populated by P0-F
+// Plan graph — P0-F
 // ---------------------------------------------------------------------------
 
-/** One task as declared in a plan document. Refined in P0-F. */
+/**
+ * One task as declared in a plan document.
+ *
+ * `dependsOn` is always present and always resolved: absent and empty
+ * `Depends on:` parse identically, retiring the Planner prompt's "never emit an
+ * empty list" workaround rather than reproducing it.
+ */
 export interface PlanTask {
   id: string;
   title: string;
   wave: number;
   dependsOn: string[];
+  /** Repo-relative globs this task may write. Required, and never empty. */
   touches: string[];
+  build: string;
+  test: string;
+  accept: string;
+  /** Line of the `#### Task` heading, for error reporting and UI links. */
+  line: number;
 }
 
-/** A parsed, validated, acyclic plan. Refined in P0-F. */
+/** A parsed, validated, acyclic plan. */
 export interface TaskGraph {
   name: string;
+  overview: string;
+  isProject: boolean;
+  title: string;
+  waves: WaveRef[];
   tasks: PlanTask[];
 }
 
-/** A loud, locatable parse failure. Refined in P0-F. */
+/**
+ * A loud, locatable parse failure.
+ *
+ * A dropped task must be impossible to miss, so every error carries where it is
+ * and what to do about it.
+ */
 export interface ParseError {
   line: number;
   column: number;

@@ -84,13 +84,13 @@ The plan must be structured so an Orchestrator can hand each task to a fresh Bui
 name: <plan-kebab-name>
 overview: <one-paragraph summary>
 todos:
-  - id: w1-foo
+  - id: W1-A
     content: "Wave 1: <task title>"
     status: pending
-  - id: w1-bar
+  - id: W1-B
     content: "Wave 1: <task title>"
     status: pending
-  - id: w2-baz
+  - id: W2-A
     content: "Wave 2: <task title>"
     status: pending
 isProject: true
@@ -120,16 +120,24 @@ Tasks here run concurrently.
 - **Build:** <specific steps; file paths; **exact function/type names to add or change**; expected diff scope>
 - **Test:** <specific assertions; commands to run; expected output that proves success>
 - **Accept:** <one observable outcome that proves this task is done — e.g. "the /foo route returns 200 with field bar">
+- **Touches:** <comma-separated repo-relative globs this task may write — e.g. `src/foo/**`, `server/bar/*.js`>
 - **Depends on:** <comma-separated task ids, or omit>
 
 #### Task W1-B: <Title>
 - **Build:** ...
 - **Test:** ...
 - **Accept:** ...
+- **Touches:** ...
 - **Depends on:** <omit if no dependency>
 
 ### Wave 2 — <Name>
-...
+
+#### Task W2-A: <Title>
+- **Build:** ...
+- **Test:** ...
+- **Accept:** ...
+- **Touches:** ...
+- **Depends on:** W1-A, W1-B
 
 ## Verification Checklist
 - [ ] `npm test` passes
@@ -142,15 +150,16 @@ Tasks here run concurrently.
 
 ## Quality requirements (non-negotiable)
 
-- **Every task has Build + Test + Accept sub-tasks.** No exceptions.
+- **Every task has Build + Test + Accept + Touches sub-tasks.** No exceptions. The plan is parsed, not interpreted — a missing field is rejected with a line number when you save it, so fix it here.
+- **Every task declares `Touches:`** — the repo-relative globs it may write, at least one. The scheduler runs two tasks concurrently only when their `Touches` sets do not intersect, so an over-broad glob costs parallelism and a too-narrow one causes merge conflicts. Declare what the task actually writes.
 - **Build sub-tasks name specific symbols.** Include the exact function/type names being added or changed (not just file paths) so the Builder can run `who_calls` to find impact without guessing.
-- **Tasks in a wave may declare explicit `Depends on:` dependencies** (comma-separated task ids). Tasks without it are independent and can run concurrently. Cross-wave sequencing still goes between waves. No cycles; only reference earlier task ids in the plan.
+- **Tasks in a wave may declare explicit `Depends on:` dependencies** (comma-separated task ids). Omitting the line and writing an empty one mean the same thing, so either is fine. Tasks without dependencies are independent and can run concurrently. Cross-wave sequencing still goes between waves. Every id must name a task in this plan, and the graph must be acyclic — cycles are rejected at save time.
 - **Build sub-tasks must be self-contained.** A fresh Builder agent with no chat history must be able to execute it. Include real file paths, function names, expected diff size.
 - **Test sub-tasks are objective.** Name the command, the assertion, the file to check. "Looks right" is not a test.
 - **Accept criterion is one observable outcome.** Not a process step — a verifiable fact about the running system or artifact.
 - **Granularity must match the active setting** (`{{plan_granularity}}`) unless the user specified otherwise.
 - **Use real file paths** that you verified exist. No placeholders.
-- **Front-matter `todos` list contains every task** with `status: pending`.
+- **Front-matter `todos` list contains every task** with `status: pending`, and **each `id` is the task id exactly** (`W1-A`, not a re-slugged title). The todos list and the `#### Task` headings must account for each other one-to-one; a mismatch is a parse error, because in the old engine it silently dropped work.
 
 ## Restrictions
 

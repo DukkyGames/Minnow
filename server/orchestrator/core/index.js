@@ -43,3 +43,5 @@ export {
   plan,
   touchesOverlap,
 } from './plan.js';
+
+export { formatParseErrors, isParseErrors, parsePlan } from './parse-plan.js';
