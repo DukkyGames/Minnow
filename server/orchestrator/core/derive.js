@@ -147,10 +147,17 @@ function apply(state, event) {
       return;
     }
 
+    // Merges are recorded as attempts of role `merge`, not as a separate shape.
+    // That is what lets `attemptCount(state, id, 'merge')` be the same filter as
+    // for builder and tester, so the policy table needs no special case for the
+    // `merge | conflicted` row.
     case 'merge.enqueued': {
       const task = state.tasks.get(event.taskId);
       if (!task) return;
       if (!state.mergeQueue.includes(event.taskId)) state.mergeQueue.push(event.taskId);
+      if (!task.attempts.some((a) => a.role === 'merge' && !a.ended)) {
+        task.attempts.push(mergeAttempt(task));
+      }
       return;
     }
 
@@ -158,6 +165,7 @@ function apply(state, event) {
       const task = state.tasks.get(event.taskId);
       if (!task) return;
       state.mergeQueue = state.mergeQueue.filter((id) => id !== event.taskId);
+      closeMergeAttempt(task, 'pass');
       task.mergedSha = event.sha;
       task.mergeConflicts = null;
       state.integrationSha = event.sha;
@@ -168,6 +176,7 @@ function apply(state, event) {
       const task = state.tasks.get(event.taskId);
       if (!task) return;
       state.mergeQueue = state.mergeQueue.filter((id) => id !== event.taskId);
+      closeMergeAttempt(task, 'conflicted');
       task.mergeConflicts = [...event.files];
       return;
     }
@@ -219,6 +228,44 @@ function apply(state, event) {
     // `known` — and adding a default that mutates would break P0-B's tolerance
     // requirement.
   }
+}
+
+/**
+ * A merge has no agent and so no `task.attempt.started` line. Its attempt id is
+ * synthesised from the fold position, which is deterministic under replay.
+ *
+ * @param {import('./types').TaskState} task
+ * @returns {import('./types').Attempt}
+ */
+function mergeAttempt(task) {
+  const n = task.attempts.filter((a) => a.role === 'merge').length;
+  return {
+    attemptId: `merge#${task.id}#${n + 1}`,
+    role: 'merge',
+    worktree: null,
+    seedKind: null,
+    ended: false,
+    outcome: null,
+    summary: null,
+    evidence: null,
+  };
+}
+
+/**
+ * @param {import('./types').TaskState} task
+ * @param {'pass' | 'conflicted'} outcome
+ * @returns {void}
+ */
+function closeMergeAttempt(task, outcome) {
+  let attempt = task.attempts.find((a) => a.role === 'merge' && !a.ended);
+  if (!attempt) {
+    // A merge result with no enqueue line: record it anyway, or the merge
+    // attempt count the policy table runs on would be short by one.
+    attempt = mergeAttempt(task);
+    task.attempts.push(attempt);
+  }
+  attempt.ended = true;
+  attempt.outcome = outcome;
 }
 
 /**

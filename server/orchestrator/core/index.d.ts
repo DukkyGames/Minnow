@@ -41,3 +41,14 @@ export type { Attempt, TouchesOverflow, FinalTestState, WaveRef, Evidence } from
 
 export { decide, formatPolicyTable, POLICY_TABLE } from './policy';
 export type { PolicyOutcome, PolicyRow, RetryAction, AdvanceAction, AbandonAction } from './types';
+
+export {
+  globsIntersect,
+  nextAction,
+  orderedTaskIds,
+  pendingAbandonments,
+  pendingEnqueues,
+  plan,
+  touchesOverlap,
+} from './plan';
+export type { NextAction } from './types';

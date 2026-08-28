@@ -23,6 +23,24 @@
  * | merge   | conflicted         | >= 2     | abandon                                  |
  * ```
  *
+ * ## What the `attempts` column counts
+ *
+ * **Attempts of this role that had already finished *before* the one being
+ * decided** — how many times we have tried this already, not counting now.
+ *
+ * The alternative reading, where the just-ended attempt is included, makes the
+ * `blocked | < 1` and `no_report | < 1` rows unreachable: an attempt cannot end
+ * as `blocked` with zero attempts finished. That would silently delete the
+ * repair path, which is the entire replacement for the env-fixer. It would also
+ * flatten the table, since every remaining row would allow exactly one retry.
+ *
+ * Under the reading used here the table says what it looks like it says: `fail`,
+ * `crashed`, and `timeout` are worth two more tries; `blocked` and `no_report`
+ * are worth one.
+ *
+ * `nextAction()` in `plan.js` is where the conversion happens, and it is the only
+ * caller.
+ *
  * ## Two agent kinds this deletes
  *
  * **The env-fixer is gone.** `blocked` retries the *builder* with a repair seed
@@ -148,6 +166,8 @@ export const POLICY_TABLE = /** @type {const} */ ([
  *   role: string,
  *   outcome: string,
  *   attemptCount: number,
+ *     Attempts of this role finished *before* the one being decided. See the
+ *     module header — the other reading makes the repair path unreachable.
  *   summary?: string | null,
  *   evidence?: Record<string, unknown> | null,
  * }} input

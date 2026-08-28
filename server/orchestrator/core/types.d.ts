@@ -229,14 +229,21 @@ export interface ParseError {
 // Board state — P0-C
 // ---------------------------------------------------------------------------
 
-/** One recorded attempt at a task. `ended` false means it is still in flight. */
+/**
+ * One recorded attempt at a task. `ended` false means it is still in flight.
+ *
+ * Merges are attempts too, of role `merge`, synthesised by the fold from
+ * `merge.enqueued` / `merge.succeeded` / `merge.conflicted`. That keeps
+ * `attemptCount()` a single filter for every role, so the policy table's
+ * `merge | conflicted` row needs no special case.
+ */
 export interface Attempt {
   attemptId: string;
   role: Role;
   worktree: string | null;
   seedKind: SeedKind | null;
   ended: boolean;
-  outcome: AttemptResult | null;
+  outcome: PolicyOutcome | null;
   summary: string | null;
   evidence: Evidence | null;
 }
@@ -269,8 +276,8 @@ export interface TaskState {
   accept: string | null;
   phase: TaskPhase;
   attempts: Attempt[];
-  /** Outcome of the most recent finished attempt. */
-  outcome: AttemptResult | null;
+  /** Outcome of the most recent finished attempt, of any role. */
+  outcome: PolicyOutcome | null;
   abandonedReason: string | null;
   abandonedEvidence: Evidence | null;
   skippedBy: string | null;
@@ -307,15 +314,29 @@ export interface BoardState {
 }
 
 // ---------------------------------------------------------------------------
-// Scheduler — populated by P0-D
+// Scheduler — P0-D
 // ---------------------------------------------------------------------------
 
-/** One attempt the scheduler wants running right now. Refined in P0-D. */
+/** One attempt the scheduler wants running right now. */
 export interface Desired {
   taskId: string;
   role: Role;
   seedKind: SeedKind;
+  /** `blocked` repairs in the worktree it broke in rather than a fresh one. */
+  sameWorktree: boolean;
 }
+
+/**
+ * What should happen next to a task with nothing in flight.
+ *
+ * `start` is for the scheduler; `enqueue` and `abandon` are for the engine to
+ * journal. Produced by the single `decide()` call site.
+ */
+export type NextAction =
+  | { kind: 'start'; role: Role; seedKind: SeedKind; sameWorktree: boolean }
+  | { kind: 'enqueue' }
+  | { kind: 'abandon'; reason: string; evidence: Evidence }
+  | { kind: 'none' };
 
 // ---------------------------------------------------------------------------
 // Policy — P0-E
