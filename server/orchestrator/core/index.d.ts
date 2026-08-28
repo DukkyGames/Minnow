@@ -23,3 +23,15 @@ export type {
   Action,
   Snapshot,
 } from './types';
+
+export {
+  ATTEMPT_OUTCOMES,
+  ENVELOPE_VERSION,
+  EVENT_SCHEMAS,
+  EVENT_TYPES,
+  isKnownEventType,
+  makeEvent,
+  ROLES,
+  STOP_REASONS,
+  validateEvent,
+} from './events';

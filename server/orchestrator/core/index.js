@@ -17,3 +17,15 @@
  * required to survive schema churn (PRD §12).
  */
 export const CORE_VERSION = 1;
+
+export {
+  ATTEMPT_OUTCOMES,
+  ENVELOPE_VERSION,
+  EVENT_SCHEMAS,
+  EVENT_TYPES,
+  isKnownEventType,
+  makeEvent,
+  ROLES,
+  STOP_REASONS,
+  validateEvent,
+} from './events.js';

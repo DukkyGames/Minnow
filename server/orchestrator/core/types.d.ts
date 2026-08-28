@@ -59,11 +59,27 @@ export type BoardStatus = 'created' | 'running' | 'stopped';
 export type StopReason = 'user' | 'complete' | 'terminal';
 
 // ---------------------------------------------------------------------------
-// Journal events — populated by P0-B
+// Journal events — P0-B
 // ---------------------------------------------------------------------------
 
-/** Discriminant of a journal event. */
-export type JournalEventType = string;
+/** The thirteen types the fold understands. Anything else is opaque, not invalid. */
+export type KnownEventType =
+  | 'board.created'
+  | 'board.started'
+  | 'board.stopped'
+  | 'task.attempt.started'
+  | 'task.attempt.ended'
+  | 'merge.enqueued'
+  | 'merge.succeeded'
+  | 'merge.conflicted'
+  | 'task.abandoned'
+  | 'task.skipped'
+  | 'touches.overflow'
+  | 'final.test.ended'
+  | 'run.finished';
+
+/** Discriminant of a journal event. Widened, because unknown types are tolerated. */
+export type JournalEventType = KnownEventType | (string & {});
 
 /**
  * The envelope every persisted event carries.
@@ -71,20 +87,115 @@ export type JournalEventType = string;
  * `seq` is a per-board monotonic integer assigned by the journal writer.
  * `ts` is wall-clock and **display-only** — no derivation may read it, or replay
  * stops being deterministic.
+ *
+ * `seq` and `ts` are optional in flight: the writer stamps them immediately
+ * before the append, and the same validator runs on both sides of that.
  */
 export interface EventEnvelope {
   v: number;
-  seq: number;
-  ts: number;
+  seq?: number;
+  ts?: number;
   type: JournalEventType;
 }
 
-/** A journal event: envelope plus a type-specific payload. Refined in P0-B. */
-export type JournalEvent = EventEnvelope & Record<string, unknown>;
+/** One wave as declared in a plan. */
+export interface WaveRef {
+  n: number;
+  name: string;
+}
 
-/** Result of validating a raw journal line. Refined in P0-B. */
+/** Free-form supporting detail. Never read by the fold; carried for the report. */
+export type Evidence = Record<string, unknown>;
+
+export type BoardCreatedEvent = EventEnvelope & {
+  type: 'board.created';
+  boardId: string;
+  planPath: string;
+  tasks: PlanTask[];
+  waves: WaveRef[];
+  name?: string;
+};
+export type BoardStartedEvent = EventEnvelope & { type: 'board.started'; concurrency: number };
+export type BoardStoppedEvent = EventEnvelope & { type: 'board.stopped'; reason: StopReason };
+export type AttemptStartedEvent = EventEnvelope & {
+  type: 'task.attempt.started';
+  taskId: string;
+  attemptId: string;
+  role: Role;
+  worktree?: string;
+  seedKind?: SeedKind;
+};
+export type AttemptEndedEvent = EventEnvelope & {
+  type: 'task.attempt.ended';
+  taskId: string;
+  attemptId: string;
+  role: Role;
+  outcome: AttemptResult;
+  summary?: string;
+  evidence?: Evidence;
+};
+export type MergeEnqueuedEvent = EventEnvelope & { type: 'merge.enqueued'; taskId: string };
+export type MergeSucceededEvent = EventEnvelope & {
+  type: 'merge.succeeded';
+  taskId: string;
+  sha: string;
+};
+export type MergeConflictedEvent = EventEnvelope & {
+  type: 'merge.conflicted';
+  taskId: string;
+  files: string[];
+};
+export type TaskAbandonedEvent = EventEnvelope & {
+  type: 'task.abandoned';
+  taskId: string;
+  reason: string;
+  evidence?: Evidence;
+};
+export type TaskSkippedEvent = EventEnvelope & {
+  type: 'task.skipped';
+  taskId: string;
+  blockedBy: string;
+};
+export type TouchesOverflowEvent = EventEnvelope & {
+  type: 'touches.overflow';
+  taskId: string;
+  attemptId: string;
+  declared: string[];
+  actual: string[];
+};
+export type FinalTestEndedEvent = EventEnvelope & {
+  type: 'final.test.ended';
+  outcome: 'pass' | 'fail';
+  runInstructions?: string;
+  evidence?: Evidence;
+};
+export type RunFinishedEvent = EventEnvelope & { type: 'run.finished'; summary: string };
+
+/** An event the fold understands. */
+export type KnownEvent =
+  | BoardCreatedEvent
+  | BoardStartedEvent
+  | BoardStoppedEvent
+  | AttemptStartedEvent
+  | AttemptEndedEvent
+  | MergeEnqueuedEvent
+  | MergeSucceededEvent
+  | MergeConflictedEvent
+  | TaskAbandonedEvent
+  | TaskSkippedEvent
+  | TouchesOverflowEvent
+  | FinalTestEndedEvent
+  | RunFinishedEvent;
+
+/** Anything else on the journal: readable, ignorable, never an error. */
+export type OpaqueEvent = EventEnvelope & Record<string, unknown>;
+
+/** A journal event. */
+export type JournalEvent = KnownEvent | OpaqueEvent;
+
+/** Result of validating a raw journal line. */
 export type ValidationResult =
-  | { ok: true; event: JournalEvent; known: boolean }
+  | { ok: true; event: Record<string, unknown>; known: boolean }
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
