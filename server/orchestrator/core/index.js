@@ -29,3 +29,5 @@ export {
   STOP_REASONS,
   validateEvent,
 } from './events.js';
+
+export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive.js';

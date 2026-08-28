@@ -35,3 +35,6 @@ export {
   STOP_REASONS,
   validateEvent,
 } from './events';
+
+export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive';
+export type { Attempt, TouchesOverflow, FinalTestState, WaveRef, Evidence } from './types';

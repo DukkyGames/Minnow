@@ -226,33 +226,84 @@ export interface ParseError {
 }
 
 // ---------------------------------------------------------------------------
-// Board state — populated by P0-C
+// Board state — P0-C
 // ---------------------------------------------------------------------------
 
-/** One recorded attempt at a task. Refined in P0-C. */
+/** One recorded attempt at a task. `ended` false means it is still in flight. */
 export interface Attempt {
   attemptId: string;
   role: Role;
+  worktree: string | null;
+  seedKind: SeedKind | null;
+  ended: boolean;
+  outcome: AttemptResult | null;
+  summary: string | null;
+  evidence: Evidence | null;
+}
+
+/** A Builder diff that reached outside what the task declared. Journaled, not failed. */
+export interface TouchesOverflow {
+  attemptId: string;
+  declared: string[];
+  actual: string[];
 }
 
 /**
  * Per-task derived state.
  *
- * There is deliberately **no attempt-count field.** Counts are derived by
- * filtering the journal; a counter would be a second source of truth. Refined in P0-C.
+ * There is deliberately **no attempt-count field**. Counts come from
+ * `attemptCount(state, taskId, role)`, which filters `attempts`. A counter would
+ * be a second source of truth and would desynchronise.
+ *
+ * `phase` is recomputed from the accumulated record on every fold, never
+ * maintained incrementally — so there is no transition table to get wrong.
  */
 export interface TaskState {
   id: string;
+  title: string;
+  wave: number;
+  dependsOn: string[];
+  touches: string[];
+  buildSpec: string | null;
+  testSpec: string | null;
+  accept: string | null;
   phase: TaskPhase;
   attempts: Attempt[];
+  /** Outcome of the most recent finished attempt. */
+  outcome: AttemptResult | null;
+  abandonedReason: string | null;
+  abandonedEvidence: Evidence | null;
+  skippedBy: string | null;
+  mergedSha: string | null;
+  mergeConflicts: string[] | null;
+  touchesOverflow: TouchesOverflow[];
 }
 
-/** The whole board, derived. Refined in P0-C. */
+/** Result of the end-of-run static (and later browser) verification ladder. */
+export interface FinalTestState {
+  outcome: 'pass' | 'fail';
+  runInstructions: string | null;
+  evidence: Evidence | null;
+}
+
+/** The whole board, derived. The only state the engine has. */
 export interface BoardState {
   boardId: string;
+  name: string;
+  planPath: string;
+  waves: WaveRef[];
   status: BoardStatus;
   concurrency: number;
+  /** Insertion-ordered by declared task order, so iteration is deterministic. */
   tasks: Map<string, TaskState>;
+  taskOrder: string[];
+  /** Enqueued and not yet merged or conflicted, in enqueue order. */
+  mergeQueue: string[];
+  integrationSha: string | null;
+  finalTest: FinalTestState | null;
+  finished: boolean;
+  stopReason: StopReason | null;
+  runSummary: string | null;
 }
 
 // ---------------------------------------------------------------------------
