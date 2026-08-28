@@ -45,3 +45,19 @@ export {
 } from './plan.js';
 
 export { formatParseErrors, isParseErrors, parsePlan } from './parse-plan.js';
+
+export {
+  canonicalise,
+  decanonicalise,
+  deriveFrom,
+  hashSnapshot,
+  hashState,
+  isSnapshotUsable,
+  makeSnapshot,
+  SNAPSHOT_INTERVAL,
+  SNAPSHOT_VERSION,
+  shouldSnapshot,
+  stateFromJSON,
+  stateToJSON,
+} from './snapshot.js';
+export { emptyState, foldInto } from './derive.js';

@@ -3,6 +3,15 @@ import type { Attempt, BoardState, Role, TaskState } from './types';
 /** Fold a journal into board state. Total: never throws, whatever the input. */
 export function derive(events: Iterable<unknown>): BoardState;
 
+/** The state of a board with no journal at all. */
+export function emptyState(): BoardState;
+
+/**
+ * Fold events into an existing state, in place, and recompute phases.
+ * The resume path for `snapshot.js`.
+ */
+export function foldInto(state: BoardState, events: Iterable<unknown>): BoardState;
+
 /** The most recent attempt that finished, or undefined if none has. */
 export function lastEndedAttempt(task: TaskState): Attempt | undefined;
 

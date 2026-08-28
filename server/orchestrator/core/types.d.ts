@@ -411,10 +411,20 @@ export interface PolicyRow {
 // Snapshot — populated by P0-G
 // ---------------------------------------------------------------------------
 
-/** A memoisation cache for the fold. Never a source of truth. Refined in P0-G. */
+/**
+ * A memoisation cache for the fold. **Never a source of truth.**
+ *
+ * Deleting every snapshot must change nothing except speed. If a snapshot and
+ * the journal disagree, the journal wins and the snapshot is discarded — there
+ * is no merge and no repair path, because the moment a snapshot can carry state
+ * the journal cannot reproduce, V2 has V1's bug back.
+ *
+ * `state` is the canonical JSON form, with `Map`s as sorted entry arrays.
+ */
 export interface Snapshot {
   v: number;
   boardId: string;
+  /** The last event folded in. */
   throughSeq: number;
   stateHash: string;
   state: unknown;

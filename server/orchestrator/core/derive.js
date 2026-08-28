@@ -30,14 +30,12 @@
 import { validateEvent } from './events.js';
 
 /**
- * Fold a journal into board state.
+ * The state of a board with no journal at all.
  *
- * @param {Iterable<unknown>} events
  * @returns {import('./types').BoardState}
  */
-export function derive(events) {
-  /** @type {import('./types').BoardState} */
-  const state = {
+export function emptyState() {
+  return {
     boardId: '',
     name: '',
     planPath: '',
@@ -53,7 +51,20 @@ export function derive(events) {
     stopReason: null,
     runSummary: null,
   };
+}
 
+/**
+ * Fold events into an existing state, in place, and recompute phases.
+ *
+ * The resume path for `snapshot.js`. Applying the same event twice is a no-op —
+ * every handler is guarded on the fact it records — but callers should still
+ * filter by `seq` rather than lean on that.
+ *
+ * @param {import('./types').BoardState} state
+ * @param {Iterable<unknown>} events
+ * @returns {import('./types').BoardState} the same object, for chaining
+ */
+export function foldInto(state, events) {
   for (const raw of events) {
     const checked = validateEvent(raw);
     // Malformed lines and unknown types are both skipped: the first keeps the
@@ -64,6 +75,16 @@ export function derive(events) {
 
   for (const task of state.tasks.values()) task.phase = phaseOf(state, task);
   return state;
+}
+
+/**
+ * Fold a journal into board state.
+ *
+ * @param {Iterable<unknown>} events
+ * @returns {import('./types').BoardState}
+ */
+export function derive(events) {
+  return foldInto(emptyState(), events);
 }
 
 /**

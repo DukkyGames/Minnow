@@ -54,3 +54,19 @@ export {
 export type { NextAction } from './types';
 
 export { formatParseErrors, isParseErrors, parsePlan } from './parse-plan';
+
+export {
+  canonicalise,
+  decanonicalise,
+  deriveFrom,
+  hashSnapshot,
+  hashState,
+  isSnapshotUsable,
+  makeSnapshot,
+  SNAPSHOT_INTERVAL,
+  SNAPSHOT_VERSION,
+  shouldSnapshot,
+  stateFromJSON,
+  stateToJSON,
+} from './snapshot';
+export { emptyState, foldInto } from './derive';
