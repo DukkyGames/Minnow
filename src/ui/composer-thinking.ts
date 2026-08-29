@@ -19,7 +19,9 @@ import {
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   defaultComposerReasoningLevel,
+  isComposerReasoningLevel,
   modelShowsComposerBrainToggle,
+  modelUsesAlwaysOnReasoning,
   modelUsesComposerReasoningDropdown,
   modelUsesComposerThinkingToggle,
   resolveEffectiveReasoningEffort,
@@ -73,11 +75,7 @@ function isDropdownReasoningActive(
 ): boolean {
   const chat = getActiveChat();
   if (chat.reasoningEffort === 'off') return false;
-  if (
-    chat.reasoningEffort === 'low' ||
-    chat.reasoningEffort === 'medium' ||
-    chat.reasoningEffort === 'high'
-  ) {
+  if (isComposerReasoningLevel(chat.reasoningEffort)) {
     return true;
   }
   const agent = resolveActiveWorkAgent(chat);
@@ -106,6 +104,8 @@ function applyChatThinkingMode(mode: ThinkingTriState): void {
 function applyDropdownModeBrainToggle(): void {
   const chat = getActiveChat();
   const caps = effectiveCapabilities();
+  // GLM-5.3 cannot disable thinking — the brain is hidden, but do not persist Off.
+  if (modelUsesAlwaysOnReasoning(caps)) return;
   if (chat.reasoningEffort === 'off') {
     const level = defaultComposerReasoningLevel(caps);
     if (level) chat.reasoningEffort = level;
@@ -165,7 +165,8 @@ export function syncThinkingControlFromActiveChat(): void {
   const dropdownMode = modelUsesComposerReasoningDropdown(caps);
   const toggleMode = modelUsesComposerThinkingToggle(caps);
   const showBrain = modelShowsComposerBrainToggle(caps);
-  const showWrap = showBrain;
+  // Always-on models hide the brain but still need the wrap for Low/High/Max.
+  const showWrap = showBrain || dropdownMode;
 
   if (thinkingWrap) {
     thinkingWrap.classList.toggle('hidden', !showWrap);

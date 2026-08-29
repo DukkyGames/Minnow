@@ -621,7 +621,7 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.modelId === 'string' && r.modelId.trim()) {
     out.modelId = r.modelId.trim().slice(0, 200);
   }
-  const REASONING_EFFORT = new Set(['off', 'on', 'low', 'medium', 'high']);
+  const REASONING_EFFORT = new Set(['off', 'on', 'low', 'medium', 'high', 'max']);
   if (typeof r.reasoningEffort === 'string' && REASONING_EFFORT.has(r.reasoningEffort)) {
     out.reasoningEffort = r.reasoningEffort;
   }

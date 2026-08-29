@@ -15,9 +15,18 @@ export const REASONING_EFFORT_OPTIONS: readonly ReasoningEffortOption[] = [
   'low',
   'medium',
   'high',
+  'max',
 ] as const;
 
 const EFFORT_SET = new Set<ReasoningEffortOption>(REASONING_EFFORT_OPTIONS);
+
+/** Composer dropdown levels (excludes off/on toggles). */
+const COMPOSER_REASONING_LEVELS: readonly ReasoningEffortOption[] = [
+  'low',
+  'medium',
+  'high',
+  'max',
+] as const;
 
 /** Composer / send options for Qwen3.8 (`xhigh` is mapped to High). */
 export const QWEN38_REASONING_OPTIONS: readonly ReasoningEffortOption[] = [
@@ -25,6 +34,16 @@ export const QWEN38_REASONING_OPTIONS: readonly ReasoningEffortOption[] = [
   'low',
   'medium',
   'high',
+] as const;
+
+/**
+ * GLM-5.3 family: thinking is always on. Z.ai accepts `low` | `high` | `max` only
+ * (no off / medium / xhigh). Default on the wire is `max`.
+ */
+export const GLM53_REASONING_OPTIONS: readonly ReasoningEffortOption[] = [
+  'low',
+  'high',
+  'max',
 ] as const;
 
 /**
@@ -36,9 +55,35 @@ export function isQwen38ModelId(modelId: string | null | undefined): boolean {
   return /(?:^|[^a-z0-9])qwen3[._]8(?![0-9])/i.test(modelId);
 }
 
-/** Map LM Studio / Qwen `xhigh` onto the composer `high` option; `none` onto Off. */
-export function normalizeReasoningCatalogValue(value: unknown): ReasoningEffortOption | undefined {
-  if (value === 'xhigh') return 'high';
+/**
+ * GLM-5.3 / GLM-5.3-Flash ids (`glm-5.3`, `z-ai/glm-5.3-flash`, GGUF names).
+ * Does not match GLM-4.x, GLM-5, GLM-5.1, or GLM-5.2.
+ */
+export function isGlm53ModelId(modelId: string | null | undefined): boolean {
+  if (!modelId) return false;
+  return /(?:^|[^a-z0-9])glm[-_.]?5[._-]?3(?:[^0-9]|$)/i.test(modelId);
+}
+
+/** True when `value` is a composer effort level (not off/on). */
+export function isComposerReasoningLevel(
+  value: unknown,
+): value is ReasoningEffortOption {
+  return (
+    value === 'low' || value === 'medium' || value === 'high' || value === 'max'
+  );
+}
+
+/**
+ * Map catalog aliases onto composer options.
+ * Qwen `xhigh` → High; GLM-5.3 `xhigh` / `extra_high` → Max; `none` → Off.
+ */
+export function normalizeReasoningCatalogValue(
+  value: unknown,
+  modelId?: string | null,
+): ReasoningEffortOption | undefined {
+  if (value === 'xhigh' || value === 'extra_high' || value === 'extra high') {
+    return isGlm53ModelId(modelId) ? 'max' : 'high';
+  }
   if (value === 'none') return 'off';
   return isReasoningEffortOption(value) ? value : undefined;
 }
@@ -49,12 +94,16 @@ export function isReasoningEffortOption(value: unknown): value is ReasoningEffor
 }
 
 /** Filter and validate upstream `allowed_options`; preserve canonical order. */
-export function normalizeReasoningAllowedOptions(raw: unknown[]): ReasoningEffortOption[] {
+export function normalizeReasoningAllowedOptions(
+  raw: unknown[],
+  modelId?: string | null,
+): ReasoningEffortOption[] {
   const seen = new Set<string>();
   for (const value of raw) {
     if (typeof value !== 'string') continue;
-    // Qwen3.8 / LM Studio report `xhigh`; some catalogs use `none` for Off.
-    const mapped = value === 'xhigh' ? 'high' : value === 'none' ? 'off' : value;
+    // Qwen3.8 / LM Studio report `xhigh`; GLM-5.3 maps that alias to Max.
+    // Some catalogs use `none` for Off.
+    const mapped = normalizeReasoningCatalogValue(value, modelId) ?? value;
     seen.add(mapped);
   }
   return REASONING_EFFORT_OPTIONS.filter((option) => seen.has(option));
@@ -67,12 +116,12 @@ export function modelHasSelectableReasoningEffort(
   return (caps?.reasoningAllowedOptions?.length ?? 0) >= 2;
 }
 
-/** True when allowed options include low / medium / high effort levels. */
+/** True when allowed options include low / medium / high / max effort levels. */
 export function modelHasReasoningEffortLevels(
   caps?: ModelCapabilities | null,
 ): boolean {
   const allowed = caps?.reasoningAllowedOptions ?? [];
-  return allowed.some((o) => o === 'low' || o === 'medium' || o === 'high');
+  return allowed.some((o) => isComposerReasoningLevel(o));
 }
 
 /**
@@ -94,10 +143,24 @@ export function modelUsesComposerThinkingToggle(
   return allowed.length === 0 && caps?.reasoning !== false;
 }
 
+/**
+ * True when thinking cannot be turned off (GLM-5.3: Low / High / Max, no Off).
+ * Driven by the forced catalog, not a leftover off/on probe row.
+ */
+export function modelUsesAlwaysOnReasoning(
+  caps?: ModelCapabilities | null,
+): boolean {
+  const allowed = caps?.reasoningAllowedOptions ?? [];
+  if (allowed.length === 0) return false;
+  return !allowed.includes('off') && allowed.includes('max');
+}
+
 /** True when the composer brain icon should be shown (level dropdown and/or off/on models). */
 export function modelShowsComposerBrainToggle(
   caps?: ModelCapabilities | null,
 ): boolean {
+  // Always-on models have no Off state — hide the brain, keep the level dropdown.
+  if (modelUsesAlwaysOnReasoning(caps)) return false;
   return modelUsesComposerReasoningDropdown(caps) || modelUsesComposerThinkingToggle(caps);
 }
 
@@ -105,7 +168,7 @@ export function modelShowsComposerBrainToggle(
 export function getComposerReasoningLevelOptions(
   allowed: ReasoningEffortOption[],
 ): ReasoningEffortOption[] {
-  return allowed.filter((o) => o === 'low' || o === 'medium' || o === 'high');
+  return COMPOSER_REASONING_LEVELS.filter((o) => allowed.includes(o));
 }
 
 /** Off/on options for models that use thinking.type instead of reasoning_effort levels. */
@@ -158,6 +221,8 @@ export function formatReasoningEffortLabel(option: ReasoningEffortOption): strin
       return 'Medium';
     case 'high':
       return 'High';
+    case 'max':
+      return 'Max';
     default:
       return option;
   }
@@ -185,6 +250,10 @@ export function inferReasoningOptionsFromModelId(
   modelId: string,
   apiKind?: ApiKind,
 ): ReasoningEffortOption[] {
+  // GLM-5.3 always thinks; Z.ai rejects off / medium. Any provider (My Models / llama.cpp).
+  if (isGlm53ModelId(modelId)) {
+    return [...GLM53_REASONING_OPTIONS];
+  }
   // Qwen3.8 exposes off/low/medium/high on every provider; default effort is high (wire xhigh).
   if (isQwen38ModelId(modelId)) {
     return [...QWEN38_REASONING_OPTIONS];
@@ -205,11 +274,26 @@ export function ensureQwen38ReasoningAllowedOptions(
   allowed: ReasoningEffortOption[],
 ): ReasoningEffortOption[] {
   if (!isQwen38ModelId(modelId)) return allowed;
-  const hasLevels = allowed.some((o) => o === 'low' || o === 'medium' || o === 'high');
+  const hasLevels = allowed.some((o) => isComposerReasoningLevel(o));
   if (hasLevels) {
-    return normalizeReasoningAllowedOptions([...allowed, ...QWEN38_REASONING_OPTIONS]);
+    return normalizeReasoningAllowedOptions(
+      [...allowed, ...QWEN38_REASONING_OPTIONS],
+      modelId,
+    );
   }
   return [...QWEN38_REASONING_OPTIONS];
+}
+
+/**
+ * GLM-5.3 always offers Low/High/Max. Catalog off/on or low/medium/high rows
+ * still 400 on Z.ai, so this replacement always wins.
+ */
+export function ensureGlm53ReasoningAllowedOptions(
+  modelId: string | null | undefined,
+  allowed: ReasoningEffortOption[],
+): ReasoningEffortOption[] {
+  if (!isGlm53ModelId(modelId)) return allowed;
+  return [...GLM53_REASONING_OPTIONS];
 }
 
 /**
@@ -224,8 +308,9 @@ export function resolveEffectiveReasoningEffort(
   const allowed = caps?.reasoningAllowedOptions ?? [];
   if (allowed.length === 0) return undefined;
 
-  // Honor explicit off from the composer brain even when catalog omits `off`.
-  if (chat.reasoningEffort === 'off') {
+  // Honor explicit off from the composer brain even when catalog omits `off`,
+  // except always-on families (GLM-5.3) which cannot disable thinking.
+  if (chat.reasoningEffort === 'off' && !modelUsesAlwaysOnReasoning(caps)) {
     return 'off';
   }
 
@@ -236,11 +321,12 @@ export function resolveEffectiveReasoningEffort(
   // Inherited thinking on must win over catalog defaults such as `off` on some models.
   if (inheritedResolved === 'on') {
     const catalogDefault = caps?.reasoningDefault;
-    // Prefer a non-off catalog default (Qwen3.8 → high) over a hardcoded medium.
+    // Prefer a non-off catalog default (Qwen3.8 → high, GLM-5.3 → max) over a hardcoded medium.
     if (catalogDefault && catalogDefault !== 'off' && allowed.includes(catalogDefault)) {
       return catalogDefault;
     }
     if (allowed.includes('medium')) return 'medium';
+    if (allowed.includes('max')) return 'max';
     if (allowed.includes('on')) return 'on';
   }
 

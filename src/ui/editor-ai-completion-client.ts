@@ -309,6 +309,8 @@ export async function fetchEditorAiCompletion(
     'off',
     provider.apiKind,
     modelCaps,
+    null,
+    modelId,
   );
   Object.assign(body, thinkingPatch);
 
