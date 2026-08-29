@@ -1035,7 +1035,7 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   const probeHint = needsLoadedModel
     ? 'On LM Studio, both probes require at least one loaded model. Loading a model also probes vision, tools, and streaming automatically. Manual model probe runs chat checks on up to 8 loaded models. Structured-output probe tests JSON Schema response_format. Neither manual probe runs on refresh.'
-    : 'Loading a local model probes vision, tools, and streaming in the background. Manual model probe checks up to 8 models. Structured-output probe tests JSON Schema response_format on one catalog model. Neither manual probe runs on refresh.';
+    : 'Selecting a model probes vision, tools, and streaming in the background — including cloud APIs (the model you pick, not the whole catalog). Manual model probe checks up to 8 models. Structured-output probe tests JSON Schema response_format on one catalog model. Neither manual probe runs on refresh.';
   form.append(el('p', 'field-hint', probeHint));
   form.append(
     createSettingsActionsRow(

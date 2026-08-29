@@ -16,6 +16,7 @@ import { resolveModelState } from './model-state-dot';
 import { getActiveChat } from '../state/sessions';
 import { isChatAppForeground } from './chat-mount';
 import { onActiveChatModelChange } from './chat-model-ui';
+import { scheduleCapabilityProbeForSelectValue } from '../providers/first-load-probe';
 import {
   clearModelSearchQuery,
   closeModelSelectMenu,
@@ -340,6 +341,7 @@ function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string)
       canonicalModelId,
       boardModelTriggerContext.plannerChat,
     );
+    scheduleCapabilityProbeForSelectValue(modelId);
     boardModelTriggerContext.onChanged();
     syncTrigger(trigger);
     syncBoardHeaderReasoning(

@@ -19,6 +19,7 @@ import { listProviders } from '../providers/store';
 import {
   getActiveChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
 } from '../state/sessions';
 import { isModelLoaded } from './model-loaded-state';
@@ -40,11 +41,15 @@ import {
   fetchProviderCapabilities,
   mergeCapabilitiesIntoModelCache,
 } from '../providers/model-capabilities';
-import { scheduleFirstLoadCapabilityProbes } from '../providers/first-load-probe';
+import {
+  scheduleCapabilityProbeForSelectValue,
+  scheduleFirstLoadCapabilityProbes,
+} from '../providers/first-load-probe';
 import { syncComposerReasoningEffortFromActiveChat } from '../ui/composer-reasoning-effort';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import {
   persistDefaultModelValue,
+  readPersistedDefaultModelValue,
   resolveDefaultModelSelectValue,
 } from '../ui/default-model';
 import {
@@ -503,8 +508,16 @@ export async function populateMultiProviderModelSelect(
       }
     }
 
-    // First time we see a local model loaded, probe vision/tools in the background.
-    scheduleFirstLoadCapabilityProbes(results);
+    // First load / first selection: local weights that are resident, plus
+    // hosted models the user is actually using (never the whole cloud catalog).
+    scheduleFirstLoadCapabilityProbes(
+      results,
+      collectInUseModelBindings(
+        options?.selectedProviderId && options?.selectedModelId
+          ? [{ providerId: options.selectedProviderId, modelId: options.selectedModelId }]
+          : undefined,
+      ),
+    );
 
     const pid = options?.selectedProviderId?.trim();
     const mid = options?.selectedModelId?.trim();
@@ -528,6 +541,45 @@ export async function populateMultiProviderModelSelect(
     syncModelSelectPicker();
     return null;
   }
+}
+
+/**
+ * Models the user is actually using — default picker, persisted default, and
+ * every session chat binding. Hosted catalogs look "loaded" for every row;
+ * auto-probe only this set so OpenRouter-sized lists are not billed.
+ */
+function collectInUseModelBindings(
+  extra?: Array<{ providerId?: string; modelId?: string }>,
+): Array<{ providerId: string; modelId: string }> {
+  const out: Array<{ providerId: string; modelId: string }> = [];
+  const seen = new Set<string>();
+  const add = (providerId?: string, modelId?: string) => {
+    const pid = providerId?.trim();
+    const mid = modelId?.trim();
+    if (!pid || !mid) return;
+    const key = `${pid}\0${mid}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ providerId: pid, modelId: mid });
+  };
+  const addSelectValue = (raw: string | undefined) => {
+    const trimmed = raw?.trim();
+    if (!trimmed) return;
+    const decoded = decodeModelSelectKey(trimmed);
+    if (decoded) add(decoded.providerId, decoded.modelId);
+  };
+
+  addSelectValue((document.getElementById('modelSelect') as HTMLSelectElement | null)?.value);
+  addSelectValue(readPersistedDefaultModelValue());
+  if (sessionState) {
+    for (const chat of sessionState.chats) {
+      add(chat.providerId, chat.modelId);
+    }
+  }
+  for (const binding of extra ?? []) {
+    add(binding.providerId, binding.modelId);
+  }
+  return out;
 }
 
 /** Pick initial <select> value: chat binding, else first loaded model, else first option. */
@@ -665,6 +717,8 @@ export async function fetchModels(): Promise<void> {
     syncComposerReasoningEffortFromActiveChat();
     renderSidebar();
     scheduleSaveSessions();
+    // Default may have been chosen after catalog fill — probe that hosted row too.
+    scheduleCapabilityProbeForSelectValue(sel.value);
     void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
     void import('../ui/benchmark/roster-picker.ts').then((m) => m.refreshBenchmarkRosterPicker());
   } catch (err) {
@@ -706,6 +760,7 @@ export async function selectProviderModel(
       applyModelSelectValueToChat(chat, opt.value);
       touchChat(chat);
       scheduleSaveSessions();
+      scheduleCapabilityProbeForSelectValue(opt.value);
       syncModelSelectPicker();
       updateModelLoadUnloadButtons();
       showCachedModelInfo();

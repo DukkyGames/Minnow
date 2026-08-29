@@ -1,6 +1,6 @@
 /**
- * First-load capability probe: which local rows get queued, and that we
- * do not probe cloud catalogs or already-flagged VLMs.
+ * First-load capability probe: which local rows get queued, that unused cloud
+ * catalog rows are skipped, and that an in-use cloud model is probed.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
@@ -13,6 +13,7 @@ import {
   modelNeedsFirstLoadCapabilityProbe,
   resetFirstLoadCapabilityProbeStateForTests,
   resolveFirstLoadProbeTarget,
+  scheduleCapabilityProbeForSelectValue,
   scheduleFirstLoadCapabilityProbes,
   setFirstLoadCapabilityProbeRunnerForTests,
   waitForFirstLoadProbesForTests,
@@ -99,7 +100,7 @@ describe('isFirstLoadProbeCandidate', () => {
     );
   });
 
-  test('rejects unloaded rows, cloud catalogs, and mlx hub listings', () => {
+  test('rejects unloaded rows, unused cloud catalogs, and mlx hub listings', () => {
     assert.equal(
       isFirstLoadProbeCandidate('lm-studio-local', { id: 'm', state: 'not-loaded' }, lmIds),
       false,
@@ -110,6 +111,30 @@ describe('isFirstLoadProbeCandidate', () => {
     );
     assert.equal(
       isFirstLoadProbeCandidate('mlx-lm-local', { id: 'mlx:qwen', state: 'loaded' }, lmIds),
+      false,
+    );
+  });
+
+  test('accepts an in-use hosted row and still rejects mlx hub even when selected', () => {
+    assert.equal(
+      isFirstLoadProbeCandidate('openai', { id: 'gpt-4o', state: 'loaded' }, lmIds, {
+        inUse: true,
+      }),
+      true,
+    );
+    assert.equal(
+      isFirstLoadProbeCandidate(
+        'anthropic',
+        { id: 'claude-sonnet-4-5', state: 'loaded' },
+        lmIds,
+        { inUse: true },
+      ),
+      true,
+    );
+    assert.equal(
+      isFirstLoadProbeCandidate('mlx-lm-local', { id: 'mlx:qwen', state: 'loaded' }, lmIds, {
+        inUse: true,
+      }),
       false,
     );
   });
@@ -175,7 +200,7 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     assert.deepEqual(calls[0]?.modelIds, ['gemma-3-12b-it']);
   });
 
-  test('does not queue a catalog VLM or a cloud openai-v1 row', async () => {
+  test('does not queue a catalog VLM or an unused cloud openai-v1 row', async () => {
     setStorageModeForTests('server');
     const calls: string[] = [];
     setFirstLoadCapabilityProbeRunnerForTests(async (providerId) => {
@@ -218,5 +243,41 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     assert.equal(calls[0]?.providerId, 'llama-cpp-local');
     assert.deepEqual(calls[0]?.modelIds, [libraryId]);
     assert.equal(getFirstLoadProbeSeenKeysForTests().length, 1);
+  });
+
+  test('queues an in-use cloud model and skips unused siblings', async () => {
+    setStorageModeForTests('server');
+    const calls: Array<{ providerId: string; modelIds?: string[] }> = [];
+    setFirstLoadCapabilityProbeRunnerForTests(async (providerId, options) => {
+      calls.push({ providerId, modelIds: options.modelIds });
+      return true;
+    });
+    cacheRow('openai', 'gpt-4o', { id: 'gpt-4o', type: 'llm', state: 'loaded' });
+    cacheRow('openai', 'gpt-3.5-turbo', { id: 'gpt-3.5-turbo', type: 'llm', state: 'loaded' });
+    scheduleFirstLoadCapabilityProbes([{ provider: cloud, models: [] }], [
+      { providerId: 'openai', modelId: 'gpt-4o' },
+    ]);
+    await waitForFirstLoadProbesForTests();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.providerId, 'openai');
+    assert.deepEqual(calls[0]?.modelIds, ['gpt-4o']);
+  });
+
+  test('scheduleCapabilityProbeForSelectValue probes a picked cloud model once', async () => {
+    setStorageModeForTests('server');
+    const calls: Array<{ providerId: string; modelIds?: string[] }> = [];
+    setFirstLoadCapabilityProbeRunnerForTests(async (providerId, options) => {
+      calls.push({ providerId, modelIds: options.modelIds });
+      return true;
+    });
+    cacheRow('openai', 'gpt-4o', { id: 'gpt-4o', type: 'llm', state: 'loaded' });
+    const selectValue = encodeModelSelectKey('openai', 'gpt-4o');
+    scheduleCapabilityProbeForSelectValue(selectValue);
+    await waitForFirstLoadProbesForTests();
+    scheduleCapabilityProbeForSelectValue(selectValue);
+    await waitForFirstLoadProbesForTests();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.providerId, 'openai');
+    assert.deepEqual(calls[0]?.modelIds, ['gpt-4o']);
   });
 });

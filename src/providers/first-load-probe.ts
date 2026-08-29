@@ -1,11 +1,15 @@
 /**
- * Background capability probe on first load of a local model (MIN-671).
+ * Background capability probe the first time a model is actually in play (MIN-671).
  *
  * Settings → Providers "Probe models" is the manual path. Catalog refresh
- * never probes. The first time Minnow sees a local model actually loaded —
- * and the catalog has not already flagged vision — we run the same matrix
- * probe so VLMs without `type: vlm` / `catalogVision` / a heuristic id still
- * get a Vision badge.
+ * never probes the whole list. The first time Minnow sees a local model loaded,
+ * or a hosted/cloud model the user selected, and the catalog has not already
+ * flagged vision — we run the same matrix probe so VLMs without `type: vlm` /
+ * `catalogVision` / a heuristic id still get a Vision badge.
+ *
+ * Hosted openai-v1 / anthropic-v1 catalogs stamp every row `state: 'loaded'`.
+ * Auto-probe those only when the model is in use (picker, default, a chat
+ * binding) — never the entire OpenRouter-sized catalog.
  */
 
 import { isModelLoaded } from '../api/model-loaded-state';
@@ -24,9 +28,20 @@ import {
   runCapabilityProbeForProvider,
 } from './model-capabilities';
 import { getCachedProviderList } from './store';
-import { LLAMA_CPP_LOCAL_PROVIDER_ID } from './types';
+import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from './types';
 
 export type FirstLoadProbeRunner = typeof runCapabilityProbeForProvider;
+
+/** Provider + model the user is actually using (not every catalog row). */
+export type FirstLoadInUseBinding = { providerId: string; modelId: string };
+
+export type FirstLoadProbeCandidateOptions = {
+  /**
+   * True when this row is the default, a session chat binding, or the model
+   * just picked. Required for hosted catalogs; ignored for local runtimes.
+   */
+  inUse?: boolean;
+};
 
 type QueueJob = {
   key: string;
@@ -90,18 +105,36 @@ export function resolveFirstLoadProbeTarget(
 }
 
 /**
- * Loaded local rows only. openai-v1 catalogs default `state: 'loaded'` even for
- * cloud lists, and mlx-lm `/v1/models` lists the hub cache — neither is a load.
+ * Local runtimes where `state: 'loaded'` means weights are resident.
+ * My Models / llama.cpp / LM Studio — not mlx hub listings, not cloud catalogs.
+ */
+export function isLocalRuntimeFirstLoadCandidate(
+  providerId: string,
+  lmStudioProviderIds: Set<string>,
+): boolean {
+  if (providerId === LIBRARY_MODEL_PROVIDER_ID) return true;
+  if (providerId === LLAMA_CPP_LOCAL_PROVIDER_ID) return true;
+  return lmStudioProviderIds.has(providerId);
+}
+
+/**
+ * Whether this catalog row should be auto-probed.
+ *
+ * Local: only when actually loaded. Hosted/cloud: only when `inUse` — every
+ * openai-v1 row looks loaded. mlx-lm `/v1/models` lists the hub cache; a
+ * request would load weights, so those rows never auto-probe (My Models
+ * serve path still qualifies via `minnow-library`).
  */
 export function isFirstLoadProbeCandidate(
   providerId: string,
   row: LmModelRecord,
   lmStudioProviderIds: Set<string>,
+  options?: FirstLoadProbeCandidateOptions,
 ): boolean {
+  if (providerId === MLX_LM_LOCAL_PROVIDER_ID) return false;
   if (!isModelLoaded(row.state)) return false;
-  if (providerId === LIBRARY_MODEL_PROVIDER_ID) return true;
-  if (providerId === LLAMA_CPP_LOCAL_PROVIDER_ID) return true;
-  return lmStudioProviderIds.has(providerId);
+  if (isLocalRuntimeFirstLoadCandidate(providerId, lmStudioProviderIds)) return true;
+  return options?.inUse === true;
 }
 
 function collectLmStudioProviderIds(results?: ProviderModelsResult[]): Set<string> {
@@ -186,22 +219,72 @@ async function drainFirstLoadProbeQueue(): Promise<void> {
   await running;
 }
 
+/** Enqueue one row when it still needs a live matrix probe. */
+function maybeEnqueueFirstLoadProbe(
+  providerId: string,
+  modelId: string,
+  row: LmModelRecord,
+  lmStudioIds: Set<string>,
+  inUse: boolean,
+): void {
+  if (!isFirstLoadProbeCandidate(providerId, row, lmStudioIds, { inUse })) return;
+  if (!modelNeedsFirstLoadCapabilityProbe(row)) return;
+  enqueueFirstLoadProbe(providerId, modelId);
+}
+
 /**
  * After modelCache is filled from a catalog fetch, probe loaded local models
- * that still have unknown vision. No-ops in Vite-only (localStorage) mode.
+ * and in-use hosted/cloud models that still have unknown vision. No-ops in
+ * Vite-only (localStorage) mode.
+ *
+ * `inUseBindings` is the default, every session chat binding, and any picker
+ * selection — not the rest of a hosted catalog.
  */
-export function scheduleFirstLoadCapabilityProbes(results?: ProviderModelsResult[]): void {
+export function scheduleFirstLoadCapabilityProbes(
+  results?: ProviderModelsResult[],
+  inUseBindings: readonly FirstLoadInUseBinding[] = [],
+): void {
   if (!isServerStorageMode()) return;
 
   const lmStudioIds = collectLmStudioProviderIds(results);
+  const inUseKeys = new Set<string>();
+  for (const binding of inUseBindings) {
+    const key = encodeModelSelectKey(binding.providerId, binding.modelId);
+    if (key) inUseKeys.add(key);
+  }
+
   for (const [key, row] of modelCache.entries()) {
     const decoded = decodeModelSelectKey(key);
     if (!decoded) continue;
-    if (!isFirstLoadProbeCandidate(decoded.providerId, row, lmStudioIds)) continue;
-    if (!modelNeedsFirstLoadCapabilityProbe(row)) continue;
-    enqueueFirstLoadProbe(decoded.providerId, decoded.modelId);
+    maybeEnqueueFirstLoadProbe(
+      decoded.providerId,
+      decoded.modelId,
+      row,
+      lmStudioIds,
+      inUseKeys.has(key),
+    );
   }
 
+  if (queue.length > 0) void drainFirstLoadProbeQueue();
+}
+
+/**
+ * Picker / default-model change: probe this one hosted or local row if needed.
+ * Same queue as catalog refresh so a Settings click still owns the abort slot.
+ */
+export function scheduleCapabilityProbeForSelectValue(selectValue: string): void {
+  if (!isServerStorageMode()) return;
+  const decoded = decodeModelSelectKey(selectValue.trim());
+  if (!decoded) return;
+  const row = cacheRowFor(decoded.providerId, decoded.modelId);
+  if (!row) return;
+  maybeEnqueueFirstLoadProbe(
+    decoded.providerId,
+    decoded.modelId,
+    row,
+    collectLmStudioProviderIds(),
+    true,
+  );
   if (queue.length > 0) void drainFirstLoadProbeQueue();
 }
 

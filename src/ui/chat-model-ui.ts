@@ -6,6 +6,7 @@
 import { applyModelSelectValueToChat } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
+import { scheduleCapabilityProbeForSelectValue } from '../providers/first-load-probe';
 import {
   getActiveChat,
   scheduleSaveSessions,
@@ -36,6 +37,8 @@ export function onActiveChatModelChange(selectValue: string): void {
   applyModelSelectValueToChat(chat, raw);
   touchChat(chat);
   scheduleSaveSessions();
+  // Cloud (and local) rows get the same first-use matrix probe as catalog refresh.
+  scheduleCapabilityProbeForSelectValue(raw);
   syncComposerModelTriggers();
   syncComposerReasoningEffortFromActiveChat();
   void import('./context-usage-ring').then((m) => m.refreshContextUsageRing());
