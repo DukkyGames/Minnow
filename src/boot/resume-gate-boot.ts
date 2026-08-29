@@ -13,7 +13,7 @@ import {
   isBoardCandidateForWakeReconcile,
   stopBoardAutoRun,
 } from '../state/orchestrate-board-actions.ts';
-import { getActiveChat, saveSessionsNow, touchChat } from '../state/sessions.ts';
+import { getActiveChat, saveSessionsNow } from '../state/sessions.ts';
 import type { Chat, ChatGroup, SessionState } from '../types.ts';
 import { listChatsWithGenerationId } from '../chat/generation-resume.ts';
 import { hasIncompleteToolBatchForBoot } from '../chat/incomplete-tool-resume.ts';
@@ -24,11 +24,15 @@ import {
 } from '../chat/orchestrate/board-boot-resume.ts';
 import { syncBoardLivenessPollAfterResumeGate } from '../chat/orchestrate/board-display-wake.ts';
 import { setResumeGateState } from '../chat/resume-gate.ts';
+import {
+  clearResumeInterruptedForChats,
+  isChatResumeInterrupted,
+} from '../chat/resume-interrupted.ts';
 import { reportBackgroundError } from './report-background-error.ts';
 import { showResumePromptModal, type ResumePromptItem } from '../ui/resume-prompt-modal.ts';
 
-/** Why a chat is a resume candidate — a live generation, or an unfinished tool batch. */
-type ChatCandidateKind = 'generation' | 'tool-batch';
+/** Why a chat is a resume candidate — a live generation, unfinished tools, or quit mid-turn. */
+type ChatCandidateKind = 'generation' | 'tool-batch' | 'interrupted';
 
 export interface ResumeChatCandidate {
   chat: Chat;
@@ -77,21 +81,40 @@ export function collectBoardResumeCandidates(state: SessionState): ResumeBoardCa
 }
 
 /**
- * Everything the three boot resumes would restart. Hydrates the active chat's
- * history (the tool-batch scan needs it), so this must be awaited before the prompt.
+ * Everything the three boot resumes would restart, plus chats stamped
+ * `resumeInterrupted` by Quit Minnow / crash mid-turn (generation id may already
+ * be gone after a clean shutdown cancel).
+ *
+ * Hydrates the active chat's history (the tool-batch scan needs it), so this must
+ * be awaited before the prompt.
  */
 export async function collectResumeCandidates(state: SessionState): Promise<ResumeCandidates> {
   const chats: ResumeChatCandidate[] = [];
+  const seen = new Set<string>();
 
-  // Boot generation resume only ever resumes the active chat; match that exactly
-  // so the prompt never lists work it would not actually restart.
+  const pushChat = (chat: Chat, kind: ChatCandidateKind): void => {
+    if (seen.has(chat.id)) return;
+    seen.add(chat.id);
+    chats.push({ chat, kind });
+  };
+
+  // Boot generation / tool resume only ever resumes the active chat; match that
+  // exactly so the prompt never lists work it would not actually restart.
   const activeId = getActiveChat()?.id;
   const active = listChatsWithGenerationId(state.chats).find((chat) => chat.id === activeId);
   if (active) {
-    chats.push({ chat: active, kind: 'generation' });
+    pushChat(active, 'generation');
   } else if (await hasIncompleteToolBatchForBoot()) {
     const activeChat = getActiveChat();
-    if (activeChat) chats.push({ chat: activeChat, kind: 'tool-batch' });
+    if (activeChat) pushChat(activeChat, 'tool-batch');
+  }
+
+  // Quit/crash marker can outlive currentGenerationId (graceful Quit cancels gens).
+  // List every stamped chat so background work is visible; Resume still only
+  // reconnects the active chat (others clear the marker after the answer).
+  for (const chat of state.chats) {
+    if (!isChatResumeInterrupted(chat)) continue;
+    pushChat(chat, 'interrupted');
   }
 
   return { chats, boards: collectBoardResumeCandidates(state) };
@@ -130,12 +153,15 @@ function unparkBoards(): void {
 }
 
 function describeChatCandidate(candidate: ResumeChatCandidate): ResumePromptItem {
+  const detail =
+    candidate.kind === 'generation'
+      ? 'Reply was still streaming'
+      : candidate.kind === 'tool-batch'
+        ? 'Tool call never finished'
+        : 'Turn was interrupted when Minnow closed';
   return {
     label: candidate.chat.name?.trim() || 'Untitled chat',
-    detail:
-      candidate.kind === 'generation'
-        ? 'Reply was still streaming'
-        : 'Tool call never finished',
+    detail,
   };
 }
 
@@ -155,7 +181,7 @@ function describeBoardCandidate(candidate: ResumeBoardCandidate): ResumePromptIt
   };
 }
 
-/** Stop each candidate board and drop stale generation ids (the "Don't resume" branch). */
+/** Stop each candidate board and drop stale generation / interrupt markers ("Don't resume"). */
 function declineResume(candidates: ResumeCandidates): void {
   for (const { group } of candidates.boards) {
     const planner = getPlannerChatForGroup(group);
@@ -166,16 +192,12 @@ function declineResume(candidates: ResumeCandidates): void {
   }
   parkedBoardAutoRunning.clear();
 
-  let touchedChat = false;
-  for (const { chat, kind } of candidates.chats) {
-    if (kind !== 'generation') continue;
-    if (chat.currentGenerationId == null) continue;
-    delete chat.currentGenerationId;
-    touchChat(chat);
-    touchedChat = true;
-  }
+  clearResumeInterruptedForChats(
+    candidates.chats.map((c) => c.chat),
+    { clearGenerationId: true },
+  );
   // Persist immediately so a second crash cannot resurrect what was just declined.
-  if (touchedChat) saveSessionsNow();
+  if (candidates.chats.length) saveSessionsNow();
 }
 
 /** Run the resume prompt (or, with nothing pending, today's plain boot resume). */
@@ -223,6 +245,11 @@ export async function runBootResumeGate(state: SessionState): Promise<void> {
   await bootGenerationResumeForChats(state.chats);
   await bootIncompleteToolResumeForChats(state.chats);
   await resumeRunningBoardsAfterGate(state);
+
+  // Markers are spent once the user answers Resume — clear so Agent Activity and
+  // a later quit do not re-prompt for work that already ran (or had nothing left).
+  clearResumeInterruptedForChats(candidates.chats.map((c) => c.chat));
+  if (candidates.chats.length) saveSessionsNow();
 }
 
 /** Boot entry point — never rejects, never blocks the rest of `initApp`. */

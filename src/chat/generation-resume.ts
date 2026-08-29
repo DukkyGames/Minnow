@@ -8,6 +8,7 @@ import { GENERATION_LOST_ON_RESTART_MESSAGE } from '../api/generations';
 import type { Chat } from '../types';
 import { isGoalLoopActive } from '../state/sessions';
 import { setStatus } from '../ui/status';
+import { isResumeGateHeld } from './resume-gate';
 
 /** Read the composer model picker (empty when none selected). */
 function getSelectedModelIdFromDom(): string {
@@ -53,11 +54,15 @@ export interface BootGenerationResumeOptions {
 /**
  * Re-subscribe to `chat.currentGenerationId` after reload or chat switch.
  * Does not push a new user message (`pushUser: false`).
+ * No-ops while the boot resume gate is held (prompt unanswered or declined).
  */
 export async function bootGenerationResumeForChat(
   chat: Chat,
   options: BootGenerationResumeOptions = {},
 ): Promise<void> {
+  if (isResumeGateHeld()) {
+    return;
+  }
   if (isChatStreaming(chat.id)) {
     return;
   }

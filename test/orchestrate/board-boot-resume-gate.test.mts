@@ -240,4 +240,44 @@ describe('boot resume gate', () => {
     assert.equal(board.userStopped ?? false, false);
     assert.equal(getResumeGateState(), 'resumed');
   });
+
+  test('a chat stamped resumeInterrupted is a candidate without a generation id', async () => {
+    const { planner, group } = makeGroupWithBoard();
+    group.orchestrateBoard!.tasks[0]!.status = 'complete';
+    planner.resumeInterrupted = true;
+    delete planner.currentGenerationId;
+    const state = seed(planner, group);
+
+    const candidates = await collectResumeCandidates(state);
+    assert.equal(candidates.chats.length, 1);
+    assert.equal(candidates.chats[0]!.kind, 'interrupted');
+
+    parkResumeCandidatesAtBoot(state);
+    const gate = runBootResumeGate(state);
+    await waitForPrompt();
+    const rows = [...document.querySelectorAll('.app-dialog-list__item')];
+    assert.match(rows[0]!.textContent ?? '', /interrupted when Minnow closed/i);
+
+    await answerPrompt('cancel');
+    await gate;
+
+    assert.equal(planner.resumeInterrupted, undefined);
+    assert.equal(getResumeGateState(), 'declined');
+  });
+
+  test('declining clears resumeInterrupted together with a generation id', async () => {
+    const { planner, group } = makeGroupWithBoard();
+    group.orchestrateBoard!.tasks[0]!.status = 'complete';
+    planner.currentGenerationId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    planner.resumeInterrupted = true;
+    const state = seed(planner, group);
+
+    parkResumeCandidatesAtBoot(state);
+    const gate = runBootResumeGate(state);
+    await answerPrompt('cancel');
+    await gate;
+
+    assert.equal(planner.currentGenerationId, undefined);
+    assert.equal(planner.resumeInterrupted, undefined);
+  });
 });

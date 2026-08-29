@@ -9,6 +9,7 @@
 
 import { setChatAbort, setStreaming } from '../app-state';
 import { clearMainTurnActivity } from './main-turn-activity';
+import { clearChatResumeInterrupted } from './resume-interrupted';
 import { notifyChatStreamEnded } from './streaming-state';
 import { findChatById, scheduleSaveSessions, touchChat } from '../state/sessions';
 
@@ -33,8 +34,12 @@ export function flushStoppedChatPresentation(
     setChatAbort(chatId, null);
     notifyChatStreamEnded(chatId);
     setStreaming(false, chatId);
-    if (options.keepGenerationId) continue;
     const chat = findChatById(chatId);
+    if (chat?.resumeInterrupted === true) {
+      clearChatResumeInterrupted(chat);
+      sessionsDirty = true;
+    }
+    if (options.keepGenerationId) continue;
     if (chat?.currentGenerationId?.trim()) {
       chat.currentGenerationId = undefined;
       touchChat(chat);

@@ -30,6 +30,7 @@ import { isAskQuestionModalOpenForChat } from '../ui/question-cards-modal';
 import { isUserPromptLocked } from '../ui/user-prompt-lock';
 
 import { setStatus } from '../ui/status';
+import { isResumeGateHeld } from './resume-gate';
 
 
 
@@ -102,6 +103,12 @@ export async function resumeIncompleteToolBatch(
 ): Promise<boolean> {
 
   if (typeof document === 'undefined') {
+
+    return false;
+
+  }
+
+  if (isResumeGateHeld()) {
 
     return false;
 
@@ -362,6 +369,12 @@ async function ensureAskQuestionSurfaceForChat(chat: Chat): Promise<void> {
 /** Resume when switching to a chat that still has unanswered question cards in history. */
 
 export async function resumeIncompleteToolBatchOnChatSwitch(chat: Chat): Promise<void> {
+
+  if (isResumeGateHeld()) {
+
+    return;
+
+  }
 
   if (!findIncompleteToolBatchAtTail(chat)) {
 

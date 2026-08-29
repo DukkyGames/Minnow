@@ -1,8 +1,11 @@
 /**
- * Pause running orchestrate boards on real app quit (not display sleep or hide-to-tray).
+ * Pause running orchestrate boards on real app quit (not display sleep or hide-to-tray),
+ * and stamp in-flight chats so the boot resume gate can still prompt after Quit Minnow
+ * cancels generations (which would otherwise clear currentGenerationId).
  */
 
 import { pauseAllRunningBoardsForShutdown } from '../../state/orchestrate-board-actions.ts';
+import { markInterruptedChatsForShutdown } from '../resume-interrupted.ts';
 
 let registered = false;
 
@@ -11,7 +14,17 @@ export function resetOrchestrateBoardShutdownRegistrationForTests(): void {
   registered = false;
   if (typeof window !== 'undefined') {
     delete window.__minnowPauseBoardsForShutdown;
+    delete window.__minnowPrepareForShutdown;
   }
+}
+
+/**
+ * Full renderer prep before the main process tears down generations / the HTTP server.
+ * Order matters: stamp chats + flush first, then pause boards.
+ */
+function prepareSessionForShutdown(): void {
+  markInterruptedChatsForShutdown();
+  pauseAllRunningBoardsForShutdown();
 }
 
 /** System-pause boards so persisted autoRunning does not survive abrupt quit. */
@@ -23,6 +36,8 @@ declare global {
   interface Window {
     /** Invoked from Electron main via executeJavaScript during before-quit. */
     __minnowPauseBoardsForShutdown?: () => void;
+    /** Preferred shutdown hook: interrupted chats + board pause. */
+    __minnowPrepareForShutdown?: () => void;
   }
 }
 
@@ -31,11 +46,13 @@ export function registerOrchestrateBoardShutdownHandler(): void {
   if (registered || typeof window === 'undefined') return;
   registered = true;
 
-  window.__minnowPauseBoardsForShutdown = pauseBoardsForShutdown;
+  window.__minnowPrepareForShutdown = prepareSessionForShutdown;
+  // Kept for older Electron shells that only call the board-only name.
+  window.__minnowPauseBoardsForShutdown = prepareSessionForShutdown;
 
   try {
     window.minnow?.board?.onPauseForShutdown?.(() => {
-      pauseBoardsForShutdown();
+      prepareSessionForShutdown();
     });
   } catch {
     /* browser / tests */

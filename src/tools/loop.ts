@@ -18,6 +18,10 @@ import {
   notifyChatStreamActivity,
 } from '../chat/streaming-state';
 import { flushStoppedChatPresentation } from '../chat/flush-stopped-chat-presentation';
+import {
+  clearChatResumeInterrupted,
+  markChatResumeInterrupted,
+} from '../chat/resume-interrupted';
 import { flushPendingMode } from '../chat/pending-mode';
 import { hiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
 import {
@@ -974,6 +978,9 @@ async function streamCompletionTurn(
     if (turnRunId) {
       noteRunGeneration(chat, turnRunId, generationId);
     }
+    // Dirty-track so PATCH persists the id (scheduleSave alone is a no-op when
+    // dirty sets were cleared after the user-message flush).
+    touchChat(chat);
     scheduleSaveSessions();
   }
 
@@ -1270,10 +1277,12 @@ async function streamCompletionTurn(
     });
 
     chat.currentGenerationId = undefined;
+    touchChat(chat);
     scheduleSaveSessions();
   } catch (err) {
     if (err instanceof GenerationNotFoundError) {
       chat.currentGenerationId = undefined;
+      touchChat(chat);
       scheduleSaveSessions();
       throw new Error(GENERATION_LOST_ON_RESTART_MESSAGE);
     }
@@ -1469,6 +1478,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   if (!beginChatTurnSetup(chat.id)) {
     return;
   }
+
+  // Stamp before any await so Quit Minnow / crash mid-turn leaves a boot-gate candidate
+  // even after generations are cancelled and currentGenerationId is cleared.
+  markChatResumeInterrupted(chat);
+  scheduleSaveSessions();
 
   let turnRunId: TurnRunId | undefined;
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
@@ -3022,6 +3036,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       thinkingTracker?.abort();
       streamCtx.streamStatus.setThinkingElapsed(null);
       chat.currentGenerationId = undefined;
+      // User Stop / timeout: drop the interrupt marker. System (Quit Minnow) keeps
+      // it so the boot resume gate can still prompt after generations were cancelled.
+      if (turnStopReason !== 'system') {
+        clearChatResumeInterrupted(chat);
+      }
+      touchChat(chat);
       scheduleSaveSessions();
 
       cancelAssistantBubbleRenderDebounce();
@@ -3071,6 +3091,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     markChatTurnError(chat);
     if (resumeGenerationId) {
       chat.currentGenerationId = undefined;
+      touchChat(chat);
       scheduleSaveSessions();
     }
     const isBoardTaskChatFlag = isBoardTaskChat(chat);
@@ -3258,6 +3279,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
     }
     clearMainTurnActivity(chat.id);
+    if (completedNormally || turnRunStatus === 'failed') {
+      // Settled turns (success or error chrome) are not boot-gate candidates.
+      clearChatResumeInterrupted(chat);
+    }
     if (turnRunId) {
       const run = findRunById(chat, turnRunId);
       const start = run?.outputHistoryStart;
