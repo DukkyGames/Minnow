@@ -1,5 +1,6 @@
 /**
  * Merge startup.md guide with per-workspace hub settings (port, network bind).
+ * Port injection is stack-aware: never append CLI flags a given server rejects.
  */
 
 import fs from 'node:fs';
@@ -9,6 +10,12 @@ import { coercePort, DEFAULT_NETWORK, DEFAULT_PORT } from './settings.js';
 /** @typedef {'local' | 'lan'} DevServerNetwork */
 
 /**
+ * Classified from the spawn command plus any resolved package.json script body.
+ * `npm run dev` alone is never enough to pick Vite.
+ * @typedef {'split-stack' | 'vite' | 'next' | 'electron-vite' | 'cra' | 'unknown'} DevServerStack
+ */
+
+/**
  * @typedef {object} EffectiveDevServerGuide
  * @property {string} command
  * @property {string} [cwd]
@@ -16,6 +23,7 @@ import { coercePort, DEFAULT_NETWORK, DEFAULT_PORT } from './settings.js';
  * @property {number} port
  * @property {number} [apiPort]
  * @property {boolean} [splitStack]
+ * @property {DevServerStack} [stack]
  * @property {DevServerNetwork} network
  * @property {string} bindHost
  * @property {{ command?: string }} [stop]
@@ -49,27 +57,40 @@ export function isSplitStackDevCommand(command) {
 }
 
 /**
+ * Return the package.json script body for `npm|pnpm|yarn run <name>` when readable.
+ * Used for stack classification; does not rewrite the spawn command.
+ * @param {string} command
+ * @param {string} packageJsonDir — directory containing package.json
+ * @returns {string | undefined}
+ */
+export function readPackageScriptBody(command, packageJsonDir) {
+  const match = String(command).trim().match(NPM_RUN_RE);
+  if (!match) return undefined;
+
+  try {
+    const pkgPath = path.join(packageJsonDir, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const script = pkg.scripts?.[match[1]];
+    if (typeof script !== 'string') return undefined;
+    const body = script.trim();
+    return body || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Expand `npm run dev` (etc.) to the underlying package.json script when it uses concurrently.
  * @param {string} command
  * @param {string} packageJsonDir — absolute or relative directory containing package.json
  */
 export function expandPackageDevScript(command, packageJsonDir) {
   const trimmed = command.trim();
-  const match = trimmed.match(NPM_RUN_RE);
-  if (!match) return trimmed;
-
-  const scriptName = match[1];
-  try {
-    const pkgPath = path.join(packageJsonDir, 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    const script = pkg.scripts?.[scriptName];
-    if (typeof script !== 'string' || !isSplitStackDevCommand(script)) {
-      return trimmed;
-    }
-    return toNpxConcurrentlyCommand(script.trim());
-  } catch {
+  const script = readPackageScriptBody(command, packageJsonDir);
+  if (!script || !isSplitStackDevCommand(script)) {
     return trimmed;
   }
+  return toNpxConcurrentlyCommand(script);
 }
 
 /**
@@ -81,6 +102,42 @@ function toNpxConcurrentlyCommand(script) {
     return `npx ${script}`;
   }
   return script;
+}
+
+/**
+ * Classify the underlying CLI from the spawn command and optional resolved script body.
+ * Order matters: electron-vite contains "vite", so it must win before the Vite check.
+ * @param {{ command: string, scriptBody?: string }} input
+ * @returns {DevServerStack}
+ */
+export function detectDevServerStack({ command, scriptBody }) {
+  const commandText = String(command ?? '').trim();
+  const body = String(scriptBody ?? '').trim();
+  const haystack = `${commandText}\n${body}`;
+
+  if (isSplitStackDevCommand(commandText) || isSplitStackDevCommand(body)) {
+    return 'split-stack';
+  }
+
+  // electron-vite's CAC rejects `--port`; check before the bare `vite` word boundary.
+  if (/\belectron-vite\b/.test(haystack)) {
+    return 'electron-vite';
+  }
+
+  if (/\breact-scripts\b/.test(haystack)) {
+    return 'cra';
+  }
+
+  // Match `next dev` / `next start`, not hyphenated names like `next-dev`.
+  if (/\bnext(?:\.js)?\s+(dev|start)\b/.test(haystack)) {
+    return 'next';
+  }
+
+  if (/\bvite\b/.test(haystack)) {
+    return 'vite';
+  }
+
+  return 'unknown';
 }
 
 /**
@@ -109,10 +166,29 @@ function isClientDevScript(segment) {
     /\bnpm run dev:client\b/.test(s) ||
     /\bpnpm (run )?dev:client\b/.test(s) ||
     /\byarn dev:client\b/.test(s) ||
-    /\bvite\b/.test(s) ||
+    // `\bvite\b` also matches inside `electron-vite`; skip that CLI (no `--port`).
+    (/\bvite\b/.test(s) && !/\belectron-vite\b/.test(s)) ||
     /\bnpx vite\b/.test(s) ||
     /\bfrontend:dev\b/.test(s)
   );
+}
+
+/**
+ * Insert CLI flags after `--` for package-manager run commands, else append.
+ * @param {string} command
+ * @param {string} flags
+ */
+function appendCliFlags(command, flags) {
+  if (!flags) return command;
+  if (
+    (/\bnpm run \S+/.test(command) ||
+      /\bpnpm (run )?\S+/.test(command) ||
+      /\byarn( run)? \S+/.test(command)) &&
+    !command.includes(' -- ')
+  ) {
+    return `${command} -- ${flags}`;
+  }
+  return `${command} ${flags}`;
 }
 
 /**
@@ -133,15 +209,19 @@ function augmentSingleDevScript(command, port, network) {
     .filter(Boolean)
     .join(' ');
 
-  if (
-    (/\bnpm run \S+/.test(trimmed) ||
-      /\bpnpm (run )?\S+/.test(trimmed) ||
-      /\byarn( run)? \S+/.test(trimmed)) &&
-    !trimmed.includes(' -- ')
-  ) {
-    return `${trimmed} -- ${flags}`;
-  }
-  return flags ? `${trimmed} ${flags}` : trimmed;
+  return appendCliFlags(trimmed, flags);
+}
+
+/**
+ * Append Next.js `-p` when the command does not already set a port.
+ * @param {string} command
+ * @param {number} port
+ */
+function augmentNextCliFlags(command, port) {
+  const trimmed = command.trim();
+  if (!trimmed) return trimmed;
+  if (/(?:^|\s)-p(?:\s|=)|--port(?:=|\s)/.test(trimmed)) return trimmed;
+  return appendCliFlags(trimmed, `-p ${port}`);
 }
 
 /**
@@ -161,48 +241,45 @@ export function augmentConcurrentlyQuotedSegments(command, port, network) {
 }
 
 /**
- * Append Vite-style CLI flags when the startup command looks like a typical dev script.
+ * Inject only the CLI flags the detected stack accepts.
+ * Unknown / electron-vite / CRA get env only — never Vite `--port`.
  * @param {string} command
  * @param {number} port
  * @param {DevServerNetwork} network
- * @param {{ expandedCommand?: string, splitStack?: boolean }} [options]
+ * @param {{ expandedCommand?: string, splitStack?: boolean, scriptBody?: string, stack?: DevServerStack }} [options]
  */
 export function augmentDevServerCommand(command, port, network, options = {}) {
   const trimmed = command.trim();
   if (!trimmed) return trimmed;
 
   const expandedCommand = options.expandedCommand ?? trimmed;
-  const splitStack = options.splitStack ?? isSplitStackDevCommand(expandedCommand);
+  const stack =
+    options.stack ??
+    detectDevServerStack({
+      command: expandedCommand,
+      scriptBody: options.scriptBody,
+    });
+  const splitStack =
+    options.splitStack ?? (stack === 'split-stack' || isSplitStackDevCommand(expandedCommand));
 
-  if (splitStack) {
+  if (splitStack || stack === 'split-stack') {
     return augmentConcurrentlyQuotedSegments(expandedCommand, port, network);
   }
 
-  const needsPort = !/--port(?:=|\s)/.test(trimmed);
-  const needsHost = network === 'lan' && !/--host(?:=|\s)/.test(trimmed);
-  if (!needsPort && !needsHost) return trimmed;
-
-  const flags = [needsPort ? `--port ${port}` : '', needsHost ? '--host' : '']
-    .filter(Boolean)
-    .join(' ');
-
-  const looksVite =
-    /\bvite\b/.test(trimmed) ||
-    /\bnpm run dev\b/.test(trimmed) ||
-    /\bnpx vite\b/.test(trimmed) ||
-    /\bpnpm (run )?dev\b/.test(trimmed) ||
-    /\byarn dev\b/.test(trimmed);
-
-  if (!looksVite) return trimmed;
-
-  if (/\bnpm run \S+/.test(trimmed) && !trimmed.includes(' -- ')) {
-    return `${trimmed} -- ${flags}`;
+  if (stack === 'vite') {
+    return augmentSingleDevScript(trimmed, port, network);
   }
-  return `${trimmed} ${flags}`;
+
+  if (stack === 'next') {
+    return augmentNextCliFlags(trimmed, port);
+  }
+
+  return trimmed;
 }
 
 /**
  * Environment variables merged into the dev-server child process.
+ * `PORT` is the API (or sole) bind; `VITE_PORT` is always the UI/client port.
  * @param {number} port — UI port for split stacks; sole port otherwise
  * @param {DevServerNetwork} network
  * @param {{ splitStack?: boolean, apiPort?: number }} [options]
@@ -214,6 +291,7 @@ export function buildDevServerSpawnEnv(port, network, options = {}) {
 
   return {
     PORT: String(splitStack ? apiPort : port),
+    VITE_PORT: String(port),
     HOST: bindHost,
     VITE_DEV_SERVER_HOST: bindHost,
   };
@@ -234,8 +312,13 @@ export function resolveEffectiveGuide(guide, settings, options = {}) {
   const bindHost = network === 'lan' ? '0.0.0.0' : '127.0.0.1';
   const packageJsonDir = options.packageJsonDir ?? guide.cwd ?? '.';
 
+  const scriptBody = readPackageScriptBody(guide.command, packageJsonDir);
   const expandedCommand = expandPackageDevScript(guide.command, packageJsonDir);
-  const splitStack = isSplitStackDevCommand(expandedCommand);
+  const stack = detectDevServerStack({
+    command: expandedCommand,
+    scriptBody,
+  });
+  const splitStack = stack === 'split-stack';
   const apiPort =
     coercePort(guide.apiPort ?? options.apiPort) ?? (splitStack ? port + 1 : port);
 
@@ -249,12 +332,15 @@ export function resolveEffectiveGuide(guide, settings, options = {}) {
     command: augmentDevServerCommand(guide.command, port, network, {
       expandedCommand,
       splitStack,
+      scriptBody,
+      stack,
     }),
     cwd: guide.cwd,
     healthUrl,
     port,
     apiPort: splitStack ? apiPort : undefined,
     splitStack,
+    stack,
     network,
     bindHost,
     stop: guide.stop,

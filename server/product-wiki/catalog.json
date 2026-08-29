@@ -120,12 +120,13 @@
         "The workspace boundary",
         "Content the model reads is data, not instructions",
         "Caching",
+        "How much of a result the model sees",
         "Tools that are not built in",
         "Practical setups",
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "a771fa572ea3fe70122155f433b2cfd83621af171034f38a3db68b8906e2fbc1"
+      "hash": "374d09179b2af494fac9e702bfaa53b7fd285e234226820e5daca20308be0773"
     },
     {
       "path": "documentation/manual/concepts/context-and-memory.md",
@@ -143,7 +144,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "27e1aae9bd66be2dd8ac600a25228d0e7307c875a20e16dff7ec0ee87022d117"
+      "hash": "92059962f2632fd62353e201559bc64553becbe49fea43e1d9d0a423f5773dfe"
     },
     {
       "path": "documentation/manual/chat/chatting.md",
@@ -216,7 +217,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "20e5814134fd2b832d706ca7d55a12669f92c23ef86928425a5dd436381062b6"
+      "hash": "2279bd0846f9444b70074afe6a364d809c9eac8511607732d50c73ccfa7bd86e"
     },
     {
       "path": "documentation/manual/apps/research.md",

@@ -105,7 +105,7 @@ The sidebar panel covers the everyday loop. For the full surface — **Changes**
 
 A first-class screen rather than a terminal tab you have to remember. Register the servers a project needs — command, working directory, port, auto-start, and which git worktree to run in — then start, stop and restart them from one place, with logs and a listening-ports view.
 
-Minnow understands split stacks: when a project's dev command runs an API and a client together, it injects the port into the client and sets `PORT` for the API, and health-checks the right one.
+Minnow wires the **Port** field by stack: Vite gets `--port`, Next gets `-p`, and stacks that reject those flags (including electron-vite) get `PORT` / `VITE_PORT` in the environment instead. Configs that ignore env keep their own port. Split stacks (API + client via `concurrently`) inject the port into the client, set `PORT` for the API, and health-check the UI.
 
 The `manage_dev_servers` tool gives the model the same controls, so "start the dev server and check the console" is one instruction.
 
