@@ -14,7 +14,13 @@ import { isChatTurnInProgress } from './chat-turn-guard';
 import { enqueueSteerMessage } from './steer-message';
 
 type QueueChangedListener = () => void;
-let queueChangedListener: QueueChangedListener | null = null;
+/**
+ * `var` is hoisted without a TDZ, unlike `let`. The composer UI used to
+ * register a listener while this module was still evaluating (sessions →
+ * composer-message-queue → here), which threw
+ * "Cannot access 'queueChangedListener' before initialization".
+ */
+var queueChangedListener: QueueChangedListener | null = null;
 
 /**
  * UI registers here so a dequeue (turn start) can drop transcript bubbles

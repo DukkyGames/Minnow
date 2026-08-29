@@ -24,4 +24,6 @@ Composer strip stays; it is the compact control. Transcript bubbles are the “n
 - [x] Local Server + picker chips
 - [x] Tests
 - [x] Docs (`context.md`, chatting manual, models manual)
-- [ ] Typecheck + scoped tests
+- [x] Typecheck + scoped tests
+- [x] Fix circular-import TDZ on queue-changed listener
+- [x] Fix composer-message-queue test parse leftover

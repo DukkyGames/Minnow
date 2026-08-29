@@ -11,6 +11,8 @@ import {
   setPendingMessageQueueChangedListener,
   updateQueuedMessage,
 } from '../../src/chat/message-queue.ts';
+// Circular import regression: composer UI must not TDZ-crash message-queue init.
+import '../../src/ui/composer-message-queue.ts';
 import {
   flushScheduledSessionSaveForTests,
   setSessionStateForTests,

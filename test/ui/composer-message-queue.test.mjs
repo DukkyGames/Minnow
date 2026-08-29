@@ -43,23 +43,6 @@ function setupCodeComposerDom() {
   return { composer, inputRow, input, hiddenChat, chatArea };
 }
 
-  const inputRow = document.createElement('div');
-  inputRow.className = 'input-row';
-
-  const input = document.createElement('textarea');
-  input.id = 'msgInput';
-  inputRow.appendChild(input);
-  composer.appendChild(inputRow);
-  document.body.appendChild(composer);
-
-  const hiddenChat = document.createElement('div');
-  hiddenChat.className = 'chat-app-composer-inner';
-  hiddenChat.style.display = 'none';
-  document.body.appendChild(hiddenChat);
-
-  return { composer, inputRow, input, hiddenChat };
-}
-
 describe('composer message queue mount', () => {
   test('resolveComposerQueueMount targets the active code composer input row', () => {
     const { input, inputRow } = setupCodeComposerDom();

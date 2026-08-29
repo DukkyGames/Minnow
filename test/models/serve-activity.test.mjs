@@ -272,8 +272,21 @@ describe('the /slots poller', () => {
     });
 
     startServeActivity({ id: 'serve-c', baseUrl: 'http://127.0.0.1:9999', runtime: 'llama-cpp' });
-    await nextActivity();
-    const afterFailure = await nextActivity(3_000);
+    const first = await nextActivity();
+    assert.equal(first.stale, false);
+    // subscribeServeActivity replays the last sample; ignore that and wait for the failed poll.
+    const afterFailure = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        unsubscribe();
+        reject(new Error('stale sample never published'));
+      }, 3_000);
+      const unsubscribe = subscribeServeActivity((activity) => {
+        if (!activity.stale) return;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(activity);
+      });
+    });
     assert.equal(afterFailure.stale, true);
     assert.equal(afterFailure.slots[0].decoded, 12, 'last good sample is kept, not discarded');
     stopAllServeActivity();

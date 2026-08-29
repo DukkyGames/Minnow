@@ -162,8 +162,21 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
   return row;
 }
 
+/**
+ * Bind after modules finish evaluating. Registering at import time raced a
+ * circular import (this file ↔ message-queue via sessions) and hit TDZ.
+ * Re-bind on every sync so a test (or other caller) that cleared the listener
+ * cannot leave the transcript stuck after the next queue mutation.
+ */
+function bindQueueChangedListener(): void {
+  setPendingMessageQueueChangedListener(() => {
+    syncComposerMessageQueue();
+  });
+}
+
 /** Show or hide the queued follow-up strip for the active streaming chat. */
 export function syncComposerMessageQueue(): void {
+  bindQueueChangedListener();
   if (typeof document === 'undefined') return;
 
   syncQueuedTranscript();
@@ -241,8 +254,3 @@ export function syncComposerFollowUpPlaceholder(streaming: boolean): void {
 export function resetComposerMessageQueueUi(): void {
   queueCollapsed = false;
 }
-
-// Keep transcript bubbles in lockstep with every queue mutation (including flush-on-turn-start).
-setPendingMessageQueueChangedListener(() => {
-  syncComposerMessageQueue();
-});
