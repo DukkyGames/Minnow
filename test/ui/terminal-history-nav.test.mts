@@ -7,6 +7,7 @@ import {
   isTerminalEscapeInput,
   parseHistoryArrow,
   resolveHistoryNavigation,
+  shouldInterceptPtyHistoryArrow,
   usesShellNativeHistory,
 } from '../../src/ui/terminal-history-nav.ts';
 
@@ -35,12 +36,65 @@ describe('terminal-history-nav', () => {
     assert.equal(parseHistoryArrow('a'), null);
   });
 
-  it('usesShellNativeHistory defers to PSReadLine/cmd on Windows native shells', () => {
+  it('usesShellNativeHistory defers to the shell line editor on every shipped PTY profile', () => {
     assert.equal(usesShellNativeHistory('powershell'), true);
     assert.equal(usesShellNativeHistory('cmd'), true);
-    assert.equal(usesShellNativeHistory('bash'), false);
-    assert.equal(usesShellNativeHistory('wsl:Ubuntu'), false);
+    assert.equal(usesShellNativeHistory('zsh'), true);
+    assert.equal(usesShellNativeHistory('bash'), true);
+    assert.equal(usesShellNativeHistory('fish'), true);
+    assert.equal(usesShellNativeHistory('wsl:Ubuntu'), true);
     assert.equal(usesShellNativeHistory(null), false);
+  });
+
+  it('MIN-670: used zsh/bash tabs do not intercept ArrowUp (avoids ^A^K echo)', () => {
+    const usedZsh = {
+      data: '\x1b[A',
+      shellProfileId: 'zsh',
+      tabHistoryLength: 4,
+    };
+    assert.equal(shouldInterceptPtyHistoryArrow(usedZsh), false);
+    assert.equal(
+      shouldInterceptPtyHistoryArrow({ ...usedZsh, shellProfileId: 'bash' }),
+      false,
+    );
+    assert.equal(
+      shouldInterceptPtyHistoryArrow({ ...usedZsh, shellProfileId: 'wsl:Ubuntu' }),
+      false,
+    );
+    assert.equal(
+      shouldInterceptPtyHistoryArrow({ ...usedZsh, shellProfileId: 'powershell' }),
+      false,
+    );
+  });
+
+  it('fresh tabs never intercept arrows even when the profile is unknown', () => {
+    assert.equal(
+      shouldInterceptPtyHistoryArrow({
+        data: '\x1b[A',
+        shellProfileId: 'custom-shell',
+        tabHistoryLength: 0,
+      }),
+      false,
+    );
+  });
+
+  it('unknown shells with stored history still intercept so the fallback replace path can run', () => {
+    assert.equal(
+      shouldInterceptPtyHistoryArrow({
+        data: '\x1b[A',
+        shellProfileId: 'custom-shell',
+        tabHistoryLength: 2,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldInterceptPtyHistoryArrow({
+        data: 'a',
+        shellProfileId: 'custom-shell',
+        tabHistoryLength: 2,
+      }),
+      false,
+    );
   });
 
   it('resolveHistoryNavigation walks up through history', () => {
