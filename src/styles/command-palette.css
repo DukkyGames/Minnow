@@ -123,7 +123,7 @@
    is meant to read uses --mn-fg-muted, which clears 4.5:1 in all sixteen. */
 .mn-palette__shortcut {
   flex-shrink: 0;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.04em;
   color: var(--mn-fg-muted);

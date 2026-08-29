@@ -475,6 +475,8 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` ? 
 
 16 themes: `<html data-theme="{family}-{mode}">` (8 families ? dark/light). **All hex/rgba only in** [`src/styles/tokens.css`](../src/styles/tokens.css); app code uses `--mn-*`.
 
+**Fonts:** `--font-ui` and `--font-mono` live on `:root` in `tokens.css`. Settings → Appearance → Fonts writes the chosen stacks onto `documentElement` via [`applyAppearanceFonts`](../src/appearance/fonts.ts). Stylesheets must consume those two names (not a `--mn-font-*` alias) so the preference reaches every mono surface.
+
 Runtime: [`src/theme.ts`](../src/theme.ts), Settings ? Appearance, desktop wallpaper ([`src/os/wallpaper.ts`](../src/os/wallpaper.ts)). Catalog: **Underwater** (default, animated), **Minnow** (fish boids), **Aurora**, **Starfield**, **Gradient**, **Flat**, **Custom image**. Retired `mesh` / `grain` prefs migrate to `gradient` / `flat`.
 
 **Custom colors:** simplified seed mode (`bg` / `fg` / `accent` / `danger`) expands via [`theme-derive.ts`](../src/appearance/theme-derive.ts). `--mn-success` is always a semantic green (not cloned from accent); stored simplified palettes that still have `success === accent` are repaired on apply ([`custom-theme.ts`](../src/appearance/custom-theme.ts)).
