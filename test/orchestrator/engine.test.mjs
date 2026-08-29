@@ -103,11 +103,21 @@ function fakeClock() {
   };
 }
 
-/** Let every already-queued microtask and promise chain run out. */
+/**
+ * Let the engine go quiet.
+ *
+ * The engine's appends are real filesystem writes, and each one costs several
+ * turns of the loop — the write itself, plus the `stat` that revalidates the
+ * journal's tail. Draining microtasks is not enough, and under-settling makes
+ * the suite *wrong* rather than flaky: the next tick reads a state that has not
+ * caught up and correctly does nothing, which looks exactly like a stalled board.
+ */
 async function settle(rounds = 60) {
-  for (let i = 0; i < rounds; i += 1) await Promise.resolve();
-  for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
-  for (let i = 0; i < rounds; i += 1) await Promise.resolve();
+  for (let round = 0; round < 3; round += 1) {
+    for (let i = 0; i < rounds; i += 1) await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 }
 
 const task = (id, extra = {}) => ({

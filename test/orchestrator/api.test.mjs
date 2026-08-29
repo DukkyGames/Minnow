@@ -389,6 +389,51 @@ describe('SSE', () => {
     assert.ok(journal.body.events.length >= 2);
   });
 
+  it('sends a snapshot whose seq the state actually contains', async () => {
+    // The frame's `id` is what a reconnect resumes from. If the seq came from a
+    // journal read while the state came from the engine, the two could disagree
+    // and a resume would skip the difference forever.
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const frames = await readSse(`/api/boards/${boardId}/events`, (f) => f.length >= 1);
+    const snapshot = frames[0];
+    assert.equal(snapshot.event, 'snapshot');
+
+    const journal = (await call('GET', `/api/boards/${boardId}/journal`)).body.events;
+    const throughSeq = journal.filter((e) => e.seq <= snapshot.data.seq);
+    assert.equal(throughSeq.length, snapshot.data.seq, 'the journal is not gapless');
+    assert.deepEqual(
+      stateFromJSON(snapshot.data.state),
+      derive(throughSeq),
+      'the snapshot state is not what its seq says it is',
+    );
+  });
+
+  it('loses no event appended while a client is connecting', async () => {
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+
+    // Connect and hammer the board at the same time, so appends land during the
+    // window between subscribing and the baseline being taken.
+    const streamed = readSse(`/api/boards/${boardId}/events`, (f) => f.length >= 12);
+    for (let i = 0; i < 12; i += 1) {
+      await call('POST', `/api/boards/${boardId}/concurrency`, { n: 1 + (i % 3) });
+    }
+
+    const frames = await streamed;
+    const snapshot = frames.find((f) => f.event === 'snapshot');
+    assert.ok(snapshot, 'no snapshot frame');
+    const seen = frames.filter((f) => f.event === 'event').map((f) => f.data.seq);
+
+    const journal = (await call('GET', `/api/boards/${boardId}/journal`)).body.events;
+    const expected = journal
+      .map((e) => e.seq)
+      .filter((seq) => seq > snapshot.data.seq && seq <= Math.max(...seen, snapshot.data.seq));
+    assert.deepEqual(seen, expected, 'the stream dropped or duplicated an event');
+  });
+
   it('404s a stream for a board that does not exist', async () => {
     const response = await fetch(`${base}/api/boards/nope/events`);
     assert.equal(response.status, 404);

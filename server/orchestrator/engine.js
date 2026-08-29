@@ -150,6 +150,8 @@ export function createEngine(options) {
 
   /** @type {import('./core/types').BoardState | null} */
   let state = null;
+  /** The journal position `state` is folded through. */
+  let highestSeq = 0;
   /** @type {unknown} */
   let timer = null;
   let ticking = false;
@@ -200,6 +202,10 @@ export function createEngine(options) {
         ? [await journal.appendEvent(boardId, events[0], { now: clock.now })]
         : await journal.appendEvents(boardId, events, { now: clock.now });
     foldInto(/** @type {import('./core/types').BoardState} */ (state), stamped);
+    // Advanced with the fold, never separately: a reader that sees the new state
+    // must see the seq that produced it, or an SSE snapshot can claim to be
+    // current as of an event it does not contain.
+    highestSeq = Number(stamped[stamped.length - 1].seq) || highestSeq;
     for (const event of stamped) {
       for (const subscriber of subscribers) {
         try {
@@ -484,6 +490,7 @@ export function createEngine(options) {
      */
     async load() {
       state = await journal.loadState(boardId);
+      highestSeq = await journal.readHighestSeq(boardId);
       // Returned, not fire-and-forget: the effector keeps the attempt visible to
       // `inspect()` until this resolves, which is what stops a tick landing in
       // the gap between "finished" and "recorded as finished".
@@ -498,12 +505,27 @@ export function createEngine(options) {
      */
     async reload() {
       state = await journal.loadState(boardId);
+      highestSeq = await journal.readHighestSeq(boardId);
     },
 
     /** @returns {import('./core/types').BoardState} */
     getState() {
       if (!state) throw new Error('engine not loaded');
       return state;
+    },
+
+    /**
+     * The journal position {@link getState} is folded through.
+     *
+     * Read together with `getState()` and never separately — the two are
+     * advanced in the same synchronous step, so a caller that reads both without
+     * awaiting in between gets a consistent pair. That is what lets an SSE
+     * snapshot frame carry a `seq` the state actually contains.
+     *
+     * @returns {number}
+     */
+    getHighestSeq() {
+      return highestSeq;
     },
 
     /** @returns {Promise<Record<string, unknown>[]>} */

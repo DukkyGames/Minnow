@@ -98,10 +98,17 @@ function safeBoardId(boardId) {
 const appendChains = new Map();
 
 /**
- * Highest `seq` written so far, per board. A cache of the journal's tail, not a
- * source: it is seeded from the file on first use and only ever advances.
+ * Highest `seq` written so far, per board, alongside the file size it was
+ * observed at. A cache of the journal's tail, not a source.
  *
- * @type {Map<string, number>}
+ * The size is what keeps it honest. The engine is a board's only writer *by
+ * design*, but nothing enforces that, and a second Minnow instance on the same
+ * `MINNOW_HOME` would otherwise assign `seq` values that already exist —
+ * producing a journal like `1,2,3,2`, which breaks the snapshot anchor and every
+ * `Last-Event-ID` resume. If the file is not the size we left it, the cache is
+ * stale and the true tail is re-read.
+ *
+ * @type {Map<string, { seq: number, size: number }>}
  */
 const highestSeq = new Map();
 
@@ -169,15 +176,18 @@ export async function readEvents(boardId) {
   try {
     for await (const line of lines) {
       lineNumber += 1;
-      if (line.trim().length === 0) continue;
 
-      // A bad line seen earlier was not the last one after all.
+      // A bad line seen earlier was not the last one after all. Blank lines
+      // count: an unparseable line with anything at all after it was written
+      // whole, so it is corruption rather than a torn tail.
       if (pendingBadLine !== null) {
         throw new Error(
           `journal ${file} is corrupt at line ${pendingBadLineNumber}: ` +
-            'unparseable line followed by further events',
+            'unparseable line followed by further content',
         );
       }
+
+      if (line.trim().length === 0) continue;
 
       try {
         events.push(JSON.parse(line));
@@ -191,7 +201,38 @@ export async function readEvents(boardId) {
     stream.destroy();
   }
 
+  // A torn append leaves a final line with no terminating newline. One *with* a
+  // newline was written in full, so an unparseable line there is corruption —
+  // and silently dropping it would hide real damage behind a plausible board.
+  if (pendingBadLine !== null && (await endsWithNewline(file))) {
+    throw new Error(
+      `journal ${file} is corrupt at line ${pendingBadLineNumber}: ` +
+        'unparseable line was written in full',
+    );
+  }
+
   return events;
+}
+
+/**
+ * @param {string} file
+ * @returns {Promise<boolean>}
+ */
+async function endsWithNewline(file) {
+  /** @type {import('node:fs/promises').FileHandle | undefined} */
+  let handle;
+  try {
+    handle = await fs.open(file, 'r');
+    const { size } = await handle.stat();
+    if (size === 0) return false;
+    const buffer = Buffer.alloc(1);
+    await handle.read(buffer, 0, 1, size - 1);
+    return buffer[0] === 0x0a;
+  } catch {
+    return false;
+  } finally {
+    await handle?.close();
+  }
 }
 
 /**
@@ -200,7 +241,7 @@ export async function readEvents(boardId) {
  * @param {string} boardId
  * @returns {Promise<number>}
  */
-async function readHighestSeq(boardId) {
+export async function readHighestSeq(boardId) {
   const events = await readEvents(boardId);
   let highest = 0;
   for (const event of events) {
@@ -208,6 +249,50 @@ async function readHighestSeq(boardId) {
     if (Number.isSafeInteger(seq) && seq > highest) highest = seq;
   }
   return highest;
+}
+
+/**
+ * Current size of a board's journal, or 0 when there is none.
+ *
+ * @param {string} boardId
+ * @returns {Promise<number>}
+ */
+async function journalSize(boardId) {
+  try {
+    return (await fs.stat(journalPath(boardId))).size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * The `seq` the next append should take, revalidating the cache against the file.
+ *
+ * One `stat` per append, which is nothing next to the write it precedes, and it
+ * turns a silent duplicate-`seq` corruption into correct numbering whenever
+ * something else has touched the journal.
+ *
+ * @param {string} boardId
+ * @returns {Promise<number>}
+ */
+async function nextSeq(boardId) {
+  const size = await journalSize(boardId);
+  const cached = highestSeq.get(boardId);
+  if (cached && cached.size === size) return cached.seq;
+  const seq = await readHighestSeq(boardId);
+  highestSeq.set(boardId, { seq, size });
+  return seq;
+}
+
+/**
+ * Record where the journal now stands, after a write.
+ *
+ * @param {string} boardId
+ * @param {number} seq
+ * @returns {Promise<void>}
+ */
+async function recordTail(boardId, seq) {
+  highestSeq.set(boardId, { seq, size: await journalSize(boardId) });
 }
 
 // ---------------------------------------------------------------------------
@@ -240,8 +325,7 @@ export function appendEvent(boardId, event, options = {}) {
   const now = options.now ?? (() => Date.now());
 
   return serialise(id, async () => {
-    if (!highestSeq.has(id)) highestSeq.set(id, await readHighestSeq(id));
-    const seq = /** @type {number} */ (highestSeq.get(id)) + 1;
+    const seq = (await nextSeq(id)) + 1;
 
     const stamped = { v: 1, ...event, seq, ts: now() };
     const checked = validateEvent(stamped);
@@ -251,7 +335,7 @@ export function appendEvent(boardId, event, options = {}) {
 
     await fs.mkdir(boardDir(id), { recursive: true });
     await fs.appendFile(journalPath(id), `${JSON.stringify(stamped)}\n`, 'utf8');
-    highestSeq.set(id, seq);
+    await recordTail(id, seq);
 
     // Fire and forget. A snapshot is a cache, so failing to write one must never
     // fail the append that triggered it — the journal is already durable.
@@ -288,8 +372,7 @@ export function appendEvents(boardId, events, options = {}) {
   const now = options.now ?? (() => Date.now());
 
   return serialise(id, async () => {
-    if (!highestSeq.has(id)) highestSeq.set(id, await readHighestSeq(id));
-    let seq = /** @type {number} */ (highestSeq.get(id));
+    let seq = await nextSeq(id);
 
     /** @type {Record<string, unknown>[]} */
     const stampedAll = [];
@@ -310,7 +393,7 @@ export function appendEvents(boardId, events, options = {}) {
       `${stampedAll.map((e) => JSON.stringify(e)).join('\n')}\n`,
       'utf8',
     );
-    highestSeq.set(id, seq);
+    await recordTail(id, seq);
 
     if (stampedAll.some((e) => shouldSnapshot(Number(e.seq)))) {
       void refreshSnapshot(id).catch((err) => {

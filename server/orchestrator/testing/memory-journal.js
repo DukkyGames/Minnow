@@ -20,6 +20,7 @@ import { validateEvent } from '../core/events.js';
  *   appendEvent: (boardId: string, event: Record<string, unknown>, options?: { now?: () => number }) => Promise<Record<string, unknown>>,
  *   appendEvents: (boardId: string, events: Record<string, unknown>[], options?: { now?: () => number }) => Promise<Record<string, unknown>[]>,
  *   readEvents: (boardId: string) => Promise<Record<string, unknown>[]>,
+ *   readHighestSeq: (boardId: string) => Promise<number>,
  *   loadState: (boardId: string) => Promise<import('../core/types').BoardState>,
  *   createBoard: (boardId: string) => Promise<void>,
  *   boardExists: (boardId: string) => Promise<boolean>,
@@ -103,6 +104,11 @@ export function createMemoryJournal() {
 
     async readEvents(boardId) {
       return [...bucket(boardId)];
+    },
+
+    async readHighestSeq(boardId) {
+      const events = bucket(boardId);
+      return events.length > 0 ? Number(events[events.length - 1].seq) : 0;
     },
 
     async loadState(boardId) {

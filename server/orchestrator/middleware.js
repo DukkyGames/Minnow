@@ -381,21 +381,55 @@ async function streamEvents(req, res, boardId) {
   };
 
   const engine = await getEngine(boardId, makeEffector);
-  const events = await readEvents(boardId);
+
+  // Subscribe *before* taking the baseline, buffering whatever arrives while it
+  // is being taken. Reading first and subscribing after leaves a window — today
+  // it happens to be free of `await`s, but that is a property of the current
+  // code rather than of the design, and an event dropped there is not recovered
+  // by anything: the client would sit on a permanently stale board.
+  /** @type {Record<string, unknown>[]} */
+  let buffered = [];
+  /** Highest seq already sent. -1 until the baseline is established. */
+  let sentThrough = -1;
+
+  const deliver = (event) => {
+    const seq = Number(event.seq) || 0;
+    if (sentThrough < 0) {
+      buffered.push(event);
+      return;
+    }
+    if (seq <= sentThrough) return; // already covered by the baseline
+    sentThrough = seq;
+    if (!send('event', event, seq)) cleanup();
+  };
+  const unsubscribe = engine.subscribe(deliver);
 
   if (resumeFrom > 0) {
     // Resuming: just the tail the client missed.
+    const events = await readEvents(boardId);
+    let highest = resumeFrom;
     for (const event of events) {
-      if (Number(event.seq) > resumeFrom) send('event', event, Number(event.seq));
+      const seq = Number(event.seq) || 0;
+      if (seq <= resumeFrom) continue;
+      send('event', event, seq);
+      if (seq > highest) highest = seq;
     }
+    sentThrough = highest;
   } else {
-    const highest = events.reduce((max, e) => Math.max(max, Number(e.seq) || 0), 0);
-    send('snapshot', { seq: highest, state: serialiseState(engine.getState()) }, highest);
+    // `seq` and `state` come from the engine together. Deriving the seq from a
+    // separate journal read could claim the snapshot is current as of an event
+    // the state does not contain, and a reconnect would then skip it forever.
+    const state = engine.getState();
+    const seq = engine.getHighestSeq();
+    send('snapshot', { seq, state: serialiseState(state) }, seq);
+    sentThrough = seq;
   }
 
-  const unsubscribe = engine.subscribe((event) => {
-    if (!send('event', event, Number(event.seq))) cleanup();
-  });
+  // Flush what arrived while the baseline was being taken. Synchronous, so no
+  // further event can interleave with it.
+  const pending = buffered;
+  buffered = [];
+  for (const event of pending) deliver(event);
 
   const heartbeat = setInterval(() => {
     try {
