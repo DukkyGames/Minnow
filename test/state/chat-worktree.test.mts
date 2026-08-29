@@ -9,6 +9,7 @@ import {
   formatComposerRunTargetLabel,
   isChatWorktreeMode,
   isManagedChatWorktreePath,
+  suggestChatWorktreeBranchName,
 } from '../../src/state/chat-worktree.ts';
 
 describe('chat-worktree helpers', () => {
@@ -33,5 +34,26 @@ describe('chat-worktree helpers', () => {
     const path = `/home/user/.minnow/worktrees/repo-hash/chat/${chatId}`;
     assert.equal(isManagedChatWorktreePath(chatId, path), true);
     assert.equal(isManagedChatWorktreePath(chatId, '/other/path'), false);
+  });
+
+  test('suggestChatWorktreeBranchName uses the chat title, not the current branch', () => {
+    assert.equal(
+      suggestChatWorktreeBranchName({
+        name: 'Test Worktree',
+        workspacePath: '/tmp/opaque-id',
+        gitBranch: 'main',
+      }),
+      'test-worktree',
+    );
+  });
+
+  test('suggestChatWorktreeBranchName skips placeholder chat names', () => {
+    assert.equal(
+      suggestChatWorktreeBranchName(
+        { name: 'New chat', workspacePath: '', gitBranch: 'main' },
+        '/Users/dev/Minnow',
+      ),
+      'minnow',
+    );
   });
 });

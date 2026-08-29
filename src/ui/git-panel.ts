@@ -103,7 +103,7 @@ import { showToast } from './toast';
 
 import {
   closeGitPanelNamePopover,
-  openGitPanelNamePopover,
+  openGitRefNamePopover,
 } from './git-panel-name-popover';
 import { decorateGitSourceControlButton } from './git-source-control-icons';
 import {
@@ -389,11 +389,12 @@ function syncMergeToMainButton(
 }
 
 function openAddBranchPopover(anchor: HTMLButtonElement): void {
-  openGitPanelNamePopover({
+  openGitRefNamePopover({
     anchor,
     title: 'New branch',
-    label: 'Branch name',
-    placeholder: 'feature/my-branch',
+    kind: 'branch',
+    defaultPath: getEffectiveCwdArg() || getWorkspacePath(),
+    reserved: [currentBranchName, 'main', 'master'],
     onSubmit: async (branch) => {
       await runGitOp(
         () => gitCheckout({ branch, create: true, cwd: getEffectiveCwdArg() }),
@@ -446,11 +447,12 @@ async function handleDeleteBranch(): Promise<void> {
 }
 
 function openAddWorktreePopover(anchor: HTMLButtonElement): void {
-  openGitPanelNamePopover({
+  openGitRefNamePopover({
     anchor,
     title: 'Add worktree',
-    label: 'Branch name',
-    placeholder: 'feature/my-worktree',
+    kind: 'worktree',
+    defaultPath: getEffectiveCwdArg() || getWorkspacePath(),
+    reserved: [currentBranchName, 'main', 'master'],
     onSubmit: async (branch) => {
       const cwd = getEffectiveCwdArg();
       const addResult = await gitWorktreeAdd({ branch, cwd });
@@ -462,7 +464,7 @@ function openAddWorktreePopover(anchor: HTMLButtonElement): void {
       }
 
       setStatus('');
-      showToast('Worktree added', 'success');
+      showToast(`Worktree ${addResult.branch ?? branch} added`, 'success');
       if (addResult.path) {
         panelCwd = addResult.path;
       }
