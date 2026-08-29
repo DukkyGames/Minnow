@@ -6,7 +6,9 @@
  * Flat chrome; --mn-* tokens only.
  *
  * Peek is a description-first document: sticky identity + dispatch, then the
- * body, then compact add-rows for empty secondary sections.
+ * body, then compact add-rows for empty secondary sections. Sparkles Expand
+ * (MIN-635) rewrites title + description into a review overlay; triage
+ * Expand with agent still researches via issue-writer.
  *
  * IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=not_required
  * shape=pass image_gate=skipped:harness lacks native image generation mutation=open
@@ -27,6 +29,10 @@ import { getMode } from '../chat/modes/registry';
 import {
   canExpandIssueWithAgent,
 } from '../chat/issues/expand-task';
+import {
+  createIssueExpandButton,
+  isIssueExpandOverlayOpen,
+} from './issues-expand';
 import {
   canInvestigateIssue,
   canRunIssueWorkflow,
@@ -130,6 +136,7 @@ export function getSelectedIssueId(): string | undefined {
  * title, description, labels, or an add-row field is being typed.
  */
 export function isIssuesDetailEditing(): boolean {
+  if (isIssueExpandOverlayOpen()) return true;
   const active = document.activeElement;
   if (!active || typeof (active as { closest?: unknown }).closest !== 'function') {
     return false;
@@ -140,7 +147,8 @@ export function isIssuesDetailEditing(): boolean {
     el.closest('.issues-detail__title') ||
       el.closest('.issues-detail__desc-wrap') ||
       el.closest('.mn-editor') ||
-      el.closest('.issues-detail__add-code'),
+      el.closest('.issues-detail__add-code') ||
+      el.closest('.issues-expand-form'),
   );
 }
 
@@ -514,7 +522,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     void import('./issues-page').then((m) => m.setIssuesRouteHash('#/app/issues'));
   });
 
-  headerActions.append(moreBtn, closeBtn);
+  headerActions.append(createIssueExpandButton(issue, 'peek'), moreBtn, closeBtn);
   header.append(idEl, headerActions);
   sticky.appendChild(header);
 
@@ -1161,8 +1169,8 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     expandBtn.type = 'button';
     expandBtn.className = 'issues-btn issues-btn--primary';
     expandBtn.disabled = expandingIds.has(issue.id);
-    expandBtn.textContent = expandingIds.has(issue.id) ? 'Expanding…' : 'Expand';
-    expandBtn.title = 'Flesh out this triage note with the issue-writer agent';
+    expandBtn.textContent = expandingIds.has(issue.id) ? 'Expanding with agent…' : 'Expand with agent';
+    expandBtn.title = 'Research the workspace and fill this triage note with the issue-writer agent';
     expandBtn.addEventListener('click', () => {
       void startExpand(issue.id);
     });
