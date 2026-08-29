@@ -20,7 +20,8 @@ import { getCachePolicyForTool } from '../../src/tools/tool-cache-policy.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const SAMPLE_PATH = 'test/fixtures/sample.fake';
+/** Private to this suite — do not share `sample.fake` (parallel suites rewrite it). */
+const SAMPLE_PATH = 'test/fixtures/agent-disk-sync.fake';
 
 async function seedFakeLspHome(homeDir) {
   process.env.MINNOW_HOME = homeDir;
@@ -60,12 +61,13 @@ describe('agent LSP diagnostics', () => {
     setLspDiagnosticWaitForTest({ quietPeriodMs: 80, totalTimeoutMs: 2_000 });
   });
 
-  after(() => {
+  after(async () => {
     shutdownAllLsp();
     resetLspDiagnosticWaitForTest();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     invalidateLspConfigCache();
+    await fs.rm(path.join(PROJECT_ROOT, SAMPLE_PATH), { force: true });
   });
 
   test('get_lsp_diagnostics is excluded from generic tool cache', () => {

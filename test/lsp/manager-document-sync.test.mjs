@@ -19,7 +19,8 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const SAMPLE_PATH = 'test/fixtures/sample.fake';
+/** Private to this suite — do not share `sample.fake` (parallel suites rewrite it). */
+const SAMPLE_PATH = 'test/fixtures/doc-sync-disk.fake';
 
 async function seedFakeLspHome(homeDir) {
   process.env.MINNOW_HOME = homeDir;
@@ -57,11 +58,12 @@ describe('LSP document sync', () => {
     await seedFakeLspHome(homeDir);
   });
 
-  after(() => {
+  after(async () => {
     shutdownAllLsp();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     invalidateLspConfigCache();
+    await fs.rm(path.join(PROJECT_ROOT, SAMPLE_PATH), { force: true });
   });
 
   test('structured diagnostics use editorText instead of disk', async () => {

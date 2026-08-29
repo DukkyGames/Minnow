@@ -83,7 +83,15 @@ function publishDiagnosticsForFixture(uri) {
     return;
   }
 
-  if (base === 'sample.fake' || uri.includes('sample.fake')) {
+  // Ordinary fixtures (including per-suite disk-sync temps) share this static error.
+  if (
+    base === 'sample.fake' ||
+    base === 'agent-disk-sync.fake' ||
+    base === 'doc-sync-disk.fake' ||
+    uri.includes('sample.fake') ||
+    uri.includes('agent-disk-sync.fake') ||
+    uri.includes('doc-sync-disk.fake')
+  ) {
     publishDiagnostics(uri, [
       {
         range: {
