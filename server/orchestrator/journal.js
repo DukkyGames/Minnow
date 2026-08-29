@@ -215,6 +215,98 @@ export async function readEvents(boardId) {
 }
 
 /**
+ * Give the journal a terminating newline, returning the size it now has.
+ *
+ * A crash mid-append leaves a final line with no newline after it. `readEvents`
+ * already copes — it drops the fragment if it is incomplete and keeps it if the
+ * cut happened to land on the closing brace — but leaving the file that way is
+ * not harmless: the *next* append concatenates onto the unterminated line. The
+ * result is one line that is both unparseable and newline-terminated, which is
+ * precisely what real corruption looks like, so from then on `readEvents` and
+ * `loadState` throw and `getEngine`, `GET /api/boards/:id` and the SSE stream
+ * fail for that board forever. A crash would have bricked the board.
+ *
+ * The repair is whichever of the two makes the file agree with what `readEvents`
+ * already returns for it:
+ *
+ * - The last line parses — the write reached the end and only the newline was
+ *   lost. Terminate it. The event is kept, because a reader already had it.
+ * - It does not parse — those bytes were never an event, and no reader ever
+ *   returned them. Cut them off.
+ *
+ * So this is not a prune path: it never removes anything a read would have
+ * yielded, and the "journals are never pruned" rule at the top of this file
+ * stands.
+ *
+ * Callers must hold the board's append chain, so no writer can be mid-append.
+ *
+ * @param {string} boardId
+ * @returns {Promise<number>} the file's size afterwards, 0 when there is none
+ */
+async function repairTornTail(boardId) {
+  const file = journalPath(boardId);
+  /** @type {import('node:fs/promises').FileHandle | undefined} */
+  let handle;
+  try {
+    handle = await fs.open(file, 'r+');
+    const { size } = await handle.stat();
+    if (size === 0) return 0;
+
+    const tail = Buffer.alloc(1);
+    await handle.read(tail, 0, 1, size - 1);
+    if (tail[0] === 0x0a) return size;
+
+    // Walk back to the newline that ends the last complete line. Chunked rather
+    // than reading the whole file: journals are kept forever and can be large,
+    // while the unterminated line is at most one event long.
+    const CHUNK = 64 * 1024;
+    let end = size;
+    let start = 0;
+    while (end > 0) {
+      const from = Math.max(0, end - CHUNK);
+      const buffer = Buffer.alloc(end - from);
+      await handle.read(buffer, 0, buffer.length, from);
+      const index = buffer.lastIndexOf(0x0a);
+      if (index !== -1) {
+        start = from + index + 1;
+        break;
+      }
+      end = from;
+    }
+
+    const line = Buffer.alloc(size - start);
+    await handle.read(line, 0, line.length, start);
+    const text = line.toString('utf8');
+
+    if (text.trim().length > 0 && isJson(text)) {
+      await handle.write('\n', size, 'utf8');
+      return size + 1;
+    }
+
+    await handle.truncate(start);
+    return start;
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return 0;
+    throw err;
+  } finally {
+    await handle?.close();
+  }
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+function isJson(text) {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * @param {string} file
  * @returns {Promise<boolean>}
  */
@@ -272,6 +364,11 @@ async function journalSize(boardId) {
  * turns a silent duplicate-`seq` corruption into correct numbering whenever
  * something else has touched the journal.
  *
+ * Re-seeding the tail is also where a torn final line is cut off — see
+ * {@link repairTornTail}. Only the re-seed path needs it: a cache hit means the
+ * file is exactly the size this process left it at, and this process only ever
+ * leaves it ending in a newline.
+ *
  * @param {string} boardId
  * @returns {Promise<number>}
  */
@@ -279,8 +376,9 @@ async function nextSeq(boardId) {
   const size = await journalSize(boardId);
   const cached = highestSeq.get(boardId);
   if (cached && cached.size === size) return cached.seq;
+  const repaired = await repairTornTail(boardId);
   const seq = await readHighestSeq(boardId);
-  highestSeq.set(boardId, { seq, size });
+  highestSeq.set(boardId, { seq, size: repaired });
   return seq;
 }
 
@@ -410,6 +508,15 @@ export function appendEvents(boardId, events, options = {}) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Distinguishes two temp files written inside the same millisecond.
+ *
+ * `refreshSnapshot` is fire-and-forget, so two of them can overlap. With only
+ * pid and clock in the name they collide, which on Windows is an `EPERM` on the
+ * rename — silently disabling the memoisation this whole path exists for.
+ */
+let snapshotWrites = 0;
+
+/**
  * Write a snapshot, temp-then-rename so a reader never sees a partial one.
  *
  * @param {string} boardId
@@ -420,7 +527,7 @@ export async function writeSnapshot(boardId, snapshot) {
   const id = safeBoardId(boardId);
   const target = snapshotPath(id);
   await fs.mkdir(path.dirname(target), { recursive: true });
-  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+  const tmp = `${target}.tmp-${process.pid}-${Date.now()}-${(snapshotWrites += 1)}`;
   await fs.writeFile(tmp, `${JSON.stringify(snapshot)}\n`, 'utf8');
   await fs.rename(tmp, target);
 }

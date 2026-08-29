@@ -150,8 +150,11 @@ function attemptIds(events) {
 describe('recovery — a kill at every event index', () => {
   it('recovers to a consistent board that completes, from all 60 kill points', async () => {
     // Sweep rather than sample: the interesting failures live at boundaries —
-    // mid-append, between a start resolving and its journal line, and during a
-    // snapshot write.
+    // between a start resolving and its journal line, and during a snapshot
+    // write. Note what this sweep does *not* cover: the kill fires from the
+    // engine's subscriber, which runs after the append has already resolved, so
+    // no run here dies with a half-written line on disk. That case is the torn
+    // tail, and it has its own test below.
     const KILL_POINTS = 60;
     let killed = 0;
     let completed = 0;
@@ -195,6 +198,45 @@ describe('recovery — a kill at every event index', () => {
 
     assert.equal(completed, KILL_POINTS);
     assert.ok(killed > KILL_POINTS / 2, `only ${killed} of ${KILL_POINTS} runs actually died`);
+  });
+
+  it('recovers a journal left with a half-written final line', async () => {
+    // The kill sweep above cannot produce this: it fires after the append has
+    // resolved. A real mid-write SIGKILL leaves a final line with no newline,
+    // which is reproduced here by cutting the file — the same bytes, arrived at
+    // deterministically.
+    //
+    // Left alone it is fatal rather than survivable: the next append lands on
+    // the fragment, making one unparseable newline-terminated line, and from
+    // then on every read of that board throws. The board would be bricked by a
+    // crash, which is the one thing an append-only journal exists to prevent.
+    const boardId = 'torn';
+    await runChild(boardId, 'killAfter', 20);
+
+    const file = path.join(home, 'boards', boardId, 'journal.jsonl');
+    const whole = await fs.readFile(file, 'utf8');
+    const lastLineStart = whole.lastIndexOf('\n', whole.length - 2) + 1;
+    assert.ok(lastLineStart > 0, 'the child wrote too little to tear');
+    // Cut the last line in half, newline and all.
+    const cut = lastLineStart + Math.floor((whole.length - 1 - lastLineStart) / 2);
+    await fs.writeFile(file, whole.slice(0, cut), 'utf8');
+    resetJournalCache();
+
+    const before = await readEvents(boardId);
+    assert.deepEqual(
+      before.map((e) => e.seq),
+      before.map((_, i) => i + 1),
+      'the torn journal does not read back gaplessly',
+    );
+
+    // The recovery path, unchanged: load, then tick.
+    const state = await restartAndFinish(boardId);
+    assert.equal(state.finished, true);
+
+    resetJournalCache();
+    const after = await readEvents(boardId);
+    assert.deepEqual(after.map((e) => e.seq), after.map((_, i) => i + 1));
+    assert.deepEqual(await loadState(boardId), derive(after));
   });
 
   it('starts exactly one attempt when killed between start() and the journal append', async () => {
