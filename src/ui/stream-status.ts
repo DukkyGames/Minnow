@@ -128,9 +128,13 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
     if (disposed) return;
     const text = detail?.trim() ? ` ${detail.trim()}` : '';
     // This ticks once per generated token; skip the DOM write when nothing changed.
-    if (detailEl.textContent === text) return;
+    if (detailEl.textContent === text) {
+      syncToolStartDetail(wrap, text);
+      return;
+    }
     detailEl.textContent = text;
     detailEl.hidden = !text;
+    syncToolStartDetail(wrap, text);
   };
 
   const setPhase = (phase: StreamPhase): void => {
@@ -196,6 +200,15 @@ export interface ToolStartIndicatorHandle {
   dispose(): void;
 }
 
+/** Keep token detail on the tool-start row while stream-status is hidden. */
+function syncToolStartDetail(wrap: HTMLElement, text: string): void {
+  const detail = wrap.querySelector<HTMLElement>('.tool-start-indicator__detail');
+  if (!detail) return;
+  if (detail.textContent === text) return;
+  detail.textContent = text;
+  detail.hidden = !text;
+}
+
 /**
  * Inline "Calling {tool}…" spinner shown while tool_calls JSON streams in
  * (before finalized tool-call bubbles render).
@@ -225,14 +238,22 @@ export function attachToolStartIndicator(row: ToolStartIndicatorRow): ToolStartI
       labelEl = document.createElement('span');
       labelEl.className = 'tool-start-indicator__label';
 
+      const detailEl = document.createElement('span');
+      detailEl.className = 'tool-start-indicator__detail';
+      detailEl.hidden = true;
+      detailEl.setAttribute('aria-hidden', 'true');
+
       indicatorEl.appendChild(spinner);
       indicatorEl.appendChild(labelEl);
+      indicatorEl.appendChild(detailEl);
       row.bubble.insertAdjacentElement('afterend', indicatorEl);
     }
 
     if (labelEl) {
       labelEl.textContent = `Calling ${humanizeToolName(toolName)}…`;
     }
+    const current = row.wrap.querySelector('.stream-status__detail')?.textContent ?? '';
+    syncToolStartDetail(row.wrap, current);
   };
 
   const dispose = (): void => {

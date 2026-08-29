@@ -54,7 +54,7 @@
         "Related"
       ],
       "section": "Get started",
-      "hash": "d5bbe1367870018c7c76f16b32a08b4b98b9dcd40b0029d8147b5426db1a04ab"
+      "hash": "5ffb28861b628764840c413f77e1103c40021e318b95c9e8966cd75810222624"
     },
     {
       "path": "documentation/manual/get-started/first-chat.md",
@@ -163,7 +163,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "9208f05bd7d857a4548f47a78463e504f99998e0a8bacdb3692324d19451a15c"
+      "hash": "f7ea56ebbf82ef515b6eadf8461e2bea16a8645b5952f7c18d974dde616dcf03"
     },
     {
       "path": "documentation/manual/chat/skills-and-commands.md",
@@ -256,6 +256,7 @@
       "title": "Models",
       "summary": "This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. You come here to configure, then go back to Code and work. Open it from th",
       "headings": [
+        "Local Server",
         "Recommendations",
         "Library and Installed",
         "MLX on Apple Silicon",
@@ -270,7 +271,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "44a987c2c9cff3429a69f1ebdbf7bafa55937fde1300ae102ac45624b50163cf"
+      "hash": "ab2807cc44dd0b1d187e87be4d4aba2ae7208e2281c81cb008270582ef572fc0"
     },
     {
       "path": "documentation/manual/apps/issues.md",

@@ -60,4 +60,85 @@ describe('serve activity chip labels', () => {
   test('stale idle without a queue still says the reading is old', () => {
     assert.deepEqual(serveActivityChipLabels({ ...IDLE, stale: true }), ['Ready · stale']);
   });
+
+  test('prefill is a percent when Minnow owns prompt_progress for this serve', () => {
+    const activity = {
+      ...IDLE,
+      slots: [
+        {
+          id: 0,
+          taskId: 1,
+          state: 'prompt',
+          promptProcessed: 8192,
+          promptCached: 0,
+          decoded: 0,
+          remaining: null,
+          tokensPerSecond: null,
+        },
+      ],
+    };
+    const overlay = {
+      serveId: 'serve-1',
+      libraryId: 'lib-1',
+      modelLabel: 'qwen',
+      processed: 8192,
+      total: 16384,
+      cache: 0,
+    };
+    assert.deepEqual(serveActivityChipLabels(activity, overlay), ['0 PP 50%']);
+  });
+
+  test('prefill is a percent when chat published libraryId without a serve id', () => {
+    const activity = {
+      ...IDLE,
+      slots: [
+        {
+          id: 0,
+          taskId: 1,
+          state: 'prompt',
+          promptProcessed: 4096,
+          promptCached: 0,
+          decoded: 0,
+          remaining: null,
+          tokensPerSecond: null,
+        },
+      ],
+    };
+    const overlay = {
+      serveId: null,
+      libraryId: 'lib-1',
+      modelLabel: 'lib-1',
+      processed: 4096,
+      total: 8192,
+      cache: 0,
+    };
+    assert.deepEqual(serveActivityChipLabels(activity, overlay), ['0 PP 50%']);
+  });
+
+  test('prefill stays a token count when the overlay is for another serve', () => {
+    const activity = {
+      ...IDLE,
+      slots: [
+        {
+          id: 0,
+          taskId: 1,
+          state: 'prompt',
+          promptProcessed: 1200,
+          promptCached: 0,
+          decoded: 0,
+          remaining: null,
+          tokensPerSecond: null,
+        },
+      ],
+    };
+    const overlay = {
+      serveId: 'other',
+      libraryId: 'lib-other',
+      modelLabel: 'other-model',
+      processed: 10,
+      total: 100,
+      cache: 0,
+    };
+    assert.deepEqual(serveActivityChipLabels(activity, overlay), ['0 PP 1.2k tok']);
+  });
 });

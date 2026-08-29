@@ -41,7 +41,7 @@ import { subscribeServeActivityFeed } from '../../models/serve-activity-feed';
 import { activeServeFor, buildLibrary, type LibraryModel } from '../../models/library';
 import { isLiveServeStatus, isRetryableServeStatus, settingsForServeRetry } from '../../models/serve-status';
 import { foldServeLogEvent, parseLoadProgress } from '../../models/serve-log';
-import { computeLoadProgress, resolveBytesPerMs } from '../../models/load-progress.mjs';
+import { computeLoadProgress, formatLoadPercentLabel, resolveBytesPerMs } from '../../models/load-progress.mjs';
 import type { HardwareSnapshot } from '../../models/types';
 
 /** Live loading state for a serve that started asynchronously. */
@@ -77,6 +77,8 @@ export interface ModelsState {
   runtimes: RuntimeDetection | null;
   hardware: HardwareSnapshot | null;
   selectedId: string | null;
+  /** Local Server card under inspection; bind by serve id, not library path. */
+  selectedServeId: string | null;
   loads: LoadProgress[];
   scanning: boolean;
   error: string | null;
@@ -90,6 +92,7 @@ const state: ModelsState = {
   runtimes: null,
   hardware: null,
   selectedId: null,
+  selectedServeId: null,
   loads: [],
   scanning: false,
   error: null,
@@ -100,6 +103,8 @@ const listeners = new Set<Listener>();
 const logUnsubs = new Map<string, () => void>();
 /** Latest log text per tracked load — the ticker re-reads it without a new SSE event. */
 const loadLogText = new Map<string, string>();
+/** Elapsed ms on the last compute tick, for skipped-phase catch-up. */
+const loadLastElapsedMs = new Map<string, number>();
 /** Redraw cadence for in-flight loads. */
 const LOAD_TICK_MS = 250;
 /** @type {number | null} handle for the in-flight-load ticker. */
@@ -170,6 +175,52 @@ export function getSelectedModel(): LibraryModel | null {
 export function selectModel(id: string | null): void {
   if (state.selectedId === id) return;
   state.selectedId = id;
+  if (id) {
+    const model = state.library.find((m) => m.id === id);
+    const serve = model ? serveForModel(model) : undefined;
+    state.selectedServeId = serve?.id ?? null;
+  } else {
+    state.selectedServeId = null;
+  }
+  emit();
+}
+
+/**
+ * Library row for a serve: exact path, then the load's model id.
+ * Name matching is how JIT path mismatch used to no-op the card click — skip it.
+ */
+export function libraryModelForServe(serve: ServeRecord): LibraryModel | undefined {
+  if (serve.modelPath) {
+    const want = normalizeServePath(serve.modelPath);
+    const byPath = state.library.find((m) => m.path && normalizeServePath(m.path) === want);
+    if (byPath) return byPath;
+  }
+  const load = state.loads.find((l) => l.serveId === serve.id);
+  if (load?.modelId) {
+    const byId = state.library.find((m) => m.id === load.modelId);
+    if (byId) return byId;
+  }
+  return undefined;
+}
+
+function normalizeServePath(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase();
+}
+
+/** Serve the inspector is bound to (Local Server card click). */
+export function getInspectedServe(): ServeRecord | undefined {
+  if (!state.selectedServeId) return undefined;
+  return state.serves.find((s) => s.id === state.selectedServeId);
+}
+
+/** Select a serve for the inspector. Repeat clicks keep the inspector open. */
+export function selectServe(serveId: string): void {
+  state.selectedServeId = serveId;
+  const serve = state.serves.find((s) => s.id === serveId);
+  const model = serve ? libraryModelForServe(serve) : undefined;
+  // Clear the library selection when this serve has no row (JIT path mismatch)
+  // so render() opens the serve-only inspector instead of the previous model.
+  state.selectedId = model?.id ?? null;
   emit();
 }
 
@@ -195,6 +246,30 @@ export function loadForModel(model: LibraryModel): LoadProgress | undefined {
 
 export function runningServes(): ServeRecord[] {
   return state.serves.filter((s) => isLiveServeStatus(s.status));
+}
+
+/**
+ * Models header copy while a llama.cpp serve is starting.
+ * Empty percent stays "Loading" so we never print a stuck 0%.
+ */
+export function formatModelsHeaderLoadingLabel(loads: LoadProgress[] = state.loads): string {
+  const live = loads.filter((l) => !l.error);
+  for (const load of live) {
+    const pct = formatLoadPercentLabel(load.percent);
+    if (pct) return `Loading ${pct}`;
+  }
+  return 'Loading';
+}
+
+/**
+ * Switch to Local Server when the user is already in Models. JIT load from
+ * Code must not yank them out of the chat.
+ */
+function revealLocalServerIfModelsActive(): void {
+  void import('../../os/instances').then(({ getForegroundAppId }) => {
+    if (getForegroundAppId() !== 'models') return;
+    void import('../models-page').then((m) => m.openModels('server'));
+  });
 }
 
 /** Crashed / error / unhealthy rows the Local Server list should still show. */
@@ -284,6 +359,7 @@ function stopTracking(serveId: string): void {
   logUnsubs.get(serveId)?.();
   logUnsubs.delete(serveId);
   loadLogText.delete(serveId);
+  loadLastElapsedMs.delete(serveId);
 }
 
 function updateLoad(serveId: string, patch: Partial<LoadProgress>): void {
@@ -410,14 +486,17 @@ function recomputeLoad(serveId: string): void {
   const entry = state.loads.find((l) => l.serveId === serveId);
   if (!entry || entry.error) return;
   const logText = loadLogText.get(serveId) ?? '';
+  const elapsedMs = Date.now() - entry.startedAt;
   const next = computeLoadProgress({
     logText,
-    elapsedMs: Date.now() - entry.startedAt,
+    elapsedMs,
     weightsBytes: entry.bytesTotal ?? 0,
     bytesPerMs: bytesPerMsForLoad(entry.modelId),
     previousPercent: entry.percent,
+    lastElapsedMs: loadLastElapsedMs.get(serveId) ?? null,
     reportedPercent: parseLoadProgress(logText),
   });
+  loadLastElapsedMs.set(serveId, elapsedMs);
   updateLoad(serveId, {
     percent: next.percent,
     phase: next.label,
@@ -569,6 +648,7 @@ export async function loadModel(
 
   upsertServe(serve);
   trackLoad(serve, model.id);
+  revealLocalServerIfModelsActive();
   ensureServeListWatch();
   const sampler = getLibrarySamplerForId(model.id);
   if (sampler) {
@@ -618,7 +698,10 @@ export async function retryServe(serve: ServeRecord): Promise<ServeRecord> {
     async: true,
   });
   upsertServe(next);
-  if (next.status === 'starting') trackLoad(next, null);
+  if (next.status === 'starting') {
+    trackLoad(next, null);
+    if (next.runtime === 'llama-cpp') revealLocalServerIfModelsActive();
+  }
   emit();
   return next;
 }
