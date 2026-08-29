@@ -17,7 +17,7 @@ Keep the **same pane buttons** (Files, Browser, Source Control) in one cluster. 
 - [x] Files click while Source Control is open switches back to the file tree (does not collapse)
 - [x] Tests for icon, stable cluster, and Files↔Source Control switching
 - [x] Update `documentation/context.md`
-- [ ] Browser verify in the running app (in progress)
+- [x] Browser verify in the running app
 
 ## Non-goals
 
