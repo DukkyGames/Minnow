@@ -25,6 +25,14 @@ const ISSUE_FIELDS = [
   'updatedAt',
 ].join(',');
 
+/** Cap imported bodies so a 100-issue list cannot freeze the SPA on parse/render. */
+const MAX_ISSUE_BODY_CHARS = 16_000;
+
+function forgeCatch(err, fallback) {
+  const message = err instanceof Error ? err.message : String(err);
+  return { ok: false, error: message || fallback };
+}
+
 /**
  * Shape a `gh issue` record into the fields the Issues app models.
  *
@@ -42,7 +50,7 @@ export function normalizeForgeIssue(raw) {
   return {
     number,
     title: String(raw.title ?? ''),
-    body: String(raw.body ?? ''),
+    body: truncateIssueBody(String(raw.body ?? '')),
     state: String(raw.state ?? '').toLowerCase(),
     url: String(raw.url ?? ''),
     labels: Array.isArray(raw.labels)
@@ -54,6 +62,11 @@ export function normalizeForgeIssue(raw) {
     createdAt: raw.createdAt ? Date.parse(raw.createdAt) || undefined : undefined,
     updatedAt: raw.updatedAt ? Date.parse(raw.updatedAt) || undefined : undefined,
   };
+}
+
+function truncateIssueBody(body) {
+  if (body.length <= MAX_ISSUE_BODY_CHARS) return body;
+  return `${body.slice(0, MAX_ISSUE_BODY_CHARS - 1)}…`;
 }
 
 /**
@@ -70,33 +83,47 @@ export function parseIssueCreateOutput(stdout) {
   return { url: url ?? '', number: match ? Number(match[1]) : undefined };
 }
 
-/** List issues on the remote. */
+/** List issues on the remote. Never throws — import must fail as JSON, not a 500. */
 export async function issueList({ cwd, state = 'open', limit = 100, labels } = {}) {
-  const gate = await requireForge(cwd);
-  if (!gate.ok) return gate;
+  try {
+    const gate = await requireForge(cwd);
+    if (!gate.ok) return gate;
 
-  const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
-  const args = [
-    'issue',
-    'list',
-    '--state',
-    String(state),
-    '--limit',
-    String(safeLimit),
-    '--json',
-    ISSUE_FIELDS,
-  ];
-  if (typeof labels === 'string' && labels.trim()) {
-    args.push('--label', labels.trim());
-  }
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const args = [
+      'issue',
+      'list',
+      '--state',
+      String(state),
+      '--limit',
+      String(safeLimit),
+      '--json',
+      ISSUE_FIELDS,
+    ];
+    if (typeof labels === 'string' && labels.trim()) {
+      args.push('--label', labels.trim());
+    }
 
-  const result = await gh(args, gate.cwd);
-  if (result.code !== 0) {
-    return { ok: false, error: processError(result, 'Could not list issues') };
+    const result = await gh(args, gate.cwd);
+    if (result.code !== 0) {
+      return { ok: false, error: processError(result, 'Could not list issues') };
+    }
+    if (result.accumulationTruncated) {
+      return {
+        ok: false,
+        error:
+          'GitHub returned more issue data than Minnow can import at once. Try again with fewer open issues, or import later.',
+      };
+    }
+    const raw = parseJson(result.stdout, null);
+    if (!Array.isArray(raw)) {
+      return { ok: false, error: 'Could not parse the GitHub issue list' };
+    }
+    const issues = raw.map(normalizeForgeIssue).filter(Boolean);
+    return { ok: true, issues };
+  } catch (err) {
+    return forgeCatch(err, 'Could not list issues');
   }
-  const raw = parseJson(result.stdout, []);
-  const issues = (Array.isArray(raw) ? raw : []).map(normalizeForgeIssue).filter(Boolean);
-  return { ok: true, issues };
 }
 
 /** Read one remote issue. */
