@@ -16,7 +16,7 @@
  * | POST   | `/api/boards/:id/stop`              | —                                         |
  * | POST   | `/api/boards/:id/concurrency`       | `{ n }`                                   |
  * | POST   | `/api/boards/:id/tasks/:taskId/start` | Manual single-task start                |
- * | GET    | `/api/boards/:id/journal`           | Raw events                                |
+ * | GET    | `/api/boards/:id/journal`           | Raw events; `?since=<seq>&limit=<n>`      |
  *
  * **No PUT, no PATCH, and no endpoint that accepts board state.** The only
  * writes are the commands above.
@@ -204,7 +204,22 @@ async function dispatch(route, req, res) {
 
     case 'journal': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
-      return json(res, 200, { ok: true, events: await readEvents(boardId) });
+      // Journals are kept forever by design, so a timeline drawer that opens
+      // against a six-hour run must be able to ask for a window rather than the
+      // whole history. `since` is a `seq`, matching the SSE frame ids and
+      // `Last-Event-ID`, so a view already holding events knows what to ask for.
+      const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const since = Number(query.get('since'));
+      const limit = Number(query.get('limit'));
+      let events = await readEvents(boardId);
+      if (Number.isSafeInteger(since) && since > 0) {
+        events = events.filter((event) => Number(event.seq) > since);
+      }
+      // The window is the *most recent* `limit`: a drawer opening on a long run
+      // wants the end of the story, not the beginning of it.
+      const truncated = Number.isSafeInteger(limit) && limit > 0 && events.length > limit;
+      if (truncated) events = events.slice(-limit);
+      return json(res, 200, { ok: true, events, truncated });
     }
 
     case 'events':

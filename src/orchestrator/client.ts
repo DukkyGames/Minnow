@@ -18,11 +18,27 @@
  * `src/ui/terminal-panel.ts` already uses for `server/tools/output-cap.js`. One
  * implementation of board state, shared by both sides, so the view cannot
  * disagree with the engine about what the journal means.
+ *
+ * ## What a consumer gets, and why it is a copy
+ *
+ * `foldInto` mutates in place. That is right for the engine, which holds one
+ * state and advances it, and wrong at a UI boundary: handing every listener the
+ * same object reference every time means anything deciding whether to re-render
+ * by reference equality sees nothing change, ever. So the folded state is
+ * private, and `getState()` returns a **frozen structural copy** rebuilt only
+ * when the state actually moved. Reference equality therefore means exactly
+ * what a view expects it to mean, and a view that tries to write to what it was
+ * given throws instead of silently corrupting itself.
  */
 
 import { foldInto } from '../../server/orchestrator/core/derive.js';
 import { stateFromJSON } from '../../server/orchestrator/core/snapshot.js';
-import type { BoardState, ParseError } from '../../server/orchestrator/core/types';
+import type {
+  Attempt,
+  BoardState,
+  ParseError,
+  TaskState,
+} from '../../server/orchestrator/core/types';
 
 /** A board as it appears in the list. */
 export interface BoardSummary {
@@ -54,10 +70,17 @@ export interface BoardClientOptions {
 
 export interface BoardClient {
   readonly boardId: string;
-  /** The current derived state, or null before the first frame arrives. */
+  /**
+   * The current derived state, or null before the first frame arrives.
+   *
+   * A frozen copy, and a **new object identity on every change** — so
+   * `previous !== current` is a correct "did anything move" test.
+   */
   getState(): BoardState | null;
   /** True while the SSE stream is open. */
   isConnected(): boolean;
+  /** The `seq` the state is folded through. 0 before the first frame. */
+  getSeq(): number;
   /** Notified on every state change, including connection changes. */
   subscribe(listener: (state: BoardState | null) => void): () => void;
   connect(): void;
@@ -105,6 +128,80 @@ async function request(path: string, init?: RequestInit): Promise<any> {
   return body;
 }
 
+// ---------------------------------------------------------------------------
+// Read-only board state
+// ---------------------------------------------------------------------------
+
+/**
+ * A frozen structural copy of a board state.
+ *
+ * Deep, because a shallow copy would leave every `TaskState` shared with the
+ * private state the next fold mutates — which is the same bug in a smaller box.
+ *
+ * The `tasks` Map is frozen *and* has its mutators replaced: `Object.freeze` on
+ * a `Map` blocks adding properties but does nothing about `set`, which is
+ * exactly the write a view would reach for.
+ */
+function readOnlyState(state: BoardState): BoardState {
+  const tasks = new Map<string, TaskState>();
+  for (const [id, task] of state.tasks) tasks.set(id, freezeTask(task));
+
+  const copy: BoardState = {
+    boardId: state.boardId,
+    name: state.name,
+    planPath: state.planPath,
+    waves: Object.freeze(state.waves.map((w) => Object.freeze({ ...w }))) as BoardState['waves'],
+    status: state.status,
+    concurrency: state.concurrency,
+    tasks: sealMap(tasks),
+    taskOrder: Object.freeze([...state.taskOrder]) as string[],
+    mergeQueue: Object.freeze([...state.mergeQueue]) as string[],
+    integrationSha: state.integrationSha,
+    finalTest: state.finalTest === null ? null : Object.freeze({ ...state.finalTest }),
+    finished: state.finished,
+    stopReason: state.stopReason,
+    runSummary: state.runSummary,
+  };
+  return Object.freeze(copy);
+}
+
+function freezeTask(task: TaskState): TaskState {
+  return Object.freeze({
+    ...task,
+    dependsOn: Object.freeze([...task.dependsOn]) as string[],
+    touches: Object.freeze([...task.touches]) as string[],
+    attempts: Object.freeze(
+      task.attempts.map((a) => Object.freeze({ ...a }) as Attempt),
+    ) as Attempt[],
+    touchesOverflow: Object.freeze(
+      task.touchesOverflow.map((o) =>
+        Object.freeze({
+          ...o,
+          declared: Object.freeze([...o.declared]),
+          actual: Object.freeze([...o.actual]),
+        }),
+      ),
+    ) as TaskState['touchesOverflow'],
+  });
+}
+
+/** Make a Map read-only for real, not just non-extensible. */
+function sealMap<K, V>(map: Map<K, V>): Map<K, V> {
+  const refuse = () => {
+    throw new TypeError('the board state is a view and cannot be written to');
+  };
+  Object.defineProperties(map, {
+    set: { value: refuse },
+    delete: { value: refuse },
+    clear: { value: refuse },
+  });
+  return Object.freeze(map);
+}
+
+// ---------------------------------------------------------------------------
+// One-shot reads
+// ---------------------------------------------------------------------------
+
 /** Every board the server knows about. */
 export async function listBoards(): Promise<BoardSummary[]> {
   const body = await request('');
@@ -129,11 +226,116 @@ export async function createBoardFromPlan(
   return { boardId: body.boardId, state: stateFromJSON(body.state) };
 }
 
-/** The raw journal, for the timeline drawer and for debugging. */
-export async function readJournal(boardId: string): Promise<Record<string, unknown>[]> {
-  const body = await request(`/${encodeURIComponent(boardId)}/journal`);
-  return body.events ?? [];
+/**
+ * A window on the raw journal, for the timeline drawer and for debugging.
+ *
+ * Journals are kept forever by design (PRD §11 needs the history), so this asks
+ * for a window rather than the lot. `since` is a `seq` — the same number the SSE
+ * frames carry — so a caller already holding events knows what to ask for, and
+ * `limit` takes the most recent N. `truncated` says whether anything older was
+ * left behind.
+ */
+export async function readJournal(
+  boardId: string,
+  options: { since?: number; limit?: number } = {},
+): Promise<{ events: Record<string, unknown>[]; truncated: boolean }> {
+  const query = new URLSearchParams();
+  if (options.since !== undefined && options.since > 0) query.set('since', String(options.since));
+  if (options.limit !== undefined && options.limit > 0) query.set('limit', String(options.limit));
+  const suffix = query.toString() ? `?${query}` : '';
+  const body = await request(`/${encodeURIComponent(boardId)}/journal${suffix}`);
+  return { events: body.events ?? [], truncated: Boolean(body.truncated) };
 }
+
+// ---------------------------------------------------------------------------
+// The board list, kept fresh
+// ---------------------------------------------------------------------------
+
+export interface BoardListClient {
+  getBoards(): BoardSummary[];
+  /** The last error from a refresh, or null. A stale list is not a crash. */
+  getError(): Error | null;
+  subscribe(listener: (boards: BoardSummary[]) => void): () => void;
+  /** Fetch now, outside the poll — after creating or commanding a board. */
+  refresh(): Promise<void>;
+  start(): void;
+  stop(): void;
+}
+
+/**
+ * The board list, kept fresh by polling.
+ *
+ * **Polling, and said out loud rather than hidden**, because the server has no
+ * list-level stream: `GET /api/boards/events` does not exist, and a board's own
+ * stream cannot report a board that was created in another window. Listeners
+ * fire only when the list actually differs, so an idle list is silent.
+ *
+ * The right long-term answer is a list stream on the server; until then this is
+ * the honest shape, and it is why `refresh()` exists — a command issued here
+ * updates the list immediately instead of waiting out the interval.
+ */
+export function createBoardListClient(
+  options: { intervalMs?: number; fetchBoards?: () => Promise<BoardSummary[]> } = {},
+): BoardListClient {
+  const intervalMs = options.intervalMs ?? 5_000;
+  const fetchBoards = options.fetchBoards ?? listBoards;
+  const listeners = new Set<(boards: BoardSummary[]) => void>();
+
+  let boards: BoardSummary[] = [];
+  let error: Error | null = null;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let signature = '';
+
+  const emit = () => {
+    for (const listener of listeners) {
+      try {
+        listener(boards);
+      } catch (err) {
+        console.error('[orchestrator] board-list subscriber threw', err);
+      }
+    }
+  };
+
+  const refresh = async () => {
+    try {
+      const next = await fetchBoards();
+      error = null;
+      const nextSignature = JSON.stringify(next);
+      if (nextSignature === signature) return;
+      signature = nextSignature;
+      boards = Object.freeze(next.map((b) => Object.freeze({ ...b }))) as BoardSummary[];
+      emit();
+    } catch (err) {
+      // A failed poll leaves the last good list in place. Losing the network for
+      // one interval should not empty the screen.
+      error = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+
+  return {
+    getBoards: () => boards,
+    getError: () => error,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    refresh,
+    start() {
+      if (timer !== null) return;
+      void refresh();
+      timer = setInterval(() => void refresh(), intervalMs);
+    },
+    stop() {
+      if (timer === null) return;
+      clearInterval(timer);
+      timer = null;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// One board, live
+// ---------------------------------------------------------------------------
 
 /**
  * Open a live view of one board.
@@ -148,26 +350,81 @@ export function createBoardClient(
   options: BoardClientOptions = {},
 ): BoardClient {
   const openStream = options.openStream ?? ((url: string) => new EventSource(url) as EventStream);
-  let state: BoardState | null = null;
+
+  /** The folded state. Private, because `foldInto` mutates it. */
+  let internal: BoardState | null = null;
+  /** What consumers see: a frozen copy, replaced whenever `internal` moves. */
+  let view: BoardState | null = null;
+  /** The seq `internal` is folded through. */
+  let seq = 0;
+
   let source: EventStream | null = null;
   let connected = false;
+
+  /**
+   * Events that arrived before the baseline they belong after.
+   *
+   * On a **resume** the server sends the missed tail and no snapshot at all, so
+   * "the snapshot will contain this" is false and dropping them loses the
+   * catch-up entirely. They are held until there is something to fold them into.
+   */
+  let pending: Record<string, unknown>[] = [];
+
   const listeners = new Set<(state: BoardState | null) => void>();
 
   const emit = () => {
     for (const listener of listeners) {
       try {
-        listener(state);
+        listener(view);
       } catch (err) {
         console.error('[orchestrator] board subscriber threw', err);
       }
     }
   };
 
+  /** Rebuild the public copy and tell everyone. */
+  const publish = () => {
+    view = internal === null ? null : readOnlyState(internal);
+    emit();
+  };
+
+  /** Fold one event, ignoring anything the state already contains. */
+  const applyEvent = (event: Record<string, unknown>): boolean => {
+    if (!internal) return false;
+    const eventSeq = Number(event.seq);
+    if (Number.isSafeInteger(eventSeq) && eventSeq <= seq) return false;
+    // The same fold the server runs. There is no second interpretation of an
+    // event anywhere in the system.
+    foldInto(internal, [event]);
+    if (Number.isSafeInteger(eventSeq)) seq = eventSeq;
+    return true;
+  };
+
+  const drainPending = (): boolean => {
+    if (pending.length === 0) return false;
+    const queued = pending;
+    pending = [];
+    let changed = false;
+    for (const event of queued) changed = applyEvent(event) || changed;
+    return changed;
+  };
+
+  /** Take a baseline, dropping one that is older than what we already have. */
+  const adopt = (state: BoardState, at: number) => {
+    if (internal !== null && at < seq) return false;
+    internal = state;
+    seq = at;
+    drainPending();
+    return true;
+  };
+
   const onSnapshot = (event: { data: string }) => {
     try {
       const payload = JSON.parse(event.data);
-      state = stateFromJSON(payload.state);
-      emit();
+      // `>= seq` rather than unconditional: the baseline fetch below can land
+      // after a snapshot frame taken earlier, and taking the older of the two
+      // would walk the view backwards.
+      if (adopt(stateFromJSON(payload.state), Number(payload.seq) || 0)) publish();
     } catch (err) {
       console.error('[orchestrator] could not read the board snapshot', err);
     }
@@ -176,21 +433,57 @@ export function createBoardClient(
   const onEvent = (event: { data: string }) => {
     try {
       const journalEvent = JSON.parse(event.data);
-      if (!state) return; // The snapshot has not arrived yet; it will include this.
-      // The same fold the server runs. There is no second interpretation of an
-      // event anywhere in the system.
-      foldInto(state, [journalEvent]);
-      emit();
+      if (!internal) {
+        // No baseline yet. On a fresh connect a snapshot is on its way; on a
+        // **resume** the server sends the tail and no snapshot at all, so these
+        // events *are* the catch-up. Hold them either way — dropping them, on
+        // the assumption a snapshot will contain them, silently loses a resume.
+        pending.push(journalEvent);
+        void ensureBaseline();
+        return;
+      }
+      if (applyEvent(journalEvent)) publish();
     } catch (err) {
       console.error('[orchestrator] could not fold a board event', err);
     }
   };
 
+  /** In flight, so a burst of resumed events asks for one baseline, not twenty. */
+  let baselineRequest: Promise<void> | null = null;
+
+  /**
+   * Fetch the current state, for when the stream will not supply one.
+   *
+   * Issued alongside `connect()` rather than only on demand: it is one cheap
+   * read against an engine that is already loaded, it paints the board before
+   * the stream has finished opening, and it is the only thing that establishes
+   * a baseline when a stream resumes — a resume carries the missed tail and no
+   * snapshot, and an empty tail carries nothing at all.
+   */
+  const ensureBaseline = () => {
+    if (internal || baselineRequest) return baselineRequest ?? Promise.resolve();
+    baselineRequest = (async () => {
+      try {
+        const body = await request(`/${encodeURIComponent(boardId)}`);
+        // `seq` is not on this response; the events held in `pending` carry
+        // their own, and anything the fetched state already contains is skipped
+        // by `applyEvent` on the way in.
+        if (adopt(stateFromJSON(body.state), 0)) publish();
+      } catch (err) {
+        console.error('[orchestrator] could not establish a baseline for the board', err);
+      } finally {
+        baselineRequest = null;
+      }
+    })();
+    return baselineRequest;
+  };
+
   return {
     boardId,
 
-    getState: () => state,
+    getState: () => view,
     isConnected: () => connected,
+    getSeq: () => seq,
 
     subscribe(listener) {
       listeners.add(listener);
@@ -199,6 +492,8 @@ export function createBoardClient(
 
     connect() {
       if (source) return;
+      // In parallel with the stream, not after it: see `ensureBaseline`.
+      void ensureBaseline();
       source = openStream(`/api/boards/${encodeURIComponent(boardId)}/events`);
       source.addEventListener('snapshot', onSnapshot);
       source.addEventListener('event', onEvent);
@@ -217,7 +512,11 @@ export function createBoardClient(
     close() {
       source?.close();
       source = null;
+      if (!connected) return;
       connected = false;
+      // Announced, not just recorded. A view showing "live" has no other way to
+      // learn that it no longer is.
+      emit();
     },
 
     async start(concurrency) {

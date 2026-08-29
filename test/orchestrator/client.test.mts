@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import type { BoardState } from '../../server/orchestrator/core/types';
 import { derive } from '../../server/orchestrator/core/derive.js';
 import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import { disposeEngines } from '../../server/orchestrator/engine.js';
@@ -27,6 +28,7 @@ import {
 import {
   createBoardClient,
   createBoardFromPlan,
+  createBoardListClient,
   listBoards,
   PlanParseFailure,
   readJournal,
@@ -130,9 +132,9 @@ after(() => {
  * client takes the stream as a seam. This is a real HTTP SSE client — it parses
  * frames off the wire — not a fake that replays canned events.
  */
-function openTestStream(url: string): EventStream & { reopenedWith?: string } {
+function openTestStream(url: string, resumeFrom: string | null = null): EventStream & { reopenedWith?: string } {
   const listeners = new Map<string, Array<(event: { data: string }) => void>>();
-  let lastEventId: string | null = null;
+  let lastEventId: string | null = resumeFrom;
   let request: http.ClientRequest | null = null;
   let closed = false;
 
@@ -150,11 +152,18 @@ function openTestStream(url: string): EventStream & { reopenedWith?: string } {
       closed = true;
       request?.destroy();
     },
+    /** Lose the connection without giving up on it — a closed laptop lid. */
+    drop() {
+      request?.destroy();
+      request = null;
+    },
     /** Drop and reconnect, exactly as EventSource does, carrying Last-Event-ID. */
     reconnect() {
       request?.destroy();
       open();
     },
+    /** How many frames of each type this stream has delivered. */
+    counts: { snapshot: 0, event: 0 } as Record<string, number>,
     get lastEventId() {
       return lastEventId;
     },
@@ -184,6 +193,7 @@ function openTestStream(url: string): EventStream & { reopenedWith?: string } {
             else if (line.startsWith('event: ')) type = line.slice(7);
             else if (line.startsWith('data: ')) data = line.slice(6);
           }
+          stream.counts[type] = (stream.counts[type] ?? 0) + 1;
           fire(type, data);
         }
       });
@@ -195,6 +205,11 @@ function openTestStream(url: string): EventStream & { reopenedWith?: string } {
 
   open();
   return stream;
+}
+
+/** The same reader, opened as a resume from `lastEventId`. */
+function openTestStreamFrom(url: string, from: number) {
+  return openTestStream(url, String(from));
 }
 
 /** Wait until `predicate` holds, or fail. */
@@ -277,9 +292,106 @@ describe('board client — reading', () => {
 
   it('reads the raw journal', async () => {
     const boardId = await makeBoard();
-    const events = await readJournal(boardId);
+    const { events, truncated } = await readJournal(boardId);
     assert.equal(events.length, 1);
     assert.equal(events[0].type, 'board.created');
+    assert.equal(truncated, false);
+  });
+
+  it('reads a window of the journal rather than all of it', async () => {
+    // Journals are kept forever by design, so a timeline drawer opening against
+    // a six-hour run must be able to ask for the end of the story.
+    const boardId = await makeBoard();
+    const client = createBoardClient(boardId, { openStream: openTestStream });
+    try {
+      client.connect();
+      await until(() => client.getState() !== null, 'the snapshot frame');
+      await client.start(1);
+      await until(() => client.getState()?.status === 'running', 'board.started');
+      await client.setConcurrency(2);
+      await until(() => client.getState()?.concurrency === 2, 'the concurrency change');
+    } finally {
+      client.close();
+    }
+
+    const all = await readJournal(boardId);
+    assert.ok(all.events.length >= 3, `only ${all.events.length} events`);
+
+    // Everything after the first event.
+    const since = await readJournal(boardId, { since: 1 });
+    assert.deepEqual(since.events, all.events.slice(1));
+
+    // The most recent two, flagged as a window onto something longer.
+    const tail = await readJournal(boardId, { limit: 2 });
+    assert.deepEqual(tail.events, all.events.slice(-2));
+    assert.equal(tail.truncated, true);
+
+    // A `since` past the end is empty, not an error.
+    const nothing = await readJournal(boardId, { since: 10_000 });
+    assert.deepEqual(nothing.events, []);
+  });
+});
+
+describe('board list — kept fresh', () => {
+  it('polls, and notifies only when the list actually changes', async () => {
+    // The server has no list-level stream, and a board's own stream cannot
+    // report a board created in another window. So this polls, says so, and
+    // stays quiet while nothing moves.
+    const seen: number[] = [];
+    const list = createBoardListClient({ intervalMs: 20 });
+    const unsubscribe = list.subscribe((boards) => seen.push(boards.length));
+    try {
+      list.start();
+      await until(() => seen.length === 0 || list.getBoards().length === 0, 'the first poll');
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const quiet = seen.length;
+
+      await makeBoard();
+      await until(() => list.getBoards().length === 1, 'the new board to appear');
+      assert.equal(seen.at(-1), 1);
+
+      // Nothing changed for a while: no further notifications.
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      assert.equal(seen.length, quiet + 1, `notified ${seen.length - quiet} times for one change`);
+    } finally {
+      unsubscribe();
+      list.stop();
+    }
+  });
+
+  it('refreshes on demand, for the window that issued the command', async () => {
+    const list = createBoardListClient({ intervalMs: 60_000 });
+    try {
+      await list.refresh();
+      assert.deepEqual(list.getBoards(), []);
+      await makeBoard();
+      await list.refresh();
+      assert.equal(list.getBoards().length, 1);
+    } finally {
+      list.stop();
+    }
+  });
+
+  it('keeps the last good list when a poll fails', async () => {
+    // Losing the network for one interval must not empty the screen.
+    let calls = 0;
+    const list = createBoardListClient({
+      intervalMs: 60_000,
+      fetchBoards: async () => {
+        calls += 1;
+        if (calls === 1) return [{ boardId: 'a' } as any];
+        throw new Error('offline');
+      },
+    });
+    try {
+      await list.refresh();
+      assert.equal(list.getBoards().length, 1);
+      await list.refresh();
+      assert.equal(list.getBoards().length, 1, 'a failed poll emptied the list');
+      assert.match(String(list.getError()?.message), /offline/);
+    } finally {
+      list.stop();
+    }
   });
 });
 
@@ -293,26 +405,57 @@ describe('board client — reconnect', () => {
       client.connect();
       await until(() => client.getState() !== null, 'the snapshot frame');
       await client.start(2);
-      await until(
-        () => client.getState()?.status === 'running',
-        'the board to start',
-      );
+      await until(() => client.getState()?.status === 'running', 'the board to start');
 
-      // The lid closes. Events keep happening.
-      stream.close();
+      const seqBefore = client.getSeq();
+      assert.ok(seqBefore > 0, 'no baseline seq');
+      assert.equal(stream.counts.snapshot, 1);
+
+      // The lid closes. The connection is gone but not given up on.
+      stream.drop();
       await client.setConcurrency(1);
       await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal(client.getState()!.concurrency, 2, 'the view saw an event it could not have');
 
-      // The lid opens. EventSource reconnects with Last-Event-ID, and the server
-      // answers with the tail — not a snapshot, and not the whole journal.
-      const resumed = openTestStream(`/api/boards/${boardId}/events`) as any;
-      const catchUp = createBoardClient(boardId, { openStream: () => resumed });
-      catchUp.connect();
-      await until(() => catchUp.getState() !== null, 'the resumed snapshot');
-      await until(() => catchUp.getState()?.concurrency === 1, 'the missed concurrency change');
+      // The lid opens. This is the reconnect EventSource performs, on the same
+      // stream, carrying the id of the last frame it saw.
+      stream.reconnect();
+      await until(() => client.getState()?.concurrency === 1, 'the missed concurrency change');
 
-      assert.deepEqual(catchUp.getState(), derive(await readEvents(boardId)));
-      catchUp.close();
+      // Resumed, so: the request carried Last-Event-ID, and the server answered
+      // with the tail rather than a second snapshot.
+      assert.equal(stream.reopenedWith, String(seqBefore));
+      assert.equal(stream.counts.snapshot, 1, 'the server re-sent a snapshot on resume');
+      assert.deepEqual(client.getState(), derive(await readEvents(boardId)));
+    } finally {
+      client.close();
+    }
+  });
+
+  it('keeps a resumed tail that arrives before any baseline exists', async () => {
+    // A resume sends the missed tail and **no snapshot**. A client that dropped
+    // events while its state was null — on the assumption that a snapshot would
+    // contain them — would silently lose the entire catch-up.
+    const boardId = await makeBoard();
+
+    // Move the board on before anyone is watching, so a resume has a real tail.
+    const primer = createBoardClient(boardId, { openStream: openTestStream });
+    primer.connect();
+    await until(() => primer.getState() !== null, 'the primer snapshot');
+    await primer.start(2);
+    await until(() => primer.getState()?.status === 'running', 'board.started');
+    const resumeFrom = primer.getSeq() - 1;
+    primer.close();
+
+    // A fresh client whose very first frames are a resumed tail.
+    const resumed = openTestStreamFrom(`/api/boards/${boardId}/events`, resumeFrom) as any;
+    const client = createBoardClient(boardId, { openStream: () => resumed });
+    try {
+      client.connect();
+      await until(() => client.getState() !== null, 'a baseline from somewhere');
+      await until(() => client.getState()?.status === 'running', 'the resumed tail');
+      assert.equal(resumed.counts.snapshot ?? 0, 0, 'the server sent a snapshot after all');
+      assert.deepEqual(client.getState(), derive(await readEvents(boardId)));
     } finally {
       client.close();
     }
@@ -321,11 +464,82 @@ describe('board client — reconnect', () => {
   it('reports the connection state so a view can show it', async () => {
     const boardId = await makeBoard();
     const client = createBoardClient(boardId, { openStream: openTestStream });
+    const connections: boolean[] = [];
+    client.subscribe(() => connections.push(client.isConnected()));
     try {
       client.connect();
       await until(() => client.isConnected(), 'the stream to open');
       client.close();
       assert.equal(client.isConnected(), false);
+      // Announced, not merely recorded: a view showing "live" has no other way
+      // to learn that it no longer is.
+      assert.equal(connections.at(-1), false, 'close() never notified anyone');
+    } finally {
+      client.close();
+    }
+  });
+});
+
+describe('board client — the state handed out is a view', () => {
+  it('gives a new object identity whenever anything changes', async () => {
+    // `foldInto` mutates in place. Handing listeners the same reference every
+    // time means anything deciding whether to re-render by reference equality
+    // sees nothing change, ever.
+    const boardId = await makeBoard();
+    const client = createBoardClient(boardId, { openStream: openTestStream });
+    // Every state a listener was handed, with the status it had at the time.
+    const seen: Array<{ state: BoardState; statusThen: string }> = [];
+    client.subscribe((state) => {
+      if (state) seen.push({ state, statusThen: state.status });
+    });
+    try {
+      client.connect();
+      await until(() => client.getState() !== null, 'the snapshot frame');
+      const first = client.getState()!;
+
+      await client.start(2);
+      await until(() => client.getState()?.status === 'running', 'board.started');
+      const second = client.getState()!;
+
+      assert.notEqual(first, second, 'the same object came back after a change');
+      assert.equal(first.status, 'created', 'the earlier state was mutated underneath its holder');
+      assert.equal(second.status, 'running');
+      // Stable between changes.
+      assert.equal(client.getState(), second);
+      // Nothing a listener was handed changed underneath it afterwards. This is
+      // the property a memoised view actually depends on: an object it kept is
+      // still the board as it was when it arrived.
+      for (const { state, statusThen } of seen) {
+        assert.equal(state.status, statusThen, 'a delivered state was mutated later');
+      }
+      assert.ok(
+        seen.some((entry) => entry.statusThen === 'created') &&
+          seen.some((entry) => entry.statusThen === 'running'),
+        'the run never actually changed status',
+      );
+    } finally {
+      client.close();
+    }
+  });
+
+  it('refuses to be written to', async () => {
+    const boardId = await makeBoard();
+    const client = createBoardClient(boardId, { openStream: openTestStream });
+    try {
+      client.connect();
+      await until(() => client.getState() !== null, 'the snapshot frame');
+      const state = client.getState()!;
+
+      assert.throws(() => {
+        (state as any).status = 'running';
+      });
+      assert.throws(() => state.tasks.set('X', {} as any));
+      assert.throws(() => state.tasks.delete('W1-A'));
+      assert.throws(() => {
+        (state.tasks.get('W1-A') as any).phase = 'merged';
+      });
+      assert.throws(() => (state.taskOrder as string[]).push('X'));
+      assert.equal(state.status, 'created');
     } finally {
       client.close();
     }
