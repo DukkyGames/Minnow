@@ -754,7 +754,7 @@
   min-width: 1.25rem;
   padding: 0 5px;
   border-radius: var(--radius-sm, 6px);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   line-height: 1.4;
@@ -2592,7 +2592,7 @@
 }
 
 .email-automation-run-action {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -2746,7 +2746,7 @@
 
 .email-recipient-suggestion-address {
   color: var(--mn-fg-muted);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -2880,7 +2880,7 @@
 }
 
 .email-shortcut-sheet-list dt {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   color: var(--mn-fg-muted);
   white-space: nowrap;
 }
@@ -2893,7 +2893,7 @@
 
 .email-list-count {
   margin-left: 6px;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   color: var(--mn-fg-muted);

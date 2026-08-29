@@ -22,7 +22,7 @@
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: var(--mn-text-sm);
   color: var(--mn-text-primary);
 }

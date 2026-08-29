@@ -185,6 +185,12 @@ function statusBar(serves: ServeRecord[]): HTMLElement {
   return bar;
 }
 
+/** `CSS.escape` with a fallback — happy-dom and older runtimes may omit it. */
+function cssEscape(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 /**
  * "~12s left" for a predicted remainder. Null once the model has overshot — a stuck
  * "0s left" is worse than saying nothing.
@@ -199,20 +205,114 @@ function formatEta(etaMs: number | null): string | null {
   return rest ? `~${minutes}m ${rest}s left` : `~${minutes}m left`;
 }
 
+/**
+ * Spawning starts at a modelled 0. Printing that as "Loading 0%" looks stuck
+ * before the first phase marker or time-model tick has anything to show.
+ */
+function shownLoadPercent(load: LoadProgress): number | null {
+  return load.percent != null && load.percent > 0 ? Math.round(load.percent) : null;
+}
+
+function loadChipLabel(load: LoadProgress): string {
+  if (load.error) return 'Failed';
+  const percent = shownLoadPercent(load);
+  return percent != null ? `Loading ${percent}%` : 'Loading';
+}
+
+function loadMetaText(load: LoadProgress): string {
+  const parts = [load.phase, formatElapsed(load.startedAt)];
+  const eta = formatEta(load.etaMs);
+  if (eta) parts.push(eta);
+  return parts.join(' · ');
+}
+
+/**
+ * Update percent / phase / bar on an existing loading card without replacing it.
+ * Recreating the node restarts `models-spin` (0.7s) every load tick (~250ms).
+ */
+function applyLoadProgress(
+  card: HTMLElement,
+  load: LoadProgress,
+  serve: ServeRecord | undefined,
+): void {
+  const label = card.querySelector('.models-loaded__state-label');
+  if (label) {
+    const next = loadChipLabel(load);
+    if (label.textContent !== next) label.textContent = next;
+  }
+
+  const name = card.querySelector('.models-loaded__name');
+  if (name && serve?.modelLabel && name.textContent !== serve.modelLabel) {
+    name.textContent = serve.modelLabel;
+  }
+
+  const meta = card.querySelector('.models-loaded__meta');
+  if (meta) {
+    const next = loadMetaText(load);
+    if (meta.textContent !== next) meta.textContent = next;
+  }
+
+  const fill = card.querySelector('.models-progress__fill') as HTMLElement | null;
+  if (!fill) return;
+  const percent = shownLoadPercent(load);
+  if (percent != null) {
+    fill.classList.remove('is-indeterminate');
+    const width = `${Math.min(100, percent)}%`;
+    if (fill.style.width !== width) fill.style.width = width;
+  } else if (!fill.classList.contains('is-indeterminate')) {
+    fill.classList.add('is-indeterminate');
+    fill.style.removeProperty('width');
+  }
+}
+
+/**
+ * True when every in-flight load already has a card we can patch.
+ * Failures, new rows, and settled serves still take the full redraw.
+ */
+function tryPatchInFlightLoads(
+  host: HTMLElement,
+  loads: LoadProgress[],
+  serves: ServeRecord[],
+): boolean {
+  if (!loads.length || loads.some((entry) => entry.error)) return false;
+  const list = host.querySelector('.models-loaded-list');
+  if (!list) return false;
+  const existing = list.querySelectorAll('.models-loaded.is-loading');
+  if (existing.length !== loads.length) return false;
+  for (const load of loads) {
+    const card = list.querySelector(
+      `.models-loaded.is-loading[data-serve-id="${cssEscape(load.serveId)}"]`,
+    );
+    if (!card) return false;
+  }
+  for (const load of loads) {
+    const card = list.querySelector(
+      `.models-loaded.is-loading[data-serve-id="${cssEscape(load.serveId)}"]`,
+    ) as HTMLElement;
+    applyLoadProgress(
+      card,
+      load,
+      serves.find((row) => row.id === load.serveId),
+    );
+  }
+  return true;
+}
+
 function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLElement {
   const card = el('article', 'models-loaded is-loading');
+  card.dataset.serveId = load.serveId;
 
   const head = el('div', 'models-loaded__head');
   const stateChip = el('span', 'models-loaded__state');
-  // Spawning starts at a modelled 0. Printing that as "Loading 0%" looks stuck
-  // before the first phase marker or time-model tick has anything to show.
-  const shownPercent = load.percent != null && load.percent > 0 ? Math.round(load.percent) : null;
   if (load.error) {
     stateChip.classList.add('is-error');
     stateChip.textContent = 'Failed';
   } else {
-    stateChip.textContent = shownPercent != null ? `Loading ${shownPercent}%` : 'Loading';
-    stateChip.appendChild(el('span', 'models-spinner'));
+    // Label is its own node so progress ticks can change the copy without
+    // wiping `.models-spinner` and restarting the rotation.
+    const spinner = el('span', 'models-spinner');
+    spinner.setAttribute('aria-hidden', 'true');
+    stateChip.append(el('span', 'models-loaded__state-label', loadChipLabel(load)), spinner);
   }
   head.appendChild(stateChip);
   head.appendChild(el('span', 'models-loaded__name', serve?.modelLabel ?? 'Model'));
@@ -256,10 +356,7 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
     if (failure) card.appendChild(failure);
     else card.appendChild(el('p', 'models-loaded__meta', load.error));
   } else {
-    const parts = [load.phase, formatElapsed(load.startedAt)];
-    const eta = formatEta(load.etaMs);
-    if (eta) parts.push(eta);
-    card.appendChild(el('p', 'models-loaded__meta', parts.join(' · ')));
+    card.appendChild(el('p', 'models-loaded__meta', loadMetaText(load)));
   }
 
   if (!load.error) {
@@ -267,7 +364,8 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
     const fill = el('div', 'models-progress__fill');
     // A 0-width modelled bar reads as stuck. Stay indeterminate until the model
     // has moved off the spawning floor.
-    if (shownPercent != null) fill.style.width = `${Math.min(100, shownPercent)}%`;
+    const percent = shownLoadPercent(load);
+    if (percent != null) fill.style.width = `${Math.min(100, percent)}%`;
     else fill.classList.add('is-indeterminate');
     track.appendChild(fill);
     card.appendChild(track);
@@ -517,6 +615,9 @@ export function render(): void {
   if (!host) return;
 
   const state = getModelsState();
+  // Load ticks fire ~4×/s. Replacing the tree cancels the spinner animation.
+  if (tryPatchInFlightLoads(host, state.loads, state.serves)) return;
+
   const serves = runningServes();
   const running = serves.filter((s) => s.status === 'running');
   const attention = attentionServes();
