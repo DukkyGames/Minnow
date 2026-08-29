@@ -120,12 +120,13 @@
         "The workspace boundary",
         "Content the model reads is data, not instructions",
         "Caching",
+        "How much of a result the model sees",
         "Tools that are not built in",
         "Practical setups",
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "a771fa572ea3fe70122155f433b2cfd83621af171034f38a3db68b8906e2fbc1"
+      "hash": "374d09179b2af494fac9e702bfaa53b7fd285e234226820e5daca20308be0773"
     },
     {
       "path": "documentation/manual/concepts/context-and-memory.md",
@@ -143,7 +144,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "27e1aae9bd66be2dd8ac600a25228d0e7307c875a20e16dff7ec0ee87022d117"
+      "hash": "c66a17361af01e987b23d9e29ee9c9a0fe97d77576566afdf5f99413f4d5e950"
     },
     {
       "path": "documentation/manual/chat/chatting.md",
@@ -216,7 +217,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "20e5814134fd2b832d706ca7d55a12669f92c23ef86928425a5dd436381062b6"
+      "hash": "c096d27f160a5e07f948eaf05b7740eae662d1dd24d59ea44d802f9ca9a4a287"
     },
     {
       "path": "documentation/manual/apps/research.md",
@@ -322,7 +323,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "03f42798dee1a78cead9445b7e05302ca96b37efa28fcc91d461f2e5edee5a8a"
+      "hash": "a3ce72b748935e1da12730be0ce0fa10865a2186fc002cb6f2c5453c2cf74e04"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",

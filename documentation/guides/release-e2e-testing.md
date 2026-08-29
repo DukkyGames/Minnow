@@ -402,7 +402,7 @@ Open Settings → use search (**Mod+K**) for spot checks. Visit each sidebar sec
 | Apps | Core list + Coming soon |
 | Issues | Taxonomy tables |
 | Agents hub | Links to subsections |
-| Rules | Add group + rule; enable flag |
+| Rules | Add group + rule; delete empty group; blocked delete of a group that still has rules; enable flag |
 | Agent packs | Template download; zip upload (test pack) |
 | Autopilot | Board defaults persist |
 | Watchdog | Idle / max duration sane defaults |

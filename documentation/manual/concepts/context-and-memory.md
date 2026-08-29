@@ -70,7 +70,7 @@ Managing it is in [the Brain app](../apps/brain.md): browse the graph, edit page
 
 Rules are standing instructions injected into every system prompt. "Always use TypeScript strict mode." "Never commit without running tests." "Answer in British English."
 
-**Settings → Agents → Rules.** Rules are off by default and organised into groups you can enable or disable together — a "Work" group and a "Personal" group, say, without rewriting the text each time.
+**Settings → Agents → Rules.** Rules are off by default and organised into groups you can enable or disable together — a "Work" group and a "Personal" group, say, without rewriting the text each time. Empty groups can be deleted from that page. A group that still has rules stays until those rules are moved or deleted.
 
 Keep them short and testable. Rules cost context on every single turn, so a page of them is a page you pay for constantly. If something applies to one project only, a memory page is usually better than a global rule.
 

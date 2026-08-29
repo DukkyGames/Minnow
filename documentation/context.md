@@ -130,7 +130,7 @@ Full directory map: [`manual/reference/configuration.md`](manual/reference/confi
 | `providers/<id>/` | `profile.json`, encrypted `secrets.json`, `capabilities.json` |
 | `prompts/`, `prompt-configs/`, `profiles/` | User prompt overrides and setup bundles |
 | `work-agents.json`, `sub-agents.json` | Agent overrides and sub-agent types |
-| `rules.json` | Grouped user rules (v2: enable flags, groups, per-rule text); legacy v1 `text` migrates on read/write |
+| `rules.json` | Grouped user rules (v2: enable flags, groups, per-rule text); legacy v1 `text` migrates on read/write. **Settings → Rules** ([`settings-rules.ts`](../src/ui/settings-rules.ts)) adds/edits rules per group and deletes **empty** groups only (`removeUserRuleGroup` in [`user-rules.ts`](../src/config/user-rules.ts)) — a group that still has rules is blocked with a count; the last remaining group is kept because an empty `groups` list is rewritten to default General on save |
 | `brain/` | Wiki pages, vectors, code index DBs, proposals |
 | `skills/`, `skills.json` | User skills and enable flags |
 | `scheduler.json`, `calendar/`, `email/` | Scheduler, calendar DB, email accounts + `mail-<accountId>.db` |

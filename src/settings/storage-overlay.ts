@@ -200,6 +200,7 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'agents.rules.enabled': resource('rules', 'enabled', 'boolean', { refreshAreas: ['rules'] }),
   'agents.rules.items': section(['rules']),
   'agents.rules.addGroup': section(['rules']),
+  'agents.rules.deleteGroup': section(['rules']),
 
   // —— Integrations ——
   'integrations.search': section(['search']),

@@ -230,7 +230,7 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 | Rule groups | Named sections (e.g. General, Git, Style) |
 | Rules | Per-rule title, instructions, enabled flag, and group assignment |
 
-Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover ([`src/ui/settings-rules.ts`](../../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../../src/ui/settings-rules-popover.ts)). Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
+Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover; **Delete group** on extra empty groups ([`src/ui/settings-rules.ts`](../../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../../src/ui/settings-rules-popover.ts), [`removeUserRuleGroup`](../../src/config/user-rules.ts)). A group that still has rules cannot be deleted (message includes the count) so rules are never dropped or remapped. Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
 
 ### Modes (9)
 

@@ -1685,6 +1685,22 @@
     ]
   },
   {
+    "key": "agents.rules.deleteGroup",
+    "label": "Delete rule group",
+    "keywords": [
+      "remove group"
+    ],
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
     "key": "agents.rules.contextDocuments",
     "label": "Workspace context documents",
     "keywords": [

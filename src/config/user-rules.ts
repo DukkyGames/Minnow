@@ -55,6 +55,52 @@ export function createUserRuleGroup(name: string): UserRuleGroup {
   return { id: newGroupId(), name: name.trim() || 'Untitled group' };
 }
 
+/** Outcome of removing a group without touching rules in other groups. */
+export type RemoveUserRuleGroupResult =
+  | { ok: true; settings: UserRulesSettings }
+  | { ok: false; error: string };
+
+/**
+ * Remove a rule group from Settings → Rules.
+ *
+ * Block-until-empty: a group that still has rules is left in place so we never
+ * drop those rows or let normalize remap them onto another group. The last
+ * remaining group is also kept — an empty `groups` list is rewritten back to
+ * the default General group on save/reload, so that delete would not stick.
+ */
+export function removeUserRuleGroup(
+  settings: UserRulesSettings,
+  groupId: string,
+): RemoveUserRuleGroupResult {
+  const group = settings.groups.find((row) => row.id === groupId);
+  if (!group) {
+    return { ok: false, error: 'That rule group is already gone.' };
+  }
+
+  const ruleCount = settings.rules.filter((rule) => rule.groupId === groupId).length;
+  if (ruleCount > 0) {
+    const ruleLabel = ruleCount === 1 ? '1 rule' : `${ruleCount} rules`;
+    const pronoun = ruleCount === 1 ? 'it' : 'them';
+    return {
+      ok: false,
+      error: `Cannot delete "${group.name}": it still has ${ruleLabel}. Move or delete ${pronoun} first.`,
+    };
+  }
+
+  if (settings.groups.length <= 1) {
+    return { ok: false, error: 'Keep at least one rule group.' };
+  }
+
+  return {
+    ok: true,
+    settings: {
+      ...settings,
+      groups: settings.groups.filter((row) => row.id !== groupId),
+      rules: [...settings.rules],
+    },
+  };
+}
+
 /** Create a rule row bound to a group. */
 export function createUserRuleItem(
   groupId: string,
