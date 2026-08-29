@@ -3,8 +3,8 @@
  *
  * llama.cpp prints no weight-load percentage (verified on b9628), so the bar is a
  * time model fenced by log phase floors. The properties that matter are that it never
- * goes backwards, never claims 100 before /health, and degrades to stepping between
- * phases when no rate prior exists rather than inventing a smooth crawl.
+ * goes backwards, never claims 100 before /health, and still climbs inside the current
+ * band when no rate prior exists rather than sitting on the phase floor.
  */
 
 import assert from 'node:assert/strict';
@@ -12,6 +12,7 @@ import { describe, it } from 'node:test';
 
 import {
   computeLoadProgress,
+  formatLoadPercentLabel,
   LOAD_PHASES,
   MAX_PERCENT_BEFORE_HEALTHY,
   matchLoadPhase,
@@ -182,16 +183,46 @@ describe('computeLoadProgress', () => {
     assert.equal(ready.phaseKey, 'ready');
   });
 
-  it('sits on the phase floor when no rate prior is available', () => {
-    const noPrior = computeLoadProgress({
-      logText: 'llama_kv_cache: size = 512.00 MiB',
+  it('climbs inside the current phase band when no rate prior is available', () => {
+    const log = 'llama_kv_cache: size = 512.00 MiB';
+    const early = computeLoadProgress({
+      logText: log,
       elapsedMs: 4_000,
       weightsBytes: 0,
       bytesPerMs: 0,
     });
-    assert.equal(noPrior.percent, 78);
-    assert.equal(noPrior.etaMs, null);
-    assert.equal(noPrior.modelled, true);
+    const later = computeLoadProgress({
+      logText: log,
+      elapsedMs: 8_000,
+      weightsBytes: 0,
+      bytesPerMs: 0,
+      previousPercent: early.percent,
+      lastElapsedMs: 4_000,
+    });
+    assert.equal(early.phaseKey, 'context');
+    assert.ok(early.percent >= 78);
+    assert.ok(later.percent > early.percent);
+    assert.ok(later.percent <= 88);
+    assert.equal(later.etaMs, null);
+    assert.equal(later.modelled, true);
+  });
+
+  it('eases toward a skipped phase floor instead of snapping 4 to 70', () => {
+    const fitting = computeLoadProgress({
+      logText: 'fitting params to device memory',
+      elapsedMs: 2_000,
+      previousPercent: 4,
+      lastElapsedMs: 1_750,
+    });
+    const jumped = computeLoadProgress({
+      logText: 'load_tensors: offloaded 34/34 layers to GPU',
+      elapsedMs: 2_250,
+      previousPercent: fitting.percent,
+      lastElapsedMs: 2_000,
+    });
+    assert.equal(jumped.phaseKey, 'offload');
+    assert.ok(jumped.percent > fitting.percent);
+    assert.ok(jumped.percent < 70);
   });
 
   it('reports the remaining time from the rate prior', () => {
@@ -225,7 +256,7 @@ describe('computeLoadProgress', () => {
       bytesPerMs: 0,
       reportedPercent: null,
     });
-    assert.equal(result.percent, 18);
+    assert.ok(result.percent >= 18 && result.percent < 70);
     assert.equal(result.phaseKey, 'weights');
     assert.equal(result.modelled, true);
   });
@@ -247,5 +278,11 @@ describe('computeLoadProgress', () => {
       previousPercent: 55,
     });
     assert.equal(result.percent, 55);
+  });
+
+  it('formatLoadPercentLabel is empty at 0 so the first paint is not stuck', () => {
+    assert.equal(formatLoadPercentLabel(0), '');
+    assert.equal(formatLoadPercentLabel(null), '');
+    assert.equal(formatLoadPercentLabel(37.4), '37%');
   });
 });

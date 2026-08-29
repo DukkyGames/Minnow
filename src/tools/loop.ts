@@ -91,6 +91,13 @@ import {
   ensureChatModelLoadedForTurn,
 } from '../api/ensure-chat-model-loaded';
 import { fetchCachedModels, listModelServes } from '../models/api-client';
+import { llamaRuntimeStatusView } from '../chat/llama-runtime-status';
+import { formatLoadPercentLabel } from '../models/load-progress.mjs';
+import {
+  clearInFlightPromptOverlay,
+  publishInFlightPromptFromMeta,
+} from '../models/in-flight-prompt';
+import { getModelsState, subscribeModelsStore } from '../ui/models/store';
 import {
   LIBRARY_MODEL_PROVIDER_ID,
   libraryBindingNeedsServeLoad,
@@ -1303,6 +1310,7 @@ async function streamCompletionTurn(
     releaseTickedMotion?.();
     finishStreamEarly = null;
     setSteerEnqueuedListener(null);
+    clearInFlightPromptOverlay();
   }
 
   flushContentRouters();
@@ -1336,6 +1344,7 @@ async function streamCompletionTurn(
   const finishReason =
     streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
+  clearInFlightPromptOverlay();
   return {
     fullText,
     streamMeta,
@@ -2181,10 +2190,27 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       if (!modelLoadDone) {
+        let unsubLoad: (() => void) | null = null;
+        if (isStreamDomVisible(chat.id)) {
+          const syncLoadDetail = (): void => {
+            const live = getModelsState().loads.filter((l) => !l.error);
+            const match = libraryEnsure?.modelId
+              ? (live.find((l) => l.modelId === libraryEnsure.modelId) ?? live[0])
+              : live[0];
+            const pct = formatLoadPercentLabel(match?.percent);
+            streamStatus.setRuntimeDetail(pct || null);
+          };
+          unsubLoad = subscribeModelsStore(syncLoadDetail);
+          syncLoadDetail();
+        }
         // Ensure with library ids so loadLibraryModelFromPicker runs (not remapped llama/mlx).
         const ensureProviderId = libraryEnsure?.providerId ?? sendProviderId;
         const ensureModelId = libraryEnsure?.modelId ?? sendModelId;
-        await ensureChatModelLoadedForTurn(ensureProviderId, ensureModelId, chatSignal);
+        try {
+          await ensureChatModelLoadedForTurn(ensureProviderId, ensureModelId, chatSignal);
+        } finally {
+          unsubLoad?.();
+        }
 
         if (libraryEnsure) {
           const cached = await fetchCachedModels().catch(() => []);
@@ -2401,6 +2427,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ...streamOpts,
             onStreamProgress: (state) => {
               pushLiveStreamingStats(state);
+              const runtime = llamaRuntimeStatusView(state.streamMeta, state.tFirst != null);
+              if (isStreamDomVisible(chat.id)) {
+                if (runtime.phase === 'prompt_processing' && state.tFirst == null) {
+                  streamStatus.setPhase('prompt_processing');
+                }
+                streamStatus.setRuntimeDetail(runtime.detail || null);
+              }
+              publishInFlightPromptFromMeta(state.streamMeta, sendModelId);
               streamOpts?.onStreamProgress?.(state);
             },
           },

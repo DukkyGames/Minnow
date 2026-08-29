@@ -42,6 +42,8 @@ export interface LoadProgressInput {
   bytesPerMs?: number;
   /** Last value shown, to hold the bar monotonic. */
   previousPercent?: number | null;
+  /** Elapsed ms on the previous tick, so skipped-phase catch-up can be rate-limited. */
+  lastElapsedMs?: number | null;
   /**
    * Runtime-printed percent. Null or omitted means none — never coerce that to 0
    * (`Number(null) === 0` pins the Local Server chip at 0% for the whole load).
@@ -63,3 +65,6 @@ export interface LoadProgressResult {
 }
 
 export declare function computeLoadProgress(input: LoadProgressInput): LoadProgressResult;
+
+/** Compact percent for chips and chat (`37%`). Empty at 0. */
+export declare function formatLoadPercentLabel(percent: unknown): string;

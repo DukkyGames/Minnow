@@ -98,6 +98,10 @@ import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { createStreamingStatsPublisher } from '../chat/streaming-stats';
 import { llamaRuntimeStatusView } from '../chat/llama-runtime-status';
+import {
+  clearInFlightPromptOverlay,
+  publishInFlightPromptFromMeta,
+} from '../models/in-flight-prompt';
 
 export { parseSsePayloads } from './sse-parse';
 
@@ -754,6 +758,7 @@ export async function sendMessage(): Promise<void> {
         streamStatus.setPhase('prompt_processing');
       }
       streamStatus.setRuntimeDetail(runtime.detail || null);
+      publishInFlightPromptFromMeta(streamMeta, modelId);
       streamingStatsPublisher.schedule({
         streamMeta,
         t0,
@@ -929,6 +934,7 @@ export async function sendMessage(): Promise<void> {
     thoughtController.abort();
     thinkingTracker.abort();
   } finally {
+    clearInFlightPromptOverlay();
     streamingStatsPublisher.reset();
     thoughtController.abort();
     setStreaming(false, chat.id);

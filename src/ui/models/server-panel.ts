@@ -18,10 +18,11 @@ import {
   iconButton,
   textButton,
 } from './dom';
-import { showModelInInspector } from './inspector';
+import { showServeInInspector } from './inspector';
 import { serveFailureBlock } from './serve-failure-view';
 import {
   attentionServes,
+  getInspectedServe,
   getModelsState,
   refreshModels,
   retryServe,
@@ -32,6 +33,10 @@ import {
 } from './store';
 import type { ServeActivity } from '../../models/api-client';
 import { serveActivityChipLabels } from '../../models/serve-activity-chips';
+import {
+  getInFlightPromptOverlay,
+  subscribeInFlightPromptOverlay,
+} from '../../models/in-flight-prompt';
 
 /** OpenAI-compatible surface llama-server exposes. */
 const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
@@ -43,6 +48,7 @@ const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
 ];
 
 let bound = false;
+let overlayUnsub: (() => void) | null = null;
 let logSource: string | null = null;
 let logUnsub: (() => void) | null = null;
 let logBuffer = '';
@@ -199,6 +205,20 @@ function formatEta(etaMs: number | null): string | null {
   return rest ? `~${minutes}m ${rest}s left` : `~${minutes}m left`;
 }
 
+/**
+ * Local Server cards open the inspector by serve id. Buttons inside the card
+ * keep their own handlers; the card itself is not a button so Eject / Cancel
+ * stay valid nested controls.
+ */
+function makeServeCardSelectable(card: HTMLElement, serveId: string): void {
+  card.classList.add('is-selectable');
+  if (getInspectedServe()?.id === serveId) card.classList.add('is-selected');
+  card.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    showServeInInspector(serveId);
+  });
+}
+
 function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLElement {
   const card = el('article', 'models-loaded is-loading');
 
@@ -267,11 +287,15 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
     const fill = el('div', 'models-progress__fill');
     // A 0-width modelled bar reads as stuck. Stay indeterminate until the model
     // has moved off the spawning floor.
-    if (shownPercent != null) fill.style.width = `${Math.min(100, shownPercent)}%`;
-    else fill.classList.add('is-indeterminate');
+    if (shownPercent != null) {
+      fill.style.setProperty('--progress', String(Math.min(100, shownPercent) / 100));
+    } else {
+      fill.classList.add('is-indeterminate');
+    }
     track.appendChild(fill);
     card.appendChild(track);
   }
+  makeServeCardSelectable(card, serve?.id ?? load.serveId);
   return card;
 }
 
@@ -280,7 +304,7 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
  * is deferring requests. Copy lives in {@link serveActivityChipLabels}.
  */
 function activityChips(activity: ServeActivity | undefined): HTMLElement[] {
-  return serveActivityChipLabels(activity).map((label) => {
+  return serveActivityChipLabels(activity, getInFlightPromptOverlay()).map((label) => {
     const queued = /\bqueued$/i.test(label);
     const ready = /^Ready/i.test(label);
     const chipEl = el(
@@ -352,15 +376,7 @@ function loadedCard(serve: ServeRecord): HTMLElement {
 
   card.appendChild(copyField(serve.baseUrl, 'Copy base URL'));
 
-  // Selecting the row wires the inspector to the matching library entry.
-  const model = getModelsState().library.find((m) => m.path === serve.modelPath);
-  if (model) {
-    card.addEventListener('click', (event) => {
-      if ((event.target as HTMLElement).closest('button')) return;
-      showModelInInspector(model.id);
-    });
-    card.classList.add('is-selectable');
-  }
+  makeServeCardSelectable(card, serve.id);
   return card;
 }
 
@@ -425,6 +441,8 @@ function attentionCard(serve: ServeRecord): HTMLElement {
     if (serve.error) bits.push(serve.error);
     card.appendChild(el('p', 'models-loaded__meta', bits.join(' · ')));
   }
+
+  makeServeCardSelectable(card, serve.id);
   return card;
 }
 
@@ -584,6 +602,9 @@ export function mountServerSection(): void {
     subscribeModelsStore(() => {
       if (isActive()) render();
     });
+    overlayUnsub = subscribeInFlightPromptOverlay(() => {
+      if (isActive()) render();
+    });
   }
   render();
   void refreshModels();
@@ -602,6 +623,8 @@ export function teardownServerSection(): void {
   logUnsub?.();
   logUnsub = null;
   logSource = null;
+  overlayUnsub?.();
+  overlayUnsub = null;
   if (elapsedTimer != null) window.clearInterval(elapsedTimer);
   elapsedTimer = null;
 }

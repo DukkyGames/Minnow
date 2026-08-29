@@ -2,13 +2,14 @@
 
 This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs.
 
-You come here to configure, then go back to Code and work. Open it from the app rail; it fills the main stage with nine sections.
+You come here to configure, then go back to Code and work. Open it from the app rail; it fills the main stage with ten sections.
 
 | Section | What it is |
 |---------|------------|
 | **Recommendations** | Hardware-aware suggestions from a probe of your machine |
 | **Installed** | Model artifacts Minnow has downloaded |
 | **Library** | Search Hugging Face, download, and serve locally |
+| **Local Server** | What is loaded, live load/inference chips, runtime log |
 | **Voice** | Speech-to-text and text-to-speech models |
 | **Providers** | Endpoints and encrypted API keys |
 | **Routing** | Which model handles which job |
@@ -17,6 +18,14 @@ You come here to configure, then go back to Code and work. Open it from the app 
 | **Usage & cost** | Token totals and spend |
 
 The last five also appear under **Models** in the Settings sidebar — same panels, two doors. Settings search finds them either way.
+
+## Local Server
+
+This is the runtime dashboard: what is loaded, whether the process is healthy, and a live log. A loading card shows a modelled percent that actually moves (llama.cpp does not print a weight-load percentage). Once the model is up, chips report prompt processing as a percent when the request came from Minnow, generated tokens as a count, and **N queued** when llama.cpp has more inference requests than free slots.
+
+Click a card to open the inspector on **Inference**, with **Loaded with** listing the flags that process was started with. Loading a model from Code does not yank you here; Local Server only comes to the front if you were already in Models.
+
+Idle `update_slots` heartbeats are dropped from the log so they cannot drown the lines that matter.
 
 ## Recommendations
 
@@ -102,9 +111,7 @@ See [Voice](../extend/voice.md).
 | **Menubar model chip** | Global default — what new chats start with |
 | **Composer picker, Ctrl+M / Cmd+M** | This chat only |
 
-Local runtimes expose **Load** and **Unload** in the composer picker, acting on the model that chat is bound to. The tray menu can unload local models without opening the window — useful when you want your VRAM back.
-
-**Local Server** (Models app) shows what is loaded and whether the runtime is working. When llama.cpp has more inference requests than free slots, the loaded-model card shows **N queued** until a slot frees.
+Local runtimes expose **Load** and **Unload** in the composer picker, acting on the model that chat is bound to. The tray menu can unload local models without opening the window — useful when you want your VRAM back. Live load and inference numbers live on **Local Server**.
 
 ## When the picker is empty
 
