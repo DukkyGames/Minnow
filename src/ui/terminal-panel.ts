@@ -42,9 +42,11 @@ import {
 import { stripAnsi } from '../lib/strip-ansi';
 import {
   capTextOutput,
-  DEFAULT_MAX_OUTPUT_CHARS,
   PROCESS_MAX_ACCUMULATE_BYTES,
+  resolveOutputCapPolicy,
+  runWithOutputCapPolicy,
 } from '../../server/tools/output-cap.js';
+import { loadToolConfig } from '../tools/config';
 import {
   focusTerminalXterm,
   initTerminalXterm,
@@ -787,6 +789,8 @@ export async function runCommandWithTerminalStream(
     timeoutMs?: number;
     /** Prefer-mode approval to run without sandbox when unavailable. */
     allowUnsandboxed?: boolean;
+    /** Skip product result-size caps for this persisted tool string (MIN-667). */
+    fullResult?: boolean;
   },
 ): Promise<string> {
   const isAgentRun = options.source === 'agent';
@@ -936,17 +940,20 @@ export async function runCommandWithTerminalStream(
   }
   // Same ceiling as the blocking /api/tools path (formatProcessOutput): the result
   // string is persisted into messages.payload_json, so an uncapped one bloats the
-  // sessions store permanently.
+  // sessions store permanently — unless Settings turned the product cap off or the
+  // model passed full_result.
+  const policy = resolveOutputCapPolicy(loadToolConfig().toolOutput, {
+    full_result: options.fullResult === true,
+  });
+  return runWithOutputCapPolicy(policy, () => {
   if (stdoutAcc.trim()) {
     const { text } = capTextOutput(stdoutAcc.trimEnd(), {
-      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
       footerHint: 'narrow the command scope or paginate follow-up reads',
     });
     parts.push(`stdout:\n${text}`);
   }
   if (stderrAcc.trim()) {
     const { text } = capTextOutput(stderrAcc.trimEnd(), {
-      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
       footerHint: 'narrow the command scope or paginate follow-up reads',
     });
     parts.push(`stderr:\n${text}`);
@@ -955,6 +962,7 @@ export async function runCommandWithTerminalStream(
     parts.push('(no output)');
   }
   return parts.join('\n\n');
+  });
   } finally {
     if (showAgentRunHint) {
       bumpAgentRunHint(-1);

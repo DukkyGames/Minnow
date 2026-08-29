@@ -85,6 +85,12 @@ import {
   saveToolConfig,
   setAllBuiltInToolPermissions,
 } from '../tools/config';
+import {
+  DEFAULT_MAX_OUTPUT_CHARS,
+  TOOL_OUTPUT_MAX_CHARS_MAX,
+  TOOL_OUTPUT_MAX_CHARS_MIN,
+  normalizeToolOutputConfig,
+} from '../../server/tools/output-cap.js';
 import { renderBrowserSettingsSection } from './settings-browser';
 import { renderLspSection } from './lsp-settings';
 import { renderEditorSection } from './settings-editor';
@@ -1537,6 +1543,41 @@ async function renderToolsSection(): Promise<void> {
     ),
   );
 
+  const outputCapGroup = appendSettingsGroup(
+    content,
+    'Tool result size',
+    'How much text each file read, search, or shell command may return to the model.',
+    'integrations.tools.outputCap',
+    { emphasis: true },
+  );
+  const { row: outputCapToggle, input: outputCapCheckbox } = createSettingsToggleRow(
+    'Limit tool result size',
+    {
+      id: 'settingsToolOutputCapEnabled',
+      searchKey: 'integrations.tools.outputCap',
+    },
+  );
+  outputCapGroup.appendChild(outputCapToggle);
+  const { row: maxCharsRow, input: maxCharsInput } = createSettingsInputRow(
+    'Maximum characters per result',
+    {
+      id: 'settingsToolOutputCapMaxChars',
+      searchKey: 'integrations.tools.outputCap.maxChars',
+      type: 'number',
+      min: String(TOOL_OUTPUT_MAX_CHARS_MIN),
+      max: String(TOOL_OUTPUT_MAX_CHARS_MAX),
+      step: '1000',
+    },
+  );
+  outputCapGroup.appendChild(maxCharsRow);
+  outputCapGroup.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Caps how much text each file read, search, or shell command returns to the model. This does not compress chat history — that is Settings → Agents → Context policy.',
+    ),
+  );
+
   const catalog = appendSettingsGroup(
     content,
     'Tool catalog',
@@ -1614,8 +1655,26 @@ async function renderToolsSection(): Promise<void> {
   };
   cacheCheckbox.addEventListener('change', persistToolCache);
 
+  const persistToolOutput = (): void => {
+    const config = getToolConfig();
+    const parsed = Number(maxCharsInput.value);
+    config.toolOutput = normalizeToolOutputConfig({
+      enabled: outputCapCheckbox.checked,
+      maxChars: Number.isFinite(parsed) ? parsed : DEFAULT_MAX_OUTPUT_CHARS,
+    });
+    maxCharsInput.value = String(config.toolOutput.maxChars);
+    maxCharsInput.disabled = !outputCapCheckbox.checked;
+    saveToolConfig(config);
+  };
+  outputCapCheckbox.addEventListener('change', persistToolOutput);
+  maxCharsInput.addEventListener('change', persistToolOutput);
+
   const config = getToolConfig();
   cacheCheckbox.checked = config.toolCache?.enabled !== false;
+  const toolOutput = normalizeToolOutputConfig(config.toolOutput);
+  outputCapCheckbox.checked = toolOutput.enabled;
+  maxCharsInput.value = String(toolOutput.maxChars);
+  maxCharsInput.disabled = !toolOutput.enabled;
   loadToolConfigIntoDrawer(list);
 
   document.getElementById('settingsToolsServerBanner')?.classList.toggle(

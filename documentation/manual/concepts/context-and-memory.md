@@ -27,6 +27,8 @@ If the ring shows no cap, the model did not report a context length. Minnow will
 
 The ring is a guide, not a wall. Some providers truncate silently when you overflow and some fail outright.
 
+**Tool result size** is a different setting. Settings → Integrations → Tools caps how much text each file read, search, or shell command **returns in the first place**. Context policy only acts on history that is already in the chat. See [Tools and permissions](tools-and-permissions.md).
+
 ### Context policy for agents
 
 Agents that run unattended — board tasks, sub-agents, scheduled jobs — cannot ask you to start a new chat, so they need a rule for what to do when they hit their cap. **Settings → Agents → Context policy** sets the global default:

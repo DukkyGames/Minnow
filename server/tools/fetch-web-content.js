@@ -11,6 +11,14 @@ import {
   WEB_TEXT_MAX_BYTES,
 } from '../../src/lib/fetch-web-content.mjs';
 import { wrapUntrusted } from '../security/untrusted.js';
+import { getOutputCapPolicy } from './output-cap.js';
+
+/** Apply the product web-text byte cap unless this call skipped result caps. */
+function capFetchedWebText(text) {
+  const policy = getOutputCapPolicy();
+  if (!policy.applyResultCap) return text;
+  return truncateUtf8(text, WEB_TEXT_MAX_BYTES);
+}
 
 /**
  * @param {Record<string, unknown>} args
@@ -27,7 +35,7 @@ export async function toolFetchWebContent(args) {
     return fetchResult;
   }
 
-  const text = truncateUtf8(fetchResult, WEB_TEXT_MAX_BYTES);
+  const text = capFetchedWebText(fetchResult);
   return wrapUntrusted(text, { source: `web:${url}` });
 }
 
@@ -51,7 +59,7 @@ export async function toolRagWebContent(args) {
     return fetchResult;
   }
 
-  const capped = truncateUtf8(fetchResult, WEB_TEXT_MAX_BYTES);
+  const capped = capFetchedWebText(fetchResult);
   const snippets = rankWebContentByQuery(capped, query, WEB_RAG_EXCERPT_LIMIT);
 
   if (snippets.length === 0) {

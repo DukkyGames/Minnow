@@ -458,6 +458,14 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['allow', 'deny', 'security'],
   }),
   field('integrations.tools.cache', 'Tool result cache', 'integrations', 'tools'),
+  field('integrations.tools.outputCap', 'Limit tool result size', 'integrations', 'tools', {
+    keywords: ['truncation', 'output cap', '32k', 'full_result', 'tool result'],
+    description:
+      'Caps how much text each file read, search, or shell command returns to the model. This does not compress chat history.',
+  }),
+  field('integrations.tools.outputCap.maxChars', 'Maximum characters per tool result', 'integrations', 'tools', {
+    keywords: ['truncation', 'max chars', 'output cap'],
+  }),
   field('integrations.tools.bulk', 'Bulk tool permissions', 'integrations', 'tools', {
     keywords: ['reset defaults', 'all full permissions'],
   }),

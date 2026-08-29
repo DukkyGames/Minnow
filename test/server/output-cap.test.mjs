@@ -9,6 +9,8 @@ import {
   capLineLength,
   capReadFileOutput,
   capTextOutput,
+  resolveOutputCapPolicy,
+  runWithOutputCapPolicy,
 } from '../../server/tools/output-cap.js';
 
 describe('output-cap', () => {
@@ -60,5 +62,40 @@ describe('output-cap', () => {
     assert.equal(truncated, true);
     assert.match(text, /read_file_range with path="big.txt"/);
     assert.doesNotMatch(text, /line-200/);
+  });
+
+  it('does not slice oversized text when applyResultCap is false', () => {
+    const text = 'a'.repeat(DEFAULT_MAX_OUTPUT_CHARS + 100);
+    const { text: out, truncated } = capTextOutput(text, { applyResultCap: false });
+    assert.equal(truncated, false);
+    assert.equal(out, text);
+    assert.doesNotMatch(out, /\[truncated —/);
+  });
+
+  it('truncates by default and skips the cap with full_result policy', () => {
+    const text = 'a'.repeat(DEFAULT_MAX_OUTPUT_CHARS + 100);
+    const { truncated: withCap } = capTextOutput(text);
+    assert.equal(withCap, true);
+
+    const policy = resolveOutputCapPolicy({ enabled: true, maxChars: DEFAULT_MAX_OUTPUT_CHARS }, {
+      full_result: true,
+    });
+    const { text: full, truncated: skipped } = runWithOutputCapPolicy(policy, () =>
+      capTextOutput(text),
+    );
+    assert.equal(skipped, false);
+    assert.equal(full, text);
+  });
+
+  it('capReadFileOutput skips the product cap when ALS applyResultCap is false', () => {
+    const lines = Array.from({ length: 200 }, (_, i) => `line-${i + 1}`);
+    const content = lines.join('\n');
+    const policy = resolveOutputCapPolicy({ enabled: false, maxChars: 80 }, {});
+    const { text, truncated } = runWithOutputCapPolicy(policy, () =>
+      capReadFileOutput(content, 'big.txt'),
+    );
+    assert.equal(truncated, false);
+    assert.match(text, /line-200/);
+    assert.doesNotMatch(text, /\[truncated —/);
   });
 });

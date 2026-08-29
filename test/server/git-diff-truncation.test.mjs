@@ -110,7 +110,7 @@ describe('git_diff integration', () => {
   });
 
   it('repo-wide diff is truncated with metadata when changes are huge', async () => {
-    for (let i = 0; i < 30; i += 1) {
+    for (let i = 0; i < 40; i += 1) {
       const name = `tracked-${i}.txt`;
       await fs.writeFile(path.join(repoDir, name), `base-${i}\n`, 'utf8');
       await execFileAsync('git', ['add', name], { cwd: repoDir, windowsHide: true });
@@ -120,8 +120,8 @@ describe('git_diff integration', () => {
       windowsHide: true,
     });
 
-    for (let i = 0; i < 30; i += 1) {
-      const body = Array.from({ length: 200 }, (_, j) => `line-${i}-${j}-padding`).join('\n');
+    for (let i = 0; i < 40; i += 1) {
+      const body = Array.from({ length: 400 }, (_, j) => `line-${i}-${j}-padding`).join('\n');
       await fs.writeFile(path.join(repoDir, `tracked-${i}.txt`), `${body}\n`, 'utf8');
     }
 

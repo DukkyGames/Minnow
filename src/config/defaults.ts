@@ -12,6 +12,7 @@ import {
 } from '../tools/tool-settings-types';
 import type { SessionState, SystemPromptSettings } from '../types';
 import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
+import { DEFAULT_MAX_OUTPUT_CHARS } from '../../server/tools/output-cap.js';
 import type { SkillConfig } from '../skills/config';
 import type { UserRulesSettings } from './user-rules';
 
@@ -116,6 +117,7 @@ export function defaultToolConfig(): ToolConfig {
     keys: { braveApiKey: '', tavilyApiKey: '' },
     webSearchProvider: 'duckduckgo',
     toolCache: { enabled: true },
+    toolOutput: { enabled: true, maxChars: DEFAULT_MAX_OUTPUT_CHARS },
   };
 }
 

@@ -70,6 +70,17 @@ function toolSchema(
   };
 }
 
+/** Per-call opt-out of automatic result-size caps (pagination args still apply). */
+const FULL_RESULT_PROPERTY = {
+  type: 'boolean',
+  description:
+    'If true, skip automatic result-size caps for this call. Pagination (head_limit, offset, line ranges, read_command_log max_bytes) still applies.',
+};
+
+function withFullResult(properties: Record<string, unknown>): Record<string, unknown> {
+  return { ...properties, full_result: FULL_RESULT_PROPERTY };
+}
+
 /**
  * All built-in tools: browser-routed handlers plus server-required tools (see `serverRequired` flags).
  * Function `name` in each schema matches execution routing (browser or server).
@@ -151,15 +162,15 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'fetch_web_content',
     label: 'Fetch page',
     description:
-      'Fetches a URL and returns stripped plain text (about 8KB max). Uses in-app HTTP fetch when Minnow is running locally; browser path is CORS-limited.',
+      'Fetches a URL and returns stripped plain text (about 128KB max unless full_result). Uses in-app HTTP fetch when Minnow is running locally; browser path is CORS-limited.',
     category: 'web',
     serverRequired: false,
     definition: toolSchema(
       'fetch_web_content',
-      'Fetch a web page URL and return its main text content (HTML stripped, up to ~24KB). Prefer running Minnow locally for reliable fetch without browser CORS limits.',
-      {
+      'Fetch a web page URL and return its main text content (HTML stripped, up to ~128KB unless full_result is true). Prefer running Minnow locally for reliable fetch without browser CORS limits.',
+      withFullResult({
         url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },
-      },
+      }),
       ['url'],
     ),
   },
@@ -171,11 +182,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'rag_web_content',
-      'Fetch a web page and return up to 16 query-relevant excerpts (sentences and paragraphs) from a deeper page extract (~24KB).',
-      {
+      'Fetch a web page and return up to 16 query-relevant excerpts (sentences and paragraphs) from a deeper page extract (~128KB unless full_result is true).',
+      withFullResult({
         url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },
         query: { type: 'string', description: 'What to extract from the page' },
-      },
+      }),
       ['url', 'query'],
     ),
   },
@@ -378,10 +389,10 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_file',
-      'Read a UTF-8 text file from the project. PDF, Excel (.xlsx/.xls), Word, PowerPoint, and OpenDocument files are extracted to plain text automatically (same as read_document) — do not treat ZIP/PK bytes as file contents. Large text files are truncated (~32k chars) with line counts and a pointer to read_file_range for the remainder — prefer read_file_range when you know you only need part of a file.',
-      {
+      'Read a UTF-8 text file from the project. PDF, Excel (.xlsx/.xls), Word, PowerPoint, and OpenDocument files are extracted to plain text automatically (same as read_document) — do not treat ZIP/PK bytes as file contents. Large text files are truncated (~128k chars by default) with line counts and a pointer to read_file_range for the remainder — prefer read_file_range when you know you only need part of a file. Pass full_result: true to skip the automatic size cap.',
+      withFullResult({
         path: { type: 'string', description: 'Relative file path' },
-      },
+      }),
       ['path'],
     ),
   },
@@ -393,8 +404,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_document',
-      'Extract plain text from a PDF or office document (Excel, Word, PowerPoint, OpenDocument, RTF). Prefer this over read_file for spreadsheets and office files. Prefer path for files already in the workspace; use content (base64 bytes) only for attachment-style payloads.',
-      {
+      'Extract plain text from a PDF or office document (Excel, Word, PowerPoint, OpenDocument, RTF). Prefer this over read_file for spreadsheets and office files. Prefer path for files already in the workspace; use content (base64 bytes) only for attachment-style payloads. Large extracts are truncated (~128k chars) unless full_result is true.',
+      withFullResult({
         path: {
           type: 'string',
           description: 'Workspace-relative path to the document (preferred for project files)',
@@ -408,7 +419,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           type: 'string',
           description: 'Base64-encoded file bytes (use when the file is not on disk in the workspace)',
         },
-      },
+      }),
     ),
   },
   {
@@ -419,12 +430,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_file_range',
-      'Read a range of lines from a text file (inclusive, 1-based). For PDF/Excel/Word, line numbers refer to the extracted text, not the binary file.',
-      {
+      'Read a range of lines from a text file (inclusive, 1-based). For PDF/Excel/Word, line numbers refer to the extracted text, not the binary file. Line bounds always apply; pass full_result: true to skip the extra character cap on the numbered slice.',
+      withFullResult({
         path: { type: 'string', description: 'Relative file path' },
         start_line: { type: 'integer', description: 'First line number (1-based)' },
         end_line: { type: 'integer', description: 'Last line number (inclusive)' },
-      },
+      }),
       ['path', 'start_line', 'end_line'],
     ),
   },
@@ -521,10 +532,10 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     definition: toolSchema(
       'search_in_file',
       'Search for lines matching a regex pattern in a file.',
-      {
+      withFullResult({
         path: { type: 'string', description: 'Relative file path' },
         pattern: { type: 'string', description: 'Regular expression pattern' },
-      },
+      }),
       ['path', 'pattern'],
     ),
   },
@@ -532,27 +543,27 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'grep',
     label: 'Grep / Search workspace',
     description:
-      'Search file contents under a directory (ripgrep-style). Respects .gitignore. Results paginate (default 200 lines).',
+      'Search file contents under a directory (ripgrep-style). Respects .gitignore. Results paginate (default 500 lines).',
     category: 'files',
     serverRequired: true,
     definition: toolSchema(
       'grep',
-      'Search file contents (ripgrep-style). Workspace-relative path:line:snippet; respects .gitignore. Paginate with offset (default 200 lines, 32k chars max). Prefer files_with_matches or count before content mode.',
-      {
+      'Search file contents (ripgrep-style). Workspace-relative path:line:snippet; respects .gitignore. Paginate with offset (default 500 lines, 128k chars max unless full_result). Prefer files_with_matches or count before content mode.',
+      withFullResult({
         pattern: { type: 'string', description: 'Regex or literal pattern' },
         path: { type: 'string', description: 'Directory or file (default workspace root)' },
         glob: { type: 'string', description: 'Glob filter (e.g. *.ts)' },
         case_insensitive: { type: 'boolean' },
         literal: { type: 'boolean', description: 'Treat pattern as literal text' },
         context: { type: 'number', description: 'Context lines (0-5)' },
-        head_limit: { type: 'number', description: 'Max output lines per page (max 200)' },
+        head_limit: { type: 'number', description: 'Max output lines per page (max 2000 when result caps are on)' },
         offset: { type: 'number', description: 'Match-line offset for pagination' },
         output_mode: {
           type: 'string',
           enum: ['content', 'count', 'files_with_matches', 'grouped'],
           description: 'content (default), grouped, count, or files_with_matches',
         },
-      },
+      }),
       ['pattern'],
     ),
   },
@@ -626,14 +637,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'find_files',
-      'Find files under a directory matching a glob-style pattern.',
-      {
+      'Find files under a directory matching a glob-style pattern. Results cap at 2000 paths unless full_result is true.',
+      withFullResult({
         pattern: { type: 'string', description: 'Glob pattern, e.g. "**/*.ts"' },
         path: {
           type: 'string',
           description: 'Root directory to search (default ".")',
         },
-      },
+      }),
       ['pattern'],
     ),
   },
@@ -763,14 +774,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'git_diff',
-      'Show git diff for changes. Large patches are truncated with a --numstat summary, complete per-file hunks that fit, and a footer listing omitted files — use path= to fetch one file at a time. Prefer path= or staged=true for overview-sized calls instead of a repo-wide diff.',
-      {
+      'Show git diff for changes. Large patches are truncated with a --numstat summary, complete per-file hunks that fit, and a footer listing omitted files — use path= to fetch one file at a time, or pass full_result: true to skip the automatic size cap. Prefer path= or staged=true for overview-sized calls instead of a repo-wide diff.',
+      withFullResult({
         path: { type: 'string', description: 'Optional file path to limit diff (recommended for large changes)' },
         staged: {
           type: 'boolean',
           description: 'If true, diff staged (--cached) changes',
         },
-      },
+      }),
     ),
   },
   {
@@ -869,8 +880,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'execute_command',
-      'Shell command → stdout/stderr. Blocking 30s default; timeout_ms for longer. background + read_command_log for detached; stop + run_id to end.',
-      {
+      'Shell command → stdout/stderr. Blocking 30s default; timeout_ms for longer. background + read_command_log for detached; stop + run_id to end. Large output is truncated (~128k chars) unless full_result is true.',
+      withFullResult({
         command: { type: 'string' },
         background: { type: 'boolean' },
         block_until_ms: { type: 'number' },
@@ -878,7 +889,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         cwd: { type: 'string' },
         stop: { type: 'boolean' },
         run_id: { type: 'string' },
-      },
+      }),
       ['command'],
     ),
   },
@@ -890,14 +901,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'read_command_log',
-      'Read the log tail for a command run started with execute_command (background: true) or start_background_command. found:false = unknown run_id (not finished).',
-      {
+      'Read the log tail for a command run started with execute_command (background: true) or start_background_command. found:false = unknown run_id (not finished). Pass full_result to use the hard byte ceiling instead of the default 64KB tail.',
+      withFullResult({
         run_id: { type: 'string', description: 'runId from the start response' },
         max_bytes: {
           type: 'number',
-          description: 'Max bytes to read from the log file (default 65536)',
+          description: 'Max bytes to read from the log file (default 65536; always honored when set)',
         },
-      },
+      }),
       ['run_id'],
     ),
   },
@@ -1012,10 +1023,10 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'run_javascript',
-      'Run JavaScript code with Node.js and return output.',
-      {
+      'Run JavaScript code with Node.js and return output. Large stdout/stderr is truncated unless full_result is true.',
+      withFullResult({
         code: { type: 'string', description: 'JavaScript source to execute' },
-      },
+      }),
       ['code'],
     ),
   },
@@ -1027,10 +1038,10 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'run_python',
-      'Run Python code and return output.',
-      {
+      'Run Python code and return output. Large stdout/stderr is truncated unless full_result is true.',
+      withFullResult({
         code: { type: 'string', description: 'Python source to execute' },
-      },
+      }),
       ['code'],
     ),
   },
