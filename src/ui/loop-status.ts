@@ -21,7 +21,7 @@ import {
   sessionState,
   updateActiveLoop,
 } from '../state/sessions';
-import { getActiveChatMountElement } from './chat-mount';
+import { appendChatTranscriptNode } from './chat-mount';
 import { scrollChatIfPinned } from './chat-scroll';
 import { syncChatItemLoopIconsInDom } from './chat-item-loop-icon';
 
@@ -288,7 +288,7 @@ function showLoopStatusPanel(chat: Chat): void {
 
   const panel = buildLoopStatusPanel(chat);
   panelByChatId.set(chat.id, panel);
-  getActiveChatMountElement().appendChild(panel);
+  appendChatTranscriptNode(panel);
   scrollChatIfPinned();
 }
 

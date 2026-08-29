@@ -8,6 +8,7 @@ import {
   getPendingMessageQueueCount,
   pushQueuedMessageNow,
   removeQueuedMessage,
+  setPendingMessageQueueChangedListener,
   updateQueuedMessage,
 } from '../../src/chat/message-queue.ts';
 import {
@@ -47,6 +48,7 @@ describe('message-queue helpers', () => {
     setStreaming(false);
     endChatTurnSetup(FIXED_CHAT_ID);
     flushScheduledSessionSaveForTests();
+    setPendingMessageQueueChangedListener(null);
     setSessionStateForTests(null);
   });
 
@@ -60,11 +62,17 @@ describe('message-queue helpers', () => {
 
   test('enqueueComposerMessage appends follow-ups', () => {
     const chat = seedChat();
+    let notified = 0;
+    setPendingMessageQueueChangedListener(() => {
+      notified += 1;
+    });
     assert.equal(enqueueComposerMessage(chat, QUEUE_TEXT), true);
     assert.equal(enqueueComposerMessage(chat, QUEUE_TEXT_TWO), true);
     assert.equal(getPendingMessageQueueCount(chat), 2);
     assert.equal(chat.pendingMessageQueue?.[0]?.text, QUEUE_TEXT);
     assert.equal(chat.pendingMessageQueue?.[1]?.text, QUEUE_TEXT_TWO);
+    assert.equal(notified, 2);
+    setPendingMessageQueueChangedListener(null);
   });
 
   test('removeQueuedMessage deletes one item', () => {
@@ -72,9 +80,14 @@ describe('message-queue helpers', () => {
     enqueueComposerMessage(chat, QUEUE_TEXT);
     const id = chat.pendingMessageQueue?.[0]?.id;
     assert.ok(id);
+    let notified = 0;
+    setPendingMessageQueueChangedListener(() => {
+      notified += 1;
+    });
     assert.equal(removeQueuedMessage(chat, id), true);
     assert.equal(getPendingMessageQueueCount(chat), 0);
     assert.equal(chat.pendingMessageQueue, undefined);
+    assert.equal(notified, 1);
   });
 
   test('updateQueuedMessage edits text in place', () => {

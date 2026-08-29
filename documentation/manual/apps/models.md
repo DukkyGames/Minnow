@@ -104,6 +104,8 @@ See [Voice](../extend/voice.md).
 
 Local runtimes expose **Load** and **Unload** in the composer picker, acting on the model that chat is bound to. The tray menu can unload local models without opening the window — useful when you want your VRAM back.
 
+**Local Server** (Models app) shows what is loaded and whether the runtime is working. When llama.cpp has more inference requests than free slots, the loaded-model card shows **N queued** until a slot frees.
+
 ## When the picker is empty
 
 1. Is the provider process running, with a model loaded?

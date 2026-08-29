@@ -114,6 +114,27 @@ export function getActiveChatMountElement(): HTMLElement {
   return getOrchestrateChatMountElement();
 }
 
+/**
+ * Host for composer-queued follow-up bubbles (MIN-647). Live transcript rows
+ * insert *before* this node so queued items stay at the tail until they start.
+ */
+export const QUEUED_TRANSCRIPT_ID = 'queuedTranscript';
+
+/**
+ * Append a transcript node above the queued-follow-up cluster.
+ * Falls through to a normal append when nothing is queued.
+ */
+export function appendChatTranscriptNode(node: Node, mount?: HTMLElement | null): void {
+  const host = mount ?? getActiveChatMountElement();
+  if (!host) return;
+  const anchor = host.querySelector(`#${QUEUED_TRANSCRIPT_ID}`);
+  if (anchor) {
+    host.insertBefore(node, anchor);
+    return;
+  }
+  host.appendChild(node);
+}
+
 /** Temporarily pin bubble / stream append targets during a history re-render. */
 export function runWithChatMount(mount: HTMLElement, fn: () => void): void {
   const prev = mountOverride;

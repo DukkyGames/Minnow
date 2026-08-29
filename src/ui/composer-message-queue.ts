@@ -7,6 +7,7 @@ import {
   getPendingMessageQueueCount,
   pushQueuedMessageNow,
   removeQueuedMessage,
+  setPendingMessageQueueChangedListener,
 } from '../chat/message-queue';
 import { isChatTurnInProgress } from '../chat/chat-turn-guard';
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -17,6 +18,7 @@ import { autoResize } from './input';
 import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { setStatus } from './status';
 import { refreshComposerStreamingAffordance } from './composer-send';
+import { syncQueuedTranscript } from './queued-transcript';
 
 const COMPOSER_FOLLOW_UP_PLACEHOLDER = 'Add a follow-up';
 
@@ -164,8 +166,18 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
 export function syncComposerMessageQueue(): void {
   if (typeof document === 'undefined') return;
 
+  syncQueuedTranscript();
+
+  let chat;
+  try {
+    chat = getActiveChat();
+  } catch {
+    const orphan = document.getElementById('composerMessageQueue');
+    orphan?.classList.add('hidden');
+    return;
+  }
+
   const root = ensureQueueRoot();
-  const chat = getActiveChat();
   const count = getPendingMessageQueueCount(chat);
   const show = count > 0;
 
@@ -229,3 +241,8 @@ export function syncComposerFollowUpPlaceholder(streaming: boolean): void {
 export function resetComposerMessageQueueUi(): void {
   queueCollapsed = false;
 }
+
+// Keep transcript bubbles in lockstep with every queue mutation (including flush-on-turn-start).
+setPendingMessageQueueChangedListener(() => {
+  syncComposerMessageQueue();
+});

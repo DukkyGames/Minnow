@@ -14,6 +14,7 @@
  */
 
 import { subscribeServeActivity, type ServeActivity } from './api-client';
+import { formatQueuedChipLabel } from './serve-activity-chips';
 
 type FeedListener = (activity: ServeActivity) => void;
 
@@ -91,19 +92,23 @@ export function serveActivityForModelId(modelId: string): ServeActivity | undefi
 
 /**
  * Compact suffix for a picker row: `pp 10.2k` while a prompt is being processed,
- * `917 tok` while generating, nothing when idle.
+ * `917 tok` while generating, `2 queued` when llama.cpp is deferring work.
  *
  * Prefill is a count rather than a percentage on purpose — `/slots` reports the same
  * running number as both the processed count and the total, so no fraction exists.
  */
 export function activitySuffixForModelId(modelId: string): string {
   const activity = serveActivityForModelId(modelId);
-  if (!activity?.available || activity.stale) return '';
+  if (!activity?.available) return '';
+  const queued = formatQueuedChipLabel(activity.queued ?? 0) ?? '';
+  if (activity.stale) return queued;
   const busy = activity.slots.find((slot) => slot.state !== 'idle');
-  if (!busy) return '';
-  return busy.state === 'prompt'
-    ? `pp ${compactTokens(busy.promptProcessed)}`
-    : `${compactTokens(busy.decoded)} tok`;
+  if (!busy) return queued;
+  const work =
+    busy.state === 'prompt'
+      ? `pp ${compactTokens(busy.promptProcessed)}`
+      : `${compactTokens(busy.decoded)} tok`;
+  return queued ? `${work} · ${queued}` : work;
 }
 
 /**
@@ -124,7 +129,9 @@ export function syncModelActivityIndicators(root: ParentNode = document): void {
 /** True when any local serve is working — drives the header dot's animation. */
 export function anyServeBusy(): boolean {
   for (const activity of byServeId.values()) {
-    if (!activity.available || activity.stale) continue;
+    if (!activity.available) continue;
+    if ((activity.queued ?? 0) > 0) return true;
+    if (activity.stale) continue;
     if (activity.slots.some((slot) => slot.state !== 'idle')) return true;
   }
   return false;

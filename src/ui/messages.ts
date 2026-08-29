@@ -41,6 +41,7 @@ import { createIcon, type IconName } from './icon';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { STREAMING_CARET_CLASS, STREAMING_CARET_SELECTOR, setAssistantBubbleContent } from '../markdown/renderer';
+import { syncComposerMessageQueue } from './composer-message-queue';
 import {
   getActiveBoardGroup,
   getBoardGroupForChat,
@@ -75,6 +76,7 @@ import {
   scrollChatToBottom,
 } from './chat-scroll';
 import {
+  appendChatTranscriptNode,
   getActiveChatMountElement,
   isChatAppForeground,
   isCodeChatMount,
@@ -594,6 +596,8 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
   renderPersistedSubAgentCardsForChat(chat);
   syncThoughtsCaretPulse(area);
+  // Re-paint queued follow-ups after history wipe so they are not lost on chat switch.
+  syncComposerMessageQueue();
   restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
   if (isChatStreaming(chat.id) && isStreamDomVisible(chat.id)) {
@@ -758,7 +762,7 @@ function appendTranscriptNoticeChip(
   if (insertBefore) {
     area.insertBefore(wrap, insertBefore);
   } else {
-    area.appendChild(wrap);
+    appendChatTranscriptNode(wrap, area);
   }
   return wrap;
 }
@@ -878,7 +882,7 @@ export function appendBubble(
 
   wrap.appendChild(label);
   wrap.appendChild(bubble);
-  mount.appendChild(wrap);
+  appendChatTranscriptNode(wrap, mount);
   if (!suppressBubbleScroll) {
     if (role === 'user') {
       scrollChatToBottom();
@@ -1031,7 +1035,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   beginStreamAnnouncer(wrap);
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
-  mount.appendChild(wrap);
+  appendChatTranscriptNode(wrap, mount);
   // Respect scroll pin: only follow the tail when the user is already near bottom.
   scrollChatIfPinned();
   return { wrap, bubble, cursor, streamStatus };

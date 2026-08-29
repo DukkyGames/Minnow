@@ -1482,6 +1482,12 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   background: var(--mn-accent-soft);
 }
 
+/* Waiting on a free llama.cpp slot. Warning, not accent — this is backup, not work. */
+.models-loaded__state.is-queued {
+  color: var(--mn-warning);
+  background: var(--mn-warning-soft);
+}
+
 .models-loaded__state.is-error {
   color: var(--mn-danger-ink);
   background: var(--mn-danger-soft);
