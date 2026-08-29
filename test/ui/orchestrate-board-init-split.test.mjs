@@ -93,6 +93,24 @@ describe('orchestrate board init loader', () => {
     disposeBoardViewForTests();
   });
 
+  test('init stream still activates when kickoff names the bound plan path', async () => {
+    setupDom();
+    const { chat } = seedBoardInitSession();
+    const { buildBoardOnboardingKickoffMessage } = await import(
+      '../../src/ui/orchestrate-board-kickoff.ts'
+    );
+    chat.history.push({
+      role: 'user',
+      content: buildBoardOnboardingKickoffMessage(PLAN_PATH),
+    });
+    setStreaming(true, chat.id);
+    syncOrchestrateInitSplitChrome(chat);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    assert.equal(isOrchestrateBoardInitSplitActive(chat), true);
+    disposeBoardViewForTests();
+  });
+
   test('appendBubble stays hidden during board init without split', () => {
     setupDom();
     const { chat } = seedBoardInitSession({ kickoffInHistory: true });
