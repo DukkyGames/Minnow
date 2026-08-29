@@ -19,7 +19,7 @@ todos:
     status: completed
   - id: verify
     content: Run scoped tests, typecheck, and verify the Settings → Rules flow in the browser
-    status: in_progress
+    status: completed
 isProject: false
 ---
 
