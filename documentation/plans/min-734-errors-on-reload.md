@@ -34,10 +34,10 @@ Listing still shows persisted +/−. File count stays omitted until that chat hy
 ## Todos
 
 - [x] Investigate stack vs lazy-history contract
-- [ ] Guard `getPerFileChangeSummary` / `runHadCodeChanges` when history is unloaded
-- [ ] Tests: unloaded chats do not trip the DEV trap; loaded chats still group by path
-- [ ] Update `documentation/context.md` lazy-history listing contract
-- [ ] Run scoped tests
+- [x] Guard `getPerFileChangeSummary` / `runHadCodeChanges` when history is unloaded
+- [x] Tests: unloaded chats do not trip the DEV trap; loaded chats still group by path
+- [x] Update `documentation/context.md` lazy-history listing contract
+- [x] Run scoped tests
 
 ## Out of scope
 

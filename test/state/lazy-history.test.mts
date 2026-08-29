@@ -23,6 +23,7 @@ import {
   touchChat,
 } from '../../src/state/sessions.ts';
 import type { Chat, Message, SessionState } from '../../src/types.ts';
+import { getPerFileChangeSummary } from '../../src/usage/code-change-ledger.ts';
 
 const CHAT_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const CHAT_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -160,6 +161,33 @@ describe('lazy history (C.2)', () => {
       assert.equal(errors.length, 1);
     } finally {
       console.error = originalError;
+    }
+  });
+
+  test('code-change listing helpers do not trip the history trap', () => {
+    setSessionsLazyHistoryEnabledForTests(true);
+    setHistoryTrapForcedForTests(true);
+
+    const chat = makeChat(CHAT_A, {
+      history: [],
+      historyLoaded: false,
+      codeChangeTotals: { additions: 12, deletions: 3 },
+    });
+    setSessionStateForTests(makeState([chat]));
+    attachUnloadedHistoryTrapForTests(chat);
+
+    const errors: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args);
+    };
+    try {
+      const summaries = getPerFileChangeSummary(chat);
+      assert.deepEqual(summaries, []);
+      assert.equal(errors.length, 0);
+    } finally {
+      console.error = originalError;
+      setHistoryTrapForcedForTests(false);
     }
   });
 
