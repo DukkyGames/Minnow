@@ -10,7 +10,14 @@ import {
   splitPatchIntoFiles,
   type GitPatchFileEntry,
 } from './git-patch-files';
-import { renderSideBySidePatchDiff } from './side-by-side-patch-diff';
+import {
+  getGitCommitDiffWordWrap,
+  setGitCommitDiffWordWrap,
+} from './git-commit-diff-prefs';
+import {
+  renderSideBySidePatchDiff,
+  setSideBySidePatchDiffWordWrap,
+} from './side-by-side-patch-diff';
 import { iconHtml } from './icon';
 
 export interface GitCommitDiffPanelOptions {
@@ -28,6 +35,12 @@ export interface GitWorkingFileDiffPanelOptions {
 /** Dispatched when the commit diff panel closes (any path). */
 export const GIT_COMMIT_DIFF_CLOSED_EVENT = 'minnow:git-commit-diff-closed';
 
+export {
+  GIT_COMMIT_DIFF_WORD_WRAP_KEY,
+  getGitCommitDiffWordWrap,
+  setGitCommitDiffWordWrap,
+} from './git-commit-diff-prefs';
+
 let openSha: string | null = null;
 let openWorkingFile: { path: string; staged: boolean } | null = null;
 let paneMarked = false;
@@ -35,6 +48,8 @@ let activeFileIndex = 0;
 let fileEntries: GitPatchFileEntry[] = [];
 let diffBodyEl: HTMLElement | null = null;
 let fileTabsEl: HTMLElement | null = null;
+let wrapToggleBtn: HTMLButtonElement | null = null;
+let diffMountEl: HTMLElement | null = null;
 
 function getViewerPane(): HTMLElement | null {
   return document.getElementById('fileViewerPane');
@@ -76,9 +91,22 @@ function appendFileTabStats(parent: HTMLElement, entry: GitPatchFileEntry): void
   parent.appendChild(badge);
 }
 
+function syncWrapToggleUi(enabled: boolean): void {
+  if (!wrapToggleBtn) return;
+  wrapToggleBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  wrapToggleBtn.classList.toggle('is-active', enabled);
+  wrapToggleBtn.title = enabled ? 'Disable word wrap' : 'Enable word wrap';
+}
+
+function applyWordWrapToMount(enabled: boolean): void {
+  if (!diffMountEl) return;
+  setSideBySidePatchDiffWordWrap(diffMountEl, enabled);
+}
+
 function renderFileDiff(index: number): void {
   if (!diffBodyEl) return;
   const entry = fileEntries[index];
+  diffMountEl = null;
   if (!entry) {
     diffBodyEl.replaceChildren();
     const empty = document.createElement('p');
@@ -117,7 +145,8 @@ function renderFileDiff(index: number): void {
   const mount = document.createElement('div');
   mount.className = 'git-commit-diff__diff-mount';
   diffBodyEl.appendChild(mount);
-  renderSideBySidePatchDiff(mount, entry.patch);
+  diffMountEl = mount;
+  renderSideBySidePatchDiff(mount, entry.patch, { wordWrap: getGitCommitDiffWordWrap() });
 }
 
 function selectFile(index: number): void {
@@ -193,6 +222,35 @@ function createCloseButton(): HTMLButtonElement {
   return closeBtn;
 }
 
+/** Wrap toggle in the meta bar — preference applies to the open mount immediately. */
+function createWrapToggleButton(): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'btnGitCommitDiffWrap';
+  btn.className = 'git-commit-diff__wrap-toggle';
+  btn.textContent = 'Wrap';
+  btn.setAttribute('aria-label', 'Toggle word wrap in commit diff');
+  const enabled = getGitCommitDiffWordWrap();
+  btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  btn.classList.toggle('is-active', enabled);
+  btn.title = enabled ? 'Disable word wrap' : 'Enable word wrap';
+  btn.addEventListener('click', () => {
+    const next = !getGitCommitDiffWordWrap();
+    setGitCommitDiffWordWrap(next);
+    syncWrapToggleUi(next);
+    applyWordWrapToMount(next);
+  });
+  wrapToggleBtn = btn;
+  return btn;
+}
+
+function createMetaActions(): HTMLElement {
+  const actions = document.createElement('div');
+  actions.className = 'git-commit-diff__meta-actions';
+  actions.append(createWrapToggleButton(), createCloseButton());
+  return actions;
+}
+
 function mountPanelShell(meta: HTMLElement, showFileTabs: boolean): void {
   const host = getViewerHost();
   if (!host) return;
@@ -230,7 +288,7 @@ function mountCommitPanelChrome(shortSha: string, subject: string, statLine: str
   detail.textContent = statLine ? `${shortSha} — ${statLine}` : shortSha;
   metaText.append(title, detail);
 
-  meta.append(metaText, createCloseButton());
+  meta.append(metaText, createMetaActions());
   mountPanelShell(meta, true);
 }
 
@@ -249,7 +307,7 @@ function mountWorkingFilePanelChrome(path: string, staged: boolean): void {
   detail.textContent = `${staged ? 'Staged' : 'Unstaged'} — ${path}`;
   metaText.append(title, detail);
 
-  meta.append(metaText, createCloseButton());
+  meta.append(metaText, createMetaActions());
   mountPanelShell(meta, false);
 }
 
@@ -357,6 +415,8 @@ export function closeGitCommitDiffPanel(): void {
   activeFileIndex = 0;
   fileTabsEl = null;
   diffBodyEl = null;
+  wrapToggleBtn = null;
+  diffMountEl = null;
 
   const host = getViewerHost();
   if (host) {
