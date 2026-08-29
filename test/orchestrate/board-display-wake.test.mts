@@ -29,6 +29,7 @@ import {
   emitMainTurnActivity,
 } from '../../src/chat/main-turn-activity.ts';
 import { setOomPauseActiveForBoot } from '../../src/chat/orchestrate/oom-recovery.ts';
+import { setResumeGateState } from '../../src/chat/resume-gate.ts';
 import { isChatStreaming } from '../../src/chat/streaming-state.ts';
 import { setStreaming } from '../../src/app-state.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
@@ -133,6 +134,7 @@ describe('board display wake reconcile', () => {
     clearMainTurnActivity(TASK_CHAT_ID);
     resetWrapperState();
     setOomPauseActiveForBoot(false);
+    setResumeGateState('idle');
     setStreaming(false);
     happyDomWindow?.close();
     happyDomWindow = undefined;
@@ -327,6 +329,51 @@ describe('board display wake reconcile', () => {
     assert.equal(board.autoRunning, false);
     assert.equal(board.systemPaused, true);
     assert.equal(board.tasks[0]!.status, 'in_progress');
+  });
+
+  test('reconcile does not auto-resume while the boot resume prompt is unanswered', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+    const board = group.orchestrateBoard!;
+    // A clean quit leaves exactly this state; the first wake after relaunch used
+    // to un-pause it and start delegating before the user said anything.
+    board.autoRunning = false;
+    board.systemPaused = true;
+    setResumeGateState('pending');
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    await reconcileRunningBoardsAfterDisplayWake({ allowStalledRestart: true });
+
+    assert.equal(board.autoRunning, false);
+    assert.equal(board.systemPaused, true);
+  });
+
+  test('reconcile does not auto-resume after the boot resume prompt was declined', async () => {
+    const planner = makePlanner();
+    const taskChat = makeTaskChat();
+    const group = makeGroup();
+    const board = group.orchestrateBoard!;
+    board.autoRunning = false;
+    board.systemPaused = true;
+    setResumeGateState('declined');
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: PLANNER_ID,
+      chats: [planner, taskChat],
+      groups: [group],
+    });
+
+    await reconcileRunningBoardsAfterDisplayWake({ allowStalledRestart: true });
+
+    assert.equal(board.autoRunning, false);
   });
 
   test('AFK power guard ref-count tracks board start/stop', () => {

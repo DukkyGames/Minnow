@@ -949,6 +949,8 @@ export function normalizeChatRow(raw) {
       : '';
 
   const currentGenerationId = ensureCurrentGenerationId(row.currentGenerationId);
+  // Boot resume gate: survives Quit Minnow after generations are cancelled.
+  const resumeInterrupted = row.resumeInterrupted === true;
 
   const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
   const orchestrateBoard = ensureOrchestrateBoard(row.orchestrateBoard);
@@ -1023,6 +1025,7 @@ export function normalizeChatRow(raw) {
     ...(activeBranchByFork ? { activeBranchByFork } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
+    ...(resumeInterrupted ? { resumeInterrupted: true } : {}),
     ...(activeGoal ? { activeGoal } : {}),
     ...(activeLoops ? { activeLoops } : {}),
     ...(nextLoopId != null ? { nextLoopId } : {}),

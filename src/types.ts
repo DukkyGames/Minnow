@@ -1405,6 +1405,12 @@ export interface Chat {
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;
+  /**
+   * Persisted when a main-chat turn is in flight so the boot resume gate can still
+   * prompt after a graceful Quit (which cancels generations and clears
+   * {@link currentGenerationId}) or a crash mid-tools.
+   */
+  resumeInterrupted?: boolean;
   /** Queued steering correction for the in-flight turn (push-now; cleared on consume or stop). */
   pendingSteerMessage?: string;
   /** Follow-up messages queued while this chat is streaming (MIN-200). */
