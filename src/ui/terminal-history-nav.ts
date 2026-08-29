@@ -52,6 +52,8 @@ export function isTerminalEscapeInput(data: string): boolean {
  * Interactive PTY shells own ArrowUp/Down via their line editor (zle, readline,
  * fish, PSReadLine, DOSKEY). Client-side recall injects Ctrl+A/Ctrl+K which zsh
  * prints as ^A^K on a used tab (MIN-670) and garbles PSReadLine on Windows.
+ * Pass-through still needs the xterm write-callback gate: CSI sent before zle
+ * restarts echoes as ^[[A / ^[[B (same cooked-mode window).
  */
 export function usesShellNativeHistory(shellProfileId: string | null | undefined): boolean {
   if (!shellProfileId) return false;

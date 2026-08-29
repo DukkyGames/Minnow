@@ -29,6 +29,7 @@ import {
   resolveHistoryNavigation,
   shouldInterceptPtyHistoryArrow,
 } from './terminal-history-nav';
+import { createPtyInputGate } from './terminal-pty-input-gate';
 import { handleTerminalWebLink } from './terminal-console-links';
 import { buildTerminalXtermTheme } from './terminal-xterm-theme';
 
@@ -59,7 +60,18 @@ let lineBuffer = '';
 let historyIndex = -1;
 let tabHistory: string[] = [];
 let resizeObserver: ResizeObserver | null = null;
+let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSentCols = 0;
+let lastSentRows = 0;
 let onSessionEnded: ((tabId: string) => void) | null = null;
+
+/** Hold keys until xterm finishes parsing output so zsh is back in zle (MIN-670). */
+const ptyInputGate = createPtyInputGate({
+  dispatch: dispatchPtyUserInput,
+});
+
+/** ResizeObserver fires while the prompt is redrawing; coalesce SIGWINCH. */
+const RESIZE_DEBOUNCE_MS = 50;
 
 function historyKey(tabId: string): string {
   return `${HISTORY_STORAGE_PREFIX}${tabId}`;
@@ -169,6 +181,7 @@ function disconnectWs(): void {
     activeWs.close();
     activeWs = null;
   }
+  ptyInputGate.reset();
 }
 
 /** Close WebSocket for the active tab without killing the server PTY. */
@@ -177,22 +190,48 @@ export function disconnectActiveTerminalWs(): void {
   attachedTabId = null;
 }
 
+function currentTerminalSize(): { cols: number; rows: number } {
+  return { cols: term?.cols ?? 80, rows: term?.rows ?? 24 };
+}
+
+/** Fit the viewport and notify the PTY; skip the syscall when size is unchanged. */
 function fitAndResize(sessionId: string | null): void {
   if (!fitAddon || !term || !hostEl) return;
   fitAddon.fit();
   const cols = term.cols;
   const rows = term.rows;
-  if (sessionId && cols > 0 && rows > 0) {
-    void resizeTerminalSession(sessionId, cols, rows);
-    if (activeWs?.readyState === WebSocket.OPEN) {
-      activeWs.send(JSON.stringify({ type: 'resize', cols, rows }));
-    }
+  if (!sessionId || cols <= 0 || rows <= 0) return;
+  if (cols === lastSentCols && rows === lastSentRows) return;
+  lastSentCols = cols;
+  lastSentRows = rows;
+  void resizeTerminalSession(sessionId, cols, rows);
+  if (activeWs?.readyState === WebSocket.OPEN) {
+    activeWs.send(JSON.stringify({ type: 'resize', cols, rows }));
   }
+}
+
+/** Coalesce host resizes so zsh does not see a SIGWINCH storm during prompt redraw. */
+function scheduleFitAndResize(sessionId: string | null): void {
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer);
+  }
+  resizeDebounceTimer = setTimeout(() => {
+    resizeDebounceTimer = null;
+    fitAndResize(sessionId);
+  }, RESIZE_DEBOUNCE_MS);
 }
 
 function sendPtyInput(data: string): void {
   if (!activeWs || activeWs.readyState !== WebSocket.OPEN || !data) return;
   activeWs.send(JSON.stringify({ type: 'input', data }));
+}
+
+/** Apply history intercept then write one input chunk to the open PTY socket. */
+function dispatchPtyUserInput(data: string): void {
+  if (!activeWs || activeWs.readyState !== WebSocket.OPEN || !data) return;
+  if (handleHistoryKeys(data)) return;
+  trackLineBufferInput(data);
+  sendPtyInput(data);
 }
 
 function trackLineBufferInput(data: string): void {
@@ -253,7 +292,15 @@ function connectWs(sessionId: string, tabId: string): void {
     const msg = parsePtyServerMessage(text);
     if (!msg || !term) return;
     if (msg.type === 'output') {
-      term.write(msg.data);
+      // Keep ArrowUp queued until this chunk is parsed (SMKX / bracketed paste).
+      ptyInputGate.beginOutputParse();
+      try {
+        term.write(msg.data, () => {
+          ptyInputGate.endOutputParse();
+        });
+      } catch {
+        ptyInputGate.endOutputParse();
+      }
     } else if (msg.type === 'exit') {
       term.writeln(`\r\n[Session ended — exit ${msg.code}]`);
       onSessionEnded?.(tabId);
@@ -309,17 +356,13 @@ function ensureTerminal(): Terminal | null {
 
   activeTerminal.onData((data) => {
     if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
-
-    if (handleHistoryKeys(data)) return;
-
-    trackLineBufferInput(data);
-    activeWs.send(JSON.stringify({ type: 'input', data }));
+    ptyInputGate.handleInput(data);
   });
 
   const resizeTarget = hostEl;
   resizeObserver = new ResizeObserver(() => {
     const sid = activeWs ? new URL(activeWs.url).searchParams.get('sessionId') : null;
-    fitAndResize(sid);
+    scheduleFitAndResize(sid);
   });
   if (resizeTarget) {
     resizeObserver.observe(resizeTarget);
@@ -383,12 +426,19 @@ export async function attachTerminalTab(
   tabHistory = loadTabHistory(tab.tabId);
   historyIndex = tabHistory.length;
   lineBuffer = '';
+  lastSentCols = 0;
+  lastSentRows = 0;
+  ptyInputGate.reset();
 
   const t = ensureTerminal();
   if (!t) return;
 
   t.reset();
   t.focus();
+  fitAddon?.fit();
+  const fitted = currentTerminalSize();
+  const spawnCols = fitted.cols > 0 ? fitted.cols : cols;
+  const spawnRows = fitted.rows > 0 ? fitted.rows : rows;
 
   if (tab.sessionId) {
     const alive = await isTerminalSessionAlive(tab.sessionId);
@@ -404,8 +454,8 @@ export async function attachTerminalTab(
   try {
     const created = await createTerminalSession({
       shellProfileId: tab.shellProfileId,
-      cols,
-      rows,
+      cols: spawnCols,
+      rows: spawnRows,
       chatId: tab.chatId ?? null,
       cwd: tab.boundCwd,
     });
@@ -453,8 +503,7 @@ export function insertTextAtTerminalInput(text: string): void {
   if (!t) return;
   t.focus();
   if (activeWs?.readyState === WebSocket.OPEN) {
-    trackLineBufferInput(text);
-    sendPtyInput(text);
+    ptyInputGate.handleInput(text);
   }
 }
 
@@ -473,6 +522,10 @@ export function setTerminalSessionEndedHandler(
 
 export function disposeTerminalXterm(): void {
   disconnectWs();
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = null;
+  }
   resizeObserver?.disconnect();
   resizeObserver = null;
   term?.dispose();

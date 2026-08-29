@@ -15,6 +15,7 @@ import {
   resolvePtySpawnForProfile,
 } from './shell-profiles.js';
 import { resolveShellProfileId, readTerminalShellConfig } from './shell-config.js';
+import { buildPtySpawnEnv } from './pty-env.js';
 
 const MAX_SESSIONS = 8;
 const MAX_SCROLLBACK_BYTES = 512 * 1024;
@@ -151,10 +152,10 @@ export async function createPtySession(options) {
   const cwd = options.cwd;
   const spawnTarget = resolvePtySpawnForProfile(profile, cwd);
 
-  const env = {
-    ...process.env,
-    MINNOW_WORKSPACE_ROOT: cwd,
-  };
+  const env = buildPtySpawnEnv(process.env, {
+    term: 'xterm-256color',
+    workspaceRoot: cwd,
+  });
 
   const ptyProcess = pty.spawn(spawnTarget.shell, spawnTarget.args, {
     name: 'xterm-256color',

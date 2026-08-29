@@ -167,7 +167,7 @@ export function resolveProfiles(platform, options = {}) {
       id: 'zsh',
       label: 'zsh',
       shell: '/bin/zsh',
-      args: ['-l'],
+      args: ['-il'],
       platform: 'darwin',
       runtime: 'native',
     });
@@ -175,7 +175,7 @@ export function resolveProfiles(platform, options = {}) {
       id: 'bash',
       label: 'bash',
       shell: '/bin/bash',
-      args: ['-l'],
+      args: ['-il'],
       platform: 'darwin',
       runtime: 'native',
     });
@@ -186,7 +186,7 @@ export function resolveProfiles(platform, options = {}) {
     id: 'bash',
     label: 'bash',
     shell: '/bin/bash',
-    args: ['-l'],
+    args: ['-il'],
     platform: 'linux',
     runtime: 'native',
   });

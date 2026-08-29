@@ -7,6 +7,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import pty from '@lydell/node-pty';
 import {
   HISTORY_LINE_CLEAR,
@@ -14,6 +15,8 @@ import {
 } from '../../src/ui/terminal-history-nav.ts';
 
 const isWin = process.platform === 'win32';
+const isDarwin = process.platform === 'darwin';
+const hasZsh = fs.existsSync('/bin/zsh');
 
 /** Wait until PTY output matches `pred`, or fail with a trailing snippet. */
 function waitForOutput(
@@ -112,6 +115,77 @@ describe('terminal HISTORY_LINE_CLEAR PTY (MIN-670)', { skip: isWin }, () => {
         'native ArrowUp must not inject Ctrl+A/Ctrl+K caret notation',
       );
       assert.match(recalled, /minnow-hist-native/);
+    } finally {
+      try {
+        proc.kill();
+      } catch {
+        /* already exited */
+      }
+    }
+  });
+
+  it('zsh echoes CSI ArrowUp as ^[[A when it arrives before the next zle prompt', { skip: !isDarwin || !hasZsh }, async () => {
+    const histFile = '/tmp/minnow-min670-zsh-hist-test';
+    const proc = pty.spawn('/bin/zsh', ['-f', '-i'], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd: '/tmp',
+      env: {
+        TERM: 'xterm-256color',
+        HISTFILE: histFile,
+        PS1: 'TESTPROMPT% ',
+        PROMPT: 'TESTPROMPT% ',
+      },
+    });
+
+    try {
+      proc.write('export PS1="TESTPROMPT% " PROMPT="TESTPROMPT% "\r');
+      await waitForOutput(proc, (s) => s.includes('TESTPROMPT%'), 5000);
+      proc.write('echo minnow-zsh-race\r');
+      await waitForOutput(proc, (s) => s.includes('minnow-zsh-race'), 5000);
+
+      // Same race the SPA hits: xterm parses the prompt asynchronously, so the
+      // key can land while zsh is still in cooked mode and echoctl paints ^[[A.
+      const immediate = await collectAfterWrite(proc, '\x1b[A', 700);
+      assert.match(
+        immediate,
+        /\^\[\[A/,
+        'expected cooked-mode caret echo of CSI ArrowUp before zle restarts',
+      );
+    } finally {
+      try {
+        proc.kill();
+      } catch {
+        /* already exited */
+      }
+    }
+  });
+
+  it('zsh recalls history from CSI ArrowUp once bracketed paste is back on', { skip: !hasZsh }, async () => {
+    const proc = pty.spawn('/bin/zsh', ['-f', '-i'], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd: '/tmp',
+      env: {
+        TERM: 'xterm-256color',
+        HISTFILE: '/tmp/minnow-min670-zsh-hist-ready',
+        PS1: 'TESTPROMPT% ',
+        PROMPT: 'TESTPROMPT% ',
+      },
+    });
+
+    try {
+      proc.write('export PS1="TESTPROMPT% " PROMPT="TESTPROMPT% "\r');
+      await waitForOutput(proc, (s) => s.includes('TESTPROMPT%'), 5000);
+      proc.write('echo minnow-zsh-ready\r');
+      await waitForOutput(proc, (s) => s.includes('\x1b[?2004h'), 5000);
+      await new Promise((r) => setTimeout(r, 80));
+
+      const recalled = await collectAfterWrite(proc, '\x1b[A', 700);
+      assert.doesNotMatch(recalled, /\^\[\[A/);
+      assert.match(recalled, /minnow-zsh-ready/);
     } finally {
       try {
         proc.kill();
