@@ -18,10 +18,11 @@ import {
   iconButton,
   textButton,
 } from './dom';
-import { showModelInInspector } from './inspector';
+import { showServeInInspector } from './inspector';
 import { serveFailureBlock } from './serve-failure-view';
 import {
   attentionServes,
+  getInspectedServe,
   getModelsState,
   refreshModels,
   retryServe,
@@ -31,6 +32,11 @@ import {
   type LoadProgress,
 } from './store';
 import type { ServeActivity } from '../../models/api-client';
+import { serveActivityChipLabels } from '../../models/serve-activity-chips';
+import {
+  getInFlightPromptOverlay,
+  subscribeInFlightPromptOverlay,
+} from '../../models/in-flight-prompt';
 
 /** OpenAI-compatible surface llama-server exposes. */
 const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
@@ -42,6 +48,7 @@ const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
 ];
 
 let bound = false;
+let overlayUnsub: (() => void) | null = null;
 let logSource: string | null = null;
 let logUnsub: (() => void) | null = null;
 let logBuffer = '';
@@ -228,6 +235,7 @@ function loadMetaText(load: LoadProgress): string {
 /**
  * Update percent / phase / bar on an existing loading card without replacing it.
  * Recreating the node restarts `models-spin` (0.7s) every load tick (~250ms).
+ * The fill uses `--progress` + scaleX so ticks do not animate layout width.
  */
 function applyLoadProgress(
   card: HTMLElement,
@@ -256,11 +264,13 @@ function applyLoadProgress(
   const percent = shownLoadPercent(load);
   if (percent != null) {
     fill.classList.remove('is-indeterminate');
-    const width = `${Math.min(100, percent)}%`;
-    if (fill.style.width !== width) fill.style.width = width;
+    const progress = String(Math.min(100, percent) / 100);
+    if (fill.style.getPropertyValue('--progress') !== progress) {
+      fill.style.setProperty('--progress', progress);
+    }
   } else if (!fill.classList.contains('is-indeterminate')) {
     fill.classList.add('is-indeterminate');
-    fill.style.removeProperty('width');
+    fill.style.removeProperty('--progress');
   }
 }
 
@@ -295,6 +305,20 @@ function tryPatchInFlightLoads(
     );
   }
   return true;
+}
+
+/**
+ * Local Server cards open the inspector by serve id. Buttons inside the card
+ * keep their own handlers; the card itself is not a button so Eject / Cancel
+ * stay valid nested controls.
+ */
+function makeServeCardSelectable(card: HTMLElement, serveId: string): void {
+  card.classList.add('is-selectable');
+  if (getInspectedServe()?.id === serveId) card.classList.add('is-selected');
+  card.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    showServeInInspector(serveId);
+  });
 }
 
 function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLElement {
@@ -364,49 +388,34 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
     // A 0-width modelled bar reads as stuck. Stay indeterminate until the model
     // has moved off the spawning floor.
     const percent = shownLoadPercent(load);
-    if (percent != null) fill.style.width = `${Math.min(100, percent)}%`;
-    else fill.classList.add('is-indeterminate');
+    if (percent != null) {
+      fill.style.setProperty('--progress', String(Math.min(100, percent) / 100));
+    } else {
+      fill.classList.add('is-indeterminate');
+    }
     track.appendChild(fill);
     card.appendChild(track);
   }
+  makeServeCardSelectable(card, serve?.id ?? load.serveId);
   return card;
 }
 
-/** `1.2k` / `917` — token counts read at a glance without a jumping column width. */
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 10_000) return `${Math.round(tokens / 1000)}k`;
-  if (tokens >= 1_000) return `${(tokens / 1000).toFixed(1)}k`;
-  return String(tokens);
-}
-
 /**
- * One chip per working slot, plus `Ready` when nothing is.
- *
- * Prompt processing shows a token *count*, not a percentage: `/slots` reports the same
- * running number in `n_prompt_tokens` and `n_prompt_tokens_processed` during prefill, so
- * there is no total to divide by. Inventing one would be the only way to show a percent
- * here, and a made-up bar is worse than an honest counter.
+ * One chip per working slot, Ready when idle, plus queue depth when the host
+ * is deferring requests. Copy lives in {@link serveActivityChipLabels}.
  */
 function activityChips(activity: ServeActivity | undefined): HTMLElement[] {
-  if (!activity?.available) return [el('span', 'models-loaded__state is-ready', 'Ready')];
-
-  const busy = activity.slots.filter((slot) => slot.state !== 'idle');
-  if (!busy.length) {
-    const chipEl = el('span', 'models-loaded__state is-ready', 'Ready');
-    // A saturated server stops answering /slots. Say the reading is old rather than
-    // claim it is idle.
-    if (activity.stale) chipEl.textContent = 'Ready · stale';
-    return [chipEl];
-  }
-
-  return busy.map((slot) => {
-    const chipEl = el('span', 'models-loaded__state is-busy');
-    if (slot.state === 'prompt') {
-      chipEl.textContent = `${slot.id} PP ${formatTokenCount(slot.promptProcessed)} tok`;
-    } else {
-      chipEl.textContent = `${slot.id} GEN ${formatTokenCount(slot.decoded)} tok`;
+  return serveActivityChipLabels(activity, getInFlightPromptOverlay()).map((label) => {
+    const queued = /\bqueued$/i.test(label);
+    const ready = /^Ready/i.test(label);
+    const chipEl = el(
+      'span',
+      `models-loaded__state${queued ? ' is-queued' : ready ? ' is-ready' : ' is-busy'}`,
+      label,
+    );
+    if (!queued && !ready) {
+      chipEl.appendChild(el('span', 'models-spinner'));
     }
-    chipEl.appendChild(el('span', 'models-spinner'));
     return chipEl;
   });
 }
@@ -468,15 +477,7 @@ function loadedCard(serve: ServeRecord): HTMLElement {
 
   card.appendChild(copyField(serve.baseUrl, 'Copy base URL'));
 
-  // Selecting the row wires the inspector to the matching library entry.
-  const model = getModelsState().library.find((m) => m.path === serve.modelPath);
-  if (model) {
-    card.addEventListener('click', (event) => {
-      if ((event.target as HTMLElement).closest('button')) return;
-      showModelInInspector(model.id);
-    });
-    card.classList.add('is-selectable');
-  }
+  makeServeCardSelectable(card, serve.id);
   return card;
 }
 
@@ -541,6 +542,8 @@ function attentionCard(serve: ServeRecord): HTMLElement {
     if (serve.error) bits.push(serve.error);
     card.appendChild(el('p', 'models-loaded__meta', bits.join(' · ')));
   }
+
+  makeServeCardSelectable(card, serve.id);
   return card;
 }
 
@@ -703,6 +706,9 @@ export function mountServerSection(): void {
     subscribeModelsStore(() => {
       if (isActive()) render();
     });
+    overlayUnsub = subscribeInFlightPromptOverlay(() => {
+      if (isActive()) render();
+    });
   }
   render();
   void refreshModels();
@@ -721,6 +727,8 @@ export function teardownServerSection(): void {
   logUnsub?.();
   logUnsub = null;
   logSource = null;
+  overlayUnsub?.();
+  overlayUnsub = null;
   if (elapsedTimer != null) window.clearInterval(elapsedTimer);
   elapsedTimer = null;
 }

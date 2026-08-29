@@ -60,7 +60,7 @@ describe('models local server loading card', () => {
     const fill = document.querySelector('.models-progress__fill') as HTMLElement | null;
     assert.ok(fill);
     assert.equal(fill?.classList.contains('is-indeterminate'), false);
-    assert.equal(fill?.style.width, '42%');
+    assert.equal(fill?.style.getPropertyValue('--progress'), '0.42');
     assert.match(document.querySelector('.models-loaded__meta')?.textContent ?? '', /Loading weights/);
   });
 

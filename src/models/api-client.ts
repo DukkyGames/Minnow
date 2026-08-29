@@ -609,6 +609,11 @@ export interface ServeActivity {
   available: boolean;
   /** The last sample is too old to trust — a saturated server stops answering. */
   stale: boolean;
+  /**
+   * llama.cpp deferred requests waiting for a free slot (`requests_deferred`).
+   * Zero when `/metrics` is unavailable or the host is not backed up.
+   */
+  queued: number;
   slots: ServeActivitySlot[];
 }
 

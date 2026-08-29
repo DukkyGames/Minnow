@@ -15,6 +15,7 @@ import {
   getServeActivity,
   listServeActivity,
   normalizeSlots,
+  parseLlamaCppDeferred,
   resetServeActivityFetchForTests,
   setServeActivityFetchForTests,
   startServeActivity,
@@ -162,29 +163,78 @@ describe('normalizeSlots', () => {
   });
 });
 
+describe('parseLlamaCppDeferred', () => {
+  it('reads the colon-form gauge llama.cpp prints', () => {
+    const text = [
+      '# HELP llamacpp:requests_deferred Number of requests deferred.',
+      '# TYPE llamacpp:requests_deferred gauge',
+      'llamacpp:requests_deferred 3',
+    ].join('\n');
+    assert.equal(parseLlamaCppDeferred(text), 3);
+  });
+
+  it('reads the underscore form and labelled gauges', () => {
+    assert.equal(parseLlamaCppDeferred('llamacpp_requests_deferred{host="x"} 2\n'), 2);
+  });
+
+  it('returns 0 when the gauge is missing or the body is not text', () => {
+    assert.equal(parseLlamaCppDeferred('llamacpp:requests_processing 1\n'), 0);
+    assert.equal(parseLlamaCppDeferred(null), 0);
+    assert.equal(parseLlamaCppDeferred(''), 0);
+  });
+});
+
+function slotsFetch(slots, metricsBody = 'llamacpp:requests_deferred 0\n') {
+  return async (url) => {
+    const href = String(url);
+    if (href.includes('/metrics')) {
+      return { ok: true, text: async () => metricsBody };
+    }
+    return { ok: true, json: async () => slots };
+  };
+}
+
 describe('the /slots poller', () => {
   it('publishes a normalised sample for a running serve', async () => {
     stopAllServeActivity();
-    setServeActivityFetchForTests(async () => ({
-      ok: true,
-      json: async () => [
-        {
-          id: 0,
-          is_processing: true,
-          id_task: 42,
-          n_prompt_tokens_processed: 2048,
-          next_token: [{ n_remain: 0, n_decoded: 0 }],
-        },
-      ],
-    }));
+    setServeActivityFetchForTests(
+      slotsFetch(
+        [
+          {
+            id: 0,
+            is_processing: true,
+            id_task: 42,
+            n_prompt_tokens_processed: 2048,
+            next_token: [{ n_remain: 0, n_decoded: 0 }],
+          },
+        ],
+        'llamacpp:requests_deferred 0\n',
+      ),
+    );
 
     startServeActivity({ id: 'serve-a', baseUrl: 'http://127.0.0.1:9999', runtime: 'llama-cpp' });
     const activity = await nextActivity();
     assert.equal(activity.serveId, 'serve-a');
     assert.equal(activity.available, true);
     assert.equal(activity.stale, false);
+    assert.equal(activity.queued, 0);
     assert.equal(activity.slots[0].state, 'prompt');
     assert.equal(activity.slots[0].promptProcessed, 2048);
+    stopAllServeActivity();
+  });
+
+  it('surfaces llama.cpp deferred requests as queue depth', async () => {
+    stopAllServeActivity();
+    setServeActivityFetchForTests(
+      slotsFetch(
+        [{ id: 0, is_processing: true, id_task: 1, next_token: [{ n_remain: 10, n_decoded: 4 }] }],
+        'llamacpp:requests_deferred 2\n',
+      ),
+    );
+
+    startServeActivity({ id: 'serve-q', baseUrl: 'http://127.0.0.1:9999', runtime: 'llama-cpp' });
+    const activity = await nextActivity();
+    assert.equal(activity.queued, 2);
     stopAllServeActivity();
   });
 
@@ -205,10 +255,14 @@ describe('the /slots poller', () => {
 
   it('keeps the last good sample when a later poll fails', async () => {
     stopAllServeActivity();
-    let calls = 0;
-    setServeActivityFetchForTests(async () => {
-      calls += 1;
-      if (calls > 1) throw new Error('busy');
+    let slotPolls = 0;
+    setServeActivityFetchForTests(async (url) => {
+      const href = String(url);
+      if (href.includes('/metrics')) {
+        return { ok: true, text: async () => 'llamacpp:requests_deferred 1\n' };
+      }
+      slotPolls += 1;
+      if (slotPolls > 1) throw new Error('busy');
       return {
         ok: true,
         json: async () => [
@@ -218,8 +272,21 @@ describe('the /slots poller', () => {
     });
 
     startServeActivity({ id: 'serve-c', baseUrl: 'http://127.0.0.1:9999', runtime: 'llama-cpp' });
-    await nextActivity();
-    const afterFailure = await nextActivity(3_000);
+    const first = await nextActivity();
+    assert.equal(first.stale, false);
+    // subscribeServeActivity replays the last sample; ignore that and wait for the failed poll.
+    const afterFailure = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        unsubscribe();
+        reject(new Error('stale sample never published'));
+      }, 3_000);
+      const unsubscribe = subscribeServeActivity((activity) => {
+        if (!activity.stale) return;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(activity);
+      });
+    });
     assert.equal(afterFailure.stale, true);
     assert.equal(afterFailure.slots[0].decoded, 12, 'last good sample is kept, not discarded');
     stopAllServeActivity();

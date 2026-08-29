@@ -50,6 +50,7 @@ const STALE_AFTER_MS = 10_000;
  * @property {number} updatedAt
  * @property {boolean} available `/slots` answered at least once.
  * @property {boolean} stale The last sample is too old to trust.
+ * @property {number} queued llama.cpp deferred requests (`requests_deferred` from `/metrics`).
  * @property {ServeActivitySlot[]} slots
  */
 
@@ -160,6 +161,28 @@ export function normalizeSlots(raw, prev, now) {
 }
 
 /**
+ * Read llama.cpp's deferred-request gauge from Prometheus `/metrics` text.
+ * Upstream emits `llamacpp:requests_deferred`; some exporters use underscores.
+ *
+ * @param {unknown} text
+ * @returns {number}
+ */
+export function parseLlamaCppDeferred(text) {
+  if (typeof text !== 'string' || !text) return 0;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const match = line.match(
+      /^llamacpp(?::|_)requests_deferred(?:\{[^}]*\})?\s+([0-9]+(?:\.[0-9]+)?)\b/,
+    );
+    if (!match) continue;
+    const n = Number(match[1]);
+    return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+  }
+  return 0;
+}
+
+/**
  * One `/slots` request. Resolves to null on any failure — including a timeout, which
  * on this endpoint usually means the server is too busy to answer, not that it died.
  * @param {string} baseUrl
@@ -174,6 +197,28 @@ async function fetchSlots(baseUrl) {
     });
     if (!res.ok) return null;
     return await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * One `/metrics` request. Resolves to the raw Prometheus body, or null on failure.
+ * @param {string} baseUrl
+ * @returns {Promise<string | null>}
+ */
+async function fetchMetricsText(baseUrl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(`${baseUrl.replace(/\/+$/, '')}/metrics`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    if (typeof res.text === 'function') return await res.text();
+    return null;
   } catch {
     return null;
   } finally {
@@ -204,17 +249,32 @@ export function startServeActivity(serve) {
 
   const tick = async () => {
     if (entry.stopped) return;
-    const raw = await fetchSlots(serve.baseUrl);
+    const [raw, metricsText] = await Promise.all([
+      fetchSlots(serve.baseUrl),
+      fetchMetricsText(serve.baseUrl),
+    ]);
     if (entry.stopped) return;
 
     const now = Date.now();
+    // Keep the last deferred count when /metrics is silent — a saturated
+    // server often stops answering both endpoints together.
+    const queued =
+      metricsText != null ? parseLlamaCppDeferred(metricsText) : (entry.last?.queued ?? 0);
     let activity;
     if (raw == null) {
       // Keep the last good sample rather than flipping every panel to Ready. A busy
       // server that stopped answering is the exact case this must not misreport.
       activity = entry.last
-        ? { ...entry.last, stale: true }
-        : { serveId: serve.id, ...identity, updatedAt: now, available: false, stale: true, slots: [] };
+        ? { ...entry.last, queued, stale: true }
+        : {
+            serveId: serve.id,
+            ...identity,
+            updatedAt: now,
+            available: false,
+            stale: true,
+            queued,
+            slots: [],
+          };
     } else {
       activity = {
         serveId: serve.id,
@@ -222,6 +282,7 @@ export function startServeActivity(serve) {
         updatedAt: now,
         available: true,
         stale: false,
+        queued,
         slots: normalizeSlots(raw, entry.prev, now),
       };
     }
@@ -229,7 +290,8 @@ export function startServeActivity(serve) {
     entry.last = activity;
     publish(activity);
 
-    const busy = activity.slots.some((slot) => slot.state !== 'idle');
+    const busy =
+      activity.queued > 0 || activity.slots.some((slot) => slot.state !== 'idle');
     entry.timer = setTimeout(() => {
       void tick();
     }, busy && !activity.stale ? BUSY_INTERVAL_MS : IDLE_INTERVAL_MS);

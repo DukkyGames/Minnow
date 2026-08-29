@@ -22,9 +22,11 @@ Drafts survive switching chats.
 
 You do not have to sit still and wait.
 
-**Type your next message and press Enter.** It queues, and runs when the current turn settles. Useful when you already know the follow-up.
+**Type your next message and press Enter.** It queues, and runs when the current turn settles. The follow-up appears in the transcript as a muted **Queued** bubble (and in the compact strip above the composer) so it is not sent-and-forgotten. Edit, push it in as a steer, or delete it from either place. The bubble leaves as soon as that turn starts.
 
 **Steer instead, when the run is going wrong.** A correction sent mid-turn is injected at the next tool-loop boundary rather than aborting the stream — so the model gets "actually, use the existing helper" before it writes the next file, without losing the work it has already done. This is almost always better than stopping and re-prompting: stopping throws away the context the model had built up.
+
+On a local llama.cpp model the status line beside the assistant row shows a load percent while weights come up, a prefill percent while the prompt is ingested, then a live token count while it generates (including while it is calling a tool).
 
 **Stop** when the run is genuinely off the rails. The partial reply stays.
 

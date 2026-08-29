@@ -37,6 +37,7 @@ describe('attachToolStartIndicator', { concurrency: false }, () => {
     const handle = attachToolStartIndicator(row);
 
     handle.show('read_file');
+    row.streamStatus.setRuntimeDetail('128 tokens');
 
     assert.equal(row.cursor.style.display, 'none');
     const status = row.wrap.querySelector('.stream-status');
@@ -48,6 +49,23 @@ describe('attachToolStartIndicator', { concurrency: false }, () => {
     assert.ok(indicator?.querySelector('.tool-call-spinner'));
     const label = indicator?.querySelector('.tool-start-indicator__label');
     assert.equal(label?.textContent, 'Calling Read file…');
+    const detail = row.wrap.querySelector('.tool-start-indicator__detail');
+    assert.equal(detail?.textContent?.trim(), '128 tokens');
+
+    handle.dispose();
+    row.streamStatus.dispose();
+  });
+
+  test('show() copies a token count already painted on stream-status', () => {
+    setupDom();
+    const row = makeStreamingRow();
+    const handle = attachToolStartIndicator(row);
+
+    row.streamStatus.setRuntimeDetail('64 tokens');
+    handle.show('read_file');
+
+    const detail = row.wrap.querySelector('.tool-start-indicator__detail');
+    assert.equal(detail?.textContent?.trim(), '64 tokens');
 
     handle.dispose();
     row.streamStatus.dispose();

@@ -7,7 +7,8 @@
  * the bar is *modelled*, not scraped:
  *
  * - the log pins which phase we are in, and each phase owns a floor and a ceiling;
- * - inside that band, an elapsed-time / bytes-per-ms model does the moving;
+ * - inside that band, elapsed time climbs even without a rate prior;
+ * - skipped phase markers ease toward the new floor instead of snapping;
  * - the caller holds the result monotonic and only ever reaches 100 on a healthy probe.
  *
  * Pure and I/O-free so the arithmetic is testable without spawning a server.
@@ -204,6 +205,7 @@ export function updateLoadRate(previousBytesPerMs, sample) {
  * @property {number} [weightsBytes] Size of the weights being loaded.
  * @property {number} [bytesPerMs] From `resolveBytesPerMs`; 0 disables the time model.
  * @property {number | null} [previousPercent] Last value shown, to hold the bar monotonic.
+ * @property {number | null} [lastElapsedMs] Elapsed ms on the previous tick, so skipped-phase catch-up can be rate-limited.
  * @property {number | null} [reportedPercent] A real percentage from the runtime, if a
  *   future build ever prints one. Always wins over the model. Null/undefined means
  *   none — `Number(null)` is 0 and must not be treated as a reported value.
@@ -218,6 +220,51 @@ export function updateLoadRate(previousBytesPerMs, sample) {
  * @property {number | null} etaMs Remaining time, or null when there is no usable model.
  * @property {boolean} modelled False when the number came from the runtime itself.
  */
+
+/**
+ * Typical wall time for a first load with no rate prior. Only used to pace the
+ * climb inside the current phase band — it is not shown as an ETA.
+ */
+const DEFAULT_LOAD_MS = 25_000;
+
+/**
+ * When the log skips a phase (fitting 4% then offload at 70%), ease toward the
+ * new floor over this window instead of snapping.
+ */
+const PHASE_CATCHUP_MS = 600;
+
+/** Worst skip we smooth (fitting floor → offload floor). */
+const PHASE_CATCHUP_SPAN = 70;
+
+/**
+ * Elapsed-time climb inside the current band when we have no rate prior.
+ *
+ * Do not subtract an assumed duration for skipped phases: a small GGUF can print
+ * a KV-cache line at 4s, and waiting out 78% of DEFAULT_LOAD_MS would pin the
+ * bar on the context floor until 19s. Scale the band width across the whole
+ * typical load so consecutive ticks still rise.
+ *
+ * @param {{ floor: number, ceiling: number }} phase
+ * @param {number} elapsedMs
+ */
+function climbInsidePhase(phase, elapsedMs) {
+  const t = DEFAULT_LOAD_MS > 0 ? Math.min(0.999, Math.max(0, elapsedMs) / DEFAULT_LOAD_MS) : 0;
+  return phase.floor + (phase.ceiling - phase.floor) * t;
+}
+
+/**
+ * Cap a jump toward a later phase floor so skipped log markers do not snap.
+ * @param {number} previous
+ * @param {number} target
+ * @param {number} dtMs
+ */
+function easeToward(previous, target, dtMs) {
+  const span = target - previous;
+  if (span <= 0) return target;
+  if (!(dtMs > 0)) return previous;
+  const maxRise = (PHASE_CATCHUP_SPAN / PHASE_CATCHUP_MS) * dtMs;
+  return previous + Math.min(span, maxRise);
+}
 
 /**
  * One tick of the bar.
@@ -248,17 +295,23 @@ export function computeLoadProgress(input) {
   }
 
   const elapsedMs = Math.max(0, Number(input.elapsedMs) || 0);
+  const lastElapsedMs = Number(input.lastElapsedMs);
+  // First tick has no prior sample: treat elapsed as the delta so a late first
+  // paint (tab was in the background) can catch up instead of sitting at 0.
+  const dtMs = Number.isFinite(lastElapsedMs) ? Math.max(0, elapsedMs - lastElapsedMs) : elapsedMs;
   const weightsBytes = positive(input.weightsBytes);
   const bytesPerMs = positive(input.bytesPerMs);
   const predictedTotalMs = weightsBytes > 0 && bytesPerMs > 0 ? weightsBytes / bytesPerMs : 0;
 
-  // Without a rate prior the phase floor is the whole story: the bar steps between
-  // waypoints instead of sweeping, which is honest rather than a fabricated crawl.
+  // A rate prior sweeps the whole 0–100 from elapsed/total, then the phase band
+  // fences it. Without a prior the bar still climbs inside the current band so
+  // fitting is not stuck at 4% until the next log line (often offload at 70%).
   const modelledPercent =
-    predictedTotalMs > 0 ? (elapsedMs / predictedTotalMs) * 100 : phase.floor;
+    predictedTotalMs > 0 ? (elapsedMs / predictedTotalMs) * 100 : climbInsidePhase(phase, elapsedMs);
 
   const banded = Math.min(phase.ceiling, Math.max(phase.floor, modelledPercent));
-  const percent = capped(Math.max(banded, floorFromPrevious));
+  const target = capped(Math.max(banded, floorFromPrevious));
+  const percent = capped(easeToward(floorFromPrevious, target, dtMs));
 
   return {
     percent,
@@ -270,6 +323,18 @@ export function computeLoadProgress(input) {
       predictedTotalMs > elapsedMs ? Math.round(predictedTotalMs - elapsedMs) : null,
     modelled: true,
   };
+}
+
+/**
+ * Compact percent for chips and chat (`37%`). Empty until the model has left 0
+ * so the first paint is not a stuck "Loading 0%".
+ * @param {unknown} percent
+ * @returns {string}
+ */
+export function formatLoadPercentLabel(percent) {
+  const n = Number(percent);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return `${Math.round(n)}%`;
 }
 
 /**

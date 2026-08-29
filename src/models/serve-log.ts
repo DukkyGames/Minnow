@@ -76,13 +76,23 @@ export function classifyLogLine(line: string): LogLevel {
 }
 
 /**
- * Split a log blob into rendered lines, dropping a trailing partial write and
- * capping history so a long-running server cannot grow the DOM without bound.
+ * Split a log blob into rendered lines, dropping idle-slot heartbeats and a
+ * trailing partial write, then capping history so a long-running server cannot
+ * grow the DOM without bound. Idle lines are filtered *before* the cap so they
+ * cannot shove real `I srv` lines off the buffer.
  */
 export function toLogLines(text: string, maxLines = 500): string[] {
-  const lines = text.split(/\r?\n/);
+  const lines = text.split(/\r?\n/).filter((line) => !isIdleSlotLogLine(line));
   if (lines.length > maxLines) lines.splice(0, lines.length - maxLines);
   return lines;
+}
+
+/** llama-server prints this on a timer while nothing is in a slot. */
+const IDLE_SLOT_LINE = /update_slots:\s*all slots are idle/i;
+
+/** True for the idle-slot heartbeat that otherwise drowns the Local Server log. */
+export function isIdleSlotLogLine(line: string): boolean {
+  return IDLE_SLOT_LINE.test(line);
 }
 
 /**
