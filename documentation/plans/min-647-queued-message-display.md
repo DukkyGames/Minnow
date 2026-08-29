@@ -1,6 +1,7 @@
 # MIN-647 — Queued message display
 
-**Status:** in progress  
+**Status:** done  
+
 **Issue:** [MIN-647](https://linear.app/minnowai/issue/MIN-647/add-queued-message-display) / [HenriGrimm/Minnow#922](https://github.com/HenriGrimm/Minnow/issues/922)  
 **Overlaps:** [MIN-587](https://linear.app/minnowai/issue/MIN-587) item 2 (Local Server queue indicator — implement once)
 
