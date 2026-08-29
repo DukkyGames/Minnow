@@ -77,11 +77,14 @@ describe('MIN-B10 cascade propagation', () => {
 
   after(async () => {
     shutdownAllLsp();
+    // Let fake-lsp child handles close on Windows before temp dir removal (UV_HANDLE_CLOSING).
+    await new Promise((resolve) => setTimeout(resolve, 200));
     closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
-    await fs.writeFile(path.join(PROJECT_ROOT, SAMPLE_PATH), SAMPLE_TEXT, 'utf8');
+    // Restore the tracked fixture — SAMPLE_TEXT is this suite's seed, not the repo default.
+    await fs.writeFile(path.join(PROJECT_ROOT, SAMPLE_PATH), 'let x = 1\n', 'utf8');
   });
 
   it('reindex through cascade marks anchored page stale when symbol span changes', async () => {
