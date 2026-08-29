@@ -1034,8 +1034,8 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   const probesBlocked = needsLoadedModel && !loadedModelId;
 
   const probeHint = needsLoadedModel
-    ? 'On LM Studio, both probes require at least one loaded model. Model probe runs chat checks on up to 8 loaded models (tools/streaming/vision). Structured-output probe tests JSON Schema response_format. Neither runs on refresh.'
-    : 'Model probe checks tools, streaming, and vision (up to 8 models). Structured-output probe tests JSON Schema response_format on one catalog model. Neither runs on refresh.';
+    ? 'On LM Studio, both probes require at least one loaded model. Loading a model also probes vision, tools, and streaming automatically. Manual model probe runs chat checks on up to 8 loaded models. Structured-output probe tests JSON Schema response_format. Neither manual probe runs on refresh.'
+    : 'Selecting a model probes vision, tools, and streaming in the background — including cloud APIs (the model you pick, not the whole catalog). Manual model probe checks up to 8 models. Structured-output probe tests JSON Schema response_format on one catalog model. Neither manual probe runs on refresh.';
   form.append(el('p', 'field-hint', probeHint));
   form.append(
     createSettingsActionsRow(
@@ -1416,6 +1416,7 @@ function bindProvidersListActions(listEl: HTMLElement): void {
           await runCapabilityProbeForProvider(modelProbeId, {
             selectedModelId,
             apiKind: provider?.apiKind,
+            manual: true,
           });
           setStatus('ok', `Model capabilities probed for ${modelProbeId}`);
           await renderProvidersSettingsSection();
