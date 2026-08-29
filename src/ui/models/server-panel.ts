@@ -31,6 +31,7 @@ import {
   type LoadProgress,
 } from './store';
 import type { ServeActivity } from '../../models/api-client';
+import { serveActivityChipLabels } from '../../models/serve-activity-chips';
 
 /** OpenAI-compatible surface llama-server exposes. */
 const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
@@ -274,41 +275,22 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
   return card;
 }
 
-/** `1.2k` / `917` — token counts read at a glance without a jumping column width. */
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 10_000) return `${Math.round(tokens / 1000)}k`;
-  if (tokens >= 1_000) return `${(tokens / 1000).toFixed(1)}k`;
-  return String(tokens);
-}
-
 /**
- * One chip per working slot, plus `Ready` when nothing is.
- *
- * Prompt processing shows a token *count*, not a percentage: `/slots` reports the same
- * running number in `n_prompt_tokens` and `n_prompt_tokens_processed` during prefill, so
- * there is no total to divide by. Inventing one would be the only way to show a percent
- * here, and a made-up bar is worse than an honest counter.
+ * One chip per working slot, Ready when idle, plus queue depth when the host
+ * is deferring requests. Copy lives in {@link serveActivityChipLabels}.
  */
 function activityChips(activity: ServeActivity | undefined): HTMLElement[] {
-  if (!activity?.available) return [el('span', 'models-loaded__state is-ready', 'Ready')];
-
-  const busy = activity.slots.filter((slot) => slot.state !== 'idle');
-  if (!busy.length) {
-    const chipEl = el('span', 'models-loaded__state is-ready', 'Ready');
-    // A saturated server stops answering /slots. Say the reading is old rather than
-    // claim it is idle.
-    if (activity.stale) chipEl.textContent = 'Ready · stale';
-    return [chipEl];
-  }
-
-  return busy.map((slot) => {
-    const chipEl = el('span', 'models-loaded__state is-busy');
-    if (slot.state === 'prompt') {
-      chipEl.textContent = `${slot.id} PP ${formatTokenCount(slot.promptProcessed)} tok`;
-    } else {
-      chipEl.textContent = `${slot.id} GEN ${formatTokenCount(slot.decoded)} tok`;
+  return serveActivityChipLabels(activity).map((label) => {
+    const queued = /\bqueued$/i.test(label);
+    const ready = /^Ready/i.test(label);
+    const chipEl = el(
+      'span',
+      `models-loaded__state${queued ? ' is-queued' : ready ? ' is-ready' : ' is-busy'}`,
+      label,
+    );
+    if (!queued && !ready) {
+      chipEl.appendChild(el('span', 'models-spinner'));
     }
-    chipEl.appendChild(el('span', 'models-spinner'));
     return chipEl;
   });
 }

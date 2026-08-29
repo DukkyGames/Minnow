@@ -378,6 +378,10 @@ async function loadServes() {
     servesCache = [];
   }
   await reconcileInterruptedServes();
+  // Restored running serves often skip commitServes (status unchanged). Still
+  // start /slots + /metrics pollers so Local Server is not blank until the
+  // next heartbeat write.
+  reconcileServeActivityPollers();
   ensureServeHeartbeat();
   ensureMlxCrashWatch();
 }

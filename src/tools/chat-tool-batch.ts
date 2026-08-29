@@ -20,7 +20,7 @@ import {
   sessionState,
 } from '../state/sessions.ts';
 import type { Chat, ToolCall, TurnRunId } from '../types.ts';
-import { getActiveChatMountElement } from '../ui/chat-mount.ts';
+import { appendChatTranscriptNode, getActiveChatMountElement } from '../ui/chat-mount.ts';
 import { scrollChatIfPinned } from '../ui/chat-scroll.ts';
 import { attachShellKillUi } from '../ui/shell-run-ui.ts';
 import type { ThoughtBubbleController } from '../ui/thought-bubbles.ts';
@@ -291,7 +291,7 @@ export async function runChatToolBatch(
     );
 
     if (paintInChat && !options.ensureToolWrap) {
-      area.appendChild(toolWrap);
+      appendChatTranscriptNode(toolWrap, area);
     }
   }
 

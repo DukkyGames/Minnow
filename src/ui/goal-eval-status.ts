@@ -6,7 +6,7 @@ import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { getGoalEvalSession } from '../chat/goal/eval-session';
 import { isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setSidebarStreamPhase, syncChatItemDotsInDom } from './chat-item-dot';
-import { getActiveChatMountElement } from './chat-mount';
+import { appendChatTranscriptNode } from './chat-mount';
 import { scrollChatIfPinned } from './chat-scroll';
 import { syncGoalActiveHint } from './goal-active-hint';
 import { syncLoopActiveHint } from './loop-active-hint';
@@ -70,7 +70,7 @@ function showGoalEvalStatusRow(chatId: string): void {
 
   row = buildGoalEvalStatusRow(chatId);
   statusRowByChatId.set(chatId, row);
-  getActiveChatMountElement().appendChild(row);
+  appendChatTranscriptNode(row);
   scrollChatIfPinned();
 }
 

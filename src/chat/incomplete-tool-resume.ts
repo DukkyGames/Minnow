@@ -22,7 +22,7 @@ import { findToolWrapInDom } from '../tools/tool-wrap-dom';
 
 import type { Chat } from '../types';
 
-import { getActiveChatMountElement } from '../ui/chat-mount';
+import { appendChatTranscriptNode } from '../ui/chat-mount';
 
 import { renderToolCall } from '../ui/tool-messages';
 
@@ -76,7 +76,7 @@ function ensureToolWrap(
 
   if (isStreamDomVisible(chat.id)) {
 
-    getActiveChatMountElement().appendChild(toolWrap);
+    appendChatTranscriptNode(toolWrap);
 
   }
 

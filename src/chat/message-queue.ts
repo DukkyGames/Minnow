@@ -13,6 +13,29 @@ import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 import { isChatTurnInProgress } from './chat-turn-guard';
 import { enqueueSteerMessage } from './steer-message';
 
+type QueueChangedListener = () => void;
+/**
+ * `var` is hoisted without a TDZ, unlike `let`. The composer UI used to
+ * register a listener while this module was still evaluating (sessions →
+ * composer-message-queue → here), which threw
+ * "Cannot access 'queueChangedListener' before initialization".
+ */
+var queueChangedListener: QueueChangedListener | null = null;
+
+/**
+ * UI registers here so a dequeue (turn start) can drop transcript bubbles
+ * immediately, rather than after the next turn finishes.
+ */
+export function setPendingMessageQueueChangedListener(
+  listener: QueueChangedListener | null,
+): void {
+  queueChangedListener = listener;
+}
+
+function notifyPendingMessageQueueChanged(): void {
+  queueChangedListener?.();
+}
+
 /** Return the chat queue array (empty when unset). */
 export function getPendingMessageQueue(chat: Chat): QueuedComposerMessage[] {
   return Array.isArray(chat.pendingMessageQueue) ? chat.pendingMessageQueue : [];
@@ -61,6 +84,7 @@ export function enqueueComposerMessage(chat: Chat, text: string): boolean {
   });
   touchChat(chat);
   scheduleSaveSessions();
+  notifyPendingMessageQueueChanged();
   return true;
 }
 
@@ -73,6 +97,7 @@ export function removeQueuedMessage(chat: Chat, id: string): boolean {
   chat.pendingMessageQueue = queue.length > 0 ? queue : undefined;
   touchChat(chat);
   scheduleSaveSessions();
+  notifyPendingMessageQueueChanged();
   return true;
 }
 
@@ -87,6 +112,7 @@ export function updateQueuedMessage(chat: Chat, id: string, text: string): boole
   chat.pendingMessageQueue = queue;
   touchChat(chat);
   scheduleSaveSessions();
+  notifyPendingMessageQueueChanged();
   return true;
 }
 
@@ -99,6 +125,7 @@ export function pushQueuedMessageNow(chat: Chat, id: string): boolean {
   chat.pendingMessageQueue = queue.length > 0 ? queue : undefined;
   touchChat(chat);
   scheduleSaveSessions();
+  notifyPendingMessageQueueChanged();
   if (!item) return false;
 
   if (isChatTurnInProgress(chat.id)) {
@@ -117,6 +144,7 @@ export function clearPendingMessageQueue(chat: Chat): void {
   chat.pendingMessageQueue = undefined;
   touchChat(chat);
   scheduleSaveSessions();
+  notifyPendingMessageQueueChanged();
 }
 
 /** Send the oldest queued follow-up as a new turn after streaming ends. */
@@ -127,6 +155,8 @@ export async function flushPendingMessageQueue(chat: Chat): Promise<void> {
   chat.pendingMessageQueue = queue.length > 0 ? queue : undefined;
   touchChat(chat);
   scheduleSaveSessions();
+  // Drop the queued bubble as the turn starts, not after it finishes.
+  notifyPendingMessageQueueChanged();
   if (!item?.text.trim()) return;
 
   const { resumeParentChatWithMessage } = await import('../tools/loop');
@@ -144,4 +174,5 @@ export function enqueueComposerMessageForTests(
   chat.pendingMessageQueue.push(item);
   touchChat(chat);
   scheduleSaveSessions();
+  notifyPendingMessageQueueChanged();
 }
