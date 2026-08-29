@@ -39,6 +39,12 @@ export function getOutputCapPolicy(): OutputCapPolicy;
 
 export function runWithOutputCapPolicy<T>(policy: OutputCapPolicy, fn: () => T): T;
 
+/** Node-only: swap in AsyncLocalStorage (called from output-cap-als.js). */
+export function installOutputCapStore(store: {
+  getStore: () => OutputCapPolicy | undefined;
+  run: <T>(policy: OutputCapPolicy, fn: () => T) => T;
+}): void;
+
 export function withFullResultFooterHint(hint: string, applyResultCap?: boolean): string;
 
 /** Cap a single output line to maxLineChars with trailing ellipsis. */

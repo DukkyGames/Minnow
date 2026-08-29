@@ -2,7 +2,9 @@
  * Shared output-cap helpers (MIN-345).
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_MAX_OUTPUT_CHARS,
   appendWithByteCap,
@@ -14,6 +16,12 @@ import {
 } from '../../server/tools/output-cap.js';
 
 describe('output-cap', () => {
+  it('does not import node:async_hooks (shared with the Vite SPA)', () => {
+    const path = fileURLToPath(new URL('../../server/tools/output-cap.js', import.meta.url));
+    const source = fs.readFileSync(path, 'utf8');
+    assert.doesNotMatch(source, /async_hooks/);
+  });
+
   it('capLineLength adds ellipsis for long lines', () => {
     const line = 'x'.repeat(500);
     const capped = capLineLength(line, 100);

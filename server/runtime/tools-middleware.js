@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import '../tools/output-cap-als.js';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from '../process-runner.js';
 import {
   MAX_READ_FILE_BYTES,

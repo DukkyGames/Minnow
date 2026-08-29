@@ -2,12 +2,14 @@
  * Shared output-size limits for server tools (MIN-345, MIN-667).
  * grep, process-backed tools, read_file, and git_diff share these ceilings.
  *
+ * This module is imported by the Vite SPA (defaults, Settings, terminal panel).
+ * Keep it free of `node:*` imports — Node AsyncLocalStorage lives in output-cap-als.js.
+ *
  * Product caps (chars/line, grep head, web bytes) are skippable via tools.json
  * `toolOutput.enabled` or per-call `full_result`. Memory guards (25 MB file,
  * 5 MB process capture) always apply.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { truncateUtf8 } from '../../src/lib/fetch-web-content.mjs';
 
 /** Default max characters returned to agents (UTF-16 code units). */
@@ -40,8 +42,49 @@ export const GREP_MAX_LINE_CHARS = DEFAULT_MAX_LINE_CHARS;
  * @typedef {{ applyResultCap: boolean, maxOutputChars: number, maxLineChars: number }} OutputCapPolicy
  */
 
-/** @type {AsyncLocalStorage<OutputCapPolicy>} */
-export const outputCapStore = new AsyncLocalStorage();
+/**
+ * Nested-call policy for the SPA and tests (sync callbacks).
+ * Concurrent overlapping async runs on Node use AsyncLocalStorage via installOutputCapStore.
+ * @type {OutputCapPolicy | undefined}
+ */
+let fallbackPolicy;
+
+/**
+ * @typedef {{ getStore: () => (OutputCapPolicy | undefined), run: (policy: OutputCapPolicy, fn: () => unknown) => unknown }} OutputCapStore
+ */
+
+/** @type {OutputCapStore} */
+let outputCapStore = {
+  getStore() {
+    return fallbackPolicy;
+  },
+  run(policy, fn) {
+    const previous = fallbackPolicy;
+    fallbackPolicy = policy;
+    try {
+      const result = fn();
+      // Keep policy until a thenable settles so a single await still sees this call's caps.
+      if (result && typeof result.then === 'function') {
+        return Promise.resolve(result).finally(() => {
+          fallbackPolicy = previous;
+        });
+      }
+      fallbackPolicy = previous;
+      return result;
+    } catch (err) {
+      fallbackPolicy = previous;
+      throw err;
+    }
+  },
+};
+
+/**
+ * Replace the in-module store with Node AsyncLocalStorage (see output-cap-als.js).
+ * @param {OutputCapStore} store
+ */
+export function installOutputCapStore(store) {
+  outputCapStore = store;
+}
 
 /**
  * True when the model asked to skip automatic size caps.
