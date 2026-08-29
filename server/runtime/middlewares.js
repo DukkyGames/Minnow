@@ -45,6 +45,7 @@ import { createGitMiddleware } from '../git/middleware.js';
 import { createWorktreeMiddleware } from '../worktree/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
 import { createOrchestrateMiddleware } from '../orchestrate/middleware.js';
+import { createBoardsMiddleware } from '../orchestrator/middleware.js';
 import { createBoardTestingMiddleware } from '../orchestrate/board-testing/middleware.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
@@ -73,6 +74,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createGitMiddleware());
   connectApp.use(createWorktreeMiddleware());
   connectApp.use(createOrchestrateMiddleware());
+  connectApp.use(createBoardsMiddleware());
   connectApp.use(createBoardTestingMiddleware());
   connectApp.use(createChatsWorkspaceMiddleware());
   connectApp.use(createDesktopWorkspaceMiddleware());
