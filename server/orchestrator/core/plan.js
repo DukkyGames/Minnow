@@ -37,8 +37,8 @@
  * cannot diverge.
  */
 
-import { attemptCount, lastEndedAttempt, readyTasks } from './derive.js';
-import { decide } from './policy.js';
+import { attemptCount, deadEnded, lastEndedAttempt, readyTasks } from './derive.js';
+import { decide, wantsSameWorktree } from './policy.js';
 
 /**
  * What should happen to a task that has nothing in flight.
@@ -151,6 +151,12 @@ export function plan(state) {
   // Attempts that already exist keep their slot. Their `task.attempt.started` is
   // already on the journal, so re-deciding them would risk stopping work the
   // engine has no reason to stop.
+  //
+  // `sameWorktree` is recomputed from the recorded seed rather than defaulted,
+  // so a resumed repair attempt is described the same way the decision that
+  // created it described it. Defaulting it to false meant a `repair` attempt
+  // came back as a fresh-worktree one, and any effector that diffs on more than
+  // `{ taskId, role }` would restart it in the wrong place.
   /** @type {import('./types').Desired[]} */
   const running = [];
   for (const id of ordered) {
@@ -160,7 +166,7 @@ export function plan(state) {
         taskId: id,
         role: open.role,
         seedKind: open.seedKind ?? 'initial',
-        sameWorktree: false,
+        sameWorktree: wantsSameWorktree(open.seedKind),
       });
     }
   }
@@ -169,12 +175,16 @@ export function plan(state) {
   const held = running.slice(0, cap);
   desired.push(...held);
 
+  // Every task with work in flight holds its footprint, including any the cap
+  // just excluded. Those are still running until the effector stops them, so
+  // starting something that overlaps them would put two writers on one file
+  // during the handover.
   /** @type {string[]} */
-  const occupied = held.map((d) => d.taskId);
+  const occupied = running.map((d) => d.taskId);
   const ready = new Set(readyTasks(state));
 
   for (const id of ordered) {
-    if (occupied.length >= cap) break;
+    if (desired.filter((d) => d.role !== 'merge').length >= cap) break;
     if (!ready.has(id) || occupied.includes(id)) continue;
     const task = state.tasks.get(id);
     if (!task) continue;
@@ -194,7 +204,62 @@ export function plan(state) {
     occupied.push(id);
   }
 
+  // The Final Tester runs once, after every task has reached a terminal phase
+  // and the merge queue has drained. It is board-level, so it carries no task id.
+  if (desired.length === 0 && isReadyForFinalTest(state)) {
+    desired.push({ taskId: null, role: 'final', seedKind: 'initial', sameWorktree: false });
+  }
+
   return desired;
+}
+
+/**
+ * Has the board finished everything it can, with the final verification still
+ * outstanding?
+ *
+ * @param {import('./types').BoardState} state
+ * @returns {boolean}
+ */
+export function isReadyForFinalTest(state) {
+  if (!state || state.tasks.size === 0) return false;
+  if (state.finalTest !== null || state.finished) return false;
+  if (state.mergeQueue.length > 0) return false;
+  // At least one task must have merged: a board where everything was abandoned
+  // has nothing to verify.
+  let merged = 0;
+  for (const task of state.tasks.values()) {
+    if (task.phase === 'merged') merged += 1;
+    else if (task.phase !== 'abandoned' && task.phase !== 'skipped') return false;
+  }
+  return merged > 0;
+}
+
+/**
+ * Tasks that can never run because something upstream was abandoned or skipped,
+ * and which are not yet recorded as skipped themselves.
+ *
+ * The engine journals `task.skipped` for each. This is what stops an abandoned
+ * task on minute three from stalling an overnight run: the dead branch is closed
+ * out and everything independent of it keeps going.
+ *
+ * @param {import('./types').BoardState} state
+ * @returns {Array<{ taskId: string, blockedBy: string }>}
+ */
+export function pendingSkips(state) {
+  /** @type {Array<{ taskId: string, blockedBy: string }>} */
+  const out = [];
+  if (!state) return out;
+  const dead = deadEnded(state);
+  for (const taskId of orderedTaskIds(state)) {
+    const task = state.tasks.get(taskId);
+    if (!task || !dead.has(taskId)) continue;
+    if (task.phase === 'skipped' || task.phase === 'abandoned') continue;
+    // A task with work in flight is skipped only once that work has ended, so a
+    // running attempt is never orphaned mid-flight.
+    if (task.attempts.some((a) => !a.ended)) continue;
+    out.push({ taskId, blockedBy: /** @type {string} */ (dead.get(taskId)) });
+  }
+  return out;
 }
 
 /**
@@ -298,15 +363,122 @@ function segmentsOf(glob) {
 }
 
 /**
+ * One atom of a segment pattern: a literal char, a wildcard, or a character
+ * class. Splitting the pattern up front keeps the DP below indexing atoms rather
+ * than raw characters, which is what makes `[ab]` a single position.
+ *
+ * @typedef {{ kind: 'star' } | { kind: 'any' } | { kind: 'char', ch: string }
+ *          | { kind: 'class', negated: boolean, ranges: Array<[string, string]> }} Atom
+ */
+
+/**
+ * @param {string} pattern
+ * @returns {Atom[]}
+ */
+function atomsOf(pattern) {
+  /** @type {Atom[]} */
+  const atoms = [];
+  for (let i = 0; i < pattern.length; i += 1) {
+    const ch = pattern[i];
+    if (ch === '*') {
+      atoms.push({ kind: 'star' });
+      continue;
+    }
+    if (ch === '?') {
+      atoms.push({ kind: 'any' });
+      continue;
+    }
+    if (ch === '[') {
+      const close = pattern.indexOf(']', i + 1);
+      if (close === -1) {
+        // Unbalanced. `parsePlan` rejects this, so treat it as a literal rather
+        // than inventing a meaning for it.
+        atoms.push({ kind: 'char', ch });
+        continue;
+      }
+      let body = pattern.slice(i + 1, close);
+      const negated = body.startsWith('!') || body.startsWith('^');
+      if (negated) body = body.slice(1);
+      /** @type {Array<[string, string]>} */
+      const ranges = [];
+      for (let k = 0; k < body.length; k += 1) {
+        if (body[k + 1] === '-' && k + 2 < body.length) {
+          ranges.push([body[k], body[k + 2]]);
+          k += 2;
+        } else {
+          ranges.push([body[k], body[k]]);
+        }
+      }
+      atoms.push({ kind: 'class', negated, ranges });
+      i = close;
+      continue;
+    }
+    atoms.push({ kind: 'char', ch });
+  }
+  return atoms;
+}
+
+/**
+ * Could these two single-character atoms match the same character?
+ *
+ * @param {Atom} a
+ * @param {Atom} b
+ * @returns {boolean}
+ */
+function atomsOverlap(a, b) {
+  if (a.kind === 'any' || b.kind === 'any') return true;
+  if (a.kind === 'char' && b.kind === 'char') return a.ch === b.ch;
+  if (a.kind === 'char' && b.kind === 'class') return classMatches(b, a.ch);
+  if (a.kind === 'class' && b.kind === 'char') return classMatches(a, b.ch);
+  if (a.kind === 'class' && b.kind === 'class') {
+    // Two negated classes always share something, since the alphabet is far
+    // larger than any listed set.
+    if (a.negated && b.negated) return true;
+    const positive = a.negated ? b : a;
+    const other = a.negated ? a : b;
+    for (const [lo, hi] of positive.ranges) {
+      for (let code = lo.charCodeAt(0); code <= hi.charCodeAt(0); code += 1) {
+        if (classMatches(other, String.fromCharCode(code))) return true;
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
+/**
+ * @param {Extract<Atom, { kind: 'class' }>} atom
+ * @param {string} ch
+ * @returns {boolean}
+ */
+function classMatches(atom, ch) {
+  let inside = false;
+  for (const [lo, hi] of atom.ranges) {
+    if (ch >= lo && ch <= hi) {
+      inside = true;
+      break;
+    }
+  }
+  return atom.negated ? !inside : inside;
+}
+
+/**
  * Can these two single-segment patterns match a common component?
  *
- * `*` matches any run of characters within a segment; `?` matches exactly one.
+ * `*` matches any run of characters within a segment, `?` matches exactly one,
+ * and `[abc]` / `[a-z]` / `[!abc]` match one from a set. Brace expansion and
+ * negated globs are rejected by `parsePlan` precisely because this function
+ * cannot reason about them, and a pattern it cannot interpret would read as
+ * "overlaps nothing" — opening the concurrency gate on two tasks writing the
+ * same file.
  *
  * @param {string} p
  * @param {string} q
  * @returns {boolean}
  */
 function segmentsIntersect(p, q) {
+  const left = atomsOf(p);
+  const right = atomsOf(q);
   /** @type {Map<number, boolean>} */
   const seen = new Map();
 
@@ -316,19 +488,18 @@ function segmentsIntersect(p, q) {
    * @returns {boolean}
    */
   const walk = (i, j) => {
-    const key = i * (q.length + 1) + j;
+    const key = i * (right.length + 1) + j;
     const cached = seen.get(key);
     if (cached !== undefined) return cached;
     let result;
-    if (i === p.length && j === q.length) {
+    if (i === left.length && j === right.length) {
       result = true;
-    } else if (i < p.length && p[i] === '*') {
-      result = walk(i + 1, j) || (j < q.length && walk(i, j + 1));
-    } else if (j < q.length && q[j] === '*') {
-      result = walk(i, j + 1) || (i < p.length && walk(i + 1, j));
-    } else if (i < p.length && j < q.length) {
-      const compatible = p[i] === '?' || q[j] === '?' || p[i] === q[j];
-      result = compatible && walk(i + 1, j + 1);
+    } else if (i < left.length && left[i].kind === 'star') {
+      result = walk(i + 1, j) || (j < right.length && walk(i, j + 1));
+    } else if (j < right.length && right[j].kind === 'star') {
+      result = walk(i, j + 1) || (i < left.length && walk(i + 1, j));
+    } else if (i < left.length && j < right.length) {
+      result = atomsOverlap(left[i], right[j]) && walk(i + 1, j + 1);
     } else {
       result = false;
     }

@@ -39,15 +39,17 @@ export {
 export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive';
 export type { Attempt, TouchesOverflow, FinalTestState, WaveRef, Evidence } from './types';
 
-export { decide, formatPolicyTable, POLICY_TABLE } from './policy';
+export { decide, formatPolicyTable, POLICY_TABLE, wantsSameWorktree } from './policy';
 export type { PolicyOutcome, PolicyRow, RetryAction, AdvanceAction, AbandonAction } from './types';
 
 export {
   globsIntersect,
+  isReadyForFinalTest,
   nextAction,
   orderedTaskIds,
   pendingAbandonments,
   pendingEnqueues,
+  pendingSkips,
   plan,
   touchesOverlap,
 } from './plan';

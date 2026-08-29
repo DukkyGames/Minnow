@@ -360,6 +360,26 @@ function highestSeq(events) {
 }
 
 /**
+ * Does every event carry a distinct, usable `seq`?
+ *
+ * The precondition for resuming at all: the fold can only be split at an anchor
+ * if every event sits unambiguously on one side of it.
+ *
+ * @param {readonly unknown[]} events
+ * @returns {boolean}
+ */
+function isWellSequenced(events) {
+  /** @type {Set<number>} */
+  const seen = new Set();
+  for (const event of events) {
+    const seq = seqOf(event);
+    if (seq === 0 || seen.has(seq)) return false;
+    seen.add(seq);
+  }
+  return true;
+}
+
+/**
  * Does this journal slice include any event the snapshot already absorbed?
  *
  * The signal that the caller passed the whole journal rather than just the tail.
@@ -407,6 +427,14 @@ function verifySnapshot(snapshot, journal) {
   if (!Number.isSafeInteger(candidate.throughSeq) || candidate.throughSeq < 0) return null;
   if (typeof candidate.stateHash !== 'string' || candidate.stateHash.length === 0) return null;
   if (candidate.state === undefined || candidate.state === null) return null;
+
+  // Resuming partitions the journal on `seq`, so every event must carry one.
+  // An unsequenced or duplicated event cannot be placed on either side of the
+  // anchor: `tailAfter` drops it while a full fold keeps it, and the result is a
+  // board that silently differs from `derive(journal)` — here, a `board.started`
+  // lost on restart, leaving a board that never ticks again while the snapshot
+  // reports itself perfectly usable. Refuse and fold everything instead.
+  if (!isWellSequenced(journal)) return null;
 
   if (candidate.throughSeq > highestSeq(journal)) return null;
 

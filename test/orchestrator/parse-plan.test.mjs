@@ -251,12 +251,20 @@ describe('parsePlan — one test per quality requirement', () => {
     assert.ok(errorsOf(source).some((e) => /duplicate task id W1-A/.test(e.message)));
   });
 
-  it('rejects an out-of-repo or escaping glob', () => {
+  it('rejects a glob the scheduler could not reason about', () => {
+    // A pattern `touchesOverlap()` cannot interpret is worse than a rejected
+    // one: it reads as "overlaps nothing" and the concurrency gate opens on two
+    // tasks writing the same file. So the parser only admits syntax the
+    // intersection actually implements.
     for (const [glob, pattern] of [
       ['/etc/passwd', /repo-relative/],
       ['../../secrets/**', /escape the repo/],
       ['src/[unclosed/**', /unbalanced \[ \]/],
-      ['src/{a,b/**', /unbalanced \{ \}/],
+      ['src/{a', /brace expansion is not supported/],
+      ['src/{ui}/**', /brace expansion is not supported/],
+      ['!src/generated/**', /negated globs are not supported/],
+      ['src/a.ts (new file)', /looks like prose/],
+      ['src/my file.ts', /may not contain whitespace/],
     ]) {
       const source = mutate('- **Touches:** src/ui/widget-panel.ts', `- **Touches:** ${glob}`);
       const [error] = errorsOf(source);
@@ -351,6 +359,21 @@ describe('parsePlan — the retired workaround', () => {
       assert.equal(isParseErrors(graph), false, placeholder);
       assert.deepEqual(graph.tasks[1].dependsOn, [], placeholder);
     }
+  });
+
+  it('keeps every entry of a wrapped Touches or Depends on list', () => {
+    // The continuation handler used to lower-case the field name, writing
+    // `touchesraw` / `dependsraw` — properties nothing read. A wrapped list
+    // silently lost every entry after the first, with no parse error: exactly
+    // the dropped-edge failure this parser exists to prevent.
+    const wrapped = GOLDEN.replace(
+      '- **Touches:** src/ui/widget-panel.ts\n- **Depends on:** W1-A, W1-B',
+      '- **Touches:** src/ui/widget-panel.ts,\n  src/ui/widget-row.ts\n- **Depends on:** W1-A,\n  W1-B',
+    );
+    const graph = parsePlan(wrapped);
+    assert.equal(isParseErrors(graph), false, isParseErrors(graph) ? formatParseErrors(graph) : '');
+    assert.deepEqual(graph.tasks[2].touches, ['src/ui/widget-panel.ts', 'src/ui/widget-row.ts']);
+    assert.deepEqual(graph.tasks[2].dependsOn, ['W1-A', 'W1-B']);
   });
 
   it('matches todo ids to task ids case-insensitively', () => {

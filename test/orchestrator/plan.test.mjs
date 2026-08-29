@@ -15,6 +15,7 @@ import {
   orderedTaskIds,
   pendingAbandonments,
   pendingEnqueues,
+  pendingSkips,
   plan,
   touchesOverlap,
 } from '../../server/orchestrator/core/plan.js';
@@ -285,6 +286,8 @@ describe('plan — the sequential deadlock regression', () => {
     push(makeEvent('merge.enqueued', { taskId: 'A' }));
     assert.deepEqual(at().map((d) => d.role), ['merge']);
     push(makeEvent('merge.succeeded', { taskId: 'A', sha: 's' }));
+    assert.deepEqual(at().map((d) => d.role), ['final'], 'everything merged — verify the whole');
+    push(makeEvent('final.test.ended', { outcome: 'pass' }));
     assert.deepEqual(at(), [], 'the run is done');
   });
 
@@ -348,18 +351,149 @@ describe('plan — determinism and totality', () => {
     }
   });
 
-  it('desires nothing for abandoned, skipped, or merged tasks', () => {
+  it('desires no task work once every task is terminal', () => {
     const state = boardOf(
       { tasks: [task('A'), task('B'), task('C')], concurrency: 4 },
       makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
       makeEvent('task.skipped', { taskId: 'B', blockedBy: 'A' }),
       ...merged('C', 's'),
     );
-    assert.deepEqual(plan(state), []);
+    // What is left is the board-level verification of what did merge.
+    assert.deepEqual(plan(state), [
+      { taskId: null, role: 'final', seedKind: 'initial', sameWorktree: false },
+    ]);
+
+    const verified = boardOf(
+      { tasks: [task('A'), task('B'), task('C')], concurrency: 4 },
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
+      makeEvent('task.skipped', { taskId: 'B', blockedBy: 'A' }),
+      ...merged('C', 's'),
+      makeEvent('final.test.ended', { outcome: 'pass' }),
+    );
+    assert.deepEqual(plan(verified), []);
+  });
+
+  it('does not desire a final test when there is nothing to verify', () => {
+    const allAbandoned = boardOf(
+      { tasks: [task('A'), task('B')], concurrency: 4 },
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
+      makeEvent('task.abandoned', { taskId: 'B', reason: 'builder-failed' }),
+    );
+    assert.deepEqual(plan(allAbandoned), []);
+  });
+
+  it('does not desire a final test while any task is still live', () => {
+    const state = boardOf(
+      { tasks: [task('A'), task('B')], concurrency: 4 },
+      ...merged('A', 's'),
+    );
+    assert.equal(plan(state).some((d) => d.role === 'final'), false);
+  });
+
+  it('does not desire a final test while a merge is queued', () => {
+    const state = boardOf(
+      { tasks: [task('A'), task('B')], concurrency: 4 },
+      ...merged('A', 's'),
+      makeEvent('task.abandoned', { taskId: 'B', reason: 'builder-failed' }),
+      makeEvent('merge.enqueued', { taskId: 'A' }),
+    );
+    assert.equal(plan(state).some((d) => d.role === 'final'), false);
   });
 });
 
 // ---------------------------------------------------------------------------
+
+describe('plan — in-flight attempts', () => {
+  it('describes a resumed repair attempt the way the decision that made it did', () => {
+    // Defaulting `sameWorktree` to false meant a repair attempt came back as a
+    // fresh-worktree one, so an effector diffing on more than { taskId, role }
+    // would restart it in the wrong place — the env-fixer bug class the
+    // `blocked` row exists to kill.
+    const state = boardOf(
+      { tasks: [task('A')], concurrency: 1 },
+      ...attempt('A', 'a1', 'builder', 'blocked'),
+      started('A', 'a2', 'builder', { seedKind: 'repair' }),
+    );
+    assert.deepEqual(plan(state), [
+      { taskId: 'A', role: 'builder', seedKind: 'repair', sameWorktree: true },
+    ]);
+  });
+
+  it('keeps the footprint of a running task the cap excluded', () => {
+    // Lowering concurrency does not stop those attempts instantly, so anything
+    // overlapping them must stay unscheduled during the handover.
+    const state = boardOf(
+      { tasks: [task('A', { touches: ['src/shared/**'] }), task('B', { touches: ['src/shared/x.ts'] })], concurrency: 2 },
+      started('A', 'a1', 'builder'),
+      started('B', 'b1', 'builder'),
+    );
+    state.concurrency = 1;
+    const desires = nonMerge(plan(state));
+    assert.deepEqual(desires.map((d) => d.taskId), ['A'], 'cap must be respected');
+    // B is dropped from `desired` and so will be stopped — but nothing new is
+    // started into its footprint either.
+    assert.equal(desires.length, 1);
+  });
+});
+
+describe('pendingSkips — dead ends never stall the run', () => {
+  const chain = [
+    task('A'),
+    task('B', { wave: 2, dependsOn: ['A'] }),
+    task('C', { wave: 3, dependsOn: ['B'] }),
+    task('D'),
+  ];
+
+  it('closes out a branch behind an abandoned task, transitively', () => {
+    const state = boardOf(
+      { tasks: chain, concurrency: 4 },
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
+    );
+    assert.deepEqual(pendingSkips(state), [
+      { taskId: 'B', blockedBy: 'A' },
+      { taskId: 'C', blockedBy: 'B' },
+    ]);
+    // And the independent task keeps going — the whole point.
+    assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['D']);
+  });
+
+  it('stops proposing a skip once it is journaled', () => {
+    const state = boardOf(
+      { tasks: chain, concurrency: 4 },
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
+      makeEvent('task.skipped', { taskId: 'B', blockedBy: 'A' }),
+      makeEvent('task.skipped', { taskId: 'C', blockedBy: 'B' }),
+    );
+    assert.deepEqual(pendingSkips(state), []);
+  });
+
+  it('never skips a task with work still in flight', () => {
+    const state = boardOf(
+      { tasks: chain, concurrency: 4 },
+      started('B', 'b1', 'builder'),
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
+    );
+    assert.deepEqual(pendingSkips(state).map((s) => s.taskId), ['C']);
+  });
+
+  it('proposes nothing on a healthy board', () => {
+    assert.deepEqual(pendingSkips(boardOf({ tasks: chain, concurrency: 4 })), []);
+  });
+
+  it('closes out a dependency cycle rather than stalling forever', () => {
+    // parsePlan rejects cycles, so this can only reach the journal by hand — but
+    // the failure mode is the worst kind: plan() returns nothing and the board
+    // sits idle with work outstanding and no explanation.
+    const cyclic = [
+      task('A', { dependsOn: ['B'] }),
+      task('B', { dependsOn: ['A'] }),
+      task('E'),
+    ];
+    const state = boardOf({ tasks: cyclic, concurrency: 4 });
+    assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['E']);
+    assert.deepEqual(pendingSkips(state).map((s) => s.taskId), ['A', 'B']);
+  });
+});
 
 describe('nextAction — the single policy call site', () => {
   it('starts a builder on a task with no history', () => {
@@ -516,6 +650,39 @@ describe('touchesOverlap — pure glob-set intersection', () => {
       assert.equal(touchesOverlap([a], [b]), false);
     });
   }
+
+  it('understands character classes, which parsePlan admits', () => {
+    // Treating `[ab]` as three literal characters made `src/[ab]x.ts` and
+    // `src/ax.ts` read as disjoint — two tasks writing one file, scheduled
+    // concurrently, from a plan the parser accepted.
+    assert.equal(globsIntersect('src/[ab]x.ts', 'src/ax.ts'), true);
+    assert.equal(globsIntersect('src/[ab]x.ts', 'src/bx.ts'), true);
+    assert.equal(globsIntersect('src/[ab]x.ts', 'src/cx.ts'), false);
+    assert.equal(globsIntersect('src/[a-z]x.ts', 'src/qx.ts'), true);
+    assert.equal(globsIntersect('src/[a-c]x.ts', 'src/zx.ts'), false);
+    assert.equal(globsIntersect('src/[ab]x.ts', 'src/[bc]x.ts'), true);
+    assert.equal(globsIntersect('src/[ab]x.ts', 'src/[cd]x.ts'), false);
+    assert.equal(globsIntersect('src/[!ab]x.ts', 'src/cx.ts'), true);
+    assert.equal(globsIntersect('src/[!ab]x.ts', 'src/ax.ts'), false);
+    assert.equal(globsIntersect('src/[ab]*.ts', 'src/along.ts'), true);
+  });
+
+  it('is symmetric and self-intersecting across a generated sweep', () => {
+    const parts = ['a', 'b', '*', '**', '?', 'x?', '[ab]', '[a-c]', '*.ts', 'a*'];
+    let checked = 0;
+    for (const p1 of parts) {
+      for (const p2 of parts) {
+        const a = `src/${p1}/${p2}`;
+        assert.equal(globsIntersect(a, a), true, `${a} does not intersect itself`);
+        for (const p3 of parts) {
+          const b = `src/${p3}`;
+          assert.equal(globsIntersect(a, b), globsIntersect(b, a), `${a} vs ${b} is asymmetric`);
+          checked += 1;
+        }
+      }
+    }
+    assert.ok(checked >= 1000, `only ${checked} pairs checked`);
+  });
 
   it('overlaps when any pair in the sets overlaps', () => {
     assert.equal(touchesOverlap(['src/a/**', 'src/z/**'], ['src/q/**', 'src/z/x.ts']), true);

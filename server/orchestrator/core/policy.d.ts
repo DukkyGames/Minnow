@@ -18,6 +18,9 @@ export function decide(input: {
   evidence?: Evidence | null;
 }): Action;
 
+/** Does this seed kind repair in place rather than in a fresh worktree? */
+export function wantsSameWorktree(seedKind: string | null | undefined): boolean;
+
 /** Render the table as markdown, so tests compare rather than restate. */
 export function formatPolicyTable(): string;
 

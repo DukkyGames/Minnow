@@ -13,6 +13,8 @@ import {
   attemptCount,
   deadEnded,
   derive,
+  emptyState,
+  foldInto,
   lastEndedAttempt,
   readyTasks,
 } from '../../server/orchestrator/core/derive.js';
@@ -470,6 +472,18 @@ describe('derive — determinism over generated journals', () => {
     }
   });
 
+  it('folding one event at a time equals folding them all at once', () => {
+    // The incremental-equivalence property proper. It is what licenses P1-B
+    // keeping a live state in memory and calling `foldInto` per appended event
+    // instead of re-folding the journal on every tick.
+    for (let seed = 1; seed <= 50; seed += 1) {
+      const events = generateJournal(seed);
+      const incremental = emptyState();
+      for (const event of events) foldInto(incremental, [event]);
+      assert.deepEqual(incremental, derive(events), `seed ${seed}`);
+    }
+  });
+
   it('every prefix derives, and the facts that must be monotone are', () => {
     for (let seed = 1; seed <= 50; seed += 1) {
       const events = generateJournal(seed);
@@ -494,12 +508,33 @@ describe('derive — determinism over generated journals', () => {
   it('replay after a simulated crash reproduces the pre-crash state', () => {
     // This is the property that deletes boot-resume, display-wake reconcile, and
     // OOM-pause repair: restart *is* recovery.
+    //
+    // The crash is simulated the way a real one happens — the journal is
+    // serialised to JSONL, the process "dies" mid-append leaving a torn final
+    // line, and the restart reads the file back and re-parses it. Comparing two
+    // folds of the same in-memory array would prove nothing that the determinism
+    // test above does not already cover.
     for (let seed = 1; seed <= 100; seed += 1) {
       const events = generateJournal(seed);
       const cut = Math.floor(events.length / 2);
       const beforeCrash = derive(events.slice(0, cut));
-      const afterRestart = derive(events.slice(0, cut).map((e) => ({ ...e })));
-      assert.deepEqual(afterRestart, beforeCrash, `seed ${seed}`);
+
+      const lines = events.slice(0, cut).map((e) => JSON.stringify(e));
+      // A partial trailing line: the append that was in flight when power went.
+      const torn = `${lines.join('\n')}\n${JSON.stringify(events[cut]).slice(0, 17)}`;
+      const readBack = [];
+      for (const line of torn.split('\n')) {
+        try {
+          readBack.push(JSON.parse(line));
+        } catch {
+          // The journal store drops the torn tail; the fold must survive it too.
+        }
+      }
+
+      assert.equal(readBack.length, cut, `seed ${seed}: torn line was not dropped`);
+      assert.deepEqual(derive(readBack), beforeCrash, `seed ${seed}`);
+      // And the fold survives being handed the torn line itself.
+      assert.deepEqual(derive([...readBack, torn.split('\n').at(-1)]), beforeCrash, `seed ${seed}`);
     }
   });
 

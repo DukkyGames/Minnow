@@ -340,7 +340,8 @@ export interface BoardState {
 
 /** One attempt the scheduler wants running right now. */
 export interface Desired {
-  taskId: string;
+  /** `null` for the board-level Final Tester, which belongs to no task. */
+  taskId: string | null;
   role: Role;
   seedKind: SeedKind;
   /** `blocked` repairs in the worktree it broke in rather than a fresh one. */

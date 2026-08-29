@@ -193,6 +193,33 @@ describe('snapshot — a cache, never a source', () => {
     }
   });
 
+  it('refuses to resume across a journal that is not cleanly sequenced', () => {
+    // Resuming partitions the journal on `seq`. An event without one cannot be
+    // placed on either side of the anchor: the tail drops it while a full fold
+    // keeps it. That produced a board that silently differed from
+    // derive(journal) — here a lost `board.started`, leaving a board that never
+    // ticks again while the snapshot reported itself perfectly usable.
+    const tasks = [{ id: 'A', title: 'A', wave: 1, dependsOn: [], touches: ['src/a/**'] }];
+    const base = [
+      { ...makeEvent('board.created', { boardId: 'b', planPath: 'p', tasks, waves: [] }), seq: 1, ts: 1 },
+      makeEvent('board.started', { concurrency: 3 }), // no seq
+      { ...makeEvent('task.attempt.started', { taskId: 'A', attemptId: 'a1', role: 'builder' }), seq: 2, ts: 2 },
+    ];
+    const snapshot = makeSnapshot('b', derive(base.slice(0, 1)), 1);
+
+    assert.equal(isSnapshotUsable(snapshot, base), false, 'an unsequenced event must veto resume');
+    assert.deepEqual(deriveFrom(snapshot, base), derive(base));
+    assert.equal(deriveFrom(snapshot, base).status, 'running');
+    assert.equal(deriveFrom(snapshot, base).concurrency, 3);
+  });
+
+  it('refuses to resume across a duplicated seq', () => {
+    const duplicated = JOURNAL.map((e, i) => (i === 1500 ? { ...e, seq: JOURNAL[1499].seq } : e));
+    const snapshot = snapshotAt(1000, duplicated);
+    assert.equal(isSnapshotUsable(snapshot, duplicated), false);
+    assert.deepEqual(deriveFrom(snapshot, duplicated), derive(duplicated));
+  });
+
   it('ignores a version-skewed snapshot rather than migrating it', () => {
     const skewed = { ...snapshotAt(1000), v: 99 };
     assert.equal(isSnapshotUsable(skewed, JOURNAL), false);

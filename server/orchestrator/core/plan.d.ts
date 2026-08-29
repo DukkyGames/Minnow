@@ -9,6 +9,15 @@ export function nextAction(state: BoardState, taskId: string): NextAction;
 /** Tasks whose tester passed but which are not yet on the merge queue. */
 export function pendingEnqueues(state: BoardState): string[];
 
+/**
+ * Tasks that can never run because something upstream was abandoned or skipped.
+ * The engine journals `task.skipped` for each.
+ */
+export function pendingSkips(state: BoardState): Array<{ taskId: string; blockedBy: string }>;
+
+/** Has the board finished everything it can, with final verification outstanding? */
+export function isReadyForFinalTest(state: BoardState): boolean;
+
 /** Tasks the policy table has given up on, with the evidence for each. */
 export function pendingAbandonments(
   state: BoardState,

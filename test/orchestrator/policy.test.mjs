@@ -108,16 +108,48 @@ describe('decide — the documented rows, cell for cell', () => {
     }
   });
 
-  it('the rendered table is stable and readable', () => {
-    const markdown = formatPolicyTable();
-    assert.match(markdown, /\| builder \| pass \| — \| advance → tester \|/);
-    assert.match(markdown, /\| builder \| fail \| < 2 \| retry builder, failure-aware seed \|/);
-    assert.match(markdown, /\| builder \| blocked \| < 1 \| retry builder, repair seed \(same worktree\) \|/);
-    assert.match(markdown, /\| tester \| pass \| — \| advance → merge \|/);
-    assert.match(markdown, /\| tester \| fail \| < 2 \| retry builder, fix seed \|/);
-    assert.match(markdown, /\| merge \| conflicted \| < 2 \| retry builder, rebase seed \|/);
-    // Every row of the table is rendered; nothing is hidden from review.
-    assert.equal(markdown.split('\n').length, POLICY_TABLE.length + 2);
+  it('renders cell for cell as the whole table, with nothing hidden', () => {
+    // Generated from POLICY_TABLE and compared against the literal expected
+    // table, so a row that is added, removed, reordered, or silently retuned
+    // fails here rather than in a run six hours deep.
+    assert.equal(
+      formatPolicyTable(),
+      [
+        '| role | outcome | attempts | action |',
+        '| --- | --- | --- | --- |',
+        '| builder | pass | — | advance → tester |',
+        '| builder | fail | < 2 | retry builder, failure-aware seed |',
+        '| builder | fail | — | abandon (builder-failed) |',
+        '| builder | blocked | < 1 | retry builder, repair seed (same worktree) |',
+        '| builder | blocked | — | abandon (builder-blocked) |',
+        '| builder | no_report | < 1 | retry builder, continue seed |',
+        '| builder | no_report | — | abandon (builder-no-report) |',
+        '| builder | crashed | < 2 | retry builder, continue seed |',
+        '| builder | crashed | — | abandon (builder-crashed) |',
+        '| builder | timeout | < 2 | retry builder, continue seed |',
+        '| builder | timeout | — | abandon (builder-timeout) |',
+        '| tester | pass | — | advance → merge |',
+        '| tester | fail | < 2 | retry builder, fix seed |',
+        '| tester | fail | — | abandon (tester-failed) |',
+        '| tester | blocked | < 1 | retry builder, repair seed (same worktree) |',
+        '| tester | blocked | — | abandon (tester-blocked) |',
+        '| tester | no_report | < 1 | retry builder, continue seed |',
+        '| tester | no_report | — | abandon (tester-no-report) |',
+        '| tester | crashed | < 2 | retry builder, continue seed |',
+        '| tester | crashed | — | abandon (tester-crashed) |',
+        '| tester | timeout | < 2 | retry builder, continue seed |',
+        '| tester | timeout | — | abandon (tester-timeout) |',
+        '| merge | pass | — | advance → done |',
+        '| merge | conflicted | < 2 | retry builder, rebase seed |',
+        '| merge | conflicted | — | abandon (merge-conflicted) |',
+        '| merge | * | < 2 | retry builder, rebase seed |',
+        '| merge | * | — | abandon (merge-failed) |',
+        '| final | pass | — | advance → done |',
+        '| final | * | — | abandon (final-test-failed) |',
+        '| * | * | — | abandon (unhandled-outcome) |',
+      ].join('\n'),
+    );
+    assert.equal(formatPolicyTable().split('\n').length, POLICY_TABLE.length + 2);
   });
 });
 
@@ -218,6 +250,51 @@ describe('decide — structural invariants', () => {
     }
   });
 
+  it('terminates under a mixed sequence of outcomes, not just a repeated one', () => {
+    // A run does not fail the same way twice in a row. Walk pseudo-random
+    // outcome sequences and assert every one reaches a terminal action within a
+    // bounded number of attempts — the property that stops a task looping
+    // forever on an alternating blocked/crashed/fail pattern.
+    let seed = 12345;
+    const next = () => {
+      seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+      return seed / 4294967296;
+    };
+    for (let trial = 0; trial < 500; trial += 1) {
+      for (const role of ROLES) {
+        // Counts are per role, and every retry targets the builder, so the bound
+        // that matters is on the role whose attempts are accumulating.
+        let attemptCount = 0;
+        let steps = 0;
+        let terminal = null;
+        while (steps < 50) {
+          const outcome = OUTCOMES[Math.floor(next() * OUTCOMES.length)];
+          const action = decide({ role, outcome, attemptCount });
+          steps += 1;
+          if (action.kind !== 'retry') {
+            terminal = action.kind;
+            break;
+          }
+          attemptCount += 1;
+        }
+        assert.ok(terminal, `${role}: no terminal action in 50 attempts`);
+        assert.ok(steps <= 3, `${role}: took ${steps} attempts under a mixed sequence`);
+      }
+    }
+  });
+
+  it('bounds every role at three attempts, whatever happens', () => {
+    // Stated explicitly because reading `fail | < 2 -> retry` as "two builder
+    // runs" is the natural mistake: the column counts tries finished *before*
+    // this one, so the budget is three.
+    for (const role of ROLES) {
+      for (const outcome of OUTCOMES) {
+        assert.notEqual(decide({ role, outcome, attemptCount: 2 }).kind, 'retry',
+          `${role}/${outcome} still retries after two prior attempts`);
+      }
+    }
+  });
+
   it('the table is data, not control flow', () => {
     assert.ok(Array.isArray(POLICY_TABLE));
     assert.ok(POLICY_TABLE.length >= 12);
@@ -249,15 +326,25 @@ describe('decide — structural invariants', () => {
 });
 
 describe('decide — what is deliberately absent', () => {
-  it('makes no model call and reads nothing outside its input', async () => {
+  it('is a pure function of its arguments', () => {
     // A model call in the control plane would forfeit replay, which is the
-    // mechanism the whole engine depends on. Enforced structurally.
-    const source = await import('node:fs').then(({ readFileSync }) =>
-      readFileSync(new URL('../../server/orchestrator/core/policy.js', import.meta.url), 'utf8'),
-    );
-    for (const forbidden of ['fetch(', 'generate', 'completion', 'prompt(', 'await ']) {
-      assert.equal(source.includes(forbidden), false, `policy.js contains ${forbidden}`);
+    // mechanism the whole engine depends on. Rather than grep the source for
+    // "await" — which any legitimate refactor would break — assert the property
+    // that a model call would violate: the same input always gives the same
+    // answer, synchronously, with nothing read from anywhere else.
+    for (const input of space()) {
+      const first = decide(input);
+      assert.equal(typeof first.then, 'undefined', 'decide() must be synchronous');
+      for (let i = 0; i < 5; i += 1) assert.deepEqual(decide(input), first);
     }
+
+    // And it reads only the fields it was given: an input carrying extra state
+    // the table might be tempted to consult changes nothing.
+    const base = { role: 'builder', outcome: 'fail', attemptCount: 1 };
+    assert.deepEqual(
+      decide({ ...base, taskId: 'W1-A', wave: 3, elapsedMs: 99999, boardHealth: 'bad' }),
+      decide(base),
+    );
   });
 
   it('has no env-fixer and no merge-fixer role', () => {

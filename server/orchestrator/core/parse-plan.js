@@ -382,10 +382,13 @@ function readBody(lines, from, errors) {
       continue;
     }
 
-    // A continuation line belongs to the bullet above it.
+    // A continuation line belongs to the bullet above it. `field` is already the
+    // property name — lower-casing it here silently wrote `touchesraw` and
+    // `dependsraw`, so a wrapped `Touches:` or `Depends on:` list dropped every
+    // entry after the first with no parse error. That is the silently-dropped-
+    // edge failure this parser exists to make impossible.
     if (field && trimmed.length > 0 && !/^[-*]\s/.test(trimmed)) {
-      const key = field.toLowerCase();
-      task[key] = `${task[key]}\n${trimmed}`;
+      task[field] = `${task[field]}\n${trimmed}`;
       continue;
     }
     if (trimmed.length === 0) finishField();
@@ -636,7 +639,21 @@ function globProblem(glob) {
   if (/^[/\\]/.test(glob) || /^[A-Za-z]:[/\\]/.test(glob)) return 'globs are repo-relative';
   if (glob.split(/[/\\]/).includes('..')) return 'globs may not escape the repo with `..`';
   if (countOf(glob, '[') !== countOf(glob, ']')) return 'unbalanced [ ]';
-  if (countOf(glob, '{') !== countOf(glob, '}')) return 'unbalanced { }';
+
+  // Only syntax `touchesOverlap()` can actually reason about is allowed through.
+  //
+  // The scheduler runs two tasks concurrently exactly when their declared globs
+  // do not intersect, so a pattern the intersection cannot interpret is worse
+  // than a rejected one: it silently reads as "overlaps nothing" and the
+  // concurrency gate opens on two tasks writing the same file. Brace expansion
+  // and negation both need alternation the segment matcher does not implement,
+  // so they are refused here rather than mis-answered there.
+  if (/[{}]/.test(glob)) {
+    return 'brace expansion is not supported — write one glob per alternative';
+  }
+  if (glob.startsWith('!')) return 'negated globs are not supported — declare what the task writes';
+  if (/\s/.test(glob)) return 'a glob may not contain whitespace — it looks like prose, not a path';
+  if (/[()]/.test(glob)) return 'a glob may not contain parentheses — it looks like prose, not a path';
   return null;
 }
 

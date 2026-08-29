@@ -18,15 +18,51 @@ import { describe, it } from 'node:test';
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const CORE_DIR = path.join(PROJECT_ROOT, 'server', 'orchestrator', 'core');
 
-/** Textual bans. Each is a clock, a random source, or an I/O surface. */
+/**
+ * Textual bans. Each is a clock, a random source, an I/O surface, or an escape
+ * hatch that would let one in through the back door.
+ *
+ * The list is deliberately broad. Purity here is load-bearing rather than
+ * stylistic — `state = fold(journal)` only recovers a crashed board if replay
+ * reproduces the same decisions — and this file is the only thing enforcing it.
+ */
 const BANNED_PATTERNS = [
-  { re: /\bDate\.now\s*\(/, why: 'reads the clock; take time as an argument instead' },
-  { re: /\bnew\s+Date\s*\(\s*\)/, why: 'reads the clock; take time as an argument instead' },
+  // Clocks. Every one of these makes a fold depend on when it ran.
+  { re: /\bDate\s*\./, why: 'reads the clock; take time as an argument instead' },
+  { re: /\bnew\s+Date\b/, why: 'reads the clock; take time as an argument instead' },
+  { re: /(?<![.\w])Date\s*\(/, why: 'reads the clock; take time as an argument instead' },
+  { re: /\bperformance\s*\./, why: 'reads the clock; take time as an argument instead' },
+  { re: /\bhrtime\b/, why: 'reads the clock; take time as an argument instead' },
+
+  // Randomness.
   { re: /\bMath\.random\s*\(/, why: 'nondeterministic; replay would diverge' },
-  { re: /\bprocess\./, why: 'host access; the core runs in the renderer too' },
-  { re: /\bfs\./, why: 'filesystem I/O is not allowed in the core' },
+  { re: /\bcrypto\s*\./, why: 'nondeterministic; replay would diverge' },
+
+  // Host-dependent behaviour: same input, different answer on another machine.
+  { re: /\bIntl\s*\./, why: 'locale-dependent; replay would diverge across hosts' },
+  { re: /\btoLocale[A-Z]\w*\s*\(/, why: 'locale-dependent; replay would diverge across hosts' },
+
+  // I/O and host access.
+  { re: /\bprocess\s*\./, why: 'host access; the core runs in the renderer too' },
+  { re: /\bfs\s*\./, why: 'filesystem I/O is not allowed in the core' },
   { re: /\bfetch\s*\(/, why: 'network I/O is not allowed in the core' },
+  { re: /\bXMLHttpRequest\b/, why: 'network I/O is not allowed in the core' },
+  { re: /\bWebSocket\b/, why: 'network I/O is not allowed in the core' },
+  { re: /\b(?:local|session)Storage\b/, why: 'host storage is not allowed in the core' },
+  { re: /\bindexedDB\b/, why: 'host storage is not allowed in the core' },
+  { re: /\bdocument\s*\./, why: 'the core has no DOM; it runs on the server too' },
+  { re: /\bwindow\s*\./, why: 'the core has no DOM; it runs on the server too' },
+
+  // Timers. Nothing in a pure fold should be scheduling anything.
+  { re: /\bset(?:Timeout|Interval|Immediate)\s*\(/, why: 'the core does not schedule work' },
+  { re: /\bqueueMicrotask\s*\(/, why: 'the core does not schedule work' },
+
+  // Escape hatches. Each one can reach any of the above without naming it.
   { re: /\brequire\s*\(/, why: 'the core is ESM-only' },
+  { re: /\bglobalThis\b/, why: 'reaching the global object bypasses every rule above' },
+  { re: /\bnew\s+Function\b/, why: 'evaluated code cannot be checked by this guard' },
+  { re: /(?<![.\w])eval\s*\(/, why: 'evaluated code cannot be checked by this guard' },
+  { re: /\bimport\s*\.\s*meta\b/, why: 'module metadata is host-specific' },
 ];
 
 /**
@@ -61,6 +97,22 @@ export function importSpecifiers(source) {
 }
 
 /**
+ * A dynamic import whose target this guard cannot read — `import(spec)`,
+ * `import('no' + 'de:fs')`. The specifier is unknowable statically, so it is
+ * refused outright rather than assumed innocent.
+ *
+ * @param {string} source
+ * @returns {boolean}
+ */
+export function hasComputedImport(source) {
+  const code = stripComments(source);
+  for (const match of code.matchAll(/\bimport\s*\(([^)]*)\)/g)) {
+    if (!/^\s*(['"])[^'"]*\1\s*$/.test(match[1])) return true;
+  }
+  return false;
+}
+
+/**
  * Check one core module for purity violations.
  *
  * @param {string} relPath  path relative to `core/`, used only in messages
@@ -74,6 +126,10 @@ export function checkCoreModule(relPath, source) {
 
   for (const { re, why } of BANNED_PATTERNS) {
     if (re.test(code)) violations.push(`${relPath}: matches ${re} — ${why}`);
+  }
+
+  if (hasComputedImport(source)) {
+    violations.push(`${relPath}: has a computed dynamic import — the target cannot be checked`);
   }
 
   for (const specifier of importSpecifiers(source)) {
@@ -91,7 +147,14 @@ export function checkCoreModule(relPath, source) {
   return violations;
 }
 
-/** @returns {string[]} every `.js` under core/, relative to core/ */
+/**
+ * Every executable module under core/, relative to core/.
+ *
+ * `.mjs` and `.cjs` are included as well as `.js` — scanning only `.js` left an
+ * unscanned hole a module could simply be renamed into.
+ *
+ * @returns {string[]}
+ */
 function coreModules() {
   /** @type {string[]} */
   const out = [];
@@ -99,7 +162,9 @@ function coreModules() {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.js')) out.push(path.relative(CORE_DIR, full).split(path.sep).join('/'));
+      else if (/\.(?:js|mjs|cjs)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
+        out.push(path.relative(CORE_DIR, full).split(path.sep).join('/'));
+      }
     }
   };
   walk(CORE_DIR);
@@ -163,13 +228,71 @@ describe('the purity guard itself', () => {
     assert.deepEqual(checkCoreModule('sub/a.js', "import { b } from '../events.js';\n"), []);
   });
 
-  it('rejects clock, randomness, and I/O', () => {
-    assert.match(checkCoreModule('a.js', 'const t = Date.now();')[0], /reads the clock/);
-    assert.match(checkCoreModule('a.js', 'const t = new Date();')[0], /reads the clock/);
-    assert.match(checkCoreModule('a.js', 'const r = Math.random();')[0], /nondeterministic/);
-    assert.match(checkCoreModule('a.js', 'const p = process.env.X;')[0], /host access/);
-    assert.match(checkCoreModule('a.js', 'fs.readFileSync(p);')[0], /filesystem I\/O/);
-    assert.match(checkCoreModule('a.js', 'await fetch(url);')[0], /network I\/O/);
+  it('rejects every clock', () => {
+    for (const source of [
+      'const t = Date.now();',
+      'const t = new Date();',
+      'const t = new Date;',
+      'const t = Date();',
+      'const t = Date.parse(s);',
+      'const t = performance.now();',
+      'const t = process.hrtime.bigint();',
+    ]) {
+      assert.ok(checkCoreModule('a.js', source).length > 0, source);
+    }
+  });
+
+  it('rejects every random source', () => {
+    for (const source of [
+      'const r = Math.random();',
+      'const r = crypto.randomUUID();',
+      'crypto.getRandomValues(buf);',
+    ]) {
+      assert.ok(checkCoreModule('a.js', source).length > 0, source);
+    }
+  });
+
+  it('rejects host-dependent formatting', () => {
+    assert.ok(checkCoreModule('a.js', 'Intl.DateTimeFormat().resolvedOptions();').length > 0);
+    assert.ok(checkCoreModule('a.js', 'const s = n.toLocaleString();').length > 0);
+  });
+
+  it('rejects I/O and host storage', () => {
+    for (const source of [
+      'const p = process.env.X;',
+      'fs.readFileSync(p);',
+      'await fetch(url);',
+      'new XMLHttpRequest();',
+      'new WebSocket(url);',
+      'localStorage.getItem("k");',
+      'document.querySelector("x");',
+      'window.alert(1);',
+    ]) {
+      assert.ok(checkCoreModule('a.js', source).length > 0, source);
+    }
+  });
+
+  it('rejects timers', () => {
+    for (const source of ['setTimeout(fn, 1);', 'setInterval(fn, 1);', 'queueMicrotask(fn);']) {
+      assert.ok(checkCoreModule('a.js', source).length > 0, source);
+    }
+  });
+
+  it('rejects the escape hatches that would hide any of the above', () => {
+    for (const source of [
+      'const p = globalThis["pro" + "cess"];',
+      'const f = new Function("return process")();',
+      'const p = eval("process");',
+      'const u = import.meta.url;',
+      'const m = await import(spec);',
+      'const m = await import("no" + "de:fs");',
+    ]) {
+      assert.ok(checkCoreModule('a.js', source).length > 0, source);
+    }
+  });
+
+  it('allows a literal relative dynamic import', () => {
+    assert.deepEqual(checkCoreModule('a.js', "const m = await import('./b.js');"), []);
   });
 
   it('does not fire on words that merely contain a banned token', () => {
@@ -180,6 +303,23 @@ describe('the purity guard itself', () => {
   it('ignores banned tokens inside comments', () => {
     const source = '// never call Date.now() here\n/* nor process.env */\nexport const a = 1;\n';
     assert.deepEqual(checkCoreModule('a.js', source), []);
+  });
+
+  it('catches a violation introduced into a real core file', () => {
+    // MIN-684 asks for exactly this: the guard must fail when an import is added
+    // to a core file and pass once it is removed. Done against the real source
+    // on disk rather than a synthetic string, so the file discovery, the reader,
+    // and the checker are all exercised together.
+    const relPath = 'derive.js';
+    const original = fs.readFileSync(path.join(CORE_DIR, relPath), 'utf8');
+    assert.deepEqual(checkCoreModule(relPath, original), [], 'derive.js is not clean to begin with');
+
+    const spiked = `import fs from 'node:fs';\n${original}`;
+    const violations = checkCoreModule(relPath, spiked);
+    assert.equal(violations.length, 1);
+    assert.match(violations[0], /may only import within core\//);
+
+    assert.deepEqual(checkCoreModule(relPath, original), [], 'guard did not pass once removed');
   });
 
   it('sees imports the same way regardless of statement shape', () => {

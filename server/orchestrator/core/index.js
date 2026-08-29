@@ -32,14 +32,16 @@ export {
 
 export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive.js';
 
-export { decide, formatPolicyTable, POLICY_TABLE } from './policy.js';
+export { decide, formatPolicyTable, POLICY_TABLE, wantsSameWorktree } from './policy.js';
 
 export {
   globsIntersect,
+  isReadyForFinalTest,
   nextAction,
   orderedTaskIds,
   pendingAbandonments,
   pendingEnqueues,
+  pendingSkips,
   plan,
   touchesOverlap,
 } from './plan.js';

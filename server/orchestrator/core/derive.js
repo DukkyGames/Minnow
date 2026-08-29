@@ -65,6 +65,14 @@ export function emptyState() {
  * @returns {import('./types').BoardState} the same object, for chaining
  */
 export function foldInto(state, events) {
+  // Total means total: a caller handing over a number rather than a journal gets
+  // an unchanged state, not a TypeError. The fold is the recovery path, and a
+  // recovery path with a throw in it is not one.
+  if (!events || typeof (/** @type {any} */ (events)[Symbol.iterator]) !== 'function') {
+    for (const task of state.tasks.values()) task.phase = phaseOf(state, task);
+    return state;
+  }
+
   for (const raw of events) {
     const checked = validateEvent(raw);
     // Malformed lines and unknown types are both skipped: the first keeps the
@@ -425,5 +433,57 @@ export function deadEnded(state) {
       }
     }
   }
+
+  // A dependency cycle is a dead end too. `parsePlan` rejects cycles, so a board
+  // built the normal way cannot contain one — but a hand-edited or externally
+  // written journal can, and the failure mode is the worst kind: every task in
+  // the cycle waits forever, `plan()` returns nothing, and the board sits idle
+  // with work outstanding. Naming them here turns a silent permanent stall into
+  // a skip the run can report.
+  for (const id of cyclicTasks(state, dead)) {
+    if (!dead.has(id)) dead.set(id, id);
+  }
   return dead;
+}
+
+/**
+ * Task ids that can never become ready because they sit on, or behind, a
+ * dependency cycle among tasks that are still live.
+ *
+ * @param {import('./types').BoardState} state
+ * @param {Map<string, string>} dead  already-known dead ends, excluded
+ * @returns {string[]} in declared order
+ */
+function cyclicTasks(state, dead) {
+  /** @type {Set<string>} */
+  const settled = new Set();
+  for (const id of state.taskOrder) {
+    const task = state.tasks.get(id);
+    if (!task) continue;
+    if (task.phase === 'merged' || task.phase === 'abandoned' || task.phase === 'skipped') {
+      settled.add(id);
+    }
+  }
+
+  // A task is reachable if every dependency is settled or itself reachable.
+  // Whatever the fixpoint cannot reach is on or behind a cycle.
+  /** @type {Set<string>} */
+  const reachable = new Set(settled);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const id of state.taskOrder) {
+      if (reachable.has(id) || dead.has(id)) continue;
+      const task = state.tasks.get(id);
+      if (!task) continue;
+      if (task.dependsOn.every((dep) => reachable.has(dep))) {
+        reachable.add(id);
+        changed = true;
+      }
+    }
+  }
+
+  return state.taskOrder.filter(
+    (id) => !reachable.has(id) && !dead.has(id) && state.tasks.has(id),
+  );
 }

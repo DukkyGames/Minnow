@@ -216,6 +216,20 @@ function evidenceFor(input) {
 }
 
 /**
+ * Does this seed kind repair in place rather than in a fresh worktree?
+ *
+ * Derived from the seed rather than carried alongside it, so a resumed attempt
+ * and a freshly decided one cannot disagree — the journal records `seedKind` on
+ * `task.attempt.started`, and this is the whole of what that implies.
+ *
+ * @param {string | null | undefined} seedKind
+ * @returns {boolean}
+ */
+export function wantsSameWorktree(seedKind) {
+  return seedKind === 'repair';
+}
+
+/**
  * Render the table as markdown, so a test can compare it to the documented one
  * cell for cell rather than restating it.
  *
