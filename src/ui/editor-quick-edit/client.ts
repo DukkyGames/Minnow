@@ -112,6 +112,8 @@ export async function fetchQuickEditReplacement(
     'off',
     provider.apiKind,
     modelCaps,
+    null,
+    modelId,
   );
   Object.assign(body, thinkingPatch);
 

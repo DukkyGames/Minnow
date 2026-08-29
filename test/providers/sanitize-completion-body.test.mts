@@ -249,6 +249,36 @@ describe('sanitizeCompletionBodyForProvider', () => {
     assert.equal(stripped.chat_template_kwargs, undefined);
     assert.equal(stripped.enable_thinking, undefined);
   });
+
+  test('rewrites GLM-5.3 disabled / medium / none into enabled + legal effort', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'glm-5.3-flash',
+        thinking: { type: 'disabled' },
+        reasoning_effort: 'medium',
+        enable_thinking: false,
+      },
+      OPENAI,
+      { reasoning: true, reasoningAllowedOptions: ['low', 'high', 'max'] },
+    );
+    assert.deepEqual(out.thinking, { type: 'enabled' });
+    assert.equal(out.reasoning_effort, 'low');
+    assert.deepEqual(out.reasoning, { effort: 'low' });
+  });
+
+  test('rewrites GLM-5.3 xhigh onto max', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'z-ai/glm-5.3-flash',
+        thinking: { type: 'disabled' },
+        reasoning_effort: 'xhigh',
+      },
+      OPENAI,
+      { reasoning: true },
+    );
+    assert.deepEqual(out.thinking, { type: 'enabled' });
+    assert.equal(out.reasoning_effort, 'max');
+  });
 });
 
 describe('extended sampler keep vs strip (shared fixtures)', () => {

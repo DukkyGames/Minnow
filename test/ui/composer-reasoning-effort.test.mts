@@ -251,4 +251,60 @@ describe('syncComposerReasoningEffortFromActiveChat', () => {
     assert.equal(select.value, 'high');
     assert.ok(!thinkingControl?.classList.contains('hidden'));
   });
+
+  test('GLM-5.3 shows Low/High/Max only, hides the brain Off toggle, defaults to Max', () => {
+    setupDom();
+    const chat = seedChat({
+      providerId: 'zai',
+      modelId: 'glm-5.3-flash',
+      reasoningEffort: 'off',
+    });
+
+    modelCache.set(encodeModelSelectKey('zai', 'glm-5.3-flash'), {
+      id: 'glm-5.3-flash',
+      type: 'llm',
+    });
+
+    initThinkingControl();
+    initComposerReasoningEffort();
+    syncComposerReasoningEffortFromActiveChat();
+
+    const dropdownWrap = document.getElementById('composerReasoningEffortWrap');
+    const select = document.getElementById('composerReasoningEffortSelect') as HTMLSelectElement;
+    const thinkingControl = document.getElementById('composerThinkingControl');
+    const thinkingWrap = document.getElementById('composerThinkingWrap');
+
+    assert.ok(!thinkingWrap?.classList.contains('hidden'));
+    assert.ok(!dropdownWrap?.classList.contains('hidden'));
+    assert.equal(select.options.length, 3);
+    assert.deepEqual(
+      [...select.options].map((o) => o.value),
+      ['low', 'high', 'max'],
+    );
+    assert.equal(select.value, 'max');
+    assert.ok(thinkingControl?.classList.contains('hidden'));
+    assert.equal(chat.reasoningEffort, undefined);
+  });
+
+  test('GLM-5.3 clears stored medium and shows Max', () => {
+    setupDom();
+    const chat = seedChat({
+      providerId: 'zai',
+      modelId: 'z-ai/glm-5.3-flash',
+      reasoningEffort: 'medium',
+    });
+
+    modelCache.set(encodeModelSelectKey('zai', 'z-ai/glm-5.3-flash'), {
+      id: 'z-ai/glm-5.3-flash',
+      type: 'llm',
+    });
+
+    initThinkingControl();
+    initComposerReasoningEffort();
+    syncComposerReasoningEffortFromActiveChat();
+
+    const select = document.getElementById('composerReasoningEffortSelect') as HTMLSelectElement;
+    assert.equal(chat.reasoningEffort, undefined);
+    assert.equal(select.value, 'max');
+  });
 });

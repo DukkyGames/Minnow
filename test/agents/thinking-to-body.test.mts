@@ -346,3 +346,86 @@ describe('reasoningEffortToCompletionBody', () => {
     ]);
   });
 });
+
+const GLM53_FLASH = 'z-ai/glm-5.3-flash';
+const glm53Caps: ModelCapabilities = {
+  vision: false,
+  tools: null,
+  streaming: null,
+  grammar: null,
+  reasoning: true,
+  reasoningAllowedOptions: ['low', 'high', 'max'],
+  reasoningDefault: 'max',
+  contextLength: null,
+  loadState: null,
+};
+
+describe('GLM-5.3 thinking bodies', () => {
+  test('openai-v1 off remaps to enabled + low (never disabled)', () => {
+    const { body } = thinkingToCompletionBody(
+      'off',
+      'openai-v1',
+      glm53Caps,
+      null,
+      GLM53_FLASH,
+    );
+    assert.deepEqual(body.thinking, { type: 'enabled' });
+    assert.equal(body.reasoning_effort, 'low');
+    assert.deepEqual(body.reasoning, { effort: 'low' });
+    assert.notEqual((body.thinking as { type?: string }).type, 'disabled');
+  });
+
+  test('openai-v1 on remaps to max, not medium', () => {
+    const { body } = thinkingToCompletionBody(
+      'on',
+      'openai-v1',
+      glm53Caps,
+      null,
+      GLM53_FLASH,
+    );
+    assert.equal(body.reasoning_effort, 'max');
+    assert.deepEqual(body.thinking, { type: 'enabled' });
+  });
+
+  test('openai-v1 medium remaps to low', () => {
+    const { body } = reasoningEffortToCompletionBody(
+      'medium',
+      'openai-v1',
+      glm53Caps,
+      null,
+      GLM53_FLASH,
+    );
+    assert.equal(body.reasoning_effort, 'low');
+    assert.deepEqual(body.thinking, { type: 'enabled' });
+  });
+
+  test('openai-v1 high stays high; max stays max', () => {
+    const high = reasoningEffortToCompletionBody(
+      'high',
+      'openai-v1',
+      glm53Caps,
+      null,
+      GLM53_FLASH,
+    ).body;
+    assert.equal(high.reasoning_effort, 'high');
+    const max = reasoningEffortToCompletionBody(
+      'max',
+      'openai-v1',
+      glm53Caps,
+      null,
+      'glm-5.3',
+    ).body;
+    assert.equal(max.reasoning_effort, 'max');
+  });
+
+  test('does not send enable_thinking false', () => {
+    const { body } = reasoningEffortToCompletionBody(
+      'off',
+      'openai-v1',
+      glm53Caps,
+      null,
+      GLM53_FLASH,
+    );
+    assert.notEqual(body.enable_thinking, false);
+  });
+});
