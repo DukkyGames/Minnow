@@ -370,6 +370,31 @@ function completeThinkOpenAtStart(text: string): number | null {
   }
   return null;
 }
+
+/**
+ * Complete think opener at a chunk start or a new line (optional indent).
+ * Mid-sentence mentions such as `use the <think> tag` must not match.
+ */
+const STANDALONE_THINK_OPEN_RE = new RegExp(
+  `(^|[\\r\\n])[ \\t]*(<${THINK_TAG}(?:\\s+[^>]*)?>)`,
+  'i',
+);
+
+function findStandaloneThinkOpen(text: string): { index: number; length: number } | null {
+  const match = STANDALONE_THINK_OPEN_RE.exec(text);
+  if (!match || match.index === undefined) {
+    return null;
+  }
+  const tag = match[2];
+  return { index: match.index + match[0].length - tag.length, length: tag.length };
+}
+
+/** True when `text` is only optional whitespace plus a complete think opener. */
+function startsWithStandaloneThinkOpen(text: string): boolean {
+  const open = findStandaloneThinkOpen(text);
+  return Boolean(open && text.slice(0, open.index).trim() === '');
+}
+
 function findReasoningProseSplit(text: string): { thinking: string; reply: string } | null {
   const trimmed = text.trimStart();
   if (!startsWithReasoningPrefix(trimmed) && !THINKING_PREFIX_RE.test(trimmed)) {
@@ -462,7 +487,9 @@ export function modelLikelyUsesInlineThinking(modelId: string): boolean {
 
 /**
  * Stateful stream splitter for `delta.content` when reasoning is embedded in prose/tags.
- * Routes inside `<think>` blocks, repairs stray `</think>` openers, and switches on reasoning prefixes.
+ * Routes inside `<think>` blocks, repairs stray `</think>` openers, switches on reasoning
+ * prefixes, and re-enters a later think span when a complete opener stands at a
+ * delta/line boundary and a matching close arrives (interleaved thinking).
  */
 export class InlineContentThinkingRouter {
   private thinkingModel: boolean;
@@ -487,6 +514,13 @@ export class InlineContentThinkingRouter {
 
   /** Latched once a buffered opener is released, so it is never re-buffered. */
   private openTagAbandoned = false;
+
+  /**
+   * Candidate second (or later) think span after visible prose, including its opener.
+   * Held until a matching close arrives so a code sample that merely mentions
+   * `<think>` is not committed as reasoning.
+   */
+  private midStreamThinkBuffer = '';
 
   constructor(options?: { thinkingModel?: boolean }) {
     this.thinkingModel = options?.thinkingModel ?? false;
@@ -519,6 +553,14 @@ export class InlineContentThinkingRouter {
       this.openTagBuffer = '';
       out.push(...this.routeChunk(buffered));
     }
+    // A second think span without a close stays visible prose, tags included.
+    if (this.midStreamThinkBuffer) {
+      const buffered = this.midStreamThinkBuffer;
+      this.midStreamThinkBuffer = '';
+      if (buffered) {
+        out.push([buffered, false]);
+      }
+    }
     if (this.inReasoningProse && this.proseBuffer) {
       const split = findReasoningProseSplit(this.proseBuffer);
       if (split) {
@@ -534,7 +576,36 @@ export class InlineContentThinkingRouter {
     return out;
   }
 
+  /**
+   * Commit a buffered mid-stream think span when `</think>` is present.
+   * An unclosed candidate stays in the buffer; `flush()` emits it as prose.
+   */
+  private drainMidStreamThink(): RoutedContentPart[] {
+    const close = findThinkClose(this.midStreamThinkBuffer);
+    if (!close) {
+      return [];
+    }
+    const openLen = completeThinkOpenAtStart(this.midStreamThinkBuffer);
+    const thinkPart = this.midStreamThinkBuffer.slice(openLen ?? 0, close.index);
+    const regularPart = this.midStreamThinkBuffer.slice(close.index + close.length);
+    this.midStreamThinkBuffer = '';
+    const out: RoutedContentPart[] = [];
+    if (thinkPart) {
+      out.push([thinkPart, true]);
+    }
+    if (regularPart) {
+      out.push(...this.routeChunk(regularPart));
+    }
+    return out;
+  }
+
   private routeChunk(content: string): RoutedContentPart[] {
+    // Finish a speculative second span before any other classification.
+    if (this.midStreamThinkBuffer) {
+      this.midStreamThinkBuffer += content;
+      return this.drainMidStreamThink();
+    }
+
     const out: RoutedContentPart[] = [];
     let chunk = content;
     const stripped = chunk.trimStart();
@@ -607,12 +678,19 @@ export class InlineContentThinkingRouter {
         }
         const regularPart = chunk.slice(close.index + close.length);
         this.inThinkTag = false;
+        // Allow a later span to strip its own opener.
+        this.thinkOpenStripped = false;
         if (thinkPart) {
           out.push([thinkPart, true]);
         }
         if (regularPart) {
-          this.firstContentSent = true;
-          out.push([regularPart, false]);
+          // Remainder that is itself a think opener is still the first channel
+          // (no visible prose yet). Anything else is the reply — re-route so a
+          // second span after a newline is not dumped as raw tags.
+          if (!startsWithStandaloneThinkOpen(regularPart)) {
+            this.firstContentSent = true;
+          }
+          out.push(...this.routeChunk(regularPart));
         }
       } else {
         if (!this.thinkOpenStripped) {
@@ -654,6 +732,22 @@ export class InlineContentThinkingRouter {
         this.firstContentSent = true;
       }
       return out;
+    }
+
+    // Interleaved thinking: a complete `<think>` at a delta/line boundary after
+    // visible prose. Hold until `</think>` so a mid-sentence mention is not
+    // reclassified. Instruct models (`thinkingModel` still false) never re-enter.
+    if (this.thinkingModel && this.firstContentSent && !this.inThinkTag && !this.inReasoningProse) {
+      const open = findStandaloneThinkOpen(chunk);
+      if (open) {
+        const before = chunk.slice(0, open.index);
+        if (before) {
+          out.push([before, false]);
+        }
+        this.midStreamThinkBuffer = chunk.slice(open.index);
+        out.push(...this.drainMidStreamThink());
+        return out;
+      }
     }
 
     this.firstContentSent = true;
