@@ -6,12 +6,15 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import '../tools/output-cap-als.js';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from '../process-runner.js';
 import {
-  DEFAULT_MAX_OUTPUT_CHARS,
   MAX_READ_FILE_BYTES,
   capReadFileOutput,
   capTextOutput,
+  getOutputCapPolicy,
+  resolveOutputCapPolicy,
+  runWithOutputCapPolicy,
 } from '../tools/output-cap.js';
 import { truncateGitDiff } from '../tools/git-diff-truncate.js';
 import {
@@ -144,11 +147,11 @@ import { resolveChatContext } from '../workspace/chat-cwd.js';
 import { appendBoardLogLine } from '../orchestrate/board-log-sink.js';
 import { guardCdOutsideWorktree as _guardCdRaw } from '../tools/cwd-guard.js';
 import { readConfigJson } from '../config/store.js';
+import { normalizeToolConfig } from '../config/validators.js';
 import { brainWorkspaceKeyFromPath } from '../brain/paths.js';
 import { purgeFileFromIndex, getCodeDb } from '../brain/code/schema.js';
 
 const execFileAsync = promisify(execFile);
-const FIND_FILES_MAX = 500;
 
 /** Read the autopilot.guardCdOutsideWorktree toggle from config.json (defaults true). */
 async function isGuardCdEnabled() {
@@ -414,7 +417,7 @@ function renderNumberedLineRange(content, startLine, endLine) {
   // Cap total output but keep a high per-line ceiling so a legitimate long-line range
   // is not chopped at 400 chars.
   const { text } = capTextOutput(rendered, {
-    maxLineChars: DEFAULT_MAX_OUTPUT_CHARS,
+    maxLineChars: getOutputCapPolicy().maxOutputChars,
     footerHint: 'request a smaller line range',
   });
   return text;
@@ -796,15 +799,11 @@ async function toolFindFiles(args) {
     return 'Error: pattern is required';
   }
 
-  return runFindFilesSearch(
-    args,
-    {
-      resolveSafePath,
-      toRelativePath,
-      getWorkspaceRoot: getEffectiveWorkspaceRoot,
-    },
-    { maxResults: FIND_FILES_MAX },
-  );
+  return runFindFilesSearch(args, {
+    resolveSafePath,
+    toRelativePath,
+    getWorkspaceRoot: getEffectiveWorkspaceRoot,
+  });
 }
 
 async function toolGetFileMetadata(args) {
@@ -866,13 +865,14 @@ async function toolGitDiff(args) {
 
   const label = `git ${gitArgs.join(' ')}`;
   const cwd = getEffectiveWorkspaceRoot();
-  const patchBudget = DEFAULT_MAX_OUTPUT_CHARS - 2_000;
+  const policy = getOutputCapPolicy();
+  const patchBudget = policy.maxOutputChars - 2_000;
 
   try {
     const result = await runProcess('git', gitArgs, { cwd });
     const patch = String(result.stdout ?? '');
 
-    if (patch.trimEnd().length > patchBudget) {
+    if (policy.applyResultCap && patch.trimEnd().length > patchBudget) {
       const numstatArgs = ['diff', '--numstat'];
       if (args?.staged) {
         numstatArgs.push('--cached');
@@ -1203,10 +1203,14 @@ async function toolReadCommandLog(args) {
   const runId = typeof args?.run_id === 'string' ? args.run_id.trim() : '';
   if (!runId) return 'Error: run_id is required';
 
-  const maxBytes =
-    typeof args?.max_bytes === 'number' && Number.isFinite(args.max_bytes)
-      ? Math.max(1024, Math.min(Math.floor(args.max_bytes), 512 * 1024))
-      : 64 * 1024;
+  const policy = getOutputCapPolicy();
+  const hasExplicitMax =
+    typeof args?.max_bytes === 'number' && Number.isFinite(args.max_bytes);
+  const maxBytes = hasExplicitMax
+    ? Math.max(1024, Math.min(Math.floor(args.max_bytes), 512 * 1024))
+    : policy.applyResultCap
+      ? 64 * 1024
+      : 512 * 1024;
 
   try {
     const snapshot = await readCommandLogSnapshot(runId, maxBytes);
@@ -1496,7 +1500,11 @@ const SERVER_TOOL_HANDLERS = {
 export async function executeServerTool(name, args, options = {}) {
   const fsAccess = await getFilesystemAccessFromConfig();
   const allowOutsideWorkspace = fsAccess === 'full';
+  const toolsRaw = await readConfigJson('tools.json');
+  const tools = normalizeToolConfig(toolsRaw);
+  const outputPolicy = resolveOutputCapPolicy(tools.toolOutput, args ?? {});
   return runWithToolContext(async () => {
+    return runWithOutputCapPolicy(outputPolicy, async () => {
     try {
       if (isPluginToolName(name)) {
         const result = await callPluginTool(name, args ?? {});
@@ -1522,6 +1530,7 @@ export async function executeServerTool(name, args, options = {}) {
       const message = err instanceof Error ? err.message : String(err);
       return { result: `Error: ${message}` };
     }
+    });
   }, {
     allowOutsideWorkspace,
     workspaceRoot: options.workspaceRoot,

@@ -61,7 +61,7 @@ describe('truncateUtf8', () => {
   it('truncates and appends byte cap notice', () => {
     const text = 'x'.repeat(WEB_TEXT_MAX_BYTES + 50);
     const out = truncateUtf8(text, WEB_TEXT_MAX_BYTES);
-    assert.match(out, /\[truncated to 24576 bytes\]/);
+    assert.match(out, new RegExp(`\\[truncated to ${WEB_TEXT_MAX_BYTES} bytes\\]`));
     assert.ok(out.length < text.length);
   });
 });
@@ -148,7 +148,7 @@ describe('toolFetchWebContent', () => {
   it('returns truncated plain text on success', async () => {
     const original = globalThis.fetch;
     globalThis.fetch = async () =>
-      new Response(`<html><body>${'word '.repeat(6000)}</body></html>`, {
+      new Response(`<html><body>${'word '.repeat(Math.ceil((WEB_TEXT_MAX_BYTES + 500) / 5))}</body></html>`, {
         status: 200,
         headers: { 'content-type': 'text/html' },
       });
@@ -157,7 +157,7 @@ describe('toolFetchWebContent', () => {
       const result = await toolFetchWebContent({ url: 'https://example.com/' });
       assert.ok(!result.startsWith('Error:'));
       assert.match(result, /<<<UNTRUSTED_SOURCE_DATA source="web:https:\/\/example\.com\/">>>/);
-      assert.ok(result.includes('[truncated to 24576 bytes]'));
+      assert.ok(result.includes(`[truncated to ${WEB_TEXT_MAX_BYTES} bytes]`));
     } finally {
       globalThis.fetch = original;
     }

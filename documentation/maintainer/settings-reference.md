@@ -366,7 +366,9 @@ Managed **SearXNG** install/start/stop (`~/.minnow/servers/`).
 | Setting | Key |
 |---------|-----|
 | Constrained tool calls | `toolCalls.useConstrainedDecoding` |
-| Tool result cache | Session-scoped |
+| Tool result cache | Session-scoped (`toolCache.enabled`) |
+| Limit tool result size | `toolOutput.enabled` (default on) |
+| Maximum characters per result | `toolOutput.maxChars` (default 128000; clamp 8000–2000000) |
 
 **Per-tool permissions:** each of **106 built-in tools** exposed in a default build (`off` / `ask` / `full`); the full catalog is **114** (eight calendar/email tools are hidden while those apps are release-gated). MCP servers add additional `mcp__…` tools with the same permission model.
 

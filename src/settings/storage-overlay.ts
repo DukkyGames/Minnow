@@ -232,6 +232,12 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'integrations.tools.cache': resource('tools', 'toolCache.enabled', 'boolean', {
     refreshAreas: ['tools'],
   }),
+  'integrations.tools.outputCap': resource('tools', 'toolOutput.enabled', 'boolean', {
+    refreshAreas: ['tools'],
+  }),
+  'integrations.tools.outputCap.maxChars': resource('tools', 'toolOutput.maxChars', 'number', {
+    refreshAreas: ['tools'],
+  }),
   'integrations.browser': meta('browser.enabled', 'boolean', { refreshAreas: ['browser'] }),
 
   // —— Advanced ——

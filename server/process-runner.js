@@ -4,7 +4,6 @@
 
 import { spawn } from 'node:child_process';
 import {
-  DEFAULT_MAX_OUTPUT_CHARS,
   PROCESS_MAX_ACCUMULATE_BYTES,
   appendWithByteCap,
   capTextOutput,
@@ -150,14 +149,12 @@ export function formatProcessOutput(label, {
 
   if (stdout.trim()) {
     const { text } = capTextOutput(stdout.trimEnd(), {
-      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
       footerHint: 'narrow the command scope or paginate follow-up reads',
     });
     parts.push(`stdout:\n${text}`);
   }
   if (stderr.trim()) {
     const { text } = capTextOutput(stderr.trimEnd(), {
-      maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
       footerHint: 'narrow the command scope or paginate follow-up reads',
     });
     parts.push(`stderr:\n${text}`);

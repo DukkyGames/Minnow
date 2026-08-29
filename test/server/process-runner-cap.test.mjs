@@ -6,6 +6,8 @@ import { describe, it } from 'node:test';
 import {
   DEFAULT_MAX_OUTPUT_CHARS,
   PROCESS_MAX_ACCUMULATE_BYTES,
+  resolveOutputCapPolicy,
+  runWithOutputCapPolicy,
 } from '../../server/tools/output-cap.js';
 import { formatProcessOutput, runProcess } from '../../server/process-runner.js';
 
@@ -15,6 +17,16 @@ describe('process-runner output caps', () => {
     const formatted = formatProcessOutput('test cmd', { code: 0, stdout, stderr: '' });
     assert.match(formatted, /\[truncated — \d+ of \d+ chars;/);
     assert.ok(formatted.length < stdout.length);
+  });
+
+  it('formatProcessOutput does not slice when applyResultCap is false', () => {
+    const stdout = 'x'.repeat(DEFAULT_MAX_OUTPUT_CHARS + 5_000);
+    const policy = resolveOutputCapPolicy({ enabled: false, maxChars: DEFAULT_MAX_OUTPUT_CHARS }, {});
+    const formatted = runWithOutputCapPolicy(policy, () =>
+      formatProcessOutput('test cmd', { code: 0, stdout, stderr: '' }),
+    );
+    assert.doesNotMatch(formatted, /\[truncated —/);
+    assert.ok(formatted.includes(stdout.slice(0, 40)));
   });
 
   it('formatProcessOutput notes subprocess accumulation truncation', () => {

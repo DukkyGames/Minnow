@@ -1984,6 +1984,49 @@
     ]
   },
   {
+    "key": "integrations.tools.outputCap",
+    "label": "Limit tool result size",
+    "description": "Caps how much text each file read, search, or shell command returns to the model. This does not compress chat history.",
+    "keywords": [
+      "truncation",
+      "output cap",
+      "32k",
+      "full_result",
+      "tool result"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "path": "toolOutput.enabled",
+    "resource": "tools",
+    "type": "boolean",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.outputCap.maxChars",
+    "label": "Maximum characters per tool result",
+    "keywords": [
+      "truncation",
+      "max chars",
+      "output cap"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "path": "toolOutput.maxChars",
+    "resource": "tools",
+    "type": "number",
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
     "key": "integrations.tools.bulk",
     "label": "Bulk tool permissions",
     "keywords": [
@@ -3783,6 +3826,32 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.board_init",
+    "type": "enum",
+    "allowedValues": [
+      "off",
+      "ask",
+      "full"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "tools"
+    ]
+  },
+  {
+    "key": "integrations.tools.permission.board_add_tasks",
+    "label": "Tool permission: board_add_tasks",
+    "description": "Permission mode for the board_add_tasks tool (off, ask, or full).",
+    "keywords": [
+      "board_add_tasks",
+      "permission",
+      "tools"
+    ],
+    "category": "integrations",
+    "area": "tools",
+    "storage": "resource",
+    "resource": "tools",
+    "path": "permissions.default.board_add_tasks",
     "type": "enum",
     "allowedValues": [
       "off",

@@ -3,8 +3,8 @@
  * Used by the browser executor and the Node tool server (BUG-011).
  */
 
-/** Max plain-text bytes returned from fetched web pages. */
-export const WEB_TEXT_MAX_BYTES = 24576;
+/** Max plain-text bytes returned from fetched web pages when result capping is on. */
+export const WEB_TEXT_MAX_BYTES = 128 * 1024;
 
 /** Default number of ranked excerpts returned by rag_web_content. */
 export const WEB_RAG_EXCERPT_LIMIT = 16;

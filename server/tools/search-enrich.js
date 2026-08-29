@@ -13,6 +13,8 @@ import {
   WEB_TEXT_MAX_BYTES,
 } from '../../src/lib/fetch-web-content.mjs';
 
+import { getOutputCapPolicy } from './output-cap.js';
+
 /** Pages fetched per enriched search. Kept small — each is a network round-trip. */
 export const DEEP_READ_PAGE_LIMIT = 3;
 
@@ -51,7 +53,8 @@ export async function fetchResultExcerpts(query, results, opts = {}) {
       if (typeof text !== 'string' || text.startsWith('Error:')) {
         return { result, excerpts: [], error: text || 'fetch failed' };
       }
-      const capped = truncateUtf8(text, WEB_TEXT_MAX_BYTES);
+      const policy = getOutputCapPolicy();
+      const capped = policy.applyResultCap ? truncateUtf8(text, WEB_TEXT_MAX_BYTES) : text;
       return { result, excerpts: rankWebContentByQuery(capped, query, excerptsPerPage) };
     }),
   );

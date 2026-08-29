@@ -5,6 +5,7 @@
 
 import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET, MINNOW_DOCS_TOOL_IDS } from './tool-ids.js';
 import { normalizeWorkspacePathKey } from '../workspace/root.js';
+import { normalizeToolOutputConfig } from '../tools/output-cap.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
   clampThinkingBudgetTokens,
@@ -922,6 +923,7 @@ export function normalizeToolConfig(raw) {
     webSearchProvider: 'duckduckgo',
     toolCache: { enabled: true },
     plugins: {},
+    toolOutput: normalizeToolOutputConfig(undefined),
   };
 
   if (!raw || typeof raw !== 'object') return config;
@@ -995,6 +997,8 @@ export function normalizeToolConfig(raw) {
   if (!config.toolCache) {
     config.toolCache = { enabled: true };
   }
+
+  config.toolOutput = normalizeToolOutputConfig(stored.toolOutput);
 
   if (stored.plugins && typeof stored.plugins === 'object') {
     const pluginsMap = /** @type {Record<string, unknown>} */ (stored.plugins);
