@@ -1483,6 +1483,31 @@ export interface Chat {
     summaryPreview?: string;
     at?: number;
   };
+  /**
+   * Durable file/URL chips pinned on this chat (MIN-630). Survive reload and
+   * are distinct from this-turn composer attachments.
+   */
+  links?: ChatLink[];
+}
+
+/** Kind of standing link chip pinned on a chat. */
+export type ChatLinkKind = 'file' | 'url';
+
+/**
+ * One pinned chat link: a workspace file (editor tab) or an http(s) URL
+ * (in-app browser tab). Same chip family as composer/transcript `.code-ref-link`.
+ */
+export interface ChatLink {
+  id: string;
+  kind: ChatLinkKind;
+  /** Workspace-relative path when {@link kind} is `file`. */
+  path?: string;
+  /** Absolute http(s) URL when {@link kind} is `url`. */
+  url?: string;
+  /** Chip label (basename or host). */
+  label: string;
+  /** Epoch ms when the link was pinned. */
+  addedAt: number;
 }
 
 export type {

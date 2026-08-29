@@ -18,6 +18,8 @@ The basics of chat take one minute. The controls on this page are the ones that 
 
 Drafts survive switching chats.
 
+**Link a tab to this chat.** Drag a Code editor tab or an in-app browser tab onto the transcript or composer. Minnow pins a link chip on that chat — the file or URL, not a one-turn attachment. The chip stays after reload; click it to open the file or page. Dragging from the file tree still attaches for the next message only.
+
 ## While the model is working
 
 You do not have to sit still and wait.

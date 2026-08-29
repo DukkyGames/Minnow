@@ -11,6 +11,8 @@ export type DragKind = 'external' | 'workspace' | 'codeSelection';
 export function looksLikeWorkspaceRelativePath(plain: string): boolean {
   const trimmed = plain.trim();
   if (!trimmed || trimmed.includes('\n') || trimmed.length > 512) return false;
+  // Tab-strip reorder tokens (`file:<path>`, `preview:<id>`) are not workspace paths.
+  if (trimmed.startsWith('file:') || trimmed.startsWith('preview:')) return false;
   if (/[=;{}()]/.test(trimmed)) return false;
   if (trimmed.includes('/') || trimmed.includes('\\')) return true;
   return /\.[a-zA-Z0-9]{1,12}$/.test(trimmed);
