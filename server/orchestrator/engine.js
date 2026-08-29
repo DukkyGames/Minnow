@@ -42,7 +42,7 @@ import {
 } from './core/plan.js';
 import { makeEvent } from './core/events.js';
 import { foldInto } from './core/derive.js';
-import { appendEvent, appendEvents, loadState, readEvents } from './journal.js';
+import * as diskJournal from './journal.js';
 
 /** How often the safety-net tick fires. */
 export const DEFAULT_TICK_MS = 5_000;
@@ -135,12 +135,18 @@ function isAgentRole(role) {
  *   effector: Effector,
  *   clock?: typeof systemClock,
  *   tickMs?: number,
+ *   journal?: typeof diskJournal,
  * }} options
  */
 export function createEngine(options) {
   const { boardId, effector } = options;
   const clock = options.clock ?? systemClock;
   const tickMs = options.tickMs ?? DEFAULT_TICK_MS;
+  // The store is a seam so the conformance suite can run the scheduler against
+  // an in-memory journal. Durability is P1-A's property and is tested there; a
+  // scheduler suite that pays for a filesystem write on every tick is a
+  // scheduler suite nobody runs.
+  const journal = options.journal ?? diskJournal;
 
   /** @type {import('./core/types').BoardState | null} */
   let state = null;
@@ -191,8 +197,8 @@ export function createEngine(options) {
     if (events.length === 0) return [];
     const stamped =
       events.length === 1
-        ? [await appendEvent(boardId, events[0], { now: clock.now })]
-        : await appendEvents(boardId, events, { now: clock.now });
+        ? [await journal.appendEvent(boardId, events[0], { now: clock.now })]
+        : await journal.appendEvents(boardId, events, { now: clock.now });
     foldInto(/** @type {import('./core/types').BoardState} */ (state), stamped);
     for (const event of stamped) {
       for (const subscriber of subscribers) {
@@ -472,12 +478,12 @@ export function createEngine(options) {
 
   return {
     /**
-     * Read the board off disk and wire up the effector.
+     * Read the board from the journal and wire up the effector.
      *
      * @returns {Promise<void>}
      */
     async load() {
-      state = await loadState(boardId);
+      state = await journal.loadState(boardId);
       // Returned, not fire-and-forget: the effector keeps the attempt visible to
       // `inspect()` until this resolves, which is what stops a tick landing in
       // the gap between "finished" and "recorded as finished".
@@ -491,7 +497,7 @@ export function createEngine(options) {
      * @returns {Promise<void>}
      */
     async reload() {
-      state = await loadState(boardId);
+      state = await journal.loadState(boardId);
     },
 
     /** @returns {import('./core/types').BoardState} */
@@ -502,7 +508,7 @@ export function createEngine(options) {
 
     /** @returns {Promise<Record<string, unknown>[]>} */
     getEvents() {
-      return readEvents(boardId);
+      return journal.readEvents(boardId);
     },
 
     /**
