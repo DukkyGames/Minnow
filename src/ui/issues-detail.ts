@@ -32,7 +32,7 @@ import {
 import {
   createIssueExpandButton,
   isIssueExpandOverlayOpen,
-} from './issues-expand';
+} from './issues-expand-controls';
 import {
   canInvestigateIssue,
   canRunIssueWorkflow,

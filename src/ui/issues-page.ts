@@ -10,7 +10,7 @@ import '../styles/issues.css';
 
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { canExpandIssueWithAgent } from '../chat/issues/expand-task';
-import { canExpandIssueDraft } from '../chat/issues/expand-issue';
+import { canExpandIssueDraft } from '../chat/issues/expand-issue-guards';
 import {
   canInvestigateIssue,
   canRunIssueWorkflow,
@@ -118,7 +118,7 @@ import {
   isIssueDraftExpanding,
   isIssueExpandOverlayOpen,
   startIssueExpandFromUi,
-} from './issues-expand';
+} from './issues-expand-controls';
 import { createIssuesLabelsField } from './issues-labels-field';
 import {
   ariaSortValue,

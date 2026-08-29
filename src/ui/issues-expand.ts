@@ -6,34 +6,35 @@
  * proposal must not land there until the user accepts.
  */
 
+import { canExpandIssueDraft } from '../chat/issues/expand-issue-guards';
 import {
-  canExpandIssueDraft,
   mergeExpandedIssue,
   type ExpandedIssueDraft,
 } from '../chat/issues/expand-issue';
 import { findIssueById, updateIssue } from '../state/issues-store';
-import type { IssueCard } from '../types';
-import {
-  EXPAND_EMPTY_MESSAGE,
-  EXPAND_FAILED_MESSAGE,
-  fetchExpandedIssue,
-  type ExpandIssueRequest,
+import type {
+  ExpandIssueRequest,
+  ExpandIssueResult,
 } from './issues-expand-client';
-import { iconHtml } from './icon';
+import {
+  ISSUES_EXPAND_BACKDROP_ID,
+  ISSUES_EXPAND_FORM_ID,
+  isIssueDraftExpanding,
+  isIssueExpandOverlayOpen,
+  setIssueExpandRun,
+} from './issues-expand-state';
 import { setStatus } from './status';
 import { showToast } from './toast';
 
-const OVERLAY_FORM_ID = 'issuesExpandForm';
-const OVERLAY_BACKDROP_ID = 'issuesExpandFormBackdrop';
+export { isIssueDraftExpanding, isIssueExpandOverlayOpen };
+
+const OVERLAY_FORM_ID = ISSUES_EXPAND_FORM_ID;
+const OVERLAY_BACKDROP_ID = ISSUES_EXPAND_BACKDROP_ID;
 
 const IDLE_LABEL = 'Expand issue';
 const IDLE_TITLE = 'Expand title and description from the current card';
 const BUSY_LABEL = 'Expanding issue — click to cancel';
 const BUSY_TITLE = 'Expanding… click to cancel';
-
-const EXPAND_MARKUP =
-  iconHtml('sparkles', { className: 'composer-expand-btn__icon', size: 16 }) +
-  '<span class="composer-expand-btn__spinner" aria-hidden="true"></span>';
 
 interface ExpandRun {
   issueId: string;
@@ -41,63 +42,41 @@ interface ExpandRun {
   original: { title: string; description: string };
 }
 
+type ExpandIssueFetcher = (input: ExpandIssueRequest) => Promise<ExpandIssueResult>;
+
 let activeRun: ExpandRun | null = null;
-let expandFetchImpl = fetchExpandedIssue;
+/** Test override; production loads the generations client on first expand. */
+let expandFetchImpl: ExpandIssueFetcher | null = null;
 
-export function setExpandIssueFetcherForTests(
-  impl: typeof fetchExpandedIssue | null,
-): void {
-  expandFetchImpl = impl ?? fetchExpandedIssue;
+export function setExpandIssueFetcherForTests(impl: ExpandIssueFetcher | null): void {
+  expandFetchImpl = impl;
 }
 
-/** True while a sparkles expansion is in flight (overlay may already be showing a proposal). */
-export function isIssueDraftExpanding(issueId?: string): boolean {
-  if (!activeRun) return false;
-  return issueId ? activeRun.issueId === issueId : true;
+/** Lazy-load the generations client so first paint does not pull it into the store chunk. */
+async function resolveExpandFetcher(): Promise<ExpandIssueFetcher> {
+  if (expandFetchImpl) return expandFetchImpl;
+  const { fetchExpandedIssue } = await import('./issues-expand-client');
+  return fetchExpandedIssue;
 }
 
-/** True when the review overlay is mounted and open. */
-export function isIssueExpandOverlayOpen(): boolean {
-  return document.getElementById(OVERLAY_FORM_ID)?.classList.contains('is-open') === true;
+/** Keep toast copy aligned with composer-expand-client without a static import. */
+const EXPAND_EMPTY_MESSAGE = 'Model returned no expanded prompt.';
+const EXPAND_FAILED_MESSAGE = 'Expand failed — check provider and model in Settings';
+
+function clearActiveRun(): void {
+  activeRun = null;
+  setIssueExpandRun(null);
 }
 
-export type IssueExpandButtonVariant = 'peek' | 'board';
-
-/** Sparkles control matching the composer prompt expander icon. */
-export function createIssueExpandButton(
-  issue: IssueCard,
-  variant: IssueExpandButtonVariant,
-): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className =
-    variant === 'peek'
-      ? 'issues-detail__icon-btn composer-expand-btn issues-expand-btn'
-      : 'issues-card__expand-btn composer-expand-btn issues-expand-btn';
-  btn.dataset.issueExpand = issue.id;
-  btn.innerHTML = EXPAND_MARKUP;
-  const busy = isIssueDraftExpanding(issue.id);
-  paintExpandButton(btn, busy);
-  btn.disabled = busy ? false : !canExpandIssueDraft(issue);
-  btn.addEventListener('click', (event) => {
-    event.stopPropagation();
-    void onExpandButtonClick(issue.id);
-  });
-  return btn;
-}
-
-function paintExpandButton(btn: HTMLButtonElement, busy: boolean): void {
-  btn.classList.toggle('composer-expand-btn--busy', busy);
-  btn.setAttribute('aria-busy', busy ? 'true' : 'false');
-  btn.setAttribute('aria-label', busy ? BUSY_LABEL : IDLE_LABEL);
-  btn.title = busy ? BUSY_TITLE : IDLE_TITLE;
-}
-
+/** Keep sparkles controls in sync after the lazy expand module mutates run state. */
 function syncExpandButtons(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-issue-expand]').forEach((btn) => {
     const id = btn.dataset.issueExpand ?? '';
     const busy = isIssueDraftExpanding(id);
-    paintExpandButton(btn, busy);
+    btn.classList.toggle('composer-expand-btn--busy', busy);
+    btn.setAttribute('aria-busy', busy ? 'true' : 'false');
+    btn.setAttribute('aria-label', busy ? BUSY_LABEL : IDLE_LABEL);
+    btn.title = busy ? BUSY_TITLE : IDLE_TITLE;
     if (!busy) {
       const issue = findIssueById(id);
       btn.disabled = !issue || !canExpandIssueDraft(issue);
@@ -105,14 +84,6 @@ function syncExpandButtons(): void {
       btn.disabled = false;
     }
   });
-}
-
-function onExpandButtonClick(issueId: string): void {
-  if (activeRun?.issueId === issueId) {
-    discardExpand();
-    return;
-  }
-  void startIssueExpandFromUi(issueId);
 }
 
 function overlayEls(): {
@@ -294,7 +265,7 @@ function discardExpand(): void {
   const run = activeRun;
   if (run) {
     run.controller.abort();
-    activeRun = null;
+    clearActiveRun();
     syncExpandButtons();
     setStatus('ok', 'Expand cancelled');
   }
@@ -313,7 +284,7 @@ function applyExpand(): void {
   const description = els.description.value;
   const issueId = run.issueId;
   // Drop the run before writing so a store-driven remount does not treat this as in-flight.
-  activeRun = null;
+  clearActiveRun();
   updateIssue(issueId, { title, description });
   closeOverlay();
   syncExpandButtons();
@@ -338,12 +309,13 @@ export async function startIssueExpandFromUi(issueId: string): Promise<void> {
 
   if (activeRun && activeRun.issueId !== issueId) {
     activeRun.controller.abort();
-    activeRun = null;
+    clearActiveRun();
   }
 
   const original = { title: issue.title, description: issue.description ?? '' };
   const controller = new AbortController();
   activeRun = { issueId, controller, original };
+  setIssueExpandRun(issueId);
 
   const els = ensureOverlay();
   setOverlayOpen(true);
@@ -356,7 +328,8 @@ export async function startIssueExpandFromUi(issueId: string): Promise<void> {
   setStatus('spin', 'Expanding issue…');
 
   try {
-    const result = await expandFetchImpl({
+    const fetchExpanded = await resolveExpandFetcher();
+    const result = await fetchExpanded({
       issue,
       signal: controller.signal,
       onPartial: (draft: ExpandedIssueDraft) => {
@@ -372,7 +345,7 @@ export async function startIssueExpandFromUi(issueId: string): Promise<void> {
     if (activeRun?.issueId !== issueId) return;
 
     if (result.error) {
-      activeRun = null;
+      clearActiveRun();
       closeOverlay();
       syncExpandButtons();
       setStatus('err', result.error);
@@ -380,7 +353,7 @@ export async function startIssueExpandFromUi(issueId: string): Promise<void> {
       return;
     }
     if (!result.draft) {
-      activeRun = null;
+      clearActiveRun();
       closeOverlay();
       syncExpandButtons();
       setStatus('ok', 'Ready');
@@ -396,7 +369,7 @@ export async function startIssueExpandFromUi(issueId: string): Promise<void> {
     els.title.focus();
     els.title.select();
   } catch (err) {
-    if (activeRun?.issueId === issueId) activeRun = null;
+    if (activeRun?.issueId === issueId) clearActiveRun();
     closeOverlay();
     syncExpandButtons();
     const message = err instanceof Error && err.message.trim() ? err.message : EXPAND_FAILED_MESSAGE;

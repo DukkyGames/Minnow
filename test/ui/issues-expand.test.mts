@@ -20,9 +20,9 @@ const { defaultToolConfig } = await import('../../src/config/defaults.ts');
 const {
   closeIssueExpandOverlay,
   isIssueExpandOverlayOpen,
-  setExpandIssueFetcherForTests,
   startIssueExpandFromUi,
-} = await import('../../src/ui/issues-expand.ts');
+} = await import('../../src/ui/issues-expand-controls.ts');
+const { setExpandIssueFetcherForTests } = await import('../../src/ui/issues-expand.ts');
 const { closeIssueDetail, openIssueDetail } = await import(
   '../../src/ui/issues-detail.ts'
 );

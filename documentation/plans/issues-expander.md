@@ -9,6 +9,7 @@ Thin issues stay thin. Add a prompt-expander-style action that fills them from *
 - [x] Review overlay: accept / edit / discard; store unchanged until Apply
 - [x] Sparkles action on peek, list menu, board card, command palette, **E**
 - [x] Keep triage **Expand with agent** (issue-writer research) as a separate action
+- [x] Code-split: thin controls on Issues paint; generations client + overlay on first click
 - [x] Tests for parser, overlay accept/discard, peek sparkles, command
 - [x] Manual + `documentation/context.md`
 

@@ -9,6 +9,9 @@
 import { extractInlineThinkingFromContent } from '../../api/inline-thinking';
 import { wrapUntrusted } from '../../lib/untrusted.mjs';
 import type { ApiMessage, IssueCard } from '../../types';
+import { canExpandIssueDraft, issueHasDetails } from './expand-issue-guards';
+
+export { canExpandIssueDraft, issueHasDetails };
 
 /** Cap so a pasted wall of text cannot blow the utility call's context. */
 const MAX_FIELD_CHARS = 8_000;
@@ -29,19 +32,6 @@ export type IssueExpandSource = Pick<
 export interface ExpandedIssueDraft {
   title: string;
   description: string;
-}
-
-/**
- * True when the card already has body text to improve rather than invent.
- * Notes count: a stub description often lives there on triage captures.
- */
-export function issueHasDetails(issue: Pick<IssueCard, 'description' | 'notes'>): boolean {
-  return Boolean(issue.description?.trim() || issue.notes?.trim());
-}
-
-/** True when there is any prose to expand (issues always have a title in practice). */
-export function canExpandIssueDraft(issue: Pick<IssueCard, 'title' | 'description' | 'notes'>): boolean {
-  return Boolean(issue.title?.trim() || issue.description?.trim() || issue.notes?.trim());
 }
 
 function cut(text: string, limit: number): string {
