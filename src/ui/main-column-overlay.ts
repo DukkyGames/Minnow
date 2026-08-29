@@ -1,6 +1,7 @@
 /**
  * Shared main-column overlay chrome — CSS classes and DOM suppression for
- * Code overview, code map, orchestrate hub, plan screen, and Issues embeds.
+ * Code overview, code map, orchestrate hub, the V2 Boards surface, plan screen,
+ * and Issues embeds.
  */
 
 import type { CodeSectionId } from '../os/types';
@@ -14,6 +15,7 @@ export type CodeStageViewKeep =
   | 'dev-server'
   | 'super-plan'
   | 'orchestrate'
+  | 'boards'
   | 'map'
   | 'source-control'
   | 'issues'
@@ -24,6 +26,7 @@ const CHAT_AREA_OVERLAY_CLASSES = [
   'chat-area--code-brain-map',
   'chat-area--orchestrate-hub',
   'chat-area--orchestrate',
+  'chat-area--orchestrator-boards',
   'chat-area--plan-screen',
   'chat-area--issues',
   'chat-area--dev-server',
@@ -34,6 +37,7 @@ const CHAT_AREA_OVERLAY_CLASSES = [
 const MAIN_COLUMN_OVERLAY_CLASSES = [
   'main-column--code-overview',
   'main-column--code-brain-map',
+  'main-column--orchestrator-boards',
   'main-column--plan-screen',
   'main-column--issues',
   'main-column--dev-server',
@@ -73,6 +77,7 @@ function isCodeStageRootHidingChatSidebar(): boolean {
   if (document.getElementById('codeOverviewRoot')) return true;
   if (document.getElementById('codeBrainMapRoot')) return true;
   if (document.getElementById('orchestrateHub')) return true;
+  if (document.getElementById('orchestratorBoardsRoot')) return true;
   if (document.getElementById('orchestratePlanScreen')) return true;
   if (document.getElementById('superPlanPage')) return true;
   if (document.getElementById('devServerScreenRoot')) return true;
@@ -149,6 +154,11 @@ export async function closeOtherCodeStageViews(keep?: CodeStageViewKeep): Promis
     hub.teardownOrchestrateHub();
   }
 
+  if (keep !== 'boards' && document.getElementById('orchestratorBoardsRoot')) {
+    const boards = await import('../orchestrator/boards-view');
+    boards.teardownBoardsView();
+  }
+
   if (keep !== 'overview' && document.getElementById('codeOverviewRoot')) {
     const overview = await import('./code-overview');
     overview.closeCodeOverview({ skipNavigate: true, restoreChat: false });
@@ -218,6 +228,11 @@ export async function showCodeStageSection(section: CodeSectionId): Promise<void
     hub.openOrchestrateLanding();
     return;
   }
+  if (section === 'boards') {
+    const boards = await import('../orchestrator/boards-view');
+    await boards.openBoardsView();
+    return;
+  }
   if (section === 'map') {
     const map = await import('./code-brain-map');
     await map.openCodeBrainMap({ skipNavigate: true });
@@ -244,6 +259,12 @@ export async function closeActiveCodeStageView(): Promise<void> {
       const { renderChatFromHistory } = await import('./messages');
       renderChatFromHistory(chat);
     }
+    return;
+  }
+
+  const boards = await import('../orchestrator/boards-view');
+  if (boards.isBoardsViewOpen()) {
+    await boards.closeBoardsView();
     return;
   }
 

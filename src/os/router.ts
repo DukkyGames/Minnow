@@ -491,6 +491,11 @@ export function navigateToCodeOrchestrate(): void {
   navigateToCodeSection('orchestrate');
 }
 
+/** Orchestrator V2's Boards surface. Beside V1's Orchestrate, not instead of it. */
+export function navigateToCodeBoards(): void {
+  navigateToCodeSection('boards');
+}
+
 /** Navigate to the Code map. */
 export function navigateToCodeMap(): void {
   navigateToCodeSection('map');

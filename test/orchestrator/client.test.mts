@@ -657,19 +657,86 @@ describe('the renderer writes nothing', () => {
     }
   });
 
-  it('has no V1 store import anywhere under src/orchestrator', () => {
+  it('has no V1 board import anywhere under src/orchestrator', () => {
     // The guard MIN-695 asks for. It is scoped to the new directory now; it
     // widens to `src/ui/orchestrate-board*` when the V1 view is removed.
-    const dir = path.join(PROJECT_ROOT, 'src/orchestrator');
-    for (const entry of fs.readdirSync(dir, { recursive: true }) as string[]) {
-      const file = path.join(dir, String(entry));
-      if (!fs.statSync(file).isFile()) continue;
-      const source = fs.readFileSync(file, 'utf8');
-      assert.equal(
-        source.includes('orchestrate-board-store'),
-        false,
-        `${entry} imports the V1 board store`,
+    //
+    // The V2 surface is meant to survive Phase 4 deleting V1, so every one of
+    // these is a module that would take it down with them — and `BoardTask` is
+    // the specific temptation, because reaching for it is how a "small
+    // adaptation" turns into a retrofit of a 50-field shape onto a 17-field one.
+    const banned = [
+      'orchestrate-board-store',
+      'orchestrate-board-actions',
+      'orchestrate-board-chat',
+      'orchestrate-board-kickoff',
+      'orchestrate-self-heal',
+      'orchestrate-hub',
+      'board-display-wake',
+      'board-boot-resume',
+      'oom-recovery',
+      'board-tools',
+    ];
+    for (const file of sourcesUnder(path.join(PROJECT_ROOT, 'src/orchestrator'))) {
+      // Code only. These files name V1 modules in their prose precisely to say
+      // why V2 does not have them, and a guard that could not tell the
+      // difference would forbid explaining itself.
+      const source = withoutComments(fs.readFileSync(file.path, 'utf8'));
+      for (const name of banned) {
+        assert.equal(source.includes(name), false, `${file.name} reaches ${name}`);
+      }
+      assert.doesNotMatch(
+        source,
+        /BoardTask/,
+        `${file.name} names V1's BoardTask — V2's TaskState is a different shape`,
       );
     }
   });
+
+  it('has no renderer module that writes board state', () => {
+    // Locked decision 2, mechanically. The only writes the V2 surface may
+    // perform are the commands `client.ts` exposes, and each of those is a POST
+    // whose effect arrives back over the stream. A view that assigned to a
+    // task's phase, or pushed onto the merge queue, would be the engine again.
+    const forbidden: Array<[RegExp, string]> = [
+      [/\.phase\s*=[^=]/, 'assigns to a task phase'],
+      [/\.status\s*=\s*['"`](running|stopped|created)/, 'assigns a board status'],
+      [/\.mergeQueue\s*[.=]\s*(push|splice|=)/, 'writes the merge queue'],
+      [/\.attempts\.(push|splice|pop|shift)/, 'writes an attempt list'],
+      [/tasks\.set\(/, 'writes the task map'],
+      [/foldInto\(/, 'folds events outside the client'],
+    ];
+    for (const file of sourcesUnder(path.join(PROJECT_ROOT, 'src/orchestrator'))) {
+      // `client.ts` is the one place the fold is allowed: it *is* the view's
+      // copy of the engine's read path, and it hands out frozen state.
+      if (file.name === 'client.ts') continue;
+      const source = withoutComments(fs.readFileSync(file.path, 'utf8'));
+      for (const [pattern, what] of forbidden) {
+        assert.doesNotMatch(source, pattern, `${file.name} ${what}`);
+      }
+    }
+  });
 });
+
+/** Strip block comments and whole-line `//` comments. Good enough for a guard. */
+function withoutComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+}
+
+/** Every `.ts` under a directory, recursively. */
+function sourcesUnder(dir: string): Array<{ name: string; path: string }> {
+  const out: Array<{ name: string; path: string }> = [];
+  for (const entry of fs.readdirSync(dir, { recursive: true }) as string[]) {
+    const name = String(entry);
+    const full = path.join(dir, name);
+    if (!fs.statSync(full).isFile()) continue;
+    if (!name.endsWith('.ts')) continue;
+    out.push({ name, path: full });
+  }
+  assert.ok(out.length > 0, `no sources found under ${dir}`);
+  return out;
+}

@@ -98,6 +98,7 @@ export type CodeSectionId =
   | 'dev-server'
   | 'super-plan'
   | 'orchestrate'
+  | 'boards'
   | 'map';
 
 /** Hash path segments that map 1:1 onto {@link CodeSectionId}. */
@@ -107,6 +108,7 @@ export const CODE_SECTION_IDS: readonly CodeSectionId[] = [
   'dev-server',
   'super-plan',
   'orchestrate',
+  'boards',
   'map',
 ];
 

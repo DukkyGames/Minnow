@@ -1,0 +1,759 @@
+/*
+ * Orchestrator V2 — the Boards surface.
+ *
+ * Scoped entirely under `.ov2`, with no selector reaching a V1 orchestrate
+ * class, so Phase 4 deleting V1 cannot take a rule out from under this.
+ *
+ * Apps run inside MinnowOS windows, so width is a container question, not a
+ * viewport one: `@media` never matches an app's width here.
+ */
+
+/*
+ * The container is the *wrapper*, not `.ov2` itself: a container query only ever
+ * matches an ancestor, so a rule inside `@container ov2` can never apply to the
+ * element that declares the container. Declaring it here is what makes the
+ * narrow layout at the bottom of this file reachable at all.
+ */
+.chat-area--orchestrator-boards {
+  container-type: inline-size;
+  container-name: ov2;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.ov2 {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  height: 100%;
+  min-height: 0;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+/* ── The list ──────────────────────────────────────────────────────────── */
+
+.ov2__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--mn-border);
+  background: var(--mn-surface-0);
+}
+
+.ov2__list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ov2__list-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ov2__boards {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov2__board-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ov2__board-btn:hover {
+  background: var(--mn-surface-1);
+}
+
+.ov2__board-btn.is-selected {
+  border-color: var(--mn-accent-border);
+  background: var(--mn-accent-soft);
+}
+
+.ov2__board-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ov2__board-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+}
+
+.ov2__list-error {
+  margin: 0;
+  color: var(--mn-warning);
+  font-size: 11px;
+}
+
+/* ── The board ─────────────────────────────────────────────────────────── */
+
+.ov2__board {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 20px 40px;
+  overflow-y: auto;
+}
+
+.ov2-board__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov2-board__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ov2-board__name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.ov2-board__plan {
+  color: var(--mn-fg-subtle);
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.ov2-board__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.ov2-board__reason,
+.ov2-board__summary {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 12px;
+}
+
+.ov2-board__final {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ov2-board__final-run {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--mn-surface-1);
+  font-size: 11px;
+}
+
+/* ── Shared primitives ─────────────────────────────────────────────────── */
+
+.ov2-field {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.ov2-field__label {
+  color: var(--mn-fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.ov2-field__value {
+  color: var(--mn-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov2-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 999px;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.ov2-pill--live {
+  border-color: var(--mn-accent-border);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+}
+
+.ov2-pill--good {
+  border-color: var(--mn-success-border);
+  background: var(--mn-success-soft);
+  color: var(--mn-success-ink);
+}
+
+.ov2-pill--warn {
+  border-color: var(--mn-warning-border);
+  background: var(--mn-warning-soft);
+  color: var(--mn-warning);
+}
+
+.ov2-pill--bad {
+  border-color: var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink);
+}
+
+.ov2-empty {
+  margin: 0;
+  color: var(--mn-fg-subtle);
+  font-size: 12px;
+}
+
+.ov2-btn {
+  padding: 5px 11px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 7px;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ov2-btn:hover:not(:disabled) {
+  background: var(--mn-surface-2);
+}
+
+.ov2-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ov2-btn--primary {
+  border-color: var(--mn-accent-border);
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
+}
+
+.ov2-btn--danger {
+  border-color: var(--mn-danger-border);
+  color: var(--mn-danger-ink);
+}
+
+.ov2-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--mn-fg-muted);
+}
+
+.ov2-notice {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.ov2-notice--warn {
+  border-color: var(--mn-warning-border);
+  background: var(--mn-warning-soft);
+  color: var(--mn-warning);
+}
+
+.ov2-notice--bad {
+  border-color: var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink);
+}
+
+/* ── Controls ──────────────────────────────────────────────────────────── */
+
+.ov2-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: 9px;
+  background: var(--mn-surface-0);
+}
+
+.ov2-controls__stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ov2-controls__label {
+  color: var(--mn-fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.ov2-controls__number {
+  width: 56px;
+  padding: 4px 6px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 6px;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov2-controls__mode {
+  color: var(--mn-fg-muted);
+  font-size: 11.5px;
+}
+
+/* ── Tasks ─────────────────────────────────────────────────────────────── */
+
+.ov2-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ov2-wave {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ov2-wave__title {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov2-task {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: 9px;
+  background: var(--mn-surface-0);
+}
+
+.ov2-task.is-selected {
+  border-color: var(--mn-border-strong);
+  background: var(--mn-surface-1);
+}
+
+.ov2-task--building,
+.ov2-task--testing,
+.ov2-task--merging {
+  border-color: var(--mn-accent-border);
+}
+
+.ov2-task--abandoned {
+  border-color: var(--mn-danger-border);
+}
+
+.ov2-task__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ov2-task__id {
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.ov2-task__title {
+  font-weight: 550;
+}
+
+.ov2-task__tries {
+  color: var(--mn-fg-subtle);
+  font-size: 11px;
+}
+
+.ov2-task__controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ov2-task__detail {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.ov2-task__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.ov2-task__spec {
+  display: flex;
+  gap: 8px;
+}
+
+.ov2-task__spec-label {
+  flex: 0 0 52px;
+  color: var(--mn-fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+  padding-top: 2px;
+}
+
+.ov2-task__spec-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ov2-task__note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--mn-surface-1);
+  font-size: 12px;
+}
+
+.ov2-task__note--bad {
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink);
+}
+
+.ov2-task__note--warn {
+  background: var(--mn-warning-soft);
+  color: var(--mn-warning);
+}
+
+/* ── Attempts ──────────────────────────────────────────────────────────── */
+
+.ov2-attempts__title {
+  margin: 0 0 4px;
+  color: var(--mn-fg-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov2-attempts__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: ov2-attempt;
+}
+
+.ov2-attempt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ov2-attempt::before {
+  counter-increment: ov2-attempt;
+  content: counter(ov2-attempt);
+  min-width: 14px;
+  color: var(--mn-fg-subtle);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.ov2-attempt__role {
+  font-weight: 550;
+}
+
+.ov2-attempt__seed,
+.ov2-attempt__summary {
+  color: var(--mn-fg-muted);
+}
+
+.ov2-attempt__summary {
+  overflow-wrap: anywhere;
+}
+
+/* ── Merge queue ───────────────────────────────────────────────────────── */
+
+.ov2-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ov2-queue__title,
+.ov2-journal__title {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov2-queue__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov2-queue__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ov2-queue__pos {
+  min-width: 16px;
+  color: var(--mn-fg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov2-queue__id {
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+}
+
+/* ── Journal ───────────────────────────────────────────────────────────── */
+
+.ov2-journal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ov2-journal__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ov2-journal__body {
+  color: var(--mn-fg-subtle);
+  font-size: 12px;
+}
+
+.ov2-timeline__note {
+  margin: 0 0 6px;
+  color: var(--mn-fg-subtle);
+  font-size: 11px;
+}
+
+.ov2-timeline__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 340px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.ov2-timeline__item {
+  display: grid;
+  grid-template-columns: 44px 160px 1fr;
+  gap: 10px;
+  padding: 2px 0;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ov2-timeline__seq {
+  color: var(--mn-fg-subtle);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov2-timeline__type {
+  color: var(--mn-accent-ink);
+}
+
+.ov2-timeline__detail {
+  color: var(--mn-fg-muted);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* ── Create ────────────────────────────────────────────────────────────── */
+
+.ov2-create {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 620px;
+}
+
+.ov2-create__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.ov2-create__hint {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ov2-create__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.ov2-create__input {
+  padding: 7px 9px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 7px;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.ov2-create__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ov2-create__parse {
+  padding: 10px 12px;
+  border: 1px solid var(--mn-danger-border);
+  border-radius: 8px;
+  background: var(--mn-danger-soft);
+}
+
+.ov2-create__parse-title {
+  margin: 0 0 6px;
+  color: var(--mn-danger-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ov2-create__parse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov2-create__parse-item {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 2px 10px;
+  font-size: 12px;
+}
+
+.ov2-create__parse-loc {
+  color: var(--mn-fg-muted);
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.ov2-create__parse-hint {
+  grid-column: 2;
+  color: var(--mn-fg-muted);
+  font-size: 11.5px;
+}
+
+.ov2-create__error {
+  margin: 0;
+  color: var(--mn-danger-ink);
+  font-size: 12px;
+}
+
+/* ── Narrow ────────────────────────────────────────────────────────────── */
+
+@container ov2 (max-width: 720px) {
+  .ov2 {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .ov2__list {
+    max-height: 30%;
+    border-right: 0;
+    border-bottom: 1px solid var(--mn-border);
+  }
+
+  .ov2-task {
+    grid-template-columns: 1fr;
+  }
+
+  .ov2-timeline__item {
+    grid-template-columns: 40px 1fr;
+  }
+
+  .ov2-timeline__detail {
+    grid-column: 2;
+  }
+}
