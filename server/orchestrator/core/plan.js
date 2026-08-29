@@ -25,7 +25,9 @@
  * 2. Never two concurrent attempts on one task.
  * 3. Never two concurrently-running tasks whose `touches` globs overlap, **even
  *    when `dependsOn` permits it**.
- * 4. Respect the concurrency cap `N`.
+ * 4. Respect the concurrency cap `N` — for *starting* work. Attempts already in
+ *    flight keep their slot, so lowering `N` mid-run stops nothing that is
+ *    already running; it stops new work being picked up.
  * 5. The merge queue is serialised — at most one merge in flight, regardless of `N`.
  * 6. A board that is not running desires nothing.
  *
@@ -171,14 +173,16 @@ export function plan(state) {
     }
   }
 
-  // Rule 4.
-  const held = running.slice(0, cap);
-  desired.push(...held);
+  // Work that already exists keeps its slot, even above the cap.
+  //
+  // The cap gates *starting*, not *continuing*. Lowering concurrency mid-run
+  // therefore stops nothing already in flight — it stops new work being picked
+  // up — because killing a builder halfway through an edit throws away real work
+  // to enforce a number the user changed after the fact. The same rule is what
+  // lets a manual single-task start survive the next reconcile instead of being
+  // immediately undone by it.
+  desired.push(...running);
 
-  // Every task with work in flight holds its footprint, including any the cap
-  // just excluded. Those are still running until the effector stops them, so
-  // starting something that overlaps them would put two writers on one file
-  // during the handover.
   /** @type {string[]} */
   const occupied = running.map((d) => d.taskId);
   const ready = new Set(readyTasks(state));
@@ -232,6 +236,30 @@ export function isReadyForFinalTest(state) {
     else if (task.phase !== 'abandoned' && task.phase !== 'skipped') return false;
   }
   return merged > 0;
+}
+
+/**
+ * Has the run finished everything it is ever going to do?
+ *
+ * True when every task has reached a terminal phase, the merge queue has
+ * drained, and either the final test has run or there was nothing to verify.
+ *
+ * @param {import('./types').BoardState} state
+ * @returns {boolean}
+ */
+export function isRunComplete(state) {
+  if (!state || state.finished) return false;
+  if (state.tasks.size === 0) return false;
+  if (state.mergeQueue.length > 0) return false;
+
+  let merged = 0;
+  for (const task of state.tasks.values()) {
+    if (task.phase === 'merged') merged += 1;
+    else if (task.phase !== 'abandoned' && task.phase !== 'skipped') return false;
+  }
+  // Something merged, so the integrated result still needs verifying.
+  if (merged > 0 && state.finalTest === null) return false;
+  return true;
 }
 
 /**

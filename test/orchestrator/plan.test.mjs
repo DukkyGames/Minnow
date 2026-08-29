@@ -419,20 +419,36 @@ describe('plan — in-flight attempts', () => {
     ]);
   });
 
-  it('keeps the footprint of a running task the cap excluded', () => {
-    // Lowering concurrency does not stop those attempts instantly, so anything
-    // overlapping them must stay unscheduled during the handover.
+  it('lets running work continue when the cap is lowered beneath it', () => {
+    // The cap gates starting, not continuing. Killing a builder mid-edit to
+    // enforce a number the user changed afterwards throws away real work.
     const state = boardOf(
-      { tasks: [task('A', { touches: ['src/shared/**'] }), task('B', { touches: ['src/shared/x.ts'] })], concurrency: 2 },
+      { tasks: [task('A'), task('B'), task('C')], concurrency: 3 },
       started('A', 'a1', 'builder'),
       started('B', 'b1', 'builder'),
     );
     state.concurrency = 1;
     const desires = nonMerge(plan(state));
-    assert.deepEqual(desires.map((d) => d.taskId), ['A'], 'cap must be respected');
-    // B is dropped from `desired` and so will be stopped — but nothing new is
-    // started into its footprint either.
-    assert.equal(desires.length, 1);
+    assert.deepEqual(desires.map((d) => d.taskId), ['A', 'B'], 'running work was killed');
+    // But nothing new is picked up while the cap is exceeded.
+    assert.equal(desires.some((d) => d.taskId === 'C'), false);
+  });
+
+  it('holds the footprint of every running task against new starts', () => {
+    const state = boardOf(
+      {
+        tasks: [
+          task('A', { touches: ['src/shared/**'] }),
+          task('B', { touches: ['src/b/**'] }),
+          task('C', { touches: ['src/shared/x.ts'] }),
+        ],
+        concurrency: 4,
+      },
+      started('A', 'a1', 'builder'),
+    );
+    const desires = nonMerge(plan(state));
+    // B is disjoint and starts; C overlaps the running A and does not.
+    assert.deepEqual(desires.map((d) => d.taskId), ['A', 'B']);
   });
 });
 
