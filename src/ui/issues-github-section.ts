@@ -79,15 +79,20 @@ function buildConflictPane(
     keepBtn.textContent = keep === 'local' ? 'Keep mine' : 'Keep GitHub';
     keepBtn.addEventListener('click', () => {
       keepBtn.disabled = true;
-      void resolveSyncConflict(conflict, keep).then((outcome) => {
-        if (!outcome.ok) {
-          showToast(outcome.error ?? 'Could not resolve the conflict', 'error');
+      void resolveSyncConflict(conflict, keep)
+        .then((outcome) => {
+          if (!outcome.ok) {
+            showToast(outcome.error ?? 'Could not resolve the conflict', 'error');
+            keepBtn.disabled = false;
+            return;
+          }
+          showToast(keep === 'local' ? 'Pushed your version' : 'Took the GitHub version', 'success');
+          onChanged();
+        })
+        .catch(() => {
+          showToast('Could not resolve the conflict', 'error');
           keepBtn.disabled = false;
-          return;
-        }
-        showToast(keep === 'local' ? 'Pushed your version' : 'Took the GitHub version', 'success');
-        onChanged();
-      });
+        });
     });
     column.appendChild(keepBtn);
     return column;
@@ -163,27 +168,33 @@ export function renderIssueGithubSection(
   syncBtn.addEventListener('click', () => {
     syncBtn.disabled = true;
     syncBtn.textContent = 'Syncing…';
-    void syncIssueWithGithub(issue.id).then((outcome) => {
-      syncBtn.disabled = false;
-      if (outcome.conflict) {
-        body.appendChild(buildConflictPane(outcome.conflict, onChanged));
-        syncBtn.textContent = 'Sync now';
-        return;
-      }
-      if (!outcome.ok) {
-        showToast(outcome.error ?? 'Sync failed', 'error');
+    void syncIssueWithGithub(issue.id)
+      .then((outcome) => {
+        syncBtn.disabled = false;
+        if (outcome.conflict) {
+          body.appendChild(buildConflictPane(outcome.conflict, onChanged));
+          syncBtn.textContent = 'Sync now';
+          return;
+        }
+        if (!outcome.ok) {
+          showToast(outcome.error ?? 'Sync failed', 'error');
+          syncBtn.textContent = link ? 'Sync now' : 'Push to GitHub';
+          return;
+        }
+        if (outcome.droppedLabels) {
+          showToast('Created on GitHub. Some labels do not exist there and were dropped.', 'success');
+        } else if (outcome.action === 'noop') {
+          showToast(outcome.error ?? 'Already in sync', 'success');
+        } else {
+          showToast(outcome.action === 'pull' ? 'Took the GitHub version' : 'Pushed to GitHub', 'success');
+        }
+        onChanged();
+      })
+      .catch(() => {
+        syncBtn.disabled = false;
+        showToast('Sync failed', 'error');
         syncBtn.textContent = link ? 'Sync now' : 'Push to GitHub';
-        return;
-      }
-      if (outcome.droppedLabels) {
-        showToast('Created on GitHub. Some labels do not exist there and were dropped.', 'success');
-      } else if (outcome.action === 'noop') {
-        showToast(outcome.error ?? 'Already in sync', 'success');
-      } else {
-        showToast(outcome.action === 'pull' ? 'Took the GitHub version' : 'Pushed to GitHub', 'success');
-      }
-      onChanged();
-    });
+      });
   });
   controls.appendChild(syncBtn);
   body.appendChild(controls);

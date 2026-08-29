@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  applyProviderCapabilities,
   catalogCapabilitiesFromRow,
   catalogRowHasVision,
   mergeModelCapabilities,
@@ -123,6 +124,40 @@ describe('prioritizeModelIdsForProbe', () => {
     );
     assert.equal(out[0], 'zzz');
     assert.equal(out[1], 'loaded-one');
+  });
+});
+
+describe('applyProviderCapabilities', () => {
+  test('stamps llama-cpp-local probe vision onto the matching My Models row', () => {
+    modelCache.clear();
+    const libraryId = 'gguf:org/gemma-3:gemma-3-12b-it.gguf';
+    modelCache.set(encodeModelSelectKey('minnow-library', libraryId), {
+      id: libraryId,
+      type: 'llm',
+      state: 'loaded',
+    });
+    applyProviderCapabilities({
+      schemaVersion: 1,
+      providerId: 'llama-cpp-local',
+      probedAt: '2026-08-27T00:00:00.000Z',
+      apiKind: 'openai-v1',
+      models: {
+        [libraryId]: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          grammar: null,
+          reasoning: null,
+          contextLength: null,
+          loadState: 'loaded',
+          sources: { vision: 'probe', tools: 'probe', streaming: 'probe' },
+          probeErrors: {},
+        },
+      },
+    });
+    const row = modelCache.get(encodeModelSelectKey('minnow-library', libraryId));
+    assert.equal(row?.capabilities?.vision, true);
+    assert.equal(row?.capabilities?.sources?.vision, 'probe');
   });
 });
 

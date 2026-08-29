@@ -164,6 +164,93 @@ describe('InlineContentThinkingRouter', () => {
     assert.equal(thinkingText(parts), '');
     assert.equal(replyText(parts), 'Done. <thi');
   });
+
+  // Interleaved-thinking models (Qwen3.8) emit think → prose → think again.
+  // The second opener used to leak into the visible reply because the router
+  // only entered a think span while firstContentSent was false.
+  test('routes a second <think> span after visible prose', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const parts = collectRouted(router, [
+      THINK_OPEN,
+      'plan',
+      THINK_CLOSE,
+      'Working.',
+      THINK_OPEN,
+      'now call',
+      THINK_CLOSE,
+    ]);
+    assert.equal(thinkingText(parts), 'plannow call');
+    assert.equal(replyText(parts), 'Working.');
+  });
+
+  test('routes a second think span that starts on its own line in one chunk', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const parts = collectRouted(router, [
+      `${THINK_OPEN}plan${THINK_CLOSE}Working.\n${THINK_OPEN}now call${THINK_CLOSE}`,
+    ]);
+    assert.equal(thinkingText(parts), 'plannow call');
+    assert.equal(replyText(parts), 'Working.\n');
+  });
+
+  test('closes a second think span when </think> is split across deltas', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const parts = collectRouted(router, [
+      THINK_OPEN,
+      'plan',
+      THINK_CLOSE,
+      'Working.',
+      THINK_OPEN,
+      'now call',
+      THINK_CLOSE.slice(0, 4),
+      THINK_CLOSE.slice(4),
+    ]);
+    assert.equal(thinkingText(parts), 'plannow call');
+    assert.equal(replyText(parts), 'Working.');
+  });
+
+  test('routes a second think span streamed one character at a time', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const parts = collectRouted(router, [
+      ...`${THINK_OPEN}plan${THINK_CLOSE}Working.${THINK_OPEN}now call${THINK_CLOSE}`,
+    ]);
+    assert.equal(thinkingText(parts), 'plannow call');
+    assert.equal(replyText(parts), 'Working.');
+  });
+
+  test('does not reclassify a <think> mention glued to prose', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const sample = `Working. Use the ${THINK_OPEN} tag in examples ${THINK_CLOSE} like this.`;
+    const parts = collectRouted(router, [THINK_OPEN, 'plan', THINK_CLOSE, sample]);
+    assert.equal(thinkingText(parts), 'plan');
+    assert.equal(replyText(parts), sample);
+  });
+
+  test('does not re-enter think mode on an instruct model after prose', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: false });
+    const parts = collectRouted(router, [
+      'Here is a sample:\n',
+      THINK_OPEN,
+      'example',
+      THINK_CLOSE,
+    ]);
+    assert.equal(thinkingText(parts), '');
+    assert.match(replyText(parts), /Here is a sample/);
+    assert.match(replyText(parts), /example/);
+  });
+
+  test('holds a second think span as prose until the matching close arrives', () => {
+    const router = new InlineContentThinkingRouter({ thinkingModel: true });
+    const parts = collectRouted(router, [
+      THINK_OPEN,
+      'plan',
+      THINK_CLOSE,
+      'Working.',
+      THINK_OPEN,
+      'now call',
+    ]);
+    assert.equal(thinkingText(parts), 'plan');
+    assert.equal(replyText(parts), `Working.${THINK_OPEN}now call`);
+  });
 });
 
 describe('HarmonyChannelRouter', () => {

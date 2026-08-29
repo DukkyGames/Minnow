@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { resolveFailedTurnPartialRow } from '../../src/tools/turn-continuation.ts';
 import { markMessageFailed } from '../../src/ui/stopped-affordance.ts';
+import { appendFailedTurnRecoveryActions } from '../../src/ui/failed-turn-recovery-actions.ts';
 
 function setupDom(): void {
   const window = new Window();
@@ -91,5 +92,46 @@ describe('failed assistant affordance', () => {
     markMessageFailed(wrap);
 
     assert.equal(wrap.querySelectorAll('.msg-failed-chip').length, 1);
+  });
+
+  test('markMessageFailed with recovery exposes Continue and Clear', () => {
+    setupDom();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg assistant';
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    wrap.appendChild(label);
+
+    markMessageFailed(wrap, { chatId: 'chat_1', forkHistoryIndex: 2 });
+
+    const buttons = [...wrap.querySelectorAll('button')].map((b) => b.textContent);
+    assert.deepEqual(buttons, ['Continue', 'Clear']);
+    assert.equal(wrap.querySelectorAll('.msg-error-recover-actions').length, 1);
+  });
+});
+
+describe('failed-turn recovery chrome', () => {
+  test('error bubble offers Continue and Clear instead of rewind-and-retry', async () => {
+    setupDom();
+    const { setAssistantErrorBubbleWithRecovery } = await import('../../src/ui/messages.ts');
+    const bubble = document.createElement('div');
+    setAssistantErrorBubbleWithRecovery(bubble, 'Could not complete this reply: network error', {
+      chatId: 'chat_1',
+      forkHistoryIndex: 2,
+    });
+
+    const labels = [...bubble.querySelectorAll('button')].map((b) => b.textContent);
+    assert.deepEqual(labels, ['Continue', 'Clear']);
+    assert.equal(bubble.textContent?.includes('Clear last failed turn'), false);
+    assert.match(bubble.textContent ?? '', /network error/);
+  });
+
+  test('appendFailedTurnRecoveryActions is idempotent', () => {
+    setupDom();
+    const host = document.createElement('div');
+    const recovery = { chatId: 'chat_1', forkHistoryIndex: 0 };
+    appendFailedTurnRecoveryActions(host, recovery);
+    appendFailedTurnRecoveryActions(host, recovery);
+    assert.equal(host.querySelectorAll('.msg-error-recover-actions').length, 1);
   });
 });

@@ -77,6 +77,44 @@ export async function setProviderThinkingBudgetSupport(id, supportsThinkingBudge
   });
 }
 
+/** Fields a live chat probe may have already settled. */
+const PROBE_MERGE_FIELDS = ['vision', 'tools', 'streaming', 'grammar', 'reasoning'];
+
+/**
+ * Merge one model capabilities patch onto a stored entry.
+ * Probe-sourced fields win over later catalog ingest so a targeted first-load
+ * probe cannot be overwritten when a full provider probe ingests the rest of
+ * the catalog (or the reverse: catalog ingest of unprobed siblings).
+ *
+ * @param {object | undefined} existing
+ * @param {object} patch
+ */
+export function mergeModelCapabilityEntry(existing, patch) {
+  if (!existing || typeof existing !== 'object') return patch;
+  if (!patch || typeof patch !== 'object') return existing;
+
+  const existingSources =
+    existing.sources && typeof existing.sources === 'object' ? existing.sources : {};
+  const patchSources = patch.sources && typeof patch.sources === 'object' ? patch.sources : {};
+  const sources = { ...existingSources, ...patchSources };
+  const merged = { ...existing, ...patch };
+
+  for (const field of PROBE_MERGE_FIELDS) {
+    if (existingSources[field] === 'probe' && patchSources[field] !== 'probe') {
+      merged[field] = existing[field];
+      sources[field] = 'probe';
+    }
+  }
+  merged.sources = sources;
+  merged.probeErrors = {
+    ...(existing.probeErrors && typeof existing.probeErrors === 'object'
+      ? existing.probeErrors
+      : {}),
+    ...(patch.probeErrors && typeof patch.probeErrors === 'object' ? patch.probeErrors : {}),
+  };
+  return merged;
+}
+
 /**
  * Merge per-model entries into an existing capabilities file.
  *
@@ -88,7 +126,7 @@ export async function mergeCapabilities(id, modelPatches, meta = {}) {
   const existing = await readCapabilities(id);
   const models = { ...existing.models };
   for (const [modelId, patch] of Object.entries(modelPatches)) {
-    models[modelId] = { ...(models[modelId] || {}), ...patch };
+    models[modelId] = mergeModelCapabilityEntry(models[modelId], patch);
   }
   return writeCapabilities(id, {
     ...existing,

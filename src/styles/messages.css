@@ -270,11 +270,31 @@
 }
 
 .msg.assistant.msg--failed .msg-failed-chip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--mn-danger, var(--mn-fg-muted));
   margin-bottom: 4px;
+}
+
+/*
+ * The ⋮ trigger is position:absolute at the wrap's top-right. Continue/Clear
+ * sit on this chip (also the top row), so without inset they land under ⋮ and
+ * a Clear click opens the message menu instead.
+ */
+.msg.assistant.msg--failed.msg--has-actions {
+  padding-right: 36px;
+}
+
+.msg.assistant.msg--failed .msg-failed-chip .msg-error-recover-actions {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  position: relative;
+  z-index: 2;
 }
 
 .msg.assistant.msg--truncated .msg-truncated-chip {
@@ -433,6 +453,12 @@
   gap: 8px;
 }
 
+.msg-error-recover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .msg-error-recover-btn {
   font: inherit;
   font-size: 0.85rem;
@@ -444,8 +470,18 @@
   cursor: pointer;
 }
 
+.msg-error-recover-btn--continue {
+  color: var(--mn-fg);
+  background: var(--mn-bg-elevated);
+  border-color: var(--mn-border);
+}
+
 .msg-error-recover-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--mn-danger) 12%, var(--mn-bg));
+}
+
+.msg-error-recover-btn--continue:hover:not(:disabled) {
+  background: var(--mn-bg-hover);
 }
 
 .msg-error-recover-btn:disabled {

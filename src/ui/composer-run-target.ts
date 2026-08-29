@@ -11,6 +11,7 @@ import {
 } from '../lib/worktree-list-parse.ts';
 import {
   attachChatToWorktree,
+  chatTitleForGitRef,
   composerGitRepoRoot,
   createManagedChatWorktree,
   formatComposerBranchLabel,
@@ -27,7 +28,7 @@ import { isComposerRecoveryBlocked } from './composer-send.ts';
 import { createGitWorktreeIcon } from './git-worktree-icons.ts';
 import {
   closeGitPanelNamePopover,
-  openGitPanelNamePopover,
+  openGitRefNamePopover,
 } from './git-panel-name-popover.ts';
 import {
   observeModeSelectorComposerSibling,
@@ -369,13 +370,13 @@ async function applyBranchCheckout(branch: string): Promise<void> {
 
 function promptNewWorktreeBranch(anchor: HTMLElement): void {
   const chat = getActiveChat();
-  openGitPanelNamePopover({
+  openGitRefNamePopover({
     anchor,
     title: 'New worktree',
-    label: 'Branch name',
-    placeholder: 'feature/my-branch',
-    defaultValue: chat.gitBranch?.trim() || '',
-    submitLabel: 'Create',
+    kind: 'worktree',
+    defaultTitle: chatTitleForGitRef(chat),
+    defaultPath: chat.workspacePath || composerGitRepoRoot(),
+    reserved: [chat.gitBranch, 'main', 'master'],
     onSubmit: async (name) => {
       await applyNewWorktree(name);
     },

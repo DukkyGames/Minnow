@@ -53,10 +53,10 @@ describe('panel worktree cwd helpers', () => {
 });
 
 describe('panel browse cwd follows board state (MIN-619)', () => {
-  // Slot paths must include a `worktrees` segment — otherwise
-  // `integrationWorktreePathFromSlotPath` will not treat them as board slots.
-  const WT_INTEGRATION = 'C:/repo/.minnow/worktrees/minnow-abc/board-1/integration';
-  const WT_TASK = 'C:/repo/.minnow/worktrees/minnow-abc/board-1/task-a';
+  // Slot paths must include a `worktrees` segment — that is how
+  // `integrationWorktreePathFromSlotPath` identifies a board checkout.
+  const WT_INTEGRATION = 'C:/repo/.minnow/worktrees/board-1/integration';
+  const WT_TASK = 'C:/repo/.minnow/worktrees/board-1/task-a';
 
   function makePlanner(): Chat {
     return {

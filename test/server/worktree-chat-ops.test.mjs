@@ -47,6 +47,18 @@ describe('chat worktree ops', () => {
     delete process.env.MINNOW_HOME;
   });
 
+  test('createChatWorktree slugifies invalid branch names', async () => {
+    const chatId = 'chat-min-659-slug';
+    const created = await createChatWorktree({
+      chatId,
+      branch: 'Test Worktree',
+    });
+    assert.equal(created.ok, true);
+    assert.equal(created.branch, 'test-worktree');
+    const removed = await removeChatWorktree({ chatId });
+    assert.equal(removed.ok, true);
+  });
+
   test('createChatWorktree creates a managed slot under MINNOW_HOME', async () => {
     const branch = 'minnow/chat/test-branch';
     const created = await createChatWorktree({ chatId: CHAT_ID, branch });

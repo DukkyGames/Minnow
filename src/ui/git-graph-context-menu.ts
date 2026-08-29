@@ -17,7 +17,7 @@ import {
 import { confirmDirtyCheckout } from './git-checkout-confirm';
 import { openCherryPickDialog } from './git-advanced-actions';
 import { extractLocalBranchRefs, type CommitVisual } from './git-graph';
-import { openGitPanelNamePopover } from './git-panel-name-popover';
+import { openGitPanelNamePopover, openGitRefNamePopover } from './git-panel-name-popover';
 import { CAPTURE_MENU_KINDS, legacyCaptureMenuItems } from './issue-capture';
 import { showToast } from './toast';
 
@@ -365,11 +365,12 @@ async function buildMenuItems(
         anchor.style.left = `${menuEl?.style.left ?? '0'}`;
         anchor.style.top = `${menuEl?.style.top ?? '0'}`;
         document.body.appendChild(anchor);
-        openGitPanelNamePopover({
+        openGitRefNamePopover({
           anchor,
           title: 'Create branch',
-          label: 'Branch name',
-          placeholder: 'feature/my-branch',
+          kind: 'branch',
+          defaultPath: ctx.cwd,
+          reserved: [ctx.getCurrentBranch?.() ?? '', 'main', 'master'],
           onSubmit: async (name) => {
             anchor.remove();
             if (!(await confirmDirtyCheckout(ctx.cwd))) return;
@@ -383,7 +384,7 @@ async function buildMenuItems(
               showToast(result.error ?? 'Could not create branch', 'error');
               return;
             }
-            showToast(`Created branch ${name}`, 'success');
+            showToast(`Created branch ${result.branch ?? name}`, 'success');
             await ctx.onRefresh();
           },
         });

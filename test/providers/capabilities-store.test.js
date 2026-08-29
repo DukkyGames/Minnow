@@ -11,6 +11,7 @@ import {
   readCapabilities,
   writeCapabilities,
   mergeCapabilities,
+  mergeModelCapabilityEntry,
 } from '../../server/providers/capabilities-store.js';
 import { ensureProviderRegistry, createProvider } from '../../server/providers/store.js';
 
@@ -86,5 +87,63 @@ describe('capabilities-store', () => {
     );
     assert.equal(merged.models['a/model'].tools, true);
     assert.equal(merged.probedAt, '2026-05-23T00:00:00.000Z');
+  });
+
+  it('keeps probe-sourced vision when a later catalog ingest arrives', async () => {
+    await writeCapabilities('cap-test-provider', {
+      schemaVersion: 1,
+      providerId: 'cap-test-provider',
+      probedAt: '2026-08-27T00:00:00.000Z',
+      apiKind: 'openai-v1',
+      models: {
+        'gemma-3-12b-it': {
+          vision: true,
+          tools: true,
+          streaming: true,
+          grammar: null,
+          reasoning: null,
+          contextLength: null,
+          loadState: 'loaded',
+          sources: { vision: 'probe', tools: 'probe', streaming: 'probe' },
+          probeErrors: {},
+        },
+      },
+    });
+    const merged = await mergeCapabilities(
+      'cap-test-provider',
+      {
+        'gemma-3-12b-it': {
+          vision: false,
+          tools: null,
+          streaming: null,
+          grammar: null,
+          reasoning: null,
+          contextLength: null,
+          loadState: 'unknown',
+          sources: { vision: 'catalog' },
+          probeErrors: {},
+        },
+      },
+      { probedAt: '2026-08-27T01:00:00.000Z' },
+    );
+    assert.equal(merged.models['gemma-3-12b-it'].vision, true);
+    assert.equal(merged.models['gemma-3-12b-it'].tools, true);
+    assert.equal(merged.models['gemma-3-12b-it'].sources.vision, 'probe');
+    assert.equal(merged.models['gemma-3-12b-it'].sources.tools, 'probe');
+  });
+
+  it('mergeModelCapabilityEntry prefers a newer probe over a previous probe', () => {
+    const merged = mergeModelCapabilityEntry(
+      {
+        vision: false,
+        sources: { vision: 'probe' },
+      },
+      {
+        vision: true,
+        sources: { vision: 'probe' },
+      },
+    );
+    assert.equal(merged.vision, true);
+    assert.equal(merged.sources.vision, 'probe');
   });
 });

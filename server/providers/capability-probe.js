@@ -689,6 +689,9 @@ export async function runCapabilityProbe(providerId, options = {}) {
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
   const patches = {};
   const probedAt = new Date().toISOString();
+  // Caller-supplied modelIds are a targeted run (first-load / one model). Do not
+  // ingest the rest of the catalog — that used to overwrite siblings' probe data.
+  const targeted = Boolean(options.modelIds?.length);
 
   for (const modelId of prioritized) {
     if (options.signal?.aborted) {
@@ -710,9 +713,11 @@ export async function runCapabilityProbe(providerId, options = {}) {
     }
   }
 
-  for (const row of catalog) {
-    if (patches[row.id]) continue;
-    patches[row.id] = ingestFromCatalog(row);
+  if (!targeted) {
+    for (const row of catalog) {
+      if (patches[row.id]) continue;
+      patches[row.id] = ingestFromCatalog(row);
+    }
   }
 
   return mergeCapabilities(providerId, patches, {

@@ -116,6 +116,7 @@ import { isBoardChatEmbedOpenForChat } from './orchestrate-board-chat-state';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
+import { scheduleCapabilityProbeForSelectValue } from '../providers/first-load-probe';
 import { restoreChatColumnOnChatSelect } from './workspace-split-resize';
 import { updateModelStateDot } from './model-state-dot';
 import { syncModelSelectPicker } from './model-select-picker';
@@ -329,6 +330,7 @@ export function onModelSelectChange(): void {
   updateModelLoadUnloadButtons();
   syncModelSelectPicker();
   showCachedModelInfo();
+  scheduleCapabilityProbeForSelectValue(sel.value);
   const active = getActiveChat();
   if (isEphemeralEmptyChat(active)) {
     applyDefaultModelToChat(active);
