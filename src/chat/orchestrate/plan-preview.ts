@@ -179,12 +179,16 @@ export const PLAN_PREVIEW_EMPTY_CLASS = 'orchestrate-plan-screen__preview-empty'
 
 /**
  * Load full plan/build-spec markdown for UI preview (not subject to read_file output cap).
+ * `cacheBust` is appended as `?v=` so a stale HTTP 404 cannot stick after the file lands.
  */
-export async function readPlanArtifactMarkdown(path: string): Promise<string> {
+export async function readPlanArtifactMarkdown(
+  path: string,
+  options?: { cacheBust?: number },
+): Promise<string> {
   const trimmed = path.trim();
   if (!trimmed) return '';
   try {
-    return await readWorkspaceTextFile(trimmed);
+    return await readWorkspaceTextFile(trimmed, undefined, options?.cacheBust);
   } catch {
     return '';
   }

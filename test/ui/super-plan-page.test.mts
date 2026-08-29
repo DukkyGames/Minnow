@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, test } from 'node:test';
+import { after, afterEach, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 
@@ -31,6 +31,21 @@ import {
 import { PlanActivityCollector } from '../../src/ui/plan-activity-collector.ts';
 
 let activeWindow: Window | undefined;
+/** Restored after this file so a 404 stub cannot leak into later tests in the worker. */
+const originalFetch = globalThis.fetch;
+
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 2_000,
+  intervalMs = 10,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error('Timed out waiting for condition');
+}
 
 function installTestWindow(): void {
   activeWindow?.close();
@@ -40,6 +55,17 @@ function installTestWindow(): void {
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.HTMLButtonElement = window.HTMLButtonElement;
   globalThis.HTMLTextAreaElement = window.HTMLTextAreaElement;
+  stubPreviewFetch(async () => new Response('', { status: 404 }));
+}
+
+/** Stub `globalThis.fetch` so preview reads cannot hang the test process. */
+function stubPreviewFetch(handler: typeof fetch): void {
+  globalThis.fetch = handler;
+}
+
+/** `resolvePreviewLoadUrl` reads `window.location.origin` — not the happy-dom window. */
+function stubPreviewOrigin(): void {
+  globalThis.window = { location: { origin: 'http://localhost:9473' } } as typeof globalThis.window;
 }
 
 const calls: string[] = [];
@@ -112,13 +138,19 @@ function textOf(root: ParentNode, selector: string): string {
 }
 
 describe('super plan page', () => {
+  after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   afterEach(() => {
     streamingChatIds.clear();
     teardownSuperPlanPage();
     calls.length = 0;
     setSessionStateForTests(null);
+    Reflect.deleteProperty(globalThis, 'window');
     activeWindow?.close();
     activeWindow = undefined;
+    globalThis.fetch = originalFetch;
   });
 
   test('pipeline column lists every stage and marks the running one', () => {
@@ -209,6 +241,116 @@ describe('super plan page', () => {
       true,
       'there is nothing to pause while the pipeline waits on you',
     );
+  });
+
+  test('reserved spec and plan paths stay hidden until a stage writes the file', () => {
+    installTestWindow();
+    const chat = makeRunChat('sp-spec-reserved', 'grill', {
+      specPath: 'documentation/plans/references/plan-aaaaaaaa-spec.md',
+      planPath: 'documentation/plans/plan-aaaaaaaa.md',
+      researchPath: 'documentation/plans/references/plan-aaaaaaaa-research.md',
+    });
+    chat.superPlan!.stages.grill.status = 'running';
+
+    const root = mountPage(chat);
+    syncSuperPlanPage(chat);
+
+    const specTab = [...root.querySelectorAll('.sp-segment')].find((node) =>
+      (node.textContent ?? '').startsWith('Spec'),
+    ) as HTMLElement;
+    const planTab = [...root.querySelectorAll('.sp-segment')].find((node) =>
+      (node.textContent ?? '').startsWith('Plan'),
+    ) as HTMLElement;
+    assert.equal(specTab.hidden, true, 'Spec tab waits for the written spec');
+    assert.equal(planTab.hidden, true, 'Plan tab waits for a draft');
+    assert.match(
+      textOf(root, '.sp-artifact-list'),
+      /Files appear here/,
+      'reserved paths are not listed as artifacts',
+    );
+  });
+
+  test('spec tab stays hidden while spec_confirm is still writing', () => {
+    installTestWindow();
+    const chat = makeRunChat('sp-spec-writing', 'spec_confirm', {
+      specPath: 'documentation/plans/references/plan-aaaaaaaa-spec.md',
+    });
+    chat.superPlan!.stages.grill.status = 'done';
+    chat.superPlan!.stages.spec_confirm.status = 'running';
+
+    const root = mountPage(chat);
+    syncSuperPlanPage(chat);
+
+    const specTab = [...root.querySelectorAll('.sp-segment')].find((node) =>
+      (node.textContent ?? '').startsWith('Spec'),
+    ) as HTMLElement;
+    assert.equal(specTab.hidden, true);
+    assert.equal(
+      root.querySelector('.sp-segment.is-on')?.textContent?.startsWith('Activity'),
+      true,
+    );
+  });
+
+  test('spec checkpoint loads the build spec markdown into the reading column', async () => {
+    installTestWindow();
+    stubPreviewOrigin();
+    const specPath = 'documentation/plans/references/offline-queue-spec.md';
+    const specBody = '# Offline queue\n\nDurable writes when the network returns.\n';
+    stubPreviewFetch(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.includes('offline-queue-spec.md')) {
+        return new Response('missing', { status: 404 });
+      }
+      return new Response(specBody, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    });
+
+    const chat = makeRunChat('sp-spec-body', 'spec_confirm', { specPath });
+    chat.superPlan!.stages.grill.status = 'done';
+    chat.superPlan!.stages.spec_confirm.status = 'blocked_user';
+    chat.superPlan!.stages.spec_confirm.artifactPath = specPath;
+
+    const root = mountPage(chat);
+    syncSuperPlanPage(chat);
+
+    await waitFor(() => (root.querySelector('.sp-doc')?.textContent ?? '').includes('Offline queue'));
+    const doc = root.querySelector('.sp-doc') as HTMLElement;
+    assert.equal(doc.hidden, false);
+    assert.match(doc.textContent ?? '', /Offline queue/);
+  });
+
+  test('empty first spec preview is retried until the file is readable (MIN-672)', async () => {
+    installTestWindow();
+    stubPreviewOrigin();
+    const specPath = 'documentation/plans/references/offline-queue-spec.md';
+    const specBody = '# Offline queue\n\nDurable writes when the network returns.\n';
+    let hits = 0;
+    stubPreviewFetch(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.includes('offline-queue-spec.md')) {
+        return new Response('missing', { status: 404 });
+      }
+      hits += 1;
+      if (hits === 1) return new Response('', { status: 404 });
+      return new Response(specBody, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    });
+
+    const chat = makeRunChat('sp-spec-race', 'spec_confirm', { specPath });
+    chat.superPlan!.stages.grill.status = 'done';
+    chat.superPlan!.stages.spec_confirm.status = 'blocked_user';
+    chat.superPlan!.stages.spec_confirm.artifactPath = specPath;
+
+    const root = mountPage(chat);
+    syncSuperPlanPage(chat);
+
+    await waitFor(() => (root.querySelector('.sp-doc')?.textContent ?? '').includes('Offline queue'));
+    assert.ok(hits >= 2, 'a 404 that races the save must not be cached as final');
+    assert.equal((root.querySelector('.sp-doc') as HTMLElement).hidden, false);
   });
 
   test('a failed stage keeps earlier work and offers retry, skip, cancel', () => {
