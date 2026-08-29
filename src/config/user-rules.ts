@@ -3,7 +3,7 @@
  */
 
 import { bumpPromptConfigEpoch } from '../chat/outbound-estimate-epochs';
-import { detectConfigServer } from './storage-mode';
+import { detectConfigServer, isConfigServerMode } from './storage-mode';
 import { getRules, putRules } from './api-client';
 import { defaultUserRulesSettings } from './defaults';
 
@@ -257,7 +257,7 @@ export async function loadUserRules(): Promise<UserRulesSettings> {
   if (cachedRules) return cachedRules;
 
   const serverUp = await detectConfigServer();
-  if (serverUp) {
+  if (isConfigServerMode(serverUp)) {
     try {
       cachedRules = normalizeUserRules(await getRules());
       writeLocalUserRules(cachedRules);
@@ -290,7 +290,8 @@ export async function saveUserRules(settings: UserRulesSettings): Promise<void> 
   bumpPromptConfigEpoch();
 
   const serverUp = await detectConfigServer();
-  if (!serverUp) return;
+  // StorageMode is a string; 'localStorage' is truthy and must not trigger a PUT.
+  if (!isConfigServerMode(serverUp)) return;
 
   await putRules(normalized);
 }
