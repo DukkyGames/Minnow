@@ -26,8 +26,8 @@ Same pattern appears when a new stage becomes active (`pending` / `running` foll
 ## Todos
 
 - [x] Locate emitter (`plan-activity-collector` controller subscription)
-- [ ] Normalize pause comparison; skip first observation
-- [ ] Add regression tests (MIN-736)
-- [ ] Update `documentation/context.md`
-- [ ] Run scoped tests; verify in browser if Super Plan UI reachable
-- [ ] Commit, push, open PR
+- [x] Normalize pause comparison; skip first observation
+- [x] Add regression tests (MIN-736)
+- [x] Update `documentation/context.md`
+- [x] Run scoped tests; verify in browser if Super Plan UI reachable
+- [x] Commit, push, open PR
