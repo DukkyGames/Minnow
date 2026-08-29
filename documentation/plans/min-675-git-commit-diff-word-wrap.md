@@ -11,7 +11,7 @@
 - [x] CSS: wrap mode uses `pre-wrap` and drops `min-width: max-content`
 - [x] Unit tests for preference + rendered wrap class
 - [x] Update `documentation/context.md` and Code manual mention
-- [ ] Browser-verify: open a commit/working diff, confirm wrap default + toggle
+- [x] Browser-verify: open a commit/working diff, confirm wrap default + toggle
 
 ## Design
 
