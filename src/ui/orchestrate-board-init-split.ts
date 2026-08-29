@@ -12,10 +12,7 @@ import {
 } from '../state/chat-groups';
 import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat } from '../types';
-import {
-  BOARD_BUILD_KICKOFF_MESSAGE,
-  BOARD_ONBOARDING_KICKOFF_MESSAGE,
-} from './orchestrate-board-kickoff';
+import { BOARD_ONBOARDING_KICKOFF_MARKER } from './orchestrate-board-kickoff';
 import { isOrchestrateBoardViewActive, syncBoardViewChrome } from './view-mode-toggle';
 
 /** True when the last user history row is a board parse/init kickoff. */
@@ -25,10 +22,8 @@ export function lastUserMessageMatchesBoardKickoff(chat: Chat): boolean {
     if (!msg) continue;
     if (msg.role === 'user') {
       const content = String(msg.content).trim();
-      return (
-        content === BOARD_ONBOARDING_KICKOFF_MESSAGE ||
-        content === BOARD_BUILD_KICKOFF_MESSAGE
-      );
+      // Marker covers pathless, path-named, and historical kickoff wording.
+      return content.includes(BOARD_ONBOARDING_KICKOFF_MARKER);
     }
     if (msg.role === 'assistant' || msg.role === 'tool') continue;
     break;

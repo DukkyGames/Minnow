@@ -10,6 +10,10 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MODES_DIR = path.join(__dirname, '../../src/chat/prompts/modes');
+const ORCHESTRATOR_DIR = path.join(
+  __dirname,
+  '../../src/chat/prompts/work-agents/orchestrator',
+);
 
 const BOARD_TOOLS = ['board_init', 'board_update_task', 'board_get_state'];
 const PROMPT_FILES = ['orchestrate.full.md', 'orchestrate.lite.md'];
@@ -87,4 +91,31 @@ describe('orchestrate board prompts', () => {
       assertBoardPromptContract(file, content);
     });
   }
+});
+
+describe('orchestrator work-agent bound-plan contract', () => {
+  function readAgent(name) {
+    return fs.readFileSync(path.join(ORCHESTRATOR_DIR, name), 'utf8');
+  }
+
+  test('agent.full.md never-asks when {{orchestrate_plan}} is set', () => {
+    const content = readAgent('agent.full.md');
+    assert.ok(
+      content.includes('{{orchestrate_plan}}'),
+      'full prompt must interpolate the bound plan path',
+    );
+    assert.match(
+      content,
+      /do \*\*not\*\* ask the user to pick among plan files/i,
+    );
+  });
+
+  test('agent.lite.md never-asks when {{orchestrate_plan}} is set', () => {
+    const content = readAgent('agent.lite.md');
+    assert.ok(
+      content.includes('{{orchestrate_plan}}'),
+      'lite prompt must interpolate the bound plan path',
+    );
+    assert.match(content, /do \*\*not\*\* ask which plan to use/i);
+  });
 });
